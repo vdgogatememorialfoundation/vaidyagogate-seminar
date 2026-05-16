@@ -1,106 +1,92 @@
-# Wix domain + seminar subdomains (vaidyagogate.org)
+# Wix DNS → Vercel (seminar portals)
 
-Your setup:
+Main marketing site stays on **Wix**. Seminar, admin, and judge portals run on **one Vercel project** (same deployment; the app routes by hostname).
 
-| URL | Purpose | Hosted on |
-|-----|---------|-----------|
-| `https://www.vaidyagogate.org` (or root) | Main marketing site | **Wix** |
-| `https://seminar.vaidyagogate.org` | Public seminar site + doctor signup/login | **Your VPS** (Node app) |
-| `https://admin.vaidyagogate.org` | Admin panel | **Your VPS** |
-| `https://judge.vaidyagogate.org` | Judge portal | **Your VPS** |
-| `https://seminar.vaidyagogate.org/scanner.html` | QR scanner (or APK) | **Your VPS** |
-
-The Node app is **one server**; Nginx routes by subdomain name.
+| URL | Portal |
+|-----|--------|
+| `https://www.vaidyagogate.org` | Wix (marketing) |
+| `https://seminar.vaidyagogate.org` | Public site + doctor login + **scanner** (`/scanner`) |
+| `https://admin.vaidyagogate.org` | Admin panel |
+| `https://judge.vaidyagogate.org` | Judge portal |
+| `https://vaidyagogate-seminar.vercel.app` | Vercel default URL (same app, before custom domains) |
 
 ---
 
-## Step 1 — Get your VPS IP
+## 1. Vercel — add domains
 
-Example: `203.0.113.50` (replace with your real server IP from Hostinger, AWS, DigitalOcean, etc.)
+Project → **Settings** → **Domains** → add:
+
+- `seminar.vaidyagogate.org`
+- `admin.vaidyagogate.org`
+- `judge.vaidyagogate.org`
+
+Vercel shows the exact DNS rows to use (host + value). Use those if they differ from the table below.
 
 ---
 
-## Step 2 — DNS in Wix
+## 2. Wix — DNS records
 
-1. Log in to **Wix** → **Domains** → select **vaidyagogate.org** → **Manage DNS** (or “DNS records”).
-2. **Do not** move the root/`www` records if the main site should stay on Wix.
-3. Add **subdomain** records pointing to your VPS:
+Wix → **Domains** → **vaidyagogate.org** → **Manage DNS**
 
-| Type | Host / Name | Points to | TTL |
-|------|-------------|-----------|-----|
-| **A** | `seminar` | `203.0.113.50` | 1 hour |
-| **A** | `admin` | `203.0.113.50` | 1 hour |
-| **A** | `judge` | `203.0.113.50` | 1 hour |
+Do **not** change `www` / apex records that point at Wix.
 
-If Wix only allows **CNAME** for subdomains, use a DNS provider (Cloudflare) for those three names, or Wix “subdomain” → external IP if supported.
+Add three **CNAME** records (recommended for Vercel subdomains):
 
-DNS can take **15 minutes to 48 hours** to propagate.
+| Host / name | Type | Value (points to) | TTL |
+|-------------|------|-------------------|-----|
+| `seminar` | **CNAME** | `cname.vercel-dns.com` | 1 hour (or default) |
+| `admin` | **CNAME** | `cname.vercel-dns.com` | 1 hour |
+| `judge` | **CNAME** | `cname.vercel-dns.com` | 1 hour |
 
-Check:
+If Wix shows “conflict” or only allows **A** for subdomains, use the IPv4 Vercel lists in the domain setup UI (often `76.76.21.21`) for each host instead of CNAME.
 
-```bash
+Propagation: often 15–60 minutes; up to 48 hours.
+
+Verify:
+
+```powershell
 nslookup seminar.vaidyagogate.org
 nslookup admin.vaidyagogate.org
+nslookup judge.vaidyagogate.org
 ```
 
 ---
 
-## Step 3 — Link from Wix to the seminar portal
+## 3. How hostnames map to the app
 
-On your Wix pages, add buttons:
+All three subdomains hit the **same** Vercel deployment. `lib/subdomain-portal.js` serves:
 
-- **Register for seminar** → `https://seminar.vaidyagogate.org`  
-- **Doctor login** → `https://seminar.vaidyagogate.org/doctor.html`  
-- **Staff admin** (hidden or footer) → `https://admin.vaidyagogate.org`  
-- **Judges** → `https://judge.vaidyagogate.org`
+| Request host | `/` serves |
+|--------------|------------|
+| `seminar.vaidyagogate.org` | `index.html` (public homepage) |
+| `admin.vaidyagogate.org` | `admin.html` |
+| `judge.vaidyagogate.org` | `judge.html` |
 
-Do **not** embed the Node app in a Wix iframe for login/payments (cookies and Razorpay often break). Always open the subdomain in the same tab.
+Scanner (seminar host only): `https://seminar.vaidyagogate.org/scanner` → `scanner.html`
 
----
-
-## Step 4 — Point DNS to Vercel (recommended)
-
-Use **CNAME** to Vercel (see **`deploy/DEPLOY-VERCEL.md`**) instead of a VPS.
-
-In Vercel → Project → **Domains**, add all three subdomains after DNS is set.
-
-*(Optional VPS + Nginx: use `deploy/nginx-vaidyagogate.conf` and certbot if you host on your own server instead of Vercel.)*
+API routes (`/api/...`) work on any of the three hosts.
 
 ---
 
-## Step 5 — App configuration
+## 4. Wix buttons (link out — do not iframe)
 
-On the server `.env`:
-
-```env
-PUBLIC_BASE_URL=https://seminar.vaidyagogate.org
-SEMINAR_HOST=seminar.vaidyagogate.org
-ADMIN_HOST=admin.vaidyagogate.org
-JUDGE_HOST=judge.vaidyagogate.org
-WIX_SITE_URL=https://www.vaidyagogate.org
-```
-
-Or set the same in **Admin → Global Settings → Email, WhatsApp & live site URL** after first login.
+| Button | URL |
+|--------|-----|
+| National seminar / register | `https://seminar.vaidyagogate.org` |
+| Doctor login | `https://seminar.vaidyagogate.org/doctor.html` |
+| Staff admin | `https://admin.vaidyagogate.org` |
+| Judges | `https://judge.vaidyagogate.org` |
+| QR scanner | `https://seminar.vaidyagogate.org/scanner` |
 
 ---
 
-## Step 6 — Razorpay / WhatsApp webhooks
+## 5. Webhooks (seminar host)
 
-Use **seminar** subdomain URLs:
-
-- Payment return: `https://seminar.vaidyagogate.org/doctor.html`
-- WhatsApp webhook: `https://seminar.vaidyagogate.org/api/webhooks/whatsapp`
+- WhatsApp: `https://seminar.vaidyagogate.org/api/webhooks/whatsapp`
+- Payment return (example): `https://seminar.vaidyagogate.org/doctor.html`
 
 ---
 
-## How subdomains work in the app
+## 6. Optional: VPS instead of Vercel
 
-When a user opens:
-
-- `admin.vaidyagogate.org/` → serves **admin** login  
-- `seminar.vaidyagogate.org/` → serves **public homepage**  
-- `judge.vaidyagogate.org/` → serves **judge** portal  
-
-API calls (`/api/...`) work on **any** of the three hosts.
-
-Emails use `https://seminar.vaidyagogate.org/doctor.html` as the doctor login link.
+If you host on your own server, use **A** records to your VPS IP instead of CNAME to Vercel. See `deploy/nginx-vaidyagogate.conf` and set `PUBLIC_BASE_URL` / host env vars accordingly.

@@ -11,9 +11,9 @@ CREATE TABLE IF NOT EXISTS users (
         phone TEXT NOT NULL,
         whatsapp TEXT,
         password TEXT NOT NULL,
-        role TEXT DEFAULT 'doctor'
+        role TEXT DEFAULT 'doctor',
         qualification TEXT,
-        practitioner_type TEXT
+        practitioner_type TEXT,
         registration_cert_path TEXT,
         registration_cert_no TEXT,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
@@ -35,22 +35,20 @@ CREATE TABLE IF NOT EXISTS abstracts (
         topic TEXT NOT NULL,
         video_path TEXT,
         ppt_path TEXT,
-        status TEXT DEFAULT 'Under Review'
+        status TEXT DEFAULT 'Under Review',
         rejection_reason TEXT,
         marks INTEGER DEFAULT 0,
         judge_remarks TEXT,
-        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id)
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
     );
 CREATE TABLE IF NOT EXISTS registrations (
         id SERIAL PRIMARY KEY,
         user_id INTEGER,
         seminar_id INTEGER,
         application_no TEXT UNIQUE,
-        status TEXT DEFAULT 'pending_approval'
+        status TEXT DEFAULT 'pending_approval',
         rejection_reason TEXT,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, form_data TEXT, registration_source TEXT DEFAULT 'doctor', admin_editor_user_id INTEGER,
-        FOREIGN KEY (user_id),
         FOREIGN KEY (seminar_id) REFERENCES seminars(id)
     );
 CREATE TABLE IF NOT EXISTS orders (
@@ -58,7 +56,7 @@ CREATE TABLE IF NOT EXISTS orders (
         order_id_string TEXT UNIQUE,
         registration_id INTEGER,
         amount REAL,
-        status TEXT DEFAULT 'pending'
+        status TEXT DEFAULT 'pending',
         payment_date TIMESTAMPTZ, payment_gateway TEXT, provider_order_id TEXT, provider_transaction_id TEXT,
         FOREIGN KEY (registration_id) REFERENCES registrations(id)
     );
@@ -69,8 +67,7 @@ CREATE TABLE IF NOT EXISTS tickets (
         qr_code_data TEXT UNIQUE,
         is_scanned BOOLEAN DEFAULT 0,
         scan_time TIMESTAMPTZ, scanned_by INTEGER, ticket_id_string TEXT, is_valid INTEGER DEFAULT 1,
-        FOREIGN KEY (order_id) REFERENCES orders(id),
-        FOREIGN KEY (user_id)
+        FOREIGN KEY (order_id) REFERENCES orders(id)
     );
 CREATE TABLE IF NOT EXISTS support_tickets (
         id SERIAL PRIMARY KEY,
@@ -128,8 +125,7 @@ CREATE TABLE IF NOT EXISTS application_edits (
     edited_by_user_id INTEGER,
     changes TEXT,
     edited_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (application_id) REFERENCES registrations(id),
-    FOREIGN KEY (edited_by_user_id)
+    FOREIGN KEY (application_id) REFERENCES registrations(id)
 );
 CREATE TABLE IF NOT EXISTS doctor_profile (
     id SERIAL PRIMARY KEY,
@@ -143,8 +139,7 @@ CREATE TABLE IF NOT EXISTS doctor_profile (
     bio TEXT,
     profile_photo_path TEXT,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id)
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS event_schedules (
         id SERIAL PRIMARY KEY,
@@ -172,7 +167,6 @@ CREATE TABLE IF NOT EXISTS seminar_feedback (
         suggestions TEXT,
         would_attend_again BOOLEAN DEFAULT 1,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id),
         FOREIGN KEY (seminar_id) REFERENCES seminars(id),
         FOREIGN KEY (registration_id) REFERENCES registrations(id)
     );
@@ -180,37 +174,33 @@ CREATE TABLE IF NOT EXISTS ticket_messages (
         id SERIAL PRIMARY KEY,
         ticket_id TEXT NOT NULL,
         sender_id INTEGER NOT NULL,
-        sender_type TEXT
+        sender_type TEXT,
         message TEXT NOT NULL,
         attachment_path TEXT,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (ticket_id) REFERENCES support_tickets(ticket_id),
-        FOREIGN KEY (sender_id)
+        FOREIGN KEY (ticket_id) REFERENCES support_tickets(ticket_id)
     );
 CREATE TABLE IF NOT EXISTS live_chat_sessions (
         id SERIAL PRIMARY KEY,
         session_id TEXT UNIQUE,
         user_id INTEGER,
         admin_id INTEGER,
-        status TEXT DEFAULT 'active'
+        status TEXT DEFAULT 'active',
         query TEXT,
         resolution TEXT,
         rating INTEGER,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-        ended_at TIMESTAMPTZ,
-        FOREIGN KEY (user_id),
-        FOREIGN KEY (admin_id)
+        ended_at TIMESTAMPTZ
     );
 CREATE TABLE IF NOT EXISTS live_chat_messages (
         id SERIAL PRIMARY KEY,
         session_id TEXT NOT NULL,
         sender_id INTEGER NOT NULL,
-        sender_type TEXT
+        sender_type TEXT,
         message TEXT NOT NULL,
         read_at TIMESTAMPTZ,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (session_id) REFERENCES live_chat_sessions(session_id),
-        FOREIGN KEY (sender_id)
+        FOREIGN KEY (session_id) REFERENCES live_chat_sessions(session_id)
     );
 CREATE TABLE IF NOT EXISTS interactive_session_registrations (
             id SERIAL PRIMARY KEY,
@@ -298,7 +288,6 @@ CREATE TABLE IF NOT EXISTS user_certificates (
                     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                     UNIQUE(user_id, seminar_id),
-                    FOREIGN KEY (user_id),
                     FOREIGN KEY (seminar_id) REFERENCES seminars(id)
                 );
 CREATE TABLE IF NOT EXISTS registration_overrides (

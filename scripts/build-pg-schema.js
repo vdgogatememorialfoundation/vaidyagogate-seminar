@@ -16,15 +16,28 @@ if (!fs.existsSync(dumpPath)) {
 const raw = fs.readFileSync(dumpPath, 'utf8');
 const blocks = raw.split(/(?=CREATE TABLE)/).filter((b) => b.trim().startsWith('CREATE'));
 
+function stripLineComments(sql) {
+    return sql
+        .split('\n')
+        .map((line) => {
+            const idx = line.indexOf('--');
+            if (idx < 0) return line;
+            return line.slice(0, idx).replace(/\s+$/, '');
+        })
+        .join('\n');
+}
+
 function convertCreate(sql) {
     if (/sqlite_sequence/i.test(sql)) return '';
-    let s = sql.trim();
+    let s = stripLineComments(sql.trim());
     s = s.replace(/INTEGER PRIMARY KEY AUTOINCREMENT/gi, 'SERIAL PRIMARY KEY');
     s = s.replace(/AUTOINCREMENT/gi, '');
     s = s.replace(/\bDATETIME\b/gi, 'TIMESTAMPTZ');
     s = s.replace(/\bBOOLEAN\b/gi, 'BOOLEAN');
-    s = s.replace(/,\s*--[^\n]*/g, '');
-    s = s.replace(/\s+REFERENCES users\(id\)/gi, '');
+    s = s.replace(/\s+REFERENCES\s+users\s*\(\s*id\s*\)/gi, '');
+    // Drop incomplete SQLite FK stubs after user refs are stripped.
+    s = s.replace(/,?\s*FOREIGN KEY\s*\([^)]+\)(?!\s*REFERENCES)/gi, '');
+    s = s.replace(/,(\s*\))/g, '$1');
     if (!/CREATE TABLE IF NOT EXISTS/i.test(s)) {
         s = s.replace(/CREATE TABLE/i, 'CREATE TABLE IF NOT EXISTS');
     }

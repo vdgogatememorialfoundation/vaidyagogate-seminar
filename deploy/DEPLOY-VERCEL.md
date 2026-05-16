@@ -36,7 +36,7 @@ Do **not** commit `.env` or real `DATABASE_URL` passwords.
 DATABASE_URL=postgresql://USER:PASSWORD@ep-xxx-pooler.region.aws.neon.tech/neondb?sslmode=require
 ```
 
-3. In Neon SQL editor, you can run `lib/schema-postgres.sql` once, or let the app create tables on first boot.
+3. Optional: run `lib/schema-postgres.sql` once in Neon SQL editor. On deploy, `vercel-build` regenerates this file and the app applies it on first connection.
 
 ---
 
@@ -65,6 +65,10 @@ DATABASE_URL=postgresql://USER:PASSWORD@ep-xxx-pooler.region.aws.neon.tech/neond
 | `RAZORPAY_KEY_ID` | live/test key (also save in admin payment UI) |
 | `RAZORPAY_KEY_SECRET` | secret |
 | `JWT_SECRET` | long random string |
+
+`VERCEL` is set automatically on Vercel; do not add it manually.
+
+If the site shows `Database initializing, retry shortly.`, check **Production** logs: missing/wrong `DATABASE_URL`, Neon project paused, or bootstrap timeout. Redeploy after fixing env vars.
 
 Or configure Zoho/WhatsApp in **Admin → Global Settings** after deploy (stored in DB).
 
@@ -141,7 +145,7 @@ npm start
 |---------|------|
 | **Cron reminders** | `node-cron` disabled on Vercel; use [Vercel Cron](https://vercel.com/docs/cron-jobs) hitting `/api/cron/reminders` (add route if needed) |
 | **File uploads** | `/public/uploads` is ephemeral; use **Cloudinary** for production uploads (next phase) |
-| **Scanner APK** | Point to `https://seminar.vaidyagogate.org/scanner.html` |
+| **Scanner APK** | Point to `https://seminar.vaidyagogate.org/scanner` |
 
 ---
 

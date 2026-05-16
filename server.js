@@ -44,11 +44,11 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 let appReadyPromise = null;
+let appReadyFailed = null;
 
 function bootstrapApp(done) {
     ensureCriticalUserColumns(() => {
         mountExtendedRoutes();
-        casePresentation.registerCasePresentationRoutes(app, { db, upload, generateId });
         startBackgroundWorkers();
         if (done) done();
     });
@@ -56,18 +56,40 @@ function bootstrapApp(done) {
 
 function ensureAppReady(req, res, next) {
     if (!process.env.DATABASE_URL) return next();
-    if (!appReadyPromise) {
-        appReadyPromise = new Promise((resolve, reject) => {
-            db.connect((err) => {
-                if (err) return reject(err);
-                bootstrapApp(resolve);
-            });
+    if (appReadyFailed && Date.now() - appReadyFailed.at < 15000) {
+        return res.status(503).json({
+            error: 'Database initializing, retry shortly.',
+            detail: process.env.VERCEL_ENV === 'production' ? undefined : appReadyFailed.message
         });
     }
-    appReadyPromise.then(() => next()).catch((e) => {
-        console.error('[bootstrap]', e);
-        res.status(503).json({ error: 'Database initializing, retry shortly.' });
-    });
+    if (!appReadyPromise) {
+        appReadyPromise = new Promise((resolve, reject) => {
+            const timeoutMs = process.env.VERCEL ? 55000 : 120000;
+            const timer = setTimeout(() => {
+                reject(new Error('Database bootstrap timed out'));
+            }, timeoutMs);
+            db.connect((err) => {
+                if (err) {
+                    clearTimeout(timer);
+                    return reject(err);
+                }
+                bootstrapApp(() => {
+                    clearTimeout(timer);
+                    resolve();
+                });
+            });
+        }).catch((e) => {
+            appReadyFailed = { message: e.message, at: Date.now() };
+            appReadyPromise = null;
+            throw e;
+        });
+    }
+    appReadyPromise
+        .then(() => next())
+        .catch((e) => {
+            console.error('[bootstrap]', e.message);
+            res.status(503).json({ error: 'Database initializing, retry shortly.' });
+        });
 }
 
 app.use(ensureAppReady);
@@ -265,6 +287,13 @@ app.use((req, res, next) => {
 
 app.use(subdomainPortalMiddleware);
 
+app.get('/scanner', (req, res) => {
+    res.redirect(302, '/scanner.html');
+});
+app.get('/scanner/', (req, res) => {
+    res.redirect(302, '/scanner.html');
+});
+
 app.get('/api/public/portal-urls', (req, res) => {
     res.json(portalUrls.getPortalUrls());
 });
@@ -291,9 +320,10 @@ const upload = multer({ storage: storage, limits: { fileSize: 50 * 1024 * 1024 }
 
 function ensureCriticalUserColumns(callback) {
     const ignoreDup = (err) => {
-        if (err && !String(err.message).includes('duplicate column name')) {
-            console.error('Schema migration:', err.message);
-        }
+        if (!err) return;
+        const m = String(err.message || '');
+        if (m.includes('duplicate column') || m.includes('already exists')) return;
+        console.error('Schema migration:', m);
     };
     db.run(`ALTER TABLE users ADD COLUMN is_disabled INTEGER DEFAULT 0`, (err) => {
         ignoreDup(err);
@@ -473,7 +503,9 @@ function needsAdvancedQualBlock(qual) {
 function ignoreSchemaMigrationErr(err) {
     if (!err) return;
     const m = String(err.message || '');
-    if (m.includes('duplicate column name') || m.includes('already exists')) return;
+    if (m.includes('duplicate column') || m.includes('duplicate column name') || m.includes('already exists')) {
+        return;
+    }
     console.error('Schema migration:', m);
 }
 
