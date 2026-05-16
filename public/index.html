@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vaidya Gogate Memorial Foundation | National Seminar</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/css/vgmf-site.css">
+    <link rel="stylesheet" href="/css/vgmf-premium.css">
+</head>
+<body>
+    <div id="site-preloader" aria-hidden="true"><div class="preloader-ring"></div><p style="color:var(--muted);font-weight:600;">Loading seminar portal…</p></div>
+    <div class="top-bar">
+        <div class="top-bar-container">
+            <div class="top-bar-left">
+                <span><i class="fas fa-envelope"></i> <span id="top-email">info@vaidyagogate.org</span></span>
+                <span><i class="fas fa-phone"></i> <span id="top-phone">+91 9876543210</span></span>
+                <span><i class="fas fa-calendar-alt"></i> <span id="top-date">National Seminar 2026</span></span>
+            </div>
+            <div class="top-bar-right">
+                <a href="/doctor.html"><i class="fas fa-user"></i> Sign in</a>
+                <a href="#" onclick="openRegisterModal(); return false;"><i class="fas fa-user-plus"></i> Create account</a>
+            </div>
+        </div>
+    </div>
+
+    <div id="site-banner-wrap" class="site-banner hidden"></div>
+
+    <header class="site-header" id="site-header">
+        <div class="nav-container">
+            <a href="#" class="logo" onclick="showSection('home'); return false;">
+                <div class="logo-icon" data-site-logo data-logo-height="48px" data-logo-width="48px" data-logo-fallback="icon"><i class="fas fa-leaf"></i></div>
+                <div class="logo-text">
+                    <h1>Vaidya Gogate Memorial Foundation</h1>
+                    <p>Ayurveda · Education · Excellence</p>
+                </div>
+            </a>
+            <button type="button" class="nav-toggle" id="nav-toggle" aria-label="Menu"><i class="fas fa-bars"></i></button>
+            <nav class="nav-links" id="nav-links">
+                <a onclick="showSection('home')">Home</a>
+                <a onclick="showSection('about')">About</a>
+                <a onclick="showSection('gallery')">Gallery</a>
+                <a onclick="showSection('schedule')">Schedule</a>
+                <a id="nav-verify" onclick="showSection('verify')">Verify</a>
+                <a onclick="showSection('contact')">Contact</a>
+                <a id="nav-wix-home" href="https://www.vaidyagogate.org" target="_blank" rel="noopener" class="hidden">Main website</a>
+                <a href="/doctor.html" class="btn-portal">Doctor portal</a>
+            </nav>
+        </div>
+    </header>
+
+    <div class="announcement-ticker">
+        <div class="ticker-container">
+            <span class="ticker-label">Update</span>
+            <div class="ticker-content">
+                <div class="ticker-text" id="tickerText">Welcome to the VGMF National Seminar portal.</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="scrolling-announce-wrap" class="scrolling-announce-wrap hidden">
+        <div class="scrolling-announce-header">
+            <span class="ticker-label">News</span>
+            <span class="sa-sub">Latest updates</span>
+        </div>
+        <div class="scrolling-announce-viewport">
+            <div class="scrolling-announce-track" id="scrolling-announce-track"></div>
+        </div>
+    </div>
+
+    <section id="marketing-hero" class="marketing-hero hidden" aria-label="Featured banners"></section>
+
+    <section class="hero">
+        <div class="hero-container">
+            <div class="hero-content">
+                <span class="hero-badge"><i class="fas fa-certificate"></i> National CME Seminar</span>
+                <h1 id="hero-title">National Seminar 2026</h1>
+                <p class="hero-lead" id="hero-subtitle">Advancements in Ayurveda &amp; integrative medicine</p>
+                <div class="hero-buttons">
+                    <a href="/?register=1" class="btn-primary" id="hero-cta-primary"><i class="fas fa-arrow-right"></i> Register now</a>
+                    <a onclick="showSection('schedule')" class="btn-ghost" id="hero-cta-secondary">View programme</a>
+                </div>
+                <div class="hero-stats" id="hero-stats">
+                    <div class="stat-item"><h3>50+</h3><p>Expert speakers</p></div>
+                    <div class="stat-item"><h3>500+</h3><p>Delegates</p></div>
+                    <div class="stat-item"><h3>30+</h3><p>Sessions</p></div>
+                </div>
+            </div>
+            <div class="hero-visual" id="hero-image-panel">
+                <i class="fas fa-spa hero-fallback-icon"></i>
+                <h3>Vaidya Gogate Memorial Foundation</h3>
+                <p class="hero-venue-line" id="hero-venue"><i class="fas fa-location-dot"></i> Convention Centre, Pune</p>
+            </div>
+        </div>
+    </section>
+
+    <div id="countdown-region"></div>
+
+    <main class="main-content">
+        <div id="homeSection">
+            <div id="home-slider" class="home-slider hidden"></div>
+
+            <section class="vgmf-section home-split">
+                <div>
+                    <div class="section-head left">
+                        <h2 id="section-features-title">Programme highlights</h2>
+                        <p id="section-features-subtitle">Clinical learning, research, and professional networking</p>
+                    </div>
+                    <div class="cards-grid" id="feature-cards-grid"></div>
+                </div>
+                <aside class="notices-panel">
+                    <h3><i class="fas fa-bullhorn"></i> Official notices</h3>
+                    <div id="notices-container">
+                        <p class="muted">Loading notices…</p>
+                    </div>
+                </aside>
+            </section>
+
+            <section class="vgmf-section" id="seminars-section">
+                <div class="section-head">
+                    <h2>Seminars open for registration</h2>
+                    <p>Apply through the secure doctor portal</p>
+                </div>
+                <div id="open-seminars-strip" class="open-seminars-strip"></div>
+            </section>
+
+            <section class="vgmf-section hidden" id="faq-section">
+                <div class="section-head">
+                    <h2>Frequently asked questions</h2>
+                    <p>Registration, payments, and e-tickets</p>
+                </div>
+                <div class="faq-list" id="faq-list"></div>
+            </section>
+
+            <section class="vgmf-section reviews-wrap hidden" id="reviews-section">
+                <div class="section-head">
+                    <h2>What delegates say</h2>
+                    <p>Experiences from our community</p>
+                </div>
+                <div class="reviews-track" id="reviews-track"></div>
+            </section>
+        </div>
+
+        <div id="aboutSection" class="hidden">
+            <div class="section-head">
+                <h2>About the foundation</h2>
+                <p>Advancing Ayurveda since 1972</p>
+            </div>
+            <div class="page-panel" id="about-content"></div>
+        </div>
+
+        <div id="gallerySection" class="hidden">
+            <div class="section-head">
+                <h2>Gallery</h2>
+                <p>Memories from past national seminars</p>
+            </div>
+            <div id="gallery-grid" class="cards-grid"></div>
+        </div>
+
+        <div id="verifySection" class="hidden">
+            <div class="section-head">
+                <h2>Participant verification</h2>
+                <p>Official list of admitted delegates with confirmed payment</p>
+            </div>
+            <div id="verify-inactive" class="verify-inactive hidden">
+                <i class="fas fa-lock"></i>
+                <h3>Verification not open yet</h3>
+                <p>Lists appear here only after admin enables <strong>Publish participant list on website</strong> for a seminar (Admin → Seminar Management), once verification and payments are complete.</p>
+            </div>
+            <div id="verify-active" class="page-panel verify-panel hidden">
+                <label for="verify-seminar">Seminar</label>
+                <select id="verify-seminar"></select>
+                <label for="verify-query">Search</label>
+                <input type="text" id="verify-query" placeholder="Application no., name, or portal ID">
+                <button type="button" class="btn-primary verify-search-btn" onclick="runParticipantVerify()"><i class="fas fa-search"></i> Search</button>
+                <div id="verify-results"></div>
+            </div>
+        </div>
+
+        <div id="scheduleSection" class="hidden">
+            <div class="section-head">
+                <h2 id="schedule-page-title">Event schedule</h2>
+                <p id="schedule-page-subtitle">Sessions, speakers, and timings</p>
+            </div>
+            <div class="schedule-picker">
+                <label for="event-schedule-dropdown">Session detail</label>
+                <select id="event-schedule-dropdown" onchange="displayEventScheduleDetail()">
+                    <option value="">Select a session</option>
+                </select>
+                <div id="event-schedule-detail"></div>
+            </div>
+            <div class="schedule-container" style="overflow-x:auto;">
+                <table class="schedule-table">
+                    <thead><tr><th>Date</th><th>Time</th><th>Session</th><th>Speaker</th></tr></thead>
+                    <tbody id="schedule-table-body">
+                        <tr><td colspan="4" style="text-align:center;padding:24px;">Loading schedule…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="contactSection" class="hidden">
+            <div class="section-head">
+                <h2>Contact us</h2>
+                <p>We are happy to help with registration and general enquiries</p>
+            </div>
+            <div class="contact-grid">
+                <div class="contact-info">
+                    <h3>Get in touch</h3>
+                    <div><i class="fas fa-map-marker-alt"></i> <span id="contact-page-address">—</span></div>
+                    <div><i class="fas fa-phone"></i> <span id="contact-page-phone">—</span></div>
+                    <div><i class="fas fa-envelope"></i> <span id="contact-page-email">—</span></div>
+                    <div id="contact-hours-line" class="hidden"><i class="fas fa-clock"></i> <span id="contact-hours"></span></div>
+                </div>
+                <div class="contact-form">
+                    <h3 style="margin-bottom:16px;font-size:1.05rem;">Send a message</h3>
+                    <form id="contactForm">
+                        <div class="form-group"><input type="text" id="contact_name" placeholder="Your name" required></div>
+                        <div class="form-group"><input type="email" id="contact_email" placeholder="Email" required></div>
+                        <div class="form-group"><input type="tel" id="contact_phone" placeholder="Phone"></div>
+                        <div class="form-group"><input type="text" id="contact_subject" placeholder="Subject" required></div>
+                        <div class="form-group"><textarea id="contact_message" rows="4" placeholder="Message" required></textarea></div>
+                        <button type="submit" class="btn-primary" style="width:100%;border:none;cursor:pointer;">Send message</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div id="authModal" class="modal">
+        <div class="modal-content">
+            <div style="padding:28px;">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;gap:12px;">
+                    <h3 style="font-size:1.1rem;line-height:1.35;">Doctor account</h3>
+                    <button type="button" onclick="closeAuthModal()" style="background:none;border:none;font-size:1.25rem;cursor:pointer;color:var(--muted);">&times;</button>
+                </div>
+                <div style="display:flex;gap:8px;margin-bottom:20px;">
+                    <button type="button" id="auth-tab-login" class="btn-primary auth-tab-btn active" style="flex:1;" onclick="switchAuthTab('login')">Sign in</button>
+                    <button type="button" id="auth-tab-signup" class="btn-ghost auth-tab-btn" style="flex:1;color:var(--ink);border-color:var(--line);" onclick="switchAuthTab('signup')">Create account</button>
+                </div>
+                <div id="loginForm">
+                    <form onsubmit="handleLogin(event)">
+                        <div class="form-group"><label>Email</label><input type="email" id="login_email" required autocomplete="email"></div>
+                        <div class="form-group"><label>Password</label><input type="password" id="login_password" required autocomplete="current-password"></div>
+                        <div id="login_otp_panel" class="hidden" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line);">
+                            <p style="font-size:0.85rem;color:var(--muted);margin-bottom:10px;">Verify with codes sent to your email and WhatsApp.</p>
+                            <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;">
+                                <span style="font-weight:700;min-width:48px;">Email</span>
+                                <button type="button" class="btn-ghost" style="padding:6px 12px;font-size:0.8rem;color:var(--ink);border-color:var(--line);" onclick="sendLoginOtp('email')">Send</button>
+                                <input type="text" id="login_email_otp" placeholder="Code" style="max-width:80px;padding:8px;border-radius:8px;border:1px solid var(--line);">
+                                <button type="button" class="btn-ghost" style="padding:6px 12px;font-size:0.8rem;color:var(--ink);border-color:var(--line);" onclick="verifyLoginOtp('email')">Verify</button>
+                                <span id="login_email_otp_ok" style="font-size:0.8rem;color:#059669;"></span>
+                            </div>
+                            <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+                                <span style="font-weight:700;min-width:48px;">WhatsApp</span>
+                                <button type="button" class="btn-ghost" style="padding:6px 12px;font-size:0.8rem;color:var(--ink);border-color:var(--line);" onclick="sendLoginOtp('phone')">Send</button>
+                                <input type="text" id="login_phone_otp" placeholder="Code" style="max-width:80px;padding:8px;border-radius:8px;border:1px solid var(--line);">
+                                <button type="button" class="btn-ghost" style="padding:6px 12px;font-size:0.8rem;color:var(--ink);border-color:var(--line);" onclick="verifyLoginOtp('phone')">Verify</button>
+                                <span id="login_phone_otp_ok" style="font-size:0.8rem;color:#059669;"></span>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn-primary" style="width:100%;margin-top:12px;border:none;cursor:pointer;">Sign in</button>
+                    </form>
+                </div>
+                <div id="signupForm" class="hidden">
+                    <form onsubmit="handleSignup(event)">
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                            <div class="form-group"><input type="text" id="signup_firstname" placeholder="First name" required></div>
+                            <div class="form-group"><input type="text" id="signup_lastname" placeholder="Last name" required></div>
+                        </div>
+                        <div class="form-group"><input type="email" id="signup_email" placeholder="Email" required></div>
+                        <div class="form-group"><input type="tel" id="signup_phone" placeholder="Phone" required></div>
+                        <div id="signup_otp_panel" class="hidden" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line);">
+                            <p style="font-size:0.85rem;color:var(--muted);margin-bottom:10px;">Verify email and WhatsApp before creating your account.</p>
+                            <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;">
+                                <span style="font-weight:600;min-width:48px;">Email</span>
+                                <button type="button" class="btn-ghost" style="padding:6px 12px;font-size:0.8rem;color:var(--ink);border-color:var(--line);" onclick="sendSignupOtp('email')">Send</button>
+                                <input type="text" id="signup_email_otp" placeholder="Code" style="max-width:80px;padding:8px;border-radius:8px;border:1px solid var(--line);">
+                                <button type="button" class="btn-ghost" style="padding:6px 12px;font-size:0.8rem;color:var(--ink);border-color:var(--line);" onclick="verifySignupOtp('email')">Verify</button>
+                                <span id="signup_email_otp_ok" style="font-size:0.8rem;color:#059669;"></span>
+                            </div>
+                            <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+                                <span style="font-weight:600;min-width:48px;">Phone</span>
+                                <button type="button" class="btn-ghost" style="padding:6px 12px;font-size:0.8rem;color:var(--ink);border-color:var(--line);" onclick="sendSignupOtp('phone')">Send</button>
+                                <input type="text" id="signup_phone_otp" placeholder="Code" style="max-width:80px;padding:8px;border-radius:8px;border:1px solid var(--line);">
+                                <button type="button" class="btn-ghost" style="padding:6px 12px;font-size:0.8rem;color:var(--ink);border-color:var(--line);" onclick="verifySignupOtp('phone')">Verify</button>
+                                <span id="signup_phone_otp_ok" style="font-size:0.8rem;color:#059669;"></span>
+                            </div>
+                        </div>
+                        <div class="form-group"><input type="password" id="signup_password" placeholder="Password" required></div>
+                        <button type="submit" class="btn-primary" style="width:100%;border:none;cursor:pointer;">Create account</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="footer">
+        <div class="footer-container">
+            <div class="footer-col">
+                <h4>Foundation</h4>
+                <p id="footer-tagline">Promoting Ayurveda education since 1972</p>
+            </div>
+            <div class="footer-col">
+                <h4>Explore</h4>
+                <ul>
+                    <li><a onclick="showSection('home')">Home</a></li>
+                    <li><a onclick="showSection('about')">About</a></li>
+                    <li><a onclick="showSection('schedule')">Schedule</a></li>
+                    <li><a onclick="showSection('gallery')">Gallery</a></li>
+                </ul>
+            </div>
+            <div class="footer-col">
+                <h4>Doctor portal</h4>
+                <ul>
+                    <li><a href="/doctor.html">Sign in</a></li>
+                    <li><a href="#" onclick="openRegisterModal(); return false;">Create account</a></li>
+                </ul>
+            </div>
+            <div class="footer-col">
+                <h4>Contact</h4>
+                <p id="contact-address">—</p>
+                <p id="contact-phone">—</p>
+                <p id="contact-email">—</p>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <p id="footer-copyright">© 2026 Vaidya Gogate Memorial Foundation. All rights reserved.</p>
+        </div>
+    </footer>
+
+    <a href="#" class="fab-register" id="fab-register" onclick="openRegisterModal(); return false;"><i class="fas fa-user-plus"></i> <span>Create account</span></a>
+    <div id="site-announce-popup" aria-hidden="true">
+        <div class="sap-backdrop"></div>
+        <div class="sap-panel" role="dialog" aria-labelledby="sap-heading">
+            <button type="button" class="sap-close" aria-label="Close">&times;</button>
+            <img id="sap-image" alt="" class="hidden">
+            <div class="sap-body-wrap">
+                <h3 id="sap-heading">Announcement</h3>
+                <p id="sap-body"></p>
+                <a id="sap-cta" class="hidden" href="#">Learn more</a>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/vgmf-home.js"></script>
+    <script src="/js/vgmf-marketing.js"></script>
+    <script>
+        let currentUserId = null;
+        let signupPhoneOtpToken = null;
+        let signupEmailOtpToken = null;
+        let loginPhoneOtpToken = null;
+        let loginEmailOtpToken = null;
+
+        function setOtpPanelVisible(panel, visible) {
+            if (!panel) return;
+            panel.classList.toggle('hidden', !visible);
+        }
+
+        function isOtpPanelActive(panel) {
+            return panel && !panel.classList.contains('hidden');
+        }
+
+        async function refreshSignupOtpPanel() {
+            const panel = document.getElementById('signup_otp_panel');
+            if (!panel) return;
+            try {
+                const res = await fetch('/api/auth/signup-otp-required');
+                const d = await res.json();
+                setOtpPanelVisible(panel, !!d.required);
+            } catch (_) {
+                setOtpPanelVisible(panel, false);
+            }
+        }
+
+        async function refreshLoginOtpPanel() {
+            const panel = document.getElementById('login_otp_panel');
+            if (!panel) return;
+            try {
+                const res = await fetch('/api/auth/login-otp-required');
+                const d = await res.json();
+                setOtpPanelVisible(panel, !!d.required);
+            } catch (_) {
+                setOtpPanelVisible(panel, false);
+            }
+        }
+
+        async function sendLoginOtp(channel) {
+            const email = String((document.getElementById('login_email') || {}).value || '').trim().toLowerCase();
+            const password = (document.getElementById('login_password') || {}).value;
+            if (!email || !password) return alert('Enter email and password first.');
+            try {
+                const res = await fetch('/api/auth/login-otp/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password, channel })
+                });
+                const data = await res.json();
+                if (!res.ok) return alert(data.error || 'Could not send code.');
+                if (data.debugCode) console.info('Login OTP debug:', data.debugCode);
+                if (data.warning) alert(data.warning);
+            } catch (e) {
+                console.error(e);
+                alert('Network error.');
+            }
+        }
+
+        async function verifyLoginOtp(channel) {
+            const email = String((document.getElementById('login_email') || {}).value || '').trim().toLowerCase();
+            const password = (document.getElementById('login_password') || {}).value;
+            const codeEl = document.getElementById(channel === 'email' ? 'login_email_otp' : 'login_phone_otp');
+            const okEl = document.getElementById(channel === 'email' ? 'login_email_otp_ok' : 'login_phone_otp_ok');
+            const code = String((codeEl || {}).value || '').trim();
+            if (!email || !password || !code) return alert('Enter email, password, and the code.');
+            try {
+                const res = await fetch('/api/auth/login-otp/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password, channel, code })
+                });
+                const data = await res.json();
+                if (!res.ok) return alert(data.error || 'Invalid code.');
+                if (channel === 'email') loginEmailOtpToken = data.token;
+                else loginPhoneOtpToken = data.token;
+                if (okEl) okEl.textContent = 'Verified';
+            } catch (e) {
+                console.error(e);
+                alert('Network error.');
+            }
+        }
+
+        function isDoctorAccount(user) {
+            const ur = String(user.user_role || '').toLowerCase();
+            const r = String(user.role || '').toLowerCase();
+            const staff = ['co_admin', 'judge_user', 'scanner_portal_user', 'reviewer'];
+            if (staff.includes(ur) || r === 'admin') return false;
+            return ur === 'doctor' || r === 'doctor';
+        }
+
+        function portalHintForUser(user) {
+            const ur = String(user.user_role || '').toLowerCase();
+            const r = String(user.role || '').toLowerCase();
+            if (r === 'admin' || ur === 'co_admin') return 'Open the admin portal: /admin.html';
+            if (ur === 'judge_user' || ur === 'reviewer') return 'Open the judge portal: /judge.html';
+            if (ur === 'scanner_portal_user') return 'Open the scanner portal: /scanner.html';
+            return 'Ask your administrator which portal to use.';
+        }
+
+        /** Public site login is for doctors only; staff use their own portal URLs. */
+        function routeUserAfterLogin(user) {
+            if (isDoctorAccount(user)) {
+                localStorage.setItem('seminar_doctor_user', JSON.stringify(user));
+                currentUserId = user.id;
+                window.location.href = '/doctor.html';
+                return;
+            }
+            alert(
+                'This sign-in on the public site is for doctors only.\n\n' +
+                    portalHintForUser(user) +
+                    '\n\nStaff accounts are created in Admin → Users & CRM.'
+            );
+        }
+
+        function signupOtpDestination(channel) {
+            const raw =
+                channel === 'email'
+                    ? String((document.getElementById('signup_email') || {}).value || '').trim()
+                    : String((document.getElementById('signup_phone') || {}).value || '').trim();
+            if (channel === 'email') return raw.toLowerCase();
+            const digits = raw.replace(/\D/g, '');
+            if (digits.length >= 10) return digits.slice(-10);
+            return digits;
+        }
+
+        async function sendSignupOtp(channel) {
+            const dest = signupOtpDestination(channel);
+            if (!dest) {
+                alert(channel === 'email' ? 'Enter your email first.' : 'Enter your phone first.');
+                return;
+            }
+            try {
+                const res = await fetch('/api/otp/send', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ channel, destination: dest, purpose: 'signup' })
+                });
+                const data = await res.json();
+                if (!res.ok) return alert(data.error || 'Could not send code.');
+                if (data.debugCode) console.info('Signup OTP debug:', data.debugCode);
+                if (data.warning) alert(data.warning);
+            } catch (e) {
+                console.error(e);
+                alert('Network error.');
+            }
+        }
+
+        async function verifySignupOtp(channel) {
+            const dest = signupOtpDestination(channel);
+            const codeEl = document.getElementById(channel === 'email' ? 'signup_email_otp' : 'signup_phone_otp');
+            const okEl = document.getElementById(channel === 'email' ? 'signup_email_otp_ok' : 'signup_phone_otp_ok');
+            const code = String((codeEl || {}).value || '').trim();
+            if (!dest || !code) return alert('Enter the code you received.');
+            try {
+                const res = await fetch('/api/otp/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ channel, destination: dest, purpose: 'signup', code })
+                });
+                const data = await res.json();
+                if (!res.ok) return alert(data.error || 'Invalid code.');
+                if (channel === 'email') signupEmailOtpToken = data.token;
+                else signupPhoneOtpToken = data.token;
+                if (okEl) okEl.textContent = 'Verified';
+            } catch (e) {
+                console.error(e);
+                alert('Network error.');
+            }
+        }
+
+        window.addEventListener('load', () => {
+            const user = localStorage.getItem('seminar_doctor_user');
+            if (user) {
+                currentUserId = JSON.parse(user).id;
+            }
+            refreshSignupOtpPanel();
+        });
+
+
+        function renderAboutGallerySocial(cms) {
+            const aboutEl = document.getElementById('about-content');
+            if (aboutEl) {
+                const secs = Array.isArray(cms.aboutSections) ? cms.aboutSections : [];
+                aboutEl.innerHTML = secs.length
+                    ? secs.map((s) => '<h3 style="font-family:Fraunces,Georgia,serif;color:#78350f;margin:16px 0 8px;">' + escHtml(s.heading || '') + '</h3><p>' + escHtml(s.body || '') + '</p>').join('')
+                    : '<p>The Vaidya Gogate Memorial Foundation advances Ayurveda through national seminars and continuing education.</p>';
+            }
+            const grid = document.getElementById('gallery-grid');
+            if (grid) {
+                const gal = Array.isArray(cms.pastSeminarGallery) ? cms.pastSeminarGallery : [];
+                grid.innerHTML = gal.length
+                    ? gal.map((g) => '<div class="card"><img src="' + escHtml(g.src || '') + '" alt="" style="width:100%;height:160px;object-fit:cover;"><div class="card-content"><h3>' + escHtml(g.caption || '') + '</h3><p style="color:#78716c;">' + escHtml(g.year || '') + '</p></div></div>').join('')
+                    : '<p style="color:#78716c;">Gallery images will appear here when added in admin.</p>';
+            }
+        }
+
+
+        function verifyStatusLabel(st) {
+            const s = String(st || '').toLowerCase();
+            if (s === 'checked_in') return 'Checked in';
+            if (s === 'completed') return 'Admitted (paid)';
+            if (s === 'approved_pending_payment') return 'Verified — payment received';
+            return st || '—';
+        }
+
+        function setVerifyUiActive(active) {
+            document.getElementById('verify-inactive')?.classList.toggle('hidden', active);
+            document.getElementById('verify-active')?.classList.toggle('hidden', !active);
+            const nav = document.getElementById('nav-verify');
+            if (nav) nav.classList.toggle('nav-disabled', !active);
+        }
+
+        async function loadVerifySeminars() {
+            const sel = document.getElementById('verify-seminar');
+            if (!sel) return;
+            try {
+                const res = await fetch('/api/public/participant-directories');
+                const list = await res.json();
+                const rows = Array.isArray(list) ? list : [];
+                if (!rows.length) {
+                    setVerifyUiActive(false);
+                    return;
+                }
+                setVerifyUiActive(true);
+                sel.innerHTML = '<option value="">— Select seminar —</option>';
+                rows.forEach((s) => {
+                    sel.innerHTML += '<option value="' + s.id + '">' + escHtml(s.title || '') + '</option>';
+                });
+            } catch (e) {
+                console.error(e);
+                setVerifyUiActive(false);
+            }
+        }
+
+        async function runParticipantVerify() {
+            const sid = document.getElementById('verify-seminar')?.value;
+            const q = document.getElementById('verify-query')?.value || '';
+            const box = document.getElementById('verify-results');
+            if (!box) return;
+            if (!sid) {
+                box.innerHTML = '<p class="verify-msg-error">Select a seminar.</p>';
+                return;
+            }
+            box.innerHTML = '<p class="verify-msg-muted">Searching…</p>';
+            try {
+                const res = await fetch('/api/public/participants/' + sid + '?q=' + encodeURIComponent(q));
+                const data = await res.json();
+                if (!res.ok) {
+                    box.innerHTML = '<p class="verify-msg-error">' + escHtml(data.error || 'List not available') + '</p>';
+                    return;
+                }
+                const rows = data.participants || [];
+                if (!rows.length) {
+                    box.innerHTML = '<p class="verify-msg-muted">No matching admitted delegates found.</p>';
+                    return;
+                }
+                box.innerHTML =
+                    '<p class="verify-count">' +
+                    rows.length +
+                    ' result(s) — ' +
+                    escHtml(data.seminarTitle || '') +
+                    '</p><table class="verify-table"><thead><tr><th>Application</th><th>Name</th><th>City</th><th>Status</th><th>Payment</th></tr></thead><tbody>' +
+                    rows
+                        .map(
+                            (r) =>
+                                '<tr><td>' +
+                                escHtml(r.applicationNo) +
+                                '</td><td>' +
+                                escHtml(r.name) +
+                                '</td><td>' +
+                                escHtml(r.city) +
+                                '</td><td>' +
+                                escHtml(verifyStatusLabel(r.status)) +
+                                '</td><td>' +
+                                (r.paid ? 'Paid' : '—') +
+                                '</td></tr>'
+                        )
+                        .join('') +
+                    '</tbody></table>';
+            } catch (e) {
+                box.innerHTML = '<p class="verify-msg-error">Network error.</p>';
+            }
+        }
+
+        function showSection(section) {
+            const map = {
+                home: 'homeSection',
+                about: 'aboutSection',
+                gallery: 'gallerySection',
+                verify: 'verifySection',
+                schedule: 'scheduleSection',
+                contact: 'contactSection'
+            };
+            Object.values(map).forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.classList.add('hidden');
+            });
+            const target = document.getElementById(map[section]);
+            if (target) target.classList.remove('hidden');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+            if (section === 'verify') loadVerifySeminars();
+            if (section === 'schedule' && typeof loadEventSchedulesPublic === 'function') {
+                loadEventSchedulesPublic();
+            }
+        }
+
+        document.getElementById('nav-toggle')?.addEventListener('click', () => {
+            document.getElementById('site-header')?.classList.toggle('nav-open');
+        });
+
+        function openAuthModal(tab) {
+            document.getElementById('authModal').style.display = 'flex';
+            switchAuthTab(tab === 'signup' ? 'signup' : 'login');
+        }
+        function openRegisterModal() {
+            openAuthModal('signup');
+        }
+        function closeAuthModal() { document.getElementById('authModal').style.display = 'none'; }
+
+        function switchAuthTab(tab) {
+            const loginForm = document.getElementById('loginForm');
+            const signupForm = document.getElementById('signupForm');
+            const tabLogin = document.getElementById('auth-tab-login');
+            const tabSignup = document.getElementById('auth-tab-signup');
+            if (tab === 'login') {
+                loginForm.classList.remove('hidden');
+                signupForm.classList.add('hidden');
+                tabLogin?.classList.add('active');
+                tabSignup?.classList.remove('active');
+                refreshLoginOtpPanel();
+            } else {
+                loginForm.classList.add('hidden');
+                signupForm.classList.remove('hidden');
+                tabSignup?.classList.add('active');
+                tabLogin?.classList.remove('active');
+                refreshSignupOtpPanel();
+            }
+        }
+
+        async function handleLogin(e) {
+            e.preventDefault();
+            const email = document.getElementById('login_email').value;
+            const password = document.getElementById('login_password').value;
+            const body = { email, password };
+            const lo = document.getElementById('login_otp_panel');
+            if (isOtpPanelActive(lo)) {
+                body.phoneOtpToken = loginPhoneOtpToken;
+                body.emailOtpToken = loginEmailOtpToken;
+            }
+            const res = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const data = await res.json();
+            if (data.success) {
+                loginPhoneOtpToken = null;
+                loginEmailOtpToken = null;
+                routeUserAfterLogin(data.user);
+            } else {
+                alert(data.error);
+            }
+        }
+
+        async function handleSignup(e) {
+            e.preventDefault();
+            const firstName = document.getElementById('signup_firstname').value.trim();
+            const lastName = document.getElementById('signup_lastname').value.trim();
+            if (typeof validatePersonNameClient === 'function') {
+                const fn = validatePersonNameClient(firstName, 'First name');
+                if (!fn.valid) return alert(fn.message);
+                const ln = validatePersonNameClient(lastName, 'Last name');
+                if (!ln.valid) return alert(ln.message);
+            }
+            const email = document.getElementById('signup_email').value;
+            const phone = document.getElementById('signup_phone').value;
+            const password = document.getElementById('signup_password').value;
+
+            const body = { firstName, lastName, email, phone, password, role: 'doctor' };
+            const otpPanel = document.getElementById('signup_otp_panel');
+            if (isOtpPanelActive(otpPanel)) {
+                body.phoneOtpToken = signupPhoneOtpToken;
+                body.emailOtpToken = signupEmailOtpToken;
+            }
+
+            const res = await fetch('/api/auth/signup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const data = await res.json();
+            if (data.success) {
+                signupPhoneOtpToken = null;
+                signupEmailOtpToken = null;
+                alert('Registration successful! Please login with your new account.');
+                switchAuthTab('login');
+            } else {
+                alert(data.error);
+            }
+        }
+
+        function escHtml(s) {
+            return String(s == null ? '' : s)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function renderHomeSlider(slides) {
+            const el = document.getElementById('home-slider');
+            if (!el) return;
+            const list = (slides || []).filter((s) => s && s.src);
+            if (!list.length) {
+                el.style.display = 'none';
+                el.innerHTML = '';
+                return;
+            }
+            el.style.display = 'block';
+            let i = 0;
+            const show = () => {
+                const s = list[i];
+                const link = s.link ? escHtml(s.link) : '';
+                const cap = escHtml(s.caption || '');
+                const img = `<img src="${escHtml(s.src)}" alt="">`;
+                el.innerHTML = link
+                    ? `<a href="${link}" style="display:block;color:inherit;">${img}<div class="cap">${cap}</div></a>`
+                    : `${img}<div class="cap">${cap}</div>`;
+                i = (i + 1) % list.length;
+            };
+            show();
+            if (window.__sliderTimer) clearInterval(window.__sliderTimer);
+            if (list.length > 1) window.__sliderTimer = setInterval(show, 6500);
+        }
+
+        function renderScrollingAnnouncements(items) {
+            const wrap = document.getElementById('scrolling-announce-wrap');
+            const track = document.getElementById('scrolling-announce-track');
+            if (!wrap || !track) return;
+            const list = Array.isArray(items) ? items.filter((x) => x && (x.title || x.body)) : [];
+            if (!list.length) {
+                wrap.classList.add('hidden');
+                track.innerHTML = '';
+                return;
+            }
+            wrap.classList.remove('hidden');
+            const one = (it) => {
+                const title = escHtml(it.title || 'Update');
+                const body = escHtml(it.body || '');
+                const date = it.date ? `<div class="sa-meta">${escHtml(it.date)}</div>` : '';
+                const img =
+                    it.image && String(it.image).trim()
+                        ? `<img class="sa-thumb" src="${escHtml(it.image)}" alt="">`
+                        : '';
+                const pdf =
+                    it.pdf && String(it.pdf).trim()
+                        ? `<div style="margin-top:8px;"><a href="${escHtml(it.pdf.startsWith('/') ? it.pdf : '/uploads/' + it.pdf)}" target="_blank" rel="noopener">PDF attachment</a></div>`
+                        : '';
+                const link =
+                    it.link && String(it.link).trim()
+                        ? `<div style="margin-top:8px;"><a href="${escHtml(it.link)}" target="_blank" rel="noopener">Learn more</a></div>`
+                        : '';
+                return `<div class="sa-card">${img}<h5>${title}</h5><p>${body}</p>${date}${link}${pdf}</div>`;
+            };
+            const html = list.map(one).join('');
+            track.innerHTML = html + html;
+        }
+
+        function renderReviewsMarquee(reviews) {
+            const sec = document.getElementById('reviews-section');
+            const track = document.getElementById('reviews-track');
+            if (!sec || !track) return;
+            if (!reviews || !reviews.length) {
+                sec.classList.add('hidden');
+                track.innerHTML = '';
+                return;
+            }
+            sec.classList.remove('hidden');
+            const mkStars = (n) => {
+                const r = Math.min(5, Math.max(0, parseInt(n, 10) || 5));
+                return '★'.repeat(r) + '☆'.repeat(5 - r);
+            };
+            const cards = reviews
+                .map(
+                    (r) => `
+                <div class="review-card">
+                    <div class="stars">${mkStars(r.rating)}</div>
+                    <p style="color:#57534e;font-style:italic;">&ldquo;${escHtml(r.text || '')}&rdquo;</p>
+                    <p style="margin-top:10px;font-weight:700;color:var(--ink);">${escHtml(r.name || '')}</p>
+                    <p style="font-size:0.85rem;color:var(--muted);">${escHtml(r.role || '')}</p>
+                </div>`
+                )
+                .join('');
+            track.innerHTML = cards + cards;
+        }
+
+        async function loadPublicCmsAndApply() {
+            try {
+                const res = await fetch('/api/public/site-cms');
+                const cms = await res.json();
+                if (typeof applySiteCms === 'function') applySiteCms(cms);
+                if (typeof renderAboutGallerySocial === 'function') renderAboutGallerySocial(cms);
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function loadNotices() {
+            try {
+                const [resN, cmsRes] = await Promise.all([fetch('/api/notices'), fetch('/api/public/site-cms')]);
+                const notices = await resN.json();
+                const cms = await cmsRes.json().catch(() => ({}));
+                const extra = Array.isArray(cms.publicNotices) ? cms.publicNotices : [];
+                const container = document.getElementById('notices-container');
+                container.innerHTML = '';
+                const blocks = [];
+                extra.forEach((n) => {
+                    blocks.push({
+                        title: n.title || 'Notice',
+                        date: n.date || '',
+                        body: n.body || '',
+                        pdf: n.pdf || null
+                    });
+                });
+                (notices || []).forEach((n) => {
+                    blocks.push({
+                        title: 'Seminar notice',
+                        date: n.created_at ? new Date(n.created_at).toLocaleDateString() : '',
+                        body: n.message || n.content || '',
+                        pdf: n.pdf_path || null
+                    });
+                });
+                if (!blocks.length) {
+                    container.innerHTML = '<p style="text-align: center; color: #78716c;">No new notices.</p>';
+                    return;
+                }
+                blocks.forEach((n) => {
+                    const pdfHref = n.pdf
+                        ? n.pdf.startsWith('/')
+                            ? escHtml(n.pdf)
+                            : '/uploads/' + escHtml(n.pdf)
+                        : '';
+                    const pdfLink = pdfHref
+                        ? `<a href="${pdfHref}" target="_blank" rel="noopener" style="color: #e63946; font-size: 0.85rem; font-weight: bold; text-decoration: none; display: inline-flex; align-items: center; gap: 5px; margin-top: 10px;"><i class="fas fa-file-pdf"></i> Download PDF</a>`
+                        : '';
+                    container.innerHTML += `
+                        <article class="notice-card">
+                            <h4>${escHtml(n.title)}</h4>
+                            <p class="notice-date">${escHtml(n.date)}</p>
+                            <p>${escHtml(n.body)}</p>
+                            ${pdfLink}
+                        </article>
+                    `;
+                });
+            } catch (err) {
+                console.error('Failed to load notices', err);
+            }
+        }
+
+        // Countdown: uses each seminar's registration_start / registration_end, then event_date (admin "Set as homepage countdown" picks the featured seminar).
+        function getCountdownTargetForSeminar(s) {
+            const now = Date.now();
+            const regStart = s.registration_start ? new Date(s.registration_start).getTime() : null;
+            const regEnd = s.registration_end ? new Date(s.registration_end).getTime() : null;
+            const eventT = s.event_date ? new Date(s.event_date).getTime() : null;
+            if (regStart != null && !Number.isNaN(regStart) && now < regStart) {
+                return { t: regStart, label: 'Registration opens in' };
+            }
+            if (regEnd != null && !Number.isNaN(regEnd) && (!regStart || Number.isNaN(regStart) || now >= regStart) && now < regEnd) {
+                return { t: regEnd, label: 'Registration closes in' };
+            }
+            if (eventT != null && !Number.isNaN(eventT) && now < eventT) {
+                return { t: eventT, label: 'Event starts in' };
+            }
+            return null;
+        }
+
+        let timerInterval;
+        let countdownStrips = [];
+
+        async function loadTimerAndSeminars() {
+            try {
+                const res = await fetch('/api/seminars');
+                const seminars = await res.json();
+                const region = document.getElementById('countdown-region');
+                if (!region) return;
+                if (timerInterval) clearInterval(timerInterval);
+
+                const featured = seminars.find((s) => Number(s.is_countdown_active) === 1);
+                let list = seminars
+                    .map((s) => ({ s, target: getCountdownTargetForSeminar(s) }))
+                    .filter((x) => x.target)
+                    .sort((a, b) => a.target.t - b.target.t);
+                if (featured) {
+                    const hit = list.find((x) => Number(x.s.id) === Number(featured.id));
+                    if (hit) {
+                        list = [hit, ...list.filter((x) => Number(x.s.id) !== Number(featured.id))];
+                    }
+                }
+
+                if (!list.length) {
+                    region.style.display = 'none';
+                    region.innerHTML = '';
+                    countdownStrips = [];
+                    return;
+                }
+
+                region.style.display = 'block';
+                countdownStrips = list;
+                region.innerHTML = list
+                    .map(
+                        (x, idx) => `
+                    <div class="countdown-strip" data-cd="${idx}">
+                        <h4>${escHtml(x.s.title)}</h4>
+                        <p class="cd-lbl" style="font-size:0.75rem;color:#57534e;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;">—</p>
+                        <div class="countdown-grid">
+                            <div class="box"><h2 class="cd-d" style="margin:0;">00</h2><span style="font-size:0.65rem;color:#166534;font-weight:700;">DAYS</span></div>
+                            <div class="box"><h2 class="cd-h" style="margin:0;">00</h2><span style="font-size:0.65rem;color:#166534;font-weight:700;">HRS</span></div>
+                            <div class="box"><h2 class="cd-m" style="margin:0;">00</h2><span style="font-size:0.65rem;color:#166534;font-weight:700;">MIN</span></div>
+                            <div class="box"><h2 class="cd-s" style="margin:0;">00</h2><span style="font-size:0.65rem;color:#166534;font-weight:700;">SEC</span></div>
+                        </div>
+                    </div>`
+                    )
+                    .join('');
+
+                const tick = () => {
+                    let visible = 0;
+                    countdownStrips.forEach((x, idx) => {
+                        const target = getCountdownTargetForSeminar(x.s);
+                        const strip = region.querySelector(`[data-cd="${idx}"]`);
+                        if (!strip) return;
+                        if (!target) {
+                            strip.style.display = 'none';
+                            return;
+                        }
+                        strip.style.display = 'block';
+                        visible++;
+                        strip.querySelector('.cd-lbl').textContent = target.label;
+                        const dist = target.t - Date.now();
+                        if (dist < 0) {
+                            loadTimerAndSeminars();
+                            return;
+                        }
+                        strip.querySelector('.cd-d').textContent = Math.floor(dist / (1000 * 60 * 60 * 24))
+                            .toString()
+                            .padStart(2, '0');
+                        strip.querySelector('.cd-h').textContent = Math.floor((dist % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
+                            .toString()
+                            .padStart(2, '0');
+                        strip.querySelector('.cd-m').textContent = Math.floor((dist % (1000 * 60 * 60)) / (1000 * 60))
+                            .toString()
+                            .padStart(2, '0');
+                        strip.querySelector('.cd-s').textContent = Math.floor((dist % (1000 * 60)) / 1000)
+                            .toString()
+                            .padStart(2, '0');
+                    });
+                    if (!visible) {
+                        region.style.display = 'none';
+                        if (timerInterval) clearInterval(timerInterval);
+                    }
+                };
+
+                tick();
+                timerInterval = setInterval(tick, 1000);
+            } catch (err) {
+                console.error('Failed to load seminars for timer', err);
+            }
+        }
+
+        document.getElementById('nav-toggle')?.addEventListener('click', () => {
+            document.getElementById('site-header')?.classList.toggle('nav-open');
+        });
+
+        window.addEventListener('load', () => {
+            document.getElementById('site-preloader')?.classList.add('is-done');
+        });
+
+        (function handleAuthDeepLink() {
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('register') === '1' || params.get('signup') === '1') {
+                openRegisterModal();
+            } else if (params.get('login') === '1') {
+                openAuthModal('login');
+            }
+        })();
+
+        showSection('home');
+        loadPublicCmsAndApply();
+        if (typeof applyPortalUrls === 'function') applyPortalUrls();
+        if (typeof loadOpenSeminarsStrip === 'function') loadOpenSeminarsStrip();
+        loadNotices();
+        loadTimerAndSeminars();
+        loadVerifySeminars();
+    </script>
+    <script src="/js/site-branding.js"></script>
+    <script src="/js/name-validation.js"></script>
+</body>
+</html>

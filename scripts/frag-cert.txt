@@ -1,0 +1,54 @@
+    if (tabId === 'tab-ticket') {
+        loadDoctorEventTickets();
+    }
+    if (tabId === 'tab-certificate') {
+        loadDoctorCertificates();
+    }
+}
+
+async function loadDoctorCertificates() {
+    const wrap = document.getElementById('doctor-certificates-wrap');
+    if (!wrap || !currentUser) return;
+    wrap.innerHTML = '<p style="color:#64748b;">Loading certificates…</p>';
+    try {
+        const res = await fetch(`/api/doctor/certificates/${currentUser.id}`);
+        const rows = await res.json();
+        if (!rows.length) {
+            wrap.innerHTML =
+                '<p>Certificates appear here after you attend the event (QR check-in), payment is complete, and the admin uploads a template.</p>';
+            return;
+        }
+        wrap.innerHTML = '';
+        rows.forEach((c) => {
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.style.marginBottom = '16px';
+            if (!c.enabled || !c.template_path) {
+                card.innerHTML = `<h4>${c.seminar_title || 'Seminar'}</h4>
+                    <p style="color:#94a3b8;">Locked — complete payment and event check-in. Admin must upload a certificate template.</p>
+                    <p>Name on certificate: <strong>${c.display_name || ''}</strong></p>`;
+                wrap.appendChild(card);
+                return;
+            }
+            const isImage = !c.mime_type || String(c.mime_type).startsWith('image/');
+            if (isImage) {
+                card.innerHTML = `<h4>${c.seminar_title || 'Seminar'}</h4>
+                    <p style="font-size:0.88rem;color:#64748b;margin-bottom:8px;">Name: <strong>${c.display_name || ''}</strong></p>
+                    <motion style="position:relative;max-width:720px;margin:0 auto;">
+                        <img src="${c.template_path}" alt="Certificate" style="width:100%;border-radius:8px;border:1px solid #e2e8f0;">
+                        <div style="position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);font-size:clamp(1rem,3vw,1.75rem);font-weight:700;color:#1e3a5f;text-align:center;width:80%;text-shadow:0 0 8px rgba(255,255,255,0.9);">${c.display_name || ''}</div>
+                    </div>
+                    <button type="button" class="btn-primary" style="margin-top:12px;" onclick="window.print()">Print / Save as PDF</button>`;
+            } else {
+                card.innerHTML = `<h4>${c.seminar_title || 'Seminar'}</h4>
+                    <p>Name: <strong>${c.display_name || ''}</strong></p>
+                    <p><a href="${c.template_path}" target="_blank" class="btn-primary" style="display:inline-block;padding:8px 14px;text-decoration:none;">Download certificate template</a></p>
+                    <p style="font-size:0.85rem;color:#64748b;">Word templates: open the file and place the name above on the certificate.</p>`;
+            }
+            wrap.appendChild(card);
+        });
+    } catch (e) {
+        console.error(e);
+        wrap.innerHTML = '<p style="color:#b91c1c;">Could not load certificates.</p>';
+    }
+}

@@ -1,0 +1,13 @@
+{
+  "appId": "org.vaidyagogate.scanner",
+  "appName": "VGMF Scanner",
+  "webDir": "www",
+  "server": {
+    "url": "https://seminar.vaidyagogate.org/scanner.html",
+    "cleartext": false,
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}

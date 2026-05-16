@@ -1,0 +1,71 @@
+async function appendCasePresentationTrackers(trackerContainer) {
+    if (!trackerContainer || !doctorNumericUserId()) return;
+    try {
+        const res = await fetch('/api/doctor/case/applications/' + doctorNumericUserId());
+        const caseRows = await res.json();
+        if (!Array.isArray(caseRows) || !caseRows.length) return;
+        caseRows.forEach((c) => {
+            const st = String(c.status || 'submitted').toLowerCase();
+            const isJudging = st === 'judging';
+            const isSelected = st === 'selected';
+            const isDisqualified = st === 'disqualified' || c.plagiarism_zero;
+            const appId = c.application_no || String(c.id);
+            if (isDisqualified) {
+                trackerContainer.innerHTML += `
+                <div class="card" style="margin-bottom:15px;border-top:4px solid #ef4444;">
+                    <h4 style="color:#ef4444;"><i class="fas fa-briefcase-medical"></i> Case presentation · ${escapeHtml(appId)}</h4>
+                    <p style="color:#64748b;">Application disqualified or duplicate (zero marks).</p>
+                </motion>`;
+                return;
+            }
+            trackerContainer.innerHTML += `
+            <div class="card" style="margin-bottom:15px;border-top:4px solid #0f766e;">
+                <h4 style="color:#0f766e;margin-bottom:16px;"><i class="fas fa-briefcase-medical"></i> Case presentation: ${escapeHtml(appId)}${c.program_title ? ' · ' + escapeHtml(c.program_title) : ''}</h4>
+                <p style="font-size:0.88rem;color:#64748b;margin:-8px 0 12px;">${escapeHtml(c.category || '')} · ${escapeHtml(c.title || '')}</p>
+                <div class="tracker-vertical">
+                    <div class="track-step completed">
+                        <motion class="track-icon"><i class="fas fa-file-upload"></i></div>
+                        <div class="track-content"><div class="track-title">Application submitted</motion>
+                        <motion class="track-desc">Your case files were received.</div></div>
+                    </div>
+                    <div class="track-step ${isJudging || isSelected ? 'completed' : ''}">
+                        <div class="track-icon"><i class="fas fa-gavel"></i></div>
+                        <div class="track-content"><motion class="track-title">Under judge review</div>
+                        <div class="track-desc">${isJudging ? 'Judges are scoring your presentation.' : 'Waiting for judge assignment.'}</div></div>
+                    </div>
+                    <div class="track-step ${isSelected ? 'completed' : ''}">
+                        <div class="track-icon"><i class="fas fa-trophy"></i></div>
+                        <div class="track-content"><div class="track-title">Result</div>
+                        <div class="track-desc">${isSelected ? 'Selected as case presentation winner.' : 'Result pending.'}</motion></motion></div>
+                    </div>
+                </div>
+            </div>`;
+        });
+        trackerContainer.innerHTML = trackerContainer.innerHTML
+            .replace(/<\/?motion\b[^>]*>/g, (m) => m.replace(/motion/g, 'div'))
+            .replace(/motion/g, 'div');
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function loadApplications() {
+    const uid = doctorNumericUserId();
+    if (!uid) {
+        const list = document.getElementById('applications-list');
+        const trackerContainer = document.getElementById('applications-tracker-container');
+        if (list) list.innerHTML = '<tr><td colspan="3">Please sign in again.</td></tr>';
+        if (trackerContainer) trackerContainer.innerHTML = '<p style="color:#64748b;">Sign in to track applications.</p>';
+        return;
+    }
+    try {
+        const res = await fetch(`/api/applications/${uid}`);
+        userApplications = await res.json();
+        const list = document.getElementById('applications-list');
+        const trackerContainer = document.getElementById('applications-tracker-container');
+        list.innerHTML = '';
+        trackerContainer.innerHTML = '';
+
+        if (!userApplications.length) {
+            list.innerHTML = '<tr><td colspan="3" style="text-align:center;">No seminar applications yet.</td></tr>';
+        }

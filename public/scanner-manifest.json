@@ -1,0 +1,10 @@
+{
+  "name": "VGMF Seminar Scanner",
+  "short_name": "Scanner",
+  "description": "QR check-in for VGMF seminars",
+  "start_url": "/scanner.html",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1e3a8a",
+  "orientation": "portrait"
+}

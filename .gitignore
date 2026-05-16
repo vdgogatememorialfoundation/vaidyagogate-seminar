@@ -1,0 +1,14 @@
+node_modules/
+.env
+.env.local
+.env.*.local
+!.env.example
+database.sqlite
+database.sqlite-journal
+*.db
+public/uploads/*
+!public/uploads/.gitkeep
+.DS_Store
+.vercel
+scanner-mobile/node_modules/
+scanner-mobile/android/

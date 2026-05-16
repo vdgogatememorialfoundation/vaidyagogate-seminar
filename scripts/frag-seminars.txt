@@ -1,0 +1,145 @@
+let activeSeminars = [];
+let seminarGridCountdownTimer = null;
+
+function registrationWindowState(seminar) {
+    const now = Date.now();
+    const rs = seminar.registration_start ? new Date(seminar.registration_start).getTime() : null;
+    const re = seminar.registration_end ? new Date(seminar.registration_end).getTime() : null;
+    const rsValid = rs != null && !Number.isNaN(rs);
+    const reValid = re != null && !Number.isNaN(re);
+    if (rsValid && now < rs) {
+        return { state: 'upcoming', opensAt: rs };
+    }
+    if (reValid && now > re) {
+        return { state: 'closed' };
+    }
+    return { state: 'open' };
+}
+
+function formatCountdownTo(targetMs) {
+    const diff = Math.max(0, targetMs - Date.now());
+    if (diff <= 0) return 'Opening now…';
+    const sec = Math.floor(diff / 1000) % 60;
+    const min = Math.floor(diff / 60000) % 60;
+    const hr = Math.floor(diff / 3600000) % 24;
+    const day = Math.floor(diff / 86400000);
+    const parts = [];
+    if (day) parts.push(`${day}d`);
+    if (day || hr) parts.push(`${hr}h`);
+    parts.push(`${min}m`);
+    parts.push(`${sec}s`);
+    return parts.join(' ');
+}
+
+function clearSeminarGridCountdownTimer() {
+    if (seminarGridCountdownTimer) {
+        clearInterval(seminarGridCountdownTimer);
+        seminarGridCountdownTimer = null;
+    }
+}
+
+function startSeminarGridCountdownTimer() {
+    clearSeminarGridCountdownTimer();
+    const tick = () => {
+        let needReload = false;
+        let anyUpcoming = false;
+        activeSeminars.forEach((s) => {
+            const w = registrationWindowState(s);
+            if (w.state === 'upcoming') {
+                anyUpcoming = true;
+                const el = document.getElementById(`seminar-reg-countdown-${s.id}`);
+                if (el && w.opensAt != null) {
+                    el.textContent = formatCountdownTo(w.opensAt);
+                }
+                const rs = s.registration_start ? new Date(s.registration_start).getTime() : null;
+                if (rs != null && !Number.isNaN(rs) && Date.now() >= rs) {
+                    needReload = true;
+                }
+            }
+        });
+        if (needReload) {
+            loadSeminarsGrid();
+            return;
+        }
+        if (!anyUpcoming) {
+            clearSeminarGridCountdownTimer();
+        }
+    };
+    tick();
+    seminarGridCountdownTimer = setInterval(tick, 1000);
+}
+
+async function loadSeminarsGrid() {
+    try {
+        const res = await fetch('/api/seminars');
+        activeSeminars = await res.json();
+        const container = document.getElementById('seminars-grid-container');
+        container.innerHTML = '';
+        clearSeminarGridCountdownTimer();
+
+        if (activeSeminars.length === 0) {
+            container.innerHTML = '<p style="text-align: center; width: 100%; color: #64748b;">No upcoming seminars currently active.</p>';
+            return;
+        }
+
+        let hasUpcoming = false;
+        activeSeminars.forEach((s) => {
+            const win = registrationWindowState(s);
+            if (win.state === 'upcoming') hasUpcoming = true;
+
+            const regStartLabel = s.registration_start
+                ? new Date(s.registration_start).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+                : '';
+            const regEndLabel = s.registration_end
+                ? new Date(s.registration_end).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+                : '';
+
+            let actionBlock = '';
+            if (win.state === 'upcoming') {
+                actionBlock = `
+                    <div style="background: linear-gradient(135deg, #eef2ff 0%, #e0e7ff 100%); border-radius: 10px; padding: 14px; margin-bottom: 12px; border: 1px solid #c7d2fe;">
+                        <p style="font-size: 0.8rem; color: #4338ca; font-weight: 600; margin-bottom: 6px;"><i class="fas fa-hourglass-half"></i> Registration opens on</p>
+                        <p style="font-size: 0.9rem; color: #312e81; margin-bottom: 10px;">${regStartLabel}</p>
+                        <p style="font-size: 0.75rem; color: #64748b; margin-bottom: 4px;">Time remaining</p>
+                        <p id="seminar-reg-countdown-${s.id}" style="font-size: 1.25rem; font-weight: 700; color: #1a237e; font-variant-numeric: tabular-nums;">${win.opensAt != null ? formatCountdownTo(win.opensAt) : '—'}</p>
+                    </div>
+                    <button type="button" disabled class="btn-primary" style="width: 100%; opacity: 0.55; cursor: not-allowed;">Registration not open yet</button>`;
+            } else if (win.state === 'closed') {
+                actionBlock = `
+                    <p style="font-size: 0.85rem; color: #b45309; margin-bottom: 12px;"><i class="fas fa-lock"></i> Registration for this seminar has closed.</p>
+                    <button type="button" disabled class="btn-primary" style="width: 100%; opacity: 0.55; cursor: not-allowed;">Registration closed</button>`;
+            } else {
+                const closesHint = regEndLabel
+                    ? `<p style="font-size: 0.8rem; color: #64748b; margin-bottom: 10px;"><i class="fas fa-door-open"></i> Registration open · closes ${regEndLabel}</p>`
+                    : '';
+                actionBlock = `
+                    ${closesHint}
+                    <button type="button" class="btn-primary" onclick="startRegistration(${s.id})" style="width: 100%;">Register Now</button>`;
+            }
+
+            const windowMeta =
+                regStartLabel || regEndLabel
+                    ? `<p style="font-size: 0.8rem; margin-bottom: 8px; color: #64748b;"><strong>Registration window:</strong> ${regStartLabel || '—'} → ${regEndLabel || '—'}</p>`
+                    : '';
+
+            container.innerHTML += `
+                <div style="background: white; border-radius: 12px; padding: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.03); border-top: 4px solid #1a237e; display: flex; flex-direction: column; justify-content: space-between;">
+                    <div>
+                        <h3 style="color: #1a237e; margin-bottom: 10px;">${s.title}</h3>
+                        <p style="color: #64748b; font-size: 0.9rem; margin-bottom: 15px;">${s.description || 'No description available.'}</p>
+                        <p style="font-size: 0.85rem; margin-bottom: 5px;"><strong><i class="fas fa-calendar-alt"></i> Event Date:</strong> ${s.event_date ? new Date(s.event_date).toLocaleDateString() : '—'}</p>
+                        ${windowMeta}
+                        <p style="font-size: 0.85rem; margin-bottom: 15px;"><strong><i class="fas fa-rupee-sign"></i> Registration Fee:</strong> ₹${s.price || 0}</p>
+                    </div>
+                    <div>${actionBlock}</div>
+                </div>
+            `;
+        });
+
+        if (hasUpcoming) {
+            startSeminarGridCountdownTimer();
+        }
+    } catch (err) {
+        console.error(err);
+    }
+}

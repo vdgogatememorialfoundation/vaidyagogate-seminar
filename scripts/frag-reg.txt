@@ -1,0 +1,222 @@
+window.onload = () => {
+    const userStr = localStorage.getItem('seminar_user');
+    if (userStr) {
+        currentUser = JSON.parse(userStr);
+        document.getElementById('auth-overlay').classList.add('hidden');
+        document.getElementById('dashboard-main').classList.remove('hidden');
+        
+        // Setup Header using 12-digit ID
+        document.getElementById('header-name').innerText = `Hi, Dr. ${currentUser.first_name || ''} ${currentUser.last_name || ''}`;
+        document.getElementById('header-id').innerText = `ID: ${currentUser.user_id_string || '---'}`;
+        
+        loadProfile();
+        loadSeminarsGrid();
+        loadApplications();
+        loadDoctorDashboardStats();
+        loadRegistrationFormConfigAndApply();
+    }
+};
+
+const REGISTRATION_FIELD_IDS = {
+    fname: 'reg-fname',
+    mname: 'reg-mname',
+    lname: 'reg-lname',
+    email: 'reg-email',
+    phone: 'reg-phone',
+    phone_otp: 'reg-otp',
+    address: 'reg-addr',
+    pin: 'reg-pin',
+    city: 'reg-city',
+    state: 'reg-state',
+    country: 'reg-country',
+    qual: 'reg-qual',
+    ncism: 'reg-ncism',
+    certificate: 'reg-cert-file',
+    college: 'reg-college',
+    ccity: 'reg-ccity',
+    cstate: 'reg-cstate'
+};
+
+const REGISTRATION_STEP_KEYS = {
+    1: ['fname', 'mname', 'lname', 'email', 'phone', 'phone_otp'],
+    2: ['address', 'pin', 'city', 'state', 'country'],
+    3: ['qual', 'ncism', 'certificate'],
+    4: ['college', 'ccity', 'cstate']
+};
+
+function needsAdvancedQualDoctor() {
+    const q = (document.getElementById('reg-qual') || {}).value || '';
+    return q === 'PG' || q === 'Practicing Vaidya' || q === 'Practitioner';
+}
+
+function collectRegistrationFormData() {
+    const o = {};
+    Object.keys(REGISTRATION_FIELD_IDS).forEach((k) => {
+        const id = REGISTRATION_FIELD_IDS[k];
+        const el = document.getElementById(id);
+        if (!el) return;
+        if (el.type === 'file') o[k] = el.files && el.files[0] ? el.files[0].name : '';
+        else o[k] = el.value;
+    });
+    return o;
+}
+
+function validateRegistrationAgainstConfigForSteps(upToStepInclusive) {
+    const fields = window.__registrationFormFields;
+    if (!fields || !fields.length) return null;
+    const fd = collectRegistrationFormData();
+    const hasCert = (document.getElementById('reg-cert-file') || {}).files && document.getElementById('reg-cert-file').files.length > 0;
+    const adv = needsAdvancedQualDoctor();
+    for (let sn = 1; sn <= upToStepInclusive; sn++) {
+        const keys = REGISTRATION_STEP_KEYS[sn];
+        if (!keys) continue;
+        for (const f of fields) {
+            if (!f.enabled || !f.required || keys.indexOf(f.key) === -1) continue;
+            if (f.onlyWhenAdvancedQual && !adv) continue;
+            if (f.key === 'certificate') {
+                if (!hasCert) return `Please upload: ${f.label || 'Certificate'}`;
+                continue;
+            }
+            const v = fd[f.key];
+            if (v === undefined || v === null || String(v).trim() === '') {
+                return `Please complete: ${f.label || f.key}`;
+            }
+        }
+    }
+    return null;
+}
+
+async function loadRegistrationFormConfigAndApply() {
+    try {
+        const res = await fetch('/api/registration-form-config');
+        const data = await res.json();
+        window.__registrationFormFields = data.fields || [];
+    } catch (e) {
+        console.error(e);
+        window.__registrationFormFields = [];
+    }
+    const fields = window.__registrationFormFields;
+    fields.forEach((f) => {
+        const id = REGISTRATION_FIELD_IDS[f.key];
+        if (!id) return;
+        const el = document.getElementById(id);
+        if (!el) return;
+        const fg = el.closest('.form-group');
+        if (fg) {
+            if (f.enabled === false) fg.classList.add('hidden');
+            else fg.classList.remove('hidden');
+            const lab = fg.querySelector('label');
+            if (lab && f.label) lab.textContent = f.label + (f.required ? ' *' : '');
+        }
+        if (f.key !== 'certificate') {
+            el.required = !!(f.enabled && f.required && (!f.onlyWhenAdvancedQual || needsAdvancedQualDoctor()));
+        }
+    });
+}
+
+async function loadInteractiveFormConfigDoctor() {
+    try {
+        const res = await fetch('/api/interactive-session-form-config');
+        const data = await res.json();
+        window.__interactiveFormFields = data.fields || [];
+    } catch (e) {
+        console.error(e);
+        window.__interactiveFormFields = [];
+    }
+    const box = document.getElementById('is-fields-container');
+    if (!box) return;
+    box.innerHTML = '';
+    (window.__interactiveFormFields || []).forEach((f) => {
+        if (!f.enabled) return;
+        const req = f.required ? 'required' : '';
+        box.innerHTML += `<div class="form-group"><label>${f.label || f.key}${f.required ? ' *' : ''}</label><input type="text" class="is-dyn-input" data-int-key="${f.key}" ${req}></div>`;
+    });
+}
+
+function getInteractiveDynamicValues() {
+    const o = {};
+    document.querySelectorAll('.is-dyn-input').forEach((inp) => {
+        const k = inp.getAttribute('data-int-key');
+        if (k) o[k] = inp.value.trim();
+    });
+    return o;
+}
+
+async function loadInteractiveSessionTab() {
+    await loadInteractiveFormConfigDoctor();
+    const sel = document.getElementById('is-registration-select');
+    if (!sel || !currentUser) return;
+    sel.innerHTML = '<option value="">— Select a paid seminar registration —</option>';
+    try {
+        const res = await fetch('/api/applications/' + currentUser.id);
+        const apps = await res.json();
+        (apps || []).forEach((a) => {
+            const st = String(a.status || '');
+            if (st !== 'completed' && st !== 'checked_in') return;
+            const fd = (() => {
+                try {
+                    return JSON.parse(a.form_data || '{}');
+                } catch (_) {
+                    return {};
+                }
+            })();
+            const title = fd._seminarTitleCache || `App ${a.application_no}`;
+            sel.innerHTML += `<option value="${a.id}">${a.application_no} · ${title} (${st})</option>`;
+        });
+    } catch (e) {
+        console.error(e);
+    }
+    const tbody = document.getElementById('is-my-registrations-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="4">Loading…</td></tr>';
+    try {
+        const res = await fetch('/api/interactive-session/user/' + currentUser.id);
+        const rows = await res.json();
+        tbody.innerHTML = '';
+        if (!rows || !rows.length) {
+            tbody.innerHTML = '<tr><td colspan="4" style="color:#64748b;">No interactive session registrations yet.</td></tr>';
+            return;
+        }
+        rows.forEach((r) => {
+            tbody.innerHTML += `<tr><td><strong>${r.ticket_id_string || '—'}</strong></td><td>${r.application_no || '—'}</td><td>${r.seminar_title || '—'}</td><td>${r.status || '—'}</td></tr>`;
+        });
+    } catch (e) {
+        console.error(e);
+        tbody.innerHTML = '<tr><td colspan="4">Could not load.</td></tr>';
+    }
+}
+
+async function submitInteractiveSession() {
+    if (!currentUser) return;
+    const rid = parseInt((document.getElementById('is-registration-select') || {}).value, 10);
+    if (!rid) {
+        alert('Select your completed seminar registration.');
+        return;
+    }
+    const fd = getInteractiveDynamicValues();
+    const fields = window.__interactiveFormFields || [];
+    for (const f of fields) {
+        if (!f.enabled || !f.required) continue;
+        if (!fd[f.key]) {
+            alert('Please fill: ' + (f.label || f.key));
+            return;
+        }
+    }
+    try {
+        const res = await fetch('/api/interactive-session/submit', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: currentUser.id, registrationId: rid, formData: fd })
+        });
+        const data = await res.json();
+        if (data.success) {
+            alert('Registered for interactive session. Your ticket ID: ' + data.ticketId);
+            loadInteractiveSessionTab();
+        } else {
+            alert(data.error || 'Could not register.');
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Error submitting.');
+    }
+}

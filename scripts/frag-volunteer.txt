@@ -1,0 +1,18 @@
+                <div id="tab-volunteer" class="tab-pane hidden">
+                    <h2 class="section-title">Volunteer registration</h2>
+                    <div class="card" id="volunteer-panel">
+                        <p style="color:#64748b;">Loading volunteer assignments…</p>
+                    </div>
+                </div>
+
+                <!-- Case presentation -->
+                <div id="tab-abstract" class="tab-pane hidden">
+                    <h2 class="section-title">Case presentation</h2>
+                    <div class="card">
+                        <p style="color: #64748b; margin-bottom: 15px;">Submit your case title and up to 5 files. Admin will review each file; rejected files can be resubmitted. Approved files cannot be changed.</p>
+                        <div class="form-group"><label>Case title</label><input type="text" id="case-title" placeholder="Presentation title"></div>
+                        <div class="form-group"><label>Files (max 5)</label><input type="file" id="case-files" multiple accept=".pdf,.ppt,.pptx,.doc,.docx,image/*"></div>
+                        <button class="btn-primary" onclick="submitCasePresentation()">Submit case</button>
+                        <div id="case-submissions-list" style="margin-top:20px;"></div>
+                    </div>
+                </div>

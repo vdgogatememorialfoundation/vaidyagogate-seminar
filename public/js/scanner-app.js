@@ -1,0 +1,274 @@
+(function () {
+    const authOverlay = document.getElementById('auth-overlay');
+    const ui = document.getElementById('scan-ui');
+    const loginErr = document.getElementById('login-err');
+    const resultBox = document.getElementById('result-box');
+    const historyEl = document.getElementById('scan-history');
+    let user = PortalAuth.getUser('scanner');
+    let html5QrCode = null;
+    let selectedSeminarId = null;
+    let facingMode = 'environment';
+    let stats = { ok: 0, err: 0, dup: 0 };
+    let torchOn = false;
+
+    function playTone(kind) {
+        try {
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const o = ctx.createOscillator();
+            const g = ctx.createGain();
+            o.connect(g);
+            g.connect(ctx.destination);
+            if (kind === 'success') {
+                o.frequency.value = 880;
+                g.gain.value = 0.18;
+                o.start();
+                o.stop(ctx.currentTime + 0.15);
+            } else if (kind === 'duplicate') {
+                o.type = 'triangle';
+                o.frequency.value = 440;
+                g.gain.value = 0.14;
+                o.start();
+                o.stop(ctx.currentTime + 0.2);
+                setTimeout(() => {
+                    const o2 = ctx.createOscillator();
+                    const g2 = ctx.createGain();
+                    o2.connect(g2);
+                    g2.connect(ctx.destination);
+                    o2.frequency.value = 440;
+                    g2.gain.value = 0.14;
+                    o2.start();
+                    o2.stop(ctx.currentTime + 0.2);
+                }, 220);
+            } else {
+                o.type = 'square';
+                o.frequency.value = 200;
+                g.gain.value = 0.16;
+                o.start();
+                o.stop(ctx.currentTime + 0.35);
+            }
+        } catch (_) {}
+    }
+
+    function updateStats() {
+        const ok = document.getElementById('stat-ok');
+        const err = document.getElementById('stat-err');
+        const dup = document.getElementById('stat-dup');
+        if (ok) ok.textContent = String(stats.ok);
+        if (err) err.textContent = String(stats.err);
+        if (dup) dup.textContent = String(stats.dup);
+    }
+
+    function pushHistory(text, ok) {
+        if (!historyEl) return;
+        const li = document.createElement('li');
+        li.textContent = (ok ? '✓ ' : '✗ ') + text;
+        historyEl.prepend(li);
+        while (historyEl.children.length > 12) historyEl.removeChild(historyEl.lastChild);
+    }
+
+    function renderResult(success, html, panelClass) {
+        resultBox.classList.remove('hidden');
+        resultBox.className = 'result-panel ' + (panelClass || (success ? 'ok' : 'bad'));
+        resultBox.innerHTML = html;
+    }
+
+    function metaHtml(d, extra) {
+        const rows = [
+            ['Name', d.name],
+            ['Ticket ID', d.ticketId || d.ticket_id_string],
+            ['Registration', d.registrationType || d.registration_status || '—'],
+            ['Payment', d.paymentStatus || (d.payment_status === 'success' ? 'PAID' : 'UNPAID')],
+            ['Application', d.applicationNo],
+            ['Seminar', d.seminarTitle],
+            ['Checked in', d.checkedInAt ? new Date(d.checkedInAt).toLocaleString() : '—']
+        ];
+        let h = '<dl class="result-meta">';
+        rows.forEach(([k, v]) => {
+            if (v) h += '<dt>' + k + '</dt><dd>' + String(v).replace(/</g, '&lt;') + '</dd>';
+        });
+        if (extra) h += '<dd>' + extra + '</dd>';
+        return h + '</dl>';
+    }
+
+    async function loadCheckinSeminars() {
+        const sel = document.getElementById('scanner-seminar-select');
+        const hint = document.getElementById('scanner-seminar-hint');
+        if (!sel) return;
+        sel.innerHTML = '<option value="">Loading…</option>';
+        try {
+            const res = await fetch('/api/scanner/checkin-seminars', { cache: 'no-store' });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const list = await res.json();
+            if (!Array.isArray(list) || !list.length) {
+                sel.innerHTML = '<option value="">No check-in seminars</option>';
+                if (hint) hint.textContent = 'Enable check-in on a seminar in Admin.';
+                return;
+            }
+            sel.innerHTML = '<option value="">— Select seminar —</option>';
+            list.forEach((s) => {
+                const opt = document.createElement('option');
+                opt.value = String(s.id);
+                opt.textContent = s.title + (s.checkinDate ? ' · ' + String(s.checkinDate).slice(0, 10) : '');
+                sel.appendChild(opt);
+            });
+            if (list.length === 1) sel.value = String(list[0].id);
+            sel.onchange = () => {
+                selectedSeminarId = sel.value ? parseInt(sel.value, 10) : null;
+                const s = list.find((x) => Number(x.id) === Number(selectedSeminarId));
+                if (hint && s) {
+                    hint.textContent =
+                        s.checkinOpenToday === false
+                            ? 'Today is not the configured check-in date.'
+                            : 'Ready to scan.';
+                }
+            };
+            sel.dispatchEvent(new Event('change'));
+        } catch (e) {
+            sel.innerHTML = '<option value="">Error</option>';
+            if (hint) hint.textContent = e.message || 'Could not load seminars.';
+        }
+    }
+
+    async function processScan(decodedText) {
+        const sel = document.getElementById('scanner-seminar-select');
+        const sid = sel && sel.value ? parseInt(sel.value, 10) : selectedSeminarId;
+        if (!sid) {
+            alert('Select the seminar first.');
+            return startCam();
+        }
+        try {
+            if (html5QrCode) await html5QrCode.stop();
+        } catch (_) {}
+
+        renderResult(false, '<i class="fas fa-spinner fa-spin"></i> Verifying…', 'warn');
+
+        try {
+            const res = await fetch('/api/scanner/mark', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ qrData: decodedText, scannerUserId: user.id, seminarId: sid })
+            });
+            const result = await res.json();
+            const d = result.doctor || {};
+
+            if (result.success) {
+                playTone('success');
+                stats.ok++;
+                renderResult(
+                    true,
+                    '<strong><i class="fas fa-check-circle"></i> Valid entry</strong>' + metaHtml(d),
+                    'ok'
+                );
+                pushHistory((d.name || 'Guest') + ' · ' + (d.ticketId || ''), true);
+            } else {
+                const err = result.error || 'Invalid';
+                const isDup = /already scanned/i.test(err);
+                playTone(isDup ? 'duplicate' : result.sound === 'wrong_date' ? 'wrong_date' : 'error');
+                if (isDup) stats.dup++;
+                else stats.err++;
+                renderResult(
+                    false,
+                    '<strong><i class="fas fa-times-circle"></i> ' +
+                        err.replace(/</g, '&lt;') +
+                        '</strong>' +
+                        (d && d.name ? metaHtml(d) : ''),
+                    isDup ? 'warn' : 'bad'
+                );
+                pushHistory(err.slice(0, 60), false);
+            }
+            updateStats();
+        } catch (e) {
+            stats.err++;
+            updateStats();
+            renderResult(false, 'Network error', 'bad');
+        }
+    }
+
+    async function startCam() {
+        if (html5QrCode) {
+            try {
+                await html5QrCode.stop();
+            } catch (_) {}
+        }
+        html5QrCode = new Html5Qrcode('reader');
+        const config = { fps: 12, qrbox: { width: 280, height: 280 }, aspectRatio: 1 };
+        await html5QrCode.start({ facingMode }, config, (text) => processScan(text));
+    }
+
+    function showLogin() {
+        authOverlay.classList.remove('hidden');
+        ui.classList.add('hidden');
+        if (html5QrCode) html5QrCode.stop().catch(() => {});
+    }
+
+    function showScan(u) {
+        user = u;
+        authOverlay.classList.add('hidden');
+        ui.classList.remove('hidden');
+        document.getElementById('scanner-who').textContent =
+            (u.first_name || '') + ' ' + (u.last_name || '') + ' · ID ' + (u.user_id_string || u.id);
+        loadCheckinSeminars().then(() => startCam()).catch(console.error);
+    }
+
+    PortalAuth.bindLoginForm({
+        portal: 'scanner',
+        formId: 'scanner-login-form',
+        otpPanelId: 'scanner-login-otp-panel',
+        emailInputId: 'scanner-email',
+        passwordInputId: 'scanner-password',
+        otpPrefix: 'scanner',
+        onSuccess: showScan,
+        onError: (msg) => {
+            loginErr.textContent = msg;
+            loginErr.classList.remove('hidden');
+        }
+    });
+
+    document.getElementById('btn-reset')?.addEventListener('click', () => {
+        resultBox.classList.add('hidden');
+        startCam().catch(console.error);
+    });
+
+    document.getElementById('btn-manual')?.addEventListener('click', () => {
+        const v = document.getElementById('manual-qr')?.value?.trim();
+        if (v) processScan(v);
+    });
+
+    document.getElementById('btn-switch-cam')?.addEventListener('click', () => {
+        facingMode = facingMode === 'environment' ? 'user' : 'environment';
+        startCam().catch(console.error);
+    });
+
+    document.getElementById('btn-fullscreen')?.addEventListener('click', () => {
+        if (!document.fullscreenElement) document.documentElement.requestFullscreen?.();
+        else document.exitFullscreen?.();
+    });
+
+    document.getElementById('btn-torch')?.addEventListener('click', async () => {
+        try {
+            const track = html5QrCode?._localMediaStream?.getVideoTracks?.()[0];
+            if (track && track.getCapabilities?.().torch) {
+                torchOn = !torchOn;
+                await track.applyConstraints({ advanced: [{ torch: torchOn }] });
+            } else alert('Torch not supported on this device.');
+        } catch (_) {
+            alert('Torch not available.');
+        }
+    });
+
+    document.getElementById('btn-logout')?.addEventListener('click', () => {
+        PortalAuth.clearUser('scanner');
+        showLogin();
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && document.fullscreenElement) document.exitFullscreen();
+        if (e.key === ' ' && e.target.tagName !== 'INPUT') {
+            e.preventDefault();
+            document.getElementById('btn-reset')?.click();
+        }
+    });
+
+    if (user) showScan(user);
+    else showLogin();
+})();

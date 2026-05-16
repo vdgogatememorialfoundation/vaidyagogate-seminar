@@ -1,0 +1,6 @@
+    activeSeminarIdForReg = seminarId;
+    document.getElementById('registration-seminar-name').innerText = `Registering for: ${seminarTitle}`;
+    document.getElementById('seminars-grid-container').classList.add('hidden');
+    document.getElementById('seminars-title').classList.add('hidden');
+    document.getElementById('multi-step-form').classList.remove('hidden');
+    void loadRegistrationFormConfigAndApply();
