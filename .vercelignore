@@ -1,0 +1,8 @@
+node_modules
+database.sqlite
+database.sqlite-journal
+seminar.db
+*.db
+uploads
+scanner-mobile
+.git
