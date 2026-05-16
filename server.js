@@ -1,5 +1,6 @@
 const express = require('express');
 const db = require('./lib/db');
+const { isPostgresConfigured, validateDatabaseUrl, publicDatabaseHint, sanitizeDbError } = require('./lib/env-db');
 const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
@@ -45,6 +46,7 @@ app.use(express.urlencoded({ extended: true }));
 
 let appReadyPromise = null;
 let appReadyFailed = null;
+let appReadyResolved = false;
 
 function bootstrapApp(done) {
     ensureCriticalUserColumns(() => {
@@ -54,43 +56,147 @@ function bootstrapApp(done) {
     });
 }
 
-function ensureAppReady(req, res, next) {
-    if (!process.env.DATABASE_URL) return next();
-    if (appReadyFailed && Date.now() - appReadyFailed.at < 15000) {
-        return res.status(503).json({
-            error: 'Database initializing, retry shortly.',
-            detail: process.env.VERCEL_ENV === 'production' ? undefined : appReadyFailed.message
-        });
+function databaseConfigResponse(res) {
+    const check = validateDatabaseUrl();
+    return res.status(503).json({
+        error: check.message,
+        code: check.code,
+        hint: publicDatabaseHint(check.code)
+    });
+}
+
+function bootstrapFailureResponse(res, err) {
+    const msg = sanitizeDbError(err);
+    let code = 'BOOTSTRAP_FAILED';
+    if (/timed out/i.test(msg)) code = 'BOOTSTRAP_TIMEOUT';
+    else if (/DATABASE_URL|ECONNREFUSED|ENOTFOUND|password authentication|SSL|timeout|Connection terminated/i.test(msg)) {
+        code = 'DB_CONNECT_FAILED';
     }
-    if (!appReadyPromise) {
-        appReadyPromise = new Promise((resolve, reject) => {
-            const timeoutMs = process.env.VERCEL ? 55000 : 120000;
-            const timer = setTimeout(() => {
-                reject(new Error('Database bootstrap timed out'));
-            }, timeoutMs);
-            db.connect((err) => {
-                if (err) {
-                    clearTimeout(timer);
-                    return reject(err);
-                }
-                bootstrapApp(() => {
-                    clearTimeout(timer);
-                    resolve();
-                });
+    return res.status(503).json({
+        error:
+            code === 'BOOTSTRAP_TIMEOUT'
+                ? 'Database bootstrap timed out on cold start — retry in a few seconds.'
+                : 'Database unavailable.',
+        code,
+        hint: publicDatabaseHint(code),
+        detail: process.env.VERCEL_ENV === 'production' ? undefined : msg
+    });
+}
+
+function startAppBootstrap() {
+    const timeoutMs = process.env.VERCEL ? 90000 : 120000;
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+            reject(new Error('Database bootstrap timed out after ' + Math.round(timeoutMs / 1000) + 's'));
+        }, timeoutMs);
+        db.connect((err) => {
+            if (err) {
+                clearTimeout(timer);
+                return reject(err);
+            }
+            bootstrapApp(() => {
+                clearTimeout(timer);
+                appReadyResolved = true;
+                resolve();
             });
-        }).catch((e) => {
-            appReadyFailed = { message: e.message, at: Date.now() };
-            appReadyPromise = null;
-            throw e;
         });
+    });
+}
+
+function ensureAppReady(req, res, next) {
+    if (!isPostgresConfigured()) {
+        if (process.env.VERCEL) return databaseConfigResponse(res);
+        return next();
+    }
+    const urlCheck = validateDatabaseUrl();
+    if (!urlCheck.ok) return databaseConfigResponse(res);
+
+    const failCooldownMs = process.env.VERCEL ? 8000 : 15000;
+    if (appReadyFailed && Date.now() - appReadyFailed.at < failCooldownMs) {
+        return bootstrapFailureResponse(res, new Error(appReadyFailed.message));
+    }
+    if (appReadyResolved && !appReadyPromise) return next();
+
+    if (!appReadyPromise) {
+        appReadyPromise = startAppBootstrap()
+            .catch((e) => {
+                appReadyFailed = { message: e.message, at: Date.now(), code: e.code };
+                appReadyPromise = null;
+                appReadyResolved = false;
+                throw e;
+            });
     }
     appReadyPromise
         .then(() => next())
         .catch((e) => {
-            console.error('[bootstrap]', e.message);
-            res.status(503).json({ error: 'Database initializing, retry shortly.' });
+            console.error('[bootstrap]', sanitizeDbError(e));
+            bootstrapFailureResponse(res, e);
         });
 }
+
+app.get('/api/health', (req, res) => {
+    const urlCheck = validateDatabaseUrl();
+    const payload = {
+        ok: false,
+        time: new Date().toISOString(),
+        runtime: {
+            vercel: !!process.env.VERCEL,
+            node: process.version
+        },
+        database: {
+            mode: isPostgresConfigured() ? 'postgresql' : process.env.VERCEL ? 'unset' : 'sqlite',
+            configured: isPostgresConfigured(),
+            valid: urlCheck.ok
+        },
+        bootstrap: {
+            state: appReadyResolved ? 'ready' : appReadyPromise ? 'in_progress' : appReadyFailed ? 'failed' : 'idle'
+        }
+    };
+    if (!urlCheck.ok) {
+        payload.code = urlCheck.code;
+        payload.error = urlCheck.message;
+        payload.hint = publicDatabaseHint(urlCheck.code);
+        return res.status(503).json(payload);
+    }
+    if (!isPostgresConfigured()) {
+        payload.ok = true;
+        return res.json(payload);
+    }
+    if (appReadyFailed) {
+        payload.bootstrap.lastError = sanitizeDbError(appReadyFailed.message);
+        payload.bootstrap.failedAt = new Date(appReadyFailed.at).toISOString();
+    }
+    db.connect((err) => {
+        if (err) {
+            payload.code = 'DB_CONNECT_FAILED';
+            payload.error = sanitizeDbError(err);
+            payload.hint = publicDatabaseHint('DB_CONNECT_FAILED');
+            return res.status(503).json(payload);
+        }
+        if (appReadyResolved) {
+            payload.ok = true;
+            payload.bootstrap.state = 'ready';
+            return res.json(payload);
+        }
+        if (appReadyPromise) {
+            return appReadyPromise
+                .then(() => {
+                    payload.ok = true;
+                    payload.bootstrap.state = 'ready';
+                    res.json(payload);
+                })
+                .catch((e) => {
+                    payload.bootstrap.state = 'failed';
+                    payload.error = sanitizeDbError(e);
+                    payload.hint = publicDatabaseHint('BOOTSTRAP_FAILED');
+                    res.status(503).json(payload);
+                });
+        }
+        payload.ok = true;
+        payload.bootstrap.state = 'connected';
+        res.json(payload);
+    });
+});
 
 app.use(ensureAppReady);
 

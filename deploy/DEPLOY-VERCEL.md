@@ -68,7 +68,7 @@ DATABASE_URL=postgresql://USER:PASSWORD@ep-xxx-pooler.region.aws.neon.tech/neond
 
 `VERCEL` is set automatically on Vercel; do not add it manually.
 
-If the site shows `Database initializing, retry shortly.`, check **Production** logs: missing/wrong `DATABASE_URL`, Neon project paused, or bootstrap timeout. Redeploy after fixing env vars.
+If the site shows a database error, open `https://your-project.vercel.app/api/health` — it reports whether `DATABASE_URL` is set, valid, and if Postgres connect/bootstrap succeeded. Check **Production** function logs for `[bootstrap]`, `[pg]`, and `[pg-schema]`. Redeploy after fixing env vars.
 
 Or configure Zoho/WhatsApp in **Admin → Global Settings** after deploy (stored in DB).
 
