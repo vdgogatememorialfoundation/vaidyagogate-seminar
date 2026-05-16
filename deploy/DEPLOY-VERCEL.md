@@ -70,6 +70,8 @@ DATABASE_URL=postgresql://USER:PASSWORD@ep-xxx-pooler.region.aws.neon.tech/neond
 
 If the site shows a database error, open `https://your-project.vercel.app/api/health` — it reports whether `DATABASE_URL` is set, valid, and if Postgres connect/bootstrap succeeded. Check **Production** function logs for `[bootstrap]`, `[pg]`, and `[pg-schema]`. Redeploy after fixing env vars.
 
+**`BOOTSTRAP_TIMEOUT` in logs:** Usually many parallel cold starts all running migrations. The app defers migrations on Vercel and serves static pages (`/`, `*.html`, `/favicon.ico`) without waiting. Push the latest `main` and redeploy. Optional one-time speed-up: `node scripts/apply-neon-schema.js` with `DATABASE_URL` set locally so Neon already has all tables before traffic hits Vercel.
+
 Or configure Zoho/WhatsApp in **Admin → Global Settings** after deploy (stored in DB).
 
 4. Deploy. Note your Vercel URL: `https://your-project.vercel.app`
@@ -143,6 +145,8 @@ npm start
 
 | Feature | Note |
 |---------|------|
+| **Function timeout** | `vercel.json` sets `maxDuration: 60` (requires **Vercel Pro**). **Hobby** caps at **10s** — run `lib/schema-postgres.sql` once in Neon SQL editor so cold start uses the fast path, or upgrade to Pro. |
+| **Cold start** | First request runs DB connect + schema check. Existing Neon DB skips full schema apply; migrations run in the background after the fast path. |
 | **Cron reminders** | `node-cron` disabled on Vercel; use [Vercel Cron](https://vercel.com/docs/cron-jobs) hitting `/api/cron/reminders` (add route if needed) |
 | **File uploads** | `/public/uploads` is ephemeral; use **Cloudinary** for production uploads (next phase) |
 | **Scanner APK** | Point to `https://seminar.vaidyagogate.org/scanner` |

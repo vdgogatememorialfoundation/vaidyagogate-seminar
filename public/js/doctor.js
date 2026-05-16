@@ -242,12 +242,12 @@ window.__regEmailOtpToken = null;
 
 function bootDoctorDashboard(user) {
     currentUser = user;
-    document.getElementById('auth-overlay').classList.add('hidden');
-    document.getElementById('dashboard-main').classList.remove('hidden');
-    document.getElementById('header-name').innerText = `Hi, Dr. ${currentUser.first_name || ''} ${currentUser.last_name || ''}`;
+        document.getElementById('auth-overlay').classList.add('hidden');
+        document.getElementById('dashboard-main').classList.remove('hidden');
+        document.getElementById('header-name').innerText = `Hi, Dr. ${currentUser.first_name || ''} ${currentUser.last_name || ''}`;
     document.getElementById('header-id').innerText =
         `ID: ${currentUser.user_id_string || '---'}` + (Number(currentUser.is_demo) === 1 ? ' · Demo' : '');
-    loadProfile();
+        loadProfile();
     loadDoctorPortalYear().then(() => {
         loadSeminarsGrid();
         loadApplications();
@@ -773,7 +773,7 @@ function renderSeminarGridCard(s, readOnlyPast) {
 
 async function loadSeminarsGrid() {
     clearSeminarGridCountdownTimer();
-    const container = document.getElementById('seminars-grid-container');
+        const container = document.getElementById('seminars-grid-container');
     if (!container) return;
     try {
         const res = await fetch('/api/seminars?bucket=current', { cache: 'no-store' });
@@ -781,7 +781,7 @@ async function loadSeminarsGrid() {
         if (payload.portalYear) doctorPortalYear = payload.portalYear;
         activeSeminars = payload.seminars || [];
         container.innerHTML = '';
-
+        
         if (!activeSeminars.length) {
             container.innerHTML =
                 '<p style="grid-column:1/-1;text-align:center;width:100%;color:#64748b;">No active seminars available for registration at this time.</p>';
@@ -873,7 +873,7 @@ function switchTab(tabId) {
     document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
     document.getElementById(tabId).classList.remove('hidden');
     if (typeof event !== 'undefined' && event && event.currentTarget) {
-        event.currentTarget.classList.add('active');
+    event.currentTarget.classList.add('active');
     } else {
         document.querySelectorAll('.menu-item').forEach(m => {
             const oc = m.getAttribute('onclick') || '';
@@ -1433,10 +1433,10 @@ async function nextStep(step) {
     // Hide all steps
     document.querySelectorAll('.form-step').forEach((el) => el.classList.add('hidden'));
     document.querySelectorAll('.step').forEach((el) => el.classList.remove('active'));
-
+    
     // Show current step
     document.getElementById(`step-${step}`).classList.remove('hidden');
-
+    
     // Update progress indicator
     for (let i = 0; i <= step; i++) {
         const ind = document.getElementById(`ind-step-${i}`);
@@ -1590,7 +1590,7 @@ function generatePdfBlob(qrImgElement) {
     const pdfBlob = doc.output('blob');
     if (currentPdfBlobUrl) URL.revokeObjectURL(currentPdfBlobUrl);
     currentPdfBlobUrl = URL.createObjectURL(pdfBlob);
-
+    
     document.getElementById('pdf-viewer').src = currentPdfBlobUrl;
 }
 
@@ -1856,7 +1856,7 @@ async function loadApplications(silentPoll) {
             const cancelBtn = canDoctorCancel
                 ? `<button type="button" class="btn-primary" style="padding: 5px 10px; margin-right: 5px; background: #b91c1c; border: none;" onclick="doctorCancelApplication(${a.id})">Cancel</button>`
                 : '';
-
+            
             list.innerHTML += `
                 <tr>
                     <td><strong>${a.application_no}</strong></td>
@@ -1924,7 +1924,7 @@ function viewApplication(index) {
         }
         trackEl.innerHTML = extra;
     }
-
+    
     document.getElementById('view-app-modal').classList.remove('hidden');
     document.getElementById('view-app-modal').style.display = 'flex';
 }
@@ -2041,7 +2041,7 @@ function downloadViewedAppPdf() {
         const tLines = doc.splitTextToSize(terms, 175);
         doc.text(tLines, 14, y);
     }
-
+    
     doc.save(`Application_${app.application_no}.pdf`);
 }
 
@@ -2489,7 +2489,7 @@ async function loadTickets() {
         }
         tickets.forEach((t) => {
             if (t.ticket_id) {
-                list.innerHTML += `
+            list.innerHTML += `
                 <tr>
                     <td><strong>${t.ticket_id}</strong></td>
                     <td>${t.subject || '—'}</td>
@@ -2531,9 +2531,9 @@ function closeChat() {
 }
 
 async function loadChatMessages() {
-    const box = document.getElementById('chat-messages');
+        const box = document.getElementById('chat-messages');
     if (!box) return;
-    box.innerHTML = '';
+        box.innerHTML = '';
     try {
         if (currentTicketId) {
             const res = await fetch('/api/support-ticket/' + encodeURIComponent(currentTicketId));
@@ -2551,8 +2551,8 @@ async function loadChatMessages() {
             const res = await fetch('/api/support/ticket/' + encodeURIComponent(currentLegacyTrackingId) + '/messages');
             const messages = await res.json();
             messages.forEach((m) => {
-                const isDoc = m.sender === 'doctor';
-                box.innerHTML += `
+            const isDoc = m.sender === 'doctor';
+            box.innerHTML += `
                 <div style="align-self: ${isDoc ? 'flex-end' : 'flex-start'}; background: ${isDoc ? '#1a237e' : 'white'}; color: ${isDoc ? 'white' : '#334155'}; border: 1px solid ${isDoc ? '#1a237e' : '#cbd5e1'}; padding: 10px 15px; border-radius: 8px; max-width: 80%;">
                     <p style="font-size: 0.8rem; margin-bottom: 5px; color: ${isDoc ? '#c7d2fe' : '#64748b'};"><strong>${isDoc ? 'You' : 'Admin'}</strong> — ${new Date(m.created_at).toLocaleString()}</p>
                     <p>${(m.message || '').replace(/</g, '&lt;')}</p>
@@ -2562,7 +2562,7 @@ async function loadChatMessages() {
     } catch (err) {
         console.error(err);
     }
-    box.scrollTop = box.scrollHeight;
+        box.scrollTop = box.scrollHeight;
 }
 
 async function sendReply() {
@@ -2582,14 +2582,14 @@ async function sendReply() {
             }
         } else if (currentLegacyTrackingId) {
             const res = await fetch('/api/support/ticket/' + encodeURIComponent(currentLegacyTrackingId) + '/reply', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ message: msg, sender: 'doctor' })
-            });
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: msg, sender: 'doctor' })
+        });
             if ((await res.json()).success) {
-                msgInput.value = '';
-                await loadChatMessages();
-            }
+            msgInput.value = '';
+            await loadChatMessages();
+        }
         }
     } catch (err) {
         console.error(err);

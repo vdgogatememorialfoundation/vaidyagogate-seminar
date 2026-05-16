@@ -1,6 +1,7 @@
 const express = require('express');
 const db = require('./lib/db');
 const { isPostgresConfigured, validateDatabaseUrl, publicDatabaseHint, sanitizeDbError } = require('./lib/env-db');
+const pgDb = isPostgresConfigured() ? require('./lib/db-pg') : null;
 const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
@@ -47,13 +48,54 @@ app.use(express.urlencoded({ extended: true }));
 let appReadyPromise = null;
 let appReadyFailed = null;
 let appReadyResolved = false;
+let deferredBootstrapStarted = false;
+
+function bootstrapTimeoutMs() {
+    if (!process.env.VERCEL) return 120000;
+    const cap = Number(process.env.VERCEL_MAX_DURATION_MS);
+    if (Number.isFinite(cap) && cap > 0) return Math.max(8000, cap - 3000);
+    return 55000;
+}
 
 function bootstrapApp(done) {
-    ensureCriticalUserColumns(() => {
-        mountExtendedRoutes();
-        startBackgroundWorkers();
+    mountExtendedRoutes();
+    startBackgroundWorkers();
+
+    const finish = () => {
         if (done) done();
-    });
+    };
+
+    const runFullMigrations = () => {
+        ensureCriticalUserColumns(() => {
+            console.log('[bootstrap] migrations complete');
+            if (done) done();
+        });
+    };
+
+    const scheduleDeferredMigrations = () => {
+        if (deferredBootstrapStarted) return finish();
+        deferredBootstrapStarted = true;
+        setImmediate(() => runFullMigrations());
+        finish();
+    };
+
+    // Vercel: never block requests on the long SQLite-style migration chain (60s function cap).
+    if (process.env.VERCEL) {
+        return scheduleDeferredMigrations();
+    }
+
+    if (!pgDb) {
+        return runFullMigrations();
+    }
+
+    pgDb
+        .isCoreSchemaPresent()
+        .then((ready) => {
+            if (!ready) return runFullMigrations();
+            console.log('[bootstrap] fast path — deferring migrations');
+            scheduleDeferredMigrations();
+        })
+        .catch(() => runFullMigrations());
 }
 
 function databaseConfigResponse(res) {
@@ -84,7 +126,7 @@ function bootstrapFailureResponse(res, err) {
 }
 
 function startAppBootstrap() {
-    const timeoutMs = process.env.VERCEL ? 90000 : 120000;
+    const timeoutMs = bootstrapTimeoutMs();
     return new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
             reject(new Error('Database bootstrap timed out after ' + Math.round(timeoutMs / 1000) + 's'));
@@ -93,6 +135,13 @@ function startAppBootstrap() {
             if (err) {
                 clearTimeout(timer);
                 return reject(err);
+            }
+            if (process.env.VERCEL) {
+                clearTimeout(timer);
+                appReadyResolved = true;
+                resolve();
+                bootstrapApp();
+                return;
             }
             bootstrapApp(() => {
                 clearTimeout(timer);
@@ -198,7 +247,32 @@ app.get('/api/health', (req, res) => {
     });
 });
 
-app.use(ensureAppReady);
+function requestNeedsBootstrap(req) {
+    const p = req.path || '/';
+    if (p === '/api/health') return false;
+    if (p === '/scanner' || p === '/scanner/') return false;
+    if (/\.(html?|css|js|ico|png|jpe?g|gif|webp|svg|woff2?|json|webmanifest|txt|map)$/i.test(p)) return false;
+    if (p.startsWith('/css/') || p.startsWith('/js/') || p.startsWith('/uploads/')) return false;
+    if (p.startsWith('/api/')) return true;
+    if (p.startsWith('/admin') || p.startsWith('/doctor') || p.startsWith('/judge')) return true;
+    return false;
+}
+
+app.use(subdomainPortalMiddleware);
+
+app.get('/scanner', (req, res) => {
+    res.redirect(302, '/scanner.html');
+});
+app.get('/scanner/', (req, res) => {
+    res.redirect(302, '/scanner.html');
+});
+
+app.use(express.static('public'));
+
+app.use((req, res, next) => {
+    if (!requestNeedsBootstrap(req)) return next();
+    return ensureAppReady(req, res, next);
+});
 
 // Kill Switch Middleware
 app.use((req, res, next) => {
@@ -391,20 +465,9 @@ app.use((req, res, next) => {
     });
 });
 
-app.use(subdomainPortalMiddleware);
-
-app.get('/scanner', (req, res) => {
-    res.redirect(302, '/scanner.html');
-});
-app.get('/scanner/', (req, res) => {
-    res.redirect(302, '/scanner.html');
-});
-
 app.get('/api/public/portal-urls', (req, res) => {
     res.json(portalUrls.getPortalUrls());
 });
-
-app.use(express.static('public')); // Serve static files
 
 const uploadsDir = path.join(__dirname, 'public', 'uploads');
 try {

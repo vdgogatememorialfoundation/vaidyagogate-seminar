@@ -45,6 +45,17 @@ $env:JAVA_HOME = $javaHome
 $env:PATH = "$javaHome\bin;$env:PATH"
 Write-Host "Using JAVA_HOME=$javaHome" -ForegroundColor Cyan
 
+$sdk = $env:ANDROID_HOME
+if (-not $sdk) { $sdk = "$env:LOCALAPPDATA\Android\Sdk" }
+if (-not (Test-Path $sdk)) {
+    throw "Android SDK not found at $sdk. Install cmdline-tools and run sdkmanager for platform-tools, platforms;android-34, build-tools;34.0.0"
+}
+$env:ANDROID_HOME = $sdk
+$localProps = Join-Path $android "local.properties"
+$sdkEsc = ($sdk -replace '\\', '\\')
+Set-Content -Path $localProps -Value "sdk.dir=$sdkEsc" -Encoding ASCII
+Write-Host "Using ANDROID_HOME=$sdk" -ForegroundColor Cyan
+
 Push-Location $mobile
 try {
     if (-not (Test-Path "node_modules")) { npm install }
