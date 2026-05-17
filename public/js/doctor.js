@@ -104,6 +104,11 @@ window.__doctorPaymentOptions = [];
 async function loadDoctorPaymentOptions() {
     try {
         const res = await fetch('/api/payments/options', { cache: 'no-store' });
+        if (!res.ok) {
+            console.warn('[payments] options HTTP', res.status);
+            window.__doctorPaymentOptions = [];
+            return;
+        }
         const data = await res.json();
         window.__doctorPaymentOptions = data.options || [];
     } catch (e) {
@@ -114,7 +119,11 @@ async function loadDoctorPaymentOptions() {
 
 function paymentGatewaySelectHtml(regId) {
     const opts = window.__doctorPaymentOptions || [];
-    if (!opts.length) return '';
+    if (!opts.length) {
+        return (
+            '<p style="margin-top:10px;font-size:0.85rem;color:#64748b;">Payment: <strong>Test / mock mode</strong> (add Razorpay keys in Admin → Payment gateways, then refresh).</p>'
+        );
+    }
     if (opts.length === 1) {
         return '<input type="hidden" id="pay-opt-' + regId + '" value="' + escapeHtml(opts[0].id) + '">';
     }
@@ -151,6 +160,7 @@ function renderTrackerStepsHtml(timeline) {
     const steps = timeline.steps || [];
     let html = '<div class="tracker-vertical">';
     steps.forEach((step) => {
+        if (step.state === 'pending') return;
         const cls = step.state === 'completed' ? 'completed' : step.state === 'active' ? 'active' : '';
         const when = step.at
             ? '<p class="track-when" style="font-size:0.78rem;color:#0f766e;margin:4px 0 0;font-weight:600;">' +
@@ -327,10 +337,11 @@ function bootDoctorDashboard(user) {
     document.getElementById('header-id').innerText =
         `ID: ${currentUser.user_id_string || '---'}` + (Number(currentUser.is_demo) === 1 ? ' · Demo' : '');
         loadProfile();
-    loadDoctorPaymentOptions();
-    loadDoctorPortalYear().then(() => {
-        loadSeminarsGrid();
-        loadApplications();
+    loadDoctorPaymentOptions().then(() => {
+        loadDoctorPortalYear().then(() => {
+            loadSeminarsGrid();
+            loadApplications();
+        });
     });
     loadDoctorDashboardStats();
     loadRegistrationFormConfigAndApply();
