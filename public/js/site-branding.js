@@ -24,6 +24,12 @@
     }
 
     async function loadSiteBranding() {
+        const onScanner =
+            document.documentElement.classList.contains('scanner-native-shell') ||
+            /\/scanner\.html$/i.test(window.location.pathname || '');
+        if (onScanner && !document.querySelector('[data-site-logo]')) {
+            return;
+        }
         let logoPath = '';
         try {
             const res = await fetch('/api/branding/logo', { cache: 'no-store' });
@@ -36,7 +42,7 @@
         }
         window.__siteLogoPath = logoPath;
         document.querySelectorAll('[data-site-logo]').forEach((el) => applyLogoToSlot(el, logoPath));
-        if (logoPath) {
+        if (logoPath && !onScanner) {
             document.body.classList.add('has-logo-theme');
             document.body.style.setProperty('--site-logo-watermark', 'url("' + logoPath + '")');
         } else {

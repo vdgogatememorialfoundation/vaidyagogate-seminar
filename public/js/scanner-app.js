@@ -2,20 +2,69 @@
     const isNativeScannerShell =
         !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) ||
         /VGMF Scanner|Capacitor/i.test(navigator.userAgent || '');
-    if (isNativeScannerShell) {
+
+    function isScannerPageUrl(url) {
+        try {
+            const u = new URL(url, window.location.href);
+            if (u.origin !== window.location.origin) return false;
+            return /\/scanner\.html$/i.test(u.pathname) || u.pathname === '/scanner';
+        } catch (_) {
+            return false;
+        }
+    }
+
+    function lockScannerNavigation() {
         document.documentElement.classList.add('scanner-native-shell');
         document.querySelectorAll('a[href]').forEach((a) => {
-            const href = String(a.getAttribute('href') || '');
-            if (href && href !== '#' && !href.includes('scanner.html')) {
-                a.addEventListener('click', (e) => e.preventDefault());
+            const href = String(a.getAttribute('href') || '').trim();
+            if (!href || href === '#') return;
+            if (!isScannerPageUrl(href)) {
+                a.removeAttribute('href');
+                a.setAttribute('aria-hidden', 'true');
+                a.style.display = 'none';
             }
         });
+        const block = (url) => {
+            if (!url || isScannerPageUrl(url)) return false;
+            console.warn('[scanner] Blocked navigation to', url);
+            return true;
+        };
+        const loc = window.location;
+        ['assign', 'replace'].forEach((fn) => {
+            const orig = loc[fn].bind(loc);
+            loc[fn] = function (url) {
+                if (block(url)) return;
+                return orig(url);
+            };
+        });
+        window.open = function (url) {
+            if (block(url)) return null;
+            return null;
+        };
+        document.addEventListener(
+            'click',
+            (e) => {
+                const a = e.target && e.target.closest ? e.target.closest('a[href]') : null;
+                if (!a) return;
+                const href = a.getAttribute('href');
+                if (href && block(href)) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            },
+            true
+        );
         window.addEventListener('beforeunload', (e) => {
             if (!window.__scannerAllowLeave) {
                 e.preventDefault();
                 e.returnValue = '';
             }
         });
+    }
+
+    if (isNativeScannerShell) lockScannerNavigation();
+    if (/scanner\.html$/i.test(window.location.pathname || '')) {
+        document.body.classList.add('scanner-standalone-page');
     }
 
     const authOverlay = document.getElementById('auth-overlay');
@@ -30,7 +79,18 @@
     let stats = { ok: 0, err: 0, dup: 0 };
     let torchOn = false;
 
+    function haptic(kind) {
+        try {
+            if (navigator.vibrate) {
+                if (kind === 'success') navigator.vibrate([40, 30, 40]);
+                else if (kind === 'duplicate') navigator.vibrate([80, 40, 80]);
+                else navigator.vibrate(120);
+            }
+        } catch (_) {}
+    }
+
     function playTone(kind) {
+        haptic(kind);
         try {
             const ctx = new (window.AudioContext || window.webkitAudioContext)();
             const o = ctx.createOscillator();

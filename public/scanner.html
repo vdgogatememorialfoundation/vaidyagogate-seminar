@@ -2,13 +2,13 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <meta name="theme-color" content="#ffffff">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#0f172a">
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="VGMF Scanner">
     <link rel="manifest" href="/scanner-manifest.json">
-    <title>Entry scanner | VGMF Seminar</title>
+    <title>VGMF Check-in Scanner</title>
     <script src="https://unpkg.com/html5-qrcode"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -17,84 +17,85 @@
 <body class="scanner-body">
     <div id="auth-overlay" class="auth-overlay-scanner">
         <div class="auth-card-scanner">
-            <h2><i class="fas fa-qrcode"></i> Scanner portal</h2>
-            <p style="color:#94a3b8;font-size:0.88rem;margin-bottom:16px;">Sign in with your scanner account (Admin → Users).</p>
+            <div class="auth-brand" data-site-logo data-logo-height="56px" aria-hidden="true"></div>
+            <h2><i class="fas fa-qrcode"></i> Staff check-in</h2>
+            <p class="auth-sub">Scanner account only — no public website access from this app.</p>
             <form id="scanner-login-form">
                 <label for="scanner-email">Email</label>
-                <input type="email" id="scanner-email" required autocomplete="email" style="width:100%;margin-bottom:10px;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);background:#0f1424;color:#fff;">
+                <input type="email" id="scanner-email" required autocomplete="email" inputmode="email">
                 <label for="scanner-password">Password</label>
-                <input type="password" id="scanner-password" required autocomplete="current-password" style="width:100%;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,0.1);background:#0f1424;color:#fff;">
-                <div id="scanner-login-otp-panel" class="hidden" style="margin-top:14px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.1);">
-                    <p style="font-size:0.8rem;color:#94a3b8;margin-bottom:8px;">Verify OTP codes if required.</p>
-                    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+                <input type="password" id="scanner-password" required autocomplete="current-password">
+                <div id="scanner-login-otp-panel" class="hidden scanner-otp-panel">
+                    <p class="auth-sub">Verify OTP if your account requires it.</p>
+                    <div class="otp-row">
                         <button type="button" class="tool-btn" id="scanner-send-otp-email">Email OTP</button>
-                        <input type="text" id="scanner-email-otp" placeholder="Code" style="max-width:80px;padding:8px;border-radius:8px;">
+                        <input type="text" id="scanner-email-otp" placeholder="Code" inputmode="numeric" maxlength="8">
                         <button type="button" class="tool-btn" id="scanner-verify-otp-email">OK</button>
                     </div>
-                    <div style="display:flex;flex-wrap:wrap;gap:8px;">
+                    <div class="otp-row">
                         <button type="button" class="tool-btn" id="scanner-send-otp-phone">Phone OTP</button>
-                        <input type="text" id="scanner-phone-otp" placeholder="Code" style="max-width:80px;padding:8px;border-radius:8px;">
+                        <input type="text" id="scanner-phone-otp" placeholder="Code" inputmode="numeric" maxlength="8">
                         <button type="button" class="tool-btn" id="scanner-verify-otp-phone">OK</button>
                     </div>
                 </div>
-                <p id="login-err" class="hidden" style="color:#f87171;margin-top:10px;font-weight:600;"></p>
-                <button type="submit" class="tool-btn primary" style="width:100%;margin-top:16px;">Sign in</button>
+                <p id="login-err" class="login-err hidden"></p>
+                <button type="submit" class="tool-btn primary auth-submit">Sign in to scanner</button>
             </form>
-            <p id="scanner-login-footnote" style="margin-top:14px;text-align:center;font-size:0.78rem;color:#64748b;">Scanner portal only — use your staff scanner account.</p>
+            <p class="auth-foot">VGMF entry scanner · venue staff use only</p>
         </div>
     </div>
 
     <div id="scan-ui" class="scanner-shell hidden">
         <header class="scanner-top">
-            <div>
-                <h1>Check-in scanner</h1>
+            <div class="scanner-top-main">
+                <p class="scanner-eyebrow">VGMF check-in</p>
+                <h1>Scan tickets</h1>
                 <p class="who" id="scanner-who"></p>
             </div>
-            <button type="button" class="tool-btn" id="btn-logout">Logout</button>
+            <button type="button" class="tool-btn scanner-logout" id="btn-logout" title="Logout"><i class="fas fa-sign-out-alt"></i></button>
         </header>
 
         <div class="stats-row">
-            <div class="stat-pill"><strong id="stat-ok">0</strong><span>OK</span></div>
-            <div class="stat-pill"><strong id="stat-err">0</strong><span>Errors</span></div>
-            <div class="stat-pill"><strong id="stat-dup">0</strong><span>Duplicate</span></div>
+            <div class="stat-pill stat-ok"><strong id="stat-ok">0</strong><span>Valid</span></div>
+            <div class="stat-pill stat-err"><strong id="stat-err">0</strong><span>Denied</span></div>
+            <div class="stat-pill stat-dup"><strong id="stat-dup">0</strong><span>Duplicate</span></div>
         </div>
 
-        <div class="scan-card">
-            <label for="scanner-seminar-select">Seminar for check-in</label>
+        <div class="scan-card scan-card-highlight">
+            <label for="scanner-seminar-select"><i class="fas fa-calendar-check"></i> Seminar for check-in</label>
             <select id="scanner-seminar-select"></select>
-            <p id="scanner-seminar-hint" style="font-size:0.78rem;color:#94a3b8;margin-top:8px;"></p>
+            <p id="scanner-seminar-hint" class="seminar-hint"></p>
         </div>
 
-        <div class="camera-wrap">
+        <div class="camera-wrap" id="camera-panel">
             <div id="reader"></div>
             <div class="scan-line-anim" aria-hidden="true"></div>
+            <p class="camera-hint">Align QR inside the frame</p>
         </div>
 
         <div class="camera-tools">
-            <button type="button" class="tool-btn" id="btn-torch" title="Torch"><i class="fas fa-lightbulb"></i> Torch</button>
-            <button type="button" class="tool-btn" id="btn-switch-cam"><i class="fas fa-sync"></i> Flip</button>
-            <button type="button" class="tool-btn" id="btn-fullscreen"><i class="fas fa-expand"></i> Full</button>
-        </div>
-
-        <div class="scan-card">
-            <label>Manual ticket / QR text</label>
-            <div class="manual-row">
-                <input type="text" id="manual-qr" placeholder="12-digit E-ticket ID or QR text" inputmode="numeric">
-                <button type="button" class="tool-btn primary" id="btn-manual">Check</button>
-            </div>
+            <button type="button" class="tool-btn" id="btn-torch" title="Torch"><i class="fas fa-lightbulb"></i></button>
+            <button type="button" class="tool-btn" id="btn-switch-cam" title="Flip camera"><i class="fas fa-sync"></i></button>
+            <button type="button" class="tool-btn" id="btn-fullscreen" title="Fullscreen"><i class="fas fa-expand"></i></button>
         </div>
 
         <div id="result-box" class="hidden"></div>
 
         <div class="scan-card">
-            <label>Recent scans</label>
+            <label for="manual-qr"><i class="fas fa-keyboard"></i> Manual entry</label>
+            <div class="manual-row">
+                <input type="text" id="manual-qr" placeholder="12-digit e-ticket ID" inputmode="numeric" autocomplete="off">
+                <button type="button" class="tool-btn primary" id="btn-manual">Check</button>
+            </div>
+        </div>
+
+        <div class="scan-card scan-card-compact">
+            <label><i class="fas fa-history"></i> Recent scans</label>
             <ul class="history-list" id="scan-history"></ul>
         </div>
 
-        <button type="button" class="tool-btn primary" id="btn-reset" style="width:100%;">Scan next ticket</button>
+        <button type="button" class="tool-btn primary scan-next-btn" id="btn-reset">Scan next ticket</button>
     </div>
-
-    <audio id="snd-ok" preload="auto"><source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTGH0fPTgjMGHm7A7+OZURE=" type="audio/wav"></audio>
 
     <script src="/js/portal-datetime.js"></script>
     <script src="/js/site-branding.js"></script>
