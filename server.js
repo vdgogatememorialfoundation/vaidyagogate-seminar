@@ -4241,6 +4241,27 @@ app.get('/api/admin/users/:userId/detail', (req, res) => {
                                             (e6, supportTickets) => {
                                                 if (e6) return res.status(500).json({ error: e6.message });
 
+                                                const finishDetail = (certificates, certErr) => {
+                                                    if (certErr) {
+                                                        console.warn('[admin] user_certificates:', certErr.message);
+                                                    }
+                                                    res.json({
+                                                        user,
+                                                        profile: profile || null,
+                                                        registrations: registrations || [],
+                                                        orders: orders || [],
+                                                        abstracts: abstracts || [],
+                                                        supportTickets: supportTickets || [],
+                                                        certificates: certificates || [],
+                                                        certificatesError:
+                                                            certErr &&
+                                                            /user_certificates|certificate_templates/i.test(
+                                                                certErr.message
+                                                            )
+                                                                ? certErr.message
+                                                                : undefined
+                                                    });
+                                                };
                                                 db.all(
                                                     `SELECT uc.*, s.title AS seminar_title, ct.file_path AS template_path
                                                      FROM user_certificates uc
@@ -4249,16 +4270,14 @@ app.get('/api/admin/users/:userId/detail', (req, res) => {
                                                      WHERE uc.user_id = ?`,
                                                     [uid],
                                                     (e7, certificates) => {
+                                                        if (
+                                                            e7 &&
+                                                            /relation .* does not exist/i.test(e7.message)
+                                                        ) {
+                                                            return finishDetail([], e7);
+                                                        }
                                                         if (e7) return res.status(500).json({ error: e7.message });
-                                                        res.json({
-                                                            user,
-                                                            profile: profile || null,
-                                                            registrations: registrations || [],
-                                                            orders: orders || [],
-                                                            abstracts: abstracts || [],
-                                                            supportTickets: supportTickets || [],
-                                                            certificates: certificates || []
-                                                        });
+                                                        finishDetail(certificates || [], null);
                                                     }
                                                 );
                                             }
@@ -5034,6 +5053,16 @@ function startBackgroundWorkers() {
         if (eBf) console.warn('[tickets] E-ticket ID backfill failed:', eBf.message);
         else if (count) console.log(`[tickets] Backfilled ${count} missing e-ticket ID(s).`);
     });
+    if (pgDb && pgDb.ensureAuxiliaryTables) {
+        pgDb
+            .ensureAuxiliaryTables()
+            .then((stillMissing) => {
+                if (stillMissing && stillMissing.length) {
+                    console.warn('[pg-schema] auxiliary tables still missing:', stillMissing.join(', '));
+                }
+            })
+            .catch((eAux) => console.warn('[pg-schema] ensureAuxiliaryTables:', eAux.message));
+    }
     integrationSettings.loadFromDb(db, (eInt) => {
         if (eInt) console.warn('[integrations] load failed:', eInt.message);
         db.get(`SELECT value FROM global_settings WHERE key = ?`, ['notification_templates_sync_v'], (eSync, row) => {
