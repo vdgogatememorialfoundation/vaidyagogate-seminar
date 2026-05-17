@@ -1942,9 +1942,13 @@ async function loadIntegrationSettings() {
         set('int-wa-lang', s.whatsapp_template_lang || 'en');
         const line = document.getElementById('int-status-line');
         if (line) {
+            let emailLine = s.email_configured ? 'Email: configured.' : 'Email: not configured.';
+            const st = s.email_status;
+            if (!s.email_configured && st && Array.isArray(st.missing) && st.missing.length) {
+                emailLine += ' Missing: ' + st.missing.join(', ') + '.';
+            }
             line.textContent =
-                (s.email_configured ? 'Email: configured. ' : 'Email: not configured. ') +
-                (s.whatsapp_configured ? 'WhatsApp: configured.' : 'WhatsApp: not configured.');
+                emailLine + ' ' + (s.whatsapp_configured ? 'WhatsApp: configured.' : 'WhatsApp: not configured.');
         }
     } catch (e) {
         console.error(e);
@@ -1984,7 +1988,14 @@ async function saveIntegrationSettings() {
         (document.getElementById('int-wa-token') || {}).value = '';
         (document.getElementById('int-wa-verify') || {}).value = '';
         await loadIntegrationSettings();
-        alert('API keys saved and applied.');
+        const st = data.email_status;
+        const emailHint =
+            data.email_configured
+                ? 'Email is configured.'
+                : st && Array.isArray(st.missing) && st.missing.length
+                  ? 'Email still missing: ' + st.missing.join(', ') + '. Enter SMTP password and save again.'
+                  : 'Email is not configured — enter Zoho host, user, and password, then save.';
+        alert('API keys saved. ' + emailHint);
     } catch (e) {
         alert('Save failed');
     }

@@ -1232,6 +1232,24 @@ function parseMaybeJson(val) {
     }
 }
 
+function persistUploadedCertificate(req, cb) {
+    if (!req.file) return cb(null, null);
+    if (process.env.VERCEL && req.file.buffer) {
+        const key =
+            'cert_' + Date.now() + '_' + crypto.randomBytes(6).toString('hex');
+        const payload = JSON.stringify({
+            mime: req.file.mimetype || 'application/octet-stream',
+            data: req.file.buffer.toString('base64'),
+            name: req.file.originalname || 'certificate'
+        });
+        return upsertGlobalSetting(key, payload, (err) => {
+            if (err) return cb(err);
+            cb(null, '/api/assets/' + encodeURIComponent(key));
+        });
+    }
+    cb(null, req.file.filename || null);
+}
+
 function sanitizeFormDataForStorage(formData) {
     const src = formData && typeof formData === 'object' ? formData : {};
     const out = { ...src };
@@ -1509,17 +1527,26 @@ function upsertGlobalSetting(key, value, cb) {
 siteMarketing.registerSiteMarketingRoutes(app, db, upload, upsertGlobalSetting);
 registerNotificationRoutes(app, db);
 
-app.get('/api/admin/integrations', (req, res) => {
-    integrationSettings.loadFromDb(db, (err, data) => {
+function withIntegrationSettingsLoaded(req, res, next) {
+    integrationSettings.ensureIntegrationSettingsLoaded(db, (err) => {
         if (err) return res.status(500).json({ error: err.message });
-        const masked = integrationSettings.maskSecretsForClient(data);
-        masked.email_configured = integrationSettings.isEmailConfiguredFromSettings();
-        masked.whatsapp_configured = integrationSettings.isWhatsAppConfiguredFromSettings();
-        res.json(masked);
+        next();
     });
+}
+
+function integrationSettingsJson(data) {
+    const masked = integrationSettings.maskSecretsForClient(data);
+    masked.email_configured = integrationSettings.isEmailConfiguredFromSettings();
+    masked.email_status = integrationSettings.getEmailConfigStatus();
+    masked.whatsapp_configured = integrationSettings.isWhatsAppConfiguredFromSettings();
+    return masked;
+}
+
+app.get('/api/admin/integrations', withIntegrationSettingsLoaded, (req, res) => {
+    res.json(integrationSettingsJson(integrationSettings.getRuntimeIntegrations()));
 });
 
-app.post('/api/admin/integrations', (req, res) => {
+app.post('/api/admin/integrations', withIntegrationSettingsLoaded, (req, res) => {
     const body = req.body || {};
     integrationSettings.saveToDb(db, body, (err, merged) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -1528,14 +1555,15 @@ app.post('/api/admin/integrations', (req, res) => {
         }
         res.json({
             success: true,
-            settings: integrationSettings.maskSecretsForClient(merged),
+            settings: integrationSettingsJson(merged),
             email_configured: integrationSettings.isEmailConfiguredFromSettings(),
+            email_status: integrationSettings.getEmailConfigStatus(),
             whatsapp_configured: integrationSettings.isWhatsAppConfiguredFromSettings()
         });
     });
 });
 
-app.post('/api/admin/integrations/test-email', async (req, res) => {
+app.post('/api/admin/integrations/test-email', withIntegrationSettingsLoaded, async (req, res) => {
     const to = String((req.body && req.body.to) || '').trim();
     if (!to) return res.status(400).json({ error: 'to email required' });
     const { sendEmail } = require('./lib/email-service');
@@ -1597,7 +1625,7 @@ app.get('/api/auth/login-otp-required', (req, res) => {
 });
 
 /** After password check: send login OTP to the user’s verified phone or email. */
-app.post('/api/auth/login-otp/send', (req, res) => {
+app.post('/api/auth/login-otp/send', withIntegrationSettingsLoaded, (req, res) => {
     const { email, password, channel } = req.body || {};
     if (!email || password === undefined || password === null || !channel) {
         return res.status(400).json({ error: 'email, password, and channel are required' });
@@ -1710,7 +1738,7 @@ app.post('/api/auth/login-otp/verify', (req, res) => {
 });
 
 // OTP: send & verify (used by homepage signup + doctor registration)
-app.post('/api/otp/send', (req, res) => {
+app.post('/api/otp/send', withIntegrationSettingsLoaded, (req, res) => {
     const { channel, destination, purpose, seminarId, fieldKey, userId } = req.body || {};
     if (!channel || !destination || !purpose) {
         return res.status(400).json({ error: 'channel, destination, and purpose are required' });
@@ -1976,22 +2004,46 @@ app.get('/api/seminars', (req, res) => {
     });
 });
 
+function registrationOtpChannelFlags(cb) {
+    integrationSettings.ensureIntegrationSettingsLoaded(db, () => {
+        const emailOk = integrationSettings.isEmailConfiguredFromSettings();
+        const waOk = integrationSettings.isWhatsAppConfiguredFromSettings();
+        cb(null, {
+            emailConfigured: emailOk,
+            whatsappConfigured: waOk,
+            otpRequiresEmail: emailOk,
+            otpRequiresPhone: waOk
+        });
+    });
+}
+
 app.get('/api/registration-form-config', (req, res) => {
     const raw = req.query && req.query.seminarId;
     const sid = raw != null && String(raw).trim() !== '' ? parseInt(raw, 10) : null;
     loadRegistrationFormConfig(Number.isNaN(sid) ? null : sid, (e, fields) => {
         if (e) return res.status(500).json({ error: e.message });
-        if (sid != null && !Number.isNaN(sid)) {
-            db.get(`SELECT otp_on_application FROM seminars WHERE id = ?`, [sid], (e2, row) => {
-                if (e2) return res.status(500).json({ error: e2.message });
-                res.json({
-                    fields: fields || [],
-                    otpOnApplication: !!(row && Number(row.otp_on_application) === 1)
+        registrationOtpChannelFlags((eFlags, flags) => {
+            if (eFlags) return res.status(500).json({ error: eFlags.message });
+            const base = {
+                fields: fields || [],
+                otpOnApplication: false,
+                ...flags
+            };
+            if (sid != null && !Number.isNaN(sid)) {
+                db.get(`SELECT otp_on_application FROM seminars WHERE id = ?`, [sid], (e2, row) => {
+                    if (e2) return res.status(500).json({ error: e2.message });
+                    const otpOn = !!(row && Number(row.otp_on_application) === 1);
+                    res.json({
+                        ...base,
+                        otpOnApplication: otpOn,
+                        otpRequiresEmail: otpOn && flags.otpRequiresEmail,
+                        otpRequiresPhone: otpOn && flags.otpRequiresPhone
+                    });
                 });
-            });
-            return;
-        }
-        res.json({ fields: fields || [], otpOnApplication: false });
+                return;
+            }
+            res.json(base);
+        });
     });
 });
 
@@ -2312,7 +2364,16 @@ function respondApplicationsList(uid, yearFilter, res) {
 }
 
 // 5. Seminars: Register (Application Submission)
-app.post('/api/applications/submit', upload.single('certificate'), (req, res) => {
+app.post('/api/applications/submit', (req, res, next) => {
+    (process.env.VERCEL ? memoryUpload : upload).single('certificate')(req, res, (err) => {
+        if (err) {
+            return res.status(400).json({
+                error: err.code === 'LIMIT_FILE_SIZE' ? 'Certificate file is too large.' : err.message || 'Upload failed'
+            });
+        }
+        next();
+    });
+}, (req, res) => {
     let { userId, seminarId, formData, phoneOtpToken, emailOtpToken, fieldOtpTokens } = req.body;
     userId = parsePositiveUserId(userId);
     if (!userId) {
@@ -2370,15 +2431,23 @@ app.post('/api/applications/submit', upload.single('certificate'), (req, res) =>
             }
 
                 function continueApplicationSubmit() {
-            if (req.file) {
-                formData = formData || {};
-                formData.certificate_path = req.file.filename;
-            }
+            persistUploadedCertificate(req, (certErr, certPath) => {
+                if (certErr) return res.status(500).json({ error: certErr.message });
+                if (certPath) {
+                    formData = formData || {};
+                    formData.certificate_path = certPath;
+                }
 
                 loadRegistrationFormConfig(seminarId, (cfgErr, regFields) => {
                     if (cfgErr) return res.status(500).json({ error: cfgErr.message });
                     const list = regFields || [];
-                    const validationError = validateFormDataAgainstRegistrationConfig(formData || {}, !!req.file, list);
+                    const hasCertFile =
+                        !!req.file || !!(formData && formData.certificate_path);
+                    const validationError = validateFormDataAgainstRegistrationConfig(
+                        formData || {},
+                        hasCertFile,
+                        list
+                    );
                     if (validationError) {
                         return res.status(400).json({ error: validationError });
                     }
@@ -2446,27 +2515,45 @@ app.post('/api/applications/submit', upload.single('certificate'), (req, res) =>
                     }
 
                     if (otpApp) {
-                        if (!phoneOtpToken || !emailOtpToken) {
-                            return res.status(400).json({
-                                error: 'This seminar requires phone and email OTP verification before you can submit.'
-                            });
-                        }
-                        otpLib.validateRegistrationOtpTokens(
-                            db,
-                            sidNum,
-                            { phoneToken: phoneOtpToken, emailToken: emailOtpToken },
-                            (oerr, ov) => {
-                                if (oerr) return res.status(500).json({ error: oerr.message });
-                                if (!ov || !ov.ok) {
-                                    return res.status(400).json({ error: (ov && ov.error) || 'OTP verification failed' });
-                                }
-                                runFieldOtpsThenInsert();
+                        integrationSettings.ensureIntegrationSettingsLoaded(db, () => {
+                            const needEmail = integrationSettings.isEmailConfiguredFromSettings();
+                            const needPhone = integrationSettings.isWhatsAppConfiguredFromSettings();
+                            if (!needEmail && !needPhone) {
+                                return runFieldOtpsThenInsert();
                             }
-                        );
+                            if (needEmail && !emailOtpToken) {
+                                return res.status(400).json({
+                                    error: 'Verify your email with the code sent to your inbox before submitting.'
+                                });
+                            }
+                            if (needPhone && !phoneOtpToken) {
+                                return res.status(400).json({
+                                    error: 'Verify your phone with the WhatsApp code before submitting.'
+                                });
+                            }
+                            otpLib.validateRegistrationOtpTokens(
+                                db,
+                                sidNum,
+                                {
+                                    phoneToken: needPhone ? phoneOtpToken : null,
+                                    emailToken: needEmail ? emailOtpToken : null
+                                },
+                                (oerr, ov) => {
+                                    if (oerr) return res.status(500).json({ error: oerr.message });
+                                    if (!ov || !ov.ok) {
+                                        return res.status(400).json({
+                                            error: (ov && ov.error) || 'OTP verification failed'
+                                        });
+                                    }
+                                    runFieldOtpsThenInsert();
+                                }
+                            );
+                        });
                         return;
                     }
                     runFieldOtpsThenInsert();
                 });
+            });
                 }
             }
         );
@@ -2888,12 +2975,14 @@ app.post('/api/auth/reset-password', (req, res) => {
     );
 });
 
-// Meta WhatsApp webhook verification
-app.get('/api/webhooks/whatsapp', (req, res) => {
+// Meta WhatsApp webhook verification (https://developers.facebook.com/docs/whatsapp/cloud-api)
+app.get('/api/webhooks/whatsapp', withIntegrationSettingsLoaded, (req, res) => {
     const mode = req.query['hub.mode'];
     const token = req.query['hub.verify_token'];
     const challenge = req.query['hub.challenge'];
-    if (mode === 'subscribe' && token && token === process.env.WHATSAPP_VERIFY_TOKEN) {
+    const expected =
+        integrationSettings.getWhatsAppConfig().verifyToken || process.env.WHATSAPP_VERIFY_TOKEN || '';
+    if (mode === 'subscribe' && token && expected && token === expected) {
         return res.status(200).send(challenge);
     }
     res.sendStatus(403);
@@ -4947,6 +5036,18 @@ function startBackgroundWorkers() {
     });
     integrationSettings.loadFromDb(db, (eInt) => {
         if (eInt) console.warn('[integrations] load failed:', eInt.message);
+        db.get(`SELECT value FROM global_settings WHERE key = ?`, ['notification_templates_sync_v'], (eSync, row) => {
+            if (eSync) return;
+            if (row && row.value === '20260517') return;
+            notifEngine.syncDefaultNotificationTemplates(db, (syncErr) => {
+                if (syncErr) console.warn('[notifications] template sync failed:', syncErr.message);
+                else {
+                    upsertGlobalSetting('notification_templates_sync_v', '20260517', () => {
+                        console.log('[notifications] VGMF 2026 default templates synced');
+                    });
+                }
+            });
+        });
     });
     if (jobsModule && typeof jobsModule.startWorkers === 'function' && !process.env.VERCEL) {
         jobsModule.startWorkers(db);

@@ -249,7 +249,7 @@
 
                         <div id="reg-seminar-otp-panel" class="hidden" style="background:#eff6ff;padding:12px;border-radius:8px;margin-bottom:14px;border:1px solid #bfdbfe;">
                             <strong style="color:#1e40af;">Seminar verification required</strong>
-                            <p style="font-size:0.85rem;color:#475569;margin:6px 0 0;">Verify email and phone codes before continuing.</p>
+                            <p id="reg-otp-panel-hint" style="font-size:0.85rem;color:#475569;margin:6px 0 0;">Verify email and/or WhatsApp codes before continuing.</p>
                         </div>
 
                         <div id="step-1" class="form-step hidden">
@@ -261,7 +261,7 @@
                             <div class="form-group">
                                 <label>Email</label>
                                 <input type="email" id="reg-email" autocomplete="email">
-                                <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                                <div id="reg-otp-email-row" style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                                     <button type="button" class="btn-primary" onclick="sendRegistrationOtpForField('email')">Send email code</button>
                                     <input type="text" id="reg-otp-code-email" placeholder="Code" style="max-width:100px;padding:8px;">
                                     <button type="button" class="btn-primary" onclick="verifyRegistrationOtpForField('email')">Verify</button>
@@ -271,7 +271,7 @@
                             <div class="form-group">
                                 <label>Phone</label>
                                 <input type="tel" id="reg-phone" autocomplete="tel">
-                                <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                                <div id="reg-otp-phone-row" style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                                     <button type="button" class="btn-primary" onclick="sendRegistrationOtpForField('phone')">Send WhatsApp code</button>
                                     <input type="text" id="reg-otp-code-phone" placeholder="Code" style="max-width:100px;padding:8px;">
                                     <button type="button" class="btn-primary" onclick="verifyRegistrationOtpForField('phone')">Verify</button>

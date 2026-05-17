@@ -410,6 +410,50 @@ const REGISTRATION_FIELD_IDS = {
     cstate: 'reg-cstate'
 };
 
+/** Matches server DEFAULT_REGISTRATION_FORM_CONFIG when API fields are empty. */
+const DEFAULT_REGISTRATION_FALLBACK_FIELDS = [
+    { key: 'fname', label: 'First name', type: 'text', step: 1, enabled: true, required: true },
+    { key: 'mname', label: 'Middle name', type: 'text', step: 1, enabled: true, required: true },
+    { key: 'lname', label: 'Last name', type: 'text', step: 1, enabled: true, required: true },
+    { key: 'email', label: 'Email', type: 'email', step: 1, enabled: true, required: true, verifyOtp: true },
+    { key: 'phone', label: 'Phone', type: 'tel', step: 1, enabled: true, required: true, verifyOtp: true },
+    { key: 'address', label: 'Address', type: 'textarea', step: 2, enabled: true, required: true },
+    { key: 'pin', label: 'Pincode', type: 'text', step: 2, enabled: true, required: true },
+    { key: 'city', label: 'City', type: 'text', step: 2, enabled: true, required: true },
+    { key: 'state', label: 'State', type: 'text', step: 2, enabled: true, required: true },
+    { key: 'country', label: 'Country', type: 'text', step: 2, enabled: true, required: true },
+    {
+        key: 'qual',
+        label: 'Qualification',
+        type: 'select',
+        step: 3,
+        enabled: true,
+        required: true,
+        options: [
+            { value: 'Practicing Vaidya', label: 'Practicing Vaidya' },
+            { value: 'Practitioner', label: 'Practitioner' },
+            { value: 'PG', label: 'PG' }
+        ]
+    },
+    { key: 'ncism', label: 'Medical registration / NCISM', type: 'text', step: 3, enabled: true, required: true, onlyWhenAdvancedQual: true },
+    { key: 'certificate', label: 'Certificate upload', type: 'file', step: 3, enabled: true, required: true, onlyWhenAdvancedQual: true },
+    { key: 'college', label: 'College name', type: 'text', step: 4, enabled: true, required: true },
+    { key: 'ccity', label: 'College city', type: 'text', step: 4, enabled: true, required: true },
+    { key: 'cstate', label: 'College state', type: 'text', step: 4, enabled: true, required: true }
+];
+
+function getRegistrationFieldsForValidation() {
+    const fields = window.__registrationFormFields;
+    if (fields && fields.length) return fields;
+    return DEFAULT_REGISTRATION_FALLBACK_FIELDS;
+}
+
+function formatRegValidationError(msg) {
+    if (!msg) return msg;
+    if (/^All details are mandatory/i.test(msg)) return msg;
+    return 'All details are mandatory. ' + msg;
+}
+
 function getMaxRegStep() {
     const fields = window.__registrationFormFields || [];
     let m = 1;
@@ -555,8 +599,7 @@ async function verifyRegistrationOtpForField(fieldKey) {
 }
 
 function validateRegistrationAgainstConfigForSteps(upToStepInclusive) {
-    const fields = window.__registrationFormFields;
-    if (!fields || !fields.length) return null;
+    const fields = getRegistrationFieldsForValidation();
     const fd = collectRegistrationFormData();
     const hasCert =
         (document.getElementById('reg-cert-file') || {}).files &&
@@ -610,6 +653,14 @@ function validateRegistrationAgainstConfigForSteps(upToStepInclusive) {
             if (Number.isNaN(fStep) || fStep !== sn) continue;
             if (f.type !== 'email' && f.type !== 'tel') continue;
             if (f.key === 'email' || f.key === 'phone') {
+                if (f.key === 'email' && window.__otpOnApplication && !window.__otpRequiresEmail && !window.__emailConfigured) {
+                    continue;
+                }
+                if (f.key === 'phone' && window.__otpOnApplication && !window.__otpRequiresPhone && !window.__whatsappConfigured) {
+                    continue;
+                }
+                if (f.key === 'email' && !window.__emailConfigured && !window.__otpOnApplication) continue;
+                if (f.key === 'phone' && !window.__whatsappConfigured && !window.__otpOnApplication) continue;
                 const ok = f.key === 'phone' ? registrationPhoneVerified() : registrationEmailVerified();
                 if (!ok) return `Please verify OTP for: ${f.label || f.key}`;
                 continue;
@@ -618,8 +669,13 @@ function validateRegistrationAgainstConfigForSteps(upToStepInclusive) {
             if (!tok) return `Please verify OTP for: ${f.label || f.key}`;
         }
         if (sn === 1 && window.__otpOnApplication) {
-            if (!registrationPhoneVerified() || !registrationEmailVerified()) {
-                return 'Please verify both email and phone codes for this seminar before continuing.';
+            const needE = window.__otpRequiresEmail !== false;
+            const needP = !!window.__otpRequiresPhone;
+            if (needE && !registrationEmailVerified()) {
+                return 'Please verify your email with the code sent to your inbox before continuing.';
+            }
+            if (needP && !registrationPhoneVerified()) {
+                return 'Please verify your phone with the WhatsApp code before continuing.';
             }
         }
         if (sn === 1 && typeof validateRegistrationNamesClient === 'function') {
@@ -628,6 +684,10 @@ function validateRegistrationAgainstConfigForSteps(upToStepInclusive) {
         }
     }
     return null;
+}
+
+function alertRegistrationValidation(err) {
+    if (err) alert(formatRegValidationError(err));
 }
 
 async function loadRegistrationFormConfigAndApply(seminarIdOpt) {
@@ -641,15 +701,27 @@ async function loadRegistrationFormConfigAndApply(seminarIdOpt) {
         const data = await res.json();
         window.__registrationFormFields = data.fields || [];
         window.__otpOnApplication = !!data.otpOnApplication;
+        window.__otpRequiresEmail = !!data.otpRequiresEmail;
+        window.__otpRequiresPhone = !!data.otpRequiresPhone;
+        window.__emailConfigured = !!data.emailConfigured;
+        window.__whatsappConfigured = !!data.whatsappConfigured;
         const otpPanel = document.getElementById('reg-seminar-otp-panel');
         if (otpPanel) {
             if (window.__otpOnApplication) otpPanel.classList.remove('hidden');
             else otpPanel.classList.add('hidden');
         }
+        const emailOtpRow = document.getElementById('reg-otp-email-row');
+        const phoneOtpRow = document.getElementById('reg-otp-phone-row');
+        if (emailOtpRow) emailOtpRow.style.display = window.__otpRequiresEmail ? '' : 'none';
+        if (phoneOtpRow) {
+            phoneOtpRow.style.display = window.__otpRequiresPhone ? '' : 'none';
+        }
     } catch (e) {
         console.error(e);
         window.__registrationFormFields = [];
         window.__otpOnApplication = false;
+        window.__otpRequiresEmail = false;
+        window.__otpRequiresPhone = false;
         const otpPanel = document.getElementById('reg-seminar-otp-panel');
         if (otpPanel) otpPanel.classList.add('hidden');
     }
@@ -1567,7 +1639,7 @@ async function nextStep(step) {
     if (step >= 2 && step <= REGISTRATION_PREVIEW_STEP) {
         const err = validateRegistrationAgainstConfigForSteps(step - 1);
         if (err) {
-            alert(err);
+            alertRegistrationValidation(err);
             return;
         }
     }
@@ -1783,7 +1855,7 @@ async function submitApplication() {
 
     const vErr = validateRegistrationAgainstConfigForSteps(4);
     if (vErr) {
-        alert(vErr);
+        alertRegistrationValidation(vErr);
         return;
     }
     
@@ -1829,15 +1901,29 @@ async function submitApplication() {
             method: 'POST',
             body: payload
         });
-        const result = await res.json();
-        if(result.success) {
+        let result = {};
+        try {
+            result = await res.json();
+        } catch (parseErr) {
+            console.error(parseErr);
+            return alert(
+                res.ok
+                    ? 'Application may have been submitted, but the server response was invalid. Check View Applications.'
+                    : `Submission failed (HTTP ${res.status}). Please try again.`
+            );
+        }
+        if (result.success) {
             alert(`Application submitted successfully. Your application number is ${result.applicationNo}. You can track status under View Applications.`);
             cancelRegistration();
             loadApplications();
         } else {
-            alert(result.error || "Submission failed.");
+            const msg = result.error || `Submission failed (HTTP ${res.status}).`;
+            alert(/^Missing required field:/i.test(msg) ? formatRegValidationError(msg) : msg);
         }
-    } catch (err) { console.error(err); }
+    } catch (err) {
+        console.error(err);
+        alert('Network error while submitting. Check your connection and try again.');
+    }
 }
 
 let userApplications = [];
