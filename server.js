@@ -1939,9 +1939,10 @@ app.get('/api/admin/portal/year', (req, res) => {
 
 app.put('/api/admin/portal/year', (req, res) => {
     const year = req.body && (req.body.portalYear != null ? req.body.portalYear : req.body.year);
-    portalTracking.setPortalYear(db, upsertGlobalSetting, year, (e) => {
+    const alignAllActive = !(req.body && req.body.alignAllActive === false);
+    portalTracking.setPortalYear(db, upsertGlobalSetting, year, { alignAllActive }, (e) => {
         if (e) return res.status(400).json({ error: e.message });
-        res.json({ success: true, portalYear: parseInt(year, 10) });
+        res.json({ success: true, portalYear: parseInt(year, 10), alignedActiveSeminars: alignAllActive });
     });
 });
 
@@ -1958,11 +1959,10 @@ app.get('/api/seminars', (req, res) => {
             sql = `SELECT * FROM seminars WHERE is_active = 1 AND portal_year IS NOT NULL AND portal_year < ? ORDER BY event_date DESC, id DESC`;
             params = [activeYear];
         } else {
-            sql = `SELECT * FROM seminars WHERE is_active = 1 AND (
-                portal_year = ?
-                OR portal_year IS NULL
-                OR CAST(strftime('%Y', COALESCE(event_date, created_at)) AS INTEGER) = ?
-            ) ORDER BY event_date ASC, id DESC`;
+            sql =
+                `SELECT * FROM seminars WHERE is_active = 1 AND ` +
+                portalTracking.seminarPortalYearMatchSql() +
+                ` ORDER BY event_date ASC, id DESC`;
             params = [activeYear, activeYear];
         }
         db.all(sql, params, (err, rows) => {
@@ -3516,11 +3516,7 @@ app.post('/api/admin/seminars', (req, res) => {
     const bodyYear = req.body && req.body.portal_year != null ? parseInt(req.body.portal_year, 10) : null;
     portalTracking.getPortalYear(db, (ePy, defaultYear) => {
         const portalYear =
-            Number.isInteger(bodyYear) && bodyYear > 2000
-                ? bodyYear
-                : event_date
-                  ? new Date(event_date).getFullYear()
-                  : defaultYear;
+            Number.isInteger(bodyYear) && bodyYear > 2000 ? bodyYear : defaultYear;
         db.run(
             `INSERT INTO seminars (title, description, registration_start, registration_end, event_date, capacity, price, checkin_enabled, checkin_date, location_url, terms_conditions, hero_image_path, flyer_path, gallery_paths, registration_form_json, cancellation_policy_json, whatsapp_group_url, otp_on_application, public_list_enabled, portal_year, is_active) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -3588,38 +3584,42 @@ app.put('/api/admin/seminars/:id', (req, res) => {
     const otpApp = otp_on_application ? 1 : 0;
     const pubList = public_list_enabled ? 1 : 0;
     const py = portal_year != null ? parseInt(portal_year, 10) : null;
-    db.run(
-        `UPDATE seminars SET title=?, description=?, registration_start=?, registration_end=?, event_date=?, capacity=?, price=?, checkin_enabled=?, checkin_date=?, is_active=?, location_url=?, terms_conditions=?, hero_image_path=?, flyer_path=?, gallery_paths=?, registration_form_json=?, cancellation_policy_json=?, whatsapp_group_url=?, otp_on_application=?, public_list_enabled=?, portal_year=COALESCE(?, portal_year) WHERE id=?`,
-        [
-            title,
-            description,
-            registration_start,
-            registration_end,
-            event_date,
-            capacity,
-            price || 0,
-            checkin_enabled ? 1 : 0,
-            checkin_date || null,
-            is_active ? 1 : 0,
-            location_url || null,
-            terms_conditions || null,
-            hero_image_path != null ? hero_image_path : null,
-            flyer_path != null ? flyer_path : null,
-            gallery_paths != null ? gallery_paths : null,
-            rfj,
-            cpj,
-            wu,
-            otpApp,
-            pubList,
-            Number.isInteger(py) ? py : null,
-            req.params.id
-        ],
-        function(err) {
-            if (err) return res.status(500).json({ error: err.message });
-            syncSeminarCmsAfterSave(parseInt(req.params.id, 10), false, () => {});
-            res.json({ success: true });
-        }
-    );
+    portalTracking.getPortalYear(db, (ePy, defaultYear) => {
+        if (ePy) return res.status(500).json({ error: ePy.message });
+        const finalPortalYear = Number.isInteger(py) && py > 2000 ? py : defaultYear;
+        db.run(
+            `UPDATE seminars SET title=?, description=?, registration_start=?, registration_end=?, event_date=?, capacity=?, price=?, checkin_enabled=?, checkin_date=?, is_active=?, location_url=?, terms_conditions=?, hero_image_path=?, flyer_path=?, gallery_paths=?, registration_form_json=?, cancellation_policy_json=?, whatsapp_group_url=?, otp_on_application=?, public_list_enabled=?, portal_year=? WHERE id=?`,
+            [
+                title,
+                description,
+                registration_start,
+                registration_end,
+                event_date,
+                capacity,
+                price || 0,
+                checkin_enabled ? 1 : 0,
+                checkin_date || null,
+                is_active ? 1 : 0,
+                location_url || null,
+                terms_conditions || null,
+                hero_image_path != null ? hero_image_path : null,
+                flyer_path != null ? flyer_path : null,
+                gallery_paths != null ? gallery_paths : null,
+                rfj,
+                cpj,
+                wu,
+                otpApp,
+                pubList,
+                finalPortalYear,
+                req.params.id
+            ],
+            function (err) {
+                if (err) return res.status(500).json({ error: err.message });
+                syncSeminarCmsAfterSave(parseInt(req.params.id, 10), false, () => {});
+                res.json({ success: true, portalYear: finalPortalYear });
+            }
+        );
+    });
 });
 
 function deleteRegistrationCascade(registrationId, cb) {

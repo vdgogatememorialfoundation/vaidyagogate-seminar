@@ -884,7 +884,11 @@ async function loadSeminarsGrid() {
     try {
         const res = await fetch('/api/seminars?bucket=current', { cache: 'no-store' });
         const payload = await res.json();
-        if (payload.portalYear) doctorPortalYear = payload.portalYear;
+        if (payload.portalYear != null) {
+            doctorPortalYear = payload.portalYear;
+            const lbl = document.getElementById('doctor-portal-year-label');
+            if (lbl) lbl.textContent = String(doctorPortalYear);
+        }
         activeSeminars = payload.seminars || [];
         container.innerHTML = '';
         

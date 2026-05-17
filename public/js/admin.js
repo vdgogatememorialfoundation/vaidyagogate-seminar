@@ -2437,6 +2437,16 @@ async function deleteAdminCaseSubmission(subId) {
 }
 let adminPortalYear = new Date().getFullYear();
 
+function openCreateSeminarModal() {
+    document.getElementById('admin-seminar-modal').classList.remove('hidden');
+    document.getElementById('seminar-form').reset();
+    document.getElementById('seminar-id').value = '';
+    const py = document.getElementById('seminar-portal-year');
+    if (py) py.value = adminPortalYear || new Date().getFullYear();
+    if (typeof loadSeminarCancellationUi === 'function') loadSeminarCancellationUi('');
+    if (typeof loadSeminarFormOverrideUi === 'function') loadSeminarFormOverrideUi('');
+}
+
 async function loadAdminPortalYear() {
     try {
         const res = await fetch('/api/admin/portal/year', { cache: 'no-store' });
@@ -2474,7 +2484,13 @@ async function saveAdminPortalYear() {
             adminPortalYear = year;
             await loadAdminPortalYear();
             loadSeminars();
-            alert('Portal year set to ' + year + '. Doctors will see ' + year + ' as current; earlier years appear under Past Seminars.');
+            alert(
+                'Portal year set to ' +
+                    year +
+                    '. All active seminars now use portal year ' +
+                    year +
+                    '. Doctors and the public site will list seminars for this year.'
+            );
         } else alert(data.error || 'Could not save portal year');
     } catch (e) {
         console.error(e);
@@ -2621,6 +2637,18 @@ async function saveSeminar(e) {
         registration_form_json: regFormOverride,
         portal_year: parseInt((document.getElementById('seminar-portal-year') || {}).value, 10) || adminPortalYear
     };
+    if (data.portal_year !== adminPortalYear) {
+        const ok = confirm(
+            'Portal year on this seminar (' +
+                data.portal_year +
+                ') differs from the admin portal year (' +
+                adminPortalYear +
+                '). Save anyway? Tip: set the header Portal year to ' +
+                data.portal_year +
+                ' to align doctor and public listings.'
+        );
+        if (!ok) return;
+    }
 
     const url = id ? '/api/admin/seminars/' + id : '/api/admin/seminars';
     const method = id ? 'PUT' : 'POST';
