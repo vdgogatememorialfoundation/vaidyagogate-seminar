@@ -19,10 +19,20 @@
             o.connect(g);
             g.connect(ctx.destination);
             if (kind === 'success') {
-                o.frequency.value = 880;
-                g.gain.value = 0.18;
+                o.frequency.value = 1046;
+                g.gain.value = 0.35;
                 o.start();
-                o.stop(ctx.currentTime + 0.15);
+                o.stop(ctx.currentTime + 0.22);
+                setTimeout(() => {
+                    const o2 = ctx.createOscillator();
+                    const g2 = ctx.createGain();
+                    o2.connect(g2);
+                    g2.connect(ctx.destination);
+                    o2.frequency.value = 1318;
+                    g2.gain.value = 0.28;
+                    o2.start();
+                    o2.stop(ctx.currentTime + 0.18);
+                }, 120);
             } else if (kind === 'duplicate') {
                 o.type = 'triangle';
                 o.frequency.value = 440;
@@ -177,6 +187,14 @@
             if (result.success) {
                 playTone('success');
                 stats.ok++;
+                try {
+                    if (html5QrCode) await html5QrCode.stop();
+                } catch (_) {}
+                const reader = document.getElementById('reader');
+                if (reader) {
+                    reader.innerHTML =
+                        '<p style="text-align:center;padding:48px 16px;font-weight:700;color:#059669;font-size:1.05rem;"><i class="fas fa-check-circle"></i> Checked in — QR cleared</p>';
+                }
                 renderResult(
                     true,
                     '<strong><i class="fas fa-check-circle"></i> Valid entry</strong>' + metaHtml(d),
@@ -251,6 +269,8 @@
 
     document.getElementById('btn-reset')?.addEventListener('click', () => {
         resultBox.classList.add('hidden');
+        const reader = document.getElementById('reader');
+        if (reader && !reader.querySelector('video')) reader.innerHTML = '';
         startCam().catch(console.error);
     });
 

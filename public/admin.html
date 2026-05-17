@@ -616,6 +616,15 @@
                     </table>
                 </div>
                 <div id="case-mgmt-detail" class="card hidden" style="margin-top:16px;"></div>
+                <div class="card" style="margin-top:16px;">
+                    <h3 style="margin-bottom:8px;">Case results (auto-ranked)</h3>
+                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:12px;">Average judge scores. Highest row highlighted — you still choose admission via <strong>Mark winner</strong>.</p>
+                    <label style="font-size:0.82rem;font-weight:700;">Program filter</label>
+                    <select id="case-results-program" style="width:100%;max-width:360px;padding:8px;margin:8px 0 12px;" onchange="loadAdminCaseResults()">
+                        <option value="">All programs</option>
+                    </select>
+                    <div id="case-results-panel"><p style="color:#64748b;">Loading results…</p></div>
+                </div>
             </div>
 
             <div id="tab-reports" class="tab-pane hidden">

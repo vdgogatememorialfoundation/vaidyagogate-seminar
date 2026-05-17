@@ -85,17 +85,30 @@ document.addEventListener('visibilitychange', () => syncDoctorTrackingPolls());
 
 let doctorPortalYear = new Date().getFullYear();
 
+const PORTAL_DISPLAY_TZ = 'Asia/Kolkata';
+
+function parsePortalDateTime(iso) {
+    if (!iso) return null;
+    const s = String(iso).trim();
+    if (!s) return null;
+    if (/Z$|[+-]\d{2}:?\d{2}$/i.test(s)) return new Date(s);
+    const normalized = s.includes('T') ? s : s.replace(' ', 'T');
+    const d = new Date(normalized);
+    return Number.isNaN(d.getTime()) ? null : d;
+}
+
 function formatTrackDateTime(iso) {
-    if (!iso) return '';
-    const d = new Date(iso);
-    if (Number.isNaN(d.getTime())) return String(iso);
-    return d.toLocaleString(undefined, {
+    const d = parsePortalDateTime(iso);
+    if (!d) return iso ? String(iso) : '';
+    return d.toLocaleString('en-IN', {
+        timeZone: PORTAL_DISPLAY_TZ,
         weekday: 'long',
         year: 'numeric',
         month: 'short',
         day: 'numeric',
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
+        hour12: true
     });
 }
 
@@ -141,11 +154,9 @@ function renderSeminarApplicationTrackerCard(a) {
     const tl = a.timeline || {};
     const payAmt = Number(a.seminar_price) > 0 ? Number(a.seminar_price) : 1500;
     const st = String(a.status || '').toLowerCase();
-    const isApproved =
-        st === 'approved_pending_payment' || st === 'completed' || st === 'checked_in';
     const isPaid = st === 'completed' || st === 'checked_in';
     const payBtn =
-        isApproved && !isPaid
+        st === 'approved_pending_payment' && !isPaid
             ? '<button class="btn-success" style="margin-top:10px;" onclick="processPayment(' +
               a.id +
               ', ' +
@@ -254,10 +265,37 @@ window.__otpOnApplication = false;
 window.__regPhoneOtpToken = null;
 window.__regEmailOtpToken = null;
 
+function initDoctorMobileNav() {
+    const toggle = document.getElementById('doctor-menu-toggle');
+    const sidebar = document.querySelector('.sidebar');
+    const backdrop = document.getElementById('doctor-nav-backdrop');
+    if (!toggle || !sidebar) return;
+    const close = () => {
+        sidebar.classList.remove('mobile-open');
+        if (backdrop) {
+            backdrop.classList.add('hidden');
+            backdrop.classList.remove('show');
+        }
+    };
+    toggle.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const open = !sidebar.classList.contains('mobile-open');
+        sidebar.classList.toggle('mobile-open', open);
+        if (backdrop) {
+            backdrop.classList.toggle('hidden', !open);
+            backdrop.classList.toggle('show', open);
+        }
+    });
+    backdrop?.addEventListener('click', close);
+    document.querySelectorAll('.menu-item').forEach((el) => el.addEventListener('click', close));
+}
+
 function bootDoctorDashboard(user) {
     currentUser = user;
         document.getElementById('auth-overlay').classList.add('hidden');
         document.getElementById('dashboard-main').classList.remove('hidden');
+    initDoctorMobileNav();
         document.getElementById('header-name').innerText = `Hi, Dr. ${currentUser.first_name || ''} ${currentUser.last_name || ''}`;
     document.getElementById('header-id').innerText =
         `ID: ${currentUser.user_id_string || '---'}` + (Number(currentUser.is_demo) === 1 ? ' · Demo' : '');
@@ -2428,13 +2466,16 @@ async function loadDoctorEventTickets() {
         rows.forEach((t) => {
             const regSt = String(t.registration_status || '').toLowerCase();
             const invalid = regSt === 'cancelled' || regSt === 'rejected' || t.is_valid === 0;
-            const qr = !invalid && t.qr_code_data ? `/api/qrcode/${encodeURIComponent(t.qr_code_data)}` : '';
-            const scanned = t.is_scanned ? `Scanned · ${t.scan_time ? new Date(t.scan_time).toLocaleString() : ''}` : 'Not scanned yet';
+            const showQr = !invalid && !t.is_scanned && t.qr_code_data;
+            const qr = showQr ? `/api/qrcode/${encodeURIComponent(t.qr_code_data)}` : '';
+            const scanned = t.is_scanned
+                ? `Checked in · ${t.scan_time ? formatTrackDateTime(t.scan_time) : 'venue'}`
+                : 'Not scanned yet — show this QR at entry';
             const statusLine = invalid
                 ? `<p style="margin:8px 0 0;font-size:0.9rem;color:#b91c1c;font-weight:600;">Invalid — registration ${regSt === 'cancelled' ? 'cancelled' : regSt === 'rejected' ? 'rejected' : 'no longer active'}. Do not use this QR for entry.</p>`
                 : `<p style="margin:8px 0 0;font-size:0.85rem;color:#64748b;">${escapeHtml(scanned)}</p>`;
             html += `<div style="border:1px solid ${invalid ? '#fecaca' : '#e2e8f0'};border-radius:12px;padding:16px;display:grid;grid-template-columns:140px 1fr;gap:16px;align-items:start;${invalid ? 'opacity:0.85;background:#fef2f2;' : ''}">
-                <div>${qr ? `<img src="${qr}" alt="QR" style="width:128px;height:128px;border:1px solid #cbd5e1;border-radius:8px;">` : '<span style="color:#94a3b8;font-size:0.85rem;">QR unavailable</span>'}</div>
+                <div>${qr ? `<img src="${qr}" alt="QR" style="width:128px;height:128px;border:1px solid #cbd5e1;border-radius:8px;">` : (t.is_scanned ? '<span style="color:#059669;font-size:0.85rem;font-weight:700;"><i class="fas fa-check-circle"></i> QR used at entry</span>' : '<span style="color:#94a3b8;font-size:0.85rem;">QR unavailable</span>')}</div>
                 <div>
                     <h4 style="margin:0 0 8px;color:#1a237e;">${escapeHtml(t.seminar_title || 'Seminar')}</h4>
                     <p style="margin:0 0 6px;font-size:0.9rem;"><strong>E‑ticket ID:</strong> <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px;">${escapeHtml(t.ticket_id_string || '—')}</code></p>

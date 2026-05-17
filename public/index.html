@@ -28,6 +28,7 @@
     <div id="site-banner-wrap" class="site-banner hidden"></div>
 
     <header class="site-header" id="site-header">
+        <div class="nav-backdrop" id="nav-backdrop" aria-hidden="true"></div>
         <div class="nav-container">
             <a href="#" class="logo" onclick="showSection('home'); return false;">
                 <div class="logo-icon" data-site-logo data-logo-height="48px" data-logo-width="48px" data-logo-fallback="icon"><i class="fas fa-leaf"></i></div>
@@ -658,14 +659,25 @@
             const toggle = document.getElementById('nav-toggle');
             const header = document.getElementById('site-header');
             const links = document.getElementById('nav-links');
+            const backdrop = document.getElementById('nav-backdrop');
             if (!toggle || !header) return;
+            const closeNav = () => {
+                header.classList.remove('nav-open');
+                document.body.classList.remove('nav-menu-open');
+            };
+            const openNav = () => {
+                header.classList.add('nav-open');
+                document.body.classList.add('nav-menu-open');
+            };
             toggle.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                header.classList.toggle('nav-open');
+                if (header.classList.contains('nav-open')) closeNav();
+                else openNav();
             });
+            backdrop?.addEventListener('click', closeNav);
             links?.querySelectorAll('a').forEach((a) => {
-                a.addEventListener('click', () => header.classList.remove('nav-open'));
+                a.addEventListener('click', closeNav);
             });
         }
         initMobileNav();

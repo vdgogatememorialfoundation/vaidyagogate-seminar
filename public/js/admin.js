@@ -1256,6 +1256,99 @@ async function initAdminCaseMgmtTab() {
     await loadAdminCasePrograms();
     await loadAdminCaseSubmissions();
     await loadAdminCaseReviewers();
+    await populateCaseResultsProgramSelect();
+    await loadAdminCaseResults();
+}
+
+function formatCaseCriteriaBreakdown(sc, criteriaDefs) {
+    let crit = [];
+    try {
+        crit = sc.criteria_json ? JSON.parse(sc.criteria_json) : [];
+    } catch (_) {
+        crit = [];
+    }
+    if (!Array.isArray(crit) || !crit.length) return '—';
+    const defs = criteriaDefs || [];
+    return crit
+        .map((c) => {
+            const def = defs.find((d) => d.key === c.key) || {};
+            const label = def.label || c.key || 'Criterion';
+            return escAdmin(label) + ': ' + escAdmin(String(c.score != null ? c.score : '—')) + '/' + escAdmin(String(c.max != null ? c.max : def.maxMarks || '5'));
+        })
+        .join(' · ');
+}
+
+async function populateCaseResultsProgramSelect() {
+    const sel = document.getElementById('case-results-program');
+    if (!sel) return;
+    try {
+        const res = await fetch('/api/admin/case/programs');
+        const rows = await res.json();
+        sel.innerHTML = '<option value="">All programs</option>';
+        (rows || []).forEach((p) => {
+            const opt = document.createElement('option');
+            opt.value = String(p.id);
+            opt.textContent = p.title || 'Program ' + p.id;
+            sel.appendChild(opt);
+        });
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function loadAdminCaseResults() {
+    const panel = document.getElementById('case-results-panel');
+    if (!panel) return;
+    panel.innerHTML = '<p style="color:#64748b;">Loading…</p>';
+    const programId = document.getElementById('case-results-program')?.value || '';
+    const q = programId ? '?programId=' + encodeURIComponent(programId) : '';
+    try {
+        const res = await fetch('/api/admin/case/results' + q);
+        const data = await res.json();
+        const rows = data.results || [];
+        const criteria = data.criteria || [];
+        if (!rows.length) {
+            panel.innerHTML = '<p style="color:#64748b;">No scored submissions yet.</p>';
+            return;
+        }
+        let topScore = null;
+        rows.forEach((r) => {
+            const s = r.avg_score != null ? Number(r.avg_score) : null;
+            if (s != null && (topScore == null || s > topScore)) topScore = s;
+        });
+        let html =
+            '<table class="data-table"><thead><tr><th>Rank</th><th>App</th><th>Doctor</th><th>Topic</th><th>Avg / 25</th><th>Judges</th><th>Status</th></tr></thead><tbody>';
+        rows.forEach((r, idx) => {
+            const avg = r.avg_score != null ? Number(r.avg_score) : null;
+            const isTop = avg != null && topScore != null && avg === topScore && (r.judges_scored || 0) > 0;
+            const name = [r.first_name, r.last_name].filter(Boolean).join(' ');
+            html +=
+                '<tr style="' +
+                (isTop ? 'background:#ecfdf5;font-weight:700;' : '') +
+                '"><td>' +
+                (idx + 1) +
+                (isTop ? ' <span style="color:#059669;">★</span>' : '') +
+                '</td><td><code>' +
+                escAdmin(r.application_no || r.id) +
+                '</code></td><td>' +
+                escAdmin(name) +
+                '</td><td>' +
+                escAdmin(r.title || '—') +
+                '</td><td>' +
+                escAdmin(avg != null ? String(avg) : '—') +
+                '</td><td>' +
+                escAdmin(String(r.judges_scored || 0)) +
+                '</td><td>' +
+                escAdmin(r.status || '—') +
+                '</td></tr>';
+        });
+        html += '</tbody></table>';
+        panel.innerHTML = html;
+        window.__caseCriteriaDefs = criteria;
+    } catch (e) {
+        console.error(e);
+        panel.innerHTML = '<p style="color:#b91c1c;">Could not load results.</p>';
+    }
 }
 
 async function loadAdminCasePrograms() {
@@ -1439,12 +1532,16 @@ async function openAdminCaseDetail(subId) {
         });
         html += '</ul>';
         if (Array.isArray(scores) && scores.length) {
-            html += '<h4 style="margin-top:16px;">Judge scores (locked after submit)</h4><table class="data-table"><thead><tr><th>Judge</th><th>Total</th><th>Locked</th></tr></thead><tbody>';
+            const critDefs = window.__caseCriteriaDefs || [];
+            html +=
+                '<h4 style="margin-top:16px;">Judge scores (criteria + total)</h4><table class="data-table"><thead><tr><th>Judge</th><th>Criteria breakdown</th><th>Total / 25</th><th>Locked</th></tr></thead><tbody>';
             scores.forEach((sc) => {
                 const jname = [sc.first_name, sc.last_name].filter(Boolean).join(' ') || sc.user_id_string;
-                html += `<tr><td>${escAdmin(jname)}</td><td>${escAdmin(sc.total_score != null ? String(sc.total_score) : '—')}</td><td>${sc.is_locked ? 'Yes' : 'No'}</td></tr>`;
+                html +=
+                    `<tr><td>${escAdmin(jname)}</td><td style="font-size:0.85rem;">${formatCaseCriteriaBreakdown(sc, critDefs)}</td><td><strong>${escAdmin(sc.total_score != null ? String(sc.total_score) : '—')}</strong></td><td>${sc.is_locked ? 'Yes' : 'No'}</td></tr>`;
             });
             html += '</tbody></table>';
+            loadAdminCaseResults().catch(() => {});
         }
         box.innerHTML = html;
         box.dataset.subId = String(subId);

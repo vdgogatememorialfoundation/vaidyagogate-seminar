@@ -323,16 +323,17 @@
                                 .map((f) => '<a href="' + escapeHtml(f.file_path) + '" target="_blank">' + escapeHtml(f.original_name || 'file') + '</a>')
                                 .join(' · ');
                     }
-                    let html = '';
+                    let html =
+                        '<table class="crit-table" style="width:100%;border-collapse:collapse;margin-bottom:8px;"><thead><tr style="background:#eef2ff;"><th style="text-align:left;padding:8px;">Criterion</th><th style="text-align:center;padding:8px;">Max</th><th style="text-align:center;padding:8px;">Your marks</th></tr></thead><tbody>';
                     defs.forEach((def) => {
                         const row = existing.find((x) => x.key === def.key) || {};
                         const val = row.score != null ? row.score : '';
                         html +=
-                            '<div class="crit-row"><span>' +
+                            '<tr><td style="padding:8px;border-bottom:1px solid #e2e8f0;">' +
                             escapeHtml(def.label) +
-                            ' (max ' +
+                            '</td><td style="text-align:center;padding:8px;border-bottom:1px solid #e2e8f0;">' +
                             def.maxMarks +
-                            ')</span><input type="number" min="0" max="' +
+                            '</td><td style="text-align:center;padding:8px;border-bottom:1px solid #e2e8f0;"><input type="number" min="0" max="' +
                             def.maxMarks +
                             '" class="case-crit-input" data-key="' +
                             escapeHtml(def.key) +
@@ -340,10 +341,11 @@
                             def.maxMarks +
                             '" value="' +
                             escapeHtml(String(val)) +
-                            '"' +
+                            '" style="width:72px;padding:6px;text-align:center;"' +
                             (locked ? ' disabled' : '') +
-                            '></div>';
+                            '></td></tr>';
                     });
+                    html += '</tbody></table>';
                     document.getElementById('case-score-criteria').innerHTML = html;
                     document.querySelectorAll('.case-crit-input').forEach((inp) => {
                         inp.addEventListener('input', updateCaseScoreTotal);

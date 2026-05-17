@@ -2886,6 +2886,15 @@ app.post('/api/payments/process', (req, res) => {
                 error: 'Payment is not available for rejected or cancelled applications.'
             });
         }
+        if (regStatus === 'completed' || regStatus === 'checked_in') {
+            return res.status(400).json({ success: false, error: 'Payment is already completed for this application.' });
+        }
+        if (regStatus !== 'approved_pending_payment') {
+            return res.status(403).json({
+                success: false,
+                error: 'Payment opens after admin approval. Current status: ' + (reg.status || 'unknown') + '.'
+            });
+        }
 
         const orderIdStr = 'ORD_' + generateId();
 
