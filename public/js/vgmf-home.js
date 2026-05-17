@@ -55,7 +55,8 @@
         if (!cms) return;
         window.__homeCms = cms;
 
-        setText('tickerText', cms.tickerText);
+        const tickerEl = document.getElementById('tickerText');
+        if (tickerEl && cms.tickerText) tickerEl.textContent = cms.tickerText;
         setText('hero-title', cms.hero && cms.hero.title);
         setText('hero-subtitle', cms.hero && cms.hero.subtitle);
         const vEl = document.getElementById('hero-venue');

@@ -603,6 +603,14 @@
                         <thead><tr><th>Field</th><th>Label</th><th>Enabled</th><th>Required</th></tr></thead>
                         <tbody id="case-prog-fields-tbody"><tr><td colspan="4">Loading…</td></tr></tbody>
                     </table>
+                    <h4 style="margin:16px 0 8px;">Judging criteria (marks per criterion)</h4>
+                    <p style="color:#64748b;font-size:0.85rem;margin-bottom:8px;">Judges score each submission against these criteria. Total marks = sum of max marks below.</p>
+                    <table class="data-table" style="margin-bottom:8px;">
+                        <thead><tr><th>Criterion label</th><th>Max marks</th><th></th></tr></thead>
+                        <tbody id="case-prog-criteria-tbody"></tbody>
+                    </table>
+                    <button type="button" class="btn-primary" style="background:#64748b;padding:6px 12px;font-size:0.85rem;margin-bottom:12px;" onclick="addAdminCaseCriterionRow()">+ Add criterion</button>
+                    <p id="case-prog-criteria-total" style="font-size:0.88rem;font-weight:700;color:#4338ca;margin-bottom:12px;">Total max marks: 25</p>
                     <p id="case-prog-msg" style="font-weight:600;margin-bottom:10px;"></p>
                     <button type="button" class="btn-primary" onclick="saveAdminCaseProgram()">Save program</button>
                     <button type="button" class="btn-primary" style="background:#64748b;margin-left:8px;" onclick="resetAdminCaseProgramForm()">Clear / new</button>

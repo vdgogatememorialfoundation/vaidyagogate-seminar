@@ -642,9 +642,10 @@ function validateRegistrationAgainstConfigForSteps(upToStepInclusive) {
                 continue;
             }
             if (f.key === 'certificate') {
-                if (!hasCert) return `Please upload: ${f.label || 'Certificate'}`;
+                if (f.required !== false && !hasCert) return `Please upload: ${f.label || 'Certificate'}`;
                 continue;
             }
+            if (f.required === false) continue;
             const v = fd[f.key];
             if (v === undefined || v === null || String(v).trim() === '') {
                 return `Please complete: ${f.label || f.key}`;
@@ -662,7 +663,7 @@ function validateRegistrationAgainstConfigForSteps(upToStepInclusive) {
             }
         }
         for (const f of fields) {
-            if (!f.verifyOtp || !f.enabled) continue;
+            if (!f.verifyOtp || !f.enabled || f.required === false) continue;
             const fStep = f.step != null ? parseInt(f.step, 10) : 1;
             if (Number.isNaN(fStep) || fStep !== sn) continue;
             if (f.type !== 'email' && f.type !== 'tel') continue;
@@ -909,7 +910,7 @@ function startSeminarGridCountdownTimer() {
     seminarGridCountdownTimer = setInterval(tick, 1000);
 }
 
-function renderSeminarGridCard(s, readOnlyPast) {
+function renderSeminarGridCard(s, readOnlyPast, alreadyRegistered) {
     const win = registrationWindowState(s);
     const regStartLabel = s.registration_start
         ? formatTrackDateTime(s.registration_start)
@@ -917,7 +918,11 @@ function renderSeminarGridCard(s, readOnlyPast) {
     const regEndLabel = s.registration_end ? formatTrackDateTime(s.registration_end) : '';
     const eventLabel = s.event_date ? formatTrackDateTime(s.event_date) : '—';
     let actionBlock = '';
-    if (readOnlyPast) {
+    if (alreadyRegistered) {
+        actionBlock =
+            '<p style="font-size:0.85rem;color:#15803d;margin-bottom:12px;"><i class="fas fa-check-circle"></i> You already have an application for this seminar.</p>' +
+            '<button type="button" class="btn-primary" style="width:100%;opacity:0.7;" onclick="switchTab(\'tab-applications\')">View my application</button>';
+    } else if (readOnlyPast) {
         actionBlock =
             '<p style="font-size:0.85rem;color:#64748b;margin-bottom:12px;"><i class="fas fa-archive"></i> Past seminar — registration closed. Track your application under <strong>Track seminar applications</strong>.</p>' +
             '<button type="button" class="btn-primary" style="width:100%;opacity:0.7;" onclick="switchTab(\'tab-applications\')">View my registration</button>';
@@ -985,6 +990,21 @@ async function loadSeminarsGrid() {
             if (lbl) lbl.textContent = String(doctorPortalYear);
         }
         activeSeminars = payload.seminars || [];
+        const registeredSeminarIds = new Set();
+        const uid = typeof resolveCurrentUserId === 'function' ? resolveCurrentUserId() : null;
+        if (uid) {
+            try {
+                const appRes = await fetch('/api/applications/' + encodeURIComponent(uid), { cache: 'no-store' });
+                const appPayload = await appRes.json();
+                const apps = Array.isArray(appPayload) ? appPayload : appPayload.applications || [];
+                apps.forEach((a) => {
+                    if (a && a.seminar_id != null) registeredSeminarIds.add(Number(a.seminar_id));
+                });
+            } catch (appErr) {
+                console.warn('Could not load applications for seminar grid', appErr);
+            }
+        }
+        window.__userRegisteredSeminarIds = registeredSeminarIds;
         container.innerHTML = '';
         
         if (!activeSeminars.length) {
@@ -997,7 +1017,8 @@ async function loadSeminarsGrid() {
         activeSeminars.forEach((s) => {
             const win = registrationWindowState(s);
             if (win.state === 'upcoming') hasUpcoming = true;
-            container.insertAdjacentHTML('beforeend', renderSeminarGridCard(s, false));
+            const alreadyRegistered = registeredSeminarIds.has(Number(s.id));
+            container.insertAdjacentHTML('beforeend', renderSeminarGridCard(s, false, alreadyRegistered));
         });
         if (hasUpcoming) {
             startSeminarGridCountdownTimer();
@@ -1023,6 +1044,12 @@ function proceedFromSeminarTnc() {
 async function startRegistration(seminarId) {
     const s = activeSeminars.find((x) => Number(x.id) === Number(seminarId));
     const seminarTitle = s && s.title ? s.title : 'Seminar';
+    const regSet = window.__userRegisteredSeminarIds;
+    if (regSet && regSet.has(Number(seminarId))) {
+        alert('You have already registered for this seminar. Track your application under Track seminar applications.');
+        switchTab('tab-applications');
+        return;
+    }
     if (s && registrationWindowState(s).state !== 'open') {
         if (registrationWindowState(s).state === 'upcoming') {
             alert('Registration has not opened yet for this seminar. Please wait until the countdown reaches zero.');
@@ -1219,11 +1246,22 @@ async function loadCaseProgramsGrid() {
     if (form) form.classList.add('hidden');
     grid.innerHTML = '<p style="color:#64748b;">Loading programs…</p>';
     try {
-        const res = await fetch('/api/case/programs');
-        const programs = await res.json();
+        const res = await fetch('/api/case/programs', { cache: 'no-store' });
+        let programs = [];
+        try {
+            programs = await res.json();
+        } catch (parseErr) {
+            console.error(parseErr);
+        }
+        if (!res.ok) {
+            const errMsg = (programs && programs.error) || 'Could not load case programs (HTTP ' + res.status + ').';
+            grid.innerHTML = '<p style="color:#b91c1c;">' + escapeHtml(errMsg) + '</p>';
+            return;
+        }
         activeCasePrograms = Array.isArray(programs) ? programs : [];
         if (!activeCasePrograms.length) {
-            grid.innerHTML = '<p style="color:#64748b;">No case presentation programs are open at this time.</p>';
+            grid.innerHTML =
+                '<p style="color:#64748b;">No case presentation programs are available. Ask admin to create a program under <strong>Case presentation management</strong> and ensure <strong>Program active</strong> is checked.</p>';
             return;
         }
         grid.innerHTML = '';
@@ -1232,13 +1270,21 @@ async function loadCaseProgramsGrid() {
             card.className = 'card';
             card.style.padding = '16px';
             const win = p.windowState || 'open';
+            const regLine =
+                p.registration_start || p.registration_end
+                    ? `<p style="font-size:0.8rem;color:#64748b;margin-top:6px;">Applications: ${escapeHtml(
+                          p.registration_start ? formatTrackDateTime(p.registration_start) : '—'
+                      )} → ${escapeHtml(p.registration_end ? formatTrackDateTime(p.registration_end) : '—')}</p>`
+                    : '';
             let btn = '';
             if (win === 'open') {
                 btn = `<button type="button" class="btn-primary" style="margin-top:10px;" onclick="startCaseApplication(${p.id})">Apply now</button>`;
             } else if (win === 'upcoming') {
-                btn = '<p style="color:#b45309;margin-top:10px;font-size:0.88rem;">Applications not open yet</p>';
+                btn =
+                    '<p style="color:#b45309;margin-top:10px;font-size:0.88rem;">Applications not open yet</p>' +
+                    '<button type="button" class="btn-primary" style="margin-top:8px;opacity:0.55;" disabled>Not open</button>';
             } else {
-                btn = '<p style="color:#94a3b8;margin-top:10px;font-size:0.88rem;">Applications closed</p>';
+                btn = '<p style="color:#94a3b8;margin-top:10px;font-size:0.88rem;">Applications closed for this program</p>';
             }
             const slots =
                 p.slotsRemaining != null
@@ -1247,6 +1293,8 @@ async function loadCaseProgramsGrid() {
             card.innerHTML = `<h4 style="margin:0 0 6px;">${escapeHtml(p.title)}</h4>
                 <p style="font-size:0.85rem;color:#64748b;margin:0;">${escapeHtml(p.description || '')}</p>
                 ${p.seminar_title ? `<p style="font-size:0.82rem;margin-top:6px;">Linked seminar: ${escapeHtml(p.seminar_title)}</p>` : ''}
+                ${regLine}
+                <p style="font-size:0.78rem;margin-top:6px;color:${win === 'open' ? '#059669' : '#64748b'};">Status: ${escapeHtml(win === 'open' ? 'Open for applications' : win === 'upcoming' ? 'Opening soon' : 'Closed')}</p>
                 ${slots}
                 ${btn}`;
             grid.appendChild(card);
@@ -2786,27 +2834,56 @@ async function submitDoctorPasswordChange() {
 
 async function loadDashboardFeedbackSeminars() {
     const sel = document.getElementById('dfb-seminar');
-    if (!sel) return;
+    if (!sel || !currentUser) return;
+    let msgEl = document.getElementById('dfb-eligible-msg');
+    if (!msgEl) {
+        msgEl = document.createElement('p');
+        msgEl.id = 'dfb-eligible-msg';
+        msgEl.style.cssText = 'font-size:0.9rem;color:#64748b;margin:0 0 12px;';
+        sel.parentElement.insertBefore(msgEl, sel);
+    }
+    msgEl.textContent = '';
     try {
-        const res = await fetch('/api/seminars');
-        const seminars = await res.json();
+        const uid = typeof resolveCurrentUserId === 'function' ? resolveCurrentUserId() : currentUser.id;
+        const res = await fetch('/api/feedback/eligible-seminars/' + encodeURIComponent(uid), { cache: 'no-store' });
+        const data = await res.json();
+        if (!res.ok) {
+            msgEl.style.color = '#b91c1c';
+            msgEl.textContent = data.error || 'Could not load eligible seminars.';
+            sel.innerHTML = '<option value="">— Select seminar —</option>';
+            return;
+        }
+        const seminars = Array.isArray(data) ? data : data.seminars || [];
         sel.innerHTML = '<option value="">— Select seminar —</option>';
         seminars.forEach((s) => {
-            sel.innerHTML += `<option value="${s.id}">${s.title}</option>`;
+            const label = s.title || 'Seminar';
+            sel.innerHTML += `<option value="${s.id}" data-registration-id="${s.registration_id || ''}">${escapeHtml(label)}</option>`;
         });
+        if (!seminars.length) {
+            msgEl.textContent =
+                'No seminars are open for feedback yet. Feedback is available after a seminar you registered for has ended, and only once per seminar.';
+        }
     } catch (e) {
         console.error(e);
+        msgEl.style.color = '#b91c1c';
+        msgEl.textContent = 'Could not load seminars for feedback.';
     }
 }
 
 async function submitDashboardFeedback(e) {
     e.preventDefault();
     if (!currentUser) return;
-    const seminarId = document.getElementById('dfb-seminar').value;
+    const seminarSel = document.getElementById('dfb-seminar');
+    const seminarId = seminarSel && seminarSel.value;
     if (!seminarId) {
         alert('Please select a seminar.');
         return;
     }
+    const regOpt = seminarSel.options[seminarSel.selectedIndex];
+    const registrationId =
+        regOpt && regOpt.getAttribute('data-registration-id')
+            ? parseInt(regOpt.getAttribute('data-registration-id'), 10)
+            : null;
     try {
         const res = await fetch('/api/feedback/submit', {
             method: 'POST',
@@ -2814,7 +2891,7 @@ async function submitDashboardFeedback(e) {
             body: JSON.stringify({
                 userId: currentUser.id,
                 seminarId,
-                registrationId: null,
+                registrationId: Number.isInteger(registrationId) ? registrationId : null,
                 rating: parseInt(document.getElementById('dfb-rating').value, 10),
                 contentQuality: parseInt(document.getElementById('dfb-content').value, 10),
                 speakerQuality: parseInt(document.getElementById('dfb-speaker').value, 10),
@@ -2829,6 +2906,7 @@ async function submitDashboardFeedback(e) {
             alert('Thank you. Your feedback was submitted and is visible to administrators.');
             document.getElementById('dash-feedback-form').reset();
             document.getElementById('dfb-again').checked = true;
+            loadDashboardFeedbackSeminars();
             loadDoctorDashboardStats();
         } else {
             alert(data.error || 'Could not submit feedback.');

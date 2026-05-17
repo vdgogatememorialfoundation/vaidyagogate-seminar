@@ -52,26 +52,12 @@
         </div>
     </header>
 
-    <div class="announcement-ticker">
-        <div class="ticker-container">
-            <span class="ticker-label">Update</span>
-            <div class="ticker-content">
-                <div class="ticker-text" id="tickerText">Welcome to the VGMF National Seminar portal.</div>
-            </div>
-        </div>
+    <div id="static-announce-wrap" class="static-announce-wrap hidden" aria-label="Announcements">
+        <div class="static-announce-grid" id="static-announce-grid"></div>
     </div>
+        <span id="tickerText" class="hidden" aria-hidden="true"></span>
 
-    <div id="scrolling-announce-wrap" class="scrolling-announce-wrap hidden">
-        <div class="scrolling-announce-header">
-            <span class="ticker-label">News</span>
-            <span class="sa-sub">Latest updates</span>
-        </div>
-        <div class="scrolling-announce-viewport">
-            <div class="scrolling-announce-track" id="scrolling-announce-track"></div>
-        </div>
-    </div>
-
-    <section id="marketing-hero" class="marketing-hero hidden" aria-label="Featured banners"></section>
+<section id="marketing-hero" class="marketing-hero hidden" aria-label="Featured banners"></section>
 
     <section class="hero">
         <div class="hero-container">
@@ -294,6 +280,24 @@
                         <button type="submit" class="btn-primary" style="width:100%;border:none;cursor:pointer;">Create account</button>
                     </form>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="signupSuccessModal" class="modal" aria-hidden="true">
+        <div class="modal-content" style="max-width:420px;">
+            <div style="padding:28px;text-align:center;">
+                <div style="width:56px;height:56px;margin:0 auto 16px;border-radius:50%;background:#ecfdf5;color:#059669;display:flex;align-items:center;justify-content:center;font-size:1.5rem;">
+                    <i class="fas fa-check" aria-hidden="true"></i>
+                </div>
+                <h3 style="font-family:Libre Baskerville,Georgia,serif;font-size:1.25rem;margin-bottom:8px;color:var(--ink);">Account created</h3>
+                <p id="signup-success-msg" style="color:var(--muted);font-size:0.9rem;line-height:1.5;margin-bottom:18px;"></p>
+                <div style="background:#f8fafc;border:1px solid var(--line);border-radius:12px;padding:16px;text-align:left;font-size:0.9rem;margin-bottom:22px;">
+                    <p style="margin:0 0 12px;"><span style="display:block;font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--muted);">Login ID</span><strong id="signup-success-userid" style="color:var(--ink);"></strong></p>
+                    <p style="margin:0;"><span style="display:block;font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:var(--muted);">Email</span><span id="signup-success-email" style="color:var(--ink);"></span></p>
+                </div>
+                <p style="font-size:0.82rem;color:var(--muted);margin-bottom:16px;">Sign in with your <strong>email</strong> and password (not the numeric login ID).</p>
+                <button type="button" class="btn-primary" style="width:100%;border:none;cursor:pointer;" onclick="closeSignupSuccessModal()">Continue to sign in</button>
             </div>
         </div>
     </div>
@@ -712,6 +716,34 @@
             }
         }
 
+        function showSignupSuccessModal(data, email) {
+            const modal = document.getElementById('signupSuccessModal');
+            const msg = document.getElementById('signup-success-msg');
+            const uidEl = document.getElementById('signup-success-userid');
+            const emailEl = document.getElementById('signup-success-email');
+            if (msg) {
+                msg.textContent =
+                    data.message || 'Your doctor account is ready. Complete your profile in the doctor portal after signing in.';
+            }
+            if (uidEl) uidEl.textContent = data.user_id_string || '—';
+            if (emailEl) emailEl.textContent = email || '—';
+            closeAuthModal();
+            if (modal) {
+                modal.style.display = 'flex';
+                modal.setAttribute('aria-hidden', 'false');
+            }
+        }
+
+        function closeSignupSuccessModal() {
+            const modal = document.getElementById('signupSuccessModal');
+            if (modal) {
+                modal.style.display = 'none';
+                modal.setAttribute('aria-hidden', 'true');
+            }
+            switchAuthTab('login');
+            openAuthModal('login');
+        }
+
         async function handleLogin(e) {
             e.preventDefault();
             const email = String(document.getElementById('login_email').value || '').trim().toLowerCase();
@@ -719,6 +751,11 @@
             const body = { email, password };
             const lo = document.getElementById('login_otp_panel');
             if (isOtpPanelActive(lo)) {
+                if (!loginPhoneOtpToken || !loginEmailOtpToken) {
+                    return alert(
+                        'Please verify both your email and WhatsApp with the codes sent to you before signing in.'
+                    );
+                }
                 body.phoneOtpToken = loginPhoneOtpToken;
                 body.emailOtpToken = loginEmailOtpToken;
             }
@@ -754,8 +791,27 @@
             const body = { firstName, lastName, email, phone, password, role: 'doctor' };
             const otpPanel = document.getElementById('signup_otp_panel');
             if (isOtpPanelActive(otpPanel)) {
+                if (!signupPhoneOtpToken || !signupEmailOtpToken) {
+                    return alert(
+                        'Please verify both your email and phone with OTP before creating your account.'
+                    );
+                }
                 body.phoneOtpToken = signupPhoneOtpToken;
                 body.emailOtpToken = signupEmailOtpToken;
+            }
+
+            try {
+                const availRes = await fetch(
+                    '/api/auth/email-available?email=' + encodeURIComponent(email)
+                );
+                const availData = await availRes.json();
+                if (!availRes.ok) return alert(availData.error || 'Could not verify email availability.');
+                if (!availData.available) {
+                    return alert('This email is already registered. Please sign in instead.');
+                }
+            } catch (availErr) {
+                console.error(availErr);
+                return alert('Could not verify email availability. Please try again.');
             }
 
             const res = await fetch('/api/auth/signup', {
@@ -767,8 +823,12 @@
             if (data.success) {
                 signupPhoneOtpToken = null;
                 signupEmailOtpToken = null;
-                alert('Registration successful! Sign in with your email and password (not the numeric user ID).');
-                switchAuthTab('login');
+                document.getElementById('signupForm')?.querySelector('form')?.reset();
+                ['signup_email_otp_ok', 'signup_phone_otp_ok'].forEach((id) => {
+                    const el = document.getElementById(id);
+                    if (el) el.textContent = '';
+                });
+                showSignupSuccessModal(data, email);
             } else {
                 alert(data.error);
             }
@@ -808,8 +868,8 @@
         }
 
         function renderScrollingAnnouncements(items) {
-            const wrap = document.getElementById('scrolling-announce-wrap');
-            const track = document.getElementById('scrolling-announce-track');
+            const wrap = document.getElementById('static-announce-wrap');
+            const track = document.getElementById('static-announce-grid');
             if (!wrap || !track) return;
             const list = Array.isArray(items) ? items.filter((x) => x && (x.title || x.body)) : [];
             if (!list.length) {
@@ -836,8 +896,8 @@
                         : '';
                 return `<div class="sa-card">${img}<h5>${title}</h5><p>${body}</p>${date}${link}${pdf}</div>`;
             };
-            const html = list.map(one).join('');
-            track.innerHTML = html + html;
+            track.className = 'static-announce-grid';
+            track.innerHTML = list.map(one).join('');
         }
 
         function renderReviewsMarquee(reviews) {
@@ -865,7 +925,8 @@
                 </div>`
                 )
                 .join('');
-            track.innerHTML = cards + cards;
+            track.innerHTML = cards;
+            track.classList.add('reviews-grid-static');
         }
 
         async function loadPublicCmsAndApply() {
@@ -954,8 +1015,9 @@
 
         async function loadTimerAndSeminars() {
             try {
-                const res = await fetch('/api/seminars');
-                const seminars = await res.json();
+                const res = await fetch('/api/seminars?bucket=current');
+                const payload = await res.json();
+                const seminars = Array.isArray(payload) ? payload : payload.seminars || [];
                 const region = document.getElementById('countdown-region');
                 if (!region) return;
                 if (timerInterval) clearInterval(timerInterval);

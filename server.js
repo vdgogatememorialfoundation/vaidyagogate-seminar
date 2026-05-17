@@ -35,6 +35,7 @@ const siteMarketing = require('./lib/site-marketing');
 const {
     isCheckinDateToday,
     isCheckinOpenForSeminar,
+    isSeminarEnded,
     localDateYmd,
     normalizeCheckinDateYmd,
     normalizeCheckinDateForStorage
@@ -1856,9 +1857,21 @@ app.post('/api/admin/integrations/test-email', withIntegrationSettingsLoaded, as
     const to = String((req.body && req.body.to) || '').trim();
     if (!to) return res.status(400).json({ error: 'to email required' });
     const { sendEmail } = require('./lib/email-service');
-    const r = await sendEmail(to, 'VGMF test email', '<p>SMTP test from seminar admin.</p>', { text: 'SMTP test' });
-    if (r.ok) return res.json({ success: true });
-    res.status(503).json({ error: r.error || 'Send failed', skipped: r.skipped });
+    const subject = 'VGMF test email';
+    const html = '<p>SMTP test from seminar admin integrations panel.</p>';
+    const r = await sendEmail(to, subject, html, { text: 'SMTP test from seminar admin.' });
+    const logStatus = r.ok ? 'sent' : r.skipped ? 'skipped' : 'failed';
+    notifEngine.logNotification(db, {
+        event_key: 'INTEGRATION_TEST_EMAIL',
+        channel: 'email',
+        destination: to,
+        status: logStatus,
+        subject,
+        body_preview: 'SMTP integration test',
+        error: r.ok ? null : r.error || 'Send failed'
+    });
+    if (r.ok) return res.json({ success: true, logged: true });
+    res.status(503).json({ error: r.error || 'Send failed', skipped: r.skipped, logged: true });
 });
 
 app.post('/api/admin/integrations/test-whatsapp', async (req, res) => {
@@ -1911,6 +1924,20 @@ app.get('/api/auth/signup-otp-required', (req, res) => {
 
 app.get('/api/auth/login-otp-required', (req, res) => {
     res.json({ required: loginOtpRequired() });
+});
+
+app.get('/api/auth/email-available', (req, res) => {
+    const email = String((req.query && req.query.email) || '')
+        .trim()
+        .toLowerCase();
+    if (!email) return res.status(400).json({ error: 'Email is required' });
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ error: 'Enter a valid email address' });
+    }
+    db.get(`SELECT id FROM users WHERE lower(trim(email)) = ?`, [email], (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ available: !row });
+    });
 });
 
 /** After password check: send login OTP to the user’s verified phone or email. */
@@ -2506,7 +2533,7 @@ app.post('/api/admin/registration-form-config', (req, res) => {
     if (!Array.isArray(fields)) return res.status(400).json({ error: 'fields must be an array' });
     const normalized = fields.map((f) => ({
         ...f,
-        required: f.enabled !== false
+        required: f.enabled === false ? false : !!f.required
     }));
     const payload = JSON.stringify({ version: 1, fields: normalized });
     upsertGlobalSetting('registration_form_config', payload, (e) => {
@@ -5334,15 +5361,107 @@ app.delete('/api/admin/event-schedules/:id', (req, res) => {
 
 // Submit Seminar Feedback
 app.post('/api/feedback/submit', (req, res) => {
-    const { userId, seminarId, registrationId, rating, contentQuality, speakerQuality, organizationQuality, overallExperience, suggestions, wouldAttendAgain } = req.body;
-    
-    db.run(`INSERT INTO seminar_feedback (user_id, seminar_id, registration_id, rating, content_quality, speaker_quality, organization_quality, overall_experience, suggestions, would_attend_again) 
+    const {
+        userId,
+        seminarId,
+        registrationId,
+        rating,
+        contentQuality,
+        speakerQuality,
+        organizationQuality,
+        overallExperience,
+        suggestions,
+        wouldAttendAgain
+    } = req.body;
+    const uid = parsePositiveUserId(userId);
+    const sid = parseInt(seminarId, 10);
+    if (!uid) return res.status(400).json({ error: 'Invalid user' });
+    if (!Number.isInteger(sid) || sid < 1) return res.status(400).json({ error: 'Invalid seminar' });
+
+    db.get(`SELECT id, event_date, title FROM seminars WHERE id = ?`, [sid], (err, sem) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!sem) return res.status(400).json({ error: 'Seminar not found' });
+        if (!isSeminarEnded(sem.event_date)) {
+            return res.status(400).json({
+                error: 'Feedback is only accepted after the seminar has ended.'
+            });
+        }
+
+        db.get(
+            `SELECT id FROM registrations WHERE user_id = ? AND seminar_id = ? ORDER BY id DESC LIMIT 1`,
+            [uid, sid],
+            (regErr, reg) => {
+                if (regErr) return res.status(500).json({ error: regErr.message });
+                if (!reg) {
+                    return res.status(400).json({
+                        error: 'You must be registered for this seminar before submitting feedback.'
+                    });
+                }
+
+                db.get(
+                    `SELECT id FROM seminar_feedback WHERE user_id = ? AND seminar_id = ?`,
+                    [uid, sid],
+                    (dupErr, existing) => {
+                        if (dupErr) return res.status(500).json({ error: dupErr.message });
+                        if (existing) {
+                            return res.status(400).json({
+                                error: 'You have already submitted feedback for this seminar.'
+                            });
+                        }
+
+                        const regId =
+                            registrationId != null && registrationId !== ''
+                                ? parseInt(registrationId, 10)
+                                : reg.id;
+                        const storedRegId = Number.isInteger(regId) && regId > 0 ? regId : reg.id;
+
+                        db.run(
+                            `INSERT INTO seminar_feedback (user_id, seminar_id, registration_id, rating, content_quality, speaker_quality, organization_quality, overall_experience, suggestions, would_attend_again) 
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [userId, seminarId, registrationId, rating || 5, contentQuality || 5, speakerQuality || 5, organizationQuality || 5, overallExperience, suggestions, wouldAttendAgain ? 1 : 0],
-        function(err) {
+                            [
+                                uid,
+                                sid,
+                                storedRegId,
+                                rating || 5,
+                                contentQuality || 5,
+                                speakerQuality || 5,
+                                organizationQuality || 5,
+                                overallExperience,
+                                suggestions,
+                                wouldAttendAgain ? 1 : 0
+                            ],
+                            function (insErr) {
+                                if (insErr) return res.status(500).json({ error: insErr.message });
+                                res.json({ success: true, id: this.lastID });
+                            }
+                        );
+                    }
+                );
+            }
+        );
+    });
+});
+
+app.get('/api/feedback/eligible-seminars/:userId', (req, res) => {
+    const uid = parsePositiveUserId(req.params.userId);
+    if (!uid) return res.status(400).json({ error: 'Invalid user id' });
+    db.all(
+        `SELECT s.id, s.title, s.event_date, r.id AS registration_id
+         FROM registrations r
+         JOIN seminars s ON s.id = r.seminar_id
+         WHERE r.user_id = ?
+         AND NOT EXISTS (
+             SELECT 1 FROM seminar_feedback sf
+             WHERE sf.user_id = r.user_id AND sf.seminar_id = r.seminar_id
+         )
+         ORDER BY s.event_date DESC, s.id DESC`,
+        [uid],
+        (err, rows) => {
             if (err) return res.status(500).json({ error: err.message });
-            res.json({ success: true, id: this.lastID });
-        });
+            const eligible = (rows || []).filter((r) => isSeminarEnded(r.event_date));
+            res.json(eligible);
+        }
+    );
 });
 
 // Get Feedback for a Seminar (Admin)

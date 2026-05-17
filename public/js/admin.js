@@ -1147,6 +1147,84 @@ function setCaseProgMsg(text, ok) {
     el.textContent = text || '';
 }
 
+function renderCaseProgramCriteriaEditor(criteria) {
+    const tbody = document.getElementById('case-prog-criteria-tbody');
+    if (!tbody) return;
+    const list =
+        criteria && criteria.length
+            ? criteria
+            : [
+                  { key: 'criteria_a', label: 'Criteria A', maxMarks: 5 },
+                  { key: 'criteria_b', label: 'Criteria B', maxMarks: 5 },
+                  { key: 'criteria_c', label: 'Criteria C', maxMarks: 5 },
+                  { key: 'criteria_d', label: 'Criteria D', maxMarks: 5 },
+                  { key: 'criteria_e', label: 'Criteria E', maxMarks: 5 }
+              ];
+    __caseProgCriteriaRows = list.map((c, i) => ({
+        key: c.key || 'criteria_' + (i + 1),
+        label: c.label || 'Criterion ' + (i + 1),
+        maxMarks: c.maxMarks != null ? c.maxMarks : 5
+    }));
+    tbody.innerHTML = '';
+    __caseProgCriteriaRows.forEach((c, idx) => {
+        tbody.innerHTML +=
+            '<tr><td><input type="text" id="case-crit-label-' +
+            idx +
+            '" value="' +
+            String(c.label || '').replace(/"/g, '&quot;') +
+            '" style="width:100%;padding:6px;"></td>' +
+            '<td><input type="number" min="1" max="100" id="case-crit-max-' +
+            idx +
+            '" value="' +
+            String(c.maxMarks != null ? c.maxMarks : 5) +
+            '" style="width:80px;padding:6px;"></td>' +
+            '<td><button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;background:#b91c1c;" onclick="removeAdminCaseCriterionRow(' +
+            idx +
+            ')">Remove</button></td></tr>';
+    });
+    updateCaseProgramCriteriaTotal();
+}
+
+function updateCaseProgramCriteriaTotal() {
+    const el = document.getElementById('case-prog-criteria-total');
+    if (!el) return;
+    let sum = 0;
+    (__caseProgCriteriaRows || []).forEach((_, idx) => {
+        const m = parseInt((document.getElementById('case-crit-max-' + idx) || {}).value, 10);
+        if (!Number.isNaN(m)) sum += m;
+    });
+    el.textContent = 'Total max marks: ' + sum;
+}
+
+function addAdminCaseCriterionRow() {
+    __caseProgCriteriaRows = __caseProgCriteriaRows || [];
+    if (__caseProgCriteriaRows.length >= 12) return alert('Maximum 12 criteria.');
+    __caseProgCriteriaRows.push({
+        key: 'criteria_' + (__caseProgCriteriaRows.length + 1),
+        label: 'Criterion ' + (__caseProgCriteriaRows.length + 1),
+        maxMarks: 5
+    });
+    renderCaseProgramCriteriaEditor(__caseProgCriteriaRows);
+}
+
+function removeAdminCaseCriterionRow(idx) {
+    __caseProgCriteriaRows = __caseProgCriteriaRows || [];
+    if (__caseProgCriteriaRows.length <= 1) return alert('At least one criterion is required.');
+    __caseProgCriteriaRows.splice(idx, 1);
+    renderCaseProgramCriteriaEditor(__caseProgCriteriaRows);
+}
+
+function collectCaseProgramJudgeCriteria() {
+    const rows = __caseProgCriteriaRows || [];
+    return rows.map((r, idx) => ({
+        key: r.key || 'criteria_' + (idx + 1),
+        label: ((document.getElementById('case-crit-label-' + idx) || {}).value || r.label || '').trim(),
+        maxMarks: Math.max(1, Math.min(100, parseInt((document.getElementById('case-crit-max-' + idx) || {}).value, 10) || 5))
+    }));
+}
+
+let __caseProgCriteriaRows = [];
+
 function collectCaseProgramFormConfig() {
     const rows = __caseProgFieldRows || [];
     if (!rows.length) {
@@ -1230,6 +1308,7 @@ function resetAdminCaseProgramForm() {
     if (act) act.checked = true;
     setCaseProgMsg('', true);
     loadCaseProgramDefaultFields();
+    renderCaseProgramCriteriaEditor(null);
 }
 
 async function editAdminCaseProgram(id) {
@@ -1258,8 +1337,10 @@ async function editAdminCaseProgram(id) {
         const cats = p.enabledCategories || [];
         document.getElementById('case-cat-agnikarma').checked = cats.indexOf('agnikarma') !== -1;
         document.getElementById('case-cat-viddhakarma').checked = cats.indexOf('viddhakarma') !== -1;
-        document.getElementById('case-prog-active').checked = p.is_active !== 0;
+        document.getElementById('case-prog-active').checked =
+            p.is_active !== 0 && p.is_active !== false && String(p.is_active) !== 'false';
         renderCaseProgramFieldsEditor((p.formConfig && p.formConfig.fields) || []);
+        renderCaseProgramCriteriaEditor(p.judgeCriteria || []);
         setCaseProgMsg('Editing program #' + p.id, true);
     } catch (e) {
         console.error(e);
@@ -1350,6 +1431,7 @@ async function loadAdminCaseResults() {
         const data = await res.json();
         const rows = data.results || [];
         const criteria = data.criteria || [];
+        const totalMax = data.totalMax != null ? data.totalMax : 25;
         if (!rows.length) {
             panel.innerHTML = '<p style="color:#64748b;">No scored submissions yet.</p>';
             return;
@@ -1360,7 +1442,9 @@ async function loadAdminCaseResults() {
             if (s != null && (topScore == null || s > topScore)) topScore = s;
         });
         let html =
-            '<table class="data-table"><thead><tr><th>Rank</th><th>App</th><th>Doctor</th><th>Topic</th><th>Avg / 25</th><th>Judges</th><th>Status</th></tr></thead><tbody>';
+            '<table class="data-table"><thead><tr><th>Rank</th><th>App</th><th>Doctor</th><th>Topic</th><th>Avg / ' +
+            escAdmin(String(totalMax)) +
+            '</th><th>Judges</th><th>Status</th></tr></thead><tbody>';
         rows.forEach((r, idx) => {
             const avg = r.avg_score != null ? Number(r.avg_score) : null;
             const isTop = avg != null && topScore != null && avg === topScore && (r.judges_scored || 0) > 0;
@@ -1453,8 +1537,11 @@ async function saveAdminCaseProgram() {
         maxFileSizeMb: (document.getElementById('case-prog-max-mb') || {}).value || 50,
         enabledCategories: enabledCategories,
         isActive: document.getElementById('case-prog-active') ? document.getElementById('case-prog-active').checked !== false : true,
-        formConfig: collectCaseProgramFormConfig()
+        formConfig: collectCaseProgramFormConfig(),
+        judgeCriteria: collectCaseProgramJudgeCriteria()
     };
+    const crit = payload.judgeCriteria;
+    if (!crit.length) return alert('Add at least one judging criterion with max marks.');
     const url = editId ? '/api/admin/case/programs/' + editId : '/api/admin/case/programs';
     const method = editId ? 'PUT' : 'POST';
     setCaseProgMsg('Saving…', true);
@@ -1528,7 +1615,11 @@ async function openAdminCaseDetail(subId) {
             fetch(`/api/admin/case/submissions/${subId}/scores`)
         ]);
         const data = await res.json();
-        const scores = scoresRes.ok ? await scoresRes.json() : [];
+        const scoresPayload = scoresRes.ok ? await scoresRes.json() : [];
+        const scores = Array.isArray(scoresPayload) ? scoresPayload : scoresPayload.scores || [];
+        if (scoresPayload.criteria && scoresPayload.criteria.length) {
+            window.__caseCriteriaDefs = scoresPayload.criteria;
+        }
         const sub = data.submission;
         const files = data.files || [];
         const assigned = data.assignedJudges || [];
@@ -1583,8 +1674,14 @@ async function openAdminCaseDetail(subId) {
         html += '</ul>';
         if (Array.isArray(scores) && scores.length) {
             const critDefs = window.__caseCriteriaDefs || [];
+            const scoreMax =
+                scoresPayload.totalMax != null
+                    ? scoresPayload.totalMax
+                    : critDefs.reduce((s, c) => s + (c.maxMarks || 0), 0) || 25;
             html +=
-                '<h4 style="margin-top:16px;">Judge scores (criteria + total)</h4><table class="data-table"><thead><tr><th>Judge</th><th>Criteria breakdown</th><th>Total / 25</th><th>Locked</th></tr></thead><tbody>';
+                '<h4 style="margin-top:16px;">Judge scores (criteria + total)</h4><table class="data-table"><thead><tr><th>Judge</th><th>Criteria breakdown</th><th>Total / ' +
+                escAdmin(String(scoreMax)) +
+                '</th><th>Locked</th></tr></thead><tbody>';
             scores.forEach((sc) => {
                 const jname = [sc.first_name, sc.last_name].filter(Boolean).join(' ') || sc.user_id_string;
                 html +=
@@ -2034,7 +2131,13 @@ async function testIntegrationEmail() {
         body: JSON.stringify({ to })
     });
     const data = await res.json();
-    alert(res.ok ? 'Test email sent.' : data.error || 'Failed');
+    if (res.ok) {
+        alert('Test email sent. Check inbox/spam. It is also logged under Notifications → Logs (INTEGRATION_TEST_EMAIL).');
+        if (typeof loadNotificationLogs === 'function') loadNotificationLogs();
+    } else {
+        alert((data.error || 'Failed') + (data.logged ? ' See Notifications → Logs for details.' : ''));
+        if (typeof loadNotificationLogs === 'function') loadNotificationLogs();
+    }
 }
 
 async function testIntegrationWhatsApp() {
@@ -3336,7 +3439,7 @@ async function loadAdminRegistrationFormConfig() {
                 <td><code>${String(f.key || '').replace(/</g, '&lt;')}</code></td>
                 <td><input type="text" id="reg-field-label-${idx}" value="${String(f.label || '').replace(/"/g, '&quot;')}" style="margin:0;"></td>
                 <td><input type="checkbox" id="reg-field-en-${idx}" ${f.enabled !== false ? 'checked' : ''}></td>
-                <td><input type="checkbox" id="reg-field-req-${idx}" ${f.required ? 'checked' : ''}></td>
+                <td><input type="checkbox" id="reg-field-req-${idx}" ${f.required !== false && f.enabled !== false ? 'checked' : ''}></td>
             </tr>`;
         });
         window.__adminRegFieldRows = fields.map((f) => ({
@@ -3355,11 +3458,12 @@ async function saveAdminRegistrationFormConfig() {
     const rows = window.__adminRegFieldRows || [];
     const fields = rows.map((r, idx) => {
         const enabled = !!(document.getElementById(`reg-field-en-${idx}`) || {}).checked;
+        const required = enabled && !!(document.getElementById(`reg-field-req-${idx}`) || {}).checked;
         return {
         key: r.key,
         label: (document.getElementById(`reg-field-label-${idx}`) || {}).value || r.key,
         enabled,
-        required: enabled,
+        required,
         onlyWhenAdvancedQual:
             typeof r.onlyWhenAdvancedQual === 'boolean'
                 ? r.onlyWhenAdvancedQual

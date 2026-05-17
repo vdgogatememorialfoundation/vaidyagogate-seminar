@@ -22,8 +22,6 @@
         .otp-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
         .otp-btn { padding: 6px 12px; border-radius: 8px; border: 1px solid #c7d2fe; background: #f5f3ff; cursor: pointer; font-size: 0.8rem; font-weight: 700; color: #4338ca; }
         #login-err { color: #b91c1c; font-size: 0.85rem; margin-top: 10px; font-weight: 600; }
-        .portal-links { margin-top: 16px; padding-top: 14px; border-top: 1px solid #e2e8f0; font-size: 0.78rem; color: #94a3b8; }
-        .portal-links a { color: #6366f1; font-weight: 600; text-decoration: none; margin-right: 10px; }
         .wrap { max-width: 1100px; margin: 0 auto; padding: 28px 20px 48px; }
         header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 28px; }
         h1 { font-family: 'Fraunces', Georgia, serif; font-size: 1.65rem; color: #312e81; letter-spacing: -0.02em; }
@@ -81,13 +79,6 @@
                 <p id="login-err" class="hidden"></p>
                 <button type="submit" class="btn-primary">Sign in to judge workspace</button>
             </form>
-            <div class="portal-links">
-                Other portals:
-                <a href="/doctor.html">Doctor</a>
-                <a href="/admin.html">Admin</a>
-                <a href="/scanner.html">Scanner</a>
-                <a href="/">Public site</a>
-            </div>
         </div>
     </div>
 
@@ -134,7 +125,7 @@
             <div id="case-score-criteria"></div>
             <label style="display:block;margin-top:12px;font-size:0.82rem;font-weight:700;color:#4338ca;">Remarks (optional)</label>
             <textarea id="case-score-remarks" rows="2" style="width:100%;padding:8px;border:1px solid #c7d2fe;border-radius:8px;margin-top:4px;"></textarea>
-            <p style="margin-top:10px;font-weight:700;">Total: <span id="case-score-total">0</span> / 25</p>
+            <p style="margin-top:10px;font-weight:700;">Total: <span id="case-score-total">0</span> / <span id="case-score-total-max">25</span></p>
             <div class="score-actions">
                 <button type="button" class="btn btn-submit" id="case-score-submit">Submit marks (locks scores)</button>
                 <button type="button" class="btn" id="case-score-cancel">Cancel</button>
@@ -301,6 +292,12 @@
                     const sub = data.submission || {};
                     const locked = !!(data.myScore && data.myScore.is_locked);
                     const defs = data.criteria || caseCriteriaDefs;
+                    const totalMax =
+                        data.totalMax != null
+                            ? data.totalMax
+                            : defs.reduce((s, d) => s + (d.maxMarks || 0), 0) || 25;
+                    const maxEl = document.getElementById('case-score-total-max');
+                    if (maxEl) maxEl.textContent = String(totalMax);
                     let existing = [];
                     if (data.myScore && data.myScore.criteria_json) {
                         try {

@@ -1,11 +1,11 @@
 /* VGMF — seminar website (refreshed theme) */
 :root {
-    --ink: #1a1f36;
+    --ink: #334155;
     --ink-soft: #4a5568;
     --muted: #718096;
     --line: #e8ecf4;
     --surface: #ffffff;
-    --surface-2: #f6f4ef;
+    --surface-2: #f0f9ff;
     --brand: #1e3a8a;
     --brand-dark: #172554;
     --brand-light: #3b82f6;
@@ -26,7 +26,7 @@ html { scroll-behavior: smooth; }
 
 body {
     font-family: var(--font);
-    background: var(--surface-2);
+    background: linear-gradient(180deg, #f8fafc 0%, #f0f9ff 40%, #ecfdf5 100%);
     color: var(--ink);
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
@@ -99,12 +99,13 @@ img { max-width: 100%; height: auto; display: block; }
 
 /* —— Header (white) —— */
 .site-header {
-    background: #ffffff;
+    background: rgba(255, 255, 255, 0.96);
     position: sticky;
     top: 0;
     z-index: 1000;
     border-bottom: 1px solid var(--line);
-    box-shadow: 0 1px 0 rgba(12, 18, 34, 0.04);
+    box-shadow: 0 4px 24px rgba(30, 58, 138, 0.06);
+    backdrop-filter: blur(10px);
 }
 
 .nav-container {
@@ -249,7 +250,7 @@ img { max-width: 100%; height: auto; display: block; }
     position: relative;
     padding: 72px 24px 80px;
     overflow: hidden;
-    background: linear-gradient(160deg, #0c1222 0%, #0d5c63 45%, #0a3d42 100%);
+    background: linear-gradient(155deg, #1e40af 0%, #0d9488 48%, #0369a1 100%);
     color: #fff;
 }
 
@@ -381,12 +382,13 @@ img { max-width: 100%; height: auto; display: block; }
 }
 
 .hero-visual {
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.12);
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.35);
     border-radius: var(--radius-lg);
     padding: 28px;
-    backdrop-filter: blur(12px);
+    backdrop-filter: blur(14px);
     text-align: center;
+    box-shadow: 0 20px 50px rgba(15, 23, 42, 0.15);
 }
 
 .hero-visual .hero-fallback-icon {
@@ -759,8 +761,8 @@ img { max-width: 100%; height: auto; display: block; }
 }
 
 .schedule-table th {
-    background: var(--ink);
-    color: #e2e8f0;
+    background: linear-gradient(90deg, var(--brand), #0d9488);
+    color: #f8fafc;
     padding: 14px 18px;
     text-align: left;
     font-size: 0.72rem;
@@ -927,11 +929,17 @@ img { max-width: 100%; height: auto; display: block; }
 }
 
 .countdown-strip {
-    background: var(--surface);
-    border: 1px solid var(--line);
+    background: linear-gradient(135deg, #ffffff 0%, #f0fdfa 100%);
+    border: 1px solid #99f6e4;
     border-radius: var(--radius);
     padding: 20px 24px;
-    box-shadow: var(--shadow);
+    box-shadow: 0 8px 28px rgba(13, 148, 136, 0.12);
+}
+
+.countdown-strip h4 {
+    color: var(--brand);
+    font-size: 1.05rem;
+    margin-bottom: 4px;
 }
 
 .countdown-grid {
@@ -943,8 +951,9 @@ img { max-width: 100%; height: auto; display: block; }
 .countdown-grid .box {
     flex: 1;
     text-align: center;
-    background: var(--surface-2);
-    border-radius: 10px;
+    background: #fff;
+    border: 1px solid #ccfbf1;
+    border-radius: 12px;
     padding: 12px 8px;
 }
 
@@ -1029,6 +1038,58 @@ img { max-width: 100%; height: auto; display: block; }
     object-fit: cover;
 }
 
+/* —— Static announcements (no sliding ticker) —— */
+.static-announce-wrap {
+    max-width: var(--max);
+    margin: 0 auto;
+    padding: 16px 24px 0;
+}
+
+.static-announce-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+}
+
+.sa-card-static {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    padding: 18px;
+    box-shadow: var(--shadow);
+}
+
+.sa-card-static h5 {
+    color: var(--brand);
+    margin-bottom: 8px;
+    font-size: 1rem;
+}
+
+.sa-card-static .sa-meta {
+    font-size: 0.8rem;
+    color: var(--muted);
+    margin-top: 8px;
+}
+
+.sa-card-static .sa-link {
+    display: inline-block;
+    margin-top: 10px;
+    font-weight: 700;
+}
+
+.reviews-grid-static {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+    width: 100%;
+    animation: none !important;
+}
+
+.reviews-grid-static .review-card {
+    flex: none;
+    width: auto;
+}
+
 /* —— Responsive —— */
 @media (max-width: 900px) {
     .hero-container { grid-template-columns: 1fr; }
@@ -1049,6 +1110,11 @@ img { max-width: 100%; height: auto; display: block; }
 }
 
 @media (max-width: 768px) {
+    .countdown-grid { flex-wrap: wrap; }
+    .countdown-grid .box { min-width: calc(50% - 8px); }
+    .countdown-strip h4 { font-size: 0.95rem; }
+    .static-announce-grid { grid-template-columns: 1fr; }
+    .reviews-grid-static { grid-template-columns: 1fr; }
     .nav-toggle { display: block; z-index: 1002; position: relative; }
     .nav-links {
         display: none;
