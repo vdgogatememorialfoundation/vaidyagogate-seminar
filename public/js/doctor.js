@@ -338,26 +338,31 @@ function initDoctorMobileNav() {
     const backdrop = document.getElementById('doctor-nav-backdrop');
     if (!toggle || !sidebar) return;
 
+    if (toggle.dataset.navInited === '1') return;
+    toggle.dataset.navInited = '1';
+
     closeDoctorMobileNav();
 
     document.querySelectorAll('.menu-item').forEach((el) => {
+        if (el.dataset.navBound === '1') return;
         const tabId = el.getAttribute('data-tab');
         const oc = el.getAttribute('onclick') || '';
         const fromOnclick = oc.match(/switchTab\('([^']+)'\)/);
         const targetTab = tabId || (fromOnclick ? fromOnclick[1] : null);
         if (!targetTab) return;
+        el.dataset.navBound = '1';
         el.removeAttribute('onclick');
         el.removeAttribute('href');
         el.setAttribute('type', 'button');
         el.setAttribute('data-tab', targetTab);
-        const onNav = (e) => {
+        const go = (e) => {
             if (e) {
                 e.preventDefault();
                 e.stopPropagation();
             }
-            switchTab(targetTab);
+            switchTab(targetTab, el);
         };
-        el.addEventListener('click', onNav);
+        el.addEventListener('click', go, { passive: false });
     });
 
     const open = () => {
@@ -1154,20 +1159,30 @@ function cancelRegistration() {
     document.getElementById('multi-step-form').classList.add('hidden');
 }
 
-function switchTab(tabId) {
+function switchTab(tabId, menuEl) {
+    if (!tabId) return;
+    const pane = document.getElementById(tabId);
+    if (!pane) {
+        console.warn('[doctor] Unknown tab:', tabId);
+        return;
+    }
     if (typeof closeDoctorMobileNav === 'function') closeDoctorMobileNav();
-    document.querySelectorAll('.tab-pane').forEach(t => t.classList.add('hidden'));
-    document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
-    document.getElementById(tabId).classList.remove('hidden');
-    if (typeof event !== 'undefined' && event && event.currentTarget) {
-    event.currentTarget.classList.add('active');
+    document.querySelectorAll('.tab-pane').forEach((t) => t.classList.add('hidden'));
+    document.querySelectorAll('.menu-item').forEach((m) => m.classList.remove('active'));
+    pane.classList.remove('hidden');
+    if (menuEl) {
+        menuEl.classList.add('active');
+    } else if (typeof event !== 'undefined' && event && event.currentTarget) {
+        event.currentTarget.classList.add('active');
     } else {
-        document.querySelectorAll('.menu-item').forEach(m => {
+        document.querySelectorAll('.menu-item').forEach((m) => {
             const t = m.getAttribute('data-tab');
             const oc = m.getAttribute('onclick') || '';
             if (t === tabId || oc.indexOf(tabId) !== -1) m.classList.add('active');
         });
     }
+    const content = document.querySelector('.content-area');
+    if (content) content.scrollTop = 0;
     if (tabId === 'tab-dashboard') {
         loadDoctorDashboardStats();
     }
@@ -1206,6 +1221,7 @@ function switchTab(tabId) {
     }
     syncDoctorTrackingPolls();
 }
+window.switchTab = switchTab;
 
 let activeCaseProgramId = null;
 let activeCasePrograms = [];

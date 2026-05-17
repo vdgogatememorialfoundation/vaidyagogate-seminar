@@ -19,7 +19,7 @@
     position: fixed;
     inset: 0;
     background: rgba(15, 23, 42, 0.45);
-    z-index: 8998;
+    z-index: 8990;
     pointer-events: none;
     visibility: hidden;
 }
@@ -30,9 +30,6 @@
 }
 body.doctor-nav-open {
     overflow: hidden;
-}
-body.doctor-nav-open .main-content {
-    pointer-events: none;
 }
 .top-header {
     display: flex;
@@ -158,13 +155,17 @@ body.doctor-nav-open .main-content {
         display: block !important;
         width: 100% !important;
     }
+    .dashboard-container {
+        position: relative;
+        z-index: 1;
+    }
     .sidebar {
         position: fixed !important;
         top: 0 !important;
         left: 0 !important;
         width: min(280px, 88vw) !important;
         max-width: 88vw !important;
-        z-index: 9000;
+        z-index: 10050 !important;
         transition: transform 0.25s ease;
         transform: translateX(-105%);
         height: 100vh !important;
@@ -176,6 +177,20 @@ body.doctor-nav-open .main-content {
     .sidebar.mobile-open {
         transform: translateX(0) !important;
         pointer-events: auto !important;
+    }
+    .sidebar.mobile-open .menu-item {
+        pointer-events: auto !important;
+        cursor: pointer;
+        position: relative;
+        z-index: 2;
+    }
+    .doctor-nav-backdrop.is-open {
+        left: min(280px, 88vw);
+        right: 0;
+        top: 0;
+        bottom: 0;
+        width: auto;
+        z-index: 10040;
     }
     .main-content {
         margin-left: 0 !important;
