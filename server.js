@@ -32,6 +32,7 @@ const extModules = require('./lib/extended-modules');
 const portalTracking = require('./lib/portal-tracking');
 const seminarDt = require('./lib/seminar-datetime');
 const siteMarketing = require('./lib/site-marketing');
+const siteKillSwitch = require('./lib/site-kill-switch');
 const {
     isCheckinDateToday,
     isCheckinOpenForSeminar,
@@ -293,6 +294,8 @@ function requestNeedsBootstrap(req) {
     return false;
 }
 
+app.use(siteKillSwitch.createSiteKillSwitchMiddleware(db));
+
 app.use(subdomainPortalMiddleware);
 
 app.get('/scanner', (req, res) => {
@@ -312,198 +315,6 @@ app.use(
 app.use((req, res, next) => {
     if (!requestNeedsBootstrap(req)) return next();
     return ensureAppReady(req, res, next);
-});
-
-// Kill Switch Middleware
-app.use((req, res, next) => {
-    // Let admin routes pass
-    if (
-        req.path.startsWith('/admin') ||
-        req.path.startsWith('/api/admin') ||
-        req.path.startsWith('/api/auth') ||
-        req.path.startsWith('/api/otp') ||
-        req.path.startsWith('/api/judge') ||
-        req.path.startsWith('/api/scanner') ||
-        req.path.startsWith('/api/branding') ||
-        req.path.startsWith('/api/assets/') ||
-        req.path.startsWith('/api/case') ||
-        req.path.startsWith('/api/doctor') ||
-        req.path.startsWith('/api/applications') ||
-        req.path.startsWith('/api/payments') ||
-        req.path.startsWith('/api/orders') ||
-        req.path.startsWith('/api/seminars') ||
-        req.path.startsWith('/api/global_settings') ||
-        req.path === '/api/registration-form-config' ||
-        req.path.startsWith('/api/public/') ||
-        req.path.startsWith('/uploads') ||
-        req.path.startsWith('/css') ||
-        req.path.startsWith('/js')
-    ) {
-        return next();
-    }
-    db.get(`SELECT value FROM global_settings WHERE key = 'is_site_disabled'`, [], (err, row) => {
-        if (err) {
-            console.error('Kill switch read global_settings:', err.message);
-            return next();
-        }
-        if (row && row.value === '1') {
-            return res.status(503).send(`
-                <!DOCTYPE html>
-                <html lang="en">
-                <head>
-                    <meta charset="UTF-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>Under Maintenance</title>
-                    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-                    <style>
-                        * { margin: 0; padding: 0; box-sizing: border-box; }
-                        body {
-                            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-                            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                            min-height: 100vh;
-                            display: flex;
-                            align-items: center;
-                            justify-content: center;
-                            overflow: hidden;
-                        }
-                        .maintenance-container {
-                            background: rgba(255, 255, 255, 0.95);
-                            border-radius: 20px;
-                            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-                            padding: 60px 40px;
-                            max-width: 600px;
-                            width: 90%;
-                            text-align: center;
-                            backdrop-filter: blur(10px);
-                            animation: slideIn 0.6s ease-out;
-                        }
-                        @keyframes slideIn {
-                            from { opacity: 0; transform: translateY(30px); }
-                            to { opacity: 1; transform: translateY(0); }
-                        }
-                        .icon-wrapper {
-                            margin-bottom: 30px;
-                            animation: float 3s ease-in-out infinite;
-                        }
-                        .icon-wrapper i {
-                            font-size: 80px;
-                            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                            -webkit-background-clip: text;
-                            -webkit-text-fill-color: transparent;
-                            background-clip: text;
-                        }
-                        @keyframes float {
-                            0%, 100% { transform: translateY(0px); }
-                            50% { transform: translateY(-20px); }
-                        }
-                        h1 {
-                            font-size: 2.5rem;
-                            color: #2d3748;
-                            margin-bottom: 15px;
-                            font-weight: 700;
-                            letter-spacing: -0.5px;
-                        }
-                        .subtitle {
-                            font-size: 1.1rem;
-                            color: #667eea;
-                            margin-bottom: 10px;
-                            font-weight: 600;
-                        }
-                        .description {
-                            font-size: 1rem;
-                            color: #4a5568;
-                            line-height: 1.6;
-                            margin-bottom: 30px;
-                        }
-                        .info-box {
-                            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-                            border-left: 4px solid #667eea;
-                            padding: 20px;
-                            border-radius: 10px;
-                            margin-bottom: 30px;
-                            text-align: left;
-                        }
-                        .info-box p {
-                            color: #2d3748;
-                            font-size: 0.95rem;
-                            margin: 8px 0;
-                        }
-                        .info-box strong {
-                            color: #667eea;
-                        }
-                        .contact-info {
-                            margin-top: 30px;
-                            padding-top: 20px;
-                            border-top: 1px solid #e2e8f0;
-                        }
-                        .contact-info p {
-                            color: #718096;
-                            font-size: 0.9rem;
-                            margin: 8px 0;
-                        }
-                        .contact-info a {
-                            color: #667eea;
-                            text-decoration: none;
-                            font-weight: 600;
-                            transition: all 0.3s ease;
-                        }
-                        .contact-info a:hover {
-                            color: #764ba2;
-                            text-decoration: underline;
-                        }
-                        .loader {
-                            margin-top: 30px;
-                            display: flex;
-                            justify-content: center;
-                            gap: 8px;
-                        }
-                        .dot {
-                            width: 8px;
-                            height: 8px;
-                            border-radius: 50%;
-                            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                            animation: pulse 1.5s ease-in-out infinite;
-                        }
-                        .dot:nth-child(2) { animation-delay: 0.2s; }
-                        .dot:nth-child(3) { animation-delay: 0.4s; }
-                        @keyframes pulse {
-                            0%, 100% { transform: scale(1); opacity: 1; }
-                            50% { transform: scale(1.5); opacity: 0.5; }
-                        }
-                    </style>
-                </head>
-                <body>
-                    <div class="maintenance-container">
-                        <div class="icon-wrapper">
-                            <i class="fas fa-tools"></i>
-                        </div>
-                        <h1>Under Maintenance</h1>
-                        <p class="subtitle">We'll be back soon!</p>
-                        <p class="description">
-                            The Vaidya Gogate Memorial Foundation National Seminar Portal is currently undergoing scheduled maintenance and updates to serve you better.
-                        </p>
-                        <div class="info-box">
-                            <p><strong>📅 What's Happening:</strong> We're upgrading our systems and improving the platform experience.</p>
-                            <p><strong>⏱️ Expected Time:</strong> Maintenance should be completed within 1-2 hours.</p>
-                            <p><strong>✅ We appreciate your patience!</strong></p>
-                        </div>
-                        <div class="loader">
-                            <div class="dot"></div>
-                            <div class="dot"></div>
-                            <div class="dot"></div>
-                        </div>
-                        <div class="contact-info">
-                            <p>For urgent inquiries, please contact us at:</p>
-                            <p><a href="mailto:support@vaidyagogate.org">📧 support@vaidyagogate.org</a></p>
-                            <p><a href="tel:+919876543210">📞 +91-98765-43210</a></p>
-                        </div>
-                    </div>
-                </body>
-                </html>
-            `);
-        }
-        next();
-    });
 });
 
 app.get('/api/public/portal-urls', (req, res) => {
@@ -5309,11 +5120,22 @@ app.get('/api/global_settings', (req, res) => {
 
 // Admin: Update Global Settings
 app.post('/api/admin/global_settings', (req, res) => {
-    const { settings } = req.body; // Array of {key, value}
-    const stmt = db.prepare(`UPDATE global_settings SET value = ? WHERE key = ?`);
-    settings.forEach(s => stmt.run(s.value, s.key));
-    stmt.finalize();
-    res.json({ success: true });
+    const { settings } = req.body;
+    if (!Array.isArray(settings) || !settings.length) {
+        return res.status(400).json({ error: 'settings array required' });
+    }
+    let pending = settings.length;
+    let errOut = null;
+    settings.forEach((s) => {
+        upsertGlobalSetting(s.key, String(s.value ?? ''), (err) => {
+            if (err && !errOut) errOut = err;
+            pending -= 1;
+            if (pending === 0) {
+                if (errOut) return res.status(500).json({ error: errOut.message });
+                res.json({ success: true });
+            }
+        });
+    });
 });
 
 // Admin: Get Payment Gateways
