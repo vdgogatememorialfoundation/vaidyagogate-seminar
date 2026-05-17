@@ -225,6 +225,20 @@ app.get('/api/health', (req, res) => {
         if (appReadyResolved) {
             payload.ok = true;
             payload.bootstrap.state = 'ready';
+            if (pgDb && pgDb.listMissingCoreTables) {
+                return pgDb
+                    .listMissingCoreTables()
+                    .then((missing) => {
+                        if (missing.length) {
+                            payload.ok = false;
+                            payload.schema = { missingTables: missing };
+                            payload.hint =
+                                'PostgreSQL schema is incomplete. Redeploy after fixing DATABASE_URL, or run schema-postgres.sql on Neon.';
+                        }
+                        res.json(payload);
+                    })
+                    .catch(() => res.json(payload));
+            }
             return res.json(payload);
         }
         if (appReadyPromise) {
@@ -2958,38 +2972,101 @@ const SCANNER_TICKET_LOOKUP_SQL = `
         JOIN seminars s ON r.seminar_id = s.id
         JOIN users u ON t.user_id = u.id`;
 
+function ticketLookupInvalid(row) {
+    if (!row) return false;
+    if (Number(row.is_valid) === 0 || row.is_valid === false) return true;
+    const regSt = String(row.registration_status || '').toLowerCase();
+    return regSt === 'cancelled' || regSt === 'rejected';
+}
+
 function lookupTicketForScan(qrData, cb) {
     const raw = String(qrData || '').trim();
     if (!raw) return cb(null, null);
 
-    function tryWhere(clause, param, next) {
+    const strategies = [];
+    const seen = new Set();
+    const add = (clause, param) => {
+        const key = clause + '\0' + String(param);
+        if (seen.has(key)) return;
+        seen.add(key);
+        strategies.push([clause, param]);
+    };
+
+    add('t.qr_code_data = ?', raw);
+    add('TRIM(t.ticket_id_string) = ?', raw);
+    add('LOWER(TRIM(t.ticket_id_string)) = LOWER(?)', raw);
+    add('o.order_id_string = ?', raw);
+    add('r.application_no = ?', raw);
+
+    let jsonTicketId = null;
+    if (raw.startsWith('{')) {
+        try {
+            const j = JSON.parse(raw);
+            if (j.ticketId) jsonTicketId = String(j.ticketId).trim();
+        } catch (_) {
+            /* ignore */
+        }
+    }
+
+    const digits = raw.replace(/\D/g, '');
+    if (digits.length >= 10) {
+        add('TRIM(t.ticket_id_string) = ?', digits);
+        add('t.qr_code_data LIKE ?', `%"ticketId":"${digits}"%`);
+        add('t.qr_code_data LIKE ?', `%"ticketId": "${digits}"%`);
+    }
+    if (jsonTicketId) {
+        add('TRIM(t.ticket_id_string) = ?', jsonTicketId);
+        add('t.qr_code_data LIKE ?', `%"ticketId":"${jsonTicketId}"%`);
+        add('t.qr_code_data LIKE ?', `%"ticketId": "${jsonTicketId}"%`);
+    }
+    const numericId = /^\d{1,9}$/.test(digits) ? parseInt(digits, 10) : NaN;
+    if (Number.isInteger(numericId) && numericId > 0) {
+        add('t.id = ?', numericId);
+    }
+
+    let i = 0;
+    const nextStrategy = () => {
+        if (i >= strategies.length) return cb(null, null);
+        const [clause, param] = strategies[i++];
         db.get(SCANNER_TICKET_LOOKUP_SQL + ' WHERE ' + clause, [param], (err, row) => {
             if (err) return cb(err);
             if (row) return cb(null, row);
-            next();
+            nextStrategy();
         });
-    }
+    };
+    nextStrategy();
+}
 
-    tryWhere('t.qr_code_data = ?', raw, () => {
-        tryWhere('t.ticket_id_string = ?', raw, () => {
-            if (raw.startsWith('{')) {
-                try {
-                    const j = JSON.parse(raw);
-                    if (j.ticketId) {
-                        return tryWhere('t.ticket_id_string = ?', String(j.ticketId), () => cb(null, null));
-                    }
-                } catch (_) {
-                    /* ignore */
-                }
-            }
-            const digits = raw.replace(/\D/g, '');
-            if (digits.length >= 10) {
-                return tryWhere('t.ticket_id_string = ?', digits, () => cb(null, null));
-            }
-            cb(null, null);
+// Scanner: dry-run ticket lookup (same matching as /mark, no state change)
+app.get('/api/scanner/verify', (req, res) => {
+    const ticketId = String(req.query.ticketId || req.query.qrData || '').trim();
+    if (!ticketId) {
+        return res.status(400).json({ success: false, error: 'ticketId query parameter is required.' });
+    }
+    lookupTicketForScan(ticketId, (err, row) => {
+        if (err) return res.status(500).json({ success: false, error: err.message });
+        if (!row) {
+            return res.status(404).json({
+                success: false,
+                found: false,
+                error: 'Ticket not found. Use the 12-digit E-ticket ID or scan the QR on the e-ticket.'
+            });
+        }
+        res.json({
+            success: true,
+            found: true,
+            ticketId: row.ticket_id_string,
+            seminarId: row.seminar_id,
+            seminarTitle: row.seminar_title,
+            paymentStatus: row.payment_status,
+            registrationStatus: row.registration_status,
+            isScanned: !!row.is_scanned,
+            invalid: ticketLookupInvalid(row),
+            checkinEnabled: !!row.checkin_enabled,
+            checkinDate: row.checkin_date
         });
     });
-}
+});
 
 // Scanner: seminars with check-in enabled (pick before scanning)
 app.get('/api/scanner/checkin-seminars', (req, res) => {
@@ -3090,7 +3167,7 @@ app.post('/api/scanner/mark', (req, res) => {
                         }
                     });
                 }
-                if (row.is_valid === 0) {
+                if (Number(row.is_valid) === 0 || row.is_valid === false) {
                     return res.status(403).json({
                         success: false,
                         error: 'Ticket is no longer valid (cancelled registration).',

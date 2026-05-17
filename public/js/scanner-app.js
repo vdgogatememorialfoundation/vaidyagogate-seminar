@@ -152,7 +152,26 @@
                     seminarId: sid
                 })
             });
-            const result = await res.json();
+            let result = {};
+            try {
+                result = await res.json();
+            } catch (_) {
+                result = {};
+            }
+            if (!result.error && !res.ok) {
+                if (res.status === 404) {
+                    result.error =
+                        'Ticket not found. Scan the QR on the e-ticket or enter the 12-digit E-ticket ID exactly as shown.';
+                } else if (res.status === 403) {
+                    result.error = result.error || 'Entry denied — check payment, registration status, seminar, or check-in date.';
+                } else if (res.status === 503) {
+                    result.error =
+                        result.error ||
+                        'Server database is not ready. Wait a minute and retry, or contact admin if this persists.';
+                } else {
+                    result.error = result.error || 'Could not verify ticket (HTTP ' + res.status + ').';
+                }
+            }
             const d = result.doctor || {};
 
             if (result.success) {
@@ -165,7 +184,9 @@
                 );
                 pushHistory((d.name || 'Guest') + ' · ' + (d.ticketId || ''), true);
             } else {
-                const err = result.error || 'Invalid';
+                const err =
+                    result.error ||
+                    (res.ok ? 'Entry denied' : 'Could not verify ticket — check network and try again');
                 const isDup = /already scanned/i.test(err);
                 playTone(isDup ? 'duplicate' : result.sound === 'wrong_date' ? 'wrong_date' : 'error');
                 if (isDup) stats.dup++;
