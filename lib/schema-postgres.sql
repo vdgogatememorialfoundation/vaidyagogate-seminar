@@ -378,7 +378,7 @@ CREATE TABLE IF NOT EXISTS case_programs (
                 registration_end TIMESTAMPTZ,
                 is_active INTEGER DEFAULT 1,
                 created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-            , form_config_json TEXT, max_presentations_per_user INTEGER DEFAULT 2, max_total_submissions INTEGER, max_files_per_submission INTEGER DEFAULT 5, max_file_size_mb INTEGER DEFAULT 50, enabled_categories TEXT, instructions TEXT, portal_year INTEGER);
+            , form_config_json TEXT, max_presentations_per_user INTEGER DEFAULT 2, max_total_submissions INTEGER, max_files_per_submission INTEGER DEFAULT 5, max_file_size_mb INTEGER DEFAULT 50, enabled_categories TEXT, instructions TEXT, portal_year INTEGER, judge_criteria_json TEXT);
 CREATE TABLE IF NOT EXISTS registration_status_log (
                 id SERIAL PRIMARY KEY,
                 registration_id INTEGER NOT NULL,
