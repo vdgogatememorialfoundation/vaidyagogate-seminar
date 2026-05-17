@@ -1549,7 +1549,14 @@ function ensureParticipantTicketForRegistration(registrationId, options, cb) {
                 [registrationId],
                 (eS, successOrd) => {
                     if (eS) return done(eS);
-                    if (successOrd) return issueOnOrder(successOrd, done);
+                    if (successOrd) {
+                        db.run(
+                            `DELETE FROM orders WHERE registration_id = ? AND status = 'pending'`,
+                            [registrationId],
+                            () => issueOnOrder(successOrd, done)
+                        );
+                        return;
+                    }
 
                     db.get(
                         `SELECT id, order_id_string, status FROM orders WHERE registration_id = ? AND status = 'pending' ORDER BY id DESC LIMIT 1`,
