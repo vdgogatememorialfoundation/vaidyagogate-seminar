@@ -40,20 +40,26 @@
             </a>
             <button type="button" class="nav-toggle" id="nav-toggle" aria-label="Menu"><i class="fas fa-bars"></i></button>
             <nav class="nav-links" id="nav-links">
-                <a onclick="showSection('home')">Home</a>
-                <a onclick="showSection('about')">About</a>
-                <a onclick="showSection('gallery')">Gallery</a>
-                <a onclick="showSection('schedule')">Schedule</a>
-                <a id="nav-verify" onclick="showSection('verify')">Verify</a>
-                <a onclick="showSection('contact')">Contact</a>
+                <a href="#" data-nav-section="home">Home</a>
+                <a href="#" data-nav-section="about">About</a>
+                <a href="#" data-nav-section="gallery">Gallery</a>
+                <a href="#" data-nav-section="schedule">Schedule</a>
+                <a href="#" id="nav-verify" data-nav-section="verify">Verify</a>
+                <a href="#" data-nav-section="contact">Contact</a>
                 <a id="nav-wix-home" href="https://www.vaidyagogate.org" target="_blank" rel="noopener" class="hidden">Main website</a>
                 <a href="/doctor.html" class="btn-portal">Doctor portal</a>
             </nav>
         </div>
     </header>
 
-    <div id="static-announce-wrap" class="static-announce-wrap hidden" aria-label="Announcements">
-        <div class="static-announce-grid" id="static-announce-grid"></div>
+    <div id="scrolling-announce-wrap" class="scrolling-announce-wrap hidden" aria-label="Announcements">
+        <div class="scrolling-announce-header">
+            <span class="ticker-label">News</span>
+            <span class="sa-sub">Registration &amp; seminar updates</span>
+        </div>
+        <div class="scrolling-announce-viewport">
+            <div id="scrolling-announce-track" class="scrolling-announce-track"></div>
+        </div>
     </div>
     <span id="tickerText" class="hidden" aria-hidden="true"></span>
 
@@ -67,7 +73,7 @@
                 <p class="hero-lead" id="hero-subtitle">Advancements in Ayurveda &amp; integrative medicine</p>
                 <div class="hero-buttons">
                     <a href="/?register=1" class="btn-primary" id="hero-cta-primary"><i class="fas fa-arrow-right"></i> Register now</a>
-                    <a onclick="showSection('schedule')" class="btn-ghost" id="hero-cta-secondary">View programme</a>
+                    <a href="#" class="btn-ghost" id="hero-cta-secondary" onclick="showSection('schedule'); return false;">View programme</a>
                 </div>
                 <div class="hero-stats" id="hero-stats">
                     <div class="stat-item"><h3>50+</h3><p>Expert speakers</p></div>
@@ -328,10 +334,10 @@
             <div class="footer-col">
                 <h4>Explore</h4>
                 <ul>
-                    <li><a onclick="showSection('home')">Home</a></li>
-                    <li><a onclick="showSection('about')">About</a></li>
-                    <li><a onclick="showSection('schedule')">Schedule</a></li>
-                    <li><a onclick="showSection('gallery')">Gallery</a></li>
+                    <li><a href="#" onclick="showSection('home'); return false;">Home</a></li>
+                    <li><a href="#" onclick="showSection('about'); return false;">About</a></li>
+                    <li><a href="#" onclick="showSection('schedule'); return false;">Schedule</a></li>
+                    <li><a href="#" onclick="showSection('gallery'); return false;">Gallery</a></li>
                 </ul>
             </div>
             <div class="footer-col">
@@ -660,6 +666,7 @@
         }
 
         function showSection(section) {
+            if (typeof window.closeMobileNav === 'function') window.closeMobileNav();
             const map = {
                 home: 'homeSection',
                 about: 'aboutSection',
@@ -690,11 +697,14 @@
             const closeNav = () => {
                 header.classList.remove('nav-open');
                 document.body.classList.remove('nav-menu-open');
+                if (backdrop) backdrop.setAttribute('aria-hidden', 'true');
             };
             const openNav = () => {
                 header.classList.add('nav-open');
                 document.body.classList.add('nav-menu-open');
+                if (backdrop) backdrop.setAttribute('aria-hidden', 'false');
             };
+            window.closeMobileNav = closeNav;
             toggle.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -702,8 +712,19 @@
                 else openNav();
             });
             backdrop?.addEventListener('click', closeNav);
-            links?.querySelectorAll('a').forEach((a) => {
+            links?.querySelectorAll('a[data-nav-section]').forEach((a) => {
+                a.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    closeNav();
+                    const section = a.getAttribute('data-nav-section');
+                    if (section) showSection(section);
+                });
+            });
+            links?.querySelectorAll('a.btn-portal').forEach((a) => {
                 a.addEventListener('click', closeNav);
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && header.classList.contains('nav-open')) closeNav();
             });
         }
         initMobileNav();
@@ -889,8 +910,8 @@
         }
 
         function renderScrollingAnnouncements(items) {
-            const wrap = document.getElementById('static-announce-wrap');
-            const track = document.getElementById('static-announce-grid');
+            const wrap = document.getElementById('scrolling-announce-wrap');
+            const track = document.getElementById('scrolling-announce-track');
             if (!wrap || !track) return;
             const list = Array.isArray(items) ? items.filter((x) => x && (x.title || x.body)) : [];
             if (!list.length) {
@@ -909,16 +930,17 @@
                         : '';
                 const pdf =
                     it.pdf && String(it.pdf).trim()
-                        ? `<div style="margin-top:8px;"><a href="${escHtml(it.pdf.startsWith('/') ? it.pdf : '/uploads/' + it.pdf)}" target="_blank" rel="noopener">PDF attachment</a></div>`
+                        ? `<div style="margin-top:8px;"><a href="${escHtml(it.pdf.startsWith('/') ? it.pdf : '/uploads/' + it.pdf)}" target="_blank" rel="noopener">PDF</a></div>`
                         : '';
                 const link =
                     it.link && String(it.link).trim()
-                        ? `<div style="margin-top:8px;"><a href="${escHtml(it.link)}" target="_blank" rel="noopener">Learn more</a></div>`
+                        ? `<div style="margin-top:8px;"><a href="${escHtml(it.link)}" target="_blank" rel="noopener">Register</a></div>`
                         : '';
-                return `<div class="sa-card">${img}<h5>${title}</h5><p>${body}</p>${date}${link}${pdf}</div>`;
+                return `<article class="sa-card">${img}<h5>${title}</h5><p>${body}</p>${date}${link}${pdf}</article>`;
             };
-            track.className = 'static-announce-grid';
-            track.innerHTML = list.map(one).join('');
+            const html = list.map(one).join('');
+            track.className = 'scrolling-announce-track';
+            track.innerHTML = html + html;
         }
 
         function renderReviewsMarquee(reviews) {

@@ -87,7 +87,7 @@
             <div>
                 <div data-site-logo data-logo-height="40px" style="margin-bottom:10px;"></div>
                 <h1><i class="fas fa-gavel" style="color:#7c3aed;"></i> Judge & reviewer workspace</h1>
-                <p class="sub">Case presentations and abstracts submitted by doctors.</p>
+                <p class="sub">Case presentations submitted by doctors for scoring.</p>
             </div>
             <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
                 <span class="badge" id="whoami"></span>
@@ -103,15 +103,6 @@
                     <tr><th>App ID</th><th>Doctor</th><th>Category</th><th>Topic</th><th>Status</th><th>Your score</th><th>Action</th></tr>
                 </thead>
                 <tbody id="case-tbody"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
-            </table>
-        </div>
-        <div class="card">
-            <h3 style="padding:14px 14px 0;font-size:1rem;color:#4338ca;">Abstracts</h3>
-            <table>
-                <thead>
-                    <tr><th>Doctor</th><th>Topic</th><th>Status</th><th>Marks</th><th>Submitted</th></tr>
-                </thead>
-                <tbody id="tbody"><tr><td colspan="5" class="empty">Loading…</td></tr></tbody>
             </table>
         </div>
     </div>
@@ -139,7 +130,6 @@
         (function () {
             const overlay = document.getElementById('auth-overlay');
             const app = document.getElementById('app');
-            const tbody = document.getElementById('tbody');
             const whoami = document.getElementById('whoami');
             const loginErr = document.getElementById('login-err');
             const scoreOverlay = document.getElementById('case-score-overlay');
@@ -174,7 +164,7 @@
                 if (typeof PortalAuth !== 'undefined' && PortalAuth.renderLoginTime) {
                     PortalAuth.renderLoginTime('judge-login-time', u);
                 }
-                load();
+                loadCaseAssignments();
             }
 
             function escapeHtml(s) {
@@ -414,45 +404,6 @@
                 }
             });
 
-            async function load() {
-                if (!user) return;
-                loadCaseAssignments();
-                tbody.innerHTML = '<tr><td colspan="5" class="empty">Loading…</td></tr>';
-                try {
-                    const jid = judgeNumericUserId();
-                    const res = await fetch('/api/judge/abstracts?judgeUserId=' + encodeURIComponent(jid));
-                    const rows = await res.json();
-                    if (!res.ok) {
-                        tbody.innerHTML =
-                            '<tr><td colspan="5" class="empty">' + escapeHtml(rows.error || 'Could not load queue.') + '</td></tr>';
-                        return;
-                    }
-                    if (!Array.isArray(rows) || rows.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="5" class="empty">No abstracts in the queue yet.</td></tr>';
-                        return;
-                    }
-                    tbody.innerHTML = '';
-                    rows.forEach((a) => {
-                        const name = [a.first_name, a.last_name].filter(Boolean).join(' ') || '—';
-                        const tr = document.createElement('tr');
-                        tr.innerHTML =
-                            '<td><strong>' + escapeHtml(name) + '</strong><div class="muted">' +
-                            escapeHtml(a.user_id_string || '') + ' · ' + escapeHtml(a.email || '') +
-                            '</div></td><td>' + escapeHtml(a.topic || '—') +
-                            '<div class="muted">Video: ' +
-                            (a.video_path ? '<code>' + escapeHtml(String(a.video_path).slice(0, 40)) + '…</code>' : '—') +
-                            '</div></td><td><strong>' + escapeHtml(String(a.status || '—')) +
-                            '</strong></td><td>' + escapeHtml(a.marks != null ? String(a.marks) : '—') +
-                            '</td><td class="muted">' +
-                            (a.created_at ? new Date(a.created_at).toLocaleString() : '—') + '</td>';
-                        tbody.appendChild(tr);
-                    });
-                } catch (e) {
-                    console.error(e);
-                    tbody.innerHTML = '<tr><td colspan="5" class="empty">Network error.</td></tr>';
-                }
-            }
-
             PortalAuth.bindLoginForm({
                 portal: 'judge',
                 formId: 'judge-login-form',
@@ -467,7 +418,9 @@
                 }
             });
 
-            document.getElementById('btn-refresh').addEventListener('click', load);
+            document.getElementById('btn-refresh').addEventListener('click', () => {
+                if (user) loadCaseAssignments();
+            });
             document.getElementById('btn-logout').addEventListener('click', () => {
                 PortalAuth.clearUser('judge');
                 showLogin();

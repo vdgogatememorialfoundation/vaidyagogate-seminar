@@ -70,6 +70,7 @@ function bootstrapTimeoutMs() {
 function bootstrapApp(done) {
     mountExtendedRoutes();
     startBackgroundWorkers();
+    persistScrollingAnnouncementsSanitizeIfNeeded(() => {});
 
     const finish = () => {
         if (done) done();
@@ -1198,12 +1199,74 @@ function loadPublicSiteCms(callback) {
                 /* keep defaults */
             }
         }
+        base.scrollingAnnouncements = sanitizeScrollingAnnouncements(base.scrollingAnnouncements);
         callback(null, base);
     });
 }
 
-/** When a seminar is saved and active, refresh its auto card in homepage scrolling announcements (+ optional DB notice on create). */
-function syncSeminarCmsAfterSave(seminarId, alsoInsertDbNotice, cb) {
+function isSeminarRegistrationOpen(row) {
+    const now = Date.now();
+    const rs = seminarDt.parseSeminarMs(row.registration_start);
+    const re = seminarDt.parseSeminarMs(row.registration_end);
+    if (rs != null && now < rs) return false;
+    if (re != null && now > re) return false;
+    return true;
+}
+
+/** Drop verbose legacy auto-cards and test seminar clutter from CMS. */
+function sanitizeScrollingAnnouncements(arr) {
+    if (!Array.isArray(arr)) return [];
+    return arr.filter((a) => {
+        if (!a || (!a.title && !a.body)) return false;
+        const t = String(a.title || '');
+        const b = String(a.body || '');
+        if (/test seminar/i.test(t) || /introduction to ayurveda/i.test(t)) return false;
+        if (t.startsWith('Seminar — ') && b.includes('Apply from the doctor portal') && b.includes(' — ')) {
+            return false;
+        }
+        return true;
+    });
+}
+
+function buildSeminarRegistrationAnnouncement(row) {
+    const title = row.title || 'Seminar';
+    const eventBit = row.event_date
+        ? ` Event: ${seminarDt.formatSeminarDateTime(row.event_date)}.`
+        : '';
+    return {
+        title: `Registration open — ${title}`,
+        body: `Registration is now open. Apply from the doctor portal.${eventBit}`,
+        date: new Date().toISOString().slice(0, 10),
+        autoFromSeminarId: row.id,
+        link: '/doctor.html'
+    };
+}
+
+function upsertSeminarScrollingAnnouncement(cms, row, cb) {
+    const sid = Number(row.id);
+    const arr = sanitizeScrollingAnnouncements(Array.isArray(cms.scrollingAnnouncements) ? cms.scrollingAnnouncements : []);
+    const filtered = arr.filter((a) => !(a && Number(a.autoFromSeminarId) === sid));
+    filtered.unshift(buildSeminarRegistrationAnnouncement(row));
+    cms.scrollingAnnouncements = filtered.slice(0, 40);
+    upsertGlobalSetting('public_site_cms', JSON.stringify({ ...cms, version: 1 }), cb);
+}
+
+function removeSeminarScrollingAnnouncement(seminarId, cb) {
+    const sid = parseInt(seminarId, 10);
+    if (Number.isNaN(sid)) return cb && cb(null);
+    loadPublicSiteCms((e, cms) => {
+        if (e) return cb && cb(e);
+        const before = (cms.scrollingAnnouncements || []).length;
+        cms.scrollingAnnouncements = sanitizeScrollingAnnouncements(cms.scrollingAnnouncements).filter(
+            (a) => !(a && Number(a.autoFromSeminarId) === sid)
+        );
+        if (cms.scrollingAnnouncements.length === before) return cb && cb(null);
+        upsertGlobalSetting('public_site_cms', JSON.stringify({ ...cms, version: 1 }), cb);
+    });
+}
+
+/** On seminar create only: short homepage slide + doctor notice when registration is already open. */
+function announceSeminarRegistrationOnCreate(seminarId, cb) {
     const sid = parseInt(seminarId, 10);
     if (Number.isNaN(sid)) return cb && cb(null);
     db.get(
@@ -1211,46 +1274,34 @@ function syncSeminarCmsAfterSave(seminarId, alsoInsertDbNotice, cb) {
         [sid],
         (err, row) => {
             if (err || !row) return cb && cb(err);
-            if (!Number(row.is_active)) return cb && cb(null);
-            const title = row.title || 'Seminar';
-            const msg = `${title}: registration is open. Apply from the doctor portal.`;
-            const bodyBits = [];
-            if (row.registration_start) {
-                bodyBits.push(`Opens ${seminarDt.formatSeminarDateTime(row.registration_start)}`);
-            }
-            if (row.registration_end) {
-                bodyBits.push(`closes ${seminarDt.formatSeminarDateTime(row.registration_end)}`);
-            }
-            if (row.event_date) {
-                bodyBits.push(`event ${seminarDt.formatSeminarDateTime(row.event_date)}`);
-            }
-            const descShort = row.description ? String(row.description).replace(/\s+/g, ' ').trim().slice(0, 160) : '';
-            const body = [msg, bodyBits.join(' · '), descShort].filter(Boolean).join(' — ');
-
+            if (!Number(row.is_active) || !isSeminarRegistrationOpen(row)) return cb && cb(null);
+            const msg = `${row.title || 'Seminar'}: registration is open. Apply from the doctor portal.`;
             const pushCms = () => {
                 loadPublicSiteCms((e2, cms) => {
                     if (e2) return cb && cb(e2);
-                    const arr = Array.isArray(cms.scrollingAnnouncements) ? cms.scrollingAnnouncements : [];
-                    const filtered = arr.filter((a) => !(a && Number(a.autoFromSeminarId) === sid));
-                    filtered.unshift({
-                        title: `Seminar — ${title}`,
-                        body,
-                        date: new Date().toISOString().slice(0, 10),
-                        autoFromSeminarId: sid,
-                        link: ''
-                    });
-                    cms.scrollingAnnouncements = filtered.slice(0, 40);
-                    upsertGlobalSetting('public_site_cms', JSON.stringify({ ...cms, version: 1 }), (upErr) => cb && cb(upErr));
+                    upsertSeminarScrollingAnnouncement(cms, row, cb);
                 });
             };
-
-            if (alsoInsertDbNotice) {
-                db.run(`INSERT INTO notices (seminar_id, message, pdf_path) VALUES (?, ?, NULL)`, [sid, msg], () => pushCms());
-            } else {
-                pushCms();
-            }
+            db.run(`INSERT INTO notices (seminar_id, message, pdf_path) VALUES (?, ?, NULL)`, [sid, msg], () => pushCms());
         }
     );
+}
+
+/** Persist CMS cleanup once if legacy verbose announcements were removed. */
+function persistScrollingAnnouncementsSanitizeIfNeeded(callback) {
+    db.get(`SELECT value FROM global_settings WHERE key = 'public_site_cms'`, [], (err, row) => {
+        if (err || !row || !row.value) return callback && callback(null);
+        try {
+            const parsed = JSON.parse(row.value);
+            if (!parsed || !Array.isArray(parsed.scrollingAnnouncements)) return callback && callback(null);
+            const cleaned = sanitizeScrollingAnnouncements(parsed.scrollingAnnouncements);
+            if (cleaned.length === parsed.scrollingAnnouncements.length) return callback && callback(null);
+            parsed.scrollingAnnouncements = cleaned;
+            upsertGlobalSetting('public_site_cms', JSON.stringify({ ...parsed, version: 1 }), callback);
+        } catch (_) {
+            callback && callback(null);
+        }
+    });
 }
 
 function validateFormDataAgainstRegistrationConfig(formData, hasCertificateFile, fields, qualOverride) {
@@ -2488,6 +2539,7 @@ app.post('/api/admin/site-cms', (req, res) => {
         if (Array.isArray(incoming.featureCards)) merged.featureCards = incoming.featureCards;
         if (Array.isArray(incoming.faq)) merged.faq = incoming.faq;
         if (Array.isArray(incoming.speakers)) merged.speakers = incoming.speakers;
+        merged.scrollingAnnouncements = sanitizeScrollingAnnouncements(merged.scrollingAnnouncements);
         const payload = JSON.stringify(merged);
         upsertGlobalSetting('public_site_cms', payload, (err) => {
             if (err) return res.status(500).json({ error: err.message });
@@ -4077,7 +4129,7 @@ app.post('/api/admin/seminars', (req, res) => {
             function (err) {
             if (err) return res.status(500).json({ error: err.message });
                 const newId = this.lastID;
-                syncSeminarCmsAfterSave(newId, true, () => {});
+                announceSeminarRegistrationOnCreate(newId, () => {});
                 res.json({ success: true, seminarId: newId });
             }
         );
@@ -4149,7 +4201,9 @@ app.put('/api/admin/seminars/:id', (req, res) => {
             ],
             function (err) {
                 if (err) return res.status(500).json({ error: err.message });
-                syncSeminarCmsAfterSave(parseInt(req.params.id, 10), false, () => {});
+                if (!is_active) {
+                    removeSeminarScrollingAnnouncement(parseInt(req.params.id, 10), () => {});
+                }
                 res.json({ success: true, portalYear: finalPortalYear });
             }
         );

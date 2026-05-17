@@ -311,10 +311,16 @@ section.hero.hero--dimmed { display: none; }
     .fab-register {
         padding: 14px;
         border-radius: 50%;
-        bottom: max(88px, calc(72px + env(safe-area-inset-bottom, 0px)));
+        bottom: max(100px, calc(84px + env(safe-area-inset-bottom, 0px)));
         min-width: 48px;
         min-height: 48px;
         justify-content: center;
+        z-index: 50;
+        touch-action: manipulation;
+    }
+    .fab-whatsapp {
+        z-index: 50;
+        touch-action: manipulation;
     }
 
     #site-announce-popup { padding: 12px; align-items: flex-end; }

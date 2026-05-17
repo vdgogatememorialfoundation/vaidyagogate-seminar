@@ -114,6 +114,7 @@ img { max-width: 100%; height: auto; display: block; }
     border-bottom: 1px solid var(--line);
     box-shadow: 0 4px 24px rgba(30, 58, 138, 0.06);
     backdrop-filter: blur(10px);
+    isolation: isolate;
 }
 
 .nav-container {
@@ -791,6 +792,25 @@ img { max-width: 100%; height: auto; display: block; }
     padding: 16px;
 }
 
+.sa-card h5 {
+    color: var(--brand);
+    margin-bottom: 8px;
+    font-size: 0.95rem;
+    line-height: 1.35;
+}
+
+.sa-card p {
+    font-size: 0.88rem;
+    color: var(--ink-soft);
+    line-height: 1.45;
+}
+
+.sa-card .sa-meta {
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-top: 8px;
+}
+
 /* —— Slider —— */
 .home-slider {
     margin-bottom: 48px;
@@ -1269,6 +1289,7 @@ img { max-width: 100%; height: auto; display: block; }
     .top-bar-container,
     .nav-container,
     .main-content,
+    .scrolling-announce-wrap,
     .static-announce-wrap,
     #countdown-region,
     .site-banner,
@@ -1297,10 +1318,16 @@ img { max-width: 100%; height: auto; display: block; }
     position: fixed;
     inset: 0;
     background: rgba(15, 23, 42, 0.4);
-    z-index: 999;
+    z-index: 1;
+    pointer-events: none;
 }
 .site-header.nav-open .nav-backdrop {
     display: block;
+    pointer-events: auto;
+}
+.site-header.nav-open .nav-container {
+    position: relative;
+    z-index: 3;
 }
 
 @media (max-width: 768px) {
@@ -1325,11 +1352,13 @@ img { max-width: 100%; height: auto; display: block; }
     .countdown-strip h4 { font-size: 0.95rem; }
     #countdown-region { padding: 16px; }
 
-    .static-announce-wrap { padding: 12px 16px 0; }
-    .static-announce-grid { grid-template-columns: 1fr; }
+    .scrolling-announce-wrap { padding: 0; }
+    .scrolling-announce-header { padding: 0 16px; }
+    .scrolling-announce-viewport { padding-left: 16px; }
+    .sa-card { flex: 0 0 min(88vw, 300px); }
     .reviews-grid-static { grid-template-columns: 1fr; }
 
-    .nav-toggle { display: block; z-index: 1002; position: relative; min-width: 44px; min-height: 44px; }
+    .nav-toggle { display: block; z-index: 4; position: relative; min-width: 44px; min-height: 44px; }
     .nav-links {
         display: none;
         position: absolute;
@@ -1341,7 +1370,7 @@ img { max-width: 100%; height: auto; display: block; }
         padding: 16px;
         border-bottom: 1px solid var(--line);
         box-shadow: var(--shadow-lg);
-        z-index: 1001;
+        z-index: 4;
         max-height: min(70vh, 480px);
         overflow-y: auto;
     }
@@ -1352,6 +1381,7 @@ img { max-width: 100%; height: auto; display: block; }
         display: flex;
         align-items: center;
         justify-content: center;
+        touch-action: manipulation;
     }
     .site-header.nav-open .nav-links { display: flex; }
     body.nav-menu-open { overflow: hidden; }
@@ -1420,11 +1450,27 @@ img { max-width: 100%; height: auto; display: block; }
     }
 
     .verify-panel .verify-search-btn { min-height: 48px; }
+    .verify-panel select,
+    .verify-panel input,
+    #verify-seminar,
+    #event-schedule-dropdown,
     .form-group input,
     .form-group textarea,
     .schedule-picker select {
         font-size: 16px;
         min-height: 48px;
+        width: 100%;
+        position: relative;
+        z-index: 2;
+        touch-action: manipulation;
+    }
+    .seminar-pill,
+    .seminar-pill .btn-primary,
+    .open-seminars-strip a {
+        position: relative;
+        z-index: 2;
+        pointer-events: auto;
+        touch-action: manipulation;
     }
 }
 
@@ -1454,7 +1500,22 @@ img { max-width: 100%; height: auto; display: block; }
         bottom: max(16px, env(safe-area-inset-bottom, 0px));
     }
     .fab-register {
-        bottom: max(76px, calc(60px + env(safe-area-inset-bottom, 0px)));
+        bottom: max(100px, calc(84px + env(safe-area-inset-bottom, 0px)));
+        z-index: 50;
+    }
+    .fab-whatsapp { z-index: 50; }
+
+    .nav-toggle,
+    .nav-links a,
+    .btn-primary,
+    .btn-ghost,
+    .seminar-pill .btn-primary,
+    .open-seminars-strip a {
+        touch-action: manipulation;
+    }
+
+    .main-content {
+        padding-bottom: max(64px, calc(48px + env(safe-area-inset-bottom, 0px)));
     }
 }
 

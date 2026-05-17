@@ -320,30 +320,48 @@ window.__otpOnApplication = false;
 window.__regPhoneOtpToken = null;
 window.__regEmailOtpToken = null;
 
+function closeDoctorMobileNav() {
+    const sidebar = document.querySelector('.sidebar');
+    const backdrop = document.getElementById('doctor-nav-backdrop');
+    sidebar?.classList.remove('mobile-open');
+    if (backdrop) {
+        backdrop.classList.remove('is-open');
+        backdrop.setAttribute('aria-hidden', 'true');
+    }
+    document.body.classList.remove('doctor-nav-open');
+}
+window.closeDoctorMobileNav = closeDoctorMobileNav;
+
 function initDoctorMobileNav() {
     const toggle = document.getElementById('doctor-menu-toggle');
     const sidebar = document.querySelector('.sidebar');
     const backdrop = document.getElementById('doctor-nav-backdrop');
     if (!toggle || !sidebar) return;
-    const close = () => {
-        sidebar.classList.remove('mobile-open');
+    document.querySelectorAll('.menu-item:not([href])').forEach((el) => {
+        el.setAttribute('href', '#');
+    });
+    document.querySelectorAll('.menu-item[href="#"]').forEach((el) => {
+        el.addEventListener('click', (e) => e.preventDefault(), true);
+    });
+    const open = () => {
+        sidebar.classList.add('mobile-open');
         if (backdrop) {
-            backdrop.classList.add('hidden');
-            backdrop.classList.remove('show');
+            backdrop.classList.add('is-open');
+            backdrop.setAttribute('aria-hidden', 'false');
         }
+        document.body.classList.add('doctor-nav-open');
     };
     toggle.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        const open = !sidebar.classList.contains('mobile-open');
-        sidebar.classList.toggle('mobile-open', open);
-        if (backdrop) {
-            backdrop.classList.toggle('hidden', !open);
-            backdrop.classList.toggle('show', open);
-        }
+        if (sidebar.classList.contains('mobile-open')) closeDoctorMobileNav();
+        else open();
     });
-    backdrop?.addEventListener('click', close);
-    document.querySelectorAll('.menu-item').forEach((el) => el.addEventListener('click', close));
+    backdrop?.addEventListener('click', closeDoctorMobileNav);
+    document.querySelectorAll('.menu-item').forEach((el) => el.addEventListener('click', closeDoctorMobileNav));
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && sidebar.classList.contains('mobile-open')) closeDoctorMobileNav();
+    });
 }
 
 function bootDoctorDashboard(user) {
@@ -1121,6 +1139,7 @@ function cancelRegistration() {
 }
 
 function switchTab(tabId) {
+    if (typeof closeDoctorMobileNav === 'function') closeDoctorMobileNav();
     document.querySelectorAll('.tab-pane').forEach(t => t.classList.add('hidden'));
     document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
     document.getElementById(tabId).classList.remove('hidden');
@@ -1164,6 +1183,9 @@ function switchTab(tabId) {
     }
     if (tabId === 'tab-applications') {
         loadApplications();
+    }
+    if (tabId === 'tab-seminars') {
+        loadSeminarsGrid();
     }
     syncDoctorTrackingPolls();
 }
