@@ -22,6 +22,33 @@
 
     window.__publicSchedules = [];
 
+    const DEFAULT_SPEAKERS = [
+        { name: 'Vaidya Expert Faculty', role: 'Keynote — Integrative Ayurveda', org: 'National faculty' },
+        { name: 'Clinical Research Panel', role: 'Case presentation chairs', org: 'VGMF programme' },
+        { name: 'Panchakarma & Shalya', role: 'Workshop leads', org: 'Speciality sessions' },
+        { name: 'Young Scholars Forum', role: 'Research presentations', org: 'Delegate submissions' }
+    ];
+
+    function renderSpeakers(list) {
+        const grid = document.getElementById('speakers-grid');
+        if (!grid) return;
+        const speakers = list && list.length ? list : DEFAULT_SPEAKERS;
+        grid.innerHTML = speakers
+            .map(
+                (s) =>
+                    '<article class="speaker-card">' +
+                    '<div class="speaker-avatar" aria-hidden="true"><i class="fas fa-user-md"></i></div>' +
+                    '<h3>' +
+                    escHtml(s.name) +
+                    '</h3><p class="speaker-role">' +
+                    escHtml(s.role || '') +
+                    '</p><p class="speaker-org">' +
+                    escHtml(s.org || '') +
+                    '</p></article>'
+            )
+            .join('');
+    }
+
     const DEFAULT_FEATURES = [
         { icon: 'fa-microphone-alt', title: 'Expert faculty', text: 'Renowned practitioners and researchers from across India.' },
         { icon: 'fa-certificate', title: 'CME & certificates', text: 'Structured learning with documented participation.' },
@@ -98,6 +125,7 @@
         }
 
         renderFeatureCards(cms.featureCards);
+        renderSpeakers(cms.speakers);
 
         const faqSection = document.getElementById('faq-section');
         const faqRoot = document.getElementById('faq-list');
@@ -159,12 +187,98 @@
         return t2 ? `${datePart} · ${t1} – ${t2}` : `${datePart} · ${t1}`;
     }
 
+    function renderScheduleDayTabs(schedules, activeKey) {
+        const tabs = document.getElementById('schedule-day-tabs');
+        if (!tabs) return;
+        const days = [];
+        (schedules || []).forEach((s) => {
+            const d = parseScheduleDate(s.start_time);
+            if (!d) return;
+            const key = d.toISOString().slice(0, 10);
+            if (!days.find((x) => x.key === key)) {
+                days.push({
+                    key,
+                    label: d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+                });
+            }
+        });
+        if (!days.length) {
+            tabs.innerHTML = '';
+            return;
+        }
+        const current = activeKey || days[0].key;
+        window.__scheduleDayFilter = current;
+        tabs.innerHTML = days
+            .map(
+                (d) =>
+                    '<button type="button" class="schedule-day-tab' +
+                    (d.key === current ? ' is-active' : '') +
+                    '" data-day="' +
+                    escHtml(d.key) +
+                    '" role="tab">' +
+                    escHtml(d.label) +
+                    '</button>'
+            )
+            .join('');
+        tabs.querySelectorAll('.schedule-day-tab').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                window.__scheduleDayFilter = btn.getAttribute('data-day');
+                renderScheduleTable(window.__publicSchedules || []);
+                renderScheduleDayTabs(window.__publicSchedules || [], window.__scheduleDayFilter);
+            });
+        });
+    }
+
+    function renderScheduleTable(schedules) {
+        const tbody = document.getElementById('schedule-table-body');
+        if (!tbody) return;
+        const dayKey = window.__scheduleDayFilter;
+        let list = schedules || [];
+        if (dayKey) {
+            list = list.filter((s) => {
+                const d = parseScheduleDate(s.start_time);
+                return d && d.toISOString().slice(0, 10) === dayKey;
+            });
+        }
+        tbody.innerHTML = '';
+        if (!list.length) {
+            tbody.innerHTML =
+                '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--muted);">No sessions for this day.</td></tr>';
+            return;
+        }
+        list.forEach((s) => {
+            const start = parseScheduleDate(s.start_time);
+            const tr = document.createElement('tr');
+            tr.className = 'schedule-row-interactive';
+            tr.dataset.scheduleId = String(s.id);
+            tr.innerHTML = '<td></td><td></td><td></td><td></td>';
+            tr.cells[0].textContent = start ? start.toLocaleDateString() : '—';
+            tr.cells[1].textContent = start
+                ? start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                : '—';
+            tr.cells[2].textContent = s.title || '—';
+            tr.cells[3].textContent = s.speaker_name || '—';
+            tr.addEventListener('click', () => {
+                const dropdown = document.getElementById('event-schedule-dropdown');
+                if (dropdown) {
+                    dropdown.value = String(s.id);
+                    displayEventScheduleDetail();
+                }
+                document.getElementById('event-schedule-detail')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            });
+            tbody.appendChild(tr);
+        });
+    }
+
     window.loadEventSchedulesPublic = async function loadEventSchedulesPublic() {
         try {
             const res = await fetch('/api/event-schedules');
             const schedules = await res.json();
             if (!res.ok || !Array.isArray(schedules)) return;
             window.__publicSchedules = schedules;
+
+            renderScheduleDayTabs(schedules);
+            renderScheduleTable(schedules);
 
             const dropdown = document.getElementById('event-schedule-dropdown');
             if (dropdown) {
@@ -178,26 +292,12 @@
                 });
             }
 
-            const tbody = document.getElementById('schedule-table-body');
-            if (tbody) {
-                tbody.innerHTML = '';
-                if (!schedules.length) {
+            if (!schedules.length) {
+                const tbody = document.getElementById('schedule-table-body');
+                if (tbody) {
                     tbody.innerHTML =
                         '<tr><td colspan="4" style="text-align:center;padding:24px;color:var(--muted);">Programme schedule will be published soon.</td></tr>';
-                    return;
                 }
-                schedules.forEach((s) => {
-                    const start = parseScheduleDate(s.start_time);
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = '<td></td><td></td><td></td><td></td>';
-                    tr.cells[0].textContent = start ? start.toLocaleDateString() : '—';
-                    tr.cells[1].textContent = start
-                        ? start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                        : '—';
-                    tr.cells[2].textContent = s.title || '—';
-                    tr.cells[3].textContent = s.speaker_name || '—';
-                    tbody.appendChild(tr);
-                });
             }
         } catch (e) {
             console.error(e);
@@ -243,6 +343,8 @@
             }
         } catch (_) {}
     };
+
+    renderSpeakers();
 
     window.loadOpenSeminarsStrip = async function loadOpenSeminarsStrip() {
         const wrap = document.getElementById('open-seminars-strip');

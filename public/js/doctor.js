@@ -1505,7 +1505,17 @@ async function loadCaseApplicationsTracker(silentPoll) {
             return;
         }
         const res = await fetch('/api/doctor/case/applications/' + uid, { cache: 'no-store' });
-        const payload = await res.json();
+        let payload = {};
+        try {
+            payload = await res.json();
+        } catch (_) {
+            payload = {};
+        }
+        if (!res.ok) {
+            const errMsg = payload.error || 'Could not load case applications (HTTP ' + res.status + ').';
+            box.innerHTML = '<p style="color:#b91c1c;">' + escapeHtml(errMsg) + '</p>';
+            return;
+        }
         const rows = Array.isArray(payload) ? payload : payload.applications || [];
         if (!Array.isArray(rows)) {
             box.innerHTML = '<p style="color:#b91c1c;">Could not load case applications.</p>';
@@ -2544,13 +2554,17 @@ async function loadDoctorDashboardStats() {
         const uid = doctorNumericUserId();
         if (!uid) return;
         const res = await fetch('/api/doctor/dashboard-stats/' + uid);
-        if (!res.ok) throw new Error('stats');
+        if (!res.ok) {
+            const errBody = await res.json().catch(() => ({}));
+            console.warn('dashboard-stats', errBody.error || res.status);
+            return;
+        }
         const d = await res.json();
         set('stat-registered', d.registered_seminars);
         set('stat-paid', d.paid_or_confirmed);
         set('stat-checked', d.checked_in_seminars);
         set('stat-feedback', d.feedback_submitted);
-        set('stat-abstracts', d.abstracts_submitted);
+        set('stat-abstracts', d.case_presentations != null ? d.case_presentations : d.abstracts_submitted);
         set('stat-ptix', d.participant_tickets);
         set('stat-suptix', d.support_tickets);
     } catch (e) {

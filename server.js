@@ -2386,13 +2386,16 @@ app.get('/api/registration-form-config', (req, res) => {
 
 app.get('/api/public/participant-directories', (req, res) => {
     db.all(
-        `SELECT id, title, event_date FROM seminars
-         WHERE is_active = 1 AND IFNULL(public_list_enabled, 0) = 1
-         ORDER BY event_date DESC`,
+        `SELECT id, title, event_date, public_list_enabled FROM seminars
+         WHERE IFNULL(is_active, 1) = 1
+         ORDER BY event_date DESC, id DESC`,
         [],
         (err, rows) => {
             if (err) return res.status(500).json({ error: err.message });
-            res.json(rows || []);
+            const list = (rows || [])
+                .filter((s) => isPublicListEnabled(s.public_list_enabled))
+                .map((s) => ({ id: s.id, title: s.title, event_date: s.event_date }));
+            res.json(list);
         }
     );
 });
@@ -2406,7 +2409,7 @@ app.get('/api/public/participants/:seminarId', (req, res) => {
         [sid],
         (err, sem) => {
             if (err) return res.status(500).json({ error: err.message });
-            if (!sem || !sem.public_list_enabled) {
+            if (!sem || !isPublicListEnabled(sem.public_list_enabled)) {
                 return res.status(403).json({ error: 'Participant list is not published for this seminar yet.' });
             }
             db.all(
@@ -3135,24 +3138,61 @@ app.get('/api/doctor/profile/:userId', (req, res) => {
     });
 });
 
-// Doctor dashboard statistics
+function isPublicListEnabled(val) {
+    return val === 1 || val === true || val === '1' || val === 't' || val === 'true';
+}
+
+// Doctor dashboard statistics (tolerant of optional auxiliary tables on PostgreSQL)
 app.get('/api/doctor/dashboard-stats/:userId', (req, res) => {
     const uid = parseInt(req.params.userId, 10);
     if (Number.isNaN(uid)) return res.status(400).json({ error: 'Invalid user' });
-    const sql = `
-        SELECT
-            (SELECT COUNT(*) FROM registrations WHERE user_id = ? AND IFNULL(status,'') NOT IN ('rejected','cancelled')) AS registered_seminars,
-            (SELECT COUNT(*) FROM registrations WHERE user_id = ? AND status IN ('completed','checked_in')) AS paid_or_confirmed,
-            (SELECT COUNT(*) FROM registrations WHERE user_id = ? AND status = 'checked_in') AS checked_in_seminars,
-            (SELECT COUNT(*) FROM seminar_feedback WHERE user_id = ?) AS feedback_submitted,
-            (SELECT COUNT(*) FROM abstracts WHERE user_id = ?) AS abstracts_submitted,
-            (SELECT COUNT(*) FROM support_tickets WHERE user_id = ?) AS support_tickets,
-            (SELECT COUNT(*) FROM tickets t JOIN orders o ON t.order_id = o.id JOIN registrations r ON o.registration_id = r.id WHERE r.user_id = ?) AS participant_tickets
-    `;
-    db.get(sql, [uid, uid, uid, uid, uid, uid, uid], (err, row) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(row || {});
-    });
+    const out = {
+        registered_seminars: 0,
+        paid_or_confirmed: 0,
+        checked_in_seminars: 0,
+        feedback_submitted: 0,
+        case_presentations: 0,
+        support_tickets: 0,
+        participant_tickets: 0
+    };
+    const steps = [
+        [
+            `SELECT COUNT(*) AS c FROM registrations WHERE user_id = ? AND IFNULL(status,'') NOT IN ('rejected','cancelled')`,
+            'registered_seminars'
+        ],
+        [
+            `SELECT COUNT(*) AS c FROM registrations WHERE user_id = ? AND status IN ('completed','checked_in','approved_pending_payment')`,
+            'paid_or_confirmed'
+        ],
+        [
+            `SELECT COUNT(*) AS c FROM registrations WHERE user_id = ? AND status = 'checked_in'`,
+            'checked_in_seminars'
+        ],
+        [
+            `SELECT COUNT(*) AS c FROM seminar_feedback WHERE user_id = ?`,
+            'feedback_submitted'
+        ],
+        [
+            `SELECT COUNT(*) AS c FROM case_submissions WHERE user_id = ? AND IFNULL(status,'') NOT IN ('cancelled')`,
+            'case_presentations'
+        ],
+        [`SELECT COUNT(*) AS c FROM support_tickets WHERE user_id = ?`, 'support_tickets'],
+        [
+            `SELECT COUNT(*) AS c FROM tickets t JOIN orders o ON t.order_id = o.id JOIN registrations r ON o.registration_id = r.id WHERE r.user_id = ?`,
+            'participant_tickets'
+        ]
+    ];
+    let i = 0;
+    const next = () => {
+        if (i >= steps.length) return res.json(out);
+        const [sql, key] = steps[i];
+        i++;
+        db.get(sql, [uid], (err, row) => {
+            if (!err && row) out[key] = row.c != null ? row.c : row.count || 0;
+            next();
+        });
+    };
+    next();
 });
 
 // Doctor orders (payments linked to their registrations)
