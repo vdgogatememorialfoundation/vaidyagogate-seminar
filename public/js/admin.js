@@ -373,7 +373,7 @@ async function loadUsers() {
                     </td>
                 </tr>`;
                 if (proxySelect) {
-                    proxySelect.innerHTML += `<option value="${u.id}">${u.first_name} ${u.last_name} (${u.user_id_string})</option>`;
+            proxySelect.innerHTML += `<option value="${u.id}">${u.first_name} ${u.last_name} (${u.user_id_string})</option>`;
                 }
             });
         }
@@ -620,12 +620,12 @@ async function adminCreateUser() {
     const email = document.getElementById('newuser-email').value.trim();
     const phone = document.getElementById('newuser-phone').value.trim();
     const userRole = document.getElementById('newuser-role')?.value || 'doctor';
-
+    
     if (!firstName || !lastName || !email || !phone || !userRole) {
         alert('Please fill all required fields');
         return;
     }
-
+    
     if (userRole === 'doctor' && typeof validatePersonNameClient === 'function') {
         const fn = validatePersonNameClient(firstName, 'First name');
         if (!fn.valid) return alert(fn.message);
@@ -639,7 +639,7 @@ async function adminCreateUser() {
         alert('Custom password must be at least 4 characters');
         return;
     }
-
+    
     const data = {
         firstName,
         lastName,
@@ -774,9 +774,9 @@ function renderAdminUserDetailTab() {
                     <p><strong>Password (stored):</strong> <code>${escAdmin(u.password)}</code></p>
                     <p><strong>Role:</strong> ${escAdmin(u.user_role || u.role)}</p>
                     <p><strong>Status:</strong> ${u.is_disabled ? 'Disabled' : 'Active'}</p>
-                    <p><strong>Demo account:</strong> ${Number(u.is_demo) === 1 ? 'Yes — any 4-digit OTP works' : 'No'}</p>
+                    ${window.__adminProductionSite ? '' : `<p><strong>Demo account:</strong> ${Number(u.is_demo) === 1 ? 'Yes — any 4-digit OTP works' : 'No'}</p>
+                    <button type="button" class="btn-primary" style="margin-top:10px;background:#7c3aed;" onclick="toggleAdminUserDemo(${u.id}, ${Number(u.is_demo) === 1 ? 'false' : 'true'})">${Number(u.is_demo) === 1 ? 'Remove demo mode' : 'Mark as demo user'}</button>`}
                     <p><strong>Joined:</strong> ${escAdmin(u.created_at)}</p>
-                    <button type="button" class="btn-primary" style="margin-top:10px;background:#7c3aed;" onclick="toggleAdminUserDemo(${u.id}, ${Number(u.is_demo) === 1 ? 'false' : 'true'})">${Number(u.is_demo) === 1 ? 'Remove demo mode' : 'Mark as demo user'}</button>
                 </div>
                 <div>
                     <h4>Doctor profile</h4>
@@ -1393,7 +1393,7 @@ async function loadAdminCasePrograms() {
             box.innerHTML += '<div style="padding:10px 0;border-bottom:1px solid #e2e8f0;display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;"><div><strong>' +
                 String(p.title || '').replace(/</g, '&lt;') + '</strong><span style="color:#64748b;font-size:0.85rem;"> · ' +
                 String(p.registration_start || '—').replace(/</g, '&lt;') + ' → ' + String(p.registration_end || '—').replace(/</g, '&lt;') + cap +
-                '</span></div><button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.8rem;background:#64748b;" onclick="editAdminCaseProgram(' + p.id + ')">Edit</button></div>';
+                '</span></div><span><button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.8rem;background:#64748b;" onclick="editAdminCaseProgram(' + p.id + ')">Edit</button> <button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.8rem;background:#b91c1c;" onclick="deleteAdminCaseProgram(' + p.id + ', \'' + String(p.title || '').replace(/'/g, "\\'") + '\')">Delete</button></span></div>';
         });
 
     } catch (e) {
@@ -1474,7 +1474,10 @@ async function loadAdminCaseSubmissions() {
                 <td>${escAdmin(s.title)}</td>
                 <td>${escAdmin(s.status)}</td>
                 <td>${s.file_count || 0}</td>
-                <td><button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.8rem;" onclick="openAdminCaseDetail(${s.id})">Review</button></td>
+                <td>
+                    <button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.8rem;" onclick="openAdminCaseDetail(${s.id})">Review</button>
+                    <button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.8rem;background:#b91c1c;margin-left:4px;" onclick="deleteAdminCaseSubmission(${s.id})">Delete</button>
+                </td>
             </tr>`;
         });
     } catch (e) {
@@ -1864,6 +1867,7 @@ async function loadApplications() {
                     </td>
                     <td>
                         <button class="btn-primary" onclick="viewFullApplication(${index})">View</button>
+                        <button type="button" class="btn-primary" style="margin-left:6px;background:#b91c1c;padding:4px 8px;font-size:0.8rem;" onclick="deleteAdminRegistration(${a.id}, '${String(a.application_no || '').replace(/'/g, "\\'")}')">Delete</button>
                     </td>
                 </tr>
             `;
@@ -2088,9 +2092,9 @@ async function saveKillSwitchSettings() {
         console.error(err);
     }
 }
-
+        
 async function savePaymentGatewaysSettings() {
-    const gateways = [
+        const gateways = [
         {
             name: 'razorpay',
             is_active: document.getElementById('pg-razorpay-active').checked,
@@ -2107,12 +2111,12 @@ async function savePaymentGatewaysSettings() {
                 }
             }
         },
-        { name: 'payu', is_active: document.getElementById('pg-payu-active').checked, config: { merchant_key: document.getElementById('pg-payu-merchant-key').value, merchant_salt: document.getElementById('pg-payu-merchant-salt').value, merchant_id: document.getElementById('pg-payu-merchant-id').value } },
-        { name: 'easebuzz', is_active: document.getElementById('pg-easebuzz-active').checked, config: { merchant_key: document.getElementById('pg-easebuzz-merchant-key').value, merchant_salt: document.getElementById('pg-easebuzz-merchant-salt').value } },
-        { name: 'paytm', is_active: document.getElementById('pg-paytm-active').checked, config: { merchant_id: document.getElementById('pg-paytm-merchant-id').value, merchant_key: document.getElementById('pg-paytm-merchant-key').value, website: document.getElementById('pg-paytm-website').value } },
-        { name: 'phonepe', is_active: document.getElementById('pg-phonepe-active').checked, config: { merchant_id: document.getElementById('pg-phonepe-merchant-id').value, salt_key: document.getElementById('pg-phonepe-salt-key').value } },
-        { name: 'cashfree', is_active: document.getElementById('pg-cashfree-active').checked, config: { app_id: document.getElementById('pg-cashfree-app-id').value, secret_key: document.getElementById('pg-cashfree-secret-key').value } }
-    ];
+            { name: 'payu', is_active: document.getElementById('pg-payu-active').checked, config: { merchant_key: document.getElementById('pg-payu-merchant-key').value, merchant_salt: document.getElementById('pg-payu-merchant-salt').value, merchant_id: document.getElementById('pg-payu-merchant-id').value } },
+            { name: 'easebuzz', is_active: document.getElementById('pg-easebuzz-active').checked, config: { merchant_key: document.getElementById('pg-easebuzz-merchant-key').value, merchant_salt: document.getElementById('pg-easebuzz-merchant-salt').value } },
+            { name: 'paytm', is_active: document.getElementById('pg-paytm-active').checked, config: { merchant_id: document.getElementById('pg-paytm-merchant-id').value, merchant_key: document.getElementById('pg-paytm-merchant-key').value, website: document.getElementById('pg-paytm-website').value } },
+            { name: 'phonepe', is_active: document.getElementById('pg-phonepe-active').checked, config: { merchant_id: document.getElementById('pg-phonepe-merchant-id').value, salt_key: document.getElementById('pg-phonepe-salt-key').value } },
+            { name: 'cashfree', is_active: document.getElementById('pg-cashfree-active').checked, config: { app_id: document.getElementById('pg-cashfree-app-id').value, secret_key: document.getElementById('pg-cashfree-secret-key').value } }
+        ];
     try {
         for (const gw of gateways) {
             await fetch(`/api/admin/payment_gateways/${gw.name}`, {
@@ -2200,6 +2204,237 @@ async function transferApplication() {
 
 // Seminars Logic
 let globalSeminars = [];
+window.__adminProductionSite = false;
+
+function summaryCancellationPolicyAdmin(raw) {
+    if (!raw) return 'No cancellation policy set for this seminar.';
+    try {
+        const p = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        if (!p || typeof p !== 'object') return 'No cancellation policy set for this seminar.';
+        const parts = [];
+        if (p.noRefundWithinDays != null) {
+            parts.push(`No refund within ${p.noRefundWithinDays} days of the event.`);
+        }
+        if (Array.isArray(p.tiers)) {
+            p.tiers.forEach((t) => {
+                if (t.minDaysBeforeEvent != null && t.refundPercent != null) {
+                    parts.push(
+                        `${t.refundPercent}% refund if cancelling at least ${t.minDaysBeforeEvent} days before the event.`
+                    );
+                }
+            });
+        }
+        return parts.length ? parts.join(' ') : 'No cancellation policy set for this seminar.';
+    } catch (_) {
+        return 'No cancellation policy set for this seminar.';
+    }
+}
+
+function buildCancellationPolicyJsonFromUi() {
+    const daysEl = document.getElementById('seminar-cancel-norefund-days');
+    const daysRaw = daysEl && daysEl.value !== '' ? parseInt(daysEl.value, 10) : null;
+    const tiers = [];
+    document.querySelectorAll('.seminar-cancel-tier-row').forEach((row) => {
+        const minD = parseInt((row.querySelector('.tier-min-days') || {}).value, 10);
+        const pct = parseInt((row.querySelector('.tier-refund-pct') || {}).value, 10);
+        if (Number.isInteger(minD) && Number.isInteger(pct)) {
+            tiers.push({ minDaysBeforeEvent: minD, refundPercent: pct });
+        }
+    });
+    if (daysRaw == null && !tiers.length) return null;
+    const out = {};
+    if (daysRaw != null && !Number.isNaN(daysRaw)) out.noRefundWithinDays = daysRaw;
+    if (tiers.length) out.tiers = tiers;
+    return JSON.stringify(out);
+}
+
+function addSeminarCancelTierRow(minDays, refundPct) {
+    const wrap = document.getElementById('seminar-cancel-tiers');
+    if (!wrap) return;
+    const row = document.createElement('div');
+    row.className = 'seminar-cancel-tier-row';
+    row.style.cssText = 'display:grid;grid-template-columns:1fr 1fr auto;gap:8px;margin-top:8px;align-items:end;';
+    row.innerHTML =
+        '<div><label style="font-size:0.75rem;">Min days before event</label><input type="number" class="tier-min-days" min="0" value="' +
+        (minDays != null ? minDays : '') +
+        '" oninput="updateSeminarPolicyPreviews()"></div>' +
+        '<div><label style="font-size:0.75rem;">Refund %</label><input type="number" class="tier-refund-pct" min="0" max="100" value="' +
+        (refundPct != null ? refundPct : '') +
+        '" oninput="updateSeminarPolicyPreviews()"></div>' +
+        '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.8rem;background:#b91c1c;" onclick="this.closest(\'.seminar-cancel-tier-row\').remove();updateSeminarPolicyPreviews();">Remove</button>';
+    wrap.appendChild(row);
+}
+
+function loadSeminarCancellationUi(rawJson) {
+    const daysEl = document.getElementById('seminar-cancel-norefund-days');
+    const tiersWrap = document.getElementById('seminar-cancel-tiers');
+    if (!daysEl || !tiersWrap) return;
+    daysEl.value = '';
+    tiersWrap.innerHTML = '';
+    if (!rawJson || !String(rawJson).trim()) {
+        updateSeminarPolicyPreviews();
+        return;
+    }
+    try {
+        const p = typeof rawJson === 'string' ? JSON.parse(rawJson) : rawJson;
+        if (p.noRefundWithinDays != null) daysEl.value = p.noRefundWithinDays;
+        if (Array.isArray(p.tiers)) {
+            p.tiers.forEach((t) => addSeminarCancelTierRow(t.minDaysBeforeEvent, t.refundPercent));
+        }
+    } catch (_) {}
+    updateSeminarPolicyPreviews();
+}
+
+async function loadSeminarFormOverrideUi(overrideJson) {
+    const tbody = document.getElementById('seminar-reg-override-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="4">Loading…</td></tr>';
+    let globalFields = [];
+    try {
+        const res = await fetch('/api/registration-form-config');
+        const data = await res.json();
+        globalFields = data.fields || [];
+    } catch (_) {}
+    let overrideFields = null;
+    if (overrideJson && String(overrideJson).trim()) {
+        try {
+            const parsed = JSON.parse(overrideJson);
+            if (parsed && Array.isArray(parsed.fields)) overrideFields = parsed.fields;
+        } catch (_) {}
+    }
+    const byKey = {};
+    (overrideFields || []).forEach((f) => {
+        if (f && f.key) byKey[f.key] = f;
+    });
+    tbody.innerHTML = '';
+    window.__seminarOverrideFieldKeys = [];
+    globalFields.forEach((f, idx) => {
+        const ov = byKey[f.key] || {};
+        const enabled = ov.enabled != null ? ov.enabled !== false : f.enabled !== false;
+        const required = ov.required != null ? !!ov.required : !!f.required;
+        const label = ov.label != null && String(ov.label).trim() ? ov.label : f.label || f.key;
+        window.__seminarOverrideFieldKeys.push(f.key);
+        tbody.innerHTML += `<tr>
+            <td><code>${String(f.key).replace(/</g, '&lt;')}</code></td>
+            <td><input type="text" class="sem-ov-label" data-idx="${idx}" value="${String(label).replace(/"/g, '&quot;')}" oninput="updateSeminarPolicyPreviews()"></td>
+            <td><input type="checkbox" class="sem-ov-en" data-idx="${idx}" ${enabled ? 'checked' : ''} onchange="updateSeminarPolicyPreviews()"></td>
+            <td><input type="checkbox" class="sem-ov-req" data-idx="${idx}" ${required ? 'checked' : ''} onchange="updateSeminarPolicyPreviews()"></td>
+        </tr>`;
+    });
+    updateSeminarPolicyPreviews();
+}
+
+function buildSeminarFormOverrideJsonFromUi() {
+    const tbody = document.getElementById('seminar-reg-override-tbody');
+    if (!tbody || !window.__seminarOverrideFieldKeys) return null;
+    const fields = [];
+    window.__seminarOverrideFieldKeys.forEach((key, idx) => {
+        const labelEl = tbody.querySelector(`.sem-ov-label[data-idx="${idx}"]`);
+        const enEl = tbody.querySelector(`.sem-ov-en[data-idx="${idx}"]`);
+        const reqEl = tbody.querySelector(`.sem-ov-req[data-idx="${idx}"]`);
+        fields.push({
+            key,
+            label: labelEl ? labelEl.value : key,
+            enabled: !!(enEl && enEl.checked),
+            required: !!(reqEl && reqEl.checked)
+        });
+    });
+    const anyDisabled = fields.some((f) => !f.enabled);
+    const anyLabelChange = fields.some((f) => f.label && f.label !== f.key);
+    if (!anyDisabled && !anyLabelChange) return null;
+    return JSON.stringify({ fields });
+}
+
+function updateSeminarPolicyPreviews() {
+    const cancelPrev = document.getElementById('seminar-cancel-preview');
+    if (cancelPrev) {
+        const built = buildCancellationPolicyJsonFromUi();
+        cancelPrev.textContent = summaryCancellationPolicyAdmin(built);
+    }
+    const formPrev = document.getElementById('seminar-form-preview');
+    if (formPrev) {
+        const built = buildSeminarFormOverrideJsonFromUi();
+        if (!built) {
+            formPrev.textContent = 'Doctors will see the global registration form (no per-seminar override).';
+            return;
+        }
+        try {
+            const parsed = JSON.parse(built);
+            const enabled = (parsed.fields || []).filter((f) => f.enabled !== false);
+            formPrev.textContent =
+                'Doctors will see: ' +
+                (enabled.length
+                    ? enabled.map((f) => f.label || f.key).join(', ')
+                    : 'no fields (check at least one is enabled)');
+        } catch (_) {
+            formPrev.textContent = 'Invalid form override.';
+        }
+    }
+}
+
+async function deleteAdminSeminar(seminarId, title) {
+    if (!confirm('Delete or deactivate seminar "' + title + '"?\n\nIf registrations exist it will be deactivated only. Hold Shift while confirming to permanently delete all related data.')) {
+        return;
+    }
+    const permanent = window.event && window.event.shiftKey ? '1' : '0';
+    try {
+        const res = await fetch('/api/admin/seminars/' + seminarId + '?permanent=' + permanent, { method: 'DELETE' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return alert(data.error || 'Delete failed');
+        alert(data.message || (data.deactivated ? 'Seminar deactivated.' : 'Seminar deleted.'));
+        loadSeminars();
+    } catch (e) {
+        console.error(e);
+        alert('Network error');
+    }
+}
+
+async function deleteAdminRegistration(appId, appNo) {
+    if (!confirm('Permanently delete registration ' + (appNo || appId) + '? This cannot be undone.')) return;
+    try {
+        const res = await fetch('/api/admin/registrations/' + appId, { method: 'DELETE' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return alert(data.error || 'Delete failed');
+        loadApplications();
+        if (currentManageSeminarId) {
+            const t = document.getElementById('detail-seminar-title');
+            manageSeminar(currentManageSeminarId, t ? t.innerText.replace(/^Dashboard:\s*/, '') : '');
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function deleteAdminCaseProgram(programId, title) {
+    if (!confirm('Delete case program "' + title + '"?\nShift+confirm = permanent delete including submissions.')) return;
+    const permanent = window.event && window.event.shiftKey ? '1' : '0';
+    try {
+        const res = await fetch('/api/admin/case/programs/' + programId + '?permanent=' + permanent, { method: 'DELETE' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return alert(data.error || 'Delete failed');
+        alert(data.message || 'Done.');
+        loadAdminCasePrograms();
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function deleteAdminCaseSubmission(subId) {
+    if (!confirm('Permanently delete case submission #' + subId + '?')) return;
+    try {
+        const res = await fetch('/api/admin/case/submissions/' + subId, { method: 'DELETE' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return alert(data.error || 'Delete failed');
+        loadAdminCaseSubmissions();
+        const box = document.getElementById('case-mgmt-detail');
+        if (box) {
+            box.classList.add('hidden');
+            box.innerHTML = '';
+        }
+    } catch (e) {
+        console.error(e);
+    }
+}
 let adminPortalYear = new Date().getFullYear();
 
 async function loadAdminPortalYear() {
@@ -2258,7 +2493,7 @@ async function loadSeminars() {
             (s) => Number(s.portal_year) === adminPortalYear || (!s.portal_year && s.event_date && new Date(s.event_date).getFullYear() === adminPortalYear)
         );
         const past = (globalSeminars || []).filter((s) => Number(s.portal_year) < adminPortalYear);
-
+        
         if (!filtered.length && !past.length) {
             tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">No seminars found.</td></tr>';
             return;
@@ -2280,6 +2515,7 @@ async function loadSeminars() {
                     <td>
                         <button class="btn-success" style="padding: 5px 10px; font-size: 0.85rem;" onclick="manageSeminar(${s.id}, '${String(s.title).replace(/'/g, "\\'")}')">Manage</button>
                         <button class="btn-primary" style="padding: 5px 10px; font-size: 0.85rem;" onclick="editSeminar(${idx})">Edit</button>
+                        <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.85rem;background:#b91c1c;margin-left:4px;" onclick="deleteAdminSeminar(${s.id}, '${String(s.title).replace(/'/g, "\\'")}')">Delete</button>
                     </td>
                 </tr>`;
         };
@@ -2316,7 +2552,7 @@ function editSeminar(index) {
     document.getElementById('seminar-event-date').value = formatDt(s.event_date);
     const py = document.getElementById('seminar-portal-year');
     if (py) py.value = s.portal_year || adminPortalYear || new Date().getFullYear();
-
+    
     document.getElementById('seminar-capacity').value = s.capacity || 0;
     document.getElementById('seminar-price').value = s.price || 0;
     document.getElementById('seminar-active').value = s.is_active ? '1' : '0';
@@ -2331,26 +2567,8 @@ function editSeminar(index) {
     if (wh) wh.value = s.whatsapp_group_url || '';
     const otp = document.getElementById('seminar-otp-app');
     if (otp) otp.checked = !!Number(s.otp_on_application);
-    const cj = document.getElementById('seminar-cancellation-json');
-    if (cj) {
-        try {
-            cj.value = s.cancellation_policy_json
-                ? JSON.stringify(JSON.parse(s.cancellation_policy_json), null, 2)
-                : '';
-        } catch (_) {
-            cj.value = s.cancellation_policy_json || '';
-        }
-    }
-    const rj = document.getElementById('seminar-reg-form-json');
-    if (rj) {
-        try {
-            rj.value = s.registration_form_json
-                ? JSON.stringify(JSON.parse(s.registration_form_json), null, 2)
-                : '';
-        } catch (_) {
-            rj.value = s.registration_form_json || '';
-        }
-    }
+    loadSeminarCancellationUi(s.cancellation_policy_json || '');
+    loadSeminarFormOverrideUi(s.registration_form_json || '');
     const hi = document.getElementById('seminar-hero-image');
     if (hi) hi.value = s.hero_image_path || '';
     const fl = document.getElementById('seminar-flyer');
@@ -2378,33 +2596,8 @@ async function saveSeminar(e) {
         alert('Gallery paths must be valid JSON array');
         return;
     }
-    let regFormOverride = (document.getElementById('seminar-reg-form-json') || {}).value;
-    if (regFormOverride && String(regFormOverride).trim()) {
-        try {
-            const parsed = JSON.parse(regFormOverride);
-            if (!parsed.fields || !Array.isArray(parsed.fields)) {
-                alert('Registration form override must include a "fields" array.');
-                return;
-            }
-            regFormOverride = JSON.stringify(parsed);
-        } catch (_) {
-            alert('Registration form override must be valid JSON.');
-            return;
-        }
-    } else {
-        regFormOverride = null;
-    }
-    let cancelPol = (document.getElementById('seminar-cancellation-json') || {}).value;
-    if (cancelPol && String(cancelPol).trim()) {
-        try {
-            cancelPol = JSON.stringify(JSON.parse(cancelPol));
-        } catch (_) {
-            alert('Cancellation policy must be valid JSON.');
-            return;
-        }
-    } else {
-        cancelPol = null;
-    }
+    const regFormOverride = buildSeminarFormOverrideJsonFromUi();
+    const cancelPol = buildCancellationPolicyJsonFromUi();
     const data = {
         title: document.getElementById('seminar-title').value,
         description: document.getElementById('seminar-desc').value,
@@ -2529,7 +2722,7 @@ async function loadLiveScans() {
             const volunteer = s.vol_first
                 ? `${s.vol_first} ${s.vol_last || ''} (${s.scanner_user_id_string || ''})`
                 : '<span style="color:#94a3b8">System/Admin</span>';
-
+            
             tbody.innerHTML += `
                 <tr>
                     <td>${timeStr}</td>
@@ -2651,8 +2844,8 @@ async function loadEventSchedules() {
             tr.innerHTML = `
                 <td><strong></strong></td>
                 <td></td>
-                <td>${startTime}</td>
-                <td>${endTime}</td>
+                    <td>${startTime}</td>
+                    <td>${endTime}</td>
                 <td></td>
                 <td></td>`;
             tr.cells[0].querySelector('strong').textContent = s.title || '';
@@ -2963,6 +3156,12 @@ async function submitTicketReply() {
 
 // Call loading functions when tab changes
 function loadAllData() {
+    fetch('/api/public/portal-urls')
+        .then((r) => r.json())
+        .then((u) => {
+            window.__adminProductionSite = !!(u && u.production);
+        })
+        .catch(() => {});
     loadAdminPortalYear();
     loadUsers();
     loadApplications();

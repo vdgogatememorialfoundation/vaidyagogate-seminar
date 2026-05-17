@@ -988,11 +988,32 @@
                 <div><label>Terms and Conditions</label><textarea id="seminar-terms" rows="3"></textarea></div>
                 <div style="background: #eff6ff; padding: 15px; border: 1px solid #bfdbfe; border-radius: 12px;">
                     <h4 style="margin-bottom: 10px; color:#1e40af;">Per-seminar links, policy &amp; form override</h4>
-                    <p style="color:#64748b;font-size:0.85rem;margin-bottom:10px;">WhatsApp link appears to doctors after approval. Cancellation policy JSON drives refund messaging (automated gateway refunds are not wired yet). Registration override uses the same <code>{"fields":[...]}</code> shape as the global form; leave empty to inherit.</p>
+                    <p style="color:#64748b;font-size:0.85rem;margin-bottom:10px;">WhatsApp link appears to doctors after approval. Cancellation policy is shown to doctors in plain language. Form override adjusts labels and which fields appear for this seminar only.</p>
                     <div><label>WhatsApp group / invite URL</label><input type="text" id="seminar-whatsapp" placeholder="https://chat.whatsapp.com/..."></div>
                     <div style="margin-top:10px;"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="seminar-otp-app"> Require OTP on application (email + WhatsApp)</label></div>
-                    <div style="margin-top:10px;"><label>Cancellation policy (JSON)</label><textarea id="seminar-cancellation-json" rows="3" placeholder='{"noRefundWithinDays":3,"tiers":[{"minDaysBeforeEvent":50,"refundPercent":50}]}'></textarea></div>
-                    <div style="margin-top:10px;"><label>Registration form override (JSON)</label><textarea id="seminar-reg-form-json" rows="4" placeholder='{"fields":[{"key":"fname","label":"First name","enabled":true,"required":true}]}'></textarea></div>
+                    <div style="margin-top:14px;padding:12px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;">
+                        <label style="font-weight:600;">Cancellation &amp; refund policy</label>
+                        <p style="font-size:0.82rem;color:#64748b;margin:6px 0 10px;">Shown to doctors when they track or cancel an application.</p>
+                        <div style="margin-bottom:10px;">
+                            <label style="font-size:0.8rem;">No refund within (days of event)</label>
+                            <input type="number" id="seminar-cancel-norefund-days" min="0" placeholder="e.g. 3" style="max-width:120px;" oninput="updateSeminarPolicyPreviews()">
+                        </div>
+                        <label style="font-size:0.8rem;">Refund tiers (optional)</label>
+                        <div id="seminar-cancel-tiers"></div>
+                        <button type="button" class="btn-primary" style="margin-top:8px;padding:4px 12px;font-size:0.82rem;background:#475569;" onclick="addSeminarCancelTierRow()">+ Add tier</button>
+                        <p id="seminar-cancel-preview" style="margin-top:10px;font-size:0.88rem;color:#334155;background:#f8fafc;padding:10px;border-radius:6px;"></p>
+                    </div>
+                    <textarea id="seminar-cancellation-json" class="hidden" aria-hidden="true"></textarea>
+                    <div style="margin-top:14px;padding:12px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;">
+                        <label style="font-weight:600;">Registration form override (this seminar)</label>
+                        <p style="font-size:0.82rem;color:#64748b;margin:6px 0 10px;">Toggle fields for this seminar.</p>
+                        <table class="data-table" style="font-size:0.88rem;">
+                            <thead><tr><th>Field</th><th>Label</th><th>On</th><th>Required</th></tr></thead>
+                            <tbody id="seminar-reg-override-tbody"></tbody>
+                        </table>
+                        <p id="seminar-form-preview" style="margin-top:10px;font-size:0.88rem;color:#334155;background:#f8fafc;padding:10px;border-radius:6px;"></p>
+                    </div>
+                    <textarea id="seminar-reg-form-json" class="hidden" aria-hidden="true"></textarea>
                 </div>
                 <div style="background: linear-gradient(135deg, #fffbeb, #fff7ed); padding: 15px; border: 1px solid #fed7aa; border-radius: 12px;">
                     <h4 style="margin-bottom: 10px; color:#c2410c;">Seminar images &amp; flyer</h4>

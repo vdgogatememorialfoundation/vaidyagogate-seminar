@@ -337,12 +337,19 @@ function initDoctorMobileNav() {
 
 function bootDoctorDashboard(user) {
     currentUser = user;
+    fetch('/api/public/portal-urls')
+        .then((r) => r.json())
+        .then((u) => {
+            window.__doctorProductionSite = !!(u && u.production);
+        })
+        .catch(() => {});
         document.getElementById('auth-overlay').classList.add('hidden');
         document.getElementById('dashboard-main').classList.remove('hidden');
     initDoctorMobileNav();
         document.getElementById('header-name').innerText = `Hi, Dr. ${currentUser.first_name || ''} ${currentUser.last_name || ''}`;
     document.getElementById('header-id').innerText =
-        `ID: ${currentUser.user_id_string || '---'}` + (Number(currentUser.is_demo) === 1 ? ' · Demo' : '');
+        `ID: ${currentUser.user_id_string || '---'}` +
+        (!window.__doctorProductionSite && Number(currentUser.is_demo) === 1 ? ' · Demo' : '');
         loadProfile();
     loadDoctorPaymentOptions().then(() => {
         loadDoctorPortalYear().then(() => {
@@ -538,7 +545,8 @@ async function verifyRegistrationOtpForField(fieldKey) {
             window.__fieldOtpTokens[fieldKey] = data.token;
         }
         if (statusEl) {
-            statusEl.textContent = data.demoBypass ? 'Verified ✓ (demo)' : 'Verified ✓';
+            statusEl.textContent =
+                data.demoBypass && !window.__doctorProductionSite ? 'Verified ✓ (demo)' : 'Verified ✓';
         }
     } catch (e) {
         console.error(e);
@@ -925,9 +933,9 @@ async function startRegistration(seminarId) {
         return;
     }
     activeSeminarIdForReg = seminarId;
-    window.__seminarTermsText =
-        (s && s.terms_conditions && String(s.terms_conditions).trim()) ||
-        'Standard seminar terms apply. Contact the organizer for full details.';
+    const termsRaw = s && s.terms_conditions && String(s.terms_conditions).trim();
+    window.__seminarTermsText = termsRaw || '';
+    window.__seminarCancellationSummary = s ? summaryCancellationPolicy(s.cancellation_policy_json) : '';
     window.__fieldOtpTokens = {};
     window.__regPhoneOtpToken = null;
     window.__regEmailOtpToken = null;
@@ -936,16 +944,36 @@ async function startRegistration(seminarId) {
     document.getElementById('seminars-title').classList.add('hidden');
     document.getElementById('multi-step-form').classList.remove('hidden');
     const tncEl = document.getElementById('reg-tnc-text');
-    if (tncEl) tncEl.textContent = window.__seminarTermsText;
+    const cancelEl = document.getElementById('reg-cancel-policy-text');
+    const cancelWrap = document.getElementById('reg-cancel-policy-wrap');
+    const step0 = document.getElementById('step-0');
+    const ind0 = document.getElementById('ind-step-0');
+    const hasTerms = !!termsRaw;
+    if (tncEl) {
+        tncEl.textContent = hasTerms
+            ? window.__seminarTermsText
+            : 'No separate terms document for this seminar. Please review the cancellation policy below (if any) and continue.';
+    }
+    if (cancelWrap && cancelEl) {
+        if (window.__seminarCancellationSummary) {
+            cancelWrap.classList.remove('hidden');
+            cancelEl.textContent = window.__seminarCancellationSummary;
+        } else {
+            cancelWrap.classList.add('hidden');
+            cancelEl.textContent = '';
+        }
+    }
     const tncAcc = document.getElementById('reg-tnc-accept');
     if (tncAcc) tncAcc.checked = false;
+    if (step0) step0.classList.toggle('hidden', !hasTerms && !window.__seminarCancellationSummary);
+    if (ind0) ind0.style.display = hasTerms || window.__seminarCancellationSummary ? '' : 'none';
     await loadRegistrationFormConfigAndApply(seminarId);
     const emailEl = document.getElementById('reg-email');
     const phoneEl = document.getElementById('reg-phone');
     if (emailEl && currentUser && currentUser.email) emailEl.value = currentUser.email;
     if (phoneEl && currentUser && currentUser.phone) phoneEl.value = currentUser.phone;
 
-    nextStep(0);
+    nextStep(hasTerms || window.__seminarCancellationSummary ? 0 : 1);
 }
 
 function cancelRegistration() {
@@ -1514,7 +1542,10 @@ document.getElementById('btn-logout').addEventListener('click', () => {
 // --- MULTI-STEP FORM LOGIC ---
 // --- MULTI-STEP FORM LOGIC ---
 async function nextStep(step) {
-    if (step >= 1 && step <= REGISTRATION_PREVIEW_STEP && step !== 0) {
+    const needsTncStep =
+        !!window.__seminarTermsText ||
+        !!(document.getElementById('reg-cancel-policy-wrap') && !document.getElementById('reg-cancel-policy-wrap').classList.contains('hidden'));
+    if (step >= 1 && step <= REGISTRATION_PREVIEW_STEP && needsTncStep) {
         if (!document.getElementById('reg-tnc-accept')?.checked) {
             alert('Please accept the Terms and Conditions on the Terms step first.');
             return nextStep(0);

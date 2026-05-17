@@ -313,6 +313,7 @@ app.use((req, res, next) => {
         req.path.startsWith('/api/judge') ||
         req.path.startsWith('/api/scanner') ||
         req.path.startsWith('/api/branding') ||
+        req.path.startsWith('/api/assets/') ||
         req.path.startsWith('/api/case') ||
         req.path.startsWith('/api/doctor') ||
         req.path.startsWith('/api/applications') ||
@@ -514,6 +515,7 @@ const storage = multer.diskStorage({
     }
 });
 const upload = multer({ storage: storage, limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB max
+const memoryUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
 
 function ensureCriticalUserColumns(callback) {
     const ignoreDup = (err) => {
@@ -1812,7 +1814,7 @@ app.post('/api/auth/signup', (req, res) => {
     const { firstName, lastName, email, phone, password, role, phoneOtpToken, emailOtpToken } = req.body;
     const emailNorm = String(email || '').trim().toLowerCase();
     const phoneNorm = String(phone || '').trim();
-
+    
     const firstNameValidation = validateDoctorName(firstName);
     if (!firstNameValidation.valid) {
         return res.status(400).json({ error: `First name: ${firstNameValidation.message}` });
@@ -1821,22 +1823,22 @@ app.post('/api/auth/signup', (req, res) => {
     if (!lastNameValidation.valid) {
         return res.status(400).json({ error: `Last name: ${lastNameValidation.message}` });
     }
-
+    
     function insertUser() {
         const userIdStr = generateId();
-        const userRole = role || 'doctor';
-        const cleanFirstName = firstNameValidation.cleanedName;
-        const cleanLastName = lastNameValidation.cleanedName;
+    const userRole = role || 'doctor';
+    const cleanFirstName = firstNameValidation.cleanedName;
+    const cleanLastName = lastNameValidation.cleanedName;
         db.run(
             `INSERT INTO users (user_id_string, first_name, last_name, email, phone, password, role, user_role) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
             [userIdStr, cleanFirstName, cleanLastName, emailNorm, phoneNorm, password, userRole, userRole],
-            function (err) {
-                if (err) {
+        function (err) {
+            if (err) {
                     if (err.message.includes('UNIQUE constraint failed') || /unique|duplicate key/i.test(err.message)) {
-                        return res.status(400).json({ error: 'Email already exists.' });
-                    }
-                    return res.status(500).json({ error: err.message });
+                    return res.status(400).json({ error: 'Email already exists.' });
                 }
+                return res.status(500).json({ error: err.message });
+            }
                 const newUserId = this.lastID != null ? Number(this.lastID) : null;
                 if (!newUserId) {
                     return res.status(500).json({ error: 'Account was created but could not be confirmed. Try signing in with your email.' });
@@ -1887,8 +1889,8 @@ app.post('/api/auth/login', (req, res) => {
         `SELECT id, user_id_string, first_name, middle_name, last_name, email, phone, password, role, user_role, is_disabled, IFNULL(is_demo,0) AS is_demo, admin_modules FROM users WHERE lower(trim(email)) = ? AND password = ?`,
         [emailNorm, password],
         (err, row) => {
-            if (err) return res.status(500).json({ error: err.message });
-            if (!row) return res.status(401).json({ error: 'Invalid credentials' });
+        if (err) return res.status(500).json({ error: err.message });
+        if (!row) return res.status(401).json({ error: 'Invalid credentials' });
             if (Number(row.is_disabled) === 1) {
                 return res.status(403).json({ error: 'Your account has been disabled. Please contact support.' });
             }
@@ -1896,7 +1898,7 @@ app.post('/api/auth/login', (req, res) => {
             function sendUser() {
                 delete row.password;
                 normalizeAuthUserRow(row);
-                res.json({ success: true, user: row });
+        res.json({ success: true, user: row });
             }
 
             if (loginOtpRequired()) {
@@ -1956,7 +1958,11 @@ app.get('/api/seminars', (req, res) => {
             sql = `SELECT * FROM seminars WHERE is_active = 1 AND portal_year IS NOT NULL AND portal_year < ? ORDER BY event_date DESC, id DESC`;
             params = [activeYear];
         } else {
-            sql = `SELECT * FROM seminars WHERE is_active = 1 AND (portal_year = ? OR (portal_year IS NULL AND CAST(strftime('%Y', COALESCE(event_date, created_at)) AS INTEGER) = ?)) ORDER BY event_date ASC, id DESC`;
+            sql = `SELECT * FROM seminars WHERE is_active = 1 AND (
+                portal_year = ?
+                OR portal_year IS NULL
+                OR CAST(strftime('%Y', COALESCE(event_date, created_at)) AS INTEGER) = ?
+            ) ORDER BY event_date ASC, id DESC`;
             params = [activeYear, activeYear];
         }
         db.all(sql, params, (err, rows) => {
@@ -2092,11 +2098,55 @@ app.post('/api/admin/site-cms', (req, res) => {
     });
 });
 
-app.post('/api/admin/upload-asset', upload.single('file'), (req, res) => {
-    if (!req.file || !req.file.filename) {
+app.post('/api/admin/upload-asset', (req, res, next) => {
+    (process.env.VERCEL ? memoryUpload : upload).single('file')(req, res, next);
+}, (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ error: 'file is required' });
+    }
+    if (process.env.VERCEL && req.file.buffer) {
+        const crypto = require('crypto');
+        const key =
+            'upload_asset_' +
+            Date.now() +
+            '_' +
+            crypto.randomBytes(6).toString('hex');
+        const payload = JSON.stringify({
+            mime: req.file.mimetype || 'application/octet-stream',
+            data: req.file.buffer.toString('base64'),
+            name: req.file.originalname || 'file'
+        });
+        return upsertGlobalSetting(key, payload, (err) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ success: true, path: '/api/assets/' + encodeURIComponent(key) });
+        });
+    }
+    if (!req.file.filename) {
         return res.status(400).json({ error: 'file is required' });
     }
     res.json({ success: true, path: '/uploads/' + req.file.filename });
+});
+
+app.get('/api/assets/:key', (req, res) => {
+    const key = decodeURIComponent(String(req.params.key || ''));
+    if (!/^upload_asset_[a-z0-9_]+$/i.test(key)) {
+        return res.status(400).json({ error: 'Invalid asset key' });
+    }
+    db.get(`SELECT value FROM global_settings WHERE key = ?`, [key], (e, row) => {
+        if (e) return res.status(500).end();
+        if (!row || !row.value) return res.status(404).end();
+        let payload;
+        try {
+            payload = JSON.parse(row.value);
+        } catch (_) {
+            return res.status(404).end();
+        }
+        if (!payload || !payload.data) return res.status(404).end();
+        const buf = Buffer.from(payload.data, 'base64');
+        res.setHeader('Content-Type', payload.mime || 'application/octet-stream');
+        res.setHeader('Cache-Control', 'public, max-age=86400');
+        res.send(buf);
+    });
 });
 
 app.post('/api/admin/registration-form-config', (req, res) => {
@@ -2270,7 +2320,7 @@ app.post('/api/applications/submit', upload.single('certificate'), (req, res) =>
     if (!Number.isInteger(seminarId) || seminarId < 1) {
         return res.status(400).json({ error: 'Invalid seminar.' });
     }
-
+    
     // formData might be passed as string if using FormData API
     if (typeof formData === 'string') {
         try {
@@ -2278,7 +2328,7 @@ app.post('/api/applications/submit', upload.single('certificate'), (req, res) =>
         } catch (e) {}
     }
     const fieldOtpTokensObj = parseMaybeJson(fieldOtpTokens) || (fieldOtpTokens && typeof fieldOtpTokens === 'object' ? fieldOtpTokens : {});
-
+    
     // Check if user already registered for this event
     db.get(`SELECT id FROM registrations WHERE user_id = ? AND seminar_id = ?`, [userId, seminarId], (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -2292,34 +2342,34 @@ app.post('/api/applications/submit', upload.single('certificate'), (req, res) =>
             `SELECT registration_start, registration_end, otp_on_application, title FROM seminars WHERE id = ? AND is_active = 1`,
             [seminarId],
             (err2, sem) => {
-                if (err2) return res.status(500).json({ error: err2.message });
-                if (!sem) return res.status(400).json({ error: 'Seminar not found or is not active.' });
+            if (err2) return res.status(500).json({ error: err2.message });
+            if (!sem) return res.status(400).json({ error: 'Seminar not found or is not active.' });
 
-                const now = Date.now();
-                const rs = sem.registration_start ? new Date(sem.registration_start).getTime() : null;
-                const re = sem.registration_end ? new Date(sem.registration_end).getTime() : null;
-                if (rs != null && !Number.isNaN(rs) && now < rs) {
+            const now = Date.now();
+            const rs = sem.registration_start ? new Date(sem.registration_start).getTime() : null;
+            const re = sem.registration_end ? new Date(sem.registration_end).getTime() : null;
+            if (rs != null && !Number.isNaN(rs) && now < rs) {
                     return res.status(400).json({
                         error: 'Registration for this seminar has not opened yet. Please wait until the scheduled registration date.'
                     });
-                }
-                if (re != null && !Number.isNaN(re) && now > re) {
+            }
+            if (re != null && !Number.isNaN(re) && now > re) {
                     return extModules.userHasRegistrationOverride(db, userId, seminarId, (ovErr, hasOverride) => {
                         if (ovErr) return res.status(500).json({ error: ovErr.message });
                         if (!hasOverride) {
-                            return res.status(400).json({ error: 'Registration for this seminar has closed.' });
+                return res.status(400).json({ error: 'Registration for this seminar has closed.' });
                         }
                         continueApplicationSubmit();
                     });
                 } else {
                     continueApplicationSubmit();
-                }
+            }
 
                 function continueApplicationSubmit() {
-                if (req.file) {
-                    formData = formData || {};
-                    formData.certificate_path = req.file.filename;
-                }
+            if (req.file) {
+                formData = formData || {};
+                formData.certificate_path = req.file.filename;
+            }
 
                 loadRegistrationFormConfig(seminarId, (cfgErr, regFields) => {
                     if (cfgErr) return res.status(500).json({ error: cfgErr.message });
@@ -2356,8 +2406,8 @@ app.post('/api/applications/submit', upload.single('certificate'), (req, res) =>
                         db.run(
                             `INSERT INTO registrations (user_id, seminar_id, application_no, status, form_data) VALUES (?, ?, ?, 'submitted', ?)`,
                             [userId, seminarId, applicationNo, JSON.stringify(stored)],
-                            function (err3) {
-                                if (err3) return res.status(500).json({ error: err3.message });
+                function (err3) {
+                    if (err3) return res.status(500).json({ error: err3.message });
                                 const newId = this.lastID;
                                 portalTracking.logRegistrationEvent(
                                     db,
@@ -2429,19 +2479,19 @@ app.get('/api/applications/:userId', (req, res) => {
 // 5c. Edit Application
 app.put('/api/applications/:applicationId', upload.single('certificate'), (req, res) => {
     let { formData, phoneOtpToken, emailOtpToken, fieldOtpTokens } = req.body;
-
+    
     if (typeof formData === 'string') {
         try {
             formData = JSON.parse(formData);
         } catch (e) {}
     }
     const fieldOtpTokensObj = parseMaybeJson(fieldOtpTokens) || (fieldOtpTokens && typeof fieldOtpTokens === 'object' ? fieldOtpTokens : {});
-
+    
     if (req.file) {
         formData = formData || {};
         formData.certificate_path = req.file.filename;
     }
-
+    
     db.get(
         `SELECT r.user_id, r.seminar_id, r.status, r.form_data, IFNULL(s.otp_on_application, 0) AS otp_on_application
          FROM registrations r
@@ -2449,9 +2499,9 @@ app.put('/api/applications/:applicationId', upload.single('certificate'), (req, 
          WHERE r.id = ?`,
         [req.params.applicationId],
         (err, row) => {
-            if (err) return res.status(500).json({ error: err.message });
-            if (!row) return res.status(404).json({ error: 'Application not found' });
-
+        if (err) return res.status(500).json({ error: err.message });
+        if (!row) return res.status(404).json({ error: 'Application not found' });
+        
             const st = String(row.status || '').toLowerCase();
             if (st !== 'submitted' && st !== 'pending_approval') {
                 return res.status(400).json({
@@ -2482,17 +2532,17 @@ app.put('/api/applications/:applicationId', upload.single('certificate'), (req, 
 
                 function persistUpdate() {
                     const mergedStored = sanitizeFormDataForStorage(merged);
-                    const changes = JSON.stringify({
-                        old: row.form_data,
+        const changes = JSON.stringify({
+            old: row.form_data,
                         new: mergedStored,
-                        timestamp: new Date().toISOString()
-                    });
-
+            timestamp: new Date().toISOString()
+        });
+        
                     db.run(
                         `INSERT INTO application_edits (application_id, edited_by_user_id, changes) VALUES (?, ?, ?)`,
                         [req.params.applicationId, row.user_id, changes],
                         (editErr) => {
-                            if (editErr) console.error('Edit history error:', editErr.message);
+                if (editErr) console.error('Edit history error:', editErr.message);
                         }
                     );
 
@@ -2567,7 +2617,7 @@ app.post('/api/applications/:applicationId/cancel', (req, res) => {
          WHERE r.id = ?`,
         [applicationId],
         (err, reg) => {
-            if (err) return res.status(500).json({ error: err.message });
+                if (err) return res.status(500).json({ error: err.message });
             if (!reg) return res.status(404).json({ error: 'Application not found.' });
             if (Number(reg.user_id) !== userId) {
                 return res.status(403).json({ error: 'You can only cancel your own applications.' });
@@ -2960,18 +3010,18 @@ app.post('/api/payments/process', (req, res) => {
             });
         }
 
-        const orderIdStr = 'ORD_' + generateId();
+    const orderIdStr = 'ORD_' + generateId();
 
         const startPayment = (gateway) => {
-            if (!gateway) {
+        if (!gateway) {
                 const mockTxn = 'MOCK' + generateId();
                 db.run(
                     `INSERT INTO orders (order_id_string, registration_id, amount, status, payment_date, payment_gateway, provider_transaction_id) VALUES (?, ?, ?, 'success', CURRENT_TIMESTAMP, 'mock', ?)`,
                     [orderIdStr, regId, amount, mockTxn],
-                    function (err) {
+                function (err) {
                         if (err) return res.status(500).json({ success: false, error: err.message });
-
-                        const newOrderId = this.lastID;
+                    
+                    const newOrderId = this.lastID;
 
                         db.run(`UPDATE registrations SET status = 'completed' WHERE id = ?`, [regId]);
                         db.get(`SELECT application_no FROM registrations WHERE id = ?`, [regId], (gErr, regRow) => {
@@ -2988,22 +3038,22 @@ app.post('/api/payments/process', (req, res) => {
                                     message: msg,
                                     transactionId: mockTxn,
                                     eTicketSkipped: !!(meta && meta.skipped)
-                                });
-                            });
+                        });
+                });
                         });
                     }
                 );
-                return;
-            }
+            return;
+        }
 
-            if (gateway.name === 'razorpay') {
-                const razorpay = new Razorpay({
-                    key_id: gateway.config.key_id,
+        if (gateway.name === 'razorpay') {
+            const razorpay = new Razorpay({
+                key_id: gateway.config.key_id,
                     key_secret: gateway.config.key_secret
-                });
-                const options = {
+            });
+            const options = {
                     amount: amount * 100,
-                    currency: 'INR',
+                currency: 'INR',
                     receipt: orderIdStr.length > 40 ? orderIdStr.slice(0, 40) : orderIdStr
                 };
                 const gwTag =
@@ -3035,17 +3085,17 @@ app.post('/api/payments/process', (req, res) => {
                         });
                     }
                 );
-            } else if (gateway.name === 'payu') {
-                res.json({ success: true, message: 'PayU integration pending', gateway: 'payu' });
-            } else if (gateway.name === 'easebuzz') {
-                res.json({ success: true, message: 'Easebuzz integration pending', gateway: 'easebuzz' });
-            } else if (gateway.name === 'paytm') {
-                res.json({ success: true, message: 'Paytm integration pending', gateway: 'paytm' });
-            } else if (gateway.name === 'phonepe') {
-                res.json({ success: true, message: 'PhonePe integration pending', gateway: 'phonepe' });
-            } else if (gateway.name === 'cashfree') {
-                res.json({ success: true, message: 'Cashfree integration pending', gateway: 'cashfree' });
-            } else {
+        } else if (gateway.name === 'payu') {
+            res.json({ success: true, message: 'PayU integration pending', gateway: 'payu' });
+        } else if (gateway.name === 'easebuzz') {
+            res.json({ success: true, message: 'Easebuzz integration pending', gateway: 'easebuzz' });
+        } else if (gateway.name === 'paytm') {
+            res.json({ success: true, message: 'Paytm integration pending', gateway: 'paytm' });
+        } else if (gateway.name === 'phonepe') {
+            res.json({ success: true, message: 'PhonePe integration pending', gateway: 'phonepe' });
+        } else if (gateway.name === 'cashfree') {
+            res.json({ success: true, message: 'Cashfree integration pending', gateway: 'cashfree' });
+        } else {
                 res.status(400).json({ success: false, error: 'Unsupported gateway' });
             }
         };
@@ -3454,13 +3504,15 @@ app.post('/api/admin/seminars', (req, res) => {
         cancellation_policy_json,
         whatsapp_group_url,
         otp_on_application,
-        public_list_enabled
+        public_list_enabled,
+        is_active
     } = req.body;
     const rfj = registration_form_json != null && String(registration_form_json).trim() !== '' ? String(registration_form_json) : null;
     const cpj = cancellation_policy_json != null && String(cancellation_policy_json).trim() !== '' ? String(cancellation_policy_json) : null;
     const wu = whatsapp_group_url != null && String(whatsapp_group_url).trim() !== '' ? String(whatsapp_group_url).trim() : null;
     const otpApp = otp_on_application ? 1 : 0;
     const pubList = public_list_enabled ? 1 : 0;
+    const activeFlag = is_active === false || is_active === 0 || is_active === '0' ? 0 : 1;
     const bodyYear = req.body && req.body.portal_year != null ? parseInt(req.body.portal_year, 10) : null;
     portalTracking.getPortalYear(db, (ePy, defaultYear) => {
         const portalYear =
@@ -3470,8 +3522,8 @@ app.post('/api/admin/seminars', (req, res) => {
                   ? new Date(event_date).getFullYear()
                   : defaultYear;
         db.run(
-            `INSERT INTO seminars (title, description, registration_start, registration_end, event_date, capacity, price, checkin_enabled, checkin_date, location_url, terms_conditions, hero_image_path, flyer_path, gallery_paths, registration_form_json, cancellation_policy_json, whatsapp_group_url, otp_on_application, public_list_enabled, portal_year) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO seminars (title, description, registration_start, registration_end, event_date, capacity, price, checkin_enabled, checkin_date, location_url, terms_conditions, hero_image_path, flyer_path, gallery_paths, registration_form_json, cancellation_policy_json, whatsapp_group_url, otp_on_application, public_list_enabled, portal_year, is_active) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 title,
                 description,
@@ -3492,16 +3544,17 @@ app.post('/api/admin/seminars', (req, res) => {
                 wu,
                 otpApp,
                 pubList,
-                portalYear
+                portalYear,
+                activeFlag
             ],
             function (err) {
-                if (err) return res.status(500).json({ error: err.message });
+            if (err) return res.status(500).json({ error: err.message });
                 const newId = this.lastID;
                 syncSeminarCmsAfterSave(newId, true, () => {});
                 res.json({ success: true, seminarId: newId });
             }
         );
-    });
+        });
 });
 
 // Admin: Update Seminar
@@ -3567,6 +3620,86 @@ app.put('/api/admin/seminars/:id', (req, res) => {
             res.json({ success: true });
         }
     );
+});
+
+function deleteRegistrationCascade(registrationId, cb) {
+    const rid = parseInt(registrationId, 10);
+    if (!Number.isInteger(rid) || rid < 1) return cb(new Error('Invalid registration id'));
+    db.run(`DELETE FROM registration_status_log WHERE registration_id = ?`, [rid], () => {
+        db.run(`DELETE FROM registration_reminder_log WHERE registration_id = ?`, [rid], () => {
+            db.run(`DELETE FROM user_certificates WHERE registration_id = ?`, [rid], () => {
+                db.get(`SELECT id FROM orders WHERE registration_id = ?`, [rid], (e0, orderRow) => {
+                    const finishOrders = () => {
+                        db.run(`DELETE FROM orders WHERE registration_id = ?`, [rid], () => {
+                            db.run(`DELETE FROM registrations WHERE id = ?`, [rid], function (e3) {
+                                if (e3) return cb(e3);
+                                cb(null, { deleted: this.changes > 0 });
+                            });
+                        });
+                    };
+                    if (e0 || !orderRow) return finishOrders();
+                    db.run(`DELETE FROM tickets WHERE order_id = ?`, [orderRow.id], () => finishOrders());
+                });
+            });
+        });
+    });
+}
+
+app.delete('/api/admin/registrations/:id', (req, res) => {
+    deleteRegistrationCascade(req.params.id, (err, result) => {
+        if (err) return res.status(400).json({ error: err.message });
+        if (!result || !result.deleted) return res.status(404).json({ error: 'Registration not found' });
+        res.json({ success: true });
+    });
+});
+
+app.delete('/api/admin/seminars/:id', (req, res) => {
+    const sid = parseInt(req.params.id, 10);
+    if (!Number.isInteger(sid) || sid < 1) return res.status(400).json({ error: 'Invalid seminar id' });
+    const permanent = String((req.query && req.query.permanent) || '') === '1';
+    db.get(`SELECT COUNT(*) AS c FROM registrations WHERE seminar_id = ?`, [sid], (e0, row) => {
+        if (e0) return res.status(500).json({ error: e0.message });
+        const regCount = row && row.c != null ? Number(row.c) : 0;
+        if (regCount > 0 && !permanent) {
+            db.run(`UPDATE seminars SET is_active = 0 WHERE id = ?`, [sid], function (e1) {
+                if (e1) return res.status(500).json({ error: e1.message });
+                if (!this.changes) return res.status(404).json({ error: 'Seminar not found' });
+                res.json({
+                    success: true,
+                    deactivated: true,
+                    message:
+                        'Seminar has registrations — marked inactive instead of permanent delete. Use permanent=1 to force delete.'
+                });
+            });
+            return;
+        }
+        const removeSeminar = () => {
+            db.run(`DELETE FROM seminars WHERE id = ?`, [sid], function (eDel) {
+                if (eDel) return res.status(500).json({ error: eDel.message });
+                if (!this.changes) return res.status(404).json({ error: 'Seminar not found' });
+                res.json({ success: true, deleted: true });
+            });
+        };
+        if (regCount === 0) return removeSeminar();
+        db.all(`SELECT id FROM registrations WHERE seminar_id = ?`, [sid], (e2, regs) => {
+            if (e2) return res.status(500).json({ error: e2.message });
+            let i = 0;
+            const next = () => {
+                if (i >= (regs || []).length) {
+                    db.run(`DELETE FROM notices WHERE seminar_id = ?`, [sid], () => {
+                        db.run(`DELETE FROM certificate_templates WHERE seminar_id = ?`, [sid], () => removeSeminar());
+                    });
+                    return;
+                }
+                deleteRegistrationCascade(regs[i].id, (e3) => {
+                    if (e3) return res.status(500).json({ error: e3.message });
+                    i++;
+                    next();
+                });
+            };
+            next();
+        });
+    });
 });
 
 // Admin: Set Countdown Active
@@ -3687,8 +3820,8 @@ app.post('/api/admin/applications/status', (req, res) => {
         const prevStatus = String((prevRow && prevRow.status) || '').toLowerCase();
         const fromRejectedOrCancelled = prevStatus === 'rejected' || prevStatus === 'cancelled';
 
-        db.run(`UPDATE registrations SET status = ? WHERE id = ?`, [status, applicationId], function(err) {
-            if (err) return res.status(500).json({ error: err.message });
+    db.run(`UPDATE registrations SET status = ? WHERE id = ?`, [status, applicationId], function(err) {
+        if (err) return res.status(500).json({ error: err.message });
 
             const newSt = String(status || '').toLowerCase();
             const logEntries = portalTracking.registrationStatusToLog(newSt, prevStatus);
@@ -3727,31 +3860,31 @@ app.post('/api/admin/applications/status', (req, res) => {
                     });
                 }
             });
-
-            if (status === 'approved_pending_payment' || status === 'completed') {
-                const orderIdStr = 'ORD_' + generateId();
-                db.run(`INSERT OR IGNORE INTO orders (order_id_string, registration_id, amount, status) VALUES (?, ?, 1500, 'pending')`,
-                    [orderIdStr, applicationId], function(err) {
+        
+        if (status === 'approved_pending_payment' || status === 'completed') {
+            const orderIdStr = 'ORD_' + generateId();
+            db.run(`INSERT OR IGNORE INTO orders (order_id_string, registration_id, amount, status) VALUES (?, ?, 1500, 'pending')`,
+                [orderIdStr, applicationId], function(err) {
                         if (status === 'completed' && !fromRejectedOrCancelled) {
                             db.get(`SELECT id, order_id_string FROM orders WHERE registration_id = ?`, [applicationId], (err, order) => {
                                 if (order) {
-                                    db.run(`UPDATE orders SET status = 'success', payment_date = CURRENT_TIMESTAMP WHERE id = ?`, [order.id]);
-
-                                    db.get(`SELECT id FROM tickets WHERE order_id = ?`, [order.id], (err, ticket) => {
+                                db.run(`UPDATE orders SET status = 'success', payment_date = CURRENT_TIMESTAMP WHERE id = ?`, [order.id]);
+                                
+                                db.get(`SELECT id FROM tickets WHERE order_id = ?`, [order.id], (err, ticket) => {
                                         if (!ticket) {
                                             db.get(`SELECT user_id, application_no, status FROM registrations WHERE id = ?`, [applicationId], (err, reg) => {
                                                 if (!reg) return;
                                                 if (reg.status === 'rejected' || reg.status === 'cancelled') return;
                                                 insertParticipantTicket(order.id, reg.user_id, order.order_id_string || '', applicationId, reg.application_no, () => {});
-                                            });
-                                        }
-                                    });
-                                }
-                            });
-                        }
-                    });
-            }
-            res.json({ success: true });
+                                        });
+                                    }
+                                });
+                            }
+                        });
+                    }
+                });
+        }
+        res.json({ success: true });
         });
     });
 });
@@ -3762,7 +3895,7 @@ app.post('/api/payments/verify', (req, res) => {
     const optionId =
         paymentOption ||
         (gateway && mode ? gateway + ':' + mode : gateway === 'razorpay' ? 'razorpay:test' : null);
-
+    
     resolveDoctorPaymentOption(optionId, (eGw, activeGateway) => {
         if (eGw) return res.status(500).json({ error: eGw.message });
         if (!activeGateway || activeGateway.name !== gateway) {
@@ -4489,8 +4622,8 @@ app.get('/api/event-schedules', (req, res) => {
          ORDER BY es.start_time ASC`,
         [],
         (err, rows) => {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json(rows || []);
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows || []);
         }
     );
 });
@@ -4509,8 +4642,8 @@ app.get('/api/event-schedules/by-seminar/:seminarId', (req, res) => {
          ORDER BY es.start_time ASC`,
         [seminarId],
         (err, rows) => {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json(rows || []);
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows || []);
         }
     );
 });
@@ -4526,7 +4659,7 @@ app.post('/api/admin/event-schedules', (req, res) => {
     }
     db.run(
         `INSERT INTO event_schedules (title, description, seminar_id, start_time, end_time, location, speaker_name, speaker_bio)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
             String(title).trim(),
             description || null,
@@ -4797,7 +4930,7 @@ if (!process.env.VERCEL) {
             app.listen(PORT, () => {
                 console.log(`Server is running on http://localhost:${PORT}`);
                 console.log('[routes] Case presentation APIs: /api/admin/case/programs, /api/case/programs');
-            });
-        });
+    });
+});
     });
 }
