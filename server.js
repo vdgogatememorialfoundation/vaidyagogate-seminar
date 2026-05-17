@@ -3937,9 +3937,72 @@ app.get('/api/admin/applications', (req, res) => {
     });
 });
 
+const ALLOWED_REGISTRATION_STATUSES = new Set([
+    'submitted',
+    'pending_approval',
+    'approved_pending_payment',
+    'completed',
+    'e_ticket_issued',
+    'certificate_issued',
+    'checked_in',
+    'rejected',
+    'cancelled'
+]);
+
+function safeDisableCertificatesForRegistration(registrationId, cb) {
+    db.run(
+        `UPDATE user_certificates SET enabled = 0, updated_at = CURRENT_TIMESTAMP WHERE registration_id = ?`,
+        [registrationId],
+        (e) => {
+            if (e && /relation .* does not exist/i.test(e.message)) return cb && cb(null);
+            cb && cb(e);
+        }
+    );
+}
+
+function enableCertificateForRegistration(registrationId, cb) {
+    db.get(
+        `SELECT r.user_id, r.seminar_id, r.form_data, u.first_name, u.middle_name, u.last_name
+         FROM registrations r JOIN users u ON u.id = r.user_id WHERE r.id = ?`,
+        [registrationId],
+        (e, row) => {
+            if (e) return cb && cb(e);
+            if (!row) return cb && cb(null);
+            const displayName = buildDisplayNameFromFormData(row.form_data, row);
+            db.get(
+                `SELECT id FROM certificate_templates WHERE seminar_id = ? AND is_active = 1 ORDER BY id DESC LIMIT 1`,
+                [row.seminar_id],
+                (e2, tpl) => {
+                    if (e2 && /relation .* does not exist/i.test(e2.message)) return cb && cb(null);
+                    if (e2) return cb && cb(e2);
+                    db.run(
+                        `INSERT INTO user_certificates (user_id, seminar_id, registration_id, display_name, template_id, enabled, updated_at)
+                         VALUES (?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
+                         ON CONFLICT (user_id, seminar_id) DO UPDATE SET
+                           enabled = 1,
+                           registration_id = excluded.registration_id,
+                           display_name = excluded.display_name,
+                           template_id = COALESCE(excluded.template_id, user_certificates.template_id),
+                           updated_at = CURRENT_TIMESTAMP`,
+                        [row.user_id, row.seminar_id, registrationId, displayName, tpl ? tpl.id : null],
+                        (e3) => {
+                            if (e3 && /relation .* does not exist/i.test(e3.message)) return cb && cb(null);
+                            cb && cb(e3);
+                        }
+                    );
+                }
+            );
+        }
+    );
+}
+
 // Admin: Update Application Status
 app.post('/api/admin/applications/status', (req, res) => {
     const { applicationId, status } = req.body;
+    const newSt = String(status || '').toLowerCase();
+    if (!ALLOWED_REGISTRATION_STATUSES.has(newSt)) {
+        return res.status(400).json({ error: 'Invalid application status.' });
+    }
     db.get(`SELECT status FROM registrations WHERE id = ?`, [applicationId], (e0, prevRow) => {
         if (e0) return res.status(500).json({ error: e0.message });
         const prevStatus = String((prevRow && prevRow.status) || '').toLowerCase();
@@ -3948,7 +4011,6 @@ app.post('/api/admin/applications/status', (req, res) => {
     db.run(`UPDATE registrations SET status = ? WHERE id = ?`, [status, applicationId], function(err) {
         if (err) return res.status(500).json({ error: err.message });
 
-            const newSt = String(status || '').toLowerCase();
             const logEntries = portalTracking.registrationStatusToLog(newSt, prevStatus);
             logEntries.forEach((entry) => {
                 portalTracking.logRegistrationEvent(
@@ -3963,12 +4025,11 @@ app.post('/api/admin/applications/status', (req, res) => {
             if (newSt === 'cancelled' || newSt === 'rejected') {
                 invalidateTicketsForRegistration(applicationId, () => {});
                 if (newSt === 'cancelled') {
-                    db.run(
-                        `UPDATE user_certificates SET enabled = 0, updated_at = CURRENT_TIMESTAMP WHERE registration_id = ?`,
-                        [applicationId],
-                        () => {}
-                    );
+                    safeDisableCertificatesForRegistration(applicationId, () => {});
                 }
+            }
+            if (newSt === 'certificate_issued') {
+                enableCertificateForRegistration(applicationId, () => {});
             }
 
             db.get(`SELECT user_id, seminar_id FROM registrations WHERE id = ?`, [applicationId], (eN, regRow) => {
@@ -4009,7 +4070,13 @@ app.post('/api/admin/applications/status', (req, res) => {
                     }
                 });
         }
-        res.json({ success: true });
+        res.json({
+            success: true,
+            message:
+                newSt === 'approved_pending_payment'
+                    ? 'Status updated. An order was created for payment.'
+                    : 'Status updated successfully.'
+        });
         });
     });
 });

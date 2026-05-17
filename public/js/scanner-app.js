@@ -1,4 +1,23 @@
 (function () {
+    const isNativeScannerShell =
+        !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) ||
+        /VGMF Scanner|Capacitor/i.test(navigator.userAgent || '');
+    if (isNativeScannerShell) {
+        document.documentElement.classList.add('scanner-native-shell');
+        document.querySelectorAll('a[href]').forEach((a) => {
+            const href = String(a.getAttribute('href') || '');
+            if (href && href !== '#' && !href.includes('scanner.html')) {
+                a.addEventListener('click', (e) => e.preventDefault());
+            }
+        });
+        window.addEventListener('beforeunload', (e) => {
+            if (!window.__scannerAllowLeave) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        });
+    }
+
     const authOverlay = document.getElementById('auth-overlay');
     const ui = document.getElementById('scan-ui');
     const loginErr = document.getElementById('login-err');

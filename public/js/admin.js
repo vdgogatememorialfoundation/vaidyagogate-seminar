@@ -3,6 +3,26 @@ let __adminLoginPhoneOtpToken = null;
 let __adminLoginEmailOtpToken = null;
 let __adminBehalfSaveTimer = null;
 
+const ADMIN_REGISTRATION_STATUSES = [
+    { value: 'submitted', label: 'Submitted' },
+    { value: 'pending_approval', label: 'Under admin review' },
+    { value: 'approved_pending_payment', label: 'Approved — payment due' },
+    { value: 'completed', label: 'Payment completed' },
+    { value: 'e_ticket_issued', label: 'E-ticket issued' },
+    { value: 'certificate_issued', label: 'Certificate issued' },
+    { value: 'checked_in', label: 'Checked in' },
+    { value: 'rejected', label: 'Rejected' },
+    { value: 'cancelled', label: 'Cancelled' }
+];
+
+function adminRegistrationStatusOptionsHtml(current) {
+    const cur = String(current || '').toLowerCase();
+    return ADMIN_REGISTRATION_STATUSES.map((s) => {
+        const sel = cur === s.value ? ' selected' : '';
+        return '<option value="' + s.value + '"' + sel + '>' + s.label + '</option>';
+    }).join('');
+}
+
 function getStoredAdminUser() {
     try {
         return JSON.parse(localStorage.getItem('admin_user') || '{}');
@@ -1867,12 +1887,8 @@ async function loadApplications() {
                     <td>${a.user_id_string}</td>
                     <td>${candidateName}${fileLink}</td>
                     <td>
-                        <select onchange="updateAppStatus(${a.id}, this.value)" style="width: auto;">
-                            <option value="submitted" ${a.status==='submitted'?'selected':''}>Submitted</option>
-                            <option value="approved_pending_payment" ${a.status==='approved_pending_payment'?'selected':''}>Approved (Pending Pay)</option>
-                            <option value="completed" ${a.status==='completed'?'selected':''}>Payment Completed</option>
-                            <option value="rejected" ${a.status==='rejected'?'selected':''}>Rejected</option>
-                            <option value="checked_in" ${a.status==='checked_in'?'selected':''}>Checked In</option>
+                        <select onchange="updateAppStatus(${a.id}, this.value)" style="width: auto; min-width: 200px;">
+                            ${adminRegistrationStatusOptionsHtml(a.status)}
                         </select>
                     </td>
                     <td>
@@ -1911,13 +1927,21 @@ function viewFullApplication(index) {
 
 async function updateAppStatus(appId, status) {
     try {
-        await fetch('/api/admin/applications/status', {
+        const res = await fetch('/api/admin/applications/status', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ applicationId: appId, status })
         });
-        alert('Status updated successfully! If approved, an Order has been auto-generated for payment.');
-    } catch(err) { console.error(err); }
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            return alert(data.error || 'Status update failed (HTTP ' + res.status + ').');
+        }
+        alert(data.message || 'Status updated successfully.');
+        loadApplications();
+    } catch(err) {
+        console.error(err);
+        alert('Status update failed. Check your connection and try again.');
+    }
 }
 
 async function loadIntegrationSettings() {
@@ -2053,7 +2077,8 @@ async function loadSettings() {
                 document.getElementById('pg-razorpay-test-enabled').checked = test.enabled !== false;
                 document.getElementById('pg-razorpay-live-key-id').value = live.key_id || '';
                 document.getElementById('pg-razorpay-live-key-secret').value = live.key_secret || '';
-                document.getElementById('pg-razorpay-live-enabled').checked = !!live.enabled;
+                document.getElementById('pg-razorpay-live-enabled').checked =
+                    !!live.enabled || !!(live.key_id && live.key_secret);
                 document.getElementById('pg-razorpay-active').checked = pg.is_active;
             } else if (pg.name === 'payu') {
                 document.getElementById('pg-payu-merchant-key').value = config.merchant_key || '';
