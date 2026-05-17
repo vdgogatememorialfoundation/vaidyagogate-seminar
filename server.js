@@ -504,15 +504,24 @@ function ensureCriticalUserColumns(callback) {
                     ignoreDup(r1);
                     db.run(`ALTER TABLE registrations ADD COLUMN admin_editor_user_id INTEGER`, (r2) => {
                         ignoreDup(r2);
-                        db.run(`ALTER TABLE case_judge_scores ADD COLUMN is_locked INTEGER DEFAULT 0`, (r3) => {
-                            ignoreDup(r3);
-                            db.run(`ALTER TABLE users ADD COLUMN is_demo INTEGER DEFAULT 0`, (r4) => {
-                                ignoreDup(r4);
-                                ensurePortalSchema(() => callback());
-                            });
+                        db.run(`ALTER TABLE registrations ADD COLUMN updated_at DATETIME`, (r2b) => {
+                            ignoreDup(r2b);
+                            db.run(
+                                `UPDATE registrations SET updated_at = created_at WHERE updated_at IS NULL`,
+                                (r2c) => {
+                                    ignoreDup(r2c);
+                                    db.run(`ALTER TABLE case_judge_scores ADD COLUMN is_locked INTEGER DEFAULT 0`, (r3) => {
+                                        ignoreDup(r3);
+                                        db.run(`ALTER TABLE users ADD COLUMN is_demo INTEGER DEFAULT 0`, (r4) => {
+                                            ignoreDup(r4);
+                                            ensurePortalSchema(() => callback());
+                                        });
+                                    });
+                                }
+                            );
                         });
                     });
-                    });
+                });
             });
         });
     });
@@ -2129,7 +2138,8 @@ function healOrphanRegistrationsForUser(uid, cb) {
 
 function fetchApplicationsForUser(uid, yearFilter, cb) {
     if (!parsePositiveUserId(uid)) return cb(new Error('Invalid user id'));
-    let sql = `SELECT r.id, r.seminar_id, r.application_no, r.status, r.form_data, r.created_at, r.updated_at,
+    let sql = `SELECT r.id, r.seminar_id, r.application_no, r.status, r.form_data, r.created_at,
+                r.created_at AS updated_at,
                 s.title AS seminar_title, s.whatsapp_group_url, s.cancellation_policy_json, s.terms_conditions,
                 s.event_date AS seminar_event_date, s.price AS seminar_price, s.portal_year
          FROM registrations r

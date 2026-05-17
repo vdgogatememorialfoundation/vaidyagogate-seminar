@@ -48,7 +48,11 @@ CREATE TABLE IF NOT EXISTS registrations (
         application_no TEXT UNIQUE,
         status TEXT DEFAULT 'pending_approval',
         rejection_reason TEXT,
-        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, form_data TEXT, registration_source TEXT DEFAULT 'doctor', admin_editor_user_id INTEGER,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+        form_data TEXT,
+        registration_source TEXT DEFAULT 'doctor',
+        admin_editor_user_id INTEGER,
         FOREIGN KEY (seminar_id) REFERENCES seminars(id)
     );
 CREATE TABLE IF NOT EXISTS orders (
