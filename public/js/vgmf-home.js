@@ -258,7 +258,16 @@
             }
             wrap.innerHTML = list
                 .map((s) => {
-                    const ed = s.event_date ? new Date(s.event_date).toLocaleDateString() : 'Date TBA';
+                    const ed =
+                        s.event_date && window.PortalDateTime
+                            ? window.PortalDateTime.format(s.event_date, {
+                                  day: 'numeric',
+                                  month: 'short',
+                                  year: 'numeric'
+                              })
+                            : s.event_date
+                              ? new Date(s.event_date).toLocaleDateString()
+                              : 'Date TBA';
                     const desc = escHtml((s.description || '').slice(0, 140));
                     const more = (s.description || '').length > 140 ? '…' : '';
                     return `<article class="seminar-pill">

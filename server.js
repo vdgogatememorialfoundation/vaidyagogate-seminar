@@ -235,9 +235,12 @@ app.get('/api/health', (req, res) => {
             payload.ok = true;
             payload.bootstrap.state = 'ready';
             if (pgDb && pgDb.listMissingCoreTables) {
-                return pgDb
-                    .listMissingCoreTables()
-                    .then((missing) => {
+                return Promise.all([
+                    pgDb.listMissingCoreTables(),
+                    pgDb.listMissingAuxTables ? pgDb.listMissingAuxTables() : Promise.resolve([])
+                ])
+                    .then(([coreMissing, auxMissing]) => {
+                        const missing = [...coreMissing, ...auxMissing];
                         if (missing.length) {
                             payload.ok = false;
                             payload.schema = { missingTables: missing };
@@ -2959,7 +2962,32 @@ app.get('/api/notices', (req, res) => {
 
 app.get('/api/payments/options', (req, res) => {
     listDoctorPaymentOptions((err, options) => {
-        if (err) return res.status(500).json({ success: false, error: err.message });
+        if (err) {
+            const msg = String(err.message || err);
+            if (/does not exist/i.test(msg) && pgDb && pgDb.ensureAuxiliaryTables) {
+                return pgDb
+                    .ensureAuxiliaryTables()
+                    .then(() => {
+                        listDoctorPaymentOptions((err2, opts2) => {
+                            if (err2) {
+                                return res.status(500).json({ success: false, error: err2.message });
+                            }
+                            res.json({
+                                success: true,
+                                options: (opts2 || []).map((o) => ({
+                                    id: o.id,
+                                    gateway: o.gateway,
+                                    mode: o.mode,
+                                    label: o.label
+                                })),
+                                mockAvailable: !(opts2 && opts2.length)
+                            });
+                        });
+                    })
+                    .catch((e2) => res.status(500).json({ success: false, error: e2.message }));
+            }
+            return res.status(500).json({ success: false, error: msg });
+        }
         res.json({
             success: true,
             options: (options || []).map((o) => ({
