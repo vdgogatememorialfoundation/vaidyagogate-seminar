@@ -146,7 +146,11 @@
             const res = await fetch('/api/scanner/mark', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ qrData: decodedText, scannerUserId: user.id, seminarId: sid })
+                body: JSON.stringify({
+                    qrData: decodedText,
+                    scannerUserId: Number(user.id),
+                    seminarId: sid
+                })
             });
             const result = await res.json();
             const d = result.doctor || {};

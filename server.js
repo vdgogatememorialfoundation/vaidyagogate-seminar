@@ -2147,7 +2147,11 @@ function fetchApplicationsForUser(uid, yearFilter, cb) {
          WHERE r.user_id = ?`;
     const params = [uid];
     if (Number.isInteger(yearFilter)) {
-        sql += ` AND (s.portal_year = ? OR EXTRACT(YEAR FROM COALESCE(s.event_date, r.created_at))::INTEGER = ?)`;
+        if (isPostgresConfigured()) {
+            sql += ` AND (s.portal_year = ? OR EXTRACT(YEAR FROM COALESCE(s.event_date, r.created_at))::INTEGER = ?)`;
+        } else {
+            sql += ` AND (s.portal_year = ? OR CAST(strftime('%Y', COALESCE(s.event_date, r.created_at)) AS INTEGER) = ?)`;
+        }
         params.push(yearFilter, yearFilter);
     }
     sql += ` ORDER BY r.id DESC`;
@@ -2941,6 +2945,52 @@ app.post('/api/payments/process', (req, res) => {
     });
 });
 
+const SCANNER_TICKET_LOOKUP_SQL = `
+        SELECT t.id AS ticket_id, t.is_scanned, t.ticket_id_string, IFNULL(t.is_valid, 1) AS is_valid,
+               t.qr_code_data,
+               s.id AS seminar_id, s.checkin_enabled, s.checkin_date, s.title AS seminar_title,
+               u.id AS doctor_user_id, u.user_id_string AS doctor_user_id_string,
+               u.first_name AS doctor_first_name, u.last_name AS doctor_last_name, u.email AS doctor_email, u.phone AS doctor_phone,
+               r.id AS registration_id, r.application_no, r.form_data, r.status AS registration_status, o.status AS payment_status
+        FROM tickets t
+        JOIN orders o ON t.order_id = o.id
+        JOIN registrations r ON o.registration_id = r.id
+        JOIN seminars s ON r.seminar_id = s.id
+        JOIN users u ON t.user_id = u.id`;
+
+function lookupTicketForScan(qrData, cb) {
+    const raw = String(qrData || '').trim();
+    if (!raw) return cb(null, null);
+
+    function tryWhere(clause, param, next) {
+        db.get(SCANNER_TICKET_LOOKUP_SQL + ' WHERE ' + clause, [param], (err, row) => {
+            if (err) return cb(err);
+            if (row) return cb(null, row);
+            next();
+        });
+    }
+
+    tryWhere('t.qr_code_data = ?', raw, () => {
+        tryWhere('t.ticket_id_string = ?', raw, () => {
+            if (raw.startsWith('{')) {
+                try {
+                    const j = JSON.parse(raw);
+                    if (j.ticketId) {
+                        return tryWhere('t.ticket_id_string = ?', String(j.ticketId), () => cb(null, null));
+                    }
+                } catch (_) {
+                    /* ignore */
+                }
+            }
+            const digits = raw.replace(/\D/g, '');
+            if (digits.length >= 10) {
+                return tryWhere('t.ticket_id_string = ?', digits, () => cb(null, null));
+            }
+            cb(null, null);
+        });
+    });
+}
+
 // Scanner: seminars with check-in enabled (pick before scanning)
 app.get('/api/scanner/checkin-seminars', (req, res) => {
     db.all(
@@ -2995,23 +3045,33 @@ app.post('/api/scanner/mark', (req, res) => {
                 });
             }
 
-            const query = `
-        SELECT t.id AS ticket_id, t.is_scanned, t.ticket_id_string, IFNULL(t.is_valid, 1) AS is_valid,
-               s.id AS seminar_id, s.checkin_enabled, s.checkin_date, s.title AS seminar_title,
-               u.id AS doctor_user_id, u.user_id_string AS doctor_user_id_string,
-               u.first_name AS doctor_first_name, u.last_name AS doctor_last_name, u.email AS doctor_email, u.phone AS doctor_phone,
-               r.id AS registration_id, r.application_no, r.form_data, r.status AS registration_status, o.status AS payment_status
-        FROM tickets t
-        JOIN orders o ON t.order_id = o.id
-        JOIN registrations r ON o.registration_id = r.id
-        JOIN seminars s ON r.seminar_id = s.id
-        JOIN users u ON t.user_id = u.id
-        WHERE t.qr_code_data = ?
-    `;
-
-            db.get(query, [qrData], (err, row) => {
+            lookupTicketForScan(qrData, (err, row) => {
                 if (err) return res.status(500).json({ success: false, error: err.message });
-                if (!row) return res.status(404).json({ success: false, error: 'Invalid Ticket' });
+                if (!row) {
+                    return res.status(404).json({
+                        success: false,
+                        error: 'Ticket not found. Scan the QR on the e-ticket or enter the 12-digit E-ticket ID.',
+                        sound: 'error'
+                    });
+                }
+
+                const payOk = String(row.payment_status || '').toLowerCase() === 'success';
+                if (!payOk) {
+                    return res.status(403).json({
+                        success: false,
+                        error: 'Payment is not confirmed for this ticket.',
+                        sound: 'error',
+                        doctor: {
+                            userId: row.doctor_user_id,
+                            userIdString: row.doctor_user_id_string,
+                            name: buildDisplayNameFromFormData(row.form_data, row),
+                            applicationNo: row.application_no,
+                            seminarTitle: row.seminar_title,
+                            ticketId: row.ticket_id_string,
+                            paymentStatus: 'UNPAID'
+                        }
+                    });
+                }
                 const regSt = String(row.registration_status || '').toLowerCase();
                 if (regSt === 'cancelled' || regSt === 'rejected') {
                     return res.status(403).json({
@@ -3059,16 +3119,20 @@ app.post('/api/scanner/mark', (req, res) => {
                     });
                 }
 
-                if (Number(row.seminar_id) !== selectedSeminarId) {
+                const ticketSeminarId = Number(row.seminar_id);
+                if (ticketSeminarId !== selectedSeminarId) {
                     return res.status(403).json({
                         success: false,
-                        error: `This ticket is for "${row.seminar_title}", not the seminar you selected. Choose the correct seminar and scan again.`,
+                        error: `Wrong seminar selected. This ticket is for "${row.seminar_title}". Choose that seminar in the dropdown, then scan again.`,
                         sound: 'wrong_seminar',
                         doctor: {
                             userId: row.doctor_user_id,
                             userIdString: row.doctor_user_id_string,
                             name: buildDisplayNameFromFormData(row.form_data, row),
-                            seminarTitle: row.seminar_title
+                            seminarTitle: row.seminar_title,
+                            ticketId: row.ticket_id_string,
+                            applicationNo: row.application_no,
+                            orderId: row.order_id_string
                         }
                     });
                 }
@@ -3081,11 +3145,14 @@ app.post('/api/scanner/mark', (req, res) => {
                     });
                 }
 
-                if (row.checkin_date && !isCheckinDateToday(row.checkin_date)) {
+                const allowAnyCheckinDate =
+                    process.env.SCANNER_ALLOW_ANY_CHECKIN_DATE === '1' || r === 'admin';
+                if (row.checkin_date && !isCheckinDateToday(row.checkin_date) && !allowAnyCheckinDate) {
                     const today = localDateYmd();
+                    const expected = String(row.checkin_date).slice(0, 10);
                     return res.status(403).json({
                         success: false,
-                        error: `Check-in date mismatch. Expected: ${String(row.checkin_date).slice(0, 10)}, today (local): ${today}`,
+                        error: `Check-in date mismatch. This seminar allows check-in on ${expected} (today is ${today}). In Admin → Seminars, clear "Check-in date" for open check-in, or set it to today.`,
                         sound: 'wrong_date',
                         doctor: {
                             userId: row.doctor_user_id,
