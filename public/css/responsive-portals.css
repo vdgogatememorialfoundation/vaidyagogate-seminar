@@ -19,15 +19,20 @@
     position: fixed;
     inset: 0;
     background: rgba(15, 23, 42, 0.45);
-    z-index: 8999;
+    z-index: 8998;
     pointer-events: none;
+    visibility: hidden;
 }
 .doctor-nav-backdrop.is-open {
     display: block;
+    visibility: visible;
     pointer-events: auto;
 }
 body.doctor-nav-open {
     overflow: hidden;
+}
+body.doctor-nav-open .main-content {
+    pointer-events: none;
 }
 .top-header {
     display: flex;
@@ -149,22 +154,56 @@ body.doctor-nav-open {
     .admin-menu-toggle {
         display: inline-flex;
     }
-    .sidebar {
-        position: fixed !important;
-        left: -280px !important;
-        width: 260px !important;
-        z-index: 9000;
-        transition: left 0.25s ease;
-        height: 100vh !important;
-        overflow-y: auto !important;
-    }
-    .sidebar.mobile-open { left: 0 !important; }
-    .main-content {
-        margin-left: 0 !important;
-        padding: 12px !important;
+    .dashboard-container {
+        display: block !important;
         width: 100% !important;
     }
-    .data-table { font-size: 0.82rem; display: block; overflow-x: auto; }
+    .sidebar {
+        position: fixed !important;
+        top: 0 !important;
+        left: 0 !important;
+        width: min(280px, 88vw) !important;
+        max-width: 88vw !important;
+        z-index: 9000;
+        transition: transform 0.25s ease;
+        transform: translateX(-105%);
+        height: 100vh !important;
+        height: 100dvh !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch;
+        pointer-events: none !important;
+    }
+    .sidebar.mobile-open {
+        transform: translateX(0) !important;
+        pointer-events: auto !important;
+    }
+    .main-content {
+        margin-left: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        position: relative;
+        z-index: 1;
+        pointer-events: auto !important;
+    }
+    .top-header {
+        padding: 12px 14px !important;
+        position: sticky;
+        top: 0;
+        z-index: 50;
+    }
+    .user-info {
+        width: 100%;
+        justify-content: flex-start;
+    }
+    .content-area {
+        padding: 14px !important;
+        pointer-events: auto !important;
+    }
+    .tab-pane {
+        pointer-events: auto;
+    }
+    .data-table { font-size: 0.82rem; display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
     .stat-grid { grid-template-columns: 1fr 1fr !important; }
     .card { padding: 14px !important; }
     .form-group input,
@@ -177,14 +216,62 @@ body.doctor-nav-open {
         pointer-events: auto;
     }
     .seminars-grid .btn-primary,
-    .seminars-grid button {
+    .seminars-grid button,
+    .content-area .btn-primary,
+    .content-area button,
+    .content-area a.btn-primary,
+    .menu-item,
+    .header-link,
+    #btn-logout {
         min-height: 44px;
         touch-action: manipulation;
+        -webkit-tap-highlight-color: rgba(15, 118, 110, 0.15);
     }
     .doctor-menu-toggle,
-    .admin-menu-toggle,
-    .menu-item {
+    .admin-menu-toggle {
         touch-action: manipulation;
+        z-index: 51;
+        position: relative;
+    }
+    .announcements-box {
+        margin: 12px 14px 0 !important;
+    }
+    .notification-bar {
+        padding: 10px 14px !important;
+    }
+}
+
+/* Judge + shared portal mobile */
+@media (max-width: 768px) {
+    .judge-wrap {
+        padding: 16px 12px 40px !important;
+    }
+    .judge-header {
+        flex-direction: column !important;
+        align-items: stretch !important;
+    }
+    .judge-header-actions {
+        width: 100%;
+        justify-content: flex-start;
+    }
+    .judge-card-scroll {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    .judge-card-scroll table {
+        min-width: 640px;
+    }
+    .judge-card-scroll .btn,
+    .judge-card-scroll button {
+        min-height: 44px;
+        min-width: 44px;
+        touch-action: manipulation;
+        padding: 10px 14px !important;
+    }
+    #case-score-overlay.hidden {
+        display: none !important;
+        pointer-events: none !important;
+        visibility: hidden !important;
     }
 }
 

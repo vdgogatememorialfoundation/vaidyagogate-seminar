@@ -337,12 +337,29 @@ function initDoctorMobileNav() {
     const sidebar = document.querySelector('.sidebar');
     const backdrop = document.getElementById('doctor-nav-backdrop');
     if (!toggle || !sidebar) return;
-    document.querySelectorAll('.menu-item:not([href])').forEach((el) => {
-        el.setAttribute('href', '#');
+
+    closeDoctorMobileNav();
+
+    document.querySelectorAll('.menu-item').forEach((el) => {
+        const tabId = el.getAttribute('data-tab');
+        const oc = el.getAttribute('onclick') || '';
+        const fromOnclick = oc.match(/switchTab\('([^']+)'\)/);
+        const targetTab = tabId || (fromOnclick ? fromOnclick[1] : null);
+        if (!targetTab) return;
+        el.removeAttribute('onclick');
+        el.removeAttribute('href');
+        el.setAttribute('type', 'button');
+        el.setAttribute('data-tab', targetTab);
+        const onNav = (e) => {
+            if (e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            switchTab(targetTab);
+        };
+        el.addEventListener('click', onNav);
     });
-    document.querySelectorAll('.menu-item[href="#"]').forEach((el) => {
-        el.addEventListener('click', (e) => e.preventDefault(), true);
-    });
+
     const open = () => {
         sidebar.classList.add('mobile-open');
         if (backdrop) {
@@ -358,7 +375,6 @@ function initDoctorMobileNav() {
         else open();
     });
     backdrop?.addEventListener('click', closeDoctorMobileNav);
-    document.querySelectorAll('.menu-item').forEach((el) => el.addEventListener('click', closeDoctorMobileNav));
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && sidebar.classList.contains('mobile-open')) closeDoctorMobileNav();
     });
@@ -1147,8 +1163,9 @@ function switchTab(tabId) {
     event.currentTarget.classList.add('active');
     } else {
         document.querySelectorAll('.menu-item').forEach(m => {
+            const t = m.getAttribute('data-tab');
             const oc = m.getAttribute('onclick') || '';
-            if (oc.indexOf(tabId) !== -1) m.classList.add('active');
+            if (t === tabId || oc.indexOf(tabId) !== -1) m.classList.add('active');
         });
     }
     if (tabId === 'tab-dashboard') {

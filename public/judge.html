@@ -47,6 +47,17 @@
         .score-actions { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; }
         .btn-submit { background: linear-gradient(135deg, #7c3aed, #6366f1); color: #fff; border: none; }
         .locked-banner { background: #fef3c7; color: #92400e; padding: 10px 12px; border-radius: 10px; font-size: 0.88rem; margin-bottom: 12px; }
+        @media (max-width: 768px) {
+            .wrap { padding: 16px 12px 40px; }
+            header { flex-direction: column; align-items: stretch; }
+            header > div:last-child { width: 100%; justify-content: flex-start; }
+            .btn, .btn-primary, .otp-btn, button { min-height: 44px; touch-action: manipulation; -webkit-tap-highlight-color: rgba(124, 58, 237, 0.15); }
+            .auth-card input { font-size: 16px; }
+            .card { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+            table { min-width: 640px; }
+            table .btn { white-space: nowrap; }
+            #case-score-overlay.hidden { pointer-events: none !important; visibility: hidden !important; }
+        }
     </style>
 </head>
 <body>
@@ -82,21 +93,21 @@
         </div>
     </div>
 
-    <div id="app" class="wrap hidden">
-        <header>
+    <div id="app" class="wrap judge-wrap hidden">
+        <header class="judge-header">
             <div>
                 <div data-site-logo data-logo-height="40px" style="margin-bottom:10px;"></div>
                 <h1><i class="fas fa-gavel" style="color:#7c3aed;"></i> Judge & reviewer workspace</h1>
                 <p class="sub">Case presentations submitted by doctors for scoring.</p>
             </div>
-            <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+            <div class="judge-header-actions" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
                 <span class="badge" id="whoami"></span>
                 <span class="badge portal-login-time hidden" id="judge-login-time" style="font-weight:500;font-size:0.78rem;"></span>
                 <button type="button" class="btn" id="btn-refresh"><i class="fas fa-sync-alt"></i> Refresh</button>
                 <button type="button" class="btn" id="btn-logout"><i class="fas fa-sign-out-alt"></i> Logout</button>
             </div>
         </header>
-        <div class="card" style="margin-bottom:20px;">
+        <div class="card judge-card-scroll" style="margin-bottom:20px;">
             <h3 style="padding:14px 14px 0;font-size:1rem;color:#4338ca;">Case presentations</h3>
             <table>
                 <thead>

@@ -19,7 +19,7 @@
         .sidebar-header h2 { font-size: 1.15rem; margin-bottom: 6px; font-weight: 800; letter-spacing: -0.02em; color: #f0fdfa; }
         .sidebar-header p { font-size: 0.78rem; color: #99f6e4; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 600; }
         .menu-items { padding: 16px 0 24px; display: flex; flex-direction: column; overflow-y: auto; gap: 2px; }
-        .menu-item { padding: 11px 18px 11px 16px; color: #ccfbf1; text-decoration: none; font-weight: 600; cursor: pointer; border-left: 4px solid transparent; transition: background 0.2s, color 0.2s, border-color 0.2s; font-size: 0.86rem; display: flex; align-items: center; gap: 12px; border-radius: 0 12px 12px 0; margin-right: 10px; }
+        .menu-item { padding: 11px 18px 11px 16px; color: #ccfbf1; text-decoration: none; font-weight: 600; cursor: pointer; border: none; border-left: 4px solid transparent; transition: background 0.2s, color 0.2s, border-color 0.2s; font-size: 0.86rem; display: flex; align-items: center; gap: 12px; border-radius: 0 12px 12px 0; margin-right: 10px; width: 100%; text-align: left; font-family: inherit; background: transparent; -webkit-tap-highlight-color: rgba(255,255,255,0.12); touch-action: manipulation; }
         .menu-item:hover { background: rgba(255,255,255,0.08); color: #fff; }
         .menu-item.active { background: rgba(255,255,255,0.14); color: #fff; border-left-color: #fbbf24; }
         .menu-item i { width: 22px; text-align: center; opacity: 0.9; }
@@ -135,21 +135,21 @@
                 <p>VGMF National Seminar (<span id="doctor-portal-year-label">2026</span>)</p>
             </div>
             <div class="menu-items">
-                <a class="menu-item active" onclick="switchTab('tab-dashboard')"><i class="fas fa-home"></i> Dashboard</a>
-                <a class="menu-item" onclick="switchTab('tab-profile')"><i class="fas fa-user-circle"></i> My Profile</a>
-                <a class="menu-item" onclick="switchTab('tab-seminars')"><i class="fas fa-calendar-check"></i> Available Seminars</a>
-                <a class="menu-item" onclick="switchTab('tab-applications')"><i class="fas fa-tasks"></i> Track seminar applications</a>
-                <a class="menu-item" onclick="switchTab('tab-abstract')"><i class="fas fa-file-upload"></i> Case presentation</a>
-                <a class="menu-item" onclick="switchTab('tab-case-track')"><i class="fas fa-route"></i> Track case applications</a>
-                <a class="menu-item" id="nav-volunteer" onclick="switchTab('tab-volunteer')"><i class="fas fa-hands-helping"></i> Volunteer</a>
-                <a class="menu-item" onclick="switchTab('tab-feedback')"><i class="fas fa-star"></i> Seminar feedback</a>
-                <a class="menu-item" onclick="switchTab('tab-support')"><i class="fas fa-ticket-alt"></i> Support tickets</a>
-                <a class="menu-item" onclick="switchTab('tab-orders')"><i class="fas fa-receipt"></i> Orders</a>
-                <a class="menu-item" onclick="switchTab('tab-receipts')"><i class="fas fa-file-invoice"></i> Receipts</a>
-                <a class="menu-item" onclick="switchTab('tab-payments')"><i class="fas fa-credit-card"></i> Payments</a>
-                <a class="menu-item" onclick="switchTab('tab-ticket')"><i class="fas fa-qrcode"></i> Participant tickets</a>
-                <a class="menu-item" onclick="switchTab('tab-certificate')"><i class="fas fa-award"></i> Certificates</a>
-                <a class="menu-item" onclick="switchTab('tab-reset-pwd')"><i class="fas fa-key"></i> Change password</a>
+                <button type="button" class="menu-item active" data-tab="tab-dashboard"><i class="fas fa-home"></i> Dashboard</button>
+                <button type="button" class="menu-item" data-tab="tab-profile"><i class="fas fa-user-circle"></i> My Profile</button>
+                <button type="button" class="menu-item" data-tab="tab-seminars"><i class="fas fa-calendar-check"></i> Available Seminars</button>
+                <button type="button" class="menu-item" data-tab="tab-applications"><i class="fas fa-tasks"></i> Track seminar applications</button>
+                <button type="button" class="menu-item" data-tab="tab-abstract"><i class="fas fa-file-upload"></i> Case presentation</button>
+                <button type="button" class="menu-item" data-tab="tab-case-track"><i class="fas fa-route"></i> Track case applications</button>
+                <button type="button" class="menu-item" id="nav-volunteer" data-tab="tab-volunteer"><i class="fas fa-hands-helping"></i> Volunteer</button>
+                <button type="button" class="menu-item" data-tab="tab-feedback"><i class="fas fa-star"></i> Seminar feedback</button>
+                <button type="button" class="menu-item" data-tab="tab-support"><i class="fas fa-ticket-alt"></i> Support tickets</button>
+                <button type="button" class="menu-item" data-tab="tab-orders"><i class="fas fa-receipt"></i> Orders</button>
+                <button type="button" class="menu-item" data-tab="tab-receipts"><i class="fas fa-file-invoice"></i> Receipts</button>
+                <button type="button" class="menu-item" data-tab="tab-payments"><i class="fas fa-credit-card"></i> Payments</button>
+                <button type="button" class="menu-item" data-tab="tab-ticket"><i class="fas fa-qrcode"></i> Participant tickets</button>
+                <button type="button" class="menu-item" data-tab="tab-certificate"><i class="fas fa-award"></i> Certificates</button>
+                <button type="button" class="menu-item" data-tab="tab-reset-pwd"><i class="fas fa-key"></i> Change password</button>
             </div>
         </aside>
 
