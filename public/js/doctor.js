@@ -160,13 +160,20 @@ function renderTrackerStepsHtml(timeline) {
     const steps = timeline.steps || [];
     let html = '<div class="tracker-vertical">';
     steps.forEach((step) => {
-        if (step.state === 'pending') return;
-        const cls = step.state === 'completed' ? 'completed' : step.state === 'active' ? 'active' : '';
-        const when = step.at
-            ? '<p class="track-when" style="font-size:0.78rem;color:#0f766e;margin:4px 0 0;font-weight:600;">' +
-              escapeHtml(formatTrackDateTime(step.at)) +
-              '</p>'
-            : '';
+        const cls =
+            step.state === 'completed'
+                ? 'completed'
+                : step.state === 'active'
+                  ? 'active'
+                  : 'upcoming';
+        const when =
+            step.at && (step.state === 'completed' || step.state === 'active')
+                ? '<p class="track-when" style="font-size:0.78rem;color:#0f766e;margin:4px 0 0;font-weight:600;">' +
+                  escapeHtml(formatTrackDateTime(step.at)) +
+                  '</p>'
+                : step.state === 'pending'
+                  ? '<p class="track-when" style="font-size:0.78rem;color:#94a3b8;margin:4px 0 0;">Upcoming</p>'
+                  : '';
         html +=
             '<div class="track-step ' +
             cls +

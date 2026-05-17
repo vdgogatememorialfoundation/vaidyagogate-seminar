@@ -38,6 +38,15 @@ DATABASE_URL=postgresql://USER:PASSWORD@ep-xxx-pooler.region.aws.neon.tech/neond
 
 3. Optional: run `lib/schema-postgres.sql` once in Neon SQL editor. On deploy, `vercel-build` regenerates this file and the app applies it on first connection.
 
+4. **Admin login (required on production)** — in Vercel → Project → Settings → Environment Variables add:
+
+```text
+ADMIN_EMAIL=admin@vaidyagogate.org
+ADMIN_PASSWORD=Admin@2026
+```
+
+Redeploy once. On startup the app creates or updates this admin user (password is not stored in git).
+
 ---
 
 ## Step 3 — Vercel project

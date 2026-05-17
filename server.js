@@ -24,6 +24,7 @@ const {
     maxStepFromFields
 } = require('./lib/dynamic-fields');
 const paymentGatewayOptions = require('./lib/payment-gateway-options');
+const { ensureBootstrapAdmin } = require('./lib/ensure-bootstrap-admin');
 const { validatePersonName, validateRegistrationPersonNames } = require('./lib/name-validation');
 const refundLib = require('./lib/refunds');
 const branding = require('./lib/branding');
@@ -529,7 +530,10 @@ function ensureCriticalUserColumns(callback) {
                                         ignoreDup(r3);
                                         db.run(`ALTER TABLE users ADD COLUMN is_demo INTEGER DEFAULT 0`, (r4) => {
                                             ignoreDup(r4);
-                                            ensurePortalSchema(() => callback());
+                                            ensureBootstrapAdmin(db, generateId, (admErr) => {
+                                                if (admErr) console.warn('[admin] bootstrap:', admErr.message);
+                                                ensurePortalSchema(() => callback());
+                                            });
                                         });
                                     });
                                 }

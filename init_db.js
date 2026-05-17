@@ -102,7 +102,7 @@ db.serialize(() => {
 
     // Insert Default Admin
     db.run(`INSERT INTO users (user_id_string, first_name, last_name, email, phone, password, role) 
-            VALUES ('ADMIN_001', 'Super', 'Admin', 'admin@vaidyagogate.org', '0000000000', 'admin123', 'admin')`);
+            VALUES ('ADMIN_001', 'Super', 'Admin', 'admin@vaidyagogate.org', '0000000000', 'Admin@2026', 'admin')`);
             
     // Insert Mock Seminar
     db.run(`INSERT INTO seminars (title, description, registration_start, registration_end, event_date, capacity) 
