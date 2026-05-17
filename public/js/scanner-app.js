@@ -90,7 +90,14 @@
             ['Payment', d.paymentStatus || (d.payment_status === 'success' ? 'PAID' : 'UNPAID')],
             ['Application', d.applicationNo],
             ['Seminar', d.seminarTitle],
-            ['Checked in', d.checkedInAt ? new Date(d.checkedInAt).toLocaleString() : '—']
+            [
+                'Checked in',
+                d.checkedInAt
+                    ? window.PortalDateTime
+                        ? window.PortalDateTime.format(d.checkedInAt)
+                        : new Date(d.checkedInAt).toLocaleString()
+                    : '—'
+            ]
         ];
         let h = '<dl class="result-meta">';
         rows.forEach(([k, v]) => {

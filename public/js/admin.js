@@ -806,7 +806,11 @@ function renderAdminUserDetailTab() {
     if (__adminUserDetailTab === 'registrations') {
         let rows = '';
         (d.registrations || []).forEach((r) => {
-            rows += `<tr><td>${escAdmin(r.application_no)}</td><td>${escAdmin(r.seminar_title)}</td><td>${escAdmin(r.status)}</td><td>${escAdmin(r.created_at)}</td><td>${escAdmin(r.registration_source || '')}</td></tr>`;
+            const createdLabel =
+                window.PortalDateTime && r.created_at
+                    ? window.PortalDateTime.format(r.created_at)
+                    : r.created_at || '—';
+            rows += `<tr><td>${escAdmin(r.application_no)}</td><td>${escAdmin(r.seminar_title)}</td><td>${escAdmin(r.status)}</td><td>${escAdmin(createdLabel)}</td><td>${escAdmin(r.registration_source || '')}</td></tr>`;
         });
         body.innerHTML = `<table class="data-table"><thead><tr><th>App no.</th><th>Seminar</th><th>Status</th><th>Created</th><th>Source</th></tr></thead><tbody>${rows || '<tr><td colspan="5">No applications</td></tr>'}</tbody></table>`;
         return;
@@ -1269,13 +1273,26 @@ function formatCaseCriteriaBreakdown(sc, criteriaDefs) {
     }
     if (!Array.isArray(crit) || !crit.length) return '—';
     const defs = criteriaDefs || [];
-    return crit
-        .map((c) => {
-            const def = defs.find((d) => d.key === c.key) || {};
-            const label = def.label || c.key || 'Criterion';
-            return escAdmin(label) + ': ' + escAdmin(String(c.score != null ? c.score : '—')) + '/' + escAdmin(String(c.max != null ? c.max : def.maxMarks || '5'));
-        })
-        .join(' · ');
+    let rows = '';
+    crit.forEach((c) => {
+        const def = defs.find((d) => d.key === c.key) || {};
+        const label = def.label || c.key || 'Criterion';
+        const max = c.max != null ? c.max : def.maxMarks || 5;
+        const score = c.score != null ? c.score : '—';
+        rows +=
+            '<tr><td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;">' +
+            escAdmin(label) +
+            '</td><td style="padding:6px 8px;border-bottom:1px solid #e2e8f0;text-align:center;font-weight:700;">' +
+            escAdmin(String(score)) +
+            ' / ' +
+            escAdmin(String(max)) +
+            '</td></tr>';
+    });
+    return (
+        '<table class="data-table" style="margin:0;font-size:0.82rem;min-width:200px;"><thead><tr style="background:#f1f5f9;"><th style="padding:6px 8px;text-align:left;">Criterion</th><th style="padding:6px 8px;text-align:center;">Score</th></tr></thead><tbody>' +
+        rows +
+        '</tbody></table>'
+    );
 }
 
 async function populateCaseResultsProgramSelect() {
@@ -1999,8 +2016,19 @@ async function loadSettings() {
         pgs.forEach(pg => {
             const config = JSON.parse(pg.config || '{}');
             if (pg.name === 'razorpay') {
-                document.getElementById('pg-razorpay-key-id').value = config.key_id || '';
-                document.getElementById('pg-razorpay-key-secret').value = config.key_secret || '';
+                const test = config.test || {};
+                const live = config.live || {};
+                if (!test.key_id && config.key_id) {
+                    test.key_id = config.key_id;
+                    test.key_secret = config.key_secret;
+                    test.enabled = test.enabled !== false;
+                }
+                document.getElementById('pg-razorpay-test-key-id').value = test.key_id || '';
+                document.getElementById('pg-razorpay-test-key-secret').value = test.key_secret || '';
+                document.getElementById('pg-razorpay-test-enabled').checked = test.enabled !== false;
+                document.getElementById('pg-razorpay-live-key-id').value = live.key_id || '';
+                document.getElementById('pg-razorpay-live-key-secret').value = live.key_secret || '';
+                document.getElementById('pg-razorpay-live-enabled').checked = !!live.enabled;
                 document.getElementById('pg-razorpay-active').checked = pg.is_active;
             } else if (pg.name === 'payu') {
                 document.getElementById('pg-payu-merchant-key').value = config.merchant_key || '';
@@ -2063,7 +2091,22 @@ async function saveKillSwitchSettings() {
 
 async function savePaymentGatewaysSettings() {
     const gateways = [
-        { name: 'razorpay', is_active: document.getElementById('pg-razorpay-active').checked, config: { key_id: document.getElementById('pg-razorpay-key-id').value, key_secret: document.getElementById('pg-razorpay-key-secret').value } },
+        {
+            name: 'razorpay',
+            is_active: document.getElementById('pg-razorpay-active').checked,
+            config: {
+                test: {
+                    enabled: document.getElementById('pg-razorpay-test-enabled').checked,
+                    key_id: document.getElementById('pg-razorpay-test-key-id').value.trim(),
+                    key_secret: document.getElementById('pg-razorpay-test-key-secret').value.trim()
+                },
+                live: {
+                    enabled: document.getElementById('pg-razorpay-live-enabled').checked,
+                    key_id: document.getElementById('pg-razorpay-live-key-id').value.trim(),
+                    key_secret: document.getElementById('pg-razorpay-live-key-secret').value.trim()
+                }
+            }
+        },
         { name: 'payu', is_active: document.getElementById('pg-payu-active').checked, config: { merchant_key: document.getElementById('pg-payu-merchant-key').value, merchant_salt: document.getElementById('pg-payu-merchant-salt').value, merchant_id: document.getElementById('pg-payu-merchant-id').value } },
         { name: 'easebuzz', is_active: document.getElementById('pg-easebuzz-active').checked, config: { merchant_key: document.getElementById('pg-easebuzz-merchant-key').value, merchant_salt: document.getElementById('pg-easebuzz-merchant-salt').value } },
         { name: 'paytm', is_active: document.getElementById('pg-paytm-active').checked, config: { merchant_id: document.getElementById('pg-paytm-merchant-id').value, merchant_key: document.getElementById('pg-paytm-merchant-key').value, website: document.getElementById('pg-paytm-website').value } },

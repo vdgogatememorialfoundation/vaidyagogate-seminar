@@ -85,32 +85,56 @@ document.addEventListener('visibilitychange', () => syncDoctorTrackingPolls());
 
 let doctorPortalYear = new Date().getFullYear();
 
-const PORTAL_DISPLAY_TZ = 'Asia/Kolkata';
-
-function parsePortalDateTime(iso) {
-    if (!iso) return null;
-    const s = String(iso).trim();
-    if (!s) return null;
-    if (/Z$|[+-]\d{2}:?\d{2}$/i.test(s)) return new Date(s);
-    const normalized = s.includes('T') ? s : s.replace(' ', 'T');
-    const d = new Date(normalized);
-    return Number.isNaN(d.getTime()) ? null : d;
-}
-
 function formatTrackDateTime(iso) {
-    const d = parsePortalDateTime(iso);
-    if (!d) return iso ? String(iso) : '';
-    return d.toLocaleString('en-IN', {
-        timeZone: PORTAL_DISPLAY_TZ,
-        weekday: 'long',
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        hour12: true
-    });
+    if (window.PortalDateTime && window.PortalDateTime.formatLong) {
+        return window.PortalDateTime.formatLong(iso);
+    }
+    return iso ? String(iso) : '';
 }
+
+function formatPortalDt(iso) {
+    if (window.PortalDateTime && window.PortalDateTime.format) {
+        return window.PortalDateTime.format(iso);
+    }
+    return iso ? String(iso) : '';
+}
+
+window.__doctorPaymentOptions = [];
+
+async function loadDoctorPaymentOptions() {
+    try {
+        const res = await fetch('/api/payments/options', { cache: 'no-store' });
+        const data = await res.json();
+        window.__doctorPaymentOptions = data.options || [];
+    } catch (e) {
+        console.warn('[payments] options', e);
+        window.__doctorPaymentOptions = [];
+    }
+}
+
+function paymentGatewaySelectHtml(regId) {
+    const opts = window.__doctorPaymentOptions || [];
+    if (!opts.length) return '';
+    if (opts.length === 1) {
+        return '<input type="hidden" id="pay-opt-' + regId + '" value="' + escapeHtml(opts[0].id) + '">';
+    }
+    let h =
+        '<label style="display:block;margin-top:10px;font-size:0.85rem;font-weight:600;color:#0f766e;">Payment method</label><select id="pay-opt-' +
+        regId +
+        '" style="width:100%;max-width:340px;padding:8px;margin:6px 0 8px;border-radius:8px;border:1px solid #cbd5e1;">';
+    opts.forEach((o) => {
+        h += '<option value="' + escapeHtml(o.id) + '">' + escapeHtml(o.label) + '</option>';
+    });
+    return h + '</select>';
+}
+
+function getPaymentOptionForReg(regId) {
+    const el = document.getElementById('pay-opt-' + regId);
+    if (el && el.value) return el.value;
+    const opts = window.__doctorPaymentOptions || [];
+    return opts[0] ? opts[0].id : '';
+}
+window.getPaymentOptionForReg = getPaymentOptionForReg;
 
 function renderTrackerStepsHtml(timeline) {
     if (!timeline) return '';
@@ -157,13 +181,16 @@ function renderSeminarApplicationTrackerCard(a) {
     const isPaid = st === 'completed' || st === 'checked_in';
     const payBtn =
         st === 'approved_pending_payment' && !isPaid
-            ? '<button class="btn-success" style="margin-top:10px;" onclick="processPayment(' +
+            ? paymentGatewaySelectHtml(a.id) +
+              '<button class="btn-success" style="margin-top:10px;" onclick="processPayment(' +
               a.id +
               ', ' +
               payAmt +
               ', ' +
               JSON.stringify(String(a.application_no || '')) +
-              ')">Make Payment (₹' +
+              ', getPaymentOptionForReg(' +
+              a.id +
+              '))">Make Payment (₹' +
               payAmt +
               ')</button>'
             : '';
@@ -300,6 +327,7 @@ function bootDoctorDashboard(user) {
     document.getElementById('header-id').innerText =
         `ID: ${currentUser.user_id_string || '---'}` + (Number(currentUser.is_demo) === 1 ? ' · Demo' : '');
         loadProfile();
+    loadDoctorPaymentOptions();
     loadDoctorPortalYear().then(() => {
         loadSeminarsGrid();
         loadApplications();
@@ -2130,7 +2158,7 @@ function loadRazorpayCheckoutScript() {
     });
 }
 
-async function processPayment(appId, amount, appNo) {
+async function processPayment(appId, amount, appNo, paymentOption) {
     const uid = doctorNumericUserId();
     if (!uid) {
         alert('Please sign out and sign in again, then try payment.');
@@ -2151,7 +2179,12 @@ async function processPayment(appId, amount, appNo) {
         const res = await fetch('/api/payments/process', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ registrationId: regId, amount, userId: uid })
+            body: JSON.stringify({
+                registrationId: regId,
+                amount,
+                userId: uid,
+                paymentOption: paymentOption || getPaymentOptionForReg(regId)
+            })
         });
         let result = {};
         try {
@@ -2192,7 +2225,14 @@ async function processPayment(appId, amount, appNo) {
                         fetch('/api/payments/verify', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ applicationId: regId, paymentData: response, gateway: 'razorpay', userId: currentUser.id })
+                            body: JSON.stringify({
+                                applicationId: regId,
+                                paymentData: response,
+                                gateway: 'razorpay',
+                                mode: result.mode,
+                                paymentOption: paymentOption || getPaymentOptionForReg(regId),
+                                userId: doctorNumericUserId()
+                            })
                         }).then(res => res.json()).then(verifyResult => {
                             if (verifyResult.success) {
                                 alert(`Payment Successful! Join WhatsApp Group: https://chat.whatsapp.com/mocklink`);
@@ -2281,7 +2321,7 @@ async function loadDoctorOrders() {
             return;
         }
         doctorOrdersCache.forEach((o) => {
-            const dt = o.payment_date ? new Date(o.payment_date).toLocaleString() : '—';
+            const dt = o.payment_date ? formatPortalDt(o.payment_date) : '—';
             const receiptBtn =
                 o.status === 'success'
                     ? `<button type="button" class="btn-primary" style="padding:6px 12px;font-size:0.78rem;border-radius:8px;" onclick="openDoctorOrderReceipt(${o.id})">Receipt</button>`
@@ -2321,7 +2361,7 @@ async function loadDoctorReceipts() {
             return;
         }
         paid.forEach((o) => {
-            const dt = o.payment_date ? new Date(o.payment_date).toLocaleString() : '—';
+            const dt = o.payment_date ? formatPortalDt(o.payment_date) : '—';
             tbody.innerHTML += `<tr>
                 <td><strong>${o.order_id_string || o.id}</strong></td>
                 <td>${escapeHtml(o.seminar_title || '—')}</td>

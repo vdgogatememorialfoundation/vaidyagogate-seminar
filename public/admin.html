@@ -825,10 +825,16 @@
                     <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
                         <h4>Razorpay</h4>
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                            <div><label>Key ID</label><input type="text" id="pg-razorpay-key-id" placeholder="rzp_test_..."></div>
-                            <div><label>Key Secret</label><input type="password" id="pg-razorpay-key-secret" placeholder="..."></div>
+                            <div><label>Test Key ID</label><input type="text" id="pg-razorpay-test-key-id" placeholder="rzp_test_..."></div>
+                            <div><label>Test Key Secret</label><input type="password" id="pg-razorpay-test-key-secret" placeholder="..."></div>
                         </div>
-                        <label style="margin-top: 10px;"><input type="checkbox" id="pg-razorpay-active"> Enable Razorpay</label>
+                        <label style="margin-top: 8px; display:block;"><input type="checkbox" id="pg-razorpay-test-enabled"> Enable Test mode for doctors</label>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 12px;">
+                            <div><label>Live Key ID</label><input type="text" id="pg-razorpay-live-key-id" placeholder="rzp_live_..."></div>
+                            <div><label>Live Key Secret</label><input type="password" id="pg-razorpay-live-key-secret" placeholder="..."></div>
+                        </div>
+                        <label style="margin-top: 8px; display:block;"><input type="checkbox" id="pg-razorpay-live-enabled"> Enable Live mode for doctors</label>
+                        <label style="margin-top: 10px; display:block;"><input type="checkbox" id="pg-razorpay-active"> Enable Razorpay gateway</label>
                     </div>
                     
                     <!-- PayU -->
@@ -1113,6 +1119,7 @@
         </div>
     </div>
 
+    <script src="/js/portal-datetime.js"></script>
     <script src="/js/site-branding.js"></script>
     <script src="/js/credentials.js"></script>
     <script src="/js/name-validation.js"></script>

@@ -23,6 +23,7 @@ const {
     sanitizeRegistrationFormFields,
     maxStepFromFields
 } = require('./lib/dynamic-fields');
+const paymentGatewayOptions = require('./lib/payment-gateway-options');
 const { validatePersonName, validateRegistrationPersonNames } = require('./lib/name-validation');
 const refundLib = require('./lib/refunds');
 const branding = require('./lib/branding');
@@ -1426,21 +1427,28 @@ try {
     }
 }
 
-// Helper function to get active payment gateway
-function getActiveGateway(callback) {
-    db.get(`SELECT * FROM payment_gateways WHERE is_active = 1 LIMIT 1`, [], (err, row) => {
-        if (err || !row) return callback(null);
-        let config = {};
-        try {
-            config = JSON.parse(row.config || '{}');
-        } catch (_) {
-            config = {};
-        }
-        if (row.name === 'razorpay' && (!config.key_id || !config.key_secret)) {
-            console.warn('[payments] Razorpay active but keys missing — falling back to mock');
-            return callback(null);
-        }
-        callback({ name: row.name, config });
+function listDoctorPaymentOptions(callback) {
+    db.all(`SELECT * FROM payment_gateways WHERE is_active = 1`, [], (err, rows) => {
+        if (err) return callback(err);
+        const options = [];
+        (rows || []).forEach((row) => {
+            options.push(...paymentGatewayOptions.expandGatewayRow(row));
+        });
+        callback(null, options);
+    });
+}
+
+function resolveDoctorPaymentOption(paymentOptionId, callback) {
+    db.all(`SELECT * FROM payment_gateways WHERE is_active = 1`, [], (err, rows) => {
+        if (err) return callback(err);
+        const resolved = paymentGatewayOptions.resolvePaymentOption(paymentOptionId, rows);
+        if (!resolved) return callback(null, null);
+        callback(null, {
+            name: resolved.gateway,
+            mode: resolved.mode,
+            label: resolved.label,
+            config: resolved.config
+        });
     });
 }
 
@@ -2858,9 +2866,25 @@ app.get('/api/notices', (req, res) => {
     });
 });
 
+app.get('/api/payments/options', (req, res) => {
+    listDoctorPaymentOptions((err, options) => {
+        if (err) return res.status(500).json({ success: false, error: err.message });
+        res.json({
+            success: true,
+            options: (options || []).map((o) => ({
+                id: o.id,
+                gateway: o.gateway,
+                mode: o.mode,
+                label: o.label
+            })),
+            mockAvailable: !(options && options.length)
+        });
+    });
+});
+
 // 6. Payments: Process Payment (Dynamic Gateway)
 app.post('/api/payments/process', (req, res) => {
-    const { registrationId, amount, userId } = req.body;
+    const { registrationId, amount, userId, paymentOption } = req.body;
     const regId = parseInt(registrationId, 10);
     const uid = parseInt(userId, 10);
     if (Number.isNaN(regId) || regId < 1) {
@@ -2898,7 +2922,7 @@ app.post('/api/payments/process', (req, res) => {
 
         const orderIdStr = 'ORD_' + generateId();
 
-        getActiveGateway((gateway) => {
+        const startPayment = (gateway) => {
             if (!gateway) {
                 const mockTxn = 'MOCK' + generateId();
                 db.run(
@@ -2932,20 +2956,21 @@ app.post('/api/payments/process', (req, res) => {
                 return;
             }
 
-            // Process with active gateway
             if (gateway.name === 'razorpay') {
                 const razorpay = new Razorpay({
                     key_id: gateway.config.key_id,
-                    key_secret: gateway.config.key_secret,
+                    key_secret: gateway.config.key_secret
                 });
                 const options = {
-                    amount: amount * 100, // Razorpay expects amount in paisa
+                    amount: amount * 100,
                     currency: 'INR',
-                    receipt: orderIdStr.length > 40 ? orderIdStr.slice(0, 40) : orderIdStr,
+                    receipt: orderIdStr.length > 40 ? orderIdStr.slice(0, 40) : orderIdStr
                 };
+                const gwTag =
+                    gateway.mode === 'live' ? 'razorpay_live' : gateway.mode === 'test' ? 'razorpay_test' : 'razorpay';
                 db.run(
-                    `INSERT INTO orders (order_id_string, registration_id, amount, status, payment_gateway) VALUES (?, ?, ?, 'pending', 'razorpay')`,
-                    [orderIdStr, regId, amount],
+                    `INSERT INTO orders (order_id_string, registration_id, amount, status, payment_gateway) VALUES (?, ?, ?, 'pending', ?)`,
+                    [orderIdStr, regId, amount, gwTag],
                     function (insErr) {
                         if (insErr) return res.status(500).json({ success: false, error: insErr.message });
                         const localOrderId = this.lastID;
@@ -2959,7 +2984,13 @@ app.post('/api/payments/process', (req, res) => {
                             }
                             db.run(`UPDATE orders SET provider_order_id = ? WHERE id = ?`, [rzOrder.id, localOrderId], (uErr) => {
                                 if (uErr) return res.status(500).json({ success: false, error: uErr.message });
-                                res.json({ success: true, order: rzOrder, gateway: 'razorpay' });
+                                res.json({
+                                    success: true,
+                                    order: rzOrder,
+                                    gateway: 'razorpay',
+                                    mode: gateway.mode,
+                                    paymentOption: paymentOption || gateway.mode
+                                });
                             });
                         });
                     }
@@ -2975,9 +3006,41 @@ app.post('/api/payments/process', (req, res) => {
             } else if (gateway.name === 'cashfree') {
                 res.json({ success: true, message: 'Cashfree integration pending', gateway: 'cashfree' });
             } else {
-                res.status(400).json({ error: 'Unsupported gateway' });
+                res.status(400).json({ success: false, error: 'Unsupported gateway' });
             }
-        });
+        };
+
+        if (paymentOption) {
+            resolveDoctorPaymentOption(paymentOption, (eGw, gateway) => {
+                if (eGw) return res.status(500).json({ success: false, error: eGw.message });
+                if (!gateway) {
+                    return res.status(400).json({
+                        success: false,
+                        error: 'Selected payment method is not available. Refresh the page and choose another option.'
+                    });
+                }
+                startPayment(gateway);
+            });
+        } else {
+            listDoctorPaymentOptions((eList, options) => {
+                if (eList) return res.status(500).json({ success: false, error: eList.message });
+                if (options && options.length === 1) {
+                    return startPayment({
+                        name: options[0].gateway,
+                        mode: options[0].mode,
+                        config: options[0].config
+                    });
+                }
+                if (options && options.length > 1) {
+                    return res.status(400).json({
+                        success: false,
+                        error: 'Choose a payment method from the dropdown before paying.',
+                        options: options.map((o) => ({ id: o.id, label: o.label }))
+                    });
+                }
+                startPayment(null);
+            });
+        }
     });
 });
 
@@ -3655,11 +3718,15 @@ app.post('/api/admin/applications/status', (req, res) => {
 
 // Payment Verification Endpoint
 app.post('/api/payments/verify', (req, res) => {
-    const { applicationId, paymentData, gateway } = req.body;
-    
-    getActiveGateway((activeGateway) => {
+    const { applicationId, paymentData, gateway, paymentOption, mode } = req.body;
+    const optionId =
+        paymentOption ||
+        (gateway && mode ? gateway + ':' + mode : gateway === 'razorpay' ? 'razorpay:test' : null);
+
+    resolveDoctorPaymentOption(optionId, (eGw, activeGateway) => {
+        if (eGw) return res.status(500).json({ error: eGw.message });
         if (!activeGateway || activeGateway.name !== gateway) {
-            return res.status(400).json({ error: 'Invalid gateway' });
+            return res.status(400).json({ error: 'Invalid gateway or payment option' });
         }
 
         if (gateway === 'razorpay') {
