@@ -2665,7 +2665,9 @@ async function saveProfile(event) {
     event.preventDefault();
     
     const formData = new FormData();
-    formData.append('userId', currentUser.id);
+    const uid = doctorNumericUserId();
+    if (!uid) return alert('Session invalid. Please sign in again with your email.');
+    formData.append('userId', uid);
     formData.append('specialization', document.getElementById('profile-specialization').value);
     formData.append('registration_no', document.getElementById('profile-registration-no').value);
     formData.append('qualifications', document.getElementById('profile-qualifications').value);
