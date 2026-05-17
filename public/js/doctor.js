@@ -132,7 +132,7 @@ function paymentGatewaySelectHtml(regId) {
     const opts = window.__doctorPaymentOptions || [];
     if (!opts.length) {
         return (
-            '<p style="margin-top:10px;font-size:0.85rem;color:#64748b;">Payment: <strong>Test / mock mode</strong> (add Razorpay keys in Admin → Payment gateways, then refresh).</p>'
+            '<p style="margin-top:10px;font-size:0.85rem;color:#64748b;">Payment: <strong>Test mode</strong> is active for this seminar.</p>'
         );
     }
     if (opts.length === 1) {
@@ -829,6 +829,14 @@ async function loadDoctorPortalUpdatesFromCms() {
     try {
         const res = await fetch('/api/public/site-cms');
         const cms = await res.json();
+        if (typeof renderPortalScrollingAnnouncements === 'function') {
+            renderPortalScrollingAnnouncements(
+                cms.scrollingAnnouncements || [],
+                'doctor-scrolling-announce-wrap',
+                'doctor-scrolling-announce-track',
+                'portal-sa-card'
+            );
+        }
         const items = Array.isArray(cms.doctorUpdates) ? cms.doctorUpdates : [];
         if (!items.length) {
             box.innerHTML = '<li style="color:#64748b;">No updates from the office yet.</li>';
@@ -1283,7 +1291,7 @@ async function loadCaseProgramsGrid() {
         activeCasePrograms = Array.isArray(programs) ? programs : [];
         if (!activeCasePrograms.length) {
             grid.innerHTML =
-                '<p style="color:#64748b;">No case presentation programs are available. Ask admin to create a program under <strong>Case presentation management</strong> and ensure <strong>Program active</strong> is checked.</p>';
+                '<p style="color:#64748b;">No case presentation programs are available at this time.</p>';
             return;
         }
         grid.innerHTML = '';
@@ -1634,7 +1642,7 @@ function viewCaseApplication(index) {
 function doctorCertificateLockedBlock(message) {
     const msg =
         message ||
-        'Locked until you are checked in, an administrator enables your certificate, and a certificate template is uploaded for this seminar.';
+        'Your certificate will be available after check-in and when it has been issued for this seminar.';
     return (
         '<div style="text-align:center;padding:24px;">' +
         '<i class="fas fa-lock" style="font-size:2rem;color:#94a3b8;margin-bottom:10px;display:block;"></i>' +
@@ -1679,7 +1687,7 @@ async function loadDoctorCertificates() {
             const name = escapeHtml(c.display_name || '');
             if (!c.enabled) {
                 card.innerHTML = `<h4 style="margin:0 0 12px;">${title}</h4>${doctorCertificateLockedBlock(
-                    'An administrator must enable your certificate after check-in.'
+                    'Your certificate is not available yet. It will appear here after check-in when issued.'
                 )}`;
                 wrap.appendChild(card);
                 return;
@@ -2481,7 +2489,7 @@ async function processPayment(appId, amount, appNo, paymentOption) {
             if (pendingGateways.includes(String(result.gateway || '').toLowerCase())) {
                 alert(
                     result.message ||
-                        'This payment gateway is selected in Admin but not fully enabled yet. Ask admin to enable Razorpay or use mock/test mode.'
+                        'Online payment is not available right now. Please try again later or contact the seminar office.'
                 );
                 return;
             }
@@ -2494,7 +2502,7 @@ async function processPayment(appId, amount, appNo, paymentOption) {
                 const checkoutKey = result.keyId || (result.order && result.order.key_id);
                 if (!checkoutKey) {
                     alert(
-                        'Razorpay is not configured correctly (missing Key ID). In Admin, enable Razorpay, check “Enable Live mode”, save live Key ID and Secret, then refresh this page.'
+                        'Online payment could not be started. Please refresh the page or contact the seminar office.'
                     );
                     return;
                 }
@@ -2939,7 +2947,7 @@ async function submitDashboardFeedback(e) {
         });
         const data = await res.json();
         if (data.success) {
-            alert('Thank you. Your feedback was submitted and is visible to administrators.');
+            alert('Thank you. Your feedback was submitted successfully.');
             document.getElementById('dash-feedback-form').reset();
             document.getElementById('dfb-again').checked = true;
             loadDashboardFeedbackSeminars();

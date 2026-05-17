@@ -197,7 +197,7 @@
             const list = await res.json();
             if (!Array.isArray(list) || !list.length) {
                 sel.innerHTML = '<option value="">No check-in seminars</option>';
-                if (hint) hint.textContent = 'Enable check-in on a seminar in Admin.';
+                if (hint) hint.textContent = 'Check-in is not enabled for any seminar yet.';
                 return;
             }
             sel.innerHTML = '<option value="">— Select seminar —</option>';
@@ -220,7 +220,7 @@
                             cfg +
                             ' (India today: ' +
                             today +
-                            '). Update Admin → Seminars → Check-in allowed date, or clear it for any day.';
+                            '). Check-in is not allowed on this date for this seminar.';
                     } else {
                         hint.textContent = 'Ready to scan.';
                     }

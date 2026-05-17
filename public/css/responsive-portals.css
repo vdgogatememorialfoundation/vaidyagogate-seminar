@@ -36,6 +36,82 @@ body.doctor-nav-open {
     flex-wrap: wrap;
 }
 
+/* Sliding announcements (doctor / other portals) */
+.portal-scrolling-announce {
+    background: #fff;
+    border-bottom: 1px solid #ccfbf1;
+    padding: 12px 0;
+    margin: 0;
+}
+.portal-scrolling-announce.hidden {
+    display: none !important;
+}
+.portal-scrolling-announce-header {
+    padding: 0 28px 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.portal-scrolling-announce-header .sa-label {
+    background: #0f766e;
+    color: #ecfdf5;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+.portal-scrolling-announce-header .sa-sub {
+    font-size: 0.82rem;
+    color: #64748b;
+}
+.portal-scrolling-announce-viewport {
+    overflow: hidden;
+}
+.portal-scrolling-announce-track {
+    display: flex;
+    gap: 14px;
+    width: max-content;
+    padding: 0 28px 4px;
+    animation: portalScrollCards 32s linear infinite;
+}
+.portal-scrolling-announce-track:hover {
+    animation-play-state: paused;
+}
+@keyframes portalScrollCards {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+}
+.portal-sa-card {
+    flex: 0 0 min(300px, 88vw);
+    background: #f0fdfa;
+    border: 1px solid #99f6e4;
+    border-radius: 12px;
+    padding: 14px 16px;
+}
+.portal-sa-card h5 {
+    color: #0f766e;
+    font-size: 0.92rem;
+    margin-bottom: 6px;
+    line-height: 1.35;
+}
+.portal-sa-card p {
+    font-size: 0.85rem;
+    color: #475569;
+    line-height: 1.45;
+}
+.portal-sa-card .sa-meta {
+    font-size: 0.75rem;
+    color: #94a3b8;
+    margin-top: 6px;
+}
+.portal-sa-card a {
+    color: #0d9488;
+    font-weight: 700;
+    font-size: 0.82rem;
+}
+
 @media (max-width: 768px) {
     .doctor-menu-toggle,
     .admin-menu-toggle {

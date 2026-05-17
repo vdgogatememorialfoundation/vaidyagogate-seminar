@@ -168,9 +168,18 @@
 
             <div class="notification-bar"><i class="fas fa-info-circle"></i> Complete your profile before registering for seminars.</div>
 
+            <div id="doctor-scrolling-announce-wrap" class="portal-scrolling-announce hidden" aria-label="Announcements">
+                <div class="portal-scrolling-announce-header">
+                    <span class="sa-label">News</span>
+                    <span class="sa-sub">Seminar updates</span>
+                </div>
+                <div class="portal-scrolling-announce-viewport">
+                    <div id="doctor-scrolling-announce-track" class="portal-scrolling-announce-track"></div>
+                </div>
+            </div>
+
             <div class="announcements-box">
                 <h4 style="color: #0f766e; margin-bottom: 10px;"><i class="fas fa-bullhorn"></i> Updates from the office</h4>
-                <p style="color:#64748b;font-size:0.85rem;margin-bottom:10px;">Important notices from seminar administrators.</p>
                 <ul id="doctor-updates-list" style="list-style-position: inside; color: #64748b; font-size: 0.9rem;">
                     <li style="color:#94a3b8;">Loading…</li>
                 </ul>
@@ -432,7 +441,7 @@
 
                 <div id="tab-support" class="tab-pane hidden">
                     <h2 class="section-title">Support tickets</h2>
-                    <p style="color:#64748b;margin:-10px 0 20px;">Raise a ticket and continue the conversation when an administrator replies.</p>
+                    <p style="color:#64748b;margin:-10px 0 20px;">Raise a ticket and follow replies here.</p>
                     <div id="support-main-view">
                         <button type="button" class="btn-primary" onclick="document.getElementById('new-ticket-form').classList.remove('hidden')" style="margin-bottom:20px;">+ New support ticket</button>
                         <div id="new-ticket-form" class="card hidden">
@@ -554,6 +563,7 @@
     <script src="/js/portal-datetime.js"></script>
     <script src="/js/site-branding.js"></script>
     <script src="/js/portal-auth.js"></script>
+    <script src="/js/portal-scrolling-announcements.js"></script>
     <script src="/js/name-validation.js"></script>
     <script src="/js/doctor.js"></script>
 </body>

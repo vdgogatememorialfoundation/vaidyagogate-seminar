@@ -133,7 +133,7 @@
         if (isScannerUser(user)) return 'Use the scanner portal: /scanner.html';
         if (isDoctorUser(user)) return 'Use the doctor portal: /doctor.html';
         if (r === 'admin') return 'Use the admin portal: /admin.html';
-        return 'This account is not enabled for this portal. Ask an administrator to set the correct role.';
+        return 'This account cannot access this portal. Please sign in with the correct account.';
     }
 
     /**

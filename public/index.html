@@ -177,7 +177,7 @@
             <div id="verify-inactive" class="verify-inactive hidden">
                 <i class="fas fa-lock"></i>
                 <h3>Verification not open yet</h3>
-                <p>Lists appear here only after admin enables <strong>Publish participant list on website</strong> for a seminar (Admin → Seminar Management), once verification and payments are complete.</p>
+                <p>Participant verification is not available at this time. Please check again later.</p>
             </div>
             <div id="verify-active" class="page-panel verify-panel hidden">
                 <label for="verify-seminar">Seminar</label>
@@ -373,6 +373,7 @@
         </div>
     </div>
 
+    <script src="/js/portal-scrolling-announcements.js"></script>
     <script src="/js/vgmf-home.js"></script>
     <script src="/js/vgmf-marketing.js"></script>
     <script>
@@ -473,7 +474,7 @@
             if (r === 'admin' || ur === 'co_admin') return 'Open the admin portal: /admin.html';
             if (ur === 'judge_user' || ur === 'reviewer') return 'Open the judge portal: /judge.html';
             if (ur === 'scanner_portal_user') return 'Open the scanner portal: /scanner.html';
-            return 'Ask your administrator which portal to use.';
+            return 'Please use the correct portal for your account type.';
         }
 
         /** Public site login is for doctors only; staff use their own portal URLs. */
@@ -487,7 +488,7 @@
             alert(
                 'This sign-in on the public site is for doctors only.\n\n' +
                     portalHintForUser(user) +
-                    '\n\nStaff accounts are created in Admin → Users & CRM.'
+                    ''
             );
         }
 
@@ -569,7 +570,7 @@
                 const gal = Array.isArray(cms.pastSeminarGallery) ? cms.pastSeminarGallery : [];
                 grid.innerHTML = gal.length
                     ? gal.map((g) => '<div class="card"><img src="' + escHtml(g.src || '') + '" alt="" style="width:100%;height:160px;object-fit:cover;"><div class="card-content"><h3>' + escHtml(g.caption || '') + '</h3><p style="color:#78716c;">' + escHtml(g.year || '') + '</p></div></div>').join('')
-                    : '<p style="color:#78716c;">Gallery images will appear here when added in admin.</p>';
+                    : '<p style="color:#78716c;">No gallery images yet.</p>';
             }
         }
 
@@ -589,7 +590,8 @@
             if (nav) {
                 nav.classList.remove('nav-disabled');
                 nav.classList.toggle('nav-verify-live', active);
-                nav.setAttribute('title', active ? 'Search admitted delegates' : 'Enable “Publish participant list” per seminar in admin');
+                if (active) nav.setAttribute('title', 'Search admitted delegates');
+                else nav.removeAttribute('title');
             }
         }
 
@@ -910,6 +912,10 @@
         }
 
         function renderScrollingAnnouncements(items) {
+            if (typeof renderPortalScrollingAnnouncements === 'function') {
+                renderPortalScrollingAnnouncements(items, 'scrolling-announce-wrap', 'scrolling-announce-track', 'sa-card');
+                return;
+            }
             const wrap = document.getElementById('scrolling-announce-wrap');
             const track = document.getElementById('scrolling-announce-track');
             if (!wrap || !track) return;
