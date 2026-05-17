@@ -47,6 +47,10 @@ ADMIN_PASSWORD=Admin@2026
 
 Redeploy once. On startup the app creates or updates this admin user (password is not stored in git).
 
+**Site logo on Vercel:** uploads are saved in the database (not the server disk). After uploading in Admin → Settings, hard-refresh pages (Ctrl+F5). Use PNG/JPG under 2 MB.
+
+**Slow first load:** Vercel “cold starts” can take a few seconds after idle time; static CSS/JS are served from the CDN edge when configured in `vercel.json`.
+
 ---
 
 ## Step 3 — Vercel project

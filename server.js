@@ -266,6 +266,7 @@ app.get('/api/health', (req, res) => {
 function requestNeedsBootstrap(req) {
     const p = req.path || '/';
     if (p === '/api/health') return false;
+    if (p.startsWith('/api/branding/logo')) return false;
     if (p === '/scanner' || p === '/scanner/') return false;
     if (/\.(html?|css|js|ico|png|jpe?g|gif|webp|svg|woff2?|json|webmanifest|txt|map)$/i.test(p)) return false;
     if (p.startsWith('/css/') || p.startsWith('/js/') || p.startsWith('/uploads/')) return false;
@@ -283,7 +284,12 @@ app.get('/scanner/', (req, res) => {
     res.redirect(302, '/scanner.html');
 });
 
-app.use(express.static('public'));
+app.use(
+    express.static('public', {
+        maxAge: process.env.VERCEL ? '86400000' : 0,
+        etag: true
+    })
+);
 
 app.use((req, res, next) => {
     if (!requestNeedsBootstrap(req)) return next();

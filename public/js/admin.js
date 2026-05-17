@@ -1768,7 +1768,7 @@ async function uploadAdminSiteLogo() {
             if (typeof window.reloadSiteBranding === 'function') {
                 await window.reloadSiteBranding();
             }
-            alert('Logo uploaded. Refresh other open tabs to see it everywhere.');
+            alert('Logo saved. It will appear on all pages after a refresh (live site stores logo in the database).');
         } else alert(data.error || 'Upload failed');
     } catch (e) {
         console.error(e);
