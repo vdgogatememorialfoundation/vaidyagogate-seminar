@@ -1,16 +1,16 @@
 /* VGMF — seminar website (refreshed theme) */
 :root {
-    --ink: #334155;
-    --ink-soft: #4a5568;
-    --muted: #718096;
-    --line: #e8ecf4;
+    --ink: #1e293b;
+    --ink-soft: #475569;
+    --muted: #64748b;
+    --line: #e2e8f0;
     --surface: #ffffff;
-    --surface-2: #f0f9ff;
-    --brand: #1e3a8a;
-    --brand-dark: #172554;
-    --brand-light: #3b82f6;
-    --accent: #d97706;
-    --accent-soft: #fef3c7;
+    --surface-2: #f0fdfa;
+    --brand: #0f766e;
+    --brand-dark: #115e59;
+    --brand-light: #14b8a6;
+    --accent: #ea580c;
+    --accent-soft: #ffedd5;
     --radius: 16px;
     --radius-lg: 24px;
     --shadow: 0 8px 30px rgba(26, 31, 54, 0.08);
@@ -22,11 +22,15 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-html { scroll-behavior: smooth; }
+html {
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
+}
 
 body {
+    overflow-x: hidden;
     font-family: var(--font);
-    background: linear-gradient(180deg, #f8fafc 0%, #f0f9ff 40%, #ecfdf5 100%);
+    background: linear-gradient(180deg, #fffbeb 0%, #f0fdfa 38%, #f8fafc 100%);
     color: var(--ink);
     line-height: 1.6;
     -webkit-font-smoothing: antialiased;
@@ -250,7 +254,7 @@ img { max-width: 100%; height: auto; display: block; }
     position: relative;
     padding: 72px 24px 80px;
     overflow: hidden;
-    background: linear-gradient(155deg, #1e40af 0%, #0d9488 48%, #0369a1 100%);
+    background: linear-gradient(145deg, #0f766e 0%, #0d9488 42%, #155e75 100%);
     color: #fff;
 }
 
@@ -421,6 +425,49 @@ img { max-width: 100%; height: auto; display: block; }
     max-height: 320px;
 }
 
+/* —— Trust strip —— */
+.trust-strip {
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+    box-shadow: 0 12px 40px rgba(15, 118, 110, 0.06);
+}
+
+.trust-strip-inner {
+    max-width: var(--max);
+    margin: 0 auto;
+    padding: 20px 24px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+}
+
+.trust-item {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 14px 16px;
+    border-radius: var(--radius);
+    background: linear-gradient(180deg, #fff 0%, var(--surface-2) 100%);
+    border: 1px solid var(--line);
+}
+
+.trust-item i {
+    color: var(--brand);
+    font-size: 1.1rem;
+    margin-bottom: 4px;
+}
+
+.trust-item strong {
+    font-size: 0.92rem;
+    color: var(--ink);
+}
+
+.trust-item span {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.4;
+}
+
 /* —— Layout —— */
 .main-content {
     max-width: var(--max);
@@ -576,13 +623,20 @@ img { max-width: 100%; height: auto; display: block; }
 }
 
 .seminar-pill {
-    background: var(--surface);
+    background: linear-gradient(180deg, #fff 0%, #f8fafc 100%);
     border: 1px solid var(--line);
     border-radius: var(--radius-lg);
     padding: 24px;
     box-shadow: var(--shadow);
     display: flex;
     flex-direction: column;
+    transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+}
+
+.seminar-pill:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-lg);
+    border-color: #99f6e4;
 }
 
 .seminar-pill h4 {
@@ -858,8 +912,8 @@ img { max-width: 100%; height: auto; display: block; }
 
 /* —— Footer —— */
 .footer {
-    background: var(--ink);
-    color: #94a3b8;
+    background: linear-gradient(180deg, #134e4a 0%, #115e59 100%);
+    color: #cbd5e1;
     padding: 56px 24px 0;
     margin-top: 0;
 }
@@ -1090,12 +1144,44 @@ img { max-width: 100%; height: auto; display: block; }
     width: auto;
 }
 
+.schedule-container {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 0 -4px;
+    padding: 4px;
+}
+
+.schedule-container .schedule-table {
+    min-width: 560px;
+}
+
 /* —— Responsive —— */
+@media (max-width: 1200px) {
+    .top-bar-container,
+    .nav-container,
+    .main-content,
+    .static-announce-wrap,
+    #countdown-region,
+    .site-banner,
+    .trust-strip-inner,
+    .footer-container {
+        padding-left: 20px;
+        padding-right: 20px;
+    }
+}
+
 @media (max-width: 900px) {
     .hero-container { grid-template-columns: 1fr; }
+    .hero-visual { max-width: 420px; margin: 0 auto; width: 100%; }
     .home-split { grid-template-columns: 1fr; }
     .notices-panel { position: static; }
     .contact-grid { grid-template-columns: 1fr; }
+    .trust-strip-inner { grid-template-columns: repeat(2, 1fr); }
+    .cards-grid { grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); }
+    .open-seminars-strip { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+    .page-panel { padding: 24px 20px; }
+    .footer-container { grid-template-columns: repeat(2, 1fr); }
 }
 
 .nav-backdrop {
@@ -1110,12 +1196,32 @@ img { max-width: 100%; height: auto; display: block; }
 }
 
 @media (max-width: 768px) {
+    .top-bar { font-size: 0.75rem; }
+    .top-bar-container {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 10px 16px;
+    }
+    .top-bar-left { gap: 10px 14px; }
+    .top-bar-right { width: 100%; justify-content: flex-start; }
+
+    .nav-container { min-height: 64px; padding: 0 16px; }
+    .logo-text h1 { font-size: 0.88rem; }
+    .logo-text p { font-size: 0.62rem; }
+    .logo-icon { width: 42px; height: 42px; }
+
     .countdown-grid { flex-wrap: wrap; }
     .countdown-grid .box { min-width: calc(50% - 8px); }
+    .countdown-strip { padding: 16px; }
     .countdown-strip h4 { font-size: 0.95rem; }
+    #countdown-region { padding: 16px; }
+
+    .static-announce-wrap { padding: 12px 16px 0; }
     .static-announce-grid { grid-template-columns: 1fr; }
     .reviews-grid-static { grid-template-columns: 1fr; }
-    .nav-toggle { display: block; z-index: 1002; position: relative; }
+
+    .nav-toggle { display: block; z-index: 1002; position: relative; min-width: 44px; min-height: 44px; }
     .nav-links {
         display: none;
         position: absolute;
@@ -1131,9 +1237,120 @@ img { max-width: 100%; height: auto; display: block; }
         max-height: min(70vh, 480px);
         overflow-y: auto;
     }
+    .nav-links a {
+        width: 100%;
+        text-align: center;
+        min-height: 44px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
     .site-header.nav-open .nav-links { display: flex; }
     body.nav-menu-open { overflow: hidden; }
     .nav-links .btn-portal { margin-left: 0; width: 100%; text-align: center; }
-    .hero { padding: 48px 20px 56px; }
-    .hero-stats { gap: 20px; }
+
+    .hero { padding: 40px 16px 48px; }
+    .hero-content h1 { font-size: clamp(1.85rem, 8vw, 2.4rem); }
+    .hero-content .hero-lead { font-size: 1rem; }
+    .hero-buttons { flex-direction: column; width: 100%; }
+    .hero-buttons .btn-primary,
+    .hero-buttons .btn-ghost {
+        width: 100%;
+        justify-content: center;
+        min-height: 48px;
+    }
+    .hero-stats {
+        gap: 16px;
+        justify-content: space-between;
+    }
+    .hero-stats .stat-item { flex: 1 1 30%; min-width: 88px; }
+    .hero-stats .stat-item h3 { font-size: 1.5rem; }
+
+    .trust-strip-inner { grid-template-columns: 1fr; padding: 16px; }
+    .main-content { padding: 40px 16px 64px; }
+    .vgmf-section { margin-bottom: 48px; }
+
+    .cards-grid,
+    .open-seminars-strip {
+        grid-template-columns: 1fr;
+    }
+
+    .feature-card,
+    .seminar-pill,
+    .notice-card { padding: 18px 16px; }
+
+    .section-head { margin-bottom: 28px; padding: 0 4px; }
+    .section-head h2 { font-size: 1.55rem; }
+
+    .page-panel,
+    .schedule-picker,
+    .contact-info,
+    .contact-form {
+        padding: 20px 16px;
+    }
+
+    .schedule-table th,
+    .schedule-table td {
+        padding: 10px 12px;
+        font-size: 0.82rem;
+    }
+
+    .footer { padding-top: 40px; }
+    .footer-container {
+        grid-template-columns: 1fr;
+        gap: 24px;
+        padding-bottom: 28px;
+    }
+
+    .modal { padding: 12px; align-items: flex-end; }
+    .modal-content {
+        max-width: 100%;
+        width: 100%;
+        max-height: 92vh;
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
+    }
+
+    .verify-panel .verify-search-btn { min-height: 48px; }
+    .form-group input,
+    .form-group textarea,
+    .schedule-picker select {
+        font-size: 16px;
+        min-height: 48px;
+    }
+}
+
+@media (max-width: 480px) {
+    .top-bar-left span:nth-child(3) { display: none; }
+    .top-bar-left { flex-direction: column; align-items: flex-start; gap: 6px; }
+
+    .logo-text h1 { font-size: 0.8rem; max-width: 52vw; }
+    .hero-stats { flex-direction: column; align-items: flex-start; }
+    .hero-stats .stat-item { flex: none; width: 100%; }
+
+    .countdown-grid .box { min-width: calc(50% - 6px); padding: 10px 6px; }
+    .countdown-grid h2 { font-size: 1.35rem; }
+
+    .btn-primary,
+    .btn-ghost,
+    .seminar-pill .btn-primary {
+        font-size: 0.9rem;
+        padding: 12px 18px;
+    }
+
+    .fab-register,
+    .fab-whatsapp {
+        right: max(12px, env(safe-area-inset-right, 0px));
+    }
+    .fab-whatsapp {
+        bottom: max(16px, env(safe-area-inset-bottom, 0px));
+    }
+    .fab-register {
+        bottom: max(76px, calc(60px + env(safe-area-inset-bottom, 0px)));
+    }
+}
+
+@media (max-width: 360px) {
+    .hero-badge { font-size: 0.7rem; padding: 5px 10px; }
+    .trust-item { padding: 12px; }
 }

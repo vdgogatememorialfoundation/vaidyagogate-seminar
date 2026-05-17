@@ -292,8 +292,51 @@ section.hero.hero--dimmed { display: none; }
     border-color: var(--brand) !important;
 }
 
+@media (max-width: 900px) {
+    .mh-content { padding: 40px 20px; }
+    .mh-title { font-size: clamp(1.65rem, 6vw, 2.5rem); }
+    .mh-sub { font-size: 1rem; }
+    .mh-desc { font-size: 0.92rem; }
+}
+
 @media (max-width: 768px) {
+    #marketing-hero { min-height: clamp(260px, 45vh, 420px); }
+    .mh-content { padding: 32px 16px; }
+    .mh-title { font-size: clamp(1.5rem, 7vw, 2rem); }
+    .mh-cta { width: 100%; justify-content: center; min-height: 48px; }
     .mh-nav { display: none; }
+    .mh-dots { bottom: 12px; }
+
     .fab-register span { display: none; }
-    .fab-register { padding: 14px; border-radius: 50%; bottom: 88px; }
+    .fab-register {
+        padding: 14px;
+        border-radius: 50%;
+        bottom: max(88px, calc(72px + env(safe-area-inset-bottom, 0px)));
+        min-width: 48px;
+        min-height: 48px;
+        justify-content: center;
+    }
+
+    #site-announce-popup { padding: 12px; align-items: flex-end; }
+    .sap-panel {
+        max-width: 100%;
+        border-bottom-left-radius: 0;
+        border-bottom-right-radius: 0;
+        max-height: 90vh;
+        overflow-y: auto;
+    }
+    .sap-body-wrap { padding: 20px 16px 24px; }
+    #sap-heading { font-size: 1.15rem; }
+
+    .auth-tab-btn {
+        min-height: 44px;
+        font-size: 0.88rem;
+    }
+}
+
+@media (max-width: 480px) {
+    #marketing-hero { min-height: 240px; }
+    .mh-content { padding: 28px 14px; }
+    .mh-dot.is-active { width: 22px; }
+    #sap-image { max-height: 160px; }
 }

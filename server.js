@@ -527,6 +527,15 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage: storage, limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB max
 const memoryUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+const fileStore = require('./lib/file-store');
+const caseUpload = fileStore.createUploadHandler(upload, memoryUpload);
+
+app.get('/uploads/:filename', fileStore.serveUploadHandler(db, uploadsDir));
+if (fileStore.useBlobStore()) {
+    fileStore.ensureSchema(db, (e) => {
+        if (e) console.warn('[file-store] schema:', e.message);
+    });
+}
 
 function ensureCriticalUserColumns(callback) {
     const ignoreDup = (err) => {
@@ -1263,20 +1272,11 @@ function parseMaybeJson(val) {
 
 function persistUploadedCertificate(req, cb) {
     if (!req.file) return cb(null, null);
-    if (process.env.VERCEL && req.file.buffer) {
-        const key =
-            'cert_' + Date.now() + '_' + crypto.randomBytes(6).toString('hex');
-        const payload = JSON.stringify({
-            mime: req.file.mimetype || 'application/octet-stream',
-            data: req.file.buffer.toString('base64'),
-            name: req.file.originalname || 'certificate'
-        });
-        return upsertGlobalSetting(key, payload, (err) => {
-            if (err) return cb(err);
-            cb(null, '/api/assets/' + encodeURIComponent(key));
-        });
-    }
-    cb(null, req.file.filename || null);
+    fileStore.persistToGlobalAsset(db, upsertGlobalSetting, req.file, 'cert_', (err, assetPath) => {
+        if (err) return cb(err);
+        if (assetPath) return cb(null, assetPath);
+        cb(null, req.file.filename ? '/uploads/' + req.file.filename : null);
+    });
 }
 
 function sanitizeFormDataForStorage(formData) {
@@ -1754,12 +1754,20 @@ let extendedRoutesMounted = false;
 function mountExtendedRoutes() {
     if (extendedRoutesMounted) return;
     extendedRoutesMounted = true;
-    casePresentation.registerCasePresentationRoutes(app, { db, upload, generateId });
+    casePresentation.registerCasePresentationRoutes(app, {
+        db,
+        upload: caseUpload,
+        generateId,
+        fileStore,
+        uploadsDir
+    });
     try {
         require('./lib/routes-ext')(app, {
             db,
-            upload,
+            upload: caseUpload,
             generateId,
+            fileStore,
+            uploadsDir,
             buildDisplayNameFromFormData,
             syncCertificateEligibilityForTicket,
             insertParticipantTicket,
@@ -1775,7 +1783,13 @@ try {
 } catch (mountErr) {
     console.error('[routes] mountExtendedRoutes failed:', mountErr.message);
     try {
-        casePresentation.registerCasePresentationRoutes(app, { db, upload, generateId });
+        casePresentation.registerCasePresentationRoutes(app, {
+        db,
+        upload: caseUpload,
+        generateId,
+        fileStore,
+        uploadsDir
+    });
     } catch (caseErr) {
         console.error('[routes] case presentation routes failed:', caseErr.message);
     }
@@ -2477,56 +2491,19 @@ app.post('/api/admin/site-cms', (req, res) => {
     });
 });
 
-app.post('/api/admin/upload-asset', (req, res, next) => {
-    (process.env.VERCEL ? memoryUpload : upload).single('file')(req, res, next);
-}, (req, res) => {
+app.post('/api/admin/upload-asset', caseUpload.single('file'), (req, res) => {
     if (!req.file) {
         return res.status(400).json({ error: 'file is required' });
     }
-    if (process.env.VERCEL && req.file.buffer) {
-        const crypto = require('crypto');
-        const key =
-            'upload_asset_' +
-            Date.now() +
-            '_' +
-            crypto.randomBytes(6).toString('hex');
-        const payload = JSON.stringify({
-            mime: req.file.mimetype || 'application/octet-stream',
-            data: req.file.buffer.toString('base64'),
-            name: req.file.originalname || 'file'
-        });
-        return upsertGlobalSetting(key, payload, (err) => {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json({ success: true, path: '/api/assets/' + encodeURIComponent(key) });
-        });
-    }
-    if (!req.file.filename) {
-        return res.status(400).json({ error: 'file is required' });
-    }
-    res.json({ success: true, path: '/uploads/' + req.file.filename });
-});
-
-app.get('/api/assets/:key', (req, res) => {
-    const key = decodeURIComponent(String(req.params.key || ''));
-    if (!/^upload_asset_[a-z0-9_]+$/i.test(key)) {
-        return res.status(400).json({ error: 'Invalid asset key' });
-    }
-    db.get(`SELECT value FROM global_settings WHERE key = ?`, [key], (e, row) => {
-        if (e) return res.status(500).end();
-        if (!row || !row.value) return res.status(404).end();
-        let payload;
-        try {
-            payload = JSON.parse(row.value);
-        } catch (_) {
-            return res.status(404).end();
-        }
-        if (!payload || !payload.data) return res.status(404).end();
-        const buf = Buffer.from(payload.data, 'base64');
-        res.setHeader('Content-Type', payload.mime || 'application/octet-stream');
-        res.setHeader('Cache-Control', 'public, max-age=86400');
-        res.send(buf);
+    fileStore.persistToGlobalAsset(db, upsertGlobalSetting, req.file, 'upload_asset_', (err, assetPath) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (assetPath) return res.json({ success: true, path: assetPath });
+        if (!req.file.filename) return res.status(400).json({ error: 'file is required' });
+        res.json({ success: true, path: '/uploads/' + req.file.filename });
     });
 });
+
+app.get('/api/assets/:key', fileStore.serveAssetHandler(db));
 
 app.post('/api/admin/registration-form-config', (req, res) => {
     const { fields } = req.body;

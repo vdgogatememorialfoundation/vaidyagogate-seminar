@@ -7,7 +7,7 @@
   "routes": [
     { "src": "/css/(.*)", "dest": "/public/css/$1" },
     { "src": "/js/(.*)", "dest": "/public/js/$1" },
-    { "src": "/uploads/(.*)", "dest": "/public/uploads/$1" },
+    { "src": "/uploads/(.*)", "dest": "server.js" },
     { "src": "/(.*\\.(png|jpg|jpeg|gif|webp|svg|ico|woff2?|webmanifest))", "dest": "/public/$1" },
     { "src": "/(.*)", "dest": "server.js" }
   ],
