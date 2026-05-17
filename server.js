@@ -1354,6 +1354,48 @@ function backfillMissingTicketIdStrings(cb) {
     );
 }
 
+/** Create missing QR tickets for paid orders (Neon backfill / failed verify). */
+function backfillTicketsForPaidOrders(cb) {
+    db.all(
+        `SELECT o.id AS order_db_id, o.order_id_string, o.registration_id, r.user_id, r.application_no
+         FROM orders o
+         JOIN registrations r ON r.id = o.registration_id
+         LEFT JOIN tickets t ON t.order_id = o.id
+         WHERE o.status = 'success' AND t.id IS NULL
+           AND r.status NOT IN ('rejected', 'cancelled')
+         ORDER BY o.id DESC
+         LIMIT 500`,
+        [],
+        (err, rows) => {
+            if (err) return cb && cb(err);
+            const list = rows || [];
+            if (!list.length) return cb && cb(null, 0);
+            let i = 0;
+            let created = 0;
+            const next = () => {
+                if (i >= list.length) return cb && cb(null, created);
+                const row = list[i++];
+                insertParticipantTicket(
+                    row.order_db_id,
+                    row.user_id,
+                    row.order_id_string || '',
+                    row.registration_id,
+                    row.application_no,
+                    (eT, etk) => {
+                        if (eT) return cb && cb(eT);
+                        if (etk) {
+                            created++;
+                            notifyTicketIssued(row.user_id, row.registration_id, etk);
+                        }
+                        next();
+                    }
+                );
+            };
+            next();
+        }
+    );
+}
+
 function notifyTicketIssued(userId, registrationId, ticketId) {
     if (!userId || !registrationId || !ticketId) return;
     db.get(`SELECT seminar_id FROM registrations WHERE id = ?`, [registrationId], (e, reg) => {
@@ -1428,6 +1470,7 @@ function insertParticipantTicket(orderDbId, userId, orderIdStr, registrationId, 
                                 }
                             );
                         }
+                        if (!err && etk) notifyTicketIssued(userId, registrationId, etk);
                         cb && cb(err, etk, qrData);
                     }
                 );
@@ -4353,7 +4396,30 @@ app.post('/api/payments/verify', (req, res) => {
                                 });
                             }
                             if (ord.status === 'success') {
-                                return res.json({ success: true, message: 'Payment already verified', transactionId: razorpay_payment_id });
+                                return db.get(
+                                    `SELECT user_id, application_no FROM registrations WHERE id = ?`,
+                                    [applicationId],
+                                    (eReg, regRow) => {
+                                        if (eReg) return res.status(500).json({ error: eReg.message });
+                                        if (!regRow) return res.status(404).json({ error: 'Registration not found' });
+                                        insertParticipantTicket(
+                                            ord.id,
+                                            regRow.user_id,
+                                            ord.order_id_string || '',
+                                            applicationId,
+                                            regRow.application_no,
+                                            (eTix) => {
+                                                if (eTix) return res.status(500).json({ error: eTix.message });
+                                                res.json({
+                                                    success: true,
+                                                    message:
+                                                        'Payment already recorded. Your e-ticket is under Participant tickets.',
+                                                    transactionId: razorpay_payment_id
+                                                });
+                                            }
+                                        );
+                                    }
+                                );
                             }
                             db.get(`SELECT status FROM registrations WHERE id = ?`, [applicationId], (ers, regSt) => {
                                 if (ers) return res.status(500).json({ error: ers.message });
@@ -5369,6 +5435,10 @@ function startBackgroundWorkers() {
     backfillMissingTicketIdStrings((eBf, count) => {
         if (eBf) console.warn('[tickets] E-ticket ID backfill failed:', eBf.message);
         else if (count) console.log(`[tickets] Backfilled ${count} missing e-ticket ID(s).`);
+    });
+    backfillTicketsForPaidOrders((ePaid, nPaid) => {
+        if (ePaid) console.warn('[tickets] Paid-order ticket backfill failed:', ePaid.message);
+        else if (nPaid) console.log(`[tickets] Created ${nPaid} missing e-ticket(s) for paid orders.`);
     });
     if (pgDb && pgDb.ensureAuxiliaryTables) {
         pgDb
