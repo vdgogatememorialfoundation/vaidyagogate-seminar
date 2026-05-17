@@ -5,7 +5,17 @@ function doctorNumericUserId() {
     if (!currentUser) return null;
     const raw = currentUser.id != null ? currentUser.id : currentUser.user_id;
     const n = parseInt(raw, 10);
-    return Number.isInteger(n) && n > 0 ? n : null;
+    if (Number.isInteger(n) && n > 0) return n;
+    return null;
+}
+
+function requireDoctorUserId() {
+    const uid = doctorNumericUserId();
+    if (!uid) {
+        alert('Session expired or invalid. Please sign out and sign in again with your email and password.');
+        return null;
+    }
+    return uid;
 }
 
 const DOCTOR_TRACK_POLL_MS = 5000;
@@ -2135,7 +2145,9 @@ async function loadDoctorDashboardStats() {
         if (el) el.textContent = v != null && v !== '' ? String(v) : '0';
     };
     try {
-        const res = await fetch('/api/doctor/dashboard-stats/' + currentUser.id);
+        const uid = doctorNumericUserId();
+        if (!uid) return;
+        const res = await fetch('/api/doctor/dashboard-stats/' + uid);
         if (!res.ok) throw new Error('stats');
         const d = await res.json();
         set('stat-registered', d.registered_seminars);
@@ -2630,7 +2642,9 @@ async function submitSupportTicket() {
 // Doctor Profile Management
 async function loadProfile() {
     try {
-        const res = await fetch(`/api/doctor/profile/${currentUser.id}`);
+        const uid = doctorNumericUserId();
+        if (!uid) return;
+        const res = await fetch(`/api/doctor/profile/${uid}`);
         const profile = await res.json();
         
         if(profile && profile.id) {

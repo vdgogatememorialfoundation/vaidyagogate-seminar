@@ -654,9 +654,21 @@
             }
         }
 
-        document.getElementById('nav-toggle')?.addEventListener('click', () => {
-            document.getElementById('site-header')?.classList.toggle('nav-open');
-        });
+        function initMobileNav() {
+            const toggle = document.getElementById('nav-toggle');
+            const header = document.getElementById('site-header');
+            const links = document.getElementById('nav-links');
+            if (!toggle || !header) return;
+            toggle.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                header.classList.toggle('nav-open');
+            });
+            links?.querySelectorAll('a').forEach((a) => {
+                a.addEventListener('click', () => header.classList.remove('nav-open'));
+            });
+        }
+        initMobileNav();
 
         function openAuthModal(tab) {
             document.getElementById('authModal').style.display = 'flex';
@@ -689,7 +701,7 @@
 
         async function handleLogin(e) {
             e.preventDefault();
-            const email = document.getElementById('login_email').value;
+            const email = String(document.getElementById('login_email').value || '').trim().toLowerCase();
             const password = document.getElementById('login_password').value;
             const body = { email, password };
             const lo = document.getElementById('login_otp_panel');
@@ -722,8 +734,8 @@
                 const ln = validatePersonNameClient(lastName, 'Last name');
                 if (!ln.valid) return alert(ln.message);
             }
-            const email = document.getElementById('signup_email').value;
-            const phone = document.getElementById('signup_phone').value;
+            const email = String(document.getElementById('signup_email').value || '').trim().toLowerCase();
+            const phone = String(document.getElementById('signup_phone').value || '').trim();
             const password = document.getElementById('signup_password').value;
 
             const body = { firstName, lastName, email, phone, password, role: 'doctor' };
@@ -742,7 +754,7 @@
             if (data.success) {
                 signupPhoneOtpToken = null;
                 signupEmailOtpToken = null;
-                alert('Registration successful! Please login with your new account.');
+                alert('Registration successful! Sign in with your email and password (not the numeric user ID).');
                 switchAuthTab('login');
             } else {
                 alert(data.error);
@@ -1015,10 +1027,6 @@
                 console.error('Failed to load seminars for timer', err);
             }
         }
-
-        document.getElementById('nav-toggle')?.addEventListener('click', () => {
-            document.getElementById('site-header')?.classList.toggle('nav-open');
-        });
 
         window.addEventListener('load', () => {
             document.getElementById('site-preloader')?.classList.add('is-done');

@@ -1719,8 +1719,18 @@ app.post('/api/otp/verify', (req, res) => {
 });
 
 // 1. Auth: Signup
+function normalizeAuthUserRow(row) {
+    if (!row) return row;
+    if (row.id != null) row.id = Number(row.id);
+    if (row.is_disabled != null) row.is_disabled = Number(row.is_disabled);
+    if (row.is_demo != null) row.is_demo = Number(row.is_demo);
+    return row;
+}
+
 app.post('/api/auth/signup', (req, res) => {
     const { firstName, lastName, email, phone, password, role, phoneOtpToken, emailOtpToken } = req.body;
+    const emailNorm = String(email || '').trim().toLowerCase();
+    const phoneNorm = String(phone || '').trim();
 
     const firstNameValidation = validateDoctorName(firstName);
     if (!firstNameValidation.valid) {
@@ -1738,15 +1748,18 @@ app.post('/api/auth/signup', (req, res) => {
         const cleanLastName = lastNameValidation.cleanedName;
         db.run(
             `INSERT INTO users (user_id_string, first_name, last_name, email, phone, password, role, user_role) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [userIdStr, cleanFirstName, cleanLastName, email, phone, password, userRole, userRole],
+            [userIdStr, cleanFirstName, cleanLastName, emailNorm, phoneNorm, password, userRole, userRole],
             function (err) {
                 if (err) {
-                    if (err.message.includes('UNIQUE constraint failed')) {
+                    if (err.message.includes('UNIQUE constraint failed') || /unique|duplicate key/i.test(err.message)) {
                         return res.status(400).json({ error: 'Email already exists.' });
                     }
                     return res.status(500).json({ error: err.message });
                 }
-                const newUserId = this.lastID;
+                const newUserId = this.lastID != null ? Number(this.lastID) : null;
+                if (!newUserId) {
+                    return res.status(500).json({ error: 'Account was created but could not be confirmed. Try signing in with your email.' });
+                }
                 notifEngine.notify(
                     db,
                     'ACCOUNT_CREATED',
@@ -1801,6 +1814,7 @@ app.post('/api/auth/login', (req, res) => {
 
             function sendUser() {
                 delete row.password;
+                normalizeAuthUserRow(row);
                 res.json({ success: true, user: row });
             }
 

@@ -69,6 +69,7 @@
     }
 
     function setUser(portal, user) {
+        if (user && user.id != null) user.id = Number(user.id);
         localStorage.setItem(KEYS[portal], JSON.stringify(user));
     }
 
