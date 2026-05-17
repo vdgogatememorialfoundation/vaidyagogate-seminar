@@ -3195,6 +3195,7 @@ app.post('/api/payments/process', (req, res) => {
                                 res.json({
                                     success: true,
                                     order: rzOrder,
+                                    keyId: gateway.config.key_id,
                                     gateway: 'razorpay',
                                     mode: gateway.mode,
                                     paymentOption: paymentOption || gateway.mode
@@ -4739,12 +4740,26 @@ app.get('/api/admin/payment_gateways', (req, res) => {
 app.post('/api/admin/payment_gateways/:name', (req, res) => {
     const { name } = req.params;
     const { is_active, config } = req.body;
-    db.run(`INSERT OR REPLACE INTO payment_gateways (name, is_active, config) VALUES (?, ?, ?)`,
-        [name, is_active ? 1 : 0, JSON.stringify(config)],
-        function(err) {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json({ success: true });
+    const finish = (finalConfig) => {
+        db.run(
+            `INSERT OR REPLACE INTO payment_gateways (name, is_active, config) VALUES (?, ?, ?)`,
+            [name, is_active ? 1 : 0, JSON.stringify(finalConfig)],
+            function (err) {
+                if (err) return res.status(500).json({ error: err.message });
+                res.json({ success: true });
+            }
+        );
+    };
+    if (String(name).toLowerCase() === 'razorpay' && config) {
+        return db.get(`SELECT config FROM payment_gateways WHERE name = ?`, [name], (e, row) => {
+            if (e) return res.status(500).json({ error: e.message });
+            const merged = row && row.config
+                ? paymentGatewayOptions.mergeRazorpayConfig(row.config, config)
+                : config;
+            finish(merged);
         });
+    }
+    finish(config || {});
 });
 
 // ==================== EVENT SCHEDULE ENDPOINTS ====================

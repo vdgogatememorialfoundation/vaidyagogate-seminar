@@ -2146,7 +2146,9 @@ async function savePaymentGatewaysSettings() {
                 body: JSON.stringify({ is_active: gw.is_active, config: gw.config })
             });
         }
-        alert('Payment gateways saved.');
+        alert(
+            'Payment gateways saved. For Razorpay Live: check “Enable Razorpay gateway”, “Enable Live mode for doctors”, enter rzp_live_ Key ID and Secret, then Save.'
+        );
     } catch (err) {
         console.error(err);
     }

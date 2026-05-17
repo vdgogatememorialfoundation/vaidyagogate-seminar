@@ -2361,8 +2361,15 @@ async function processPayment(appId, amount, appNo, paymentOption) {
                     alert('Payment checkout could not load. Disable ad blockers and refresh the page.');
                     return;
                 }
+                const checkoutKey = result.keyId || (result.order && result.order.key_id);
+                if (!checkoutKey) {
+                    alert(
+                        'Razorpay is not configured correctly (missing Key ID). In Admin, enable Razorpay, check “Enable Live mode”, save live Key ID and Secret, then refresh this page.'
+                    );
+                    return;
+                }
                 const options = {
-                    key: result.order.key_id,
+                    key: checkoutKey,
                     amount: result.order.amount,
                     currency: result.order.currency,
                     name: 'Vaidya Gogate Memorial Foundation National Seminar',
