@@ -32,7 +32,13 @@ const extModules = require('./lib/extended-modules');
 const portalTracking = require('./lib/portal-tracking');
 const seminarDt = require('./lib/seminar-datetime');
 const siteMarketing = require('./lib/site-marketing');
-const { isCheckinDateToday, localDateYmd } = require('./lib/local-date');
+const {
+    isCheckinDateToday,
+    isCheckinOpenForSeminar,
+    localDateYmd,
+    normalizeCheckinDateYmd,
+    normalizeCheckinDateForStorage
+} = require('./lib/local-date');
 let jobsModule = null;
 try {
     jobsModule = require('./lib/jobs');
@@ -3678,14 +3684,19 @@ app.get('/api/scanner/checkin-seminars', (req, res) => {
         [],
         (err, rows) => {
             if (err) return res.status(500).json({ error: err.message });
+            const todayYmd = localDateYmd();
             res.json(
-                (rows || []).map((r) => ({
-                    id: r.id,
-                    title: r.title,
-                    checkinDate: r.checkin_date,
-                    eventDate: r.event_date,
-                    checkinOpenToday: isCheckinDateToday(r.checkin_date)
-                }))
+                (rows || []).map((r) => {
+                    const checkinYmd = normalizeCheckinDateYmd(r.checkin_date);
+                    return {
+                        id: r.id,
+                        title: r.title,
+                        checkinDate: checkinYmd || r.checkin_date,
+                        eventDate: normalizeCheckinDateYmd(r.event_date) || r.event_date,
+                        todayYmd,
+                        checkinOpenToday: isCheckinOpenForSeminar(r)
+                    };
+                })
             );
         }
     );
@@ -3815,7 +3826,11 @@ app.post('/api/scanner/mark', (req, res) => {
                     });
                 }
 
-                if (!row.checkin_enabled) {
+                const checkinOn =
+                    row.checkin_enabled === true ||
+                    row.checkin_enabled === 1 ||
+                    row.checkin_enabled === '1';
+                if (!checkinOn) {
                     return res.status(403).json({
                         success: false,
                         error: 'Check-in is currently disabled for this seminar.',
@@ -3825,12 +3840,19 @@ app.post('/api/scanner/mark', (req, res) => {
 
                 const allowAnyCheckinDate =
                     process.env.SCANNER_ALLOW_ANY_CHECKIN_DATE === '1' || r === 'admin';
-                if (row.checkin_date && !isCheckinDateToday(row.checkin_date) && !allowAnyCheckinDate) {
+                const seminarForDate = {
+                    checkin_enabled: row.checkin_enabled,
+                    checkin_date: row.checkin_date,
+                    event_date: row.event_date
+                };
+                if (!allowAnyCheckinDate && !isCheckinOpenForSeminar(seminarForDate)) {
                     const today = localDateYmd();
-                    const expected = String(row.checkin_date).slice(0, 10);
+                    const expected =
+                        normalizeCheckinDateYmd(row.checkin_date) ||
+                        String(row.checkin_date || '').slice(0, 10);
                     return res.status(403).json({
                         success: false,
-                        error: `Check-in date mismatch. This seminar allows check-in on ${expected} (today is ${today}). In Admin → Seminars, clear "Check-in date" for open check-in, or set it to today.`,
+                        error: `Check-in is only open for ${expected || 'the configured date'} (today in India is ${today}). In Admin → Seminars, set "Check-in allowed date" to today (${today}), or leave it blank to allow any day while check-in is enabled.`,
                         sound: 'wrong_date',
                         doctor: {
                             userId: row.doctor_user_id,
@@ -3958,7 +3980,7 @@ app.post('/api/admin/seminars', (req, res) => {
                 capacity,
                 price || 0,
                 checkin_enabled ? 1 : 0,
-                checkin_date || null,
+                normalizeCheckinDateForStorage(checkin_date),
                 location_url || null,
                 terms_conditions || null,
                 hero_image_path || null,
@@ -4030,7 +4052,7 @@ app.put('/api/admin/seminars/:id', (req, res) => {
                 capacity,
                 price || 0,
                 checkin_enabled ? 1 : 0,
-                checkin_date || null,
+                normalizeCheckinDateForStorage(checkin_date),
                 is_active ? 1 : 0,
                 location_url || null,
                 terms_conditions || null,

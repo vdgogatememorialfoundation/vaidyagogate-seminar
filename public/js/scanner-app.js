@@ -212,10 +212,18 @@
                 selectedSeminarId = sel.value ? parseInt(sel.value, 10) : null;
                 const s = list.find((x) => Number(x.id) === Number(selectedSeminarId));
                 if (hint && s) {
-                    hint.textContent =
-                        s.checkinOpenToday === false
-                            ? 'Today is not the configured check-in date.'
-                            : 'Ready to scan.';
+                    if (s.checkinOpenToday === false) {
+                        const today = s.todayYmd || 'today';
+                        const cfg = s.checkinDate ? String(s.checkinDate).slice(0, 10) : 'not set';
+                        hint.textContent =
+                            'Check-in date is ' +
+                            cfg +
+                            ' (India today: ' +
+                            today +
+                            '). Update Admin → Seminars → Check-in allowed date, or clear it for any day.';
+                    } else {
+                        hint.textContent = 'Ready to scan.';
+                    }
                 }
             };
             sel.dispatchEvent(new Event('change'));

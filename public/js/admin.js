@@ -2626,7 +2626,14 @@ function editSeminar(index) {
     document.getElementById('seminar-active').value = s.is_active ? '1' : '0';
     
     document.getElementById('seminar-checkin-enabled').value = s.checkin_enabled ? '1' : '0';
-    document.getElementById('seminar-checkin-date').value = s.checkin_date || '';
+    const checkinRaw = s.checkin_date || '';
+    const checkinYmd =
+        typeof checkinRaw === 'string' && /^\d{4}-\d{2}-\d{2}/.test(checkinRaw)
+            ? checkinRaw.slice(0, 10)
+            : checkinRaw
+              ? new Date(checkinRaw).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' })
+              : '';
+    document.getElementById('seminar-checkin-date').value = checkinYmd;
     const ple = document.getElementById('seminar-public-list-enabled');
     if (ple) ple.value = s.public_list_enabled ? '1' : '0';
     document.getElementById('seminar-location-url').value = s.location_url || '';
@@ -2682,7 +2689,14 @@ async function saveSeminar(e) {
         price: parseFloat(document.getElementById('seminar-price').value) || 0,
         is_active: document.getElementById('seminar-active').value === '1',
         checkin_enabled: document.getElementById('seminar-checkin-enabled').value === '1',
-        checkin_date: document.getElementById('seminar-checkin-date').value || null,
+        checkin_date: (() => {
+            const enabled = document.getElementById('seminar-checkin-enabled').value === '1';
+            let d = document.getElementById('seminar-checkin-date').value || '';
+            if (enabled && !d) {
+                d = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+            }
+            return d || null;
+        })(),
         public_list_enabled: document.getElementById('seminar-public-list-enabled')?.value === '1',
         location_url: document.getElementById('seminar-location-url').value || null,
         terms_conditions: document.getElementById('seminar-terms').value || null,
