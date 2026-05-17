@@ -808,22 +808,12 @@ img { max-width: 100%; height: auto; display: block; }
 }
 
 .scrolling-announce-track.sa-loop-set {
-    animation: scrollCardsRtl 45s linear infinite;
+    animation: scrollCardsRtl 40s linear infinite;
+    will-change: transform;
 }
 
 .scrolling-announce-track.sa-loop-set:hover {
     animation-play-state: paused;
-}
-
-.scrolling-announce-track.sa-single-set {
-    animation: none;
-    width: 100%;
-    max-width: 100%;
-}
-
-.scrolling-announce-track.sa-single-set .sa-card {
-    flex: 1 1 auto;
-    max-width: 100%;
 }
 
 @keyframes scrollCardsRtl {

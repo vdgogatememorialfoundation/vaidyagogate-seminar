@@ -1,5 +1,5 @@
 ﻿/**
- * Shared horizontal scrolling announcement strip (public site + doctor portal).
+ * Homepage sliding announcement strip (public site only).
  * Data: Admin → Website CMS → Homepage sliding announcements (+ open seminars from API).
  */
 (function () {
@@ -13,7 +13,6 @@
 
     function isTestOrDuplicateAnnouncement(item) {
         const t = String(item.title || '');
-        const b = String(item.body || '');
         if (/test seminar/i.test(t) || /introduction to ayurveda/i.test(t)) return true;
         return false;
     }
@@ -71,19 +70,14 @@
             wrap.classList.add('hidden');
             wrap.setAttribute('aria-hidden', 'true');
             track.innerHTML = '';
+            track.classList.remove('sa-loop-set');
             return;
         }
         wrap.classList.remove('hidden');
         wrap.setAttribute('aria-hidden', 'false');
         const cls = cardClass || 'sa-card';
         const html = list.map((it) => cardHtml(it, cls)).join('');
-        track.innerHTML = html;
-        track.classList.remove('sa-single-set', 'sa-loop-set');
-        if (list.length === 1) {
-            track.classList.add('sa-single-set');
-        } else {
-            track.innerHTML = html + html;
-            track.classList.add('sa-loop-set');
-        }
+        track.innerHTML = html + html;
+        track.classList.add('sa-loop-set');
     };
 })();

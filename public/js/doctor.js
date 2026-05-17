@@ -829,14 +829,6 @@ async function loadDoctorPortalUpdatesFromCms() {
     try {
         const res = await fetch('/api/public/site-cms');
         const cms = await res.json();
-        if (typeof renderPortalScrollingAnnouncements === 'function') {
-            renderPortalScrollingAnnouncements(
-                cms.scrollingAnnouncements || [],
-                'doctor-scrolling-announce-wrap',
-                'doctor-scrolling-announce-track',
-                'portal-sa-card'
-            );
-        }
         const items = Array.isArray(cms.doctorUpdates) ? cms.doctorUpdates : [];
         if (!items.length) {
             box.innerHTML = '<li style="color:#64748b;">No updates from the office yet.</li>';
