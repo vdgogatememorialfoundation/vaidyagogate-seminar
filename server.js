@@ -1458,6 +1458,217 @@ function insertParticipantTicket(orderDbId, userId, orderIdStr, registrationId, 
     });
 }
 
+/** Reuse existing pending order or create one (avoids duplicate pending rows per registration). */
+function getOrCreatePendingOrder(registrationId, amount, cb) {
+    db.get(
+        `SELECT id, order_id_string FROM orders WHERE registration_id = ? AND status = 'pending' ORDER BY id DESC LIMIT 1`,
+        [registrationId],
+        (e, row) => {
+            if (e) return cb && cb(e);
+            if (row) return cb && cb(null, row);
+            const orderIdStr = 'ORD_' + generateId();
+            db.run(
+                `INSERT INTO orders (order_id_string, registration_id, amount, status) VALUES (?, ?, ?, 'pending')`,
+                [orderIdStr, registrationId, amount != null ? amount : 1500],
+                function (insErr) {
+                    if (insErr) return cb && cb(insErr);
+                    cb && cb(null, { id: this.lastID, order_id_string: orderIdStr });
+                }
+            );
+        }
+    );
+}
+
+/**
+ * Ensure a participant ticket exists for a registration (admin e_ticket_issued or post-payment).
+ * Reuses success order, or promotes pending → success, or creates a success order when allowed.
+ */
+function ensureParticipantTicketForRegistration(registrationId, options, cb) {
+    const opts = options || {};
+    const done = typeof cb === 'function' ? cb : () => {};
+
+    db.get(
+        `SELECT id, user_id, application_no, status FROM registrations WHERE id = ?`,
+        [registrationId],
+        (eReg, reg) => {
+            if (eReg) return done(eReg);
+            if (!reg) return done(new Error('Registration not found'));
+            const st = String(reg.status || '').toLowerCase();
+            if (st === 'rejected' || st === 'cancelled') {
+                return done(null, { skipped: true, reason: 'ineligible' });
+            }
+
+            const issueOnOrder = (orderRow, cb2) => {
+                if (!orderRow || !orderRow.id) {
+                    if (!opts.createOrderIfMissing) return cb2(null, { skipped: true, reason: 'no_order' });
+                    const orderIdStr = 'ORD_' + generateId();
+                    return db.run(
+                        `INSERT INTO orders (order_id_string, registration_id, amount, status, payment_date) VALUES (?, ?, ?, 'success', CURRENT_TIMESTAMP)`,
+                        [orderIdStr, registrationId, opts.amount != null ? opts.amount : 1500],
+                        function (insErr) {
+                            if (insErr) return cb2(insErr);
+                            insertParticipantTicket(
+                                this.lastID,
+                                reg.user_id,
+                                orderIdStr,
+                                registrationId,
+                                reg.application_no,
+                                (eT, etk, qr, meta) => {
+                                    if (eT) return cb2(eT);
+                                    cb2(null, {
+                                        orderId: this.lastID,
+                                        orderIdString: orderIdStr,
+                                        ticketId: etk,
+                                        skipped: meta && meta.skipped
+                                    });
+                                }
+                            );
+                        }
+                    );
+                }
+                insertParticipantTicket(
+                    orderRow.id,
+                    reg.user_id,
+                    orderRow.order_id_string || '',
+                    registrationId,
+                    reg.application_no,
+                    (eT, etk, qr, meta) => {
+                        if (eT) return cb2(eT);
+                        cb2(null, {
+                            orderId: orderRow.id,
+                            orderIdString: orderRow.order_id_string,
+                            ticketId: etk,
+                            skipped: meta && meta.skipped
+                        });
+                    }
+                );
+            };
+
+            db.get(
+                `SELECT id, order_id_string, status FROM orders WHERE registration_id = ? AND status = 'success' ORDER BY id DESC LIMIT 1`,
+                [registrationId],
+                (eS, successOrd) => {
+                    if (eS) return done(eS);
+                    if (successOrd) return issueOnOrder(successOrd, done);
+
+                    db.get(
+                        `SELECT id, order_id_string, status FROM orders WHERE registration_id = ? AND status = 'pending' ORDER BY id DESC LIMIT 1`,
+                        [registrationId],
+                        (eP, pendingOrd) => {
+                            if (eP) return done(eP);
+                            if (pendingOrd && opts.promotePendingToSuccess) {
+                                return db.run(
+                                    `UPDATE orders SET status = 'success', payment_date = COALESCE(payment_date, CURRENT_TIMESTAMP) WHERE id = ?`,
+                                    [pendingOrd.id],
+                                    (eU) => {
+                                        if (eU) return done(eU);
+                                        issueOnOrder(
+                                            { id: pendingOrd.id, order_id_string: pendingOrd.order_id_string },
+                                            done
+                                        );
+                                    }
+                                );
+                            }
+                            issueOnOrder(pendingOrd, done);
+                        }
+                    );
+                }
+            );
+        }
+    );
+}
+
+/** Mark payment success on existing pending order (or insert one) and issue ticket — no duplicate rows. */
+function fulfillRegistrationPayment(registrationId, userId, amount, gatewayName, providerTxnId, cb) {
+    db.get(
+        `SELECT id, order_id_string FROM orders WHERE registration_id = ? AND status = 'success' ORDER BY id DESC LIMIT 1`,
+        [registrationId],
+        (eExist, paid) => {
+            if (eExist) return cb(eExist);
+            if (paid) {
+                return db.get(
+                    `SELECT application_no FROM registrations WHERE id = ?`,
+                    [registrationId],
+                    (gErr, regRow) => {
+                        if (gErr) return cb(gErr);
+                        insertParticipantTicket(
+                            paid.id,
+                            userId,
+                            paid.order_id_string || '',
+                            registrationId,
+                            regRow && regRow.application_no,
+                            (eT, etk, qr, meta) =>
+                                cb(eT, {
+                                    orderId: paid.id,
+                                    orderIdString: paid.order_id_string,
+                                    alreadyPaid: true,
+                                    ticketId: etk,
+                                    skipped: meta && meta.skipped
+                                })
+                        );
+                    }
+                );
+            }
+
+            db.get(
+                `SELECT id, order_id_string FROM orders WHERE registration_id = ? AND status = 'pending' ORDER BY id DESC LIMIT 1`,
+                [registrationId],
+                (eP, pending) => {
+                    if (eP) return cb(eP);
+
+                    const applySuccess = (orderDbId, orderStr) => {
+                        db.run(
+                            `UPDATE orders SET status = 'success', payment_date = CURRENT_TIMESTAMP, payment_gateway = ?, provider_transaction_id = ? WHERE id = ?`,
+                            [gatewayName || 'mock', providerTxnId || null, orderDbId],
+                            (uErr) => {
+                                if (uErr) return cb(uErr);
+                                db.run(`DELETE FROM orders WHERE registration_id = ? AND status = 'pending' AND id != ?`, [
+                                    registrationId,
+                                    orderDbId
+                                ]);
+                                db.run(`UPDATE registrations SET status = 'completed' WHERE id = ?`, [registrationId]);
+                                db.get(
+                                    `SELECT application_no FROM registrations WHERE id = ?`,
+                                    [registrationId],
+                                    (gErr, regRow) => {
+                                        if (gErr) return cb(gErr);
+                                        insertParticipantTicket(
+                                            orderDbId,
+                                            userId,
+                                            orderStr,
+                                            registrationId,
+                                            regRow && regRow.application_no,
+                                            (eT, etk, qr, meta) =>
+                                                cb(eT, {
+                                                    orderId: orderDbId,
+                                                    orderIdString: orderStr,
+                                                    ticketId: etk,
+                                                    skipped: meta && meta.skipped
+                                                })
+                                        );
+                                    }
+                                );
+                            }
+                        );
+                    };
+
+                    if (pending) return applySuccess(pending.id, pending.order_id_string);
+
+                    const orderIdStr = 'ORD_' + generateId();
+                    db.run(
+                        `INSERT INTO orders (order_id_string, registration_id, amount, status, payment_date, payment_gateway, provider_transaction_id) VALUES (?, ?, ?, 'success', CURRENT_TIMESTAMP, ?, ?)`,
+                        [orderIdStr, registrationId, amount, gatewayName || 'mock', providerTxnId || null],
+                        function (insErr) {
+                            if (insErr) return cb(insErr);
+                            applySuccess(this.lastID, orderIdStr);
+                        }
+                    );
+                }
+            );
+        }
+    );
+}
+
 const casePresentation = require('./lib/case-presentation');
 
 let extendedRoutesMounted = false;
@@ -3128,39 +3339,26 @@ app.post('/api/payments/process', (req, res) => {
             });
         }
 
-    const orderIdStr = 'ORD_' + generateId();
-
         const startPayment = (gateway) => {
         if (!gateway) {
                 const mockTxn = 'MOCK' + generateId();
-                db.run(
-                    `INSERT INTO orders (order_id_string, registration_id, amount, status, payment_date, payment_gateway, provider_transaction_id) VALUES (?, ?, ?, 'success', CURRENT_TIMESTAMP, 'mock', ?)`,
-                    [orderIdStr, regId, amount, mockTxn],
-                function (err) {
-                        if (err) return res.status(500).json({ success: false, error: err.message });
-                    
-                    const newOrderId = this.lastID;
-
-                        db.run(`UPDATE registrations SET status = 'completed' WHERE id = ?`, [regId]);
-                        db.get(`SELECT application_no FROM registrations WHERE id = ?`, [regId], (gErr, regRow) => {
-                            if (gErr) return res.status(500).json({ success: false, error: gErr.message });
-                            insertParticipantTicket(newOrderId, uid, orderIdStr, regId, regRow && regRow.application_no, (err, _etk, _qr, meta) => {
-                                if (err) return res.status(500).json({ success: false, error: err.message });
-                                const msg = meta && meta.skipped
-                                    ? 'Payment recorded. No e-ticket was issued because this registration is not eligible.'
-                                    : 'Payment successful, e-ticket generated.';
-                                res.json({
-                                    success: true,
-                                    orderId: orderIdStr,
-                                    gateway: 'mock',
-                                    message: msg,
-                                    transactionId: mockTxn,
-                                    eTicketSkipped: !!(meta && meta.skipped)
-                        });
+                fulfillRegistrationPayment(regId, uid, amount, 'mock', mockTxn, (err, meta) => {
+                    if (err) return res.status(500).json({ success: false, error: err.message });
+                    const msg =
+                        meta && meta.skipped
+                            ? 'Payment recorded. No e-ticket was issued because this registration is not eligible.'
+                            : meta && meta.alreadyPaid
+                              ? 'Payment was already recorded. Your e-ticket is in Participant tickets.'
+                              : 'Payment successful, e-ticket generated.';
+                    res.json({
+                        success: true,
+                        orderId: (meta && meta.orderIdString) || '',
+                        gateway: 'mock',
+                        message: msg,
+                        transactionId: mockTxn,
+                        eTicketSkipped: !!(meta && meta.skipped)
+                    });
                 });
-                        });
-                    }
-                );
             return;
         }
 
@@ -3169,39 +3367,69 @@ app.post('/api/payments/process', (req, res) => {
                 key_id: gateway.config.key_id,
                     key_secret: gateway.config.key_secret
             });
-            const options = {
-                    amount: amount * 100,
-                currency: 'INR',
-                    receipt: orderIdStr.length > 40 ? orderIdStr.slice(0, 40) : orderIdStr
-                };
                 const gwTag =
                     gateway.mode === 'live' ? 'razorpay_live' : gateway.mode === 'test' ? 'razorpay_test' : 'razorpay';
-                db.run(
-                    `INSERT INTO orders (order_id_string, registration_id, amount, status, payment_gateway) VALUES (?, ?, ?, 'pending', ?)`,
-                    [orderIdStr, regId, amount, gwTag],
-                    function (insErr) {
-                        if (insErr) return res.status(500).json({ success: false, error: insErr.message });
-                        const localOrderId = this.lastID;
-                        razorpay.orders.create(options, (err, rzOrder) => {
-                            if (err) {
-                                db.run(`DELETE FROM orders WHERE id = ? AND status = 'pending'`, [localOrderId]);
-                                return res.status(500).json({
-                                    success: false,
-                                    error: err.message || 'Razorpay order could not be created. Check Admin payment keys.'
-                                });
-                            }
-                            db.run(`UPDATE orders SET provider_order_id = ? WHERE id = ?`, [rzOrder.id, localOrderId], (uErr) => {
-                                if (uErr) return res.status(500).json({ success: false, error: uErr.message });
-                                res.json({
-                                    success: true,
-                                    order: rzOrder,
-                                    keyId: gateway.config.key_id,
-                                    gateway: 'razorpay',
-                                    mode: gateway.mode,
-                                    paymentOption: paymentOption || gateway.mode
-                                });
+
+                const beginRazorpayOrder = (orderIdStr, localOrderId) => {
+                    const options = {
+                        amount: amount * 100,
+                        currency: 'INR',
+                        receipt: orderIdStr.length > 40 ? orderIdStr.slice(0, 40) : orderIdStr
+                    };
+                    razorpay.orders.create(options, (err, rzOrder) => {
+                        if (err) {
+                            db.run(`DELETE FROM orders WHERE id = ? AND status = 'pending' AND provider_order_id IS NULL`, [
+                                localOrderId
+                            ]);
+                            return res.status(500).json({
+                                success: false,
+                                error: err.message || 'Razorpay order could not be created. Check Admin payment keys.'
+                            });
+                        }
+                        db.run(`UPDATE orders SET provider_order_id = ? WHERE id = ?`, [rzOrder.id, localOrderId], (uErr) => {
+                            if (uErr) return res.status(500).json({ success: false, error: uErr.message });
+                            res.json({
+                                success: true,
+                                order: rzOrder,
+                                keyId: gateway.config.key_id,
+                                gateway: 'razorpay',
+                                mode: gateway.mode,
+                                paymentOption: paymentOption || gateway.mode
                             });
                         });
+                    });
+                };
+
+                db.get(
+                    `SELECT id, order_id_string, provider_order_id FROM orders WHERE registration_id = ? AND status = 'pending' ORDER BY id DESC LIMIT 1`,
+                    [regId],
+                    (ePend, pending) => {
+                        if (ePend) return res.status(500).json({ success: false, error: ePend.message });
+                        if (pending && pending.provider_order_id) {
+                            return res.status(400).json({
+                                success: false,
+                                error: 'A payment is already in progress for this application. Complete it or contact support.'
+                            });
+                        }
+                        if (pending) {
+                            return db.run(
+                                `UPDATE orders SET amount = ?, payment_gateway = ? WHERE id = ?`,
+                                [amount, gwTag, pending.id],
+                                (uAmt) => {
+                                    if (uAmt) return res.status(500).json({ success: false, error: uAmt.message });
+                                    beginRazorpayOrder(pending.order_id_string, pending.id);
+                                }
+                            );
+                        }
+                        const orderIdStr = 'ORD_' + generateId();
+                        db.run(
+                            `INSERT INTO orders (order_id_string, registration_id, amount, status, payment_gateway) VALUES (?, ?, ?, 'pending', ?)`,
+                            [orderIdStr, regId, amount, gwTag],
+                            function (insErr) {
+                                if (insErr) return res.status(500).json({ success: false, error: insErr.message });
+                                beginRazorpayOrder(orderIdStr, this.lastID);
+                            }
+                        );
                     }
                 );
         } else if (gateway.name === 'payu') {
@@ -4047,28 +4275,23 @@ app.post('/api/admin/applications/status', (req, res) => {
                 }
             });
         
-        if (status === 'approved_pending_payment' || status === 'completed') {
-            const orderIdStr = 'ORD_' + generateId();
-            db.run(`INSERT OR IGNORE INTO orders (order_id_string, registration_id, amount, status) VALUES (?, ?, 1500, 'pending')`,
-                [orderIdStr, applicationId], function(err) {
-                        if (status === 'completed' && !fromRejectedOrCancelled) {
-                            db.get(`SELECT id, order_id_string FROM orders WHERE registration_id = ?`, [applicationId], (err, order) => {
-                                if (order) {
-                                db.run(`UPDATE orders SET status = 'success', payment_date = CURRENT_TIMESTAMP WHERE id = ?`, [order.id]);
-                                
-                                db.get(`SELECT id FROM tickets WHERE order_id = ?`, [order.id], (err, ticket) => {
-                                        if (!ticket) {
-                                            db.get(`SELECT user_id, application_no, status FROM registrations WHERE id = ?`, [applicationId], (err, reg) => {
-                                                if (!reg) return;
-                                                if (reg.status === 'rejected' || reg.status === 'cancelled') return;
-                                                insertParticipantTicket(order.id, reg.user_id, order.order_id_string || '', applicationId, reg.application_no, () => {});
-                                        });
-                                    }
-                                });
-                            }
-                        });
-                    }
-                });
+        if (newSt === 'approved_pending_payment') {
+            getOrCreatePendingOrder(applicationId, 1500, () => {});
+        }
+        if (
+            (newSt === 'e_ticket_issued' || newSt === 'completed') &&
+            !fromRejectedOrCancelled
+        ) {
+            ensureParticipantTicketForRegistration(
+                applicationId,
+                { createOrderIfMissing: true, promotePendingToSuccess: true, amount: 1500 },
+                (eTix, tixMeta) => {
+                    if (eTix || !tixMeta || tixMeta.skipped || !tixMeta.ticketId) return;
+                    db.get(`SELECT user_id FROM registrations WHERE id = ?`, [applicationId], (eU, regU) => {
+                        if (!eU && regU) notifyTicketIssued(regU.user_id, applicationId, tixMeta.ticketId);
+                    });
+                }
+            );
         }
         res.json({
             success: true,
@@ -4138,6 +4361,11 @@ app.post('/api/payments/verify', (req, res) => {
                                     [razorpay_payment_id, ord.id],
                                     function (uerr) {
                                         if (uerr) return res.status(500).json({ error: uerr.message });
+                                        db.run(
+                                            `DELETE FROM orders WHERE registration_id = ? AND status = 'pending' AND id != ?`,
+                                            [applicationId, ord.id],
+                                            () => {}
+                                        );
                                         db.run(`UPDATE registrations SET status = 'completed' WHERE id = ?`, [applicationId], () => {
                                             portalTracking.registrationStatusToLog('completed', '').forEach((entry) => {
                                                 portalTracking.logRegistrationEvent(

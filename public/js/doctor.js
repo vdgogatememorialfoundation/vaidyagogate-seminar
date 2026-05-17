@@ -2654,7 +2654,7 @@ async function loadDoctorEventTickets() {
         const res = await fetch('/api/doctor/event-tickets/' + currentUser.id);
         const rows = await res.json();
         if (!rows || rows.length === 0) {
-            box.innerHTML = '<p style="color:#64748b;">No participant tickets yet. After a successful payment, your QR entry ticket appears here.</p>';
+            box.innerHTML = '<p style="color:#64748b;">No participant tickets yet. After payment is confirmed (or admin issues your e-ticket), your QR entry ticket appears here.</p>';
             return;
         }
         let html = '<div style="display:flex;flex-direction:column;gap:20px;">';
