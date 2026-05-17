@@ -2073,7 +2073,31 @@ function downloadViewedAppPdf() {
     doc.save(`Application_${app.application_no}.pdf`);
 }
 
+function loadRazorpayCheckoutScript() {
+    return new Promise((resolve, reject) => {
+        if (typeof Razorpay !== 'undefined') return resolve();
+        const existing = document.querySelector('script[data-razorpay-checkout]');
+        if (existing) {
+            existing.addEventListener('load', () => resolve());
+            existing.addEventListener('error', () => reject(new Error('Razorpay checkout failed to load')));
+            return;
+        }
+        const s = document.createElement('script');
+        s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+        s.async = true;
+        s.setAttribute('data-razorpay-checkout', '1');
+        s.onload = () => resolve();
+        s.onerror = () => reject(new Error('Could not load Razorpay checkout. Check your internet connection.'));
+        document.head.appendChild(s);
+    });
+}
+
 async function processPayment(appId, amount, appNo) {
+    const uid = doctorNumericUserId();
+    if (!uid) {
+        alert('Please sign out and sign in again, then try payment.');
+        return;
+    }
     let regId = parseInt(appId, 10);
     if (Number.isNaN(regId) || regId < 1) {
         const found = (userApplications || []).find((x) => String(x.application_no) === String(appNo));
@@ -2089,7 +2113,7 @@ async function processPayment(appId, amount, appNo) {
         const res = await fetch('/api/payments/process', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ registrationId: regId, amount, userId: currentUser.id })
+            body: JSON.stringify({ registrationId: regId, amount, userId: uid })
         });
         let result = {};
         try {
@@ -2104,8 +2128,20 @@ async function processPayment(appId, amount, appNo) {
         }
         
         if (result.success) {
+            const pendingGateways = ['payu', 'easebuzz', 'paytm', 'phonepe', 'cashfree'];
+            if (pendingGateways.includes(String(result.gateway || '').toLowerCase())) {
+                alert(
+                    result.message ||
+                        'This payment gateway is selected in Admin but not fully enabled yet. Ask admin to enable Razorpay or use mock/test mode.'
+                );
+                return;
+            }
             if (result.gateway === 'razorpay') {
-                // Initialize Razorpay checkout
+                await loadRazorpayCheckoutScript();
+                if (typeof Razorpay === 'undefined') {
+                    alert('Payment checkout could not load. Disable ad blockers and refresh the page.');
+                    return;
+                }
                 const options = {
                     key: result.order.key_id,
                     amount: result.order.amount,
@@ -2133,15 +2169,21 @@ async function processPayment(appId, amount, appNo) {
                         });
                     },
                     prefill: {
-                        name: currentUser.first_name + ' ' + currentUser.last_name,
-                        email: 'user@example.com',
-                        contact: currentUser.phone
+                        name: (currentUser.first_name || '') + ' ' + (currentUser.last_name || ''),
+                        email: currentUser.email || '',
+                        contact: currentUser.phone || ''
                     },
                     theme: {
                         color: '#0f766e'
                     }
                 };
                 const rzp = new Razorpay(options);
+                rzp.on('payment.failed', function (resp) {
+                    alert(
+                        (resp.error && resp.error.description) ||
+                            'Payment failed or was cancelled. You can try again from My Applications.'
+                    );
+                });
                 rzp.open();
             } else {
                 // Mock gateway or other: payment already completed on server for mock
@@ -2153,8 +2195,13 @@ async function processPayment(appId, amount, appNo) {
                 loadDoctorEventTickets();
             }
         }
-    } catch(err) { console.error(err); }
+    } catch (err) {
+        console.error(err);
+        alert(err.message || 'Payment could not be started. Refresh the page and try again.');
+    }
 }
+
+window.processPayment = processPayment;
 
 async function loadDoctorDashboardStats() {
     if (!currentUser) return;

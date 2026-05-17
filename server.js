@@ -1430,7 +1430,17 @@ try {
 function getActiveGateway(callback) {
     db.get(`SELECT * FROM payment_gateways WHERE is_active = 1 LIMIT 1`, [], (err, row) => {
         if (err || !row) return callback(null);
-        callback({ name: row.name, config: JSON.parse(row.config || '{}') });
+        let config = {};
+        try {
+            config = JSON.parse(row.config || '{}');
+        } catch (_) {
+            config = {};
+        }
+        if (row.name === 'razorpay' && (!config.key_id || !config.key_secret)) {
+            console.warn('[payments] Razorpay active but keys missing — falling back to mock');
+            return callback(null);
+        }
+        callback({ name: row.name, config });
     });
 }
 
@@ -2933,10 +2943,13 @@ app.post('/api/payments/process', (req, res) => {
                         razorpay.orders.create(options, (err, rzOrder) => {
                             if (err) {
                                 db.run(`DELETE FROM orders WHERE id = ? AND status = 'pending'`, [localOrderId]);
-                                return res.status(500).json({ error: err.message });
+                                return res.status(500).json({
+                                    success: false,
+                                    error: err.message || 'Razorpay order could not be created. Check Admin payment keys.'
+                                });
                             }
                             db.run(`UPDATE orders SET provider_order_id = ? WHERE id = ?`, [rzOrder.id, localOrderId], (uErr) => {
-                                if (uErr) return res.status(500).json({ error: uErr.message });
+                                if (uErr) return res.status(500).json({ success: false, error: uErr.message });
                                 res.json({ success: true, order: rzOrder, gateway: 'razorpay' });
                             });
                         });
