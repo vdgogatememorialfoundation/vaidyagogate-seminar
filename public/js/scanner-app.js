@@ -336,6 +336,9 @@
         ui.classList.remove('hidden');
         document.getElementById('scanner-who').textContent =
             (u.first_name || '') + ' ' + (u.last_name || '') + ' · ID ' + (u.user_id_string || u.id);
+        if (typeof PortalAuth !== 'undefined' && PortalAuth.renderLoginTime) {
+            PortalAuth.renderLoginTime('scanner-login-time', u);
+        }
         loadCheckinSeminars().then(() => startCam()).catch(console.error);
     }
 

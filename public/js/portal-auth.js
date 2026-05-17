@@ -68,8 +68,46 @@
         }
     }
 
+    function formatLoginTime(iso) {
+        if (!iso) return '';
+        if (global.PortalDateTime && typeof global.PortalDateTime.format === 'function') {
+            return global.PortalDateTime.format(iso);
+        }
+        try {
+            return new Date(iso).toLocaleString('en-IN', {
+                timeZone: 'Asia/Kolkata',
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        } catch (_) {
+            return String(iso);
+        }
+    }
+
+    function loginTimeLabel(user) {
+        if (!user) return '';
+        const signedIn = formatLoginTime(user.login_at || user.last_login_at);
+        if (!signedIn) return '';
+        const prev = formatLoginTime(user.previous_login_at);
+        if (prev) return 'Signed in ' + signedIn + ' · Previous login ' + prev;
+        return 'Signed in ' + signedIn;
+    }
+
+    function renderLoginTime(target, user) {
+        const el = typeof target === 'string' ? document.getElementById(target) : target;
+        if (!el) return;
+        const text = loginTimeLabel(user);
+        el.textContent = text;
+        if (text) el.classList.remove('hidden');
+        else el.classList.add('hidden');
+    }
+
     function setUser(portal, user) {
         if (user && user.id != null) user.id = Number(user.id);
+        if (user && !user.login_at) user.login_at = user.last_login_at || new Date().toISOString();
         localStorage.setItem(KEYS[portal], JSON.stringify(user));
     }
 
@@ -226,6 +264,9 @@
         isAdminPortalUser,
         wrongPortalHint,
         refreshLoginOtpPanel,
-        bindLoginForm
+        bindLoginForm,
+        formatLoginTime,
+        loginTimeLabel,
+        renderLoginTime
     };
 })(typeof window !== 'undefined' ? window : global);

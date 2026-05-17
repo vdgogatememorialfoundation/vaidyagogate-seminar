@@ -350,6 +350,9 @@ function bootDoctorDashboard(user) {
     document.getElementById('header-id').innerText =
         `ID: ${currentUser.user_id_string || '---'}` +
         (!window.__doctorProductionSite && Number(currentUser.is_demo) === 1 ? ' · Demo' : '');
+    if (typeof PortalAuth !== 'undefined' && PortalAuth.renderLoginTime) {
+        PortalAuth.renderLoginTime('header-login-time', currentUser);
+    }
         loadProfile();
     loadDoctorPaymentOptions().then(() => {
         loadDoctorPortalYear().then(() => {

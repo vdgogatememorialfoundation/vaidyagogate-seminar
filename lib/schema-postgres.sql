@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS users (
         registration_cert_path TEXT,
         registration_cert_no TEXT,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-    , is_disabled INTEGER DEFAULT 0, user_role TEXT DEFAULT 'doctor', admin_modules TEXT, is_demo INTEGER DEFAULT 0);
+    , is_disabled INTEGER DEFAULT 0, user_role TEXT DEFAULT 'doctor', admin_modules TEXT, is_demo INTEGER DEFAULT 0, last_login_at TIMESTAMPTZ);
 CREATE TABLE IF NOT EXISTS seminars (
         id SERIAL PRIMARY KEY,
         title TEXT NOT NULL,

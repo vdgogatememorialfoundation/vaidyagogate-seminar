@@ -31,6 +31,7 @@
         .user-info { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
         .hi-user { font-weight: 700; color: #134e4a; }
         .user-id { background: linear-gradient(135deg, #ccfbf1, #99f6e4); color: #115e59; padding: 6px 14px; border-radius: 999px; font-size: 0.8rem; font-weight: 700; border: 1px solid #5eead4; }
+        .portal-login-time { display: block; width: 100%; font-size: 0.75rem; color: #0f766e; font-weight: 600; margin-top: 4px; }
         .header-link { color: #0f766e; text-decoration: none; font-weight: 700; cursor: pointer; font-size: 0.88rem; }
         .header-link:hover { text-decoration: underline; }
         
@@ -159,6 +160,7 @@
                 <div class="user-info">
                     <span class="hi-user" id="header-name">Hi, Doctor</span>
                     <span class="user-id" id="header-id">ID: —</span>
+                    <span class="portal-login-time hidden" id="header-login-time"></span>
                     <a href="/" class="header-link" target="_blank"><i class="fas fa-external-link-alt"></i> Public site</a>
                     <button type="button" class="btn-primary" id="btn-logout" style="padding:8px 16px;"><i class="fas fa-sign-out-alt"></i> Logout</button>
                 </div>

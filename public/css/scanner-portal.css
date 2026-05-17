@@ -1,17 +1,15 @@
-/* VGMF scanner — venue check-in (mobile-first, APK-friendly) */
+/* VGMF scanner — bright, high-visibility check-in (mobile + APK) */
 :root {
-    --scan-bg: #0f172a;
-    --scan-bg-soft: #1e293b;
-    --scan-panel: #1e293b;
-    --scan-panel-elevated: #334155;
-    --scan-line: rgba(148, 163, 184, 0.22);
-    --scan-accent: #38bdf8;
-    --scan-accent-deep: #0ea5e9;
-    --scan-ok: #34d399;
-    --scan-err: #f87171;
-    --scan-warn: #fbbf24;
-    --scan-text: #f1f5f9;
-    --scan-muted: #94a3b8;
+    --scan-bg: #f0f9ff;
+    --scan-panel: #ffffff;
+    --scan-line: #cbd5e1;
+    --scan-accent: #1e3a8a;
+    --scan-accent-soft: #2563eb;
+    --scan-ok: #059669;
+    --scan-err: #dc2626;
+    --scan-warn: #d97706;
+    --scan-text: #0f172a;
+    --scan-muted: #64748b;
     --scan-font: 'Plus Jakarta Sans', system-ui, sans-serif;
 }
 
@@ -27,7 +25,7 @@ body.scanner-body {
     font-family: var(--scan-font);
     min-height: 100vh;
     min-height: 100dvh;
-    background: radial-gradient(ellipse 120% 80% at 50% -20%, #1e3a8a 0%, var(--scan-bg) 55%);
+    background: linear-gradient(180deg, #eff6ff 0%, #f8fafc 35%, #ffffff 100%);
     color: var(--scan-text);
 }
 
@@ -36,8 +34,7 @@ body.scanner-body.has-logo-theme::before {
 }
 
 body.scanner-body.has-logo-theme {
-    background-image: none;
-    background-color: var(--scan-bg);
+    background: linear-gradient(180deg, #eff6ff 0%, #f8fafc 40%, #ffffff 100%);
 }
 
 .scanner-shell {
@@ -55,29 +52,41 @@ body.scanner-body.has-logo-theme {
     align-items: flex-start;
     justify-content: space-between;
     gap: 12px;
-    padding: 4px 2px 8px;
+    background: var(--scan-panel);
+    border: 1px solid var(--scan-line);
+    border-radius: 16px;
+    padding: 14px 16px;
+    box-shadow: 0 4px 20px rgba(30, 58, 138, 0.08);
 }
 
 .scanner-top-main h1 {
-    font-size: 1.35rem;
+    font-size: 1.25rem;
     font-weight: 800;
     letter-spacing: -0.02em;
-    color: #fff;
+    color: var(--scan-accent);
 }
 
 .scanner-eyebrow {
     font-size: 0.68rem;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.14em;
-    color: var(--scan-accent);
+    letter-spacing: 0.12em;
+    color: var(--scan-accent-soft);
     margin-bottom: 2px;
 }
 
 .scanner-top .who {
-    font-size: 0.75rem;
+    font-size: 0.78rem;
     color: var(--scan-muted);
     margin-top: 4px;
+    font-weight: 600;
+}
+
+.portal-login-time.who {
+    font-size: 0.72rem;
+    font-weight: 500;
+    color: #0369a1;
+    margin-top: 2px;
 }
 
 .scanner-logout {
@@ -91,11 +100,12 @@ body.scanner-body.has-logo-theme {
     border: 1px solid var(--scan-line);
     border-radius: 16px;
     padding: 14px 16px;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
 }
 
 .scan-card-highlight {
-    border-color: rgba(56, 189, 248, 0.35);
-    box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.08);
+    border-color: #93c5fd;
+    background: #f8fafc;
 }
 
 .scan-card-compact {
@@ -121,7 +131,7 @@ body.scanner-body.has-logo-theme {
     padding: 13px 14px;
     border-radius: 12px;
     border: 1px solid var(--scan-line);
-    background: var(--scan-bg-soft);
+    background: #fff;
     color: var(--scan-text);
     font-size: 1rem;
 }
@@ -129,8 +139,9 @@ body.scanner-body.has-logo-theme {
 .scan-card select:focus,
 .scan-card input:focus,
 .auth-card-scanner input:focus {
-    outline: 2px solid var(--scan-accent);
+    outline: 2px solid var(--scan-accent-soft);
     outline-offset: 1px;
+    border-color: #93c5fd;
 }
 
 .seminar-hint {
@@ -144,15 +155,15 @@ body.scanner-body.has-logo-theme {
     position: relative;
     border-radius: 18px;
     overflow: hidden;
-    border: 2px solid rgba(56, 189, 248, 0.45);
-    background: #000;
-    min-height: min(52vh, 360px);
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+    border: 3px solid var(--scan-accent);
+    background: #e2e8f0;
+    min-height: min(50vh, 340px);
+    box-shadow: 0 8px 28px rgba(30, 58, 138, 0.12);
 }
 
 .camera-wrap #reader {
     width: 100%;
-    min-height: min(52vh, 360px);
+    min-height: min(50vh, 340px);
 }
 
 .camera-hint {
@@ -161,9 +172,9 @@ body.scanner-body.has-logo-theme {
     left: 0;
     right: 0;
     text-align: center;
-    font-size: 0.72rem;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.85);
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #fff;
     text-shadow: 0 1px 4px #000;
     pointer-events: none;
     z-index: 3;
@@ -173,15 +184,15 @@ body.scanner-body.has-logo-theme {
     position: absolute;
     left: 10%;
     right: 10%;
-    height: 2px;
-    background: linear-gradient(90deg, transparent, var(--scan-accent), transparent);
+    height: 3px;
+    background: linear-gradient(90deg, transparent, #22d3ee, transparent);
     animation: scan-sweep 2.2s ease-in-out infinite;
     pointer-events: none;
     z-index: 2;
 }
 
 @keyframes scan-sweep {
-    0%, 100% { top: 15%; opacity: 0.45; }
+    0%, 100% { top: 15%; opacity: 0.55; }
     50% { top: 82%; opacity: 1; }
 }
 
@@ -195,8 +206,8 @@ body.scanner-body.has-logo-theme {
     padding: 12px 10px;
     border-radius: 12px;
     border: 1px solid var(--scan-line);
-    background: var(--scan-panel);
-    color: var(--scan-text);
+    background: #fff;
+    color: var(--scan-accent);
     font-weight: 700;
     font-size: 0.85rem;
     cursor: pointer;
@@ -205,13 +216,14 @@ body.scanner-body.has-logo-theme {
 
 .tool-btn:active {
     transform: scale(0.98);
+    background: #f1f5f9;
 }
 
 .tool-btn.primary {
-    background: linear-gradient(135deg, #0369a1, #0ea5e9);
+    background: linear-gradient(135deg, #1e3a8a, #2563eb);
     color: #fff;
     border: none;
-    box-shadow: 0 4px 14px rgba(14, 165, 233, 0.35);
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.3);
 }
 
 .manual-row {
@@ -242,7 +254,7 @@ body.scanner-body.has-logo-theme {
 .result-meta {
     margin-top: 12px;
     padding: 12px;
-    background: rgba(0, 0, 0, 0.18);
+    background: rgba(0, 0, 0, 0.12);
     border-radius: 10px;
     font-size: 0.86rem;
 }
@@ -259,14 +271,15 @@ body.scanner-body.has-logo-theme {
 .stat-pill {
     text-align: center;
     padding: 12px 6px;
-    background: var(--scan-panel);
+    background: #fff;
     border-radius: 14px;
     border: 1px solid var(--scan-line);
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
 }
 
 .stat-pill strong {
     display: block;
-    font-size: 1.4rem;
+    font-size: 1.35rem;
     font-weight: 800;
 }
 
@@ -275,6 +288,7 @@ body.scanner-body.has-logo-theme {
     color: var(--scan-muted);
     text-transform: uppercase;
     letter-spacing: 0.06em;
+    font-weight: 700;
 }
 
 .stat-ok strong { color: var(--scan-ok); }
@@ -291,7 +305,7 @@ body.scanner-body.has-logo-theme {
 
 .history-list li {
     padding: 8px 0;
-    border-bottom: 1px solid var(--scan-line);
+    border-bottom: 1px solid #e2e8f0;
     list-style: none;
 }
 
@@ -310,18 +324,18 @@ body.scanner-body.has-logo-theme {
     align-items: center;
     justify-content: center;
     padding: max(16px, env(safe-area-inset-top)) 20px max(20px, env(safe-area-inset-bottom));
-    background: rgba(15, 23, 42, 0.92);
-    backdrop-filter: blur(10px);
+    background: rgba(241, 245, 249, 0.92);
+    backdrop-filter: blur(8px);
 }
 
 .auth-card-scanner {
     width: 100%;
     max-width: 400px;
-    background: var(--scan-panel);
+    background: #fff;
     border: 1px solid var(--scan-line);
     border-radius: 20px;
     padding: 24px 22px;
-    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 20px 50px rgba(30, 58, 138, 0.15);
 }
 
 .auth-brand {
@@ -332,7 +346,7 @@ body.scanner-body.has-logo-theme {
 }
 
 .auth-card-scanner h2 {
-    color: #fff;
+    color: var(--scan-accent);
     font-size: 1.2rem;
     margin-bottom: 6px;
     text-align: center;
@@ -395,7 +409,6 @@ body.scanner-body.has-logo-theme {
 
 .hidden { display: none !important; }
 
-/* Hide any injected marketing / website links in APK */
 .scanner-native-shell a[href]:not([href^="#"]):not([href*="scanner.html"]) {
     display: none !important;
     pointer-events: none !important;

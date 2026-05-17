@@ -582,8 +582,30 @@ function ensureCriticalUserColumns(callback) {
             ignoreDup(err2);
             db.run(`ALTER TABLE users ADD COLUMN admin_modules TEXT`, (err3) => {
                 ignoreDup(err3);
-                afterUsers();
+                db.run(`ALTER TABLE users ADD COLUMN last_login_at TEXT`, (err4) => {
+                    ignoreDup(err4);
+                    afterUsers();
+                });
             });
+        });
+    });
+}
+
+function recordUserLogin(userId, cb) {
+    const uid = parseInt(userId, 10);
+    if (!Number.isInteger(uid) || uid < 1) return cb && cb(null, { previousLoginAt: null, loginAt: new Date().toISOString() });
+    db.get(`SELECT last_login_at FROM users WHERE id = ?`, [uid], (e, row) => {
+        if (e && /does not exist|no such column/i.test(String(e.message || ''))) {
+            return cb && cb(null, { previousLoginAt: null, loginAt: new Date().toISOString() });
+        }
+        if (e) return cb && cb(e);
+        const previousLoginAt = row && row.last_login_at ? String(row.last_login_at) : null;
+        db.run(`UPDATE users SET last_login_at = datetime('now') WHERE id = ?`, [uid], (e2) => {
+            if (e2 && /does not exist|no such column/i.test(String(e2.message || ''))) {
+                return cb && cb(null, { previousLoginAt, loginAt: new Date().toISOString() });
+            }
+            if (e2) return cb && cb(e2);
+            cb && cb(null, { previousLoginAt, loginAt: new Date().toISOString() });
         });
     });
 }
@@ -2189,9 +2211,16 @@ app.post('/api/auth/login', (req, res) => {
             }
 
             function sendUser() {
-                delete row.password;
-                normalizeAuthUserRow(row);
-        res.json({ success: true, user: row });
+                recordUserLogin(row.id, (eLogin, times) => {
+                    if (!eLogin && times) {
+                        row.previous_login_at = times.previousLoginAt || null;
+                        row.login_at = times.loginAt;
+                        row.last_login_at = times.loginAt;
+                    }
+                    delete row.password;
+                    normalizeAuthUserRow(row);
+                    res.json({ success: true, user: row });
+                });
             }
 
             if (loginOtpRequired()) {

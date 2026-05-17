@@ -29,6 +29,7 @@
         h1 { font-family: 'Fraunces', Georgia, serif; font-size: 1.65rem; color: #312e81; letter-spacing: -0.02em; }
         .sub { color: #6366f1; font-size: 0.95rem; margin-top: 6px; max-width: 52ch; }
         .badge { display: inline-flex; align-items: center; gap: 8px; background: #fff; border: 1px solid #e0e7ff; padding: 8px 14px; border-radius: 999px; font-size: 0.85rem; font-weight: 600; color: #4338ca; }
+        .portal-login-time { background: #ecfdf5; border-color: #a7f3d0; color: #047857; max-width: 280px; text-align: center; line-height: 1.35; }
         .card { background: #fff; border-radius: 16px; border: 1px solid #e0e7ff; box-shadow: 0 12px 40px rgba(49,46,129,0.07); overflow: hidden; }
         table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
         th { text-align: left; padding: 12px 14px; background: linear-gradient(180deg, #f5f3ff, #eef2ff); color: #4338ca; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid #e0e7ff; }
@@ -99,6 +100,7 @@
             </div>
             <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
                 <span class="badge" id="whoami"></span>
+                <span class="badge portal-login-time hidden" id="judge-login-time" style="font-weight:500;font-size:0.78rem;"></span>
                 <button type="button" class="btn" id="btn-refresh"><i class="fas fa-sync-alt"></i> Refresh</button>
                 <button type="button" class="btn" id="btn-logout"><i class="fas fa-sign-out-alt"></i> Logout</button>
             </div>
@@ -178,6 +180,9 @@
                 app.classList.remove('hidden');
                 whoami.textContent =
                     (u.first_name || '') + ' ' + (u.last_name || '') + ' · ID ' + (u.user_id_string || u.id);
+                if (typeof PortalAuth !== 'undefined' && PortalAuth.renderLoginTime) {
+                    PortalAuth.renderLoginTime('judge-login-time', u);
+                }
                 load();
             }
 
