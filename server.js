@@ -90,14 +90,20 @@ function bootstrapApp(done) {
         return runFullMigrations();
     }
 
-    pgDb
-        .isCoreSchemaPresent()
-        .then((ready) => {
-            if (!ready) return runFullMigrations();
-            console.log('[bootstrap] fast path — deferring migrations');
-            scheduleDeferredMigrations();
-        })
-        .catch(() => runFullMigrations());
+    const startMigrations = () => {
+        pgDb
+            .isCoreSchemaPresent()
+            .then((ready) => {
+                if (!ready) return runFullMigrations();
+                console.log('[bootstrap] fast path — deferring migrations');
+                scheduleDeferredMigrations();
+            })
+            .catch(() => runFullMigrations());
+    };
+    if (pgDb.ensureMissingCoreTables) {
+        return pgDb.ensureMissingCoreTables().then(startMigrations).catch(() => runFullMigrations());
+    }
+    startMigrations();
 }
 
 function databaseConfigResponse(res) {
@@ -513,40 +519,64 @@ function ensureCriticalUserColumns(callback) {
     const ignoreDup = (err) => {
         if (!err) return;
         const m = String(err.message || '');
-        if (m.includes('duplicate column') || m.includes('already exists')) return;
+        if (
+            m.includes('duplicate column') ||
+            m.includes('already exists') ||
+            m.includes('does not exist')
+        ) {
+            return;
+        }
         console.error('Schema migration:', m);
     };
+
+    const runRegistrationMigrations = (next) => {
+        db.run(`ALTER TABLE registrations ADD COLUMN registration_source TEXT DEFAULT 'doctor'`, (r1) => {
+            ignoreDup(r1);
+            db.run(`ALTER TABLE registrations ADD COLUMN admin_editor_user_id INTEGER`, (r2) => {
+                ignoreDup(r2);
+                db.run(`ALTER TABLE registrations ADD COLUMN updated_at DATETIME`, (r2b) => {
+                    ignoreDup(r2b);
+                    db.run(
+                        `UPDATE registrations SET updated_at = created_at WHERE updated_at IS NULL`,
+                        (r2c) => {
+                            ignoreDup(r2c);
+                            next();
+                        }
+                    );
+                });
+            });
+        });
+    };
+
+    const afterUsers = () => {
+        const onRegDone = () => {
+            db.run(`ALTER TABLE case_judge_scores ADD COLUMN is_locked INTEGER DEFAULT 0`, (r3) => {
+                ignoreDup(r3);
+                db.run(`ALTER TABLE users ADD COLUMN is_demo INTEGER DEFAULT 0`, (r4) => {
+                    ignoreDup(r4);
+                    ensureBootstrapAdmin(db, generateId, (admErr) => {
+                        if (admErr) console.warn('[admin] bootstrap:', admErr.message);
+                        ensurePortalSchema(() => callback());
+                    });
+                });
+            });
+        };
+        if (pgDb && pgDb.listMissingCoreTables) {
+            return pgDb.listMissingCoreTables().then((missing) => {
+                if (missing.includes('registrations')) return onRegDone();
+                runRegistrationMigrations(onRegDone);
+            });
+        }
+        runRegistrationMigrations(onRegDone);
+    };
+
     db.run(`ALTER TABLE users ADD COLUMN is_disabled INTEGER DEFAULT 0`, (err) => {
         ignoreDup(err);
         db.run(`ALTER TABLE users ADD COLUMN user_role TEXT`, (err2) => {
             ignoreDup(err2);
             db.run(`ALTER TABLE users ADD COLUMN admin_modules TEXT`, (err3) => {
                 ignoreDup(err3);
-                db.run(`ALTER TABLE registrations ADD COLUMN registration_source TEXT DEFAULT 'doctor'`, (r1) => {
-                    ignoreDup(r1);
-                    db.run(`ALTER TABLE registrations ADD COLUMN admin_editor_user_id INTEGER`, (r2) => {
-                        ignoreDup(r2);
-                        db.run(`ALTER TABLE registrations ADD COLUMN updated_at DATETIME`, (r2b) => {
-                            ignoreDup(r2b);
-                            db.run(
-                                `UPDATE registrations SET updated_at = created_at WHERE updated_at IS NULL`,
-                                (r2c) => {
-                                    ignoreDup(r2c);
-                                    db.run(`ALTER TABLE case_judge_scores ADD COLUMN is_locked INTEGER DEFAULT 0`, (r3) => {
-                                        ignoreDup(r3);
-                                        db.run(`ALTER TABLE users ADD COLUMN is_demo INTEGER DEFAULT 0`, (r4) => {
-                                            ignoreDup(r4);
-                                            ensureBootstrapAdmin(db, generateId, (admErr) => {
-                                                if (admErr) console.warn('[admin] bootstrap:', admErr.message);
-                                                ensurePortalSchema(() => callback());
-                                            });
-                                        });
-                                    });
-                                }
-                            );
-                        });
-                    });
-                });
+                afterUsers();
             });
         });
     });
