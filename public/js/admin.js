@@ -1223,8 +1223,14 @@ async function editAdminCaseProgram(id) {
         document.getElementById('case-prog-desc').value = p.description || '';
         document.getElementById('case-prog-instructions').value = p.instructions || '';
         document.getElementById('case-prog-seminar').value = p.seminar_id ? String(p.seminar_id) : '';
-        document.getElementById('case-prog-start').value = (p.registration_start || '').slice(0, 16);
-        document.getElementById('case-prog-end').value = (p.registration_end || '').slice(0, 16);
+        document.getElementById('case-prog-start').value =
+            window.PortalDateTime && window.PortalDateTime.toDatetimeLocal
+                ? window.PortalDateTime.toDatetimeLocal(p.registration_start)
+                : (p.registration_start || '').slice(0, 16);
+        document.getElementById('case-prog-end').value =
+            window.PortalDateTime && window.PortalDateTime.toDatetimeLocal
+                ? window.PortalDateTime.toDatetimeLocal(p.registration_end)
+                : (p.registration_end || '').slice(0, 16);
         document.getElementById('case-prog-max-per-user').value = String(p.maxPresentationsPerUser != null ? p.maxPresentationsPerUser : p.max_presentations_per_user != null ? p.max_presentations_per_user : 2);
         document.getElementById('case-prog-max-total').value = p.maxTotalSubmissions != null ? String(p.maxTotalSubmissions) : p.max_total_submissions != null ? String(p.max_total_submissions) : '';
         document.getElementById('case-prog-max-files').value = String(p.maxFilesPerSubmission != null ? p.maxFilesPerSubmission : p.max_files_per_submission != null ? p.max_files_per_submission : 5);
@@ -1415,8 +1421,12 @@ async function saveAdminCaseProgram() {
         description: (document.getElementById('case-prog-desc') || {}).value || '',
         instructions: (document.getElementById('case-prog-instructions') || {}).value || '',
         seminarId: (document.getElementById('case-prog-seminar') || {}).value || null,
-        registrationStart: (document.getElementById('case-prog-start') || {}).value || null,
-        registrationEnd: (document.getElementById('case-prog-end') || {}).value || null,
+        registrationStart: window.PortalDateTime
+            ? window.PortalDateTime.fromDatetimeLocal((document.getElementById('case-prog-start') || {}).value)
+            : (document.getElementById('case-prog-start') || {}).value || null,
+        registrationEnd: window.PortalDateTime
+            ? window.PortalDateTime.fromDatetimeLocal((document.getElementById('case-prog-end') || {}).value)
+            : (document.getElementById('case-prog-end') || {}).value || null,
         maxPresentationsPerUser: (document.getElementById('case-prog-max-per-user') || {}).value || 2,
         maxTotalSubmissions: (document.getElementById('case-prog-max-total') || {}).value || null,
         maxFilesPerSubmission: (document.getElementById('case-prog-max-files') || {}).value || 5,
@@ -2524,7 +2534,7 @@ async function loadSeminars() {
                 <tr style="${pastRow ? 'opacity:0.85;background:#f8fafc;' : ''}">
                     <td>${s.id}</td>
                     <td><strong>${s.title}</strong> ${activeStatus} ${yearTag}</td>
-                    <td>${s.event_date ? new Date(s.event_date).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : '—'}</td>
+                    <td>${s.event_date ? (window.PortalDateTime ? window.PortalDateTime.format(s.event_date) : new Date(s.event_date).toLocaleString()) : '—'}</td>
                     <td>₹${s.price || 0}</td>
                     <td>${checkinStatus}</td>
                     <td>${pastRow ? '<em>Past year</em>' : 'Current'}</td>
@@ -2561,8 +2571,12 @@ function editSeminar(index) {
     document.getElementById('seminar-title').value = s.title;
     document.getElementById('seminar-desc').value = s.description || '';
     
-    // Format dates for datetime-local
-    const formatDt = (dtStr) => dtStr ? new Date(dtStr).toISOString().slice(0, 16) : '';
+    const formatDt = (dtStr) =>
+        window.PortalDateTime && window.PortalDateTime.toDatetimeLocal
+            ? window.PortalDateTime.toDatetimeLocal(dtStr)
+            : dtStr
+              ? String(dtStr).slice(0, 16)
+              : '';
     document.getElementById('seminar-reg-start').value = formatDt(s.registration_start);
     document.getElementById('seminar-reg-end').value = formatDt(s.registration_end);
     document.getElementById('seminar-event-date').value = formatDt(s.event_date);
@@ -2617,9 +2631,15 @@ async function saveSeminar(e) {
     const data = {
         title: document.getElementById('seminar-title').value,
         description: document.getElementById('seminar-desc').value,
-        registration_start: document.getElementById('seminar-reg-start').value,
-        registration_end: document.getElementById('seminar-reg-end').value,
-        event_date: document.getElementById('seminar-event-date').value,
+        registration_start: window.PortalDateTime
+            ? window.PortalDateTime.fromDatetimeLocal(document.getElementById('seminar-reg-start').value)
+            : document.getElementById('seminar-reg-start').value,
+        registration_end: window.PortalDateTime
+            ? window.PortalDateTime.fromDatetimeLocal(document.getElementById('seminar-reg-end').value)
+            : document.getElementById('seminar-reg-end').value,
+        event_date: window.PortalDateTime
+            ? window.PortalDateTime.fromDatetimeLocal(document.getElementById('seminar-event-date').value)
+            : document.getElementById('seminar-event-date').value,
         capacity: parseInt(document.getElementById('seminar-capacity').value) || 0,
         price: parseFloat(document.getElementById('seminar-price').value) || 0,
         is_active: document.getElementById('seminar-active').value === '1',

@@ -748,8 +748,12 @@ let seminarGridCountdownTimer = null;
 
 function registrationWindowState(seminar) {
     const now = Date.now();
-    const rs = seminar.registration_start ? new Date(seminar.registration_start).getTime() : null;
-    const re = seminar.registration_end ? new Date(seminar.registration_end).getTime() : null;
+    const parseMs =
+        window.PortalDateTime && window.PortalDateTime.parseMs
+            ? (v) => window.PortalDateTime.parseMs(v)
+            : (v) => (v ? new Date(v).getTime() : null);
+    const rs = parseMs(seminar.registration_start);
+    const re = parseMs(seminar.registration_end);
     const rsValid = rs != null && !Number.isNaN(rs);
     const reValid = re != null && !Number.isNaN(re);
     if (rsValid && now < rs) {
@@ -796,7 +800,12 @@ function startSeminarGridCountdownTimer() {
                 if (el && w.opensAt != null) {
                     el.textContent = formatCountdownTo(w.opensAt);
                 }
-                const rs = s.registration_start ? new Date(s.registration_start).getTime() : null;
+                const rs =
+                    window.PortalDateTime && window.PortalDateTime.parseMs
+                        ? window.PortalDateTime.parseMs(s.registration_start)
+                        : s.registration_start
+                          ? new Date(s.registration_start).getTime()
+                          : null;
                 if (rs != null && !Number.isNaN(rs) && Date.now() >= rs) {
                     needReload = true;
                 }

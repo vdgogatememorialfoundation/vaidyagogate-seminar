@@ -585,8 +585,8 @@
                         <div><label>Linked seminar</label><select id="case-prog-seminar" style="width:100%;padding:8px;"><option value="">— None —</option></select></div>
                         <div style="grid-column:1/-1;"><label>Description</label><textarea id="case-prog-desc" rows="2" style="width:100%;padding:8px;"></textarea></div>
                         <div style="grid-column:1/-1;"><label>Instructions (shown to doctors)</label><textarea id="case-prog-instructions" rows="2" style="width:100%;padding:8px;"></textarea></div>
-                        <div><label>Registration opens</label><input type="datetime-local" id="case-prog-start" style="width:100%;padding:8px;"></div>
-                        <div><label>Registration closes</label><input type="datetime-local" id="case-prog-end" style="width:100%;padding:8px;"></div>
+                        <div><label>Registration opens (IST)</label><input type="datetime-local" id="case-prog-start" style="width:100%;padding:8px;"></div>
+                        <div><label>Registration closes (IST)</label><input type="datetime-local" id="case-prog-end" style="width:100%;padding:8px;"></div>
                         <div><label>Max presentations per doctor</label><input type="number" id="case-prog-max-per-user" min="1" max="10" value="2" style="width:100%;padding:8px;"></div>
                         <div><label>Total presentation slots</label><input type="number" id="case-prog-max-total" min="1" placeholder="Unlimited if empty" style="width:100%;padding:8px;"></div>
                         <div><label>Max files per submission</label><input type="number" id="case-prog-max-files" min="1" max="10" value="5" style="width:100%;padding:8px;"></div>
@@ -972,11 +972,11 @@
                 <div><label>Title</label><input type="text" id="seminar-title" required></div>
                 <div><label>Description</label><textarea id="seminar-desc" rows="3"></textarea></div>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                    <div><label>Registration Start</label><input type="datetime-local" id="seminar-reg-start" required></div>
-                    <div><label>Registration End</label><input type="datetime-local" id="seminar-reg-end" required></div>
+                    <div><label>Registration Start <span style="font-weight:normal;color:#64748b;">(IST)</span></label><input type="datetime-local" id="seminar-reg-start" required></div>
+                    <div><label>Registration End <span style="font-weight:normal;color:#64748b;">(IST)</span></label><input type="datetime-local" id="seminar-reg-end" required></div>
                 </div>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                    <div><label>Event Date (Main)</label><input type="datetime-local" id="seminar-event-date" required></div>
+                    <div><label>Event Date (Main) <span style="font-weight:normal;color:#64748b;">(IST)</span></label><input type="datetime-local" id="seminar-event-date" required></div>
                     <div><label>Portal year</label><input type="number" id="seminar-portal-year" min="2000" max="2100" placeholder="e.g. 2027"></div>
                     <div><label>Capacity</label><input type="number" id="seminar-capacity" required></div>
                 </div>

@@ -30,6 +30,7 @@ const refundLib = require('./lib/refunds');
 const branding = require('./lib/branding');
 const extModules = require('./lib/extended-modules');
 const portalTracking = require('./lib/portal-tracking');
+const seminarDt = require('./lib/seminar-datetime');
 const siteMarketing = require('./lib/site-marketing');
 const { isCheckinDateToday, localDateYmd } = require('./lib/local-date');
 let jobsModule = null;
@@ -1173,13 +1174,13 @@ function syncSeminarCmsAfterSave(seminarId, alsoInsertDbNotice, cb) {
             const msg = `${title}: registration is open. Apply from the doctor portal.`;
             const bodyBits = [];
             if (row.registration_start) {
-                bodyBits.push(`Opens ${new Date(row.registration_start).toLocaleString()}`);
+                bodyBits.push(`Opens ${seminarDt.formatSeminarDateTime(row.registration_start)}`);
             }
             if (row.registration_end) {
-                bodyBits.push(`closes ${new Date(row.registration_end).toLocaleString()}`);
+                bodyBits.push(`closes ${seminarDt.formatSeminarDateTime(row.registration_end)}`);
             }
             if (row.event_date) {
-                bodyBits.push(`event ${new Date(row.event_date).toLocaleString()}`);
+                bodyBits.push(`event ${seminarDt.formatSeminarDateTime(row.event_date)}`);
             }
             const descShort = row.description ? String(row.description).replace(/\s+/g, ' ').trim().slice(0, 160) : '';
             const body = [msg, bodyBits.join(' · '), descShort].filter(Boolean).join(' — ');
@@ -2346,8 +2347,8 @@ app.post('/api/applications/submit', upload.single('certificate'), (req, res) =>
             if (!sem) return res.status(400).json({ error: 'Seminar not found or is not active.' });
 
             const now = Date.now();
-            const rs = sem.registration_start ? new Date(sem.registration_start).getTime() : null;
-            const re = sem.registration_end ? new Date(sem.registration_end).getTime() : null;
+            const rs = seminarDt.parseSeminarMs(sem.registration_start);
+            const re = seminarDt.parseSeminarMs(sem.registration_end);
             if (rs != null && !Number.isNaN(rs) && now < rs) {
                     return res.status(400).json({
                         error: 'Registration for this seminar has not opened yet. Please wait until the scheduled registration date.'
@@ -3513,6 +3514,9 @@ app.post('/api/admin/seminars', (req, res) => {
     const otpApp = otp_on_application ? 1 : 0;
     const pubList = public_list_enabled ? 1 : 0;
     const activeFlag = is_active === false || is_active === 0 || is_active === '0' ? 0 : 1;
+    const regStart = seminarDt.normalizeSeminarDateTimeForStorage(registration_start);
+    const regEnd = seminarDt.normalizeSeminarDateTimeForStorage(registration_end);
+    const eventDt = seminarDt.normalizeSeminarDateTimeForStorage(event_date);
     const bodyYear = req.body && req.body.portal_year != null ? parseInt(req.body.portal_year, 10) : null;
     portalTracking.getPortalYear(db, (ePy, defaultYear) => {
         const portalYear =
@@ -3523,9 +3527,9 @@ app.post('/api/admin/seminars', (req, res) => {
             [
                 title,
                 description,
-                registration_start,
-                registration_end,
-                event_date,
+                regStart,
+                regEnd,
+                eventDt,
                 capacity,
                 price || 0,
                 checkin_enabled ? 1 : 0,
@@ -3584,6 +3588,9 @@ app.put('/api/admin/seminars/:id', (req, res) => {
     const otpApp = otp_on_application ? 1 : 0;
     const pubList = public_list_enabled ? 1 : 0;
     const py = portal_year != null ? parseInt(portal_year, 10) : null;
+    const regStart = seminarDt.normalizeSeminarDateTimeForStorage(registration_start);
+    const regEnd = seminarDt.normalizeSeminarDateTimeForStorage(registration_end);
+    const eventDt = seminarDt.normalizeSeminarDateTimeForStorage(event_date);
     portalTracking.getPortalYear(db, (ePy, defaultYear) => {
         if (ePy) return res.status(500).json({ error: ePy.message });
         const finalPortalYear = Number.isInteger(py) && py > 2000 ? py : defaultYear;
@@ -3592,9 +3599,9 @@ app.put('/api/admin/seminars/:id', (req, res) => {
             [
                 title,
                 description,
-                registration_start,
-                registration_end,
-                event_date,
+                regStart,
+                regEnd,
+                eventDt,
                 capacity,
                 price || 0,
                 checkin_enabled ? 1 : 0,
