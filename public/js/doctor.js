@@ -22,7 +22,7 @@ function doctorUserIdOrAlert() {
     return requireDoctorUserId();
 }
 
-const DOCTOR_TRACK_POLL_MS = 5000;
+const DOCTOR_TRACK_POLL_MS = 4000;
 let seminarTrackPollTimer = null;
 let caseTrackPollTimer = null;
 let _lastSeminarTrackFingerprint = '';
@@ -31,6 +31,17 @@ let _lastCaseTrackFingerprint = '';
 function doctorTabVisible(tabId) {
     const el = document.getElementById(tabId);
     return el && !el.classList.contains('hidden');
+}
+
+function isApplicationDetailModalOpen() {
+    const m = document.getElementById('view-app-modal');
+    if (!m || m.classList.contains('hidden')) return false;
+    const disp = m.style.display;
+    return disp === 'flex' || disp === 'block';
+}
+
+function shouldPollSeminarTracking() {
+    return doctorTabVisible('tab-applications') || isApplicationDetailModalOpen();
 }
 
 function stopSeminarTrackingPoll() {
@@ -56,7 +67,7 @@ function startSeminarTrackingPoll() {
     const live = document.getElementById('seminar-track-live');
     if (live) live.classList.remove('hidden');
     seminarTrackPollTimer = setInterval(() => {
-        if (doctorTabVisible('tab-applications')) loadApplications(true);
+        if (shouldPollSeminarTracking()) loadApplications(true);
     }, DOCTOR_TRACK_POLL_MS);
 }
 
@@ -75,7 +86,7 @@ function syncDoctorTrackingPolls() {
         stopCaseTrackingPoll();
         return;
     }
-    if (doctorTabVisible('tab-applications')) startSeminarTrackingPoll();
+    if (shouldPollSeminarTracking()) startSeminarTrackingPoll();
     else stopSeminarTrackingPoll();
     if (doctorTabVisible('tab-case-track')) startCaseTrackingPoll();
     else stopCaseTrackingPoll();
@@ -2090,6 +2101,8 @@ async function loadApplications(silentPoll) {
                 '<p style="color:#64748b;">No seminar registrations yet. Apply from <strong>Available Seminars</strong>.</p>';
         }
 
+        refreshOpenApplicationTrackerFromList(userApplications);
+
         userApplications.forEach((a, index) => {
             // Render Table Row
             const canEdit = a.status === 'submitted' || a.status === 'pending_approval';
@@ -2119,6 +2132,40 @@ async function loadApplications(silentPoll) {
 
 let currentlyViewedApp = null;
 
+function refreshOpenApplicationTrackerFromList(apps) {
+    if (!currentlyViewedApp || !isApplicationDetailModalOpen()) return;
+    const fresh = (apps || []).find((a) => Number(a.id) === Number(currentlyViewedApp.id));
+    if (!fresh) return;
+    currentlyViewedApp = fresh;
+    const statusEl = document.getElementById('view-app-status');
+    if (statusEl) {
+        statusEl.innerHTML =
+            '<strong>Status:</strong> <span style="color: #10b981; font-weight: bold;">' +
+            String(fresh.status || '').toUpperCase() +
+            '</span>';
+    }
+    const trackEl = document.getElementById('view-app-tracking');
+    if (trackEl) {
+        let extra = renderTrackerStepsHtml(fresh.timeline || {});
+        extra += renderWhatsappLinkBlock(fresh);
+        const pol = summaryCancellationPolicy(fresh.cancellation_policy_json);
+        if (pol) {
+            extra +=
+                '<p style="margin-top:12px;font-size:0.85rem;color:#64748b;"><strong>Cancellation policy:</strong> ' +
+                escapeHtml(pol) +
+                '</p>';
+        }
+        if (fresh.terms_conditions) {
+            extra +=
+                '<p style="margin-top:8px;font-size:0.85rem;color:#64748b;"><strong>Terms:</strong> ' +
+                escapeHtml(String(fresh.terms_conditions).slice(0, 400)) +
+                (String(fresh.terms_conditions).length > 400 ? '…' : '') +
+                '</p>';
+        }
+        trackEl.innerHTML = extra;
+    }
+}
+
 function viewApplication(index) {
     const app = userApplications[index];
     currentlyViewedApp = app;
@@ -2130,7 +2177,7 @@ function viewApplication(index) {
     const contentDiv = document.getElementById('view-app-content');
     contentDiv.innerHTML = `
         <p><strong>Application No:</strong> ${app.application_no}</p>
-        <p><strong>Status:</strong> <span style="color: #10b981; font-weight: bold;">${app.status.toUpperCase()}</span></p>
+        <p id="view-app-status"><strong>Status:</strong> <span style="color: #10b981; font-weight: bold;">${app.status.toUpperCase()}</span></p>
         <hr style="margin: 10px 0; border: 0; border-top: 1px solid #cbd5e1;">
         <h4 style="color: #475569; margin-bottom: 5px;">Step 1: Personal Details</h4>
         <p><strong>Name:</strong> ${formData.fname || ''} ${formData.mname || ''} ${formData.lname || ''}</p>

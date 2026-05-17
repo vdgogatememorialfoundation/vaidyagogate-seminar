@@ -3869,42 +3869,76 @@ app.post('/api/scanner/mark', (req, res) => {
                     [staffId, row.ticket_id],
                     function (err2) {
                         if (err2) return res.status(500).json({ success: false, error: err2.message });
-                        syncCertificateEligibilityForTicket(row.ticket_id, () => {
-                            const doctorName = buildDisplayNameFromFormData(row.form_data, {
-                                first_name: row.doctor_first_name,
-                                last_name: row.doctor_last_name
-                            });
-                            notifEngine.notify(db, 'CHECK_IN_SUCCESS', {
-                                userId: row.doctor_user_id,
-                                seminarId: row.seminar_id,
-                                registrationId: row.registration_id || null,
-                                vars: {
-                                    ticket_id: row.ticket_id_string,
-                                    payment_status: row.payment_status === 'success' ? 'PAID' : 'UNPAID',
-                                    approval_status: row.registration_status
-                                }
-                            });
-
-                            res.json({
-                                success: true,
-                                sound: 'success',
-                                message: 'Attendance marked. Certificate unlocked if a template is configured for this seminar.',
-                                doctor: {
+                        const regId = row.registration_id;
+                        const finishScanResponse = (checkedInAtIso) => {
+                            syncCertificateEligibilityForTicket(row.ticket_id, () => {
+                                const doctorName = buildDisplayNameFromFormData(row.form_data, {
+                                    first_name: row.doctor_first_name,
+                                    last_name: row.doctor_last_name
+                                });
+                                notifEngine.notify(db, 'CHECK_IN_SUCCESS', {
                                     userId: row.doctor_user_id,
-                                    userIdString: row.doctor_user_id_string,
-                                    name: doctorName,
-                                    email: row.doctor_email,
-                                    phone: row.doctor_phone,
-                                    applicationNo: row.application_no,
-                                    seminarTitle: row.seminar_title,
-                                    ticketId: row.ticket_id_string,
-                                    registrationType: row.registration_status,
-                                    paymentStatus: row.payment_status === 'success' ? 'PAID' : 'UNPAID',
-                                    checkedInAt: new Date().toISOString()
-                                },
-                                scannedByStaffId: staffId
+                                    seminarId: row.seminar_id,
+                                    registrationId: regId || null,
+                                    vars: {
+                                        ticket_id: row.ticket_id_string,
+                                        payment_status: row.payment_status === 'success' ? 'PAID' : 'UNPAID',
+                                        approval_status: 'checked_in'
+                                    }
+                                });
+
+                                res.json({
+                                    success: true,
+                                    sound: 'success',
+                                    message:
+                                        'Attendance marked. Doctor tracking updated. Certificate unlocked if configured.',
+                                    doctor: {
+                                        userId: row.doctor_user_id,
+                                        userIdString: row.doctor_user_id_string,
+                                        name: doctorName,
+                                        email: row.doctor_email,
+                                        phone: row.doctor_phone,
+                                        applicationNo: row.application_no,
+                                        seminarTitle: row.seminar_title,
+                                        ticketId: row.ticket_id_string,
+                                        registrationType: 'checked_in',
+                                        paymentStatus: row.payment_status === 'success' ? 'PAID' : 'UNPAID',
+                                        checkedInAt: checkedInAtIso || new Date().toISOString()
+                                    },
+                                    scannedByStaffId: staffId
+                                });
                             });
-                        });
+                        };
+
+                        if (!regId) return finishScanResponse(new Date().toISOString());
+
+                        db.run(
+                            `UPDATE registrations SET status = 'checked_in' WHERE id = ? AND status NOT IN ('rejected', 'cancelled')`,
+                            [regId],
+                            () => {
+                                portalTracking.logRegistrationEvent(
+                                    db,
+                                    regId,
+                                    'checked_in',
+                                    'Checked in at venue',
+                                    'Venue check-in completed — QR scanned at entry.',
+                                    (logErr) => {
+                                        if (logErr) {
+                                            console.warn('[scanner] check-in log:', logErr.message);
+                                        }
+                                        db.get(
+                                            `SELECT scan_time FROM tickets WHERE id = ?`,
+                                            [row.ticket_id],
+                                            (eSt, tix) => {
+                                                const at =
+                                                    (tix && tix.scan_time) || new Date().toISOString();
+                                                finishScanResponse(at);
+                                            }
+                                        );
+                                    }
+                                );
+                            }
+                        );
                     }
                 );
             });
