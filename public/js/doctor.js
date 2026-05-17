@@ -18,6 +18,10 @@ function requireDoctorUserId() {
     return uid;
 }
 
+function doctorUserIdOrAlert() {
+    return requireDoctorUserId();
+}
+
 const DOCTOR_TRACK_POLL_MS = 5000;
 let seminarTrackPollTimer = null;
 let caseTrackPollTimer = null;
@@ -1674,8 +1678,11 @@ async function submitApplication() {
         agree_terms: document.getElementById('tnc').checked ? '1' : ''
     };
 
+    const uid = doctorUserIdOrAlert();
+    if (!uid) return;
+
     const payload = new FormData();
-    payload.append('userId', currentUser.id);
+    payload.append('userId', String(uid));
     payload.append('seminarId', activeSeminarIdForReg || 1);
     payload.append('formData', JSON.stringify(formDataObj));
     if (window.__otpOnApplication) {
@@ -1837,23 +1844,32 @@ async function loadApplications(silentPoll) {
         if (trackerContainer) trackerContainer.innerHTML = '<p style="color:#64748b;">Sign in to track applications.</p>';
         return;
     }
+    const list = document.getElementById('applications-list');
+    const trackerContainer = document.getElementById('applications-tracker-container');
     try {
         const res = await fetch(`/api/applications/${uid}`, { cache: 'no-store' });
-        const payload = await res.json();
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            const msg = payload.error || 'Could not load applications.';
+            if (list) list.innerHTML = '<tr><td colspan="3" style="color:#b91c1c;">' + escapeHtml(msg) + '</td></tr>';
+            if (trackerContainer) {
+                trackerContainer.innerHTML =
+                    '<p style="color:#b91c1c;">' + escapeHtml(msg) + ' Try signing out and back in.</p>';
+            }
+            return;
+        }
         userApplications = Array.isArray(payload) ? payload : payload.applications || [];
         if (payload.portalYear) doctorPortalYear = payload.portalYear;
         const fp = seminarTrackFingerprint(userApplications);
         if (silentPoll && fp === _lastSeminarTrackFingerprint) return;
         _lastSeminarTrackFingerprint = fp;
 
-        const list = document.getElementById('applications-list');
-        const trackerContainer = document.getElementById('applications-tracker-container');
-        list.innerHTML = '';
-        trackerContainer.innerHTML = '';
+        if (list) list.innerHTML = '';
+        if (trackerContainer) trackerContainer.innerHTML = '';
 
         if (!userApplications.length) {
-            list.innerHTML = '<tr><td colspan="3" style="text-align:center;">No seminar applications yet.</td></tr>';
-            trackerContainer.innerHTML =
+            if (list) list.innerHTML = '<tr><td colspan="3" style="text-align:center;">No seminar applications yet.</td></tr>';
+            if (trackerContainer) trackerContainer.innerHTML =
                 '<p style="color:#64748b;">No seminar registrations yet. Apply from <strong>Available Seminars</strong>.</p>';
         }
 
@@ -1867,15 +1883,17 @@ async function loadApplications(silentPoll) {
                 ? `<button type="button" class="btn-primary" style="padding: 5px 10px; margin-right: 5px; background: #b91c1c; border: none;" onclick="doctorCancelApplication(${a.id})">Cancel</button>`
                 : '';
             
-            list.innerHTML += `
+            if (list) {
+                list.innerHTML += `
                 <tr>
                     <td><strong>${a.application_no}</strong></td>
                     <td><span style="background: ${a.status === 'rejected' ? '#fee2e2' : '#fef3c7'}; padding: 5px; border-radius: 5px;">${a.status.toUpperCase()}</span></td>
                     <td>${editBtn}${cancelBtn}<button class="btn-primary" style="padding: 5px 10px;" onclick="viewApplication(${index})">View Details</button></td>
                 </tr>
             `;
+            }
 
-            trackerContainer.innerHTML += renderSeminarApplicationTrackerCard(a);
+            if (trackerContainer) trackerContainer.innerHTML += renderSeminarApplicationTrackerCard(a);
         });
     } catch (err) {
         console.error(err);

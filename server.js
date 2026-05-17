@@ -2088,9 +2088,102 @@ app.post('/api/abstracts/submit', upload.fields([{ name: 'video', maxCount: 1 },
         });
 });
 
+function parsePositiveUserId(raw) {
+    const n = parseInt(raw, 10);
+    return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+/** Link registrations saved without user_id (bad session) to the signed-in account by email in form_data. */
+function healOrphanRegistrationsForUser(uid, cb) {
+    db.get(`SELECT email FROM users WHERE id = ?`, [uid], (e, user) => {
+        if (e || !user || !user.email) return cb(e);
+        const emailNorm = String(user.email).trim().toLowerCase();
+        db.all(
+            `SELECT id, form_data FROM registrations WHERE user_id IS NULL OR user_id = 0`,
+            [],
+            (e2, orphans) => {
+                if (e2 || !orphans || !orphans.length) return cb(null, 0);
+                let fixed = 0;
+                let pending = orphans.length;
+                orphans.forEach((row) => {
+                    let fdEmail = '';
+                    try {
+                        const fd = typeof row.form_data === 'string' ? JSON.parse(row.form_data) : row.form_data;
+                        fdEmail = String((fd && fd.email) || '').trim().toLowerCase();
+                    } catch (_) {
+                        fdEmail = '';
+                    }
+                    if (fdEmail && fdEmail === emailNorm) {
+                        db.run(`UPDATE registrations SET user_id = ? WHERE id = ?`, [uid, row.id], () => {
+                            fixed++;
+                            if (--pending === 0) cb(null, fixed);
+                        });
+                    } else if (--pending === 0) {
+                        cb(null, fixed);
+                    }
+                });
+            }
+        );
+    });
+}
+
+function fetchApplicationsForUser(uid, yearFilter, cb) {
+    if (!parsePositiveUserId(uid)) return cb(new Error('Invalid user id'));
+    let sql = `SELECT r.id, r.seminar_id, r.application_no, r.status, r.form_data, r.created_at, r.updated_at,
+                s.title AS seminar_title, s.whatsapp_group_url, s.cancellation_policy_json, s.terms_conditions,
+                s.event_date AS seminar_event_date, s.price AS seminar_price, s.portal_year
+         FROM registrations r
+         LEFT JOIN seminars s ON r.seminar_id = s.id
+         WHERE r.user_id = ?`;
+    const params = [uid];
+    if (Number.isInteger(yearFilter)) {
+        sql += ` AND (s.portal_year = ? OR EXTRACT(YEAR FROM COALESCE(s.event_date, r.created_at))::INTEGER = ?)`;
+        params.push(yearFilter, yearFilter);
+    }
+    sql += ` ORDER BY r.id DESC`;
+    db.all(sql, params, cb);
+}
+
+function respondApplicationsList(uid, yearFilter, res) {
+    fetchApplicationsForUser(uid, yearFilter, (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        const finish = (list) => {
+            portalTracking.attachRegistrationTimelines(db, list || [], (e2, enriched) => {
+                if (e2) {
+                    console.error('[applications] timeline attach failed:', e2.message);
+                    enriched = (list || []).map((r) => ({ ...r, timeline: { steps: [], status: r.status } }));
+                }
+                portalTracking.getPortalYear(db, (e3, portalYear) => {
+                    if (e3) return res.status(500).json({ error: e3.message });
+                    res.json({ portalYear, applications: enriched || [] });
+                });
+            });
+        };
+        if (rows && rows.length) return finish(rows);
+        healOrphanRegistrationsForUser(uid, (healErr, fixed) => {
+            if (healErr) console.warn('[applications] heal orphans:', healErr.message);
+            if (fixed) console.log(`[applications] linked ${fixed} orphan registration(s) to user ${uid}`);
+            fetchApplicationsForUser(uid, yearFilter, (err2, rows2) => {
+                if (err2) return res.status(500).json({ error: err2.message });
+                finish(rows2 || []);
+            });
+        });
+    });
+}
+
 // 5. Seminars: Register (Application Submission)
 app.post('/api/applications/submit', upload.single('certificate'), (req, res) => {
     let { userId, seminarId, formData, phoneOtpToken, emailOtpToken, fieldOtpTokens } = req.body;
+    userId = parsePositiveUserId(userId);
+    if (!userId) {
+        return res.status(400).json({
+            error: 'Invalid user session. Sign out of the doctor portal, sign in again with your email, then resubmit.'
+        });
+    }
+    seminarId = parseInt(seminarId, 10);
+    if (!Number.isInteger(seminarId) || seminarId < 1) {
+        return res.status(400).json({ error: 'Invalid seminar.' });
+    }
 
     // formData might be passed as string if using FormData API
     if (typeof formData === 'string') {
@@ -2242,30 +2335,10 @@ app.post('/api/applications/submit', upload.single('certificate'), (req, res) =>
 
 // 5b. Get Applications for User
 app.get('/api/applications/:userId', (req, res) => {
-    const uid = parseInt(req.params.userId, 10);
+    const uid = parsePositiveUserId(req.params.userId);
+    if (!uid) return res.status(400).json({ error: 'Invalid user id' });
     const yearFilter = req.query && req.query.year != null ? parseInt(req.query.year, 10) : null;
-    let sql = `SELECT r.id, r.seminar_id, r.application_no, r.status, r.form_data, r.created_at, r.updated_at,
-                s.title AS seminar_title, s.whatsapp_group_url, s.cancellation_policy_json, s.terms_conditions,
-                s.event_date AS seminar_event_date, s.price AS seminar_price, s.portal_year
-         FROM registrations r
-         LEFT JOIN seminars s ON r.seminar_id = s.id
-         WHERE r.user_id = ?`;
-    const params = [uid];
-    if (Number.isInteger(yearFilter)) {
-        sql += ` AND (s.portal_year = ? OR CAST(strftime('%Y', COALESCE(s.event_date, r.created_at)) AS INTEGER) = ?)`;
-        params.push(yearFilter, yearFilter);
-    }
-    sql += ` ORDER BY r.id DESC`;
-    db.all(sql, params, (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        portalTracking.attachRegistrationTimelines(db, rows || [], (e2, enriched) => {
-            if (e2) return res.status(500).json({ error: e2.message });
-            portalTracking.getPortalYear(db, (e3, portalYear) => {
-                if (e3) return res.status(500).json({ error: e3.message });
-                res.json({ portalYear, applications: enriched || [] });
-            });
-        });
-    });
+    respondApplicationsList(uid, yearFilter, res);
 });
 // 5c. Edit Application
 app.put('/api/applications/:applicationId', upload.single('certificate'), (req, res) => {
