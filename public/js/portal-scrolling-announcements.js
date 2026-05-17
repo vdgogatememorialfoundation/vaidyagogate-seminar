@@ -50,8 +50,14 @@
             return;
         }
         wrap.classList.remove('hidden');
+        wrap.setAttribute('aria-hidden', 'false');
         const cls = cardClass || 'sa-card';
-        const html = list.map((it) => cardHtml(it, cls)).join('');
-        track.innerHTML = html + html;
+        let html = list.map((it) => cardHtml(it, cls)).join('');
+        if (list.length === 1) html = html + html + html;
+        else html = html + html;
+        track.innerHTML = html;
+        if (!track.classList.contains('scrolling-announce-track') && !track.classList.contains('portal-scrolling-announce-track')) {
+            track.classList.add('scrolling-announce-track');
+        }
     };
 })();

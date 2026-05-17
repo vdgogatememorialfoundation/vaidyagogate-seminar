@@ -762,6 +762,13 @@ img { max-width: 100%; height: auto; display: block; }
     background: var(--surface);
     border-bottom: 1px solid var(--line);
     padding: 16px 0;
+    position: relative;
+    z-index: 2;
+    min-height: 88px;
+}
+
+.scrolling-announce-wrap:not(.hidden) {
+    display: block !important;
 }
 
 .scrolling-announce-header {

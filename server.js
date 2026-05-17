@@ -2500,10 +2500,43 @@ app.get('/api/public/participants/:seminarId', (req, res) => {
     );
 });
 
+function mergeScrollingAnnouncementsWithOpenSeminars(cms, cb) {
+    db.all(
+        `SELECT id, title, event_date, registration_start, registration_end, is_active
+         FROM seminars WHERE is_active = 1
+         ORDER BY COALESCE(registration_start, event_date) DESC`,
+        [],
+        (err, rows) => {
+            if (err) return cb(err);
+            const base = sanitizeScrollingAnnouncements(cms.scrollingAnnouncements || []);
+            const bySeminarId = new Map();
+            base.forEach((a) => {
+                if (a && a.autoFromSeminarId != null) bySeminarId.set(Number(a.autoFromSeminarId), a);
+            });
+            (rows || []).forEach((row) => {
+                if (!Number(row.is_active) || !isSeminarRegistrationOpen(row)) return;
+                const sid = Number(row.id);
+                if (!bySeminarId.has(sid)) bySeminarId.set(sid, buildSeminarRegistrationAnnouncement(row));
+                else {
+                    const built = buildSeminarRegistrationAnnouncement(row);
+                    bySeminarId.set(sid, { ...bySeminarId.get(sid), ...built, title: built.title, body: built.body });
+                }
+            });
+            const manual = base.filter((a) => !a || a.autoFromSeminarId == null);
+            const auto = Array.from(bySeminarId.values());
+            cms.scrollingAnnouncements = [...auto, ...manual].slice(0, 40);
+            cb(null, cms);
+        }
+    );
+}
+
 app.get('/api/public/site-cms', (req, res) => {
     loadPublicSiteCms((e, cms) => {
         if (e) return res.status(500).json({ error: e.message });
-        res.json(cms);
+        mergeScrollingAnnouncementsWithOpenSeminars(cms, (e2, enriched) => {
+            if (e2) return res.status(500).json({ error: e2.message });
+            res.json(enriched);
+        });
     });
 });
 

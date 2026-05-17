@@ -980,9 +980,12 @@
 
         async function loadPublicCmsAndApply() {
             try {
-                const res = await fetch('/api/public/site-cms');
+                const res = await fetch('/api/public/site-cms', { cache: 'no-store' });
                 const cms = await res.json();
                 if (typeof applySiteCms === 'function') applySiteCms(cms);
+                if (typeof renderScrollingAnnouncements === 'function') {
+                    renderScrollingAnnouncements(cms.scrollingAnnouncements || []);
+                }
                 if (typeof renderAboutGallerySocial === 'function') renderAboutGallerySocial(cms);
             } catch (e) {
                 console.error(e);
