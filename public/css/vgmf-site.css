@@ -771,24 +771,70 @@ img { max-width: 100%; height: auto; display: block; }
     display: block !important;
 }
 
-.scrolling-announce-header {
+.scrolling-announce-bar {
     max-width: var(--max);
-    margin: 0 auto 12px;
-    padding: 0 24px;
+    margin: 0 auto;
+    padding: 12px 24px;
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 20px;
 }
 
-.sa-sub { font-size: 0.8rem; color: var(--muted); }
+.scrolling-announce-label {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-width: 200px;
+}
 
-.scrolling-announce-viewport { overflow: hidden; }
-.scrolling-announce-track { display: flex; gap: 16px; animation: scrollCards 35s linear infinite; width: max-content; }
-.scrolling-announce-track:hover { animation-play-state: paused; }
+.scrolling-announce-label .sa-heading {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--brand);
+    line-height: 1.35;
+}
 
-@keyframes scrollCards {
+.scrolling-announce-viewport {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.scrolling-announce-track {
+    display: flex;
+    gap: 16px;
+    width: max-content;
+}
+
+.scrolling-announce-track.sa-loop-set {
+    animation: scrollCardsRtl 45s linear infinite;
+}
+
+.scrolling-announce-track.sa-loop-set:hover {
+    animation-play-state: paused;
+}
+
+.scrolling-announce-track.sa-single-set {
+    animation: none;
+    width: 100%;
+    max-width: 100%;
+}
+
+.scrolling-announce-track.sa-single-set .sa-card {
+    flex: 1 1 auto;
+    max-width: 100%;
+}
+
+@keyframes scrollCardsRtl {
     0% { transform: translateX(0); }
     100% { transform: translateX(-50%); }
+}
+
+.sa-card-link a {
+    color: var(--brand);
+    font-weight: 700;
+    font-size: 0.82rem;
 }
 
 .sa-card {
@@ -1360,8 +1406,8 @@ img { max-width: 100%; height: auto; display: block; }
     #countdown-region { padding: 16px; }
 
     .scrolling-announce-wrap { padding: 0; }
-    .scrolling-announce-header { padding: 0 16px; }
-    .scrolling-announce-viewport { padding-left: 16px; }
+    .scrolling-announce-bar { flex-direction: column; align-items: stretch; padding: 12px 16px; gap: 10px; }
+    .scrolling-announce-label { max-width: none; }
     .sa-card { flex: 0 0 min(88vw, 300px); }
     .reviews-grid-static { grid-template-columns: 1fr; }
 

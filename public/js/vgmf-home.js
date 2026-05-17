@@ -177,6 +177,10 @@
             }
         }
 
+        const announceHeading = document.getElementById('scrolling-announce-heading');
+        if (announceHeading && cms.scrollingAnnounceHeading) {
+            announceHeading.textContent = cms.scrollingAnnounceHeading;
+        }
         if (typeof renderHomeSlider === 'function') renderHomeSlider(cms.slides || []);
         if (typeof renderScrollingAnnouncements === 'function') renderScrollingAnnouncements(cms.scrollingAnnouncements || []);
         if (typeof renderReviewsMarquee === 'function') renderReviewsMarquee(cms.reviews || []);

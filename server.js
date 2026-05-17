@@ -2515,6 +2515,8 @@ function mergeScrollingAnnouncementsWithOpenSeminars(cms, cb) {
             });
             (rows || []).forEach((row) => {
                 if (!Number(row.is_active) || !isSeminarRegistrationOpen(row)) return;
+                const rowTitle = String(row.title || '');
+                if (/test seminar/i.test(rowTitle) || /introduction to ayurveda/i.test(rowTitle)) return;
                 const sid = Number(row.id);
                 if (!bySeminarId.has(sid)) bySeminarId.set(sid, buildSeminarRegistrationAnnouncement(row));
                 else {

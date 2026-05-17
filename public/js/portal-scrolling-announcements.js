@@ -1,5 +1,6 @@
 ﻿/**
- * Shared horizontal scrolling announcement strip for public site and doctor portal.
+ * Shared horizontal scrolling announcement strip (public site + doctor portal).
+ * Data: Admin → Website CMS → Homepage sliding announcements (+ open seminars from API).
  */
 (function () {
     function escHtml(s) {
@@ -10,16 +11,38 @@
             .replace(/"/g, '&quot;');
     }
 
+    function isTestOrDuplicateAnnouncement(item) {
+        const t = String(item.title || '');
+        const b = String(item.body || '');
+        if (/test seminar/i.test(t) || /introduction to ayurveda/i.test(t)) return true;
+        return false;
+    }
+
+    function dedupeAnnouncements(items) {
+        const seen = new Set();
+        const out = [];
+        (items || []).forEach((x) => {
+            if (!x || (!x.title && !x.body) || isTestOrDuplicateAnnouncement(x)) return;
+            const key =
+                x.autoFromSeminarId != null
+                    ? 'seminar:' + Number(x.autoFromSeminarId)
+                    : 'manual:' + String(x.title || '').trim() + '|' + String(x.body || '').trim().slice(0, 80);
+            if (seen.has(key)) return;
+            seen.add(key);
+            out.push(x);
+        });
+        return out;
+    }
+
     function cardHtml(it, cardClass) {
         const title = escHtml(it.title || 'Update');
         const body = escHtml(it.body || '');
         const date = it.date ? '<div class="sa-meta">' + escHtml(it.date) + '</div>' : '';
-        const link =
-            it.link && String(it.link).trim()
-                ? '<div style="margin-top:8px;"><a href="' +
-                  escHtml(it.link) +
-                  '">View details</a></div>'
-                : '';
+        const linkUrl = it.link && String(it.link).trim() ? String(it.link).trim() : '';
+        const linkLabel = linkUrl.indexOf('doctor') !== -1 ? 'Register' : 'View details';
+        const link = linkUrl
+            ? '<div class="sa-card-link"><a href="' + escHtml(linkUrl) + '">' + linkLabel + '</a></div>'
+            : '';
         return (
             '<article class="' +
             cardClass +
@@ -43,21 +66,24 @@
         const wrap = document.getElementById(wrapId || 'scrolling-announce-wrap');
         const track = document.getElementById(trackId || 'scrolling-announce-track');
         if (!wrap || !track) return;
-        const list = Array.isArray(items) ? items.filter((x) => x && (x.title || x.body)) : [];
+        const list = dedupeAnnouncements(items);
         if (!list.length) {
             wrap.classList.add('hidden');
+            wrap.setAttribute('aria-hidden', 'true');
             track.innerHTML = '';
             return;
         }
         wrap.classList.remove('hidden');
         wrap.setAttribute('aria-hidden', 'false');
         const cls = cardClass || 'sa-card';
-        let html = list.map((it) => cardHtml(it, cls)).join('');
-        if (list.length === 1) html = html + html + html;
-        else html = html + html;
+        const html = list.map((it) => cardHtml(it, cls)).join('');
         track.innerHTML = html;
-        if (!track.classList.contains('scrolling-announce-track') && !track.classList.contains('portal-scrolling-announce-track')) {
-            track.classList.add('scrolling-announce-track');
+        track.classList.remove('sa-single-set', 'sa-loop-set');
+        if (list.length === 1) {
+            track.classList.add('sa-single-set');
+        } else {
+            track.innerHTML = html + html;
+            track.classList.add('sa-loop-set');
         }
     };
 })();
