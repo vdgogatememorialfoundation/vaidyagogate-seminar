@@ -3771,6 +3771,69 @@ async function cmsUploadRowPdf(btn, pathSelector) {
     if (path && pathEl) pathEl.value = path;
 }
 
+function cmsCollectSpeakersFromDom() {
+    const root = document.getElementById('cms-speaker-rows');
+    if (!root) return [];
+    return Array.from(root.querySelectorAll('.cms-speaker-row'))
+        .map((row) => ({
+            name: (row.querySelector('.csp-name') || {}).value || '',
+            role: (row.querySelector('.csp-role') || {}).value || '',
+            seminar: (row.querySelector('.csp-seminar') || {}).value || '',
+            org: (row.querySelector('.csp-org') || {}).value || '',
+            image: (row.querySelector('.csp-image') || {}).value || ''
+        }))
+        .filter((x) => x.name || x.image);
+}
+
+function cmsFillSpeakerRows(items) {
+    const root = document.getElementById('cms-speaker-rows');
+    if (!root) return;
+    root.innerHTML = '';
+    (items || []).forEach((it) => cmsAddSpeakerRow(it));
+}
+
+function cmsAddSpeakerRow(prefill) {
+    const root = document.getElementById('cms-speaker-rows');
+    if (!root) return;
+    const p = prefill || {};
+    const wrap = document.createElement('div');
+    wrap.className = 'cms-speaker-row';
+    wrap.style.cssText =
+        'margin-bottom:12px;padding:12px;border:1px solid #e2e8f0;border-radius:10px;background:#fafafa;display:grid;grid-template-columns:1fr 1fr;gap:8px;';
+    wrap.innerHTML = `
+        <div style="grid-column:1/-1;"><label style="font-size:0.8rem;">Full name</label><input class="csp-name" type="text" style="width:100%"></div>
+        <div><label style="font-size:0.8rem;">Designation / topic</label><input class="csp-role" type="text" style="width:100%" placeholder="Keynote speaker"></div>
+        <div><label style="font-size:0.8rem;">Seminar (title)</label><input class="csp-seminar" type="text" style="width:100%" placeholder="National Seminar 2026"></div>
+        <div><label style="font-size:0.8rem;">Institution (optional)</label><input class="csp-org" type="text" style="width:100%"></div>
+        <div style="grid-column:1/-1;"><label style="font-size:0.8rem;">Photo path</label><input class="csp-image" type="text" style="width:100%" placeholder="/uploads/speaker.jpg or /api/assets/..."></div>
+        <div style="grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <input type="file" class="csp-file" accept="image/*" style="max-width:180px;">
+          <button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;" onclick="cmsUploadSpeakerImage(this)">Upload photo</button>
+          <button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;background:#64748b;" onclick="this.closest('.cms-speaker-row').remove()">Remove</button>
+        </div>`;
+    const n = wrap.querySelector('.csp-name');
+    const r = wrap.querySelector('.csp-role');
+    const sem = wrap.querySelector('.csp-seminar');
+    const o = wrap.querySelector('.csp-org');
+    const img = wrap.querySelector('.csp-image');
+    if (n) n.value = p.name || '';
+    if (r) r.value = p.role || '';
+    if (sem) sem.value = p.seminar || p.seminarTitle || '';
+    if (o) o.value = p.org || '';
+    if (img) img.value = p.image || p.imagePath || '';
+    root.appendChild(wrap);
+}
+
+async function cmsUploadSpeakerImage(btn) {
+    const row = btn.closest('.cms-speaker-row');
+    if (!row) return;
+    const fileInp = row.querySelector('.csp-file');
+    const path = await uploadAdminAssetFromInput(fileInp);
+    if (fileInp) fileInp.value = '';
+    const pathEl = row.querySelector('.csp-image');
+    if (path && pathEl) pathEl.value = path;
+}
+
 function cmsCollectFeatureCardsFromDom() {
     const root = document.getElementById('cms-feature-rows');
     if (!root) return [];
@@ -3948,6 +4011,7 @@ async function loadAdminSiteCms() {
         if (soc) soc.value = JSON.stringify(cms.socialLinks || [], null, 2);
         cmsFillGalleryRows(cms.pastSeminarGallery || []);
         cmsApplyHeroFieldsToForm(cms);
+        cmsFillSpeakerRows(cms.speakers || []);
         cmsFillFeatureRows(cms.featureCards || []);
         cmsFillFaqRows(cms.faq || []);
         await loadAdminMarketing();
@@ -4005,6 +4069,7 @@ async function saveAdminSiteCms() {
             aboutSections,
             socialLinks,
             pastSeminarGallery,
+            speakers: cmsCollectSpeakersFromDom(),
             ...cmsCollectHeroFieldsFromForm()
         };
         const res = await fetch('/api/admin/site-cms', {

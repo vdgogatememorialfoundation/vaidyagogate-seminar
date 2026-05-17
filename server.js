@@ -755,6 +755,7 @@ const DEFAULT_PUBLIC_SITE_CMS = {
         title: 'Event Schedule',
         subtitle: 'Sessions, speakers, and timings'
     },
+    speakers: [],
     faq: [
         {
             q: 'How do I register?',
@@ -2460,8 +2461,8 @@ app.post('/api/admin/site-cms', (req, res) => {
     if (!incoming || typeof incoming !== 'object') {
         return res.status(400).json({ error: 'cms object required' });
     }
-    for (let i = 0; i < ['doctorUpdates', 'slides', 'publicNotices', 'reviews', 'scrollingAnnouncements', 'aboutSections', 'socialLinks', 'pastSeminarGallery'].length; i++) {
-        const k = ['doctorUpdates', 'slides', 'publicNotices', 'reviews', 'scrollingAnnouncements', 'aboutSections', 'socialLinks', 'pastSeminarGallery'][i];
+    for (let i = 0; i < ['doctorUpdates', 'slides', 'publicNotices', 'reviews', 'scrollingAnnouncements', 'aboutSections', 'socialLinks', 'pastSeminarGallery', 'speakers'].length; i++) {
+        const k = ['doctorUpdates', 'slides', 'publicNotices', 'reviews', 'scrollingAnnouncements', 'aboutSections', 'socialLinks', 'pastSeminarGallery', 'speakers'][i];
         if (incoming[k] !== undefined && !Array.isArray(incoming[k])) {
             return res.status(400).json({ error: `${k} must be an array` });
         }
@@ -2473,7 +2474,7 @@ app.post('/api/admin/site-cms', (req, res) => {
             ...incoming,
             version: 1
         };
-        ['doctorUpdates', 'slides', 'publicNotices', 'reviews', 'scrollingAnnouncements', 'aboutSections', 'socialLinks', 'pastSeminarGallery'].forEach((k) => {
+        ['doctorUpdates', 'slides', 'publicNotices', 'reviews', 'scrollingAnnouncements', 'aboutSections', 'socialLinks', 'pastSeminarGallery', 'speakers'].forEach((k) => {
             if (incoming[k] !== undefined) merged[k] = incoming[k];
         });
         if (typeof incoming.tickerText === 'string') merged.tickerText = incoming.tickerText;
@@ -2486,6 +2487,7 @@ app.post('/api/admin/site-cms', (req, res) => {
         if (Array.isArray(incoming.heroStats)) merged.heroStats = incoming.heroStats;
         if (Array.isArray(incoming.featureCards)) merged.featureCards = incoming.featureCards;
         if (Array.isArray(incoming.faq)) merged.faq = incoming.faq;
+        if (Array.isArray(incoming.speakers)) merged.speakers = incoming.speakers;
         const payload = JSON.stringify(merged);
         upsertGlobalSetting('public_site_cms', payload, (err) => {
             if (err) return res.status(500).json({ error: err.message });
