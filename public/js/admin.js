@@ -2062,6 +2062,11 @@ async function loadIntegrationSettings() {
         set('int-zoho-from', s.zoho_from);
         set('int-wa-phone-id', s.whatsapp_phone_number_id);
         set('int-wa-lang', s.whatsapp_template_lang || 'en');
+        const waHook = document.getElementById('int-wa-webhook-url');
+        if (waHook) {
+            const base = (s.public_base_url || '').replace(/\/$/, '') || 'https://inar.vaidyagogate.org';
+            waHook.textContent = base + '/api/webhooks/whatsapp';
+        }
         const line = document.getElementById('int-status-line');
         if (line) {
             let emailLine = s.email_configured ? 'Email: configured.' : 'Email: not configured.';
@@ -2176,8 +2181,12 @@ async function testIntegrationWhatsApp() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone })
     });
-    const data = await res.json();
-    alert(res.ok ? 'Test WhatsApp sent.' : data.error || 'Failed');
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+        alert('WhatsApp test sent. Reply on WhatsApp to open the 24-hour window for OTP messages.');
+    } else {
+        alert(data.error || 'WhatsApp test failed');
+    }
 }
 
 async function loadSettings() {

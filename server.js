@@ -1816,11 +1816,14 @@ app.post('/api/admin/integrations/test-email', withIntegrationSettingsLoaded, as
     });
 });
 
-app.post('/api/admin/integrations/test-whatsapp', async (req, res) => {
+app.post('/api/admin/integrations/test-whatsapp', withIntegrationSettingsLoaded, async (req, res) => {
     const phone = String((req.body && req.body.phone) || '').trim();
     if (!phone) return res.status(400).json({ error: 'phone required' });
     const { sendWhatsAppText } = require('./lib/whatsapp-service');
-    const r = await sendWhatsAppText(phone, 'VGMF scanner/portal test message from admin.');
+    const r = await sendWhatsAppText(
+        phone,
+        'VGMF test from admin. Reply to this chat to open the 24-hour messaging window for OTP messages.'
+    );
     if (r.ok) return res.json({ success: true });
     res.status(503).json({ error: r.error || 'Send failed', skipped: r.skipped });
 });

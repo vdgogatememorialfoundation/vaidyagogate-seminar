@@ -176,14 +176,28 @@ async function notifPreview() {
         const box = document.getElementById('notif-preview-box');
         if (!box) return;
         box.classList.remove('hidden');
+        const html = data.emailHtml || '';
         box.innerHTML =
             '<p><strong>Subject:</strong> ' +
             escNotif(data.emailSubject) +
-            '</p><hr><div>' +
-            (data.emailHtml || '') +
-            '</div><p><strong>WhatsApp:</strong></p><pre style="white-space:pre-wrap;">' +
-            escNotif(data.whatsappBody) +
-            '</pre>';
+            '</p><p style="font-size:0.78rem;color:#64748b;margin:8px 0;">Email preview (buttons render below):</p>';
+        const frame = document.createElement('iframe');
+        frame.className = 'notif-preview-frame';
+        frame.title = 'Email preview';
+        frame.setAttribute('sandbox', '');
+        frame.srcdoc =
+            '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body style="margin:12px;font-family:Arial,sans-serif;">' +
+            html +
+            '</body></html>';
+        box.appendChild(frame);
+        const waLabel = document.createElement('p');
+        waLabel.style.marginTop = '12px';
+        waLabel.innerHTML = '<strong>WhatsApp:</strong>';
+        box.appendChild(waLabel);
+        const waPre = document.createElement('pre');
+        waPre.style.cssText = 'white-space:pre-wrap;background:#fff;padding:10px;border-radius:6px;border:1px solid #e2e8f0;';
+        waPre.textContent = data.whatsappBody || '';
+        box.appendChild(waPre);
     } catch (e) {
         alert('Preview failed');
     }

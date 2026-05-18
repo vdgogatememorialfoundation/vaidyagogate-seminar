@@ -15,6 +15,17 @@
         .btn-primary:hover { filter: brightness(1.05); }
         .btn-danger { background: #fff1f2; color: #be123c; border: 1px solid #fecdd3; padding: 8px 14px; border-radius: 10px; cursor: pointer; font-weight: 600; }
         .btn-success { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; padding: 8px 14px; border-radius: 10px; cursor: pointer; font-weight: 600; }
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 16px; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 0.875rem; font-family: inherit; border: none; }
+        .btn-secondary { background: #f1f5f9; color: #0f766e; border: 1px solid #cbd5e1; }
+        .btn-secondary:hover { background: #e2e8f0; }
+        .btn-outline { background: #fff; color: #64748b; border: 1px solid #cbd5e1; }
+        .btn-outline:hover { background: #f8fafc; }
+        .btn-sm { padding: 6px 12px; font-size: 0.8rem; }
+        .form-group { margin-bottom: 0; }
+        .form-group label { display: block; }
+        .form-control { width: 100%; }
+        #notif-preview-box .notif-preview-email { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; }
+        #notif-preview-box iframe.notif-preview-frame { width: 100%; min-height: 280px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; }
         input, select, textarea { width: 100%; padding: 10px 12px; border: 1px solid #bfdbfe; border-radius: 10px; margin-top: 6px; background: #fff; color: #1e3a5f; }
         input:focus, select:focus, textarea:focus { outline: none; border-color: #0d9488; box-shadow: 0 0 0 3px rgba(13,148,136,0.18); }
         label { color: #475569; font-size: 0.85rem; font-weight: 600; }
@@ -775,7 +786,10 @@
                         <div class="form-group"><label>Seminar ID (blank = global)</label><input id="notif-edit-seminar-id" class="form-control" type="number" placeholder=""></div>
                         <div class="form-group" style="display:flex;align-items:flex-end;"><label style="margin:0;"><input type="checkbox" id="notif-edit-enabled" checked> Enabled</label></div>
                         <div class="form-group" style="grid-column: 1 / -1;"><label>Email subject</label><input id="notif-edit-email-subject" class="form-control" type="text"></div>
-                        <div class="form-group" style="grid-column: 1 / -1;"><label>Email HTML body</label><textarea id="notif-edit-email-body" class="form-control" rows="10" style="font-family: monospace; font-size: 0.85rem;"></textarea></div>
+                        <div class="form-group" style="grid-column: 1 / -1;"><label>Email HTML body</label>
+                        <p style="font-size:0.78rem;color:#64748b;margin:6px 0;">Use styled links for buttons (not HTML button tags). Click Insert email button for a working CTA.</p>
+                        <textarea id="notif-edit-email-body" class="form-control" rows="10" style="font-family: monospace; font-size: 0.85rem;"></textarea>
+                        <button type="button" class="btn-secondary btn-sm" style="margin-top:8px;" onclick="notifInsertEmailButton()">Insert email button</button></div>
                         <div class="form-group" style="grid-column: 1 / -1;"><label>WhatsApp message</label><textarea id="notif-edit-wa-body" class="form-control" rows="5" style="font-family: monospace; font-size: 0.85rem;"></textarea></div>
                         <div class="form-group" style="grid-column: 1 / -1;"><label>Meta template name (optional)</label><input id="notif-edit-wa-template" class="form-control" type="text" placeholder=""></div>
                     </div>
@@ -861,9 +875,11 @@
                         <div><label>From</label><input type="email" id="int-zoho-from" placeholder="care@vaidyagogate.org" style="width:100%"></div>
                         <div style="display:flex;gap:8px;align-items:flex-end;"><input type="email" id="int-test-email" placeholder="Test to" style="flex:1"><button type="button" class="btn-primary" style="background:#64748b;padding:8px 12px;" onclick="testIntegrationEmail()">Test email</button></div>
                         <div style="grid-column:1/-1;"><h4 style="margin:8px 0;color:#0c4a6e;">Meta WhatsApp Business</h4>
-                        <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px;">Webhook URL: <code>https://your-domain/api/webhooks/whatsapp</code> — <a href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started" target="_blank" rel="noopener">Cloud API setup</a></p></div>
-                        <div style="grid-column:1/-1;"><label>Access token</label><input type="password" id="int-wa-token" placeholder="Leave blank to keep" style="width:100%"></div>
-                        <div><label>Phone number ID</label><input type="text" id="int-wa-phone-id" style="width:100%"></div>
+                        <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px;line-height:1.5;">Webhook: <code id="int-wa-webhook-url">https://your-domain/api/webhooks/whatsapp</code><br>
+                        Access token = permanent System User token (not App Secret). Phone number ID from API Setup.<br>
+                        <a href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started" target="_blank" rel="noopener">Cloud API setup</a></p></div>
+                        <div style="grid-column:1/-1;"><label>Access token (System User)</label><input type="password" id="int-wa-token" placeholder="Permanent token — not App Secret" style="width:100%"></div>
+                        <div><label>Phone number ID</label><input type="text" id="int-wa-phone-id" placeholder="1066436679893640" style="width:100%"></div>
                         <div><label>Webhook verify token</label><input type="password" id="int-wa-verify" placeholder="Leave blank to keep" style="width:100%"></div>
                         <div><label>Template language</label><input type="text" id="int-wa-lang" placeholder="en" style="width:100%"></div>
                         <div style="display:flex;gap:8px;align-items:flex-end;"><input type="text" id="int-test-phone" placeholder="10-digit mobile" style="flex:1"><button type="button" class="btn-primary" style="background:#64748b;padding:8px 12px;" onclick="testIntegrationWhatsApp()">Test WhatsApp</button></div>
