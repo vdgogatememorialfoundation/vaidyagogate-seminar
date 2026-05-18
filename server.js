@@ -1352,11 +1352,13 @@ function backfillTicketsForPaidOrders(cb) {
 function notifyTicketIssued(userId, registrationId, ticketId) {
     if (!userId || !registrationId || !ticketId) return;
     db.get(
-        `SELECT r.seminar_id, r.application_no, t.qr_code_data, t.ticket_id_string,
+        `SELECT r.seminar_id, r.application_no, t.qr_code_data, t.ticket_id_string, t.is_scanned, t.scan_time,
+                IFNULL(t.is_valid, 1) AS is_valid, o.status AS payment_status,
                 s.title AS seminar_title, s.event_date, s.location_url,
                 u.first_name, u.last_name
          FROM registrations r
          JOIN tickets t ON t.order_id IN (SELECT id FROM orders WHERE registration_id = r.id)
+         JOIN orders o ON o.id = t.order_id
          JOIN seminars s ON s.id = r.seminar_id
          JOIN users u ON u.id = r.user_id
          WHERE r.id = ? AND TRIM(t.ticket_id_string) = TRIM(?)`,
@@ -1392,7 +1394,11 @@ function notifyTicketIssued(userId, registrationId, ticketId) {
                         event_date: row.event_date,
                         location_url: row.location_url,
                         display_name: [row.first_name, row.last_name].filter(Boolean).join(' '),
-                        qr_code_data: row.qr_code_data
+                        qr_code_data: row.qr_code_data,
+                        payment_status: row.payment_status || 'success',
+                        is_scanned: row.is_scanned,
+                        scan_time: row.scan_time,
+                        is_valid: row.is_valid
                     })
                     .then((html) => {
                         db.get(`SELECT email, phone FROM users WHERE id = ?`, [userId], (eu, u) => {
@@ -3748,7 +3754,8 @@ app.get('/api/doctor/ticket-document/:ticketId', (req, res) => {
         : 'WHERE TRIM(t.ticket_id_string) = TRIM(?)';
     const params = internalRowId ? [ticketId, internalRowId] : [ticketId];
     db.get(
-        `SELECT t.ticket_id_string, t.qr_code_data, r.application_no, r.user_id,
+        `SELECT t.ticket_id_string, t.qr_code_data, t.is_scanned, t.scan_time, IFNULL(t.is_valid, 1) AS is_valid,
+                r.application_no, r.user_id, o.status AS payment_status,
                 s.title AS seminar_title, s.event_date, s.location_url,
                 u.first_name, u.last_name
          FROM tickets t
@@ -3772,7 +3779,11 @@ app.get('/api/doctor/ticket-document/:ticketId', (req, res) => {
                     event_date: row.event_date,
                     location_url: row.location_url,
                     display_name: [row.first_name, row.last_name].filter(Boolean).join(' '),
-                    qr_code_data: row.qr_code_data
+                    qr_code_data: row.qr_code_data,
+                    is_scanned: row.is_scanned,
+                    scan_time: row.scan_time,
+                    payment_status: row.payment_status,
+                    is_valid: row.is_valid
                 })
                 .then((html) => {
                     res.setHeader('Content-Type', 'text/html; charset=utf-8');
