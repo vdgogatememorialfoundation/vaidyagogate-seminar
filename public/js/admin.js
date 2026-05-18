@@ -611,6 +611,7 @@ const ADMIN_MODULE_TAB_DEFS = [
     ['tab-case-mgmt', 'Case management'],
     ['tab-reports', 'Reports & exports'],
     ['tab-scanner-logs', 'Scanner activity'],
+    ['tab-activity-logs', 'User & doctor activity'],
     ['tab-notifications', 'Notifications'],
     ['tab-settings', 'Global settings']
 ];
@@ -2089,6 +2090,98 @@ async function uploadAdminSiteLogo() {
         } else alert(data.error || 'Upload failed');
     } catch (e) {
         console.error(e);
+    }
+}
+
+function formatActivityLogTimeIst(iso) {
+    if (!iso) return '—';
+    try {
+        const d = new Date(iso);
+        if (Number.isNaN(d.getTime())) return iso;
+        return d.toLocaleString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true
+        });
+    } catch (_) {
+        return iso;
+    }
+}
+
+async function initAdminActivityLogsTab() {
+    await loadAdminActivityLogs();
+}
+
+async function loadAdminActivityLogs() {
+    const tbody = document.getElementById('activity-logs-list');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Loading…</td></tr>';
+    const uid = (document.getElementById('activity-log-user-id') || {}).value.trim();
+    const action = (document.getElementById('activity-log-action') || {}).value.trim();
+    const role = (document.getElementById('activity-log-role') || {}).value.trim();
+    const q = new URLSearchParams();
+    if (uid) q.set('userId', uid);
+    if (action) q.set('action', action);
+    if (role) q.set('role', role);
+    q.set('limit', '200');
+    try {
+        const res = await fetch('/api/admin/activity-logs?' + q.toString());
+        const rows = await res.json();
+        if (!Array.isArray(rows) || !rows.length) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No activity yet</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows
+            .map((r) => {
+                const name =
+                    [r.first_name, r.last_name].filter(Boolean).join(' ') ||
+                    r.email ||
+                    (r.user_id ? 'User #' + r.user_id : '—');
+                const resource = [r.resource_type, r.resource_id].filter(Boolean).join(' ');
+                let meta = '';
+                try {
+                    meta = r.meta ? JSON.stringify(JSON.parse(r.meta)) : '';
+                } catch (_) {
+                    meta = r.meta || '';
+                }
+                return `<tr>
+                    <td style="white-space:nowrap;font-size:0.82rem;">${escapeHtml(formatActivityLogTimeIst(r.created_at))}</td>
+                    <td><code>${escapeHtml(r.user_id_string || '')}</code><br><span style="font-size:0.82rem;">${escapeHtml(name)}</span></td>
+                    <td>${escapeHtml(r.user_role || r.account_role || '')}</td>
+                    <td><code>${escapeHtml(r.action || '')}</code></td>
+                    <td style="font-size:0.82rem;">${escapeHtml(resource)}</td>
+                    <td style="font-size:0.78rem;max-width:220px;word-break:break-word;">${escapeHtml(meta.slice(0, 160))}</td>
+                    <td style="font-size:0.78rem;">${escapeHtml(r.ip || '')}</td>
+                </tr>`;
+            })
+            .join('');
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Failed to load</td></tr>';
+    }
+}
+
+async function checkWhatsAppWebhookStatus() {
+    try {
+        const res = await fetch('/api/admin/integrations/whatsapp-webhook-status');
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Check failed');
+        alert(
+            [
+                'Webhook URL: ' + (data.webhook_url || ''),
+                data.verify_token_configured
+                    ? 'Verify token: configured (' + data.verify_token_length + ' chars)'
+                    : 'Verify token: NOT SET — save one in Integrations',
+                '',
+                data.hint || ''
+            ].join('\n')
+        );
+    } catch (e) {
+        alert('Check failed');
     }
 }
 

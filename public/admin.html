@@ -113,6 +113,7 @@
                 <a class="menu-item" data-admin-module="tab-case-mgmt" onclick="switchTab('tab-case-mgmt'); initAdminCaseMgmtTab();"><i class="fas fa-briefcase-medical"></i> Case Management</a>
                 <a class="menu-item" data-admin-module="tab-reports" onclick="switchTab('tab-reports'); initAdminReportsTab();"><i class="fas fa-file-export"></i> Reports &amp; Exports</a>
                 <a class="menu-item" data-admin-module="tab-scanner-logs" onclick="switchTab('tab-scanner-logs'); initAdminScannerLogsTab();"><i class="fas fa-qrcode"></i> Scanner Activity</a>
+                <a class="menu-item" data-admin-module="tab-activity-logs" onclick="switchTab('tab-activity-logs'); initAdminActivityLogsTab();"><i class="fas fa-history"></i> User &amp; doctor activity</a>
                 <a class="menu-item" data-admin-module="tab-notifications" onclick="switchTab('tab-notifications'); initAdminNotificationsTab();"><i class="fas fa-bell"></i> Notifications</a>
                 <a class="menu-item" data-admin-module="tab-settings" onclick="switchTab('tab-settings'); initAdminBrandingPreview();"><i class="fas fa-cogs"></i> Global Settings</a>
             </div>
@@ -787,6 +788,38 @@
                 </div>
             </div>
 
+            <!-- User & doctor activity -->
+            <div id="tab-activity-logs" class="tab-pane hidden">
+                <h2 style="margin-bottom: 20px;">User &amp; doctor activity</h2>
+                <p style="color:#64748b;font-size:0.9rem;margin-bottom:16px;">Audit trail of logins, applications, payments, and support (IST).</p>
+                <div class="card">
+                    <div style="display:flex;gap:12px;align-items:end;margin-bottom:16px;flex-wrap:wrap;">
+                        <div style="min-width:140px;">
+                            <label>User ID (numeric)</label>
+                            <input type="number" id="activity-log-user-id" placeholder="Optional" style="width:100%;padding:8px;">
+                        </div>
+                        <div style="min-width:160px;">
+                            <label>Action contains</label>
+                            <input type="text" id="activity-log-action" placeholder="e.g. payment" style="width:100%;padding:8px;">
+                        </div>
+                        <div style="min-width:120px;">
+                            <label>Role</label>
+                            <select id="activity-log-role" style="width:100%;padding:8px;">
+                                <option value="">All</option>
+                                <option value="doctor">doctor</option>
+                                <option value="admin">admin</option>
+                                <option value="scanner">scanner</option>
+                            </select>
+                        </div>
+                        <button type="button" class="btn-primary" onclick="loadAdminActivityLogs()"><i class="fas fa-sync"></i> Refresh</button>
+                    </div>
+                    <table class="data-table">
+                        <thead><tr><th>Time (IST)</th><th>User</th><th>Role</th><th>Action</th><th>Resource</th><th>Details</th><th>IP</th></tr></thead>
+                        <tbody id="activity-logs-list"><tr><td colspan="7" style="text-align:center;">Loading…</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+
             <!-- Scanner activity log -->
             <div id="tab-scanner-logs" class="tab-pane hidden">
                 <h2 style="margin-bottom: 20px;">Scanner portal activity</h2>
@@ -957,7 +990,8 @@
                         <div><label>Phone number ID</label><input type="text" id="int-wa-phone-id" placeholder="1066436679893640" style="width:100%"></div>
                         <div><label>WhatsApp Business Account ID (WABA)</label><input type="text" id="int-wa-waba-id" placeholder="From Meta ? WhatsApp Manager ? Account overview" style="width:100%"></div>
                         <div style="grid-column:1/-1;"><button type="button" class="btn-secondary btn-sm" onclick="checkWhatsAppTemplateOnMeta()">Check template on Meta</button>
-                        <span style="font-size:0.8rem;color:#64748b;margin-left:8px;">Verifies vgmf_otp_auth exists on the same account as your Phone number ID</span></div>
+                        <button type="button" class="btn-secondary btn-sm" style="margin-left:6px;" onclick="checkWhatsAppWebhookStatus()">Check webhook</button>
+                        <span style="font-size:0.8rem;color:#64748b;margin-left:8px;">Webhook verify token must match Meta exactly</span></div>
 
                         <div><label>Webhook verify token</label><input type="password" id="int-wa-verify" placeholder="Leave blank to keep" style="width:100%"></div>
                         <div><label>Template language</label><input type="text" id="int-wa-lang" placeholder="en (English in Meta)" style="width:100%"></div>

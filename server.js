@@ -37,6 +37,8 @@ const seminarDt = require('./lib/seminar-datetime');
 const cancelPolicy = require('./lib/cancellation-policy');
 const siteMarketing = require('./lib/site-marketing');
 const siteKillSwitch = require('./lib/site-kill-switch');
+const activityLog = require('./lib/activity-log');
+const whatsappWebhook = require('./lib/whatsapp-webhook');
 const { ensureSupportTicketSchema } = require('./lib/support-tickets-schema');
 const { ensureContactInquiriesSchema } = require('./lib/contact-inquiries-schema');
 const {
@@ -697,7 +699,9 @@ function ensureMessagingOtpSchema(next) {
         )`);
         db.run(`CREATE INDEX IF NOT EXISTS idx_otp_lookup ON otp_codes (destination, purpose, consumed)`, () => {
             notifEngine.ensureNotificationSchema(db, ignoreSchemaMigrationErr, () => {
-                if (next) next();
+                activityLog.ensureActivityLogSchema(db, () => {
+                    if (next) next();
+                });
             });
         });
     });
@@ -1724,6 +1728,17 @@ function fulfillRegistrationPayment(registrationId, userId, amount, gatewayName,
                                     orderDbId
                                 ]);
                                 db.run(`UPDATE registrations SET status = 'completed' WHERE id = ?`, [registrationId]);
+                                activityLog.logActivity(db, {
+                                    user_id: userId,
+                                    action: 'payment.completed',
+                                    resource_type: 'registration',
+                                    resource_id: String(registrationId),
+                                    meta: {
+                                        gateway: gatewayName || 'mock',
+                                        order_id: orderStr,
+                                        provider_txn: providerTxnId || null
+                                    }
+                                });
                                 db.get(
                                     `SELECT application_no FROM registrations WHERE id = ?`,
                                     [registrationId],
@@ -2118,6 +2133,7 @@ app.post('/api/admin/integrations/test-whatsapp', withIntegrationSettingsLoaded,
         channel: 'whatsapp',
         destination: to,
         status: r.ok ? 'accepted' : 'failed',
+        provider_message_id: r.messageId || null,
         subject: 'Admin WhatsApp test',
         body_preview:
             method +
@@ -2139,7 +2155,9 @@ app.post('/api/admin/integrations/test-whatsapp', withIntegrationSettingsLoaded,
             metaLangs: r.metaLangs || [],
             messageId: r.messageId || null,
             hint: otpTpl
-                ? 'Template message accepted by Meta. Check WhatsApp on +' + to + ' (may take a minute).'
+                ? 'Accepted by Meta API (not delivered yet). Add +' +
+                  to +
+                  ' as a test recipient in Meta if the app is in Development mode. Subscribe webhook for delivered/failed updates. Check spam/archived chats.'
                 : 'Plain text sent. If you do not receive it, set OTP template on OTP_VERIFICATION or add your number as a Meta test recipient.'
         });
     }
@@ -2689,6 +2707,11 @@ app.post('/api/auth/signup', (req, res) => {
                     if (evFlag === 0) {
                         queuePortalEmailVerification(db, newUserId, () => {});
                     }
+                    activityLog.logFromRequest(db, req, {
+                        user_id: newUserId,
+                        action: 'auth.signup',
+                        meta: { email: emailNorm, user_id_string: userIdStr }
+                    });
                     res.json({
                         success: true,
                         userId: newUserId,
@@ -2751,6 +2774,12 @@ app.post('/api/auth/login', (req, res) => {
                             row.login_at = times.loginAt;
                             row.last_login_at = times.loginAt;
                         }
+                        activityLog.logFromRequest(db, req, {
+                            user_id: row.id,
+                            user_role: row.role || row.user_role,
+                            action: 'auth.login',
+                            meta: { email: row.email, user_id_string: row.user_id_string }
+                        });
                         delete row.password;
                         normalizeAuthUserRow(row);
                         res.json({ success: true, user: row });
@@ -3473,6 +3502,14 @@ app.post('/api/applications/submit', (req, res, next) => {
                                     registrationId: newId,
                                     vars: { approval_status: 'submitted' }
                                 });
+                                activityLog.logFromRequest(db, req, {
+                                    user_id: userId,
+                                    seminar_id: seminarId,
+                                    action: 'application.submit',
+                                    resource_type: 'registration',
+                                    resource_id: applicationNo,
+                                    meta: { applicationId: newId }
+                                });
                                 res.json({ success: true, applicationId: newId, applicationNo });
                                     }
                                 );
@@ -4080,17 +4117,52 @@ app.post('/api/auth/reset-password', (req, res) => {
     );
 });
 
-// Meta WhatsApp webhook verification (https://developers.facebook.com/docs/whatsapp/cloud-api)
-app.get('/api/webhooks/whatsapp', withIntegrationSettingsLoaded, (req, res) => {
-    const mode = req.query['hub.mode'];
-    const token = req.query['hub.verify_token'];
-    const challenge = req.query['hub.challenge'];
-    const expected =
-        integrationSettings.getWhatsAppConfig().verifyToken || process.env.WHATSAPP_VERIFY_TOKEN || '';
-    if (mode === 'subscribe' && token && expected && token === expected) {
-        return res.status(200).send(challenge);
-    }
-    res.sendStatus(403);
+// Meta WhatsApp webhook (https://developers.facebook.com/docs/whatsapp/cloud-api)
+app.get('/api/webhooks/whatsapp', (req, res) => {
+    integrationSettings.ensureIntegrationSettingsLoaded(db, () => {
+        const mode = req.query['hub.mode'];
+        const token = String(req.query['hub.verify_token'] || '').trim();
+        const challenge = req.query['hub.challenge'];
+        const expected = String(
+            integrationSettings.getWhatsAppConfig().verifyToken ||
+                process.env.WHATSAPP_VERIFY_TOKEN ||
+                ''
+        ).trim();
+        if (mode === 'subscribe' && token && expected && token === expected) {
+            return res.status(200).type('text/plain').send(String(challenge));
+        }
+        console.warn('[whatsapp-webhook] GET verify failed', {
+            mode: mode || '(missing)',
+            tokenPresent: !!token,
+            expectedConfigured: !!expected
+        });
+        res.status(403).type('text/plain').send('Forbidden — verify token mismatch. Set the same value in Admin → Integrations → Webhook verify token and Meta webhook setup.');
+    });
+});
+
+app.post('/api/webhooks/whatsapp', (req, res) => {
+    whatsappWebhook.handleWhatsAppWebhookPost(db, req.body || {}, (err, result) => {
+        if (err) console.warn('[whatsapp-webhook] POST', err.message);
+        else if (result && result.updated) {
+            console.log('[whatsapp-webhook] updated notification_logs:', result.updated);
+        }
+        res.sendStatus(200);
+    });
+});
+
+app.get('/api/admin/integrations/whatsapp-webhook-status', withIntegrationSettingsLoaded, (req, res) => {
+    const expected = String(
+        integrationSettings.getWhatsAppConfig().verifyToken || process.env.WHATSAPP_VERIFY_TOKEN || ''
+    ).trim();
+    const base = integrationSettings.getPublicBaseUrl() || '';
+    res.json({
+        webhook_url: (base.replace(/\/$/, '') || '') + '/api/webhooks/whatsapp',
+        verify_token_configured: !!expected,
+        verify_token_length: expected.length,
+        hint: expected
+            ? 'In Meta → WhatsApp → Configuration, paste the same Verify token as in Admin → Integrations, then click Verify and Save.'
+            : 'Set Webhook verify token in Admin → Integrations and Save, then use the same string in Meta webhook setup.'
+    });
 });
 
 // Support Ticket Route (Create Ticket)
@@ -4108,6 +4180,13 @@ app.post('/api/support/ticket', (req, res) => {
                 [ticketId, message],
                 function (err2) {
                     if (err2) return res.status(500).json({ error: err2.message });
+                    activityLog.logFromRequest(db, req, {
+                        user_id: userId,
+                        action: 'support.ticket_create',
+                        resource_type: 'ticket',
+                        resource_id: trackingId,
+                        meta: { subject: String(subject || '').slice(0, 120) }
+                    });
                     res.json({ success: true, trackingId: trackingId, message: "Ticket raised successfully." });
                 });
         });
@@ -5742,6 +5821,38 @@ app.get('/api/admin/scanner/logs', (req, res) => {
         params.push(seminarId);
     }
     sql += ` ORDER BY t.scan_time DESC LIMIT 500`;
+    db.all(sql, params, (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows || []);
+    });
+});
+
+app.get('/api/admin/activity-logs', (req, res) => {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 200, 500);
+    const userId = req.query.userId ? parseInt(req.query.userId, 10) : null;
+    const action = req.query.action ? String(req.query.action).trim() : '';
+    const role = req.query.role ? String(req.query.role).trim() : '';
+    let sql = `
+        SELECT a.*, u.user_id_string, u.first_name, u.last_name, u.email, u.phone, u.role AS account_role
+        FROM user_activity_logs a
+        LEFT JOIN users u ON u.id = a.user_id
+        WHERE 1=1
+    `;
+    const params = [];
+    if (Number.isInteger(userId) && userId > 0) {
+        sql += ` AND a.user_id = ?`;
+        params.push(userId);
+    }
+    if (action) {
+        sql += ` AND a.action LIKE ?`;
+        params.push('%' + action + '%');
+    }
+    if (role) {
+        sql += ` AND (a.user_role = ? OR u.role = ?)`;
+        params.push(role, role);
+    }
+    sql += ` ORDER BY a.created_at DESC LIMIT ?`;
+    params.push(limit);
     db.all(sql, params, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(rows || []);
