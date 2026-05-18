@@ -807,12 +807,12 @@ async function adminCreateUser() {
     const email = document.getElementById('newuser-email').value.trim();
     const phone = document.getElementById('newuser-phone').value.trim();
     const userRole = document.getElementById('newuser-role')?.value || 'doctor';
-
+    
     if (!firstName || !lastName || !email || !phone || !userRole) {
         alert('Please fill all required fields');
         return;
     }
-
+    
     if (userRole === 'doctor' && typeof validatePersonNameClient === 'function') {
         const fn = validatePersonNameClient(firstName, 'First name');
         if (!fn.valid) return alert(fn.message);
@@ -2248,6 +2248,8 @@ async function loadIntegrationSettings() {
         set('int-zoho-from', s.zoho_from);
         set('int-wa-phone-id', s.whatsapp_phone_number_id);
         set('int-wa-lang', s.whatsapp_template_lang || 'en');
+        set('int-wa-otp-template', s.whatsapp_otp_template_name);
+        set('int-otp-email-subject', s.otp_email_subject);
         const waHook = document.getElementById('int-wa-webhook-url');
         if (waHook) {
             let base = (s.public_base_url || '').trim().replace(/\/$/, '');
@@ -2303,7 +2305,9 @@ async function saveIntegrationSettings() {
         whatsapp_token: (document.getElementById('int-wa-token') || {}).value,
         whatsapp_phone_number_id: (document.getElementById('int-wa-phone-id') || {}).value.trim(),
         whatsapp_verify_token: (document.getElementById('int-wa-verify') || {}).value,
-        whatsapp_template_lang: (document.getElementById('int-wa-lang') || {}).value.trim() || 'en'
+        whatsapp_template_lang: (document.getElementById('int-wa-lang') || {}).value.trim() || 'en',
+        whatsapp_otp_template_name: (document.getElementById('int-wa-otp-template') || {}).value.trim(),
+        otp_email_subject: (document.getElementById('int-otp-email-subject') || {}).value.trim()
     };
     try {
         const res = await fetch('/api/admin/integrations', {
@@ -2558,7 +2562,7 @@ async function submitProxyApp() {
 
     const adm = getStoredAdminUser();
     if (!adm || !adm.id) return alert('Not logged in.');
-
+    
     const formDataObj = {
         fname: document.getElementById('proxy-fname').value.trim(),
         lname: document.getElementById('proxy-lname').value.trim(),

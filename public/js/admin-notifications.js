@@ -11,6 +11,25 @@ function escNotif(s) {
         .replace(/"/g, '&quot;');
 }
 
+function formatNotifLogTimeIst(raw) {
+    if (!raw) return '—';
+    const s = String(raw).trim();
+    const d = /Z$|[+-]\d{2}/.test(s) ? new Date(s) : new Date(s.replace(' ', 'T') + 'Z');
+    if (Number.isNaN(d.getTime())) return s.slice(0, 19);
+    return (
+        d.toLocaleString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true
+        }) + ' IST'
+    );
+}
+
 async function initAdminNotificationsTab() {
     await Promise.all([loadNotifEvents(), loadNotifSeminarsForFilter()]);
     loadNotificationTemplatesList();
@@ -245,7 +264,13 @@ async function loadNotificationLogs() {
         const res = await fetch('/api/admin/notification-logs?limit=150');
         let rows = await res.json();
         if (!Array.isArray(rows)) rows = [];
-        if (status) rows = rows.filter((r) => r.status === status);
+        if (status) {
+            rows = rows.filter((r) => {
+                if (r.status === status) return true;
+                if (status === 'sent' && r.status === 'accepted') return true;
+                return false;
+            });
+        }
         if (!rows.length) {
             tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;">No logs yet</td></tr>';
             return;
@@ -253,7 +278,7 @@ async function loadNotificationLogs() {
         tbody.innerHTML = rows
             .map(
                 (r) => `<tr>
-            <td>${escNotif((r.created_at || '').slice(0, 19))}</td>
+            <td>${escNotif(formatNotifLogTimeIst(r.created_at))}</td>
             <td><code>${escNotif(r.event_key)}</code></td>
             <td>${escNotif(r.channel)}</td>
             <td>${escNotif(r.destination)}</td>

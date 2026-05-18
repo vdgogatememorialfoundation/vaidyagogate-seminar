@@ -1869,7 +1869,21 @@ function integrationSettingsJson(data) {
 }
 
 app.get('/api/admin/integrations', withIntegrationSettingsLoaded, (req, res) => {
-    res.json(integrationSettingsJson(integrationSettings.getRuntimeIntegrations()));
+    const masked = integrationSettingsJson(integrationSettings.getRuntimeIntegrations());
+    db.get(
+        `SELECT whatsapp_template_name, email_subject FROM notification_templates
+         WHERE event_key = 'OTP_VERIFICATION' AND seminar_id IS NULL LIMIT 1`,
+        [],
+        (e, row) => {
+            if (!e && row) {
+                if (row.whatsapp_template_name && !masked.whatsapp_otp_template_name) {
+                    masked.whatsapp_otp_template_name = row.whatsapp_template_name;
+                }
+                if (row.email_subject) masked.otp_email_subject = row.email_subject;
+            }
+            res.json(masked);
+        }
+    );
 });
 
 app.post('/api/admin/integrations', withIntegrationSettingsLoaded, (req, res) => {
@@ -1879,12 +1893,14 @@ app.post('/api/admin/integrations', withIntegrationSettingsLoaded, (req, res) =>
         if (body.public_base_url) {
             upsertGlobalSetting('domain', String(body.public_base_url).replace(/^https?:\/\//, ''), () => {});
         }
-        res.json({
-            success: true,
-            settings: integrationSettingsJson(merged),
-            email_configured: integrationSettings.isEmailConfiguredFromSettings(),
-            email_status: integrationSettings.getEmailConfigStatus(),
-            whatsapp_configured: integrationSettings.isWhatsAppConfiguredFromSettings()
+        notifEngine.syncOtpNotificationDefaults(db, body, () => {
+            res.json({
+                success: true,
+                settings: integrationSettingsJson(merged),
+                email_configured: integrationSettings.isEmailConfiguredFromSettings(),
+                email_status: integrationSettings.getEmailConfigStatus(),
+                whatsapp_configured: integrationSettings.isWhatsAppConfiguredFromSettings()
+            });
         });
     });
 });
@@ -1981,9 +1997,12 @@ app.post('/api/admin/integrations/test-whatsapp', withIntegrationSettingsLoaded,
         event_key: 'INTEGRATION_TEST_WHATSAPP',
         channel: 'whatsapp',
         destination: to,
-        status: r.ok ? 'sent' : 'failed',
+        status: r.ok ? 'accepted' : 'failed',
         subject: 'Admin WhatsApp test',
-        body_preview: method + (otpTpl ? ' code 123456' : ''),
+        body_preview:
+            method +
+            (otpTpl ? ' code 123456' : '') +
+            (r.messageId ? ' id=' + r.messageId : ''),
         error: r.ok ? null : r.error
     };
     notifEngine.logNotification(db, logRow);
