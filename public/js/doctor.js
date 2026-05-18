@@ -2379,49 +2379,106 @@ function doctorCanCancelApplication(app) {
     return gate.allowed;
 }
 
-async function doctorCancelApplication(applicationId) {
+let __cancelRequestAppId = null;
+let __doctorCancelRequestsByReg = {};
+
+async function loadDoctorCancellationRequests() {
     if (!currentUser || !currentUser.id) return;
-    const app = (userApplications || []).find((a) => a.id === applicationId);
-    if (app && !doctorCanCancelApplication(app)) {
-        const gate = evaluateDoctorCancellationClient(
-            app.cancellation_policy_json,
-            app.seminar_event_date
-        );
-        alert(gate.reason || 'Cancellation is not available for this application.');
+    try {
+        const res = await fetch('/api/doctor/cancellation-requests?userId=' + encodeURIComponent(currentUser.id));
+        const rows = await res.json();
+        __doctorCancelRequestsByReg = {};
+        (Array.isArray(rows) ? rows : []).forEach((r) => {
+            __doctorCancelRequestsByReg[r.registration_id] = r;
+        });
+    } catch (e) {
+        console.warn('[cancel-req]', e);
+    }
+}
+
+function doctorCancelRequestStatus(registrationId) {
+    const r = __doctorCancelRequestsByReg[registrationId];
+    if (!r) return '';
+    const st = String(r.status || '').toLowerCase();
+    if (st === 'pending') return 'Cancellation pending review';
+    if (st === 'approved') return 'Cancellation approved';
+    if (st === 'rejected') return 'Cancellation request rejected';
+    return '';
+}
+
+function openCancelRequestModal(applicationId) {
+    if (!currentUser || !currentUser.id) return;
+    const app = (userApplications || []).find((a) => Number(a.id) === Number(applicationId));
+    if (!app) return;
+    if (!doctorCanCancelApplication(app)) {
+        const gate = evaluateDoctorCancellationClient(app.cancellation_policy_json, app.seminar_event_date);
+        alert(gate.reason || 'Cancellation request is not available.');
         return;
     }
-    const policyText = app ? summaryCancellationPolicy(app.cancellation_policy_json) : '';
-    let confirmMsg =
-        'Cancel this application?\n\n• Only allowed before the seminar day.\n• Your e-ticket QR code will be invalidated and cannot be used for check-in.';
-    if (policyText) {
-        confirmMsg += '\n\nCancellation policy:\n' + policyText;
-        confirmMsg += '\n\nAutomated payment refunds are not processed online yet; contact support if you paid.';
-    } else if (app && (app.status === 'completed' || app.status === 'checked_in')) {
-        confirmMsg += '\n\nIf you already paid, refund rules depend on the seminar policy. Automated refunds are not wired yet.';
-    } else {
-        confirmMsg += '\n\nIf you already paid, no refund may apply per seminar policy.';
+    const pending = __doctorCancelRequestsByReg[applicationId];
+    if (pending && pending.status === 'pending') {
+        alert('You already have a pending cancellation request for this application.');
+        return;
     }
-    if (!confirm(confirmMsg)) {
+    __cancelRequestAppId = applicationId;
+    const label = document.getElementById('cancel-request-app-label');
+    const pol = document.getElementById('cancel-request-policy');
+    const reason = document.getElementById('cancel-request-reason');
+    if (label) label.textContent = 'Application ' + (app.application_no || '') + ' — ' + (app.seminar_title || app.title || '');
+    if (pol) pol.textContent = summaryCancellationPolicy(app.cancellation_policy_json) || 'Refund eligibility is calculated in IST when admin reviews your request.';
+    if (reason) reason.value = '';
+    const m = document.getElementById('cancel-request-modal');
+    if (m) {
+        m.classList.remove('hidden');
+        m.style.display = 'flex';
+    }
+}
+
+function closeCancelRequestModal() {
+    __cancelRequestAppId = null;
+    const m = document.getElementById('cancel-request-modal');
+    if (m) {
+        m.classList.add('hidden');
+        m.style.display = '';
+    }
+}
+
+async function submitCancellationRequest() {
+    if (!currentUser || !currentUser.id || !__cancelRequestAppId) return;
+    const reason = String(document.getElementById('cancel-request-reason')?.value || '').trim();
+    if (reason.length < 10) {
+        alert('Please enter at least 10 characters describing your reason.');
         return;
     }
     try {
-        const res = await fetch(`/api/applications/${applicationId}/cancel`, {
+        const res = await fetch('/api/doctor/cancellation-requests', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: currentUser.id })
+            body: JSON.stringify({
+                userId: currentUser.id,
+                registrationId: __cancelRequestAppId,
+                reason
+            })
         });
         const data = await res.json();
-        if (data.success) {
-            alert(data.detail || 'Application cancelled. Your ticket is no longer valid for entry.');
-            loadApplications();
-            loadDoctorEventTickets();
-        } else {
-            alert(data.error || 'Could not cancel.');
+        if (!res.ok) return alert(data.error || 'Could not submit request.');
+        const prev = data.refundPreview;
+        let msg = data.message || 'Request submitted.';
+        if (prev && prev.amount != null) {
+            msg += '\n\nPolicy preview (IST): ' + (prev.percent || 0) + '% — ₹' + prev.amount + '. ' + (prev.reason || '');
         }
+        alert(msg);
+        closeCancelRequestModal();
+        await loadDoctorCancellationRequests();
+        loadApplications();
     } catch (e) {
         console.error(e);
         alert('Network error.');
     }
+}
+
+async function doctorCancelApplication(applicationId) {
+    openCancelRequestModal(applicationId);
 }
 
 function normalizeWhatsappHref(raw) {
@@ -2466,6 +2523,7 @@ async function loadApplications(silentPoll) {
             return;
         }
         userApplications = Array.isArray(payload) ? payload : payload.applications || [];
+        await loadDoctorCancellationRequests();
         if (payload.portalYear) doctorPortalYear = payload.portalYear;
         const fp = seminarTrackFingerprint(userApplications);
         if (silentPoll && fp === _lastSeminarTrackFingerprint) return;
@@ -2487,10 +2545,14 @@ async function loadApplications(silentPoll) {
             const canEdit = a.status === 'submitted' || a.status === 'pending_approval';
             const editBtn = canEdit ? `<button class="btn-warning" style="padding: 5px 10px; margin-right: 5px;" onclick="editApplication(${index})">Edit</button>` : '';
             const st = String(a.status || '').toLowerCase();
-            const canDoctorCancel = doctorCanCancelApplication(a);
-            const cancelBtn = canDoctorCancel
-                ? `<button type="button" class="btn-primary" style="padding: 5px 10px; margin-right: 5px; background: #b91c1c; border: none;" onclick="doctorCancelApplication(${a.id})">Cancel</button>`
-                : '';
+            const cancelStatus = doctorCancelRequestStatus(a.id);
+            const canRequestCancel = doctorCanCancelApplication(a) && cancelStatus !== 'Cancellation pending review';
+            let cancelBtn = '';
+            if (cancelStatus) {
+                cancelBtn = '<span style="font-size:0.78rem;color:#92400e;margin-right:6px;">' + escapeHtml(cancelStatus) + '</span>';
+            } else if (canRequestCancel) {
+                cancelBtn = '<button type="button" class="btn-primary" style="padding: 5px 10px; margin-right: 5px; background: #b91c1c; border: none;" onclick="openCancelRequestModal(' + a.id + ')">Request cancellation</button>';
+            }
             
             if (list) {
                 list.innerHTML += `

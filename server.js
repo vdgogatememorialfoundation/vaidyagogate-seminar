@@ -41,6 +41,8 @@ const activityLog = require('./lib/activity-log');
 const whatsappWebhook = require('./lib/whatsapp-webhook');
 const { ensureSupportTicketSchema } = require('./lib/support-tickets-schema');
 const { ensureContactInquiriesSchema } = require('./lib/contact-inquiries-schema');
+const paymentsMod = require('./lib/payments-module');
+const { registerPaymentsRoutes } = require('./lib/routes-payments');
 const authUsers = require('./lib/auth-users');
 const authLoginOtp = require('./lib/auth-login-otp');
 const {
@@ -78,8 +80,22 @@ function bootstrapTimeoutMs() {
     return 55000;
 }
 
+function mountPaymentsRoutes() {
+    registerPaymentsRoutes(app, {
+        db,
+        generateId,
+        invalidateTicketsForRegistration,
+        fulfillRegistrationPayment,
+        insertParticipantTicket,
+        notifEngine,
+        activityLog,
+        jobsModule
+    });
+}
+
 function bootstrapApp(done) {
     mountExtendedRoutes();
+    mountPaymentsRoutes();
     startBackgroundWorkers();
     persistScrollingAnnouncementsSanitizeIfNeeded(() => {});
 
@@ -791,6 +807,10 @@ function ensurePortalSchema(next) {
                                                                                                                         db,
                                                                                                                         ignoreSchemaMigrationErr,
                                                                                                                         () => {
+                                                                                                                            paymentsMod.ensurePaymentsModuleSchema(
+                                                                                                                                db,
+                                                                                                                                ignoreSchemaMigrationErr,
+                                                                                                                                () => {
                                                                                                                             seedGlobalSettingIfMissing(
                                                                                                                                 integrationSettings.SETTINGS_KEY,
                                                                                                                                 '{}',
@@ -798,6 +818,8 @@ function ensurePortalSchema(next) {
                                                                                                                                     integrationSettings.loadFromDb(db, () => {
                                                                                                                                         if (next) next();
                                                                                                                                     });
+                                                                                                                                }
+                                                                                                                            );
                                                                                                                                 }
                                                                                                                             );
                                                                                                                         }
@@ -3731,112 +3753,17 @@ app.put('/api/applications/:applicationId', upload.single('certificate'), (req, 
     );
 });
 
-// 5d. Cancel application (optional automated refund by cancellation policy)
+// 5d. Cancel application — doctors must use cancellation request API (admin approves + refund)
 app.post('/api/applications/:applicationId/cancel', (req, res) => {
     const applicationId = parseInt(req.params.applicationId, 10);
     const userId = parseInt((req.body && req.body.userId) || '', 10);
     if (Number.isNaN(applicationId) || applicationId < 1 || Number.isNaN(userId) || userId < 1) {
         return res.status(400).json({ error: 'Valid applicationId and userId are required.' });
     }
-
-    db.get(
-        `SELECT r.id, r.user_id, r.status, r.application_no,
-                s.title AS seminar_title, s.event_date, s.cancellation_policy_json,
-                u.email AS user_email
-         FROM registrations r
-         JOIN seminars s ON s.id = r.seminar_id
-         JOIN users u ON u.id = r.user_id
-         WHERE r.id = ?`,
-        [applicationId],
-        (err, reg) => {
-                if (err) return res.status(500).json({ error: err.message });
-            if (!reg) return res.status(404).json({ error: 'Application not found.' });
-            if (Number(reg.user_id) !== userId) {
-                return res.status(403).json({ error: 'You can only cancel your own applications.' });
-            }
-
-            const st = String(reg.status || '').toLowerCase();
-            if (st === 'cancelled') return res.status(400).json({ error: 'This application is already cancelled.' });
-            if (st === 'rejected') return res.status(400).json({ error: 'Rejected applications cannot be cancelled here.' });
-            const cancelGate = cancelPolicy.evaluateDoctorCancellation(
-                reg.cancellation_policy_json,
-                reg.event_date
-            );
-            if (!cancelGate.allowed) {
-                return res.status(400).json({ error: cancelGate.reason || 'Cancellation is not allowed for this seminar.' });
-            }
-
-            db.get(
-                `SELECT * FROM orders WHERE registration_id = ? AND status = 'success' ORDER BY id DESC LIMIT 1`,
-                [applicationId],
-                (oerr, order) => {
-                    if (oerr) return res.status(500).json({ error: oerr.message });
-
-                    const hadPaidOrder = !!order;
-                    let policy = {};
-                    try {
-                        policy = reg.cancellation_policy_json
-                            ? JSON.parse(reg.cancellation_policy_json)
-                            : {};
-                    } catch (_) {
-                        policy = {};
-                    }
-                    const refundCalc = refundLib.computeRefundPercent(policy, reg.event_date);
-                    const refundPercent = hadPaidOrder ? refundCalc.percent : 0;
-                    const refundAmount =
-                        hadPaidOrder && order && order.amount
-                            ? Math.round((Number(order.amount) * refundPercent) / 100 * 100) / 100
-                            : 0;
-                    const refundReason = hadPaidOrder
-                        ? `Policy: ${refundCalc.reason}. ${refundPercent}% refund (${refundAmount > 0 ? '₹' + refundAmount : '₹0'}) — automated gateway refund is not wired yet.`
-                        : 'No payment recorded for this application.';
-
-                    function markCancelled(extra) {
-                        invalidateTicketsForRegistration(applicationId, (invErr) => {
-                            if (invErr) return res.status(500).json({ error: invErr.message });
-                            db.run(`UPDATE registrations SET status = 'cancelled' WHERE id = ?`, [applicationId], (uerr) => {
-                                if (uerr) return res.status(500).json({ error: uerr.message });
-                                db.run(
-                                    `UPDATE user_certificates SET enabled = 0, updated_at = CURRENT_TIMESTAMP
-                                     WHERE registration_id = ?`,
-                                    [applicationId],
-                                    () => {}
-                                );
-                                if (jobsModule && jobsModule.enqueue && reg.user_email) {
-                                    const title = reg.seminar_title || 'Seminar';
-                                    const text = `Your application ${reg.application_no} for "${title}" has been cancelled.${extra ? '\n\n' + extra : ''}\n\n— Vaidya Gogate Memorial Foundation`;
-                                    jobsModule.enqueue(
-                                        db,
-                                        {
-                                            channel: 'email',
-                                            destination: reg.user_email,
-                                            template_key: 'application_cancelled',
-                                            payload: { subject: `Cancelled: ${title}`, text },
-                                            scheduled_at: new Date().toISOString()
-                                        },
-                                        () => {}
-                                    );
-                                }
-                                res.json({
-                                    success: true,
-                                    refundPercent,
-                                    refundReason,
-                                    refundAmount,
-                                    ticketsInvalidated: true,
-                                    detail: extra || null
-                                });
-                            });
-                        });
-                    }
-
-                    const cancelDetail = hadPaidOrder
-                        ? `Your registration is cancelled. ${refundReason} Your e-ticket QR code is no longer valid for entry.`
-                        : 'Your registration is cancelled. Your e-ticket (if any) is no longer valid for entry.';
-                    return markCancelled(cancelDetail);
-                }
-            );
-        }
-    );
+    return res.status(403).json({
+        error: 'Direct cancellation is disabled. Submit a cancellation request from your Applications tab.',
+        useCancellationRequest: true
+    });
 });
 
 // 6. Doctor Profile Management
