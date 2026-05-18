@@ -243,8 +243,10 @@
                     <form onsubmit="handleLogin(event)">
                         <div class="form-group"><label>Email</label><input type="email" id="login_email" required autocomplete="email"></div>
                         <div class="form-group"><label>Password</label><input type="password" id="login_password" required autocomplete="current-password"></div>
+                        <p id="login_email_hint" style="font-size:0.82rem;color:var(--muted);margin:-4px 0 8px;display:none;"></p>
+                        <p style="margin:0 0 12px;"><button type="button" class="btn-ghost" style="padding:0;font-size:0.85rem;border:none;color:var(--brand);" onclick="openForgotPasswordModal()">Forgot password?</button></p>
                         <div id="login_otp_panel" class="hidden" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line);">
-                            <p style="font-size:0.85rem;color:var(--muted);margin-bottom:10px;">Verify with codes sent to your email and WhatsApp (both required).</p>
+                            <p style="font-size:0.85rem;color:var(--muted);margin-bottom:10px;">Enter your email, then send codes to your registered email and WhatsApp (both required).</p>
                             <button type="button" class="btn-ghost" style="padding:6px 14px;font-size:0.8rem;margin-bottom:10px;border-color:var(--line);color:var(--ink);" onclick="sendLoginOtpBoth()">Send codes to email &amp; WhatsApp</button>
                             <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;">
                                 <span style="font-weight:700;min-width:48px;">Email</span>
@@ -301,6 +303,34 @@
         </div>
     </div>
 
+    <div id="forgotPasswordModal" class="modal" aria-hidden="true" style="display:none;">
+        <div class="modal-content" style="max-width:420px;">
+            <div style="padding:28px;">
+                <h3 style="font-size:1.1rem;margin-bottom:12px;">Reset password</h3>
+                <p style="font-size:0.88rem;color:var(--muted);margin-bottom:14px;">Enter your registered email. We will send a reset link to your email and WhatsApp.</p>
+                <form onsubmit="handleForgotPassword(event)">
+                    <div class="form-group"><label>Email</label><input type="email" id="forgot_email" required></div>
+                    <p id="forgot_status" style="font-size:0.85rem;margin:8px 0 0;"></p>
+                    <button type="submit" class="btn-primary" style="width:100%;margin-top:14px;">Send reset link</button>
+                </form>
+                <button type="button" onclick="closeForgotPasswordModal()" style="margin-top:12px;background:none;border:none;cursor:pointer;">Cancel</button>
+            </div>
+        </div>
+    </div>
+    <div id="resetPasswordModal" class="modal" aria-hidden="true" style="display:none;">
+        <div class="modal-content" style="max-width:420px;">
+            <div style="padding:28px;">
+                <h3 style="font-size:1.1rem;margin-bottom:12px;">Choose a new password</h3>
+                <form onsubmit="handleResetPassword(event)">
+                    <input type="hidden" id="reset_token" value="">
+                    <div class="form-group"><label>New password</label><input type="password" id="reset_password" required minlength="4"></div>
+                    <div class="form-group"><label>Confirm</label><input type="password" id="reset_password2" required minlength="4"></div>
+                    <p id="reset_status" style="font-size:0.85rem;"></p>
+                    <button type="submit" class="btn-primary" style="width:100%;margin-top:14px;">Update password</button>
+                </form>
+            </div>
+        </div>
+    </div>
     <div id="signupSuccessModal" class="modal" aria-hidden="true">
         <div class="modal-content" style="max-width:420px;">
             <div style="padding:28px;text-align:center;">
@@ -433,6 +463,80 @@
             }
         }
 
+
+        async function onLoginEmailBlur() {
+            const hint = document.getElementById('login_email_hint');
+            if (!hint) return;
+            const email = String((document.getElementById('login_email') || {}).value || '').trim().toLowerCase();
+            if (!email) { hint.style.display = 'none'; return; }
+            try {
+                const pc = await precheckLoginEmail();
+                if (pc.exists) {
+                    hint.style.color = '#059669';
+                    hint.textContent = 'Account found — codes will go to your email and WhatsApp.';
+                    hint.style.display = 'block';
+                } else if (pc.needsSignup) {
+                    hint.style.color = '#b91c1c';
+                    hint.textContent = pc.message || 'No account with this email.';
+                    hint.style.display = 'block';
+                } else hint.style.display = 'none';
+            } catch (_) { hint.style.display = 'none'; }
+        }
+        function openForgotPasswordModal() {
+            const m = document.getElementById('forgotPasswordModal');
+            const fe = document.getElementById('forgot_email');
+            const le = document.getElementById('login_email');
+            if (fe && le && le.value) fe.value = le.value.trim();
+            const st = document.getElementById('forgot_status');
+            if (st) st.textContent = '';
+            if (m) { m.style.display = 'flex'; m.setAttribute('aria-hidden', 'false'); }
+        }
+        function closeForgotPasswordModal() {
+            const m = document.getElementById('forgotPasswordModal');
+            if (m) { m.style.display = 'none'; m.setAttribute('aria-hidden', 'true'); }
+        }
+        async function handleForgotPassword(e) {
+            e.preventDefault();
+            const email = String((document.getElementById('forgot_email') || {}).value || '').trim().toLowerCase();
+            const st = document.getElementById('forgot_status');
+            if (st) { st.textContent = 'Sending…'; }
+            try {
+                const res = await fetch('/api/auth/forgot-password', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email })
+                });
+                const data = await res.json();
+                if (st) { st.style.color = '#059669'; st.textContent = data.message || 'Check your email and WhatsApp.'; }
+            } catch (_) {
+                if (st) { st.style.color = '#b91c1c'; st.textContent = 'Could not send.'; }
+            }
+        }
+        function openResetPasswordModal(token) {
+            const m = document.getElementById('resetPasswordModal');
+            const t = document.getElementById('reset_token');
+            if (t) t.value = token || '';
+            if (m) { m.style.display = 'flex'; m.setAttribute('aria-hidden', 'false'); }
+        }
+        async function handleResetPassword(e) {
+            e.preventDefault();
+            const token = String((document.getElementById('reset_token') || {}).value || '').trim();
+            const p1 = (document.getElementById('reset_password') || {}).value;
+            const p2 = (document.getElementById('reset_password2') || {}).value;
+            const st = document.getElementById('reset_status');
+            if (p1 !== p2) { if (st) { st.style.color = '#b91c1c'; st.textContent = 'Passwords do not match.'; } return; }
+            try {
+                const res = await fetch('/api/auth/reset-password', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token, newPassword: p1 })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Failed');
+                if (st) { st.style.color = '#059669'; st.textContent = data.message || 'Password updated.'; }
+                setTimeout(() => openAuthModal('login'), 1200);
+            } catch (err) {
+                if (st) { st.style.color = '#b91c1c'; st.textContent = err.message; }
+            }
+        }
+
         async function precheckLoginEmail() {
             const email = String((document.getElementById('login_email') || {}).value || '').trim().toLowerCase();
             if (!email) return { ok: false, message: 'Enter your email first.' };
@@ -448,15 +552,10 @@
             const email = String((document.getElementById('login_email') || {}).value || '').trim().toLowerCase();
             const password = (document.getElementById('login_password') || {}).value;
             if (!email) return alert('Enter your email first.');
-            if (!password) {
-                try {
-                    const pc = await precheckLoginEmail();
-                    if (pc.needsSignup) {
-                        return alert(pc.message || 'No account found. Please use Create account to register.');
-                    }
-                } catch (_) {}
-                return alert('Enter your password, then request a verification code.');
-            }
+            try {
+                const pc = await precheckLoginEmail();
+                if (pc.needsSignup) return alert(pc.message || 'No account found.');
+            } catch (_) {}
             try {
                 const res = await fetch('/api/auth/login-otp/send', {
                     method: 'POST',
@@ -488,7 +587,7 @@
                     return alert(pc.message || 'No account found. Please use Create account to register.');
                 }
             } catch (_) {}
-            if (!password) return alert('Enter your password first.');
+            
             try {
                 const res = await fetch('/api/auth/login-otp/send-both', {
                     method: 'POST',
@@ -511,7 +610,7 @@
             const codeEl = document.getElementById(channel === 'email' ? 'login_email_otp' : 'login_phone_otp');
             const okEl = document.getElementById(channel === 'email' ? 'login_email_otp_ok' : 'login_phone_otp_ok');
             const code = String((codeEl || {}).value || '').trim();
-            if (!email || !password || !code) return alert('Enter email, password, and the code.');
+            if (!email || !code) return alert('Enter email and the code.');
             try {
                 const res = await fetch('/api/auth/login-otp/verify', {
                     method: 'POST',
@@ -618,6 +717,9 @@
         }
 
         window.addEventListener('load', () => {
+            const params = new URLSearchParams(window.location.search);
+            const rt = params.get('resetToken');
+            if (rt) openResetPasswordModal(rt);
             const user = localStorage.getItem('seminar_doctor_user');
             if (user) {
                 currentUserId = JSON.parse(user).id;

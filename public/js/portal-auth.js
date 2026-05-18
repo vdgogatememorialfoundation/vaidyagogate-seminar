@@ -179,12 +179,9 @@
                 .toLowerCase();
             const password = (document.getElementById(opts.passwordInputId) || {}).value;
             if (!email) return alert('Enter your email first.');
-            if (!password) {
-                const pc = await precheckEmail(email);
-                if (pc.needsSignup) {
-                    return alert(pc.message || 'No account with this email. Please create an account first.');
-                }
-                return alert('Enter your password, then request verification codes.');
+            const pc = await precheckEmail(email);
+            if (pc.needsSignup) {
+                return alert(pc.message || 'No account with this email. Please create an account first.');
             }
             const res = await fetch('/api/auth/login-otp/send', {
                 method: 'POST',
@@ -212,7 +209,6 @@
             if (pc.needsSignup) {
                 return alert(pc.message || 'No account with this email. Please create an account first.');
             }
-            if (!password) return alert('Enter your password, then send verification codes.');
             const res = await fetch('/api/auth/login-otp/send-both', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -236,7 +232,7 @@
                 channel === 'email' ? prefix + '-email-otp-ok' : prefix + '-phone-otp-ok'
             );
             const code = String((codeEl || {}).value || '').trim();
-            if (!email || !password || !code) return alert('Enter email, password, and the code.');
+            if (!email || !code) return alert('Enter email and the code.');
             const res = await fetch('/api/auth/login-otp/verify', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

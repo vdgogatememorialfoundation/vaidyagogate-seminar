@@ -41,6 +41,8 @@ const activityLog = require('./lib/activity-log');
 const whatsappWebhook = require('./lib/whatsapp-webhook');
 const { ensureSupportTicketSchema } = require('./lib/support-tickets-schema');
 const { ensureContactInquiriesSchema } = require('./lib/contact-inquiries-schema');
+const authUsers = require('./lib/auth-users');
+const authLoginOtp = require('./lib/auth-login-otp');
 const {
     isCheckinDateToday,
     isCheckinOpenForSeminar,
@@ -2273,7 +2275,8 @@ app.get('/api/auth/email-available', (req, res) => {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         return res.status(400).json({ error: 'Enter a valid email address' });
     }
-    db.get(`SELECT id FROM users WHERE lower(trim(email)) = ?`, [email], (err, row) => {
+    const emailNorm = authUsers.normalizeEmail(email);
+    db.get(`SELECT id FROM users WHERE ${authUsers.sqlEmailMatches('email')}`, [emailNorm], (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ available: !row });
     });
@@ -2281,231 +2284,134 @@ app.get('/api/auth/email-available', (req, res) => {
 
 /** Check whether an email is registered before login OTP (no password). */
 app.post('/api/auth/login-otp/precheck', (req, res) => {
-    const emailNorm = String((req.body && req.body.email) || '').trim().toLowerCase();
+    const emailNorm = authUsers.normalizeEmail((req.body && req.body.email) || '');
     if (!emailNorm) return res.status(400).json({ error: 'Email is required' });
-    db.get(
-        `SELECT id, IFNULL(is_disabled,0) AS is_disabled FROM users WHERE lower(trim(email)) = ?`,
-        [emailNorm],
-        (err, row) => {
-            if (err) return res.status(500).json({ error: err.message });
-            if (!row) {
-                return res.json({
-                    exists: false,
-                    needsSignup: true,
-                    message: 'No account found with this email. Please create an account first.'
-                });
-            }
-            if (Number(row.is_disabled) === 1) {
-                return res.json({
-                    exists: true,
-                    needsSignup: false,
-                    disabled: true,
-                    message: 'This account is disabled. Contact support.'
-                });
-            }
-            res.json({ exists: true, needsSignup: false, disabled: false });
+    authUsers.findUserByEmail(db, emailNorm, (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!row) {
+            return res.json({
+                exists: false,
+                needsSignup: true,
+                message: 'No account found with this email. Please create an account first.'
+            });
         }
-    );
+        res.json({
+            exists: true,
+            needsSignup: false,
+            disabled: false,
+            maskedPhone: row.phone ? String(row.phone).replace(/\d(?=\d{4})/g, '•') : ''
+        });
+    });
 });
 
-/** After password check: send login OTP to both phone and email. */
+function resolveLoginUserForOtp(email, password, cb) {
+    const emailNorm = authUsers.normalizeEmail(email);
+    if (!emailNorm) return cb(null, { status: 400, error: 'Email is required' });
+    authUsers.findUserByEmail(db, emailNorm, (err, row) => {
+        if (err) return cb(err);
+        if (!row) {
+            return cb(null, {
+                status: 401,
+                error: 'No account found with this email. Please create an account first.',
+                needsSignup: true
+            });
+        }
+        const pw = password != null && password !== undefined ? String(password) : '';
+        if (pw && row.password !== pw) {
+            return cb(null, {
+                status: 401,
+                error: 'Invalid password. Use Forgot password or check your password.',
+                needsSignup: false
+            });
+        }
+        cb(null, { status: 200, row });
+    });
+}
+
+/** Find account by email and send login OTP to registered email + WhatsApp. */
 app.post('/api/auth/login-otp/send-both', withIntegrationSettingsLoaded, (req, res) => {
     const { email, password } = req.body || {};
-    if (!email || password === undefined || password === null) {
-        return res.status(400).json({ error: 'email and password are required' });
-    }
-    const emailNorm = String(email).trim().toLowerCase();
-    db.get(
-        `SELECT id, phone, email FROM users WHERE lower(trim(email)) = ? AND password = ? AND IFNULL(is_disabled,0) = 0`,
-        [emailNorm, password],
-        (err, row) => {
-            if (err) return res.status(500).json({ error: err.message });
-            if (!row) {
-                return res.status(401).json({
-                    error: 'Invalid credentials',
-                    needsSignup: false
-                });
-            }
-            const meta = { userId: row.id };
-            const channels = [];
-            if (row.email) channels.push({ channel: 'email', dest: String(row.email).trim().toLowerCase() });
-            if (row.phone) channels.push({ channel: 'phone', dest: String(row.phone).trim() });
-            if (!channels.length) {
-                return res.status(400).json({ error: 'No email or phone on file for this account.' });
-            }
-            let left = channels.length;
-            const results = {};
-            channels.forEach(({ channel, dest }) => {
-                otpLib.countRecentSends(db, channel, dest, (cerr, cnt) => {
-                    if (cerr) {
-                        results[channel] = { ok: false, error: cerr.message };
-                        left--;
-                        if (left === 0) finish();
-                        return;
-                    }
-                    if (cnt >= otpLib.MAX_SENDS_PER_HOUR) {
-                        results[channel] = { ok: false, error: 'Too many OTP requests' };
-                        left--;
-                        if (left === 0) finish();
-                        return;
-                    }
-                    const code = otpLib.generateOtpDigits();
-                    otpLib.saveOtp(db, { channel, destination: dest, purpose: 'login', meta }, code, (serr) => {
-                        if (serr) {
-                            results[channel] = { ok: false, error: serr.message };
-                            left--;
-                            if (left === 0) finish();
-                            return;
-                        }
-                        const done = (sent) => {
-                            results[channel] = sent;
-                            left--;
-                            if (left === 0) finish();
-                        };
-                        if (channel === 'phone') {
-                            notifEngine
-                                .sendOtpMessages({ phone: dest, code, db, eventKey: 'OTP_VERIFICATION' })
-                                .then((r) => done(r.whatsapp || { ok: false }));
-                        } else {
-                            notifEngine
-                                .sendOtpMessages({ email: dest, code, db, eventKey: 'OTP_VERIFICATION' })
-                                .then((r) => done(r.email || { ok: false }));
-                        }
-                    });
-                });
-            });
-            function finish() {
-                const debug = process.env.OTP_RETURN_CODE === '1' || process.env.NODE_ENV === 'development';
-                const payload = { success: true, ttlMinutes: otpLib.OTP_TTL_MIN, channels: results };
-                if (debug && channels.length) payload.debugNote = 'Set OTP_RETURN_CODE=1 on send for per-channel debug codes.';
-                const anyFail = Object.values(results).some((r) => r && !r.ok && !r.skipped);
-                if (anyFail) {
-                    return res.status(503).json({
-                        error: 'Could not deliver OTP on all channels. Check messaging configuration.',
-                        ...payload
-                    });
-                }
-                res.json(payload);
-            }
+    if (!email) return res.status(400).json({ error: 'Email is required' });
+    resolveLoginUserForOtp(email, password, (err, out) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (out.status !== 200) {
+            return res.status(out.status).json({ error: out.error, needsSignup: !!out.needsSignup });
         }
-    );
+        authLoginOtp.sendLoginOtpsForUser(db, out.row, (e2, result) => {
+            if (e2) return res.status(500).json({ error: e2.message });
+            if (!result.ok) {
+                return res.status(result.status || 503).json({
+                    error: result.error || 'Could not deliver OTP on all channels. Check messaging configuration.',
+                    channels: result.results
+                });
+            }
+            res.json({ success: true, ttlMinutes: result.ttlMinutes, channels: result.results });
+        });
+    });
 });
 
-/** After password check: send login OTP to the user’s verified phone or email. */
+/** Send login OTP to one channel (email or phone) for the account matching email. */
 app.post('/api/auth/login-otp/send', withIntegrationSettingsLoaded, (req, res) => {
     const { email, password, channel } = req.body || {};
-    if (!email || password === undefined || password === null || !channel) {
-        return res.status(400).json({ error: 'email, password, and channel are required' });
-    }
+    if (!email || !channel) return res.status(400).json({ error: 'email and channel are required' });
     if (channel !== 'phone' && channel !== 'email') {
         return res.status(400).json({ error: 'channel must be phone or email' });
     }
-    const emailNorm = String(email).trim().toLowerCase();
-    db.get(
-        `SELECT id, phone, email FROM users WHERE lower(trim(email)) = ? AND password = ? AND IFNULL(is_disabled,0) = 0`,
-        [emailNorm, password],
-        (err, row) => {
-            if (err) return res.status(500).json({ error: err.message });
-            if (!row) {
-                return res.status(401).json({
-                    error: 'No account found or invalid password. Create an account if you have not registered yet.',
-                    needsSignup: true
-                });
-            }
-            const dest =
-                channel === 'email'
-                    ? String(row.email || '')
-                          .trim()
-                          .toLowerCase()
-                    : otpLib.normalizeOtpDestination('phone', String(row.phone || '').trim()) ||
-                      String(row.phone || '').trim();
-            if (!dest) {
-                return res.status(400).json({ error: channel === 'email' ? 'No email on file.' : 'No phone on file.' });
-            }
-            const meta = { userId: row.id };
-            otpLib.countRecentSends(db, channel, dest, (cerr, cnt) => {
-                if (cerr) return res.status(500).json({ error: cerr.message });
-                if (cnt >= otpLib.MAX_SENDS_PER_HOUR) {
-                    return res.status(429).json({ error: 'Too many OTP requests. Try again later.' });
-                }
-                const code = otpLib.generateOtpDigits();
-                otpLib.saveOtp(db, { channel, destination: dest, purpose: 'login', meta }, code, (serr) => {
-                    if (serr) return res.status(500).json({ error: serr.message });
-                    const msg = `Your login code is ${code}. Valid ${otpLib.OTP_TTL_MIN} minutes.`;
-                    const finish = (sent) => {
-                        const debug = process.env.OTP_RETURN_CODE === '1' || process.env.NODE_ENV === 'development';
-                        const payload = { success: true, ttlMinutes: otpLib.OTP_TTL_MIN };
-                        if (debug) payload.debugCode = code;
-                        if (!sent.ok && !sent.skipped) {
-                            return res.status(503).json({
-                                error: sent.error || 'Could not deliver OTP.',
-                                debugCode: debug ? code : undefined
-                            });
-                        }
-                        if (sent.skipped) payload.warning = 'Messaging not fully configured; use debugCode in development.';
-                        res.json(payload);
-                    };
-                    if (channel === 'phone') {
-                        notifEngine
-                            .sendOtpMessages({ phone: dest, code, db, eventKey: 'OTP_VERIFICATION' })
-                            .then((r) => finish(r.whatsapp || { ok: false }));
-                    } else {
-                        notifEngine
-                            .sendOtpMessages({ email: dest, code, db, eventKey: 'OTP_VERIFICATION' })
-                            .then((r) => finish(r.email || { ok: false }));
-                    }
-                });
-            });
+    resolveLoginUserForOtp(email, password, (err, out) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (out.status !== 200) {
+            return res.status(out.status).json({ error: out.error, needsSignup: !!out.needsSignup });
         }
-    );
+        authLoginOtp.sendLoginOtpChannel(db, out.row, channel, (e2, result) => {
+            if (e2) return res.status(500).json({ error: e2.message });
+            if (!result.ok) {
+                return res.status(result.status || 503).json({ error: result.error || 'Could not deliver OTP.' });
+            }
+            const payload = { success: true, ttlMinutes: result.ttlMinutes };
+            if (result.debugCode) payload.debugCode = result.debugCode;
+            if (result.warning) payload.warning = result.warning;
+            res.json(payload);
+        });
+    });
 });
 
 app.post('/api/auth/login-otp/verify', (req, res) => {
     const { email, password, channel, code } = req.body || {};
-    if (!email || password === undefined || !channel || !code) {
-        return res.status(400).json({ error: 'email, password, channel, and code are required' });
+    if (!email || !channel || !code) {
+        return res.status(400).json({ error: 'email, channel, and code are required' });
     }
     if (channel !== 'phone' && channel !== 'email') {
         return res.status(400).json({ error: 'channel must be phone or email' });
     }
-    const emailNorm = String(email).trim().toLowerCase();
-    db.get(
-        `SELECT id, phone, email FROM users WHERE lower(trim(email)) = ? AND password = ? AND IFNULL(is_disabled,0) = 0`,
-        [emailNorm, password],
-        (err, row) => {
-            if (err) return res.status(500).json({ error: err.message });
-            if (!row) return res.status(401).json({ error: 'Invalid credentials' });
-            const dest =
-                channel === 'email'
-                    ? String(row.email || '')
-                          .trim()
-                          .toLowerCase()
-                    : String(row.phone || '')
-                          .trim()
-                          .toLowerCase();
-            if (!dest) return res.status(400).json({ error: 'Missing destination on account' });
-            const meta = { userId: row.id };
-            otpLib.verifyOtp(
-                db,
-                {
-                    channel,
-                    destination: dest,
-                    purpose: 'login',
-                    code,
-                    meta,
-                    userId: row.id,
-                    seminarId: null
-                },
-                (verr, result) => {
-                    if (verr) return res.status(500).json({ error: verr.message });
-                    if (!result || !result.ok) {
-                        return res.status(400).json({ error: (result && result.error) || 'Verification failed' });
-                    }
-                    res.json({ success: true, token: result.token });
-                }
-            );
+    resolveLoginUserForOtp(email, password, (err, out) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (out.status !== 200) {
+            return res.status(out.status).json({ error: out.error, needsSignup: !!out.needsSignup });
         }
-    );
+        const row = out.row;
+        const dest = authUsers.loginOtpDestination(channel, row);
+        if (!dest) return res.status(400).json({ error: 'Missing destination on account' });
+        const meta = { userId: row.id };
+        otpLib.verifyOtp(
+            db,
+            {
+                channel,
+                destination: dest,
+                purpose: 'login',
+                code,
+                meta,
+                userId: row.id,
+                seminarId: null
+            },
+            (verr, result) => {
+                if (verr) return res.status(500).json({ error: verr.message });
+                if (!result || !result.ok) {
+                    return res.status(400).json({ error: (result && result.error) || 'Verification failed' });
+                }
+                res.json({ success: true, token: result.token });
+            }
+        );
+    });
 });
 
 // OTP: send & verify (used by homepage signup + doctor registration)
@@ -2733,7 +2639,7 @@ app.post('/api/auth/signup', (req, res) => {
                         {
                             userId: newUserId,
                             vars: {
-                                temporary_password: '(password you chose at registration)'
+                                temporary_password: String(password || '')
                             }
                         },
                         () => {}
@@ -2741,7 +2647,7 @@ app.post('/api/auth/signup', (req, res) => {
                     designatedNotify.notifyDesignatedAccountCreated(
                         db,
                         newUserId,
-                        { source: 'public signup', temporary_password: '(chosen at registration)' },
+                        { source: 'public signup', temporary_password: String(password || '') },
                         () => {}
                     );
                     if (evFlag === 0) {
@@ -2787,15 +2693,23 @@ app.post('/api/auth/login', (req, res) => {
     if (!email || password === undefined || password === null) {
         return res.status(400).json({ error: 'Email and password are required' });
     }
-    const emailNorm = String(email).trim().toLowerCase();
+    const emailNorm = authUsers.normalizeEmail(email);
     portalAuthPolicy.loadPortalAuthConfig(db, (ePol) => {
         if (ePol) console.warn('[portal-auth-policy] login', ePol.message);
-        db.get(
-            `SELECT id, user_id_string, first_name, middle_name, last_name, email, phone, password, role, user_role, is_disabled, IFNULL(is_demo,0) AS is_demo, admin_modules, IFNULL(email_verified,1) AS email_verified FROM users WHERE lower(trim(email)) = ? AND password = ?`,
-            [emailNorm, password],
-            (err, row) => {
+        authUsers.findUserByEmailAndPassword(db, emailNorm, password, (err, row) => {
                 if (err) return res.status(500).json({ error: err.message });
-                if (!row) return res.status(401).json({ error: 'Invalid credentials' });
+                if (!row) {
+                    return authUsers.findUserByEmail(db, emailNorm, (e2, exists) => {
+                        if (e2) return res.status(500).json({ error: e2.message });
+                        if (!exists) {
+                            return res.status(401).json({
+                                error: 'No account found with this email. Please create an account first.',
+                                needsSignup: true
+                            });
+                        }
+                        return res.status(401).json({ error: 'Invalid password. Use Forgot password if needed.' });
+                    });
+                }
                 if (Number(row.is_disabled) === 1) {
                     return res.status(403).json({ error: 'Your account has been disabled. Please contact support.' });
                 }
@@ -2843,8 +2757,7 @@ app.post('/api/auth/login', (req, res) => {
                     return;
                 }
                 sendUser();
-            }
-        );
+        });
     });
 });
 
@@ -2875,12 +2788,9 @@ app.post('/api/auth/resend-verification', (req, res) => {
     if (!emailNorm || password === undefined || password === null) {
         return res.status(400).json({ error: 'Email and password are required' });
     }
-    db.get(
-        `SELECT id, password, IFNULL(email_verified,1) AS email_verified FROM users WHERE lower(trim(email)) = ?`,
-        [emailNorm],
-        (e, row) => {
+    authUsers.findUserByEmailAndPassword(db, emailNorm, password, (e, row) => {
             if (e) return res.status(500).json({ error: e.message });
-            if (!row || row.password !== password) return res.status(401).json({ error: 'Invalid credentials' });
+            if (!row) return res.status(401).json({ error: 'Invalid credentials' });
             if (Number(row.email_verified) === 1) {
                 return res.status(400).json({ error: 'This email is already verified.' });
             }
@@ -2888,8 +2798,7 @@ app.post('/api/auth/resend-verification', (req, res) => {
                 if (qe) return res.status(500).json({ error: qe.message });
                 res.json({ success: true, message: 'Verification email queued. Check your inbox.' });
             });
-        }
-    );
+    });
 });
 
 // Portal year (doctor + public)
@@ -4153,7 +4062,7 @@ app.post('/api/auth/forgot-password', (req, res) => {
         .toLowerCase();
     if (!emailNorm) return res.status(400).json({ error: 'Email is required' });
     const respond = () => res.json({ success: true, message: 'If an account exists, reset instructions were sent.' });
-    db.get(`SELECT id FROM users WHERE lower(trim(email)) = ? AND IFNULL(is_disabled,0) = 0`, [emailNorm], (err, user) => {
+    authUsers.findUserByEmail(db, emailNorm, (err, user) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!user) return respond();
         const token = crypto.randomBytes(32).toString('hex');
