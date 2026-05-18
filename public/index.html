@@ -79,94 +79,6 @@
 
     <a href="#" class="cg-fab-register" id="cg-fab-register" onclick="openRegisterModal(); return false;"><i class="fas fa-user-plus"></i> Register</a>
 
-    <div class="top-bar legacy-header">
-        <div class="top-bar-container">
-            <div class="top-bar-left">
-                <span><i class="fas fa-envelope"></i> <span id="top-email">info@vaidyagogate.org</span></span>
-                <span><i class="fas fa-phone"></i> <span id="top-phone">+91 9876543210</span></span>
-                <span><i class="fas fa-calendar-alt"></i> <span id="top-date">National Seminar 2026</span></span>
-            </div>
-            <div class="top-bar-right">
-                <a href="/doctor.html"><i class="fas fa-user"></i> Sign in</a>
-                <a href="#" onclick="openRegisterModal(); return false;"><i class="fas fa-user-plus"></i> Create account</a>
-            </div>
-        </div>
-    </div>
-
-    <div id="site-banner-wrap" class="site-banner hidden"></div>
-
-    <header class="site-header" id="site-header">
-        <div class="nav-backdrop" id="nav-backdrop" aria-hidden="true"></div>
-        <div class="nav-container">
-            <a href="#" class="logo" onclick="showSection('home'); return false;">
-                <div class="logo-icon" data-site-logo data-logo-height="48px" data-logo-width="48px" data-logo-fallback="icon"><i class="fas fa-leaf"></i></div>
-                <div class="logo-text">
-                    <h1>Vaidya Gogate Memorial Foundation</h1>
-                    <p>Ayurveda · Education · Excellence</p>
-                </div>
-            </a>
-            <button type="button" class="nav-toggle" id="nav-toggle" aria-label="Menu"><i class="fas fa-bars"></i></button>
-            <nav class="nav-links" id="nav-links">
-                <a href="#" data-nav-section="home">Home</a>
-                <a href="#" data-nav-section="about">About</a>
-                <a href="#" data-nav-section="gallery">Gallery</a>
-                <a href="#" data-nav-section="schedule">Schedule</a>
-                <a href="#" id="nav-verify" data-nav-section="verify">Verify</a>
-                <a href="#" data-nav-section="contact">Contact</a>
-                <a id="nav-wix-home" href="https://www.vaidyagogate.org" target="_blank" rel="noopener" class="hidden">Main website</a>
-                <a href="/doctor.html" class="btn-portal">Doctor portal</a>
-            </nav>
-        </div>
-    </header>
-
-    <div id="scrolling-announce-wrap" class="scrolling-announce-wrap hidden" aria-label="Announcements">
-        <div class="scrolling-announce-bar">
-            <div class="scrolling-announce-label">
-                <span class="ticker-label">News</span>
-                <span class="sa-heading" id="scrolling-announce-heading">Registration &amp; seminar updates</span>
-            </div>
-            <div class="scrolling-announce-viewport">
-                <div id="scrolling-announce-track" class="scrolling-announce-track"></div>
-            </div>
-        </div>
-    </div>
-    <span id="tickerText" class="hidden" aria-hidden="true"></span>
-
-    <section id="marketing-hero" class="marketing-hero hidden" aria-label="Featured banners"></section>
-
-    <section class="hero">
-        <div class="hero-container">
-            <div class="hero-content">
-                <span class="hero-badge"><i class="fas fa-certificate"></i> National CME Seminar</span>
-                <h1 id="hero-title">National Seminar 2026</h1>
-                <p class="hero-lead" id="hero-subtitle">Advancements in Ayurveda &amp; integrative medicine</p>
-                <div class="hero-buttons">
-                    <a href="/?register=1" class="btn-primary" id="hero-cta-primary"><i class="fas fa-arrow-right"></i> Register now</a>
-                    <a href="#" class="btn-ghost" id="hero-cta-secondary" onclick="showSection('schedule'); return false;">View programme</a>
-                </div>
-                <div class="hero-stats" id="hero-stats">
-                    <div class="stat-item"><h3>50+</h3><p>Expert speakers</p></div>
-                    <div class="stat-item"><h3>500+</h3><p>Delegates</p></div>
-                    <div class="stat-item"><h3>30+</h3><p>Sessions</p></div>
-                </div>
-            </div>
-            <div class="hero-visual" id="hero-image-panel">
-                <i class="fas fa-spa hero-fallback-icon"></i>
-                <h3>Vaidya Gogate Memorial Foundation</h3>
-                <p class="hero-venue-line" id="hero-venue"><i class="fas fa-location-dot"></i> Convention Centre, Pune</p>
-            </div>
-        </div>
-    </section>
-
-    <section class="trust-strip" aria-label="Why attend">
-        <div class="trust-strip-inner">
-            <div class="trust-item"><i class="fas fa-shield-halved"></i><strong>Secure registration</strong><span>OTP-verified doctor portal</span></div>
-            <div class="trust-item"><i class="fas fa-qrcode"></i><strong>Digital e-tickets</strong><span>QR check-in at venue</span></div>
-            <div class="trust-item"><i class="fas fa-award"></i><strong>CME programme</strong><span>National seminar sessions</span></div>
-            <div class="trust-item"><i class="fas fa-hand-holding-heart"></i><strong>Since 1972</strong><span>Memorial foundation legacy</span></div>
-        </div>
-    </section>
-
     <div id="countdown-region"></div>
 
     <main class="main-content">
@@ -308,6 +220,7 @@
                         <div class="form-group"><input type="text" id="contact_subject" placeholder="Subject" required></div>
                         <div class="form-group"><textarea id="contact_message" rows="4" placeholder="Message" required></textarea></div>
                         <button type="submit" class="btn-primary" style="width:100%;border:none;cursor:pointer;">Send message</button>
+                        <p id="contact-form-status" style="margin-top:12px;font-size:0.9rem;"></p>
                     </form>
                 </div>
             </div>
@@ -744,8 +657,9 @@
             }
         }
 
-        function showSection(section) {
+        window.showSection = function showSection(section) {
             if (typeof window.closeMobileNav === 'function') window.closeMobileNav();
+            if (typeof window.highlightCongressNav === 'function') window.highlightCongressNav(section);
             const map = {
                 home: 'homeSection',
                 about: 'aboutSection',
@@ -806,7 +720,40 @@
                 if (e.key === 'Escape' && header.classList.contains('nav-open')) closeNav();
             });
         }
-        initMobileNav();
+        const contactForm = document.getElementById('contactForm');
+        if (contactForm) {
+            contactForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const statusEl = document.getElementById('contact-form-status');
+                const payload = {
+                    name: document.getElementById('contact_name').value.trim(),
+                    email: document.getElementById('contact_email').value.trim(),
+                    phone: document.getElementById('contact_phone').value.trim(),
+                    subject: document.getElementById('contact_subject').value.trim(),
+                    message: document.getElementById('contact_message').value.trim()
+                };
+                if (statusEl) statusEl.textContent = 'Sending…';
+                try {
+                    const res = await fetch('/api/public/contact-inquiry', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || 'Could not send message');
+                    contactForm.reset();
+                    if (statusEl) {
+                        statusEl.style.color = '#059669';
+                        statusEl.textContent = 'Thank you. We received your message and will respond soon.';
+                    }
+                } catch (err) {
+                    if (statusEl) {
+                        statusEl.style.color = '#b91c1c';
+                        statusEl.textContent = err.message || 'Could not send. Please try again.';
+                    }
+                }
+            });
+        }
 
         function openAuthModal(tab) {
             document.getElementById('authModal').style.display = 'flex';

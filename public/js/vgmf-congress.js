@@ -402,9 +402,27 @@
         });
         backdrop?.addEventListener('click', close);
         nav.querySelectorAll('a[data-nav-section]').forEach((a) => {
-            a.addEventListener('click', close);
+            a.addEventListener('click', (e) => {
+                e.preventDefault();
+                close();
+                const section = a.getAttribute('data-nav-section');
+                if (section && typeof window.showSection === 'function') {
+                    window.showSection(section);
+                }
+                nav.querySelectorAll('a[data-nav-section]').forEach((link) => {
+                    link.classList.toggle('active', link === a);
+                });
+            });
         });
     }
+
+    window.highlightCongressNav = function (section) {
+        const nav = document.getElementById('cg-nav');
+        if (!nav) return;
+        nav.querySelectorAll('a[data-nav-section]').forEach((a) => {
+            a.classList.toggle('active', a.getAttribute('data-nav-section') === section);
+        });
+    };
 
     function bindHeaderScroll() {
         const header = document.getElementById('cg-header');

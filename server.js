@@ -33,6 +33,8 @@ const portalTracking = require('./lib/portal-tracking');
 const seminarDt = require('./lib/seminar-datetime');
 const siteMarketing = require('./lib/site-marketing');
 const siteKillSwitch = require('./lib/site-kill-switch');
+const { ensureSupportTicketSchema } = require('./lib/support-tickets-schema');
+const { ensureContactInquiriesSchema } = require('./lib/contact-inquiries-schema');
 const {
     isCheckinDateToday,
     isCheckinOpenForSeminar,
@@ -748,13 +750,25 @@ function ensurePortalSchema(next) {
                                                                                                     JSON.stringify(new Date().getFullYear()),
                                                                                                     () => {
                                                                                                         siteMarketing.ensureSiteMarketingSchema(db, () => {
-                                                                                                            seedGlobalSettingIfMissing(
-                                                                                                                integrationSettings.SETTINGS_KEY,
-                                                                                                                '{}',
+                                                                                                            ensureSupportTicketSchema(
+                                                                                                                db,
+                                                                                                                ignoreSchemaMigrationErr,
                                                                                                                 () => {
-                                                                                                                    integrationSettings.loadFromDb(db, () => {
-                                                                                                                        if (next) next();
-                                                                                                                    });
+                                                                                                                    ensureContactInquiriesSchema(
+                                                                                                                        db,
+                                                                                                                        ignoreSchemaMigrationErr,
+                                                                                                                        () => {
+                                                                                                                            seedGlobalSettingIfMissing(
+                                                                                                                                integrationSettings.SETTINGS_KEY,
+                                                                                                                                '{}',
+                                                                                                                                () => {
+                                                                                                                                    integrationSettings.loadFromDb(db, () => {
+                                                                                                                                        if (next) next();
+                                                                                                                                    });
+                                                                                                                                }
+                                                                                                                            );
+                                                                                                                        }
+                                                                                                                    );
                                                                                                                 }
                                                                                                             );
                                                                                                         });
@@ -5444,6 +5458,69 @@ app.get('/api/feedback/user/:userId', (req, res) => {
     });
 });
 
+// ==================== CONTACT INQUIRIES (public website) ====================
+
+app.post('/api/public/contact-inquiry', (req, res) => {
+    const { name, email, phone, subject, message } = req.body || {};
+    const n = String(name || '').trim();
+    const em = String(email || '').trim().toLowerCase();
+    const sub = String(subject || '').trim();
+    const msg = String(message || '').trim();
+    if (!n || !em || !sub || !msg) {
+        return res.status(400).json({ error: 'Name, email, subject, and message are required.' });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
+        return res.status(400).json({ error: 'Please enter a valid email address.' });
+    }
+    db.run(
+        `INSERT INTO contact_inquiries (name, email, phone, subject, message, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'new', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        [n, em, String(phone || '').trim() || null, sub, msg],
+        function (err) {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ success: true, id: this.lastID });
+        }
+    );
+});
+
+app.get('/api/admin/contact-inquiries', (req, res) => {
+    const status = req.query.status ? String(req.query.status).trim() : '';
+    let sql = `SELECT * FROM contact_inquiries WHERE 1=1`;
+    const params = [];
+    if (status) {
+        sql += ` AND status = ?`;
+        params.push(status);
+    }
+    sql += ` ORDER BY created_at DESC LIMIT 500`;
+    db.all(sql, params, (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows || []);
+    });
+});
+
+app.put('/api/admin/contact-inquiries/:id', (req, res) => {
+    const id = parseInt(req.params.id, 10);
+    if (!Number.isInteger(id) || id < 1) return res.status(400).json({ error: 'Invalid id' });
+    const { status, admin_notes } = req.body || {};
+    const st = status != null ? String(status).trim() : null;
+    const notes = admin_notes != null ? String(admin_notes).trim() : null;
+    db.get(`SELECT * FROM contact_inquiries WHERE id = ?`, [id], (e, row) => {
+        if (e) return res.status(500).json({ error: e.message });
+        if (!row) return res.status(404).json({ error: 'Inquiry not found' });
+        const newStatus = st || row.status || 'new';
+        const newNotes = notes !== null && notes !== '' ? notes : row.admin_notes;
+        const repliedAt = newStatus === 'replied' || newStatus === 'closed' ? new Date().toISOString() : row.replied_at;
+        db.run(
+            `UPDATE contact_inquiries SET status = ?, admin_notes = ?, replied_at = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+            [newStatus, newNotes, repliedAt, id],
+            (e2) => {
+                if (e2) return res.status(500).json({ error: e2.message });
+                res.json({ success: true });
+            }
+        );
+    });
+});
+
 // ==================== SUPPORT TICKET ENDPOINTS ====================
 
 // Create Support Ticket
@@ -5457,11 +5534,14 @@ app.post('/api/support-ticket/create', (req, res) => {
     const cat = category || 'general';
 
     db.run(
-        `INSERT INTO support_tickets (ticket_id, user_id, category, subject, description, attachment_path, priority, status) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'open')`,
-        [ticketId, uid, cat, subject.trim(), description.trim(), attachment_path || null, 'medium'],
+        `INSERT INTO support_tickets (ticket_id, tracking_id, user_id, category, subject, description, attachment_path, priority, status, created_at, updated_at) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        [ticketId, ticketId, uid, cat, subject.trim(), description.trim(), attachment_path || null, 'medium'],
         function (err) {
-            if (err) return res.status(500).json({ error: err.message });
+            if (err) {
+                console.error('[support-ticket/create]', err.message);
+                return res.status(500).json({ error: err.message || 'Could not create ticket. Please try again.' });
+            }
             const initialMsg = description.trim();
             db.run(
                 `INSERT INTO ticket_messages (ticket_id, sender_id, sender_type, message) VALUES (?, ?, 'user', ?)`,
@@ -5478,10 +5558,14 @@ app.post('/api/support-ticket/create', (req, res) => {
 // Get User's Support Tickets
 app.get('/api/support-ticket/user/:userId', (req, res) => {
     const { userId } = req.params;
-    db.all(`SELECT * FROM support_tickets WHERE user_id = ? ORDER BY created_at DESC`, [userId], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(rows || []);
-    });
+    db.all(
+        `SELECT *, COALESCE(ticket_id, tracking_id) AS ticket_id FROM support_tickets WHERE user_id = ? ORDER BY created_at DESC`,
+        [userId],
+        (err, rows) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json(rows || []);
+        }
+    );
 });
 
 // Get Ticket Details with Messages
@@ -5489,16 +5573,17 @@ app.get('/api/support-ticket/:ticketId', (req, res) => {
     const { ticketId } = req.params;
     db.get(`SELECT st.*, u.first_name, u.last_name, u.email FROM support_tickets st 
             LEFT JOIN users u ON st.user_id = u.id 
-            WHERE st.ticket_id = ?`, [ticketId], (err, ticket) => {
+            WHERE st.ticket_id = ? OR st.tracking_id = ?`, [ticketId, ticketId], (err, ticket) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+        const tid = ticket.ticket_id || ticket.tracking_id;
         
         db.all(`SELECT tm.*, u.first_name, u.last_name FROM ticket_messages tm 
                 LEFT JOIN users u ON tm.sender_id = u.id 
                 WHERE tm.ticket_id = ? 
-                ORDER BY tm.created_at ASC`, [ticketId], (err, messages) => {
+                ORDER BY tm.created_at ASC`, [tid, tid], (err, messages) => {
             if (err) return res.status(500).json({ error: err.message });
-            res.json({ ...ticket, messages: messages || [] });
+            res.json({ ...ticket, ticket_id: tid, messages: messages || [] });
         });
     });
 });

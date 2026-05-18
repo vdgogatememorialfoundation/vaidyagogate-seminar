@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Homepage sliding announcement strip (public site only).
  * Data: Admin → Website CMS → Homepage sliding announcements (+ open seminars from API).
  */

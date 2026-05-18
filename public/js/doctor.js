@@ -3166,6 +3166,10 @@ async function submitSupportTicket() {
             body: JSON.stringify({ userId: currentUser.id, category, subject, description })
         });
         const result = await res.json();
+        if (!res.ok || !result.success) {
+            alert(result.error || 'Could not create support ticket. Please try again.');
+            return;
+        }
         if (result.success) {
             document.getElementById('ticket-result').innerText = 'Ticket created: ' + result.ticketId;
             document.getElementById('ticket-subj').value = '';

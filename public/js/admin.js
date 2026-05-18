@@ -457,6 +457,7 @@ const ADMIN_MODULE_TAB_DEFS = [
     ['tab-applications', 'Review applications'],
     ['tab-feedback', 'Seminar feedback'],
     ['tab-support-tickets', 'Support tickets'],
+    ['tab-contact-inquiries', 'Website contact'],
     ['tab-transfer', 'Transfer applications'],
     ['tab-behalf-reg', 'Doctor applications (admin workspace)'],
     ['tab-reg-form', 'Registration form fields'],
@@ -3219,6 +3220,105 @@ async function loadFeedbackForSeminar() {
             `;
         });
     } catch(err) { console.error(err); }
+}
+
+// ==================== CONTACT INQUIRIES (website) ====================
+let currentContactInquiryId = null;
+
+function escapeHtml(s) {
+    return String(s ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+async function loadContactInquiries() {
+    try {
+        const filterEl = document.getElementById('contact-inquiry-filter');
+        const status = filterEl ? filterEl.value : '';
+        let url = '/api/admin/contact-inquiries';
+        if (status) url += `?status=${encodeURIComponent(status)}`;
+        const res = await fetch(url);
+        const rows = await res.json();
+        const tbody = document.getElementById('contact-inquiries-list');
+        if (!tbody) return;
+        tbody.innerHTML = '';
+        if (!Array.isArray(rows) || rows.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No contact requests yet.</td></tr>';
+            return;
+        }
+        rows.forEach((r) => {
+            const created = r.created_at ? new Date(r.created_at).toLocaleString() : '—';
+            const subj = (r.subject || '').length > 40 ? (r.subject.slice(0, 40) + '…') : (r.subject || '—');
+            tbody.innerHTML += `
+                <tr>
+                    <td>${created}</td>
+                    <td>${escapeHtml(r.name || '')}</td>
+                    <td><a href="mailto:${escapeHtml(r.email || '')}">${escapeHtml(r.email || '')}</a></td>
+                    <td>${escapeHtml(r.phone || '—')}</td>
+                    <td>${escapeHtml(subj)}</td>
+                    <td>${escapeHtml(r.status || 'new')}</td>
+                    <td><button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;" onclick="openContactInquiry(${r.id})">View</button></td>
+                </tr>`;
+        });
+    } catch (err) {
+        console.error(err);
+    }
+}
+
+async function openContactInquiry(id) {
+    try {
+        const res = await fetch('/api/admin/contact-inquiries');
+        const rows = await res.json();
+        const row = Array.isArray(rows) ? rows.find((x) => Number(x.id) === Number(id)) : null;
+        if (!row) {
+            alert('Inquiry not found. Refresh the list.');
+            return;
+        }
+        currentContactInquiryId = id;
+        const body = document.getElementById('contact-inquiry-detail-body');
+        const panel = document.getElementById('contact-inquiry-detail');
+        const statusSel = document.getElementById('contact-inquiry-status');
+        const notesEl = document.getElementById('contact-inquiry-notes');
+        if (!body || !panel) return;
+        body.innerHTML = `
+            <p><strong>Name:</strong> ${escapeHtml(row.name || '')}</p>
+            <p><strong>Email:</strong> <a href="mailto:${escapeHtml(row.email || '')}">${escapeHtml(row.email || '')}</a></p>
+            <p><strong>Phone:</strong> ${escapeHtml(row.phone || '—')}</p>
+            <p><strong>Subject:</strong> ${escapeHtml(row.subject || '')}</p>
+            <p><strong>Received:</strong> ${row.created_at ? new Date(row.created_at).toLocaleString() : '—'}</p>
+            <p style="margin-top:10px;"><strong>Message:</strong></p>
+            <div style="white-space:pre-wrap;background:#f8fafc;padding:12px;border-radius:8px;border:1px solid #e2e8f0;">${escapeHtml(row.message || '')}</div>
+        `;
+        if (statusSel) statusSel.value = row.status || 'new';
+        if (notesEl) notesEl.value = row.admin_notes || '';
+        panel.classList.remove('hidden');
+        panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } catch (err) {
+        console.error(err);
+        alert('Could not load inquiry.');
+    }
+}
+
+async function saveContactInquiryUpdate() {
+    if (!currentContactInquiryId) return alert('Select an inquiry first.');
+    const status = document.getElementById('contact-inquiry-status')?.value || 'new';
+    const admin_notes = document.getElementById('contact-inquiry-notes')?.value || '';
+    try {
+        const res = await fetch(`/api/admin/contact-inquiries/${currentContactInquiryId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status, admin_notes })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return alert(data.error || 'Update failed');
+        alert('Contact inquiry updated');
+        loadContactInquiries();
+    } catch (err) {
+        console.error(err);
+        alert('Update failed');
+    }
 }
 
 // ==================== SUPPORT TICKETS ====================

@@ -89,6 +89,7 @@
                 <a class="menu-item" data-admin-module="tab-applications" onclick="switchTab('tab-applications')"><i class="fas fa-folder-open"></i> Review Applications</a>
                 <a class="menu-item" data-admin-module="tab-feedback" onclick="switchTab('tab-feedback')"><i class="fas fa-comments"></i> Seminar Feedback</a>
                 <a class="menu-item" data-admin-module="tab-support-tickets" onclick="switchTab('tab-support-tickets')"><i class="fas fa-ticket-alt"></i> Support Tickets</a>
+                <a class="menu-item" data-admin-module="tab-contact-inquiries" onclick="switchTab('tab-contact-inquiries'); loadContactInquiries();"><i class="fas fa-envelope-open-text"></i> Website contact</a>
                 <a class="menu-item" data-admin-module="tab-transfer" onclick="switchTab('tab-transfer')"><i class="fas fa-exchange-alt"></i> Transfer Applications</a>
                 <a class="menu-item" data-admin-module="tab-behalf-reg" onclick="switchTab('tab-behalf-reg'); initAdminBehalfRegTab();"><i class="fas fa-user-md"></i> Doctor applications (admin)</a>
                 <a class="menu-item" data-admin-module="tab-reg-form" onclick="switchTab('tab-reg-form'); loadAdminRegistrationFormConfig();"><i class="fas fa-list-alt"></i> Registration Form Fields</a>
@@ -286,6 +287,44 @@
                         <thead><tr><th>Attendee Name</th><th>Rating</th><th>Content</th><th>Speaker</th><th>Organization</th><th>Comments</th></tr></thead>
                         <tbody id="feedback-list"><tr><td colspan="6" style="text-align: center;">Select a seminar to view feedback</td></tr></tbody>
                     </table>
+                </div>
+            </div>
+
+
+            <div id="tab-contact-inquiries" class="tab-pane hidden">
+                <h2 style="margin-bottom: 20px;">Website contact requests</h2>
+                <p style="color:#64748b;margin:-8px 0 16px;">Messages from the public site contact form.</p>
+                <div class="card">
+                    <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+                        <select id="contact-inquiry-filter" onchange="loadContactInquiries()" style="min-width:160px;">
+                            <option value="">All statuses</option>
+                            <option value="new">New</option>
+                            <option value="in_progress">In progress</option>
+                            <option value="replied">Replied</option>
+                            <option value="closed">Closed</option>
+                        </select>
+                        <button type="button" class="btn-primary" onclick="loadContactInquiries()"><i class="fas fa-sync"></i> Refresh</button>
+                    </div>
+                    <table class="data-table">
+                        <thead><tr><th>Date</th><th>Name</th><th>Email</th><th>Phone</th><th>Subject</th><th>Status</th><th>Action</th></tr></thead>
+                        <tbody id="contact-inquiries-list"><tr><td colspan="7" style="text-align:center;">Loading…</td></tr></tbody>
+                    </table>
+                </div>
+                <div id="contact-inquiry-detail" class="card hidden" style="margin-top:16px;">
+                    <h3 style="margin-bottom:12px;color:#0f766e;">Inquiry detail</h3>
+                    <div id="contact-inquiry-detail-body"></div>
+                    <div style="margin-top:14px;display:grid;gap:10px;max-width:480px;">
+                        <label>Status</label>
+                        <select id="contact-inquiry-status">
+                            <option value="new">New</option>
+                            <option value="in_progress">In progress</option>
+                            <option value="replied">Replied</option>
+                            <option value="closed">Closed</option>
+                        </select>
+                        <label>Admin notes (internal)</label>
+                        <textarea id="contact-inquiry-notes" rows="3" placeholder="Call back, sent email, etc."></textarea>
+                        <button type="button" class="btn-primary" onclick="saveContactInquiryUpdate()">Save update</button>
+                    </div>
                 </div>
             </div>
 
