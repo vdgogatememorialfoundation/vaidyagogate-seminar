@@ -1864,6 +1864,7 @@ function integrationSettingsJson(data) {
     masked.email_configured = integrationSettings.isEmailConfiguredFromSettings();
     masked.email_status = integrationSettings.getEmailConfigStatus();
     masked.whatsapp_configured = integrationSettings.isWhatsAppConfiguredFromSettings();
+    masked.whatsapp_status = integrationSettings.getWhatsAppConfigStatus();
     return masked;
 }
 

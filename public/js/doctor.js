@@ -103,6 +103,13 @@ function formatTrackDateTime(iso) {
     return iso ? String(iso) : '';
 }
 
+function formatEventDate(iso) {
+    if (window.PortalDateTime && window.PortalDateTime.formatEvent) {
+        return window.PortalDateTime.formatEvent(iso);
+    }
+    return formatPortalDt(iso);
+}
+
 function formatPortalDt(iso) {
     if (window.PortalDateTime && window.PortalDateTime.format) {
         return window.PortalDateTime.format(iso);
@@ -1061,7 +1068,7 @@ function renderSeminarGridCard(s, readOnlyPast, alreadyRegistered) {
         ? formatTrackDateTime(s.registration_start)
         : '';
     const regEndLabel = s.registration_end ? formatTrackDateTime(s.registration_end) : '';
-    const eventLabel = s.event_date ? formatTrackDateTime(s.event_date) : '—';
+    const eventLabel = s.event_date ? formatEventDate(s.event_date) : '—';
     let actionBlock = '';
     if (alreadyRegistered) {
         actionBlock =

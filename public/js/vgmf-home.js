@@ -360,12 +360,8 @@
             wrap.innerHTML = list
                 .map((s) => {
                     const ed =
-                        s.event_date && window.PortalDateTime
-                            ? window.PortalDateTime.format(s.event_date, {
-                                  day: 'numeric',
-                                  month: 'short',
-                                  year: 'numeric'
-                              })
+                        s.event_date && window.PortalDateTime && window.PortalDateTime.formatEvent
+                            ? window.PortalDateTime.formatEvent(s.event_date)
                             : s.event_date
                               ? String(s.event_date)
                               : '';

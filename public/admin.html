@@ -937,7 +937,8 @@
                         <div style="grid-column:1/-1;"><h4 style="margin:8px 0;color:#0c4a6e;">Meta WhatsApp Business</h4>
                         <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px;line-height:1.5;">Webhook: <code id="int-wa-webhook-url">https://your-domain/api/webhooks/whatsapp</code><br>
                         Access token = permanent System User token (not App Secret). Phone number ID from API Setup.<br>
-                        <strong>OTP on WhatsApp:</strong> create an approved Meta template, then set env <code>WHATSAPP_OTP_TEMPLATE_NAME</code> or the template name on the <code>OTP_VERIFICATION</code> row in <strong>Notifications</strong>. Full steps: <code>deploy/WHATSAPP-TEMPLATES.md</code> in the repo.<br>
+                        <strong>Required for “WhatsApp configured”:</strong> save <em>Access token</em> + <em>Phone number ID</em> below (re-paste token if you only changed other fields).<br>
+                        <strong>OTP template (separate):</strong> approved Meta template name on <code>OTP_VERIFICATION</code> in <strong>Notifications</strong> or env <code>WHATSAPP_OTP_TEMPLATE_NAME</code>. See <code>deploy/WHATSAPP-TEMPLATES.md</code>.<br>
                         <a href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started" target="_blank" rel="noopener">Cloud API setup</a></p></div>
                         <div style="grid-column:1/-1;"><label>Access token (System User)</label><input type="password" id="int-wa-token" placeholder="Permanent token — not App Secret" style="width:100%"></div>
                         <div><label>Phone number ID</label><input type="text" id="int-wa-phone-id" placeholder="1066436679893640" style="width:100%"></div>

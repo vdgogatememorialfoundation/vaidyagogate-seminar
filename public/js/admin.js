@@ -2260,8 +2260,18 @@ async function loadIntegrationSettings() {
             if (!s.email_configured && st && Array.isArray(st.missing) && st.missing.length) {
                 emailLine += ' Missing: ' + st.missing.join(', ') + '.';
             }
-            line.textContent =
-                emailLine + ' ' + (s.whatsapp_configured ? 'WhatsApp: configured.' : 'WhatsApp: not configured.');
+            let waLine = s.whatsapp_configured
+                ? 'WhatsApp: configured (token + phone number ID).'
+                : 'WhatsApp: not configured.';
+            const wst = s.whatsapp_status;
+            if (!s.whatsapp_configured && wst && Array.isArray(wst.missing) && wst.missing.length) {
+                waLine += ' Missing: ' + wst.missing.join(', ') + '.';
+            }
+            if (!s.whatsapp_configured) {
+                waLine +=
+                    ' (OTP template in Notifications is not enough — save Access token and Phone number ID below.)';
+            }
+            line.textContent = emailLine + ' ' + waLine;
         }
     } catch (e) {
         console.error(e);
@@ -2308,7 +2318,13 @@ async function saveIntegrationSettings() {
                 : st && Array.isArray(st.missing) && st.missing.length
                   ? 'Email still missing: ' + st.missing.join(', ') + '. Enter SMTP password and save again.'
                   : 'Email is not configured — enter Zoho host, user, and password, then save.';
-        alert('API keys saved. ' + emailHint);
+        const wst = data.settings && data.settings.whatsapp_status;
+        const waHint = data.whatsapp_configured
+            ? 'WhatsApp is configured.'
+            : wst && Array.isArray(wst.missing) && wst.missing.length
+              ? 'WhatsApp still missing: ' + wst.missing.join(', ') + '. Paste token and phone number ID, then save.'
+              : 'WhatsApp not configured — add token + phone number ID (OTP template alone is not enough).';
+        alert('API keys saved. ' + emailHint + ' ' + waHint);
     } catch (e) {
         alert('Save failed');
     }
