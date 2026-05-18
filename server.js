@@ -439,6 +439,12 @@ function ensureCriticalUserColumns(callback) {
 
     db.run(`ALTER TABLE users ADD COLUMN is_disabled INTEGER DEFAULT 0`, (err) => {
         ignoreDup(err);
+        db.run(`ALTER TABLE users ADD COLUMN is_banned INTEGER DEFAULT 0`, (ban1) => {
+            ignoreDup(ban1);
+            db.run(`ALTER TABLE users ADD COLUMN ban_reason TEXT`, (ban2) => {
+                ignoreDup(ban2);
+                db.run(`ALTER TABLE users ADD COLUMN banned_at TEXT`, (ban3) => {
+                    ignoreDup(ban3);
         db.run(`ALTER TABLE users ADD COLUMN user_role TEXT`, (err2) => {
             ignoreDup(err2);
             db.run(`ALTER TABLE users ADD COLUMN admin_modules TEXT`, (err3) => {
@@ -446,6 +452,9 @@ function ensureCriticalUserColumns(callback) {
                 db.run(`ALTER TABLE users ADD COLUMN last_login_at TEXT`, (err4) => {
                     ignoreDup(err4);
                     afterUsers();
+                });
+            });
+        });
                 });
             });
         });
@@ -2732,6 +2741,12 @@ app.post('/api/auth/login', (req, res) => {
                         return res.status(401).json({ error: 'Invalid password. Use Forgot password if needed.' });
                     });
                 }
+                if (Number(row.is_banned) === 1) {
+                    return res.status(403).json({
+                        error: 'Your account has been banned. Please contact the foundation office.',
+                        accountBanned: true
+                    });
+                }
                 if (Number(row.is_disabled) === 1) {
                     return res.status(403).json({ error: 'Your account has been disabled. Please contact support.' });
                 }
@@ -4418,6 +4433,7 @@ const SCANNER_TICKET_LOOKUP_SQL = `
                s.id AS seminar_id, s.checkin_enabled, s.checkin_date, s.title AS seminar_title,
                u.id AS doctor_user_id, u.user_id_string AS doctor_user_id_string,
                u.first_name AS doctor_first_name, u.last_name AS doctor_last_name, u.email AS doctor_email, u.phone AS doctor_phone,
+               IFNULL(u.is_disabled, 0) AS doctor_is_disabled, IFNULL(u.is_banned, 0) AS doctor_is_banned, u.ban_reason AS doctor_ban_reason,
                r.id AS registration_id, r.application_no, r.form_data, r.status AS registration_status, o.status AS payment_status
         FROM tickets t
         JOIN orders o ON t.order_id = o.id
@@ -4430,6 +4446,24 @@ function ticketLookupInvalid(row) {
     if (Number(row.is_valid) === 0 || row.is_valid === false) return true;
     const regSt = String(row.registration_status || '').toLowerCase();
     return regSt === 'cancelled' || regSt === 'rejected';
+}
+
+function doctorAccountBlockForScan(row) {
+    if (!row) return null;
+    if (Number(row.doctor_is_banned) === 1) {
+        return {
+            error: 'Entry denied — doctor account is banned.',
+            accountStatus: 'BANNED',
+            banReason: row.doctor_ban_reason || null
+        };
+    }
+    if (Number(row.doctor_is_disabled) === 1) {
+        return {
+            error: 'Entry denied — doctor account is disabled.',
+            accountStatus: 'DISABLED'
+        };
+    }
+    return null;
 }
 
 function lookupTicketForScan(qrData, cb) {
@@ -4496,7 +4530,8 @@ const SCANNER_REG_LOOKUP_SQL = `
                t.id AS ticket_id, t.ticket_id_string, t.is_scanned, t.qr_code_data, IFNULL(t.is_valid, 1) AS is_valid,
                s.id AS seminar_id, s.checkin_enabled, s.checkin_date, s.title AS seminar_title, s.event_date,
                u.id AS doctor_user_id, u.user_id_string AS doctor_user_id_string,
-               u.first_name AS doctor_first_name, u.last_name AS doctor_last_name, u.email AS doctor_email, u.phone AS doctor_phone
+               u.first_name AS doctor_first_name, u.last_name AS doctor_last_name, u.email AS doctor_email, u.phone AS doctor_phone,
+               IFNULL(u.is_disabled, 0) AS doctor_is_disabled, IFNULL(u.is_banned, 0) AS doctor_is_banned, u.ban_reason AS doctor_ban_reason
         FROM registrations r
         JOIN users u ON u.id = r.user_id
         JOIN seminars s ON s.id = r.seminar_id
@@ -4527,6 +4562,9 @@ function registrationRowToTicketScanShape(row) {
         doctor_last_name: row.doctor_last_name,
         doctor_email: row.doctor_email,
         doctor_phone: row.doctor_phone,
+        doctor_is_disabled: row.doctor_is_disabled,
+        doctor_is_banned: row.doctor_is_banned,
+        doctor_ban_reason: row.doctor_ban_reason,
         registration_id: row.registration_id,
         application_no: row.application_no,
         form_data: row.form_data,
@@ -4711,6 +4749,26 @@ app.post('/api/scanner/mark', (req, res) => {
                         doctor: {
                             applicationNo: row.regRow && row.regRow.application_no,
                             name: buildDisplayNameFromFormData(row.regRow && row.regRow.form_data, row.regRow)
+                        }
+                    });
+                }
+
+                const accountBlock = doctorAccountBlockForScan(row);
+                if (accountBlock) {
+                    return res.status(403).json({
+                        success: false,
+                        error: accountBlock.error,
+                        sound: 'error',
+                        accountStatus: accountBlock.accountStatus,
+                        doctor: {
+                            userId: row.doctor_user_id,
+                            userIdString: row.doctor_user_id_string,
+                            name: buildDisplayNameFromFormData(row.form_data, row),
+                            applicationNo: row.application_no,
+                            seminarTitle: row.seminar_title,
+                            ticketId: row.ticket_id_string,
+                            accountStatus: accountBlock.accountStatus,
+                            banReason: accountBlock.banReason || undefined
                         }
                     });
                 }
@@ -5631,7 +5689,9 @@ app.get('/api/admin/users/:userId/detail', (req, res) => {
     if (!Number.isInteger(uid) || uid < 1) return res.status(400).json({ error: 'Invalid user id' });
 
     db.get(
-        `SELECT id, user_id_string, first_name, middle_name, last_name, email, phone, password, role, user_role, is_disabled, IFNULL(is_demo,0) AS is_demo, created_at FROM users WHERE id = ?`,
+        `SELECT id, user_id_string, first_name, middle_name, last_name, email, phone, password, role, user_role,
+                is_disabled, IFNULL(is_banned,0) AS is_banned, ban_reason, banned_at,
+                IFNULL(is_demo,0) AS is_demo, created_at FROM users WHERE id = ?`,
         [uid],
         (e, user) => {
             if (e) return res.status(500).json({ error: e.message });
@@ -5679,7 +5739,7 @@ app.get('/api/admin/users/:userId/detail', (req, res) => {
                                             (e6, supportTickets) => {
                                                 if (e6) return res.status(500).json({ error: e6.message });
 
-                                                const finishDetail = (certificates, certErr) => {
+                                                const finishDetail = (certificates, certErr, cancellationRequests) => {
                                                     if (certErr) {
                                                         console.warn('[admin] user_certificates:', certErr.message);
                                                     }
@@ -5691,6 +5751,7 @@ app.get('/api/admin/users/:userId/detail', (req, res) => {
                                                         abstracts: abstracts || [],
                                                         supportTickets: supportTickets || [],
                                                         certificates: certificates || [],
+                                                        cancellationRequests: cancellationRequests || [],
                                                         certificatesError:
                                                             certErr &&
                                                             /user_certificates|certificate_templates/i.test(
@@ -5712,10 +5773,27 @@ app.get('/api/admin/users/:userId/detail', (req, res) => {
                                                             e7 &&
                                                             /relation .* does not exist/i.test(e7.message)
                                                         ) {
-                                                            return finishDetail([], e7);
+                                                            return finishDetail([], e7, []);
                                                         }
                                                         if (e7) return res.status(500).json({ error: e7.message });
-                                                        finishDetail(certificates || [], null);
+                                                        db.all(
+                                                            `SELECT cr.*, r.application_no, s.title AS seminar_title
+                                                             FROM cancellation_requests cr
+                                                             JOIN registrations r ON r.id = cr.registration_id
+                                                             LEFT JOIN seminars s ON s.id = r.seminar_id
+                                                             WHERE cr.user_id = ?
+                                                             ORDER BY cr.id DESC`,
+                                                            [uid],
+                                                            (eCr, cancelRows) => {
+                                                                if (eCr && /no such table|does not exist/i.test(eCr.message)) {
+                                                                    return finishDetail(certificates || [], null, []);
+                                                                }
+                                                                if (eCr) {
+                                                                    return finishDetail(certificates || [], null, []);
+                                                                }
+                                                                finishDetail(certificates || [], null, cancelRows || []);
+                                                            }
+                                                        );
                                                     }
                                                 );
                                             }
@@ -6243,7 +6321,8 @@ app.post('/api/admin/users/create', (req, res) => {
 // Admin: Get Users
 app.get('/api/admin/users', (req, res) => {
     db.all(
-        `SELECT id, user_id_string, first_name, last_name, email, phone, role, user_role, is_disabled, IFNULL(is_demo,0) AS is_demo, admin_modules FROM users ORDER BY id DESC`,
+        `SELECT id, user_id_string, first_name, last_name, email, phone, role, user_role, is_disabled,
+                IFNULL(is_banned,0) AS is_banned, ban_reason, IFNULL(is_demo,0) AS is_demo, admin_modules FROM users ORDER BY id DESC`,
         [],
         (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -6276,11 +6355,66 @@ app.get('/api/admin/user-roles', (req, res) => {
 
 // Admin: Toggle Disable User
 app.post('/api/admin/users/toggle_disable', (req, res) => {
-    const { userId, disable } = req.body;
-    const val = disable ? 1 : 0;
-    db.run(`UPDATE users SET is_disabled = ? WHERE id = ?`, [val, userId], function(err) {
+    const userId = parseInt((req.body && req.body.userId) || '', 10);
+    const disable = !!(req.body && req.body.disable);
+    const actingAdminId = parseInt((req.body && req.body.actingAdminId) || '', 10);
+    if (!userId) return res.status(400).json({ error: 'userId required' });
+
+    const applyDisable = () => {
+        db.run(`UPDATE users SET is_disabled = ? WHERE id = ?`, [disable ? 1 : 0, userId], function (err) {
+            if (err) return res.status(500).json({ error: err.message });
+            if (this.changes === 0) return res.status(404).json({ error: 'User not found' });
+            activityLog.logActivity(db, {
+                user_id: actingAdminId || null,
+                action: disable ? 'admin.user.disabled' : 'admin.user.enabled',
+                resource_type: 'user',
+                resource_id: String(userId),
+                meta: { targetUserId: userId }
+            });
+            res.json({ success: true, is_disabled: disable ? 1 : 0 });
+        });
+    };
+
+    if (!disable) {
+        return db.get(`SELECT IFNULL(is_banned,0) AS is_banned FROM users WHERE id = ?`, [userId], (e, row) => {
+            if (e) return res.status(500).json({ error: e.message });
+            if (!row) return res.status(404).json({ error: 'User not found' });
+            if (Number(row.is_banned) === 1) {
+                return res.status(400).json({ error: 'User is banned. Unban the account before enabling login.' });
+            }
+            applyDisable();
+        });
+    }
+    applyDisable();
+});
+
+// Admin: Ban / unban user (blocks login and ticket check-in)
+app.post('/api/admin/users/toggle_ban', (req, res) => {
+    const userId = parseInt((req.body && req.body.userId) || '', 10);
+    const ban = !!(req.body && req.body.ban);
+    const reason = (req.body && req.body.reason) != null ? String(req.body.reason).trim() : '';
+    const actingAdminId = parseInt((req.body && req.body.actingAdminId) || '', 10);
+    if (!userId) return res.status(400).json({ error: 'userId required' });
+    if (ban && reason.length < 3) {
+        return res.status(400).json({ error: 'Ban reason is required (at least 3 characters).' });
+    }
+
+    const sql = ban
+        ? `UPDATE users SET is_banned = 1, is_disabled = 1, ban_reason = ?, banned_at = CURRENT_TIMESTAMP WHERE id = ?`
+        : `UPDATE users SET is_banned = 0, ban_reason = NULL, banned_at = NULL WHERE id = ?`;
+    const params = ban ? [reason, userId] : [userId];
+
+    db.run(sql, params, function (err) {
         if (err) return res.status(500).json({ error: err.message });
-        res.json({ success: true });
+        if (this.changes === 0) return res.status(404).json({ error: 'User not found' });
+        activityLog.logActivity(db, {
+            user_id: actingAdminId || null,
+            action: ban ? 'admin.user.banned' : 'admin.user.unbanned',
+            resource_type: 'user',
+            resource_id: String(userId),
+            meta: { targetUserId: userId, reason: ban ? reason : null }
+        });
+        res.json({ success: true, is_banned: ban ? 1 : 0, ban_reason: ban ? reason : null });
     });
 });
 

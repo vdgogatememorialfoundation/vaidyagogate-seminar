@@ -430,6 +430,9 @@ function adminUserStatusBadge(u) {
         adminDemoAccountsEnabled() && Number(u.is_demo) === 1
             ? ' <span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:6px;font-size:0.72rem;margin-left:4px;">DUMMY</span>'
             : '';
+    if (Number(u.is_banned) === 1) {
+        return `<span style="color:#7f1d1d;font-weight:bold;">BANNED</span>${demo}`;
+    }
     return u.is_disabled
         ? `<span style="color:red;font-weight:bold;">DISABLED</span>${demo}`
         : `<span style="color:green;font-weight:bold;">ACTIVE</span>${demo}`;
@@ -923,10 +926,82 @@ async function openAdminUserDetail(userId) {
             `${u.first_name || ''} ${u.last_name || ''}`.trim() || 'User details';
         document.getElementById('admin-user-detail-sub').textContent =
             `ID: ${u.user_id_string} · ${u.email} · Role: ${u.user_role || u.role}`;
+        renderAdminUserDetailActions();
         switchAdminUserDetailTab('profile');
     } catch (e) {
         console.error(e);
         if (body) body.innerHTML = '<p style="color:#b91c1c;">Network error</p>';
+    }
+}
+
+function renderAdminUserDetailActions() {
+    const bar = document.getElementById('admin-user-detail-actions');
+    const d = __adminUserDetailCache;
+    if (!bar || !d || !d.user) return;
+    const u = d.user;
+    const banned = Number(u.is_banned) === 1;
+    const disabled = Number(u.is_disabled) === 1;
+    let html = '';
+    if (banned) {
+        html +=
+            '<button type="button" class="btn-primary" style="background:#059669;border:none;" onclick="toggleAdminUserBan(' +
+            u.id +
+            ', false)">Unban user</button>';
+    } else {
+        html +=
+            '<button type="button" class="btn-primary" style="background:#7f1d1d;border:none;" onclick="toggleAdminUserBan(' +
+            u.id +
+            ', true)">Ban user</button>';
+    }
+    if (disabled && !banned) {
+        html +=
+            '<button type="button" class="btn-primary" style="background:#059669;border:none;" onclick="toggleDisable(' +
+            u.id +
+            ', false)">Enable account</button>';
+    } else if (!disabled && !banned) {
+        html +=
+            '<button type="button" class="btn-primary" style="background:#b45309;border:none;" onclick="toggleDisable(' +
+            u.id +
+            ', true)">Disable account</button>';
+    }
+    if (banned && u.ban_reason) {
+        html +=
+            '<span style="font-size:0.85rem;color:#7f1d1d;margin-left:8px;">Ban reason: ' +
+            escAdmin(u.ban_reason) +
+            '</span>';
+    }
+    bar.innerHTML = html;
+}
+
+async function toggleAdminUserBan(userId, ban) {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return alert('Not logged in.');
+    let reason = '';
+    if (ban) {
+        reason = prompt('Ban reason (required):', 'Policy violation') || '';
+        if (reason.trim().length < 3) return alert('Ban reason is required.');
+    } else if (!confirm('Remove ban from this user? They will still be disabled until you enable the account.')) {
+        return;
+    }
+    try {
+        const res = await fetch('/api/admin/users/toggle_ban', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, ban, reason, actingAdminId: adm.id })
+        });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Failed');
+        if (__adminUserDetailCache && __adminUserDetailCache.user && Number(__adminUserDetailCache.user.id) === Number(userId)) {
+            __adminUserDetailCache.user.is_banned = ban ? 1 : 0;
+            __adminUserDetailCache.user.ban_reason = ban ? reason : null;
+            if (ban) __adminUserDetailCache.user.is_disabled = 1;
+        }
+        renderAdminUserDetailActions();
+        renderAdminUserDetailTab();
+        loadUsers();
+    } catch (e) {
+        console.error(e);
+        alert('Network error.');
     }
 }
 
@@ -977,7 +1052,9 @@ function renderAdminUserDetailTab() {
                     <p><strong>Phone:</strong> ${escAdmin(u.phone)}</p>
                     <p><strong>Password (stored):</strong> <code>${escAdmin(u.password)}</code></p>
                     <p><strong>Role:</strong> ${escAdmin(u.user_role || u.role)}</p>
-                    <p><strong>Status:</strong> ${u.is_disabled ? 'Disabled' : 'Active'}</p>
+                    <p><strong>Status:</strong> ${Number(u.is_banned) === 1 ? 'Banned' : u.is_disabled ? 'Disabled' : 'Active'}</p>
+                    ${Number(u.is_banned) === 1 && u.ban_reason ? `<p><strong>Ban reason:</strong> ${escAdmin(u.ban_reason)}</p>` : ''}
+                    ${u.banned_at ? `<p><strong>Banned at:</strong> ${escAdmin(u.banned_at)}</p>` : ''}
                     ${
                         adminDemoAccountsEnabled()
                             ? `<p><strong>Dummy / demo account:</strong> ${Number(u.is_demo) === 1 ? 'Yes — any OTP code is accepted at login and registration' : 'No'}</p>
@@ -1027,6 +1104,17 @@ function renderAdminUserDetailTab() {
     if (__adminUserDetailTab === 'orders') {
         body.innerHTML = '<p>Loading payments…</p>';
         loadAdminUserPaymentsPanel(u.id, body);
+        return;
+    }
+
+    if (__adminUserDetailTab === 'cancellations') {
+        renderAdminUserCancellationTab(body, u.id);
+        return;
+    }
+
+    if (__adminUserDetailTab === 'activity') {
+        body.innerHTML = '<p>Loading activity…</p>';
+        loadAdminUserActivityPanel(u.id, body);
         return;
     }
 
@@ -2240,15 +2328,114 @@ async function initAdminScannerLogsTab() {
 }
 
 async function toggleDisable(userId, disable) {
-    if(!confirm(`Are you sure you want to ${disable ? 'disable' : 'enable'} this user?`)) return;
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return alert('Not logged in.');
+    if (!confirm(`Are you sure you want to ${disable ? 'disable' : 'enable'} this user?`)) return;
     try {
-        await fetch('/api/admin/users/toggle_disable', {
+        const res = await fetch('/api/admin/users/toggle_disable', {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ userId, disable })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, disable, actingAdminId: adm.id })
         });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Failed');
+        if (__adminUserDetailCache && __adminUserDetailCache.user && Number(__adminUserDetailCache.user.id) === Number(userId)) {
+            __adminUserDetailCache.user.is_disabled = disable ? 1 : 0;
+            renderAdminUserDetailActions();
+            renderAdminUserDetailTab();
+        }
         loadUsers();
-    } catch(err) { console.error(err); }
+    } catch (err) {
+        console.error(err);
+        alert('Network error.');
+    }
+}
+
+function renderAdminUserCancellationTab(bodyEl, userId) {
+    const rows = (__adminUserDetailCache && __adminUserDetailCache.cancellationRequests) || [];
+    let html =
+        '<p style="color:#64748b;font-size:0.88rem;margin-bottom:12px;">Cancellation requests submitted by this doctor (IST refund policy applied on approve).</p>';
+    html += '<table class="data-table"><thead><tr><th>Requested</th><th>App</th><th>Seminar</th><th>Reason</th><th>Policy refund</th><th>Status</th><th></th></tr></thead><tbody>';
+    if (!rows.length) {
+        html += '<tr><td colspan="7">No cancellation requests</td></tr>';
+    } else {
+        rows.forEach((r) => {
+            const when = r.requested_at
+                ? new Date(r.requested_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
+                : '—';
+            let act = '—';
+            if (r.status === 'pending') {
+                act =
+                    '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;" onclick="closeAdminUserDetailModal();switchTab(\'tab-admin-payments\');switchAdminPaymentsTab(\'cancellations\');loadAdminCancellationRequests();">Review in Payments</button>';
+            }
+            html +=
+                '<tr><td>' +
+                escAdmin(when) +
+                '</td><td>' +
+                escAdmin(r.application_no) +
+                '</td><td>' +
+                escAdmin(r.seminar_title) +
+                '</td><td style="max-width:180px;font-size:0.85rem;">' +
+                escAdmin(r.reason) +
+                '</td><td>₹' +
+                escAdmin(r.refund_amount || 0) +
+                ' (' +
+                escAdmin(r.refund_percent || 0) +
+                '%)</td><td>' +
+                escAdmin(r.status) +
+                '</td><td>' +
+                act +
+                '</td></tr>';
+        });
+    }
+    html += '</tbody></table>';
+    bodyEl.innerHTML = html;
+}
+
+async function loadAdminUserActivityPanel(userId, bodyEl) {
+    if (!bodyEl) return;
+    try {
+        const res = await fetch(
+            '/api/admin/activity-logs?userId=' + encodeURIComponent(userId) + '&limit=150'
+        );
+        const rows = await res.json();
+        const list = Array.isArray(rows) ? rows : [];
+        let html =
+            '<p style="color:#64748b;font-size:0.88rem;margin-bottom:12px;">Login, applications, payments, and admin actions for this account.</p>';
+        html +=
+            '<table class="data-table"><thead><tr><th>Time (IST)</th><th>Action</th><th>Resource</th><th>Details</th></tr></thead><tbody>';
+        if (!list.length) {
+            html += '<tr><td colspan="4">No activity logged yet</td></tr>';
+        } else {
+            list.forEach((a) => {
+                const when = a.created_at
+                    ? new Date(a.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
+                    : '—';
+                let meta = '';
+                try {
+                    const m = a.meta ? JSON.parse(a.meta) : null;
+                    if (m && typeof m === 'object') meta = JSON.stringify(m).slice(0, 120);
+                } catch (_) {
+                    meta = String(a.meta || '').slice(0, 120);
+                }
+                html +=
+                    '<tr><td style="white-space:nowrap;font-size:0.85rem;">' +
+                    escAdmin(when) +
+                    '</td><td><code>' +
+                    escAdmin(a.action) +
+                    '</code></td><td>' +
+                    escAdmin((a.resource_type || '') + (a.resource_id ? ' #' + a.resource_id : '')) +
+                    '</td><td style="font-size:0.82rem;color:#64748b;">' +
+                    escAdmin(meta) +
+                    '</td></tr>';
+            });
+        }
+        html += '</tbody></table>';
+        bodyEl.innerHTML = html;
+    } catch (e) {
+        console.error(e);
+        bodyEl.innerHTML = '<p style="color:#b91c1c;">Failed to load activity</p>';
+    }
 }
 
 let globalAdminApps = [];

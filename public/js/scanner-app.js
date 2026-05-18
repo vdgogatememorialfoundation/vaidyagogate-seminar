@@ -169,7 +169,9 @@
     function metaHtml(d, extra) {
         const rows = [
             ['Name', d.name],
+            ['Doctor ID', d.userIdString],
             ['Ticket ID', d.ticketId || d.ticket_id_string],
+            ['Account', d.accountStatus || (d.account_status || '')],
             ['Registration', d.registrationType || d.registration_status || '—'],
             ['Payment', d.paymentStatus || (d.payment_status === 'success' ? 'PAID' : 'UNPAID')],
             ['Application', d.applicationNo],
@@ -321,12 +323,19 @@
                 playTone(isDup ? 'duplicate' : result.sound === 'wrong_date' ? 'wrong_date' : 'error');
                 if (isDup) stats.dup++;
                 else stats.err++;
+                const banNote =
+                    d.banReason && /banned/i.test(err)
+                        ? '<p style="margin-top:8px;font-size:0.85rem;">Reason: ' +
+                          String(d.banReason).replace(/</g, '&lt;') +
+                          '</p>'
+                        : '';
                 renderResult(
                     false,
                     '<strong><i class="fas fa-times-circle"></i> ' +
                         err.replace(/</g, '&lt;') +
                         '</strong>' +
-                        (d && d.name ? metaHtml(d) : ''),
+                        banNote +
+                        (d && (d.name || d.userIdString || d.applicationNo) ? metaHtml(d) : ''),
                     isDup ? 'warn' : 'bad'
                 );
                 pushHistory(err.slice(0, 60), false);

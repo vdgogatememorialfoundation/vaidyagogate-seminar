@@ -43,7 +43,7 @@
                 <p id="login-err" class="login-err hidden"></p>
                 <button type="submit" class="tool-btn primary auth-submit">Sign in to scanner</button>
             </form>
-            <p class="auth-foot">VGMF entry scanner · venue staff use only</p>
+            <p class="auth-foot">VGMF entry scanner · venue staff use only · denies banned/disabled doctor accounts</p>
         </div>
     </div>
 
@@ -95,6 +95,7 @@
         <div class="scan-card scan-card-compact">
             <label><i class="fas fa-history"></i> Recent scans</label>
             <ul class="history-list" id="scan-history"></ul>
+            <p style="font-size:0.78rem;color:var(--scan-muted);margin-top:10px;line-height:1.45;">Entry is blocked if the doctor account is <strong>disabled</strong> or <strong>banned</strong> in admin, or if the registration was cancelled.</p>
         </div>
 
         <button type="button" class="tool-btn scan-next-btn" id="btn-reset">Clear &amp; scan again</button>

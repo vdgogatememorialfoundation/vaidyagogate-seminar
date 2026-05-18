@@ -1376,10 +1376,13 @@
             <button type="button" onclick="closeAdminUserDetailModal()" style="position: absolute; top: 16px; right: 16px; background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
             <h2 style="color:#0c4a6e;margin-bottom:4px;" id="admin-user-detail-title">User details</h2>
             <p id="admin-user-detail-sub" style="color:#64748b;font-size:0.88rem;margin-bottom:16px;"></p>
+            <div id="admin-user-detail-actions" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;"></div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;border-bottom:1px solid #e2e8f0;padding-bottom:10px;">
                 <button type="button" class="btn-primary admin-user-detail-tab active" data-ud-tab="profile" onclick="switchAdminUserDetailTab('profile')">Profile</button>
                 <button type="button" class="btn-primary admin-user-detail-tab" data-ud-tab="registrations" onclick="switchAdminUserDetailTab('registrations')" style="background:#64748b;">Applications</button>
-                <button type="button" class="btn-primary admin-user-detail-tab" data-ud-tab="orders" onclick="switchAdminUserDetailTab('orders')" style="background:#64748b;">Orders &amp; tickets</button>
+                <button type="button" class="btn-primary admin-user-detail-tab" data-ud-tab="orders" onclick="switchAdminUserDetailTab('orders')" style="background:#64748b;">Payments</button>
+                <button type="button" class="btn-primary admin-user-detail-tab" data-ud-tab="cancellations" onclick="switchAdminUserDetailTab('cancellations')" style="background:#64748b;">Cancellations</button>
+                <button type="button" class="btn-primary admin-user-detail-tab" data-ud-tab="activity" onclick="switchAdminUserDetailTab('activity')" style="background:#64748b;">Activity</button>
                 <button type="button" class="btn-primary admin-user-detail-tab" data-ud-tab="scans" onclick="switchAdminUserDetailTab('scans')" style="background:#64748b;">Check-ins</button>
                 <button type="button" class="btn-primary admin-user-detail-tab" data-ud-tab="password" onclick="switchAdminUserDetailTab('password')" style="background:#64748b;">Password</button>
                 </div>
