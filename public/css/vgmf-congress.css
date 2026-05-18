@@ -772,6 +772,57 @@
     text-decoration: underline;
 }
 
+.congress-site .social-follow,
+.congress-site .footer-social {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 14px;
+}
+.congress-site .social-follow.hidden,
+.congress-site .footer-social.hidden {
+    display: none !important;
+}
+.congress-site .social-link-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: #fef3c7 !important;
+    font-weight: 600;
+    font-size: 0.85rem;
+    text-decoration: none;
+    transition: background 0.2s;
+}
+.congress-site .social-link-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: #fff !important;
+}
+.congress-site .social-link-btn i {
+    font-size: 1.1rem;
+}
+.congress-site .social-follow {
+    justify-content: center;
+    margin: 24px auto 0;
+    max-width: 720px;
+}
+.congress-site .verify-head-icon {
+    color: var(--cg-green);
+    margin-right: 8px;
+}
+.verify-status-ico { width: 36px; text-align: center; }
+.verify-ico { font-size: 1.05rem; }
+.verify-ico-ok { color: #059669; }
+.verify-ico-warn { color: #d97706; }
+.verify-ico-muted { color: #94a3b8; font-size: 0.45rem; vertical-align: middle; }
+.verify-pay { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.verify-pay-yes { color: #059669; }
+.verify-pay-no { color: #94a3b8; }
+.cg-nav a i { margin-right: 4px; }
+
 /* Legacy FAB hidden — congress uses .cg-fab-register */
 .congress-site .fab-register {
     display: none !important;

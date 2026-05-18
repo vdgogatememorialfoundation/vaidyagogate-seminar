@@ -27,6 +27,48 @@
         return '/uploads/' + p;
     }
 
+    function socialIcon(platform) {
+        const p = String(platform || '').toLowerCase();
+        if (p === 'youtube') return 'fab fa-youtube';
+        if (p === 'facebook') return 'fab fa-facebook';
+        if (p === 'instagram') return 'fab fa-instagram';
+        if (p === 'twitter' || p === 'x') return 'fab fa-x-twitter';
+        if (p === 'linkedin') return 'fab fa-linkedin';
+        if (p === 'whatsapp') return 'fab fa-whatsapp';
+        return 'fas fa-link';
+    }
+
+    window.renderSocialLinks = function renderSocialLinks(cms) {
+        const links = Array.isArray(cms && cms.socialLinks) ? cms.socialLinks.filter((l) => l && l.url) : [];
+        const html = links.length
+            ? links
+                  .map(
+                      (l) =>
+                          '<a href="' +
+                          escHtml(l.url) +
+                          '" target="_blank" rel="noopener noreferrer" class="social-link-btn" title="' +
+                          escHtml(l.label || l.platform || '') +
+                          '"><i class="' +
+                          socialIcon(l.platform) +
+                          '" aria-hidden="true"></i><span>' +
+                          escHtml(l.label || l.platform || 'Follow') +
+                          '</span></a>'
+                  )
+                  .join('')
+            : '';
+        ['social-follow', 'footer-social'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            if (!html) {
+                el.innerHTML = '';
+                el.classList.add('hidden');
+                return;
+            }
+            el.classList.remove('hidden');
+            el.innerHTML = html;
+        });
+    }
+
     window.__publicSchedules = [];
 
     function renderSpeakers(list) {
@@ -182,8 +224,12 @@
             announceHeading.textContent = cms.scrollingAnnounceHeading;
         }
         if (typeof renderHomeSlider === 'function') renderHomeSlider(cms.slides || []);
-        if (typeof renderScrollingAnnouncements === 'function') renderScrollingAnnouncements(cms.scrollingAnnouncements || []);
+        const onCongressSite = document.body && document.body.classList.contains('congress-site');
+        if (!onCongressSite && typeof renderScrollingAnnouncements === 'function') {
+            renderScrollingAnnouncements(cms.scrollingAnnouncements || []);
+        }
         if (typeof renderReviewsMarquee === 'function') renderReviewsMarquee(cms.reviews || []);
+        renderSocialLinks(cms);
         if (typeof renderAboutGallerySocial === 'function') renderAboutGallerySocial(cms);
     };
 

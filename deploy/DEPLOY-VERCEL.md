@@ -71,7 +71,7 @@ Redeploy once. On startup the app creates or updates this admin user (password i
 | `ZOHO_PORT` | `465` |
 | `ZOHO_USER` | your mailbox |
 | `ZOHO_PASS` | app password |
-| `ZOHO_FROM` | `info@vaidyagogate.org` |
+| `ZOHO_FROM` | `care@vaidyagogate.org` (or your sending mailbox) |
 | `WHATSAPP_TOKEN` | Meta token |
 | `WHATSAPP_PHONE_NUMBER_ID` | Meta phone id |
 | `WHATSAPP_VERIFY_TOKEN` | webhook verify string |
@@ -86,6 +86,17 @@ If the site shows a database error, open `https://your-project.vercel.app/api/he
 **`BOOTSTRAP_TIMEOUT` in logs:** Usually many parallel cold starts all running migrations. The app defers migrations on Vercel and serves static pages (`/`, `*.html`, `/favicon.ico`) without waiting. Push the latest `main` and redeploy. Optional one-time speed-up: `node scripts/apply-neon-schema.js` with `DATABASE_URL` set locally so Neon already has all tables before traffic hits Vercel.
 
 Or configure Zoho/WhatsApp in **Admin → Global Settings** after deploy (stored in DB).
+
+### Zoho Mail — DNS (domain registrar / Wix)
+
+| Type | Host | Priority / value |
+|------|------|------------------|
+| MX | `@` | `10` → `mx.zoho.in` |
+| MX | `@` | `20` → `mx2.zoho.in` |
+| MX | `@` | `50` → `mx3.zoho.in` |
+| TXT | `@` | `v=spf1 include:zoho.in ~all` |
+
+**SMTP (app / Vercel env):** host `smtp.zoho.in`, port `465` (SSL) or `587` (TLS), user `you@yourdomain.com`, app-specific password in `ZOHO_PASS`. Incoming: `imap.zoho.in:993` or `pop.zoho.in:995`.
 
 4. Deploy. Note your Vercel URL: `https://your-project.vercel.app`
 
