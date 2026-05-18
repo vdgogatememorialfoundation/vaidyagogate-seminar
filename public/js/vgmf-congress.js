@@ -469,5 +469,17 @@
         if (pre) {
             setTimeout(() => pre.classList.add('done'), 400);
         }
+        (async () => {
+            const root = document.getElementById('congress-hero-slides');
+            if (root && root.children.length) return;
+            try {
+                const res = await fetch('/api/public/site-cms', { cache: 'no-store' });
+                const cms = await res.json();
+                if (typeof window.applySiteCms === 'function') window.applySiteCms(cms);
+            } catch (e) {
+                console.error('[congress] CMS bootstrap failed', e);
+                renderCongressHero({});
+            }
+        })();
     });
 })();

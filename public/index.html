@@ -371,8 +371,8 @@
 
     <script src="/js/portal-content-protection.js"></script>
     <script src="/js/portal-scrolling-announcements.js"></script>
-    <script src="/js/vgmf-congress.js"></script>
     <script src="/js/vgmf-home.js"></script>
+    <script src="/js/vgmf-congress.js"></script>
     <script src="/js/vgmf-marketing.js"></script>
     <script>
         let currentUserId = null;
@@ -399,6 +399,8 @@
                 if (tabSignup) tabSignup.style.display = window.__portalAuth.showSignup !== false ? '' : 'none';
             } catch (_) {}
         }
+
+        function setOtpPanelVisible(panel, visible) {
             if (!panel) return;
             panel.classList.toggle('hidden', !visible);
         }
@@ -1295,7 +1297,6 @@
                         strip.querySelector('.cd-lbl').textContent = target.label;
                         const dist = target.t - Date.now();
                         if (dist < 0) {
-                            loadTimerAndSeminars();
                             return;
                         }
                         strip.querySelector('.cd-d').textContent = Math.floor(dist / (1000 * 60 * 60 * 24))
