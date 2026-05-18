@@ -3,12 +3,13 @@
   "appName": "VGMF Scanner",
   "webDir": "www",
   "server": {
-    "url": "https://vaidyagogate-seminar.vercel.app/scanner.html",
+    "url": "https://seminar.vaidyagogate.org/scanner.html",
     "cleartext": false,
     "androidScheme": "https",
     "allowNavigation": [
-      "https://vaidyagogate-seminar.vercel.app",
-      "https://seminar.vaidyagogate.org"
+      "https://seminar.vaidyagogate.org",
+      "https://admin.vaidyagogate.org",
+      "https://vaidyagogate-seminar.vercel.app"
     ]
   },
   "android": {
