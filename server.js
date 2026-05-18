@@ -2029,8 +2029,9 @@ app.post('/api/admin/integrations/test-whatsapp', withIntegrationSettingsLoaded,
             method +
             (otpTpl ? ' code=123456' : '') +
             (tplDebug.source ? ' src=' + tplDebug.source : '') +
+            (r.triedMethods ? ' tries=' + String(r.triedMethods).slice(0, 200) : '') +
             (r.messageId ? ' id=' + r.messageId : ''),
-        error: r.ok ? null : r.error
+        error: r.ok ? null : (r.error || '').slice(0, 900)
     };
     notifEngine.logNotification(db, logRow);
     if (r.ok) {
