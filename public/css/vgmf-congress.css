@@ -747,9 +747,120 @@
     color: rgba(255, 255, 255, 0.9);
     padding: 56px 20px 28px;
     margin-top: 0;
+    position: relative;
+    z-index: 1;
 }
 .congress-site .footer a { color: #fef3c7; }
 .congress-site .footer h4 { color: #fff; font-family: var(--cg-display); }
+.congress-site .footer-bottom {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+}
+.congress-site .footer-credit {
+    margin: 0;
+    font-size: 0.8rem;
+    opacity: 0.85;
+}
+.congress-site .footer-credit a {
+    color: #fde68a;
+    text-decoration: none;
+    font-weight: 600;
+}
+.congress-site .footer-credit a:hover {
+    text-decoration: underline;
+}
+
+/* Legacy FAB hidden — congress uses .cg-fab-register */
+.congress-site .fab-register {
+    display: none !important;
+}
+
+/* Announcement popup (overlay; must not sit in document flow) */
+#site-announce-popup {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.35s, visibility 0.35s;
+}
+#site-announce-popup.is-open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+}
+#site-announce-popup .sap-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.65);
+    backdrop-filter: blur(4px);
+}
+#site-announce-popup .sap-panel {
+    position: relative;
+    z-index: 1;
+    background: var(--cg-white);
+    border-radius: var(--cg-radius-lg);
+    max-width: 520px;
+    width: 100%;
+    overflow: hidden;
+    box-shadow: var(--cg-shadow-lg);
+    transform: scale(0.96) translateY(10px);
+    transition: transform 0.35s ease;
+}
+#site-announce-popup.is-open .sap-panel {
+    transform: scale(1) translateY(0);
+}
+#site-announce-popup .sap-close {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 2;
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(15, 23, 42, 0.08);
+    cursor: pointer;
+    font-size: 1.25rem;
+    line-height: 1;
+    color: var(--cg-ink, #0f172a);
+}
+#site-announce-popup #sap-image {
+    width: 100%;
+    max-height: 220px;
+    object-fit: cover;
+}
+#site-announce-popup .sap-body-wrap {
+    padding: 24px;
+}
+#site-announce-popup #sap-heading {
+    font-size: 1.35rem;
+    margin-bottom: 10px;
+    color: var(--cg-ink, #0f172a);
+}
+#site-announce-popup #sap-body {
+    color: var(--cg-muted, #64748b);
+    margin-bottom: 16px;
+}
+#site-announce-popup #sap-cta {
+    display: inline-flex;
+    padding: 12px 22px;
+    border-radius: 10px;
+    background: var(--cg-green);
+    color: #fff !important;
+    font-weight: 700;
+    text-decoration: none;
+}
+#site-announce-popup #sap-cta.hidden {
+    display: none !important;
+}
 
 /* FAB mobile register */
 .cg-fab-register {
