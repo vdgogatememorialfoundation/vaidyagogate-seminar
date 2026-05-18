@@ -2541,7 +2541,8 @@ async function loadSettings() {
         document.getElementById('setting-domain').value = settings.domain || '';
         document.getElementById('setting-pg').value = settings.payment_gateway || 'mock';
         document.getElementById('setting-disabled').value = settings.is_site_disabled || '0';
-        
+        await loadMaintenanceSettings();
+
         // Load payment gateways
         const pgRes = await fetch('/api/admin/payment_gateways');
         const pgs = await pgRes.json();
@@ -2608,18 +2609,128 @@ async function saveSiteConfigSettings() {
     }
 }
 
-async function saveKillSwitchSettings() {
-    const settings = [{ key: 'is_site_disabled', value: document.getElementById('setting-disabled').value }];
+let __maintenancePreviewSecret = '';
+
+function isoToDatetimeLocalInput(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    const pad = (n) => String(n).padStart(2, '0');
+    return (
+        d.getFullYear() +
+        '-' +
+        pad(d.getMonth() + 1) +
+        '-' +
+        pad(d.getDate()) +
+        'T' +
+        pad(d.getHours()) +
+        ':' +
+        pad(d.getMinutes())
+    );
+}
+
+function datetimeLocalInputToIso(localVal) {
+    if (!localVal) return '';
+    const d = new Date(localVal);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toISOString();
+}
+
+async function loadMaintenanceSettings() {
+    const hint = document.getElementById('maint-admin-hint');
     try {
-        await fetch('/api/admin/global_settings', {
+        const res = await fetch('/api/admin/maintenance-settings');
+        const data = await res.json();
+        if (!res.ok) return;
+        const cfg = data.config || {};
+        __maintenancePreviewSecret = cfg.preview_secret || '';
+        const headlineEl = document.getElementById('maint-headline');
+        const messageEl = document.getElementById('maint-message');
+        const goLiveEl = document.getElementById('maint-go-live');
+        if (headlineEl) headlineEl.value = cfg.headline || '';
+        if (messageEl) messageEl.value = cfg.message || '';
+        if (goLiveEl) goLiveEl.value = isoToDatetimeLocalInput(cfg.go_live_at || '');
+        if (data.disabled != null) {
+            const sel = document.getElementById('setting-disabled');
+            if (sel) sel.value = data.disabled ? '1' : '0';
+        }
+        if (hint) {
+            const lines = [];
+            if (data.disabled) {
+                lines.push('Maintenance is ON — public visitors see the maintenance page only.');
+                if (cfg.go_live_at) {
+                    lines.push(
+                        'Scheduled go-live: ' +
+                            (data.go_live_due ? 'due now (will auto-open on next visit)' : cfg.go_live_at)
+                    );
+                }
+                if (__maintenancePreviewSecret) {
+                    lines.push('Use “Preview live site” to browse the real homepage while maintenance stays on for everyone else.');
+                }
+            } else {
+                lines.push('Site is live for all visitors.');
+            }
+            hint.textContent = lines.join(' ');
+            hint.style.display = lines.length ? 'block' : 'none';
+        }
+        window.__seminarPreviewBase = data.seminar_preview_base || '';
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function saveKillSwitchSettings() {
+    const disabled = (document.getElementById('setting-disabled') || {}).value === '1';
+    const body = {
+        disabled,
+        headline: (document.getElementById('maint-headline') || {}).value.trim(),
+        message: (document.getElementById('maint-message') || {}).value.trim(),
+        go_live_at: datetimeLocalInputToIso((document.getElementById('maint-go-live') || {}).value)
+    };
+    try {
+        const res = await fetch('/api/admin/maintenance-settings', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ settings })
+            body: JSON.stringify(body)
         });
-        alert('Maintenance / kill switch saved.');
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Save failed');
+        __maintenancePreviewSecret = data.preview_secret || __maintenancePreviewSecret;
+        await loadMaintenanceSettings();
+        alert(
+            disabled
+                ? 'Maintenance mode saved. Public site is closed; use Preview buttons to check your work.'
+                : 'Site is live again.'
+        );
     } catch (err) {
         console.error(err);
+        alert('Save failed');
     }
+}
+
+function previewMaintenancePage() {
+    const frame = document.getElementById('maint-preview-frame');
+    if (!frame) {
+        window.open('/maintenance-preview', '_blank', 'noopener');
+        return;
+    }
+    frame.style.display = 'block';
+    frame.src = '/maintenance-preview?ts=' + Date.now();
+}
+
+function previewLiveSiteDuringMaintenance() {
+    const secret = __maintenancePreviewSecret;
+    if (!secret) {
+        return alert('Save maintenance settings first to generate a preview link.');
+    }
+    let base = window.__seminarPreviewBase || '';
+    if (!base) {
+        const host = (document.getElementById('int-seminar-host') || {}).value.trim();
+        if (host) base = 'https://' + host.replace(/^https?:\/\//, '').replace(/\/$/, '');
+    }
+    if (!base) base = window.location.origin;
+    const url = base.replace(/\/$/, '') + '/?vgmf_preview=' + encodeURIComponent(secret);
+    window.open(url, '_blank', 'noopener');
 }
         
 async function savePaymentGatewaysSettings() {

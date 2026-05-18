@@ -6420,6 +6420,80 @@ app.post('/api/admin/global_settings', (req, res) => {
     });
 });
 
+const maintenanceSettings = require('./lib/maintenance-settings');
+
+app.get('/api/public/maintenance-status', (req, res) => {
+    maintenanceSettings.readMaintenanceBundle(db, (err, bundle) => {
+        if (err) return res.status(500).json({ error: err.message });
+        siteKillSwitch.loadBrandingForMaintenance(db, (bErr, branding) => {
+            const pub = maintenanceSettings.publicMaintenancePayload(bundle.config, branding);
+            res.json({
+                disabled: bundle.disabled,
+                headline: pub.headline,
+                message: pub.message,
+                go_live_at: pub.go_live_at,
+                go_live_label: pub.go_live_label,
+                site_name: pub.site_name
+            });
+        });
+    });
+});
+
+app.get('/api/admin/maintenance-settings', (req, res) => {
+    maintenanceSettings.readMaintenanceBundle(db, (err, bundle) => {
+        if (err) return res.status(500).json({ error: err.message });
+        const rt = integrationSettings.getRuntimeIntegrations();
+        let seminarBase = (rt.public_base_url || '').trim().replace(/\/$/, '');
+        if (!seminarBase && rt.seminar_host) {
+            seminarBase = 'https://' + String(rt.seminar_host).replace(/^https?:\/\//, '').replace(/\/$/, '');
+        }
+        res.json({
+            disabled: bundle.disabled,
+            config: bundle.config,
+            go_live_due: maintenanceSettings.isGoLiveDue(bundle.config),
+            seminar_preview_base: seminarBase || '',
+            maintenance_preview_url: '/maintenance-preview'
+        });
+    });
+});
+
+app.post('/api/admin/maintenance-settings', (req, res) => {
+    const body = req.body || {};
+    maintenanceSettings.readMaintenanceBundle(db, (err, existing) => {
+        if (err) return res.status(500).json({ error: err.message });
+        const cfg = maintenanceSettings.parseConfig(existing.config);
+        if (body.headline != null) cfg.headline = String(body.headline).trim();
+        if (body.message != null) cfg.message = String(body.message).trim();
+        if (body.go_live_at != null) cfg.go_live_at = String(body.go_live_at).trim();
+        if (body.regenerate_preview_secret) {
+            cfg.preview_secret = maintenanceSettings.randomPreviewSecret();
+        } else if (!cfg.preview_secret) {
+            cfg.preview_secret = maintenanceSettings.randomPreviewSecret();
+        }
+        const disabledVal =
+            body.disabled != null
+                ? body.disabled === true || body.disabled === '1' || body.disabled === 1
+                    ? '1'
+                    : '0'
+                : existing.disabled
+                  ? '1'
+                  : '0';
+
+        upsertGlobalSetting(maintenanceSettings.KEY_CONFIG, JSON.stringify(cfg), (e1) => {
+            if (e1) return res.status(500).json({ error: e1.message });
+            upsertGlobalSetting(maintenanceSettings.KEY_DISABLED, disabledVal, (e2) => {
+                if (e2) return res.status(500).json({ error: e2.message });
+                res.json({
+                    success: true,
+                    disabled: disabledVal === '1',
+                    config: cfg,
+                    preview_secret: cfg.preview_secret
+                });
+            });
+        });
+    });
+});
+
 // Admin: Get Payment Gateways
 app.get('/api/admin/payment_gateways', (req, res) => {
     db.all(`SELECT * FROM payment_gateways`, [], (err, rows) => {
