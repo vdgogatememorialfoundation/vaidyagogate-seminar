@@ -2123,20 +2123,47 @@ async function saveIntegrationSettings() {
     }
 }
 
+function integrationFormSmtpPayload() {
+    const passEl = document.getElementById('int-zoho-pass');
+    const pass = passEl ? passEl.value : '';
+    const body = {
+        zoho_host: (document.getElementById('int-zoho-host') || {}).value.trim(),
+        zoho_port: (document.getElementById('int-zoho-port') || {}).value.trim(),
+        zoho_user: (document.getElementById('int-zoho-user') || {}).value.trim(),
+        zoho_from: (document.getElementById('int-zoho-from') || {}).value.trim()
+    };
+    if (pass && pass.trim() && pass !== '********') body.zoho_pass = pass.trim();
+    return body;
+}
+
 async function testIntegrationEmail() {
     const to = (document.getElementById('int-test-email') || {}).value.trim();
     if (!to) return alert('Enter test email address');
+    const smtp = integrationFormSmtpPayload();
+    if (!smtp.zoho_host || !smtp.zoho_user) {
+        return alert('Fill Zoho Host and User (full mailbox e.g. care@vaidyagogate.org), then try again.');
+    }
+    const passEl = document.getElementById('int-zoho-pass');
+    if (passEl && passEl.value.trim() && passEl.value !== '********') {
+        const saveFirst = confirm(
+            'Save the new app password before testing? (Recommended — click OK to save, then test.)'
+        );
+        if (saveFirst) {
+            await saveIntegrationSettings();
+        }
+    }
     const res = await fetch('/api/admin/integrations/test-email', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ to })
+        body: JSON.stringify({ to, ...smtp })
     });
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     if (res.ok) {
-        alert('Test email sent. Check inbox/spam. It is also logged under Notifications → Logs (INTEGRATION_TEST_EMAIL).');
+        alert('Test email sent. Check inbox/spam. Logged under Notifications → Logs.');
         if (typeof loadNotificationLogs === 'function') loadNotificationLogs();
     } else {
-        alert((data.error || 'Failed') + (data.logged ? ' See Notifications → Logs for details.' : ''));
+        const msg = [data.error, data.hint].filter(Boolean).join('\n\n');
+        alert((msg || 'Failed') + (data.logged ? '\n\nSee Notifications → Logs for details.' : ''));
         if (typeof loadNotificationLogs === 'function') loadNotificationLogs();
     }
 }

@@ -1753,14 +1753,51 @@ app.post('/api/admin/integrations', withIntegrationSettingsLoaded, (req, res) =>
     });
 });
 
+function smtpOverridesFromBody(body) {
+    const b = body || {};
+    const o = {};
+    if (b.zoho_host != null && String(b.zoho_host).trim()) o.zoho_host = String(b.zoho_host).trim();
+    if (b.zoho_port != null && String(b.zoho_port).trim()) o.zoho_port = String(b.zoho_port).trim();
+    if (b.zoho_user != null && String(b.zoho_user).trim()) o.zoho_user = String(b.zoho_user).trim();
+    if (b.zoho_from != null && String(b.zoho_from).trim()) o.zoho_from = String(b.zoho_from).trim();
+    if (b.zoho_pass != null && String(b.zoho_pass).trim() && !integrationSettings.isMaskedSecretValue(b.zoho_pass)) {
+        o.zoho_pass = String(b.zoho_pass).trim();
+    }
+    return Object.keys(o).length ? o : null;
+}
+
 app.post('/api/admin/integrations/test-email', withIntegrationSettingsLoaded, async (req, res) => {
     const to = String((req.body && req.body.to) || '').trim();
     if (!to) return res.status(400).json({ error: 'to email required' });
-    const { sendEmail } = require('./lib/email-service');
+    const overrides = smtpOverridesFromBody(req.body);
+    const { verifySmtpConnection, sendEmail } = require('./lib/email-service');
+    const verify = await verifySmtpConnection(overrides || undefined);
+    if (!verify.ok) {
+        const errText = [verify.error, verify.hint].filter(Boolean).join(' ');
+        notifEngine.logNotification(db, {
+            event_key: 'INTEGRATION_TEST_EMAIL',
+            channel: 'email',
+            destination: to,
+            status: 'failed',
+            subject: 'VGMF test email',
+            body_preview: 'SMTP verify failed',
+            error: errText
+        });
+        return res.status(503).json({
+            error: verify.error || 'SMTP login failed',
+            hint: verify.hint,
+            skipped: verify.skipped,
+            logged: true
+        });
+    }
     const subject = 'VGMF test email';
     const html = '<p>SMTP test from seminar admin integrations panel.</p>';
-    const r = await sendEmail(to, subject, html, { text: 'SMTP test from seminar admin.' });
+    const r = await sendEmail(to, subject, html, {
+        text: 'SMTP test from seminar admin.',
+        smtpOverrides: overrides || undefined
+    });
     const logStatus = r.ok ? 'sent' : r.skipped ? 'skipped' : 'failed';
+    const logError = r.ok ? null : [r.error, r.hint].filter(Boolean).join(' ');
     notifEngine.logNotification(db, {
         event_key: 'INTEGRATION_TEST_EMAIL',
         channel: 'email',
@@ -1768,10 +1805,15 @@ app.post('/api/admin/integrations/test-email', withIntegrationSettingsLoaded, as
         status: logStatus,
         subject,
         body_preview: 'SMTP integration test',
-        error: r.ok ? null : r.error || 'Send failed'
+        error: logError
     });
-    if (r.ok) return res.json({ success: true, logged: true });
-    res.status(503).json({ error: r.error || 'Send failed', skipped: r.skipped, logged: true });
+    if (r.ok) return res.json({ success: true, logged: true, from: verify.from });
+    res.status(503).json({
+        error: r.error || 'Send failed',
+        hint: r.hint,
+        skipped: r.skipped,
+        logged: true
+    });
 });
 
 app.post('/api/admin/integrations/test-whatsapp', async (req, res) => {

@@ -852,12 +852,13 @@
                         <div><label>Admin host (DNS)</label><input type="text" id="int-admin-host" placeholder="admin.vaidyagogate.org" style="width:100%"></div>
                         <div><label>Judge host (DNS)</label><input type="text" id="int-judge-host" placeholder="judge.vaidyagogate.org" style="width:100%"></div>
                         <div><label>Admin contact email</label><input type="email" id="int-admin-contact" placeholder="info@vaidyagogate.org" style="width:100%"></div>
-                        <div style="grid-column:1/-1;"><h4 style="margin:8px 0;color:#0c4a6e;">Zoho SMTP</h4></div>
+                        <div style="grid-column:1/-1;"><h4 style="margin:8px 0;color:#0c4a6e;">Zoho SMTP</h4>
+                        <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px;line-height:1.5;">Host smtp.zoho.in, port 465. User and From = care@vaidyagogate.org. Password = Zoho App-Specific Password (not login password). Save, then Test.</p></div>
                         <div><label>Host</label><input type="text" id="int-zoho-host" placeholder="smtp.zoho.in" style="width:100%"></div>
                         <div><label>Port</label><input type="number" id="int-zoho-port" placeholder="465" style="width:100%"></div>
-                        <div><label>User</label><input type="text" id="int-zoho-user" placeholder="info@yourdomain.com" style="width:100%"></div>
-                        <div><label>Password</label><input type="password" id="int-zoho-pass" placeholder="Leave blank to keep" style="width:100%"></div>
-                        <div><label>From</label><input type="email" id="int-zoho-from" placeholder="info@yourdomain.com" style="width:100%"></div>
+                        <div><label>User</label><input type="email" id="int-zoho-user" placeholder="care@vaidyagogate.org" style="width:100%"></div>
+                        <div><label>App password</label><input type="password" id="int-zoho-pass" placeholder="Zoho app password" style="width:100%" autocomplete="new-password"></div>
+                        <div><label>From</label><input type="email" id="int-zoho-from" placeholder="care@vaidyagogate.org" style="width:100%"></div>
                         <div style="display:flex;gap:8px;align-items:flex-end;"><input type="email" id="int-test-email" placeholder="Test to" style="flex:1"><button type="button" class="btn-primary" style="background:#64748b;padding:8px 12px;" onclick="testIntegrationEmail()">Test email</button></div>
                         <div style="grid-column:1/-1;"><h4 style="margin:8px 0;color:#0c4a6e;">Meta WhatsApp Business</h4>
                         <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px;">Webhook URL: <code>https://your-domain/api/webhooks/whatsapp</code> — <a href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started" target="_blank" rel="noopener">Cloud API setup</a></p></div>
