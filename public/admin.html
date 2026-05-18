@@ -952,7 +952,18 @@
                         <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px;">Updates <code>OTP_VERIFICATION</code> for login/signup. Template name must match Meta (e.g. <code>vgmf_otp_auth</code>).</p></div>
                         <div><label>WhatsApp OTP template name</label><input type="text" id="int-wa-otp-template" placeholder="vgmf_otp_auth" style="width:100%"></div>
                         <div><label>Email OTP subject</label><input type="text" id="int-otp-email-subject" placeholder="Verify Your Email" style="width:100%"></div>
-                        <div style="grid-column:1/-1;"><button type="button" class="btn-secondary btn-sm" onclick="switchTab('tab-notifications');if(typeof initAdminNotificationsTab==='function')initAdminNotificationsTab();">Open all notification templates</button></div>
+                        <div style="grid-column:1/-1;margin-top:8px;">
+                            <h4 style="margin:0 0 8px;color:#0c4a6e;">WhatsApp Meta templates (all events)</h4>
+                            <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px;">Map each notification event to a Meta template name and language (e.g. <code>en</code>). Body text is edited under Notifications.</p>
+                            <div style="overflow-x:auto;max-height:320px;border:1px solid #e2e8f0;border-radius:8px;">
+                                <table class="data-table" style="width:100%;font-size:0.85rem;">
+                                    <thead><tr><th>Event</th><th>Channel</th><th>Meta template name</th><th>Lang</th></tr></thead>
+                                    <tbody id="wa-event-templates-tbody"><tr><td colspan="4">Loading…</td></tr></tbody>
+                                </table>
+                            </div>
+                            <button type="button" class="btn-secondary btn-sm" style="margin-top:8px;" onclick="saveWhatsAppEventTemplates()">Save WhatsApp template names</button>
+                            <button type="button" class="btn-secondary btn-sm" style="margin-top:8px;margin-left:6px;" onclick="switchTab('tab-notifications');if(typeof initAdminNotificationsTab==='function')initAdminNotificationsTab();">Open notification bodies</button>
+                        </div>
 
                         <div style="display:flex;gap:8px;align-items:flex-end;"><input type="text" id="int-test-phone" placeholder="10-digit mobile (no leading 0)" style="flex:1"><button type="button" class="btn-primary" style="background:#64748b;padding:8px 12px;" onclick="testIntegrationWhatsApp()">Test WhatsApp</button></div>
                     </div>

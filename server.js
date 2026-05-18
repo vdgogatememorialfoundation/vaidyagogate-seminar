@@ -1899,6 +1899,100 @@ app.get('/api/admin/integrations', withIntegrationSettingsLoaded, (req, res) => 
     );
 });
 
+app.get('/api/admin/integrations/whatsapp-event-templates', withIntegrationSettingsLoaded, (req, res) => {
+    const { EVENT_KEYS } = require('./lib/notification-defaults');
+    const rt = integrationSettings.getRuntimeIntegrations();
+    const langMap =
+        rt.whatsapp_event_templates && typeof rt.whatsapp_event_templates === 'object'
+            ? rt.whatsapp_event_templates
+            : {};
+    db.all(
+        `SELECT event_key, channel, email_subject, whatsapp_template_name
+         FROM notification_templates WHERE seminar_id IS NULL`,
+        [],
+        (err, rows) => {
+            if (err) return res.status(500).json({ error: err.message });
+            const byKey = {};
+            (rows || []).forEach((r) => {
+                byKey[r.event_key] = r;
+            });
+            const list = EVENT_KEYS.map((key) => {
+                const row = byKey[key] || {};
+                const extra = langMap[key] || {};
+                return {
+                    event_key: key,
+                    channel: row.channel || 'both',
+                    email_subject: row.email_subject || '',
+                    whatsapp_template_name: row.whatsapp_template_name || extra.name || '',
+                    whatsapp_template_lang: extra.lang || ''
+                };
+            });
+            res.json(list);
+        }
+    );
+});
+
+app.post('/api/admin/integrations/whatsapp-event-templates', withIntegrationSettingsLoaded, (req, res) => {
+    const templates = Array.isArray(req.body && req.body.templates) ? req.body.templates : [];
+    if (!templates.length) return res.json({ success: true, updated: 0 });
+
+    const langMap = {};
+    let pending = templates.length;
+    let updated = 0;
+    let lastErr = null;
+
+    templates.forEach((row) => {
+        const eventKey = String(row.event_key || '').trim();
+        if (!eventKey) {
+            if (--pending === 0) finish();
+            return;
+        }
+        const waName = String(row.whatsapp_template_name || '').trim();
+        const waLang = String(row.whatsapp_template_lang || '').trim();
+        langMap[eventKey] = { name: waName, lang: waLang };
+
+        db.run(
+            `UPDATE notification_templates SET whatsapp_template_name = ?, updated_at = CURRENT_TIMESTAMP
+             WHERE event_key = ? AND seminar_id IS NULL`,
+            [waName, eventKey],
+            function (uerr) {
+                if (uerr) {
+                    lastErr = uerr;
+                    if (--pending === 0) finish();
+                    return;
+                }
+                updated += this.changes;
+                if (this.changes === 0) {
+                    db.run(
+                        `INSERT INTO notification_templates (event_key, seminar_id, enabled, channel, whatsapp_template_name, whatsapp_body, version)
+                         VALUES (?, NULL, 1, 'both', ?, '', 1)`,
+                        [eventKey, waName],
+                        function (ierr) {
+                            if (!ierr) updated += 1;
+                            else lastErr = ierr;
+                            if (--pending === 0) finish();
+                        }
+                    );
+                } else if (--pending === 0) finish();
+            }
+        );
+    });
+
+    function finish() {
+        if (lastErr) return res.status(500).json({ error: lastErr.message });
+        const rt = integrationSettings.getRuntimeIntegrations();
+        const existing =
+            rt.whatsapp_event_templates && typeof rt.whatsapp_event_templates === 'object'
+                ? rt.whatsapp_event_templates
+                : {};
+        const mergedLang = Object.assign({}, existing, langMap);
+        integrationSettings.saveToDb(db, { whatsapp_event_templates: mergedLang }, (err2) => {
+            if (err2) return res.status(500).json({ error: err2.message });
+            res.json({ success: true, updated, languages: langMap });
+        });
+    }
+});
+
 app.post('/api/admin/integrations', withIntegrationSettingsLoaded, (req, res) => {
     const body = req.body || {};
     integrationSettings.saveToDb(db, body, (err, merged) => {

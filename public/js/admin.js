@@ -2296,6 +2296,7 @@ async function loadIntegrationSettings() {
             }
             line.textContent = emailLine + ' ' + waLine;
         }
+        await loadWhatsAppEventTemplatesTable();
     } catch (e) {
         console.error(e);
     }
@@ -2413,6 +2414,12 @@ async function checkWhatsAppTemplateOnMeta() {
             data.error ? 'ERROR: ' + data.error : 'Template found on Meta.',
             data.hint || '',
             data.wabaId ? 'WABA ID: ' + data.wabaId : '',
+            data.phoneWabaId ? 'Phone number WABA: ' + data.phoneWabaId : '',
+            data.wabaMatch === false
+                ? 'MISMATCH: phone is not on admin WABA — fix Phone number ID or WABA field.'
+                : data.wabaMatch === true
+                  ? 'Phone number is on admin WABA.'
+                  : '',
             data.phoneNumberId ? 'Phone number ID: ' + data.phoneNumberId : '',
             data.languages && data.languages.length ? 'Language code(s): ' + data.languages.join(', ') : '',
             data.templates && data.templates.length
@@ -2430,6 +2437,61 @@ async function checkWhatsAppTemplateOnMeta() {
         await loadIntegrationSettings();
     } catch (e) {
         alert('Check failed');
+    }
+}
+
+async function loadWhatsAppEventTemplatesTable() {
+    const tbody = document.getElementById('wa-event-templates-tbody');
+    if (!tbody) return;
+    try {
+        const res = await fetch('/api/admin/integrations/whatsapp-event-templates');
+        const rows = await res.json();
+        if (!Array.isArray(rows)) {
+            tbody.innerHTML = '<tr><td colspan="4">Failed to load</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows
+            .map(
+                (r) => `<tr>
+            <td><code>${escapeHtml(r.event_key)}</code></td>
+            <td style="font-size:0.82rem;">${escapeHtml(r.channel || 'both')}</td>
+            <td><input class="form-control" data-wa-event="${escapeHtml(r.event_key)}" data-field="name" value="${escapeHtml(r.whatsapp_template_name || '')}" placeholder="Meta template name" style="width:100%;font-size:0.85rem;"></td>
+            <td><input class="form-control" data-wa-event="${escapeHtml(r.event_key)}" data-field="lang" value="${escapeHtml(r.whatsapp_template_lang || '')}" placeholder="en" style="width:72px;font-size:0.85rem;"></td>
+        </tr>`
+            )
+            .join('');
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="4">Failed to load</td></tr>';
+    }
+}
+
+async function saveWhatsAppEventTemplates() {
+    const tbody = document.getElementById('wa-event-templates-tbody');
+    if (!tbody) return;
+    const templates = [];
+    tbody.querySelectorAll('input[data-wa-event]').forEach((inp) => {
+        const key = inp.getAttribute('data-wa-event');
+        const field = inp.getAttribute('data-field');
+        if (!key || !field) return;
+        let row = templates.find((t) => t.event_key === key);
+        if (!row) {
+            row = { event_key: key, whatsapp_template_name: '', whatsapp_template_lang: '' };
+            templates.push(row);
+        }
+        row[field === 'lang' ? 'whatsapp_template_lang' : 'whatsapp_template_name'] = inp.value.trim();
+    });
+    try {
+        const res = await fetch('/api/admin/integrations/whatsapp-event-templates', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ templates })
+        });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Save failed');
+        alert('WhatsApp template names saved for ' + (data.updated || 0) + ' event(s).');
+        await loadIntegrationSettings();
+    } catch (e) {
+        alert('Save failed');
     }
 }
 
