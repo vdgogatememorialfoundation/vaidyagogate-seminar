@@ -2566,8 +2566,61 @@ async function loadApplications(silentPoll) {
 
             if (trackerContainer) trackerContainer.innerHTML += renderSeminarApplicationTrackerCard(a);
         });
+        if (
+            (userApplications || []).some(
+                (a) => String(a.status || '').toLowerCase() === 'approved_pending_payment'
+            )
+        ) {
+            ensureDoctorPaymentPoll();
+        } else if (_doctorPayPollTimer) {
+            clearInterval(_doctorPayPollTimer);
+            _doctorPayPollTimer = null;
+        }
     } catch (err) {
         console.error(err);
+    }
+}
+
+let _doctorPayPollTimer = null;
+
+function ensureDoctorPaymentPoll() {
+    if (_doctorPayPollTimer) return;
+    doctorPollPaymentStatus();
+    _doctorPayPollTimer = setInterval(() => doctorPollPaymentStatus(), 5000);
+}
+
+async function doctorPollPaymentStatus() {
+    const uid = doctorNumericUserId();
+    if (!uid) return;
+    const pending = (userApplications || []).filter(
+        (a) => String(a.status || '').toLowerCase() === 'approved_pending_payment'
+    );
+    if (!pending.length) {
+        if (_doctorPayPollTimer) {
+            clearInterval(_doctorPayPollTimer);
+            _doctorPayPollTimer = null;
+        }
+        return;
+    }
+    for (const a of pending) {
+        try {
+            const res = await fetch(
+                '/api/payments/status?registrationId=' +
+                    encodeURIComponent(a.id) +
+                    '&userId=' +
+                    encodeURIComponent(uid),
+                { cache: 'no-store' }
+            );
+            const st = await res.json();
+            if (st.paid) {
+                await loadApplications(true);
+                loadDoctorDashboardStats();
+                loadDoctorOrders();
+                loadDoctorReceipts();
+                loadDoctorEventTickets();
+                return;
+            }
+        } catch (_) {}
     }
 }
 

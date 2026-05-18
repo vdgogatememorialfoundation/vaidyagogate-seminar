@@ -43,6 +43,7 @@ const { ensureSupportTicketSchema } = require('./lib/support-tickets-schema');
 const { ensureContactInquiriesSchema } = require('./lib/contact-inquiries-schema');
 const paymentsMod = require('./lib/payments-module');
 const { registerPaymentsRoutes } = require('./lib/routes-payments');
+const seminarCapacity = require('./lib/seminar-capacity');
 const authUsers = require('./lib/auth-users');
 const authLoginOtp = require('./lib/auth-login-otp');
 const {
@@ -89,7 +90,11 @@ function mountPaymentsRoutes() {
         insertParticipantTicket,
         notifEngine,
         activityLog,
-        jobsModule
+        jobsModule,
+        getOrCreatePendingOrder,
+        portalTracking,
+        notifyTicketIssued,
+        assertAdminPortalActor
     });
 }
 
@@ -2471,6 +2476,9 @@ app.post('/api/otp/send', withIntegrationSettingsLoaded, (req, res) => {
     if (purpose === 'registration_field' && (Number.isNaN(meta.seminarId) || !meta.fieldKey)) {
         return res.status(400).json({ error: 'seminarId and fieldKey required for field OTP' });
     }
+    if (purpose === 'proxy_applicant' && Number.isNaN(meta.seminarId)) {
+        return res.status(400).json({ error: 'seminarId required for proxy applicant OTP' });
+    }
 
     otpLib.countRecentSends(db, channel, dest, (cerr, cnt) => {
         if (cerr) return res.status(500).json({ error: cerr.message });
@@ -3499,6 +3507,19 @@ app.post('/api/applications/submit', (req, res, next) => {
                     }
 
                     function insertRegistration() {
+                        seminarCapacity.assertSeminarHasCapacity(db, seminarId, (capErr, cap) => {
+                            if (capErr) return res.status(500).json({ error: capErr.message });
+                            if (!cap || !cap.ok) {
+                                return res.status(400).json({
+                                    error: (cap && cap.error) || 'Seminar is full.',
+                                    capacity: cap && cap.capacity
+                                });
+                            }
+                            doInsertRegistration();
+                        });
+                    }
+
+                    function doInsertRegistration() {
                         const applicationNo = generateId();
                         const stored = sanitizeFormDataForStorage(formData || {});
                         db.run(
@@ -5262,9 +5283,9 @@ app.get('/api/admin/seminars/:id/stats', (req, res) => {
         });
 
         db.all(`
-            SELECT o.status, o.amount 
-            FROM orders o 
-            JOIN registrations r ON o.registration_id = r.id 
+            SELECT o.status, o.amount
+            FROM orders o
+            JOIN registrations r ON o.registration_id = r.id
             WHERE r.seminar_id = ?
         `, [seminarId], (err, orders) => {
             if (err) return res.status(500).json({ error: err.message });
@@ -5275,8 +5296,29 @@ app.get('/api/admin/seminars/:id/stats', (req, res) => {
                     stats.total_revenue += (o.amount || 0);
                 }
             });
-            res.json(stats);
+            seminarCapacity.getSeminarCapacity(db, seminarId, (eCap, cap) => {
+                if (!eCap && cap) {
+                    stats.capacity = cap.capacity;
+                    stats.filled = cap.filled;
+                    stats.remaining = cap.remaining;
+                    stats.seats_full = cap.full;
+                    stats.unlimited_seats = cap.unlimited;
+                }
+                res.json(stats);
+            });
         });
+    });
+});
+
+app.get('/api/admin/seminars/:id/capacity', (req, res) => {
+    const seminarId = parseInt(req.params.id, 10);
+    if (!Number.isInteger(seminarId) || seminarId < 1) {
+        return res.status(400).json({ error: 'Invalid seminar id' });
+    }
+    seminarCapacity.getSeminarCapacity(db, seminarId, (err, cap) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!cap) return res.status(404).json({ error: 'Seminar not found' });
+        res.json(cap);
     });
 });
 
@@ -6540,9 +6582,91 @@ app.post('/api/admin/users/:userId/modules', (req, res) => {
     });
 });
 
+// Admin proxy: OTP to applicant phone/email on the form
+app.post('/api/admin/proxy-otp/send', withIntegrationSettingsLoaded, (req, res) => {
+    const { adminUserId, channel, destination, seminarId } = req.body || {};
+    assertAdminPortalActor(adminUserId, (eAct) => {
+        if (eAct) return res.status(eAct.message === 'FORBIDDEN' ? 403 : 500).json({ error: 'Admin access required' });
+        if (channel !== 'phone' && channel !== 'email') {
+            return res.status(400).json({ error: 'channel must be phone or email' });
+        }
+        const dest = String(destination || '').trim();
+        if (!dest) return res.status(400).json({ error: 'destination required' });
+        const sid = parseInt(seminarId, 10);
+        if (!Number.isInteger(sid) || sid < 1) return res.status(400).json({ error: 'seminarId required' });
+        const meta = { seminarId: sid };
+        otpLib.countRecentSends(db, channel, dest, (cerr, cnt) => {
+            if (cerr) return res.status(500).json({ error: cerr.message });
+            if (cnt >= otpLib.MAX_SENDS_PER_HOUR) {
+                return res.status(429).json({ error: 'Too many OTP requests. Try again later.' });
+            }
+            const code = otpLib.generateOtpDigits();
+            otpLib.saveOtp(db, { channel, destination: dest, purpose: 'proxy_applicant', meta }, code, (serr) => {
+                if (serr) return res.status(500).json({ error: serr.message });
+                notifEngine.sendOtpMessages({
+                    email: channel === 'email' ? dest : null,
+                    phone: channel === 'phone' ? dest : null,
+                    code,
+                    db,
+                    eventKey: 'OTP_VERIFICATION'
+                }).then((results) => {
+                    const sent = channel === 'phone' ? results.whatsapp : results.email;
+                    const debug = process.env.OTP_RETURN_CODE === '1' || process.env.NODE_ENV === 'development';
+                    const payload = { success: true, ttlMinutes: otpLib.OTP_TTL_MIN };
+                    if (debug) payload.debugCode = code;
+                    if (!sent.ok && !sent.skipped) {
+                        return res.status(503).json({
+                            error: sent.error || 'Could not deliver OTP.',
+                            debugCode: debug ? code : undefined
+                        });
+                    }
+                    if (sent.skipped) payload.warning = 'Messaging not fully configured.';
+                    res.json(payload);
+                });
+            });
+        });
+    });
+});
+
+app.post('/api/admin/proxy-otp/verify', (req, res) => {
+    const { adminUserId, channel, destination, code, seminarId } = req.body || {};
+    assertAdminPortalActor(adminUserId, (eAct) => {
+        if (eAct) return res.status(eAct.message === 'FORBIDDEN' ? 403 : 500).json({ error: 'Admin access required' });
+        const sid = parseInt(seminarId, 10);
+        if (!Number.isInteger(sid) || sid < 1) return res.status(400).json({ error: 'seminarId required' });
+        otpLib.verifyOtp(
+            db,
+            {
+                channel,
+                destination,
+                purpose: 'proxy_applicant',
+                code,
+                meta: { seminarId: sid },
+                seminarId: sid
+            },
+            (err, result) => {
+                if (err) return res.status(500).json({ error: err.message });
+                if (!result || !result.ok) {
+                    return res.status(400).json({ error: (result && result.error) || 'Verification failed' });
+                }
+                res.json({ success: true, token: result.token });
+            }
+        );
+    });
+});
+
 // Admin: create or update a registration on behalf of a doctor (admin-edited; distinct from doctor self-edit API)
 app.post('/api/admin/registrations/upsert', (req, res) => {
-    const { targetUserId, seminarId, formData, adminUserId, adminPhoneOtpToken, adminEmailOtpToken } = req.body || {};
+    const {
+        targetUserId,
+        seminarId,
+        formData,
+        adminUserId,
+        adminPhoneOtpToken,
+        adminEmailOtpToken,
+        applicantPhoneOtpToken,
+        applicantEmailOtpToken
+    } = req.body || {};
     const tid = parseInt(targetUserId, 10);
     const sid = parseInt(seminarId, 10);
     const aid = parseInt(adminUserId, 10);
@@ -6556,40 +6680,73 @@ app.post('/api/admin/registrations/upsert', (req, res) => {
             String(adm.role || '').toLowerCase() === 'admin' ||
             String(adm.user_role || '').toLowerCase() === 'co_admin';
         if (!ok) return res.status(403).json({ error: 'Admin portal access required' });
-        requireAdminSensitiveOtpIfEnabled(aid, adminPhoneOtpToken, adminEmailOtpToken, (eOtp, okOtp, msgOtp) => {
-            if (eOtp) return res.status(500).json({ error: eOtp.message });
-            if (!okOtp) return res.status(400).json({ error: msgOtp || 'Admin verification required' });
-            const fd = formData && typeof formData === 'object' ? JSON.stringify(formData) : '{}';
-            db.get(`SELECT id FROM registrations WHERE user_id = ? AND seminar_id = ?`, [tid, sid], (e2, reg) => {
-                if (e2) return res.status(500).json({ error: e2.message });
-                if (reg) {
-                    return db.run(
-                        `UPDATE registrations SET form_data = ?, registration_source = 'admin', admin_editor_user_id = ? WHERE id = ?`,
-                        [fd, aid, reg.id],
-                        function (uerr) {
-                            if (uerr) return res.status(500).json({ error: uerr.message });
-                            res.json({ success: true, registrationId: reg.id, created: false });
-                        }
-                    );
-                }
-                const applicationNo = generateId();
-                db.run(
-                    `INSERT INTO registrations (user_id, seminar_id, application_no, status, form_data, registration_source, admin_editor_user_id) VALUES (?, ?, ?, 'submitted', ?, 'admin', ?)`,
-                    [tid, sid, applicationNo, fd, aid],
-                    function (ierr) {
-                        if (ierr) return res.status(500).json({ error: ierr.message });
-                        const newRegId = this.lastID;
-                        notifEngine.notify(
-                            db,
-                            'SEMINAR_REGISTRATION_SUCCESS',
-                            { userId: tid, seminarId: sid, registrationId: newRegId },
-                            () => {}
-                        );
-                        res.json({ success: true, registrationId: newRegId, applicationNo, created: true });
+        otpLib.validateProxyApplicantOtpTokens(
+                db,
+                sid,
+                {
+                    phoneToken: applicantPhoneOtpToken,
+                    emailToken: applicantEmailOtpToken
+                },
+                (eApp, appOk) => {
+                    if (eApp) return res.status(500).json({ error: eApp.message });
+                    if (!appOk || !appOk.ok) {
+                        return res.status(400).json({
+                            error:
+                                (appOk && appOk.error) ||
+                                'Verify applicant phone and email OTP before saving proxy registration.'
+                        });
                     }
-                );
-            });
-        });
+                    const fd = formData && typeof formData === 'object' ? JSON.stringify(formData) : '{}';
+                    db.get(`SELECT id FROM registrations WHERE user_id = ? AND seminar_id = ?`, [tid, sid], (e2, reg) => {
+                        if (e2) return res.status(500).json({ error: e2.message });
+                        if (reg) {
+                            return db.run(
+                                `UPDATE registrations SET form_data = ?, registration_source = 'admin', admin_editor_user_id = ? WHERE id = ?`,
+                                [fd, aid, reg.id],
+                                function (uerr) {
+                                    if (uerr) return res.status(500).json({ error: uerr.message });
+                                    res.json({
+                                        success: true,
+                                        registrationId: reg.id,
+                                        applicationNo: null,
+                                        created: false
+                                    });
+                                }
+                            );
+                        }
+                        seminarCapacity.assertSeminarHasCapacity(db, sid, (capErr, cap) => {
+                            if (capErr) return res.status(500).json({ error: capErr.message });
+                            if (!cap || !cap.ok) {
+                                return res.status(400).json({
+                                    error: (cap && cap.error) || 'Seminar is full.',
+                                    capacity: cap && cap.capacity
+                                });
+                            }
+                            const applicationNo = generateId();
+                            db.run(
+                                `INSERT INTO registrations (user_id, seminar_id, application_no, status, form_data, registration_source, admin_editor_user_id) VALUES (?, ?, ?, 'submitted', ?, 'admin', ?)`,
+                                [tid, sid, applicationNo, fd, aid],
+                                function (ierr) {
+                                    if (ierr) return res.status(500).json({ error: ierr.message });
+                                    const newRegId = this.lastID;
+                                    notifEngine.notify(
+                                        db,
+                                        'SEMINAR_REGISTRATION_SUCCESS',
+                                        { userId: tid, seminarId: sid, registrationId: newRegId },
+                                        () => {}
+                                    );
+                                    res.json({
+                                        success: true,
+                                        registrationId: newRegId,
+                                        applicationNo,
+                                        created: true
+                                    });
+                                }
+                            );
+                        });
+                    });
+                }
+            );
     });
 });
 

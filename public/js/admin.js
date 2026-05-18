@@ -64,24 +64,37 @@ function sensitiveOtpFieldIds(ctx) {
     };
 }
 
-function ensureProxyOtpPanel() {
-    if (document.getElementById('proxy-admin-otp-wrap')) return;
-    const sel = document.getElementById('proxy-user-select');
-    if (!sel || !sel.parentNode) return;
-    const wrap = document.createElement('div');
-    wrap.id = 'proxy-admin-otp-wrap';
-    wrap.style.cssText =
-        'display:none;margin:16px 0;padding:14px;border:1px solid #fed7aa;border-radius:8px;background:#fffbeb;';
-    wrap.innerHTML = `<strong style="display:block;margin-bottom:8px;color:#9a3412;">Admin OTP (email + WhatsApp)</strong>
-        <p style="font-size:0.82rem;margin:6px 0;"><button type="button" class="btn-primary" style="padding:5px 8px;font-size:0.75rem;background:#64748b;margin-right:6px;" onclick="adminSendSensitiveOtp('email','proxy')">Email</button>
-        <input type="text" id="proxy-sens-email-otp" placeholder="code" style="width:72px;padding:4px;">
-        <button type="button" onclick="adminVerifySensitiveOtp('email','proxy')">Verify</button> <span id="proxy-sens-email-ok" style="color:#059669;"></span></p>
-        <p style="font-size:0.82rem;"><button type="button" class="btn-primary" style="padding:5px 8px;font-size:0.75rem;background:#64748b;margin-right:6px;" onclick="adminSendSensitiveOtp('phone','proxy')">WhatsApp</button>
-        <input type="text" id="proxy-sens-phone-otp" placeholder="code" style="width:72px;padding:4px;">
-        <button type="button" onclick="adminVerifySensitiveOtp('phone','proxy')">Verify</button> <span id="proxy-sens-phone-ok" style="color:#059669;"></span></p>`;
-    const blank = sel.nextElementSibling;
-    if (blank && blank.nodeType === 3) sel.parentNode.insertBefore(wrap, blank.nextSibling);
-    else sel.insertAdjacentElement('afterend', wrap);
+let __proxyApplicantPhoneOtpToken = '';
+let __proxyApplicantEmailOtpToken = '';
+let __proxyLastRegId = null;
+let __proxyLastUserId = null;
+let __proxyPaymentAmount = 0;
+let __proxySelectedMethodId = 'dqr';
+let __proxyLastOrderDbId = null;
+let __proxyPollTimer = null;
+
+function resetProxyApplicantOtpTokens() {
+    __proxyApplicantPhoneOtpToken = '';
+    __proxyApplicantEmailOtpToken = '';
+    ['proxy-app-phone-ok', 'proxy-app-email-ok'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = '';
+    });
+}
+
+function onProxyUserSelected() {
+    const uid = parseInt((document.getElementById('proxy-user-select') || {}).value, 10);
+    const u = window.__adminUsersById && window.__adminUsersById[uid];
+    if (!u) return;
+    const set = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.value = val || '';
+    };
+    set('proxy-fname', u.first_name);
+    set('proxy-lname', u.last_name);
+    set('proxy-email', u.email);
+    set('proxy-phone', u.phone);
+    resetProxyApplicantOtpTokens();
 }
 
 async function refreshAdminSensitiveOtpRequirement() {
@@ -99,12 +112,9 @@ async function refreshAdminSensitiveOtpRequirement() {
     }
     const wrapCreate = document.getElementById('newuser-admin-otp-wrap');
     const wrapBehalf = document.getElementById('behalf-admin-otp-wrap');
-    ensureProxyOtpPanel();
-    const wrapProxy = document.getElementById('proxy-admin-otp-wrap');
     const show = !!__requireAdminSensitiveOtp;
     if (wrapCreate) wrapCreate.style.display = show ? 'block' : 'none';
     if (wrapBehalf) wrapBehalf.style.display = show ? 'block' : 'none';
-    if (wrapProxy) wrapProxy.style.display = show ? 'block' : 'none';
     if (!show) resetAdminSensitiveOtpTokens();
 }
 
@@ -384,6 +394,14 @@ async function refreshSeminarDashboard() {
         document.getElementById('stat-approved-apps').innerText = stats.approved_apps || 0;
         document.getElementById('stat-pending-payments').innerText = stats.pending_payments || 0;
         document.getElementById('stat-revenue').innerText = '₹' + (stats.total_revenue || 0);
+        const seatsEl = document.getElementById('stat-seats');
+        if (seatsEl) {
+            if (stats.unlimited_seats) seatsEl.textContent = (stats.filled || 0) + ' / ∞';
+            else if (stats.capacity > 0) {
+                seatsEl.textContent = (stats.filled || 0) + ' / ' + stats.capacity;
+                seatsEl.style.color = stats.seats_full ? '#b91c1c' : '#7c3aed';
+            } else seatsEl.textContent = (stats.filled || 0) + ' (no cap)';
+        }
     } catch (err) {
         console.error(err);
     }
@@ -3080,15 +3098,333 @@ async function saveGlobalSettings() {
     await savePaymentGatewaysSettings();
 }
 
+async function proxySendApplicantOtp(channel) {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return alert('Not logged in.');
+    const sid = parseInt(currentManageSeminarId, 10);
+    if (!Number.isInteger(sid) || sid < 1) return alert('Open a seminar dashboard first.');
+    const phone = (document.getElementById('proxy-phone') || {}).value.trim();
+    const email = (document.getElementById('proxy-email') || {}).value.trim();
+    const destination = channel === 'phone' ? phone : email;
+    if (!destination) return alert(channel === 'phone' ? 'Enter applicant phone on the form.' : 'Enter applicant email on the form.');
+    try {
+        const res = await fetch('/api/admin/proxy-otp/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ adminUserId: adm.id, channel, destination, seminarId: sid })
+        });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Could not send OTP.');
+        if (data.debugCode) console.info('Proxy applicant OTP:', data.debugCode);
+        if (data.warning) alert(data.warning);
+        else alert(channel === 'phone' ? 'WhatsApp OTP sent to applicant phone.' : 'Email OTP sent to applicant.');
+    } catch (e) {
+        console.error(e);
+        alert('Network error');
+    }
+}
+
+async function proxyVerifyApplicantOtp(channel) {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return alert('Not logged in.');
+    const sid = parseInt(currentManageSeminarId, 10);
+    const phone = (document.getElementById('proxy-phone') || {}).value.trim();
+    const email = (document.getElementById('proxy-email') || {}).value.trim();
+    const destination = channel === 'phone' ? phone : email;
+    const codeEl = document.getElementById(channel === 'phone' ? 'proxy-app-phone-otp' : 'proxy-app-email-otp');
+    const code = codeEl ? codeEl.value.trim() : '';
+    if (!destination || !code) return alert('Enter destination and OTP code.');
+    try {
+        const res = await fetch('/api/admin/proxy-otp/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ adminUserId: adm.id, channel, destination, code, seminarId: sid })
+        });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Verification failed.');
+        if (channel === 'phone') __proxyApplicantPhoneOtpToken = data.token;
+        else __proxyApplicantEmailOtpToken = data.token;
+        const okEl = document.getElementById(channel === 'phone' ? 'proxy-app-phone-ok' : 'proxy-app-email-ok');
+        if (okEl) okEl.textContent = '✓ Verified';
+    } catch (e) {
+        console.error(e);
+        alert('Network error');
+    }
+}
+
+async function loadProxyCapacityBanner() {
+    const banner = document.getElementById('proxy-capacity-banner');
+    const sid = parseInt(currentManageSeminarId, 10);
+    if (!banner || !Number.isInteger(sid) || sid < 1) return;
+    try {
+        const res = await fetch('/api/admin/seminars/' + sid + '/capacity');
+        const cap = await res.json();
+        if (!res.ok) {
+            banner.style.display = 'none';
+            return;
+        }
+        banner.style.display = 'block';
+        if (cap.unlimited) {
+            banner.style.background = '#f0fdf4';
+            banner.style.border = '1px solid #86efac';
+            banner.style.color = '#166534';
+            banner.textContent = `Seats: ${cap.filled} registered (no capacity limit set).`;
+        } else if (cap.full) {
+            banner.style.background = '#fef2f2';
+            banner.style.border = '1px solid #fecaca';
+            banner.style.color = '#b91c1c';
+            banner.textContent = `Seminar FULL — ${cap.filled}/${cap.capacity} seats. New proxy registrations are blocked.`;
+        } else {
+            banner.style.background = '#eff6ff';
+            banner.style.border = '1px solid #bfdbfe';
+            banner.style.color = '#1e40af';
+            banner.textContent = `Seats: ${cap.filled}/${cap.capacity} filled — ${cap.remaining} remaining. Fee: ₹${cap.price || 0}.`;
+        }
+    } catch (_) {
+        banner.style.display = 'none';
+    }
+}
+
+function stopProxyPaymentPoll() {
+    if (__proxyPollTimer) {
+        clearInterval(__proxyPollTimer);
+        __proxyPollTimer = null;
+    }
+}
+
+async function loadProxyPaymentMethodsUI() {
+    const box = document.getElementById('proxy-payment-methods');
+    const adm = getStoredAdminUser();
+    if (!box || !adm || !adm.id) return;
+    try {
+        const res = await fetch(
+            '/api/admin/payments/methods?actingAdminId=' + encodeURIComponent(adm.id)
+        );
+        const data = await res.json();
+        if (!res.ok) {
+            box.innerHTML = '<p style="color:#b91c1c;">' + escAdmin(data.error || 'Could not load methods') + '</p>';
+            return;
+        }
+        const methods = (data.methods || []).filter((m) => m.available);
+        if (!methods.length) {
+            box.innerHTML = '<p style="color:#64748b;">No payment methods configured.</p>';
+            return;
+        }
+        __proxySelectedMethodId = methods[0].id;
+        box.innerHTML = methods
+            .map((m, i) => {
+                const checked = i === 0 ? ' checked' : '';
+                return (
+                    '<label style="display:flex;gap:10px;align-items:flex-start;padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;cursor:pointer;">' +
+                    '<input type="radio" name="proxy-pay-method" value="' +
+                    escAdmin(m.id) +
+                    '"' +
+                    checked +
+                    ' style="width:auto;margin-top:4px;" onchange="proxySelectPaymentMethod(this.value)">' +
+                    '<span><strong style="color:#1a237e;">' +
+                    escAdmin(m.label) +
+                    '</strong><br><span style="font-size:0.82rem;color:#64748b;">' +
+                    escAdmin(m.description) +
+                    '</span></span></label>'
+                );
+            })
+            .join('');
+    } catch (e) {
+        console.error(e);
+        box.innerHTML = '<p style="color:#b91c1c;">Network error loading payment methods.</p>';
+    }
+}
+
+function proxySelectPaymentMethod(id) {
+    __proxySelectedMethodId = id;
+}
+
+function showProxyPaymentPanel(registrationId, userId, applicationNo) {
+    stopProxyPaymentPoll();
+    __proxyLastRegId = registrationId;
+    __proxyLastUserId = userId;
+    __proxyLastOrderDbId = null;
+    const wrap = document.getElementById('proxy-payment-wrap');
+    const st = document.getElementById('proxy-payment-status');
+    const pollSt = document.getElementById('proxy-poll-status');
+    const qrBlock = document.getElementById('proxy-qr-block');
+    const markBtn = document.getElementById('proxy-mark-upi-btn');
+    if (wrap) wrap.classList.remove('hidden');
+    if (st) {
+        st.textContent =
+            'Application ' +
+            (applicationNo || registrationId) +
+            ' saved. Choose a payment method and create a payment request.';
+    }
+    if (pollSt) pollSt.textContent = '';
+    if (qrBlock) qrBlock.classList.add('hidden');
+    if (markBtn) markBtn.classList.add('hidden');
+    loadProxyPaymentMethodsUI().catch(console.error);
+}
+
+async function proxyPollPaymentOnce() {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id || !__proxyLastOrderDbId) return;
+    const pollSt = document.getElementById('proxy-poll-status');
+    try {
+        const res = await fetch(
+            '/api/admin/payments/poll/' +
+                __proxyLastOrderDbId +
+                '?actingAdminId=' +
+                encodeURIComponent(adm.id)
+        );
+        const data = await res.json();
+        if (data.paid) {
+            stopProxyPaymentPoll();
+            if (pollSt) {
+                pollSt.style.color = '#15803d';
+                pollSt.textContent = data.message || 'Payment received — doctor dashboard updated.';
+            }
+            alert(data.message || 'Payment complete.');
+            return;
+        }
+        if (pollSt && data.message) pollSt.textContent = data.message;
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+function startProxyPaymentPoll() {
+    stopProxyPaymentPoll();
+    proxyPollPaymentOnce();
+    __proxyPollTimer = setInterval(proxyPollPaymentOnce, 4000);
+}
+
+async function proxyInitiatePayment() {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id || !__proxyLastRegId) return alert('Save an application first.');
+    const methodId = __proxySelectedMethodId || 'dqr';
+    stopProxyPaymentPoll();
+    const pollSt = document.getElementById('proxy-poll-status');
+    const qrBlock = document.getElementById('proxy-qr-block');
+    const qrImg = document.getElementById('proxy-qr-img');
+    const qrAmt = document.getElementById('proxy-qr-amount');
+    const markBtn = document.getElementById('proxy-mark-upi-btn');
+    if (pollSt) pollSt.textContent = 'Creating payment request…';
+    try {
+        const res = await fetch('/api/admin/payments/initiate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                registrationId: __proxyLastRegId,
+                adminUserId: adm.id,
+                methodId
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Could not initiate payment.');
+        if (data.paid) {
+            if (pollSt) {
+                pollSt.style.color = '#15803d';
+                pollSt.textContent = data.message || 'Paid.';
+            }
+            return alert(data.message || 'Payment recorded.');
+        }
+        __proxyPaymentAmount = Number(data.amount) || 0;
+        __proxyLastOrderDbId = data.orderDbId;
+        if (qrAmt) {
+            qrAmt.textContent =
+                'Amount: ₹' + __proxyPaymentAmount + ' — Order ' + (data.orderIdString || '');
+        }
+        if (data.qrImageUrl) {
+            if (qrImg) {
+                qrImg.src =
+                    data.qrImageUrl.indexOf('http') === 0
+                        ? data.qrImageUrl
+                        : data.qrImageUrl;
+            }
+            if (qrBlock) qrBlock.classList.remove('hidden');
+        }
+        if (data.manualConfirm && markBtn) markBtn.classList.remove('hidden');
+        else if (markBtn) markBtn.classList.add('hidden');
+        if (data.paymentType === 'razorpay_checkout' && data.razorpayOrder && data.keyId) {
+            openProxyRazorpayCheckout(data);
+        }
+        if (data.pollRequired) startProxyPaymentPoll();
+        else if (pollSt) pollSt.textContent = data.message || '';
+        else alert(data.message || 'Payment request created.');
+    } catch (e) {
+        console.error(e);
+        alert('Network error');
+    }
+}
+
+function openProxyRazorpayCheckout(data) {
+    if (typeof Razorpay === 'undefined') {
+        return alert('Razorpay checkout script not loaded.');
+    }
+    const options = {
+        key: data.keyId,
+        amount: data.razorpayOrder.amount,
+        currency: data.razorpayOrder.currency || 'INR',
+        name: 'VGMF Seminar',
+        description: 'Registration ' + (data.applicationNo || ''),
+        order_id: data.razorpayOrder.id,
+        handler: function () {
+            proxyPollPaymentOnce();
+        }
+    };
+    const rzp = new Razorpay(options);
+    rzp.open();
+}
+
+async function proxyMarkUpiPaid() {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id || !__proxyLastOrderDbId) return alert('Create a UPI payment request first.');
+    if (!confirm('Confirm that UPI payment was received in your bank account?')) return;
+    try {
+        const res = await fetch('/api/admin/payments/mark-upi-paid', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orderDbId: __proxyLastOrderDbId, adminUserId: adm.id })
+        });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Could not confirm.');
+        stopProxyPaymentPoll();
+        alert(data.message || 'Payment recorded.');
+        const pollSt = document.getElementById('proxy-poll-status');
+        if (pollSt) {
+            pollSt.style.color = '#15803d';
+            pollSt.textContent = data.message || 'Paid.';
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Network error');
+    }
+}
+
+async function proxyWaivePayment() {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id || !__proxyLastRegId) return alert('Save an application first.');
+    const note = prompt('Note for waiver (optional):', 'Proxy registration — fee waived') || '';
+    try {
+        const res = await fetch('/api/admin/payments/waive-and-ticket', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ registrationId: __proxyLastRegId, note, actingAdminId: adm.id })
+        });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Could not waive.');
+        alert(data.message || 'Fee waived.');
+    } catch (e) {
+        console.error(e);
+        alert('Network error');
+    }
+}
+
 async function submitProxyApp() {
     const userId = parseInt(document.getElementById('proxy-user-select').value, 10);
     const sid = parseInt(currentManageSeminarId, 10);
     if (!Number.isInteger(userId) || userId < 1) return alert('Select a user first.');
     if (!Number.isInteger(sid) || sid < 1) return alert('Open a seminar dashboard first so the correct seminar is selected.');
 
-    await refreshAdminSensitiveOtpRequirement();
-    if (__requireAdminSensitiveOtp && (!__adminSensitivePhoneOtpToken || !__adminSensitiveEmailOtpToken)) {
-        return alert('Verify both your admin email and WhatsApp OTP before creating a proxy application.');
+    if (!__proxyApplicantPhoneOtpToken || !__proxyApplicantEmailOtpToken) {
+        return alert('Verify applicant phone and email OTP before saving.');
     }
 
     const adm = getStoredAdminUser();
@@ -3119,18 +3455,19 @@ async function submitProxyApp() {
                 seminarId: sid,
                 formData: formDataObj,
                 adminUserId: adm.id,
-                adminPhoneOtpToken: __adminSensitivePhoneOtpToken,
-                adminEmailOtpToken: __adminSensitiveEmailOtpToken
+                applicantPhoneOtpToken: __proxyApplicantPhoneOtpToken,
+                applicantEmailOtpToken: __proxyApplicantEmailOtpToken
             })
         });
         const result = await res.json();
         if (result.success) {
             resetAdminSensitiveOtpTokens();
-            alert(`Proxy application saved. Application ID: ${result.applicationNo || '(existing)'}`);
-            document.querySelectorAll('#admin-proxy-modal input').forEach((el) => {
-                if (el.type !== 'button') el.value = '';
-            });
-            document.getElementById('admin-proxy-modal').classList.add('hidden');
+            resetProxyApplicantOtpTokens();
+            const appNo = result.applicationNo || '(existing)';
+            alert(`Proxy application saved. Application ID: ${appNo}`);
+            if (result.registrationId) {
+                showProxyPaymentPanel(result.registrationId, userId, appNo);
+            }
             if (currentManageSeminarId) {
                 manageSeminar(
                     currentManageSeminarId,
@@ -3741,6 +4078,14 @@ async function manageSeminar(id, title) {
         document.getElementById('stat-approved-apps').innerText = stats.approved_apps || 0;
         document.getElementById('stat-pending-payments').innerText = stats.pending_payments || 0;
         document.getElementById('stat-revenue').innerText = '₹' + (stats.total_revenue || 0);
+        const seatsEl = document.getElementById('stat-seats');
+        if (seatsEl) {
+            if (stats.unlimited_seats) seatsEl.textContent = (stats.filled || 0) + ' / ∞';
+            else if (stats.capacity > 0) {
+                seatsEl.textContent = (stats.filled || 0) + ' / ' + stats.capacity;
+                seatsEl.style.color = stats.seats_full ? '#b91c1c' : '#7c3aed';
+            } else seatsEl.textContent = (stats.filled || 0) + ' (no cap)';
+        }
     } catch (err) { console.error(err); }
 
     // Load Applications
@@ -5081,8 +5426,16 @@ async function sendVenueBroadcast() {
 }
 
 function openProxyApplicationModal() {
-    ensureProxyOtpPanel();
-    refreshAdminSensitiveOtpRequirement().catch(console.error);
+    stopProxyPaymentPoll();
+    resetProxyApplicantOtpTokens();
+    __proxyLastRegId = null;
+    __proxyLastUserId = null;
+    __proxyLastOrderDbId = null;
+    const payWrap = document.getElementById('proxy-payment-wrap');
+    const qrBlock = document.getElementById('proxy-qr-block');
+    if (payWrap) payWrap.classList.add('hidden');
+    if (qrBlock) qrBlock.classList.add('hidden');
+    loadProxyCapacityBanner().catch(console.error);
     document.getElementById('admin-proxy-modal').classList.remove('hidden');
 }
 
