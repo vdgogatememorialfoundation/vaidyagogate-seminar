@@ -1874,13 +1874,18 @@ app.get('/api/admin/integrations', withIntegrationSettingsLoaded, (req, res) => 
         `SELECT whatsapp_template_name, email_subject FROM notification_templates
          WHERE event_key = 'OTP_VERIFICATION' AND seminar_id IS NULL LIMIT 1`,
         [],
-        (e, row) => {
+        async (e, row) => {
             if (!e && row) {
                 if (row.whatsapp_template_name && !masked.whatsapp_otp_template_name) {
                     masked.whatsapp_otp_template_name = row.whatsapp_template_name;
                 }
                 if (row.email_subject) masked.otp_email_subject = row.email_subject;
             }
+            try {
+                const dbg = await notifEngine.getOtpWhatsAppTemplateDebug(db);
+                masked.otp_template_resolved = dbg.resolved;
+                masked.otp_template_source = dbg.source;
+            } catch (_) {}
             res.json(masked);
         }
     );
@@ -1981,11 +1986,12 @@ app.post('/api/admin/integrations/test-whatsapp', withIntegrationSettingsLoaded,
         return res.status(503).json({ error: 'WhatsApp not configured — save access token and phone number ID first.' });
     }
     const to = normalizePhoneE164(phone);
-    const otpTpl = await notifEngine.getOtpWhatsAppTemplateName(db);
+    const tplDebug = await notifEngine.getOtpWhatsAppTemplateDebug(db);
+    const otpTpl = tplDebug.resolved;
     let r;
     let method = 'plain_text';
     if (otpTpl) {
-        method = 'otp_template:' + otpTpl;
+        method = 'otp_template:' + otpTpl + ' lang:' + (tplDebug.lang || 'en');
         r = await sendWhatsAppOtpTemplate(phone, otpTpl, '123456');
     } else {
         r = await sendWhatsAppText(
@@ -2001,7 +2007,8 @@ app.post('/api/admin/integrations/test-whatsapp', withIntegrationSettingsLoaded,
         subject: 'Admin WhatsApp test',
         body_preview:
             method +
-            (otpTpl ? ' code 123456' : '') +
+            (otpTpl ? ' code=123456' : '') +
+            (tplDebug.source ? ' src=' + tplDebug.source : '') +
             (r.messageId ? ' id=' + r.messageId : ''),
         error: r.ok ? null : r.error
     };
@@ -2011,6 +2018,9 @@ app.post('/api/admin/integrations/test-whatsapp', withIntegrationSettingsLoaded,
             success: true,
             to,
             method,
+            template: otpTpl,
+            templateSource: tplDebug.source,
+            lang: r.lang || tplDebug.lang,
             messageId: r.messageId || null,
             hint: otpTpl
                 ? 'Template message accepted by Meta. Check WhatsApp on +' + to + ' (may take a minute).'
@@ -2021,11 +2031,20 @@ app.post('/api/admin/integrations/test-whatsapp', withIntegrationSettingsLoaded,
         error: r.error || 'Send failed',
         to,
         method,
+        template: otpTpl,
+        templateSource: tplDebug.source,
+        templateRaw: tplDebug.raw,
+        lang: r.lang || tplDebug.lang,
         skipped: r.skipped,
         hint:
-            'Common fixes: (1) Add +' +
+            'Meta rejected template "' +
+            (otpTpl || tplDebug.raw || '?') +
+            '". In Admin → Integrations set WhatsApp OTP template to the EXACT name from Meta (e.g. vgmf_otp_auth). ' +
+            'Set Template language to match Meta (often en_US not en). ' +
+            'Remove wrong WHATSAPP_OTP_TEMPLATE_NAME on Vercel if it says gmf_otp_auth. ' +
+            'Add +' +
             to +
-            ' as test number in Meta App → WhatsApp → API Setup while in development mode. (2) Use approved OTP template name on OTP_VERIFICATION. (3) Confirm Phone number ID matches the sending number. See Notifications → Logs.'
+            ' as test recipient in development mode.'
     });
 });
 

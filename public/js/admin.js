@@ -2279,6 +2279,14 @@ async function loadIntegrationSettings() {
                 waLine +=
                     ' (OTP template in Notifications is not enough — save Access token and Phone number ID below.)';
             }
+            if (s.otp_template_resolved) {
+                waLine +=
+                    ' OTP template in use: ' +
+                    s.otp_template_resolved +
+                    ' (' +
+                    (s.otp_template_source || 'unknown') +
+                    ').';
+            }
             line.textContent = emailLine + ' ' + waLine;
         }
     } catch (e) {
@@ -2398,6 +2406,8 @@ async function testIntegrationWhatsApp() {
         const lines = [
             data.hint || 'WhatsApp test accepted by Meta.',
             data.to ? 'Sent to: +' + data.to : '',
+            data.template ? 'Template: ' + data.template + (data.templateSource ? ' (' + data.templateSource + ')' : '') : '',
+            data.lang ? 'Language: ' + data.lang : '',
             data.method ? 'Method: ' + data.method : '',
             data.messageId ? 'Message ID: ' + data.messageId : '',
             'Check Notifications → Logs if nothing arrives in 2 minutes.'
@@ -2405,9 +2415,14 @@ async function testIntegrationWhatsApp() {
         alert(lines.join('\n\n'));
         if (typeof loadNotificationLogs === 'function') loadNotificationLogs();
     } else {
-        const lines = [data.error || 'WhatsApp test failed', data.hint, data.to ? 'Normalized to: +' + data.to : ''].filter(
-            Boolean
-        );
+        const lines = [
+            data.error || 'WhatsApp test failed',
+            data.hint,
+            data.template ? 'Tried template: ' + data.template : data.templateRaw ? 'Raw config: ' + data.templateRaw : '',
+            data.templateSource ? 'Source: ' + data.templateSource : '',
+            data.lang ? 'Language: ' + data.lang : '',
+            data.to ? 'Normalized to: +' + data.to : ''
+        ].filter(Boolean);
         alert(lines.join('\n\n') + '\n\nSee Notifications → Logs.');
         if (typeof loadNotificationLogs === 'function') loadNotificationLogs();
     }
