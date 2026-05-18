@@ -1,9 +1,9 @@
 {
-  "appId": "org.vaidyagogate.scanner",
-  "appName": "VGMF Scanner",
+  "appId": "org.vaidyagogate.doctor",
+  "appName": "VGMF Doctor",
   "webDir": "www",
   "server": {
-    "url": "https://seminar.vaidyagogate.org/scanner.html",
+    "url": "https://seminar.vaidyagogate.org/doctor.html",
     "cleartext": false,
     "androidScheme": "https",
     "allowNavigation": [

@@ -1,4 +1,5 @@
 # Build VGMF Scanner debug APK (Capacitor Android)
+# Prefer: scripts\build-portal-apks.ps1 (builds Admin, Judge, Doctor, Scanner)
 # Requires: Node.js, JDK 17+, Android SDK (via Android Studio)
 
 $ErrorActionPreference = "Stop"

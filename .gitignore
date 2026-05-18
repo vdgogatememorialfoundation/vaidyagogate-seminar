@@ -10,8 +10,11 @@ public/uploads/*
 !public/uploads/.gitkeep
 .DS_Store
 .vercel
-scanner-mobile/node_modules/
-scanner-mobile/android/
+*-mobile/node_modules/
+*-mobile/android/
+*-mobile/package-lock.json
+VGMF-*-debug.apk
+VGMF-Scanner-debug.apk
 
 .vercel
 
