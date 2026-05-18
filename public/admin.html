@@ -993,7 +993,8 @@
                         <button type="button" class="btn-secondary btn-sm" style="margin-left:6px;" onclick="checkWhatsAppWebhookStatus()">Check webhook</button>
                         <span style="font-size:0.8rem;color:#64748b;margin-left:8px;">Webhook verify token must match Meta exactly</span></div>
 
-                        <div><label>Webhook verify token</label><input type="password" id="int-wa-verify" placeholder="Leave blank to keep" style="width:100%"></div>
+                        <div><label>Webhook verify token</label><input type="text" id="int-wa-verify" placeholder="e.g. vgmf_whatsapp_verify_2026 — must match Meta exactly" style="width:100%" autocomplete="off" spellcheck="false"></div>
+                        <p style="font-size:0.78rem;color:#64748b;margin:4px 0 0;grid-column:1/-1;">Must match Meta exactly. Save integrations, then use Check webhook.</p>
                         <div><label>Template language</label><input type="text" id="int-wa-lang" placeholder="en (English in Meta)" style="width:100%"></div>
                         <div style="grid-column:1/-1;"><h4 style="margin:12px 0 8px;color:#0c4a6e;">OTP notifications (email + WhatsApp)</h4>
                         <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px;">Updates <code>OTP_VERIFICATION</code> for login/signup. Template name must match Meta (e.g. <code>vgmf_otp_auth</code>).</p></div>

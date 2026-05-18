@@ -3051,6 +3051,47 @@ app.get('/api/public/participants/:seminarId', (req, res) => {
     );
 });
 
+function enrichSiteCmsSpeakers(cms, cb) {
+    const configured = (Array.isArray(cms.speakers) ? cms.speakers : []).filter(
+        (s) => s && String(s.name || s.image || s.imagePath || '').trim()
+    );
+    if (configured.length) {
+        cms.speakers = configured;
+        return cb(null, cms);
+    }
+    db.all(
+        `SELECT es.speaker_name, es.speaker_bio, es.description, es.title, s.title AS seminar_title
+         FROM event_schedules es
+         LEFT JOIN seminars s ON es.seminar_id = s.id
+         WHERE TRIM(COALESCE(es.speaker_name, '')) <> ''
+         ORDER BY es.start_time IS NULL, es.start_time ASC, es.id ASC
+         LIMIT 48`,
+        [],
+        (err, rows) => {
+            if (err) return cb(err);
+            const seen = new Set();
+            const speakers = [];
+            (rows || []).forEach((r) => {
+                const name = String(r.speaker_name || '').trim();
+                if (!name) return;
+                const key = name.toLowerCase();
+                if (seen.has(key)) return;
+                seen.add(key);
+                const role =
+                    String(r.title || r.description || r.speaker_bio || '').trim() || 'Featured faculty';
+                speakers.push({
+                    name,
+                    role,
+                    seminar: r.seminar_title || '',
+                    org: ''
+                });
+            });
+            cms.speakers = speakers;
+            cb(null, cms);
+        }
+    );
+}
+
 function mergeScrollingAnnouncementsWithOpenSeminars(cms, cb) {
     db.all(
         `SELECT id, title, event_date, registration_start, registration_end, is_active
@@ -3088,7 +3129,10 @@ app.get('/api/public/site-cms', (req, res) => {
         if (e) return res.status(500).json({ error: e.message });
         mergeScrollingAnnouncementsWithOpenSeminars(cms, (e2, enriched) => {
             if (e2) return res.status(500).json({ error: e2.message });
-            res.json(enriched);
+            enrichSiteCmsSpeakers(enriched, (e3, withSpeakers) => {
+                if (e3) return res.status(500).json({ error: e3.message });
+                res.json(withSpeakers);
+            });
         });
     });
 });
@@ -4163,20 +4207,22 @@ app.get('/api/webhooks/whatsapp', (req, res) => {
         const mode = req.query['hub.mode'];
         const token = String(req.query['hub.verify_token'] || '').trim();
         const challenge = req.query['hub.challenge'];
-        const expected = String(
-            integrationSettings.getWhatsAppConfig().verifyToken ||
-                process.env.WHATSAPP_VERIFY_TOKEN ||
-                ''
-        ).trim();
-        if (mode === 'subscribe' && token && expected && token === expected) {
+        if (mode === 'subscribe' && token && integrationSettings.matchesWhatsAppVerifyToken(token)) {
             return res.status(200).type('text/plain').send(String(challenge));
         }
+        const candidates = integrationSettings.getWhatsAppVerifyCandidates();
         console.warn('[whatsapp-webhook] GET verify failed', {
             mode: mode || '(missing)',
             tokenPresent: !!token,
-            expectedConfigured: !!expected
+            tokenLength: token.length,
+            configuredCount: candidates.length,
+            configuredLengths: candidates.map((c) => c.length)
         });
-        res.status(403).type('text/plain').send('Forbidden — verify token mismatch. Set the same value in Admin → Integrations → Webhook verify token and Meta webhook setup.');
+        res.status(403)
+            .type('text/plain')
+            .send(
+                'Forbidden — verify token mismatch. In Admin → Integrations, enter the exact Verify token you use in Meta, click Save integrations, then Verify in Meta again.'
+            );
     });
 });
 
@@ -4209,16 +4255,34 @@ app.get('/api/admin/integrations/whatsapp-phone-diagnostics', withIntegrationSet
 });
 
 app.get('/api/admin/integrations/whatsapp-webhook-status', withIntegrationSettingsLoaded, (req, res) => {
-    const expected = String(
-        integrationSettings.getWhatsAppConfig().verifyToken || process.env.WHATSAPP_VERIFY_TOKEN || ''
-    ).trim();
+    const candidates = integrationSettings.getWhatsAppVerifyCandidates();
+    const primary = candidates[0] || '';
+    const probe = String((req.query && req.query.probe) || '').trim();
     const base = integrationSettings.getPublicBaseUrl() || '';
+    const webhookUrl = (base.replace(/\/$/, '') || 'https://seminar.vaidyagogate.org') + '/api/webhooks/whatsapp';
+    let probeMatch = null;
+    let probeHint = '';
+    if (probe) {
+        probeMatch = integrationSettings.matchesWhatsAppVerifyToken(probe);
+        if (!probeMatch) {
+            probeHint =
+                primary.length && probe.length !== primary.length
+                    ? `Meta token is ${probe.length} characters; server token is ${primary.length} characters — they must match exactly.`
+                    : 'Token does not match any value saved on the server. Re-enter it in Webhook verify token and Save integrations.';
+        } else {
+            probeHint = 'This token matches the server. Use the same string in Meta → Verify and save.';
+        }
+    }
     res.json({
-        webhook_url: (base.replace(/\/$/, '') || '') + '/api/webhooks/whatsapp',
-        verify_token_configured: !!expected,
-        verify_token_length: expected.length,
-        hint: expected
-            ? 'In Meta → WhatsApp → Configuration, paste the same Verify token as in Admin → Integrations, then click Verify and Save.'
+        webhook_url: webhookUrl,
+        verify_token_configured: candidates.length > 0,
+        verify_token_length: primary.length,
+        verify_token_candidate_count: candidates.length,
+        probe_token_length: probe ? probe.length : null,
+        probe_match: probeMatch,
+        probe_hint: probeHint,
+        hint: primary
+            ? 'In Meta → WhatsApp → Configuration, use the same Verify token as Admin → Integrations (or add WHATSAPP_VERIFY_TOKEN_ALT on the server). Then click Verify and save.'
             : 'Set Webhook verify token in Admin → Integrations and Save, then use the same string in Meta webhook setup.'
     });
 });
@@ -6974,19 +7038,31 @@ app.post('/api/public/contact-inquiry', (req, res) => {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
         return res.status(400).json({ error: 'Please enter a valid email address.' });
     }
-    db.run(
-        `INSERT INTO contact_inquiries (name, email, phone, subject, message, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, 'new', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-        [n, em, String(phone || '').trim() || null, sub, msg],
-        function (err) {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json({ success: true, id: this.lastID });
-        }
-    );
+    ensureContactInquiriesSchema(db, ignoreSchemaMigrationErr, () => {
+        db.run(
+            `INSERT INTO contact_inquiries (name, email, phone, subject, message, status, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, 'new', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+            [n, em, String(phone || '').trim() || null, sub, msg],
+            function (err) {
+                if (err) {
+                    const m = String(err.message || '');
+                    if (/contact_inquiries/i.test(m) && /does not exist|no such table/i.test(m)) {
+                        return res.status(503).json({
+                            error:
+                                'Contact form database is updating. Please try again in one minute, or ask the administrator to restart the seminar app.'
+                        });
+                    }
+                    return res.status(500).json({ error: err.message });
+                }
+                res.json({ success: true, id: this.lastID });
+            }
+        );
+    });
 });
 
 app.get('/api/admin/contact-inquiries', (req, res) => {
     const status = req.query.status ? String(req.query.status).trim() : '';
+    const runList = () => {
     let sql = `SELECT * FROM contact_inquiries WHERE 1=1`;
     const params = [];
     if (status) {
@@ -6998,6 +7074,8 @@ app.get('/api/admin/contact-inquiries', (req, res) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(rows || []);
     });
+    };
+    ensureContactInquiriesSchema(db, ignoreSchemaMigrationErr, runList);
 });
 
 app.put('/api/admin/contact-inquiries/:id', (req, res) => {

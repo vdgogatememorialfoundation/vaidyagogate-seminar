@@ -14,6 +14,7 @@ Meta **does not** allow creating approved message templates purely from this app
 | `WHATSAPP_TOKEN` | System User access token (or store in Admin → Global Settings) |
 | `WHATSAPP_PHONE_NUMBER_ID` | From Meta → WhatsApp → API Setup |
 | `WHATSAPP_VERIFY_TOKEN` | Your chosen string; same in Meta webhook config |
+| `WHATSAPP_VERIFY_TOKEN_ALT` | Optional comma-separated extra verify strings (e.g. while changing Meta token) |
 | `WHATSAPP_OTP_TEMPLATE_NAME` | **Optional.** Approved **authentication** template name used for OTP (see below). If unset, OTP WhatsApp falls back to **plain text** (only works inside the **24-hour customer service window**). |
 
 ## Webhook

@@ -395,10 +395,13 @@
         const close = () => {
             nav.classList.remove('mobile-open');
             backdrop?.classList.remove('open');
+            document.body.classList.remove('cg-nav-open');
         };
         toggle.addEventListener('click', () => {
-            nav.classList.toggle('mobile-open');
-            backdrop?.classList.toggle('open');
+            const open = !nav.classList.contains('mobile-open');
+            nav.classList.toggle('mobile-open', open);
+            backdrop?.classList.toggle('open', open);
+            document.body.classList.toggle('cg-nav-open', open);
         });
         backdrop?.addEventListener('click', close);
         nav.querySelectorAll('a[data-nav-section]').forEach((a) => {

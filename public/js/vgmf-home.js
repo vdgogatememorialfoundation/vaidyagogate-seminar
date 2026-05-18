@@ -81,12 +81,12 @@
         const grid = document.getElementById('speakers-grid');
         if (!grid) return;
         const speakers = (list || []).filter((s) => s && (s.name || s.image || s.imagePath));
+        if (section) section.classList.remove('hidden');
         if (!speakers.length) {
-            if (section) section.classList.add('hidden');
-            grid.innerHTML = '';
+            grid.innerHTML =
+                '<p class="speakers-placeholder muted" style="text-align:center;max-width:42rem;margin:0 auto;padding:24px 16px;">Faculty lineup will be announced shortly. Session speakers also appear on the <a href="#" data-nav-section="schedule">programme</a> page.</p>';
             return;
         }
-        if (section) section.classList.remove('hidden');
         grid.innerHTML = speakers
             .map((s) => {
                 const imgSrc = mediaUrl(s.image || s.imagePath);

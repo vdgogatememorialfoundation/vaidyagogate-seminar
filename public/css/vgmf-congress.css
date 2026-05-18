@@ -1031,6 +1031,23 @@
     .cg-quick-grid { grid-template-columns: repeat(3, 1fr); }
 }
 @media (max-width: 768px) {
+    .congress-site { overflow-x: clip; }
+    .cg-utility { font-size: 0.72rem; padding: 10px 0; }
+    .cg-utility-inner {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+        padding: 0 16px;
+    }
+    .cg-utility-inner > div {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 14px;
+        width: 100%;
+    }
+    .cg-header-inner { padding: 10px 16px; gap: 10px; }
+    .cg-logo-text h1 { font-size: 0.82rem; max-width: 58vw; line-height: 1.2; }
+    .cg-logo-text p { font-size: 0.6rem; letter-spacing: 0.1em; }
     .cg-menu-toggle { display: flex; align-items: center; justify-content: center; }
     .cg-nav {
         position: fixed;
@@ -1047,16 +1064,71 @@
         transition: transform 0.3s var(--cg-ease);
         box-shadow: -8px 0 32px rgba(0, 0, 0, 0.1);
         z-index: 1001;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
     }
+    .cg-nav a { min-height: 44px; display: flex; align-items: center; }
     .cg-nav.mobile-open { transform: translateX(0); }
-    .cg-quick-grid { grid-template-columns: repeat(2, 1fr); margin-top: -32px; }
+    .congress-hero { min-height: min(72vh, 500px); }
+    .congress-hero-content { padding: 36px 16px 80px; }
+    .congress-hero-content h2 { font-size: clamp(1.65rem, 7vw, 2.25rem); }
+    .congress-hero-actions {
+        flex-direction: column;
+        width: 100%;
+        max-width: 320px;
+    }
+    .congress-hero-actions a {
+        width: 100%;
+        justify-content: center;
+        min-height: 48px;
+    }
+    .congress-hero-arrows button { width: 40px; height: 40px; }
+    .cg-quick { margin-top: -28px; padding: 0 16px; }
+    .cg-quick-grid { grid-template-columns: repeat(2, 1fr); margin-top: -32px; gap: 12px; }
     .cg-quick-card { padding: 18px 12px; }
     .cg-fab-register { display: inline-flex; }
     .congress-hero-arrows .prev { left: 8px; }
     .congress-hero-arrows .next { right: 8px; }
     .cg-past-year { grid-template-columns: 1fr; }
+    .congress-site .main-content { padding: 32px 16px 72px; }
+    .congress-site .home-split {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+    .congress-site .cards-grid,
+    .congress-site .cg-glass-grid {
+        grid-template-columns: 1fr;
+    }
+    .congress-site .notices-panel { padding: 18px 16px; }
+    #speakers-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 16px;
+    }
+    .congress-site .contact-grid {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+    .congress-site .page-panel,
+    .congress-site .contact-form,
+    .congress-site .contact-info {
+        padding: 20px 16px;
+    }
+    .congress-site .form-group input,
+    .congress-site .form-group textarea,
+    .congress-site .form-group select {
+        font-size: 16px;
+        min-height: 48px;
+    }
+    body.cg-nav-open { overflow: hidden; }
 }
 @media (max-width: 480px) {
     .cg-quick-grid { grid-template-columns: 1fr; }
-    .cg-logo-text h1 { font-size: 0.9rem; }
+    .cg-logo-text h1 { font-size: 0.78rem; max-width: 52vw; }
+    .cg-utility span:nth-child(3) { display: none; }
+    #speakers-grid { grid-template-columns: 1fr; }
+    .congress-hero { min-height: 420px; }
+    .cg-fab-register {
+        right: max(12px, env(safe-area-inset-right, 0px));
+        bottom: max(16px, env(safe-area-inset-bottom, 0px));
+    }
 }

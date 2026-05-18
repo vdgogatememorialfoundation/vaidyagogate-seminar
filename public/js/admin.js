@@ -2167,21 +2167,43 @@ async function loadAdminActivityLogs() {
 
 async function checkWhatsAppWebhookStatus() {
     try {
-        const res = await fetch('/api/admin/integrations/whatsapp-webhook-status');
+        const probe = (document.getElementById('int-wa-verify') || {}).value.trim();
+        const q = probe ? '?probe=' + encodeURIComponent(probe) : '';
+        const res = await fetch('/api/admin/integrations/whatsapp-webhook-status' + q);
         const data = await res.json();
         if (!res.ok) return alert(data.error || 'Check failed');
-        alert(
-            [
-                'Webhook URL: ' + (data.webhook_url || ''),
-                data.verify_token_configured
-                    ? 'Verify token: configured (' + data.verify_token_length + ' chars)'
-                    : 'Verify token: NOT SET — save one in Integrations',
-                '',
-                data.hint || ''
-            ].join('\n')
-        );
+        const lines = [
+            'Webhook URL (paste in Meta):',
+            data.webhook_url || '',
+            '',
+            data.verify_token_configured
+                ? 'Server verify token: saved (' + data.verify_token_length + ' characters)'
+                : 'Server verify token: NOT SET',
+            probe
+                ? 'Token in this box: ' + probe.length + ' characters — ' + (data.probe_match ? 'MATCHES server' : 'does NOT match server')
+                : 'Tip: type the token you want in Meta into “Webhook verify token”, Save integrations, then check again.',
+            data.probe_hint || '',
+            '',
+            data.hint || ''
+        ];
+        if (probe && data.webhook_url) {
+            const live = await fetch(
+                data.webhook_url +
+                    '?hub.mode=subscribe&hub.verify_token=' +
+                    encodeURIComponent(probe) +
+                    '&hub.challenge=meta_probe_ok'
+            );
+            const body = await live.text();
+            lines.push('');
+            lines.push(
+                live.ok && body === 'meta_probe_ok'
+                    ? 'Live Meta test: OK — click Verify and save in Meta now.'
+                    : 'Live Meta test: FAILED (HTTP ' + live.status + ') — ' + body.slice(0, 120)
+            );
+        }
+        alert(lines.filter(Boolean).join('\n'));
     } catch (e) {
-        alert('Check failed');
+        alert('Check failed: ' + (e.message || e));
     }
 }
 
