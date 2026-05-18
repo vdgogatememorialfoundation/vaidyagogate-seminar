@@ -34,6 +34,7 @@ const branding = require('./lib/branding');
 const extModules = require('./lib/extended-modules');
 const portalTracking = require('./lib/portal-tracking');
 const seminarDt = require('./lib/seminar-datetime');
+const cancelPolicy = require('./lib/cancellation-policy');
 const siteMarketing = require('./lib/site-marketing');
 const siteKillSwitch = require('./lib/site-kill-switch');
 const { ensureSupportTicketSchema } = require('./lib/support-tickets-schema');
@@ -3501,10 +3502,12 @@ app.post('/api/applications/:applicationId/cancel', (req, res) => {
             const st = String(reg.status || '').toLowerCase();
             if (st === 'cancelled') return res.status(400).json({ error: 'This application is already cancelled.' });
             if (st === 'rejected') return res.status(400).json({ error: 'Rejected applications cannot be cancelled here.' });
-            if (!isBeforeSeminarDay(reg.event_date)) {
-                return res.status(400).json({
-                    error: 'Cancellation is only allowed before the seminar day. Contact support if you need help.'
-                });
+            const cancelGate = cancelPolicy.evaluateDoctorCancellation(
+                reg.cancellation_policy_json,
+                reg.event_date
+            );
+            if (!cancelGate.allowed) {
+                return res.status(400).json({ error: cancelGate.reason || 'Cancellation is not allowed for this seminar.' });
             }
 
             db.get(

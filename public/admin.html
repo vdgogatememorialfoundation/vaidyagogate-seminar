@@ -1146,7 +1146,17 @@
                     <div style="margin-top:10px;"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="seminar-otp-app" checked> Require OTP on application (email + WhatsApp on the form, plus a second email + WhatsApp confirmation on the preview step before submit)</label></div>
                     <div style="margin-top:14px;padding:12px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;">
                         <label style="font-weight:600;">Cancellation &amp; refund policy</label>
-                        <p style="font-size:0.82rem;color:#64748b;margin:6px 0 10px;">Shown to doctors when they track or cancel an application.</p>
+                        <p style="font-size:0.82rem;color:#64748b;margin:6px 0 10px;">Control whether doctors can cancel from their portal and until when. Refund tiers apply when they do cancel.</p>
+                        <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;margin-bottom:10px;">
+                            <input type="checkbox" id="seminar-cancel-enabled" onchange="updateSeminarPolicyPreviews()">
+                            Allow doctors to cancel their application (self-service)
+                        </label>
+                        <div style="margin-bottom:12px;">
+                            <label style="font-size:0.8rem;">Cancellation window closes at (IST, optional)</label>
+                            <input type="datetime-local" id="seminar-cancel-until" style="max-width:280px;display:block;margin-top:4px;" oninput="updateSeminarPolicyPreviews()">
+                            <p style="font-size:0.78rem;color:#94a3b8;margin:4px 0 0;">Leave blank to allow cancellation until the seminar day. After this date/time, the Cancel button is hidden.</p>
+                        </div>
+
                         <div style="margin-bottom:10px;">
                             <label style="font-size:0.8rem;">No refund within (days of event)</label>
                             <input type="number" id="seminar-cancel-norefund-days" min="0" placeholder="e.g. 3" style="max-width:120px;" oninput="updateSeminarPolicyPreviews()">

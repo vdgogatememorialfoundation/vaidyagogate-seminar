@@ -2239,19 +2239,59 @@ async function submitApplication() {
 let userApplications = [];
 let userCaseApplications = [];
 
+function parseCancellationPolicyClient(raw) {
+    if (raw == null || raw === '') return { enabled: true };
+    try {
+        const p = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        return p && typeof p === 'object' ? p : { enabled: true };
+    } catch (_) {
+        return { enabled: true };
+    }
+}
+
+function formatCancelUntilIst(iso) {
+    if (!iso) return '';
+    const raw = String(iso).trim();
+    const d = new Date(/[zZ+-]/.test(raw) ? raw : raw.includes('T') ? raw + '+05:30' : raw);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+    });
+}
+
 function summaryCancellationPolicy(raw) {
     if (!raw) return '';
     try {
-        const p = typeof raw === 'string' ? JSON.parse(raw) : raw;
-        if (!p || typeof p !== 'object') return '';
+        const p = parseCancellationPolicyClient(raw);
+        if (p.enabled === false) {
+            return 'Self-cancellation is not available for this seminar. Contact the organizer if you need help.';
+        }
         const parts = [];
+        if (p.allowedUntil) {
+            const when = formatCancelUntilIst(p.allowedUntil);
+            parts.push(
+                when
+                    ? `You may cancel until ${when} (IST).`
+                    : 'You may cancel until the scheduled deadline.'
+            );
+        } else {
+            parts.push('You may cancel until the seminar day.');
+        }
         if (p.noRefundWithinDays != null) {
             parts.push(`No refund within ${p.noRefundWithinDays} days of the event.`);
         }
         if (Array.isArray(p.tiers)) {
             p.tiers.forEach((t) => {
                 if (t.minDaysBeforeEvent != null && t.refundPercent != null) {
-                    parts.push(`${t.refundPercent}% refund if cancelling at least ${t.minDaysBeforeEvent} days before the event.`);
+                    parts.push(
+                        `${t.refundPercent}% refund if cancelling at least ${t.minDaysBeforeEvent} days before the event.`
+                    );
                 }
             });
         }
@@ -2259,6 +2299,43 @@ function summaryCancellationPolicy(raw) {
     } catch (_) {
         return '';
     }
+}
+
+function evaluateDoctorCancellationClient(policy, eventDate) {
+    const p = parseCancellationPolicyClient(policy);
+    if (p.enabled === false) {
+        return { allowed: false, reason: 'Self-cancellation is not enabled for this seminar.' };
+    }
+    if (p.allowedUntil) {
+        const raw = String(p.allowedUntil).trim();
+        const untilMs = new Date(/[zZ+-]/.test(raw) ? raw : raw.includes('T') ? raw + '+05:30' : raw).getTime();
+        if (!Number.isNaN(untilMs) && Date.now() > untilMs) {
+            const when = formatCancelUntilIst(p.allowedUntil);
+            return {
+                allowed: false,
+                reason: when ? `Cancellation closed on ${when} (IST).` : 'The cancellation window has closed.'
+            };
+        }
+    }
+    if (eventDate) {
+        const evRaw = String(eventDate).trim();
+        const evMs = new Date(/[zZ+-]/.test(evRaw) ? evRaw : evRaw.includes('T') ? evRaw + '+05:30' : evRaw).getTime();
+        if (!Number.isNaN(evMs)) {
+            const fmt = new Intl.DateTimeFormat('en-CA', {
+                timeZone: 'Asia/Kolkata',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            });
+            if (fmt.format(new Date()) >= fmt.format(new Date(evMs))) {
+                return {
+                    allowed: false,
+                    reason: 'Cancellation is only allowed before the seminar day.'
+                };
+            }
+        }
+    }
+    return { allowed: true };
 }
 
 function seminarShowsWhatsappLink(app) {
@@ -2288,23 +2365,22 @@ function renderWhatsappLinkBlock(app) {
 function doctorCanCancelApplication(app) {
     const st = String((app && app.status) || '').toLowerCase();
     if (['rejected', 'cancelled'].includes(st)) return false;
-    if (app && app.seminar_event_date) {
-        const ev = new Date(app.seminar_event_date);
-        if (!Number.isNaN(ev.getTime())) {
-            const eventDay = new Date(ev.getFullYear(), ev.getMonth(), ev.getDate());
-            const today = new Date();
-            const todayDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-            if (todayDay >= eventDay) return false;
-        }
-    }
-    return true;
+    const gate = evaluateDoctorCancellationClient(
+        app && app.cancellation_policy_json,
+        app && app.seminar_event_date
+    );
+    return gate.allowed;
 }
 
 async function doctorCancelApplication(applicationId) {
     if (!currentUser || !currentUser.id) return;
     const app = (userApplications || []).find((a) => a.id === applicationId);
     if (app && !doctorCanCancelApplication(app)) {
-        alert('You can only cancel before the seminar day, and not after rejection or cancellation.');
+        const gate = evaluateDoctorCancellationClient(
+            app.cancellation_policy_json,
+            app.seminar_event_date
+        );
+        alert(gate.reason || 'Cancellation is not available for this application.');
         return;
     }
     const policyText = app ? summaryCancellationPolicy(app.cancellation_policy_json) : '';

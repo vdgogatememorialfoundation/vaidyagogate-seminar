@@ -2605,11 +2605,19 @@ window.__adminProductionSite = false;
 window.__allowDemoAccounts = true;
 
 function summaryCancellationPolicyAdmin(raw) {
-    if (!raw) return 'No cancellation policy set for this seminar.';
+    if (!raw) return 'Doctors may cancel until the seminar day (no refund tiers configured).';
     try {
         const p = typeof raw === 'string' ? JSON.parse(raw) : raw;
-        if (!p || typeof p !== 'object') return 'No cancellation policy set for this seminar.';
+        if (!p || typeof p !== 'object') return 'Doctors may cancel until the seminar day.';
+        if (p.enabled === false) return 'Self-cancellation is disabled for doctors.';
         const parts = [];
+        parts.push('Doctors may cancel');
+        if (p.allowedUntil) {
+            parts.push(` until ${seminarCancelUntilFromStorage(p.allowedUntil) || p.allowedUntil} IST`);
+        } else {
+            parts.push(' until the seminar day');
+        }
+        parts.push('.');
         if (p.noRefundWithinDays != null) {
             parts.push(`No refund within ${p.noRefundWithinDays} days of the event.`);
         }
@@ -2628,7 +2636,35 @@ function summaryCancellationPolicyAdmin(raw) {
     }
 }
 
+function seminarCancelUntilToStorage(localVal) {
+    if (!localVal || !String(localVal).trim()) return null;
+    const s = String(localVal).trim();
+    const norm = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(s) ? s + ':00' : s;
+    return norm + '+05:30';
+}
+
+function seminarCancelUntilFromStorage(stored) {
+    if (!stored) return '';
+    const raw = String(stored).trim();
+    if (!raw) return '';
+    const d = new Date(raw.includes('T') && !/[zZ+-]/.test(raw) ? raw + '+05:30' : raw);
+    if (Number.isNaN(d.getTime())) return '';
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+    }).formatToParts(d);
+    const g = (t) => (parts.find((p) => p.type === t) || {}).value || '00';
+    return `${g('year')}-${g('month')}-${g('day')}T${g('hour')}:${g('minute')}`;
+}
+
 function buildCancellationPolicyJsonFromUi() {
+    const enabledEl = document.getElementById('seminar-cancel-enabled');
+    const untilEl = document.getElementById('seminar-cancel-until');
     const daysEl = document.getElementById('seminar-cancel-norefund-days');
     const daysRaw = daysEl && daysEl.value !== '' ? parseInt(daysEl.value, 10) : null;
     const tiers = [];
@@ -2639,10 +2675,18 @@ function buildCancellationPolicyJsonFromUi() {
             tiers.push({ minDaysBeforeEvent: minD, refundPercent: pct });
         }
     });
-    if (daysRaw == null && !tiers.length) return null;
     const out = {};
+    out.enabled = enabledEl ? !!enabledEl.checked : true;
+    const until = untilEl && untilEl.value ? seminarCancelUntilToStorage(untilEl.value) : null;
+    if (until) out.allowedUntil = until;
     if (daysRaw != null && !Number.isNaN(daysRaw)) out.noRefundWithinDays = daysRaw;
     if (tiers.length) out.tiers = tiers;
+    if (!out.enabled && !until && daysRaw == null && !tiers.length) {
+        return JSON.stringify({ enabled: false });
+    }
+    if (out.enabled && !until && daysRaw == null && !tiers.length) {
+        return JSON.stringify({ enabled: true });
+    }
     return JSON.stringify(out);
 }
 
@@ -2664,9 +2708,13 @@ function addSeminarCancelTierRow(minDays, refundPct) {
 }
 
 function loadSeminarCancellationUi(rawJson) {
+    const enabledEl = document.getElementById('seminar-cancel-enabled');
+    const untilEl = document.getElementById('seminar-cancel-until');
     const daysEl = document.getElementById('seminar-cancel-norefund-days');
     const tiersWrap = document.getElementById('seminar-cancel-tiers');
     if (!daysEl || !tiersWrap) return;
+    if (enabledEl) enabledEl.checked = false;
+    if (untilEl) untilEl.value = '';
     daysEl.value = '';
     tiersWrap.innerHTML = '';
     if (!rawJson || !String(rawJson).trim()) {
@@ -2675,6 +2723,12 @@ function loadSeminarCancellationUi(rawJson) {
     }
     try {
         const p = typeof rawJson === 'string' ? JSON.parse(rawJson) : rawJson;
+        if (enabledEl) {
+            enabledEl.checked = p.enabled !== false;
+        }
+        if (untilEl && p.allowedUntil) {
+            untilEl.value = seminarCancelUntilFromStorage(p.allowedUntil);
+        }
         if (p.noRefundWithinDays != null) daysEl.value = p.noRefundWithinDays;
         if (Array.isArray(p.tiers)) {
             p.tiers.forEach((t) => addSeminarCancelTierRow(t.minDaysBeforeEvent, t.refundPercent));
