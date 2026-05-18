@@ -1,0 +1,455 @@
+/**
+ * VGMF Congress — premium homepage UI (hero, ticker, quick access, programme timeline)
+ */
+(function () {
+    function esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function mediaUrl(path) {
+        if (!path) return '';
+        const p = String(path).trim();
+        if (p.startsWith('http') || p.startsWith('/')) return p;
+        return '/uploads/' + p;
+    }
+
+    const QUICK_ACCESS = [
+        { icon: 'fa-user-plus', title: 'Register now', text: 'Doctor portal registration', href: '/doctor.html', action: 'register' },
+        { icon: 'fa-microphone', title: 'Speakers', text: 'Faculty & experts', section: 'home', anchor: 'speakers-section' },
+        { icon: 'fa-images', title: 'Gallery', text: 'Photos & memories', section: 'gallery' },
+        { icon: 'fa-shield-check', title: 'Verify delegate', text: 'Certificate lookup', section: 'verify' },
+        { icon: 'fa-envelope', title: 'Contact', text: 'Get in touch', section: 'contact' }
+    ];
+
+    let heroIndex = 0;
+    let heroTimer = null;
+    let heroSlides = [];
+
+    function renderQuickAccess() {
+        const grid = document.getElementById('cg-quick-grid');
+        if (!grid) return;
+        grid.innerHTML = QUICK_ACCESS.map((c) => {
+            let onclick = '';
+            if (c.section && typeof showSection === 'function') {
+                onclick = `onclick="showSection('${c.section}');${c.anchor ? "document.getElementById('" + c.anchor + "')?.scrollIntoView({behavior:'smooth'});" : ''} return false;"`;
+            } else if (c.action === 'register') {
+                onclick = `onclick="openRegisterModal(); return false;"`;
+            }
+            const href = c.href || '#';
+            return (
+                '<a class="cg-quick-card" href="' +
+                esc(href) +
+                '" ' +
+                onclick +
+                '><div class="cg-quick-icon"><i class="fas ' +
+                esc(c.icon) +
+                '"></i></div><h3>' +
+                esc(c.title) +
+                '</h3><p>' +
+                esc(c.text) +
+                '</p></a>'
+            );
+        }).join('');
+    }
+
+    function buildHeroSlides(cms) {
+        const slides = [];
+        const fromCms = Array.isArray(cms.slides) ? cms.slides : [];
+        fromCms.forEach((sl) => {
+            if (!sl || (!sl.image && !sl.title)) return;
+            slides.push({
+                image: mediaUrl(sl.image),
+                title: sl.title || (cms.hero && cms.hero.title) || 'National Seminar',
+                subtitle: sl.subtitle || (cms.hero && cms.hero.subtitle) || '',
+                cta: sl.cta || (cms.hero && cms.hero.ctaPrimary) || 'Register now',
+                link: sl.link || '/doctor.html',
+                cta2: sl.cta2 || '',
+                link2: sl.link2 || ''
+            });
+        });
+        if (!slides.length && cms.hero) {
+            slides.push({
+                image: mediaUrl(cms.hero.image),
+                title: cms.hero.title || 'National Seminar',
+                subtitle: cms.hero.subtitle || '',
+                cta: cms.hero.ctaPrimary || 'Register now',
+                link: '/doctor.html',
+                cta2: cms.hero.ctaSecondary || 'View programme',
+                link2: '#schedule'
+            });
+        }
+        if (!slides.length) {
+            slides.push({
+                image: '',
+                title: 'VGMF National Seminar',
+                subtitle: 'Ayurveda · Education · Excellence',
+                cta: 'Register now',
+                link: '/doctor.html',
+                cta2: 'Programme',
+                link2: '#'
+            });
+        }
+        return slides;
+    }
+
+    function showHeroSlide(i) {
+        const root = document.getElementById('congress-hero-slides');
+        const dots = document.getElementById('congress-hero-dots');
+        if (!root || !heroSlides.length) return;
+        heroIndex = ((i % heroSlides.length) + heroSlides.length) % heroSlides.length;
+        root.querySelectorAll('.congress-hero-slide').forEach((el, idx) => {
+            el.classList.toggle('is-active', idx === heroIndex);
+        });
+        if (dots) {
+            dots.querySelectorAll('button').forEach((btn, idx) => {
+                btn.classList.toggle('is-active', idx === heroIndex);
+            });
+        }
+    }
+
+    function startHeroAutoplay() {
+        if (heroTimer) clearInterval(heroTimer);
+        if (heroSlides.length < 2) return;
+        heroTimer = setInterval(() => showHeroSlide(heroIndex + 1), 6000);
+    }
+
+    window.renderCongressHero = function renderCongressHero(cms) {
+        const root = document.getElementById('congress-hero-slides');
+        const dots = document.getElementById('congress-hero-dots');
+        if (!root) return;
+        heroSlides = buildHeroSlides(cms || {});
+        root.innerHTML = heroSlides
+            .map((sl, i) => {
+                const bg = sl.image
+                    ? `style="background-image:url('${esc(sl.image)}')"`
+                    : 'style="background:linear-gradient(135deg,#0f766e,#134e4a)"';
+                const cta2 =
+                    sl.cta2 && sl.link2
+                        ? `<a href="${esc(sl.link2)}" class="cg-btn-ghost" onclick="${sl.link2 === '#' ? "showSection('schedule');return false;" : ''}">${esc(sl.cta2)}</a>`
+                        : '';
+                return (
+                    '<div class="congress-hero-slide' +
+                    (i === 0 ? ' is-active' : '') +
+                    '">' +
+                    '<div class="congress-hero-bg" ' +
+                    bg +
+                    '></div>' +
+                    '<div class="congress-hero-overlay"></div>' +
+                    '<div class="congress-hero-content">' +
+                    '<span class="congress-hero-eyebrow"><i class="fas fa-certificate"></i> National CME Congress</span>' +
+                    '<h2>' +
+                    esc(sl.title) +
+                    '</h2>' +
+                    '<p class="lead">' +
+                    esc(sl.subtitle) +
+                    '</p>' +
+                    '<div class="congress-hero-actions">' +
+                    '<a href="' +
+                    esc(sl.link) +
+                    '" class="cg-btn-primary">' +
+                    esc(sl.cta) +
+                    ' <i class="fas fa-arrow-right"></i></a>' +
+                    cta2 +
+                    '</div></div></div>'
+                );
+            })
+            .join('');
+        if (dots) {
+            dots.innerHTML = heroSlides
+                .map(
+                    (_, i) =>
+                        '<button type="button" data-i="' +
+                        i +
+                        '" class="' +
+                        (i === 0 ? 'is-active' : '') +
+                        '" aria-label="Slide ' +
+                        (i + 1) +
+                        '"></button>'
+                )
+                .join('');
+            dots.querySelectorAll('button').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    showHeroSlide(parseInt(btn.dataset.i, 10));
+                    startHeroAutoplay();
+                });
+            });
+        }
+        startHeroAutoplay();
+    };
+
+    function filterAnnouncements(items) {
+        const now = Date.now();
+        return (items || [])
+            .filter((a) => {
+                if (!a || (!a.title && !a.body)) return false;
+                if (a.enabled === false || a.enabled === '0') return false;
+                if (a.expiresAt || a.expiry) {
+                    const ex = new Date(String(a.expiresAt || a.expiry));
+                    if (!Number.isNaN(ex.getTime()) && ex.getTime() < now) return false;
+                }
+                return true;
+            })
+            .sort((a, b) => (Number(b.priority) || 0) - (Number(a.priority) || 0));
+    }
+
+    window.renderCongressTicker = function renderCongressTicker(items) {
+        const wrap = document.getElementById('scrolling-announce-wrap');
+        const track = document.getElementById('scrolling-announce-track');
+        if (!wrap || !track) return;
+        const list = filterAnnouncements(items);
+        if (!list.length) {
+            wrap.classList.add('hidden');
+            return;
+        }
+        wrap.classList.remove('hidden');
+        const html = list
+            .map((it) => {
+                const text = esc(it.title || it.body || 'Update');
+                const link = it.link ? '<a href="' + esc(it.link) + '">' + text + '</a>' : text;
+                const pdf = it.pdf
+                    ? ' <a href="' + esc(mediaUrl(it.pdf)) + '" target="_blank" rel="noopener"><i class="fas fa-file-pdf"></i></a>'
+                    : '';
+                return '<span class="cg-ticker-item">' + link + pdf + '</span>';
+            })
+            .join('');
+        track.innerHTML = html + html;
+    };
+
+    function groupSchedulesByDay(schedules) {
+        const map = new Map();
+        (schedules || []).forEach((s) => {
+            const d = s.start_time ? new Date(String(s.start_time).replace(' ', 'T')) : null;
+            const key = d ? d.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : 'TBA';
+            if (!map.has(key)) map.set(key, []);
+            map.get(key).push(s);
+        });
+        return map;
+    }
+
+    window.renderCongressProgramme = function renderCongressProgramme(schedules) {
+        const root = document.getElementById('cg-programme-root');
+        const filters = document.getElementById('cg-programme-filters');
+        if (!root) return;
+        const list = schedules || window.__publicSchedules || [];
+        if (!list.length) {
+            root.innerHTML =
+                '<p style="text-align:center;color:#64748b;padding:32px;">Programme schedule will be published soon.</p>';
+            return;
+        }
+        const seminars = [...new Set(list.map((s) => s.seminar_title).filter(Boolean))];
+        let activeFilter = 'all';
+        const render = () => {
+            const filtered =
+                activeFilter === 'all' ? list : list.filter((s) => s.seminar_title === activeFilter);
+            const byDay = groupSchedulesByDay(filtered);
+            let html = '<div class="cg-timeline">';
+            byDay.forEach((sessions, day) => {
+                html += '<div class="cg-timeline-day"><h3>' + esc(day) + '</h3>';
+                sessions.forEach((s) => {
+                    const start = s.start_time ? new Date(String(s.start_time).replace(' ', 'T')) : null;
+                    const end = s.end_time ? new Date(String(s.end_time).replace(' ', 'T')) : null;
+                    const time =
+                        start && end
+                            ? start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) +
+                              ' – ' +
+                              end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                            : '—';
+                    html +=
+                        '<article class="cg-session" tabindex="0"><time>' +
+                        esc(time) +
+                        '</time><h4>' +
+                        esc(s.title || 'Session') +
+                        '</h4><p class="meta">' +
+                        esc(s.speaker_name || '') +
+                        (s.location ? ' · ' + esc(s.location) : '') +
+                        (s.seminar_title ? ' · ' + esc(s.seminar_title) : '') +
+                        '</p><div class="cg-session-detail">' +
+                        esc(s.description || s.speaker_bio || '') +
+                        '</div></article>';
+                });
+                html += '</div>';
+            });
+            html += '</div>';
+            root.innerHTML = html;
+            root.querySelectorAll('.cg-session').forEach((el) => {
+                el.addEventListener('click', () => el.classList.toggle('is-open'));
+            });
+        };
+        if (filters && seminars.length > 1) {
+            filters.innerHTML =
+                '<button type="button" class="is-active" data-f="all">All</button>' +
+                seminars
+                    .map((t) => '<button type="button" data-f="' + esc(t) + '">' + esc(t) + '</button>')
+                    .join('');
+            filters.querySelectorAll('button').forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    filters.querySelectorAll('button').forEach((b) => b.classList.remove('is-active'));
+                    btn.classList.add('is-active');
+                    activeFilter = btn.dataset.f;
+                    render();
+                });
+            });
+        }
+        render();
+    };
+
+    window.renderCongressPastSeminars = function renderCongressPastSeminars(cms) {
+        const root = document.getElementById('cg-past-timeline');
+        if (!root) return;
+        const gallery = Array.isArray(cms.pastSeminarGallery) ? cms.pastSeminarGallery : [];
+        if (!gallery.length) {
+            root.innerHTML = '<p style="color:#64748b;">Past seminar highlights coming soon.</p>';
+            return;
+        }
+        const byYear = new Map();
+        gallery.forEach((g) => {
+            const y = g.year || 'Archive';
+            if (!byYear.has(y)) byYear.set(y, []);
+            byYear.get(y).push(g);
+        });
+        let html = '';
+        [...byYear.entries()]
+            .sort((a, b) => String(b[0]).localeCompare(String(a[0])))
+            .forEach(([year, items]) => {
+                html +=
+                    '<div class="cg-past-year"><div class="cg-past-year-label">' +
+                    esc(year) +
+                    '</div><div class="cg-past-gallery">' +
+                    items
+                        .map(
+                            (it) =>
+                                '<figure><img src="' +
+                                esc(mediaUrl(it.src)) +
+                                '" alt="' +
+                                esc(it.caption || '') +
+                                '" loading="lazy"><figcaption>' +
+                                esc(it.caption || '') +
+                                '</figcaption></figure>'
+                        )
+                        .join('') +
+                    '</div></div>';
+            });
+        root.innerHTML = html;
+    };
+
+    window.renderCongressVideos = function renderCongressVideos(cms) {
+        const section = document.getElementById('cg-video-section');
+        const grid = document.getElementById('cg-video-grid');
+        if (!section || !grid) return;
+        const videos = Array.isArray(cms.videoHub) ? cms.videoHub : [];
+        if (!videos.length) {
+            section.classList.add('hidden');
+            return;
+        }
+        section.classList.remove('hidden');
+        grid.innerHTML = videos
+            .map((v) => {
+                const id = (String(v.youtubeId || v.url || '').match(/[\w-]{11}/) || [])[0];
+                const embed = id ? 'https://www.youtube-nocookie.com/embed/' + id : '';
+                return (
+                    '<article class="cg-video-card"><div class="cg-video-thumb">' +
+                    (embed
+                        ? '<iframe src="' + embed + '" title="' + esc(v.title || 'Video') + '" allowfullscreen loading="lazy"></iframe>'
+                        : '') +
+                    '</div><div class="cg-video-body"><h4>' +
+                    esc(v.title || 'Video') +
+                    '</h4><p>' +
+                    esc(v.category || v.description || '') +
+                    '</p></div></article>'
+                );
+            })
+            .join('');
+    };
+
+    function bindSpeakerModal() {
+        const modal = document.getElementById('cg-speaker-modal');
+        const body = document.getElementById('cg-speaker-modal-body');
+        const close = document.getElementById('cg-speaker-modal-close');
+        if (!modal || !body) return;
+        document.getElementById('speakers-grid')?.addEventListener('click', (e) => {
+            const card = e.target.closest('.speaker-card');
+            if (!card) return;
+            body.innerHTML = card.innerHTML;
+            modal.classList.add('open');
+            modal.setAttribute('aria-hidden', 'false');
+        });
+        const shut = () => {
+            modal.classList.remove('open');
+            modal.setAttribute('aria-hidden', 'true');
+        };
+        close?.addEventListener('click', shut);
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) shut();
+        });
+    }
+
+    function bindMobileNav() {
+        const toggle = document.getElementById('cg-menu-toggle');
+        const nav = document.getElementById('cg-nav');
+        const backdrop = document.getElementById('cg-nav-backdrop');
+        if (!toggle || !nav) return;
+        const close = () => {
+            nav.classList.remove('mobile-open');
+            backdrop?.classList.remove('open');
+        };
+        toggle.addEventListener('click', () => {
+            nav.classList.toggle('mobile-open');
+            backdrop?.classList.toggle('open');
+        });
+        backdrop?.addEventListener('click', close);
+        nav.querySelectorAll('a[data-nav-section]').forEach((a) => {
+            a.addEventListener('click', close);
+        });
+    }
+
+    function bindHeaderScroll() {
+        const header = document.getElementById('cg-header');
+        if (!header) return;
+        window.addEventListener(
+            'scroll',
+            () => {
+                header.classList.toggle('is-scrolled', window.scrollY > 8);
+            },
+            { passive: true }
+        );
+    }
+
+    document.getElementById('congress-hero-prev')?.addEventListener('click', () => {
+        showHeroSlide(heroIndex - 1);
+        startHeroAutoplay();
+    });
+    document.getElementById('congress-hero-next')?.addEventListener('click', () => {
+        showHeroSlide(heroIndex + 1);
+        startHeroAutoplay();
+    });
+
+    const origApply = window.applySiteCms;
+    window.applySiteCms = function (cms) {
+        if (origApply) origApply(cms);
+        renderCongressHero(cms);
+        renderCongressTicker(cms.scrollingAnnouncements || []);
+        renderCongressPastSeminars(cms);
+        renderCongressVideos(cms);
+    };
+
+    const origSchedules = window.loadEventSchedulesPublic;
+    window.loadEventSchedulesPublic = async function () {
+        if (origSchedules) await origSchedules();
+        renderCongressProgramme(window.__publicSchedules);
+    };
+
+    document.addEventListener('DOMContentLoaded', () => {
+        renderQuickAccess();
+        bindMobileNav();
+        bindHeaderScroll();
+        bindSpeakerModal();
+        const pre = document.getElementById('site-preloader');
+        if (pre) {
+            setTimeout(() => pre.classList.add('done'), 400);
+        }
+    });
+})();

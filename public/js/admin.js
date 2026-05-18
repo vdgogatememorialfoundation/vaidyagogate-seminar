@@ -3533,7 +3533,10 @@ function cmsCollectScrollingAnnouncementsFromDom() {
                 date: (row.querySelector('.cs-date') || {}).value || '',
                 link: (row.querySelector('.cs-link') || {}).value || '',
                 pdf: (row.querySelector('.cs-pdf') || {}).value || '',
-                image: (row.querySelector('.cs-img') || {}).value || ''
+                image: (row.querySelector('.cs-img') || {}).value || '',
+                priority: (row.querySelector('.cs-priority') || {}).value || '',
+                expiresAt: (row.querySelector('.cs-expiry') || {}).value || '',
+                enabled: (row.querySelector('.cs-enabled') || {}).checked !== false
             };
             const hid = row.querySelector('.cs-auto-id');
             if (hid && hid.value && String(hid.value).trim() !== '') {
@@ -3670,6 +3673,11 @@ function cmsAddScrollingRow(prefill) {
           <div><label style="font-size:0.8rem;">Title</label><input class="cs-title" type="text" style="width:100%" placeholder="Headline"></div>
           <div><label style="font-size:0.8rem;">Date</label><input class="cs-date" type="text" style="width:100%" placeholder="2026-05-01"></div>
         </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:6px;">
+          <div><label style="font-size:0.8rem;">Priority</label><input class="cs-priority" type="number" style="width:100%" placeholder="10"></div>
+          <div><label style="font-size:0.8rem;">Expires</label><input class="cs-expiry" type="date" style="width:100%"></div>
+          <div style="display:flex;align-items:flex-end;padding-bottom:6px;"><label style="font-size:0.8rem;"><input class="cs-enabled" type="checkbox" checked> Enabled</label></div>
+        </div>
         <div style="margin-top:6px;"><label style="font-size:0.8rem;">Body</label><textarea class="cs-body" rows="2" style="width:100%" placeholder="Details"></textarea></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;">
           <div><label style="font-size:0.8rem;">Link</label><input class="cs-link" type="text" style="width:100%" placeholder="https://..."></div>
@@ -3701,6 +3709,12 @@ function cmsAddScrollingRow(prefill) {
     if (l) l.value = p.link || '';
     if (pdf) pdf.value = p.pdf || '';
     if (im) im.value = p.image || '';
+    const pr = wrap.querySelector('.cs-priority');
+    const ex = wrap.querySelector('.cs-expiry');
+    const en = wrap.querySelector('.cs-enabled');
+    if (pr) pr.value = p.priority != null ? String(p.priority) : '';
+    if (ex) ex.value = (p.expiresAt || p.expiry || '').toString().slice(0, 10);
+    if (en) en.checked = p.enabled !== false && p.enabled !== 0 && String(p.enabled).toLowerCase() !== 'false';
     root.appendChild(wrap);
 }
 

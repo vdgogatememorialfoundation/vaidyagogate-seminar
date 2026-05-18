@@ -1624,6 +1624,7 @@ async function loadCaseApplicationsTracker(silentPoll) {
 }
 
 function viewCaseApplication(index) {
+    currentCaseViewIndex = index;
     const c = userCaseApplications[index];
     if (!c) return;
     const contentDiv = document.getElementById('view-case-content');
@@ -1656,7 +1657,8 @@ function viewCaseApplication(index) {
         '</p>' +
         '<hr style="margin:16px 0;border:0;border-top:1px solid #cbd5e1;">' +
         '<h4 style="color:#0f766e;margin-bottom:12px;"><i class="fas fa-route"></i> Case presentation tracking</h4>' +
-        renderTrackerStepsHtml(c.timeline || {});
+        renderTrackerStepsHtml(c.timeline || {}) +
+        '<button type="button" class="btn-primary" style="margin-top:16px;background:#0f766e;" onclick="downloadCaseApplicationPdf()"><i class="fas fa-file-pdf"></i> Download application PDF</button>';
     const modal = document.getElementById('view-case-modal');
     if (modal) {
         modal.classList.remove('hidden');
@@ -1664,6 +1666,50 @@ function viewCaseApplication(index) {
     }
 }
 
+function downloadCaseApplicationPdf() {
+    const c = userCaseApplications[currentCaseViewIndex];
+    if (!c || !window.jspdf) return;
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    const accent = [15, 118, 110];
+    const ink = [15, 23, 42];
+    const muted = [71, 85, 105];
+    let y = pdfCongressHeader(doc, 'Case presentation application');
+    const row = (label, val) => {
+        doc.setFontSize(9.5);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(...muted);
+        const lines = doc.splitTextToSize(String(val == null ? '—' : val), 118);
+        doc.text(label, 18, y + 6);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...ink);
+        doc.text(lines, 72, y + 6);
+        y += Math.max(10, lines.length * 5.2 + 4);
+        doc.setDrawColor(226, 232, 240);
+        doc.line(14, y, 196, y);
+    };
+    y = pdfCongressSectionTitle(doc, y + 4, 'Application', accent, ink);
+    row('Application ID', c.application_no || c.id);
+    row('Program', c.program_title);
+    row('Category', c.category);
+    row('Topic / title', c.title);
+    row('Status', caseApplicationStatusLabel(c.status));
+    row('Files uploaded', c.file_count || 0);
+    y += 8;
+    doc.setFontSize(10);
+    doc.setTextColor(180, 83, 9);
+    doc.setFont('helvetica', 'bold');
+    doc.text('VGMF Case Presentation · ' + new Date().toLocaleDateString(), 105, y, { align: 'center' });
+    const blob = doc.output('blob');
+    if (currentCasePdfBlobUrl) URL.revokeObjectURL(currentCasePdfBlobUrl);
+    currentCasePdfBlobUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = currentCasePdfBlobUrl;
+    a.download = 'Case_Application_' + (c.application_no || c.id) + '.pdf';
+    a.click();
+}
+
+let currentCaseViewIndex = 0;
 function doctorCertificateLockedBlock(message) {
     const msg =
         message ||
@@ -1828,6 +1874,35 @@ async function nextStep(step) {
 }
 
 let currentPdfBlobUrl = null;
+let currentCasePdfBlobUrl = null;
+
+function pdfCongressHeader(doc, subtitle) {
+    doc.setFillColor(13, 92, 77);
+    doc.rect(0, 0, 210, 42, 'F');
+    doc.setFillColor(184, 134, 11);
+    doc.rect(0, 40, 210, 2.5, 'F');
+    doc.setFontSize(15);
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Vaidya Gogate Memorial Foundation', 105, 17, { align: 'center' });
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(subtitle || 'National Seminar Portal', 105, 28, { align: 'center' });
+    doc.setFontSize(8);
+    doc.setTextColor(236, 253, 245);
+    doc.text('National Seminar · Ayurveda Congress', 105, 35, { align: 'center' });
+    return 50;
+}
+
+function pdfCongressSectionTitle(doc, y, title, accent, ink) {
+    doc.setFillColor(240, 253, 250);
+    doc.roundedRect(14, y, 182, 9, 1.5, 1.5, 'F');
+    doc.setFontSize(11);
+    doc.setTextColor(...accent);
+    doc.setFont('helvetica', 'bold');
+    doc.text(title, 18, y + 6.5);
+    return y + 14;
+}
 
 function generatePdfBlob(qrImgElement) {
     const { jsPDF } = window.jspdf;
@@ -1836,19 +1911,7 @@ function generatePdfBlob(qrImgElement) {
     const ink = [15, 23, 42];
     const muted = [71, 85, 105];
 
-    doc.setDrawColor(...accent);
-    doc.setLineWidth(0.6);
-    doc.roundedRect(10, 8, 190, 282, 3, 3);
-
-    doc.setFillColor(...accent);
-    doc.rect(10, 8, 190, 28, 'F');
-    doc.setFontSize(15);
-    doc.setTextColor(255, 255, 255);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Vaidya Gogate Memorial Foundation', 105, 20, { align: 'center' });
-    doc.setFontSize(10.5);
-    doc.setFont('helvetica', 'normal');
-    doc.text('Seminar registration — application preview', 105, 29, { align: 'center' });
+    let y = pdfCongressHeader(doc, 'Seminar registration — draft preview');
 
     if (qrImgElement && qrImgElement.src) {
         const canvas = document.createElement('canvas');
@@ -1860,16 +1923,8 @@ function generatePdfBlob(qrImgElement) {
         doc.addImage(imgData, 'PNG', 162, 42, 32, 32);
     }
 
-    let y = 44;
     const drawSection = (title) => {
-        y += 6;
-        doc.setFillColor(240, 253, 250);
-        doc.roundedRect(14, y, 182, 9, 1.5, 1.5, 'F');
-        doc.setFontSize(11.5);
-        doc.setTextColor(...accent);
-        doc.setFont('helvetica', 'bold');
-        doc.text(title, 18, y + 6.5);
-        y += 14;
+        y = pdfCongressSectionTitle(doc, y + 4, title, accent, ink);
     };
 
     const drawTableRow = (label, value) => {
@@ -2354,17 +2409,7 @@ function downloadViewedAppPdf() {
     const ink = [15, 23, 42];
     const muted = [71, 85, 105];
 
-    doc.setFillColor(...accent);
-    doc.rect(0, 0, 210, 36, 'F');
-    doc.setFontSize(16);
-    doc.setTextColor(255, 255, 255);
-    doc.setFont('helvetica', 'bold');
-    doc.text('Vaidya Gogate Memorial Foundation', 105, 16, { align: 'center' });
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.text('Submitted seminar application', 105, 26, { align: 'center' });
-
-    let y = 46;
+    let y = pdfCongressHeader(doc, 'Submitted seminar application');
     doc.setFontSize(11);
     doc.setTextColor(...accent);
     doc.setFont('helvetica', 'bold');

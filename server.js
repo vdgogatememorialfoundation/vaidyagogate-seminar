@@ -1027,16 +1027,25 @@ function isSeminarRegistrationOpen(row) {
 /** Drop verbose legacy auto-cards and test seminar clutter from CMS. */
 function sanitizeScrollingAnnouncements(arr) {
     if (!Array.isArray(arr)) return [];
-    return arr.filter((a) => {
-        if (!a || (!a.title && !a.body)) return false;
-        const t = String(a.title || '');
-        const b = String(a.body || '');
-        if (/test seminar/i.test(t) || /introduction to ayurveda/i.test(t)) return false;
-        if (t.startsWith('Seminar — ') && b.includes('Apply from the doctor portal') && b.includes(' — ')) {
-            return false;
-        }
-        return true;
-    });
+    const now = Date.now();
+    return arr
+        .filter((a) => {
+            if (!a || (!a.title && !a.body)) return false;
+            if (a.enabled === false || a.enabled === 0 || String(a.enabled).toLowerCase() === 'false') return false;
+            const exp = a.expiresAt || a.expiry;
+            if (exp) {
+                const ex = new Date(String(exp));
+                if (!Number.isNaN(ex.getTime()) && ex.getTime() < now) return false;
+            }
+            const t = String(a.title || '');
+            const b = String(a.body || '');
+            if (/test seminar/i.test(t) || /introduction to ayurveda/i.test(t)) return false;
+            if (t.startsWith('Seminar — ') && b.includes('Apply from the doctor portal') && b.includes(' — ')) {
+                return false;
+            }
+            return true;
+        })
+        .sort((a, b) => (Number(b.priority) || 0) - (Number(a.priority) || 0));
 }
 
 function buildSeminarRegistrationAnnouncement(row) {
@@ -3683,7 +3692,7 @@ app.post('/api/scanner/mark', (req, res) => {
                 if (!row) {
                     return res.status(404).json({
                         success: false,
-                        error: 'Ticket not found. Scan the QR on the e-ticket or enter the 12-digit E-ticket ID.',
+                        error: 'Not found. Scan e-ticket QR, or enter E-ticket ID / Application ID.',
                         sound: 'error'
                     });
                 }

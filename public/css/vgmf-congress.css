@@ -1,0 +1,860 @@
+/* VGMF National Seminar — Premium Congress Theme */
+:root {
+    --cg-white: #ffffff;
+    --cg-bg: #fafbfc;
+    --cg-surface: rgba(255, 255, 255, 0.72);
+    --cg-green: #0d5c4d;
+    --cg-green-mid: #0f766e;
+    --cg-green-light: #ecfdf5;
+    --cg-gold: #b8860b;
+    --cg-gold-soft: #d4a84b;
+    --cg-ink: #0f172a;
+    --cg-muted: #64748b;
+    --cg-line: rgba(15, 118, 110, 0.12);
+    --cg-shadow: 0 4px 24px rgba(15, 23, 42, 0.06);
+    --cg-shadow-lg: 0 20px 50px rgba(15, 23, 42, 0.1);
+    --cg-radius: 16px;
+    --cg-radius-lg: 24px;
+    --cg-font: 'Plus Jakarta Sans', system-ui, sans-serif;
+    --cg-display: 'Libre Baskerville', Georgia, serif;
+    --cg-header-h: 72px;
+    --cg-ease: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.congress-site {
+    font-family: var(--cg-font);
+    background: var(--cg-bg);
+    color: var(--cg-ink);
+    -webkit-font-smoothing: antialiased;
+}
+
+.congress-site .top-bar,
+.congress-site .hero:not(.congress-hero-wrap),
+.congress-site .trust-strip,
+.congress-site .marketing-hero,
+.congress-site #home-slider {
+    display: none !important;
+}
+
+.congress-site .site-header.legacy-header {
+    display: none !important;
+}
+
+/* Preloader */
+#site-preloader {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: var(--cg-white);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    transition: opacity 0.4s var(--cg-ease), visibility 0.4s;
+}
+#site-preloader.done {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
+.preloader-ring {
+    width: 48px;
+    height: 48px;
+    border: 3px solid var(--cg-green-light);
+    border-top-color: var(--cg-green-mid);
+    border-radius: 50%;
+    animation: cg-spin 0.8s linear infinite;
+}
+@keyframes cg-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Top utility strip */
+.cg-utility {
+    background: var(--cg-green);
+    color: rgba(255, 255, 255, 0.92);
+    font-size: 0.8rem;
+    padding: 8px 0;
+}
+.cg-utility-inner {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 0 20px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 8px 20px;
+}
+.cg-utility span { display: inline-flex; align-items: center; gap: 8px; opacity: 0.95; }
+.cg-utility a { color: #fef3c7; font-weight: 600; text-decoration: none; }
+.cg-utility a:hover { text-decoration: underline; }
+
+/* Sticky header */
+.cg-header {
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    background: var(--cg-white);
+    border-bottom: 1px solid var(--cg-line);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8);
+    transition: box-shadow 0.3s var(--cg-ease);
+}
+.cg-header.is-scrolled {
+    box-shadow: var(--cg-shadow);
+}
+.cg-header-inner {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+}
+.cg-logo-zone {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    text-decoration: none;
+    color: inherit;
+    flex-shrink: 0;
+    background: var(--cg-white);
+    padding: 4px 8px 4px 0;
+    border-radius: 12px;
+}
+.cg-logo-zone [data-site-logo] {
+    flex-shrink: 0;
+}
+.cg-logo-text h1 {
+    font-family: var(--cg-display);
+    font-size: 1.05rem;
+    font-weight: 700;
+    line-height: 1.2;
+    color: var(--cg-green);
+    letter-spacing: -0.02em;
+}
+.cg-logo-text p {
+    font-size: 0.68rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--cg-gold);
+    font-weight: 700;
+    margin-top: 2px;
+}
+.cg-nav {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+}
+.cg-nav a {
+    padding: 10px 14px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--cg-muted);
+    text-decoration: none;
+    border-radius: 10px;
+    transition: color 0.2s, background 0.2s;
+}
+.cg-nav a:hover,
+.cg-nav a.active {
+    color: var(--cg-green);
+    background: var(--cg-green-light);
+}
+.cg-btn-register {
+    background: linear-gradient(135deg, var(--cg-green-mid), var(--cg-green));
+    color: #fff !important;
+    padding: 12px 22px !important;
+    border-radius: 12px !important;
+    box-shadow: 0 4px 14px rgba(15, 118, 110, 0.35);
+}
+.cg-btn-register:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(15, 118, 110, 0.4);
+}
+.cg-menu-toggle {
+    display: none;
+    width: 44px;
+    height: 44px;
+    border: 1px solid var(--cg-line);
+    border-radius: 12px;
+    background: var(--cg-white);
+    color: var(--cg-green);
+    font-size: 1.2rem;
+    cursor: pointer;
+    margin-left: auto;
+}
+.cg-nav-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.4);
+    z-index: 999;
+}
+.cg-nav-backdrop.open { display: block; }
+
+/* Announcement ticker */
+.cg-ticker {
+    background: linear-gradient(90deg, var(--cg-green-light), #fffbeb);
+    border-bottom: 1px solid var(--cg-line);
+    overflow: hidden;
+}
+.cg-ticker-inner {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+}
+.cg-ticker-badge {
+    flex-shrink: 0;
+    background: var(--cg-green);
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 6px 12px;
+    border-radius: 8px;
+}
+.cg-ticker-viewport {
+    flex: 1;
+    overflow: hidden;
+    mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent);
+}
+.cg-ticker-track {
+    display: flex;
+    gap: 32px;
+    width: max-content;
+    animation: cg-ticker-scroll 40s linear infinite;
+}
+.cg-ticker:hover .cg-ticker-track { animation-play-state: paused; }
+@keyframes cg-ticker-scroll {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+}
+.cg-ticker-item {
+    flex-shrink: 0;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--cg-ink);
+    white-space: nowrap;
+}
+.cg-ticker-item a {
+    color: var(--cg-green-mid);
+    text-decoration: none;
+}
+.cg-ticker-item a:hover { text-decoration: underline; }
+
+/* Hero carousel */
+.congress-hero {
+    position: relative;
+    min-height: clamp(420px, 58vh, 620px);
+    overflow: hidden;
+    background: var(--cg-ink);
+}
+.congress-hero-slide {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 0.9s var(--cg-ease);
+    pointer-events: none;
+}
+.congress-hero-slide.is-active {
+    opacity: 1;
+    pointer-events: auto;
+    z-index: 1;
+}
+.congress-hero-bg {
+    position: absolute;
+    inset: 0;
+    background-size: cover;
+    background-position: center;
+    transform: scale(1.05);
+    transition: transform 8s ease;
+}
+.congress-hero-slide.is-active .congress-hero-bg { transform: scale(1); }
+.congress-hero-overlay {
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(105deg, rgba(13, 92, 77, 0.88) 0%, rgba(15, 118, 110, 0.65) 45%, rgba(0, 0, 0, 0.25) 100%);
+}
+.congress-hero-content {
+    position: relative;
+    z-index: 2;
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: clamp(48px, 8vw, 96px) 24px;
+    color: #fff;
+    min-height: inherit;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+.congress-hero-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #fef3c7;
+    margin-bottom: 16px;
+}
+.congress-hero-content h2 {
+    font-family: var(--cg-display);
+    font-size: clamp(2rem, 5vw, 3.5rem);
+    font-weight: 700;
+    line-height: 1.08;
+    max-width: 720px;
+    margin-bottom: 16px;
+}
+.congress-hero-content .lead {
+    font-size: clamp(1rem, 2vw, 1.2rem);
+    opacity: 0.92;
+    max-width: 560px;
+    line-height: 1.6;
+    margin-bottom: 28px;
+}
+.congress-hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+.congress-hero-actions .cg-btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 28px;
+    background: linear-gradient(135deg, #fbbf24, var(--cg-gold));
+    color: var(--cg-ink);
+    font-weight: 800;
+    border-radius: 14px;
+    text-decoration: none;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+    transition: transform 0.2s;
+}
+.congress-hero-actions .cg-btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 24px;
+    border: 2px solid rgba(255, 255, 255, 0.5);
+    color: #fff;
+    font-weight: 700;
+    border-radius: 14px;
+    text-decoration: none;
+    backdrop-filter: blur(8px);
+}
+.congress-hero-actions a:hover { transform: translateY(-2px); }
+.congress-hero-nav {
+    position: absolute;
+    bottom: 28px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 3;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+.congress-hero-dots button {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255, 255, 255, 0.4);
+    cursor: pointer;
+    padding: 0;
+    transition: background 0.2s, transform 0.2s;
+}
+.congress-hero-dots button.is-active {
+    background: #fbbf24;
+    transform: scale(1.2);
+}
+.congress-hero-arrows button {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    z-index: 3;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    cursor: pointer;
+    backdrop-filter: blur(8px);
+    transition: background 0.2s;
+}
+.congress-hero-arrows button:hover { background: rgba(255, 255, 255, 0.25); }
+.congress-hero-arrows .prev { left: 20px; }
+.congress-hero-arrows .next { right: 20px; }
+
+/* Quick access */
+.cg-quick {
+    max-width: 1280px;
+    margin: -48px auto 0;
+    padding: 0 20px;
+    position: relative;
+    z-index: 10;
+}
+.cg-quick-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 16px;
+}
+.cg-quick-card {
+    background: var(--cg-surface);
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--cg-line);
+    border-radius: var(--cg-radius);
+    padding: 24px 18px;
+    text-align: center;
+    text-decoration: none;
+    color: inherit;
+    box-shadow: var(--cg-shadow);
+    transition: transform 0.25s var(--cg-ease), box-shadow 0.25s;
+}
+.cg-quick-card:hover {
+    transform: translateY(-6px);
+    box-shadow: var(--cg-shadow-lg);
+    border-color: rgba(15, 118, 110, 0.25);
+}
+.cg-quick-icon {
+    width: 52px;
+    height: 52px;
+    margin: 0 auto 14px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, var(--cg-green-light), #fffbeb);
+    color: var(--cg-green-mid);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.35rem;
+}
+.cg-quick-card h3 {
+    font-size: 0.95rem;
+    font-weight: 800;
+    color: var(--cg-green);
+    margin-bottom: 4px;
+}
+.cg-quick-card p {
+    font-size: 0.78rem;
+    color: var(--cg-muted);
+    line-height: 1.4;
+}
+
+/* Main sections */
+.congress-site .main-content {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 48px 20px 80px;
+}
+.cg-section {
+    margin-bottom: 64px;
+}
+.cg-section-head {
+    text-align: center;
+    max-width: 640px;
+    margin: 0 auto 40px;
+}
+.cg-section-head h2 {
+    font-family: var(--cg-display);
+    font-size: clamp(1.75rem, 3vw, 2.25rem);
+    color: var(--cg-green);
+    margin-bottom: 10px;
+}
+.cg-section-head p {
+    color: var(--cg-muted);
+    font-size: 1.05rem;
+    line-height: 1.6;
+}
+.cg-section-head.left {
+    text-align: left;
+    margin-left: 0;
+}
+
+/* Glass cards */
+.cg-glass-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 20px;
+}
+.cg-glass-card {
+    background: var(--cg-white);
+    border: 1px solid var(--cg-line);
+    border-radius: var(--cg-radius);
+    padding: 28px;
+    box-shadow: var(--cg-shadow);
+    transition: transform 0.25s, box-shadow 0.25s;
+}
+.cg-glass-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--cg-shadow-lg);
+}
+.congress-site .feature-card {
+    background: var(--cg-white);
+    border: 1px solid var(--cg-line);
+    border-radius: var(--cg-radius);
+    padding: 28px;
+    box-shadow: var(--cg-shadow);
+    transition: transform 0.25s, box-shadow 0.25s;
+}
+.congress-site .feature-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--cg-shadow-lg);
+}
+.congress-site .feature-card .card-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: var(--cg-green-light);
+    color: var(--cg-green-mid);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    margin-bottom: 16px;
+}
+.congress-site .cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 20px;
+}
+.congress-site .notices-panel {
+    background: var(--cg-white);
+    border: 1px solid var(--cg-line);
+    border-radius: var(--cg-radius);
+    padding: 24px;
+    box-shadow: var(--cg-shadow);
+}
+
+.cg-glass-card .card-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: var(--cg-green-light);
+    color: var(--cg-green-mid);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    margin-bottom: 16px;
+}
+
+/* Speakers */
+#speakers-section .speakers-grid,
+#speakers-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 24px;
+}
+.speaker-card {
+    background: var(--cg-white);
+    border-radius: var(--cg-radius);
+    overflow: hidden;
+    border: 1px solid var(--cg-line);
+    box-shadow: var(--cg-shadow);
+    cursor: pointer;
+    transition: transform 0.25s, box-shadow 0.25s;
+    text-align: center;
+    padding-bottom: 20px;
+}
+.speaker-card:hover {
+    transform: translateY(-6px);
+    box-shadow: var(--cg-shadow-lg);
+}
+.speaker-photo-wrap {
+    aspect-ratio: 1;
+    overflow: hidden;
+    background: var(--cg-green-light);
+}
+.speaker-photo {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+.speaker-card h3 {
+    font-size: 1rem;
+    margin: 14px 12px 4px;
+    color: var(--cg-green);
+}
+.speaker-role { font-size: 0.85rem; color: var(--cg-gold); font-weight: 600; }
+.speaker-seminar, .speaker-org { font-size: 0.8rem; color: var(--cg-muted); padding: 0 12px; }
+
+/* Programme timeline */
+.cg-programme-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 24px;
+    justify-content: center;
+}
+.cg-programme-filters button {
+    padding: 10px 18px;
+    border-radius: 999px;
+    border: 1px solid var(--cg-line);
+    background: var(--cg-white);
+    font-weight: 600;
+    font-size: 0.85rem;
+    cursor: pointer;
+    color: var(--cg-muted);
+    transition: all 0.2s;
+}
+.cg-programme-filters button.is-active {
+    background: var(--cg-green);
+    color: #fff;
+    border-color: var(--cg-green);
+}
+.cg-timeline { position: relative; padding-left: 28px; }
+.cg-timeline::before {
+    content: '';
+    position: absolute;
+    left: 8px;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: linear-gradient(180deg, var(--cg-green-mid), var(--cg-gold-soft));
+}
+.cg-timeline-day {
+    margin-bottom: 32px;
+}
+.cg-timeline-day h3 {
+    font-family: var(--cg-display);
+    font-size: 1.15rem;
+    color: var(--cg-green);
+    margin-bottom: 16px;
+    padding-left: 8px;
+}
+.cg-session {
+    position: relative;
+    margin-bottom: 12px;
+    padding: 18px 20px 18px 24px;
+    background: var(--cg-white);
+    border: 1px solid var(--cg-line);
+    border-radius: var(--cg-radius);
+    box-shadow: var(--cg-shadow);
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+.cg-session::before {
+    content: '';
+    position: absolute;
+    left: -24px;
+    top: 22px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--cg-gold);
+    border: 3px solid var(--cg-white);
+    box-shadow: 0 0 0 2px var(--cg-green-mid);
+}
+.cg-session:hover { border-color: var(--cg-green-mid); }
+.cg-session time {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: var(--cg-gold);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+.cg-session h4 {
+    font-size: 1.05rem;
+    margin: 6px 0 4px;
+    color: var(--cg-ink);
+}
+.cg-session .meta {
+    font-size: 0.85rem;
+    color: var(--cg-muted);
+}
+.cg-session-detail {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed var(--cg-line);
+    font-size: 0.9rem;
+    color: var(--cg-muted);
+    display: none;
+}
+.cg-session.is-open .cg-session-detail { display: block; }
+.congress-site .schedule-table { display: none; }
+
+/* Video hub */
+.cg-video-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 20px;
+}
+.cg-video-card {
+    background: var(--cg-white);
+    border-radius: var(--cg-radius);
+    overflow: hidden;
+    border: 1px solid var(--cg-line);
+    box-shadow: var(--cg-shadow);
+    transition: transform 0.25s;
+}
+.cg-video-card:hover { transform: translateY(-4px); }
+.cg-video-thumb {
+    aspect-ratio: 16/9;
+    background: var(--cg-ink);
+    position: relative;
+}
+.cg-video-thumb iframe,
+.cg-video-thumb img {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    object-fit: cover;
+}
+.cg-video-body { padding: 16px; }
+.cg-video-body h4 { font-size: 0.95rem; color: var(--cg-green); margin-bottom: 4px; }
+
+/* Past seminars */
+.cg-past-timeline {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+.cg-past-year {
+    display: grid;
+    grid-template-columns: 100px 1fr;
+    gap: 24px;
+    align-items: start;
+}
+.cg-past-year-label {
+    font-family: var(--cg-display);
+    font-size: 2rem;
+    font-weight: 700;
+    color: var(--cg-gold);
+    line-height: 1;
+}
+.cg-past-gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+}
+.cg-past-gallery img {
+    width: 100%;
+    aspect-ratio: 4/3;
+    object-fit: cover;
+    border-radius: 12px;
+    border: 1px solid var(--cg-line);
+}
+
+/* Footer */
+.congress-site .footer {
+    background: linear-gradient(180deg, var(--cg-green) 0%, #0a3d34 100%);
+    color: rgba(255, 255, 255, 0.9);
+    padding: 56px 20px 28px;
+    margin-top: 0;
+}
+.congress-site .footer a { color: #fef3c7; }
+.congress-site .footer h4 { color: #fff; font-family: var(--cg-display); }
+
+/* FAB mobile register */
+.cg-fab-register {
+    display: none;
+    position: fixed;
+    bottom: 24px;
+    right: 20px;
+    z-index: 900;
+    padding: 14px 22px;
+    background: linear-gradient(135deg, var(--cg-green-mid), var(--cg-green));
+    color: #fff;
+    font-weight: 800;
+    border-radius: 999px;
+    text-decoration: none;
+    box-shadow: 0 8px 28px rgba(15, 118, 110, 0.45);
+    font-size: 0.9rem;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Speaker modal */
+.cg-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    background: rgba(15, 23, 42, 0.5);
+    backdrop-filter: blur(6px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s;
+}
+.cg-modal.open {
+    opacity: 1;
+    visibility: visible;
+}
+.cg-modal-panel {
+    background: var(--cg-white);
+    border-radius: var(--cg-radius-lg);
+    max-width: 480px;
+    width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
+    padding: 32px;
+    position: relative;
+    box-shadow: var(--cg-shadow-lg);
+}
+.cg-modal-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 40px;
+    height: 40px;
+    border: none;
+    background: var(--cg-green-light);
+    border-radius: 50%;
+    cursor: pointer;
+    color: var(--cg-green);
+    font-size: 1.2rem;
+}
+
+/* Countdown strip */
+#countdown-region .countdown-strip {
+    background: var(--cg-white);
+    border: 1px solid var(--cg-line);
+    border-radius: var(--cg-radius);
+    margin: 32px auto;
+    max-width: 1280px;
+    padding: 20px;
+    box-shadow: var(--cg-shadow);
+}
+
+@media (max-width: 1024px) {
+    .cg-quick-grid { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 768px) {
+    .cg-menu-toggle { display: flex; align-items: center; justify-content: center; }
+    .cg-nav {
+        position: fixed;
+        top: var(--cg-header-h);
+        right: 0;
+        width: min(300px, 88vw);
+        height: calc(100vh - var(--cg-header-h));
+        background: var(--cg-white);
+        flex-direction: column;
+        align-items: stretch;
+        padding: 20px;
+        gap: 4px;
+        transform: translateX(105%);
+        transition: transform 0.3s var(--cg-ease);
+        box-shadow: -8px 0 32px rgba(0, 0, 0, 0.1);
+        z-index: 1001;
+    }
+    .cg-nav.mobile-open { transform: translateX(0); }
+    .cg-quick-grid { grid-template-columns: repeat(2, 1fr); margin-top: -32px; }
+    .cg-quick-card { padding: 18px 12px; }
+    .cg-fab-register { display: inline-flex; }
+    .congress-hero-arrows .prev { left: 8px; }
+    .congress-hero-arrows .next { right: 8px; }
+    .cg-past-year { grid-template-columns: 1fr; }
+}
+@media (max-width: 480px) {
+    .cg-quick-grid { grid-template-columns: 1fr; }
+    .cg-logo-text h1 { font-size: 0.9rem; }
+}

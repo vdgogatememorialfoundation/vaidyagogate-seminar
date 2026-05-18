@@ -78,6 +78,11 @@
     let facingMode = 'environment';
     let stats = { ok: 0, err: 0, dup: 0 };
     let torchOn = false;
+    let scanBusy = false;
+    let lastScanKey = '';
+    let lastScanAt = 0;
+    const SCAN_DEBOUNCE_MS = 2200;
+    const AUTO_NEXT_MS = 2600;
 
     function haptic(kind) {
         try {
@@ -233,16 +238,34 @@
         }
     }
 
+    function scheduleAutoResume() {
+        setTimeout(() => {
+            resultBox.classList.add('hidden');
+            if (!html5QrCode || !document.getElementById('reader')?.querySelector('video')) {
+                startCam().catch(console.error);
+            }
+            scanBusy = false;
+        }, AUTO_NEXT_MS);
+    }
+
     async function processScan(decodedText) {
+        const raw = String(decodedText || '').trim();
+        if (!raw) return;
+        const scanKey = raw + '|' + (document.getElementById('scanner-seminar-select')?.value || '');
+        const now = Date.now();
+        if (scanBusy) return;
+        if (scanKey === lastScanKey && now - lastScanAt < SCAN_DEBOUNCE_MS) return;
+
         const sel = document.getElementById('scanner-seminar-select');
         const sid = sel && sel.value ? parseInt(sel.value, 10) : selectedSeminarId;
         if (!sid) {
             alert('Select the seminar first.');
-            return startCam();
+            return;
         }
-        try {
-            if (html5QrCode) await html5QrCode.stop();
-        } catch (_) {}
+
+        scanBusy = true;
+        lastScanKey = scanKey;
+        lastScanAt = now;
 
         renderResult(false, '<i class="fas fa-spinner fa-spin"></i> Verifying…', 'warn');
 
@@ -265,7 +288,7 @@
             if (!result.error && !res.ok) {
                 if (res.status === 404) {
                     result.error =
-                        'Ticket not found. Scan the QR on the e-ticket or enter the 12-digit E-ticket ID exactly as shown.';
+                        'Not found. Scan e-ticket QR, enter 12-digit E-ticket ID, or 12-digit Application ID.';
                 } else if (res.status === 403) {
                     result.error = result.error || 'Entry denied — check payment, registration status, seminar, or check-in date.';
                 } else if (res.status === 503) {
@@ -281,20 +304,15 @@
             if (result.success) {
                 playTone('success');
                 stats.ok++;
-                try {
-                    if (html5QrCode) await html5QrCode.stop();
-                } catch (_) {}
-                const reader = document.getElementById('reader');
-                if (reader) {
-                    reader.innerHTML =
-                        '<p style="text-align:center;padding:48px 16px;font-weight:700;color:#059669;font-size:1.05rem;"><i class="fas fa-check-circle"></i> Checked in — QR cleared</p>';
-                }
                 renderResult(
                     true,
-                    '<strong><i class="fas fa-check-circle"></i> Valid entry</strong>' + metaHtml(d),
+                    '<strong><i class="fas fa-check-circle"></i> Checked in</strong>' +
+                        metaHtml(d) +
+                        '<p style="margin-top:10px;font-size:0.85rem;opacity:0.85;">Next scan in a moment…</p>',
                     'ok'
                 );
-                pushHistory((d.name || 'Guest') + ' · ' + (d.ticketId || ''), true);
+                pushHistory((d.name || 'Guest') + ' · ' + (d.ticketId || d.applicationNo || ''), true);
+                scheduleAutoResume();
             } else {
                 const err =
                     result.error ||
@@ -312,12 +330,14 @@
                     isDup ? 'warn' : 'bad'
                 );
                 pushHistory(err.slice(0, 60), false);
+                scheduleAutoResume();
             }
             updateStats();
         } catch (e) {
             stats.err++;
             updateStats();
             renderResult(false, 'Network error', 'bad');
+            scheduleAutoResume();
         }
     }
 
@@ -328,7 +348,7 @@
             } catch (_) {}
         }
         html5QrCode = new Html5Qrcode('reader');
-        const config = { fps: 12, qrbox: { width: 280, height: 280 }, aspectRatio: 1 };
+        const config = { fps: 15, qrbox: { width: 260, height: 260 }, aspectRatio: 1, disableFlip: false };
         await html5QrCode.start({ facingMode }, config, (text) => processScan(text));
     }
 
