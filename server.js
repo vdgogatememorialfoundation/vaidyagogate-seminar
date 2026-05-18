@@ -1886,8 +1886,12 @@ app.get('/api/admin/integrations', withIntegrationSettingsLoaded, (req, res) => 
                 masked.otp_template_resolved = dbg.resolved;
                 masked.otp_template_source = dbg.source;
                 if (dbg.resolved) {
-                    const { fetchTemplateLanguageCodes } = require('./lib/whatsapp-service');
-                    masked.otp_template_meta_languages = await fetchTemplateLanguageCodes(dbg.resolved);
+                    const { debugWhatsAppTemplateLookup } = require('./lib/whatsapp-service');
+                    const metaDbg = await debugWhatsAppTemplateLookup(dbg.resolved);
+                    masked.otp_template_meta_languages = metaDbg.languages || [];
+                    masked.whatsapp_waba_id = metaDbg.wabaId || '';
+                    masked.whatsapp_template_check_error = metaDbg.error || '';
+                    masked.whatsapp_template_check_hint = metaDbg.hint || '';
                 }
             } catch (_) {}
             res.json(masked);
@@ -1975,6 +1979,18 @@ app.post('/api/admin/integrations/test-email', withIntegrationSettingsLoaded, as
         skipped: r.skipped,
         logged: true
     });
+});
+
+app.get('/api/admin/integrations/whatsapp-template-check', withIntegrationSettingsLoaded, async (req, res) => {
+    const name =
+        (req.query && req.query.name) || (await notifEngine.getOtpWhatsAppTemplateName(db)) || 'vgmf_otp_auth';
+    const { debugWhatsAppTemplateLookup } = require('./lib/whatsapp-service');
+    try {
+        const result = await debugWhatsAppTemplateLookup(name);
+        res.json(result);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 app.post('/api/admin/integrations/test-whatsapp', withIntegrationSettingsLoaded, async (req, res) => {

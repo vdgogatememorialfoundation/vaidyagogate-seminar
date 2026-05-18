@@ -942,6 +942,10 @@
                         <strong><a href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started" target="_blank" rel="noopener">Cloud API setup</a></p></div>
                         <div style="grid-column:1/-1;"><label>Access token (System User)</label><input type="password" id="int-wa-token" placeholder="Permanent token — not App Secret" style="width:100%"></div>
                         <div><label>Phone number ID</label><input type="text" id="int-wa-phone-id" placeholder="1066436679893640" style="width:100%"></div>
+                        <div><label>WhatsApp Business Account ID (WABA)</label><input type="text" id="int-wa-waba-id" placeholder="From Meta ? WhatsApp Manager ? Account overview" style="width:100%"></div>
+                        <div style="grid-column:1/-1;"><button type="button" class="btn-secondary btn-sm" onclick="checkWhatsAppTemplateOnMeta()">Check template on Meta</button>
+                        <span style="font-size:0.8rem;color:#64748b;margin-left:8px;">Verifies vgmf_otp_auth exists on the same account as your Phone number ID</span></div>
+
                         <div><label>Webhook verify token</label><input type="password" id="int-wa-verify" placeholder="Leave blank to keep" style="width:100%"></div>
                         <div><label>Template language</label><input type="text" id="int-wa-lang" placeholder="en (English in Meta)" style="width:100%"></div>
                         <div style="grid-column:1/-1;"><h4 style="margin:12px 0 8px;color:#0c4a6e;">OTP notifications (email + WhatsApp)</h4>

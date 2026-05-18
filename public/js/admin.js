@@ -2247,6 +2247,7 @@ async function loadIntegrationSettings() {
         set('int-zoho-user', s.zoho_user);
         set('int-zoho-from', s.zoho_from);
         set('int-wa-phone-id', s.whatsapp_phone_number_id);
+        set('int-wa-waba-id', s.whatsapp_business_account_id);
         set('int-wa-lang', s.whatsapp_template_lang || 'en');
         set('int-wa-otp-template', s.whatsapp_otp_template_name);
         set('int-otp-email-subject', s.otp_email_subject);
@@ -2288,7 +2289,10 @@ async function loadIntegrationSettings() {
                     ').';
                 if (s.otp_template_meta_languages && s.otp_template_meta_languages.length) {
                     waLine += ' Meta language code(s): ' + s.otp_template_meta_languages.join(', ') + '.';
+                } else if (s.whatsapp_template_check_error) {
+                    waLine += ' WARNING: ' + s.whatsapp_template_check_error;
                 }
+                if (s.whatsapp_waba_id) waLine += ' WABA: ' + s.whatsapp_waba_id + '.';
             }
             line.textContent = emailLine + ' ' + waLine;
         }
@@ -2315,6 +2319,7 @@ async function saveIntegrationSettings() {
         zoho_from: (document.getElementById('int-zoho-from') || {}).value.trim(),
         whatsapp_token: (document.getElementById('int-wa-token') || {}).value,
         whatsapp_phone_number_id: (document.getElementById('int-wa-phone-id') || {}).value.trim(),
+        whatsapp_business_account_id: (document.getElementById('int-wa-waba-id') || {}).value.trim(),
         whatsapp_verify_token: (document.getElementById('int-wa-verify') || {}).value,
         whatsapp_template_lang: (document.getElementById('int-wa-lang') || {}).value.trim() || 'en',
         whatsapp_otp_template_name: (document.getElementById('int-wa-otp-template') || {}).value.trim(),
@@ -2393,6 +2398,38 @@ async function testIntegrationEmail() {
         const msg = [data.error, data.hint].filter(Boolean).join('\n\n');
         alert((msg || 'Failed') + (data.logged ? '\n\nSee Notifications → Logs for details.' : ''));
         if (typeof loadNotificationLogs === 'function') loadNotificationLogs();
+    }
+}
+
+async function checkWhatsAppTemplateOnMeta() {
+    const name = (document.getElementById('int-wa-otp-template') || {}).value.trim() || 'vgmf_otp_auth';
+    try {
+        const res = await fetch(
+            '/api/admin/integrations/whatsapp-template-check?name=' + encodeURIComponent(name)
+        );
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Check failed');
+        const lines = [
+            data.error ? 'ERROR: ' + data.error : 'Template found on Meta.',
+            data.hint || '',
+            data.wabaId ? 'WABA ID: ' + data.wabaId : '',
+            data.phoneNumberId ? 'Phone number ID: ' + data.phoneNumberId : '',
+            data.languages && data.languages.length ? 'Language code(s): ' + data.languages.join(', ') : '',
+            data.templates && data.templates.length
+                ? 'Status: ' + data.templates.map((t) => t.language + '=' + t.status).join(', ')
+                : '',
+            data.otpLikeNames && data.otpLikeNames.length
+                ? 'Other OTP templates on this WABA: ' + data.otpLikeNames.join('; ')
+                : ''
+        ].filter(Boolean);
+        alert(lines.join('\n\n'));
+        if (data.languages && data.languages.length) {
+            const langEl = document.getElementById('int-wa-lang');
+            if (langEl) langEl.value = data.languages[0];
+        }
+        await loadIntegrationSettings();
+    } catch (e) {
+        alert('Check failed');
     }
 }
 
