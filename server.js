@@ -1885,6 +1885,10 @@ app.get('/api/admin/integrations', withIntegrationSettingsLoaded, (req, res) => 
                 const dbg = await notifEngine.getOtpWhatsAppTemplateDebug(db);
                 masked.otp_template_resolved = dbg.resolved;
                 masked.otp_template_source = dbg.source;
+                if (dbg.resolved) {
+                    const { fetchTemplateLanguageCodes } = require('./lib/whatsapp-service');
+                    masked.otp_template_meta_languages = await fetchTemplateLanguageCodes(dbg.resolved);
+                }
             } catch (_) {}
             res.json(masked);
         }
@@ -2021,6 +2025,7 @@ app.post('/api/admin/integrations/test-whatsapp', withIntegrationSettingsLoaded,
             template: otpTpl,
             templateSource: tplDebug.source,
             lang: r.lang || tplDebug.lang,
+            metaLangs: r.metaLangs || [],
             messageId: r.messageId || null,
             hint: otpTpl
                 ? 'Template message accepted by Meta. Check WhatsApp on +' + to + ' (may take a minute).'
@@ -2035,13 +2040,17 @@ app.post('/api/admin/integrations/test-whatsapp', withIntegrationSettingsLoaded,
         templateSource: tplDebug.source,
         templateRaw: tplDebug.raw,
         lang: r.lang || tplDebug.lang,
+        metaLangs: r.metaLangs || [],
+        triedLangs: r.triedLangs || [],
         skipped: r.skipped,
         hint:
             'Meta rejected template "' +
             (otpTpl || tplDebug.raw || '?') +
-            '". In Admin → Integrations set WhatsApp OTP template to the EXACT name from Meta (e.g. vgmf_otp_auth). ' +
-            'Set Template language to match Meta (often en_US not en). ' +
-            'Remove wrong WHATSAPP_OTP_TEMPLATE_NAME on Vercel if it says gmf_otp_auth. ' +
+            '". ' +
+            (r.metaLangs && r.metaLangs.length
+                ? 'Use Template language: ' + r.metaLangs.join(' or ') + ' (from Meta). '
+                : 'Set Template language in Integrations (try en, then en_US). ') +
+            (r.triedLangs && r.triedLangs.length ? 'Tried: ' + r.triedLangs.join(', ') + '. ' : '') +
             'Add +' +
             to +
             ' as test recipient in development mode.'

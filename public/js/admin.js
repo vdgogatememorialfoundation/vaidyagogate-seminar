@@ -2286,6 +2286,9 @@ async function loadIntegrationSettings() {
                     ' (' +
                     (s.otp_template_source || 'unknown') +
                     ').';
+                if (s.otp_template_meta_languages && s.otp_template_meta_languages.length) {
+                    waLine += ' Meta language code(s): ' + s.otp_template_meta_languages.join(', ') + '.';
+                }
             }
             line.textContent = emailLine + ' ' + waLine;
         }
@@ -2420,6 +2423,8 @@ async function testIntegrationWhatsApp() {
             data.hint,
             data.template ? 'Tried template: ' + data.template : data.templateRaw ? 'Raw config: ' + data.templateRaw : '',
             data.templateSource ? 'Source: ' + data.templateSource : '',
+            data.metaLangs && data.metaLangs.length ? 'Meta languages: ' + data.metaLangs.join(', ') : '',
+            data.triedLangs && data.triedLangs.length ? 'Languages tried: ' + data.triedLangs.join(', ') : '',
             data.lang ? 'Language: ' + data.lang : '',
             data.to ? 'Normalized to: +' + data.to : ''
         ].filter(Boolean);
