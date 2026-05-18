@@ -1955,13 +1955,59 @@ app.post('/api/admin/integrations/test-email', withIntegrationSettingsLoaded, as
 app.post('/api/admin/integrations/test-whatsapp', withIntegrationSettingsLoaded, async (req, res) => {
     const phone = String((req.body && req.body.phone) || '').trim();
     if (!phone) return res.status(400).json({ error: 'phone required' });
-    const { sendWhatsAppText } = require('./lib/whatsapp-service');
-    const r = await sendWhatsAppText(
-        phone,
-        'VGMF test from admin. Reply to this chat to open the 24-hour messaging window for OTP messages.'
-    );
-    if (r.ok) return res.json({ success: true });
-    res.status(503).json({ error: r.error || 'Send failed', skipped: r.skipped });
+    const {
+        sendWhatsAppText,
+        sendWhatsAppOtpTemplate,
+        normalizePhoneE164,
+        isWhatsAppConfigured
+    } = require('./lib/whatsapp-service');
+    if (!isWhatsAppConfigured()) {
+        return res.status(503).json({ error: 'WhatsApp not configured — save access token and phone number ID first.' });
+    }
+    const to = normalizePhoneE164(phone);
+    const otpTpl = await notifEngine.getOtpWhatsAppTemplateName(db);
+    let r;
+    let method = 'plain_text';
+    if (otpTpl) {
+        method = 'otp_template:' + otpTpl;
+        r = await sendWhatsAppOtpTemplate(phone, otpTpl, '123456');
+    } else {
+        r = await sendWhatsAppText(
+            phone,
+            'VGMF test from admin. Reply to this chat to open the 24-hour window, or set OTP_VERIFICATION Meta template name for outbound OTP.'
+        );
+    }
+    const logRow = {
+        event_key: 'INTEGRATION_TEST_WHATSAPP',
+        channel: 'whatsapp',
+        destination: to,
+        status: r.ok ? 'sent' : 'failed',
+        subject: 'Admin WhatsApp test',
+        body_preview: method + (otpTpl ? ' code 123456' : ''),
+        error: r.ok ? null : r.error
+    };
+    notifEngine.logNotification(db, logRow);
+    if (r.ok) {
+        return res.json({
+            success: true,
+            to,
+            method,
+            messageId: r.messageId || null,
+            hint: otpTpl
+                ? 'Template message accepted by Meta. Check WhatsApp on +' + to + ' (may take a minute).'
+                : 'Plain text sent. If you do not receive it, set OTP template on OTP_VERIFICATION or add your number as a Meta test recipient.'
+        });
+    }
+    res.status(503).json({
+        error: r.error || 'Send failed',
+        to,
+        method,
+        skipped: r.skipped,
+        hint:
+            'Common fixes: (1) Add +' +
+            to +
+            ' as test number in Meta App → WhatsApp → API Setup while in development mode. (2) Use approved OTP template name on OTP_VERIFICATION. (3) Confirm Phone number ID matches the sending number. See Notifications → Logs.'
+    });
 });
 
 function validateDoctorName(name) {

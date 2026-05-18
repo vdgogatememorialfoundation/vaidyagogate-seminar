@@ -2250,7 +2250,13 @@ async function loadIntegrationSettings() {
         set('int-wa-lang', s.whatsapp_template_lang || 'en');
         const waHook = document.getElementById('int-wa-webhook-url');
         if (waHook) {
-            const base = (s.public_base_url || '').replace(/\/$/, '') || 'https://inar.vaidyagogate.org';
+            let base = (s.public_base_url || '').trim().replace(/\/$/, '');
+            if (!base && s.seminar_host) {
+                base = 'https://' + String(s.seminar_host).replace(/^https?:\/\//, '').replace(/\/$/, '');
+            }
+            if (!base || /inar\.vaidyagogate/i.test(base)) {
+                base = 'https://seminar.vaidyagogate.org';
+            }
             waHook.textContent = base + '/api/webhooks/whatsapp';
         }
         const line = document.getElementById('int-status-line');
@@ -2385,9 +2391,21 @@ async function testIntegrationWhatsApp() {
     });
     const data = await res.json().catch(() => ({}));
     if (res.ok) {
-        alert('WhatsApp test sent. Reply on WhatsApp to open the 24-hour window for OTP messages.');
+        const lines = [
+            data.hint || 'WhatsApp test accepted by Meta.',
+            data.to ? 'Sent to: +' + data.to : '',
+            data.method ? 'Method: ' + data.method : '',
+            data.messageId ? 'Message ID: ' + data.messageId : '',
+            'Check Notifications → Logs if nothing arrives in 2 minutes.'
+        ].filter(Boolean);
+        alert(lines.join('\n\n'));
+        if (typeof loadNotificationLogs === 'function') loadNotificationLogs();
     } else {
-        alert(data.error || 'WhatsApp test failed');
+        const lines = [data.error || 'WhatsApp test failed', data.hint, data.to ? 'Normalized to: +' + data.to : ''].filter(
+            Boolean
+        );
+        alert(lines.join('\n\n') + '\n\nSee Notifications → Logs.');
+        if (typeof loadNotificationLogs === 'function') loadNotificationLogs();
     }
 }
 
