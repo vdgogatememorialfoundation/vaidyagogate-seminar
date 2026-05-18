@@ -776,8 +776,9 @@
 .congress-site .footer-social {
     display: flex;
     flex-wrap: wrap;
-    gap: 10px;
-    margin-top: 14px;
+    gap: 12px;
+    margin-top: 18px;
+    align-items: center;
 }
 .congress-site .social-follow.hidden,
 .congress-site .footer-social.hidden {
@@ -786,28 +787,67 @@
 .congress-site .social-link-btn {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding: 8px 14px;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.12);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    color: #fef3c7 !important;
-    font-weight: 600;
-    font-size: 0.85rem;
-    text-decoration: none;
-    transition: background 0.2s;
-}
-.congress-site .social-link-btn:hover {
-    background: rgba(255, 255, 255, 0.2);
+    gap: 10px;
+    padding: 12px 18px;
+    border-radius: 14px;
+    font-weight: 700;
+    font-size: 0.9rem;
+    text-decoration: none !important;
+    border: 2px solid transparent;
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
     color: #fff !important;
 }
+.congress-site .social-link-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 22px rgba(15, 23, 42, 0.2);
+    filter: brightness(1.05);
+}
 .congress-site .social-link-btn i {
-    font-size: 1.1rem;
+    font-size: 1.35rem;
+    filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
+}
+.congress-site .social-pill-label {
+    letter-spacing: 0.01em;
+}
+.congress-site .social-pill--youtube {
+    background: linear-gradient(135deg, #ff0000, #cc0000);
+    border-color: #7f1d1d;
+}
+.congress-site .social-pill--facebook {
+    background: linear-gradient(135deg, #1877f2, #0c63d4);
+    border-color: #1e3a8a;
+}
+.congress-site .social-pill--instagram {
+    background: linear-gradient(135deg, #f58529, #dd2a7b, #8134af);
+    border-color: #831843;
+}
+.congress-site .social-pill--twitter,
+.congress-site .social-pill--x {
+    background: linear-gradient(135deg, #0f172a, #334155);
+    border-color: #020617;
+}
+.congress-site .social-pill--linkedin {
+    background: linear-gradient(135deg, #0a66c2, #004182);
+    border-color: #082f49;
+}
+.congress-site .social-pill--whatsapp {
+    background: linear-gradient(135deg, #25d366, #128c7e);
+    border-color: #14532d;
+}
+.congress-site .social-pill--link,
+.congress-site .social-pill--website {
+    background: linear-gradient(135deg, #0f766e, #0d9488);
+    border-color: #134e4a;
 }
 .congress-site .social-follow {
     justify-content: center;
-    margin: 24px auto 0;
+    margin: 28px auto 8px;
     max-width: 720px;
+}
+.congress-site .footer-social {
+    margin-top: 16px;
+    justify-content: flex-start;
 }
 .congress-site .verify-head-icon {
     color: var(--cg-green);

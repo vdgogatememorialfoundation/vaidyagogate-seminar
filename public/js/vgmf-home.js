@@ -42,18 +42,23 @@
         const links = Array.isArray(cms && cms.socialLinks) ? cms.socialLinks.filter((l) => l && l.url) : [];
         const html = links.length
             ? links
-                  .map(
-                      (l) =>
+                  .map((l) => {
+                      const p = String(l.platform || 'link').toLowerCase().replace(/[^a-z0-9]+/g, '_');
+                      const pillClass = 'social-pill social-pill--' + (p || 'link');
+                      return (
                           '<a href="' +
                           escHtml(l.url) +
-                          '" target="_blank" rel="noopener noreferrer" class="social-link-btn" title="' +
+                          '" target="_blank" rel="noopener noreferrer" class="social-link-btn ' +
+                          escHtml(pillClass) +
+                          '" title="' +
                           escHtml(l.label || l.platform || '') +
                           '"><i class="' +
                           socialIcon(l.platform) +
-                          '" aria-hidden="true"></i><span>' +
+                          '" aria-hidden="true"></i><span class="social-pill-label">' +
                           escHtml(l.label || l.platform || 'Follow') +
                           '</span></a>'
-                  )
+                      );
+                  })
                   .join('')
             : '';
         ['social-follow', 'footer-social'].forEach((id) => {

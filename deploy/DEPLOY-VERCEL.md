@@ -75,6 +75,7 @@ Redeploy once. On startup the app creates or updates this admin user (password i
 | `WHATSAPP_TOKEN` | Meta token |
 | `WHATSAPP_PHONE_NUMBER_ID` | Meta phone id |
 | `WHATSAPP_VERIFY_TOKEN` | webhook verify string |
+| `WHATSAPP_OTP_TEMPLATE_NAME` | optional Meta-approved OTP template (see deploy/WHATSAPP-TEMPLATES.md) |
 | `RAZORPAY_KEY_ID` | live/test key (also save in admin payment UI) |
 | `RAZORPAY_KEY_SECRET` | secret |
 | `JWT_SECRET` | long random string |

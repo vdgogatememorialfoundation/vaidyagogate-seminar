@@ -5169,7 +5169,14 @@ app.post('/api/admin/registrations/upsert', (req, res) => {
                 [tid, sid, applicationNo, fd, aid],
                 function (ierr) {
                     if (ierr) return res.status(500).json({ error: ierr.message });
-                    res.json({ success: true, registrationId: this.lastID, applicationNo, created: true });
+                    const newRegId = this.lastID;
+                    notifEngine.notify(
+                        db,
+                        'SEMINAR_REGISTRATION_SUCCESS',
+                        { userId: tid, seminarId: sid, registrationId: newRegId },
+                        () => {}
+                    );
+                    res.json({ success: true, registrationId: newRegId, applicationNo, created: true });
                 }
             );
         });
