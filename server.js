@@ -2143,22 +2143,62 @@ app.post('/api/admin/integrations/test-whatsapp', withIntegrationSettingsLoaded,
             (r.messageId ? ' id=' + r.messageId : ''),
         error: r.ok ? null : (r.error || '').slice(0, 900)
     };
+    let deliveryInfo = null;
+    if (r.ok && r.messageId) {
+        deliveryInfo = await new Promise((resolve) => {
+            whatsappWebhook.waitForDeliveryUpdate(db, r.messageId, 12000, (e, info) => {
+                resolve(info || { status: 'accepted', events: [] });
+            });
+        });
+        if (deliveryInfo && deliveryInfo.status && deliveryInfo.status !== 'accepted') {
+            logRow.status = deliveryInfo.status;
+            if (deliveryInfo.error) logRow.error = deliveryInfo.error;
+        } else if (deliveryInfo && deliveryInfo.timeout) {
+            logRow.error =
+                (logRow.error || '') +
+                ' No delivery webhook yet — fix Meta webhook (Check webhook in admin).';
+        }
+    }
     notifEngine.logNotification(db, logRow);
+
+    const phoneDiag = await require('./lib/whatsapp-service').getWhatsAppPhoneDiagnostics();
+
     if (r.ok) {
+        const lines = [
+            deliveryInfo && deliveryInfo.status
+                ? 'Delivery status: ' + deliveryInfo.status
+                : 'Meta accepted the message (API ok).',
+            r.messageId ? 'Message ID: ' + r.messageId : '',
+            r.method ? 'Send method: ' + r.method : method,
+            deliveryInfo && deliveryInfo.error ? 'Meta error: ' + deliveryInfo.error : '',
+            phoneDiag.quality_rating ? 'Phone quality: ' + phoneDiag.quality_rating : '',
+            phoneDiag.display_phone_number
+                ? 'Business number: ' + phoneDiag.display_phone_number
+                : ''
+        ].filter(Boolean);
+        if (deliveryInfo && deliveryInfo.status === 'failed') {
+            lines.push(
+                'Fix: add +' + to + ' as Meta test recipient (dev mode), or move app Live with approved template.'
+            );
+        } else if (!deliveryInfo || deliveryInfo.status === 'accepted' || deliveryInfo.timeout) {
+            lines.push(
+                'If still no message on phone: Meta → WhatsApp → API Setup → add +' +
+                    to +
+                    ' as test recipient. Then Check webhook and Save verify token.'
+            );
+        }
         return res.json({
             success: true,
             to,
-            method,
+            method: r.method || method,
             template: otpTpl,
             templateSource: tplDebug.source,
             lang: r.lang || tplDebug.lang,
             metaLangs: r.metaLangs || [],
             messageId: r.messageId || null,
-            hint: otpTpl
-                ? 'Accepted by Meta API (not delivered yet). Add +' +
-                  to +
-                  ' as a test recipient in Meta if the app is in Development mode. Subscribe webhook for delivered/failed updates. Check spam/archived chats.'
-                : 'Plain text sent. If you do not receive it, set OTP template on OTP_VERIFICATION or add your number as a Meta test recipient.'
+            delivery: deliveryInfo,
+            phoneDiagnostics: phoneDiag,
+            hint: lines.join('\n')
         });
     }
     res.status(503).json({
@@ -4143,11 +4183,29 @@ app.get('/api/webhooks/whatsapp', (req, res) => {
 app.post('/api/webhooks/whatsapp', (req, res) => {
     whatsappWebhook.handleWhatsAppWebhookPost(db, req.body || {}, (err, result) => {
         if (err) console.warn('[whatsapp-webhook] POST', err.message);
-        else if (result && result.updated) {
-            console.log('[whatsapp-webhook] updated notification_logs:', result.updated);
+        else if (result && result.events) {
+            console.log('[whatsapp-webhook]', JSON.stringify(result.statuses || result));
         }
         res.sendStatus(200);
     });
+});
+
+app.get('/api/admin/integrations/whatsapp-delivery-events', withIntegrationSettingsLoaded, (req, res) => {
+    const messageId = String((req.query && req.query.messageId) || '').trim();
+    if (!messageId) return res.status(400).json({ error: 'messageId required' });
+    whatsappWebhook.getDeliveryEventsForMessage(db, messageId, (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows || []);
+    });
+});
+
+app.get('/api/admin/integrations/whatsapp-phone-diagnostics', withIntegrationSettingsLoaded, async (req, res) => {
+    try {
+        const diag = await require('./lib/whatsapp-service').getWhatsAppPhoneDiagnostics();
+        res.json(diag);
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 app.get('/api/admin/integrations/whatsapp-webhook-status', withIntegrationSettingsLoaded, (req, res) => {

@@ -2598,14 +2598,22 @@ async function testIntegrationWhatsApp() {
     });
     const data = await res.json().catch(() => ({}));
     if (res.ok) {
+        const del = data.delivery || {};
         const lines = [
-            data.hint || 'WhatsApp test accepted by Meta.',
+            data.hint || 'WhatsApp test completed.',
+            del.status ? 'Delivery status: ' + del.status : 'Delivery status: accepted (API only)',
+            del.error ? 'Delivery error: ' + del.error : '',
             data.to ? 'Sent to: +' + data.to : '',
             data.template ? 'Template: ' + data.template + (data.templateSource ? ' (' + data.templateSource + ')' : '') : '',
             data.lang ? 'Language: ' + data.lang : '',
             data.method ? 'Method: ' + data.method : '',
             data.messageId ? 'Message ID: ' + data.messageId : '',
-            'Check Notifications → Logs if nothing arrives in 2 minutes.'
+            data.phoneDiagnostics && data.phoneDiagnostics.quality_rating
+                ? 'Phone quality: ' + data.phoneDiagnostics.quality_rating
+                : '',
+            data.phoneDiagnostics && data.phoneDiagnostics.display_phone_number
+                ? 'From: ' + data.phoneDiagnostics.display_phone_number
+                : ''
         ].filter(Boolean);
         alert(lines.join('\n\n'));
         if (typeof loadNotificationLogs === 'function') loadNotificationLogs();
