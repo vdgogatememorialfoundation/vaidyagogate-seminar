@@ -1192,6 +1192,17 @@ function persistUploadedCertificate(req, cb) {
     });
 }
 
+const PG_INT_MAX = 2147483647;
+
+/** Internal tickets.id only — not 12-digit e-ticket strings (avoids PG integer overflow). */
+function safeInternalTicketRowId(val) {
+    const s = String(val || '').trim();
+    if (!/^\d{1,9}$/.test(s)) return null;
+    const n = parseInt(s, 10);
+    if (!Number.isInteger(n) || n < 1 || n > PG_INT_MAX) return null;
+    return n;
+}
+
 function sanitizeFormDataForStorage(formData) {
     const src = formData && typeof formData === 'object' ? formData : {};
     const out = { ...src };
@@ -3731,6 +3742,11 @@ app.get('/api/doctor/ticket-document/:ticketId', (req, res) => {
     const ticketId = String(req.params.ticketId || '').trim();
     const uid = parseInt(req.query.userId, 10);
     if (!ticketId) return res.status(400).send('Ticket id required');
+    const internalRowId = safeInternalTicketRowId(ticketId);
+    const whereClause = internalRowId
+        ? 'WHERE TRIM(t.ticket_id_string) = TRIM(?) OR t.id = ?'
+        : 'WHERE TRIM(t.ticket_id_string) = TRIM(?)';
+    const params = internalRowId ? [ticketId, internalRowId] : [ticketId];
     db.get(
         `SELECT t.ticket_id_string, t.qr_code_data, r.application_no, r.user_id,
                 s.title AS seminar_title, s.event_date, s.location_url,
@@ -3740,8 +3756,8 @@ app.get('/api/doctor/ticket-document/:ticketId', (req, res) => {
          JOIN registrations r ON o.registration_id = r.id
          JOIN seminars s ON r.seminar_id = s.id
          JOIN users u ON u.id = r.user_id
-         WHERE TRIM(t.ticket_id_string) = TRIM(?) OR t.id = ?`,
-        [ticketId, /^\d+$/.test(ticketId) ? parseInt(ticketId, 10) : -1],
+         ${whereClause}`,
+        params,
         (err, row) => {
             if (err) return res.status(500).send(err.message);
             if (!row) return res.status(404).send('Ticket not found');
