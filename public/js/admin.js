@@ -2978,7 +2978,7 @@ async function loadSeminars() {
                 <tr style="${pastRow ? 'opacity:0.85;background:#f8fafc;' : ''}">
                     <td>${s.id}</td>
                     <td><strong>${s.title}</strong> ${activeStatus} ${yearTag}</td>
-                    <td>${s.event_date ? (window.PortalDateTime ? window.PortalDateTime.format(s.event_date) : new Date(s.event_date).toLocaleString()) : '—'}</td>
+                    <td>${s.event_date ? (window.PortalDateTime && window.PortalDateTime.formatEvent ? window.PortalDateTime.formatEvent(s.event_date) : window.PortalDateTime ? window.PortalDateTime.format(s.event_date) : new Date(s.event_date).toLocaleString()) : '—'}</td>
                     <td>₹${s.price || 0}</td>
                     <td>${checkinStatus}</td>
                     <td>${pastRow ? '<em>Past year</em>' : 'Current'}</td>

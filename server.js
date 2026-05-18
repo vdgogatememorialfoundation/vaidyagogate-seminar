@@ -1354,7 +1354,7 @@ function notifyTicketIssued(userId, registrationId, ticketId) {
     db.get(
         `SELECT r.seminar_id, r.application_no, t.qr_code_data, t.ticket_id_string, t.is_scanned, t.scan_time,
                 IFNULL(t.is_valid, 1) AS is_valid, o.status AS payment_status,
-                s.title AS seminar_title, s.event_date, s.location_url,
+                s.title AS seminar_title, s.event_date, s.location_url, s.portal_year,
                 u.first_name, u.last_name
          FROM registrations r
          JOIN tickets t ON t.order_id IN (SELECT id FROM orders WHERE registration_id = r.id)
@@ -1387,19 +1387,23 @@ function notifyTicketIssued(userId, registrationId, ticketId) {
             });
             if (row && row.qr_code_data) {
                 ticketHtml
-                    .buildTicketHtmlFromRow({
-                        ticket_id_string: row.ticket_id_string || ticketId,
-                        application_no: row.application_no,
-                        seminar_title: row.seminar_title,
-                        event_date: row.event_date,
-                        location_url: row.location_url,
-                        display_name: [row.first_name, row.last_name].filter(Boolean).join(' '),
-                        qr_code_data: row.qr_code_data,
-                        payment_status: row.payment_status || 'success',
-                        is_scanned: row.is_scanned,
-                        scan_time: row.scan_time,
-                        is_valid: row.is_valid
-                    })
+                    .buildTicketHtmlFromRow(
+                        {
+                            ticket_id_string: row.ticket_id_string || ticketId,
+                            application_no: row.application_no,
+                            seminar_title: row.seminar_title,
+                            event_date: row.event_date,
+                            location_url: row.location_url,
+                            portal_year: row.portal_year,
+                            display_name: [row.first_name, row.last_name].filter(Boolean).join(' '),
+                            qr_code_data: row.qr_code_data,
+                            payment_status: row.payment_status || 'success',
+                            is_scanned: row.is_scanned,
+                            scan_time: row.scan_time,
+                            is_valid: row.is_valid
+                        },
+                        db
+                    )
                     .then((html) => {
                         db.get(`SELECT email, phone FROM users WHERE id = ?`, [userId], (eu, u) => {
                             if (eu || !u) return;
@@ -3756,7 +3760,7 @@ app.get('/api/doctor/ticket-document/:ticketId', (req, res) => {
     db.get(
         `SELECT t.ticket_id_string, t.qr_code_data, t.is_scanned, t.scan_time, IFNULL(t.is_valid, 1) AS is_valid,
                 r.application_no, r.user_id, o.status AS payment_status,
-                s.title AS seminar_title, s.event_date, s.location_url,
+                s.title AS seminar_title, s.event_date, s.location_url, s.portal_year,
                 u.first_name, u.last_name
          FROM tickets t
          JOIN orders o ON t.order_id = o.id
@@ -3772,21 +3776,26 @@ app.get('/api/doctor/ticket-document/:ticketId', (req, res) => {
                 return res.status(403).send('Not your ticket');
             }
             ticketHtml
-                .buildTicketHtmlFromRow({
-                    ticket_id_string: row.ticket_id_string,
-                    application_no: row.application_no,
-                    seminar_title: row.seminar_title,
-                    event_date: row.event_date,
-                    location_url: row.location_url,
-                    display_name: [row.first_name, row.last_name].filter(Boolean).join(' '),
-                    qr_code_data: row.qr_code_data,
-                    is_scanned: row.is_scanned,
-                    scan_time: row.scan_time,
-                    payment_status: row.payment_status,
-                    is_valid: row.is_valid
-                })
+                .buildTicketHtmlFromRow(
+                    {
+                        ticket_id_string: row.ticket_id_string,
+                        application_no: row.application_no,
+                        seminar_title: row.seminar_title,
+                        event_date: row.event_date,
+                        location_url: row.location_url,
+                        portal_year: row.portal_year,
+                        display_name: [row.first_name, row.last_name].filter(Boolean).join(' '),
+                        qr_code_data: row.qr_code_data,
+                        is_scanned: row.is_scanned,
+                        scan_time: row.scan_time,
+                        payment_status: row.payment_status,
+                        is_valid: row.is_valid
+                    },
+                    db
+                )
                 .then((html) => {
                     res.setHeader('Content-Type', 'text/html; charset=utf-8');
+                    res.setHeader('Cache-Control', 'no-store');
                     res.send(html);
                 })
                 .catch((e) => res.status(500).send(e.message));
