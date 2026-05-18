@@ -75,6 +75,7 @@
                     <div class="otp-row">
                         <span style="font-weight:700;min-width:44px;">Email</span>
                         <button type="button" class="otp-btn" id="judge-send-otp-email">Send</button>
+                        <button type="button" class="otp-btn" id="judge-resend-otp-email">Resend</button>
                         <input type="text" id="judge-email-otp" placeholder="Code" style="max-width:88px;">
                         <button type="button" class="otp-btn" id="judge-verify-otp-email">Verify</button>
                         <span id="judge-email-otp-ok" style="font-size:0.78rem;color:#059669;"></span>
@@ -82,6 +83,7 @@
                     <div class="otp-row">
                         <span style="font-weight:700;min-width:44px;">Phone</span>
                         <button type="button" class="otp-btn" id="judge-send-otp-phone">Send</button>
+                        <button type="button" class="otp-btn" id="judge-resend-otp-phone">Resend</button>
                         <input type="text" id="judge-phone-otp" placeholder="Code" style="max-width:88px;">
                         <button type="button" class="otp-btn" id="judge-verify-otp-phone">Verify</button>
                         <span id="judge-phone-otp-ok" style="font-size:0.78rem;color:#059669;"></span>
@@ -423,6 +425,8 @@
                 emailInputId: 'judge-email',
                 passwordInputId: 'judge-password',
                 otpPrefix: 'judge',
+                resendEmailBtnId: 'judge-resend-otp-email',
+                resendPhoneBtnId: 'judge-resend-otp-phone',
                 onSuccess: showApp,
                 onError: (msg) => {
                     loginErr.textContent = msg;

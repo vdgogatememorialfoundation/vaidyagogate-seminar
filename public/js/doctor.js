@@ -319,6 +319,8 @@ window.__fieldOtpTokens = window.__fieldOtpTokens || {};
 window.__otpOnApplication = false;
 window.__regPhoneOtpToken = null;
 window.__regEmailOtpToken = null;
+window.__regSubmitPhoneOtpToken = null;
+window.__regSubmitEmailOtpToken = null;
 
 function closeDoctorMobileNav() {
     const sidebar = document.querySelector('.sidebar');
@@ -391,6 +393,7 @@ function bootDoctorDashboard(user) {
         .then((r) => r.json())
         .then((u) => {
             window.__doctorProductionSite = !!(u && u.production);
+            window.__allowDemoAccounts = u && u.allowDemoAccounts !== false;
         })
         .catch(() => {});
         document.getElementById('auth-overlay').classList.add('hidden');
@@ -399,7 +402,7 @@ function bootDoctorDashboard(user) {
         document.getElementById('header-name').innerText = `Hi, Dr. ${currentUser.first_name || ''} ${currentUser.last_name || ''}`;
     document.getElementById('header-id').innerText =
         `ID: ${currentUser.user_id_string || '---'}` +
-        (!window.__doctorProductionSite && Number(currentUser.is_demo) === 1 ? ' · Demo' : '');
+        (window.__allowDemoAccounts !== false && Number(currentUser.is_demo) === 1 ? ' · Dummy' : '');
     if (typeof PortalAuth !== 'undefined' && PortalAuth.renderLoginTime) {
         PortalAuth.renderLoginTime('header-login-time', currentUser);
     }
@@ -432,6 +435,8 @@ window.onload = () => {
             emailInputId: 'doctor-login-email',
             passwordInputId: 'doctor-login-password',
             otpPrefix: 'doctor',
+            resendEmailBtnId: 'doctor-resend-otp-email',
+            resendPhoneBtnId: 'doctor-resend-otp-phone',
             onSuccess: bootDoctorDashboard,
             onError: (msg) => {
                 const el = document.getElementById('doctor-login-err');
@@ -643,8 +648,98 @@ async function verifyRegistrationOtpForField(fieldKey) {
         }
         if (statusEl) {
             statusEl.textContent =
-                data.demoBypass && !window.__doctorProductionSite ? 'Verified ✓ (demo)' : 'Verified ✓';
+                data.demoBypass && window.__allowDemoAccounts !== false ? 'Verified ✓ (dummy)' : 'Verified ✓';
         }
+    } catch (e) {
+        console.error(e);
+        alert('Network error verifying code.');
+    }
+}
+
+function resetRegistrationSubmitOtpState() {
+    window.__regSubmitPhoneOtpToken = null;
+    window.__regSubmitEmailOtpToken = null;
+    ['reg-submit-otp-code-email', 'reg-submit-otp-code-phone'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    ['reg-submit-otp-status-email', 'reg-submit-otp-status-phone', 'reg-submit-otp-email-ok', 'reg-submit-otp-phone-ok'].forEach(
+        (id) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = '';
+        }
+    );
+}
+
+async function sendRegistrationSubmitOtpForField(fieldKey) {
+    const sid = activeSeminarIdForReg;
+    if (sid == null) return alert('Seminar not selected.');
+    const channel = fieldKey === 'email' ? 'email' : 'phone';
+    const dest = registrationOtpDestination(fieldKey);
+    if (!dest) return alert(channel === 'email' ? 'Enter your email first.' : 'Enter your phone first.');
+    const body = { channel, destination: dest, purpose: 'registration_submit', seminarId: sid };
+    const statusEl = document.getElementById(
+        fieldKey === 'email' ? 'reg-submit-otp-status-email' : 'reg-submit-otp-status-phone'
+    );
+    if (statusEl) statusEl.textContent = 'Sending…';
+    try {
+        const res = await fetch('/api/otp/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            if (statusEl) statusEl.textContent = '';
+            return alert(data.error || 'Could not send code.');
+        }
+        if (statusEl) {
+            statusEl.textContent = data.debugCode
+                ? 'Code sent (dev: ' + data.debugCode + ')'
+                : data.warning
+                  ? 'Sent (check configuration).'
+                  : 'Code sent.';
+        }
+        if (data.debugCode) console.info('Submit OTP debug:', data.debugCode);
+    } catch (e) {
+        console.error(e);
+        if (statusEl) statusEl.textContent = '';
+        alert('Network error sending code.');
+    }
+}
+
+async function verifyRegistrationSubmitOtpForField(fieldKey) {
+    const sid = activeSeminarIdForReg;
+    if (sid == null) return alert('Seminar not selected.');
+    const channel = fieldKey === 'email' ? 'email' : 'phone';
+    const dest = registrationOtpDestination(fieldKey);
+    const codeEl = document.getElementById(
+        fieldKey === 'email' ? 'reg-submit-otp-code-email' : 'reg-submit-otp-code-phone'
+    );
+    const code = String((codeEl || {}).value || '').trim();
+    if (!dest || !code) return alert('Enter the code you received.');
+    const body = { channel, destination: dest, purpose: 'registration_submit', code, seminarId: sid };
+    const uid = doctorNumericUserId();
+    if (uid) body.userId = uid;
+    const statusEl = document.getElementById(
+        fieldKey === 'email' ? 'reg-submit-otp-status-email' : 'reg-submit-otp-status-phone'
+    );
+    const okEl = document.getElementById(fieldKey === 'email' ? 'reg-submit-otp-email-ok' : 'reg-submit-otp-phone-ok');
+    try {
+        const res = await fetch('/api/otp/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            if (statusEl) statusEl.textContent = '';
+            return alert((data.error || 'Invalid code.') + '\n\nUse Resend if the code expired.');
+        }
+        if (fieldKey === 'email') window.__regSubmitEmailOtpToken = data.token;
+        else window.__regSubmitPhoneOtpToken = data.token;
+        if (statusEl) statusEl.textContent = '';
+        if (okEl) okEl.textContent = 'Verified ✓';
     } catch (e) {
         console.error(e);
         alert('Network error verifying code.');
@@ -755,6 +850,7 @@ async function loadRegistrationFormConfigAndApply(seminarIdOpt) {
         const data = await res.json();
         window.__registrationFormFields = data.fields || [];
         window.__otpOnApplication = !!data.otpOnApplication;
+        window.__submitOtpRequired = !!data.submitOtpRequired;
         window.__otpRequiresEmail = !!data.otpRequiresEmail;
         window.__otpRequiresPhone = !!data.otpRequiresPhone;
         window.__emailConfigured = !!data.emailConfigured;
@@ -764,6 +860,15 @@ async function loadRegistrationFormConfigAndApply(seminarIdOpt) {
             if (window.__otpOnApplication) otpPanel.classList.remove('hidden');
             else otpPanel.classList.add('hidden');
         }
+        const submitPanel = document.getElementById('reg-submit-otp-panel');
+        if (submitPanel) {
+            if (window.__submitOtpRequired) submitPanel.classList.remove('hidden');
+            else submitPanel.classList.add('hidden');
+        }
+        const subER = document.getElementById('reg-submit-otp-email-row');
+        const subPR = document.getElementById('reg-submit-otp-phone-row');
+        if (subER) subER.style.display = window.__submitOtpRequired && window.__emailConfigured ? '' : 'none';
+        if (subPR) subPR.style.display = window.__submitOtpRequired && window.__whatsappConfigured ? '' : 'none';
         const emailOtpRow = document.getElementById('reg-otp-email-row');
         const phoneOtpRow = document.getElementById('reg-otp-phone-row');
         if (emailOtpRow) emailOtpRow.style.display = window.__otpRequiresEmail ? '' : 'none';
@@ -774,6 +879,7 @@ async function loadRegistrationFormConfigAndApply(seminarIdOpt) {
         console.error(e);
         window.__registrationFormFields = [];
         window.__otpOnApplication = false;
+        window.__submitOtpRequired = false;
         window.__otpRequiresEmail = false;
         window.__otpRequiresPhone = false;
         const otpPanel = document.getElementById('reg-seminar-otp-panel');
@@ -1104,6 +1210,9 @@ async function startRegistration(seminarId) {
     window.__fieldOtpTokens = {};
     window.__regPhoneOtpToken = null;
     window.__regEmailOtpToken = null;
+    window.__regSubmitPhoneOtpToken = null;
+    window.__regSubmitEmailOtpToken = null;
+    resetRegistrationSubmitOtpState();
     document.getElementById('registration-seminar-name').innerText = `Registering for: ${seminarTitle}`;
     document.getElementById('seminars-grid-container').classList.add('hidden');
     document.getElementById('seminars-title').classList.add('hidden');
@@ -1146,6 +1255,9 @@ function cancelRegistration() {
     window.__fieldOtpTokens = {};
     window.__regPhoneOtpToken = null;
     window.__regEmailOtpToken = null;
+    window.__regSubmitPhoneOtpToken = null;
+    window.__regSubmitEmailOtpToken = null;
+    resetRegistrationSubmitOtpState();
     ['reg-otp-status-email', 'reg-otp-status-phone'].forEach((id) => {
         const el = document.getElementById(id);
         if (el) el.textContent = '';
@@ -1832,6 +1944,7 @@ async function nextStep(step) {
 
     // If moving to preview, populate data and generate PDF iframe
     if (step === REGISTRATION_PREVIEW_STEP) {
+        resetRegistrationSubmitOtpState();
         const prevTnc = document.getElementById('prev-tnc-block');
         const prevTncText = document.getElementById('prev-tnc-text');
         if (prevTnc && prevTncText) {
@@ -2035,6 +2148,17 @@ async function submitApplication() {
         return;
     }
 
+    if (window.__submitOtpRequired) {
+        if (window.__emailConfigured && !window.__regSubmitEmailOtpToken) {
+            alert('Verify your email using the final confirmation codes on this preview step before submitting.');
+            return;
+        }
+        if (window.__whatsappConfigured && !window.__regSubmitPhoneOtpToken) {
+            alert('Verify WhatsApp using the final confirmation codes on this preview step before submitting.');
+            return;
+        }
+    }
+
     const vErr = validateRegistrationAgainstConfigForSteps(4);
     if (vErr) {
         alertRegistrationValidation(vErr);
@@ -2070,6 +2194,10 @@ async function submitApplication() {
     if (window.__otpOnApplication) {
         payload.append('phoneOtpToken', window.__regPhoneOtpToken || '');
         payload.append('emailOtpToken', window.__regEmailOtpToken || '');
+    }
+    if (window.__submitOtpRequired) {
+        payload.append('submitPhoneOtpToken', window.__regSubmitPhoneOtpToken || '');
+        payload.append('submitEmailOtpToken', window.__regSubmitEmailOtpToken || '');
     }
     payload.append('fieldOtpTokens', JSON.stringify(window.__fieldOtpTokens || {}));
     
@@ -2889,6 +3017,11 @@ async function loadDoctorEventTickets() {
                     <p style="margin:4px 0;font-size:0.9rem;"><strong>Order:</strong> ${escapeHtml(String(t.order_id_string || '—'))} · <strong>Application:</strong> ${escapeHtml(String(t.application_no || '—'))}</p>
                     <p style="margin:4px 0;font-size:0.9rem;"><strong>Registration:</strong> ${escapeHtml(t.registration_status || '—')} · <strong>Payment:</strong> ${escapeHtml(t.order_status || '—')}</p>
                     ${statusLine}
+                    ${
+                        !invalid && t.ticket_id_string
+                            ? `<p style="margin:12px 0 0;"><a href="/api/doctor/ticket-document/${encodeURIComponent(t.ticket_id_string)}?userId=${encodeURIComponent(String(currentUser.id))}" target="_blank" rel="noopener" class="btn-primary" style="display:inline-block;padding:8px 14px;text-decoration:none;font-size:0.88rem;">Download / print e-ticket (PDF)</a></p>`
+                            : ''
+                    }
                 </div>
             </div>`;
         });

@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS users (
         registration_cert_path TEXT,
         registration_cert_no TEXT,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-    , is_disabled INTEGER DEFAULT 0, user_role TEXT DEFAULT 'doctor', admin_modules TEXT, is_demo INTEGER DEFAULT 0, last_login_at TIMESTAMPTZ);
+    , is_disabled INTEGER DEFAULT 0, user_role TEXT DEFAULT 'doctor', admin_modules TEXT, is_demo INTEGER DEFAULT 0, last_login_at TIMESTAMPTZ, email_verified INTEGER DEFAULT 1);
 CREATE TABLE IF NOT EXISTS seminars (
         id SERIAL PRIMARY KEY,
         title TEXT NOT NULL,
@@ -234,6 +234,14 @@ CREATE TABLE IF NOT EXISTS otp_verification_tokens (
             channel TEXT NOT NULL,
             user_id INTEGER,
             seminar_id INTEGER,
+            expires_at TEXT NOT NULL,
+            consumed INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
+CREATE TABLE IF NOT EXISTS email_verify_tokens (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            token_hash TEXT NOT NULL,
             expires_at TEXT NOT NULL,
             consumed INTEGER DEFAULT 0,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP

@@ -80,9 +80,16 @@
         #auth-overlay { position: fixed; inset: 0; z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 20px; background: rgba(15,118,110,0.35); backdrop-filter: blur(6px); }
         .btn-warning { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-weight: 600; }
         .seminars-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
-        .preview-box { background: #f8fafc; padding: 20px; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 20px; }
-        .preview-box p { margin: 6px 0; font-size: 0.92rem; }
-        #pdf-viewer { width: 100%; height: 420px; border: 1px solid #cbd5e1; border-radius: 8px; margin-top: 12px; }
+        .preview-shell { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: 20px; align-items: start; margin-bottom: 20px; }
+        @media (max-width: 900px) { .preview-shell { grid-template-columns: 1fr; } }
+        .preview-box { background: linear-gradient(180deg, #f0fdfa 0%, #f8fafc 100%); padding: 20px 22px; border-radius: 14px; border: 1px solid #99f6e4; box-shadow: 0 4px 18px rgba(15,118,110,0.08); }
+        .preview-box h5 { margin: 0 0 12px; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: #0f766e; font-weight: 800; }
+        .preview-row { display: grid; grid-template-columns: 118px 1fr; gap: 8px 12px; padding: 8px 0; border-bottom: 1px solid #e2e8f0; font-size: 0.9rem; }
+        .preview-row:last-child { border-bottom: none; }
+        .preview-row .lbl { color: #64748b; font-weight: 600; font-size: 0.82rem; }
+        .preview-row .val { color: #0f172a; font-weight: 600; word-break: break-word; }
+        .preview-pdf-wrap { background: #fff; border: 1px solid #cbd5e1; border-radius: 12px; overflow: hidden; min-height: 420px; }
+        #pdf-viewer { width: 100%; height: 480px; border: none; display: block; }
         #prev-qrcode { max-width: 120px; display: none; margin: 10px 0; }
         #seminar-track-live, #case-track-live { font-size: 0.82rem; color: #0f766e; font-weight: 700; margin-bottom: 10px; }
     </style>
@@ -101,10 +108,12 @@
                 <label style="display:block;font-size:0.82rem;font-weight:700;color:#0f766e;margin:12px 0 6px;">Password</label>
                 <input type="password" id="doctor-login-password" required autocomplete="current-password" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;">
                 <div id="doctor-login-otp-panel" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid #e2e8f0;">
-                    <p style="font-size:0.82rem;color:#64748b;margin-bottom:8px;">Verify email and phone OTP codes.</p>
+                    <p style="font-size:0.82rem;color:#64748b;margin-bottom:8px;">Verify email and WhatsApp (both required).</p>
+                    <button type="button" id="doctor-send-otp-both" style="padding:6px 14px;border-radius:8px;border:1px solid #99f6e4;background:#ecfdf5;cursor:pointer;font-weight:700;color:#0f766e;margin-bottom:8px;">Send codes to email &amp; WhatsApp</button>
                     <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px;">
                         <span style="font-weight:700;min-width:44px;">Email</span>
                         <button type="button" id="doctor-send-otp-email" style="padding:6px 12px;border-radius:8px;border:1px solid #99f6e4;background:#f0fdfa;cursor:pointer;font-weight:700;color:#0f766e;">Send</button>
+                        <button type="button" id="doctor-resend-otp-email" style="padding:6px 12px;border-radius:8px;border:1px solid #cbd5e1;background:#f8fafc;cursor:pointer;font-weight:700;color:#475569;">Resend</button>
                         <input type="text" id="doctor-email-otp" placeholder="Code" style="max-width:88px;padding:8px;border-radius:8px;border:1px solid #cbd5e1;">
                         <button type="button" id="doctor-verify-otp-email" style="padding:6px 12px;border-radius:8px;border:1px solid #99f6e4;background:#f0fdfa;cursor:pointer;font-weight:700;color:#0f766e;">Verify</button>
                         <span id="doctor-email-otp-ok" style="font-size:0.78rem;color:#059669;"></span>
@@ -112,6 +121,7 @@
                     <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
                         <span style="font-weight:700;min-width:44px;">Phone</span>
                         <button type="button" id="doctor-send-otp-phone" style="padding:6px 12px;border-radius:8px;border:1px solid #99f6e4;background:#f0fdfa;cursor:pointer;font-weight:700;color:#0f766e;">Send</button>
+                        <button type="button" id="doctor-resend-otp-phone" style="padding:6px 12px;border-radius:8px;border:1px solid #cbd5e1;background:#f8fafc;cursor:pointer;font-weight:700;color:#475569;">Resend</button>
                         <input type="text" id="doctor-phone-otp" placeholder="Code" style="max-width:88px;padding:8px;border-radius:8px;border:1px solid #cbd5e1;">
                         <button type="button" id="doctor-verify-otp-phone" style="padding:6px 12px;border-radius:8px;border:1px solid #99f6e4;background:#f0fdfa;cursor:pointer;font-weight:700;color:#0f766e;">Verify</button>
                         <span id="doctor-phone-otp-ok" style="font-size:0.78rem;color:#059669;"></span>
@@ -251,7 +261,7 @@
 
                         <div id="reg-seminar-otp-panel" class="hidden" style="background:#eff6ff;padding:12px;border-radius:8px;margin-bottom:14px;border:1px solid #bfdbfe;">
                             <strong style="color:#1e40af;">Seminar verification required</strong>
-                            <p id="reg-otp-panel-hint" style="font-size:0.85rem;color:#475569;margin:6px 0 0;">Verify email and/or WhatsApp codes before continuing.</p>
+                            <p id="reg-otp-panel-hint" style="font-size:0.85rem;color:#475569;margin:6px 0 0;">Verify email and WhatsApp on this step where shown. On the preview step you will enter a second set of codes to confirm submission.</p>
                         </div>
 
                         <div id="step-1" class="form-step hidden">
@@ -265,6 +275,7 @@
                                 <input type="email" id="reg-email" autocomplete="email">
                                 <div id="reg-otp-email-row" style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                                     <button type="button" class="btn-primary" onclick="sendRegistrationOtpForField('email')">Send email code</button>
+                                    <button type="button" class="btn-primary" style="background:#64748b;" onclick="sendRegistrationOtpForField('email')">Resend</button>
                                     <input type="text" id="reg-otp-code-email" placeholder="Code" style="max-width:100px;padding:8px;">
                                     <button type="button" class="btn-primary" onclick="verifyRegistrationOtpForField('email')">Verify</button>
                                     <span id="reg-otp-status-email" style="font-size:0.85rem;color:#64748b;"></span>
@@ -275,6 +286,7 @@
                                 <input type="tel" id="reg-phone" autocomplete="tel">
                                 <div id="reg-otp-phone-row" style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                                     <button type="button" class="btn-primary" onclick="sendRegistrationOtpForField('phone')">Send WhatsApp code</button>
+                                    <button type="button" class="btn-primary" style="background:#64748b;" onclick="sendRegistrationOtpForField('phone')">Resend</button>
                                     <input type="text" id="reg-otp-code-phone" placeholder="Code" style="max-width:100px;padding:8px;">
                                     <button type="button" class="btn-primary" onclick="verifyRegistrationOtpForField('phone')">Verify</button>
                                     <span id="reg-otp-status-phone" style="font-size:0.85rem;color:#64748b;"></span>
@@ -326,25 +338,55 @@
                             <button type="button" class="btn-primary" style="background:#64748b;margin-left:8px;" onclick="nextStep(3)">Back</button>
                         </div>
 
-                        <div id="step-5" class="form-step hidden">
+                                                <div id="step-5" class="form-step hidden">
                             <h4 style="color:#0f766e;margin-bottom:12px;">Preview &amp; submit</h4>
-                            <div class="preview-box">
-                                <p><strong>Name:</strong> <span id="prev-name"></span></p>
-                                <p><strong>Contact:</strong> <span id="prev-contact"></span></p>
-                                <p><strong>Address:</strong> <span id="prev-addr"></span></p>
-                                <p><strong>Location:</strong> <span id="prev-loc"></span></p>
-                                <p><strong>Qualification:</strong> <span id="prev-qual"></span></p>
-                                <div id="prev-ncism-box" class="hidden"><p><strong>Registration ID:</strong> <span id="prev-ncism"></span></p></div>
-                                <div id="prev-cert-box" class="hidden"><p><strong>Certificate:</strong> uploaded</p></div>
-                                <p><strong>College:</strong> <span id="prev-college"></span></p>
-                                <p><strong>College location:</strong> <span id="prev-cloc"></span></p>
-                                <div id="prev-tnc-block" style="margin-top:12px;display:none;">
-                                    <h4 style="color:#0f766e;margin-bottom:6px;">Seminar terms</h4>
-                                    <div id="prev-tnc-text" style="white-space:pre-wrap;font-size:0.88rem;"></div>
+                            <div class="preview-shell">
+                                <div class="preview-box">
+                                    <h5>Application summary</h5>
+                                    <div class="preview-row"><span class="lbl">Name</span><span class="val" id="prev-name"></span></div>
+                                    <div class="preview-row"><span class="lbl">Contact</span><span class="val" id="prev-contact"></span></div>
+                                    <div class="preview-row"><span class="lbl">Address</span><span class="val" id="prev-addr"></span></div>
+                                    <div class="preview-row"><span class="lbl">Location</span><span class="val" id="prev-loc"></span></div>
+                                    <div class="preview-row"><span class="lbl">Qualification</span><span class="val" id="prev-qual"></span></div>
+                                    <div id="prev-ncism-box" class="preview-row hidden"><span class="lbl">Reg. ID</span><span class="val" id="prev-ncism"></span></div>
+                                    <div id="prev-cert-box" class="preview-row hidden"><span class="lbl">Certificate</span><span class="val">Uploaded</span></div>
+                                    <div class="preview-row"><span class="lbl">College</span><span class="val" id="prev-college"></span></div>
+                                    <div class="preview-row"><span class="lbl">College loc.</span><span class="val" id="prev-cloc"></span></div>
+                                    <div id="prev-tnc-block" style="margin-top:14px;display:none;">
+                                        <h5 style="margin-bottom:8px;">Seminar terms</h5>
+                                        <div id="prev-tnc-text" style="white-space:pre-wrap;font-size:0.86rem;color:#475569;max-height:140px;overflow:auto;"></div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <h5 style="margin:0 0 10px;color:#0f766e;font-size:0.78rem;text-transform:uppercase;letter-spacing:0.06em;font-weight:800;">PDF preview</h5>
+                                    <div class="preview-pdf-wrap">
+                                        <img id="prev-qrcode" alt="QR preview" style="display:none;">
+                                        <iframe id="pdf-viewer" title="Application preview PDF"></iframe>
+                                    </div>
                                 </div>
                             </div>
-                            <img id="prev-qrcode" alt="QR preview">
-                            <iframe id="pdf-viewer" title="Application preview PDF"></iframe>
+                            <div id="reg-submit-otp-panel" class="hidden" style="background:#fefce8;padding:14px;border-radius:10px;margin:14px 0;border:1px solid #fde047;">
+                                <strong style="color:#854d0e;">Final confirmation — new codes required</strong>
+                                <p style="font-size:0.85rem;color:#713f12;margin:8px 0 10px;">Request fresh codes to the same email and WhatsApp number, then verify before submitting. Codes from the first step cannot be reused here.</p>
+                                <div id="reg-submit-otp-email-row" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px;">
+                                    <span style="font-weight:700;min-width:52px;">Email</span>
+                                    <button type="button" class="btn-primary" onclick="sendRegistrationSubmitOtpForField('email')">Send</button>
+                                    <button type="button" class="btn-primary" style="background:#64748b;" onclick="sendRegistrationSubmitOtpForField('email')">Resend</button>
+                                    <input type="text" id="reg-submit-otp-code-email" placeholder="Code" style="max-width:100px;padding:8px;">
+                                    <button type="button" class="btn-primary" onclick="verifyRegistrationSubmitOtpForField('email')">Verify</button>
+                                    <span id="reg-submit-otp-status-email" style="font-size:0.85rem;color:#64748b;"></span>
+                                    <span id="reg-submit-otp-email-ok" style="font-size:0.85rem;color:#059669;font-weight:700;"></span>
+                                </div>
+                                <div id="reg-submit-otp-phone-row" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+                                    <span style="font-weight:700;min-width:52px;">WhatsApp</span>
+                                    <button type="button" class="btn-primary" onclick="sendRegistrationSubmitOtpForField('phone')">Send</button>
+                                    <button type="button" class="btn-primary" style="background:#64748b;" onclick="sendRegistrationSubmitOtpForField('phone')">Resend</button>
+                                    <input type="text" id="reg-submit-otp-code-phone" placeholder="Code" style="max-width:100px;padding:8px;">
+                                    <button type="button" class="btn-primary" onclick="verifyRegistrationSubmitOtpForField('phone')">Verify</button>
+                                    <span id="reg-submit-otp-status-phone" style="font-size:0.85rem;color:#64748b;"></span>
+                                    <span id="reg-submit-otp-phone-ok" style="font-size:0.85rem;color:#059669;font-weight:700;"></span>
+                                </div>
+                            </div>
                             <label style="display:flex;align-items:center;gap:8px;margin:16px 0;"><input type="checkbox" id="tnc"> I agree to the terms and confirm the information is correct.</label>
                             <div style="display:flex;flex-wrap:wrap;gap:10px;">
                                 <button type="button" class="btn-primary" onclick="submitApplication()">Submit application</button>

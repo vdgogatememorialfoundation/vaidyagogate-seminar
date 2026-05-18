@@ -1,0 +1,66 @@
+
+    <div class="cg-utility">
+        <div class="cg-utility-inner">
+            <div>
+                <span><i class="fas fa-envelope"></i> <span id="top-email">info@vaidyagogate.org</span></span>
+                <span><i class="fas fa-phone"></i> <span id="top-phone">+91 9876543210</span></span>
+                <span><i class="fas fa-calendar-alt"></i> <span id="top-date">National Seminar 2026</span></span>
+            </div>
+            <div>
+                <a href="/doctor.html"><i class="fas fa-user"></i> Doctor sign in</a>
+                <span style="opacity:0.5;margin:0 8px;">|</span>
+                <a href="#" onclick="openRegisterModal(); return false;"><i class="fas fa-user-plus"></i> Create account</a>
+            </div>
+        </div>
+    </div>
+
+    <header class="cg-header" id="cg-header">
+        <div class="cg-header-inner">
+            <a href="#" class="cg-logo-zone" onclick="showSection('home'); return false;">
+                <div data-site-logo data-logo-height="52px" data-logo-width="52px" data-logo-fallback="icon"><i class="fas fa-leaf" style="font-size:1.5rem;color:#0f766e;"></i></div>
+                <div class="cg-logo-text">
+                    <h1>Vaidya Gogate Memorial Foundation</h1>
+                    <p>National Seminar Portal</p>
+                </div>
+            </a>
+            <button type="button" class="cg-menu-toggle" id="cg-menu-toggle" aria-label="Menu"><i class="fas fa-bars"></i></button>
+            <nav class="cg-nav" id="cg-nav">
+                <a href="#" data-nav-section="home" class="active">Home</a>
+                <a href="#" data-nav-section="about">About</a>
+                <a href="#" data-nav-section="schedule">Programme</a>
+                <a href="#" data-nav-section="gallery">Gallery</a>
+                <a href="#" id="nav-verify" data-nav-section="verify">Verify</a>
+                <a href="#" data-nav-section="contact">Contact</a>
+                <a id="nav-wix-home" href="https://www.vaidyagogate.org" target="_blank" rel="noopener" class="hidden">Main site</a>
+                <a href="/doctor.html">Doctor portal</a>
+                <a href="/?register=1" class="cg-btn-register" onclick="openRegisterModal(); return false;">Register</a>
+            </nav>
+        </div>
+    </header>
+    <div class="cg-nav-backdrop" id="cg-nav-backdrop" aria-hidden="true"></div>
+
+    <div id="scrolling-announce-wrap" class="cg-ticker hidden" aria-label="Announcements">
+        <div class="cg-ticker-inner">
+            <span class="cg-ticker-badge">Live</span>
+            <div class="cg-ticker-viewport">
+                <div id="scrolling-announce-track" class="cg-ticker-track"></div>
+            </div>
+        </div>
+    </div>
+
+    <section id="congress-hero-root" class="congress-hero" aria-label="Featured">
+        <div id="congress-hero-slides"></div>
+        <div class="congress-hero-arrows">
+            <button type="button" class="prev" id="congress-hero-prev" aria-label="Previous"><i class="fas fa-chevron-left"></i></button>
+            <button type="button" class="next" id="congress-hero-next" aria-label="Next"><i class="fas fa-chevron-right"></i></button>
+        </div>
+        <div class="congress-hero-nav">
+            <div class="congress-hero-dots" id="congress-hero-dots"></div>
+        </div>
+    </section>
+
+    <section class="cg-quick" aria-label="Quick access">
+        <div class="cg-quick-grid" id="cg-quick-grid"></div>
+    </section>
+
+    <a href="#" class="cg-fab-register" id="cg-fab-register" onclick="openRegisterModal(); return false;"><i class="fas fa-user-plus"></i> Register</a>

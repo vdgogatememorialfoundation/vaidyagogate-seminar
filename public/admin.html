@@ -67,6 +67,7 @@
                     <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px;">
                         <span style="min-width:44px;font-weight:700;font-size:0.85rem;">Email</span>
                         <button type="button" class="btn-success" style="padding:6px 12px;" id="admin-send-login-email-otp">Send</button>
+                        <button type="button" class="btn-success" style="padding:6px 12px;background:#64748b;" id="admin-resend-login-email-otp">Resend</button>
                         <input type="text" id="admin_login_email_otp" placeholder="Code" style="max-width:88px;margin-top:0;">
                         <button type="button" class="btn-success" style="padding:6px 12px;" id="admin-verify-login-email-otp">Verify</button>
                         <span id="admin_login_email_otp_ok" style="font-size:0.78rem;color:#047857;"></span>
@@ -74,6 +75,7 @@
                     <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
                         <span style="min-width:44px;font-weight:700;font-size:0.85rem;">Phone</span>
                         <button type="button" class="btn-success" style="padding:6px 12px;" id="admin-send-login-phone-otp">Send</button>
+                        <button type="button" class="btn-success" style="padding:6px 12px;background:#64748b;" id="admin-resend-login-phone-otp">Resend</button>
                         <input type="text" id="admin_login_phone_otp" placeholder="Code" style="max-width:88px;margin-top:0;">
                         <button type="button" class="btn-success" style="padding:6px 12px;" id="admin-verify-login-phone-otp">Verify</button>
                         <span id="admin_login_phone_otp_ok" style="font-size:0.78rem;color:#047857;"></span>
@@ -218,7 +220,7 @@
                 <div class="card">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
                         <h3>Applications for this Seminar</h3>
-                        <button class="btn-primary" onclick="document.getElementById('admin-proxy-modal').classList.remove('hidden')">Register New Applicant (Proxy)</button>
+                        <button class="btn-primary" onclick="openProxyApplicationModal()">Register New Applicant (Proxy)</button>
                     </div>
                     <table class="data-table">
                         <thead><tr><th>App ID (Barcode)</th><th>Name</th><th>Status</th><th>Action</th></tr></thead>
@@ -381,7 +383,25 @@
             <!-- Admin: seminar application on behalf of doctor (live save) -->
             <div id="tab-behalf-reg" class="tab-pane hidden">
                 <h2 style="margin-bottom: 12px;">Doctor seminar applications (admin workspace)</h2>
-                <p style="color:#64748b;margin-bottom:18px;max-width:900px;">Create or edit the same registration payload doctors use, but stored as an <strong>admin-managed</strong> application (<code>registration_source = admin</code>). Changes save automatically a few moments after you stop typing valid JSON.</p>
+                <p style="color:#64748b;margin-bottom:18px;max-width:900px;">Create or edit the same registration payload doctors use, but stored as an <strong>admin-managed</strong> application (<code>registration_source = admin</code>). When admin OTP for sensitive actions is off, changes save automatically a few moments after you stop typing valid JSON. When that policy is on, verify your email and WhatsApp below, then click <strong>Save application</strong>.</p>
+                <div id="behalf-admin-otp-wrap" class="card" style="display:none;margin-bottom:16px;padding:14px;border:1px solid #fed7aa;background:#fffbeb;">
+                    <strong style="display:block;margin-bottom:8px;color:#9a3412;">Your admin confirmation (email + WhatsApp)</strong>
+                    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:8px;">
+                        <span style="font-size:0.85rem;">Email</span>
+                        <button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;background:#64748b;" onclick="adminSendSensitiveOtp('email','behalf')">Send</button>
+                        <input type="text" id="beh-sens-email-otp" placeholder="Code" style="width:72px;padding:6px;border-radius:6px;border:1px solid #cbd5e1;">
+                        <button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;" onclick="adminVerifySensitiveOtp('email','behalf')">Verify</button>
+                        <span id="beh-sens-email-ok" style="font-size:0.8rem;color:#059669;"></span>
+                    </div>
+                    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+                        <span style="font-size:0.85rem;">WhatsApp</span>
+                        <button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;background:#64748b;" onclick="adminSendSensitiveOtp('phone','behalf')">Send</button>
+                        <input type="text" id="beh-sens-phone-otp" placeholder="Code" style="width:72px;padding:6px;border-radius:6px;border:1px solid #cbd5e1;">
+                        <button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;" onclick="adminVerifySensitiveOtp('phone','behalf')">Verify</button>
+                        <span id="beh-sens-phone-ok" style="font-size:0.8rem;color:#059669;"></span>
+                    </div>
+                    <button type="button" class="btn-primary" style="margin-top:12px;background:#0f766e;" onclick="flushBehalfRegistrationSave(true)">Save application (uses verified OTP)</button>
+                </div>
                     <div class="card">
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
                         <div>
@@ -432,7 +452,47 @@
             <div id="tab-site-cms" class="tab-pane hidden">
                 <h2 style="margin-bottom: 12px; color:#0c4a6e;">Public website &amp; doctor portal content</h2>
                 <p style="color:#475569;margin-bottom:18px;max-width:860px;">Manage the public website: ticker, banner carousel, gallery, about us, social links, and notices. Use <strong>Upload</strong> buttons — paths are saved automatically. <strong>Final attendee list:</strong> enable <em>Publish participant list</em> per seminar under Seminar Management (after payments are complete).</p>
-                <div class="card">
+                <div class="card" style="margin-bottom:18px;border:1px solid #bae6fd;background:#f0f9ff;">
+                    <h3 style="margin:0 0 10px;color:#0369a1;font-size:1.05rem;">Public portal sign-in &amp; security</h3>
+                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:12px;">Controls whether the main website shows signup/login, optional email verification after signup, and whether creating users or saving doctor applications on their behalf requires <strong>your</strong> email + WhatsApp OTP. Environment variables <code>REQUIRE_SIGNUP_OTP</code> / <code>REQUIRE_LOGIN_OTP</code> still override signup/login OTP when set to 0 or 1.</p>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:720px;">
+                        <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="pa-show-signup" checked> Show “Create account” on main site</label>
+                        <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="pa-show-login" checked> Show sign-in entry on main site</label>
+                        <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="pa-req-signup-otp" checked> Require signup OTP (email + WhatsApp)</label>
+                        <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="pa-req-login-otp" checked> Require login OTP (email + WhatsApp)</label>
+                        <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="pa-req-email-verify"> Require email verification before login</label>
+                        <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="pa-req-admin-sensitive-otp"> Require admin OTP to create users / save behalf applications</label>
+                    </div>
+                    <p id="pa-effective-hint" style="font-size:0.82rem;color:#475569;margin:10px 0 8px;"></p>
+                    <button type="button" class="btn-primary" style="background:#0369a1;" onclick="savePortalAuthAdminConfig()">Save portal auth policy</button>
+                    <p id="pa-save-msg" style="margin-top:8px;font-weight:600;font-size:0.9rem;"></p>
+                </div>
+                
+                <div class="card" style="margin-bottom:18px;border:1px solid #fde68a;background:#fffbeb;">
+                    <h3 style="margin:0 0 10px;color:#92400e;font-size:1.05rem;">Account alerts (designated staff)</h3>
+                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:10px;">When someone creates a portal account (public signup or admin CRM), full user details are emailed and sent on WhatsApp to these contacts (one per line).</p>
+                    <label style="font-size:0.82rem;font-weight:700;">Notification emails</label>
+                    <textarea id="dn-emails" rows="2" style="width:100%;max-width:640px;margin:6px 0 12px;font-family:monospace;font-size:0.85rem;" placeholder="coordinator@example.org"></textarea>
+                    <label style="font-size:0.82rem;font-weight:700;">WhatsApp numbers (with country code)</label>
+                    <textarea id="dn-phones" rows="2" style="width:100%;max-width:640px;margin:6px 0 12px;font-family:monospace;font-size:0.85rem;" placeholder="9198xxxxxxxx"></textarea>
+                    <button type="button" class="btn-primary" style="background:#b45309;" onclick="saveDesignatedNotifyConfig()">Save designated contacts</button>
+                    <p id="dn-save-msg" style="margin-top:8px;font-weight:600;font-size:0.9rem;"></p>
+                </div>
+                <div class="card" style="margin-bottom:18px;border:1px solid #bbf7d0;background:#f0fdf4;">
+                    <h3 style="margin:0 0 10px;color:#166534;font-size:1.05rem;">Venue change broadcast</h3>
+                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:10px;">After updating <em>Venue line</em> below, send email and WhatsApp to all <strong>paid</strong> registrants. Seminar dates in notifications use India Standard Time (IST).</p>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:720px;">
+                        <div><label style="font-size:0.82rem;">Seminar (optional — blank = all)</label><select id="venue-broadcast-seminar" class="form-control"><option value="">All paid seminars</option></select></div>
+                        <div><label style="font-size:0.82rem;">New venue / message</label><input type="text" id="venue-broadcast-msg" class="form-control" placeholder="Convention Centre Hall B, Pune"></div>
+                    </div>
+                    <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:14px;font-size:0.9rem;">
+                        <label><input type="checkbox" id="venue-broadcast-email" checked> Email</label>
+                        <label><input type="checkbox" id="venue-broadcast-wa" checked> WhatsApp</label>
+                    </div>
+                    <button type="button" class="btn-primary" style="margin-top:12px;background:#15803d;" onclick="sendVenueBroadcast()">Send venue update to paid registrants</button>
+                    <p id="venue-broadcast-status" style="margin-top:8px;font-weight:600;font-size:0.9rem;"></p>
+                </div>
+<div class="card">
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
                         <div><label>Homepage ticker text</label><input type="text" id="cms-ticker" placeholder="Short announcement line (single line)"></div>
                         <div><label>Banner image URL</label><input type="text" id="cms-banner" placeholder="/uploads/banner.jpg"></div>
@@ -1016,6 +1076,10 @@
                     <input type="checkbox" id="newuser-custom-pass" onchange="toggleNewUserPasswordFields()">
                     Set custom password (otherwise system generates one)
                 </label>
+                <label id="newuser-is-demo-wrap" style="display:flex;align-items:flex-start;gap:8px;font-size:0.88rem;padding:10px 12px;background:#f5f3ff;border:1px solid #c4b5fd;border-radius:8px;">
+                    <input type="checkbox" id="newuser-is-demo" style="margin-top:3px;">
+                    <span><strong>Dummy account</strong> — for testing on live: login and registration accept <em>any</em> OTP code (e.g. 0000, 1234). Real SMS/email OTP is optional.</span>
+                </label>
                 <div id="newuser-pass-wrap" style="display:none;">
                     <input type="password" id="newuser-pass" placeholder="Custom password" style="width:100%;">
                     <button type="button" class="btn-primary" style="margin-top:6px;padding:6px 12px;font-size:0.85rem;background:#64748b;" onclick="toggleNewUserPassVisible()">Show / hide</button>
@@ -1029,6 +1093,23 @@
                     <strong>Doctor</strong> → /doctor.html · <strong>Judge/Reviewer</strong> → /judge.html ·
                     <strong>Scanner</strong> → /scanner.html · <strong>Co-admin</strong> → /admin.html
                 </p>
+                <div id="newuser-admin-otp-wrap" style="display:none;padding:12px;border:1px solid #fed7aa;border-radius:8px;background:#fffbeb;margin-top:8px;">
+                    <strong style="display:block;margin-bottom:8px;color:#9a3412;font-size:0.9rem;">Confirm it is you (email + WhatsApp)</strong>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px;">
+                        <span style="font-size:0.82rem;">Email</span>
+                        <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.78rem;background:#64748b;" onclick="adminSendSensitiveOtp('email','create')">Send</button>
+                        <input type="text" id="cau-sens-email-otp" placeholder="Code" style="width:68px;padding:5px;border-radius:6px;border:1px solid #cbd5e1;">
+                        <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.78rem;" onclick="adminVerifySensitiveOtp('email','create')">Verify</button>
+                        <span id="cau-sens-email-ok" style="font-size:0.78rem;color:#059669;"></span>
+                    </div>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+                        <span style="font-size:0.82rem;">WhatsApp</span>
+                        <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.78rem;background:#64748b;" onclick="adminSendSensitiveOtp('phone','create')">Send</button>
+                        <input type="text" id="cau-sens-phone-otp" placeholder="Code" style="width:68px;padding:5px;border-radius:6px;border:1px solid #cbd5e1;">
+                        <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.78rem;" onclick="adminVerifySensitiveOtp('phone','create')">Verify</button>
+                        <span id="cau-sens-phone-ok" style="font-size:0.78rem;color:#059669;"></span>
+                    </div>
+                </div>
                 <button class="btn-primary" style="margin-top: 15px;" onclick="adminCreateUser()">Create Account &amp; Send Credentials</button>
             </div>
         </div>
@@ -1062,7 +1143,7 @@
                     <h4 style="margin-bottom: 10px; color:#1e40af;">Per-seminar links, policy &amp; form override</h4>
                     <p style="color:#64748b;font-size:0.85rem;margin-bottom:10px;">WhatsApp link appears to doctors after approval. Cancellation policy is shown to doctors in plain language. Form override adjusts labels and which fields appear for this seminar only.</p>
                     <div><label>WhatsApp group / invite URL</label><input type="text" id="seminar-whatsapp" placeholder="https://chat.whatsapp.com/..."></div>
-                    <div style="margin-top:10px;"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="seminar-otp-app"> Require OTP on application (email + WhatsApp)</label></div>
+                    <div style="margin-top:10px;"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="seminar-otp-app" checked> Require OTP on application (email + WhatsApp on the form, plus a second email + WhatsApp confirmation on the preview step before submit)</label></div>
                     <div style="margin-top:14px;padding:12px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;">
                         <label style="font-weight:600;">Cancellation &amp; refund policy</label>
                         <p style="font-size:0.82rem;color:#64748b;margin:6px 0 10px;">Shown to doctors when they track or cancel an application.</p>

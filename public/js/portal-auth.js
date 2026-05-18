@@ -159,24 +159,69 @@
         const prefix = opts.otpPrefix || portal;
         const sendBtnEmail = document.getElementById(prefix + '-send-otp-email');
         const sendBtnPhone = document.getElementById(prefix + '-send-otp-phone');
+        const resendBtnEmail = opts.resendEmailBtnId ? document.getElementById(opts.resendEmailBtnId) : null;
+        const resendBtnPhone = opts.resendPhoneBtnId ? document.getElementById(opts.resendPhoneBtnId) : null;
         const verifyBtnEmail = document.getElementById(prefix + '-verify-otp-email');
         const verifyBtnPhone = document.getElementById(prefix + '-verify-otp-phone');
+
+        async function precheckEmail(email) {
+            const res = await fetch('/api/auth/login-otp/precheck', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email })
+            });
+            return res.json();
+        }
 
         async function sendOtp(channel) {
             const email = String((document.getElementById(opts.emailInputId) || {}).value || '')
                 .trim()
                 .toLowerCase();
             const password = (document.getElementById(opts.passwordInputId) || {}).value;
-            if (!email || !password) return alert('Enter email and password first.');
+            if (!email) return alert('Enter your email first.');
+            if (!password) {
+                const pc = await precheckEmail(email);
+                if (pc.needsSignup) {
+                    return alert(pc.message || 'No account with this email. Please create an account first.');
+                }
+                return alert('Enter your password, then request verification codes.');
+            }
             const res = await fetch('/api/auth/login-otp/send', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password, channel })
             });
             const data = await res.json();
-            if (!res.ok) return alert(data.error || 'Could not send code.');
+            if (!res.ok) {
+                if (data.needsSignup) {
+                    return alert(data.error || 'No account found. Please create an account first.');
+                }
+                return alert(data.error || 'Could not send code.');
+            }
             if (data.debugCode) console.info('Login OTP debug:', data.debugCode);
             if (data.warning) alert(data.warning);
+        }
+
+        async function sendBothOtps() {
+            const email = String((document.getElementById(opts.emailInputId) || {}).value || '')
+                .trim()
+                .toLowerCase();
+            const password = (document.getElementById(opts.passwordInputId) || {}).value;
+            if (!email) return alert('Enter your email first.');
+            const pc = await precheckEmail(email);
+            if (pc.needsSignup) {
+                return alert(pc.message || 'No account with this email. Please create an account first.');
+            }
+            if (!password) return alert('Enter your password, then send verification codes.');
+            const res = await fetch('/api/auth/login-otp/send-both', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            });
+            const data = await res.json();
+            if (!res.ok) return alert(data.error || 'Could not send codes.');
+            if (data.warning) alert(data.warning);
+            else alert('Verification codes sent to your email and WhatsApp.');
         }
 
         async function verifyOtp(channel) {
@@ -206,6 +251,10 @@
 
         if (sendBtnEmail) sendBtnEmail.addEventListener('click', () => sendOtp('email').catch(console.error));
         if (sendBtnPhone) sendBtnPhone.addEventListener('click', () => sendOtp('phone').catch(console.error));
+        const sendBothBtn = document.getElementById(prefix + '-send-otp-both');
+        if (sendBothBtn) sendBothBtn.addEventListener('click', () => sendBothOtps().catch(console.error));
+        if (resendBtnEmail) resendBtnEmail.addEventListener('click', () => sendOtp('email').catch(console.error));
+        if (resendBtnPhone) resendBtnPhone.addEventListener('click', () => sendOtp('phone').catch(console.error));
         if (verifyBtnEmail) verifyBtnEmail.addEventListener('click', () => verifyOtp('email').catch(console.error));
         if (verifyBtnPhone) verifyBtnPhone.addEventListener('click', () => verifyOtp('phone').catch(console.error));
 
@@ -226,7 +275,36 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(body)
                 });
-                const data = await res.json();
+                let data = {};
+                try {
+                    data = await res.json();
+                } catch (_) {
+                    data = {};
+                }
+                if (res.status === 403 && data.needsEmailVerification) {
+                    const again = confirm(
+                        (data.error || 'Please verify your email before signing in.') +
+                            '\n\nSend another verification email now?'
+                    );
+                    if (again) {
+                        try {
+                            const r2 = await fetch('/api/auth/resend-verification', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ email, password })
+                            });
+                            const d2 = await r2.json();
+                            const m = d2.success ? d2.message || 'Verification email queued.' : d2.error || 'Could not resend.';
+                            if (opts.onError) opts.onError(m);
+                            else alert(m);
+                        } catch (_) {
+                            const m = 'Could not resend verification email.';
+                            if (opts.onError) opts.onError(m);
+                            else alert(m);
+                        }
+                    }
+                    return;
+                }
                 if (!res.ok || !data.success) {
                     const msg = data.error || 'Login failed.';
                     if (opts.onError) opts.onError(msg);

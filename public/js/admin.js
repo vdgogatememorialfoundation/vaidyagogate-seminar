@@ -2,6 +2,9 @@ window.__adminUsersById = {};
 let __adminLoginPhoneOtpToken = null;
 let __adminLoginEmailOtpToken = null;
 let __adminBehalfSaveTimer = null;
+let __adminSensitivePhoneOtpToken = null;
+let __adminSensitiveEmailOtpToken = null;
+let __requireAdminSensitiveOtp = false;
 
 const ADMIN_REGISTRATION_STATUSES = [
     { value: 'submitted', label: 'Submitted' },
@@ -29,6 +32,114 @@ function getStoredAdminUser() {
     } catch (_) {
         return {};
     }
+}
+
+function resetAdminSensitiveOtpTokens() {
+    __adminSensitivePhoneOtpToken = null;
+    __adminSensitiveEmailOtpToken = null;
+}
+
+function sensitiveOtpFieldIds(ctx) {
+    if (ctx === 'behalf') {
+        return {
+            phoneCode: 'beh-sens-phone-otp',
+            emailCode: 'beh-sens-email-otp',
+            phoneOk: 'beh-sens-phone-ok',
+            emailOk: 'beh-sens-email-ok'
+        };
+    }
+    if (ctx === 'proxy') {
+        return {
+            phoneCode: 'proxy-sens-phone-otp',
+            emailCode: 'proxy-sens-email-otp',
+            phoneOk: 'proxy-sens-phone-ok',
+            emailOk: 'proxy-sens-email-ok'
+        };
+    }
+    return {
+        phoneCode: 'cau-sens-phone-otp',
+        emailCode: 'cau-sens-email-otp',
+        phoneOk: 'cau-sens-phone-ok',
+        emailOk: 'cau-sens-email-ok'
+    };
+}
+
+function ensureProxyOtpPanel() {
+    if (document.getElementById('proxy-admin-otp-wrap')) return;
+    const sel = document.getElementById('proxy-user-select');
+    if (!sel || !sel.parentNode) return;
+    const wrap = document.createElement('div');
+    wrap.id = 'proxy-admin-otp-wrap';
+    wrap.style.cssText =
+        'display:none;margin:16px 0;padding:14px;border:1px solid #fed7aa;border-radius:8px;background:#fffbeb;';
+    wrap.innerHTML = `<strong style="display:block;margin-bottom:8px;color:#9a3412;">Admin OTP (email + WhatsApp)</strong>
+        <p style="font-size:0.82rem;margin:6px 0;"><button type="button" class="btn-primary" style="padding:5px 8px;font-size:0.75rem;background:#64748b;margin-right:6px;" onclick="adminSendSensitiveOtp('email','proxy')">Email</button>
+        <input type="text" id="proxy-sens-email-otp" placeholder="code" style="width:72px;padding:4px;">
+        <button type="button" onclick="adminVerifySensitiveOtp('email','proxy')">Verify</button> <span id="proxy-sens-email-ok" style="color:#059669;"></span></p>
+        <p style="font-size:0.82rem;"><button type="button" class="btn-primary" style="padding:5px 8px;font-size:0.75rem;background:#64748b;margin-right:6px;" onclick="adminSendSensitiveOtp('phone','proxy')">WhatsApp</button>
+        <input type="text" id="proxy-sens-phone-otp" placeholder="code" style="width:72px;padding:4px;">
+        <button type="button" onclick="adminVerifySensitiveOtp('phone','proxy')">Verify</button> <span id="proxy-sens-phone-ok" style="color:#059669;"></span></p>`;
+    const blank = sel.nextElementSibling;
+    if (blank && blank.nodeType === 3) sel.parentNode.insertBefore(wrap, blank.nextSibling);
+    else sel.insertAdjacentElement('afterend', wrap);
+}
+
+async function refreshAdminSensitiveOtpRequirement() {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) {
+        __requireAdminSensitiveOtp = false;
+        return;
+    }
+    try {
+        const res = await fetch(`/api/admin/portal-auth-config?actingAdminId=${encodeURIComponent(adm.id)}`);
+        const d = await res.json();
+        __requireAdminSensitiveOtp = !!(d.success && d.config && d.config.requireAdminOtpForSensitive);
+    } catch (_) {
+        __requireAdminSensitiveOtp = false;
+    }
+    const wrapCreate = document.getElementById('newuser-admin-otp-wrap');
+    const wrapBehalf = document.getElementById('behalf-admin-otp-wrap');
+    ensureProxyOtpPanel();
+    const wrapProxy = document.getElementById('proxy-admin-otp-wrap');
+    const show = !!__requireAdminSensitiveOtp;
+    if (wrapCreate) wrapCreate.style.display = show ? 'block' : 'none';
+    if (wrapBehalf) wrapBehalf.style.display = show ? 'block' : 'none';
+    if (wrapProxy) wrapProxy.style.display = show ? 'block' : 'none';
+    if (!show) resetAdminSensitiveOtpTokens();
+}
+
+async function adminSendSensitiveOtp(channel, ctx) {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return alert('Not logged in.');
+    const res = await fetch('/api/admin/otp/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminUserId: adm.id, channel })
+    });
+    const data = await res.json();
+    if (!res.ok) return alert(data.error || 'Could not send code.');
+    if (data.debugCode) console.info('Admin sensitive OTP debug:', data.debugCode);
+    if (data.warning) alert(data.warning);
+}
+
+async function adminVerifySensitiveOtp(channel, ctx) {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return alert('Not logged in.');
+    const ids = sensitiveOtpFieldIds(ctx || 'create');
+    const codeEl = document.getElementById(channel === 'email' ? ids.emailCode : ids.phoneCode);
+    const okEl = document.getElementById(channel === 'email' ? ids.emailOk : ids.phoneOk);
+    const code = String((codeEl || {}).value || '').trim();
+    if (!code) return alert('Enter the code.');
+    const res = await fetch('/api/admin/otp/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ adminUserId: adm.id, channel, code })
+    });
+    const data = await res.json();
+    if (!res.ok) return alert(data.error || 'Invalid code.');
+    if (channel === 'email') __adminSensitiveEmailOtpToken = data.token;
+    else __adminSensitivePhoneOtpToken = data.token;
+    if (okEl) okEl.textContent = 'Verified';
 }
 
 function isSuperAdminUser() {
@@ -81,12 +192,15 @@ window.onload = () => {
         document.getElementById('dashboard-main').classList.remove('hidden');
         loadAllData();
         applyCoAdminSidebarVisibility();
+        refreshAdminSensitiveOtpRequirement();
     }
 };
 
 function wireAdminLoginOtpButtons() {
     const sendE = document.getElementById('admin-send-login-email-otp');
     const sendP = document.getElementById('admin-send-login-phone-otp');
+    const resendE = document.getElementById('admin-resend-login-email-otp');
+    const resendP = document.getElementById('admin-resend-login-phone-otp');
     const verE = document.getElementById('admin-verify-login-email-otp');
     const verP = document.getElementById('admin-verify-login-phone-otp');
     if (sendE)
@@ -96,6 +210,16 @@ function wireAdminLoginOtpButtons() {
             });
     if (sendP)
         sendP.onclick = () =>
+            adminSendLoginOtp('phone').catch((e) => {
+                console.error(e);
+            });
+    if (resendE)
+        resendE.onclick = () =>
+            adminSendLoginOtp('email').catch((e) => {
+                console.error(e);
+            });
+    if (resendP)
+        resendP.onclick = () =>
             adminSendLoginOtp('phone').catch((e) => {
                 console.error(e);
             });
@@ -233,6 +357,9 @@ function switchTab(tabId) {
     document.querySelectorAll('.menu-item').forEach((m) => m.classList.remove('active'));
     document.getElementById(tabId).classList.remove('hidden');
     if (typeof event !== 'undefined' && event && event.currentTarget) event.currentTarget.classList.add('active');
+    if (tabId === 'tab-behalf-reg' || tabId === 'tab-site-cms') {
+        refreshAdminSensitiveOtpRequirement();
+    }
 }
 
 let adminAutoRefreshInterval = null;
@@ -294,10 +421,18 @@ function isDoctorAccount(u) {
     return ur === 'doctor';
 }
 
+function adminDemoAccountsEnabled() {
+    return window.__allowDemoAccounts !== false;
+}
+
 function adminUserStatusBadge(u) {
+    const demo =
+        adminDemoAccountsEnabled() && Number(u.is_demo) === 1
+            ? ' <span style="background:#ede9fe;color:#6d28d9;padding:2px 8px;border-radius:6px;font-size:0.72rem;margin-left:4px;">DUMMY</span>'
+            : '';
     return u.is_disabled
-        ? `<span style="color:red;font-weight:bold;">DISABLED</span>`
-        : `<span style="color:green;font-weight:bold;">ACTIVE</span>`;
+        ? `<span style="color:red;font-weight:bold;">DISABLED</span>${demo}`
+        : `<span style="color:green;font-weight:bold;">ACTIVE</span>${demo}`;
 }
 
 function adminUserToggleBtn(u) {
@@ -310,6 +445,12 @@ function openAdminCreateUserModal(kind) {
     const modal = document.getElementById('admin-create-user-modal');
     const roleSel = document.getElementById('newuser-role');
     if (!modal) return;
+    resetAdminSensitiveOtpTokens();
+    ['cau-sens-phone-ok', 'cau-sens-email-ok', 'beh-sens-phone-ok', 'beh-sens-email-ok'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = '';
+    });
+    refreshAdminSensitiveOtpRequirement();
     if (roleSel) {
         Array.from(roleSel.options).forEach((opt) => {
             if (!opt.value) return;
@@ -404,11 +545,13 @@ async function loadUsers() {
 
 async function toggleAdminUserDemo(userId, enable) {
     const isDemo = enable === true || enable === 1 || enable === '1' || enable === 'true';
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return alert('Not logged in.');
     try {
         const res = await fetch('/api/admin/users/toggle_demo', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: parseInt(userId, 10), isDemo })
+            body: JSON.stringify({ userId: parseInt(userId, 10), isDemo, actingAdminId: adm.id })
         });
         let data = {};
         const text = await res.text();
@@ -537,13 +680,19 @@ async function saveAdminModulesForTarget() {
 }
 
 function scheduleBehalfRegSave() {
+    if (__requireAdminSensitiveOtp) {
+        const st = document.getElementById('behalf-save-status');
+        if (st) st.textContent = 'Admin OTP is on: verify your codes above, then click Save application.';
+        return;
+    }
     const st = document.getElementById('behalf-save-status');
     if (st) st.textContent = 'Waiting to save…';
     if (__adminBehalfSaveTimer) clearTimeout(__adminBehalfSaveTimer);
-    __adminBehalfSaveTimer = setTimeout(flushBehalfRegistrationSave, 750);
+    __adminBehalfSaveTimer = setTimeout(() => flushBehalfRegistrationSave(false), 750);
 }
 
-async function flushBehalfRegistrationSave() {
+async function flushBehalfRegistrationSave(manual) {
+    await refreshAdminSensitiveOtpRequirement();
     const st = document.getElementById('behalf-save-status');
     const docId = parseInt((document.getElementById('behalf-doctor-select') || {}).value, 10);
     const sid = parseInt((document.getElementById('behalf-seminar-select') || {}).value, 10);
@@ -564,6 +713,13 @@ async function flushBehalfRegistrationSave() {
         if (st) st.textContent = 'Not logged in.';
         return;
     }
+    if (__requireAdminSensitiveOtp && !manual) {
+        if (st) st.textContent = 'Verify admin OTP and click Save application to persist changes.';
+        return;
+    }
+    if (__requireAdminSensitiveOtp && manual && (!__adminSensitivePhoneOtpToken || !__adminSensitiveEmailOtpToken)) {
+        return alert('Verify both email and WhatsApp OTP before saving.');
+    }
     if (st) st.textContent = 'Saving…';
     try {
         const res = await fetch('/api/admin/registrations/upsert', {
@@ -573,13 +729,22 @@ async function flushBehalfRegistrationSave() {
                 targetUserId: docId,
                 seminarId: sid,
                 formData,
-                adminUserId: adm.id
+                adminUserId: adm.id,
+                adminPhoneOtpToken: __adminSensitivePhoneOtpToken,
+                adminEmailOtpToken: __adminSensitiveEmailOtpToken
             })
         });
         const data = await res.json();
         if (!res.ok || !data.success) {
             if (st) st.textContent = data.error || 'Save failed.';
             return;
+        }
+        if (__requireAdminSensitiveOtp) {
+            resetAdminSensitiveOtpTokens();
+            ['beh-sens-phone-ok', 'beh-sens-email-ok'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = '';
+            });
         }
         if (st)
             st.textContent = `Saved ${data.created ? '(new application)' : '(updated)'} at ${new Date().toLocaleTimeString()}`;
@@ -594,6 +759,7 @@ function initAdminBehalfRegTab() {
     const ss = document.getElementById('behalf-seminar-select');
     const ta = document.getElementById('behalf-form-json');
     if (!ds || !ss) return;
+    refreshAdminSensitiveOtpRequirement();
     const prevDoc = ds.value;
     const prevSem = ss.value;
     ds.innerHTML = '<option value="">— Select doctor —</option>';
@@ -641,12 +807,12 @@ async function adminCreateUser() {
     const email = document.getElementById('newuser-email').value.trim();
     const phone = document.getElementById('newuser-phone').value.trim();
     const userRole = document.getElementById('newuser-role')?.value || 'doctor';
-    
+
     if (!firstName || !lastName || !email || !phone || !userRole) {
         alert('Please fill all required fields');
         return;
     }
-    
+
     if (userRole === 'doctor' && typeof validatePersonNameClient === 'function') {
         const fn = validatePersonNameClient(firstName, 'First name');
         if (!fn.valid) return alert(fn.message);
@@ -660,15 +826,26 @@ async function adminCreateUser() {
         alert('Custom password must be at least 4 characters');
         return;
     }
-    
+
+    await refreshAdminSensitiveOtpRequirement();
+    if (__requireAdminSensitiveOtp && (!__adminSensitivePhoneOtpToken || !__adminSensitiveEmailOtpToken)) {
+        return alert('Verify both your admin email and WhatsApp OTP before creating a user.');
+    }
+
+    const adm = getStoredAdminUser();
     const data = {
         firstName,
         lastName,
         email,
         phone,
-        role: userRole
+        role: userRole,
+        actingAdminId: adm && adm.id,
+        adminPhoneOtpToken: __adminSensitivePhoneOtpToken,
+        adminEmailOtpToken: __adminSensitiveEmailOtpToken
     };
     if (useCustom) data.password = customPass.trim();
+    const demoChk = document.getElementById('newuser-is-demo');
+    if (demoChk && demoChk.checked && adminDemoAccountsEnabled()) data.isDemo = true;
 
     try {
         const res = await fetch('/api/admin/users/create', {
@@ -678,6 +855,11 @@ async function adminCreateUser() {
         });
         const result = await res.json();
         if (result.success) {
+            resetAdminSensitiveOtpTokens();
+            ['cau-sens-phone-ok', 'cau-sens-email-ok'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.textContent = '';
+            });
             const finalPassword = result.generatedPassword || customPass;
             await sendCredentialsToNewUser(email, phone, firstName, result.user_id_string, finalPassword);
 
@@ -795,8 +977,12 @@ function renderAdminUserDetailTab() {
                     <p><strong>Password (stored):</strong> <code>${escAdmin(u.password)}</code></p>
                     <p><strong>Role:</strong> ${escAdmin(u.user_role || u.role)}</p>
                     <p><strong>Status:</strong> ${u.is_disabled ? 'Disabled' : 'Active'}</p>
-                    ${window.__adminProductionSite ? '' : `<p><strong>Demo account:</strong> ${Number(u.is_demo) === 1 ? 'Yes — any 4-digit OTP works' : 'No'}</p>
-                    <button type="button" class="btn-primary" style="margin-top:10px;background:#7c3aed;" onclick="toggleAdminUserDemo(${u.id}, ${Number(u.is_demo) === 1 ? 'false' : 'true'})">${Number(u.is_demo) === 1 ? 'Remove demo mode' : 'Mark as demo user'}</button>`}
+                    ${
+                        adminDemoAccountsEnabled()
+                            ? `<p><strong>Dummy / demo account:</strong> ${Number(u.is_demo) === 1 ? 'Yes — any OTP code is accepted at login and registration' : 'No'}</p>
+                    <button type="button" class="btn-primary" style="margin-top:10px;background:#7c3aed;" onclick="toggleAdminUserDemo(${u.id}, ${Number(u.is_demo) === 1 ? 'false' : 'true'})">${Number(u.is_demo) === 1 ? 'Remove dummy account' : 'Mark as dummy account (any OTP)'}</button>`
+                            : ''
+                    }
                     <p><strong>Joined:</strong> ${escAdmin(u.created_at)}</p>
                 </div>
                 <div>
@@ -2326,46 +2512,69 @@ async function saveGlobalSettings() {
 }
 
 async function submitProxyApp() {
-    const userId = document.getElementById('proxy-user-select').value;
-    if(!userId) return alert('Select a user first.');
-    
+    const userId = parseInt(document.getElementById('proxy-user-select').value, 10);
+    const sid = parseInt(currentManageSeminarId, 10);
+    if (!Number.isInteger(userId) || userId < 1) return alert('Select a user first.');
+    if (!Number.isInteger(sid) || sid < 1) return alert('Open a seminar dashboard first so the correct seminar is selected.');
+
+    await refreshAdminSensitiveOtpRequirement();
+    if (__requireAdminSensitiveOtp && (!__adminSensitivePhoneOtpToken || !__adminSensitiveEmailOtpToken)) {
+        return alert('Verify both your admin email and WhatsApp OTP before creating a proxy application.');
+    }
+
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return alert('Not logged in.');
+
     const formDataObj = {
-        fname: document.getElementById('proxy-fname').value,
-        lname: document.getElementById('proxy-lname').value,
-        email: document.getElementById('proxy-email').value,
-        phone: document.getElementById('proxy-phone').value,
-        address: document.getElementById('proxy-addr').value,
-        pin: document.getElementById('proxy-pin').value,
-        city: document.getElementById('proxy-city').value,
-        state: document.getElementById('proxy-state').value,
-        qual: document.getElementById('proxy-qual').value,
-        ncism: document.getElementById('proxy-ncism').value,
-        college: document.getElementById('proxy-college').value,
-        ccity: document.getElementById('proxy-ccity').value,
+        fname: document.getElementById('proxy-fname').value.trim(),
+        lname: document.getElementById('proxy-lname').value.trim(),
+        email: document.getElementById('proxy-email').value.trim(),
+        phone: document.getElementById('proxy-phone').value.trim(),
+        address: document.getElementById('proxy-addr').value.trim(),
+        pin: document.getElementById('proxy-pin').value.trim(),
+        city: document.getElementById('proxy-city').value.trim(),
+        state: document.getElementById('proxy-state').value.trim(),
+        qual: document.getElementById('proxy-qual').value.trim(),
+        ncism: document.getElementById('proxy-ncism').value.trim(),
+        college: document.getElementById('proxy-college').value.trim(),
+        ccity: document.getElementById('proxy-ccity').value.trim(),
         is_proxy: true
     };
 
-    // Because the backend expects formData as a string if using FormData API, or an object if JSON
-    const payload = new FormData();
-    payload.append('userId', userId);
-    payload.append('seminarId', currentManageSeminarId || 1);
-    payload.append('formData', JSON.stringify(formDataObj));
-
     try {
-        const res = await fetch('/api/applications/submit', {
+        const res = await fetch('/api/admin/registrations/upsert', {
             method: 'POST',
-            body: payload
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                targetUserId: userId,
+                seminarId: sid,
+                formData: formDataObj,
+                adminUserId: adm.id,
+                adminPhoneOtpToken: __adminSensitivePhoneOtpToken,
+                adminEmailOtpToken: __adminSensitiveEmailOtpToken
+            })
         });
         const result = await res.json();
-        if(result.success) {
-            alert(`Proxy Application created! ID: ${result.applicationNo}`);
-            document.querySelectorAll('#admin-proxy-modal input').forEach(el => el.value = '');
+        if (result.success) {
+            resetAdminSensitiveOtpTokens();
+            alert(`Proxy application saved. Application ID: ${result.applicationNo || '(existing)'}`);
+            document.querySelectorAll('#admin-proxy-modal input').forEach((el) => {
+                if (el.type !== 'button') el.value = '';
+            });
             document.getElementById('admin-proxy-modal').classList.add('hidden');
-            if (currentManageSeminarId) manageSeminar(currentManageSeminarId, document.getElementById('detail-seminar-title').innerText.replace("Dashboard: ", ""));
+            if (currentManageSeminarId) {
+                manageSeminar(
+                    currentManageSeminarId,
+                    document.getElementById('detail-seminar-title').innerText.replace('Dashboard: ', '')
+                );
+            }
         } else {
-            alert(result.error);
+            alert(result.error || 'Save failed');
         }
-    } catch(err) { console.error(err); }
+    } catch (err) {
+        console.error(err);
+        alert('Network error');
+    }
 }
 
 async function transferApplication() {
@@ -2393,6 +2602,7 @@ async function transferApplication() {
 // Seminars Logic
 let globalSeminars = [];
 window.__adminProductionSite = false;
+window.__allowDemoAccounts = true;
 
 function summaryCancellationPolicyAdmin(raw) {
     if (!raw) return 'No cancellation policy set for this seminar.';
@@ -2629,6 +2839,8 @@ function openCreateSeminarModal() {
     document.getElementById('admin-seminar-modal').classList.remove('hidden');
     document.getElementById('seminar-form').reset();
     document.getElementById('seminar-id').value = '';
+    const otpCh = document.getElementById('seminar-otp-app');
+    if (otpCh) otpCh.checked = true;
     const py = document.getElementById('seminar-portal-year');
     if (py) py.value = adminPortalYear || new Date().getFullYear();
     if (typeof loadSeminarCancellationUi === 'function') loadSeminarCancellationUi('');
@@ -3499,8 +3711,13 @@ function loadAllData() {
         .then((r) => r.json())
         .then((u) => {
             window.__adminProductionSite = !!(u && u.production);
+            window.__allowDemoAccounts = u && u.allowDemoAccounts !== false;
+            const demoWrap = document.getElementById('newuser-is-demo-wrap');
+            if (demoWrap) demoWrap.style.display = window.__allowDemoAccounts ? '' : 'none';
         })
-        .catch(() => {});
+        .catch(() => {
+            window.__allowDemoAccounts = true;
+        });
     loadAdminPortalYear();
     loadUsers();
     loadApplications();
@@ -4138,9 +4355,120 @@ function cmsCollectHeroFieldsFromForm() {
     };
 }
 
+async function loadDesignatedNotifyAdminForm() {
+    const adm = getStoredAdminUser();
+    const em = document.getElementById('dn-emails');
+    const ph = document.getElementById('dn-phones');
+    if (!em || !ph || !adm || !adm.id) return;
+    try {
+        const res = await fetch(
+            `/api/admin/designated-notify-config?actingAdminId=${encodeURIComponent(adm.id)}`
+        );
+        const d = await res.json();
+        if (!d.success || !d.config) return;
+        em.value = (d.config.emails || []).join('\n');
+        ph.value = (d.config.phones || []).join('\n');
+    } catch (_) {}
+}
+
+async function saveDesignatedNotifyConfig() {
+    const adm = getStoredAdminUser();
+    const msg = document.getElementById('dn-save-msg');
+    if (!adm || !adm.id) return;
+    const emails = String((document.getElementById('dn-emails') || {}).value || '')
+        .split(/[\n,;]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+    const phones = String((document.getElementById('dn-phones') || {}).value || '')
+        .split(/[\n,;]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+    try {
+        const res = await fetch('/api/admin/designated-notify-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: adm.id, config: { emails, phones } })
+        });
+        const data = await res.json();
+        if (msg) {
+            msg.style.color = data.success ? '#15803d' : '#b91c1c';
+            msg.textContent = data.success ? 'Designated contacts saved.' : data.error || 'Save failed.';
+        }
+    } catch (e) {
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = 'Network error.';
+        }
+    }
+}
+
+async function populateVenueBroadcastSeminars() {
+    const sel = document.getElementById('venue-broadcast-seminar');
+    if (!sel || sel.options.length > 1) return;
+    try {
+        const res = await fetch('/api/seminars');
+        const rows = await res.json();
+        (rows || []).forEach((s) => {
+            const o = document.createElement('option');
+            o.value = String(s.id);
+            o.textContent = s.title || `Seminar ${s.id}`;
+            sel.appendChild(o);
+        });
+    } catch (_) {}
+}
+
+async function sendVenueBroadcast() {
+    const adm = getStoredAdminUser();
+    const st = document.getElementById('venue-broadcast-status');
+    if (!adm || !adm.id) return alert('Not logged in.');
+    const message = String((document.getElementById('venue-broadcast-msg') || {}).value || '').trim();
+    if (!message) return alert('Enter the new venue or message text.');
+    if (!confirm('Send venue update to all paid registrants? This cannot be undone.')) return;
+    const seminarId = String((document.getElementById('venue-broadcast-seminar') || {}).value || '').trim();
+    if (st) {
+        st.style.color = '#64748b';
+        st.textContent = 'Sending…';
+    }
+    try {
+        const res = await fetch('/api/admin/broadcast-venue-update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                actingAdminId: adm.id,
+                message,
+                venue: message,
+                seminarId: seminarId || undefined,
+                sendEmail: !!(document.getElementById('venue-broadcast-email') || {}).checked,
+                sendWhatsApp: !!(document.getElementById('venue-broadcast-wa') || {}).checked
+            })
+        });
+        const data = await res.json();
+        if (st) {
+            st.style.color = data.success ? '#15803d' : '#b91c1c';
+            st.textContent = data.success
+                ? `Queued for ${data.recipients || 0} recipient(s).`
+                : data.error || 'Broadcast failed.';
+        }
+    } catch (e) {
+        if (st) {
+            st.style.color = '#b91c1c';
+            st.textContent = 'Network error.';
+        }
+    }
+}
+
+function openProxyApplicationModal() {
+    ensureProxyOtpPanel();
+    refreshAdminSensitiveOtpRequirement().catch(console.error);
+    document.getElementById('admin-proxy-modal').classList.remove('hidden');
+}
+
 async function loadAdminSiteCms() {
     const tickerEl = document.getElementById('cms-ticker');
     if (!tickerEl) return;
+    loadPortalAuthAdminForm().catch(console.error);
+    loadDesignatedNotifyAdminForm().catch(console.error);
+    populateVenueBroadcastSeminars().catch(console.error);
     try {
         const res = await fetch('/api/public/site-cms');
         const cms = await res.json();
@@ -4165,8 +4493,74 @@ async function loadAdminSiteCms() {
         cmsFillFeatureRows(cms.featureCards || []);
         cmsFillFaqRows(cms.faq || []);
         await loadAdminMarketing();
+        await loadPortalAuthAdminForm();
     } catch (e) {
         console.error(e);
+    }
+}
+
+async function loadPortalAuthAdminForm() {
+    const adm = getStoredAdminUser();
+    const eff = document.getElementById('pa-effective-hint');
+    if (!adm || !adm.id) {
+        if (eff) eff.textContent = '';
+        return;
+    }
+    try {
+        const res = await fetch(`/api/admin/portal-auth-config?actingAdminId=${encodeURIComponent(adm.id)}`);
+        const d = await res.json();
+        if (!d.success || !d.config) return;
+        const setChk = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.checked = !!val;
+        };
+        setChk('pa-show-signup', d.config.showSignup);
+        setChk('pa-show-login', d.config.showLogin);
+        setChk('pa-req-signup-otp', d.config.requireSignupOtp);
+        setChk('pa-req-login-otp', d.config.requireLoginOtp);
+        setChk('pa-req-email-verify', d.config.requireEmailVerification);
+        setChk('pa-req-admin-sensitive-otp', d.config.requireAdminOtpForSensitive);
+        if (eff) {
+            eff.textContent = `Effective signup OTP: ${d.signupOtpEffective ? 'on' : 'off'} · Effective login OTP: ${d.loginOtpEffective ? 'on' : 'off'} (environment variables can still override).`;
+        }
+    } catch (_) {
+        if (eff) eff.textContent = '';
+    }
+}
+
+async function savePortalAuthAdminConfig() {
+    const adm = getStoredAdminUser();
+    const msg = document.getElementById('pa-save-msg');
+    if (!adm || !adm.id) return;
+    const gv = (id) => !!(document.getElementById(id) || {}).checked;
+    const config = {
+        showSignup: gv('pa-show-signup'),
+        showLogin: gv('pa-show-login'),
+        requireSignupOtp: gv('pa-req-signup-otp'),
+        requireLoginOtp: gv('pa-req-login-otp'),
+        requireEmailVerification: gv('pa-req-email-verify'),
+        requireAdminOtpForSensitive: gv('pa-req-admin-sensitive-otp')
+    };
+    try {
+        const res = await fetch('/api/admin/portal-auth-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: adm.id, config })
+        });
+        const data = await res.json();
+        if (msg) {
+            msg.style.color = data.success ? '#15803d' : '#b91c1c';
+            msg.textContent = data.success ? 'Portal auth policy saved.' : data.error || 'Save failed.';
+        }
+        if (data.success) {
+            await loadPortalAuthAdminForm();
+            await refreshAdminSensitiveOtpRequirement();
+        }
+    } catch (e) {
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = 'Network error.';
+        }
     }
 }
 

@@ -377,6 +377,8 @@
         emailInputId: 'scanner-email',
         passwordInputId: 'scanner-password',
         otpPrefix: 'scanner',
+        resendEmailBtnId: 'scanner-resend-otp-email',
+        resendPhoneBtnId: 'scanner-resend-otp-phone',
         onSuccess: showScan,
         onError: (msg) => {
             loginErr.textContent = msg;

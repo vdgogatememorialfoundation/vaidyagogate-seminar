@@ -17,6 +17,9 @@ const integrationSettings = require('./lib/integration-settings');
 const portalUrls = require('./lib/portal-urls');
 const { subdomainPortalMiddleware } = require('./lib/subdomain-portal');
 const otpLib = require('./lib/otp');
+const portalAuthPolicy = require('./lib/portal-auth-policy');
+const designatedNotify = require('./lib/designated-notify');
+const ticketHtml = require('./lib/ticket-html');
 const {
     validateDynamicForm,
     normalizeFields,
@@ -321,6 +324,13 @@ app.use((req, res, next) => {
 
 app.get('/api/public/portal-urls', (req, res) => {
     res.json(portalUrls.getPortalUrls());
+});
+
+app.get('/api/public/portal-auth', (req, res) => {
+    portalAuthPolicy.loadPortalAuthConfig(db, (e) => {
+        if (e) console.warn('[portal-auth-policy]', e.message);
+        res.json(portalAuthPolicy.publicPortalAuthPayload());
+    });
 });
 
 const uploadsDir = path.join(__dirname, 'public', 'uploads');
@@ -639,6 +649,22 @@ function ensureMessagingOtpSchema(next) {
             consumed INTEGER DEFAULT 0,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )`);
+        db.run(`ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 1`, (evErr) => {
+            ignoreSchemaMigrationErr(evErr);
+        });
+        db.run(
+            `CREATE TABLE IF NOT EXISTS email_verify_tokens (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                token_hash TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                consumed INTEGER DEFAULT 0,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )`,
+            (evtErr) => {
+                ignoreSchemaMigrationErr(evtErr);
+            }
+        );
         db.run(`CREATE TABLE IF NOT EXISTS notification_queue (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             channel TEXT NOT NULL,
@@ -1313,19 +1339,103 @@ function backfillTicketsForPaidOrders(cb) {
 
 function notifyTicketIssued(userId, registrationId, ticketId) {
     if (!userId || !registrationId || !ticketId) return;
-    db.get(`SELECT seminar_id FROM registrations WHERE id = ?`, [registrationId], (e, reg) => {
-        if (e || !reg) return;
-        notifEngine.notify(db, 'TICKET_ISSUED', {
-            userId,
-            seminarId: reg.seminar_id,
-            registrationId,
-            vars: {
+    db.get(
+        `SELECT r.seminar_id, r.application_no, t.qr_code_data, t.ticket_id_string,
+                s.title AS seminar_title, s.event_date, s.location_url,
+                u.first_name, u.last_name
+         FROM registrations r
+         JOIN tickets t ON t.order_id IN (SELECT id FROM orders WHERE registration_id = r.id)
+         JOIN seminars s ON s.id = r.seminar_id
+         JOIN users u ON u.id = r.user_id
+         WHERE r.id = ? AND TRIM(t.ticket_id_string) = TRIM(?)`,
+        [registrationId, String(ticketId)],
+        (e, row) => {
+            if (e) return;
+            const seminarId = row && row.seminar_id;
+            const base = notifEngine.publicBaseUrl();
+            const pdfUrl =
+                base +
+                '/api/doctor/ticket-document/' +
+                encodeURIComponent(String(ticketId)) +
+                '?userId=' +
+                encodeURIComponent(String(userId));
+            const vars = {
                 ticket_id: ticketId,
-                qr_code_url: notifEngine.publicBaseUrl() + '/doctor.html#tab-tickets',
+                qr_code_url: base + '/doctor.html#tab-tickets',
+                ticket_pdf_url: pdfUrl,
                 payment_status: 'PAID'
+            };
+            notifEngine.notify(db, 'TICKET_ISSUED', {
+                userId,
+                seminarId,
+                registrationId,
+                vars
+            });
+            if (row && row.qr_code_data) {
+                ticketHtml
+                    .buildTicketHtmlFromRow({
+                        ticket_id_string: row.ticket_id_string || ticketId,
+                        application_no: row.application_no,
+                        seminar_title: row.seminar_title,
+                        event_date: row.event_date,
+                        location_url: row.location_url,
+                        display_name: [row.first_name, row.last_name].filter(Boolean).join(' '),
+                        qr_code_data: row.qr_code_data
+                    })
+                    .then((html) => {
+                        db.get(`SELECT email, phone FROM users WHERE id = ?`, [userId], (eu, u) => {
+                            if (eu || !u) return;
+                            const attach = [
+                                {
+                                    filename: 'E-Ticket-' + String(ticketId).replace(/\W/g, '') + '.html',
+                                    content: html,
+                                    contentType: 'text/html'
+                                }
+                            ];
+                            const waLine =
+                                'Your e-ticket for ' +
+                                (row.seminar_title || 'the seminar') +
+                                ' is ready.\nTicket ID: ' +
+                                ticketId +
+                                '\nDownload / print: ' +
+                                pdfUrl;
+                            if (u.email) {
+                                notifEngine.enqueueDirectMessage(
+                                    db,
+                                    {
+                                        channel: 'email',
+                                        destination: u.email,
+                                        subject: 'Your e-ticket (printable)',
+                                        html:
+                                            '<p>Your e-ticket is attached. You can also open: <a href="' +
+                                            pdfUrl +
+                                            '">' +
+                                            pdfUrl +
+                                            '</a></p>',
+                                        text: 'E-ticket: ' + pdfUrl,
+                                        event_key: 'TICKET_ISSUED'
+                                    },
+                                    () => {}
+                                );
+                            }
+                            if (u.phone) {
+                                notifEngine.enqueueDirectMessage(
+                                    db,
+                                    {
+                                        channel: 'whatsapp',
+                                        destination: u.phone,
+                                        body: waLine,
+                                        event_key: 'TICKET_ISSUED'
+                                    },
+                                    () => {}
+                                );
+                            }
+                        });
+                    })
+                    .catch(() => {});
             }
-        });
-    });
+        }
+    );
 }
 
 function insertParticipantTicket(orderDbId, userId, orderIdStr, registrationId, applicationNo, cb) {
@@ -1720,7 +1830,10 @@ registerNotificationRoutes(app, db);
 function withIntegrationSettingsLoaded(req, res, next) {
     integrationSettings.ensureIntegrationSettingsLoaded(db, (err) => {
         if (err) return res.status(500).json({ error: err.message });
-        next();
+        portalAuthPolicy.loadPortalAuthConfig(db, (e2) => {
+            if (e2) console.warn('[portal-auth-policy]', e2.message);
+            next();
+        });
     });
 }
 
@@ -1835,15 +1948,11 @@ function validateDoctorName(name) {
 // --- API ENDPOINTS ---
 
 function signupOtpRequired() {
-    if (process.env.REQUIRE_SIGNUP_OTP === '0') return false;
-    if (process.env.REQUIRE_SIGNUP_OTP === '1') return true;
-    return notifEngine.isMessagingConfigured();
+    return portalAuthPolicy.signupOtpRequired();
 }
 
 function loginOtpRequired() {
-    if (process.env.REQUIRE_LOGIN_OTP === '0') return false;
-    if (process.env.REQUIRE_LOGIN_OTP === '1') return true;
-    return notifEngine.isMessagingConfigured();
+    return portalAuthPolicy.loginOtpRequired();
 }
 
 function isSuperAdminRow(row) {
@@ -1863,11 +1972,11 @@ function parseAdminModulesJson(str) {
     }
 }
 
-app.get('/api/auth/signup-otp-required', (req, res) => {
+app.get('/api/auth/signup-otp-required', withIntegrationSettingsLoaded, (req, res) => {
     res.json({ required: signupOtpRequired() });
 });
 
-app.get('/api/auth/login-otp-required', (req, res) => {
+app.get('/api/auth/login-otp-required', withIntegrationSettingsLoaded, (req, res) => {
     res.json({ required: loginOtpRequired() });
 });
 
@@ -1885,6 +1994,118 @@ app.get('/api/auth/email-available', (req, res) => {
     });
 });
 
+/** Check whether an email is registered before login OTP (no password). */
+app.post('/api/auth/login-otp/precheck', (req, res) => {
+    const emailNorm = String((req.body && req.body.email) || '').trim().toLowerCase();
+    if (!emailNorm) return res.status(400).json({ error: 'Email is required' });
+    db.get(
+        `SELECT id, IFNULL(is_disabled,0) AS is_disabled FROM users WHERE lower(trim(email)) = ?`,
+        [emailNorm],
+        (err, row) => {
+            if (err) return res.status(500).json({ error: err.message });
+            if (!row) {
+                return res.json({
+                    exists: false,
+                    needsSignup: true,
+                    message: 'No account found with this email. Please create an account first.'
+                });
+            }
+            if (Number(row.is_disabled) === 1) {
+                return res.json({
+                    exists: true,
+                    needsSignup: false,
+                    disabled: true,
+                    message: 'This account is disabled. Contact support.'
+                });
+            }
+            res.json({ exists: true, needsSignup: false, disabled: false });
+        }
+    );
+});
+
+/** After password check: send login OTP to both phone and email. */
+app.post('/api/auth/login-otp/send-both', withIntegrationSettingsLoaded, (req, res) => {
+    const { email, password } = req.body || {};
+    if (!email || password === undefined || password === null) {
+        return res.status(400).json({ error: 'email and password are required' });
+    }
+    const emailNorm = String(email).trim().toLowerCase();
+    db.get(
+        `SELECT id, phone, email FROM users WHERE lower(trim(email)) = ? AND password = ? AND IFNULL(is_disabled,0) = 0`,
+        [emailNorm, password],
+        (err, row) => {
+            if (err) return res.status(500).json({ error: err.message });
+            if (!row) {
+                return res.status(401).json({
+                    error: 'Invalid credentials',
+                    needsSignup: false
+                });
+            }
+            const meta = { userId: row.id };
+            const channels = [];
+            if (row.email) channels.push({ channel: 'email', dest: String(row.email).trim().toLowerCase() });
+            if (row.phone) channels.push({ channel: 'phone', dest: String(row.phone).trim() });
+            if (!channels.length) {
+                return res.status(400).json({ error: 'No email or phone on file for this account.' });
+            }
+            let left = channels.length;
+            const results = {};
+            channels.forEach(({ channel, dest }) => {
+                otpLib.countRecentSends(db, channel, dest, (cerr, cnt) => {
+                    if (cerr) {
+                        results[channel] = { ok: false, error: cerr.message };
+                        left--;
+                        if (left === 0) finish();
+                        return;
+                    }
+                    if (cnt >= otpLib.MAX_SENDS_PER_HOUR) {
+                        results[channel] = { ok: false, error: 'Too many OTP requests' };
+                        left--;
+                        if (left === 0) finish();
+                        return;
+                    }
+                    const code = otpLib.generateOtpDigits();
+                    otpLib.saveOtp(db, { channel, destination: dest, purpose: 'login', meta }, code, (serr) => {
+                        if (serr) {
+                            results[channel] = { ok: false, error: serr.message };
+                            left--;
+                            if (left === 0) finish();
+                            return;
+                        }
+                        const done = (sent) => {
+                            results[channel] = sent;
+                            left--;
+                            if (left === 0) finish();
+                        };
+                        if (channel === 'phone') {
+                            notifEngine
+                                .sendOtpMessages({ phone: dest, code, db, eventKey: 'OTP_VERIFICATION' })
+                                .then((r) => done(r.whatsapp || { ok: false }));
+                        } else {
+                            notifEngine
+                                .sendOtpMessages({ email: dest, code, db, eventKey: 'OTP_VERIFICATION' })
+                                .then((r) => done(r.email || { ok: false }));
+                        }
+                    });
+                });
+            });
+            function finish() {
+                const debug = process.env.OTP_RETURN_CODE === '1' || process.env.NODE_ENV === 'development';
+                const payload = { success: true, ttlMinutes: otpLib.OTP_TTL_MIN, channels: results };
+                if (debug && channels.length) payload.debugNote = 'Set OTP_RETURN_CODE=1 on send for per-channel debug codes.';
+                const anyFail = Object.values(results).some((r) => r && !r.ok && !r.skipped);
+                if (anyFail) {
+                    return res.status(503).json({
+                        error: 'Could not deliver OTP on all channels. Check messaging configuration.',
+                        ...payload
+                    });
+                }
+                res.json(payload);
+            }
+        }
+    );
+});
+
 /** After password check: send login OTP to the user’s verified phone or email. */
 app.post('/api/auth/login-otp/send', withIntegrationSettingsLoaded, (req, res) => {
     const { email, password, channel } = req.body || {};
@@ -1900,15 +2121,19 @@ app.post('/api/auth/login-otp/send', withIntegrationSettingsLoaded, (req, res) =
         [emailNorm, password],
         (err, row) => {
             if (err) return res.status(500).json({ error: err.message });
-            if (!row) return res.status(401).json({ error: 'Invalid credentials' });
+            if (!row) {
+                return res.status(401).json({
+                    error: 'No account found or invalid password. Create an account if you have not registered yet.',
+                    needsSignup: true
+                });
+            }
             const dest =
                 channel === 'email'
                     ? String(row.email || '')
                           .trim()
                           .toLowerCase()
-                    : String(row.phone || '')
-                          .trim()
-                          .toLowerCase();
+                    : otpLib.normalizeOtpDestination('phone', String(row.phone || '').trim()) ||
+                      String(row.phone || '').trim();
             if (!dest) {
                 return res.status(400).json({ error: channel === 'email' ? 'No email on file.' : 'No phone on file.' });
             }
@@ -2018,6 +2243,9 @@ app.post('/api/otp/send', withIntegrationSettingsLoaded, (req, res) => {
     if (purpose === 'registration' && Number.isNaN(meta.seminarId)) {
         return res.status(400).json({ error: 'seminarId required for registration OTP' });
     }
+    if (purpose === 'registration_submit' && Number.isNaN(meta.seminarId)) {
+        return res.status(400).json({ error: 'seminarId required for submit OTP' });
+    }
     if (purpose === 'registration_field' && (Number.isNaN(meta.seminarId) || !meta.fieldKey)) {
         return res.status(400).json({ error: 'seminarId and fieldKey required for field OTP' });
     }
@@ -2103,11 +2331,80 @@ function normalizeAuthUserRow(row) {
     return row;
 }
 
+function hashEmailVerifyToken(raw) {
+    return crypto.createHash('sha256').update(String(raw).trim(), 'utf8').digest('hex');
+}
+
+function queuePortalEmailVerification(db, userId, cb) {
+    portalAuthPolicy.loadPortalAuthConfig(db, (ePol) => {
+        if (ePol) return cb && cb(ePol);
+        if (!portalAuthPolicy.getPortalAuthConfig().requireEmailVerification) {
+            return cb && cb(null, { skipped: true });
+        }
+        db.get(
+            `SELECT id, first_name, middle_name, last_name, email, IFNULL(email_verified,1) AS email_verified FROM users WHERE id = ?`,
+            [userId],
+            (eu, u) => {
+                if (eu) return cb && cb(eu);
+                if (!u || !u.email) return cb && cb(null, { skipped: true });
+                if (Number(u.email_verified) === 1) return cb && cb(null, { skipped: true });
+                const rawToken = crypto.randomBytes(32).toString('hex');
+                const th = hashEmailVerifyToken(rawToken);
+                const exp = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
+                db.run(`UPDATE email_verify_tokens SET consumed = 1 WHERE user_id = ? AND consumed = 0`, [userId], () => {
+                    db.run(
+                        `INSERT INTO email_verify_tokens (user_id, token_hash, expires_at) VALUES (?, ?, ?)`,
+                        [userId, th, exp],
+                        function (ierr) {
+                            if (ierr) return cb && cb(ierr);
+                            const verify_link =
+                                notifEngine.publicBaseUrl() + '/api/auth/verify-email?t=' + encodeURIComponent(rawToken);
+                            notifEngine.notify(
+                                db,
+                                'EMAIL_VERIFICATION',
+                                {
+                                    userId,
+                                    vars: { verify_link }
+                                },
+                                () => cb && cb(null, { queued: true })
+                            );
+                        }
+                    );
+                });
+            }
+        );
+    });
+}
+
+function requireAdminSensitiveOtpIfEnabled(actorAdminId, phoneTok, emailTok, next) {
+    portalAuthPolicy.loadPortalAuthConfig(db, () => {
+        if (!portalAuthPolicy.getPortalAuthConfig().requireAdminOtpForSensitive) {
+            return next(null, true, null);
+        }
+        const aid = parseInt(actorAdminId, 10);
+        if (!Number.isInteger(aid) || aid < 1) {
+            return next(null, false, 'actingAdminId is required when admin confirmation OTP is enabled.');
+        }
+        if (!phoneTok || !emailTok) {
+            return next(
+                null,
+                false,
+                'Admin email and WhatsApp OTP verification is required for this action. Send codes to your admin phone and email, then verify.'
+            );
+        }
+        otpLib.validateAdminConfirmOtpTokens(db, aid, { phoneToken: phoneTok, emailToken: emailTok }, (e, vr) => {
+            if (e) return next(e);
+            if (!vr || !vr.ok) return next(null, false, (vr && vr.error) || 'Invalid admin OTP');
+            next(null, true, null);
+        });
+    });
+}
+
 app.post('/api/auth/signup', (req, res) => {
     const { firstName, lastName, email, phone, password, role, phoneOtpToken, emailOtpToken } = req.body;
     const emailNorm = String(email || '').trim().toLowerCase();
     const phoneNorm = String(phone || '').trim();
-    
+
     const firstNameValidation = validateDoctorName(firstName);
     if (!firstNameValidation.valid) {
         return res.status(400).json({ error: `First name: ${firstNameValidation.message}` });
@@ -2116,59 +2413,82 @@ app.post('/api/auth/signup', (req, res) => {
     if (!lastNameValidation.valid) {
         return res.status(400).json({ error: `Last name: ${lastNameValidation.message}` });
     }
-    
-    function insertUser() {
-        const userIdStr = generateId();
-    const userRole = role || 'doctor';
-    const cleanFirstName = firstNameValidation.cleanedName;
-    const cleanLastName = lastNameValidation.cleanedName;
-        db.run(
-            `INSERT INTO users (user_id_string, first_name, last_name, email, phone, password, role, user_role) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [userIdStr, cleanFirstName, cleanLastName, emailNorm, phoneNorm, password, userRole, userRole],
-        function (err) {
-            if (err) {
-                    if (err.message.includes('UNIQUE constraint failed') || /unique|duplicate key/i.test(err.message)) {
-                    return res.status(400).json({ error: 'Email already exists.' });
-                }
-                return res.status(500).json({ error: err.message });
-            }
-                const newUserId = this.lastID != null ? Number(this.lastID) : null;
-                if (!newUserId) {
-                    return res.status(500).json({ error: 'Account was created but could not be confirmed. Try signing in with your email.' });
-                }
-                notifEngine.notify(
-                    db,
-                    'ACCOUNT_CREATED',
-                    {
-                        userId: newUserId,
-                        vars: {
-                            temporary_password: '(password you chose at registration)'
-                        }
-                    },
-                    () => {}
-                );
-                res.json({
-                    success: true,
-                    userId: newUserId,
-                    user_id_string: userIdStr,
-                    message: 'Signup successful! Please create your profile before applying.'
-                });
-            }
-        );
-    }
 
-    if (signupOtpRequired()) {
-        if (!phoneOtpToken || !emailOtpToken) {
-            return res.status(400).json({ error: 'Phone and email OTP verification is required before signup.' });
+    portalAuthPolicy.loadPortalAuthConfig(db, (e0) => {
+        if (e0) console.warn('[portal-auth-policy] signup', e0.message);
+        if (!portalAuthPolicy.getPortalAuthConfig().showSignup) {
+            return res.status(403).json({
+                error: 'New account registration is currently closed. Please sign in if you already have an account.'
+            });
         }
-        otpLib.validateSignupOtpTokens(db, { phoneToken: phoneOtpToken, emailToken: emailOtpToken }, (verr, vr) => {
-            if (verr) return res.status(500).json({ error: verr.message });
-            if (!vr || !vr.ok) return res.status(400).json({ error: (vr && vr.error) || 'Invalid OTP verification' });
-            insertUser();
-        });
-        return;
-    }
-    insertUser();
+        const evFlag = portalAuthPolicy.getPortalAuthConfig().requireEmailVerification ? 0 : 1;
+
+        function insertUser() {
+            const userIdStr = generateId();
+            const userRole = role || 'doctor';
+            const cleanFirstName = firstNameValidation.cleanedName;
+            const cleanLastName = lastNameValidation.cleanedName;
+            db.run(
+                `INSERT INTO users (user_id_string, first_name, last_name, email, phone, password, role, user_role, email_verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [userIdStr, cleanFirstName, cleanLastName, emailNorm, phoneNorm, password, userRole, userRole, evFlag],
+                function (err) {
+                    if (err) {
+                        if (err.message.includes('UNIQUE constraint failed') || /unique|duplicate key/i.test(err.message)) {
+                            return res.status(400).json({ error: 'Email already exists.' });
+                        }
+                        return res.status(500).json({ error: err.message });
+                    }
+                    const newUserId = this.lastID != null ? Number(this.lastID) : null;
+                    if (!newUserId) {
+                        return res.status(500).json({ error: 'Account was created but could not be confirmed. Try signing in with your email.' });
+                    }
+                    notifEngine.notify(
+                        db,
+                        'ACCOUNT_CREATED',
+                        {
+                            userId: newUserId,
+                            vars: {
+                                temporary_password: '(password you chose at registration)'
+                            }
+                        },
+                        () => {}
+                    );
+                    designatedNotify.notifyDesignatedAccountCreated(
+                        db,
+                        newUserId,
+                        { source: 'public signup', temporary_password: '(chosen at registration)' },
+                        () => {}
+                    );
+                    if (evFlag === 0) {
+                        queuePortalEmailVerification(db, newUserId, () => {});
+                    }
+                    res.json({
+                        success: true,
+                        userId: newUserId,
+                        user_id_string: userIdStr,
+                        needsEmailVerification: evFlag === 0,
+                        message:
+                            evFlag === 0
+                                ? 'Signup successful! Check your email to verify your address, then sign in.'
+                                : 'Signup successful! Please create your profile before applying.'
+                    });
+                }
+            );
+        }
+
+        if (signupOtpRequired()) {
+            if (!phoneOtpToken || !emailOtpToken) {
+                return res.status(400).json({ error: 'Phone and email OTP verification is required before signup.' });
+            }
+            otpLib.validateSignupOtpTokens(db, { phoneToken: phoneOtpToken, emailToken: emailOtpToken }, (verr, vr) => {
+                if (verr) return res.status(500).json({ error: verr.message });
+                if (!vr || !vr.ok) return res.status(400).json({ error: (vr && vr.error) || 'Invalid OTP verification' });
+                insertUser();
+            });
+            return;
+        }
+        insertUser();
+    });
 });
 
 // 2. Auth: Login (optional phone + email OTP when messaging is configured)
@@ -2178,46 +2498,100 @@ app.post('/api/auth/login', (req, res) => {
         return res.status(400).json({ error: 'Email and password are required' });
     }
     const emailNorm = String(email).trim().toLowerCase();
-    db.get(
-        `SELECT id, user_id_string, first_name, middle_name, last_name, email, phone, password, role, user_role, is_disabled, IFNULL(is_demo,0) AS is_demo, admin_modules FROM users WHERE lower(trim(email)) = ? AND password = ?`,
-        [emailNorm, password],
-        (err, row) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (!row) return res.status(401).json({ error: 'Invalid credentials' });
-            if (Number(row.is_disabled) === 1) {
-                return res.status(403).json({ error: 'Your account has been disabled. Please contact support.' });
-            }
-
-            function sendUser() {
-                recordUserLogin(row.id, (eLogin, times) => {
-                    if (!eLogin && times) {
-                        row.previous_login_at = times.previousLoginAt || null;
-                        row.login_at = times.loginAt;
-                        row.last_login_at = times.loginAt;
-                    }
-                    delete row.password;
-                    normalizeAuthUserRow(row);
-                    res.json({ success: true, user: row });
-                });
-            }
-
-            if (loginOtpRequired()) {
-                if (!phoneOtpToken || !emailOtpToken) {
-                    return res.status(400).json({ error: 'Phone and email OTP verification is required to log in.' });
+    portalAuthPolicy.loadPortalAuthConfig(db, (ePol) => {
+        if (ePol) console.warn('[portal-auth-policy] login', ePol.message);
+        db.get(
+            `SELECT id, user_id_string, first_name, middle_name, last_name, email, phone, password, role, user_role, is_disabled, IFNULL(is_demo,0) AS is_demo, admin_modules, IFNULL(email_verified,1) AS email_verified FROM users WHERE lower(trim(email)) = ? AND password = ?`,
+            [emailNorm, password],
+            (err, row) => {
+                if (err) return res.status(500).json({ error: err.message });
+                if (!row) return res.status(401).json({ error: 'Invalid credentials' });
+                if (Number(row.is_disabled) === 1) {
+                    return res.status(403).json({ error: 'Your account has been disabled. Please contact support.' });
                 }
-                otpLib.validateLoginOtpTokens(
-                    db,
-                    row.id,
-                    { phoneToken: phoneOtpToken, emailToken: emailOtpToken },
-                    (verr, vr) => {
-                        if (verr) return res.status(500).json({ error: verr.message });
-                        if (!vr || !vr.ok) return res.status(400).json({ error: (vr && vr.error) || 'Invalid OTP verification' });
-                        sendUser();
+                if (portalAuthPolicy.getPortalAuthConfig().requireEmailVerification && Number(row.email_verified) === 0) {
+                    return res.status(403).json({
+                        error: 'Please verify your email before signing in. Check your inbox for the verification link.',
+                        needsEmailVerification: true,
+                        email: row.email
+                    });
+                }
+
+                function sendUser() {
+                    recordUserLogin(row.id, (eLogin, times) => {
+                        if (!eLogin && times) {
+                            row.previous_login_at = times.previousLoginAt || null;
+                            row.login_at = times.loginAt;
+                            row.last_login_at = times.loginAt;
+                        }
+                        delete row.password;
+                        normalizeAuthUserRow(row);
+                        res.json({ success: true, user: row });
+                    });
+                }
+
+                if (loginOtpRequired()) {
+                    if (!phoneOtpToken || !emailOtpToken) {
+                        return res.status(400).json({ error: 'Phone and email OTP verification is required to log in.' });
                     }
-                );
-                return;
+                    otpLib.validateLoginOtpTokens(
+                        db,
+                        row.id,
+                        { phoneToken: phoneOtpToken, emailToken: emailOtpToken },
+                        (verr, vr) => {
+                            if (verr) return res.status(500).json({ error: verr.message });
+                            if (!vr || !vr.ok) return res.status(400).json({ error: (vr && vr.error) || 'Invalid OTP verification' });
+                            sendUser();
+                        }
+                    );
+                    return;
+                }
+                sendUser();
             }
-            sendUser();
+        );
+    });
+});
+
+app.get('/api/auth/verify-email', (req, res) => {
+    const token = String((req.query && (req.query.token || req.query.t)) || '').trim();
+    if (!token) return res.status(400).send('Missing verification token.');
+    const th = hashEmailVerifyToken(token);
+    const now = new Date().toISOString();
+    db.get(
+        `SELECT id, user_id FROM email_verify_tokens WHERE token_hash = ? AND consumed = 0 AND expires_at > ?`,
+        [th, now],
+        (e, tok) => {
+            if (e) return res.status(500).send(e.message);
+            if (!tok) return res.status(400).send('Invalid or expired verification link.');
+            db.run(`UPDATE email_verify_tokens SET consumed = 1 WHERE id = ?`, [tok.id], () => {
+                db.run(`UPDATE users SET email_verified = 1 WHERE id = ?`, [tok.user_id], () => {
+                    const base = notifEngine.publicBaseUrl() || '';
+                    res.redirect(base + '/?emailVerified=1');
+                });
+            });
+        }
+    );
+});
+
+app.post('/api/auth/resend-verification', (req, res) => {
+    const { email, password } = req.body || {};
+    const emailNorm = String(email || '').trim().toLowerCase();
+    if (!emailNorm || password === undefined || password === null) {
+        return res.status(400).json({ error: 'Email and password are required' });
+    }
+    db.get(
+        `SELECT id, password, IFNULL(email_verified,1) AS email_verified FROM users WHERE lower(trim(email)) = ?`,
+        [emailNorm],
+        (e, row) => {
+            if (e) return res.status(500).json({ error: e.message });
+            if (!row || row.password !== password) return res.status(401).json({ error: 'Invalid credentials' });
+            if (Number(row.email_verified) === 1) {
+                return res.status(400).json({ error: 'This email is already verified.' });
+            }
+            queuePortalEmailVerification(db, row.id, (qe) => {
+                if (qe) return res.status(500).json({ error: qe.message });
+                res.json({ success: true, message: 'Verification email queued. Check your inbox.' });
+            });
         }
     );
 });
@@ -2295,6 +2669,7 @@ app.get('/api/registration-form-config', (req, res) => {
             const base = {
                 fields: fields || [],
                 otpOnApplication: false,
+                submitOtpRequired: false,
                 ...flags
             };
             if (sid != null && !Number.isNaN(sid)) {
@@ -2304,6 +2679,7 @@ app.get('/api/registration-form-config', (req, res) => {
                     res.json({
                         ...base,
                         otpOnApplication: otpOn,
+                        submitOtpRequired: otpOn,
                         otpRequiresEmail: otpOn && flags.otpRequiresEmail,
                         otpRequiresPhone: otpOn && flags.otpRequiresPhone
                     });
@@ -2458,6 +2834,89 @@ app.post('/api/admin/site-cms', (req, res) => {
         upsertGlobalSetting('public_site_cms', payload, (err) => {
             if (err) return res.status(500).json({ error: err.message });
             res.json({ success: true });
+        });
+    });
+});
+
+app.post('/api/admin/broadcast-venue-update', (req, res) => {
+    const { actingAdminId, message, venue, seminarId, sendEmail, sendWhatsApp } = req.body || {};
+    const aid = parseInt(actingAdminId, 10);
+    const sid = seminarId != null && seminarId !== '' ? parseInt(seminarId, 10) : null;
+    if (!Number.isInteger(aid) || aid < 1) return res.status(400).json({ error: 'actingAdminId is required' });
+    const bodyText = String(message || venue || '').trim();
+    if (!bodyText) return res.status(400).json({ error: 'message or venue text is required' });
+    assertAdminPortalActor(aid, (e, adm) => {
+        if (e && e.message === 'BAD_ACTOR') return res.status(400).json({ error: 'actingAdminId is required' });
+        if (e && e.message === 'FORBIDDEN') return res.status(403).json({ error: 'Administrator access required' });
+        if (e) return res.status(500).json({ error: e.message });
+        if (!adm) return res.status(403).json({ error: 'Invalid administrator' });
+        const doEmail = sendEmail !== false;
+        const doWa = sendWhatsApp !== false;
+        let sql = `SELECT DISTINCT u.id, u.email, u.phone, u.first_name, u.last_name, s.title AS seminar_title
+                   FROM registrations r
+                   JOIN users u ON u.id = r.user_id
+                   JOIN orders o ON o.registration_id = r.id AND lower(trim(o.status)) = 'success'
+                   JOIN seminars s ON s.id = r.seminar_id
+                   WHERE r.status NOT IN ('rejected', 'cancelled')`;
+        const params = [];
+        if (Number.isInteger(sid) && sid > 0) {
+            sql += ` AND r.seminar_id = ?`;
+            params.push(sid);
+        }
+        db.all(sql, params, (e2, rows) => {
+            if (e2) return res.status(500).json({ error: e2.message });
+            const list = rows || [];
+            if (!list.length) return res.json({ success: true, queued: 0, message: 'No paid registrants found.' });
+            let queued = 0;
+            let left = list.length;
+            const waLine =
+                'Venue update — ' +
+                (list[0] && list[0].seminar_title ? list[0].seminar_title : 'National Seminar') +
+                '\n' +
+                bodyText;
+            list.forEach((u) => {
+                let pending = 0;
+                if (doEmail && u.email) pending++;
+                if (doWa && u.phone) pending++;
+                const doneOne = () => {
+                    pending--;
+                    if (pending > 0) return;
+                    left--;
+                    if (left === 0) {
+                        notifEngine.processQueueOnce(db);
+                        res.json({ success: true, queued, recipients: list.length });
+                    }
+                };
+                if (!pending) return doneOne();
+                if (doEmail && u.email) {
+                    queued++;
+                    notifEngine.enqueueDirectMessage(
+                        db,
+                        {
+                            channel: 'email',
+                            destination: u.email,
+                            subject: 'Venue / location update — VGMF Seminar',
+                            html:
+                                '<p>Dear ' +
+                                (u.first_name || 'Doctor') +
+                                ',</p><p>' +
+                                bodyText.replace(/\n/g, '<br>') +
+                                '</p>',
+                            text: bodyText,
+                            event_key: 'VENUE_UPDATE'
+                        },
+                        doneOne
+                    );
+                }
+                if (doWa && u.phone) {
+                    queued++;
+                    notifEngine.enqueueDirectMessage(
+                        db,
+                        { channel: 'whatsapp', destination: u.phone, body: waLine, event_key: 'VENUE_UPDATE' },
+                        doneOne
+                    );
+                }
+            });
         });
     });
 });
@@ -2645,7 +3104,16 @@ app.post('/api/applications/submit', (req, res, next) => {
         next();
     });
 }, (req, res) => {
-    let { userId, seminarId, formData, phoneOtpToken, emailOtpToken, fieldOtpTokens } = req.body;
+    let {
+        userId,
+        seminarId,
+        formData,
+        phoneOtpToken,
+        emailOtpToken,
+        submitPhoneOtpToken,
+        submitEmailOtpToken,
+        fieldOtpTokens
+    } = req.body;
     userId = parsePositiveUserId(userId);
     if (!userId) {
         return res.status(400).json({
@@ -2792,31 +3260,61 @@ app.post('/api/applications/submit', (req, res, next) => {
                             if (!needEmail && !needPhone) {
                                 return runFieldOtpsThenInsert();
                             }
-                            if (needEmail && !emailOtpToken) {
+                            const subPhone = String(submitPhoneOtpToken || '').trim();
+                            const subEmail = String(submitEmailOtpToken || '').trim();
+                            if (needEmail && !subEmail) {
                                 return res.status(400).json({
-                                    error: 'Verify your email with the code sent to your inbox before submitting.'
+                                    error:
+                                        'Enter the email confirmation code on the preview step (final verification) before submitting.'
                                 });
                             }
-                            if (needPhone && !phoneOtpToken) {
+                            if (needPhone && !subPhone) {
                                 return res.status(400).json({
-                                    error: 'Verify your phone with the WhatsApp code before submitting.'
+                                    error:
+                                        'Enter the WhatsApp confirmation code on the preview step (final verification) before submitting.'
                                 });
                             }
-                            otpLib.validateRegistrationOtpTokens(
+                            otpLib.validateRegistrationSubmitOtpTokens(
                                 db,
                                 sidNum,
                                 {
-                                    phoneToken: needPhone ? phoneOtpToken : null,
-                                    emailToken: needEmail ? emailOtpToken : null
+                                    phoneToken: needPhone ? subPhone : null,
+                                    emailToken: needEmail ? subEmail : null
                                 },
-                                (oerr, ov) => {
-                                    if (oerr) return res.status(500).json({ error: oerr.message });
-                                    if (!ov || !ov.ok) {
+                                (sErr, sv) => {
+                                    if (sErr) return res.status(500).json({ error: sErr.message });
+                                    if (!sv || !sv.ok) {
                                         return res.status(400).json({
-                                            error: (ov && ov.error) || 'OTP verification failed'
+                                            error: (sv && sv.error) || 'Final confirmation OTP failed. Request new codes on the preview step.'
                                         });
                                     }
-                                    runFieldOtpsThenInsert();
+                                    if (needEmail && !emailOtpToken) {
+                                        return res.status(400).json({
+                                            error: 'Verify your email with the code from the application form before submitting.'
+                                        });
+                                    }
+                                    if (needPhone && !phoneOtpToken) {
+                                        return res.status(400).json({
+                                            error: 'Verify your phone with the WhatsApp code from the application form before submitting.'
+                                        });
+                                    }
+                                    otpLib.validateRegistrationOtpTokens(
+                                        db,
+                                        sidNum,
+                                        {
+                                            phoneToken: needPhone ? phoneOtpToken : null,
+                                            emailToken: needEmail ? emailOtpToken : null
+                                        },
+                                        (oerr, ov) => {
+                                            if (oerr) return res.status(500).json({ error: oerr.message });
+                                            if (!ov || !ov.ok) {
+                                                return res.status(400).json({
+                                                    error: (ov && ov.error) || 'OTP verification failed'
+                                                });
+                                            }
+                                            runFieldOtpsThenInsert();
+                                        }
+                                    );
                                 }
                             );
                         });
@@ -2936,23 +3434,38 @@ app.put('/api/applications/:applicationId', upload.single('certificate'), (req, 
                 }
 
                 if (otpApp) {
-                    if (!phoneOtpToken || !emailOtpToken) {
-                        return res.status(400).json({
-                            error: 'This seminar requires phone and email OTP verification when saving changes.'
-                        });
-                    }
-                    otpLib.validateRegistrationOtpTokens(
-                        db,
-                        sidNum,
-                        { phoneToken: phoneOtpToken, emailToken: emailOtpToken },
-                        (oerr, ov) => {
-                            if (oerr) return res.status(500).json({ error: oerr.message });
-                            if (!ov || !ov.ok) {
-                                return res.status(400).json({ error: (ov && ov.error) || 'OTP verification failed' });
-                            }
-                            runFieldOtps();
+                    integrationSettings.ensureIntegrationSettingsLoaded(db, () => {
+                        const needEmail = integrationSettings.isEmailConfiguredFromSettings();
+                        const needPhone = integrationSettings.isWhatsAppConfiguredFromSettings();
+                        if (!needEmail && !needPhone) {
+                            return runFieldOtps();
                         }
-                    );
+                        if (needEmail && !emailOtpToken) {
+                            return res.status(400).json({
+                                error: 'Verify your email with the code from the application form before saving changes.'
+                            });
+                        }
+                        if (needPhone && !phoneOtpToken) {
+                            return res.status(400).json({
+                                error: 'Verify your phone with the WhatsApp code from the application form before saving changes.'
+                            });
+                        }
+                        otpLib.validateRegistrationOtpTokens(
+                            db,
+                            sidNum,
+                            {
+                                phoneToken: needPhone ? phoneOtpToken : null,
+                                emailToken: needEmail ? emailOtpToken : null
+                            },
+                            (oerr, ov) => {
+                                if (oerr) return res.status(500).json({ error: oerr.message });
+                                if (!ov || !ov.ok) {
+                                    return res.status(400).json({ error: (ov && ov.error) || 'OTP verification failed' });
+                                }
+                                runFieldOtps();
+                            }
+                        );
+                    });
                     return;
                 }
                 runFieldOtps();
@@ -3207,6 +3720,46 @@ app.get('/api/doctor/event-tickets/:userId', (req, res) => {
         (err, rows) => {
             if (err) return res.status(500).json({ error: err.message });
             res.json(rows || []);
+        }
+    );
+});
+
+app.get('/api/doctor/ticket-document/:ticketId', (req, res) => {
+    const ticketId = String(req.params.ticketId || '').trim();
+    const uid = parseInt(req.query.userId, 10);
+    if (!ticketId) return res.status(400).send('Ticket id required');
+    db.get(
+        `SELECT t.ticket_id_string, t.qr_code_data, r.application_no, r.user_id,
+                s.title AS seminar_title, s.event_date, s.location_url,
+                u.first_name, u.last_name
+         FROM tickets t
+         JOIN orders o ON t.order_id = o.id
+         JOIN registrations r ON o.registration_id = r.id
+         JOIN seminars s ON r.seminar_id = s.id
+         JOIN users u ON u.id = r.user_id
+         WHERE TRIM(t.ticket_id_string) = TRIM(?) OR t.id = ?`,
+        [ticketId, /^\d+$/.test(ticketId) ? parseInt(ticketId, 10) : -1],
+        (err, row) => {
+            if (err) return res.status(500).send(err.message);
+            if (!row) return res.status(404).send('Ticket not found');
+            if (Number.isInteger(uid) && uid > 0 && Number(row.user_id) !== uid) {
+                return res.status(403).send('Not your ticket');
+            }
+            ticketHtml
+                .buildTicketHtmlFromRow({
+                    ticket_id_string: row.ticket_id_string,
+                    application_no: row.application_no,
+                    seminar_title: row.seminar_title,
+                    event_date: row.event_date,
+                    location_url: row.location_url,
+                    display_name: [row.first_name, row.last_name].filter(Boolean).join(' '),
+                    qr_code_data: row.qr_code_data
+                })
+                .then((html) => {
+                    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+                    res.send(html);
+                })
+                .catch((e) => res.status(500).send(e.message));
         }
     );
 });
@@ -3656,25 +4209,90 @@ function lookupTicketForScan(qrData, cb) {
     nextStrategy();
 }
 
-// Scanner: dry-run ticket lookup (same matching as /mark, no state change)
-app.get('/api/scanner/verify', (req, res) => {
-    const ticketId = String(req.query.ticketId || req.query.qrData || '').trim();
-    if (!ticketId) {
-        return res.status(400).json({ success: false, error: 'ticketId query parameter is required.' });
-    }
-    lookupTicketForScan(ticketId, (err, row) => {
-        if (err) return res.status(500).json({ success: false, error: err.message });
-        if (!row) {
-            return res.status(404).json({
-                success: false,
-                found: false,
-                error: 'Ticket not found. Use the 12-digit E-ticket ID or scan the QR on the e-ticket.'
+const SCANNER_REG_LOOKUP_SQL = `
+        SELECT r.id AS registration_id, r.application_no, r.form_data, r.status AS registration_status, r.user_id,
+               o.id AS order_db_id, o.order_id_string, o.status AS payment_status,
+               t.id AS ticket_id, t.ticket_id_string, t.is_scanned, t.qr_code_data, IFNULL(t.is_valid, 1) AS is_valid,
+               s.id AS seminar_id, s.checkin_enabled, s.checkin_date, s.title AS seminar_title, s.event_date,
+               u.id AS doctor_user_id, u.user_id_string AS doctor_user_id_string,
+               u.first_name AS doctor_first_name, u.last_name AS doctor_last_name, u.email AS doctor_email, u.phone AS doctor_phone
+        FROM registrations r
+        JOIN users u ON u.id = r.user_id
+        JOIN seminars s ON s.id = r.seminar_id
+        LEFT JOIN orders o ON o.registration_id = r.id AND lower(trim(o.status)) = 'success'
+        LEFT JOIN tickets t ON t.order_id = o.id`;
+
+function lookupRegistrationForScan(raw, cb) {
+    const appNo = String(raw || '').trim();
+    if (!appNo) return cb(null, null);
+    db.get(SCANNER_REG_LOOKUP_SQL + ` WHERE r.application_no = ? ORDER BY o.id DESC, t.id DESC LIMIT 1`, [appNo], cb);
+}
+
+function registrationRowToTicketScanShape(row) {
+    if (!row) return null;
+    return {
+        ticket_id: row.ticket_id,
+        is_scanned: row.is_scanned,
+        ticket_id_string: row.ticket_id_string,
+        qr_code_data: row.qr_code_data,
+        is_valid: row.is_valid,
+        seminar_id: row.seminar_id,
+        checkin_enabled: row.checkin_enabled,
+        checkin_date: row.checkin_date,
+        seminar_title: row.seminar_title,
+        doctor_user_id: row.doctor_user_id,
+        doctor_user_id_string: row.doctor_user_id_string,
+        doctor_first_name: row.doctor_first_name,
+        doctor_last_name: row.doctor_last_name,
+        doctor_email: row.doctor_email,
+        doctor_phone: row.doctor_phone,
+        registration_id: row.registration_id,
+        application_no: row.application_no,
+        form_data: row.form_data,
+        registration_status: row.registration_status,
+        payment_status: row.payment_status,
+        order_id_string: row.order_id_string,
+        order_db_id: row.order_db_id,
+        user_id: row.user_id
+    };
+}
+
+function resolveScanRowFromApplicationId(qrData, selectedSeminarId, cb) {
+    lookupRegistrationForScan(qrData, (eReg, regRow) => {
+        if (eReg) return cb(eReg);
+        if (!regRow) return cb(null, null);
+        const payOk = String(regRow.payment_status || '').toLowerCase() === 'success';
+        if (!payOk) return cb(null, { error: 'unpaid', regRow });
+        if (regRow.ticket_id) {
+            return lookupTicketForScan(regRow.ticket_id_string || qrData, (e2, tRow) => {
+                if (e2) return cb(e2);
+                cb(null, tRow || registrationRowToTicketScanShape(regRow));
             });
         }
-        res.json({
+        if (!regRow.order_db_id) {
+            return cb(null, { error: 'no_order', regRow });
+        }
+        insertParticipantTicket(
+            regRow.order_db_id,
+            regRow.user_id,
+            regRow.order_id_string,
+            regRow.registration_id,
+            regRow.application_no,
+            (eIns, etk) => {
+                if (eIns) return cb(eIns);
+                lookupTicketForScan(etk || qrData, (e3, tRow) => cb(e3, tRow));
+            }
+        );
+    });
+}
+
+function scannerVerifyJsonFromRow(row, extras) {
+    return Object.assign(
+        {
             success: true,
             found: true,
             ticketId: row.ticket_id_string,
+            applicationNo: row.application_no || null,
             seminarId: row.seminar_id,
             seminarTitle: row.seminar_title,
             paymentStatus: row.payment_status,
@@ -3683,6 +4301,55 @@ app.get('/api/scanner/verify', (req, res) => {
             invalid: ticketLookupInvalid(row),
             checkinEnabled: !!row.checkin_enabled,
             checkinDate: row.checkin_date
+        },
+        extras || {}
+    );
+}
+
+// Scanner: dry-run ticket lookup (same matching as /mark, no state change)
+app.get('/api/scanner/verify', (req, res) => {
+    const ticketId = String(req.query.ticketId || req.query.qrData || '').trim();
+    const seminarId = req.query.seminarId != null && req.query.seminarId !== '' ? parseInt(req.query.seminarId, 10) : null;
+    if (!ticketId) {
+        return res.status(400).json({ success: false, error: 'ticketId query parameter is required.' });
+    }
+    lookupTicketForScan(ticketId, (err, row) => {
+        if (err) return res.status(500).json({ success: false, error: err.message });
+        if (row) {
+            return res.json(scannerVerifyJsonFromRow(row));
+        }
+        resolveScanRowFromApplicationId(ticketId, seminarId, (e2, row2) => {
+            if (e2) return res.status(500).json({ success: false, error: e2.message });
+            if (!row2) {
+                return res.status(404).json({
+                    success: false,
+                    found: false,
+                    error:
+                        'Ticket not found. Scan the e-ticket QR, enter the 12-digit ticket ID, or enter the application ID for a paid registration.'
+                });
+            }
+            if (row2.error === 'unpaid') {
+                return res.status(400).json({
+                    success: false,
+                    found: true,
+                    applicationNo: row2.regRow && row2.regRow.application_no,
+                    error: 'Registration found but payment is not complete.'
+                });
+            }
+            if (row2.error === 'no_order') {
+                return res.status(400).json({
+                    success: false,
+                    found: true,
+                    applicationNo: row2.regRow && row2.regRow.application_no,
+                    error: 'Registration found but no paid order — cannot issue entry ticket.'
+                });
+            }
+            res.json(
+                scannerVerifyJsonFromRow(row2, {
+                    resolvedViaApplicationId: true,
+                    ticketAutoIssued: !row2.ticket_id && !!row2.ticket_id_string
+                })
+            );
         });
     });
 });
@@ -3746,13 +4413,24 @@ app.post('/api/scanner/mark', (req, res) => {
                 });
             }
 
-            lookupTicketForScan(qrData, (err, row) => {
+            function proceedWithScanRow(err, row, regHint) {
                 if (err) return res.status(500).json({ success: false, error: err.message });
                 if (!row) {
                     return res.status(404).json({
                         success: false,
                         error: 'Not found. Scan e-ticket QR, or enter E-ticket ID / Application ID.',
                         sound: 'error'
+                    });
+                }
+                if (row.error === 'unpaid') {
+                    return res.status(403).json({
+                        success: false,
+                        error: 'Application found but payment is not confirmed.',
+                        sound: 'error',
+                        doctor: {
+                            applicationNo: row.regRow && row.regRow.application_no,
+                            name: buildDisplayNameFromFormData(row.regRow && row.regRow.form_data, row.regRow)
+                        }
                     });
                 }
 
@@ -3953,6 +4631,16 @@ app.post('/api/scanner/mark', (req, res) => {
                         );
                     }
                 );
+            }
+
+            lookupTicketForScan(qrData, (err, row) => {
+                if (err) return res.status(500).json({ success: false, error: err.message });
+                if (row) return proceedWithScanRow(null, row);
+                resolveScanRowFromApplicationId(qrData, selectedSeminarId, (e2, row2) => {
+                    if (e2) return res.status(500).json({ success: false, error: e2.message });
+                    if (row2 && row2.error) return proceedWithScanRow(null, row2);
+                    proceedWithScanRow(null, row2);
+                });
             });
         }
     );
@@ -4004,7 +4692,8 @@ app.post('/api/admin/seminars', (req, res) => {
     const rfj = registration_form_json != null && String(registration_form_json).trim() !== '' ? String(registration_form_json) : null;
     const cpj = cancellation_policy_json != null && String(cancellation_policy_json).trim() !== '' ? String(cancellation_policy_json) : null;
     const wu = whatsapp_group_url != null && String(whatsapp_group_url).trim() !== '' ? String(whatsapp_group_url).trim() : null;
-    const otpApp = otp_on_application ? 1 : 0;
+    const otpApp =
+        otp_on_application === false || otp_on_application === 0 || otp_on_application === '0' ? 0 : 1;
     const pubList = public_list_enabled ? 1 : 0;
     const activeFlag = is_active === false || is_active === 0 || is_active === '0' ? 0 : 1;
     const regStart = seminarDt.normalizeSeminarDateTimeForStorage(registration_start);
@@ -4945,9 +5634,248 @@ app.get('/api/doctor/certificates/:userId', (req, res) => {
     );
 });
 
+function assertAdminPortalActor(adminId, cb) {
+    const aid = parseInt(adminId, 10);
+    if (!Number.isInteger(aid) || aid < 1) return cb(new Error('BAD_ACTOR'), null);
+    db.get(
+        `SELECT id, role, user_role FROM users WHERE id = ? AND IFNULL(is_disabled,0) = 0`,
+        [aid],
+        (e, adm) => {
+            if (e) return cb(e, null);
+            if (!adm) return cb(new Error('FORBIDDEN'), null);
+            const ok =
+                String(adm.role || '').toLowerCase() === 'admin' || String(adm.user_role || '').toLowerCase() === 'co_admin';
+            if (!ok) return cb(new Error('FORBIDDEN'), null);
+            cb(null, adm);
+        }
+    );
+}
+
+app.get('/api/admin/portal-auth-config', (req, res) => {
+    const aid = parseInt(req.query.actingAdminId, 10);
+    if (!Number.isInteger(aid) || aid < 1) {
+        return res.status(400).json({ error: 'actingAdminId query parameter is required' });
+    }
+    assertAdminPortalActor(aid, (e, adm) => {
+        if (e && e.message === 'BAD_ACTOR') return res.status(400).json({ error: 'actingAdminId is required' });
+        if (e && e.message === 'FORBIDDEN') return res.status(403).json({ error: 'Administrator access required' });
+        if (e) return res.status(500).json({ error: e.message });
+        if (!adm) return res.status(403).json({ error: 'Invalid administrator' });
+        portalAuthPolicy.loadPortalAuthConfig(db, () => {
+            res.json({
+                success: true,
+                config: portalAuthPolicy.getPortalAuthConfig(),
+                signupOtpEffective: portalAuthPolicy.signupOtpRequired(),
+                loginOtpEffective: portalAuthPolicy.loginOtpRequired()
+            });
+        });
+    });
+});
+
+app.get('/api/admin/designated-notify-config', (req, res) => {
+    const aid = parseInt(req.query.actingAdminId, 10);
+    if (!Number.isInteger(aid) || aid < 1) {
+        return res.status(400).json({ error: 'actingAdminId query parameter is required' });
+    }
+    assertAdminPortalActor(aid, (e, adm) => {
+        if (e && e.message === 'BAD_ACTOR') return res.status(400).json({ error: 'actingAdminId is required' });
+        if (e && e.message === 'FORBIDDEN') return res.status(403).json({ error: 'Administrator access required' });
+        if (e) return res.status(500).json({ error: e.message });
+        if (!adm) return res.status(403).json({ error: 'Invalid administrator' });
+        designatedNotify.loadConfig(db, (err, cfg) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ success: true, config: cfg });
+        });
+    });
+});
+
+app.post('/api/admin/designated-notify-config', (req, res) => {
+    const { actingAdminId, config } = req.body || {};
+    const aid = parseInt(actingAdminId, 10);
+    if (!Number.isInteger(aid) || aid < 1) return res.status(400).json({ error: 'actingAdminId is required' });
+    if (!config || typeof config !== 'object') return res.status(400).json({ error: 'config object required' });
+    assertAdminPortalActor(aid, (e, adm) => {
+        if (e && e.message === 'BAD_ACTOR') return res.status(400).json({ error: 'actingAdminId is required' });
+        if (e && e.message === 'FORBIDDEN') return res.status(403).json({ error: 'Administrator access required' });
+        if (e) return res.status(500).json({ error: e.message });
+        if (!adm) return res.status(403).json({ error: 'Invalid administrator' });
+        const emails = Array.isArray(config.emails)
+            ? config.emails.map((x) => String(x || '').trim()).filter(Boolean)
+            : [];
+        const phones = Array.isArray(config.phones)
+            ? config.phones.map((x) => String(x || '').trim()).filter(Boolean)
+            : [];
+        upsertGlobalSetting(designatedNotify.KEY, JSON.stringify({ emails, phones }), (err) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ success: true, config: { emails, phones } });
+        });
+    });
+});
+
+app.post('/api/admin/portal-auth-config', (req, res) => {
+    const { actingAdminId, config } = req.body || {};
+    const aid = parseInt(actingAdminId, 10);
+    if (!Number.isInteger(aid) || aid < 1) return res.status(400).json({ error: 'actingAdminId is required' });
+    if (!config || typeof config !== 'object') return res.status(400).json({ error: 'config object required' });
+    assertAdminPortalActor(aid, (e, adm) => {
+        if (e && e.message === 'BAD_ACTOR') return res.status(400).json({ error: 'actingAdminId is required' });
+        if (e && e.message === 'FORBIDDEN') return res.status(403).json({ error: 'Administrator access required' });
+        if (e) return res.status(500).json({ error: e.message });
+        if (!adm) return res.status(403).json({ error: 'Invalid administrator' });
+        const merged = portalAuthPolicy.merge(config);
+        upsertGlobalSetting(portalAuthPolicy.KEY, JSON.stringify(merged), (err) => {
+            if (err) return res.status(500).json({ error: err.message });
+            portalAuthPolicy.loadPortalAuthConfig(db, () => {
+                res.json({ success: true, config: portalAuthPolicy.getPortalAuthConfig() });
+            });
+        });
+    });
+});
+
+app.post('/api/admin/otp/send', withIntegrationSettingsLoaded, (req, res) => {
+    const adminUserId = parseInt((req.body || {}).adminUserId, 10);
+    const channel = (req.body || {}).channel;
+    if (!Number.isInteger(adminUserId) || adminUserId < 1) {
+        return res.status(400).json({ error: 'adminUserId is required' });
+    }
+    if (channel !== 'phone' && channel !== 'email') {
+        return res.status(400).json({ error: 'channel must be phone or email' });
+    }
+    db.get(
+        `SELECT id, email, phone, role, user_role FROM users WHERE id = ? AND IFNULL(is_disabled,0) = 0`,
+        [adminUserId],
+        (e, adm) => {
+            if (e) return res.status(500).json({ error: e.message });
+            if (!adm) return res.status(404).json({ error: 'User not found' });
+            const r0 = String(adm.role || '').toLowerCase();
+            const ur0 = String(adm.user_role || '').toLowerCase();
+            if (r0 !== 'admin' && ur0 !== 'co_admin') {
+                return res.status(403).json({ error: 'Administrator access required' });
+            }
+            const dest =
+                channel === 'email'
+                    ? String(adm.email || '')
+                          .trim()
+                          .toLowerCase()
+                    : otpLib.normalizeOtpDestination('phone', String(adm.phone || '').trim()) ||
+                      String(adm.phone || '').trim();
+            if (!dest) {
+                return res.status(400).json({
+                    error:
+                        channel === 'email'
+                            ? 'No email address on file for this admin account.'
+                            : 'No phone number on file for this admin account.'
+                });
+            }
+            otpLib.countRecentSends(db, channel, dest, (cerr, cnt) => {
+                if (cerr) return res.status(500).json({ error: cerr.message });
+                if (cnt >= otpLib.MAX_SENDS_PER_HOUR) {
+                    return res.status(429).json({ error: 'Too many OTP requests. Try again later.' });
+                }
+                const code = otpLib.generateOtpDigits();
+                const meta = { adminUserId };
+                otpLib.saveOtp(db, { channel, destination: dest, purpose: 'admin_confirm', meta }, code, (serr) => {
+                    if (serr) return res.status(500).json({ error: serr.message });
+                    notifEngine
+                        .sendOtpMessages({
+                            email: channel === 'email' ? dest : null,
+                            phone: channel === 'phone' ? dest : null,
+                            code,
+                            db,
+                            eventKey: 'OTP_VERIFICATION'
+                        })
+                        .then((results) => {
+                            const sent = channel === 'phone' ? results.whatsapp : results.email;
+                            const debug = process.env.OTP_RETURN_CODE === '1' || process.env.NODE_ENV === 'development';
+                            const payload = { success: true, ttlMinutes: otpLib.OTP_TTL_MIN };
+                            if (debug) payload.debugCode = code;
+                            if (!sent.ok && !sent.skipped) {
+                                return res.status(503).json({
+                                    error: sent.error || 'Could not deliver OTP.',
+                                    debugCode: debug ? code : undefined
+                                });
+                            }
+                            if (sent.skipped) {
+                                payload.warning = 'Messaging not fully configured; use debugCode in development.';
+                            }
+                            res.json(payload);
+                        });
+                });
+            });
+        }
+    );
+});
+
+app.post('/api/admin/otp/verify', (req, res) => {
+    const adminUserId = parseInt((req.body || {}).adminUserId, 10);
+    const channel = (req.body || {}).channel;
+    const code = String((req.body || {}).code || '').trim();
+    if (!Number.isInteger(adminUserId) || adminUserId < 1) {
+        return res.status(400).json({ error: 'adminUserId is required' });
+    }
+    if (channel !== 'phone' && channel !== 'email') {
+        return res.status(400).json({ error: 'channel must be phone or email' });
+    }
+    if (!code) return res.status(400).json({ error: 'code is required' });
+    db.get(
+        `SELECT id, email, phone, role, user_role FROM users WHERE id = ? AND IFNULL(is_disabled,0) = 0`,
+        [adminUserId],
+        (e, adm) => {
+            if (e) return res.status(500).json({ error: e.message });
+            if (!adm) return res.status(404).json({ error: 'User not found' });
+            const r0 = String(adm.role || '').toLowerCase();
+            const ur0 = String(adm.user_role || '').toLowerCase();
+            if (r0 !== 'admin' && ur0 !== 'co_admin') {
+                return res.status(403).json({ error: 'Administrator access required' });
+            }
+            const dest =
+                channel === 'email'
+                    ? String(adm.email || '')
+                          .trim()
+                          .toLowerCase()
+                    : otpLib.normalizeOtpDestination('phone', String(adm.phone || '').trim()) ||
+                      String(adm.phone || '').trim();
+            if (!dest) return res.status(400).json({ error: 'Missing phone or email on admin profile' });
+            const meta = { adminUserId };
+            otpLib.verifyOtp(
+                db,
+                {
+                    channel,
+                    destination: dest,
+                    purpose: 'admin_confirm',
+                    code,
+                    meta,
+                    userId: adminUserId,
+                    seminarId: null
+                },
+                (verr, result) => {
+                    if (verr) return res.status(500).json({ error: verr.message });
+                    if (!result || !result.ok) {
+                        return res.status(400).json({ error: (result && result.error) || 'Verification failed' });
+                    }
+                    res.json({ success: true, token: result.token });
+                }
+            );
+        }
+    );
+});
+
 // Admin: Create User
 app.post('/api/admin/users/create', (req, res) => {
-    const { firstName, lastName, email, phone, password, role } = req.body;
+    const {
+        firstName,
+        lastName,
+        email,
+        phone,
+        password,
+        role,
+        actingAdminId,
+        adminPhoneOtpToken,
+        adminEmailOtpToken,
+        isDemo
+    } = req.body || {};
+    const demoFlag =
+        isDemo === true || isDemo === 1 || isDemo === '1' || isDemo === 'true' ? 1 : 0;
     const userRole = role || 'doctor';
     const roleCol = String(userRole).toLowerCase() === 'co_admin' ? 'admin' : String(userRole).toLowerCase() === 'admin' ? 'admin' : 'doctor';
 
@@ -4968,24 +5896,35 @@ app.post('/api/admin/users/create', (req, res) => {
     const cleanFirst = userRole === 'doctor' || roleCol === 'doctor' ? validateDoctorName(firstName).cleanedName : String(firstName).trim();
     const cleanLast = userRole === 'doctor' || roleCol === 'doctor' ? validateDoctorName(lastName).cleanedName : String(lastName).trim();
 
-    db.run(
-        `INSERT INTO users (user_id_string, first_name, last_name, email, phone, password, role, user_role) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [userIdStr, cleanFirst, cleanLast, email, phone, finalPassword, roleCol, userRole],
-        function (err) {
-            if (err) return res.status(500).json({ error: err.message });
-            const newId = this.lastID;
+    requireAdminSensitiveOtpIfEnabled(actingAdminId, adminPhoneOtpToken, adminEmailOtpToken, (eOtp, okOtp, msgOtp) => {
+        if (eOtp) return res.status(500).json({ error: eOtp.message });
+        if (!okOtp) return res.status(400).json({ error: msgOtp || 'Admin verification required' });
+        db.run(
+            `INSERT INTO users (user_id_string, first_name, last_name, email, phone, password, role, user_role, email_verified, is_demo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+            [userIdStr, cleanFirst, cleanLast, email, phone, finalPassword, roleCol, userRole, demoFlag],
+            function (err) {
+                if (err) return res.status(500).json({ error: err.message });
+                const newId = this.lastID;
             notifEngine.notify(db, 'ACCOUNT_CREATED', {
                 userId: newId,
                 vars: { temporary_password: finalPassword }
             });
+            designatedNotify.notifyDesignatedAccountCreated(
+                db,
+                newId,
+                { source: 'admin create user', temporary_password: finalPassword },
+                () => {}
+            );
             res.json({
                 success: true,
                 userId: newId,
                 user_id_string: userIdStr,
-                generatedPassword: finalPassword
+                generatedPassword: finalPassword,
+                isDemo: !!demoFlag
             });
-        }
-    );
+            }
+        );
+    });
 });
 
 // Admin: Get Users
@@ -5049,24 +5988,44 @@ function setUserDemoFlag(userId, isDemo, res) {
 }
 
 app.post('/api/admin/users/toggle_demo', (req, res) => {
-    const uid = req.body && req.body.userId != null ? req.body.userId : req.body && req.body.user_id;
-    const isDemo =
-        req.body &&
-        (req.body.isDemo === true ||
-            req.body.isDemo === 1 ||
-            req.body.isDemo === '1' ||
-            req.body.isDemo === 'true');
-    setUserDemoFlag(uid, isDemo, res);
+    const aid = parseInt((req.body || {}).actingAdminId, 10);
+    if (!Number.isInteger(aid) || aid < 1) {
+        return res.status(400).json({ error: 'actingAdminId is required' });
+    }
+    assertAdminPortalActor(aid, (e, adm) => {
+        if (e && e.message === 'BAD_ACTOR') return res.status(400).json({ error: 'actingAdminId is required' });
+        if (e && e.message === 'FORBIDDEN') return res.status(403).json({ error: 'Administrator access required' });
+        if (e) return res.status(500).json({ error: e.message });
+        if (!adm) return res.status(403).json({ error: 'Invalid administrator' });
+        const uid = req.body && req.body.userId != null ? req.body.userId : req.body && req.body.user_id;
+        const isDemo =
+            req.body &&
+            (req.body.isDemo === true ||
+                req.body.isDemo === 1 ||
+                req.body.isDemo === '1' ||
+                req.body.isDemo === 'true');
+        setUserDemoFlag(uid, isDemo, res);
+    });
 });
 
 app.post('/api/admin/users/:userId/demo', (req, res) => {
-    const isDemo =
-        req.body &&
-        (req.body.isDemo === true ||
-            req.body.isDemo === 1 ||
-            req.body.isDemo === '1' ||
-            req.body.isDemo === 'true');
-    setUserDemoFlag(req.params.userId, isDemo, res);
+    const aid = parseInt((req.body || {}).actingAdminId, 10);
+    if (!Number.isInteger(aid) || aid < 1) {
+        return res.status(400).json({ error: 'actingAdminId is required' });
+    }
+    assertAdminPortalActor(aid, (e, adm) => {
+        if (e && e.message === 'BAD_ACTOR') return res.status(400).json({ error: 'actingAdminId is required' });
+        if (e && e.message === 'FORBIDDEN') return res.status(403).json({ error: 'Administrator access required' });
+        if (e) return res.status(500).json({ error: e.message });
+        if (!adm) return res.status(403).json({ error: 'Invalid administrator' });
+        const isDemo =
+            req.body &&
+            (req.body.isDemo === true ||
+                req.body.isDemo === 1 ||
+                req.body.isDemo === '1' ||
+                req.body.isDemo === 'true');
+        setUserDemoFlag(req.params.userId, isDemo, res);
+    });
 });
 
 // Admin: Transfer Application
@@ -5136,7 +6095,7 @@ app.post('/api/admin/users/:userId/modules', (req, res) => {
 
 // Admin: create or update a registration on behalf of a doctor (admin-edited; distinct from doctor self-edit API)
 app.post('/api/admin/registrations/upsert', (req, res) => {
-    const { targetUserId, seminarId, formData, adminUserId } = req.body || {};
+    const { targetUserId, seminarId, formData, adminUserId, adminPhoneOtpToken, adminEmailOtpToken } = req.body || {};
     const tid = parseInt(targetUserId, 10);
     const sid = parseInt(seminarId, 10);
     const aid = parseInt(adminUserId, 10);
@@ -5150,35 +6109,39 @@ app.post('/api/admin/registrations/upsert', (req, res) => {
             String(adm.role || '').toLowerCase() === 'admin' ||
             String(adm.user_role || '').toLowerCase() === 'co_admin';
         if (!ok) return res.status(403).json({ error: 'Admin portal access required' });
-        const fd = formData && typeof formData === 'object' ? JSON.stringify(formData) : '{}';
-        db.get(`SELECT id FROM registrations WHERE user_id = ? AND seminar_id = ?`, [tid, sid], (e2, reg) => {
-            if (e2) return res.status(500).json({ error: e2.message });
-            if (reg) {
-                return db.run(
-                    `UPDATE registrations SET form_data = ?, registration_source = 'admin', admin_editor_user_id = ? WHERE id = ?`,
-                    [fd, aid, reg.id],
-                    function (uerr) {
-                        if (uerr) return res.status(500).json({ error: uerr.message });
-                        res.json({ success: true, registrationId: reg.id, created: false });
+        requireAdminSensitiveOtpIfEnabled(aid, adminPhoneOtpToken, adminEmailOtpToken, (eOtp, okOtp, msgOtp) => {
+            if (eOtp) return res.status(500).json({ error: eOtp.message });
+            if (!okOtp) return res.status(400).json({ error: msgOtp || 'Admin verification required' });
+            const fd = formData && typeof formData === 'object' ? JSON.stringify(formData) : '{}';
+            db.get(`SELECT id FROM registrations WHERE user_id = ? AND seminar_id = ?`, [tid, sid], (e2, reg) => {
+                if (e2) return res.status(500).json({ error: e2.message });
+                if (reg) {
+                    return db.run(
+                        `UPDATE registrations SET form_data = ?, registration_source = 'admin', admin_editor_user_id = ? WHERE id = ?`,
+                        [fd, aid, reg.id],
+                        function (uerr) {
+                            if (uerr) return res.status(500).json({ error: uerr.message });
+                            res.json({ success: true, registrationId: reg.id, created: false });
+                        }
+                    );
+                }
+                const applicationNo = generateId();
+                db.run(
+                    `INSERT INTO registrations (user_id, seminar_id, application_no, status, form_data, registration_source, admin_editor_user_id) VALUES (?, ?, ?, 'submitted', ?, 'admin', ?)`,
+                    [tid, sid, applicationNo, fd, aid],
+                    function (ierr) {
+                        if (ierr) return res.status(500).json({ error: ierr.message });
+                        const newRegId = this.lastID;
+                        notifEngine.notify(
+                            db,
+                            'SEMINAR_REGISTRATION_SUCCESS',
+                            { userId: tid, seminarId: sid, registrationId: newRegId },
+                            () => {}
+                        );
+                        res.json({ success: true, registrationId: newRegId, applicationNo, created: true });
                     }
                 );
-            }
-            const applicationNo = generateId();
-            db.run(
-                `INSERT INTO registrations (user_id, seminar_id, application_no, status, form_data, registration_source, admin_editor_user_id) VALUES (?, ?, ?, 'submitted', ?, 'admin', ?)`,
-                [tid, sid, applicationNo, fd, aid],
-                function (ierr) {
-                    if (ierr) return res.status(500).json({ error: ierr.message });
-                    const newRegId = this.lastID;
-                    notifEngine.notify(
-                        db,
-                        'SEMINAR_REGISTRATION_SUCCESS',
-                        { userId: tid, seminarId: sid, registrationId: newRegId },
-                        () => {}
-                    );
-                    res.json({ success: true, registrationId: newRegId, applicationNo, created: true });
-                }
-            );
+            });
         });
     });
 });
@@ -5732,6 +6695,12 @@ function startBackgroundWorkers() {
     }
     integrationSettings.loadFromDb(db, (eInt) => {
         if (eInt) console.warn('[integrations] load failed:', eInt.message);
+        db.get(`SELECT value FROM global_settings WHERE key = ?`, [portalAuthPolicy.KEY], (ePk, rowPk) => {
+            if (!ePk && !rowPk) {
+                upsertGlobalSetting(portalAuthPolicy.KEY, JSON.stringify(portalAuthPolicy.DEFAULTS), () => {});
+            }
+            portalAuthPolicy.loadPortalAuthConfig(db, () => {});
+        });
         db.get(`SELECT value FROM global_settings WHERE key = ?`, ['notification_templates_sync_v'], (eSync, row) => {
             if (eSync) return;
             if (row && row.value === '20260517') return;
