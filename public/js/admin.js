@@ -3849,7 +3849,10 @@ async function saveIntegrationSettings() {
             body: JSON.stringify(body)
         });
         const data = await res.json();
-        if (!res.ok) return alert(data.error || 'Save failed');
+        if (!res.ok) {
+            setAdminSettingsSaveMsg(data.error || 'Save failed', true);
+            return;
+        }
         (document.getElementById('int-zoho-pass') || {}).value = '';
         (document.getElementById('int-wa-token') || {}).value = '';
         (document.getElementById('int-wa-verify') || {}).value = '';
@@ -3867,9 +3870,9 @@ async function saveIntegrationSettings() {
             : wst && Array.isArray(wst.missing) && wst.missing.length
               ? 'WhatsApp still missing: ' + wst.missing.join(', ') + '. Paste token and phone number ID, then save.'
               : 'WhatsApp not configured — add token + phone number ID (OTP template alone is not enough).';
-        alert('API keys saved. ' + emailHint + ' ' + waHint);
+        setAdminSettingsSaveMsg('API keys and messaging saved. ' + emailHint + ' ' + waHint);
     } catch (e) {
-        alert('Save failed');
+        setAdminSettingsSaveMsg('Save failed', true);
     }
 }
 
@@ -4115,6 +4118,13 @@ async function loadSettings() {
     } catch(err) { console.error(err); }
 }
 
+function setAdminSettingsSaveMsg(text, isError) {
+    const msg = document.getElementById('admin-settings-save-msg');
+    if (!msg) return;
+    msg.style.color = isError ? '#b91c1c' : '#15803d';
+    msg.textContent = text || '';
+}
+
 async function saveSiteConfigSettings() {
     const settings = [
         { key: 'site_name', value: document.getElementById('setting-sitename').value },
@@ -4127,9 +4137,10 @@ async function saveSiteConfigSettings() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ settings })
         });
-        alert('Site configuration saved.');
+        setAdminSettingsSaveMsg('Site configuration saved.');
     } catch (err) {
         console.error(err);
+        setAdminSettingsSaveMsg('Could not save site configuration.', true);
     }
 }
 
@@ -4218,17 +4229,20 @@ async function saveKillSwitchSettings() {
             body: JSON.stringify(body)
         });
         const data = await res.json();
-        if (!res.ok) return alert(data.error || 'Save failed');
+        if (!res.ok) {
+            setAdminSettingsSaveMsg(data.error || 'Save failed', true);
+            return;
+        }
         __maintenancePreviewSecret = data.preview_secret || __maintenancePreviewSecret;
         await loadMaintenanceSettings();
-        alert(
+        setAdminSettingsSaveMsg(
             disabled
                 ? 'Maintenance mode saved. Public site is closed; use Preview buttons to check your work.'
                 : 'Site is live again.'
         );
     } catch (err) {
         console.error(err);
-        alert('Save failed');
+        setAdminSettingsSaveMsg('Save failed', true);
     }
 }
 
@@ -4289,11 +4303,12 @@ async function savePaymentGatewaysSettings() {
                 body: JSON.stringify({ is_active: gw.is_active, config: gw.config })
             });
         }
-        alert(
-            'Payment gateways saved. For Razorpay Live: check “Enable Razorpay gateway”, “Enable Live mode for doctors”, enter rzp_live_ Key ID and Secret, then Save.'
+        setAdminSettingsSaveMsg(
+            'Payment gateways saved. For Razorpay Live: enable the gateway and Live mode, enter rzp_live_ Key ID and Secret, then save again.'
         );
     } catch (err) {
         console.error(err);
+        setAdminSettingsSaveMsg('Could not save payment gateways.', true);
     }
 }
 
@@ -4856,6 +4871,69 @@ function loadSeminarCancellationUi(rawJson) {
     updateSeminarPolicyPreviews();
 }
 
+function seminarExtraFieldTypeOptions(selected) {
+    return adminRegFieldTypeOptions(selected);
+}
+
+function addSeminarExtraFieldRow(prefill) {
+    const tbody = document.getElementById('seminar-extra-fields-tbody');
+    if (!tbody) return;
+    const rows = window.__seminarExtraFieldRows || [];
+    const p = prefill || {};
+    const idx = rows.length;
+    const key = p.key || 'extra_' + Date.now();
+    rows.push({ key });
+    window.__seminarExtraFieldRows = rows;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+        <td><input type="text" class="sem-ex-key" data-idx="${idx}" value="${String(key).replace(/"/g, '&quot;')}" style="width:100px;"></td>
+        <td><input type="text" class="sem-ex-label" data-idx="${idx}" value="${String(p.label || key).replace(/"/g, '&quot;')}" style="width:100%;"></td>
+        <td><select class="sem-ex-type" data-idx="${idx}">${seminarExtraFieldTypeOptions(p.type)}</select></td>
+        <td><input type="number" class="sem-ex-step" data-idx="${idx}" min="1" max="9" value="${p.step != null ? p.step : 1}" style="width:48px;"></td>
+        <td><input type="checkbox" class="sem-ex-en" data-idx="${idx}" ${p.enabled !== false ? 'checked' : ''}></td>
+        <td><input type="checkbox" class="sem-ex-req" data-idx="${idx}" ${p.required !== false ? 'checked' : ''}></td>
+        <td><button type="button" class="btn-primary" style="padding:3px 8px;font-size:0.75rem;background:#64748b;" onclick="removeSeminarExtraFieldRow(${idx})">Remove</button></td>`;
+    tbody.appendChild(tr);
+}
+
+function removeSeminarExtraFieldRow(idx) {
+    const rows = window.__seminarExtraFieldRows || [];
+    rows.splice(idx, 1);
+    window.__seminarExtraFieldRows = rows;
+    const tbody = document.getElementById('seminar-extra-fields-tbody');
+    if (!tbody) return;
+    const saved = collectSeminarExtraFieldsFromDom();
+    tbody.innerHTML = '';
+    window.__seminarExtraFieldRows = [];
+    saved.forEach((f) => addSeminarExtraFieldRow(f));
+}
+
+function collectSeminarExtraFieldsFromDom() {
+    const tbody = document.getElementById('seminar-extra-fields-tbody');
+    if (!tbody) return [];
+    const rows = window.__seminarExtraFieldRows || [];
+    return rows.map((r, idx) => {
+        const keyEl = tbody.querySelector(`.sem-ex-key[data-idx="${idx}"]`);
+        const key = keyEl ? String(keyEl.value || '').trim() : r.key;
+        return {
+            key: key || r.key,
+            label: (tbody.querySelector(`.sem-ex-label[data-idx="${idx}"]`) || {}).value || key,
+            type: (tbody.querySelector(`.sem-ex-type[data-idx="${idx}"]`) || {}).value || 'text',
+            step: parseInt((tbody.querySelector(`.sem-ex-step[data-idx="${idx}"]`) || {}).value, 10) || 1,
+            enabled: !!(tbody.querySelector(`.sem-ex-en[data-idx="${idx}"]`) || {}).checked,
+            required: !!(tbody.querySelector(`.sem-ex-req[data-idx="${idx}"]`) || {}).checked
+        };
+    });
+}
+
+function cmsFillSeminarExtraRows(items) {
+    const tbody = document.getElementById('seminar-extra-fields-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    window.__seminarExtraFieldRows = [];
+    (items || []).forEach((f) => addSeminarExtraFieldRow(f));
+}
+
 async function loadSeminarFormOverrideUi(overrideJson) {
     const tbody = document.getElementById('seminar-reg-override-tbody');
     if (!tbody) return;
@@ -4866,7 +4944,8 @@ async function loadSeminarFormOverrideUi(overrideJson) {
         const data = await res.json();
         globalFields = data.fields || [];
     } catch (_) {}
-    let overrideFields = null;
+    window.__seminarGlobalFieldKeys = globalFields.map((f) => f.key);
+    let overrideFields = [];
     if (overrideJson && String(overrideJson).trim()) {
         try {
             const parsed = JSON.parse(overrideJson);
@@ -4874,9 +4953,11 @@ async function loadSeminarFormOverrideUi(overrideJson) {
         } catch (_) {}
     }
     const byKey = {};
-    (overrideFields || []).forEach((f) => {
+    overrideFields.forEach((f) => {
         if (f && f.key) byKey[f.key] = f;
     });
+    const extras = overrideFields.filter((f) => f && f.key && !window.__seminarGlobalFieldKeys.includes(f.key));
+    cmsFillSeminarExtraRows(extras);
     tbody.innerHTML = '';
     window.__seminarOverrideFieldKeys = [];
     globalFields.forEach((f, idx) => {
@@ -4892,6 +4973,9 @@ async function loadSeminarFormOverrideUi(overrideJson) {
             <td><input type="checkbox" class="sem-ov-req" data-idx="${idx}" ${required ? 'checked' : ''} onchange="updateSeminarPolicyPreviews()"></td>
         </tr>`;
     });
+    if (!extras.length) {
+        cmsFillSeminarExtraRows([]);
+    }
     updateSeminarPolicyPreviews();
 }
 
@@ -4910,10 +4994,12 @@ function buildSeminarFormOverrideJsonFromUi() {
             required: !!(reqEl && reqEl.checked)
         });
     });
+    const extras = collectSeminarExtraFieldsFromDom();
+    const allFields = fields.concat(extras);
     const anyDisabled = fields.some((f) => !f.enabled);
     const anyLabelChange = fields.some((f) => f.label && f.label !== f.key);
-    if (!anyDisabled && !anyLabelChange) return null;
-    return JSON.stringify({ fields });
+    if (!extras.length && !anyDisabled && !anyLabelChange) return null;
+    return JSON.stringify({ fields: allFields });
 }
 
 function updateSeminarPolicyPreviews() {
@@ -6122,30 +6208,72 @@ function downloadParticipantsPdf() {
 
 let __adminOrdersCache = [];
 
-async function loadAdminRegistrationFormConfig() {
+const ADMIN_REG_FIELD_TYPES = ['text', 'textarea', 'email', 'tel', 'number', 'select', 'checkbox', 'file'];
+
+function adminRegFieldTypeOptions(selected) {
+    const sel = String(selected || 'text').toLowerCase();
+    return ADMIN_REG_FIELD_TYPES.map(
+        (t) => `<option value="${t}"${t === sel ? ' selected' : ''}>${t}</option>`
+    ).join('');
+}
+
+function adminAddRegistrationFieldRow(prefill) {
     const tbody = document.getElementById('admin-reg-fields-tbody');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="4">Loading…</td></tr>';
+    const rows = window.__adminRegFieldRows || [];
+    const p = prefill || {};
+    const idx = rows.length;
+    const key = p.key || 'custom_' + Date.now();
+    const isNew = !p._existing;
+    rows.push({
+        key,
+        onlyWhenAdvancedQual: !!p.onlyWhenAdvancedQual,
+        _existing: true
+    });
+    window.__adminRegFieldRows = rows;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+        <td>${isNew ? `<input type="text" id="reg-field-key-${idx}" value="${String(key).replace(/"/g, '&quot;')}" style="margin:0;width:120px;" placeholder="field_key">` : `<code>${String(key).replace(/</g, '&lt;')}</code>`}</td>
+        <td><input type="text" id="reg-field-label-${idx}" value="${String(p.label || key).replace(/"/g, '&quot;')}" style="margin:0;"></td>
+        <td><select id="reg-field-type-${idx}" style="margin:0;">${adminRegFieldTypeOptions(p.type)}</select></td>
+        <td><input type="number" id="reg-field-step-${idx}" min="1" max="9" value="${p.step != null ? p.step : 1}" style="margin:0;width:56px;"></td>
+        <td><input type="checkbox" id="reg-field-en-${idx}" ${p.enabled !== false ? 'checked' : ''}></td>
+        <td><input type="checkbox" id="reg-field-req-${idx}" ${p.required !== false && p.enabled !== false ? 'checked' : ''}></td>
+        <td><button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;background:#64748b;" onclick="adminRemoveRegistrationFieldRow(${idx})">Remove</button></td>`;
+    tbody.appendChild(tr);
+}
+
+function adminRemoveRegistrationFieldRow(idx) {
+    const rows = window.__adminRegFieldRows || [];
+    if (idx < 0 || idx >= rows.length) return;
+    rows.splice(idx, 1);
+    window.__adminRegFieldRows = rows;
+    loadAdminRegistrationFormConfig(true);
+}
+
+async function loadAdminRegistrationFormConfig(skipFetch) {
+    const tbody = document.getElementById('admin-reg-fields-tbody');
+    if (!tbody) return;
+    if (!skipFetch) {
+        tbody.innerHTML = '<tr><td colspan="7">Loading…</td></tr>';
+    }
     try {
-        const res = await fetch('/api/registration-form-config');
-        const data = await res.json();
-        const fields = data.fields || [];
+        let fields;
+        if (skipFetch && window.__adminRegFieldRowsCache) {
+            fields = window.__adminRegFieldRowsCache;
+        } else {
+            const res = await fetch('/api/registration-form-config');
+            const data = await res.json();
+            fields = data.fields || [];
+            window.__adminRegFieldRowsCache = fields;
+        }
         tbody.innerHTML = '';
-        fields.forEach((f, idx) => {
-            tbody.innerHTML += `<tr>
-                <td><code>${String(f.key || '').replace(/</g, '&lt;')}</code></td>
-                <td><input type="text" id="reg-field-label-${idx}" value="${String(f.label || '').replace(/"/g, '&quot;')}" style="margin:0;"></td>
-                <td><input type="checkbox" id="reg-field-en-${idx}" ${f.enabled !== false ? 'checked' : ''}></td>
-                <td><input type="checkbox" id="reg-field-req-${idx}" ${f.required !== false && f.enabled !== false ? 'checked' : ''}></td>
-            </tr>`;
-        });
-        window.__adminRegFieldRows = fields.map((f) => ({
-            key: f.key,
-            onlyWhenAdvancedQual: f.onlyWhenAdvancedQual
-        }));
+        window.__adminRegFieldRows = [];
+        fields.forEach((f) => adminAddRegistrationFieldRow({ ...f, _existing: true }));
+        if (!fields.length) adminAddRegistrationFieldRow({ key: 'custom_field', label: 'Custom field' });
     } catch (e) {
         console.error(e);
-        tbody.innerHTML = '<tr><td colspan="4">Failed to load</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7">Failed to load</td></tr>';
     }
 }
 
@@ -6156,16 +6284,22 @@ async function saveAdminRegistrationFormConfig() {
     const fields = rows.map((r, idx) => {
         const enabled = !!(document.getElementById(`reg-field-en-${idx}`) || {}).checked;
         const required = enabled && !!(document.getElementById(`reg-field-req-${idx}`) || {}).checked;
+        const keyEl = document.getElementById(`reg-field-key-${idx}`);
+        const key = keyEl ? String(keyEl.value || '').trim() : r.key;
+        const typeEl = document.getElementById(`reg-field-type-${idx}`);
+        const stepEl = document.getElementById(`reg-field-step-${idx}`);
         return {
-        key: r.key,
-        label: (document.getElementById(`reg-field-label-${idx}`) || {}).value || r.key,
-        enabled,
-        required,
-        onlyWhenAdvancedQual:
-            typeof r.onlyWhenAdvancedQual === 'boolean'
-                ? r.onlyWhenAdvancedQual
-                : ['ncism', 'certificate'].indexOf(r.key) !== -1
-    };
+            key: key || r.key,
+            label: (document.getElementById(`reg-field-label-${idx}`) || {}).value || key || r.key,
+            type: typeEl ? typeEl.value : 'text',
+            step: stepEl ? parseInt(stepEl.value, 10) || 1 : 1,
+            enabled,
+            required,
+            onlyWhenAdvancedQual:
+                typeof r.onlyWhenAdvancedQual === 'boolean'
+                    ? r.onlyWhenAdvancedQual
+                    : ['ncism', 'certificate'].indexOf(r.key) !== -1
+        };
     });
     try {
         const res = await fetch('/api/admin/registration-form-config', {
@@ -6177,8 +6311,9 @@ async function saveAdminRegistrationFormConfig() {
         if (data.success) {
             if (msg) {
                 msg.style.color = '#15803d';
-                msg.innerText = 'Saved.';
+                msg.innerText = 'Registration form saved.';
             }
+            window.__adminRegFieldRowsCache = fields;
         } else if (msg) {
             msg.style.color = '#b91c1c';
             msg.innerText = data.error || 'Save failed';
@@ -6468,8 +6603,127 @@ function cmsAddDoctorUpdateRow(prefill) {
     const a = wrap.querySelector('.cd-at');
     if (t) t.value = p.title || '';
     if (b) b.value = p.body || '';
-    if (a) a.value = p.at || '';
+        if (a) a.value = p.at || '';
     root.appendChild(wrap);
+}
+
+function cmsAddAboutRow(prefill) {
+    const root = document.getElementById('cms-about-rows');
+    if (!root) return;
+    const p = prefill || {};
+    const wrap = document.createElement('div');
+    wrap.className = 'cms-about-row';
+    wrap.style.cssText =
+        'margin-bottom:12px;padding:12px;border:1px solid #e2e8f0;border-radius:10px;background:#fafafa;';
+    wrap.innerHTML = `
+        <div><label style="font-size:0.8rem;">Heading</label><input class="ca-heading" type="text" style="width:100%" placeholder="About our foundation"></div>
+        <div style="margin-top:6px;"><label style="font-size:0.8rem;">Body</label><textarea class="ca-body" rows="3" style="width:100%"></textarea></div>
+        <div style="margin-top:8px;"><button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;background:#64748b;" onclick="this.closest('.cms-about-row').remove()">Remove</button></div>`;
+    wrap.className = 'cms-about-row';
+    wrap.querySelector('.ca-heading').value = p.heading || '';
+    wrap.querySelector('.ca-body').value = p.body || '';
+    root.appendChild(wrap);
+}
+
+function cmsCollectAboutFromDom() {
+    const root = document.getElementById('cms-about-rows');
+    if (!root) return [];
+    return Array.from(root.querySelectorAll('.cms-about-row'))
+        .map((row) => ({
+            heading: (row.querySelector('.ca-heading') || {}).value || '',
+            body: (row.querySelector('.ca-body') || {}).value || ''
+        }))
+        .filter((x) => x.heading || x.body);
+}
+
+function cmsFillAboutRows(items) {
+    const root = document.getElementById('cms-about-rows');
+    if (!root) return;
+    root.innerHTML = '';
+    (items || []).forEach((it) => cmsAddAboutRow(it));
+}
+
+function cmsAddSocialRow(prefill) {
+    const root = document.getElementById('cms-social-rows');
+    if (!root) return;
+    const p = prefill || {};
+    const wrap = document.createElement('div');
+    wrap.className = 'cms-social-row';
+    wrap.style.cssText =
+        'margin-bottom:12px;padding:12px;border:1px solid #e2e8f0;border-radius:10px;background:#fafafa;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;';
+    wrap.innerHTML = `
+        <div><label style="font-size:0.8rem;">Platform</label><select class="cs-platform" style="width:100%"><option value="youtube">youtube</option><option value="facebook">facebook</option><option value="instagram">instagram</option><option value="twitter">twitter</option><option value="linkedin">linkedin</option><option value="whatsapp">whatsapp</option><option value="link">link</option></select></div>
+        <div><label style="font-size:0.8rem;">Label</label><input class="cs-label" type="text" style="width:100%"></div>
+        <div><label style="font-size:0.8rem;">URL</label><input class="cs-url" type="url" style="width:100%"></div>
+        <div style="grid-column:1/-1;"><button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;background:#64748b;" onclick="this.closest('.cms-social-row').remove()">Remove</button></div>`;
+    const plat = wrap.querySelector('.cs-platform');
+    if (plat) plat.value = p.platform || 'link';
+    wrap.querySelector('.cs-label').value = p.label || '';
+    wrap.querySelector('.cs-url').value = p.url || '';
+    root.appendChild(wrap);
+}
+
+function cmsCollectSocialFromDom() {
+    const root = document.getElementById('cms-social-rows');
+    if (!root) return [];
+    return Array.from(root.querySelectorAll('.cms-social-row'))
+        .map((row) => ({
+            platform: (row.querySelector('.cs-platform') || {}).value || 'link',
+            label: (row.querySelector('.cs-label') || {}).value || '',
+            url: (row.querySelector('.cs-url') || {}).value || ''
+        }))
+        .filter((x) => x.url);
+}
+
+function cmsFillSocialRows(items) {
+    const root = document.getElementById('cms-social-rows');
+    if (!root) return;
+    root.innerHTML = '';
+    (items || []).forEach((it) => cmsAddSocialRow(it));
+}
+
+function cmsAddReviewRow(prefill) {
+    const root = document.getElementById('cms-review-rows');
+    if (!root) return;
+    const p = prefill || {};
+    const wrap = document.createElement('div');
+    wrap.className = 'cms-review-row';
+    wrap.style.cssText =
+        'margin-bottom:12px;padding:12px;border:1px solid #e2e8f0;border-radius:10px;background:#fafafa;';
+    wrap.innerHTML = `
+        <div style="display:grid;grid-template-columns:1fr 1fr 80px;gap:8px;">
+          <div><label style="font-size:0.8rem;">Name</label><input class="cr-name" type="text" style="width:100%"></div>
+          <div><label style="font-size:0.8rem;">Role</label><input class="cr-role" type="text" style="width:100%"></div>
+          <div><label style="font-size:0.8rem;">Rating</label><input class="cr-rating" type="number" min="1" max="5" value="5" style="width:100%"></div>
+        </div>
+        <div style="margin-top:6px;"><label style="font-size:0.8rem;">Quote</label><textarea class="cr-text" rows="2" style="width:100%"></textarea></div>
+        <div style="margin-top:8px;"><button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;background:#64748b;" onclick="this.closest('.cms-review-row').remove()">Remove</button></div>`;
+    wrap.querySelector('.cr-name').value = p.name || '';
+    wrap.querySelector('.cr-role').value = p.role || '';
+    wrap.querySelector('.cr-text').value = p.text || '';
+    const rt = wrap.querySelector('.cr-rating');
+    if (rt) rt.value = p.rating != null ? p.rating : 5;
+    root.appendChild(wrap);
+}
+
+function cmsCollectReviewsFromDom() {
+    const root = document.getElementById('cms-review-rows');
+    if (!root) return [];
+    return Array.from(root.querySelectorAll('.cms-review-row'))
+        .map((row) => ({
+            name: (row.querySelector('.cr-name') || {}).value || '',
+            role: (row.querySelector('.cr-role') || {}).value || '',
+            text: (row.querySelector('.cr-text') || {}).value || '',
+            rating: parseInt((row.querySelector('.cr-rating') || {}).value, 10) || 5
+        }))
+        .filter((x) => x.name || x.text);
+}
+
+function cmsFillReviewRows(items) {
+    const root = document.getElementById('cms-review-rows');
+    if (!root) return;
+    root.innerHTML = '';
+    (items || []).forEach((it) => cmsAddReviewRow(it));
 }
 
 async function cmsUploadRowPdf(btn, pathSelector) {
@@ -6832,15 +7086,12 @@ async function loadAdminSiteCms() {
         if (b) b.value = cms.bannerImage || '';
         const sl = document.getElementById('cms-slides');
         if (sl) sl.value = JSON.stringify(cms.slides || [], null, 2);
-        const rv = document.getElementById('cms-reviews');
-        if (rv) rv.value = JSON.stringify(cms.reviews || [], null, 2);
+        cmsFillReviewRows(cms.reviews || []);
         cmsFillScrollingRows(cms.scrollingAnnouncements || []);
         cmsFillPublicNoticeRows(cms.publicNotices || []);
         cmsFillDoctorRows(cms.doctorUpdates || []);
-        const ab = document.getElementById('cms-about-json');
-        if (ab) ab.value = JSON.stringify(cms.aboutSections || [], null, 2);
-        const soc = document.getElementById('cms-social-json');
-        if (soc) soc.value = JSON.stringify(cms.socialLinks || [], null, 2);
+        cmsFillAboutRows(cms.aboutSections || []);
+        cmsFillSocialRows(cms.socialLinks || []);
         cmsFillGalleryRows(cms.pastSeminarGallery || []);
         cmsApplyHeroFieldsToForm(cms);
         cmsFillSpeakerRows(cms.speakers || []);
@@ -6922,7 +7173,6 @@ async function saveAdminSiteCms() {
     const msg = document.getElementById('cms-save-msg');
     if (msg) msg.innerText = '';
     let slides;
-    let reviews;
     try {
         slides = cmsParseJsonArray((document.getElementById('cms-slides') || {}).value, 'Homepage slides');
     } catch (e) {
@@ -6932,29 +7182,10 @@ async function saveAdminSiteCms() {
         }
         return;
     }
-    try {
-        reviews = cmsParseJsonArray((document.getElementById('cms-reviews') || {}).value, 'Homepage reviews');
-    } catch (e) {
-        if (msg) {
-            msg.style.color = '#b91c1c';
-            msg.innerText = e.message || String(e);
-        }
-        return;
-    }
-    let aboutSections;
-    let socialLinks;
-    let pastSeminarGallery;
-    try {
-        aboutSections = cmsParseJsonArray((document.getElementById('cms-about-json') || {}).value, 'About sections');
-        socialLinks = cmsParseJsonArray((document.getElementById('cms-social-json') || {}).value, 'Social links');
-        pastSeminarGallery = cmsCollectGalleryFromDom();
-    } catch (e) {
-        if (msg) {
-            msg.style.color = '#b91c1c';
-            msg.innerText = e.message || String(e);
-        }
-        return;
-    }
+    const reviews = cmsCollectReviewsFromDom();
+    const aboutSections = cmsCollectAboutFromDom();
+    const socialLinks = cmsCollectSocialFromDom();
+    const pastSeminarGallery = cmsCollectGalleryFromDom();
     try {
         const cms = {
             tickerText: (document.getElementById('cms-ticker') || {}).value || '',
@@ -6979,7 +7210,7 @@ async function saveAdminSiteCms() {
         if (data.success) {
             if (msg) {
                 msg.style.color = '#15803d';
-                msg.innerText = 'Saved.';
+                msg.innerText = 'Website and portal content saved.';
             }
         } else if (msg) {
             msg.style.color = '#b91c1c';

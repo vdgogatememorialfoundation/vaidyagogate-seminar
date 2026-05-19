@@ -76,8 +76,15 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ channel, destination: dest, purpose: 'signup' })
         });
-        const data = await res.json();
-        if (!res.ok) return alert(data.error || 'Could not send code.');
+        const readJson = window.HttpJson ? window.HttpJson.readJsonResponse : null;
+        const errMsg = window.HttpJson ? window.HttpJson.apiErrorMessage : null;
+        const parsed = readJson ? await readJson(res) : { data: await res.json(), parseFailed: false };
+        const data = parsed.data;
+        if (parsed.parseFailed || !res.ok) {
+            return alert(
+                errMsg ? errMsg(res, data, parsed.parseFailed) : data.error || 'Could not send code.'
+            );
+        }
         if (window.OtpUi) window.OtpUi.notifyOtpSent(channel, data);
         else alert('OTP sent successfully to your ' + (channel === 'email' ? 'email' : 'WhatsApp') + '.');
     }
@@ -97,8 +104,17 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ channel, destination: dest, code, purpose: 'signup' })
         });
-        const data = await res.json();
-        if (!res.ok) return alert(data.error || 'Invalid code.');
+        const readJson = window.HttpJson ? window.HttpJson.readJsonResponse : null;
+        const errMsg = window.HttpJson ? window.HttpJson.apiErrorMessage : null;
+        const parsed = readJson ? await readJson(res) : { data: await res.json(), parseFailed: false };
+        const data = parsed.data;
+        if (parsed.parseFailed || !res.ok) {
+            return alert(
+                parsed.parseFailed
+                    ? errMsg(res, data, true)
+                    : data.error || 'Invalid code.'
+            );
+        }
         if (channel === 'email') signupEmailOtpToken = data.token;
         else signupPhoneOtpToken = data.token;
         if (okEl) okEl.textContent = 'Verified';
@@ -122,6 +138,11 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email, password: password || '' })
         });
+        if (window.HttpJson) {
+            const { data, parseFailed } = await window.HttpJson.readJsonResponse(res);
+            if (parseFailed) throw new Error('account-check-parse');
+            return { ok: res.ok, ...data };
+        }
         return { ok: res.ok, ...(await res.json()) };
     }
 
@@ -196,7 +217,23 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
             });
-            const data = await res.json();
+            let data = {};
+            let parseFailed = false;
+            if (window.HttpJson) {
+                const parsed = await window.HttpJson.readJsonResponse(res);
+                data = parsed.data;
+                parseFailed = parsed.parseFailed;
+            } else {
+                data = await res.json();
+            }
+            if (parseFailed) {
+                const msg = window.HttpJson.apiErrorMessage(res, data, true);
+                if (errEl) {
+                    errEl.textContent = msg;
+                    errEl.classList.remove('hidden');
+                } else alert(msg);
+                return;
+            }
             if (data.success) {
                 signupPhoneOtpToken = null;
                 signupEmailOtpToken = null;
@@ -213,10 +250,13 @@
                 switchDoctorAuthTab('login');
                 return;
             }
+            const failMsg =
+                data.error ||
+                (window.HttpJson ? window.HttpJson.apiErrorMessage(res, data, false) : 'Signup failed');
             if (errEl) {
-                errEl.textContent = data.error || 'Signup failed';
+                errEl.textContent = failMsg;
                 errEl.classList.remove('hidden');
-            } else alert(data.error || 'Signup failed');
+            } else alert(failMsg);
         } catch (err) {
             console.error(err);
             alert('Network error.');

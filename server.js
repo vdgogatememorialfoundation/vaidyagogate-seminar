@@ -2772,6 +2772,7 @@ function requireAdminSensitiveOtpIfEnabled(actorAdminId, phoneTok, emailTok, nex
 }
 
 app.post('/api/auth/signup', (req, res) => {
+    const runSignup = () => {
     const { firstName, lastName, email, phone, password, role, phoneOtpToken, emailOtpToken } = req.body;
     const emailV = contactValidation.validateEmail(email);
     if (!emailV.valid) {
@@ -2895,6 +2896,18 @@ app.post('/api/auth/signup', (req, res) => {
         }
         insertUser();
     });
+    };
+
+    if (pgDb && typeof pgDb.ensureAuxiliaryTables === 'function') {
+        return pgDb
+            .ensureAuxiliaryTables()
+            .then(() => runSignup())
+            .catch((e) => {
+                console.warn('[signup] ensureAuxiliaryTables:', e.message);
+                runSignup();
+            });
+    }
+    runSignup();
 });
 
 // 2. Auth: Login (optional phone + email OTP when messaging is configured)

@@ -222,7 +222,7 @@
                     </div>
                     <div class="card" style="margin-bottom: 0;">
                         <h4 style="color: #64748b;">Total Revenue</h4>
-                        <h2 id="stat-revenue" style="color: #3b82f6;">â‚¹0</h2>
+                        <h2 id="stat-revenue" style="color: #3b82f6;">&#8377;0</h2>
                     </div>
                     <div class="card" style="margin-bottom: 0;">
                         <h4 style="color: #64748b;">Seats</h4>
@@ -515,10 +515,11 @@
                 <p style="color:#64748b;margin-bottom:16px;">Toggle which fields appear for doctors and whether each is required. Changes apply to new submissions and edits.</p>
                     <div class="card">
                     <table class="data-table">
-                        <thead><tr><th>Field key</th><th>Label (shown to doctor)</th><th>Enabled</th><th>Required</th></tr></thead>
+                        <thead><tr><th>Field key</th><th>Label (shown to doctor)</th><th>Type</th><th>Step</th><th>Enabled</th><th>Required</th><th></th></tr></thead>
                         <tbody id="admin-reg-fields-tbody"></tbody>
                     </table>
-                    <button type="button" class="btn-primary" style="margin-top:16px;" onclick="saveAdminRegistrationFormConfig()">Save registration form</button>
+                    <button type="button" class="btn-primary" style="margin-top:10px;background:#0d9488;" onclick="adminAddRegistrationFieldRow()">+ Add field</button>
+                    <button type="button" class="btn-primary" style="margin-top:16px;margin-left:8px;" onclick="saveAdminRegistrationFormConfig()">Save registration form</button>
                     <p id="admin-reg-form-msg" style="margin-top:10px;font-weight:600;"></p>
                             </div>
                             </div>
@@ -630,8 +631,8 @@
                     </div>
                     <div style="margin-top:14px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
                         <input type="file" id="cms-file-picker" style="max-width:220px;">
-                        <button type="button" class="btn-primary" onclick="cmsApplyUploadedPath('cms-banner')">Upload â†’ banner field</button>
-                        <button type="button" class="btn-primary" style="background:#0d9488;" onclick="cmsApplyUploadedPath('cms-hero-image')">Upload â†’ hero image</button>
+                        <button type="button" class="btn-primary" onclick="cmsApplyUploadedPath('cms-banner')">Upload &rarr; banner field</button>
+                        <button type="button" class="btn-primary" style="background:#0d9488;" onclick="cmsApplyUploadedPath('cms-hero-image')">Upload &rarr; hero image</button>
             </div>
 
                     <div style="margin-top:22px;padding-top:16px;border-top:1px solid #e2e8f0;">
@@ -687,9 +688,24 @@
                         <div id="cms-gallery-rows"></div>
                         <button type="button" class="btn-primary" style="margin-top:8px;padding:8px 14px;font-size:0.9rem;background:#0d9488;" onclick="cmsAddGalleryRow()">+ Add gallery photo</button>
                     </div>
-                    <div style="margin-top:14px;"><label>About us (JSON: heading, body)</label><textarea id="cms-about-json" rows="5"></textarea></div>
-                    <div style="margin-top:14px;"><label>Social links (JSON: platform, label, url)</label><textarea id="cms-social-json" rows="4"></textarea></div>
-                    <div style="margin-top:14px;"><label>Homepage reviews / testimonials (JSON)</label><textarea id="cms-reviews" rows="5"></textarea></div>
+                    <div style="margin-top:22px;padding-top:16px;border-top:1px solid #e2e8f0;">
+                        <label style="font-weight:700;">About us</label>
+                        <p style="color:#64748b;font-size:0.88rem;margin:6px 0 10px;">Sections on the public homepage About area (heading + body).</p>
+                        <div id="cms-about-rows"></div>
+                        <button type="button" class="btn-primary" style="margin-top:8px;padding:8px 14px;font-size:0.9rem;background:#0d9488;" onclick="cmsAddAboutRow()">+ Add section</button>
+                    </div>
+                    <div style="margin-top:22px;padding-top:16px;border-top:1px solid #e2e8f0;">
+                        <label style="font-weight:700;">Social links</label>
+                        <p style="color:#64748b;font-size:0.88rem;margin:6px 0 10px;">YouTube, Facebook, Instagram, etc.</p>
+                        <div id="cms-social-rows"></div>
+                        <button type="button" class="btn-primary" style="margin-top:8px;padding:8px 14px;font-size:0.9rem;background:#0d9488;" onclick="cmsAddSocialRow()">+ Add link</button>
+                    </div>
+                    <div style="margin-top:22px;padding-top:16px;border-top:1px solid #e2e8f0;">
+                        <label style="font-weight:700;">Homepage reviews / testimonials</label>
+                        <p style="color:#64748b;font-size:0.88rem;margin:6px 0 10px;">Name, role, quote, and star rating (1-5).</p>
+                        <div id="cms-review-rows"></div>
+                        <button type="button" class="btn-primary" style="margin-top:8px;padding:8px 14px;font-size:0.9rem;background:#0d9488;" onclick="cmsAddReviewRow()">+ Add review</button>
+                    </div>
                     <button type="button" class="btn-primary" style="margin-top:16px;" onclick="saveAdminSiteCms()">Save website &amp; portal content</button>
                     <p id="cms-save-msg" style="margin-top:10px;font-weight:600;"></p>
                 </div>
@@ -717,9 +733,9 @@
                     <div id="co-lookup-result" style="margin-top:12px;font-size:0.9rem;"></div>
                     <div id="co-pay-panel" class="hidden" style="margin-top:14px;padding-top:14px;border-top:1px solid #cbd5e1;">
                         <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;max-width:900px;">
-                            <div><label>Fee (â‚¹)</label><input type="number" id="co-amount" step="0.01" style="width:100%;padding:8px;"></div>
-                            <div><label>Discount (â‚¹)</label><input type="number" id="co-discount" step="0.01" value="0" style="width:100%;padding:8px;" oninput="updateCoFinalAmount()"></div>
-                            <div><label>Payable (â‚¹)</label><input type="number" id="co-final" step="0.01" readonly style="width:100%;padding:8px;background:#f8fafc;"></div>
+                            <div><label>Fee (&#8377;)</label><input type="number" id="co-amount" step="0.01" style="width:100%;padding:8px;"></div>
+                            <div><label>Discount (&#8377;)</label><input type="number" id="co-discount" step="0.01" value="0" style="width:100%;padding:8px;" oninput="updateCoFinalAmount()"></div>
+                            <div><label>Payable (&#8377;)</label><input type="number" id="co-final" step="0.01" readonly style="width:100%;padding:8px;background:#f8fafc;"></div>
                             <div><label>Payment method</label><select id="co-method" style="width:100%;padding:8px;"></select></div>
                         </div>
                         <div id="co-qr-block" class="hidden" style="margin-top:12px;text-align:center;"><img id="co-qr-img" alt="QR" style="max-width:220px;"><p id="co-qr-amount" style="font-weight:600;"></p></div>
@@ -1167,7 +1183,7 @@
                 <div class="card" style="margin-top: 20px;">
                     <h3><i class="fas fa-plug"></i> Email, WhatsApp &amp; live site URL</h3>
                     <p style="color:#64748b;font-size:0.9rem;margin-bottom:16px;">Saved in the database and applied immediately. Leave password/token blank to keep existing values.</p>
-                    <p style="font-size:0.85rem;margin-bottom:12px;padding:10px 12px;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe;"><strong>Homepage venue</strong> (e.g. Convention Centre, Pune): <a href="#" onclick="switchTab('tab-site-cms');loadAdminSiteCms();return false;">Website &amp; doctor updates</a> â†’ <em>Venue line</em> + <em>Contact address</em>, then Save CMS.</p>
+                    <p style="font-size:0.85rem;margin-bottom:12px;padding:10px 12px;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe;"><strong>Homepage venue</strong> (e.g. Convention Centre, Pune): <a href="#" onclick="switchTab('tab-site-cms');loadAdminSiteCms();return false;">Website &amp; doctor updates</a> &rarr; <em>Venue line</em> + <em>Contact address</em>, then click <strong>Save website &amp; portal content</strong>.</p>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
                         <p style="font-size:0.85rem;margin-bottom:12px;padding:10px 12px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0;"><strong>Wix + subdomains:</strong> Main site on Wix; point seminar, admin, judge DNS to your VPS. See deploy/WIX-DNS.md</p>
                         <div><label>Seminar portal URL</label><input type="url" id="int-public-base-url" placeholder="https://seminar.vaidyagogate.org" style="width:100%"></div>
@@ -1198,7 +1214,7 @@
 
                         <div><label>Webhook verify token</label><input type="text" id="int-wa-verify" placeholder="e.g. vgmf_whatsapp_verify_2026 — must match Meta exactly" style="width:100%" autocomplete="off" spellcheck="false"></div>
                         <p style="font-size:0.78rem;color:#64748b;margin:4px 0 0;grid-column:1/-1;">Must match Meta exactly. Save integrations, then use Check webhook.</p>
-                        <div><label>Template language</label><input type="text" id="int-wa-lang" placeholder="en (English in Meta)" style="width:100%"></div>
+                        <div><label>Default WhatsApp template language (Meta code)</label><input type="text" id="int-wa-lang" placeholder="en (English in Meta)" style="width:100%"></div>
                         <div style="grid-column:1/-1;"><h4 style="margin:12px 0 8px;color:#0c4a6e;">OTP notifications (email + WhatsApp)</h4>
                         <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px;">Updates <code>OTP_VERIFICATION</code> for login/signup. Template name must match Meta (e.g. <code>vgmf_otp_auth</code>).</p></div>
                         <div><label>WhatsApp OTP template name</label><input type="text" id="int-wa-otp-template" placeholder="vgmf_otp_auth" style="width:100%"></div>
@@ -1208,7 +1224,7 @@
                             <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px;">Map each notification event to a Meta template name and language (e.g. <code>en</code>). Body text is edited under Notifications.</p>
                             <div style="overflow-x:auto;max-height:320px;border:1px solid #e2e8f0;border-radius:8px;">
                                 <table class="data-table" style="width:100%;font-size:0.85rem;">
-                                    <thead><tr><th>Event</th><th>Channel</th><th>Meta template name</th><th>Lang</th></tr></thead>
+                                    <thead><tr><th>Event</th><th>Channel</th><th>Meta template name</th><th>Meta lang</th></tr></thead>
                                     <tbody id="wa-event-templates-tbody"><tr><td colspan="4">Loading…</td></tr></tbody>
                                 </table>
                             </div>
@@ -1300,6 +1316,7 @@
                     <button type="button" class="btn-primary" style="background:#b91c1c;" onclick="saveKillSwitchSettings()">Save maintenance / kill switch</button>
                     <button type="button" class="btn-primary" style="background:#0d9488;" onclick="savePaymentGatewaysSettings()">Save payment gateways</button>
                 </div>
+                <p id="admin-settings-save-msg" style="margin-top:12px;font-weight:600;font-size:0.9rem;"></p>
             </div>
             
         </main>
@@ -1363,8 +1380,8 @@
                 </div>
                 <p style="font-size: 0.85rem; color: #64748b; margin-top: 4px; background: #f0f4ff; padding: 10px; border-radius: 4px;">
                     Each role signs in at its own URL:
-                    <strong>Doctor</strong> â†’ /doctor.html Â· <strong>Judge/Reviewer</strong> â†’ /judge.html Â·
-                    <strong>Scanner</strong> â†’ /scanner.html Â· <strong>Co-admin</strong> â†’ /admin.html
+                    <strong>Doctor</strong> &rarr; /doctor.html &middot; <strong>Judge/Reviewer</strong> &rarr; /judge.html &middot;
+                    <strong>Scanner</strong> &rarr; /scanner.html &middot; <strong>Co-admin</strong> &rarr; /admin.html
                 </p>
                 <div id="newuser-admin-otp-wrap" style="display:none;padding:12px;border:1px solid #fed7aa;border-radius:8px;background:#fffbeb;margin-top:8px;">
                     <strong style="display:block;margin-bottom:8px;color:#9a3412;font-size:0.9rem;">Confirm it is you (email + WhatsApp)</strong>
@@ -1407,7 +1424,7 @@
                     <div><label>Capacity</label><input type="number" id="seminar-capacity" required></div>
                 </div>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                    <div><label>Price (â‚¹)</label><input type="number" id="seminar-price" step="0.01" value="0" required></div>
+                    <div><label>Price (&#8377;)</label><input type="number" id="seminar-price" step="0.01" value="0" required></div>
                     <div><label>Is Active?</label><select id="seminar-active"><option value="1">Yes</option><option value="0">No</option></select></div>
                 </div>
                 <div><label>Google Maps Embed URL</label><input type="text" id="seminar-location-url" placeholder="https://www.google.com/maps/embed?..."></div>
@@ -1452,6 +1469,15 @@
                             <tbody id="seminar-reg-override-tbody"></tbody>
                         </table>
                         <p id="seminar-form-preview" style="margin-top:10px;font-size:0.88rem;color:#334155;background:#f8fafc;padding:10px;border-radius:6px;"></p>
+                    </div>
+                    <div style="margin-top:14px;padding:12px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;">
+                        <label style="font-weight:600;">Additional fields (this seminar only)</label>
+                        <p style="font-size:0.82rem;color:#64748b;margin:6px 0 10px;">Extra questions on this seminar application only.</p>
+                        <table class="data-table" style="font-size:0.88rem;">
+                            <thead><tr><th>Key</th><th>Label</th><th>Type</th><th>Step</th><th>On</th><th>Req</th><th></th></tr></thead>
+                            <tbody id="seminar-extra-fields-tbody"></tbody>
+                        </table>
+                        <button type="button" class="btn-primary" style="margin-top:8px;padding:4px 12px;font-size:0.82rem;background:#0d9488;" onclick="addSeminarExtraFieldRow()">+ Add field</button>
                     </div>
                     <textarea id="seminar-reg-form-json" class="hidden" aria-hidden="true"></textarea>
                 </div>
