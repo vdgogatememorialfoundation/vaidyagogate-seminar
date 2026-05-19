@@ -2993,7 +2993,7 @@ app.post('/api/auth/signup', (req, res) => {
 });
 
 // 2. Auth: Login (optional phone + email OTP when messaging is configured)
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', withAuxiliaryTables, (req, res) => {
     const { email, password, phoneOtpToken, emailOtpToken } = req.body;
     if (!email || password === undefined || password === null) {
         return res.status(400).json({ error: 'Email and password are required' });

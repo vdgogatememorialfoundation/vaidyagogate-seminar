@@ -310,11 +310,14 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(body)
                 });
-                let data = {};
-                try {
-                    data = await res.json();
-                } catch (_) {
-                    data = {};
+                const { data, parseFailed } = await readApiJson(res);
+                if (parseFailed && !res.ok) {
+                    const msg =
+                        global.HttpJson &&
+                        global.HttpJson.apiErrorMessage(res, data, true);
+                    if (opts.onError) opts.onError(msg || 'Could not sign in.');
+                    else alert(msg || 'Could not sign in.');
+                    return;
                 }
                 if (res.status === 403 && data.needsEmailVerification) {
                     const again = confirm(

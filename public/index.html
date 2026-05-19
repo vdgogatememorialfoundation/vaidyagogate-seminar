@@ -1155,11 +1155,9 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body)
             });
-            let data = {};
-            try {
-                data = await res.json();
-            } catch (_) {
-                data = {};
+            const { data, parseFailed } = await readIndexApiJson(res);
+            if (parseFailed && !res.ok) {
+                return alert(indexApiError(res, data, parseFailed));
             }
             if (res.status === 403 && data.needsEmailVerification) {
                 const again = confirm(
