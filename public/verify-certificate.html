@@ -35,14 +35,32 @@
         .cv-otp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         @media (max-width: 480px) { .cv-otp-grid { grid-template-columns: 1fr; } }
         .cv-back { display: inline-block; margin-bottom: 16px; color: #0f766e; text-decoration: none; font-weight: 600; font-size: 0.9rem; }
+        .cv-countdown { text-align: center; padding: 16px 0; }
+        .cv-countdown-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
+        .cv-countdown-grid .box { background: #ecfdf5; border-radius: 8px; padding: 10px 6px; }
+        .cv-countdown-grid h2 { margin: 0; font-size: 1.4rem; color: #0f766e; }
+        .cv-countdown-grid span { font-size: 0.65rem; color: #166534; font-weight: 700; }
     </style>
 </head>
-<body>
+<body oncontextmenu="return false;">
     <div class="cv-wrap">
         <a href="/" class="cv-back"><i class="fas fa-arrow-left"></i> Back to seminar portal</a>
         <div class="cv-card">
             <h1><i class="fas fa-certificate"></i> Verify certificate</h1>
-            <p class="cv-lead">Confirm that a VGMF seminar certificate is genuine. Verification is available only after the seminar ends and the foundation has enabled it for that event.</p>
+            <p class="cv-lead">Confirm that a Vaidya Gogate Memorial Foundation seminar certificate is genuine. Verification is available only after the seminar ends and the foundation has enabled it for that event.</p>
+
+            <div id="cv-step-countdown" class="cv-step">
+                <div class="cv-countdown">
+                    <p id="cv-countdown-label" style="font-size:0.88rem;color:#57534e;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;">Certificate verification opens in</p>
+                    <p id="cv-countdown-seminar" style="margin:8px 0 0;font-weight:600;color:#0f766e;"></p>
+                    <div class="cv-countdown-grid">
+                        <div class="box"><h2 class="cv-cd-d">00</h2><span>DAYS</span></div>
+                        <div class="box"><h2 class="cv-cd-h">00</h2><span>HOURS</span></div>
+                        <div class="box"><h2 class="cv-cd-m">00</h2><span>MINUTES</span></div>
+                        <div class="box"><h2 class="cv-cd-s">00</h2><span>SECONDS</span></div>
+                    </div>
+                </div>
+            </div>
 
             <div id="cv-step-lookup" class="cv-step active">
                 <div class="cv-field">
@@ -50,12 +68,12 @@
                     <select id="cv-seminar"><option value="">Loading seminars…</option></select>
                 </div>
                 <div class="cv-field">
-                    <label for="cv-application">Application No.</label>
+                    <label for="cv-application">Application number</label>
                     <input type="text" id="cv-application" inputmode="numeric" placeholder="12-digit application number" maxlength="12">
                 </div>
                 <div class="cv-field">
-                    <label for="cv-prn">PRN No. (portal Doctor ID)</label>
-                    <input type="text" id="cv-prn" placeholder="e.g. USR_XXXXX" autocomplete="off">
+                    <label for="cv-prn">Portal registration number (doctor identifier)</label>
+                    <input type="text" id="cv-prn" placeholder="Portal doctor identifier" autocomplete="off">
                 </div>
                 <p style="font-size:0.82rem;color:#64748b;margin:0 0 12px;">Or open this page by scanning the QR code on the certificate.</p>
                 <button type="button" class="cv-btn cv-btn-primary" id="cv-lookup-btn">Continue</button>
@@ -64,18 +82,18 @@
 
             <div id="cv-step-otp" class="cv-step">
                 <p class="cv-lead" id="cv-otp-hint"></p>
-                <p style="font-size:0.88rem;color:#64748b;">Enter both OTP codes sent to the certificate holder.</p>
+                <p style="font-size:0.88rem;color:#64748b;">Enter both one-time password codes sent to the certificate holder.</p>
                 <div class="cv-otp-grid">
                     <div class="cv-field">
-                        <label for="cv-email-otp">Email OTP</label>
+                        <label for="cv-email-otp">Email one-time password</label>
                         <input type="text" id="cv-email-otp" inputmode="numeric" maxlength="8" autocomplete="one-time-code">
                     </div>
                     <div class="cv-field">
-                        <label for="cv-phone-otp">WhatsApp OTP</label>
+                        <label for="cv-phone-otp">WhatsApp one-time password</label>
                         <input type="text" id="cv-phone-otp" inputmode="numeric" maxlength="8" autocomplete="one-time-code">
                     </div>
                 </div>
-                <button type="button" class="cv-btn cv-btn-primary" id="cv-send-otp-btn">Send OTP to certificate holder</button>
+                <button type="button" class="cv-btn cv-btn-primary" id="cv-send-otp-btn">Send one-time passwords to certificate holder</button>
                 <button type="button" class="cv-btn cv-btn-primary" id="cv-confirm-btn" style="display:none;">Verify certificate</button>
                 <button type="button" class="cv-btn cv-btn-secondary" id="cv-back-lookup-btn">Back</button>
                 <div id="cv-otp-msg" class="cv-msg" style="display:none;"></div>
@@ -93,6 +111,6 @@
         </div>
     </div>
     <script src="/js/verify-certificate.js"></script>
+    <script>document.addEventListener('contextmenu',function(e){e.preventDefault();});</script>
 </body>
 </html>
-

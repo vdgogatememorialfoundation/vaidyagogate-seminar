@@ -7,7 +7,9 @@
         certId: null,
         maskedEmail: '',
         maskedPhone: '',
-        displayName: ''
+        displayName: '',
+        schedule: [],
+        countdownTimer: null
     };
 
     function qs(name) {
@@ -34,6 +36,82 @@
             prn: state.prn || undefined,
             token: state.token || undefined
         };
+    }
+
+    function pad2(n) {
+        return String(n).padStart(2, '0');
+    }
+
+    function tickCountdown(opensAt, labelEl, seminarEl, onDone) {
+        const dist = new Date(opensAt).getTime() - Date.now();
+        if (dist <= 0) {
+            if (onDone) onDone();
+            return;
+        }
+        if (labelEl) labelEl.textContent = 'Certificate verification opens in';
+        const d = Math.floor(dist / (1000 * 60 * 60 * 24));
+        const h = Math.floor((dist % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const m = Math.floor((dist % (1000 * 60 * 60)) / (1000 * 60));
+        const s = Math.floor((dist % (1000 * 60)) / 1000);
+        const root = document.getElementById('cv-step-countdown');
+        if (root) {
+            const dd = root.querySelector('.cv-cd-d');
+            const hh = root.querySelector('.cv-cd-h');
+            const mm = root.querySelector('.cv-cd-m');
+            const ss = root.querySelector('.cv-cd-s');
+            if (dd) dd.textContent = pad2(d);
+            if (hh) hh.textContent = pad2(h);
+            if (mm) mm.textContent = pad2(m);
+            if (ss) ss.textContent = pad2(s);
+        }
+        if (seminarEl && state.schedule.length) {
+            const item = state.schedule.find((x) => x.countdown && x.countdown.opensAt === opensAt);
+            if (item) seminarEl.textContent = item.title || '';
+        }
+    }
+
+    function refreshCountdownUi() {
+        const pending = (state.schedule || []).filter((x) => x.countdown && !x.live);
+        const live = (state.schedule || []).filter((x) => x.live);
+        if (!pending.length && live.length) {
+            showStep('cv-step-lookup');
+            loadSeminars();
+            return;
+        }
+        if (pending.length) {
+            const first = pending[0];
+            const opensAt = first.countdown.opensAt;
+            const labelEl = document.getElementById('cv-countdown-label');
+            const seminarEl = document.getElementById('cv-countdown-seminar');
+            if (first.countdown.label && labelEl) labelEl.textContent = first.countdown.label;
+            if (seminarEl) seminarEl.textContent = first.title || '';
+            showStep('cv-step-countdown');
+            if (state.countdownTimer) clearInterval(state.countdownTimer);
+            tickCountdown(opensAt, labelEl, seminarEl, () => {
+                loadSchedule().then(() => refreshCountdownUi());
+            });
+            state.countdownTimer = setInterval(() => {
+                tickCountdown(opensAt, labelEl, seminarEl, () => {
+                    clearInterval(state.countdownTimer);
+                    loadSchedule().then(() => refreshCountdownUi());
+                });
+            }, 1000);
+            return;
+        }
+        showStep('cv-step-lookup');
+        loadSeminars();
+    }
+
+    async function loadSchedule() {
+        try {
+            const res = await fetch('/api/public/certificate-verify/schedule');
+            const list = await res.json();
+            if (!res.ok) throw new Error(list.error || 'Could not load schedule');
+            state.schedule = Array.isArray(list) ? list : [];
+        } catch (e) {
+            console.error(e);
+            state.schedule = [];
+        }
     }
 
     async function loadSeminars() {
@@ -70,7 +148,7 @@
             return;
         }
         if (!state.token && !state.applicationNo && !state.prn) {
-            showMsg(msg, 'Enter Application No., PRN No., or scan the certificate QR code.', 'err');
+            showMsg(msg, 'Enter application number, portal registration number, or scan the certificate QR code.', 'err');
             return;
         }
         if (btn) btn.disabled = true;
@@ -107,7 +185,7 @@
                 hint.textContent =
                     'Certificate found for ' +
                     (data.displayName || 'participant') +
-                    '. OTP will be sent to ' +
+                    '. One-time passwords will be sent to ' +
                     state.maskedEmail +
                     ' and WhatsApp ' +
                     state.maskedPhone +
@@ -129,7 +207,7 @@
         const sendBtn = document.getElementById('cv-send-otp-btn');
         const confirmBtn = document.getElementById('cv-confirm-btn');
         if (sendBtn) sendBtn.disabled = true;
-        showMsg(msg, 'Sending OTP codes…', 'info');
+        showMsg(msg, 'Sending one-time password codes…', 'info');
         try {
             const res = await fetch('/api/public/certificate-verify/otp/send-both', {
                 method: 'POST',
@@ -137,10 +215,10 @@
                 body: JSON.stringify(lookupPayload())
             });
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Could not send OTP');
+            if (!res.ok) throw new Error(data.error || 'Could not send one-time passwords');
             showMsg(
                 msg,
-                'OTP sent to ' +
+                'One-time passwords sent to ' +
                     (data.maskedEmail || state.maskedEmail) +
                     ' and ' +
                     (data.maskedPhone || state.maskedPhone) +
@@ -162,7 +240,7 @@
         const emailCode = String(document.getElementById('cv-email-otp')?.value || '').trim();
         const phoneCode = String(document.getElementById('cv-phone-otp')?.value || '').trim();
         if (!emailCode || !phoneCode) {
-            showMsg(msg, 'Enter both email and WhatsApp OTP codes.', 'err');
+            showMsg(msg, 'Enter both email and WhatsApp one-time password codes.', 'err');
             return;
         }
         const btn = document.getElementById('cv-confirm-btn');
@@ -190,10 +268,10 @@
                     '<dt>Seminar</dt><dd>' +
                     escapeHtml(data.seminarTitle || '') +
                     '</dd>' +
-                    '<dt>Application No.</dt><dd>' +
+                    '<dt>Application number</dt><dd>' +
                     escapeHtml(data.applicationNo || state.applicationNo) +
                     '</dd>' +
-                    '<dt>PRN No.</dt><dd>' +
+                    '<dt>Portal registration number</dt><dd>' +
                     escapeHtml(data.prn || state.prn) +
                     '</dd>';
             }
@@ -222,14 +300,17 @@
         document.getElementById('cv-phone-otp').value = '';
         document.getElementById('cv-send-otp-btn').style.display = 'block';
         document.getElementById('cv-confirm-btn').style.display = 'none';
-        showStep('cv-step-lookup');
+        refreshCountdownUi();
     }
 
     document.addEventListener('DOMContentLoaded', () => {
         state.token = qs('t');
-        loadSeminars().then(() => {
+        loadSchedule().then(() => {
             if (state.token) {
+                showStep('cv-step-lookup');
                 doLookup();
+            } else {
+                refreshCountdownUi();
             }
         });
         document.getElementById('cv-lookup-btn')?.addEventListener('click', doLookup);

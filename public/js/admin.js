@@ -1727,23 +1727,42 @@ async function loadCertVerifySettings() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Could not load');
         cb.checked = !!data.enabled;
-        cb.disabled = !data.seminarEnded;
-        if (!data.seminarEnded) {
+        cb.disabled = false;
+        const manualEl = document.getElementById('cert-verify-manual');
+        const goLiveEl = document.getElementById('cert-verify-go-live');
+        if (manualEl) manualEl.checked = !!data.manualOverride;
+        if (goLiveEl && data.goLiveAt) {
+            const d = new Date(data.goLiveAt);
+            if (!Number.isNaN(d.getTime())) {
+                goLiveEl.value = d.toISOString().slice(0, 16);
+            }
+        } else if (goLiveEl) {
+            goLiveEl.value = '';
+        }
+        if (!data.seminarEnded && !data.manualOverride && !data.goLiveAt) {
             status.style.color = '#b45309';
             status.textContent =
-                'Public verification can be enabled only after the seminar has ended (event date: ' +
+                'Seminar has not ended yet (event date: ' +
                 (data.eventDate || '—') +
-                ').';
-        } else if (data.enabled) {
+                '). Check manual override or set a scheduled opening time, then save.';
+        } else if (data.enabled && data.publicLive) {
             status.style.color = '#15803d';
             status.textContent =
-                'Public verify page is ON for “' +
+                'Public verification is live for “' +
                 (data.title || 'this seminar') +
                 '”. Visitors can verify at /verify-certificate.html';
+        } else if (data.enabled && data.countdown) {
+            status.style.color = '#0369a1';
+            status.textContent =
+                'Verification is scheduled. Opens ' +
+                new Date(data.countdown.at || data.goLiveAt).toLocaleString() +
+                '.';
+        } else if (data.enabled) {
+            status.style.color = '#64748b';
+            status.textContent = 'Verification is enabled but not yet open to the public.';
         } else {
             status.style.color = '#64748b';
-            status.textContent =
-                'Seminar has ended. Enable verification when certificates are ready to publish.';
+            status.textContent = 'Enable verification when certificates are ready to publish.';
         }
     } catch (e) {
         status.style.color = '#b91c1c';
@@ -1758,12 +1777,15 @@ async function saveCertVerifyEnabled() {
     const status = document.getElementById('cert-verify-status');
     if (!sid || !cb) return;
     const enabled = !!cb.checked;
+    const manualOverride = !!(document.getElementById('cert-verify-manual') || {}).checked;
+    const goLiveRaw = (document.getElementById('cert-verify-go-live') || {}).value || '';
+    const goLiveAt = goLiveRaw ? new Date(goLiveRaw).toISOString() : null;
     if (status) status.textContent = 'Saving…';
     try {
         const res = await fetch(`/api/admin/seminars/${encodeURIComponent(sid)}/certificate-verify`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ enabled })
+            body: JSON.stringify({ enabled, manualOverride, goLiveAt })
         });
         const data = await res.json();
         if (!res.ok) {
@@ -1834,6 +1856,8 @@ function readCertConfigFromForm() {
         sigLeftTitle: document.getElementById('cert-cfg-sig-l')?.value || '',
         sigRightName: document.getElementById('cert-cfg-sig-rn')?.value || '',
         sigRightTitle: document.getElementById('cert-cfg-sig-rt')?.value || '',
+        sigLeftImagePath: window.__certSigLeftPath || '',
+        sigRightImagePath: window.__certSigRightPath || '',
         goldColor: document.getElementById('cert-cfg-gold')?.value || '#c9a227',
         nameColor: document.getElementById('cert-cfg-name-color')?.value || '#c45c26',
         showFlame: !!document.getElementById('cert-cfg-flame')?.checked,
@@ -1867,6 +1891,39 @@ function fillCertConfigForm(cfg) {
     if (fl) fl.checked = c.showFlame !== false;
     if (sw) sw.checked = c.showSwooshes !== false;
     if (ho) ho.checked = c.autoHonorific !== false;
+    window.__certSigLeftPath = c.sigLeftImagePath || '';
+    window.__certSigRightPath = c.sigRightImagePath || '';
+    const lp = document.getElementById('cert-sig-left-preview');
+    const rp = document.getElementById('cert-sig-right-preview');
+    if (lp) lp.textContent = window.__certSigLeftPath ? 'Current: ' + window.__certSigLeftPath : 'No left signature image uploaded.';
+    if (rp) rp.textContent = window.__certSigRightPath ? 'Current: ' + window.__certSigRightPath : 'No right signature image uploaded.';
+}
+
+async function uploadCertSignatureImage(side) {
+    const sid = document.getElementById('cert-mgmt-seminar')?.value;
+    const certType = document.getElementById('cert-mgmt-type')?.value || 'participant';
+    const inputId = side === 'left' ? 'cert-sig-left-file' : 'cert-sig-right-file';
+    const fileInput = document.getElementById(inputId);
+    const admin = getStoredAdminUser();
+    if (!sid) return alert('Select a seminar');
+    if (!fileInput || !fileInput.files || !fileInput.files[0]) return alert('Choose an image file first');
+    const fd = new FormData();
+    fd.append('signatureFile', fileInput.files[0]);
+    fd.append('seminarId', sid);
+    fd.append('certType', certType);
+    fd.append('side', side);
+    if (admin && admin.id) fd.append('adminUserId', String(admin.id));
+    try {
+        const res = await fetch('/api/admin/certificates/signature-image', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Upload failed');
+        if (side === 'left') window.__certSigLeftPath = data.path;
+        else window.__certSigRightPath = data.path;
+        await loadCertTemplateConfig();
+        alert('Signature image uploaded.');
+    } catch (e) {
+        alert(e.message || 'Upload failed');
+    }
 }
 
 async function loadCertTemplateConfig() {
@@ -1885,6 +1942,8 @@ async function loadCertTemplateConfig() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Load failed');
         fillCertConfigForm(data.config);
+        if (data.signatureLeftPath) window.__certSigLeftPath = data.signatureLeftPath;
+        if (data.signatureRightPath) window.__certSigRightPath = data.signatureRightPath;
         if (msg) {
             msg.style.color = '#15803d';
             msg.textContent = data.templateId
@@ -6285,6 +6344,71 @@ async function sendAdminBulkEmail() {
 // ==================== SUPPORT TICKETS ====================
 let currentViewingTicketId = null;
 
+async function adminCreateSupportTicketForDoctor() {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) {
+        alert('Admin session expired. Please sign in again.');
+        return;
+    }
+    const msgEl = document.getElementById('admin-st-create-msg');
+    const targetUserId = parseInt((document.getElementById('admin-st-create-user-id') || {}).value, 10);
+    const subject = ((document.getElementById('admin-st-create-subject') || {}).value || '').trim();
+    const description = ((document.getElementById('admin-st-create-description') || {}).value || '').trim();
+    const category = (document.getElementById('admin-st-create-category') || {}).value || 'general';
+    if (msgEl) {
+        msgEl.style.color = '#64748b';
+        msgEl.textContent = '';
+    }
+    if (!Number.isInteger(targetUserId) || targetUserId < 1) {
+        if (msgEl) {
+            msgEl.style.color = '#b91c1c';
+            msgEl.textContent = 'Enter the doctor numeric user ID (from user details / registrations).';
+        }
+        return;
+    }
+    if (!subject || !description) {
+        if (msgEl) {
+            msgEl.style.color = '#b91c1c';
+            msgEl.textContent = 'Subject and message are required.';
+        }
+        return;
+    }
+    try {
+        const res = await fetch('/api/admin/support-ticket/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                actingAdminId: adm.id,
+                targetUserId,
+                category,
+                subject,
+                description
+            })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            if (msgEl) {
+                msgEl.style.color = '#b91c1c';
+                msgEl.textContent = data.error || 'Could not create ticket.';
+            }
+            return;
+        }
+        if (msgEl) {
+            msgEl.style.color = '#059669';
+            msgEl.textContent = 'Ticket created: ' + (data.ticketId || '');
+        }
+        const descEl = document.getElementById('admin-st-create-description');
+        if (descEl) descEl.value = '';
+        loadSupportTickets();
+    } catch (e) {
+        console.error(e);
+        if (msgEl) {
+            msgEl.style.color = '#b91c1c';
+            msgEl.textContent = 'Network error.';
+        }
+    }
+}
+
 async function loadSupportTickets() {
     try {
         const status = document.getElementById('ticket-status-filter').value;
@@ -6309,19 +6433,21 @@ async function loadSupportTickets() {
 
         tickets.forEach(t => {
             const created = new Date(t.created_at).toLocaleDateString();
+            const tid = t.ticket_id || t.tracking_id || '—';
+            const pri = (t.priority || 'medium').toUpperCase();
             const priorityColor = t.priority === 'urgent' ? '#ef4444' : (t.priority === 'high' ? '#f59e0b' : '#3b82f6');
             const statusBg = t.status === 'closed' ? '#cbd5e1' : (t.status === 'resolved' ? '#10b981' : '#fbbf24');
             
             tbody.innerHTML += `
                 <tr>
-                    <td><strong>${t.ticket_id}</strong></td>
+                    <td><strong>${escAdmin(tid)}</strong></td>
                     <td>${t.first_name} ${t.last_name}</td>
                     <td>${t.subject}</td>
                     <td>${t.category}</td>
-                    <td style="color: ${priorityColor}; font-weight: 600;">${t.priority.toUpperCase()}</td>
-                    <td style="background: ${statusBg}; padding: 5px; border-radius: 4px;">${t.status}</td>
+                    <td style="color: ${priorityColor}; font-weight: 600;">${pri}</td>
+                    <td style="background: ${statusBg}; padding: 5px; border-radius: 4px;">${escAdmin(t.status || '')}</td>
                     <td>${created}</td>
-                    <td><button class="btn-primary" style="padding: 5px 10px; font-size: 0.8rem;" onclick="viewSupportTicket('${t.ticket_id}')">View</button></td>
+                    <td><button class="btn-primary" style="padding: 5px 10px; font-size: 0.8rem;" onclick="viewSupportTicket('${escAdmin(tid).replace(/'/g, "\\'")}')">View</button></td>
                 </tr>
             `;
         });
@@ -6365,12 +6491,13 @@ async function viewSupportTicket(ticketId) {
 async function updateTicketStatus() {
     const newStatus = document.getElementById('ticket-status-update').value;
     if(!newStatus || !currentViewingTicketId) return;
+    const adm = getStoredAdminUser();
     
     try {
         const res = await fetch(`/api/admin/support-ticket/${currentViewingTicketId}/status`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status: newStatus, adminId: 1 })
+            body: JSON.stringify({ status: newStatus, adminId: adm && adm.id ? adm.id : null })
         });
         
         if(res.ok) {
@@ -6403,12 +6530,13 @@ async function updateTicketPriority() {
 async function submitTicketReply() {
     const message = document.getElementById('ticket-reply-input').value;
     if(!message || !currentViewingTicketId) return;
+    const adm = getStoredAdminUser();
     
     try {
         const res = await fetch(`/api/support-ticket/${currentViewingTicketId}/reply`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ senderId: 1, senderType: 'admin', message: message })
+            body: JSON.stringify({ senderId: adm && adm.id ? adm.id : 1, senderType: 'admin', message: message })
         });
         
         if(res.ok) {

@@ -6658,13 +6658,53 @@ app.get('/api/admin/certificates/template-config', (req, res) => {
     certRender.getActiveTemplate(db, seminarId, certType, (err, tpl) => {
         if (err) return res.status(500).json({ error: err.message });
         const config = certTemplateCfg.parseConfig(tpl && tpl.config_json);
+        if (tpl && tpl.signature_left_path) config.sigLeftImagePath = tpl.signature_left_path;
+        if (tpl && tpl.signature_right_path) config.sigRightImagePath = tpl.signature_right_path;
         res.json({
             success: true,
             config,
             templateId: tpl ? tpl.id : null,
             filePath: tpl ? tpl.file_path : null,
+            signatureLeftPath: tpl ? tpl.signature_left_path : null,
+            signatureRightPath: tpl ? tpl.signature_right_path : null,
             isBuiltin: tpl ? certRender.isBuiltinPath(tpl.file_path) : false
         });
+    });
+});
+
+app.post('/api/admin/certificates/signature-image', upload.single('signatureFile'), (req, res) => {
+    const seminarId = parseInt(req.body && req.body.seminarId, 10);
+    const certType =
+        req.body && String(req.body.certType || 'participant').toLowerCase() === 'volunteer'
+            ? 'volunteer'
+            : 'participant';
+    const side = String((req.body && req.body.side) || 'right').toLowerCase() === 'left' ? 'left' : 'right';
+    if (!req.file) return res.status(400).json({ error: 'signatureFile is required (PNG or JPEG)' });
+    if (!Number.isInteger(seminarId) || seminarId < 1) {
+        return res.status(400).json({ error: 'seminarId is required' });
+    }
+    const relPath = '/uploads/' + req.file.filename;
+    const col = side === 'left' ? 'signature_left_path' : 'signature_right_path';
+    certRender.getActiveTemplate(db, seminarId, certType, (e, tpl) => {
+        if (e) return res.status(500).json({ error: e.message });
+        const applyPath = (templateId, cb) => {
+            db.run(`UPDATE certificate_templates SET ${col} = ? WHERE id = ?`, [relPath, templateId], (e2) => {
+                if (e2) return res.status(500).json({ error: e2.message });
+                cb(null, { templateId, path: relPath, side });
+            });
+        };
+        if (tpl && tpl.id) return applyPath(tpl.id, (e2, out) => res.json({ success: true, ...out }));
+        certRender.applyBuiltinTemplate(
+            db,
+            { seminarId, certType, adminUserId: parseInt(req.body.adminUserId, 10) },
+            (e3, out) => {
+                if (e3) return res.status(500).json({ error: e3.message });
+                applyPath(out.templateId, (e4, done) => {
+                    if (e4) return res.status(500).json({ error: e4.message });
+                    res.json({ success: true, ...done });
+                });
+            }
+        );
     });
 });
 
@@ -6832,6 +6872,13 @@ app.post('/api/admin/certificates/:id/toggle', (req, res) => {
 // Public certificate verification (enabled per seminar after event ends)
 app.get('/api/public/certificate-verify/seminars', (req, res) => {
     certVerify.listPublicVerifySeminars(db, (err, list) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(list || []);
+    });
+});
+
+app.get('/api/public/certificate-verify/schedule', (req, res) => {
+    certVerify.listPublicVerifySchedule(db, (err, list) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(list || []);
     });
@@ -8751,36 +8798,101 @@ app.post('/api/admin/email/bulk', (req, res) => {
 
 // ==================== SUPPORT TICKET ENDPOINTS ====================
 
-// Create Support Ticket
+function createSupportTicketRecord(opts, cb) {
+    const uid = parseInt(opts.userId, 10);
+    if (Number.isNaN(uid) || uid < 1) return cb(new Error('Invalid user'));
+    const subject = opts.subject && String(opts.subject).trim();
+    const description = opts.description && String(opts.description).trim();
+    if (!subject) return cb(new Error('Subject is required'));
+    if (!description) return cb(new Error('Description is required'));
+    const ticketId = 'TKT_' + generateId();
+    const cat = opts.category || 'general';
+    const senderType = opts.senderType || 'user';
+    const senderId = parseInt(opts.senderId, 10) || uid;
+
+    const runInsert = () => {
+        db.run(
+            `INSERT INTO support_tickets (ticket_id, tracking_id, user_id, category, subject, description, attachment_path, priority, status, created_at, updated_at) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+            [ticketId, ticketId, uid, cat, subject, description, opts.attachment_path || null, opts.priority || 'medium'],
+            function (err) {
+                if (err) return cb(err);
+                db.run(
+                    `INSERT INTO ticket_messages (ticket_id, sender_id, sender_type, message) VALUES (?, ?, ?, ?)`,
+                    [ticketId, senderId, senderType, description],
+                    function (err2) {
+                        if (err2) return cb(err2);
+                        cb(null, { ticketId, userId: uid });
+                    }
+                );
+            }
+        );
+    };
+
+    if (pgDb && pgDb.ensureAuxiliaryTables) {
+        return pgDb.ensureAuxiliaryTables().then(runInsert).catch((e) => cb(e));
+    }
+    ensureSupportTicketSchema(db, ignoreSchemaMigrationErr, runInsert);
+}
+
+// Create Support Ticket (doctor portal)
 app.post('/api/support-ticket/create', (req, res) => {
     const { userId, category, subject, description, attachment_path } = req.body;
-    const uid = parseInt(userId, 10);
-    if (Number.isNaN(uid)) return res.status(400).json({ error: 'Invalid user' });
-    if (!subject || !String(subject).trim()) return res.status(400).json({ error: 'Subject is required' });
-    if (!description || !String(description).trim()) return res.status(400).json({ error: 'Description is required' });
-    const ticketId = 'TKT_' + generateId();
-    const cat = category || 'general';
-
-    db.run(
-        `INSERT INTO support_tickets (ticket_id, tracking_id, user_id, category, subject, description, attachment_path, priority, status, created_at, updated_at) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-        [ticketId, ticketId, uid, cat, subject.trim(), description.trim(), attachment_path || null, 'medium'],
-        function (err) {
+    createSupportTicketRecord(
+        { userId, category, subject, description, attachment_path, senderType: 'user', senderId: userId },
+        (err, out) => {
             if (err) {
                 console.error('[support-ticket/create]', err.message);
                 return res.status(500).json({ error: err.message || 'Could not create ticket. Please try again.' });
             }
-            const initialMsg = description.trim();
-            db.run(
-                `INSERT INTO ticket_messages (ticket_id, sender_id, sender_type, message) VALUES (?, ?, 'user', ?)`,
-                [ticketId, uid, initialMsg],
-                function (err2) {
-                    if (err2) return res.status(500).json({ error: err2.message });
-                    res.json({ success: true, ticketId: ticketId, id: ticketId });
-                }
-            );
+            res.json({ success: true, ticketId: out.ticketId, id: out.ticketId });
         }
     );
+});
+
+// Admin: create support ticket on behalf of a doctor
+app.post('/api/admin/support-ticket/create', (req, res) => {
+    const body = req.body || {};
+    const actingAdminId = parseInt(body.actingAdminId, 10);
+    const targetUserId = parseInt(body.targetUserId, 10);
+    if (!Number.isInteger(actingAdminId) || actingAdminId < 1) {
+        return res.status(400).json({ error: 'actingAdminId is required' });
+    }
+    if (!Number.isInteger(targetUserId) || targetUserId < 1) {
+        return res.status(400).json({ error: 'targetUserId is required' });
+    }
+    assertAdminPortalActor(actingAdminId, (eAct) => {
+        if (eAct) return res.status(eAct.message === 'FORBIDDEN' ? 403 : 500).json({ error: 'Admin access required' });
+        db.get(`SELECT id FROM users WHERE id = ?`, [targetUserId], (eU, doc) => {
+            if (eU) return res.status(500).json({ error: eU.message });
+            if (!doc) return res.status(404).json({ error: 'Doctor user not found' });
+            createSupportTicketRecord(
+                {
+                    userId: targetUserId,
+                    category: body.category,
+                    subject: body.subject,
+                    description: body.description,
+                    attachment_path: body.attachment_path,
+                    senderType: 'admin',
+                    senderId: actingAdminId
+                },
+                (err, out) => {
+                    if (err) {
+                        console.error('[admin/support-ticket/create]', err.message);
+                        return res.status(500).json({ error: err.message || 'Could not create ticket' });
+                    }
+                    activityLog.logActivity(db, {
+                        user_id: actingAdminId,
+                        action: 'support_ticket.create',
+                        resource_type: 'support_ticket',
+                        resource_id: out.ticketId,
+                        meta: { targetUserId }
+                    });
+                    res.json({ success: true, ticketId: out.ticketId });
+                }
+            );
+        });
+    });
 });
 
 // Get User's Support Tickets
@@ -8942,20 +9054,32 @@ app.post('/api/admin/e-tickets/generate', (req, res) => {
                                 error: 'No successful payment order found. Use Payments → waive/issue or confirm payment first.'
                             });
                         }
-                        activityLog.logActivity(db, {
-                            user_id: actingAdminId,
-                            action: 'eticket.generate',
-                            resource_type: 'registration',
-                            resource_id: String(registrationId),
-                            meta: { ticketId: out && out.ticketId }
-                        });
-                        res.json({
-                            success: true,
-                            registrationId,
-                            ticketId: (out && out.ticketId) || null,
-                            orderIdString: (out && out.orderIdString) || null,
-                            message: out && out.ticketId ? 'E-ticket generated or refreshed.' : 'No ticket was created.'
-                        });
+                        const afterGenerate = () => {
+                            activityLog.logActivity(db, {
+                                user_id: actingAdminId,
+                                action: 'eticket.generate',
+                                resource_type: 'registration',
+                                resource_id: String(registrationId),
+                                meta: { ticketId: out && out.ticketId }
+                            });
+                            res.json({
+                                success: true,
+                                registrationId,
+                                ticketId: (out && out.ticketId) || null,
+                                orderIdString: (out && out.orderIdString) || null,
+                                message: out && out.ticketId ? 'E-ticket generated or refreshed.' : 'No ticket was created.'
+                            });
+                        };
+                        if (out && out.ticketId) {
+                            db.run(
+                                `UPDATE registrations SET status = 'e_ticket_issued'
+                                 WHERE id = ? AND IFNULL(status,'') NOT IN ('checked_in','completed','certificate_issued','cancelled','rejected')`,
+                                [registrationId],
+                                () => afterGenerate()
+                            );
+                        } else {
+                            afterGenerate();
+                        }
                     }
                 );
             }
@@ -8982,6 +9106,7 @@ app.post('/api/admin/e-tickets/send', (req, res) => {
                 return res.status(400).json({ error: 'No e-ticket ID on file. Click Generate ticket first.' });
             }
             notifyTicketIssued(userId, regId, ticketId, { email: sendEmail, whatsapp: sendWhatsapp });
+            flushNotificationQueue();
             activityLog.logActivity(db, {
                 user_id: actingAdminId,
                 action: 'eticket.send',
@@ -9035,7 +9160,8 @@ app.post('/api/admin/e-tickets/send', (req, res) => {
 // Admin: Get All Support Tickets
 app.get('/api/admin/support-tickets', (req, res) => {
     const { status, category, priority } = req.query;
-    let query = `SELECT st.*, u.first_name, u.last_name, u.email FROM support_tickets st 
+    let query = `SELECT st.*, COALESCE(st.ticket_id, st.tracking_id) AS ticket_id,
+                        u.first_name, u.last_name, u.email FROM support_tickets st 
                  LEFT JOIN users u ON st.user_id = u.id WHERE 1=1`;
     const params = [];
     
@@ -9065,8 +9191,8 @@ app.put('/api/admin/support-ticket/:ticketId/status', (req, res) => {
     const { ticketId } = req.params;
     const { status, adminId } = req.body;
     
-    db.run(`UPDATE support_tickets SET status = ?, assigned_to_admin = ?, updated_at = CURRENT_TIMESTAMP WHERE ticket_id = ?`,
-        [status, adminId || null, ticketId],
+    db.run(`UPDATE support_tickets SET status = ?, assigned_to_admin = ?, updated_at = CURRENT_TIMESTAMP WHERE ticket_id = ? OR tracking_id = ?`,
+        [status, adminId || null, ticketId, ticketId],
         function(err) {
             if (err) return res.status(500).json({ error: err.message });
             res.json({ success: true });
@@ -9078,8 +9204,8 @@ app.put('/api/admin/support-ticket/:ticketId/priority', (req, res) => {
     const { ticketId } = req.params;
     const { priority } = req.body;
     
-    db.run(`UPDATE support_tickets SET priority = ?, updated_at = CURRENT_TIMESTAMP WHERE ticket_id = ?`,
-        [priority, ticketId],
+    db.run(`UPDATE support_tickets SET priority = ?, updated_at = CURRENT_TIMESTAMP WHERE ticket_id = ? OR tracking_id = ?`,
+        [priority, ticketId, ticketId],
         function(err) {
             if (err) return res.status(500).json({ error: err.message });
             res.json({ success: true });

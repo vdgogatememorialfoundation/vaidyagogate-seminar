@@ -405,6 +405,35 @@
             <!-- 5. Support Tickets -->
             <div id="tab-support-tickets" class="tab-pane hidden">
                 <h2 style="margin-bottom: 20px;">Doctor Support Tickets</h2>
+                <div class="card" style="margin-bottom: 16px;">
+                    <h3 style="margin:0 0 12px;font-size:1rem;color:#1e40af;">Create ticket for a doctor</h3>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
+                        <div>
+                            <label style="font-size:0.82rem;color:#64748b;">Doctor user ID (numeric)</label>
+                            <input type="number" id="admin-st-create-user-id" placeholder="e.g. 42" min="1" style="width:100%;">
+                        </div>
+                        <div>
+                            <label style="font-size:0.82rem;color:#64748b;">Category</label>
+                            <select id="admin-st-create-category" style="width:100%;">
+                                <option value="general">General</option>
+                                <option value="registration">Registration</option>
+                                <option value="payment">Payment</option>
+                                <option value="certificate">Certificate</option>
+                                <option value="technical">Technical</option>
+                            </select>
+                        </div>
+                        <div style="grid-column:1/-1;">
+                            <label style="font-size:0.82rem;color:#64748b;">Subject</label>
+                            <input type="text" id="admin-st-create-subject" placeholder="Brief subject" style="width:100%;">
+                        </div>
+                        <div style="grid-column:1/-1;">
+                            <label style="font-size:0.82rem;color:#64748b;">Message / description</label>
+                            <textarea id="admin-st-create-description" rows="3" placeholder="Details visible to the doctor in their portal" style="width:100%;"></textarea>
+                        </div>
+                    </div>
+                    <button type="button" class="btn-primary" style="margin-top:12px;" onclick="adminCreateSupportTicketForDoctor()">Create support ticket</button>
+                    <p id="admin-st-create-msg" style="margin:8px 0 0;font-size:0.88rem;"></p>
+                </div>
                 <div class="card">
                     <div style="display: flex; gap: 10px; margin-bottom: 15px;">
                         <select id="ticket-status-filter" onchange="loadSupportTickets()" style="flex: 1;">
@@ -808,8 +837,10 @@
                         <div><label>Venue override</label><input id="cert-cfg-venue" style="width:100%;padding:6px;" placeholder="Leave blank for CMS / seminar"></div>
                         <div><label>Date override</label><input id="cert-cfg-date" style="width:100%;padding:6px;" placeholder="Leave blank for seminar date"></div>
                         <div><label>Left signature title</label><input id="cert-cfg-sig-l" style="width:100%;padding:6px;"></div>
+                        <div><label>Left signature image</label><input type="file" id="cert-sig-left-file" accept="image/png,image/jpeg,image/webp" style="width:100%;"><button type="button" class="btn-primary" style="margin-top:6px;padding:6px 10px;font-size:0.82rem;" onclick="uploadCertSignatureImage('left')">Upload left signature</button><p id="cert-sig-left-preview" style="font-size:0.8rem;color:#64748b;margin:4px 0 0;"></p></div>
                         <div><label>Right signature name</label><input id="cert-cfg-sig-rn" style="width:100%;padding:6px;"></div>
                         <div><label>Right signature title</label><input id="cert-cfg-sig-rt" style="width:100%;padding:6px;"></div>
+                        <div><label>Right signature image</label><input type="file" id="cert-sig-right-file" accept="image/png,image/jpeg,image/webp" style="width:100%;"><button type="button" class="btn-primary" style="margin-top:6px;padding:6px 10px;font-size:0.82rem;" onclick="uploadCertSignatureImage('right')">Upload right signature</button><p id="cert-sig-right-preview" style="font-size:0.8rem;color:#64748b;margin:4px 0 0;"></p></div>
                         <div><label>Gold color</label><input id="cert-cfg-gold" type="color" style="width:100%;height:36px;"></div>
                         <div><label>Name color</label><input id="cert-cfg-name-color" type="color" style="width:100%;height:36px;"></div>
                         <div><label><input type="checkbox" id="cert-cfg-flame" checked> Show flame graphic</label></div>
@@ -825,11 +856,20 @@
                 </div>
                 <div class="card cert-mgmt-card" style="margin-top:16px;">
                     <h3 style="margin:0 0 8px;color:#92400e;">Public verification &amp; dispatch</h3>
-                    <p style="font-size:0.85rem;color:#78716c;margin:0 0 12px;">After the seminar has ended and certificates are enabled, turn on the public verify page at <code>/verify-certificate.html</code>. Visitors must pass <strong>email and WhatsApp OTP</strong> to confirm authenticity.</p>
-                    <label style="display:flex;align-items:center;gap:8px;font-weight:600;">
+                    <p style="font-size:0.85rem;color:#78716c;margin:0 0 12px;">Turn on the public certificate verification page at <code>/verify-certificate.html</code>. Visitors must pass <strong>email and WhatsApp one-time password</strong> to confirm authenticity. You may enable verification manually before the seminar ends, or schedule an opening date and time.</p>
+                    <label style="display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:8px;">
                         <input type="checkbox" id="cert-verify-enabled" onchange="saveCertVerifyEnabled()">
                         Enable public certificate verification for this seminar
                     </label>
+                    <label style="display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:8px;">
+                        <input type="checkbox" id="cert-verify-manual">
+                        Enable now (manual override — before seminar has ended)
+                    </label>
+                    <div style="margin-bottom:10px;">
+                        <label style="font-size:0.85rem;font-weight:600;">Scheduled opening (optional)</label>
+                        <input type="datetime-local" id="cert-verify-go-live" style="width:100%;max-width:320px;padding:8px;margin-top:4px;">
+                        <button type="button" class="btn-primary" style="margin-top:8px;padding:6px 12px;font-size:0.85rem;" onclick="saveCertVerifyEnabled()">Save verification settings</button>
+                    </div>
                     <p id="cert-verify-status" style="font-size:0.88rem;margin:10px 0 0;color:#64748b;"></p>
                     <button type="button" class="btn-primary cert-btn-gold" style="margin-top:12px;" onclick="dispatchAllAdminCertificates()"><i class="fas fa-paper-plane"></i> Dispatch all enabled certificates</button>
                     <p id="cert-dispatch-msg" style="font-size:0.88rem;margin-top:8px;"></p>

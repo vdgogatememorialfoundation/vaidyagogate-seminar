@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="/css/vgmf-congress.css">
     <script src="/js/portal-datetime.js"></script>
 </head>
-<body class="congress-site">
+<body class="congress-site" oncontextmenu="return false;">
     <div id="site-preloader" aria-hidden="true"><div class="preloader-ring"></div><p style="color:var(--muted);font-weight:600;">Loading seminar portal…</p></div>
 
     <div class="cg-utility">
@@ -81,6 +81,7 @@
     <a href="#" class="cg-fab-register" id="cg-fab-register" data-portal-auth="signup" onclick="openRegisterModal(); return false;"><i class="fas fa-user-plus"></i> Register</a>
 
     <div id="countdown-region"></div>
+    <div id="cert-verify-countdown-region" class="hidden" style="max-width:960px;margin:0 auto 16px;padding:0 16px;"></div>
 
     <main class="main-content">
         <div id="homeSection">
@@ -1495,6 +1496,69 @@
         let timerInterval;
         let countdownStrips = [];
 
+        let certVerifyCountdownTimer = null;
+
+        async function loadCertVerifyCountdown() {
+            const region = document.getElementById('cert-verify-countdown-region');
+            if (!region) return;
+            try {
+                const res = await fetch('/api/public/certificate-verify/schedule');
+                const list = await res.json();
+                const pending = (Array.isArray(list) ? list : []).filter((x) => x.countdown && !x.live);
+                if (!pending.length) {
+                    region.classList.add('hidden');
+                    region.innerHTML = '';
+                    if (certVerifyCountdownTimer) clearInterval(certVerifyCountdownTimer);
+                    return;
+                }
+                region.classList.remove('hidden');
+                const item = pending[0];
+                const opensAt = item.countdown.opensAt;
+                region.innerHTML =
+                    '<div class="countdown-strip" style="background:#fff;border:1px solid #a7f3d0;border-radius:12px;padding:16px 20px;">' +
+                    '<h4 style="margin:0 0 4px;color:#0f766e;">Certificate verification — ' +
+                    escHtml(item.title || 'Seminar') +
+                    '</h4>' +
+                    '<p class="cv-home-cd-lbl" style="font-size:0.75rem;color:#57534e;text-transform:uppercase;letter-spacing:0.06em;font-weight:700;margin:0 0 10px;">' +
+                    escHtml(item.countdown.label || 'Certificate verification opens in') +
+                    '</p>' +
+                    '<p style="font-size:0.88rem;color:#64748b;margin:0 0 12px;">Confirm that a Vaidya Gogate Memorial Foundation seminar certificate is genuine. Verification is available only after the seminar ends and the foundation has enabled it for that event.</p>' +
+                    '<div class="countdown-grid">' +
+                    '<div class="box"><h2 class="cv-home-cd-d" style="margin:0;">00</h2><span style="font-size:0.65rem;color:#166534;font-weight:700;">DAYS</span></div>' +
+                    '<div class="box"><h2 class="cv-home-cd-h" style="margin:0;">00</h2><span style="font-size:0.65rem;color:#166534;font-weight:700;">HOURS</span></div>' +
+                    '<div class="box"><h2 class="cv-home-cd-m" style="margin:0;">00</h2><span style="font-size:0.65rem;color:#166534;font-weight:700;">MINUTES</span></div>' +
+                    '<div class="box"><h2 class="cv-home-cd-s" style="margin:0;">00</h2><span style="font-size:0.65rem;color:#166534;font-weight:700;">SECONDS</span></div>' +
+                    '</div>' +
+                    '<p style="margin:12px 0 0;"><a href="/verify-certificate.html" style="color:#0f766e;font-weight:600;">Open certificate verification page</a></p>' +
+                    '</div>';
+                const tick = () => {
+                    const dist = new Date(opensAt).getTime() - Date.now();
+                    if (dist <= 0) {
+                        if (certVerifyCountdownTimer) clearInterval(certVerifyCountdownTimer);
+                        loadCertVerifyCountdown();
+                        return;
+                    }
+                    const d = Math.floor(dist / (1000 * 60 * 60 * 24));
+                    const h = Math.floor((dist % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                    const m = Math.floor((dist % (1000 * 60 * 60)) / (1000 * 60));
+                    const s = Math.floor((dist % (1000 * 60)) / 1000);
+                    const dd = region.querySelector('.cv-home-cd-d');
+                    const hh = region.querySelector('.cv-home-cd-h');
+                    const mm = region.querySelector('.cv-home-cd-m');
+                    const ss = region.querySelector('.cv-home-cd-s');
+                    if (dd) dd.textContent = String(d).padStart(2, '0');
+                    if (hh) hh.textContent = String(h).padStart(2, '0');
+                    if (mm) mm.textContent = String(m).padStart(2, '0');
+                    if (ss) ss.textContent = String(s).padStart(2, '0');
+                };
+                tick();
+                if (certVerifyCountdownTimer) clearInterval(certVerifyCountdownTimer);
+                certVerifyCountdownTimer = setInterval(tick, 1000);
+            } catch (e) {
+                console.error('cert verify countdown', e);
+            }
+        }
+
         async function loadTimerAndSeminars() {
             try {
                 const res = await fetch('/api/seminars?bucket=current');
@@ -1607,10 +1671,12 @@
         if (typeof loadOpenSeminarsStrip === 'function') loadOpenSeminarsStrip();
         loadNotices();
         loadTimerAndSeminars();
+        loadCertVerifyCountdown();
         loadVerifySeminars();
     </script>
     <script src="/js/site-branding.js"></script>
     <script src="/js/name-validation.js"></script>
     <script src="/js/contact-validation.js"></script>
+    <script>document.addEventListener('contextmenu',function(e){e.preventDefault();});</script>
 </body>
 </html>
