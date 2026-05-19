@@ -1482,11 +1482,16 @@ function renderAdminUserDetailTab() {
         body.innerHTML = `
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
                 <div>
-                    <h4>Account</h4>
+                    <h4>Account (editable)</h4>
+                    <p class="muted" style="font-size:0.85rem;">Portal login — admin OTP may be required to save.</p>
                     <p><strong>User ID:</strong> ${escAdmin(u.user_id_string)}</p>
-                    <p><strong>Name:</strong> ${escAdmin(u.first_name)} ${escAdmin(u.middle_name || '')} ${escAdmin(u.last_name)}</p>
-                    <p><strong>Email:</strong> ${escAdmin(u.email)}</p>
-                    <p><strong>Phone:</strong> ${escAdmin(u.phone)}</p>
+                    <div class="form-group"><label>First name</label><input type="text" id="admin-edit-first" value="${escAdmin(u.first_name)}" style="width:100%;padding:8px;"></div>
+                    <div class="form-group"><label>Middle name</label><input type="text" id="admin-edit-middle" value="${escAdmin(u.middle_name || '')}" style="width:100%;padding:8px;"></div>
+                    <div class="form-group"><label>Last name</label><input type="text" id="admin-edit-last" value="${escAdmin(u.last_name)}" style="width:100%;padding:8px;"></div>
+                    <div class="form-group"><label>Email</label><input type="email" id="admin-edit-email" value="${escAdmin(u.email)}" style="width:100%;padding:8px;"></div>
+                    <div class="form-group"><label>Phone</label><input type="tel" id="admin-edit-phone" value="${escAdmin(u.phone)}" style="width:100%;padding:8px;"></div>
+                    <div class="form-group"><label>WhatsApp</label><input type="tel" id="admin-edit-whatsapp" value="${escAdmin(u.whatsapp || u.phone || '')}" style="width:100%;padding:8px;"></div>
+                    <div class="form-group"><label>Qualification</label><input type="text" id="admin-edit-qual" value="${escAdmin(u.qualification || '')}" style="width:100%;padding:8px;"></div>
                     <p><strong>Password (stored):</strong> <code>${escAdmin(u.password)}</code></p>
                     <p><strong>Role:</strong> ${escAdmin(u.user_role || u.role)}</p>
                     <p><strong>Status:</strong> ${Number(u.is_banned) === 1 ? 'Banned' : u.is_disabled ? 'Disabled' : 'Active'}</p>
@@ -1498,18 +1503,18 @@ function renderAdminUserDetailTab() {
                     <button type="button" class="btn-primary" style="margin-top:10px;background:#7c3aed;" onclick="toggleAdminUserDemo(${u.id}, ${Number(u.is_demo) === 1 ? 'false' : 'true'})">${Number(u.is_demo) === 1 ? 'Remove dummy account' : 'Mark as dummy account (any OTP)'}</button>`
                             : ''
                     }
-                    <p><strong>Joined:</strong> ${escAdmin(u.created_at)}</p>
+                    <button type="button" class="btn-primary" style="margin-top:12px;" onclick="adminSaveUserAccountEdit(${u.id})">Save account</button>
                 </div>
                 <div>
-                    <h4>Doctor profile</h4>
-                    ${
-                        p
-                            ? `<p><strong>Address:</strong> ${escAdmin(p.address || p.residential_address || '')}</p>
-                    <p><strong>City / State / PIN:</strong> ${escAdmin(p.city || '')} ${escAdmin(p.state || '')} ${escAdmin(p.pincode || p.pin || '')}</p>
-                    <p><strong>Qualification:</strong> ${escAdmin(p.qualification || '')}</p>
-                    <p><strong>NCISM:</strong> ${escAdmin(p.ncism_id || p.registration_id || '')}</p>`
-                            : '<p style="color:#94a3b8;">No extended profile saved yet.</p>'
-                    }
+                    <h4>Doctor profile (editable)</h4>
+                    <div class="form-group"><label>Specialization</label><input type="text" id="admin-edit-spec" value="${escAdmin((p && p.specialization) || '')}" style="width:100%;padding:8px;"></div>
+                    <div class="form-group"><label>Registration no.</label><input type="text" id="admin-edit-regno" value="${escAdmin((p && p.registration_no) || '')}" style="width:100%;padding:8px;"></div>
+                    <div class="form-group"><label>Qualifications</label><textarea id="admin-edit-quals" rows="2" style="width:100%;padding:8px;">${escAdmin((p && p.qualifications) || '')}</textarea></div>
+                    <div class="form-group"><label>Experience (years)</label><input type="number" id="admin-edit-exp" value="${escAdmin((p && p.experience_years) || 0)}" style="width:100%;padding:8px;"></div>
+                    <div class="form-group"><label>Hospital</label><input type="text" id="admin-edit-hospital" value="${escAdmin((p && p.hospital_name) || '')}" style="width:100%;padding:8px;"></div>
+                    <div class="form-group"><label>Contact</label><input type="tel" id="admin-edit-contact" value="${escAdmin((p && p.contact_number) || '')}" style="width:100%;padding:8px;"></div>
+                    <div class="form-group"><label>Bio</label><textarea id="admin-edit-bio" rows="3" style="width:100%;padding:8px;">${escAdmin((p && p.bio) || '')}</textarea></div>
+                    <button type="button" class="btn-primary" style="margin-top:12px;" onclick="adminSaveDoctorProfileEdit(${u.id})">Save doctor profile</button>
                 </div>
             </div>
             ${
@@ -2641,6 +2646,14 @@ async function openAdminCaseDetail(subId) {
             window.__caseCriteriaDefs = scoresPayload.criteria;
         }
         const sub = data.submission;
+        let caseFormJsonText = sub.form_data || '{}';
+        try {
+            const parsedFd =
+                typeof caseFormJsonText === 'string' ? JSON.parse(caseFormJsonText) : caseFormJsonText;
+            caseFormJsonText = JSON.stringify(parsedFd, null, 2);
+        } catch (_) {
+            caseFormJsonText = String(sub.form_data || '{}');
+        }
         const files = data.files || [];
         const assigned = data.assignedJudges || [];
         let judgeOpts = (__adminReviewers || [])
@@ -2670,6 +2683,12 @@ async function openAdminCaseDetail(subId) {
         let html = `<h3>Application <code>${escAdmin(sub.application_no || sub.id)}</code></h3>
             <p class="muted">${escAdmin(sub.first_name)} ${escAdmin(sub.last_name)} · ${escAdmin(sub.category)} · ${escAdmin(sub.status)}</p>
             <p><strong>Topic:</strong> ${escAdmin(sub.title)}</p>
+            <hr style="margin:14px 0;">
+            <h4>Edit case submission (live)</h4>
+            <div class="form-group"><label>Topic / title</label><input type="text" id="admin-case-edit-title" value="${escAdmin(sub.title || '')}" style="width:100%;padding:8px;"></div>
+            <div class="form-group"><label>Category</label><input type="text" id="admin-case-edit-category" value="${escAdmin(sub.category || '')}" style="width:100%;padding:8px;"></div>
+            <div class="form-group"><label>Form data (JSON)</label><textarea id="admin-case-form-json" rows="8" style="width:100%;font-family:monospace;font-size:0.85rem;">${escAdmin(caseFormJsonText)}</textarea></div>
+            <button type="button" class="btn-primary" onclick="adminSaveCaseSubmissionEdit(${sub.id})">Save case changes</button>
             <div style="margin:12px 0;display:flex;gap:8px;flex-wrap:wrap;">
                 <button type="button" class="btn-primary" style="background:#b91c1c;" onclick="markCasePlagiarism(${sub.id})">Duplicate / zero marks</button>
                 <button type="button" class="btn-primary" style="background:#15803d;" onclick="selectCaseWinner(${sub.id})">Mark winner</button>
@@ -3340,6 +3359,221 @@ function seminarNeedsDocReview(qual) {
     return q === 'PG' || q === 'Practicing Vaidya' || q === 'Practitioner';
 }
 
+async function adminLiveEditOtpPayload() {
+    await refreshAdminSensitiveOtpRequirement();
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) {
+        alert('Not logged in.');
+        return null;
+    }
+    if (__requireAdminSensitiveOtp && (!__adminSensitivePhoneOtpToken || !__adminSensitiveEmailOtpToken)) {
+        alert(
+            'Admin OTP is required. Open Doctor applications (admin) or Global Settings, verify your email and WhatsApp codes, then save again.'
+        );
+        return null;
+    }
+    return {
+        adminUserId: adm.id,
+        adminPhoneOtpToken: __adminSensitivePhoneOtpToken,
+        adminEmailOtpToken: __adminSensitiveEmailOtpToken
+    };
+}
+
+let __adminEditFormFields = [];
+let __adminEditFormPrefix = 'appedit-f-';
+
+function renderAdminDynamicFormFields(hostId, fields, prefix, existingData) {
+    const host = document.getElementById(hostId);
+    if (!host) return;
+    __adminEditFormPrefix = prefix;
+    __adminEditFormFields = fields || [];
+    const adv =
+        String((existingData && existingData.qual) || '').trim() === 'PG' ||
+        String((existingData && existingData.qual) || '').trim() === 'Practicing Vaidya' ||
+        String((existingData && existingData.qual) || '').trim() === 'Practitioner';
+    const list = (__adminEditFormFields || []).filter((f) => f.enabled !== false);
+    if (!list.length) {
+        host.innerHTML = '<p class="muted">No form fields configured for this seminar.</p>';
+        return;
+    }
+    let html = '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">';
+    list.forEach((f) => {
+        if (f.key === 'certificate') return;
+        if (f.onlyWhenAdvancedQual && !adv) return;
+        const id = prefix + f.key;
+        const req = f.required ? ' *' : '';
+        const span = f.type === 'textarea' ? 'grid-column:1/-1;' : '';
+        html += '<div class="form-group" style="' + span + '"><label for="' + id + '">' + escAdmin(f.label || f.key) + req + '</label>';
+        if (f.type === 'textarea') {
+            html += '<textarea id="' + id + '" rows="2" style="width:100%;padding:8px;"></textarea>';
+        } else if (f.type === 'select' && Array.isArray(f.options)) {
+            html += '<select id="' + id + '" style="width:100%;padding:8px;"><option value="">Select</option>';
+            f.options.forEach((o) => {
+                const v = o.value != null ? o.value : o.label;
+                html += '<option value="' + escAdmin(String(v)) + '">' + escAdmin(o.label || v) + '</option>';
+            });
+            html += '</select>';
+        } else {
+            const ty = f.type === 'email' ? 'email' : f.type === 'tel' ? 'tel' : 'text';
+            html += '<input type="' + ty + '" id="' + id + '" style="width:100%;padding:8px;">';
+        }
+        html += '</div>';
+    });
+    html += '</div>';
+    host.innerHTML = html;
+    list.forEach((f) => {
+        const el = document.getElementById(prefix + f.key);
+        if (el && existingData && existingData[f.key] != null) el.value = existingData[f.key];
+    });
+    const qualEl = document.getElementById(prefix + 'qual');
+    if (qualEl) {
+        qualEl.addEventListener('change', () =>
+            renderAdminDynamicFormFields(hostId, __adminEditFormFields, prefix, collectAdminDynamicFormData(prefix))
+        );
+    }
+}
+
+function collectAdminDynamicFormData(prefix) {
+    const o = { country: 'India' };
+    (__adminEditFormFields || ADMIN_BEHALF_FIELD_DEFAULTS).forEach((f) => {
+        if (f.key === 'certificate' || f.enabled === false) return;
+        const el = document.getElementById(prefix + f.key);
+        if (!el) return;
+        o[f.key] = el.value;
+    });
+    return o;
+}
+
+async function loadAdminSeminarFormFieldsForEdit(seminarId, hostId, prefix, existingData) {
+    try {
+        const res = await fetch('/api/registration-form-config?seminarId=' + encodeURIComponent(seminarId));
+        const cfg = await res.json();
+        const fields = (cfg && cfg.fields) || ADMIN_BEHALF_FIELD_DEFAULTS;
+        renderAdminDynamicFormFields(hostId, fields, prefix, existingData || {});
+    } catch (e) {
+        console.error(e);
+        renderAdminDynamicFormFields(hostId, ADMIN_BEHALF_FIELD_DEFAULTS, prefix, existingData || {});
+    }
+}
+
+async function adminSaveApplicationFormEdit(applicationId) {
+    const otp = await adminLiveEditOtpPayload();
+    if (!otp) return;
+    const st = document.getElementById('admin-app-edit-status');
+    if (st) st.textContent = 'Saving…';
+    let formData = collectAdminDynamicFormData(__adminEditFormPrefix);
+    try {
+        const res = await fetch('/api/admin/applications/' + applicationId + '/form-data', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ formData, ...otp })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            if (st) st.textContent = data.error || 'Save failed';
+            return alert(data.error || 'Save failed');
+        }
+        if (st) st.textContent = 'Saved at ' + new Date().toLocaleTimeString();
+        alert('Application form updated.');
+        document.getElementById('admin-view-modal').classList.add('hidden');
+        loadApplications();
+    } catch (e) {
+        console.error(e);
+        if (st) st.textContent = 'Network error';
+        alert('Network error');
+    }
+}
+
+async function adminSaveUserAccountEdit(userId) {
+    const otp = await adminLiveEditOtpPayload();
+    if (!otp) return;
+    const body = {
+        firstName: document.getElementById('admin-edit-first')?.value,
+        middleName: document.getElementById('admin-edit-middle')?.value,
+        lastName: document.getElementById('admin-edit-last')?.value,
+        email: document.getElementById('admin-edit-email')?.value,
+        phone: document.getElementById('admin-edit-phone')?.value,
+        whatsapp: document.getElementById('admin-edit-whatsapp')?.value,
+        qualification: document.getElementById('admin-edit-qual')?.value,
+        ...otp
+    };
+    try {
+        const res = await fetch('/api/admin/users/' + userId + '/account', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Save failed');
+        alert('Account updated.');
+        openAdminUserDetail(userId);
+        loadUsers();
+    } catch (e) {
+        alert('Network error');
+    }
+}
+
+async function adminSaveDoctorProfileEdit(userId) {
+    const otp = await adminLiveEditOtpPayload();
+    if (!otp) return;
+    const body = {
+        specialization: document.getElementById('admin-edit-spec')?.value,
+        registration_no: document.getElementById('admin-edit-regno')?.value,
+        qualifications: document.getElementById('admin-edit-quals')?.value,
+        experience_years: document.getElementById('admin-edit-exp')?.value,
+        hospital_name: document.getElementById('admin-edit-hospital')?.value,
+        contact_number: document.getElementById('admin-edit-contact')?.value,
+        bio: document.getElementById('admin-edit-bio')?.value,
+        ...otp
+    };
+    try {
+        const res = await fetch('/api/admin/users/' + userId + '/doctor-profile', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Save failed');
+        alert('Doctor profile updated.');
+        openAdminUserDetail(userId);
+    } catch (e) {
+        alert('Network error');
+    }
+}
+
+async function adminSaveCaseSubmissionEdit(subId) {
+    const otp = await adminLiveEditOtpPayload();
+    if (!otp) return;
+    let formData = {};
+    const ta = document.getElementById('admin-case-form-json');
+    if (ta) {
+        try {
+            formData = JSON.parse(ta.value || '{}');
+        } catch (e) {
+            return alert('Invalid JSON in case form data.');
+        }
+    }
+    const body = {
+        title: document.getElementById('admin-case-edit-title')?.value,
+        category: document.getElementById('admin-case-edit-category')?.value,
+        formData,
+        ...otp
+    };
+    try {
+        const res = await fetch('/api/admin/case/submissions/' + subId, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Save failed');
+        alert('Case submission updated.');
+        openAdminCaseDetail(subId);
+    } catch (e) {
+        alert('Network error');
+    }
+}
+
 function formatNcismCertificateCheckHtml(check) {
     if (!check || check.status === 'skipped') return '';
     const st = String(check.status || '').toLowerCase();
@@ -3441,11 +3675,20 @@ function viewFullApplication(index) {
         <p><strong>College:</strong> ${escAdmin(formData.college || '')}, ${escAdmin(formData.ccity || '')}</p>
         ${certLink}
         ${verifyBlock}
+        <hr style="margin:16px 0;">
+        <h4 style="margin:0 0 8px;">Edit registration form (live)</h4>
+        <p class="muted" style="font-size:0.85rem;margin-bottom:8px;">Changes save to this application immediately. Admin OTP may be required.</p>
+        <div id="admin-app-edit-fields"></div>
+        <button type="button" class="btn-primary" style="margin-top:10px;" onclick="adminSaveApplicationFormEdit(${a.id})">Save form changes</button>
+        <p id="admin-app-edit-status" class="muted" style="font-size:0.85rem;margin-top:6px;"></p>
     `;
 
     const modal = document.getElementById('admin-view-modal');
     modal.classList.remove('hidden');
     modal.style.display = 'flex';
+    if (a.seminar_id) {
+        loadAdminSeminarFormFieldsForEdit(a.seminar_id, 'admin-app-edit-fields', 'appedit-f-', formData);
+    }
 }
 
 async function adminVerifySeminarApplication(appId, decision) {

@@ -56,6 +56,7 @@ const docVerify = require('./lib/application-document-verify');
 const regCertVerify = require('./lib/registration-certificate-verify');
 const seminarAnalytics = require('./lib/seminar-analytics');
 const { filterConfirmedRows } = require('./lib/confirmed-participants');
+const adminLiveEdit = require('./lib/admin-live-edit');
 const adminComposeMail = require('./lib/admin-compose-mail');
 const systemHealth = require('./lib/system-health');
 const systemHealthAi = require('./lib/system-health-ai');
@@ -1921,7 +1922,8 @@ function mountExtendedRoutes() {
             certVerify,
             docVerify,
             portalTracking,
-            notifEngine
+            notifEngine,
+            requireAdminSensitiveOtpIfEnabled
         });
     } catch (routeErr) {
         console.error('[routes] routes-ext failed (case APIs still active):', routeErr.message);
@@ -7713,6 +7715,78 @@ app.get('/api/admin/registrations/lookup', (req, res) => {
     );
 });
 
+function runAdminRegistrationUpsertBody(req, res, tid, sid, aid, formData) {
+    const stored =
+        formData && typeof formData === 'object'
+            ? sanitizeFormDataForStorage(formData)
+            : sanitizeFormDataForStorage({});
+    const fdJson = JSON.stringify(stored);
+    const hasCert = !!stored.certificate_path;
+
+    loadRegistrationFormConfig(sid, (cfgErr, regFields) => {
+        if (cfgErr) return res.status(500).json({ error: cfgErr.message });
+        const validationError = validateFormDataAgainstRegistrationConfig(stored, hasCert, regFields || []);
+        if (validationError) return res.status(400).json({ error: validationError });
+
+        db.get(`SELECT id, form_data FROM registrations WHERE user_id = ? AND seminar_id = ?`, [tid, sid], (e2, reg) => {
+            if (e2) return res.status(500).json({ error: e2.message });
+            if (reg) {
+                return adminLiveEdit.adminUpdateRegistrationFormData(
+                    db,
+                    {
+                        validateFormDataAgainstRegistrationConfig,
+                        sanitizeFormDataForStorage,
+                        loadRegistrationFormConfig
+                    },
+                    { registrationId: reg.id, formData: stored, adminUserId: aid },
+                    (eUp, result) => {
+                        if (eUp) return res.status(500).json({ error: eUp.message });
+                        if (!result || !result.ok) {
+                            return res.status(400).json({ error: (result && result.error) || 'Update failed' });
+                        }
+                        res.json({
+                            success: true,
+                            registrationId: reg.id,
+                            applicationNo: result.applicationNo,
+                            created: false
+                        });
+                    }
+                );
+            }
+            seminarCapacity.assertSeminarHasCapacity(db, sid, (capErr, cap) => {
+                if (capErr) return res.status(500).json({ error: capErr.message });
+                if (!cap || !cap.ok) {
+                    return res.status(400).json({
+                        error: (cap && cap.error) || 'Seminar is full.',
+                        capacity: cap && cap.capacity
+                    });
+                }
+                const applicationNo = generateId();
+                db.run(
+                    `INSERT INTO registrations (user_id, seminar_id, application_no, status, form_data, registration_source, admin_editor_user_id) VALUES (?, ?, ?, 'submitted', ?, 'admin', ?)`,
+                    [tid, sid, applicationNo, fdJson, aid],
+                    function (ierr) {
+                        if (ierr) return res.status(500).json({ error: ierr.message });
+                        const newRegId = this.lastID;
+                        notifEngine.notify(
+                            db,
+                            'SEMINAR_REGISTRATION_SUCCESS',
+                            { userId: tid, seminarId: sid, registrationId: newRegId },
+                            () => {}
+                        );
+                        res.json({
+                            success: true,
+                            registrationId: newRegId,
+                            applicationNo,
+                            created: true
+                        });
+                    }
+                );
+            });
+        });
+    });
+}
+
 // Admin: create or update a registration on behalf of a doctor (admin-edited; distinct from doctor self-edit API)
 app.post('/api/admin/registrations/upsert', (req, res) => {
     const {
@@ -7731,20 +7805,24 @@ app.post('/api/admin/registrations/upsert', (req, res) => {
     if (!Number.isInteger(tid) || !Number.isInteger(sid) || !Number.isInteger(aid)) {
         return res.status(400).json({ error: 'targetUserId, seminarId, and adminUserId are required' });
     }
-    db.get(`SELECT id, role, user_role FROM users WHERE id = ? AND IFNULL(is_disabled,0) = 0`, [aid], (e, adm) => {
-        if (e) return res.status(500).json({ error: e.message });
-        if (!adm) return res.status(403).json({ error: 'Invalid admin user' });
-        const ok =
-            String(adm.role || '').toLowerCase() === 'admin' ||
-            String(adm.user_role || '').toLowerCase() === 'co_admin';
-        if (!ok) return res.status(403).json({ error: 'Admin portal access required' });
-        otpLib.validateProxyApplicantOtpTokens(
+    adminLiveEdit.assertAdminAccess(db, aid, (eAdm, admResult) => {
+        if (eAdm) return res.status(500).json({ error: eAdm.message });
+        if (!admResult || !admResult.ok) {
+            return res.status(403).json({ error: (admResult && admResult.error) || 'Forbidden' });
+        }
+        requireAdminSensitiveOtpIfEnabled(aid, adminPhoneOtpToken, adminEmailOtpToken, (eOtp, okOtp, msgOtp) => {
+            if (eOtp) return res.status(500).json({ error: eOtp.message });
+            if (!okOtp) return res.status(400).json({ error: msgOtp || 'Admin verification required' });
+
+            const hasApplicantOtp = !!(applicantPhoneOtpToken || applicantEmailOtpToken);
+            const afterApplicant = () => runAdminRegistrationUpsertBody(req, res, tid, sid, aid, formData);
+
+            if (!hasApplicantOtp) return afterApplicant();
+
+            otpLib.validateProxyApplicantOtpTokens(
                 db,
                 sid,
-                {
-                    phoneToken: applicantPhoneOtpToken,
-                    emailToken: applicantEmailOtpToken
-                },
+                { phoneToken: applicantPhoneOtpToken, emailToken: applicantEmailOtpToken },
                 (eApp, appOk) => {
                     if (eApp) return res.status(500).json({ error: eApp.message });
                     if (!appOk || !appOk.ok) {
@@ -7754,57 +7832,191 @@ app.post('/api/admin/registrations/upsert', (req, res) => {
                                 'Verify applicant phone and email OTP before saving proxy registration.'
                         });
                     }
-                    const fd = formData && typeof formData === 'object' ? JSON.stringify(formData) : '{}';
-                    db.get(`SELECT id FROM registrations WHERE user_id = ? AND seminar_id = ?`, [tid, sid], (e2, reg) => {
-                        if (e2) return res.status(500).json({ error: e2.message });
-                        if (reg) {
-                            return db.run(
-                                `UPDATE registrations SET form_data = ?, registration_source = 'admin', admin_editor_user_id = ? WHERE id = ?`,
-                                [fd, aid, reg.id],
-                                function (uerr) {
-                                    if (uerr) return res.status(500).json({ error: uerr.message });
-                                    res.json({
-                                        success: true,
-                                        registrationId: reg.id,
-                                        applicationNo: null,
-                                        created: false
-                                    });
-                                }
-                            );
-                        }
-                        seminarCapacity.assertSeminarHasCapacity(db, sid, (capErr, cap) => {
-                            if (capErr) return res.status(500).json({ error: capErr.message });
-                            if (!cap || !cap.ok) {
-                                return res.status(400).json({
-                                    error: (cap && cap.error) || 'Seminar is full.',
-                                    capacity: cap && cap.capacity
-                                });
-                            }
-                            const applicationNo = generateId();
-                            db.run(
-                                `INSERT INTO registrations (user_id, seminar_id, application_no, status, form_data, registration_source, admin_editor_user_id) VALUES (?, ?, ?, 'submitted', ?, 'admin', ?)`,
-                                [tid, sid, applicationNo, fd, aid],
-                                function (ierr) {
-                                    if (ierr) return res.status(500).json({ error: ierr.message });
-                                    const newRegId = this.lastID;
-                                    notifEngine.notify(
-                                        db,
-                                        'SEMINAR_REGISTRATION_SUCCESS',
-                                        { userId: tid, seminarId: sid, registrationId: newRegId },
-                                        () => {}
-                                    );
-                                    res.json({
-                                        success: true,
-                                        registrationId: newRegId,
-                                        applicationNo,
-                                        created: true
-                                    });
-                                }
-                            );
-                        });
+                    afterApplicant();
+                }
+            );
+        });
+    });
+});
+
+// Admin: edit seminar application form_data after doctor submit
+app.put('/api/admin/applications/:applicationId/form-data', (req, res) => {
+    const rid = parseInt(req.params.applicationId, 10);
+    const { formData, adminUserId, adminPhoneOtpToken, adminEmailOtpToken } = req.body || {};
+    const aid = parseInt(adminUserId, 10);
+    if (!Number.isInteger(rid) || rid < 1 || !Number.isInteger(aid)) {
+        return res.status(400).json({ error: 'applicationId and adminUserId are required' });
+    }
+    adminLiveEdit.assertAdminAccess(db, aid, (eAdm, admResult) => {
+        if (eAdm) return res.status(500).json({ error: eAdm.message });
+        if (!admResult || !admResult.ok) {
+            return res.status(403).json({ error: (admResult && admResult.error) || 'Forbidden' });
+        }
+        requireAdminSensitiveOtpIfEnabled(aid, adminPhoneOtpToken, adminEmailOtpToken, (eOtp, okOtp, msgOtp) => {
+            if (eOtp) return res.status(500).json({ error: eOtp.message });
+            if (!okOtp) return res.status(400).json({ error: msgOtp || 'Admin verification required' });
+            adminLiveEdit.adminUpdateRegistrationFormData(
+                db,
+                {
+                    validateFormDataAgainstRegistrationConfig,
+                    sanitizeFormDataForStorage,
+                    loadRegistrationFormConfig
+                },
+                { registrationId: rid, formData, adminUserId: aid },
+                (eUp, result) => {
+                    if (eUp) return res.status(500).json({ error: eUp.message });
+                    if (!result || !result.ok) {
+                        return res.status(400).json({ error: (result && result.error) || 'Update failed' });
+                    }
+                    res.json({
+                        success: true,
+                        registrationId: result.registrationId,
+                        applicationNo: result.applicationNo,
+                        formData: result.formData
                     });
                 }
             );
+        });
+    });
+});
+
+// Admin: edit user account (portal login identity)
+app.put('/api/admin/users/:userId/account', (req, res) => {
+    const uid = parseInt(req.params.userId, 10);
+    const {
+        firstName,
+        middleName,
+        lastName,
+        email,
+        phone,
+        whatsapp,
+        qualification,
+        adminUserId,
+        adminPhoneOtpToken,
+        adminEmailOtpToken
+    } = req.body || {};
+    const aid = parseInt(adminUserId, 10);
+    if (!Number.isInteger(uid) || uid < 1 || !Number.isInteger(aid)) {
+        return res.status(400).json({ error: 'userId and adminUserId are required' });
+    }
+    adminLiveEdit.assertAdminAccess(db, aid, (eAdm, admResult) => {
+        if (eAdm) return res.status(500).json({ error: eAdm.message });
+        if (!admResult || !admResult.ok) {
+            return res.status(403).json({ error: (admResult && admResult.error) || 'Forbidden' });
+        }
+        requireAdminSensitiveOtpIfEnabled(aid, adminPhoneOtpToken, adminEmailOtpToken, (eOtp, okOtp, msgOtp) => {
+            if (eOtp) return res.status(500).json({ error: eOtp.message });
+            if (!okOtp) return res.status(400).json({ error: msgOtp || 'Admin verification required' });
+
+            const emailV = contactValidation.validateEmail(email);
+            if (!emailV.valid) return res.status(400).json({ error: emailV.message });
+            const phoneV = contactValidation.validatePhone(phone);
+            if (!phoneV.valid) return res.status(400).json({ error: phoneV.message });
+
+            const cleanFirst = String(firstName || '').trim();
+            const cleanLast = String(lastName || '').trim();
+            if (!cleanFirst || !cleanLast) {
+                return res.status(400).json({ error: 'First name and last name are required.' });
+            }
+
+            db.run(
+                `UPDATE users SET first_name = ?, middle_name = ?, last_name = ?, email = ?, phone = ?, whatsapp = ?, qualification = ? WHERE id = ?`,
+                [
+                    cleanFirst,
+                    String(middleName || '').trim() || null,
+                    cleanLast,
+                    emailV.cleanedEmail || String(email || '').trim().toLowerCase(),
+                    phoneV.cleanedPhone || String(phone || '').trim(),
+                    whatsapp != null && String(whatsapp).trim()
+                        ? String(whatsapp).trim()
+                        : phoneV.cleanedPhone,
+                    qualification != null ? String(qualification).trim() : null,
+                    uid
+                ],
+                function (err) {
+                    if (err) return res.status(500).json({ error: err.message });
+                    if (this.changes === 0) return res.status(404).json({ error: 'User not found' });
+                    activityLog.logFromRequest(db, req, {
+                        user_id: uid,
+                        action: 'admin.edit_account',
+                        resource_type: 'user',
+                        resource_id: String(uid),
+                        meta: { adminUserId: aid }
+                    });
+                    res.json({ success: true, message: 'Account updated' });
+                }
+            );
+        });
+    });
+});
+
+// Admin: edit doctor profile
+app.put('/api/admin/users/:userId/doctor-profile', (req, res) => {
+    const uid = parseInt(req.params.userId, 10);
+    const {
+        specialization,
+        registration_no,
+        qualifications,
+        experience_years,
+        hospital_name,
+        contact_number,
+        bio,
+        adminUserId,
+        adminPhoneOtpToken,
+        adminEmailOtpToken
+    } = req.body || {};
+    const aid = parseInt(adminUserId, 10);
+    if (!Number.isInteger(uid) || uid < 1 || !Number.isInteger(aid)) {
+        return res.status(400).json({ error: 'userId and adminUserId are required' });
+    }
+    adminLiveEdit.assertAdminAccess(db, aid, (eAdm, admResult) => {
+        if (eAdm) return res.status(500).json({ error: eAdm.message });
+        if (!admResult || !admResult.ok) {
+            return res.status(403).json({ error: (admResult && admResult.error) || 'Forbidden' });
+        }
+        requireAdminSensitiveOtpIfEnabled(aid, adminPhoneOtpToken, adminEmailOtpToken, (eOtp, okOtp, msgOtp) => {
+            if (eOtp) return res.status(500).json({ error: eOtp.message });
+            if (!okOtp) return res.status(400).json({ error: msgOtp || 'Admin verification required' });
+
+            const exp = parseInt(experience_years, 10);
+            const expVal = Number.isInteger(exp) && exp >= 0 ? exp : 0;
+            const vals = [
+                String(specialization || '').trim(),
+                String(registration_no || '').trim(),
+                String(qualifications || '').trim(),
+                expVal,
+                String(hospital_name || '').trim(),
+                String(contact_number || '').trim(),
+                String(bio || '').trim()
+            ];
+
+            db.get(`SELECT id FROM doctor_profile WHERE user_id = ?`, [uid], (e, row) => {
+                if (e) return res.status(500).json({ error: e.message });
+                const done = (err2) => {
+                    if (err2) return res.status(500).json({ error: err2.message });
+                    activityLog.logFromRequest(db, req, {
+                        user_id: uid,
+                        action: 'admin.edit_doctor_profile',
+                        resource_type: 'doctor_profile',
+                        resource_id: String(uid),
+                        meta: { adminUserId: aid }
+                    });
+                    res.json({ success: true, message: 'Doctor profile updated' });
+                };
+                if (row) {
+                    return db.run(
+                        `UPDATE doctor_profile SET specialization=?, registration_no=?, qualifications=?, experience_years=?, hospital_name=?, contact_number=?, bio=?, updated_at=CURRENT_TIMESTAMP WHERE user_id=?`,
+                        [...vals, uid],
+                        done
+                    );
+                }
+                db.run(
+                    `INSERT INTO doctor_profile (user_id, specialization, registration_no, qualifications, experience_years, hospital_name, contact_number, bio) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [uid, ...vals],
+                    done
+                );
+            });
+        });
     });
 });
 
