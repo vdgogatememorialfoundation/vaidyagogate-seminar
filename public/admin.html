@@ -736,12 +736,12 @@
             <!-- Certificate management -->
             <div id="tab-certificates" class="tab-pane hidden cert-mgmt-theme">
                 <h2 class="cert-mgmt-heading">Certificate Management</h2>
-                <p class="cert-mgmt-intro">Apply the <strong>VGMF gold certificate design</strong> (participant or volunteer) or upload a custom file, then enable certificates for checked-in doctors.</p>
+                <p class="cert-mgmt-intro">Apply the <strong>VGMF gold certificate design</strong> (participant or volunteer) or upload a custom file, then enable certificates for checked-in doctors. Each certificate must show <strong>PRN No.</strong>, <strong>Application No.</strong>, and a <strong>verification QR</strong>. After the seminar ends, enable the public verify page and dispatch notifications.</p>
                 <div class="card cert-mgmt-card">
                     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px;">
                         <div>
                             <label>Seminar</label>
-                            <select id="cert-mgmt-seminar" style="width:100%;padding:8px;" onchange="loadAdminCertificateCandidates(); loadCertTemplateConfig();"></select>
+                            <select id="cert-mgmt-seminar" style="width:100%;padding:8px;" onchange="loadAdminCertificateCandidates(); loadCertTemplateConfig(); loadCertVerifySettings();"></select>
                         </div>
                         <div>
                             <label>Template type</label>
@@ -764,7 +764,7 @@
                 </div>
                 <div class="card cert-mgmt-card" style="margin-top:16px;">
                     <h3 style="margin:0 0 8px;color:#92400e;">Edit certificate text &amp; design</h3>
-                    <p style="font-size:0.85rem;color:#78716c;margin:0 0 12px;">Customize every line on the VGMF template. Placeholders: <code>{{recipient_name}}</code>, <code>{{seminar_title}}</code>, <code>{{topic}}</code>, <code>{{venue}}</code>, <code>{{date}}</code></p>
+                    <p style="font-size:0.85rem;color:#78716c;margin:0 0 12px;">Customize every line on the VGMF template. Placeholders: <code>{{recipient_name}}</code>, <code>{{seminar_title}}</code>, <code>{{topic}}</code>, <code>{{venue}}</code>, <code>{{date}}</code>, <code>{{prn_no}}</code>, <code>{{application_no}}</code></p>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
                         <div><label>Organization</label><input id="cert-cfg-org" style="width:100%;padding:6px;"></div>
                         <div><label>Main title</label><input id="cert-cfg-title" style="width:100%;padding:6px;"></div>
@@ -790,6 +790,17 @@
                     </div>
                     <p id="cert-cfg-msg" style="margin-top:8px;font-size:0.88rem;"></p>
                 </div>
+                <div class="card cert-mgmt-card" style="margin-top:16px;">
+                    <h3 style="margin:0 0 8px;color:#92400e;">Public verification &amp; dispatch</h3>
+                    <p style="font-size:0.85rem;color:#78716c;margin:0 0 12px;">After the seminar has ended and certificates are enabled, turn on the public verify page at <code>/verify-certificate.html</code>. Visitors must pass <strong>email and WhatsApp OTP</strong> to confirm authenticity.</p>
+                    <label style="display:flex;align-items:center;gap:8px;font-weight:600;">
+                        <input type="checkbox" id="cert-verify-enabled" onchange="saveCertVerifyEnabled()">
+                        Enable public certificate verification for this seminar
+                    </label>
+                    <p id="cert-verify-status" style="font-size:0.88rem;margin:10px 0 0;color:#64748b;"></p>
+                    <button type="button" class="btn-primary cert-btn-gold" style="margin-top:12px;" onclick="dispatchAllAdminCertificates()"><i class="fas fa-paper-plane"></i> Dispatch all enabled certificates</button>
+                    <p id="cert-dispatch-msg" style="font-size:0.88rem;margin-top:8px;"></p>
+                </div>
                 <div class="card" style="margin-top:20px;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px;">
                         <h3 style="margin:0;">Candidates</h3>
@@ -799,7 +810,7 @@
                         </div>
                     </div>
                     <table class="data-table">
-                        <thead><tr><th><input type="checkbox" id="cert-cand-select-all" onchange="toggleAllCertCandidates(this.checked)"></th><th>Doctor ID</th><th>Name</th><th>Application</th><th>Reg. status</th><th>Paid</th><th>Checked in</th><th>Ticket</th><th>Certificate</th></tr></thead>
+                        <thead><tr><th><input type="checkbox" id="cert-cand-select-all" onchange="toggleAllCertCandidates(this.checked)"></th><th>PRN No.</th><th>Name</th><th>Application No.</th><th>Reg. status</th><th>Paid</th><th>Checked in</th><th>Ticket</th><th>Certificate</th></tr></thead>
                         <tbody id="cert-mgmt-list"><tr><td colspan="9" style="text-align:center;">Select a seminar</td></tr></tbody>
                     </table>
                 </div>

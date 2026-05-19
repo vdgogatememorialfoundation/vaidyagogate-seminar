@@ -197,6 +197,49 @@
     color: #555;
 }
 
+.cert-ids-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    margin-top: 18px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(201, 162, 39, 0.35);
+}
+
+.cert-ids-text {
+    flex: 1 1 200px;
+}
+
+.cert-id-line {
+    margin: 4px 0;
+}
+
+.cert-qr-wrap {
+    flex: 0 0 auto;
+    text-align: center;
+}
+
+.cert-qr {
+    width: 96px;
+    height: 96px;
+    display: block;
+    margin: 0 auto;
+}
+
+.cert-qr-caption {
+    font-size: 0.72rem;
+    color: #64748b;
+    margin: 4px 0 0;
+    font-family: Inter, sans-serif;
+}
+
+.cert-id-missing {
+    font-size: 0.8rem;
+    color: #b45309;
+}
+
 .cert-print-hint {
     text-align: center;
     font-size: 0.85rem;

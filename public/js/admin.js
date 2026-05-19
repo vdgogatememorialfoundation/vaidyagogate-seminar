@@ -1208,6 +1208,119 @@ async function initAdminCertificatesTab() {
     await fillAdminSeminarSelect('cert-mgmt-seminar', false);
     await loadAdminCertificateCandidates();
     await loadCertTemplateConfig();
+    await loadCertVerifySettings();
+}
+
+async function loadCertVerifySettings() {
+    const sid = document.getElementById('cert-mgmt-seminar')?.value;
+    const cb = document.getElementById('cert-verify-enabled');
+    const status = document.getElementById('cert-verify-status');
+    if (!cb || !status) return;
+    if (!sid) {
+        cb.checked = false;
+        cb.disabled = true;
+        status.textContent = 'Select a seminar.';
+        return;
+    }
+    cb.disabled = true;
+    status.textContent = 'Loading verification settings…';
+    try {
+        const res = await fetch(`/api/admin/seminars/${encodeURIComponent(sid)}/certificate-verify`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Could not load');
+        cb.checked = !!data.enabled;
+        cb.disabled = !data.seminarEnded;
+        if (!data.seminarEnded) {
+            status.style.color = '#b45309';
+            status.textContent =
+                'Public verification can be enabled only after the seminar has ended (event date: ' +
+                (data.eventDate || '—') +
+                ').';
+        } else if (data.enabled) {
+            status.style.color = '#15803d';
+            status.textContent =
+                'Public verify page is ON for “' +
+                (data.title || 'this seminar') +
+                '”. Visitors can verify at /verify-certificate.html';
+        } else {
+            status.style.color = '#64748b';
+            status.textContent =
+                'Seminar has ended. Enable verification when certificates are ready to publish.';
+        }
+    } catch (e) {
+        status.style.color = '#b91c1c';
+        status.textContent = e.message || 'Could not load settings';
+        cb.disabled = true;
+    }
+}
+
+async function saveCertVerifyEnabled() {
+    const sid = document.getElementById('cert-mgmt-seminar')?.value;
+    const cb = document.getElementById('cert-verify-enabled');
+    const status = document.getElementById('cert-verify-status');
+    if (!sid || !cb) return;
+    const enabled = !!cb.checked;
+    if (status) status.textContent = 'Saving…';
+    try {
+        const res = await fetch(`/api/admin/seminars/${encodeURIComponent(sid)}/certificate-verify`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            cb.checked = !enabled;
+            throw new Error(data.error || 'Save failed');
+        }
+        await loadCertVerifySettings();
+    } catch (e) {
+        if (status) {
+            status.style.color = '#b91c1c';
+            status.textContent = e.message || 'Save failed';
+        }
+        alert(e.message || 'Could not save verification setting');
+    }
+}
+
+async function dispatchAllAdminCertificates() {
+    const sid = document.getElementById('cert-mgmt-seminar')?.value;
+    const msg = document.getElementById('cert-dispatch-msg');
+    if (!sid) return alert('Select a seminar');
+    if (
+        !confirm(
+            'Send certificate notifications (email + WhatsApp) to every doctor with an enabled certificate for this seminar?'
+        )
+    ) {
+        return;
+    }
+    if (msg) {
+        msg.style.color = '#78716c';
+        msg.textContent = 'Dispatching…';
+    }
+    try {
+        const res = await fetch('/api/admin/certificates/dispatch-all', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ seminarId: parseInt(sid, 10) })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Dispatch failed');
+        if (msg) {
+            msg.style.color = '#15803d';
+            msg.textContent =
+                'Dispatched: ' +
+                (data.dispatched || 0) +
+                (data.skipped ? ', skipped: ' + data.skipped : '') +
+                (data.errors && data.errors.length ? '. Some rows skipped (missing PRN/Application No.).' : '.');
+        }
+        loadAdminCertificateCandidates();
+    } catch (e) {
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = e.message || 'Dispatch failed';
+        }
+        alert(e.message || 'Dispatch failed');
+    }
 }
 
 function readCertConfigFromForm() {
@@ -1375,11 +1488,17 @@ async function loadAdminCertificateCandidates() {
             const paid = r.order_status === 'success' ? 'Yes' : 'No';
             const checked = r.is_scanned ? 'Yes' : 'No';
             const cert = r.cert_enabled ? 'Enabled' : 'Locked';
+            const appCell = r.application_no
+                ? escAdmin(r.application_no)
+                : '<span style="color:#b91c1c;font-weight:600;">Missing</span>';
+            const prnCell = r.user_id_string
+                ? escAdmin(r.user_id_string)
+                : '<span style="color:#b91c1c;">Missing PRN</span>';
             tbody.innerHTML += `<tr>
                 <td><input type="checkbox" class="cert-cand-cb" data-user-id="${r.user_id}" value="${r.user_id}"></td>
-                <td>${escAdmin(r.user_id_string)}</td>
+                <td>${prnCell}</td>
                 <td>${escAdmin(name)}</td>
-                <td>${escAdmin(r.application_no || '—')}</td>
+                <td>${appCell}</td>
                 <td>${escAdmin(r.reg_status || '—')}</td>
                 <td>${paid}</td>
                 <td>${checked}</td>
@@ -1416,6 +1535,16 @@ async function bulkEnableAdminCertificates(enabled) {
         const data = await res.json();
         if (data.success) {
             loadAdminCertificateCandidates();
+            if (data.skipped && data.skipped.length) {
+                const lines = data.skipped
+                    .slice(0, 5)
+                    .map((s) => 'User #' + s.userId + ': ' + (s.error || 'skipped'))
+                    .join('\n');
+                alert(
+                    'Some doctors were not enabled (PRN No. and Application No. are required on every certificate):\n\n' +
+                        lines
+                );
+            }
             if (enabled && data.templateMissing) {
                 alert(
                     'Certificate enabled for selected doctors.\n\nApply the VGMF certificate design (or upload a custom template) in this tab — until then, doctors will see “approved” but cannot view the certificate yet.'

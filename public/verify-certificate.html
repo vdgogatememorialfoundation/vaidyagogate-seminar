@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify Certificate | Vaidya Gogate Memorial Foundation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/css/vgmf-site.css">
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background: #f8fafc; margin: 0; min-height: 100vh; }
+        .cv-wrap { max-width: 560px; margin: 0 auto; padding: 32px 20px 48px; }
+        .cv-card { background: #fff; border-radius: 12px; box-shadow: 0 4px 24px rgba(15, 118, 110, 0.08); border: 1px solid #e2e8f0; padding: 28px 24px; }
+        .cv-card h1 { margin: 0 0 8px; font-size: 1.35rem; color: #0f766e; }
+        .cv-card p.cv-lead { margin: 0 0 20px; color: #64748b; font-size: 0.92rem; line-height: 1.5; }
+        .cv-field { margin-bottom: 14px; }
+        .cv-field label { display: block; font-weight: 600; font-size: 0.85rem; margin-bottom: 4px; color: #334155; }
+        .cv-field input, .cv-field select { width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 1rem; box-sizing: border-box; }
+        .cv-btn { width: 100%; padding: 12px; border: none; border-radius: 8px; font-weight: 700; font-size: 1rem; cursor: pointer; margin-top: 8px; }
+        .cv-btn-primary { background: linear-gradient(135deg, #0f766e, #0d9488); color: #fff; }
+        .cv-btn-secondary { background: #e2e8f0; color: #334155; }
+        .cv-msg { margin-top: 12px; font-size: 0.9rem; padding: 10px 12px; border-radius: 8px; }
+        .cv-msg.err { background: #fef2f2; color: #b91c1c; }
+        .cv-msg.ok { background: #ecfdf5; color: #047857; }
+        .cv-msg.info { background: #f0f9ff; color: #0369a1; }
+        .cv-step { display: none; }
+        .cv-step.active { display: block; }
+        .cv-result { text-align: center; padding: 12px 0; }
+        .cv-result .cv-badge { font-size: 3rem; color: #15803d; margin-bottom: 8px; }
+        .cv-result h2 { color: #15803d; margin: 0 0 12px; }
+        .cv-meta { text-align: left; background: #f8fafc; border-radius: 8px; padding: 12px 16px; margin-top: 16px; font-size: 0.9rem; }
+        .cv-meta dt { font-weight: 600; color: #64748b; margin-top: 8px; }
+        .cv-meta dd { margin: 2px 0 0; color: #0f172a; }
+        .cv-otp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        @media (max-width: 480px) { .cv-otp-grid { grid-template-columns: 1fr; } }
+        .cv-back { display: inline-block; margin-bottom: 16px; color: #0f766e; text-decoration: none; font-weight: 600; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+    <div class="cv-wrap">
+        <a href="/" class="cv-back"><i class="fas fa-arrow-left"></i> Back to seminar portal</a>
+        <div class="cv-card">
+            <h1><i class="fas fa-certificate"></i> Verify certificate</h1>
+            <p class="cv-lead">Confirm that a VGMF seminar certificate is genuine. Verification is available only after the seminar ends and the foundation has enabled it for that event.</p>
+
+            <div id="cv-step-lookup" class="cv-step active">
+                <div class="cv-field">
+                    <label for="cv-seminar">Seminar</label>
+                    <select id="cv-seminar"><option value="">Loading seminars…</option></select>
+                </div>
+                <div class="cv-field">
+                    <label for="cv-application">Application No.</label>
+                    <input type="text" id="cv-application" inputmode="numeric" placeholder="12-digit application number" maxlength="12">
+                </div>
+                <div class="cv-field">
+                    <label for="cv-prn">PRN No. (portal Doctor ID)</label>
+                    <input type="text" id="cv-prn" placeholder="e.g. USR_XXXXX" autocomplete="off">
+                </div>
+                <p style="font-size:0.82rem;color:#64748b;margin:0 0 12px;">Or open this page by scanning the QR code on the certificate.</p>
+                <button type="button" class="cv-btn cv-btn-primary" id="cv-lookup-btn">Continue</button>
+                <div id="cv-lookup-msg" class="cv-msg" style="display:none;"></div>
+            </div>
+
+            <div id="cv-step-otp" class="cv-step">
+                <p class="cv-lead" id="cv-otp-hint"></p>
+                <p style="font-size:0.88rem;color:#64748b;">Enter both OTP codes sent to the certificate holder.</p>
+                <div class="cv-otp-grid">
+                    <div class="cv-field">
+                        <label for="cv-email-otp">Email OTP</label>
+                        <input type="text" id="cv-email-otp" inputmode="numeric" maxlength="8" autocomplete="one-time-code">
+                    </div>
+                    <div class="cv-field">
+                        <label for="cv-phone-otp">WhatsApp OTP</label>
+                        <input type="text" id="cv-phone-otp" inputmode="numeric" maxlength="8" autocomplete="one-time-code">
+                    </div>
+                </div>
+                <button type="button" class="cv-btn cv-btn-primary" id="cv-send-otp-btn">Send OTP to certificate holder</button>
+                <button type="button" class="cv-btn cv-btn-primary" id="cv-confirm-btn" style="display:none;">Verify certificate</button>
+                <button type="button" class="cv-btn cv-btn-secondary" id="cv-back-lookup-btn">Back</button>
+                <div id="cv-otp-msg" class="cv-msg" style="display:none;"></div>
+            </div>
+
+            <div id="cv-step-result" class="cv-step">
+                <div class="cv-result">
+                    <div class="cv-badge"><i class="fas fa-check-circle"></i></div>
+                    <h2>Certificate is valid</h2>
+                    <p id="cv-result-message"></p>
+                    <dl class="cv-meta" id="cv-result-meta"></dl>
+                </div>
+                <button type="button" class="cv-btn cv-btn-secondary" id="cv-another-btn">Verify another</button>
+            </div>
+        </div>
+    </div>
+    <script src="/js/verify-certificate.js"></script>
+</body>
+</html>
+

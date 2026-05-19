@@ -51,6 +51,7 @@ const authUsers = require('./lib/auth-users');
 const authLoginOtp = require('./lib/auth-login-otp');
 const certRender = require('./lib/certificate-render');
 const certTemplateCfg = require('./lib/certificate-template-config');
+const certVerify = require('./lib/certificate-verify');
 const adminComposeMail = require('./lib/admin-compose-mail');
 const systemHealth = require('./lib/system-health');
 const systemHealthAi = require('./lib/system-health-ai');
@@ -938,7 +939,9 @@ function ensureCertificateSchema(next) {
                 )`,
                 (e2) => {
                     ignoreSchemaMigrationErr(e2);
-                    if (next) next();
+                    certVerify.ensureCertificateVerifySchema(db, ignoreSchemaMigrationErr, () => {
+                        if (next) next();
+                    });
                 }
             );
         }
@@ -1877,7 +1880,8 @@ function mountExtendedRoutes() {
             buildDisplayNameFromFormData,
             syncCertificateEligibilityForTicket,
             insertParticipantTicket,
-            ignoreSchemaMigrationErr
+            ignoreSchemaMigrationErr,
+            certVerify
         });
     } catch (routeErr) {
         console.error('[routes] routes-ext failed (case APIs still active):', routeErr.message);
@@ -2558,6 +2562,13 @@ app.post('/api/otp/send', withIntegrationSettingsLoaded, (req, res) => {
     if (purpose === 'proxy_applicant' && Number.isNaN(meta.seminarId)) {
         return res.status(400).json({ error: 'seminarId required for proxy applicant OTP' });
     }
+    if (purpose === 'certificate_verify') {
+        const certId = req.body && req.body.certId != null ? parseInt(req.body.certId, 10) : NaN;
+        if (Number.isNaN(certId) || certId < 1) {
+            return res.status(400).json({ error: 'certId required for certificate verification OTP' });
+        }
+        meta.certId = certId;
+    }
 
     otpLib.countRecentSends(db, channel, dest, (cerr, cnt) => {
         if (cerr) return res.status(500).json({ error: cerr.message });
@@ -2609,6 +2620,15 @@ app.post('/api/otp/verify', (req, res) => {
             return res.status(400).json({ error: 'userId required for login OTP' });
         }
         meta.userId = uidNum;
+    }
+    if (purpose === 'certificate_verify') {
+        const certId = req.body && req.body.certId != null ? parseInt(req.body.certId, 10) : NaN;
+        if (Number.isNaN(certId) || certId < 1) {
+            return res.status(400).json({ error: 'certId required for certificate verification OTP' });
+        }
+        meta.certId = certId;
+        if (seminarId != null && seminarId !== '') meta.seminarId = parseInt(seminarId, 10);
+        if (uidNum != null && !Number.isNaN(uidNum)) meta.userId = uidNum;
     }
     otpLib.verifyOtp(
         db,
@@ -6256,23 +6276,261 @@ app.get('/api/admin/certificates/status', (req, res) => {
 app.post('/api/admin/certificates/:id/toggle', (req, res) => {
     const id = parseInt(req.params.id, 10);
     const enabled = req.body && req.body.enabled ? 1 : 0;
-    db.run(`UPDATE user_certificates SET enabled = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`, [enabled, id], function (err) {
-        if (err) return res.status(500).json({ error: err.message });
-        if (enabled) {
-            db.get(`SELECT user_id, seminar_id FROM user_certificates WHERE id = ?`, [id], (e2, cert) => {
-                if (!e2 && cert) {
-                    notifEngine.notify(db, 'CERTIFICATE_AVAILABLE', {
-                        userId: cert.user_id,
-                        seminarId: cert.seminar_id,
-                        vars: {
-                            certificate_url: notifEngine.publicBaseUrl() + '/doctor.html#tab-certificates'
+    if (enabled) {
+        return db.get(
+            `SELECT uc.id, uc.user_id, uc.seminar_id, r.application_no, u.user_id_string
+             FROM user_certificates uc
+             JOIN users u ON u.id = uc.user_id
+             LEFT JOIN registrations r ON r.id = uc.registration_id
+             WHERE uc.id = ?`,
+            [id],
+            (e0, row) => {
+                if (e0) return res.status(500).json({ error: e0.message });
+                if (!row) return res.status(404).json({ error: 'Certificate not found' });
+                const chk = certVerify.validateCertMandatoryFields(row);
+                if (!chk.ok) return res.status(400).json({ error: chk.error });
+                certVerify.ensureUserCertVerifyToken(db, id, (eTok) => {
+                    if (eTok) return res.status(500).json({ error: eTok.message });
+                    db.run(
+                        `UPDATE user_certificates SET enabled = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+                        [id],
+                        function (err) {
+                            if (err) return res.status(500).json({ error: err.message });
+                            notifEngine.notify(db, 'CERTIFICATE_AVAILABLE', {
+                                userId: row.user_id,
+                                seminarId: row.seminar_id,
+                                vars: {
+                                    certificate_url:
+                                        notifEngine.publicBaseUrl() + '/doctor.html#tab-certificates'
+                                }
+                            });
+                            res.json({ success: true });
                         }
-                    });
-                }
+                    );
+                });
+            }
+        );
+    }
+    db.run(
+        `UPDATE user_certificates SET enabled = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+        [id],
+        function (err) {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ success: true });
+        }
+    );
+});
+
+// Public certificate verification (enabled per seminar after event ends)
+app.get('/api/public/certificate-verify/seminars', (req, res) => {
+    certVerify.listPublicVerifySeminars(db, (err, list) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(list || []);
+    });
+});
+
+app.post('/api/public/certificate-verify/lookup', (req, res) => {
+    const { seminarId, applicationNo, prn, token } = req.body || {};
+    certVerify.resolveCertForPublicLookup(
+        db,
+        { seminarId, applicationNo, prn, token },
+        (err, out) => {
+            if (err) return res.status(500).json({ error: err.message });
+            if (!out || !out.ok) return res.status(400).json(out || { ok: false, error: 'Lookup failed' });
+            res.json({
+                ok: true,
+                seminar: out.seminar,
+                certId: out.cert.id,
+                displayName: out.cert.displayName,
+                applicationNo: out.cert.applicationNo,
+                prn: out.cert.prn,
+                maskedEmail: certVerify.maskEmail(out.cert.email),
+                maskedPhone: certVerify.maskPhone(out.cert.phone)
             });
         }
-        res.json({ success: true });
+    );
+});
+
+function sendCertificateVerifyOtpChannel(channel, destination, meta, cb) {
+    otpLib.countRecentSends(db, channel, destination, (cerr, cnt) => {
+        if (cerr) return cb(cerr);
+        if (cnt >= otpLib.MAX_SENDS_PER_HOUR) {
+            return cb(null, { rateLimited: true });
+        }
+        const code = otpLib.generateOtpDigits();
+        otpLib.saveOtp(db, { channel, destination, purpose: 'certificate_verify', meta }, code, (serr) => {
+            if (serr) return cb(serr);
+            notifEngine
+                .sendOtpMessages({
+                    email: channel === 'email' ? destination : null,
+                    phone: channel === 'phone' ? destination : null,
+                    code,
+                    db,
+                    eventKey: 'OTP_VERIFICATION'
+                })
+                .then((results) => {
+                    const sent = channel === 'phone' ? results.whatsapp : results.email;
+                    const debug =
+                        process.env.OTP_RETURN_CODE === '1' || process.env.NODE_ENV === 'development';
+                    if (!sent.ok && !sent.skipped) {
+                        return cb(null, {
+                            deliverError:
+                                sent.error ||
+                                'Could not deliver OTP. Configure Zoho email and/or WhatsApp API.',
+                            debugCode: debug ? code : undefined
+                        });
+                    }
+                    cb(null, { debugCode: debug ? code : undefined });
+                })
+                .catch((e) => cb(e));
+        });
     });
+}
+
+app.post('/api/public/certificate-verify/otp/send-both', withIntegrationSettingsLoaded, (req, res) => {
+    const { seminarId, applicationNo, prn, token } = req.body || {};
+    certVerify.resolveCertForPublicLookup(
+        db,
+        { seminarId, applicationNo, prn, token },
+        (err, out) => {
+            if (err) return res.status(500).json({ error: err.message });
+            if (!out || !out.ok) return res.status(400).json(out || { ok: false, error: 'Lookup failed' });
+            const email = String(out.cert.email || '').trim();
+            const phone = String(out.cert.phone || '').trim();
+            const ev = contactValidation.validateEmail(email);
+            const pv = contactValidation.validatePhone(phone);
+            if (!ev.valid) return res.status(400).json({ error: 'Certificate holder email is not on file.' });
+            if (!pv.valid) return res.status(400).json({ error: 'Certificate holder mobile is not on file.' });
+            const meta = {
+                certId: out.cert.id,
+                seminarId: out.seminar.id,
+                userId: out.cert.userId
+            };
+            sendCertificateVerifyOtpChannel('email', ev.cleanedEmail, meta, (e1, r1) => {
+                if (e1) return res.status(500).json({ error: e1.message });
+                if (r1 && r1.rateLimited) {
+                    return res.status(429).json({ error: 'Too many OTP requests. Try again later.' });
+                }
+                if (r1 && r1.deliverError) {
+                    return res.status(503).json({ error: r1.deliverError, debugCode: r1.debugCode });
+                }
+                sendCertificateVerifyOtpChannel('phone', pv.cleanedPhone, meta, (e2, r2) => {
+                    if (e2) return res.status(500).json({ error: e2.message });
+                    if (r2 && r2.rateLimited) {
+                        return res.status(429).json({ error: 'Too many OTP requests. Try again later.' });
+                    }
+                    if (r2 && r2.deliverError) {
+                        return res.status(503).json({ error: r2.deliverError, debugCode: r2.debugCode });
+                    }
+                    const debug =
+                        process.env.OTP_RETURN_CODE === '1' || process.env.NODE_ENV === 'development';
+                    const payload = {
+                        success: true,
+                        ttlMinutes: otpLib.OTP_TTL_MIN,
+                        maskedEmail: certVerify.maskEmail(ev.cleanedEmail),
+                        maskedPhone: certVerify.maskPhone(pv.cleanedPhone),
+                        certId: out.cert.id
+                    };
+                    if (debug) {
+                        payload.debugEmailCode = r1 && r1.debugCode;
+                        payload.debugPhoneCode = r2 && r2.debugCode;
+                    }
+                    res.json(payload);
+                });
+            });
+        }
+    );
+});
+
+app.post('/api/public/certificate-verify/confirm', (req, res) => {
+    const { seminarId, applicationNo, prn, token, emailCode, phoneCode } = req.body || {};
+    if (!emailCode || !phoneCode) {
+        return res.status(400).json({ error: 'Email and WhatsApp OTP codes are both required.' });
+    }
+    certVerify.resolveCertForPublicLookup(
+        db,
+        { seminarId, applicationNo, prn, token },
+        (err, out) => {
+            if (err) return res.status(500).json({ error: err.message });
+            if (!out || !out.ok) return res.status(400).json(out || { ok: false, error: 'Lookup failed' });
+            const ev = contactValidation.validateEmail(out.cert.email);
+            const pv = contactValidation.validatePhone(out.cert.phone);
+            if (!ev.valid || !pv.valid) {
+                return res.status(400).json({ error: 'Certificate contact details are incomplete.' });
+            }
+            const meta = {
+                certId: out.cert.id,
+                seminarId: out.seminar.id,
+                userId: out.cert.userId
+            };
+            otpLib.verifyOtp(
+                db,
+                {
+                    channel: 'email',
+                    destination: ev.cleanedEmail,
+                    purpose: 'certificate_verify',
+                    code: String(emailCode).trim(),
+                    meta,
+                    userId: out.cert.userId,
+                    seminarId: out.seminar.id
+                },
+                (e1, r1) => {
+                    if (e1) return res.status(500).json({ error: e1.message });
+                    if (!r1 || !r1.ok) {
+                        return res.status(400).json({
+                            error: (r1 && r1.error) || 'Invalid or expired email OTP.'
+                        });
+                    }
+                    otpLib.verifyOtp(
+                        db,
+                        {
+                            channel: 'phone',
+                            destination: pv.cleanedPhone,
+                            purpose: 'certificate_verify',
+                            code: String(phoneCode).trim(),
+                            meta,
+                            userId: out.cert.userId,
+                            seminarId: out.seminar.id
+                        },
+                        (e2, r2) => {
+                            if (e2) return res.status(500).json({ error: e2.message });
+                            if (!r2 || !r2.ok) {
+                                return res.status(400).json({
+                                    error: (r2 && r2.error) || 'Invalid or expired WhatsApp OTP.'
+                                });
+                            }
+                            certVerify.validateBothOtpTokens(
+                                db,
+                                {
+                                    certId: out.cert.id,
+                                    emailToken: r1.token,
+                                    phoneToken: r2.token
+                                },
+                                (e3, v) => {
+                                    if (e3) return res.status(500).json({ error: e3.message });
+                                    if (!v || !v.ok) {
+                                        return res.status(400).json(
+                                            v || { ok: false, error: 'OTP validation failed' }
+                                        );
+                                    }
+                                    res.json({
+                                        ok: true,
+                                        valid: true,
+                                        seminarTitle: out.seminar.title,
+                                        displayName: out.cert.displayName,
+                                        applicationNo: out.cert.applicationNo,
+                                        prn: out.cert.prn,
+                                        message:
+                                            'This certificate is authentic and was issued by the Vaidya Gogate Memorial Foundation.'
+                                    });
+                                }
+                            );
+                        }
+                    );
+                }
+            );
+        }
+    );
 });
 
 // Doctor: certificate eligibility for logged-in user
