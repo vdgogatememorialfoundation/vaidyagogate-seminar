@@ -38,7 +38,12 @@ const PORTALS = [
     }
 ];
 
-const ALLOW_NAV = ['https://seminar.vaidyagogate.org', 'https://vaidyagogate-seminar.vercel.app'];
+const ALLOW_NAV = [
+    'https://seminar.vaidyagogate.org',
+    'https://admin.vaidyagogate.org',
+    'https://judge.vaidyagogate.org',
+    'https://vaidyagogate-seminar.vercel.app'
+];
 
 const packageJson = (name) => ({
     name,
@@ -77,6 +82,7 @@ function writePortal(p) {
                 webDir: 'www',
                 server: {
                     url: p.url,
+                    hostname: 'seminar.vaidyagogate.org',
                     cleartext: false,
                     androidScheme: 'https',
                     allowNavigation: ALLOW_NAV

@@ -47,9 +47,9 @@ if (-not (Test-Path $sdk)) {
 $env:ANDROID_HOME = $sdk
 Write-Host "Using ANDROID_HOME=$sdk" -ForegroundColor Cyan
 
-Write-Host "Scaffolding portal mobile projects (if needed)..." -ForegroundColor Cyan
-node (Join-Path $root "scripts\scaffold-portal-mobile.js")
-if ($LASTEXITCODE -ne 0) { throw "scaffold-portal-mobile.js failed" }
+Write-Host "Syncing portal mobile URLs (seminar.vaidyagogate.org)..." -ForegroundColor Cyan
+node (Join-Path $root "scripts\sync-mobile-capacitor.js")
+if ($LASTEXITCODE -ne 0) { throw "sync-mobile-capacitor.js failed" }
 
 $built = @()
 foreach ($p in $portals) {

@@ -8,7 +8,12 @@ const { execSync } = require('child_process');
 
 const root = path.join(__dirname, '..');
 const SEMINAR = 'https://seminar.vaidyagogate.org';
-const ALLOW = [SEMINAR, 'https://vaidyagogate-seminar.vercel.app'];
+const ALLOW = [
+    SEMINAR,
+    'https://admin.vaidyagogate.org',
+    'https://judge.vaidyagogate.org',
+    'https://vaidyagogate-seminar.vercel.app'
+];
 
 const APPS = [
     { dir: 'admin-mobile', url: `${SEMINAR}/admin.html`, title: 'VGMF Admin' },
@@ -31,6 +36,7 @@ function writeConfig(app) {
         webDir: 'www',
         server: {
             url: app.url,
+            hostname: 'seminar.vaidyagogate.org',
             cleartext: false,
             androidScheme: 'https',
             allowNavigation: ALLOW

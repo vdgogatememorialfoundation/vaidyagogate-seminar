@@ -4,10 +4,13 @@
   "webDir": "www",
   "server": {
     "url": "https://seminar.vaidyagogate.org/admin.html",
+    "hostname": "seminar.vaidyagogate.org",
     "cleartext": false,
     "androidScheme": "https",
     "allowNavigation": [
       "https://seminar.vaidyagogate.org",
+      "https://admin.vaidyagogate.org",
+      "https://judge.vaidyagogate.org",
       "https://vaidyagogate-seminar.vercel.app"
     ]
   },
