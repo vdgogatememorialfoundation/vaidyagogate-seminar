@@ -44,6 +44,26 @@ function shouldPollSeminarTracking() {
     return doctorTabVisible('tab-applications') || isApplicationDetailModalOpen();
 }
 
+function shouldPollCertTracking() {
+    return doctorTabVisible('tab-dashboard');
+}
+
+let certTrackPollTimer = null;
+
+function stopCertTrackingPoll() {
+    if (certTrackPollTimer) {
+        clearInterval(certTrackPollTimer);
+        certTrackPollTimer = null;
+    }
+}
+
+function startCertTrackingPoll() {
+    stopCertTrackingPoll();
+    certTrackPollTimer = setInterval(() => {
+        if (shouldPollCertTracking()) loadDoctorCertificateTracking(true);
+    }, DOCTOR_TRACK_POLL_MS);
+}
+
 function stopSeminarTrackingPoll() {
     if (seminarTrackPollTimer) {
         clearInterval(seminarTrackPollTimer);
@@ -423,6 +443,8 @@ function bootDoctorDashboard(user) {
         });
     });
     loadDoctorDashboardStats();
+    loadDoctorCertificateTracking();
+    startCertTrackingPoll();
     loadRegistrationFormConfigAndApply();
     loadDoctorPortalUpdatesFromCms();
     loadSiteBranding();
@@ -1391,6 +1413,10 @@ function switchTab(tabId, menuEl) {
     if (content) content.scrollTop = 0;
     if (tabId === 'tab-dashboard') {
         loadDoctorDashboardStats();
+        loadDoctorCertificateTracking();
+        startCertTrackingPoll();
+    } else {
+        stopCertTrackingPoll();
     }
     if (tabId === 'tab-feedback') {
         loadDashboardFeedbackSeminars();
@@ -2010,7 +2036,8 @@ async function loadDoctorCertificates() {
                     `<div style="border:2px solid #e8d48a;border-radius:10px;overflow:hidden;"><iframe src="${viewUrl}" style="width:100%;min-height:420px;border:0;"></iframe></div>` +
                     `<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">` +
                     `<a href="${viewUrl}" target="_blank" class="btn-primary" style="text-decoration:none;background:linear-gradient(135deg,#c9a227,#a67c00);padding:8px 14px;">Open</a>` +
-                    `<button type="button" class="btn-primary" style="background:#475569;padding:8px 14px;" onclick="var w=window.open('${viewUrl}');if(w)w.print();">Print PDF</button></div>`;
+                    `<button type="button" class="btn-primary" style="background:#15803d;padding:8px 14px;" onclick="downloadDoctorCertificate('${viewUrl}')"><i class="fas fa-download"></i> Download PDF</button>` +
+                    `<button type="button" class="btn-primary" style="background:#475569;padding:8px 14px;" onclick="var w=window.open('${viewUrl}');if(w)w.print();">Print</button></div>`;
                 wrap.appendChild(card);
                 return;
             }
@@ -3218,6 +3245,79 @@ async function processPayment(appId, amount, appNo, paymentOption) {
 }
 
 window.processPayment = processPayment;
+
+function downloadDoctorCertificate(viewUrl, seminarTitle) {
+    const url = String(viewUrl || '');
+    if (!url || url === '#') return;
+    const w = window.open(url, '_blank');
+    if (w) {
+        w.addEventListener('load', function onLd() {
+            w.removeEventListener('load', onLd);
+            try {
+                w.print();
+            } catch (_) {}
+        });
+    } else {
+        alert('Allow pop-ups to download or print your certificate.');
+    }
+}
+
+async function loadDoctorCertificateTracking(quiet) {
+    const wrap = document.getElementById('doctor-cert-tracking-wrap');
+    const live = document.getElementById('cert-track-live');
+    if (!wrap || !currentUser) return;
+    if (!quiet) wrap.innerHTML = '<p style="color:#94a3b8;text-align:center;">Loading…</p>';
+    if (live) {
+        live.textContent = 'Updating…';
+        live.style.color = '#64748b';
+    }
+    try {
+        const uid = doctorNumericUserId();
+        if (!uid) return;
+        const res = await fetch('/api/doctor/certificate-tracking/' + uid);
+        const rows = await res.json();
+        if (!res.ok) throw new Error(rows.error || 'Could not load');
+        if (!Array.isArray(rows) || !rows.length) {
+            wrap.innerHTML =
+                '<p style="color:#64748b;text-align:center;">No seminar registrations yet. Register and complete payment to track certificate status here.</p>';
+        } else {
+            let html =
+                '<table class="data-table" style="font-size:0.88rem;"><thead><tr><th>Seminar</th><th>Application No.</th><th>Scans</th><th>Status</th></tr></thead><tbody>';
+            rows.forEach((r) => {
+                const scanLbl = (r.scanCount || 0) + ' / ' + (r.scansRequired || 1);
+                let statusColor = '#64748b';
+                if (r.certStatus === 'issued') statusColor = '#15803d';
+                else if (r.certStatus === 'awaiting_checkin') statusColor = '#b45309';
+                else if (r.certStatus === 'awaiting_approval') statusColor = '#7c3aed';
+                html +=
+                    '<tr><td>' +
+                    escapeHtml(r.seminarTitle || '—') +
+                    '</td><td><code>' +
+                    escapeHtml(r.applicationNo || '—') +
+                    '</code></td><td>' +
+                    escapeHtml(scanLbl) +
+                    '</td><td style="font-weight:600;color:' +
+                    statusColor +
+                    ';">' +
+                    escapeHtml(r.certStatusLabel || '—') +
+                    (r.canDownload
+                        ? ' <a href="#" onclick="switchTab(\'tab-certificate\');return false;" style="color:#0f766e;">Download</a>'
+                        : '') +
+                    '</td></tr>';
+            });
+            html += '</tbody></table>';
+            wrap.innerHTML = html;
+        }
+        if (live) {
+            live.textContent = 'Updated ' + new Date().toLocaleTimeString();
+            live.style.color = '#15803d';
+        }
+    } catch (e) {
+        console.error(e);
+        if (!quiet) wrap.innerHTML = '<p style="color:#b91c1c;">Could not load certificate tracking.</p>';
+        if (live) live.textContent = 'Update failed';
+    }
+}
 
 async function loadDoctorDashboardStats() {
     if (!currentUser) return;

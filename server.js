@@ -987,13 +987,15 @@ function invalidateTicketsForRegistration(registrationId, cb) {
 
 function syncCertificateEligibilityForTicket(ticketId, cb) {
     const q = `
-        SELECT t.id AS ticket_id, t.is_scanned, t.scan_time, t.user_id, t.order_id,
+        SELECT t.id AS ticket_id, t.is_scanned, IFNULL(t.scan_count, 0) AS scan_count, t.scan_time, t.user_id, t.order_id,
                r.id AS registration_id, r.seminar_id, r.form_data,
                u.first_name, u.middle_name, u.last_name,
-               o.status AS order_status
+               o.status AS order_status,
+               IFNULL(s.cert_scans_required, 1) AS cert_scans_required
         FROM tickets t
         JOIN orders o ON o.id = t.order_id
         JOIN registrations r ON r.id = o.registration_id
+        JOIN seminars s ON s.id = r.seminar_id
         JOIN users u ON u.id = t.user_id
         WHERE t.id = ?
     `;
@@ -1001,8 +1003,9 @@ function syncCertificateEligibilityForTicket(ticketId, cb) {
         if (err) return cb && cb(err);
         if (!row) return cb && cb(null);
         const displayName = buildDisplayNameFromFormData(row.form_data, row);
-        const paidAndScanned =
-            row.is_scanned === 1 && String(row.order_status || '').toLowerCase() === 'success' ? 1 : 0;
+        const paid = String(row.order_status || '').toLowerCase() === 'success';
+        const scansOk = certVerify.ticketMeetsScanRequirement(row.scan_count, row.cert_scans_required);
+        const paidAndScanned = paid && scansOk ? 1 : 0;
         db.get(
             `SELECT id FROM certificate_templates WHERE seminar_id = ? AND is_active = 1 ORDER BY id DESC LIMIT 1`,
             [row.seminar_id],
@@ -4003,6 +4006,84 @@ function isPublicListEnabled(val) {
     return val === 1 || val === true || val === '1' || val === 't' || val === 'true';
 }
 
+// Doctor certificate tracking (live check-in + approval status per seminar)
+app.get('/api/doctor/certificate-tracking/:userId', (req, res) => {
+    const uid = parseInt(req.params.userId, 10);
+    if (Number.isNaN(uid)) return res.status(400).json({ error: 'Invalid user' });
+    db.all(
+        `SELECT r.id AS registration_id, r.application_no, r.status AS reg_status, r.seminar_id,
+                s.title AS seminar_title, IFNULL(s.cert_scans_required, 1) AS cert_scans_required,
+                o.status AS order_status,
+                t.id AS ticket_id, IFNULL(t.scan_count, 0) AS scan_count, IFNULL(t.is_scanned, 0) AS is_scanned,
+                t.scan_time, t.ticket_id_string,
+                uc.id AS cert_id, IFNULL(uc.scan_verified, 0) AS scan_verified, IFNULL(uc.enabled, 0) AS cert_enabled,
+                ct.file_path AS template_path
+         FROM registrations r
+         JOIN seminars s ON s.id = r.seminar_id
+         LEFT JOIN orders o ON o.registration_id = r.id AND lower(trim(o.status)) = 'success'
+         LEFT JOIN tickets t ON t.order_id = o.id
+         LEFT JOIN user_certificates uc ON uc.user_id = r.user_id AND uc.seminar_id = r.seminar_id
+         LEFT JOIN certificate_templates ct ON ct.id = uc.template_id AND IFNULL(ct.is_active, 1) = 1
+         WHERE r.user_id = ? AND IFNULL(r.status, '') NOT IN ('rejected', 'cancelled')
+         ORDER BY r.id DESC`,
+        [uid],
+        (err, rows) => {
+            if (err) return res.status(500).json({ error: err.message });
+            const out = (rows || []).map((row) => {
+                const scansRequired = certVerify.normalizeCertScansRequired(row.cert_scans_required);
+                const scanCount = Number(row.scan_count) || 0;
+                const paid = String(row.order_status || '').toLowerCase() === 'success';
+                const checkinComplete = certVerify.ticketMeetsScanRequirement(scanCount, scansRequired);
+                let certStatus = 'not_applicable';
+                let certStatusLabel = '—';
+                if (!paid) {
+                    certStatus = 'awaiting_payment';
+                    certStatusLabel = 'Awaiting payment';
+                } else if (!checkinComplete) {
+                    certStatus = 'awaiting_checkin';
+                    certStatusLabel =
+                        scansRequired === 2
+                            ? `Check-in ${scanCount}/${scansRequired} scans`
+                            : 'Awaiting venue check-in';
+                } else if (!Number(row.scan_verified)) {
+                    certStatus = 'processing';
+                    certStatusLabel = 'Check-in recorded';
+                } else if (!Number(row.cert_enabled)) {
+                    certStatus = 'awaiting_approval';
+                    certStatusLabel = 'Awaiting foundation approval';
+                } else if (!row.template_path) {
+                    certStatus = 'approved_pending_design';
+                    certStatusLabel = 'Approved — certificate preparing';
+                } else {
+                    certStatus = 'issued';
+                    certStatusLabel = 'Certificate issued — download available';
+                }
+                return {
+                    registrationId: row.registration_id,
+                    seminarId: row.seminar_id,
+                    seminarTitle: row.seminar_title,
+                    applicationNo: row.application_no,
+                    ticketId: row.ticket_id_string,
+                    regStatus: row.reg_status,
+                    paid,
+                    scanCount,
+                    scansRequired,
+                    checkinComplete,
+                    scanTime: row.scan_time,
+                    scanVerified: !!Number(row.scan_verified),
+                    certEnabled: !!Number(row.cert_enabled),
+                    certId: row.cert_id,
+                    templatePath: row.template_path,
+                    certStatus,
+                    certStatusLabel,
+                    canDownload: !!Number(row.cert_enabled) && !!row.template_path
+                };
+            });
+            res.json(out);
+        }
+    );
+});
+
 // Doctor dashboard statistics (tolerant of optional auxiliary tables on PostgreSQL)
 app.get('/api/doctor/dashboard-stats/:userId', (req, res) => {
     const uid = parseInt(req.params.userId, 10);
@@ -4606,9 +4687,10 @@ app.post('/api/payments/process', (req, res) => {
 });
 
 const SCANNER_TICKET_LOOKUP_SQL = `
-        SELECT t.id AS ticket_id, t.is_scanned, t.ticket_id_string, IFNULL(t.is_valid, 1) AS is_valid,
+        SELECT t.id AS ticket_id, t.is_scanned, IFNULL(t.scan_count, 0) AS scan_count, t.ticket_id_string, IFNULL(t.is_valid, 1) AS is_valid,
                t.qr_code_data,
                s.id AS seminar_id, s.checkin_enabled, s.checkin_date, s.title AS seminar_title,
+               s.event_date, IFNULL(s.cert_scans_required, 1) AS cert_scans_required,
                u.id AS doctor_user_id, u.user_id_string AS doctor_user_id_string,
                u.first_name AS doctor_first_name, u.last_name AS doctor_last_name, u.email AS doctor_email, u.phone AS doctor_phone,
                IFNULL(u.is_disabled, 0) AS doctor_is_disabled, IFNULL(u.is_banned, 0) AS doctor_is_banned, u.ban_reason AS doctor_ban_reason,
@@ -4705,8 +4787,9 @@ function lookupTicketForScan(qrData, cb) {
 const SCANNER_REG_LOOKUP_SQL = `
         SELECT r.id AS registration_id, r.application_no, r.form_data, r.status AS registration_status, r.user_id,
                o.id AS order_db_id, o.order_id_string, o.status AS payment_status,
-               t.id AS ticket_id, t.ticket_id_string, t.is_scanned, t.qr_code_data, IFNULL(t.is_valid, 1) AS is_valid,
+               t.id AS ticket_id, t.ticket_id_string, t.is_scanned, IFNULL(t.scan_count, 0) AS scan_count, t.qr_code_data, IFNULL(t.is_valid, 1) AS is_valid,
                s.id AS seminar_id, s.checkin_enabled, s.checkin_date, s.title AS seminar_title, s.event_date,
+               IFNULL(s.cert_scans_required, 1) AS cert_scans_required,
                u.id AS doctor_user_id, u.user_id_string AS doctor_user_id_string,
                u.first_name AS doctor_first_name, u.last_name AS doctor_last_name, u.email AS doctor_email, u.phone AS doctor_phone,
                IFNULL(u.is_disabled, 0) AS doctor_is_disabled, IFNULL(u.is_banned, 0) AS doctor_is_banned, u.ban_reason AS doctor_ban_reason
@@ -5000,10 +5083,17 @@ app.post('/api/scanner/mark', (req, res) => {
                         }
                     });
                 }
-                if (row.is_scanned) {
+                const scansRequired = certVerify.normalizeCertScansRequired(row.cert_scans_required);
+                const currentScanCount = Number(row.scan_count) || (row.is_scanned ? 1 : 0);
+                if (currentScanCount >= scansRequired) {
                     return res.status(400).json({
                         success: false,
-                        error: 'Ticket already scanned!',
+                        error:
+                            scansRequired === 2
+                                ? 'Both entry and exit scans are already recorded for this ticket.'
+                                : 'Ticket already scanned!',
+                        scanCount: currentScanCount,
+                        scansRequired,
                         doctor: {
                             userId: row.doctor_user_id,
                             userIdString: row.doctor_user_id_string,
@@ -5071,9 +5161,10 @@ app.post('/api/scanner/mark', (req, res) => {
                     });
                 }
 
+                const newScanCount = currentScanCount + 1;
                 db.run(
-                    `UPDATE tickets SET is_scanned = 1, scan_time = CURRENT_TIMESTAMP, scanned_by = ? WHERE id = ?`,
-                    [staffId, row.ticket_id],
+                    `UPDATE tickets SET scan_count = ?, is_scanned = 1, scan_time = CURRENT_TIMESTAMP, scanned_by = ? WHERE id = ?`,
+                    [newScanCount, staffId, row.ticket_id],
                     function (err2) {
                         if (err2) return res.status(500).json({ success: false, error: err2.message });
                         const regId = row.registration_id;
@@ -5094,11 +5185,30 @@ app.post('/api/scanner/mark', (req, res) => {
                                     }
                                 });
 
+                                const certEligibleNow =
+                                    String(row.payment_status || '').toLowerCase() === 'success' &&
+                                    newScanCount >= scansRequired;
+                                let scanMsg =
+                                    'Attendance marked. Doctor tracking updated.';
+                                if (scansRequired === 2) {
+                                    if (newScanCount === 1) {
+                                        scanMsg =
+                                            'Entry scan recorded (1 of 2). Exit scan still required for certificate eligibility.';
+                                    } else {
+                                        scanMsg =
+                                            'Exit scan recorded (2 of 2). Certificate eligibility updated pending admin approval.';
+                                    }
+                                } else if (certEligibleNow) {
+                                    scanMsg +=
+                                        ' Certificate eligibility recorded — awaiting admin approval to issue.';
+                                }
                                 res.json({
                                     success: true,
                                     sound: 'success',
-                                    message:
-                                        'Attendance marked. Doctor tracking updated. Certificate unlocked if configured.',
+                                    message: scanMsg,
+                                    scanCount: newScanCount,
+                                    scansRequired,
+                                    certificateEligible: certEligibleNow,
                                     doctor: {
                                         userId: row.doctor_user_id,
                                         userIdString: row.doctor_user_id_string,
@@ -5206,8 +5316,10 @@ app.post('/api/admin/seminars', (req, res) => {
         otp_on_step1,
         otp_on_submit,
         public_list_enabled,
+        cert_scans_required,
         is_active
     } = req.body;
+    const certScansReq = certVerify.normalizeCertScansRequired(cert_scans_required);
     const rfj = registration_form_json != null && String(registration_form_json).trim() !== '' ? String(registration_form_json) : null;
     const cpj = cancellation_policy_json != null && String(cancellation_policy_json).trim() !== '' ? String(cancellation_policy_json) : null;
     const wu = whatsapp_group_url != null && String(whatsapp_group_url).trim() !== '' ? String(whatsapp_group_url).trim() : null;
@@ -5227,8 +5339,8 @@ app.post('/api/admin/seminars', (req, res) => {
         const portalYear =
             Number.isInteger(bodyYear) && bodyYear > 2000 ? bodyYear : defaultYear;
         db.run(
-            `INSERT INTO seminars (title, description, registration_start, registration_end, event_date, capacity, price, checkin_enabled, checkin_date, location_url, terms_conditions, hero_image_path, flyer_path, gallery_paths, registration_form_json, cancellation_policy_json, whatsapp_group_url, otp_on_application, otp_on_step1, otp_on_submit, public_list_enabled, portal_year, is_active) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO seminars (title, description, registration_start, registration_end, event_date, capacity, price, checkin_enabled, checkin_date, location_url, terms_conditions, hero_image_path, flyer_path, gallery_paths, registration_form_json, cancellation_policy_json, whatsapp_group_url, otp_on_application, otp_on_step1, otp_on_submit, public_list_enabled, cert_scans_required, portal_year, is_active) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 title,
                 description,
@@ -5251,6 +5363,7 @@ app.post('/api/admin/seminars', (req, res) => {
                 otpStep1,
                 otpSubmit,
                 pubList,
+                certScansReq,
                 portalYear,
                 activeFlag
             ],
@@ -5289,8 +5402,10 @@ app.put('/api/admin/seminars/:id', (req, res) => {
         otp_on_step1,
         otp_on_submit,
         public_list_enabled,
+        cert_scans_required,
         portal_year
     } = req.body;
+    const certScansReq = certVerify.normalizeCertScansRequired(cert_scans_required);
     const rfj = registration_form_json != null && String(registration_form_json).trim() !== '' ? String(registration_form_json) : null;
     const cpj = cancellation_policy_json != null && String(cancellation_policy_json).trim() !== '' ? String(cancellation_policy_json) : null;
     const wu = whatsapp_group_url != null && String(whatsapp_group_url).trim() !== '' ? String(whatsapp_group_url).trim() : null;
@@ -5309,7 +5424,7 @@ app.put('/api/admin/seminars/:id', (req, res) => {
         if (ePy) return res.status(500).json({ error: ePy.message });
         const finalPortalYear = Number.isInteger(py) && py > 2000 ? py : defaultYear;
         db.run(
-            `UPDATE seminars SET title=?, description=?, registration_start=?, registration_end=?, event_date=?, capacity=?, price=?, checkin_enabled=?, checkin_date=?, is_active=?, location_url=?, terms_conditions=?, hero_image_path=?, flyer_path=?, gallery_paths=?, registration_form_json=?, cancellation_policy_json=?, whatsapp_group_url=?, otp_on_application=?, otp_on_step1=?, otp_on_submit=?, public_list_enabled=?, portal_year=? WHERE id=?`,
+            `UPDATE seminars SET title=?, description=?, registration_start=?, registration_end=?, event_date=?, capacity=?, price=?, checkin_enabled=?, checkin_date=?, is_active=?, location_url=?, terms_conditions=?, hero_image_path=?, flyer_path=?, gallery_paths=?, registration_form_json=?, cancellation_policy_json=?, whatsapp_group_url=?, otp_on_application=?, otp_on_step1=?, otp_on_submit=?, public_list_enabled=?, cert_scans_required=?, portal_year=? WHERE id=?`,
             [
                 title,
                 description,
@@ -5333,6 +5448,7 @@ app.put('/api/admin/seminars/:id', (req, res) => {
                 otpStep1,
                 otpSubmit,
                 pubList,
+                certScansReq,
                 finalPortalYear,
                 req.params.id
             ],

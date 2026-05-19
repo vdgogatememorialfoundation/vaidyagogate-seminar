@@ -1486,8 +1486,15 @@ async function loadAdminCertificateCandidates() {
         rows.forEach((r) => {
             const name = [r.first_name, r.last_name].filter(Boolean).join(' ') || '—';
             const paid = r.order_status === 'success' ? 'Yes' : 'No';
-            const checked = r.is_scanned ? 'Yes' : 'No';
-            const cert = r.cert_enabled ? 'Enabled' : 'Locked';
+            const scansReq = Number(r.cert_scans_required) === 2 ? 2 : 1;
+            const scanCt = Number(r.scan_count) || 0;
+            const checked =
+                scanCt >= scansReq
+                    ? 'Yes (' + scanCt + '/' + scansReq + ')'
+                    : scanCt > 0
+                      ? scanCt + '/' + scansReq
+                      : 'No';
+            const cert = r.cert_enabled ? 'Enabled' : r.scan_verified ? 'Eligible' : 'Locked';
             const appCell = r.application_no
                 ? escAdmin(r.application_no)
                 : '<span style="color:#b91c1c;font-weight:600;">Missing</span>';
@@ -4252,6 +4259,8 @@ function editSeminar(index) {
     document.getElementById('seminar-active').value = s.is_active ? '1' : '0';
     
     document.getElementById('seminar-checkin-enabled').value = s.checkin_enabled ? '1' : '0';
+    const csr = document.getElementById('seminar-cert-scans-required');
+    if (csr) csr.value = Number(s.cert_scans_required) === 2 ? '2' : '1';
     const checkinRaw = s.checkin_date || '';
     const checkinYmd =
         typeof checkinRaw === 'string' && /^\d{4}-\d{2}-\d{2}/.test(checkinRaw)
@@ -4329,6 +4338,7 @@ async function saveSeminar(e) {
             return d || null;
         })(),
         public_list_enabled: document.getElementById('seminar-public-list-enabled')?.value === '1',
+        cert_scans_required: parseInt(document.getElementById('seminar-cert-scans-required')?.value || '1', 10) === 2 ? 2 : 1,
         location_url: document.getElementById('seminar-location-url').value || null,
         terms_conditions: document.getElementById('seminar-terms').value || null,
         hero_image_path: (document.getElementById('seminar-hero-image') || {}).value || null,

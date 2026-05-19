@@ -1083,8 +1083,8 @@
         min-height: 48px;
     }
     .congress-hero-arrows button { width: 40px; height: 40px; }
-    .cg-quick { margin-top: -28px; padding: 0 16px; }
-    .cg-quick-grid { grid-template-columns: repeat(2, 1fr); margin-top: -32px; gap: 12px; }
+    .cg-quick { margin-top: 0; padding: 0 16px; }
+    .cg-quick-grid { grid-template-columns: repeat(2, 1fr); margin-top: 0; gap: 12px; }
     .cg-quick-card { padding: 18px 12px; }
     .cg-fab-register { display: inline-flex; }
     .congress-hero-arrows .prev { left: 8px; }

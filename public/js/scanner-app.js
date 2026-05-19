@@ -306,10 +306,21 @@
             if (result.success) {
                 playTone('success');
                 stats.ok++;
+                const scanNote =
+                    result.scanCount != null && result.scansRequired != null
+                        ? '<p style="margin-top:8px;font-size:0.85rem;">Scans: <strong>' +
+                          result.scanCount +
+                          '/' +
+                          result.scansRequired +
+                          '</strong></p>'
+                        : '';
                 renderResult(
                     true,
-                    '<strong><i class="fas fa-check-circle"></i> Checked in</strong>' +
+                    '<strong><i class="fas fa-check-circle"></i> ' +
+                        (result.message || 'Checked in').replace(/</g, '&lt;') +
+                        '</strong>' +
                         metaHtml(d) +
+                        scanNote +
                         '<p style="margin-top:10px;font-size:0.85rem;opacity:0.85;">Next scan in a moment…</p>',
                     'ok'
                 );

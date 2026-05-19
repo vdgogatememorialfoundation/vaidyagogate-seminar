@@ -21,7 +21,8 @@
         { icon: 'fa-user-plus', title: 'Register now', text: 'Doctor portal registration', href: '/doctor.html', action: 'register' },
         { icon: 'fa-microphone', title: 'Speakers', text: 'Faculty & experts', section: 'home', anchor: 'speakers-section' },
         { icon: 'fa-images', title: 'Gallery', text: 'Photos & memories', section: 'gallery' },
-        { icon: 'fa-shield-check', title: 'Verify delegate', text: 'Certificate lookup', section: 'verify' },
+        { icon: 'fa-shield-check', title: 'Verify delegate', text: 'Paid participants', section: 'verify' },
+        { icon: 'fa-award', title: 'Verify certificate', text: 'OTP authenticity check', href: '/verify-certificate.html' },
         { icon: 'fa-envelope', title: 'Contact', text: 'Get in touch', section: 'contact' }
     ];
 
