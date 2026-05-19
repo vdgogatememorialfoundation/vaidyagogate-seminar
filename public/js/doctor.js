@@ -2513,13 +2513,58 @@ function toggleRegBlock() {
     refreshRegistrationRequiredAttributes();
 }
 
-function verifyNcism() {
-    const ncism = document.getElementById('reg-ncism').value;
-    if(ncism.length > 3) {
-        document.getElementById('ncism-status').classList.remove('hidden');
-        alert("System Auto-Verified Registration ID successfully!");
-    } else {
-        alert("Invalid Registration ID");
+async function verifyNcism() {
+    const ncism = String(document.getElementById('reg-ncism')?.value || '').trim();
+    const fileInput = document.getElementById('reg-cert-file');
+    const statusEl = document.getElementById('ncism-status');
+    if (ncism.length < 4) {
+        if (statusEl) statusEl.classList.add('hidden');
+        return alert('Enter your NCISM / registration number (at least 4 characters).');
+    }
+    if (!fileInput || !fileInput.files || !fileInput.files[0]) {
+        return alert('Upload your registration certificate (PDF or image), then click Verify ID.');
+    }
+    const fd = new FormData();
+    fd.append('ncism', ncism);
+    fd.append('certificate', fileInput.files[0]);
+    try {
+        const res = await fetch('/api/applications/check-ncism-certificate', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Verification failed');
+        const check = data.check || {};
+        if (statusEl) {
+            statusEl.classList.remove('hidden');
+            if (check.status === 'match') {
+                statusEl.style.color = '#059669';
+                statusEl.textContent = 'Certificate matches entered registration number.';
+            } else if (check.status === 'mismatch') {
+                statusEl.style.color = '#b91c1c';
+                statusEl.textContent =
+                    'Mismatch: certificate shows ' +
+                    (check.bestMatch || (check.extracted || []).join(', ') || '?') +
+                    ' — admin will verify manually.';
+            } else {
+                statusEl.style.color = '#b45309';
+                statusEl.textContent =
+                    'Could not read number from file automatically — your application will be reviewed manually.';
+            }
+        }
+        if (check.status === 'match') {
+            alert('Registration number matches the uploaded certificate.');
+        } else if (check.status === 'mismatch') {
+            alert(
+                'FLAG: The number on your certificate does not match what you entered.\n\nEntered: ' +
+                    ncism +
+                    '\nFound on document: ' +
+                    ((check.extracted || []).join(', ') || check.bestMatch || '—') +
+                    '\n\nYou may continue; admin will verify manually.'
+            );
+        } else {
+            alert('Certificate uploaded. Automatic read was inconclusive — admin will verify your documents.');
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Network error while checking certificate.');
     }
 }
 

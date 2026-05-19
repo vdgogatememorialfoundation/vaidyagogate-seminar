@@ -116,6 +116,7 @@
                 <a class="menu-item" data-admin-module="tab-certificates" onclick="switchTab('tab-certificates'); initAdminCertificatesTab();"><i class="fas fa-award"></i> Certificate Management</a>
                 <a class="menu-item" data-admin-module="tab-volunteers" onclick="switchTab('tab-volunteers'); initAdminVolunteersTab();"><i class="fas fa-hands-helping"></i> Volunteers</a>
                 <a class="menu-item" data-admin-module="tab-case-mgmt" onclick="switchTab('tab-case-mgmt'); initAdminCaseMgmtTab();"><i class="fas fa-briefcase-medical"></i> Case Management</a>
+                <a class="menu-item" data-admin-module="tab-analytics" onclick="switchTab('tab-analytics'); initAdminAnalyticsTab();"><i class="fas fa-chart-pie"></i> Analytics</a>
                 <a class="menu-item" data-admin-module="tab-reports" onclick="switchTab('tab-reports'); initAdminReportsTab();"><i class="fas fa-file-export"></i> Reports &amp; Exports</a>
                 <a class="menu-item" data-admin-module="tab-scanner-logs" onclick="switchTab('tab-scanner-logs'); initAdminScannerLogsTab();"><i class="fas fa-qrcode"></i> Scanner Activity</a>
                 <a class="menu-item" data-admin-module="tab-activity-logs" onclick="switchTab('tab-activity-logs'); initAdminActivityLogsTab();"><i class="fas fa-history"></i> User &amp; doctor activity</a>
@@ -909,12 +910,21 @@
                 </div>
             </div>
 
+            <div id="tab-analytics" class="tab-pane hidden">
+                <h2 style="margin-bottom: 20px;">Seminar analytics</h2>
+                <div class="card">
+                    <label>Seminar</label>
+                    <select id="analytics-seminar" style="width:100%;max-width:400px;padding:8px;margin:8px 0 16px;" onchange="loadAdminSeminarAnalytics()"></select>
+                    <div id="analytics-dashboard"><p style="color:#64748b;">Select a seminar to load analytics.</p></div>
+                </div>
+            </div>
+
             <div id="tab-reports" class="tab-pane hidden">
                 <h2 style="margin-bottom: 20px;">Reports &amp; exports</h2>
                 <div class="card">
                     <label>Seminar</label>
                     <select id="report-seminar" style="width:100%;max-width:400px;padding:8px;margin:8px 0 16px;"></select>
-                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:10px;">Exports include all registration form fields. Pick Excel, CSV, or PDF (printable HTML).</p>
+                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:10px;">Exports include all registration form fields. Confirmed = approved + paid + verified. Pick Excel, CSV, or PDF (printable HTML).</p>
                     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
                         <button type="button" class="btn-primary" style="background:#334155;" onclick="window.__reportFmt='xlsx'">Excel (.xlsx)</button>
                         <button type="button" class="btn-primary" style="background:#475569;" onclick="window.__reportFmt='csv'">CSV</button>
@@ -927,6 +937,12 @@
                         <button type="button" class="btn-primary" style="background:#7c3aed;" onclick="downloadAdminReport('checked_in', window.__reportFmt||'xlsx')">Checked in</button>
                         <button type="button" class="btn-primary" style="background:#0d9488;" onclick="downloadAdminReport('cert_eligible', window.__reportFmt||'xlsx')">Certificate eligible</button>
                         <button type="button" class="btn-primary" style="background:#1e40af;" onclick="downloadAdminReport('all_participants', window.__reportFmt||'xlsx')">All participants</button>
+                        <button type="button" class="btn-primary" style="background:#0f766e;" onclick="downloadAdminReport('confirmed', window.__reportFmt||'xlsx')">Confirmed list</button>
+                        <button type="button" class="btn-primary" style="background:#c2410c;" onclick="downloadAdminReport('pending_verification', window.__reportFmt||'xlsx')">Pending verification</button>
+                        <button type="button" class="btn-primary" style="background:#6d28d9;" onclick="downloadAdminReport('attendance', window.__reportFmt||'xlsx')">Attendance sheet</button>
+                        <button type="button" class="btn-primary" style="background:#0369a1;" onclick="downloadAdminReport('check_in', window.__reportFmt||'xlsx')">Check-in report</button>
+                        <button type="button" class="btn-primary" style="background:#a16207;" onclick="downloadAdminReport('finance', window.__reportFmt||'xlsx')">Finance report</button>
+                        <button type="button" class="btn-primary" style="background:#4d7c0f;" onclick="downloadAdminReport('certificate_report', window.__reportFmt||'xlsx')">Certificate report</button>
                     </div>
                 </div>
                 <div class="card" style="margin-top:16px;">

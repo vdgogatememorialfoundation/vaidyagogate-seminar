@@ -53,6 +53,9 @@ const certRender = require('./lib/certificate-render');
 const certTemplateCfg = require('./lib/certificate-template-config');
 const certVerify = require('./lib/certificate-verify');
 const docVerify = require('./lib/application-document-verify');
+const regCertVerify = require('./lib/registration-certificate-verify');
+const seminarAnalytics = require('./lib/seminar-analytics');
+const { filterConfirmedRows } = require('./lib/confirmed-participants');
 const adminComposeMail = require('./lib/admin-compose-mail');
 const systemHealth = require('./lib/system-health');
 const systemHealthAi = require('./lib/system-health-ai');
@@ -3155,26 +3158,38 @@ app.get('/api/public/participants/:seminarId', (req, res) => {
                 return res.status(403).json({ error: 'Participant list is not published for this seminar yet.' });
             }
             db.all(
-                `SELECT r.application_no, r.status, u.first_name, u.middle_name, u.last_name, u.user_id_string,
-                        u.city, u.state, o.status AS payment_status, o.payment_date
+                `SELECT r.application_no, r.status, r.form_data, r.doc_review_json,
+                        u.first_name, u.middle_name, u.last_name, u.user_id_string,
+                        o.status AS payment_status, o.payment_date
                  FROM registrations r
                  JOIN users u ON r.user_id = u.id
                  INNER JOIN orders o ON o.registration_id = r.id AND o.status = 'success'
                  WHERE r.seminar_id = ?
-                   AND r.status IN ('approved_pending_payment', 'completed', 'checked_in')
                  ORDER BY r.application_no ASC`,
                 [sid],
                 (e2, rows) => {
                     if (e2) return res.status(500).json({ error: e2.message });
-                    let list = (rows || []).map((r) => ({
-                        applicationNo: r.application_no,
-                        name: [r.first_name, r.middle_name, r.last_name].filter(Boolean).join(' '),
-                        city: r.city || '',
-                        state: r.state || '',
-                        status: r.status,
-                        paid: r.payment_status === 'success',
-                        userIdString: r.user_id_string
-                    }));
+                    const confirmed = filterConfirmedRows(
+                        (rows || []).map((r) => ({
+                            ...r,
+                            order_status: r.payment_status
+                        }))
+                    );
+                    let list = confirmed.map((r) => {
+                        let fd = {};
+                        try {
+                            fd = JSON.parse(r.form_data || '{}');
+                        } catch (_) {}
+                        return {
+                            applicationNo: r.application_no,
+                            name: [r.first_name, r.middle_name, r.last_name].filter(Boolean).join(' '),
+                            city: fd.city || '',
+                            state: fd.state || '',
+                            status: r.status,
+                            paid: r.payment_status === 'success',
+                            userIdString: r.user_id_string
+                        };
+                    });
                     if (q) {
                         list = list.filter(
                             (p) =>
@@ -3262,6 +3277,27 @@ function mergeScrollingAnnouncementsWithOpenSeminars(cms, cb) {
         }
     );
 }
+
+app.get('/api/public/announcements', (req, res) => {
+    loadPublicSiteCms((e, cms) => {
+        if (e) return res.status(500).json({ error: e.message });
+        mergeScrollingAnnouncementsWithOpenSeminars(cms, (e2, enriched) => {
+            if (e2) return res.status(500).json({ error: e2.message });
+            const out = {
+                updatedAt: new Date().toISOString(),
+                ticker: enriched.ticker || null,
+                scrollingAnnouncements: enriched.scrollingAnnouncements || [],
+                publicNotices: enriched.publicNotices || [],
+                portalUrls: {
+                    seminar: portalUrls.getPortalUrls().seminar,
+                    wix: portalUrls.getPortalUrls().wix
+                }
+            };
+            res.setHeader('Cache-Control', 'public, max-age=120');
+            res.json(out);
+        });
+    });
+});
 
 app.get('/api/public/site-cms', (req, res) => {
     loadPublicSiteCms((e, cms) => {
@@ -3727,6 +3763,7 @@ app.post('/api/applications/submit', (req, res, next) => {
 
                     function doInsertRegistration() {
                         const applicationNo = generateId();
+                        const finishInsert = () => {
                         const stored = sanitizeFormDataForStorage(formData || {});
                         db.run(
                             `INSERT INTO registrations (user_id, seminar_id, application_no, status, form_data) VALUES (?, ?, ?, 'submitted', ?)`,
@@ -3772,6 +3809,22 @@ app.post('/api/applications/submit', (req, res, next) => {
                                 );
                             }
                         );
+                        };
+                        if (formData && formData.certificate_path && formData.ncism) {
+                            regCertVerify.verifyCertificateForRegistration(
+                                db,
+                                fileStore,
+                                uploadsDir,
+                                formData,
+                                (verr, check) => {
+                                    if (verr) console.warn('[ncism-verify]', verr.message);
+                                    if (check) formData.ncism_certificate_check = check;
+                                    finishInsert();
+                                }
+                            );
+                            return;
+                        }
+                        finishInsert();
                     }
 
                     if (otpStep1 || otpSubmit) {
@@ -5794,6 +5847,72 @@ function enableCertificateForRegistration(registrationId, cb) {
     );
 }
 
+app.get('/api/admin/analytics/seminar/:seminarId', (req, res) => {
+    seminarAnalytics.loadSeminarAnalytics(db, req.params.seminarId, (err, data) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(data);
+    });
+});
+
+app.post('/api/applications/check-ncism-certificate', (req, res, next) => {
+    (process.env.VERCEL ? memoryUpload : upload).single('certificate')(req, res, (err) => {
+        if (err) return res.status(400).json({ error: err.message || 'Upload failed' });
+        next();
+    });
+}, (req, res) => {
+    let entered = String((req.body && req.body.ncism) || '').trim();
+    if (!entered && req.body && req.body.formData) {
+        try {
+            const fd =
+                typeof req.body.formData === 'string' ? JSON.parse(req.body.formData) : req.body.formData;
+            entered = String((fd && fd.ncism) || '').trim();
+        } catch (_) {}
+    }
+    if (!entered) return res.status(400).json({ error: 'Enter your NCISM / registration number first.' });
+
+    const runCheck = (formData) => {
+        regCertVerify.verifyCertificateForRegistration(db, fileStore, uploadsDir, formData, (e, check) => {
+            if (e) return res.status(500).json({ error: e.message });
+            res.json({ success: true, check });
+        });
+    };
+
+    if (req.file) {
+        return persistUploadedCertificate(req, (certErr, certPath) => {
+            if (certErr) return res.status(500).json({ error: certErr.message });
+            runCheck({ ncism: entered, certificate_path: certPath });
+        });
+    }
+    const existingPath = String((req.body && req.body.certificate_path) || '').trim();
+    if (existingPath) return runCheck({ ncism: entered, certificate_path: existingPath });
+    return res.status(400).json({ error: 'Upload your registration certificate to compare with the number you entered.' });
+});
+
+app.post('/api/admin/applications/:applicationId/recheck-ncism', (req, res) => {
+    const appId = parseInt(req.params.applicationId, 10);
+    if (!Number.isInteger(appId) || appId < 1) return res.status(400).json({ error: 'Invalid application id' });
+    db.get(`SELECT form_data FROM registrations WHERE id = ?`, [appId], (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!row) return res.status(404).json({ error: 'Application not found' });
+        let formData = {};
+        try {
+            formData = JSON.parse(row.form_data || '{}');
+        } catch (_) {}
+        regCertVerify.verifyCertificateForRegistration(db, fileStore, uploadsDir, formData, (e2, check) => {
+            if (e2) return res.status(500).json({ error: e2.message });
+            formData.ncism_certificate_check = check;
+            db.run(
+                `UPDATE registrations SET form_data = ? WHERE id = ?`,
+                [JSON.stringify(sanitizeFormDataForStorage(formData)), appId],
+                (e3) => {
+                    if (e3) return res.status(500).json({ error: e3.message });
+                    res.json({ success: true, check });
+                }
+            );
+        });
+    });
+});
+
 // Admin: verify seminar application (documents + details)
 app.post('/api/admin/applications/:applicationId/document-verify', (req, res) => {
     docVerify.verifySeminarApplication(
@@ -5854,7 +5973,7 @@ app.post('/api/applications/:applicationId/resubmit-documents', upload.single('c
                         return res.status(400).json({ error: 'Please upload your certificate document.' });
                     }
                 }
-                const mergedStored = sanitizeFormDataForStorage(formData);
+                const saveResubmit = (mergedStored) => {
                 db.run(
                     `UPDATE registrations SET form_data = ?, status = 'pending_approval', doc_review_json = NULL WHERE id = ?`,
                     [JSON.stringify(mergedStored), appId],
@@ -5883,6 +6002,21 @@ app.post('/api/applications/:applicationId/resubmit-documents', upload.single('c
                         });
                     }
                 );
+                };
+                if (formData.certificate_path && formData.ncism) {
+                    return regCertVerify.verifyCertificateForRegistration(
+                        db,
+                        fileStore,
+                        uploadsDir,
+                        formData,
+                        (verr, check) => {
+                            if (verr) console.warn('[ncism-verify]', verr.message);
+                            if (check) formData.ncism_certificate_check = check;
+                            saveResubmit(sanitizeFormDataForStorage(formData));
+                        }
+                    );
+                }
+                saveResubmit(sanitizeFormDataForStorage(formData));
             });
         }
     );

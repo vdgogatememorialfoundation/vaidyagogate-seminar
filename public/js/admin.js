@@ -621,6 +621,7 @@ const ADMIN_MODULE_TAB_DEFS = [
     ['tab-certificates', 'Certificate management'],
     ['tab-volunteers', 'Volunteers'],
     ['tab-case-mgmt', 'Case management'],
+    ['tab-analytics', 'Analytics'],
     ['tab-reports', 'Reports & exports'],
     ['tab-scanner-logs', 'Scanner activity'],
     ['tab-activity-logs', 'User & doctor activity'],
@@ -2873,6 +2874,68 @@ async function assignCaseJudges(subId) {
     }
 }
 
+async function initAdminAnalyticsTab() {
+    await fillAdminSeminarSelect('analytics-seminar', false);
+    const sid = document.getElementById('analytics-seminar')?.value;
+    if (sid) loadAdminSeminarAnalytics();
+}
+
+function renderAnalyticsList(title, items) {
+    if (!items || !items.length) return `<p class="muted" style="font-size:0.85rem;">No ${escAdmin(title)} data yet.</p>`;
+    return (
+        '<ul style="margin:0;padding-left:18px;font-size:0.88rem;">' +
+        items
+            .map((x) => `<li>${escAdmin(x.name)} — <strong>${x.count}</strong></li>`)
+            .join('') +
+        '</ul>'
+    );
+}
+
+async function loadAdminSeminarAnalytics() {
+    const sid = document.getElementById('analytics-seminar')?.value;
+    const host = document.getElementById('analytics-dashboard');
+    if (!host) return;
+    if (!sid) {
+        host.innerHTML = '<p style="color:#64748b;">Select a seminar.</p>';
+        return;
+    }
+    host.innerHTML = '<p style="color:#64748b;">Loading…</p>';
+    try {
+        const res = await fetch('/api/admin/analytics/seminar/' + encodeURIComponent(sid));
+        const d = await res.json();
+        if (!res.ok) throw new Error(d.error || 'Failed');
+        const rev = d.revenue || {};
+        const ps = d.practitionerVsStudent || {};
+        host.innerHTML = `
+            <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin-bottom:16px;">
+                <div class="card" style="padding:12px;"><div class="muted" style="font-size:0.75rem;">Registered</div><strong>${d.registered || 0}</strong></div>
+                <div class="card" style="padding:12px;"><div class="muted" style="font-size:0.75rem;">Confirmed</div><strong>${d.confirmed || 0}</strong></div>
+                <div class="card" style="padding:12px;"><div class="muted" style="font-size:0.75rem;">Paid</div><strong>${d.paid || 0}</strong></div>
+                <div class="card" style="padding:12px;"><div class="muted" style="font-size:0.75rem;">Checked in</div><strong>${d.scanned || 0}</strong></div>
+                <div class="card" style="padding:12px;"><div class="muted" style="font-size:0.75rem;">No-shows (paid)</div><strong>${d.noShow || 0}</strong></div>
+                <div class="card" style="padding:12px;"><div class="muted" style="font-size:0.75rem;">Verification pending</div><strong>${d.verificationPending || 0}</strong></div>
+                <div class="card" style="padding:12px;"><div class="muted" style="font-size:0.75rem;">Payment pending</div><strong>${d.paymentPending || 0}</strong></div>
+                <div class="card" style="padding:12px;"><div class="muted" style="font-size:0.75rem;">Revenue (₹)</div><strong>${rev.collected || 0}</strong></div>
+            </div>
+            <p style="font-size:0.85rem;color:#64748b;">Attendance rate (checked-in ÷ paid): <strong>${d.attendanceRate || 0}%</strong></p>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-top:14px;">
+                <div><h4 style="margin:0 0 6px;">By state</h4>${renderAnalyticsList('state', d.byState)}</div>
+                <div><h4 style="margin:0 0 6px;">By city</h4>${renderAnalyticsList('city', d.byCity)}</div>
+                <div><h4 style="margin:0 0 6px;">By qualification</h4>${renderAnalyticsList('qualification', d.byQual)}</div>
+                <div><h4 style="margin:0 0 6px;">Top colleges</h4>${renderAnalyticsList('college', d.byCollege)}</div>
+                <div><h4 style="margin:0 0 6px;">Practitioner vs student</h4>
+                    <ul style="margin:0;padding-left:18px;font-size:0.88rem;">
+                        <li>Practitioner / PG — <strong>${ps.practitioner || 0}</strong></li>
+                        <li>UG student — <strong>${ps.student || 0}</strong></li>
+                        <li>Other — <strong>${ps.other || 0}</strong></li>
+                    </ul>
+                </div>
+            </div>`;
+    } catch (e) {
+        host.innerHTML = '<p style="color:#b91c1c;">' + escAdmin(e.message) + '</p>';
+    }
+}
+
 async function initAdminReportsTab() {
     await fillAdminSeminarSelect('report-seminar', false);
     await fillAdminSeminarSelect('reg-ov-seminar', false);
@@ -3277,6 +3340,48 @@ function seminarNeedsDocReview(qual) {
     return q === 'PG' || q === 'Practicing Vaidya' || q === 'Practitioner';
 }
 
+function formatNcismCertificateCheckHtml(check) {
+    if (!check || check.status === 'skipped') return '';
+    const st = String(check.status || '').toLowerCase();
+    let color = '#64748b';
+    let label = 'Certificate check';
+    if (st === 'match') {
+        color = '#15803d';
+        label = 'Certificate OCR: number matches uploaded document';
+    } else if (st === 'mismatch') {
+        color = '#b91c1c';
+        label = 'Certificate OCR: MISMATCH — manual verification required';
+    } else if (st === 'no_text' || st === 'no_file') {
+        color = '#b45309';
+        label = 'Certificate OCR: could not read number from file — verify manually';
+    }
+    const extracted = (check.extracted || []).join(', ') || '—';
+    return `<div style="margin:10px 0;padding:10px;border-radius:8px;border:1px solid ${color};background:${color}14;">
+        <p style="margin:0 0 6px;font-weight:600;color:${color};">${escAdmin(label)}</p>
+        <p style="margin:0;font-size:0.88rem;"><strong>Entered:</strong> ${escAdmin(check.entered || '—')}</p>
+        <p style="margin:4px 0 0;font-size:0.88rem;"><strong>OCR found:</strong> ${escAdmin(extracted)}</p>
+        ${check.bestMatch && st === 'mismatch' ? `<p style="margin:4px 0 0;font-size:0.88rem;"><strong>Closest:</strong> ${escAdmin(check.bestMatch)}</p>` : ''}
+        <button type="button" class="btn-primary" style="margin-top:8px;font-size:0.8rem;" onclick="adminRecheckNcism(${check._appId || 0})">Re-run OCR check</button>
+    </div>`;
+}
+
+async function adminRecheckNcism(appId) {
+    if (!appId) return;
+    try {
+        const res = await fetch('/api/admin/applications/' + appId + '/recheck-ncism', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Check failed');
+        alert(
+            data.check && data.check.status === 'match'
+                ? 'OCR: entered number matches certificate.'
+                : 'OCR check complete — see application view for details.'
+        );
+        loadApplications();
+    } catch (e) {
+        alert('Network error');
+    }
+}
+
 function viewFullApplication(index) {
     const a = globalAdminApps[index];
     let formData = {};
@@ -3330,6 +3435,9 @@ function viewFullApplication(index) {
         <hr style="margin:10px 0;">
         <p><strong>Qualification:</strong> ${escAdmin(formData.qual || '')}</p>
         <p><strong>NCISM / Reg. no.:</strong> ${escAdmin(formData.ncism || '—')}</p>
+        ${formatNcismCertificateCheckHtml(
+            Object.assign({}, formData.ncism_certificate_check || {}, { _appId: a.id })
+        )}
         <p><strong>College:</strong> ${escAdmin(formData.college || '')}, ${escAdmin(formData.ccity || '')}</p>
         ${certLink}
         ${verifyBlock}
