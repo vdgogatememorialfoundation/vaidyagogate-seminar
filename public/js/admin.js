@@ -694,6 +694,419 @@ async function saveAdminModulesForTarget() {
     }
 }
 
+let __behalfRegId = null;
+let __behalfRegApplicationNo = '';
+let __behalfFormFields = [];
+let __behalfSelectedMethodId = 'dqr';
+let __behalfOrderDbId = null;
+let __behalfPollTimer = null;
+
+const ADMIN_BEHALF_FIELD_DEFAULTS = [
+    { key: 'fname', label: 'First name', type: 'text', enabled: true, required: true },
+    { key: 'mname', label: 'Middle name', type: 'text', enabled: true, required: false },
+    { key: 'lname', label: 'Last name', type: 'text', enabled: true, required: true },
+    { key: 'email', label: 'Email', type: 'email', enabled: true, required: true },
+    { key: 'phone', label: 'Phone', type: 'tel', enabled: true, required: true },
+    { key: 'address', label: 'Address', type: 'textarea', enabled: true, required: true },
+    { key: 'pin', label: 'Pincode', type: 'text', enabled: true, required: true },
+    { key: 'city', label: 'City', type: 'text', enabled: true, required: true },
+    { key: 'state', label: 'State', type: 'text', enabled: true, required: true },
+    { key: 'country', label: 'Country', type: 'text', enabled: true, required: true },
+    {
+        key: 'qual',
+        label: 'Qualification',
+        type: 'select',
+        enabled: true,
+        required: true,
+        options: [
+            { value: 'Practicing Vaidya', label: 'Practicing Vaidya' },
+            { value: 'Practitioner', label: 'Practitioner' },
+            { value: 'PG', label: 'PG' }
+        ]
+    },
+    { key: 'ncism', label: 'NCISM / Reg. no.', type: 'text', enabled: true, required: true, onlyWhenAdvancedQual: true },
+    { key: 'college', label: 'College', type: 'text', enabled: true, required: true },
+    { key: 'ccity', label: 'College city', type: 'text', enabled: true, required: true },
+    { key: 'cstate', label: 'College state', type: 'text', enabled: true, required: false }
+];
+
+function adminBehalfNeedsAdvancedQual() {
+    const el = document.getElementById('behalf-f-qual');
+    const q = el ? String(el.value || '').trim() : '';
+    return q === 'PG' || q === 'Practicing Vaidya' || q === 'Practitioner';
+}
+
+function renderAdminBehalfFormFields() {
+    const host = document.getElementById('behalf-form-fields');
+    if (!host) return;
+    const fields = (__behalfFormFields || []).filter((f) => f.enabled !== false);
+    if (!fields.length) {
+        host.innerHTML = '<p class="muted" style="grid-column:1/-1;">No fields configured. Set them under Seminar registration form.</p>';
+        return;
+    }
+    const adv = adminBehalfNeedsAdvancedQual();
+    let html = '';
+    fields.forEach((f) => {
+        if (f.key === 'certificate') return;
+        if (f.onlyWhenAdvancedQual && !adv) return;
+        const id = 'behalf-f-' + f.key;
+        const req = f.required ? ' *' : '';
+        const span = f.type === 'textarea' ? 'grid-column:1/-1;' : '';
+        html += '<div class="form-group" style="' + span + '"><label for="' + id + '">' + escAdmin(f.label || f.key) + req + '</label>';
+        if (f.type === 'textarea') {
+            html += '<textarea id="' + id + '" rows="2" style="width:100%;padding:8px;"></textarea>';
+        } else if (f.type === 'select' && Array.isArray(f.options)) {
+            html += '<select id="' + id + '" style="width:100%;padding:8px;"><option value="">Select</option>';
+            f.options.forEach((o) => {
+                const v = o.value != null ? o.value : o.label;
+                html += '<option value="' + escAdmin(String(v)) + '">' + escAdmin(o.label || v) + '</option>';
+            });
+            html += '</select>';
+        } else {
+            const ty = f.type === 'email' ? 'email' : f.type === 'tel' ? 'tel' : 'text';
+            html += '<input type="' + ty + '" id="' + id + '" style="width:100%;padding:8px;">';
+        }
+        html += '</div>';
+    });
+    host.innerHTML = html;
+    const qualEl = document.getElementById('behalf-f-qual');
+    if (qualEl) qualEl.addEventListener('change', () => renderAdminBehalfFormFields());
+    host.querySelectorAll('input,textarea,select').forEach((el) => {
+        el.addEventListener('input', () => {
+            syncBehalfJsonFromForm();
+            scheduleBehalfRegSave();
+        });
+        el.addEventListener('change', () => {
+            syncBehalfJsonFromForm();
+            scheduleBehalfRegSave();
+        });
+    });
+}
+
+function collectAdminBehalfFormData() {
+    const o = { country: 'India' };
+    (__behalfFormFields || ADMIN_BEHALF_FIELD_DEFAULTS).forEach((f) => {
+        if (f.key === 'certificate' || f.enabled === false) return;
+        const el = document.getElementById('behalf-f-' + f.key);
+        if (!el) return;
+        o[f.key] = el.value;
+    });
+    return o;
+}
+
+function syncBehalfJsonFromForm() {
+    const ta = document.getElementById('behalf-form-json');
+    if (!ta) return;
+    try {
+        ta.value = JSON.stringify(collectAdminBehalfFormData(), null, 2);
+    } catch (_) {}
+}
+
+function syncBehalfFormFromJson() {
+    const ta = document.getElementById('behalf-form-json');
+    if (!ta) return;
+    try {
+        const fd = JSON.parse(ta.value || '{}');
+        (__behalfFormFields || ADMIN_BEHALF_FIELD_DEFAULTS).forEach((f) => {
+            const el = document.getElementById('behalf-f-' + f.key);
+            if (el && fd[f.key] != null) el.value = fd[f.key];
+        });
+    } catch (_) {}
+}
+
+async function loadAdminBehalfFormConfig(seminarId) {
+    try {
+        const res = await fetch('/api/registration-form-config?seminarId=' + encodeURIComponent(seminarId));
+        const data = await res.json();
+        __behalfFormFields = (data.fields && data.fields.length) ? data.fields : ADMIN_BEHALF_FIELD_DEFAULTS;
+    } catch (_) {
+        __behalfFormFields = ADMIN_BEHALF_FIELD_DEFAULTS;
+    }
+    renderAdminBehalfFormFields();
+}
+
+function refreshAdminBehalfWorkflow(data) {
+    const card = document.getElementById('behalf-workflow-card');
+    const st = document.getElementById('behalf-workflow-status');
+    const payWrap = document.getElementById('behalf-payment-wrap');
+    if (!card || !st) return;
+    if (!data || !data.found) {
+        card.classList.add('hidden');
+        __behalfRegId = null;
+        return;
+    }
+    card.classList.remove('hidden');
+    const reg = data.registration;
+    __behalfRegId = reg.id;
+    __behalfRegApplicationNo = reg.applicationNo || '';
+    let lines = [
+        '<strong>Application:</strong> ' + escAdmin(reg.applicationNo || reg.id),
+        '<strong>Status:</strong> ' + escAdmin(reg.status),
+        '<strong>Source:</strong> ' + escAdmin(reg.registrationSource || 'admin')
+    ];
+    if (data.order) {
+        lines.push('<strong>Payment:</strong> ' + escAdmin(data.order.status) + ' — ₹' + escAdmin(data.order.amount));
+    }
+    if (data.ticket) {
+        lines.push(
+            '<strong>E-ticket:</strong> ' +
+                escAdmin(data.ticket.ticketIdString) +
+                (data.ticket.isScanned ? ' (checked in)' : '')
+        );
+    }
+    st.innerHTML = lines.join('<br>');
+    if (payWrap) {
+        const paid = data.order && String(data.order.status).toLowerCase() === 'success';
+        if (paid) payWrap.classList.add('hidden');
+        else {
+            payWrap.classList.remove('hidden');
+            const ps = document.getElementById('behalf-payment-status');
+            if (ps) {
+                ps.textContent =
+                    'Collect payment for application ' + (reg.applicationNo || reg.id) + ' then e-ticket is issued automatically.';
+            }
+            loadBehalfPaymentMethodsUI().catch(console.error);
+        }
+    }
+}
+
+async function onAdminBehalfDoctorOrSeminarChange() {
+    const docId = parseInt((document.getElementById('behalf-doctor-select') || {}).value, 10);
+    const sid = parseInt((document.getElementById('behalf-seminar-select') || {}).value, 10);
+    const summary = document.getElementById('behalf-app-summary');
+    if (!Number.isInteger(sid) || sid < 1) {
+        if (summary) summary.textContent = 'Select a seminar to load the registration form.';
+        return;
+    }
+    await loadAdminBehalfFormConfig(sid);
+    if (Number.isInteger(docId) && docId > 0) {
+        const u = window.__adminUsersById && window.__adminUsersById[docId];
+        if (u) {
+            const set = (k, v) => {
+                const el = document.getElementById('behalf-f-' + k);
+                if (el && !String(el.value || '').trim()) el.value = v || '';
+            };
+            set('fname', u.first_name);
+            set('lname', u.last_name);
+            set('email', u.email);
+            set('phone', u.phone);
+        }
+    }
+    syncBehalfJsonFromForm();
+    if (!Number.isInteger(docId) || docId < 1) {
+        if (summary) summary.textContent = 'Select a doctor account.';
+        return;
+    }
+    try {
+        const res = await fetch(
+            '/api/admin/registrations/lookup?userId=' + encodeURIComponent(docId) + '&seminarId=' + encodeURIComponent(sid)
+        );
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Lookup failed');
+        if (data.found && data.registration && data.registration.formData) {
+            (__behalfFormFields || []).forEach((f) => {
+                const el = document.getElementById('behalf-f-' + f.key);
+                if (el && data.registration.formData[f.key] != null) {
+                    el.value = data.registration.formData[f.key];
+                }
+            });
+            syncBehalfJsonFromForm();
+        }
+        refreshAdminBehalfWorkflow(data);
+        if (summary) {
+            summary.textContent = data.found
+                ? 'Loaded existing application ' + (data.registration.applicationNo || data.registration.id) + '.'
+                : 'No application yet — fill the form and save to create one.';
+        }
+    } catch (e) {
+        if (summary) summary.textContent = e.message || 'Could not load application.';
+    }
+}
+
+async function adminBehalfApproveForPayment() {
+    if (!__behalfRegId) return alert('Save an application first.');
+    if (!confirm('Approve this application for payment?')) return;
+    try {
+        const res = await fetch('/api/admin/applications/status', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ applicationId: __behalfRegId, status: 'approved_pending_payment' })
+        });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Failed');
+        alert(data.message || 'Approved.');
+        onAdminBehalfDoctorOrSeminarChange();
+        loadApplications();
+    } catch (e) {
+        alert('Network error');
+    }
+}
+
+function adminBehalfOpenApplicationsTab() {
+    switchTab('tab-applications');
+    loadApplications();
+    alert('Find the application in the list and click View to verify documents (certificate / NCISM).');
+}
+
+function adminBehalfOpenPaymentsTab() {
+    const docId = parseInt((document.getElementById('behalf-doctor-select') || {}).value, 10);
+    const sid = parseInt((document.getElementById('behalf-seminar-select') || {}).value, 10);
+    const u = window.__adminUsersById && window.__adminUsersById[docId];
+    switchTab('tab-admin-payments');
+    loadAdminPaymentsModule();
+    const coSem = document.getElementById('co-seminar');
+    const coQ = document.getElementById('co-user-query');
+    if (coSem && sid) coSem.value = String(sid);
+    if (coQ && u) coQ.value = u.user_id_string || u.email || '';
+    if (coQ && u) lookupAdminCreateOrder();
+}
+
+async function adminBehalfWaiveAndTicket() {
+    const adm = getStoredAdminUser();
+    if (!adm?.id || !__behalfRegId) return alert('Save an application first.');
+    if (!confirm('Waive fee and issue e-ticket for this application?')) return;
+    try {
+        const res = await fetch('/api/admin/payments/waive-and-ticket', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ registrationId: __behalfRegId, note: 'Admin workspace waiver', actingAdminId: adm.id })
+        });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Failed');
+        alert(data.message || 'Done');
+        onAdminBehalfDoctorOrSeminarChange();
+    } catch (e) {
+        alert('Network error');
+    }
+}
+
+function stopBehalfPaymentPoll() {
+    if (__behalfPollTimer) {
+        clearInterval(__behalfPollTimer);
+        __behalfPollTimer = null;
+    }
+}
+
+async function loadBehalfPaymentMethodsUI() {
+    const box = document.getElementById('behalf-payment-methods');
+    const adm = getStoredAdminUser();
+    if (!box || !adm?.id) return;
+    try {
+        const res = await fetch('/api/admin/payments/methods?actingAdminId=' + encodeURIComponent(adm.id));
+        const data = await res.json();
+        if (!res.ok) {
+            box.innerHTML = '<p style="color:#b91c1c;">' + escAdmin(data.error || 'Could not load methods') + '</p>';
+            return;
+        }
+        const methods = (data.methods || []).filter((m) => m.available);
+        if (!methods.length) {
+            box.innerHTML = '<p style="color:#64748b;">No payment methods configured.</p>';
+            return;
+        }
+        __behalfSelectedMethodId = methods[0].id;
+        box.innerHTML = methods
+            .map((m, i) => {
+                const checked = i === 0 ? ' checked' : '';
+                return (
+                    '<label style="display:flex;gap:10px;align-items:flex-start;padding:8px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;cursor:pointer;">' +
+                    '<input type="radio" name="behalf-pay-method" value="' +
+                    escAdmin(m.id) +
+                    '"' +
+                    checked +
+                    ' style="width:auto;margin-top:4px;" onchange="__behalfSelectedMethodId=this.value">' +
+                    '<span><strong>' +
+                    escAdmin(m.label) +
+                    '</strong><br><span style="font-size:0.82rem;color:#64748b;">' +
+                    escAdmin(m.description) +
+                    '</span></span></label>'
+                );
+            })
+            .join('');
+    } catch (e) {
+        box.innerHTML = '<p style="color:#b91c1c;">Network error</p>';
+    }
+}
+
+async function behalfInitiatePayment() {
+    const adm = getStoredAdminUser();
+    if (!adm?.id || !__behalfRegId) return alert('Save an application first.');
+    stopBehalfPaymentPoll();
+    const pollSt = document.getElementById('behalf-poll-status');
+    try {
+        const res = await fetch('/api/admin/payments/initiate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                registrationId: __behalfRegId,
+                adminUserId: adm.id,
+                methodId: __behalfSelectedMethodId || 'dqr'
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Failed');
+        if (data.paid) {
+            alert(data.message || 'Paid.');
+            onAdminBehalfDoctorOrSeminarChange();
+            return;
+        }
+        __behalfOrderDbId = data.orderDbId;
+        const qrBlock = document.getElementById('behalf-qr-block');
+        const qrImg = document.getElementById('behalf-qr-img');
+        const markBtn = document.getElementById('behalf-mark-upi-btn');
+        if (data.qrImageUrl && qrImg) {
+            qrImg.src = data.qrImageUrl;
+            if (qrBlock) qrBlock.classList.remove('hidden');
+        }
+        if (data.manualConfirm && markBtn) markBtn.classList.remove('hidden');
+        if (pollSt) pollSt.textContent = data.message || 'Waiting for payment…';
+        __behalfPollTimer = setInterval(behalfPollPayment, 4000);
+    } catch (e) {
+        alert('Network error');
+    }
+}
+
+async function behalfMarkUpiPaid() {
+    const adm = getStoredAdminUser();
+    if (!adm?.id || !__behalfOrderDbId) return alert('Start payment first.');
+    if (!confirm('Confirm UPI received?')) return;
+    try {
+        const res = await fetch('/api/admin/payments/mark-upi-paid', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orderDbId: __behalfOrderDbId, adminUserId: adm.id })
+        });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Failed');
+        alert(data.message || 'Recorded.');
+        onAdminBehalfDoctorOrSeminarChange();
+    } catch (e) {
+        alert('Network error');
+    }
+}
+
+async function behalfPollPayment() {
+    const adm = getStoredAdminUser();
+    if (!adm?.id || !__behalfOrderDbId) return;
+    const pollSt = document.getElementById('behalf-poll-status');
+    try {
+        const res = await fetch(
+            '/api/admin/payments/poll/' + __behalfOrderDbId + '?actingAdminId=' + encodeURIComponent(adm.id)
+        );
+        const data = await res.json();
+        if (data.paid) {
+            stopBehalfPaymentPoll();
+            if (pollSt) {
+                pollSt.style.color = '#15803d';
+                pollSt.textContent = data.message || 'Payment received — e-ticket issued.';
+            }
+            alert(data.message || 'Payment complete.');
+            onAdminBehalfDoctorOrSeminarChange();
+        } else if (pollSt && data.message) pollSt.textContent = data.message;
+    } catch (e) {
+        console.error(e);
+    }
+}
+
 function scheduleBehalfRegSave() {
     if (__requireAdminSensitiveOtp) {
         const st = document.getElementById('behalf-save-status');
@@ -718,10 +1131,15 @@ async function flushBehalfRegistrationSave(manual) {
     }
     let formData;
     try {
-        formData = JSON.parse(String((ta || {}).value || '{}'));
+        formData = collectAdminBehalfFormData();
+        if (ta) ta.value = JSON.stringify(formData, null, 2);
     } catch (_) {
-        if (st) st.textContent = 'Invalid JSON — fix syntax to save.';
-        return;
+        try {
+            formData = JSON.parse(String((ta || {}).value || '{}'));
+        } catch (e2) {
+            if (st) st.textContent = 'Invalid form or JSON — fix to save.';
+            return;
+        }
     }
     const adm = getStoredAdminUser();
     if (!adm || !adm.id) {
@@ -763,6 +1181,9 @@ async function flushBehalfRegistrationSave(manual) {
         }
         if (st)
             st.textContent = `Saved ${data.created ? '(new application)' : '(updated)'} at ${new Date().toLocaleTimeString()}`;
+        __behalfRegId = data.registrationId || __behalfRegId;
+        if (data.applicationNo) __behalfRegApplicationNo = data.applicationNo;
+        onAdminBehalfDoctorOrSeminarChange();
     } catch (e) {
         console.error(e);
         if (st) st.textContent = 'Network error while saving.';
@@ -793,9 +1214,13 @@ function initAdminBehalfRegTab() {
     if (prevSem) ss.value = prevSem;
     if (!window.__behalfWired && ta) {
         window.__behalfWired = true;
-        ta.addEventListener('input', scheduleBehalfRegSave);
-        ds.addEventListener('change', scheduleBehalfRegSave);
-        ss.addEventListener('change', scheduleBehalfRegSave);
+        ta.addEventListener('input', () => {
+            syncBehalfFormFromJson();
+            scheduleBehalfRegSave();
+        });
+    }
+    if (Number.isInteger(parseInt(prevSem, 10))) {
+        loadAdminBehalfFormConfig(parseInt(prevSem, 10)).then(() => onAdminBehalfDoctorOrSeminarChange());
     }
 }
 

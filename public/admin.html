@@ -442,7 +442,7 @@
             <!-- Admin: seminar application on behalf of doctor (live save) -->
             <div id="tab-behalf-reg" class="tab-pane hidden">
                 <h2 style="margin-bottom: 12px;">Doctor seminar applications (admin workspace)</h2>
-                <p style="color:#64748b;margin-bottom:18px;max-width:900px;">Create or edit the same registration payload doctors use, but stored as an <strong>admin-managed</strong> application (<code>registration_source = admin</code>). When admin OTP for sensitive actions is off, changes save automatically a few moments after you stop typing valid JSON. When that policy is on, verify your email and WhatsApp below, then click <strong>Save application</strong>.</p>
+                <p style="color:#64748b;margin-bottom:18px;max-width:920px;">Register a doctor using the <strong>same fields as the doctor portal</strong> (from <em>Seminar registration form</em> settings). Data is stored in <code>registrations.form_data</code> as JSON — that is what the old JSON box was for. After saving, use <strong>Process application</strong> below for verify → payment → e-ticket QR.</p>
                 <div id="behalf-admin-otp-wrap" class="card" style="display:none;margin-bottom:16px;padding:14px;border:1px solid #fed7aa;background:#fffbeb;">
                     <strong style="display:block;margin-bottom:8px;color:#9a3412;">Your admin confirmation (email + WhatsApp)</strong>
                     <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:8px;">
@@ -465,32 +465,46 @@
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
                         <div>
                             <label>Doctor account</label>
-                            <select id="behalf-doctor-select"><option value="">— Select doctor —</option></select>
+                            <select id="behalf-doctor-select" onchange="onAdminBehalfDoctorOrSeminarChange()"><option value="">— Select doctor —</option></select>
                         </div>
                         <div>
                             <label>Seminar</label>
-                            <select id="behalf-seminar-select"><option value="">— Select seminar —</option></select>
+                            <select id="behalf-seminar-select" onchange="onAdminBehalfDoctorOrSeminarChange()"><option value="">— Select seminar —</option></select>
                     </div>
                     </div>
-                    <label>Form data (JSON — keys like <code>fname</code>, <code>lname</code>, <code>email</code>, <code>phone</code>, <code>address</code>, <code>city</code>, <code>state</code>, <code>pin</code>, <code>qual</code>, <code>college</code>, …)</label>
-                    <textarea id="behalf-form-json" rows="16" style="font-family:ui-monospace,Consolas,monospace;font-size:0.82rem;margin-top:8px;" spellcheck="false">{
-  "fname": "",
-  "mname": "",
-  "lname": "",
-  "email": "",
-  "phone": "",
-  "address": "",
-  "pin": "",
-  "city": "",
-  "state": "",
-  "country": "India",
-  "qual": "PG",
-  "ncism": "",
-  "college": "",
-  "ccity": "",
-  "cstate": ""
-}</textarea>
-                    <p id="behalf-save-status" style="margin-top:12px;font-weight:600;color:#0d9488;font-size:0.9rem;"></p>
+                    <p id="behalf-app-summary" style="margin-top:12px;font-size:0.9rem;color:#475569;">Select a doctor and seminar to load or create an application.</p>
+                </div>
+                <div class="card" style="margin-bottom:16px;">
+                    <h3 style="margin:0 0 12px;color:#1a237e;">Application form</h3>
+                    <p style="font-size:0.85rem;color:#64748b;margin:0 0 12px;">Rendered from seminar registration form config. Certificate: use Applications tab after save.</p>
+                    <div id="behalf-form-fields" style="display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;"></div>
+                    <div style="margin-top:16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+                        <button type="button" class="btn-primary" onclick="flushBehalfRegistrationSave(true)">Save application</button>
+                        <span id="behalf-save-status" style="font-weight:600;color:#0d9488;font-size:0.9rem;"></span>
+                    </div>
+                    <details style="margin-top:16px;">
+                        <summary style="cursor:pointer;font-size:0.88rem;color:#64748b;">Advanced: raw JSON</summary>
+                        <textarea id="behalf-form-json" rows="8" style="font-family:ui-monospace,Consolas,monospace;font-size:0.82rem;width:100%;margin-top:8px;" spellcheck="false" oninput="syncBehalfFormFromJson()">{}</textarea>
+                    </details>
+                </div>
+                <div id="behalf-workflow-card" class="card hidden" style="border-top:4px solid #0d9488;">
+                    <h3 style="margin:0 0 10px;color:#0f766e;">Process application</h3>
+                    <p id="behalf-workflow-status" style="font-size:0.9rem;margin-bottom:12px;"></p>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+                        <button type="button" class="btn-primary" style="background:#15803d;" onclick="adminBehalfApproveForPayment()">Approve for payment</button>
+                        <button type="button" class="btn-primary" style="background:#7c3aed;" onclick="adminBehalfOpenApplicationsTab()">Verify (Applications)</button>
+                        <button type="button" class="btn-primary" style="background:#0d9488;" onclick="adminBehalfOpenPaymentsTab()">Payment and QR</button>
+                        <button type="button" class="btn-primary" style="background:#64748b;" onclick="adminBehalfWaiveAndTicket()">Waive and issue ticket</button>
+                    </div>
+                    <div id="behalf-payment-wrap" class="hidden" style="padding:14px;border:1px solid #a7f3d0;border-radius:8px;background:#ecfdf5;">
+                        <p id="behalf-payment-status" style="margin-bottom:10px;font-size:0.9rem;"></p>
+                        <div id="behalf-payment-methods" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;"></div>
+                        <button type="button" class="btn-primary" onclick="behalfInitiatePayment()">Start payment</button>
+                        <button type="button" class="btn-primary hidden" id="behalf-mark-upi-btn" style="background:#64748b;margin-left:8px;" onclick="behalfMarkUpiPaid()">Mark UPI received</button>
+                        <button type="button" class="btn-primary" style="background:#15803d;margin-left:8px;" onclick="behalfPollPayment()">Check status</button>
+                        <div id="behalf-qr-block" class="hidden" style="margin-top:12px;text-align:center;"><img id="behalf-qr-img" alt="QR" style="max-width:220px;"><p id="behalf-qr-amount" style="font-weight:600;"></p></div>
+                        <p id="behalf-poll-status" style="margin-top:8px;font-size:0.85rem;"></p>
+                    </div>
                 </div>
             </div>
 

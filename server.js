@@ -7488,6 +7488,97 @@ app.post('/api/admin/proxy-otp/verify', (req, res) => {
     });
 });
 
+// Admin: lookup registration + payment/ticket summary for doctor + seminar
+app.get('/api/admin/registrations/lookup', (req, res) => {
+    const tid = parseInt(req.query.userId, 10);
+    const sid = parseInt(req.query.seminarId, 10);
+    if (!Number.isInteger(tid) || tid < 1 || !Number.isInteger(sid) || sid < 1) {
+        return res.status(400).json({ error: 'userId and seminarId are required' });
+    }
+    db.get(
+        `SELECT r.id, r.application_no, r.status, r.form_data, r.registration_source, r.created_at,
+                s.title AS seminar_title, s.price AS seminar_price
+         FROM registrations r
+         JOIN seminars s ON s.id = r.seminar_id
+         WHERE r.user_id = ? AND r.seminar_id = ?`,
+        [tid, sid],
+        (e, reg) => {
+            if (e) return res.status(500).json({ error: e.message });
+            if (!reg) {
+                return res.json({
+                    found: false,
+                    registration: null,
+                    order: null,
+                    ticket: null
+                });
+            }
+            db.get(
+                `SELECT o.id, o.order_id_string, o.status, o.amount, o.payment_gateway
+                 FROM orders o
+                 WHERE o.registration_id = ?
+                 ORDER BY o.id DESC
+                 LIMIT 1`,
+                [reg.id],
+                (e2, ord) => {
+                    if (e2) return res.status(500).json({ error: e2.message });
+                    const loadTicket = (cb) => {
+                        if (!ord) return cb(null, null);
+                        db.get(
+                            `SELECT t.ticket_id_string, IFNULL(t.is_scanned, 0) AS is_scanned,
+                                    IFNULL(t.scan_count, 0) AS scan_count, t.scan_time
+                             FROM tickets t WHERE t.order_id = ? LIMIT 1`,
+                            [ord.id],
+                            (e3, tix) => {
+                                if (e3) return cb(e3);
+                                cb(null, tix);
+                            }
+                        );
+                    };
+                    loadTicket((e3, tix) => {
+                        if (e3) return res.status(500).json({ error: e3.message });
+                        let formData = {};
+                        try {
+                            formData = JSON.parse(reg.form_data || '{}');
+                        } catch (_) {
+                            formData = {};
+                        }
+                        res.json({
+                            found: true,
+                            registration: {
+                                id: reg.id,
+                                applicationNo: reg.application_no,
+                                status: reg.status,
+                                registrationSource: reg.registration_source,
+                                createdAt: reg.created_at,
+                                seminarTitle: reg.seminar_title,
+                                seminarPrice: reg.seminar_price,
+                                formData
+                            },
+                            order: ord
+                                ? {
+                                      id: ord.id,
+                                      orderIdString: ord.order_id_string,
+                                      status: ord.status,
+                                      amount: ord.amount,
+                                      gateway: ord.payment_gateway
+                                  }
+                                : null,
+                            ticket: tix
+                                ? {
+                                      ticketIdString: tix.ticket_id_string,
+                                      isScanned: !!Number(tix.is_scanned),
+                                      scanCount: Number(tix.scan_count) || 0,
+                                      scanTime: tix.scan_time
+                                  }
+                                : null
+                        });
+                    });
+                }
+            );
+        }
+    );
+});
+
 // Admin: create or update a registration on behalf of a doctor (admin-edited; distinct from doctor self-edit API)
 app.post('/api/admin/registrations/upsert', (req, res) => {
     const {
