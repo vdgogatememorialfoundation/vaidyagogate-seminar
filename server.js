@@ -52,6 +52,7 @@ const authLoginOtp = require('./lib/auth-login-otp');
 const certRender = require('./lib/certificate-render');
 const certTemplateCfg = require('./lib/certificate-template-config');
 const certVerify = require('./lib/certificate-verify');
+const docVerify = require('./lib/application-document-verify');
 const adminComposeMail = require('./lib/admin-compose-mail');
 const systemHealth = require('./lib/system-health');
 const systemHealthAi = require('./lib/system-health-ai');
@@ -940,7 +941,9 @@ function ensureCertificateSchema(next) {
                 (e2) => {
                     ignoreSchemaMigrationErr(e2);
                     certVerify.ensureCertificateVerifySchema(db, ignoreSchemaMigrationErr, () => {
-                        if (next) next();
+                        docVerify.ensureDocumentVerifySchema(db, ignoreSchemaMigrationErr, () => {
+                            if (next) next();
+                        });
                     });
                 }
             );
@@ -1884,7 +1887,10 @@ function mountExtendedRoutes() {
             syncCertificateEligibilityForTicket,
             insertParticipantTicket,
             ignoreSchemaMigrationErr,
-            certVerify
+            certVerify,
+            docVerify,
+            portalTracking,
+            notifEngine
         });
     } catch (routeErr) {
         console.error('[routes] routes-ext failed (case APIs still active):', routeErr.message);
@@ -3491,7 +3497,7 @@ function healOrphanRegistrationsForUser(uid, cb) {
 
 function fetchApplicationsForUser(uid, yearFilter, cb) {
     if (!parsePositiveUserId(uid)) return cb(new Error('Invalid user id'));
-    let sql = `SELECT r.id, r.seminar_id, r.application_no, r.status, r.form_data, r.created_at,
+    let sql = `SELECT r.id, r.seminar_id, r.application_no, r.status, r.form_data, r.doc_review_json, r.created_at,
                 r.created_at AS updated_at,
                 s.title AS seminar_title, s.whatsapp_group_url, s.cancellation_policy_json, s.terms_conditions,
                 s.event_date AS seminar_event_date, s.price AS seminar_price, s.portal_year
@@ -3515,7 +3521,18 @@ function respondApplicationsList(uid, yearFilter, res) {
     fetchApplicationsForUser(uid, yearFilter, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         const finish = (list) => {
-            portalTracking.attachRegistrationTimelines(db, list || [], (e2, enriched) => {
+            const withReview = (list || []).map((r) => {
+                let doc_review = null;
+                if (r.doc_review_json) {
+                    try {
+                        doc_review = JSON.parse(r.doc_review_json);
+                    } catch (_) {
+                        doc_review = null;
+                    }
+                }
+                return { ...r, doc_review };
+            });
+            portalTracking.attachRegistrationTimelines(db, withReview, (e2, enriched) => {
                 if (e2) {
                     console.error('[applications] timeline attach failed:', e2.message);
                     enriched = (list || []).map((r) => ({ ...r, timeline: { steps: [], status: r.status } }));
@@ -3839,9 +3856,14 @@ app.put('/api/applications/:applicationId', upload.single('certificate'), (req, 
         if (!row) return res.status(404).json({ error: 'Application not found' });
         
             const st = String(row.status || '').toLowerCase();
-            if (st !== 'submitted' && st !== 'pending_approval') {
+            if (st !== 'submitted' && st !== 'pending_approval' && st !== 'revision_required') {
                 return res.status(400).json({
                     error: 'This application can no longer be edited after it has moved forward in the workflow.'
+                });
+            }
+            if (st === 'revision_required') {
+                return res.status(400).json({
+                    error: 'Use Re-upload documents for this application (certificate and NCISM only).'
                 });
             }
 
@@ -5568,7 +5590,9 @@ app.get('/api/admin/seminars/:id/stats', (req, res) => {
     db.all(`SELECT status FROM registrations WHERE seminar_id = ?`, [seminarId], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         rows.forEach(r => {
-            if (r.status === 'pending_approval' || r.status === 'submitted') stats.pending_apps++;
+            if (r.status === 'pending_approval' || r.status === 'submitted' || r.status === 'revision_required') {
+                stats.pending_apps++;
+            }
             if (r.status !== 'pending_approval' && r.status !== 'submitted' && r.status !== 'rejected') stats.approved_apps++;
         });
 
@@ -5677,6 +5701,7 @@ app.get('/api/admin/applications', (req, res) => {
 const ALLOWED_REGISTRATION_STATUSES = new Set([
     'submitted',
     'pending_approval',
+    'revision_required',
     'approved_pending_payment',
     'completed',
     'e_ticket_issued',
@@ -5733,6 +5758,100 @@ function enableCertificateForRegistration(registrationId, cb) {
     );
 }
 
+// Admin: verify seminar application (documents + details)
+app.post('/api/admin/applications/:applicationId/document-verify', (req, res) => {
+    docVerify.verifySeminarApplication(
+        db,
+        req.params.applicationId,
+        req.body || {},
+        { portalTracking, notifEngine, getOrCreatePendingOrder },
+        (err, result) => {
+            if (err) return res.status(500).json({ error: err.message });
+            if (!result || !result.ok) return res.status(400).json({ error: (result && result.error) || 'Verify failed' });
+            res.json({ success: true, status: result.status, message: result.message });
+        }
+    );
+});
+
+// Doctor: re-upload certificate / NCISM on same application after admin document rejection
+app.post('/api/applications/:applicationId/resubmit-documents', upload.single('certificate'), (req, res) => {
+    const appId = parseInt(req.params.applicationId, 10);
+    if (!Number.isInteger(appId) || appId < 1) {
+        return res.status(400).json({ error: 'Invalid application id' });
+    }
+    db.get(
+        `SELECT id, user_id, seminar_id, status, form_data, application_no FROM registrations WHERE id = ?`,
+        [appId],
+        (err, row) => {
+            if (err) return res.status(500).json({ error: err.message });
+            if (!row) return res.status(404).json({ error: 'Application not found' });
+            if (String(row.status || '').toLowerCase() !== 'revision_required') {
+                return res.status(400).json({
+                    error: 'Document resubmission is only available when admin requested corrections.'
+                });
+            }
+            let formData = {};
+            try {
+                formData = JSON.parse(row.form_data || '{}');
+            } catch (_) {
+                formData = {};
+            }
+            if (req.body && req.body.ncism) {
+                formData.ncism = String(req.body.ncism).trim();
+            } else if (req.body && req.body.formData) {
+                try {
+                    const fd =
+                        typeof req.body.formData === 'string' ? JSON.parse(req.body.formData) : req.body.formData;
+                    if (fd && fd.ncism) formData.ncism = String(fd.ncism).trim();
+                } catch (_) {
+                    /* ignore */
+                }
+            }
+            persistUploadedCertificate(req, (certErr, certPath) => {
+                if (certErr) return res.status(500).json({ error: certErr.message });
+                if (certPath) formData.certificate_path = certPath;
+                if (docVerify.needsAdvancedQualDocs(formData)) {
+                    if (!formData.ncism || !String(formData.ncism).trim()) {
+                        return res.status(400).json({ error: 'NCISM / registration number is required.' });
+                    }
+                    if (!formData.certificate_path || !String(formData.certificate_path).trim()) {
+                        return res.status(400).json({ error: 'Please upload your certificate document.' });
+                    }
+                }
+                const mergedStored = sanitizeFormDataForStorage(formData);
+                db.run(
+                    `UPDATE registrations SET form_data = ?, status = 'pending_approval', doc_review_json = NULL WHERE id = ?`,
+                    [JSON.stringify(mergedStored), appId],
+                    (e2) => {
+                        if (e2) return res.status(500).json({ error: e2.message });
+                        portalTracking.logRegistrationEvent(
+                            db,
+                            appId,
+                            'pending_approval',
+                            'Documents resubmitted',
+                            'Updated certificate/NCISM received — under review again.',
+                            () => {}
+                        );
+                        notifEngine.notify(db, 'APPLICATION_UNDER_REVIEW', {
+                            userId: row.user_id,
+                            seminarId: row.seminar_id,
+                            registrationId: appId,
+                            vars: { application_no: row.application_no || '' }
+                        });
+                        res.json({
+                            success: true,
+                            message:
+                                'Documents resubmitted on application ' +
+                                (row.application_no || appId) +
+                                '. Admin will review again.'
+                        });
+                    }
+                );
+            });
+        }
+    );
+});
+
 // Admin: Update Application Status
 app.post('/api/admin/applications/status', (req, res) => {
     const { applicationId, status } = req.body;
@@ -5774,6 +5893,7 @@ app.post('/api/admin/applications/status', (req, res) => {
                     let ev = 'APPLICATION_UNDER_REVIEW';
                     if (newSt === 'approved_pending_payment' || newSt === 'completed') ev = 'APPLICATION_APPROVED';
                     else if (newSt === 'rejected') ev = 'APPLICATION_REJECTED';
+                    else if (newSt === 'revision_required') ev = 'APPLICATION_REVISION_REQUIRED';
                     else if (newSt === 'cancelled') ev = 'REGISTRATION_CANCELLED';
                     notifEngine.notify(db, ev, {
                         userId: regRow.user_id,

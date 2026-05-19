@@ -9,6 +9,7 @@ let __requireAdminSensitiveOtp = false;
 const ADMIN_REGISTRATION_STATUSES = [
     { value: 'submitted', label: 'Submitted' },
     { value: 'pending_approval', label: 'Under admin review' },
+    { value: 'revision_required', label: 'Documents need re-upload' },
     { value: 'approved_pending_payment', label: 'Approved — payment due' },
     { value: 'completed', label: 'Payment completed' },
     { value: 'e_ticket_issued', label: 'E-ticket issued' },
@@ -2265,6 +2266,20 @@ async function openAdminCaseDetail(subId) {
                 </div></li>`;
         });
         html += '</ul>';
+        const caseSt = String(sub.status || '').toLowerCase();
+        const caseCanVerify = ['submitted', 'under_review', 'resubmitted'].includes(caseSt);
+        if (caseCanVerify) {
+            html += `<hr style="margin:16px 0;"><h4>Verify case application</h4>
+                <label style="display:block;margin:6px 0;"><input type="checkbox" id="case-verify-info"> Applicant details & topic are correct</label>
+                <label style="display:block;margin:6px 0;"><input type="checkbox" id="case-verify-files"> All files reviewed and acceptable</label>
+                <div class="form-group"><label>Reason (for rejections)</label>
+                <textarea id="case-verify-reason" rows="2" style="width:100%;"></textarea></div>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
+                <button type="button" class="btn-primary" style="background:#15803d;" onclick="adminVerifyCaseSubmission(${sub.id},'approve_for_judging')">Approve for judging</button>
+                <button type="button" class="btn-primary" style="background:#b45309;" onclick="adminVerifyCaseSubmission(${sub.id},'reject_documents')">Request document revision</button>
+                <button type="button" class="btn-primary" style="background:#b91c1c;" onclick="adminVerifyCaseSubmission(${sub.id},'reject_application')">Reject application</button>
+                </div>`;
+        }
         if (Array.isArray(scores) && scores.length) {
             const critDefs = window.__caseCriteriaDefs || [];
             const scoreMax =
@@ -2359,6 +2374,34 @@ async function selectCaseWinner(subId) {
         openAdminCaseDetail(subId);
     } catch (e) {
         console.error(e);
+    }
+}
+
+async function adminVerifyCaseSubmission(subId, decision) {
+    const reason = (document.getElementById('case-verify-reason')?.value || '').trim();
+    const infoOk = !!document.getElementById('case-verify-info')?.checked;
+    const filesOk = !!document.getElementById('case-verify-files')?.checked;
+    if (decision !== 'approve_for_judging' && !reason) {
+        return alert('Please enter a reason for the doctor.');
+    }
+    if (decision === 'approve_for_judging' && !infoOk) {
+        return alert('Confirm applicant details are correct.');
+    }
+    if (!confirm('Apply this verification decision?')) return;
+    try {
+        const res = await fetch('/api/admin/case/submissions/' + subId + '/document-verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ decision, reason, infoOk, filesOk })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return alert(data.error || 'Failed');
+        alert(data.message || 'Done');
+        openAdminCaseDetail(subId);
+        loadAdminCaseSubmissions();
+    } catch (e) {
+        console.error(e);
+        alert('Network error');
     }
 }
 
@@ -2804,28 +2847,106 @@ async function loadApplications() {
     } catch(err) { console.error(err); }
 }
 
+function seminarNeedsDocReview(qual) {
+    const q = String(qual || '').trim();
+    return q === 'PG' || q === 'Practicing Vaidya' || q === 'Practitioner';
+}
+
 function viewFullApplication(index) {
     const a = globalAdminApps[index];
     let formData = {};
-    try { formData = JSON.parse(a.form_data || '{}'); } catch(e){}
-    
+    try {
+        formData = JSON.parse(a.form_data || '{}');
+    } catch (e) {}
+    const needsDocs = seminarNeedsDocReview(formData.qual);
+    const certPath = formData.certificate_path ? String(formData.certificate_path) : '';
+    const certLink = certPath
+        ? '<p><a href="' +
+          escAdmin(certPath) +
+          '" target="_blank" rel="noopener">View certificate document</a></p>'
+        : '<p class="muted">No certificate file on record.</p>';
+    const st = String(a.status || '').toLowerCase();
+    const canVerify = st === 'submitted' || st === 'pending_approval';
+    const docChecks = needsDocs
+        ? `<label style="display:block;margin:6px 0;"><input type="checkbox" id="admin-verify-info"> Applicant details are correct</label>
+        <label style="display:block;margin:6px 0;"><input type="checkbox" id="admin-verify-ncism"> NCISM / registration number is correct</label>
+        <label style="display:block;margin:6px 0;"><input type="checkbox" id="admin-verify-cert"> Certificate document is correct</label>`
+        : `<label style="display:block;margin:6px 0;"><input type="checkbox" id="admin-verify-info"> Applicant details are correct</label>`;
+    const verifyBlock = canVerify
+        ? `<hr style="margin:14px 0;">
+        <h4 style="margin:0 0 8px;">Verify application</h4>
+        ${docChecks}
+        <div class="form-group" style="margin-top:10px;"><label>Reason (required for rejections)</label>
+        <textarea id="admin-verify-reason" rows="3" style="width:100%;" placeholder="e.g. NCISM number does not match certificate"></textarea>
+        <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;">
+        <button type="button" class="btn-primary" style="background:#15803d;" onclick="adminVerifySeminarApplication(${a.id},'approve')">Approve application</button>
+        ${
+            needsDocs
+                ? '<button type="button" class="btn-primary" style="background:#b45309;" onclick="adminVerifySeminarApplication(' +
+                  a.id +
+                  ",'reject_documents')\">Reject documents only</button>"
+                : ''
+        }
+        <button type="button" class="btn-primary" style="background:#b91c1c;" onclick="adminVerifySeminarApplication(${a.id},'reject_application')">Reject entire application</button>
+        </div>
+        <p class="muted" style="font-size:0.85rem;margin-top:8px;">Reject documents: doctor keeps the same application number and re-uploads certificate/NCISM only.</p>`
+        : '<p class="muted" style="margin-top:12px;">Verification actions appear when status is Submitted or Under review.</p>';
+
     const content = document.getElementById('admin-view-content');
     content.innerHTML = `
-        <p><strong>App No:</strong> ${a.application_no}</p>
-        <p><strong>Status:</strong> ${a.status.toUpperCase()}</p>
+        <p><strong>App No:</strong> ${escAdmin(a.application_no)}</p>
+        <p><strong>Status:</strong> ${escAdmin(String(a.status || '').toUpperCase())}</p>
+        <p><strong>Portal ID:</strong> ${escAdmin(a.user_id_string || '')}</p>
         <hr style="margin:10px 0;">
-        <p><strong>Name:</strong> ${formData.fname||''} ${formData.lname||''}</p>
-        <p><strong>Email:</strong> ${formData.email||''}</p>
-        <p><strong>Phone:</strong> ${formData.phone||''}</p>
-        <p><strong>Address:</strong> ${formData.address||''}, ${formData.city||''}, ${formData.state||''} - ${formData.pin||''}</p>
+        <p><strong>Name:</strong> ${escAdmin(formData.fname || '')} ${escAdmin(formData.lname || '')}</p>
+        <p><strong>Email:</strong> ${escAdmin(formData.email || '')}</p>
+        <p><strong>Phone:</strong> ${escAdmin(formData.phone || '')}</p>
+        <p><strong>Address:</strong> ${escAdmin(formData.address || '')}, ${escAdmin(formData.city || '')}, ${escAdmin(formData.state || '')} - ${escAdmin(formData.pin || '')}</p>
         <hr style="margin:10px 0;">
-        <p><strong>Qualification:</strong> ${formData.qual||''}</p>
-        <p><strong>Registration ID:</strong> ${formData.ncism||''}</p>
-        <p><strong>College:</strong> ${formData.college||''}, ${formData.ccity||''}</p>
+        <p><strong>Qualification:</strong> ${escAdmin(formData.qual || '')}</p>
+        <p><strong>NCISM / Reg. no.:</strong> ${escAdmin(formData.ncism || '—')}</p>
+        <p><strong>College:</strong> ${escAdmin(formData.college || '')}, ${escAdmin(formData.ccity || '')}</p>
+        ${certLink}
+        ${verifyBlock}
     `;
-    
-    document.getElementById('admin-view-modal').classList.remove('hidden');
-    document.getElementById('admin-view-modal').style.display = 'flex';
+
+    const modal = document.getElementById('admin-view-modal');
+    modal.classList.remove('hidden');
+    modal.style.display = 'flex';
+}
+
+async function adminVerifySeminarApplication(appId, decision) {
+    const reason = (document.getElementById('admin-verify-reason')?.value || '').trim();
+    const infoOk = !!document.getElementById('admin-verify-info')?.checked;
+    const ncismOk = !!document.getElementById('admin-verify-ncism')?.checked;
+    const certificateOk = !!document.getElementById('admin-verify-cert')?.checked;
+    if (decision !== 'approve' && !reason) {
+        return alert('Please enter a reason so the doctor knows what to fix.');
+    }
+    if (decision === 'approve' && !infoOk) {
+        return alert('Check that applicant details are correct before approving.');
+    }
+    const labels = {
+        approve: 'Approve this application?',
+        reject_documents: 'Request document re-upload on the same application number?',
+        reject_application: 'Reject this entire application?'
+    };
+    if (!confirm(labels[decision] || 'Continue?')) return;
+    try {
+        const res = await fetch('/api/admin/applications/' + appId + '/document-verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ decision, reason, infoOk, ncismOk, certificateOk })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return alert(data.error || 'Verification failed');
+        alert(data.message || 'Done');
+        document.getElementById('admin-view-modal').classList.add('hidden');
+        loadApplications();
+    } catch (err) {
+        console.error(err);
+        alert('Network error');
+    }
 }
 
 async function updateAppStatus(appId, status) {

@@ -234,6 +234,28 @@ function renderSeminarApplicationTrackerCard(a) {
     const payAmt = Number(a.seminar_price) > 0 ? Number(a.seminar_price) : 1500;
     const st = String(a.status || '').toLowerCase();
     const isPaid = st === 'completed' || st === 'checked_in';
+    let revisionBlock = '';
+    if (st === 'revision_required') {
+        let reason = '';
+        try {
+            const dr =
+                typeof a.doc_review === 'object' && a.doc_review
+                    ? a.doc_review
+                    : a.doc_review_json
+                      ? JSON.parse(a.doc_review_json)
+                      : null;
+            reason = (dr && dr.rejection_reason) || '';
+        } catch (_) {}
+        revisionBlock =
+            '<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:12px;margin-bottom:12px;">' +
+            '<p style="margin:0 0 8px;font-weight:600;color:#9a3412;"><i class="fas fa-exclamation-triangle"></i> Re-upload documents (same application no.)</p>' +
+            (reason
+                ? '<p style="margin:0 0 10px;font-size:0.9rem;color:#7c2d12;">Admin note: ' + escapeHtml(reason) + '</p>'
+                : '') +
+            '<button type="button" class="btn-warning" onclick="openSeminarDocumentResubmit(' +
+            JSON.stringify(String(a.application_no || '')) +
+            ')">Re-upload certificate &amp; NCISM</button></div>';
+    }
     const payBtn =
         st === 'approved_pending_payment' && !isPaid
             ? paymentGatewaySelectHtml(a.id) +
@@ -262,6 +284,7 @@ function renderSeminarApplicationTrackerCard(a) {
         (a.seminar_title ? ' · ' + escapeHtml(a.seminar_title) : '') +
         yearBadge +
         '</h4>' +
+        revisionBlock +
         renderTrackerStepsHtml(tl) +
         payBtn +
         waBlock +
@@ -1777,6 +1800,7 @@ async function submitCasePresentation() {
 
 function caseApplicationStatusLabel(st) {
     const s = String(st || 'submitted').toLowerCase();
+    if (s === 'revision_required') return 'Re-upload documents required';
     if (s === 'judging') return 'Judges scoring';
     if (s === 'under_review') return 'Admin reviewing files';
     if (s === 'approved_for_judging') return 'Ready for judges';
@@ -1905,11 +1929,95 @@ function viewCaseApplication(index) {
         '<hr style="margin:16px 0;border:0;border-top:1px solid #cbd5e1;">' +
         '<h4 style="color:#0f766e;margin-bottom:12px;"><i class="fas fa-route"></i> Case presentation tracking</h4>' +
         renderTrackerStepsHtml(c.timeline || {}) +
-        '<button type="button" class="btn-primary" style="margin-top:16px;background:#0f766e;" onclick="downloadCaseApplicationPdf()"><i class="fas fa-file-pdf"></i> Download application PDF</button>';
+        '<button type="button" class="btn-primary" style="margin-top:16px;background:#0f766e;" onclick="downloadCaseApplicationPdf()"><i class="fas fa-file-pdf"></i> Download application PDF</button>' +
+        (String(c.status || '').toLowerCase() === 'revision_required'
+            ? '<div id="case-resubmit-panel" style="margin-top:16px;"><p style="color:#9a3412;font-weight:600;">Re-upload rejected files (same application ID)</p><p class="muted">Loading file list…</p></div>'
+            : '');
     const modal = document.getElementById('view-case-modal');
     if (modal) {
         modal.classList.remove('hidden');
         modal.style.display = 'flex';
+    }
+    if (String(c.status || '').toLowerCase() === 'revision_required') {
+        loadCaseResubmitPanel(c.id);
+    }
+}
+
+async function loadCaseResubmitPanel(submissionId) {
+    const panel = document.getElementById('case-resubmit-panel');
+    if (!panel || !currentUser) return;
+    const uid = doctorNumericUserId();
+    if (!uid) return;
+    try {
+        const res = await fetch(
+            '/api/doctor/case/submissions/' + uid + '/files?submissionId=' + encodeURIComponent(submissionId)
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            panel.innerHTML = '<p style="color:#b91c1c;">' + escapeHtml(data.error || 'Could not load files') + '</p>';
+            return;
+        }
+        const files = (data.files || []).filter((f) => String(f.status).toLowerCase() === 'rejected');
+        if (!files.length) {
+            panel.innerHTML =
+                '<p class="muted">No rejected files listed. If admin asked for changes, wait for file review or contact support.</p>';
+            return;
+        }
+        let html = '';
+        files.forEach((f) => {
+            html +=
+                '<div style="margin:8px 0;padding:8px;border:1px solid #e2e8f0;border-radius:6px;">' +
+                '<strong>' +
+                escapeHtml(f.original_name || 'File') +
+                '</strong>' +
+                (f.rejection_reason
+                    ? '<div class="muted" style="font-size:0.85rem;">' + escapeHtml(f.rejection_reason) + '</div>'
+                    : '') +
+                '<input type="file" class="case-resubmit-file" data-file-id="' +
+                f.id +
+                '" style="margin-top:6px;width:100%;"></div>';
+        });
+        html +=
+            '<button type="button" class="btn-warning" style="margin-top:8px;" onclick="submitCaseFileResubmits(' +
+            submissionId +
+            ')">Submit corrected files</button>';
+        panel.innerHTML = html;
+    } catch (e) {
+        console.error(e);
+        panel.innerHTML = '<p style="color:#b91c1c;">Network error loading files.</p>';
+    }
+}
+
+async function submitCaseFileResubmits(submissionId) {
+    const uid = doctorNumericUserId();
+    if (!uid) return alert('Please sign in again.');
+    const inputs = document.querySelectorAll('.case-resubmit-file');
+    const fd = new FormData();
+    fd.append('userId', String(uid));
+    fd.append('submissionId', String(submissionId));
+    const ids = [];
+    let hasFile = false;
+    inputs.forEach((inp) => {
+        const fid = inp.getAttribute('data-file-id');
+        if (inp.files && inp.files[0] && fid) {
+            fd.append('files', inp.files[0]);
+            ids.push(fid);
+            hasFile = true;
+        }
+    });
+    if (!hasFile) return alert('Select at least one replacement file.');
+    fd.append('replaceFileIds', ids.join(','));
+    try {
+        const res = await fetch('/api/case/resubmit', { method: 'POST', body: fd });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return alert(data.error || 'Resubmit failed');
+        alert('Files resubmitted. Admin will review again on the same application ID.');
+        loadCaseApplicationsTracker();
+        const modal = document.getElementById('view-case-modal');
+        if (modal) modal.classList.add('hidden');
+    } catch (e) {
+        console.error(e);
+        alert('Network error');
     }
 }
 
@@ -2818,9 +2926,15 @@ async function loadApplications(silentPoll) {
 
         userApplications.forEach((a, index) => {
             // Render Table Row
-            const canEdit = a.status === 'submitted' || a.status === 'pending_approval';
-            const editBtn = canEdit ? `<button class="btn-warning" style="padding: 5px 10px; margin-right: 5px;" onclick="editApplication(${index})">Edit</button>` : '';
             const st = String(a.status || '').toLowerCase();
+            const canEdit = a.status === 'submitted' || a.status === 'pending_approval';
+            const needsResubmit = st === 'revision_required';
+            const editBtn = canEdit
+                ? `<button class="btn-warning" style="padding: 5px 10px; margin-right: 5px;" onclick="editApplication(${index})">Edit</button>`
+                : '';
+            const resubmitBtn = needsResubmit
+                ? `<button class="btn-warning" style="padding: 5px 10px; margin-right: 5px;" onclick="openSeminarDocumentResubmitByIndex(${index})">Re-upload docs</button>`
+                : '';
             const cancelStatus = doctorCancelRequestStatus(a.id);
             const canRequestCancel = doctorCanCancelApplication(a) && cancelStatus !== 'Cancellation pending review';
             let cancelBtn = '';
@@ -2835,7 +2949,7 @@ async function loadApplications(silentPoll) {
                 <tr>
                     <td><strong>${a.application_no}</strong></td>
                     <td><span style="background: ${a.status === 'rejected' ? '#fee2e2' : '#fef3c7'}; padding: 5px; border-radius: 5px;">${a.status.toUpperCase()}</span></td>
-                    <td>${editBtn}${cancelBtn}<button class="btn-primary" style="padding: 5px 10px;" onclick="viewApplication(${index})">View Details</button></td>
+                    <td>${editBtn}${resubmitBtn}${cancelBtn}<button class="btn-primary" style="padding: 5px 10px;" onclick="viewApplication(${index})">View Details</button></td>
                 </tr>
             `;
             }
@@ -3956,6 +4070,56 @@ async function editApplication(index) {
     window.editingApplicationId = userApplications[index].id || null;
     
     switchTab('tab-seminars');
+}
+
+function openSeminarDocumentResubmitByIndex(index) {
+    const a = userApplications[index];
+    if (!a) return;
+    window.__seminarResubmitAppId = a.id;
+    openSeminarDocumentResubmit(a.application_no);
+}
+
+function openSeminarDocumentResubmit(applicationNo) {
+    let formData = {};
+    const app =
+        userApplications.find((x) => String(x.application_no) === String(applicationNo)) ||
+        userApplications.find((x) => x.id === window.__seminarResubmitAppId);
+    if (app) {
+        window.__seminarResubmitAppId = app.id;
+        try {
+            formData = JSON.parse(app.form_data || '{}');
+        } catch (_) {}
+    }
+    const ncism = prompt(
+        'Application ' +
+            (applicationNo || '') +
+            ' — enter corrected NCISM / registration number:',
+        formData.ncism || ''
+    );
+    if (ncism === null) return;
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.pdf,.jpg,.jpeg,.png';
+    fileInput.onchange = async () => {
+        if (!fileInput.files || !fileInput.files[0]) return;
+        const fd = new FormData();
+        fd.append('ncism', ncism.trim());
+        fd.append('certificate', fileInput.files[0]);
+        try {
+            const res = await fetch('/api/applications/' + window.__seminarResubmitAppId + '/resubmit-documents', {
+                method: 'POST',
+                body: fd
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) return alert(data.error || 'Resubmit failed');
+            alert(data.message || 'Documents resubmitted.');
+            loadApplications();
+        } catch (e) {
+            console.error(e);
+            alert('Network error');
+        }
+    };
+    fileInput.click();
 }
 
 async function updateApplication() {
