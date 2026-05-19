@@ -1255,6 +1255,19 @@ async function loadSeminarsGrid() {
 }
 
 let activeSeminarIdForReg = null;
+
+function generateClientApplicationNo() {
+    let id = '';
+    for (let i = 0; i < 12; i++) id += Math.floor(Math.random() * 10).toString();
+    return id;
+}
+
+function ensureDraftApplicationNo() {
+    if (!window.__draftApplicationNo) {
+        window.__draftApplicationNo = generateClientApplicationNo();
+    }
+    return window.__draftApplicationNo;
+}
 window.__seminarTermsText = '';
 
 function proceedFromSeminarTnc() {
@@ -1292,6 +1305,7 @@ async function startRegistration(seminarId) {
     window.__regSubmitPhoneOtpToken = null;
     window.__regSubmitEmailOtpToken = null;
     resetRegistrationSubmitOtpState();
+    window.__draftApplicationNo = null;
     document.getElementById('registration-seminar-name').innerText = `Registering for: ${seminarTitle}`;
     document.getElementById('seminars-grid-container').classList.add('hidden');
     document.getElementById('seminars-title').classList.add('hidden');
@@ -1331,6 +1345,7 @@ async function startRegistration(seminarId) {
 
 function cancelRegistration() {
     activeSeminarIdForReg = null;
+    window.__draftApplicationNo = null;
     window.__fieldOtpTokens = {};
     window.__regPhoneOtpToken = null;
     window.__regEmailOtpToken = null;
@@ -2072,6 +2087,9 @@ async function nextStep(step) {
             prevTncText.textContent = window.__seminarTermsText || '—';
             prevTnc.style.display = 'block';
         }
+        const draftAppNo = ensureDraftApplicationNo();
+        const prevAppNo = document.getElementById('prev-app-no');
+        if (prevAppNo) prevAppNo.innerText = draftAppNo;
         document.getElementById('prev-name').innerText = `${document.getElementById('reg-fname').value} ${document.getElementById('reg-mname').value} ${document.getElementById('reg-lname').value}`;
         document.getElementById('prev-contact').innerText = `${document.getElementById('reg-email').value} / ${document.getElementById('reg-phone').value}`;
         document.getElementById('prev-addr').innerText = document.getElementById('reg-addr').value;
@@ -2095,15 +2113,10 @@ async function nextStep(step) {
         document.getElementById('prev-college').innerText = document.getElementById('reg-college').value;
         document.getElementById('prev-cloc').innerText = `${document.getElementById('reg-ccity').value}, ${document.getElementById('reg-cstate').value}`;
         
-        // Load QR Code dynamically for preview
-        const trackingId = `PREVIEW-${currentUser.id}-${Date.now().toString().slice(-4)}`;
-        document.getElementById('prev-qrcode').src = `/api/qrcode/${trackingId}`;
-        document.getElementById('prev-qrcode').style.display = 'inline-block';
-        
-        // Wait for image to load to embed in PDF
-        document.getElementById('prev-qrcode').onload = () => {
-            generatePdfBlob(document.getElementById('prev-qrcode'));
-        };
+        const qrImg = document.getElementById('prev-qrcode');
+        qrImg.onload = () => generatePdfBlob(qrImg);
+        qrImg.onerror = () => generatePdfBlob(null);
+        qrImg.src = `/api/qrcode/${encodeURIComponent(draftAppNo)}`;
     }
 }
 
@@ -2138,6 +2151,25 @@ function pdfCongressSectionTitle(doc, y, title, accent, ink) {
     return y + 14;
 }
 
+/** Embed QR on PDF (draw after section backgrounds so it is not covered). */
+function pdfAddQrCode(doc, qrImgElement, x, y, sizeMm) {
+    if (!qrImgElement || !qrImgElement.src) return;
+    const w = qrImgElement.naturalWidth || qrImgElement.width;
+    const h = qrImgElement.naturalHeight || qrImgElement.height;
+    if (!w || !h) return;
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(qrImgElement, 0, 0, w, h);
+    const imgData = canvas.toDataURL('image/png');
+    const sz = sizeMm || 34;
+    doc.addImage(imgData, 'PNG', x, y, sz, sz);
+    doc.setDrawColor(203, 213, 225);
+    doc.setLineWidth(0.3);
+    doc.rect(x, y, sz, sz, 'S');
+}
+
 function generatePdfBlob(qrImgElement) {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF();
@@ -2146,16 +2178,6 @@ function generatePdfBlob(qrImgElement) {
     const muted = [71, 85, 105];
 
     let y = pdfCongressHeader(doc, 'Seminar registration — draft preview');
-
-    if (qrImgElement && qrImgElement.src) {
-        const canvas = document.createElement('canvas');
-        canvas.width = qrImgElement.width;
-        canvas.height = qrImgElement.height;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(qrImgElement, 0, 0, qrImgElement.width, qrImgElement.height);
-        const imgData = canvas.toDataURL('image/png');
-        doc.addImage(imgData, 'PNG', 162, 42, 32, 32);
-    }
 
     const drawSection = (title) => {
         y = pdfCongressSectionTitle(doc, y + 4, title, accent, ink);
@@ -2176,6 +2198,12 @@ function generatePdfBlob(qrImgElement) {
         doc.text(lines, 72, y + 7);
         y += rowH;
     };
+
+    const appNo = window.__draftApplicationNo || '';
+    if (appNo) {
+        drawSection('Application');
+        drawTableRow('Application number', appNo);
+    }
 
     drawSection('Candidate');
     drawTableRow(
@@ -2211,6 +2239,8 @@ function generatePdfBlob(qrImgElement) {
         y += tLines.length * 4.2 + 4;
     }
 
+    pdfAddQrCode(doc, qrImgElement, 166, 44, 34);
+
     y += 8;
     doc.setFontSize(11);
     doc.setTextColor(180, 83, 9);
@@ -2228,7 +2258,8 @@ function downloadPdf() {
     if(currentPdfBlobUrl) {
         const a = document.createElement('a');
         a.href = currentPdfBlobUrl;
-        a.download = "Application_Form.pdf";
+        const no = window.__draftApplicationNo || 'Draft';
+        a.download = `Application_${no}.pdf`;
         a.click();
     }
 }

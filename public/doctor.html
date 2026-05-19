@@ -88,9 +88,10 @@
         .preview-row:last-child { border-bottom: none; }
         .preview-row .lbl { color: #64748b; font-weight: 600; font-size: 0.82rem; }
         .preview-row .val { color: #0f172a; font-weight: 600; word-break: break-word; }
-        .preview-pdf-wrap { background: #fff; border: 1px solid #cbd5e1; border-radius: 12px; overflow: hidden; min-height: 420px; }
+        .preview-pdf-wrap { position: relative; background: #fff; border: 1px solid #cbd5e1; border-radius: 12px; overflow: hidden; min-height: 420px; }
         #pdf-viewer { width: 100%; height: 480px; border: none; display: block; }
-        #prev-qrcode { max-width: 120px; display: none; margin: 10px 0; }
+        /* Off-screen — source for PDF only; must not stack on the iframe */
+        #prev-qrcode { position: absolute; left: -9999px; width: 128px; height: 128px; opacity: 0; pointer-events: none; }
         #seminar-track-live, #case-track-live { font-size: 0.82rem; color: #0f766e; font-weight: 700; margin-bottom: 10px; }
     </style>
 </head>
@@ -382,6 +383,7 @@
                             <div class="preview-shell">
                                 <div class="preview-box">
                                     <h5>Application summary</h5>
+                                    <div class="preview-row"><span class="lbl">Application no.</span><span class="val" id="prev-app-no"></span></div>
                                     <div class="preview-row"><span class="lbl">Name</span><span class="val" id="prev-name"></span></div>
                                     <div class="preview-row"><span class="lbl">Contact</span><span class="val" id="prev-contact"></span></div>
                                     <div class="preview-row"><span class="lbl">Address</span><span class="val" id="prev-addr"></span></div>
@@ -399,7 +401,7 @@
                                 <div>
                                     <h5 style="margin:0 0 10px;color:#0f766e;font-size:0.78rem;text-transform:uppercase;letter-spacing:0.06em;font-weight:800;">PDF preview</h5>
                                     <div class="preview-pdf-wrap">
-                                        <img id="prev-qrcode" alt="QR preview" style="display:none;">
+                                        <img id="prev-qrcode" alt="" aria-hidden="true">
                                         <iframe id="pdf-viewer" title="Application preview PDF"></iframe>
                                     </div>
                                 </div>
