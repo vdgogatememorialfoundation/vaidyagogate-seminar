@@ -151,10 +151,22 @@ function bootstrapApp(done) {
             })
             .catch(() => runFullMigrations());
     };
+    const runPgColumnPatches = () => {
+        if (pgDb.ensureCertificateVerifyColumns) {
+            return pgDb.ensureCertificateVerifyColumns().catch((e) => {
+                console.warn('[bootstrap] certificate verify columns:', e.message);
+            });
+        }
+        return Promise.resolve();
+    };
     if (pgDb.ensureMissingCoreTables) {
-        return pgDb.ensureMissingCoreTables().then(startMigrations).catch(() => runFullMigrations());
+        return pgDb
+            .ensureMissingCoreTables()
+            .then(() => runPgColumnPatches())
+            .then(() => startMigrations())
+            .catch(() => runFullMigrations());
     }
-    startMigrations();
+    runPgColumnPatches().then(() => startMigrations()).catch(() => startMigrations());
 }
 
 function databaseConfigResponse(res) {
@@ -813,6 +825,10 @@ function ensurePortalSchema(next) {
                                                 ignoreSchemaMigrationErr(h7a2);
                                                 db.run(`ALTER TABLE seminars ADD COLUMN public_list_enabled INTEGER DEFAULT 0`, (h7b) => {
                                             ignoreSchemaMigrationErr(h7b);
+                                        db.run(`ALTER TABLE seminars ADD COLUMN cert_scans_required INTEGER DEFAULT 1`, (h7c) => {
+                                            ignoreSchemaMigrationErr(h7c);
+                                        db.run(`ALTER TABLE seminars ADD COLUMN certificate_verify_enabled INTEGER DEFAULT 0`, (h7d) => {
+                                            ignoreSchemaMigrationErr(h7d);
                                         db.run(`ALTER TABLE tickets ADD COLUMN ticket_id_string TEXT`, (e2) => {
                                             ignoreSchemaMigrationErr(e2);
                                             db.run(`ALTER TABLE tickets ADD COLUMN is_valid INTEGER DEFAULT 1`, (e2b) => {
@@ -889,6 +905,8 @@ function ensurePortalSchema(next) {
                                                     });
                                                 });
                                             });
+                                        });
+                                        });
                                         });
                                         });
                                         });
@@ -3497,24 +3515,32 @@ function healOrphanRegistrationsForUser(uid, cb) {
 
 function fetchApplicationsForUser(uid, yearFilter, cb) {
     if (!parsePositiveUserId(uid)) return cb(new Error('Invalid user id'));
-    let sql = `SELECT r.id, r.seminar_id, r.application_no, r.status, r.form_data, r.doc_review_json, r.created_at,
+    const baseSelect = `SELECT r.id, r.seminar_id, r.application_no, r.status, r.form_data, r.created_at,
                 r.created_at AS updated_at,
                 s.title AS seminar_title, s.whatsapp_group_url, s.cancellation_policy_json, s.terms_conditions,
-                s.event_date AS seminar_event_date, s.price AS seminar_price, s.portal_year
-         FROM registrations r
+                s.event_date AS seminar_event_date, s.price AS seminar_price, s.portal_year`;
+    const fromWhere = ` FROM registrations r
          LEFT JOIN seminars s ON r.seminar_id = s.id
          WHERE r.user_id = ?`;
     const params = [uid];
+    let yearClause = '';
     if (Number.isInteger(yearFilter)) {
         if (isPostgresConfigured()) {
-            sql += ` AND (s.portal_year = ? OR EXTRACT(YEAR FROM COALESCE(s.event_date, r.created_at))::INTEGER = ?)`;
+            yearClause = ` AND (s.portal_year = ? OR EXTRACT(YEAR FROM COALESCE(s.event_date, r.created_at))::INTEGER = ?)`;
         } else {
-            sql += ` AND (s.portal_year = ? OR CAST(strftime('%Y', COALESCE(s.event_date, r.created_at)) AS INTEGER) = ?)`;
+            yearClause = ` AND (s.portal_year = ? OR CAST(strftime('%Y', COALESCE(s.event_date, r.created_at)) AS INTEGER) = ?)`;
         }
         params.push(yearFilter, yearFilter);
     }
-    sql += ` ORDER BY r.id DESC`;
-    db.all(sql, params, cb);
+    const order = ` ORDER BY r.id DESC`;
+    const sqlWithDoc = `${baseSelect}, r.doc_review_json${fromWhere}${yearClause}${order}`;
+    const sqlWithoutDoc = `${baseSelect}${fromWhere}${yearClause}${order}`;
+    db.all(sqlWithDoc, params, (err, rows) => {
+        if (err && /doc_review_json|column.*does not exist/i.test(String(err.message))) {
+            return db.all(sqlWithoutDoc, params, cb);
+        }
+        cb(err, rows);
+    });
 }
 
 function respondApplicationsList(uid, yearFilter, res) {
@@ -5113,7 +5139,7 @@ app.post('/api/scanner/mark', (req, res) => {
                         error:
                             scansRequired === 2
                                 ? 'Both entry and exit scans are already recorded for this ticket.'
-                                : 'Ticket already scanned!',
+                                : 'Check-in already completed for this ticket.',
                         scanCount: currentScanCount,
                         scansRequired,
                         doctor: {
