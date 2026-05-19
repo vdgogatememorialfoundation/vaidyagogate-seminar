@@ -1156,9 +1156,6 @@
                 body: JSON.stringify(body)
             });
             const { data, parseFailed } = await readIndexApiJson(res);
-            if (parseFailed && !res.ok) {
-                return alert(indexApiError(res, data, parseFailed));
-            }
             if (res.status === 403 && data.needsEmailVerification) {
                 const again = confirm(
                     (data.error || 'Please verify your email before signing in.') +
@@ -1196,7 +1193,7 @@
                     openAuthModal('signup');
                 }
             } else {
-                alert(data.error || 'Sign-in failed.');
+                alert(indexApiError(res, data, parseFailed) || 'Sign-in failed.');
             }
         }
 

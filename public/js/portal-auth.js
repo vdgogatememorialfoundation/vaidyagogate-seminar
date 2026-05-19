@@ -311,14 +311,6 @@
                     body: JSON.stringify(body)
                 });
                 const { data, parseFailed } = await readApiJson(res);
-                if (parseFailed && !res.ok) {
-                    const msg =
-                        global.HttpJson &&
-                        global.HttpJson.apiErrorMessage(res, data, true);
-                    if (opts.onError) opts.onError(msg || 'Could not sign in.');
-                    else alert(msg || 'Could not sign in.');
-                    return;
-                }
                 if (res.status === 403 && data.needsEmailVerification) {
                     const again = confirm(
                         (data.error || 'Please verify your email before signing in.') +
@@ -353,7 +345,10 @@
                         if (go) window.location.href = '/?register=1';
                         return;
                     }
-                    const msg = data.error || 'Login failed.';
+                    const msg =
+                        parseFailed && global.HttpJson
+                            ? global.HttpJson.apiErrorMessage(res, data, true)
+                            : data.error || 'Login failed.';
                     if (opts.onError) opts.onError(msg);
                     else alert(msg);
                     return;

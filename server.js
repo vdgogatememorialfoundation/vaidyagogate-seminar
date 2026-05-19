@@ -5698,7 +5698,7 @@ app.delete('/api/admin/seminars/:id', (req, res) => {
             };
             next();
         });
-    });
+        });
 });
 
 // Admin: Set Countdown Active
