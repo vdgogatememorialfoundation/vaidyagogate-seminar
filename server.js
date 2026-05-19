@@ -152,12 +152,22 @@ function bootstrapApp(done) {
             .catch(() => runFullMigrations());
     };
     const runPgColumnPatches = () => {
+        const tasks = [];
         if (pgDb.ensureCertificateVerifyColumns) {
-            return pgDb.ensureCertificateVerifyColumns().catch((e) => {
-                console.warn('[bootstrap] certificate verify columns:', e.message);
-            });
+            tasks.push(
+                pgDb.ensureCertificateVerifyColumns().catch((e) => {
+                    console.warn('[bootstrap] certificate verify columns:', e.message);
+                })
+            );
         }
-        return Promise.resolve();
+        if (pgDb.ensureAuxiliaryTables) {
+            tasks.push(
+                pgDb.ensureAuxiliaryTables().catch((e) => {
+                    console.warn('[bootstrap] auxiliary tables:', e.message);
+                })
+            );
+        }
+        return tasks.length ? Promise.all(tasks) : Promise.resolve();
     };
     if (pgDb.ensureMissingCoreTables) {
         return pgDb
