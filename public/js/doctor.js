@@ -2647,10 +2647,14 @@ async function submitApplication() {
 
     const uid = doctorUserIdOrAlert();
     if (!uid) return;
+    const sid = parseInt(activeSeminarIdForReg, 10);
+    if (!Number.isInteger(sid) || sid < 1) {
+        return alert('Seminar session expired. Close the form and open the seminar again from the dashboard.');
+    }
 
     const payload = new FormData();
     payload.append('userId', String(uid));
-    payload.append('seminarId', activeSeminarIdForReg || 1);
+    payload.append('seminarId', String(sid));
     payload.append('formData', JSON.stringify(formDataObj));
     if (window.__otpOnStep1) {
         payload.append('phoneOtpToken', window.__regPhoneOtpToken || '');
@@ -3931,7 +3935,13 @@ async function loadDashboardFeedbackSeminars() {
     }
     msgEl.textContent = '';
     try {
-        const uid = typeof resolveCurrentUserId === 'function' ? resolveCurrentUserId() : currentUser.id;
+        const uid = doctorNumericUserId();
+        if (!uid) {
+            msgEl.style.color = '#b91c1c';
+            msgEl.textContent = 'Sign in again to load feedback seminars.';
+            sel.innerHTML = '<option value="">— Select seminar —</option>';
+            return;
+        }
         const res = await fetch('/api/feedback/eligible-seminars/' + encodeURIComponent(uid), { cache: 'no-store' });
         const data = await res.json();
         if (!res.ok) {

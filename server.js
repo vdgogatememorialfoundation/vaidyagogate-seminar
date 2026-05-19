@@ -2641,11 +2641,17 @@ app.post('/api/otp/send', withIntegrationSettingsLoaded, withAuxiliaryTables, (r
     } else {
         const pv = contactValidation.validatePhone(dest);
         if (!pv.valid) return res.status(400).json({ error: pv.message });
-        dest = pv.cleanedPhone;
+        dest = otpLib.normalizeOtpDestination('phone', pv.cleanedPhone) || pv.cleanedPhone;
     }
 
     const meta = {};
-    if (seminarId != null && seminarId !== '') meta.seminarId = parseInt(seminarId, 10);
+    if (seminarId != null && seminarId !== '') {
+        const sidMeta = parseInt(seminarId, 10);
+        if (!Number.isInteger(sidMeta) || sidMeta < 1) {
+            return res.status(400).json({ error: 'Invalid seminarId for OTP' });
+        }
+        meta.seminarId = sidMeta;
+    }
     if (fieldKey) meta.fieldKey = String(fieldKey);
     if (userId != null && userId !== '') meta.userId = parseInt(userId, 10);
 
@@ -2719,12 +2725,18 @@ app.post('/api/otp/verify', withAuxiliaryTables, (req, res) => {
     } else if (channel === 'phone') {
         const pv = contactValidation.validatePhone(dest);
         if (!pv.valid) return res.status(400).json({ error: pv.message });
-        dest = pv.cleanedPhone;
+        dest = otpLib.normalizeOtpDestination('phone', pv.cleanedPhone) || pv.cleanedPhone;
     } else {
         return res.status(400).json({ error: 'channel must be phone or email' });
     }
     const meta = {};
-    if (seminarId != null && seminarId !== '') meta.seminarId = parseInt(seminarId, 10);
+    if (seminarId != null && seminarId !== '') {
+        const sidMeta = parseInt(seminarId, 10);
+        if (!Number.isInteger(sidMeta) || sidMeta < 1) {
+            return res.status(400).json({ error: 'Invalid seminarId for OTP' });
+        }
+        meta.seminarId = sidMeta;
+    }
     if (fieldKey) meta.fieldKey = String(fieldKey);
     const uidNum = userId != null && userId !== '' ? parseInt(userId, 10) : null;
     if (purpose === 'login') {
@@ -3858,6 +3870,8 @@ app.post('/api/applications/submit', (req, res, next) => {
                         });
                     }
 
+                    const otpTokensToConsume = [];
+
                     function doInsertRegistration() {
                         const applicationNo = generateId();
                         const finishInsert = () => {
@@ -3901,7 +3915,13 @@ app.post('/api/applications/submit', (req, res, next) => {
                                     resource_id: applicationNo,
                                     meta: { applicationId: newId }
                                 });
-                                res.json({ success: true, applicationId: newId, applicationNo });
+                                const finishResponse = () =>
+                                    res.json({ success: true, applicationId: newId, applicationNo });
+                                if (!otpTokensToConsume.length) return finishResponse();
+                                otpLib.consumeVerificationTokens(db, otpTokensToConsume, (cErr) => {
+                                    if (cErr) console.warn('[otp] consume after submit:', cErr.message);
+                                    finishResponse();
+                                });
                                     }
                                 );
                             }
@@ -3958,8 +3978,11 @@ app.post('/api/applications/submit', (req, res, next) => {
                                                 error: (ov && ov.error) || 'OTP verification failed on personal details step.'
                                             });
                                         }
+                                        if (needPhone && phoneOtpToken) otpTokensToConsume.push(phoneOtpToken);
+                                        if (needEmail && emailOtpToken) otpTokensToConsume.push(emailOtpToken);
                                         runFieldOtpsThenInsert();
-                                    }
+                                    },
+                                    { peekOnly: true }
                                 );
                             };
 
@@ -3993,8 +4016,11 @@ app.post('/api/applications/submit', (req, res, next) => {
                                             error: (sv && sv.error) || 'Final confirmation OTP failed. Request new codes on the preview step.'
                                         });
                                     }
+                                    if (needPhone && subPhone) otpTokensToConsume.push(subPhone);
+                                    if (needEmail && subEmail) otpTokensToConsume.push(subEmail);
                                     afterSubmitOtp();
-                                }
+                                },
+                                { peekOnly: true }
                             );
                         });
                         return;
@@ -7882,32 +7908,27 @@ app.post('/api/admin/registrations/upsert', (req, res) => {
         if (!admResult || !admResult.ok) {
             return res.status(403).json({ error: (admResult && admResult.error) || 'Forbidden' });
         }
-        requireAdminSensitiveOtpIfEnabled(aid, adminPhoneOtpToken, adminEmailOtpToken, (eOtp, okOtp, msgOtp) => {
-            if (eOtp) return res.status(500).json({ error: eOtp.message });
-            if (!okOtp) return res.status(400).json({ error: msgOtp || 'Admin verification required' });
-
-            const hasApplicantOtp = !!(applicantPhoneOtpToken || applicantEmailOtpToken);
-            const afterApplicant = () => runAdminRegistrationUpsertBody(req, res, tid, sid, aid, formData);
-
-            if (!hasApplicantOtp) return afterApplicant();
-
-            otpLib.validateProxyApplicantOtpTokens(
-                db,
-                sid,
-                { phoneToken: applicantPhoneOtpToken, emailToken: applicantEmailOtpToken },
-                (eApp, appOk) => {
-                    if (eApp) return res.status(500).json({ error: eApp.message });
-                    if (!appOk || !appOk.ok) {
-                        return res.status(400).json({
-                            error:
-                                (appOk && appOk.error) ||
-                                'Verify applicant phone and email OTP before saving proxy registration.'
-                        });
-                    }
-                    afterApplicant();
+        if (!applicantPhoneOtpToken || !applicantEmailOtpToken) {
+            return res.status(400).json({
+                error: 'Verify applicant phone and email OTP before saving this application.'
+            });
+        }
+        otpLib.validateProxyApplicantOtpTokens(
+            db,
+            sid,
+            { phoneToken: applicantPhoneOtpToken, emailToken: applicantEmailOtpToken },
+            (eApp, appOk) => {
+                if (eApp) return res.status(500).json({ error: eApp.message });
+                if (!appOk || !appOk.ok) {
+                    return res.status(400).json({
+                        error:
+                            (appOk && appOk.error) ||
+                            'Verify applicant phone and email OTP before saving this application.'
+                    });
                 }
-            );
-        });
+                runAdminRegistrationUpsertBody(req, res, tid, sid, aid, formData);
+            }
+        );
     });
 });
 
@@ -8347,6 +8368,20 @@ app.delete('/api/admin/event-schedules/:id', (req, res) => {
 
 // ==================== SEMINAR FEEDBACK ENDPOINTS ====================
 
+const FEEDBACK_ELIGIBLE_STATUSES = new Set([
+    'completed',
+    'e_ticket_issued',
+    'checked_in',
+    'approved_pending_payment'
+]);
+
+function isFeedbackEligibleRegistration(row) {
+    if (!row) return false;
+    if (isSeminarEnded(row.event_date)) return true;
+    const st = String(row.status || '').toLowerCase();
+    return FEEDBACK_ELIGIBLE_STATUSES.has(st);
+}
+
 // Submit Seminar Feedback
 app.post('/api/feedback/submit', (req, res) => {
     const {
@@ -8369,20 +8404,25 @@ app.post('/api/feedback/submit', (req, res) => {
     db.get(`SELECT id, event_date, title FROM seminars WHERE id = ?`, [sid], (err, sem) => {
             if (err) return res.status(500).json({ error: err.message });
         if (!sem) return res.status(400).json({ error: 'Seminar not found' });
-        if (!isSeminarEnded(sem.event_date)) {
-            return res.status(400).json({
-                error: 'Feedback is only accepted after the seminar has ended.'
-            });
-        }
-
         db.get(
-            `SELECT id FROM registrations WHERE user_id = ? AND seminar_id = ? ORDER BY id DESC LIMIT 1`,
+            `SELECT id, status FROM registrations WHERE user_id = ? AND seminar_id = ? ORDER BY id DESC LIMIT 1`,
             [uid, sid],
             (regErr, reg) => {
                 if (regErr) return res.status(500).json({ error: regErr.message });
                 if (!reg) {
                     return res.status(400).json({
                         error: 'You must be registered for this seminar before submitting feedback.'
+                    });
+                }
+                if (
+                    !isFeedbackEligibleRegistration({
+                        event_date: sem.event_date,
+                        status: reg.status
+                    })
+                ) {
+                    return res.status(400).json({
+                        error:
+                            'Feedback is available after the seminar ends, or once your registration is approved or completed.'
                     });
                 }
 
@@ -8434,10 +8474,11 @@ app.get('/api/feedback/eligible-seminars/:userId', (req, res) => {
     const uid = parsePositiveUserId(req.params.userId);
     if (!uid) return res.status(400).json({ error: 'Invalid user id' });
     db.all(
-        `SELECT s.id, s.title, s.event_date, r.id AS registration_id
+        `SELECT s.id, s.title, s.event_date, r.id AS registration_id, r.status
          FROM registrations r
          JOIN seminars s ON s.id = r.seminar_id
          WHERE r.user_id = ?
+         AND LOWER(IFNULL(r.status, '')) NOT IN ('rejected', 'cancelled')
          AND NOT EXISTS (
              SELECT 1 FROM seminar_feedback sf
              WHERE sf.user_id = r.user_id AND sf.seminar_id = r.seminar_id
@@ -8446,7 +8487,7 @@ app.get('/api/feedback/eligible-seminars/:userId', (req, res) => {
         [uid],
         (err, rows) => {
             if (err) return res.status(500).json({ error: err.message });
-            const eligible = (rows || []).filter((r) => isSeminarEnded(r.event_date));
+            const eligible = (rows || []).filter(isFeedbackEligibleRegistration);
             res.json(eligible);
         }
     );

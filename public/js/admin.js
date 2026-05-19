@@ -67,6 +67,8 @@ function sensitiveOtpFieldIds(ctx) {
 
 let __proxyApplicantPhoneOtpToken = '';
 let __proxyApplicantEmailOtpToken = '';
+let __behalfApplicantPhoneOtpToken = '';
+let __behalfApplicantEmailOtpToken = '';
 let __proxyLastRegId = null;
 let __proxyLastUserId = null;
 let __proxyPaymentAmount = 0;
@@ -112,11 +114,89 @@ async function refreshAdminSensitiveOtpRequirement() {
         __requireAdminSensitiveOtp = false;
     }
     const wrapCreate = document.getElementById('newuser-admin-otp-wrap');
-    const wrapBehalf = document.getElementById('behalf-admin-otp-wrap');
     const show = !!__requireAdminSensitiveOtp;
     if (wrapCreate) wrapCreate.style.display = show ? 'block' : 'none';
-    if (wrapBehalf) wrapBehalf.style.display = show ? 'block' : 'none';
     if (!show) resetAdminSensitiveOtpTokens();
+}
+
+function resetBehalfApplicantOtpTokens() {
+    __behalfApplicantPhoneOtpToken = '';
+    __behalfApplicantEmailOtpToken = '';
+    ['behalf-app-phone-ok', 'behalf-app-email-ok'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = '';
+    });
+}
+
+function behalfApplicantContact(channel) {
+    const key = channel === 'phone' ? 'phone' : 'email';
+    const el = document.getElementById('behalf-f-' + key);
+    if (el && String(el.value || '').trim()) return String(el.value).trim();
+    const docId = parseInt((document.getElementById('behalf-doctor-select') || {}).value, 10);
+    const u = window.__adminUsersById && window.__adminUsersById[docId];
+    if (!u) return '';
+    return channel === 'phone' ? String(u.phone || '').trim() : String(u.email || '').trim();
+}
+
+async function behalfSendApplicantOtp(channel) {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return alert('Not logged in.');
+    const sid = parseInt((document.getElementById('behalf-seminar-select') || {}).value, 10);
+    if (!Number.isInteger(sid) || sid < 1) return alert('Select a seminar first.');
+    const destination = behalfApplicantContact(channel);
+    if (!destination) {
+        return alert(channel === 'phone' ? 'Enter applicant phone on the form.' : 'Enter applicant email on the form.');
+    }
+    try {
+        const res = await fetch('/api/admin/proxy-otp/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ adminUserId: adm.id, channel, destination, seminarId: sid })
+        });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Could not send OTP.');
+        if (data.debugCode) console.info('Behalf applicant OTP:', data.debugCode);
+        if (window.OtpUi) {
+            window.OtpUi.notifyOtpSent(channel, data, {
+                customMessage:
+                    channel === 'phone'
+                        ? 'OTP sent to the applicant’s WhatsApp.'
+                        : 'OTP sent to the applicant’s email.'
+            });
+        } else {
+            alert(channel === 'phone' ? 'OTP sent to applicant WhatsApp.' : 'OTP sent to applicant email.');
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Network error');
+    }
+}
+
+async function behalfVerifyApplicantOtp(channel) {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return alert('Not logged in.');
+    const sid = parseInt((document.getElementById('behalf-seminar-select') || {}).value, 10);
+    if (!Number.isInteger(sid) || sid < 1) return alert('Select a seminar first.');
+    const destination = behalfApplicantContact(channel);
+    const codeEl = document.getElementById(channel === 'phone' ? 'behalf-app-phone-otp' : 'behalf-app-email-otp');
+    const code = codeEl ? codeEl.value.trim() : '';
+    if (!destination || !code) return alert('Enter destination and OTP code.');
+    try {
+        const res = await fetch('/api/admin/proxy-otp/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ adminUserId: adm.id, channel, destination, code, seminarId: sid })
+        });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Verification failed.');
+        if (channel === 'phone') __behalfApplicantPhoneOtpToken = data.token;
+        else __behalfApplicantEmailOtpToken = data.token;
+        const okEl = document.getElementById(channel === 'phone' ? 'behalf-app-phone-ok' : 'behalf-app-email-ok');
+        if (okEl) okEl.textContent = '✓ Verified';
+    } catch (e) {
+        console.error(e);
+        alert('Network error');
+    }
 }
 
 async function adminSendSensitiveOtp(channel, ctx) {
@@ -872,6 +952,7 @@ function refreshAdminBehalfWorkflow(data) {
 }
 
 async function onAdminBehalfDoctorOrSeminarChange() {
+    resetBehalfApplicantOtpTokens();
     const docId = parseInt((document.getElementById('behalf-doctor-select') || {}).value, 10);
     const sid = parseInt((document.getElementById('behalf-seminar-select') || {}).value, 10);
     const summary = document.getElementById('behalf-app-summary');
@@ -1109,19 +1190,11 @@ async function behalfPollPayment() {
 }
 
 function scheduleBehalfRegSave() {
-    if (__requireAdminSensitiveOtp) {
-        const st = document.getElementById('behalf-save-status');
-        if (st) st.textContent = 'Admin OTP is on: verify your codes above, then click Save application.';
-        return;
-    }
     const st = document.getElementById('behalf-save-status');
-    if (st) st.textContent = 'Waiting to save…';
-    if (__adminBehalfSaveTimer) clearTimeout(__adminBehalfSaveTimer);
-    __adminBehalfSaveTimer = setTimeout(() => flushBehalfRegistrationSave(false), 750);
+    if (st) st.textContent = 'Verify applicant OTP above, then click Save application.';
 }
 
 async function flushBehalfRegistrationSave(manual) {
-    await refreshAdminSensitiveOtpRequirement();
     const st = document.getElementById('behalf-save-status');
     const docId = parseInt((document.getElementById('behalf-doctor-select') || {}).value, 10);
     const sid = parseInt((document.getElementById('behalf-seminar-select') || {}).value, 10);
@@ -1147,12 +1220,10 @@ async function flushBehalfRegistrationSave(manual) {
         if (st) st.textContent = 'Not logged in.';
         return;
     }
-    if (__requireAdminSensitiveOtp && !manual) {
-        if (st) st.textContent = 'Verify admin OTP and click Save application to persist changes.';
+    if (!__behalfApplicantPhoneOtpToken || !__behalfApplicantEmailOtpToken) {
+        if (st) st.textContent = 'Verify applicant phone and email OTP before saving.';
+        if (manual) return alert('Verify applicant phone and email OTP before saving.');
         return;
-    }
-    if (__requireAdminSensitiveOtp && manual && (!__adminSensitivePhoneOtpToken || !__adminSensitiveEmailOtpToken)) {
-        return alert('Verify both email and WhatsApp OTP before saving.');
     }
     if (st) st.textContent = 'Saving…';
     try {
@@ -1164,8 +1235,8 @@ async function flushBehalfRegistrationSave(manual) {
                 seminarId: sid,
                 formData,
                 adminUserId: adm.id,
-                adminPhoneOtpToken: __adminSensitivePhoneOtpToken,
-                adminEmailOtpToken: __adminSensitiveEmailOtpToken
+                applicantPhoneOtpToken: __behalfApplicantPhoneOtpToken,
+                applicantEmailOtpToken: __behalfApplicantEmailOtpToken
             })
         });
         const data = await res.json();
@@ -1173,13 +1244,7 @@ async function flushBehalfRegistrationSave(manual) {
             if (st) st.textContent = data.error || 'Save failed.';
             return;
         }
-        if (__requireAdminSensitiveOtp) {
-            resetAdminSensitiveOtpTokens();
-            ['beh-sens-phone-ok', 'beh-sens-email-ok'].forEach((id) => {
-                const el = document.getElementById(id);
-                if (el) el.textContent = '';
-            });
-        }
+        resetBehalfApplicantOtpTokens();
         if (st)
             st.textContent = `Saved ${data.created ? '(new application)' : '(updated)'} at ${new Date().toLocaleTimeString()}`;
         __behalfRegId = data.registrationId || __behalfRegId;

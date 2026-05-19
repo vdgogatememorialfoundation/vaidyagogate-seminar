@@ -444,23 +444,23 @@
             <div id="tab-behalf-reg" class="tab-pane hidden">
                 <h2 style="margin-bottom: 12px;">Doctor seminar applications (admin workspace)</h2>
                 <p style="color:#64748b;margin-bottom:18px;max-width:920px;">Register a doctor using the <strong>same fields as the doctor portal</strong> (from <em>Seminar registration form</em> settings). Data is stored in <code>registrations.form_data</code> as JSON — that is what the old JSON box was for. After saving, use <strong>Process application</strong> below for verify → payment → e-ticket QR.</p>
-                <div id="behalf-admin-otp-wrap" class="card" style="display:none;margin-bottom:16px;padding:14px;border:1px solid #fed7aa;background:#fffbeb;">
-                    <strong style="display:block;margin-bottom:8px;color:#9a3412;">Your admin confirmation (email + WhatsApp)</strong>
+                <div id="behalf-applicant-otp-wrap" class="card" style="margin-bottom:16px;padding:14px;border:1px solid #bfdbfe;background:#eff6ff;">
+                    <strong style="display:block;margin-bottom:8px;color:#1e40af;">OTP to the doctor (phone &amp; email on the form below)</strong>
+                    <p style="font-size:0.85rem;color:#475569;margin:0 0 10px;">Send codes to the applicant — not your admin login. Verify both before saving.</p>
                     <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:8px;">
-                        <span style="font-size:0.85rem;">Email</span>
-                        <button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;background:#64748b;" onclick="adminSendSensitiveOtp('email','behalf')">Send</button>
-                        <input type="text" id="beh-sens-email-otp" placeholder="Code" style="width:72px;padding:6px;border-radius:6px;border:1px solid #cbd5e1;">
-                        <button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;" onclick="adminVerifySensitiveOtp('email','behalf')">Verify</button>
-                        <span id="beh-sens-email-ok" style="font-size:0.8rem;color:#059669;"></span>
+                        <span style="font-size:0.85rem;">Applicant email</span>
+                        <button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;background:#64748b;" onclick="behalfSendApplicantOtp('email')">Send OTP</button>
+                        <input type="text" id="behalf-app-email-otp" placeholder="Code" style="width:72px;padding:6px;border-radius:6px;border:1px solid #cbd5e1;">
+                        <button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;" onclick="behalfVerifyApplicantOtp('email')">Verify</button>
+                        <span id="behalf-app-email-ok" style="font-size:0.8rem;color:#059669;"></span>
                     </div>
                     <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
-                        <span style="font-size:0.85rem;">WhatsApp</span>
-                        <button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;background:#64748b;" onclick="adminSendSensitiveOtp('phone','behalf')">Send</button>
-                        <input type="text" id="beh-sens-phone-otp" placeholder="Code" style="width:72px;padding:6px;border-radius:6px;border:1px solid #cbd5e1;">
-                        <button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;" onclick="adminVerifySensitiveOtp('phone','behalf')">Verify</button>
-                        <span id="beh-sens-phone-ok" style="font-size:0.8rem;color:#059669;"></span>
+                        <span style="font-size:0.85rem;">Applicant WhatsApp</span>
+                        <button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;background:#64748b;" onclick="behalfSendApplicantOtp('phone')">Send OTP</button>
+                        <input type="text" id="behalf-app-phone-otp" placeholder="Code" style="width:72px;padding:6px;border-radius:6px;border:1px solid #cbd5e1;">
+                        <button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;" onclick="behalfVerifyApplicantOtp('phone')">Verify</button>
+                        <span id="behalf-app-phone-ok" style="font-size:0.8rem;color:#059669;"></span>
                     </div>
-                    <button type="button" class="btn-primary" style="margin-top:12px;background:#0f766e;" onclick="flushBehalfRegistrationSave(true)">Save application (uses verified OTP)</button>
                 </div>
                     <div class="card">
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
