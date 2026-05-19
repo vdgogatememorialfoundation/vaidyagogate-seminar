@@ -1,0 +1,15 @@
+const fs = require('fs');
+const p = 'lib/certificate-render.js';
+let s = fs.readFileSync(p, 'utf8');
+s = s.replaceAll('<motion ', '<div ');
+s = s.replaceAll('</motion>', '</div>');
+s = s.replaceAll('${deco}', '${swoosh}');
+s = s.replace(/\n    const html = swoosh\.replace\([\s\S]*?\);\n/, '\n');
+const tail = "`.replace(/</motion>/g, '</motion>').replace(/<motion /g, '<div ');";
+const tail2 = "`.replace(/</motion>/g, '</div>').replace(/<motion /g, '<motion ');";
+const tail3 = "`.replace(/</motion>/g, '</div>').replace(/<motion /g, '<div ');";
+if (s.includes(tail3)) s = s.replace(tail3, '`;');
+else if (s.includes(tail2)) s = s.replace(tail2, '`;');
+else if (s.includes(tail)) s = s.replace(tail, '`;');
+fs.writeFileSync(p, s);
+console.log('done');

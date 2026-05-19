@@ -140,7 +140,9 @@
                     '></div>' +
                     '<div class="congress-hero-overlay"></div>' +
                     '<div class="congress-hero-content">' +
-                    '<span class="congress-hero-eyebrow"><i class="fas fa-certificate"></i> National CME Congress</span>' +
+                    '<span class="congress-hero-eyebrow"><i class="fas fa-certificate"></i> ' +
+                    esc((cms && cms.hero && cms.hero.eyebrow) || 'National CME Congress') +
+                    '</span>' +
                     '<h2>' +
                     esc(sl.title) +
                     '</h2>' +

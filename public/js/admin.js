@@ -186,13 +186,7 @@ function applyCoAdminSidebarVisibility() {
 async function refreshAdminLoginOtpPanel() {
     const panel = document.getElementById('admin_login_otp_panel');
     if (!panel) return;
-    try {
-        const res = await fetch('/api/auth/login-otp-required');
-        const d = await res.json();
-        panel.style.display = d.required ? 'block' : 'none';
-    } catch (_) {
-        panel.style.display = 'none';
-    }
+    panel.style.display = 'none';
 }
 
 window.onload = () => {
@@ -288,12 +282,7 @@ document.getElementById('admin-login-form').addEventListener('submit', async (e)
     e.preventDefault();
     const email = document.getElementById('admin-email').value.trim().toLowerCase();
     const password = document.getElementById('admin-password').value;
-    const body = { email, password };
-    const lo = document.getElementById('admin_login_otp_panel');
-    if (lo && lo.style.display === 'block') {
-        body.phoneOtpToken = __adminLoginPhoneOtpToken;
-        body.emailOtpToken = __adminLoginEmailOtpToken;
-    }
+    const body = { email, password, portal: 'admin' };
     try {
         const res = await fetch('/api/auth/login', {
             method: 'POST',
@@ -622,6 +611,7 @@ const ADMIN_MODULE_TAB_DEFS = [
     ['tab-feedback', 'Seminar feedback'],
     ['tab-support-tickets', 'Support tickets'],
     ['tab-contact-inquiries', 'Website contact'],
+    ['tab-email-compose', 'Send email'],
     ['tab-transfer', 'Transfer applications'],
     ['tab-behalf-reg', 'Doctor applications (admin workspace)'],
     ['tab-reg-form', 'Registration form fields'],
@@ -634,6 +624,8 @@ const ADMIN_MODULE_TAB_DEFS = [
     ['tab-scanner-logs', 'Scanner activity'],
     ['tab-activity-logs', 'User & doctor activity'],
     ['tab-notifications', 'Notifications'],
+    ['tab-system-platform', 'System health'],
+    ['tab-system-users', 'User health'],
     ['tab-settings', 'Global settings']
 ];
 
@@ -1215,6 +1207,149 @@ async function fillAdminSeminarSelect(selectId, includeAllOption) {
 async function initAdminCertificatesTab() {
     await fillAdminSeminarSelect('cert-mgmt-seminar', false);
     await loadAdminCertificateCandidates();
+    await loadCertTemplateConfig();
+}
+
+function readCertConfigFromForm() {
+    return {
+        orgName: document.getElementById('cert-cfg-org')?.value || '',
+        title: document.getElementById('cert-cfg-title')?.value || '',
+        subtitle: document.getElementById('cert-cfg-subtitle')?.value || '',
+        leadText: document.getElementById('cert-cfg-lead')?.value || '',
+        bodyParticipant: document.getElementById('cert-cfg-body-p')?.value || '',
+        bodyVolunteer: document.getElementById('cert-cfg-body-v')?.value || '',
+        venueOverride: document.getElementById('cert-cfg-venue')?.value || '',
+        dateOverride: document.getElementById('cert-cfg-date')?.value || '',
+        sigLeftTitle: document.getElementById('cert-cfg-sig-l')?.value || '',
+        sigRightName: document.getElementById('cert-cfg-sig-rn')?.value || '',
+        sigRightTitle: document.getElementById('cert-cfg-sig-rt')?.value || '',
+        goldColor: document.getElementById('cert-cfg-gold')?.value || '#c9a227',
+        nameColor: document.getElementById('cert-cfg-name-color')?.value || '#c45c26',
+        showFlame: !!document.getElementById('cert-cfg-flame')?.checked,
+        showSwooshes: !!document.getElementById('cert-cfg-swoosh')?.checked,
+        autoHonorific: !!document.getElementById('cert-cfg-honorific')?.checked
+    };
+}
+
+function fillCertConfigForm(cfg) {
+    const c = cfg || {};
+    const set = (id, v) => {
+        const el = document.getElementById(id);
+        if (el) el.value = v != null ? v : '';
+    };
+    set('cert-cfg-org', c.orgName);
+    set('cert-cfg-title', c.title);
+    set('cert-cfg-subtitle', c.subtitle);
+    set('cert-cfg-lead', c.leadText);
+    set('cert-cfg-body-p', c.bodyParticipant);
+    set('cert-cfg-body-v', c.bodyVolunteer);
+    set('cert-cfg-venue', c.venueOverride);
+    set('cert-cfg-date', c.dateOverride);
+    set('cert-cfg-sig-l', c.sigLeftTitle);
+    set('cert-cfg-sig-rn', c.sigRightName);
+    set('cert-cfg-sig-rt', c.sigRightTitle);
+    set('cert-cfg-gold', c.goldColor || '#c9a227');
+    set('cert-cfg-name-color', c.nameColor || '#c45c26');
+    const fl = document.getElementById('cert-cfg-flame');
+    const sw = document.getElementById('cert-cfg-swoosh');
+    const ho = document.getElementById('cert-cfg-honorific');
+    if (fl) fl.checked = c.showFlame !== false;
+    if (sw) sw.checked = c.showSwooshes !== false;
+    if (ho) ho.checked = c.autoHonorific !== false;
+}
+
+async function loadCertTemplateConfig() {
+    const sid = document.getElementById('cert-mgmt-seminar')?.value;
+    const certType = document.getElementById('cert-mgmt-type')?.value || 'participant';
+    const msg = document.getElementById('cert-cfg-msg');
+    if (!sid) {
+        if (msg) msg.textContent = 'Select a seminar to load certificate design.';
+        return;
+    }
+    if (msg) msg.textContent = 'Loading…';
+    try {
+        const res = await fetch(
+            `/api/admin/certificates/template-config?seminarId=${encodeURIComponent(sid)}&certType=${encodeURIComponent(certType)}`
+        );
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Load failed');
+        fillCertConfigForm(data.config);
+        if (msg) {
+            msg.style.color = '#15803d';
+            msg.textContent = data.templateId
+                ? 'Loaded design for this seminar (' + (data.isBuiltin ? 'VGMF template' : 'custom file') + ').'
+                : 'Defaults loaded — save to create template for this seminar.';
+        }
+    } catch (e) {
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = e.message || 'Could not load';
+        }
+    }
+}
+
+async function saveCertTemplateConfig() {
+    const sid = document.getElementById('cert-mgmt-seminar')?.value;
+    const certType = document.getElementById('cert-mgmt-type')?.value || 'participant';
+    const msg = document.getElementById('cert-cfg-msg');
+    if (!sid) return alert('Select a seminar');
+    const admin = getStoredAdminUser();
+    if (msg) msg.textContent = 'Saving…';
+    try {
+        const res = await fetch('/api/admin/certificates/template-config', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                seminarId: parseInt(sid, 10),
+                certType,
+                config: readCertConfigFromForm(),
+                adminUserId: admin?.id
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Save failed');
+        if (msg) {
+            msg.style.color = '#15803d';
+            msg.textContent = 'Certificate design saved.';
+        }
+    } catch (e) {
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = e.message || 'Save failed';
+        }
+    }
+}
+
+async function previewCertTemplate() {
+    const sid = document.getElementById('cert-mgmt-seminar')?.value;
+    const certType = document.getElementById('cert-mgmt-type')?.value || 'participant';
+    if (!sid) return alert('Select a seminar');
+    try {
+        const res = await fetch('/api/admin/certificates/preview', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                seminarId: parseInt(sid, 10),
+                certType,
+                config: readCertConfigFromForm()
+            })
+        });
+        const html = await res.text();
+        if (!res.ok) {
+            let err = html;
+            try {
+                err = JSON.parse(html).error;
+            } catch (_) {}
+            throw new Error(err || 'Preview failed');
+        }
+        const w = window.open('', '_blank');
+        if (w) {
+            w.document.write(html);
+            w.document.close();
+        } else alert('Allow pop-ups to preview the certificate.');
+    } catch (e) {
+        alert(e.message || 'Preview failed');
+    }
 }
 
 async function loadAdminCertificateCandidates() {
@@ -1283,13 +1418,50 @@ async function bulkEnableAdminCertificates(enabled) {
             loadAdminCertificateCandidates();
             if (enabled && data.templateMissing) {
                 alert(
-                    'Certificate enabled for selected doctors.\n\nUpload a participant certificate template in this tab (image/PDF) — until then, doctors will see “approved” but cannot download the certificate yet.'
+                    'Certificate enabled for selected doctors.\n\nApply the VGMF certificate design (or upload a custom template) in this tab — until then, doctors will see “approved” but cannot view the certificate yet.'
                 );
             }
         } else alert(data.error || 'Failed');
     } catch (e) {
         console.error(e);
         alert('Network error');
+    }
+}
+
+async function applyAdminBuiltinCertificate(certType) {
+    const sid = document.getElementById('cert-mgmt-seminar')?.value;
+    const msg = document.getElementById('cert-mgmt-msg');
+    if (!sid) return alert('Select a seminar');
+    const admin = getStoredAdminUser();
+    if (msg) {
+        msg.textContent = 'Applying VGMF design…';
+        msg.style.color = '#78716c';
+    }
+    try {
+        const res = await fetch('/api/admin/certificates/builtin-template', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                seminarId: parseInt(sid, 10),
+                certType: certType || 'participant',
+                adminUserId: admin?.id
+            })
+        });
+        const data = await res.json();
+        if (data.success) {
+            if (msg) {
+                msg.style.color = '#15803d';
+                msg.textContent = data.message || 'VGMF certificate design applied.';
+            }
+            loadAdminCertificateCandidates();
+            loadCertTemplateConfig();
+        } else if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = data.error || 'Failed';
+        }
+    } catch (e) {
+        console.error(e);
+        if (msg) msg.textContent = 'Network error';
     }
 }
 
@@ -3116,8 +3288,16 @@ async function proxySendApplicantOtp(channel) {
         const data = await res.json();
         if (!res.ok) return alert(data.error || 'Could not send OTP.');
         if (data.debugCode) console.info('Proxy applicant OTP:', data.debugCode);
-        if (data.warning) alert(data.warning);
-        else alert(channel === 'phone' ? 'WhatsApp OTP sent to applicant phone.' : 'Email OTP sent to applicant.');
+        if (window.OtpUi) {
+            window.OtpUi.notifyOtpSent(channel, data, {
+                customMessage:
+                    channel === 'phone'
+                        ? 'OTP sent successfully to the applicant’s WhatsApp.'
+                        : 'OTP sent successfully to the applicant’s email.'
+            });
+        } else {
+            alert(channel === 'phone' ? 'OTP sent successfully to applicant WhatsApp.' : 'OTP sent successfully to applicant email.');
+        }
     } catch (e) {
         console.error(e);
         alert('Network error');
@@ -3801,6 +3981,11 @@ function openCreateSeminarModal() {
     document.getElementById('seminar-id').value = '';
     const otpCh = document.getElementById('seminar-otp-app');
     if (otpCh) otpCh.checked = true;
+    const otpS1 = document.getElementById('seminar-otp-step1');
+    const otpSub = document.getElementById('seminar-otp-submit');
+    if (otpS1) otpS1.checked = true;
+    if (otpSub) otpSub.checked = true;
+    syncSeminarOtpOptionsUi();
     const py = document.getElementById('seminar-portal-year');
     if (py) py.value = adminPortalYear || new Date().getFullYear();
     if (typeof loadSeminarCancellationUi === 'function') loadSeminarCancellationUi('');
@@ -3954,6 +4139,11 @@ function editSeminar(index) {
     if (wh) wh.value = s.whatsapp_group_url || '';
     const otp = document.getElementById('seminar-otp-app');
     if (otp) otp.checked = !!Number(s.otp_on_application);
+    const otpS1 = document.getElementById('seminar-otp-step1');
+    const otpSub = document.getElementById('seminar-otp-submit');
+    if (otpS1) otpS1.checked = s.otp_on_step1 == null ? !!otp?.checked : !!Number(s.otp_on_step1);
+    if (otpSub) otpSub.checked = s.otp_on_submit == null ? !!otp?.checked : !!Number(s.otp_on_submit);
+    syncSeminarOtpOptionsUi();
     loadSeminarCancellationUi(s.cancellation_policy_json || '');
     loadSeminarFormOverrideUi(s.registration_form_json || '');
     const hi = document.getElementById('seminar-hero-image');
@@ -4017,6 +4207,12 @@ async function saveSeminar(e) {
         gallery_paths: galleryVal,
         whatsapp_group_url: (document.getElementById('seminar-whatsapp') || {}).value || null,
         otp_on_application: !!(document.getElementById('seminar-otp-app') || {}).checked,
+        otp_on_step1:
+            !!(document.getElementById('seminar-otp-app') || {}).checked &&
+            !!(document.getElementById('seminar-otp-step1') || {}).checked,
+        otp_on_submit:
+            !!(document.getElementById('seminar-otp-app') || {}).checked &&
+            !!(document.getElementById('seminar-otp-submit') || {}).checked,
         cancellation_policy_json: cancelPol,
         registration_form_json: regFormOverride,
         portal_year: parseInt((document.getElementById('seminar-portal-year') || {}).value, 10) || adminPortalYear
@@ -4509,6 +4705,12 @@ async function openContactInquiry(id) {
         `;
         if (statusSel) statusSel.value = row.status || 'new';
         if (notesEl) notesEl.value = row.admin_notes || '';
+        const subEl = document.getElementById('contact-reply-subject');
+        const bodyEl = document.getElementById('contact-reply-body');
+        const replyMsg = document.getElementById('contact-reply-msg');
+        if (subEl) subEl.value = 'Re: ' + (row.subject || 'Your enquiry');
+        if (bodyEl) bodyEl.value = '';
+        if (replyMsg) replyMsg.textContent = '';
         panel.classList.remove('hidden');
         panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     } catch (err) {
@@ -4534,6 +4736,144 @@ async function saveContactInquiryUpdate() {
     } catch (err) {
         console.error(err);
         alert('Update failed');
+    }
+}
+
+async function sendContactInquiryEmail() {
+    if (!currentContactInquiryId) return alert('Select an inquiry first.');
+    const admin = getStoredAdminUser();
+    if (!admin?.id) return alert('Admin session required');
+    const subject = document.getElementById('contact-reply-subject')?.value || '';
+    const body = document.getElementById('contact-reply-body')?.value || '';
+    const msgEl = document.getElementById('contact-reply-msg');
+    if (!subject.trim() || !body.trim()) return alert('Subject and message are required');
+    if (msgEl) msgEl.textContent = 'Sending…';
+    try {
+        const res = await fetch(`/api/admin/contact-inquiries/${currentContactInquiryId}/send-email`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: admin.id, subject, body })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || data.hint || 'Send failed');
+        if (msgEl) {
+            msgEl.style.color = '#15803d';
+            msgEl.textContent = data.message || 'Email sent.';
+        }
+        loadContactInquiries();
+        openContactInquiry(currentContactInquiryId);
+    } catch (e) {
+        if (msgEl) {
+            msgEl.style.color = '#b91c1c';
+            msgEl.textContent = e.message || 'Send failed';
+        }
+    }
+}
+
+async function initAdminEmailComposeTab() {
+    await fillAdminSeminarSelect('mail-bulk-seminar', false);
+    onMailBulkAudienceChange();
+}
+
+function onMailBulkAudienceChange() {
+    const aud = document.getElementById('mail-bulk-audience')?.value || '';
+    const semWrap = document.getElementById('mail-bulk-seminar-wrap');
+    const emWrap = document.getElementById('mail-bulk-emails-wrap');
+    const showSem = aud === 'seminar_paid' || aud === 'seminar_all';
+    if (semWrap) semWrap.style.display = showSem ? '' : 'none';
+    if (emWrap) emWrap.classList.toggle('hidden', aud !== 'custom_emails');
+}
+
+async function previewMailBulkCount() {
+    const admin = getStoredAdminUser();
+    const aud = document.getElementById('mail-bulk-audience')?.value || '';
+    const sid = document.getElementById('mail-bulk-seminar')?.value || '';
+    const emails = document.getElementById('mail-bulk-emails')?.value || '';
+    const el = document.getElementById('mail-bulk-count');
+    if (!admin?.id) return alert('Admin session required');
+    if (el) el.textContent = 'Counting…';
+    try {
+        let url =
+            `/api/admin/email/recipient-count?actingAdminId=${admin.id}&audience=${encodeURIComponent(aud)}`;
+        if (sid && (aud === 'seminar_paid' || aud === 'seminar_all')) {
+            url += `&seminarId=${encodeURIComponent(sid)}`;
+        }
+        if (aud === 'custom_emails' && emails) {
+            url += `&emails=${encodeURIComponent(emails)}`;
+        }
+        const res = await fetch(url);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed');
+        if (el) el.textContent = `Recipients with valid email: ${data.count}`;
+    } catch (e) {
+        if (el) el.textContent = e.message || 'Could not count';
+    }
+}
+
+async function sendAdminSingleEmail() {
+    const admin = getStoredAdminUser();
+    if (!admin?.id) return alert('Admin session required');
+    const to = document.getElementById('mail-single-to')?.value || '';
+    const subject = document.getElementById('mail-single-subject')?.value || '';
+    const body = document.getElementById('mail-single-body')?.value || '';
+    const msgEl = document.getElementById('mail-single-msg');
+    if (msgEl) msgEl.textContent = 'Sending…';
+    try {
+        const res = await fetch('/api/admin/email/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: admin.id, to, subject, body })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || data.hint || 'Send failed');
+        if (msgEl) {
+            msgEl.style.color = '#15803d';
+            msgEl.textContent = data.message || 'Sent.';
+        }
+    } catch (e) {
+        if (msgEl) {
+            msgEl.style.color = '#b91c1c';
+            msgEl.textContent = e.message || 'Send failed';
+        }
+    }
+}
+
+async function sendAdminBulkEmail() {
+    const admin = getStoredAdminUser();
+    if (!admin?.id) return alert('Admin session required');
+    const audience = document.getElementById('mail-bulk-audience')?.value || '';
+    const seminarId = document.getElementById('mail-bulk-seminar')?.value || '';
+    const emailsRaw = document.getElementById('mail-bulk-emails')?.value || '';
+    const subject = document.getElementById('mail-bulk-subject')?.value || '';
+    const body = document.getElementById('mail-bulk-body')?.value || '';
+    const msgEl = document.getElementById('mail-bulk-msg');
+    if (!subject.trim() || !body.trim()) return alert('Subject and message are required');
+    if (!confirm('Send bulk email to the selected audience?')) return;
+    if (msgEl) msgEl.textContent = 'Queueing…';
+    try {
+        const res = await fetch('/api/admin/email/bulk', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                actingAdminId: admin.id,
+                audience,
+                seminarId: seminarId ? parseInt(seminarId, 10) : null,
+                emails: emailsRaw.split(/[,\s;]+/).filter(Boolean),
+                subject,
+                body
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed');
+        if (msgEl) {
+            msgEl.style.color = '#15803d';
+            msgEl.textContent = data.message || 'Queued.';
+        }
+    } catch (e) {
+        if (msgEl) {
+            msgEl.style.color = '#b91c1c';
+            msgEl.textContent = e.message || 'Failed';
+        }
     }
 }
 
@@ -5258,6 +5598,7 @@ function cmsApplyHeroFieldsToForm(cms) {
         const el = document.getElementById(id);
         if (el) el.value = v != null ? String(v) : '';
     };
+    set('cms-hero-eyebrow', hero.eyebrow);
     set('cms-hero-title', hero.title);
     set('cms-hero-subtitle', hero.subtitle);
     set('cms-hero-venue', hero.venue);
@@ -5292,6 +5633,7 @@ function cmsCollectHeroFieldsFromForm() {
             dateLine: gv('cms-top-date')
         },
         hero: {
+            eyebrow: gv('cms-hero-eyebrow'),
             title: gv('cms-hero-title'),
             subtitle: gv('cms-hero-subtitle'),
             venue: gv('cms-hero-venue'),
@@ -5663,7 +6005,241 @@ function switchAdminPaymentsTab(tab) {
     else loadAdminCancellationRequests();
 }
 
-function loadAdminPaymentsModule() {
+function syncSeminarOtpOptionsUi() {
+    const master = document.getElementById('seminar-otp-app')?.checked;
+    const wrap = document.getElementById('seminar-otp-subopts');
+    const s1 = document.getElementById('seminar-otp-step1');
+    const sub = document.getElementById('seminar-otp-submit');
+    if (wrap) wrap.style.opacity = master ? '1' : '0.45';
+    if (s1) s1.disabled = !master;
+    if (sub) sub.disabled = !master;
+}
+
+let __coLookup = null;
+let __coRegId = null;
+let __coOrderDbId = null;
+let __coMethodId = 'dqr';
+
+function updateCoFinalAmount() {
+    const fee = parseFloat(document.getElementById('co-amount')?.value || '0') || 0;
+    const disc = parseFloat(document.getElementById('co-discount')?.value || '0') || 0;
+    const fin = document.getElementById('co-final');
+    if (fin) fin.value = String(Math.max(0, Math.round((fee - disc) * 100) / 100));
+}
+
+async function loadCreateOrderPaymentMethods() {
+    const sel = document.getElementById('co-method');
+    const adm = getStoredAdminUser();
+    if (!sel || !adm?.id) return;
+    try {
+        const res = await fetch('/api/admin/payments/methods?actingAdminId=' + encodeURIComponent(adm.id));
+        const data = await res.json();
+        if (!res.ok) return;
+        const methods = (data.methods || []).filter((m) => m.available);
+        sel.innerHTML = methods.map((m) => '<option value="' + escAdmin(m.id) + '">' + escAdmin(m.label) + '</option>').join('');
+        if (methods.length) __coMethodId = methods[0].id;
+        sel.onchange = () => {
+            __coMethodId = sel.value;
+        };
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function lookupAdminCreateOrder() {
+    const adm = getStoredAdminUser();
+    const sid = document.getElementById('co-seminar')?.value;
+    const q = document.getElementById('co-user-query')?.value?.trim();
+    const box = document.getElementById('co-lookup-result');
+    const panel = document.getElementById('co-pay-panel');
+    if (!adm?.id || !sid || !q) return alert('Select seminar and enter doctor User ID, email, or phone.');
+    if (box) box.innerHTML = 'Looking up…';
+    if (panel) panel.classList.add('hidden');
+    try {
+        const res = await fetch(
+            '/api/admin/payments/lookup?actingAdminId=' +
+                encodeURIComponent(adm.id) +
+                '&seminarId=' +
+                encodeURIComponent(sid) +
+                '&q=' +
+                encodeURIComponent(q)
+        );
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Lookup failed');
+        __coLookup = data;
+        __coRegId = data.registration ? data.registration.id : null;
+        if (!data.found) {
+            if (box) box.innerHTML = '<p style="color:#b91c1c;">' + escAdmin(data.message || 'Not found') + '</p>';
+            return;
+        }
+        const u = data.user;
+        let html =
+            '<p><strong>' +
+            escAdmin(u.name) +
+            '</strong> · ' +
+            escAdmin(u.userIdString) +
+            '<br>Email: ' +
+            escAdmin(u.email) +
+            ' · Phone: ' +
+            escAdmin(u.phone || '—') +
+            '</p>';
+        html += '<p>Seminar: <strong>' + escAdmin(data.seminar.title) + '</strong> · Fee ₹' + data.seminar.price + '</p>';
+        if (data.registration) {
+            html +=
+                '<p>Application <code>' +
+                escAdmin(data.registration.applicationNo) +
+                '</code> — status <strong>' +
+                escAdmin(data.registration.status) +
+                '</strong></p>';
+        } else {
+            html += '<p style="color:#b45309;">No application for this seminar — click <em>Ensure application</em> first.</p>';
+        }
+        if (data.order) {
+            html +=
+                '<p>Order <code>' +
+                escAdmin(data.order.orderIdString) +
+                '</code> — ' +
+                escAdmin(data.order.status) +
+                (data.order.gateway ? ' via ' + escAdmin(data.order.gateway) : '') +
+                ' · ₹' +
+                escAdmin(data.order.amount) +
+                '</p>';
+        }
+        if (data.paid) html += '<p style="color:#15803d;font-weight:700;">Already paid in system.</p>';
+        else if (data.canCollectPayment) html += '<p style="color:#0f766e;">Ready to collect payment below.</p>';
+        if (box) box.innerHTML = html;
+        if (data.canCollectPayment && data.registration) {
+            document.getElementById('co-amount').value = String(data.suggestedAmount || 0);
+            updateCoFinalAmount();
+            if (panel) panel.classList.remove('hidden');
+            await loadCreateOrderPaymentMethods();
+        }
+    } catch (e) {
+        if (box) box.innerHTML = '<p style="color:#b91c1c;">' + escAdmin(e.message) + '</p>';
+    }
+}
+
+async function ensureAdminCreateOrderRegistration() {
+    const adm = getStoredAdminUser();
+    if (!__coLookup?.found || !__coLookup.user?.id) return alert('Look up a doctor first.');
+    const sid = document.getElementById('co-seminar')?.value;
+    try {
+        const res = await fetch('/api/admin/payments/ensure-registration', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                userId: __coLookup.user.id,
+                seminarId: parseInt(sid, 10),
+                adminUserId: adm.id
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed');
+        alert(data.created ? 'Application created and approved for payment.' : 'Application ready for payment.');
+        document.getElementById('co-user-query').value = __coLookup.user.userIdString || '';
+        lookupAdminCreateOrder();
+    } catch (e) {
+        alert(e.message || 'Failed');
+    }
+}
+
+async function initiateAdminCreateOrderPayment() {
+    const adm = getStoredAdminUser();
+    if (!adm?.id || !__coRegId) return alert('Look up doctor and ensure application first.');
+    const methodId = document.getElementById('co-method')?.value || __coMethodId || 'dqr';
+    const amount = parseFloat(document.getElementById('co-final')?.value || '0');
+    const discount = parseFloat(document.getElementById('co-discount')?.value || '0');
+    const msg = document.getElementById('co-pay-msg');
+    if (msg) msg.textContent = 'Starting payment…';
+    try {
+        const res = await fetch('/api/admin/payments/initiate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                registrationId: __coRegId,
+                adminUserId: adm.id,
+                methodId,
+                amount,
+                discountAmount: discount
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed');
+        if (data.paid) {
+            if (msg) {
+                msg.style.color = '#15803d';
+                msg.textContent = data.message || 'Paid.';
+            }
+            alert(data.message || 'Payment recorded.');
+            loadAdminEnrichedOrders();
+            lookupAdminCreateOrder();
+            return;
+        }
+        __coOrderDbId = data.orderDbId;
+        const qrBlock = document.getElementById('co-qr-block');
+        const qrImg = document.getElementById('co-qr-img');
+        const qrAmt = document.getElementById('co-qr-amount');
+        const markBtn = document.getElementById('co-mark-upi-btn');
+        if (data.qrImageUrl && qrImg) {
+            qrImg.src = data.qrImageUrl;
+            if (qrBlock) qrBlock.classList.remove('hidden');
+        }
+        if (qrAmt) qrAmt.textContent = 'Amount: ₹' + (data.amount || amount);
+        if (data.manualConfirm && markBtn) markBtn.classList.remove('hidden');
+        else if (markBtn) markBtn.classList.add('hidden');
+        if (msg) msg.textContent = data.message || 'Payment started.';
+    } catch (e) {
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = e.message;
+        }
+    }
+}
+
+async function markAdminCreateOrderUpiPaid() {
+    const adm = getStoredAdminUser();
+    if (!adm?.id || !__coOrderDbId) return alert('Start UPI payment first.');
+    if (!confirm('Confirm UPI payment received?')) return;
+    try {
+        const res = await fetch('/api/admin/payments/mark-upi-paid', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orderDbId: __coOrderDbId, adminUserId: adm.id })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed');
+        alert(data.message || 'Recorded.');
+        loadAdminEnrichedOrders();
+        lookupAdminCreateOrder();
+    } catch (e) {
+        alert(e.message || 'Failed');
+    }
+}
+
+async function pollAdminCreateOrderPayment() {
+    const adm = getStoredAdminUser();
+    if (!adm?.id || !__coOrderDbId) return alert('Start payment first.');
+    try {
+        const res = await fetch(
+            '/api/admin/payments/poll/' + __coOrderDbId + '?actingAdminId=' + encodeURIComponent(adm.id)
+        );
+        const data = await res.json();
+        const msg = document.getElementById('co-pay-msg');
+        if (data.paid) {
+            if (msg) {
+                msg.style.color = '#15803d';
+                msg.textContent = data.message || 'Payment received.';
+            }
+            loadAdminEnrichedOrders();
+            lookupAdminCreateOrder();
+        } else if (msg) msg.textContent = data.message || 'Not paid yet.';
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function loadAdminPaymentsModule() {
+    await fillAdminSeminarSelect('co-seminar', false);
     switchAdminPaymentsTab(__adminPaymentsTab || 'orders');
 }
 

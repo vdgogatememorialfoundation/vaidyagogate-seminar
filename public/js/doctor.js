@@ -324,6 +324,8 @@ function brandingFooterHtml() {
 }
 window.__fieldOtpTokens = window.__fieldOtpTokens || {};
 window.__otpOnApplication = false;
+window.__otpOnStep1 = false;
+window.__otpOnSubmit = false;
 window.__regPhoneOtpToken = null;
 window.__regEmailOtpToken = null;
 window.__regSubmitPhoneOtpToken = null;
@@ -588,9 +590,9 @@ async function sendRegistrationOtpForField(fieldKey) {
     const channel = fieldKey === 'email' ? 'email' : 'phone';
     const dest = registrationOtpDestination(fieldKey);
     if (!dest) return alert(channel === 'email' ? 'Enter your email first.' : 'Enter your phone first.');
-    const purpose = window.__otpOnApplication ? 'registration' : 'registration_field';
+    const purpose = window.__otpOnStep1 ? 'registration' : 'registration_field';
     const body = { channel, destination: dest, purpose, seminarId: sid };
-    if (!window.__otpOnApplication) body.fieldKey = fieldKey;
+    if (!window.__otpOnStep1) body.fieldKey = fieldKey;
     const statusEl = document.getElementById(fieldKey === 'email' ? 'reg-otp-status-email' : 'reg-otp-status-phone');
     if (statusEl) statusEl.textContent = 'Sending…';
     try {
@@ -607,11 +609,11 @@ async function sendRegistrationOtpForField(fieldKey) {
         if (statusEl) {
             statusEl.textContent = data.debugCode
                 ? 'Code sent (dev: ' + data.debugCode + ')'
-                : data.warning
-                  ? 'Sent (check configuration).'
-                  : 'Code sent.';
+                : 'Sent ✓';
         }
         if (data.debugCode) console.info('OTP debug:', data.debugCode);
+        if (window.OtpUi) window.OtpUi.notifyOtpSent(channel, data);
+        else alert('OTP sent successfully to your ' + (channel === 'email' ? 'email' : 'WhatsApp') + '.');
     } catch (e) {
         console.error(e);
         if (statusEl) statusEl.textContent = '';
@@ -627,9 +629,9 @@ async function verifyRegistrationOtpForField(fieldKey) {
     const codeEl = document.getElementById(fieldKey === 'email' ? 'reg-otp-code-email' : 'reg-otp-code-phone');
     const code = String((codeEl || {}).value || '').trim();
     if (!dest || !code) return alert('Enter the code you received.');
-    const purpose = window.__otpOnApplication ? 'registration' : 'registration_field';
+    const purpose = window.__otpOnStep1 ? 'registration' : 'registration_field';
     const body = { channel, destination: dest, purpose, code, seminarId: sid };
-    if (!window.__otpOnApplication) body.fieldKey = fieldKey;
+    if (!window.__otpOnStep1) body.fieldKey = fieldKey;
     const uid = doctorNumericUserId();
     if (uid) body.userId = uid;
     const statusEl = document.getElementById(fieldKey === 'email' ? 'reg-otp-status-email' : 'reg-otp-status-phone');
@@ -703,11 +705,19 @@ async function sendRegistrationSubmitOtpForField(fieldKey) {
         if (statusEl) {
             statusEl.textContent = data.debugCode
                 ? 'Code sent (dev: ' + data.debugCode + ')'
-                : data.warning
-                  ? 'Sent (check configuration).'
-                  : 'Code sent.';
+                : 'Sent ✓';
         }
         if (data.debugCode) console.info('Submit OTP debug:', data.debugCode);
+        if (window.OtpUi) {
+            window.OtpUi.notifyOtpSent(channel, data, {
+                customMessage:
+                    'OTP sent successfully. Check your ' +
+                    (channel === 'email' ? 'email' : 'WhatsApp') +
+                    ' before submitting your application.'
+            });
+        } else {
+            alert('OTP sent successfully. Check your ' + (channel === 'email' ? 'email' : 'WhatsApp') + '.');
+        }
     } catch (e) {
         console.error(e);
         if (statusEl) statusEl.textContent = '';
@@ -824,7 +834,7 @@ function validateRegistrationAgainstConfigForSteps(upToStepInclusive) {
             const tok = (window.__fieldOtpTokens || {})[f.key];
             if (!tok) return `Please verify OTP for: ${f.label || f.key}`;
         }
-        if (sn === 1 && window.__otpOnApplication) {
+        if (sn === 1 && window.__otpOnStep1) {
             const needE = window.__otpRequiresEmail !== false;
             const needP = !!window.__otpRequiresPhone;
             if (needE && !registrationEmailVerified()) {
@@ -857,35 +867,20 @@ async function loadRegistrationFormConfigAndApply(seminarIdOpt) {
         const data = await res.json();
         window.__registrationFormFields = data.fields || [];
         window.__otpOnApplication = !!data.otpOnApplication;
+        window.__otpOnStep1 = !!data.otpOnStep1;
+        window.__otpOnSubmit = !!data.otpOnSubmit;
         window.__submitOtpRequired = !!data.submitOtpRequired;
         window.__otpRequiresEmail = !!data.otpRequiresEmail;
         window.__otpRequiresPhone = !!data.otpRequiresPhone;
         window.__emailConfigured = !!data.emailConfigured;
         window.__whatsappConfigured = !!data.whatsappConfigured;
-        const otpPanel = document.getElementById('reg-seminar-otp-panel');
-        if (otpPanel) {
-            if (window.__otpOnApplication) otpPanel.classList.remove('hidden');
-            else otpPanel.classList.add('hidden');
-        }
-        const submitPanel = document.getElementById('reg-submit-otp-panel');
-        if (submitPanel) {
-            if (window.__submitOtpRequired) submitPanel.classList.remove('hidden');
-            else submitPanel.classList.add('hidden');
-        }
-        const subER = document.getElementById('reg-submit-otp-email-row');
-        const subPR = document.getElementById('reg-submit-otp-phone-row');
-        if (subER) subER.style.display = window.__submitOtpRequired && window.__emailConfigured ? '' : 'none';
-        if (subPR) subPR.style.display = window.__submitOtpRequired && window.__whatsappConfigured ? '' : 'none';
-        const emailOtpRow = document.getElementById('reg-otp-email-row');
-        const phoneOtpRow = document.getElementById('reg-otp-phone-row');
-        if (emailOtpRow) emailOtpRow.style.display = window.__otpRequiresEmail ? '' : 'none';
-        if (phoneOtpRow) {
-            phoneOtpRow.style.display = window.__otpRequiresPhone ? '' : 'none';
-        }
+        syncRegistrationOtpUi();
     } catch (e) {
         console.error(e);
         window.__registrationFormFields = [];
         window.__otpOnApplication = false;
+        window.__otpOnStep1 = false;
+        window.__otpOnSubmit = false;
         window.__submitOtpRequired = false;
         window.__otpRequiresEmail = false;
         window.__otpRequiresPhone = false;
@@ -925,6 +920,48 @@ async function loadRegistrationFormConfigAndApply(seminarIdOpt) {
         }
     });
     refreshRegistrationRequiredAttributes();
+}
+
+function syncRegistrationOtpUi() {
+    const otpPanel = document.getElementById('reg-seminar-otp-panel');
+    const hint = document.getElementById('reg-otp-panel-hint');
+    if (otpPanel) {
+        if (window.__otpOnApplication) otpPanel.classList.remove('hidden');
+        else otpPanel.classList.add('hidden');
+    }
+    if (hint) {
+        let parts = [];
+        if (window.__otpOnStep1) parts.push('personal details (step 1)');
+        if (window.__otpOnSubmit) parts.push('preview before submit');
+        hint.textContent = parts.length
+            ? 'Verify email and/or WhatsApp on: ' + parts.join(' and ') + '.'
+            : 'OTP is disabled for this seminar.';
+    }
+    const submitPanel = document.getElementById('reg-submit-otp-panel');
+    if (submitPanel) {
+        if (window.__otpOnSubmit) submitPanel.classList.remove('hidden');
+        else submitPanel.classList.add('hidden');
+    }
+    const subER = document.getElementById('reg-submit-otp-email-row');
+    const subPR = document.getElementById('reg-submit-otp-phone-row');
+    if (subER) subER.style.display = window.__otpOnSubmit && window.__emailConfigured ? '' : 'none';
+    if (subPR) subPR.style.display = window.__otpOnSubmit && window.__whatsappConfigured ? '' : 'none';
+    const emailOtpRow = document.getElementById('reg-otp-email-row');
+    const phoneOtpRow = document.getElementById('reg-otp-phone-row');
+    if (emailOtpRow) {
+        emailOtpRow.style.display = window.__otpOnStep1 ? '' : 'none';
+        if (window.__otpOnStep1 && !window.__emailConfigured) {
+            const st = document.getElementById('reg-otp-status-email');
+            if (st) st.textContent = 'Email OTP unavailable — configure SMTP in admin integrations.';
+        }
+    }
+    if (phoneOtpRow) {
+        phoneOtpRow.style.display = window.__otpOnStep1 && window.__whatsappConfigured ? '' : 'none';
+        if (window.__otpOnStep1 && !window.__whatsappConfigured) {
+            const st = document.getElementById('reg-otp-status-phone');
+            if (st) st.textContent = 'WhatsApp OTP unavailable — configure WhatsApp in admin integrations.';
+        }
+    }
 }
 
 function refreshRegistrationRequiredAttributes() {
@@ -1829,6 +1866,19 @@ function downloadCaseApplicationPdf() {
 }
 
 let currentCaseViewIndex = 0;
+
+function isBuiltinCertificateTemplate(path) {
+    const p = String(path || '');
+    return p === '__builtin_vgmf_participant__' || p === '__builtin_vgmf_volunteer__';
+}
+
+function certificateViewUrl(c, isVolunteer) {
+    const uid = currentUser && currentUser.id != null ? Number(currentUser.id) : 0;
+    if (!uid || !c.id) return '#';
+    const q = isVolunteer ? `vc=${c.id}&uid=${uid}` : `uc=${c.id}&uid=${uid}`;
+    return `/certificate/view?${q}`;
+}
+
 function doctorCertificateLockedBlock(message) {
     const msg =
         message ||
@@ -1844,10 +1894,10 @@ function doctorCertificateLockedBlock(message) {
 
 function doctorCertificatePendingTemplateBlock() {
     return (
-        '<div style="text-align:center;padding:24px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0;">' +
-        '<i class="fas fa-check-circle" style="font-size:2rem;color:#15803d;margin-bottom:10px;display:block;"></i>' +
-        '<p style="margin:0;font-weight:600;color:#166534;">Certificate approved</p>' +
-        '<p style="margin:8px 0 0;font-size:0.9rem;color:#475569;">Your certificate is enabled. The organizer still needs to upload the certificate design — check back after they add the template.</p>' +
+        '<div style="text-align:center;padding:24px;background:#fffbeb;border-radius:8px;border:1px solid #e8d48a;">' +
+        '<i class="fas fa-award" style="font-size:2rem;color:#c9a227;margin-bottom:10px;display:block;"></i>' +
+        '<p style="margin:0;font-weight:600;color:#92400e;">Certificate approved</p>' +
+        '<p style="margin:8px 0 0;font-size:0.9rem;color:#78716c;">Your certificate is enabled. The organizer still needs to apply the VGMF certificate design in admin.</p>' +
         '</div>'
     );
 }
@@ -1884,6 +1934,18 @@ async function loadDoctorCertificates() {
             }
             if (!c.template_path) {
                 card.innerHTML = `<h4 style="margin:0 0 12px;">${title}</h4>${doctorCertificatePendingTemplateBlock()}`;
+                wrap.appendChild(card);
+                return;
+            }
+            const viewUrl = certificateViewUrl(c, !!c._volunteer);
+            if (isBuiltinCertificateTemplate(c.template_path)) {
+                card.innerHTML =
+                    `<h4 style="margin:0 0 8px;color:#92400e;">${title}</h4>` +
+                    `<p style="font-size:0.88rem;color:#78716c;margin-bottom:10px;">${name}</p>` +
+                    `<div style="border:2px solid #e8d48a;border-radius:10px;overflow:hidden;"><iframe src="${viewUrl}" style="width:100%;min-height:420px;border:0;"></iframe></div>` +
+                    `<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">` +
+                    `<a href="${viewUrl}" target="_blank" class="btn-primary" style="text-decoration:none;background:linear-gradient(135deg,#c9a227,#a67c00);padding:8px 14px;">Open</a>` +
+                    `<button type="button" class="btn-primary" style="background:#475569;padding:8px 14px;" onclick="var w=window.open('${viewUrl}');if(w)w.print();">Print PDF</button></div>`;
                 wrap.appendChild(card);
                 return;
             }
@@ -1950,7 +2012,9 @@ async function nextStep(step) {
     }
 
     // If moving to preview, populate data and generate PDF iframe
+    if (step === 1) syncRegistrationOtpUi();
     if (step === REGISTRATION_PREVIEW_STEP) {
+        syncRegistrationOtpUi();
         resetRegistrationSubmitOtpState();
         const prevTnc = document.getElementById('prev-tnc-block');
         const prevTncText = document.getElementById('prev-tnc-text');
@@ -2155,13 +2219,23 @@ async function submitApplication() {
         return;
     }
 
-    if (window.__submitOtpRequired) {
+    if (window.__otpOnSubmit) {
         if (window.__emailConfigured && !window.__regSubmitEmailOtpToken) {
             alert('Verify your email using the final confirmation codes on this preview step before submitting.');
             return;
         }
         if (window.__whatsappConfigured && !window.__regSubmitPhoneOtpToken) {
             alert('Verify WhatsApp using the final confirmation codes on this preview step before submitting.');
+            return;
+        }
+    }
+    if (window.__otpOnStep1) {
+        if (window.__emailConfigured && !registrationEmailVerified()) {
+            alert('Verify your email on the personal details step (step 1) before submitting.');
+            return;
+        }
+        if (window.__whatsappConfigured && !registrationPhoneVerified()) {
+            alert('Verify your phone on the personal details step (step 1) before submitting.');
             return;
         }
     }
@@ -2198,11 +2272,11 @@ async function submitApplication() {
     payload.append('userId', String(uid));
     payload.append('seminarId', activeSeminarIdForReg || 1);
     payload.append('formData', JSON.stringify(formDataObj));
-    if (window.__otpOnApplication) {
+    if (window.__otpOnStep1) {
         payload.append('phoneOtpToken', window.__regPhoneOtpToken || '');
         payload.append('emailOtpToken', window.__regEmailOtpToken || '');
     }
-    if (window.__submitOtpRequired) {
+    if (window.__otpOnSubmit) {
         payload.append('submitPhoneOtpToken', window.__regSubmitPhoneOtpToken || '');
         payload.append('submitEmailOtpToken', window.__regSubmitEmailOtpToken || '');
     }

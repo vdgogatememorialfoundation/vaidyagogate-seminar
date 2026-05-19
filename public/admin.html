@@ -20,6 +20,10 @@
         .btn-secondary:hover { background: #e2e8f0; }
         .btn-outline { background: #fff; color: #64748b; border: 1px solid #cbd5e1; }
         .btn-outline:hover { background: #f8fafc; }
+        .cert-mgmt-theme .cert-mgmt-heading { margin-bottom: 8px; color: #92400e; }
+        .cert-mgmt-theme .cert-mgmt-intro { color: #78716c; font-size: 0.9rem; margin-bottom: 16px; max-width: 920px; }
+        .cert-mgmt-theme .cert-mgmt-card { border: 1px solid #e8d48a; background: linear-gradient(180deg, #fffbeb 0%, #fff 40%); }
+        .cert-mgmt-theme .cert-btn-gold { background: linear-gradient(135deg, #c9a227, #a67c00) !important; box-shadow: 0 4px 14px rgba(201, 162, 39, 0.35); }
         .btn-sm { padding: 6px 12px; font-size: 0.8rem; }
         .form-group { margin-bottom: 0; }
         .form-group label { display: block; }
@@ -103,6 +107,7 @@
                 <a class="menu-item" data-admin-module="tab-feedback" onclick="switchTab('tab-feedback')"><i class="fas fa-comments"></i> Seminar Feedback</a>
                 <a class="menu-item" data-admin-module="tab-support-tickets" onclick="switchTab('tab-support-tickets')"><i class="fas fa-ticket-alt"></i> Support Tickets</a>
                 <a class="menu-item" data-admin-module="tab-contact-inquiries" onclick="switchTab('tab-contact-inquiries'); loadContactInquiries();"><i class="fas fa-envelope-open-text"></i> Website contact</a>
+                <a class="menu-item" data-admin-module="tab-email-compose" onclick="switchTab('tab-email-compose'); initAdminEmailComposeTab();"><i class="fas fa-paper-plane"></i> Send email</a>
                 <a class="menu-item" data-admin-module="tab-transfer" onclick="switchTab('tab-transfer')"><i class="fas fa-exchange-alt"></i> Transfer Applications</a>
                 <a class="menu-item" data-admin-module="tab-behalf-reg" onclick="switchTab('tab-behalf-reg'); initAdminBehalfRegTab();"><i class="fas fa-user-md"></i> Doctor applications (admin)</a>
                 <a class="menu-item" data-admin-module="tab-reg-form" onclick="switchTab('tab-reg-form'); loadAdminRegistrationFormConfig();"><i class="fas fa-list-alt"></i> Registration Form Fields</a>
@@ -115,6 +120,8 @@
                 <a class="menu-item" data-admin-module="tab-scanner-logs" onclick="switchTab('tab-scanner-logs'); initAdminScannerLogsTab();"><i class="fas fa-qrcode"></i> Scanner Activity</a>
                 <a class="menu-item" data-admin-module="tab-activity-logs" onclick="switchTab('tab-activity-logs'); initAdminActivityLogsTab();"><i class="fas fa-history"></i> User &amp; doctor activity</a>
                 <a class="menu-item" data-admin-module="tab-notifications" onclick="switchTab('tab-notifications'); initAdminNotificationsTab();"><i class="fas fa-bell"></i> Notifications</a>
+                <a class="menu-item" data-admin-module="tab-system-platform" onclick="switchTab('tab-system-platform'); initAdminSystemHealth('platform');"><i class="fas fa-server"></i> System health</a>
+                <a class="menu-item" data-admin-module="tab-system-users" onclick="switchTab('tab-system-users'); initAdminSystemHealth('users');"><i class="fas fa-users-cog"></i> User health</a>
                 <a class="menu-item" data-admin-module="tab-settings" onclick="switchTab('tab-settings'); initAdminBrandingPreview();"><i class="fas fa-cogs"></i> Global Settings</a>
             </div>
         </aside>
@@ -343,6 +350,53 @@
                         <textarea id="contact-inquiry-notes" rows="3" placeholder="Call back, sent email, etc."></textarea>
                         <button type="button" class="btn-primary" onclick="saveContactInquiryUpdate()">Save update</button>
                     </div>
+                    <div class="card" style="margin-top:16px;border:1px solid #e2e8f0;">
+                        <h4 style="margin:0 0 10px;color:#0f766e;"><i class="fas fa-reply"></i> Reply by email</h4>
+                        <label>Subject</label>
+                        <input type="text" id="contact-reply-subject" style="width:100%;max-width:560px;padding:8px;margin-bottom:8px;" placeholder="Re: your enquiry">
+                        <label>Message</label>
+                        <textarea id="contact-reply-body" rows="5" style="width:100%;max-width:560px;padding:8px;" placeholder="Type your reply…"></textarea>
+                        <p id="contact-reply-msg" style="margin:8px 0;font-size:0.88rem;"></p>
+                        <button type="button" class="btn-primary" onclick="sendContactInquiryEmail()"><i class="fas fa-paper-plane"></i> Send email to visitor</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="tab-email-compose" class="tab-pane hidden">
+                <h2 style="margin-bottom:8px;">Send email</h2>
+                <p style="color:#64748b;margin:-4px 0 16px;">Single message or bulk to doctors, seminar registrants, or any email list (max 500 per send).</p>
+                <div class="card" style="margin-bottom:16px;">
+                    <h3 style="margin:0 0 12px;">Single email</h3>
+                    <div style="max-width:720px;display:grid;gap:10px;">
+                        <div><label>To (email)</label><input type="email" id="mail-single-to" style="width:100%;padding:8px;" placeholder="anyone@example.com"></div>
+                        <div><label>Subject</label><input type="text" id="mail-single-subject" style="width:100%;padding:8px;"></div>
+                        <div><label>Message</label><textarea id="mail-single-body" rows="5" style="width:100%;padding:8px;"></textarea></div>
+                    </div>
+                    <p id="mail-single-msg" style="margin:8px 0;font-size:0.88rem;"></p>
+                    <button type="button" class="btn-primary" onclick="sendAdminSingleEmail()">Send single email</button>
+                </div>
+                <div class="card">
+                    <h3 style="margin:0 0 12px;">Bulk email</h3>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:900px;">
+                        <div><label>Audience</label>
+                            <select id="mail-bulk-audience" style="width:100%;padding:8px;" onchange="onMailBulkAudienceChange()">
+                                <option value="all_doctors">All doctors</option>
+                                <option value="seminar_paid">Paid registrants — seminar</option>
+                                <option value="seminar_all">All registrants — seminar</option>
+                                <option value="custom_emails">Custom email list</option>
+                            </select>
+                        </div>
+                        <div id="mail-bulk-seminar-wrap"><label>Seminar</label><select id="mail-bulk-seminar" style="width:100%;padding:8px;"></select></div>
+                        <div id="mail-bulk-emails-wrap" class="hidden" style="grid-column:1/-1;"><label>Emails</label><textarea id="mail-bulk-emails" rows="3" style="width:100%;padding:8px;"></textarea></div>
+                        <div style="grid-column:1/-1;"><label>Subject</label><input type="text" id="mail-bulk-subject" style="width:100%;padding:8px;"></div>
+                        <div style="grid-column:1/-1;"><label>Message</label><textarea id="mail-bulk-body" rows="6" style="width:100%;padding:8px;"></textarea></div>
+                    </div>
+                    <p id="mail-bulk-count" style="margin:10px 0;font-size:0.9rem;color:#475569;"></p>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <button type="button" class="btn-primary" style="background:#64748b;" onclick="previewMailBulkCount()">Count recipients</button>
+                        <button type="button" class="btn-primary" onclick="sendAdminBulkEmail()">Send bulk email</button>
+                    </div>
+                    <p id="mail-bulk-msg" style="margin:8px 0;font-size:0.88rem;"></p>
                 </div>
             </div>
 
@@ -464,7 +518,7 @@
                         <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="pa-show-signup" checked> Show “Create account” on main site</label>
                         <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="pa-show-login" checked> Show sign-in entry on main site</label>
                         <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="pa-req-signup-otp" checked> Require signup OTP (email + WhatsApp)</label>
-                        <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="pa-req-login-otp" checked> Require login OTP (email + WhatsApp)</label>
+                        <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="pa-req-login-otp" checked> Require login OTP on public site &amp; doctor portal (never on admin/judge/scanner apps)</label>
                         <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="pa-req-email-verify"> Require email verification before login</label>
                         <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="pa-req-admin-sensitive-otp"> Require admin OTP to create users / save behalf applications</label>
                     </div>
@@ -506,6 +560,8 @@
                         <label style="font-weight:700;">Homepage hero &amp; top bar</label>
                         <p style="color:#64748b;font-size:0.88rem;margin:6px 0 10px;">Controls the main headline, stats, and contact strip on the public site.</p>
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                            <div><label style="font-size:0.8rem;">Hero badge (e.g. National CME Congress)</label><input type="text" id="cms-hero-eyebrow" style="width:100%" placeholder="National CME Congress"></div>
+                            <div></div>
                             <div><label style="font-size:0.8rem;">Headline</label><input type="text" id="cms-hero-title" style="width:100%"></div>
                             <div><label style="font-size:0.8rem;">Subtitle</label><input type="text" id="cms-hero-subtitle" style="width:100%"></div>
                             <div><label style="font-size:0.8rem;">Venue line</label><input type="text" id="cms-hero-venue" style="width:100%" placeholder="e.g. Convention Centre, Pune"></div>
@@ -632,6 +688,32 @@
                     <button type="button" class="btn-primary admin-payments-subtab active" data-pay-tab="orders" style="background:#0d9488;" onclick="switchAdminPaymentsTab('orders')">Orders</button>
                     <button type="button" class="btn-primary admin-payments-subtab" data-pay-tab="cancellations" style="background:#64748b;" onclick="switchAdminPaymentsTab('cancellations')">Cancellation requests</button>
                 </div>
+                <div class="card" style="margin-bottom:16px;border:1px solid #99f6e4;background:#f0fdfa;">
+                    <h3 style="margin:0 0 10px;color:#0f766e;">Create / record order</h3>
+                    <p style="font-size:0.88rem;color:#64748b;margin:0 0 12px;">For doctors who paid offline but the system was not updated.</p>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:900px;">
+                        <div><label>Seminar</label><select id="co-seminar" style="width:100%;padding:8px;"></select></div>
+                        <div><label>Doctor (User ID, email, or phone)</label><input type="text" id="co-user-query" style="width:100%;padding:8px;"></div>
+                    </div>
+                    <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+                        <button type="button" class="btn-primary" onclick="lookupAdminCreateOrder()">Look up</button>
+                        <button type="button" class="btn-primary" style="background:#64748b;" onclick="ensureAdminCreateOrderRegistration()">Ensure application</button>
+                    </div>
+                    <div id="co-lookup-result" style="margin-top:12px;font-size:0.9rem;"></div>
+                    <div id="co-pay-panel" class="hidden" style="margin-top:14px;padding-top:14px;border-top:1px solid #cbd5e1;">
+                        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:10px;max-width:900px;">
+                            <div><label>Fee (₹)</label><input type="number" id="co-amount" step="0.01" style="width:100%;padding:8px;"></div>
+                            <div><label>Discount (₹)</label><input type="number" id="co-discount" step="0.01" value="0" style="width:100%;padding:8px;" oninput="updateCoFinalAmount()"></div>
+                            <div><label>Payable (₹)</label><input type="number" id="co-final" step="0.01" readonly style="width:100%;padding:8px;background:#f8fafc;"></div>
+                            <div><label>Payment method</label><select id="co-method" style="width:100%;padding:8px;"></select></div>
+                        </div>
+                        <div id="co-qr-block" class="hidden" style="margin-top:12px;text-align:center;"><img id="co-qr-img" alt="QR" style="max-width:220px;"><p id="co-qr-amount" style="font-weight:600;"></p></div>
+                        <p id="co-pay-msg" style="margin:8px 0;"></p>
+                        <button type="button" class="btn-primary" onclick="initiateAdminCreateOrderPayment()">Start payment</button>
+                        <button type="button" class="btn-primary hidden" id="co-mark-upi-btn" style="background:#64748b;margin-left:8px;" onclick="markAdminCreateOrderUpiPaid()">Mark UPI received</button>
+                        <button type="button" class="btn-primary" style="background:#15803d;margin-left:8px;" onclick="pollAdminCreateOrderPayment()">Check status</button>
+                    </div>
+                </div>
                 <div id="admin-payments-panel-orders" class="card">
                     <button type="button" class="btn-primary" style="margin-bottom:12px;background:#64748b;" onclick="loadAdminEnrichedOrders()">Refresh orders</button>
                     <table class="data-table">
@@ -652,18 +734,18 @@
             </div>
 
             <!-- Certificate management -->
-            <div id="tab-certificates" class="tab-pane hidden">
-                <h2 style="margin-bottom: 20px;">Certificate Management</h2>
-                <div class="card">
-                    <p style="color:#64748b;font-size:0.9rem;margin-bottom:16px;">Upload a template, then verify each doctor after the system generates their certificate. Use <strong>Verify &amp; enable</strong> to publish on the doctor portal, or <strong>Disable</strong> to hide it again.</p>
+            <div id="tab-certificates" class="tab-pane hidden cert-mgmt-theme">
+                <h2 class="cert-mgmt-heading">Certificate Management</h2>
+                <p class="cert-mgmt-intro">Apply the <strong>VGMF gold certificate design</strong> (participant or volunteer) or upload a custom file, then enable certificates for checked-in doctors.</p>
+                <div class="card cert-mgmt-card">
                     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px;">
                         <div>
                             <label>Seminar</label>
-                            <select id="cert-mgmt-seminar" style="width:100%;padding:8px;" onchange="loadAdminCertificateCandidates()"></select>
+                            <select id="cert-mgmt-seminar" style="width:100%;padding:8px;" onchange="loadAdminCertificateCandidates(); loadCertTemplateConfig();"></select>
                         </div>
                         <div>
                             <label>Template type</label>
-                            <select id="cert-mgmt-type" style="width:100%;padding:8px;">
+                            <select id="cert-mgmt-type" style="width:100%;padding:8px;" onchange="loadCertTemplateConfig()">
                                 <option value="participant">Participant</option>
                                 <option value="volunteer">Volunteer</option>
                             </select>
@@ -673,8 +755,40 @@
                             <input type="file" id="cert-mgmt-file" accept="image/*,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
                         </div>
                     </div>
-                    <button type="button" class="btn-primary" onclick="uploadAdminCertificateTemplate()"><i class="fas fa-upload"></i> Upload template &amp; refresh eligibility</button>
+                    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
+                        <button type="button" class="btn-primary cert-btn-gold" onclick="applyAdminBuiltinCertificate('participant')"><i class="fas fa-award"></i> VGMF design — Participant</button>
+                        <button type="button" class="btn-primary cert-btn-gold" onclick="applyAdminBuiltinCertificate('volunteer')"><i class="fas fa-hands-helping"></i> VGMF design — Volunteer</button>
+                        <button type="button" class="btn-primary" style="background:#475569;" onclick="uploadAdminCertificateTemplate()"><i class="fas fa-upload"></i> Upload custom file</button>
+                    </div>
                     <p id="cert-mgmt-msg" style="margin-top:10px;font-size:0.88rem;"></p>
+                </div>
+                <div class="card cert-mgmt-card" style="margin-top:16px;">
+                    <h3 style="margin:0 0 8px;color:#92400e;">Edit certificate text &amp; design</h3>
+                    <p style="font-size:0.85rem;color:#78716c;margin:0 0 12px;">Customize every line on the VGMF template. Placeholders: <code>{{recipient_name}}</code>, <code>{{seminar_title}}</code>, <code>{{topic}}</code>, <code>{{venue}}</code>, <code>{{date}}</code></p>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                        <div><label>Organization</label><input id="cert-cfg-org" style="width:100%;padding:6px;"></div>
+                        <div><label>Main title</label><input id="cert-cfg-title" style="width:100%;padding:6px;"></div>
+                        <div><label>Subtitle banner</label><input id="cert-cfg-subtitle" style="width:100%;padding:6px;"></div>
+                        <div><label>Lead line</label><input id="cert-cfg-lead" style="width:100%;padding:6px;"></div>
+                        <div style="grid-column:1/-1;"><label>Body (participant)</label><textarea id="cert-cfg-body-p" rows="2" style="width:100%;padding:6px;"></textarea></div>
+                        <div style="grid-column:1/-1;"><label>Body (volunteer)</label><textarea id="cert-cfg-body-v" rows="2" style="width:100%;padding:6px;"></textarea></div>
+                        <div><label>Venue override</label><input id="cert-cfg-venue" style="width:100%;padding:6px;" placeholder="Leave blank for CMS / seminar"></div>
+                        <div><label>Date override</label><input id="cert-cfg-date" style="width:100%;padding:6px;" placeholder="Leave blank for seminar date"></div>
+                        <div><label>Left signature title</label><input id="cert-cfg-sig-l" style="width:100%;padding:6px;"></div>
+                        <div><label>Right signature name</label><input id="cert-cfg-sig-rn" style="width:100%;padding:6px;"></div>
+                        <div><label>Right signature title</label><input id="cert-cfg-sig-rt" style="width:100%;padding:6px;"></div>
+                        <div><label>Gold color</label><input id="cert-cfg-gold" type="color" style="width:100%;height:36px;"></div>
+                        <div><label>Name color</label><input id="cert-cfg-name-color" type="color" style="width:100%;height:36px;"></div>
+                        <div><label><input type="checkbox" id="cert-cfg-flame" checked> Show flame graphic</label></div>
+                        <div><label><input type="checkbox" id="cert-cfg-swoosh" checked> Show corner swooshes</label></div>
+                        <div><label><input type="checkbox" id="cert-cfg-honorific" checked> Auto Mr/Dr/Ms from profile</label></div>
+                    </div>
+                    <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;">
+                        <button type="button" class="btn-primary cert-btn-gold" onclick="loadCertTemplateConfig()"><i class="fas fa-sync"></i> Load</button>
+                        <button type="button" class="btn-primary cert-btn-gold" onclick="saveCertTemplateConfig()"><i class="fas fa-save"></i> Save design</button>
+                        <button type="button" class="btn-primary" style="background:#475569;" onclick="previewCertTemplate()"><i class="fas fa-eye"></i> Preview</button>
+                    </div>
+                    <p id="cert-cfg-msg" style="margin-top:8px;font-size:0.88rem;"></p>
                 </div>
                 <div class="card" style="margin-top:20px;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px;">
@@ -932,6 +1046,36 @@
                         <thead><tr><th>Time (IST)</th><th>Event</th><th>Channel</th><th>To</th><th>Status</th><th>Error</th></tr></thead>
                         <tbody id="notif-logs-tbody"><tr><td colspan="6" style="text-align:center;">—</td></tr></tbody>
                     </table>
+                </div>
+            </div>
+
+            <div id="tab-system-platform" class="tab-pane hidden">
+                <h2 style="margin-bottom:12px;color:#0c4a6e;">System health — platform &amp; apps</h2>
+                <p style="color:#475569;margin-bottom:16px;max-width:900px;">Live status for admin backend, doctor/judge/scanner portals, mobile app URLs, database, email/WhatsApp, and notification queue. Refreshes every 12 seconds. Issues trigger automatic remediation where possible.</p>
+                <div class="card">
+                    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
+                        <button type="button" class="btn-primary" onclick="initAdminSystemHealth('platform')">Refresh now</button>
+                        <button type="button" class="btn-primary" style="background:#7c3aed;" onclick="adminSystemHealthManualFix('platform')">AI auto-fix issues</button>
+                        <button type="button" class="btn-primary" style="background:#475569;" onclick="adminSystemHealthAiAnalyze('platform')">AI analyze</button>
+                    </div>
+                    <p id="sys-platform-status" style="font-weight:600;margin-bottom:8px;"></p>
+                    <div id="sys-platform-components"></div>
+                    <pre id="sys-platform-ai-out" style="margin-top:14px;padding:12px;background:#f8fafc;border-radius:8px;font-size:0.82rem;white-space:pre-wrap;max-height:200px;overflow:auto;"></pre>
+                </div>
+            </div>
+
+            <div id="tab-system-users" class="tab-pane hidden">
+                <h2 style="margin-bottom:12px;color:#0c4a6e;">User module health</h2>
+                <p style="color:#475569;margin-bottom:16px;max-width:900px;">Accounts, verification, bans, activity, and user-facing notification delivery.</p>
+                <div class="card">
+                    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
+                        <button type="button" class="btn-primary" onclick="initAdminSystemHealth('users')">Refresh now</button>
+                        <button type="button" class="btn-primary" style="background:#7c3aed;" onclick="adminSystemHealthManualFix('users')">AI auto-fix issues</button>
+                        <button type="button" class="btn-primary" style="background:#475569;" onclick="adminSystemHealthAiAnalyze('users')">AI analyze</button>
+                    </div>
+                    <p id="sys-users-status" style="font-weight:600;margin-bottom:8px;"></p>
+                    <div id="sys-users-components"></div>
+                    <pre id="sys-users-ai-out" style="margin-top:14px;padding:12px;background:#f8fafc;border-radius:8px;font-size:0.82rem;white-space:pre-wrap;max-height:200px;overflow:auto;"></pre>
                 </div>
             </div>
 
@@ -1231,7 +1375,11 @@
                     <h4 style="margin-bottom: 10px; color:#1e40af;">Per-seminar links, policy &amp; form override</h4>
                     <p style="color:#64748b;font-size:0.85rem;margin-bottom:10px;">WhatsApp link appears to doctors after approval. Cancellation policy is shown to doctors in plain language. Form override adjusts labels and which fields appear for this seminar only.</p>
                     <div><label>WhatsApp group / invite URL</label><input type="text" id="seminar-whatsapp" placeholder="https://chat.whatsapp.com/..."></div>
-                    <div style="margin-top:10px;"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="seminar-otp-app" checked> Require OTP on application (email + WhatsApp on the form, plus a second email + WhatsApp confirmation on the preview step before submit)</label></div>
+                    <div style="margin-top:10px;"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="seminar-otp-app" checked onchange="syncSeminarOtpOptionsUi()"> Enable application OTP verification</label></div>
+                    <div id="seminar-otp-subopts" style="margin:8px 0 0 22px;display:grid;gap:6px;">
+                        <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="seminar-otp-step1" checked> Step 1 — personal details (email + WhatsApp codes)</label>
+                        <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="seminar-otp-submit" checked> Preview step — fresh codes before submit</label>
+                    </div>
                     <div style="margin-top:14px;padding:12px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;">
                         <label style="font-weight:600;">Cancellation &amp; refund policy</label>
                         <p style="font-size:0.82rem;color:#64748b;margin:6px 0 10px;">Control whether doctors can cancel from their portal and until when. Refund tiers apply when they do cancel.</p>
@@ -1434,6 +1582,8 @@
     <script src="/js/name-validation.js"></script>
     <script src="/js/admin-notifications.js"></script>
     <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <script src="/js/admin-system-health.js"></script>
+    <script src="/js/otp-ui.js"></script>
     <script src="/js/admin.js"></script>
 </body>
 </html>

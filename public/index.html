@@ -404,6 +404,7 @@
     <script src="/js/vgmf-home.js"></script>
     <script src="/js/vgmf-congress.js"></script>
     <script src="/js/vgmf-marketing.js"></script>
+    <script src="/js/otp-ui.js"></script>
     <script>
         let currentUserId = null;
         let signupPhoneOtpToken = null;
@@ -570,7 +571,7 @@
                     return alert(data.error || 'Could not send code.');
                 }
                 if (data.debugCode) console.info('Login OTP debug:', data.debugCode);
-                if (data.warning) alert(data.warning);
+                OtpUi.notifyOtpSent(channel, data);
             } catch (e) {
                 console.error(e);
                 alert('Network error.');
@@ -596,8 +597,7 @@
                 });
                 const data = await res.json();
                 if (!res.ok) return alert(data.error || 'Could not send codes.');
-                if (data.warning) alert(data.warning);
-                else alert('Codes sent to your email and WhatsApp.');
+                OtpUi.notifyOtpSent(null, data, { both: true });
             } catch (e) {
                 console.error(e);
                 alert('Network error.');
@@ -686,7 +686,7 @@
                 const data = await res.json();
                 if (!res.ok) return alert(data.error || 'Could not send code.');
                 if (data.debugCode) console.info('Signup OTP debug:', data.debugCode);
-                if (data.warning) alert(data.warning);
+                OtpUi.notifyOtpSent(channel, data);
             } catch (e) {
                 console.error(e);
                 alert('Network error.');
@@ -1039,6 +1039,26 @@
             openAuthModal('login');
         }
 
+        async function accountCheck(email, password) {
+            const res = await fetch('/api/auth/account-check', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password: password || '' })
+            });
+            const data = await res.json();
+            return { ok: res.ok, ...data };
+        }
+
+        function redirectToLoginTab(email, password, message) {
+            if (message && !confirm(message + '\n\nSwitch to Sign in now?')) return;
+            switchAuthTab('login');
+            const le = document.getElementById('login_email');
+            const lp = document.getElementById('login_password');
+            if (le && email) le.value = email;
+            if (lp && password) lp.value = password;
+            openAuthModal('login');
+        }
+
         async function handleLogin(e) {
             e.preventDefault();
             const email = String(document.getElementById('login_email').value || '').trim().toLowerCase();
@@ -1089,6 +1109,18 @@
                 loginPhoneOtpToken = null;
                 loginEmailOtpToken = null;
                 routeUserAfterLogin(data.user);
+            } else if (data.needsSignup) {
+                if (
+                    confirm(
+                        (data.error || 'No account found with this email.') +
+                            '\n\nOpen Create account?'
+                    )
+                ) {
+                    switchAuthTab('signup');
+                    const se = document.getElementById('signup_email');
+                    if (se) se.value = email;
+                    openAuthModal('signup');
+                }
             } else {
                 alert(data.error || 'Sign-in failed.');
             }
@@ -1121,17 +1153,28 @@
             }
 
             try {
-                const availRes = await fetch(
-                    '/api/auth/email-available?email=' + encodeURIComponent(email)
-                );
-                const availData = await availRes.json();
-                if (!availRes.ok) return alert(availData.error || 'Could not verify email availability.');
-                if (!availData.available) {
-                    return alert('This email is already registered. Please sign in instead.');
+                const check = await accountCheck(email, password);
+                if (!check.ok && check.error) return alert(check.error);
+                if (check.exists) {
+                    if (check.passwordMatch) {
+                        redirectToLoginTab(
+                            email,
+                            password,
+                            check.message ||
+                                'An account with this email already exists. Sign in with your password.'
+                        );
+                        return;
+                    }
+                    alert(check.message || 'This email is already registered. Please sign in.');
+                    switchAuthTab('login');
+                    const le = document.getElementById('login_email');
+                    if (le) le.value = email;
+                    openAuthModal('login');
+                    return;
                 }
             } catch (availErr) {
                 console.error(availErr);
-                return alert('Could not verify email availability. Please try again.');
+                return alert('Could not verify email. Please try again.');
             }
 
             const res = await fetch('/api/auth/signup', {
@@ -1149,6 +1192,16 @@
                     if (el) el.textContent = '';
                 });
                 showSignupSuccessModal(data, email);
+            } else if (data.needsLogin) {
+                if (data.passwordMatch) {
+                    redirectToLoginTab(email, password, data.error);
+                } else {
+                    alert(data.error || 'Email already registered. Please sign in.');
+                    switchAuthTab('login');
+                    const le = document.getElementById('login_email');
+                    if (le) le.value = email;
+                    openAuthModal('login');
+                }
             } else {
                 alert(data.error);
             }

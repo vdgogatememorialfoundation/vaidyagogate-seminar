@@ -1,0 +1,228 @@
+/* VGMF certificate — gold / charcoal theme (landscape A4) */
+:root {
+    --cert-gold: #c9a227;
+    --cert-gold-light: #e8d48a;
+    --cert-charcoal: #4a4a4a;
+    --cert-ink: #2d2d2d;
+    --cert-name: #c45c26;
+    --cert-bg: #f3f3f3;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+.cert-print-body {
+    margin: 0;
+    padding: 16px;
+    background: #e5e5e5;
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    color: var(--cert-ink);
+}
+
+.cert-page {
+    position: relative;
+    width: 297mm;
+    max-width: 100%;
+    min-height: 210mm;
+    margin: 0 auto;
+    background: var(--cert-bg);
+    border: 3px solid var(--cert-gold);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+    overflow: hidden;
+}
+
+.cert-inner {
+    position: relative;
+    z-index: 2;
+    padding: 28px 48px 32px 120px;
+    text-align: center;
+    min-height: 204mm;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+}
+
+.cert-swoosh-tl {
+    position: absolute;
+    top: -20px;
+    left: -20px;
+    width: 220px;
+    height: 140px;
+    background: linear-gradient(135deg, var(--cert-charcoal) 0%, #888 40%, var(--cert-gold) 70%, #ddd 100%);
+    border-radius: 0 0 80% 0;
+    opacity: 0.85;
+    z-index: 1;
+}
+
+.cert-swoosh-br {
+    position: absolute;
+    bottom: -30px;
+    right: -30px;
+    width: 260px;
+    height: 160px;
+    background: linear-gradient(315deg, var(--cert-charcoal) 0%, #999 35%, var(--cert-gold-light) 65%, #ccc 100%);
+    border-radius: 80% 0 0 0;
+    opacity: 0.8;
+    z-index: 1;
+}
+
+.cert-flame {
+    position: absolute;
+    left: 12px;
+    bottom: 24px;
+    width: 72px;
+    height: 200px;
+    background: linear-gradient(180deg, #e53935 0%, #ff9800 45%, #ffeb3b 100%);
+    border-radius: 40% 40% 12% 12%;
+    opacity: 0.35;
+    z-index: 1;
+}
+
+.cert-logo-tr {
+    position: absolute;
+    top: 20px;
+    right: 24px;
+    max-height: 64px;
+    max-width: 72px;
+    z-index: 3;
+}
+
+.cert-logo-fallback {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #ff9800, #e65100);
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: Inter, sans-serif;
+}
+
+.cert-org {
+    font-size: 1.15rem;
+    color: #777;
+    margin: 0 0 8px;
+    letter-spacing: 0.02em;
+}
+
+.cert-title {
+    font-family: Inter, 'Segoe UI', sans-serif;
+    font-size: 3.2rem;
+    font-weight: 700;
+    color: #9ca3af;
+    letter-spacing: 0.35em;
+    margin: 0;
+    line-height: 1;
+}
+
+.cert-of {
+    display: inline-block;
+    margin: 10px auto 20px;
+    padding: 6px 28px;
+    background: var(--cert-charcoal);
+    color: #fff;
+    font-family: Inter, sans-serif;
+    font-size: 0.95rem;
+    font-weight: 600;
+    letter-spacing: 0.2em;
+}
+
+.cert-lead {
+    font-size: 1.05rem;
+    color: #555;
+    margin: 0 0 6px;
+}
+
+.cert-name {
+    font-family: 'Great Vibes', cursive;
+    font-size: 2.75rem;
+    color: var(--cert-name);
+    margin: 4px 0 16px;
+    text-decoration: underline;
+    text-underline-offset: 6px;
+    text-decoration-color: #333;
+    line-height: 1.2;
+}
+
+.cert-body {
+    font-size: 1.05rem;
+    line-height: 1.55;
+    max-width: 620px;
+    margin: 0 auto 14px;
+    color: #444;
+}
+
+.cert-meta {
+    font-size: 1rem;
+    margin: 4px 0;
+    color: #222;
+}
+
+.cert-sigs {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-top: 28px;
+    padding: 0 20px;
+    max-width: 640px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.cert-sig {
+    flex: 1;
+    text-align: center;
+}
+
+.cert-sig-line {
+    height: 36px;
+    border-bottom: 1px solid #333;
+    margin: 0 24px 6px;
+    opacity: 0.6;
+}
+
+.cert-sig-name {
+    font-weight: 700;
+    margin: 0;
+    font-size: 0.95rem;
+}
+
+.cert-sig-title {
+    margin: 2px 0 0;
+    font-size: 0.88rem;
+    color: #555;
+}
+
+.cert-print-hint {
+    text-align: center;
+    font-size: 0.85rem;
+    color: #64748b;
+    margin-top: 12px;
+    font-family: Inter, sans-serif;
+}
+
+@media print {
+    .no-print {
+        display: none !important;
+    }
+    .cert-print-body {
+        padding: 0;
+        background: #fff;
+    }
+    .cert-page {
+        box-shadow: none;
+        max-width: none;
+        width: 100%;
+        min-height: auto;
+        page-break-inside: avoid;
+    }
+}
+
+@page {
+    size: A4 landscape;
+    margin: 8mm;
+}

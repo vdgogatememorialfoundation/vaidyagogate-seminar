@@ -3,13 +3,11 @@
   "appName": "VGMF Doctor",
   "webDir": "www",
   "server": {
-    "url": "https://seminar.vaidyagogate.org/doctor.html",
+    "url": "https://seminar.vaidyagogate.org/doctor.html?app=1",
     "cleartext": false,
     "androidScheme": "https",
     "allowNavigation": [
       "https://seminar.vaidyagogate.org",
-      "https://admin.vaidyagogate.org",
-      "https://judge.vaidyagogate.org",
       "https://vaidyagogate-seminar.vercel.app"
     ]
   },

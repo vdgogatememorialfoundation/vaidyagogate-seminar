@@ -1,8 +1,8 @@
 {
-  "name": "vgmf-scanner-mobile",
+  "name": "scanner-mobile",
   "version": "1.0.0",
   "private": true,
-  "description": "Android wrapper for VGMF seminar QR scanner",
+  "description": "Android wrapper for scanner-mobile",
   "scripts": {
     "sync": "npx cap sync android",
     "open:android": "npx cap open android",

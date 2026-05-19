@@ -115,10 +115,15 @@
         localStorage.removeItem(KEYS[portal]);
     }
 
-    async function refreshLoginOtpPanel(panelEl) {
+    async function refreshLoginOtpPanel(panelEl, portal) {
         if (!panelEl) return;
+        if (portal === 'judge' || portal === 'scanner' || portal === 'admin') {
+            panelEl.style.display = 'none';
+            return;
+        }
         try {
-            const res = await fetch('/api/auth/login-otp-required');
+            const q = portal ? '?portal=' + encodeURIComponent(portal) : '';
+            const res = await fetch('/api/auth/login-otp-required' + q);
             const d = await res.json();
             panelEl.style.display = d.required ? 'block' : 'none';
         } catch (_) {
@@ -154,7 +159,8 @@
         let phoneOtpToken = null;
         let emailOtpToken = null;
 
-        refreshLoginOtpPanel(otpPanel);
+        const otpPortal = portal === 'doctor' ? 'public' : portal;
+        refreshLoginOtpPanel(otpPanel, otpPortal);
 
         const prefix = opts.otpPrefix || portal;
         const sendBtnEmail = document.getElementById(prefix + '-send-otp-email');
@@ -196,7 +202,8 @@
                 return alert(data.error || 'Could not send code.');
             }
             if (data.debugCode) console.info('Login OTP debug:', data.debugCode);
-            if (data.warning) alert(data.warning);
+            if (global.OtpUi) global.OtpUi.notifyOtpSent(channel, data);
+            else alert('OTP sent successfully to your ' + (channel === 'email' ? 'email' : 'WhatsApp') + '.');
         }
 
         async function sendBothOtps() {
@@ -216,8 +223,8 @@
             });
             const data = await res.json();
             if (!res.ok) return alert(data.error || 'Could not send codes.');
-            if (data.warning) alert(data.warning);
-            else alert('Verification codes sent to your email and WhatsApp.');
+            if (global.OtpUi) global.OtpUi.notifyOtpSent(null, data, { both: true });
+            else alert('OTP sent successfully to your email and WhatsApp.');
         }
 
         async function verifyOtp(channel) {
@@ -260,7 +267,7 @@
                 .trim()
                 .toLowerCase();
             const password = (document.getElementById(opts.passwordInputId) || {}).value;
-            const body = { email, password };
+            const body = { email, password, portal: portal === 'doctor' ? 'doctor' : portal };
             if (otpPanel && otpPanel.style.display === 'block') {
                 body.phoneOtpToken = phoneOtpToken;
                 body.emailOtpToken = emailOtpToken;
@@ -302,6 +309,15 @@
                     return;
                 }
                 if (!res.ok || !data.success) {
+                    if (data.needsSignup) {
+                        const go =
+                            confirm(
+                                (data.error || 'No account found with this email.') +
+                                    '\n\nCreate an account on the seminar homepage?'
+                            );
+                        if (go) window.location.href = '/?register=1';
+                        return;
+                    }
                     const msg = data.error || 'Login failed.';
                     if (opts.onError) opts.onError(msg);
                     else alert(msg);

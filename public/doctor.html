@@ -100,8 +100,13 @@
     <div id="auth-overlay">
         <div style="background:#fff;border-radius:16px;padding:32px;width:100%;max-width:420px;box-shadow:0 24px 50px rgba(15,118,110,0.2);border:1px solid #99f6e4;">
             <div data-site-logo data-logo-height="44px" style="margin-bottom:12px;"></div>
-            <h2 style="color:#0f766e;margin-bottom:8px;font-size:1.35rem;">Doctor portal sign-in</h2>
-            <p style="color:#64748b;font-size:0.88rem;margin-bottom:18px;line-height:1.45;">Sign in with your doctor account. New here? <a href="/?register=1" style="color:#0d9488;font-weight:700;">Create account</a></p>
+            <h2 id="doctor-auth-title" style="color:#0f766e;margin-bottom:12px;font-size:1.35rem;">Doctor portal sign-in</h2>
+            <div style="display:flex;gap:8px;margin-bottom:16px;">
+                <button type="button" id="doctor-auth-tab-login" class="btn-primary" style="flex:1;padding:10px;" onclick="DoctorAuthUi.switchDoctorAuthTab('login')">Sign in</button>
+                <button type="button" id="doctor-auth-tab-signup" class="btn-primary" style="flex:1;padding:10px;opacity:0.75;background:#64748b;" onclick="DoctorAuthUi.switchDoctorAuthTab('signup')">Create account</button>
+            </div>
+            <div id="doctor-auth-login-panel">
+            <p style="color:#64748b;font-size:0.88rem;margin-bottom:14px;">Sign in with your doctor account.</p>
             <form id="doctor-login-form">
                 <label style="display:block;font-size:0.82rem;font-weight:700;color:#0f766e;margin:10px 0 6px;">Email</label>
                 <input type="email" id="doctor-login-email" required autocomplete="email" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;">
@@ -129,7 +134,41 @@
                 <p id="doctor-login-err" class="hidden" style="color:#b91c1c;font-size:0.85rem;margin-top:10px;font-weight:600;"></p>
                 <button type="submit" class="btn-primary" style="width:100%;margin-top:16px;">Sign in</button>
             </form>
-            <p style="margin-top:14px;font-size:0.78rem;color:#94a3b8;text-align:center;">
+            </div>
+            <div id="doctor-auth-signup-panel" class="hidden">
+                <p style="color:#64748b;font-size:0.88rem;margin-bottom:12px;">Register as a doctor delegate (same account works on web and app).</p>
+                <form id="doctor-signup-form">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                        <input type="text" id="doctor-signup-firstname" placeholder="First name" required style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;">
+                        <input type="text" id="doctor-signup-lastname" placeholder="Last name" required style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;">
+                    </div>
+                    <input type="email" id="doctor-signup-email" placeholder="Email" required style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;margin-bottom:10px;">
+                    <input type="tel" id="doctor-signup-phone" placeholder="Phone (WhatsApp)" required style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;margin-bottom:10px;">
+                    <div id="doctor-signup-otp-panel" style="display:none;margin-bottom:10px;padding-top:10px;border-top:1px solid #e2e8f0;">
+                        <p style="font-size:0.82rem;color:#64748b;margin-bottom:8px;">Verify email and WhatsApp before signup.</p>
+                        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px;">
+                            <span style="font-weight:700;">Email</span>
+                            <button type="button" id="doctor-signup-send-otp-email" style="padding:5px 10px;border-radius:8px;border:1px solid #99f6e4;background:#f0fdfa;cursor:pointer;font-weight:700;">Send</button>
+                            <button type="button" id="doctor-signup-resend-otp-email" style="padding:5px 10px;border-radius:8px;border:1px solid #cbd5e1;cursor:pointer;">Resend</button>
+                            <input type="text" id="doctor-signup-email-otp" placeholder="Code" style="max-width:72px;padding:6px;border-radius:8px;border:1px solid #cbd5e1;">
+                            <button type="button" id="doctor-signup-verify-otp-email" style="padding:5px 10px;border-radius:8px;border:1px solid #99f6e4;background:#f0fdfa;cursor:pointer;font-weight:700;">OK</button>
+                            <span id="doctor-signup-email-otp-ok" style="font-size:0.78rem;color:#059669;"></span>
+                        </div>
+                        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+                            <span style="font-weight:700;">Phone</span>
+                            <button type="button" id="doctor-signup-send-otp-phone" style="padding:5px 10px;border-radius:8px;border:1px solid #99f6e4;background:#f0fdfa;cursor:pointer;font-weight:700;">Send</button>
+                            <button type="button" id="doctor-signup-resend-otp-phone" style="padding:5px 10px;border-radius:8px;border:1px solid #cbd5e1;cursor:pointer;">Resend</button>
+                            <input type="text" id="doctor-signup-phone-otp" placeholder="Code" style="max-width:72px;padding:6px;border-radius:8px;border:1px solid #cbd5e1;">
+                            <button type="button" id="doctor-signup-verify-otp-phone" style="padding:5px 10px;border-radius:8px;border:1px solid #99f6e4;background:#f0fdfa;cursor:pointer;font-weight:700;">OK</button>
+                            <span id="doctor-signup-phone-otp-ok" style="font-size:0.78rem;color:#059669;"></span>
+                        </div>
+                    </div>
+                    <input type="password" id="doctor-signup-password" placeholder="Password" required style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;margin-bottom:10px;">
+                    <p id="doctor-signup-err" class="hidden" style="color:#b91c1c;font-size:0.85rem;font-weight:600;"></p>
+                    <button type="submit" class="btn-primary" style="width:100%;">Create account</button>
+                </form>
+            </div>
+            <p class="doctor-web-only" style="margin-top:14px;font-size:0.78rem;color:#94a3b8;text-align:center;">
                 <a href="/" style="color:#0d9488;font-weight:600;">Back to seminar website</a>
             </p>
         </div>
@@ -171,7 +210,7 @@
                     <span class="hi-user" id="header-name">Hi, Doctor</span>
                     <span class="user-id" id="header-id">ID: —</span>
                     <span class="portal-login-time hidden" id="header-login-time"></span>
-                    <a href="/" class="header-link" target="_blank"><i class="fas fa-external-link-alt"></i> Public site</a>
+                    <a href="/" class="header-link doctor-web-only" target="_blank"><i class="fas fa-external-link-alt"></i> Public site</a>
                     <button type="button" class="btn-primary" id="btn-logout" style="padding:8px 16px;"><i class="fas fa-sign-out-alt"></i> Logout</button>
                 </div>
             </header>
@@ -546,9 +585,9 @@
                 </div>
 
                 <div id="tab-certificate" class="tab-pane hidden">
-                    <h2 class="section-title">Certificates</h2>
-                    <p style="color:#64748b;margin:-10px 0 16px;">Available after event check-in and admin template upload.</p>
-                    <div id="doctor-certificates-wrap" class="card"><p style="color:#64748b;">Loading…</p></div>
+                    <h2 class="section-title" style="color:#92400e;">Certificates</h2>
+                    <p style="color:#78716c;margin:-10px 0 16px;">Available after event check-in when the organizer applies the VGMF certificate design.</p>
+                    <div id="doctor-certificates-wrap" class="card" style="border:1px solid #e8d48a;background:linear-gradient(180deg,#fffbeb 0%,#fff 50%);"><p style="color:#78716c;">Loading…</p></div>
                 </div>
 
                 <div id="tab-reset-pwd" class="tab-pane hidden">
@@ -611,8 +650,10 @@
     <script src="/js/portal-content-protection.js"></script>
     <script src="/js/portal-datetime.js"></script>
     <script src="/js/site-branding.js"></script>
+    <script src="/js/otp-ui.js"></script>
     <script src="/js/portal-auth.js"></script>
     <script src="/js/name-validation.js"></script>
+    <script src="/js/doctor-auth-ui.js"></script>
     <script src="/js/doctor.js"></script>
 </body>
 </html>

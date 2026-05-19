@@ -12,21 +12,21 @@ const PORTALS = [
         dir: 'admin-mobile',
         appId: 'org.vaidyagogate.admin',
         appName: 'VGMF Admin',
-        url: 'https://admin.vaidyagogate.org/',
+        url: 'https://seminar.vaidyagogate.org/admin.html',
         title: 'VGMF Admin'
     },
     {
         dir: 'judge-mobile',
         appId: 'org.vaidyagogate.judge',
         appName: 'VGMF Judge',
-        url: 'https://judge.vaidyagogate.org/',
+        url: 'https://seminar.vaidyagogate.org/judge.html',
         title: 'VGMF Judge'
     },
     {
         dir: 'doctor-mobile',
         appId: 'org.vaidyagogate.doctor',
         appName: 'VGMF Doctor',
-        url: 'https://seminar.vaidyagogate.org/doctor.html',
+        url: 'https://seminar.vaidyagogate.org/doctor.html?app=1',
         title: 'VGMF Doctor'
     },
     {
@@ -38,12 +38,7 @@ const PORTALS = [
     }
 ];
 
-const ALLOW_NAV = [
-    'https://seminar.vaidyagogate.org',
-    'https://admin.vaidyagogate.org',
-    'https://judge.vaidyagogate.org',
-    'https://vaidyagogate-seminar.vercel.app'
-];
+const ALLOW_NAV = ['https://seminar.vaidyagogate.org', 'https://vaidyagogate-seminar.vercel.app'];
 
 const packageJson = (name) => ({
     name,
