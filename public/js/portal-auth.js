@@ -206,7 +206,6 @@
             const ev = validatedLoginEmail();
             if (!ev.valid) return alert(ev.message);
             const email = ev.cleanedEmail;
-            const password = (document.getElementById(opts.passwordInputId) || {}).value;
             const pc = await precheckEmail(email);
             if (pc.needsSignup) {
                 return alert(pc.message || 'No account with this email. Please create an account first.');
@@ -214,7 +213,7 @@
             const res = await fetch('/api/auth/login-otp/send', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password, channel })
+                body: JSON.stringify({ email, channel })
             });
             const { data, parseFailed } = await readApiJson(res);
             if (parseFailed || !res.ok) {
@@ -235,7 +234,6 @@
             const ev = validatedLoginEmail();
             if (!ev.valid) return alert(ev.message);
             const email = ev.cleanedEmail;
-            const password = (document.getElementById(opts.passwordInputId) || {}).value;
             const pc = await precheckEmail(email);
             if (pc.needsSignup) {
                 return alert(pc.message || 'No account with this email. Please create an account first.');
@@ -243,7 +241,7 @@
             const res = await fetch('/api/auth/login-otp/send-both', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password })
+                body: JSON.stringify({ email })
             });
             const { data, parseFailed } = await readApiJson(res);
             if (parseFailed || !res.ok) {
@@ -260,7 +258,6 @@
             const ev = validatedLoginEmail();
             if (!ev.valid) return alert(ev.message);
             const email = ev.cleanedEmail;
-            const password = (document.getElementById(opts.passwordInputId) || {}).value;
             const codeEl = document.getElementById(
                 channel === 'email' ? prefix + '-email-otp' : prefix + '-phone-otp'
             );
@@ -272,7 +269,7 @@
             const res = await fetch('/api/auth/login-otp/verify', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password, channel, code })
+                body: JSON.stringify({ email, channel, code })
             });
             const { data, parseFailed } = await readApiJson(res);
             if (parseFailed || !res.ok) {

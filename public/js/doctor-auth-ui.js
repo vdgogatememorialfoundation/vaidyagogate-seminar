@@ -303,6 +303,134 @@
         });
     }
 
+    function doctorReturnToPage() {
+        const q = new URLSearchParams(window.location.search);
+        return q.get('app') === '1' ? 'doctor.html?app=1' : 'doctor.html';
+    }
+
+    function openDoctorForgotPasswordModal() {
+        const overlay = document.getElementById('doctor-forgot-password-overlay');
+        const fe = document.getElementById('doctor-forgot-email');
+        const le = document.getElementById('doctor-login-email');
+        const st = document.getElementById('doctor-forgot-status');
+        if (fe && le && le.value) fe.value = le.value.trim();
+        if (st) st.textContent = '';
+        if (overlay) overlay.style.display = 'flex';
+    }
+
+    function closeDoctorForgotPasswordModal() {
+        const overlay = document.getElementById('doctor-forgot-password-overlay');
+        if (overlay) overlay.style.display = 'none';
+    }
+
+    function openDoctorResetPasswordModal(token) {
+        const overlay = document.getElementById('doctor-reset-password-overlay');
+        const t = document.getElementById('doctor-reset-token');
+        if (t) t.value = token || '';
+        if (overlay) overlay.style.display = 'flex';
+    }
+
+    function closeDoctorResetPasswordModal() {
+        const overlay = document.getElementById('doctor-reset-password-overlay');
+        if (overlay) overlay.style.display = 'none';
+    }
+
+    async function handleDoctorForgotPassword(e) {
+        e.preventDefault();
+        const emailRaw = String((document.getElementById('doctor-forgot-email') || {}).value || '').trim();
+        let email = emailRaw.toLowerCase();
+        if (typeof validateEmailClient === 'function') {
+            const ev = validateEmailClient(emailRaw, 'Email');
+            if (!ev.valid) return alert(ev.message);
+            email = ev.cleanedEmail;
+        }
+        const st = document.getElementById('doctor-forgot-status');
+        if (st) {
+            st.style.color = '#64748b';
+            st.textContent = 'Sending…';
+        }
+        try {
+            const res = await fetch('/api/auth/forgot-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, returnTo: doctorReturnToPage() })
+            });
+            let data = {};
+            if (window.HttpJson) {
+                const parsed = await window.HttpJson.readJsonResponse(res);
+                data = parsed.data;
+            } else {
+                data = await res.json();
+            }
+            if (st) {
+                st.style.color = '#059669';
+                st.textContent = data.message || 'Check your email and WhatsApp.';
+            }
+        } catch (_) {
+            if (st) {
+                st.style.color = '#b91c1c';
+                st.textContent = 'Could not send.';
+            }
+        }
+    }
+
+    async function handleDoctorResetPassword(e) {
+        e.preventDefault();
+        const token = String((document.getElementById('doctor-reset-token') || {}).value || '').trim();
+        const p1 = (document.getElementById('doctor-reset-password') || {}).value;
+        const p2 = (document.getElementById('doctor-reset-password2') || {}).value;
+        const st = document.getElementById('doctor-reset-status');
+        if (p1 !== p2) {
+            if (st) {
+                st.style.color = '#b91c1c';
+                st.textContent = 'Passwords do not match.';
+            }
+            return;
+        }
+        try {
+            const res = await fetch('/api/auth/reset-password', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token, newPassword: p1 })
+            });
+            let data = {};
+            if (window.HttpJson) {
+                const parsed = await window.HttpJson.readJsonResponse(res);
+                data = parsed.data;
+            } else {
+                data = await res.json();
+            }
+            if (!res.ok) throw new Error(data.error || 'Failed');
+            if (st) {
+                st.style.color = '#059669';
+                st.textContent = data.message || 'Password updated. You can sign in now.';
+            }
+            setTimeout(() => {
+                closeDoctorResetPasswordModal();
+                switchDoctorAuthTab('login');
+            }, 1200);
+        } catch (err) {
+            if (st) {
+                st.style.color = '#b91c1c';
+                st.textContent = err.message || 'Could not reset password.';
+            }
+        }
+    }
+
+    function wireForgotPasswordUi() {
+        const forgotBtn = document.getElementById('doctor-forgot-password-btn');
+        const forgotCancel = document.getElementById('doctor-forgot-cancel');
+        const forgotForm = document.getElementById('doctor-forgot-password-form');
+        const resetForm = document.getElementById('doctor-reset-password-form');
+        if (forgotBtn) forgotBtn.addEventListener('click', openDoctorForgotPasswordModal);
+        if (forgotCancel) forgotCancel.addEventListener('click', closeDoctorForgotPasswordModal);
+        if (forgotForm) forgotForm.addEventListener('submit', handleDoctorForgotPassword);
+        if (resetForm) resetForm.addEventListener('submit', handleDoctorResetPassword);
+        const params = new URLSearchParams(window.location.search);
+        const rt = params.get('resetToken');
+        if (rt) openDoctorResetPasswordModal(rt);
+    }
+
     function blockHomepageNavigation() {
         if (!isStandaloneDoctorApp()) return;
         document.addEventListener(
@@ -333,6 +461,7 @@
             blockHomepageNavigation();
             refreshSignupOtpPanel();
             wireSignupOtpButtons();
+            wireForgotPasswordUi();
             const signupForm = document.getElementById('doctor-signup-form');
             if (signupForm) signupForm.addEventListener('submit', handleDoctorSignup);
             if (isStandaloneDoctorApp()) switchDoctorAuthTab('login');

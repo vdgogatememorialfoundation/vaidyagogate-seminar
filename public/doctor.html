@@ -113,6 +113,9 @@
                 <input type="email" id="doctor-login-email" required autocomplete="email" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;">
                 <label style="display:block;font-size:0.82rem;font-weight:700;color:#0f766e;margin:12px 0 6px;">Password</label>
                 <input type="password" id="doctor-login-password" required autocomplete="current-password" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;">
+                <p style="margin:10px 0 0;">
+                    <button type="button" id="doctor-forgot-password-btn" style="padding:0;border:none;background:none;color:#0f766e;font-weight:700;font-size:0.85rem;cursor:pointer;text-decoration:underline;">Forgot password?</button>
+                </p>
                 <div id="doctor-login-otp-panel" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid #e2e8f0;">
                     <p style="font-size:0.82rem;color:#64748b;margin-bottom:8px;">Verify email and WhatsApp (both required).</p>
                     <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px;">
@@ -647,6 +650,34 @@
             <h3 style="color:#0f766e;margin-bottom:12px;">Case application</h3>
             <div id="view-case-content"></div>
             <button type="button" class="btn-primary" style="margin-top:16px;background:#64748b;" onclick="document.getElementById('view-case-modal').classList.add('hidden')">Close</button>
+        </div>
+    </div>
+
+    <div id="doctor-forgot-password-overlay" style="display:none;position:fixed;inset:0;z-index:10000;align-items:center;justify-content:center;padding:20px;background:rgba(15,23,42,0.45);">
+        <div style="background:#fff;border-radius:16px;padding:28px;width:100%;max-width:400px;box-shadow:0 20px 40px rgba(0,0,0,0.15);">
+            <h3 style="color:#0f766e;margin-bottom:10px;font-size:1.1rem;">Reset password</h3>
+            <p style="color:#64748b;font-size:0.88rem;margin-bottom:14px;">Enter your registered email. We will send a reset link to your email and WhatsApp.</p>
+            <form id="doctor-forgot-password-form">
+                <label style="display:block;font-size:0.82rem;font-weight:700;color:#0f766e;margin-bottom:6px;">Email</label>
+                <input type="email" id="doctor-forgot-email" required style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;margin-bottom:10px;">
+                <p id="doctor-forgot-status" style="font-size:0.85rem;margin:0 0 12px;"></p>
+                <button type="submit" class="btn-primary" style="width:100%;">Send reset link</button>
+            </form>
+            <button type="button" id="doctor-forgot-cancel" style="margin-top:12px;background:none;border:none;color:#64748b;cursor:pointer;font-weight:600;">Cancel</button>
+        </div>
+    </div>
+    <div id="doctor-reset-password-overlay" style="display:none;position:fixed;inset:0;z-index:10000;align-items:center;justify-content:center;padding:20px;background:rgba(15,23,42,0.45);">
+        <div style="background:#fff;border-radius:16px;padding:28px;width:100%;max-width:400px;box-shadow:0 20px 40px rgba(0,0,0,0.15);">
+            <h3 style="color:#0f766e;margin-bottom:10px;font-size:1.1rem;">Choose a new password</h3>
+            <form id="doctor-reset-password-form">
+                <input type="hidden" id="doctor-reset-token" value="">
+                <label style="display:block;font-size:0.82rem;font-weight:700;color:#0f766e;margin:10px 0 6px;">New password</label>
+                <input type="password" id="doctor-reset-password" required minlength="4" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;">
+                <label style="display:block;font-size:0.82rem;font-weight:700;color:#0f766e;margin:12px 0 6px;">Confirm</label>
+                <input type="password" id="doctor-reset-password2" required minlength="4" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;">
+                <p id="doctor-reset-status" style="font-size:0.85rem;margin:12px 0 0;"></p>
+                <button type="submit" class="btn-primary" style="width:100%;margin-top:14px;">Update password</button>
+            </form>
         </div>
     </div>
 

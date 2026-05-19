@@ -529,7 +529,7 @@ function recordUserLogin(userId, cb) {
         }
         if (e) return cb && cb(e);
         const previousLoginAt = row && row.last_login_at ? String(row.last_login_at) : null;
-        db.run(`UPDATE users SET last_login_at = datetime('now') WHERE id = ?`, [uid], (e2) => {
+        db.run(`UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?`, [uid], (e2) => {
             if (e2 && /does not exist|no such column/i.test(String(e2.message || ''))) {
                 return cb && cb(null, { previousLoginAt, loginAt: new Date().toISOString() });
             }
@@ -2074,7 +2074,7 @@ app.get('/api/admin/integrations/whatsapp-event-templates', withIntegrationSetti
             const list = EVENT_KEYS.map((key) => {
                 const row = byKey[key] || {};
                 const extra = langMap[key] || {};
-                return {
+            return { 
                     event_key: key,
                     channel: row.channel || 'both',
                     email_subject: row.email_subject || '',
@@ -2507,7 +2507,8 @@ app.post('/api/auth/login-otp/precheck', (req, res) => {
     });
 });
 
-function resolveLoginUserForOtp(email, password, cb) {
+function resolveLoginUserForOtp(email, password, cb, options) {
+    const requirePassword = options && options.requirePassword === true;
     const loginOtpEmailV = contactValidation.validateEmail(email);
     if (!loginOtpEmailV.valid) {
         return cb(null, { status: 400, error: loginOtpEmailV.message });
@@ -2522,20 +2523,22 @@ function resolveLoginUserForOtp(email, password, cb) {
                 needsSignup: true
             });
         }
-        const pw = password != null && password !== undefined ? String(password) : '';
-        if (pw && row.password !== pw) {
-            return cb(null, {
-                status: 401,
-                error: 'Invalid password. Use Forgot password or check your password.',
-                needsSignup: false
-            });
+        if (requirePassword) {
+            const pw = password != null && password !== undefined ? String(password) : '';
+            if (!pw || row.password !== pw) {
+                return cb(null, {
+                    status: 401,
+                    error: 'Invalid password. Use Forgot password or check your password.',
+                    needsSignup: false
+                });
+            }
         }
         cb(null, { status: 200, row });
     });
 }
 
 /** Find account by email and send login OTP to registered email + WhatsApp. */
-app.post('/api/auth/login-otp/send-both', withIntegrationSettingsLoaded, (req, res) => {
+app.post('/api/auth/login-otp/send-both', withIntegrationSettingsLoaded, withAuxiliaryTables, (req, res) => {
     const { email, password } = req.body || {};
     if (!email) return res.status(400).json({ error: 'Email is required' });
     resolveLoginUserForOtp(email, password, (err, out) => {
@@ -2557,7 +2560,7 @@ app.post('/api/auth/login-otp/send-both', withIntegrationSettingsLoaded, (req, r
 });
 
 /** Send login OTP to one channel (email or phone) for the account matching email. */
-app.post('/api/auth/login-otp/send', withIntegrationSettingsLoaded, (req, res) => {
+app.post('/api/auth/login-otp/send', withIntegrationSettingsLoaded, withAuxiliaryTables, (req, res) => {
     const { email, password, channel } = req.body || {};
     if (!email || !channel) return res.status(400).json({ error: 'email and channel are required' });
     if (channel !== 'phone' && channel !== 'email') {
@@ -2581,7 +2584,7 @@ app.post('/api/auth/login-otp/send', withIntegrationSettingsLoaded, (req, res) =
     });
 });
 
-app.post('/api/auth/login-otp/verify', (req, res) => {
+app.post('/api/auth/login-otp/verify', withAuxiliaryTables, (req, res) => {
     const { email, password, channel, code } = req.body || {};
     if (!email || !channel || !code) {
         return res.status(400).json({ error: 'email, channel, and code are required' });
@@ -2860,7 +2863,7 @@ app.post('/api/auth/signup', (req, res) => {
     if (!lastNameValidation.valid) {
         return res.status(400).json({ error: `Last name: ${lastNameValidation.message}` });
     }
-
+    
     portalAuthPolicy.loadPortalAuthConfig(db, (e0) => {
         if (e0) console.warn('[portal-auth-policy] signup', e0.message);
         if (!portalAuthPolicy.getPortalAuthConfig().showSignup) {
@@ -2902,19 +2905,19 @@ app.post('/api/auth/signup', (req, res) => {
 
         function doInsertUser() {
             const userIdStr = generateId();
-            const userRole = role || 'doctor';
-            const cleanFirstName = firstNameValidation.cleanedName;
-            const cleanLastName = lastNameValidation.cleanedName;
+    const userRole = role || 'doctor';
+    const cleanFirstName = firstNameValidation.cleanedName;
+    const cleanLastName = lastNameValidation.cleanedName;
             db.run(
                 `INSERT INTO users (user_id_string, first_name, last_name, email, phone, password, role, user_role, email_verified) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                 [userIdStr, cleanFirstName, cleanLastName, emailNorm, phoneNorm, password, userRole, userRole, evFlag],
-                function (err) {
-                    if (err) {
+        function (err) {
+            if (err) {
                         if (err.message.includes('UNIQUE constraint failed') || /unique|duplicate key/i.test(err.message)) {
-                            return res.status(400).json({ error: 'Email already exists.' });
-                        }
-                        return res.status(500).json({ error: err.message });
-                    }
+                    return res.status(400).json({ error: 'Email already exists.' });
+                }
+                return res.status(500).json({ error: err.message });
+            }
                     const newUserId = this.lastID != null ? Number(this.lastID) : null;
                     if (!newUserId) {
                         return res.status(500).json({ error: 'Account was created but could not be confirmed. Try signing in with your email.' });
@@ -3003,7 +3006,7 @@ app.post('/api/auth/login', (req, res) => {
     portalAuthPolicy.loadPortalAuthConfig(db, (ePol) => {
         if (ePol) console.warn('[portal-auth-policy] login', ePol.message);
         authUsers.findUserByEmailAndPassword(db, emailNorm, password, (err, row) => {
-                if (err) return res.status(500).json({ error: err.message });
+        if (err) return res.status(500).json({ error: err.message });
                 if (!row) {
                     return authUsers.findUserByEmail(db, emailNorm, (e2, exists) => {
                         if (e2) return res.status(500).json({ error: e2.message });
@@ -3052,7 +3055,7 @@ app.post('/api/auth/login', (req, res) => {
                         });
                         delete row.password;
                         normalizeAuthUserRow(row);
-                        res.json({ success: true, user: row });
+        res.json({ success: true, user: row });
                     });
                 }
 
@@ -3164,7 +3167,7 @@ app.get('/api/seminars', (req, res) => {
             params = [activeYear, activeYear];
         }
         db.all(sql, params, (err, rows) => {
-            if (err) return res.status(500).json({ error: err.message });
+        if (err) return res.status(500).json({ error: err.message });
             res.json({ portalYear: activeYear, bucket, seminars: rows || [] });
         });
     });
@@ -3801,7 +3804,7 @@ app.post('/api/applications/submit', (req, res, next) => {
             persistUploadedCertificate(req, (certErr, certPath) => {
                 if (certErr) return res.status(500).json({ error: certErr.message });
                 if (certPath) {
-                    formData = formData || {};
+                formData = formData || {};
                     formData.certificate_path = certPath;
                 }
 
@@ -4092,7 +4095,7 @@ app.put('/api/applications/:applicationId', upload.single('certificate'), (req, 
                         [JSON.stringify(mergedStored), req.params.applicationId],
                         function (err2) {
                             if (err2) return res.status(500).json({ error: err2.message });
-                            res.json({ success: true, message: 'Application updated successfully' });
+                res.json({ success: true, message: 'Application updated successfully' });
                         }
                     );
                 }
@@ -4463,11 +4466,13 @@ app.post('/api/auth/change-password', (req, res) => {
 });
 
 // Forgot password — email + WhatsApp (no plain password stored)
-app.post('/api/auth/forgot-password', (req, res) => {
+app.post('/api/auth/forgot-password', withAuxiliaryTables, (req, res) => {
     const forgotEmailV = contactValidation.validateEmail((req.body && req.body.email) || '');
     if (!forgotEmailV.valid) return res.status(400).json({ error: forgotEmailV.message });
     const emailNorm = forgotEmailV.cleanedEmail;
     const respond = () => res.json({ success: true, message: 'If an account exists, reset instructions were sent.' });
+    let returnPage = String((req.body && req.body.returnTo) || 'index.html').trim();
+    if (!/^[a-z0-9._-]+\.html$/i.test(returnPage)) returnPage = 'index.html';
     authUsers.findUserByEmail(db, emailNorm, (err, user) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!user) return respond();
@@ -4481,7 +4486,11 @@ app.post('/api/auth/forgot-password', (req, res) => {
                 (ierr) => {
                     if (ierr) return respond();
                     const link =
-                        notifEngine.publicBaseUrl() + '/index.html?resetToken=' + encodeURIComponent(token);
+                        notifEngine.publicBaseUrl() +
+                        '/' +
+                        returnPage +
+                        '?resetToken=' +
+                        encodeURIComponent(token);
                     notifEngine.notify(db, 'FORGOT_PASSWORD', {
                         userId: user.id,
                         vars: { forgot_password_link: link }
@@ -4493,7 +4502,7 @@ app.post('/api/auth/forgot-password', (req, res) => {
     });
 });
 
-app.post('/api/auth/reset-password', (req, res) => {
+app.post('/api/auth/reset-password', withAuxiliaryTables, (req, res) => {
     const token = String((req.body && req.body.token) || '').trim();
     const newPassword = req.body && req.body.newPassword != null ? String(req.body.newPassword) : '';
     if (!token || newPassword.length < 4) {
@@ -4501,8 +4510,8 @@ app.post('/api/auth/reset-password', (req, res) => {
     }
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     db.get(
-        `SELECT id, user_id FROM password_reset_tokens WHERE token_hash = ? AND used = 0 AND expires_at > datetime('now')`,
-        [tokenHash],
+        `SELECT id, user_id FROM password_reset_tokens WHERE token_hash = ? AND used = 0 AND expires_at > ?`,
+        [tokenHash, new Date().toISOString()],
         (err, row) => {
             if (err) return res.status(500).json({ error: err.message });
             if (!row) return res.status(400).json({ error: 'Invalid or expired reset link' });
@@ -5602,7 +5611,7 @@ app.put('/api/admin/seminars/:id', (req, res) => {
                 req.params.id
             ],
             function (err) {
-                if (err) return res.status(500).json({ error: err.message });
+            if (err) return res.status(500).json({ error: err.message });
                 if (!is_active) {
                     removeSeminarScrollingAnnouncement(parseInt(req.params.id, 10), () => {});
                 }
@@ -5639,8 +5648,8 @@ app.delete('/api/admin/registrations/:id', (req, res) => {
     deleteRegistrationCascade(req.params.id, (err, result) => {
         if (err) return res.status(400).json({ error: err.message });
         if (!result || !result.deleted) return res.status(404).json({ error: 'Registration not found' });
-        res.json({ success: true });
-    });
+            res.json({ success: true });
+        });
 });
 
 app.delete('/api/admin/seminars/:id', (req, res) => {
@@ -5724,9 +5733,9 @@ app.get('/api/admin/seminars/:id/stats', (req, res) => {
         });
 
         db.all(`
-            SELECT o.status, o.amount
-            FROM orders o
-            JOIN registrations r ON o.registration_id = r.id
+            SELECT o.status, o.amount 
+            FROM orders o 
+            JOIN registrations r ON o.registration_id = r.id 
             WHERE r.seminar_id = ?
         `, [seminarId], (err, orders) => {
             if (err) return res.status(500).json({ error: err.message });
@@ -5745,7 +5754,7 @@ app.get('/api/admin/seminars/:id/stats', (req, res) => {
                     stats.seats_full = cap.full;
                     stats.unlimited_seats = cap.unlimited;
                 }
-                res.json(stats);
+            res.json(stats);
             });
         });
     });
@@ -6074,7 +6083,7 @@ app.post('/api/admin/applications/status', (req, res) => {
 
     db.run(`UPDATE registrations SET status = ? WHERE id = ?`, [status, applicationId], function(err) {
         if (err) return res.status(500).json({ error: err.message });
-
+        
             const logEntries = portalTracking.registrationStatusToLog(newSt, prevStatus);
             logEntries.forEach((entry) => {
                 portalTracking.logRegistrationEvent(
@@ -6108,9 +6117,9 @@ app.post('/api/admin/applications/status', (req, res) => {
                         seminarId: regRow.seminar_id,
                         registrationId: applicationId,
                         vars: { approval_status: status, rejection_reason: req.body.rejection_reason || '' }
-                    });
-                }
-            });
+                                });
+                            }
+                        });
         
         if (newSt === 'approved_pending_payment') {
             getOrCreatePendingOrder(applicationId, 1500, () => {});
@@ -7331,8 +7340,8 @@ app.post('/api/admin/users/create', (req, res) => {
         db.run(
             `INSERT INTO users (user_id_string, first_name, last_name, email, phone, password, role, user_role, email_verified, is_demo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
             [userIdStr, cleanFirst, cleanLast, email, phone, finalPassword, roleCol, userRole, demoFlag],
-            function (err) {
-                if (err) return res.status(500).json({ error: err.message });
+        function (err) {
+            if (err) return res.status(500).json({ error: err.message });
                 const newId = this.lastID;
             notifEngine.notify(
                 db,
@@ -7362,7 +7371,7 @@ app.post('/api/admin/users/create', (req, res) => {
             });
             }
         );
-    });
+        });
 });
 
 // Admin: Get Users
@@ -7409,7 +7418,7 @@ app.post('/api/admin/users/toggle_disable', (req, res) => {
 
     const applyDisable = () => {
         db.run(`UPDATE users SET is_disabled = ? WHERE id = ?`, [disable ? 1 : 0, userId], function (err) {
-            if (err) return res.status(500).json({ error: err.message });
+        if (err) return res.status(500).json({ error: err.message });
             if (this.changes === 0) return res.status(404).json({ error: 'User not found' });
             activityLog.logActivity(db, {
                 user_id: actingAdminId || null,
@@ -8080,7 +8089,7 @@ app.post('/api/admin/global_settings', (req, res) => {
             pending -= 1;
             if (pending === 0) {
                 if (errOut) return res.status(500).json({ error: errOut.message });
-                res.json({ success: true });
+    res.json({ success: true });
             }
         });
     });
@@ -8177,8 +8186,8 @@ app.post('/api/admin/payment_gateways/:name', (req, res) => {
             `INSERT OR REPLACE INTO payment_gateways (name, is_active, config) VALUES (?, ?, ?)`,
             [name, is_active ? 1 : 0, JSON.stringify(finalConfig)],
             function (err) {
-                if (err) return res.status(500).json({ error: err.message });
-                res.json({ success: true });
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ success: true });
             }
         );
     };
@@ -8331,7 +8340,7 @@ app.post('/api/feedback/submit', (req, res) => {
     if (!Number.isInteger(sid) || sid < 1) return res.status(400).json({ error: 'Invalid seminar' });
 
     db.get(`SELECT id, event_date, title FROM seminars WHERE id = ?`, [sid], (err, sem) => {
-        if (err) return res.status(500).json({ error: err.message });
+            if (err) return res.status(500).json({ error: err.message });
         if (!sem) return res.status(400).json({ error: 'Seminar not found' });
         if (!isSeminarEnded(sem.event_date)) {
             return res.status(400).json({
@@ -8384,14 +8393,14 @@ app.post('/api/feedback/submit', (req, res) => {
                             ],
                             function (insErr) {
                                 if (insErr) return res.status(500).json({ error: insErr.message });
-                                res.json({ success: true, id: this.lastID });
+            res.json({ success: true, id: this.lastID });
                             }
                         );
                     }
                 );
             }
         );
-    });
+        });
 });
 
 app.get('/api/feedback/eligible-seminars/:userId', (req, res) => {
@@ -8711,8 +8720,8 @@ app.get('/api/support-ticket/user/:userId', (req, res) => {
         `SELECT *, COALESCE(ticket_id, tracking_id) AS ticket_id FROM support_tickets WHERE user_id = ? ORDER BY created_at DESC`,
         [userId],
         (err, rows) => {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json(rows || []);
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows || []);
         }
     );
 });
@@ -8845,9 +8854,9 @@ function startBackgroundWorkers() {
                         console.log('[notifications] VGMF 2026 default templates synced');
                     });
                 }
-            });
         });
     });
+});
     if (jobsModule && typeof jobsModule.startWorkers === 'function' && !process.env.VERCEL) {
         jobsModule.startWorkers(db);
     } else if (process.env.VERCEL) {
@@ -8881,7 +8890,7 @@ if (!process.env.VERCEL) {
             app.listen(PORT, () => {
                 console.log(`Server is running on http://localhost:${PORT}`);
                 console.log('[routes] Case presentation APIs: /api/admin/case/programs, /api/case/programs');
-    });
+        });
 });
     });
 }
