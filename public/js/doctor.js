@@ -45,7 +45,7 @@ function shouldPollSeminarTracking() {
 }
 
 function shouldPollCertTracking() {
-    return doctorTabVisible('tab-dashboard');
+    return doctorTabVisible('tab-certificate');
 }
 
 let certTrackPollTimer = null;
@@ -487,8 +487,6 @@ function bootDoctorDashboard(user) {
         });
     });
     loadDoctorDashboardStats();
-    loadDoctorCertificateTracking();
-    startCertTrackingPoll();
     loadRegistrationFormConfigAndApply();
     loadDoctorPortalUpdatesFromCms();
     loadSiteBranding();
@@ -1457,9 +1455,8 @@ function switchTab(tabId, menuEl) {
     if (content) content.scrollTop = 0;
     if (tabId === 'tab-dashboard') {
         loadDoctorDashboardStats();
-        loadDoctorCertificateTracking();
-        startCertTrackingPoll();
-    } else {
+    }
+    if (tabId !== 'tab-certificate') {
         stopCertTrackingPoll();
     }
     if (tabId === 'tab-feedback') {
@@ -1478,7 +1475,9 @@ function switchTab(tabId, menuEl) {
         loadDoctorEventTickets();
     }
     if (tabId === 'tab-certificate') {
+        loadDoctorCertificateTracking();
         loadDoctorCertificates();
+        startCertTrackingPoll();
     }
     if (tabId === 'tab-volunteer') {
         loadDoctorVolunteerPanel();
@@ -2127,12 +2126,17 @@ async function loadDoctorCertificates() {
     if (!wrap || !currentUser) return;
     wrap.innerHTML = '<p style="color:#64748b;text-align:center;">Loading…</p>';
     try {
+        const uid = doctorNumericUserId();
+        if (!uid) {
+            wrap.innerHTML = '<p style="color:#b91c1c;">Please sign out and sign in again.</p>';
+            return;
+        }
         const [res, vres] = await Promise.all([
-            fetch(`/api/doctor/certificates/${currentUser.id}`),
-            fetch(`/api/doctor/volunteer-certificates/${currentUser.id}`)
+            fetch('/api/doctor/certificates/' + uid),
+            fetch('/api/doctor/volunteer-certificates/' + uid)
         ]);
-        const rows = await res.json();
-        const vrows = await vres.json();
+        const rows = await res.json().catch(() => []);
+        const vrows = await vres.json().catch(() => []);
         const all = [...(Array.isArray(rows) ? rows : []), ...(Array.isArray(vrows) ? vrows.map((v) => ({ ...v, _volunteer: true })) : [])];
         if (!all.length) {
             wrap.innerHTML = doctorCertificateLockedBlock();
@@ -3514,6 +3518,7 @@ async function loadDoctorCertificateTracking(quiet) {
     const wrap = document.getElementById('doctor-cert-tracking-wrap');
     const live = document.getElementById('cert-track-live');
     if (!wrap || !currentUser) return;
+    if (!doctorTabVisible('tab-certificate')) return;
     if (!quiet) wrap.innerHTML = '<p style="color:#94a3b8;text-align:center;">Loading…</p>';
     if (live) {
         live.textContent = 'Updating…';
@@ -3521,10 +3526,29 @@ async function loadDoctorCertificateTracking(quiet) {
     }
     try {
         const uid = doctorNumericUserId();
-        if (!uid) return;
-        const res = await fetch('/api/doctor/certificate-tracking/' + uid);
-        const rows = await res.json();
-        if (!res.ok) throw new Error(rows.error || 'Could not load');
+        if (!uid) {
+            wrap.innerHTML =
+                '<p style="color:#b91c1c;text-align:center;">Session invalid. Please sign out and sign in again.</p>';
+            return;
+        }
+        const res = await fetch('/api/doctor/certificate-tracking/' + uid, { cache: 'no-store' });
+        let rows = [];
+        let parseFailed = false;
+        if (window.HttpJson) {
+            const parsed = await window.HttpJson.readJsonResponse(res);
+            rows = parsed.data;
+            parseFailed = parsed.parseFailed;
+        } else {
+            rows = await res.json();
+        }
+        if (parseFailed || !res.ok) {
+            const msg =
+                window.HttpJson && parseFailed
+                    ? window.HttpJson.apiErrorMessage(res, rows, true)
+                    : (rows && rows.error) || 'Could not load certificate status.';
+            throw new Error(msg);
+        }
+        if (!Array.isArray(rows)) throw new Error('Unexpected response from server.');
         if (!Array.isArray(rows) || !rows.length) {
             wrap.innerHTML =
                 '<p style="color:#64748b;text-align:center;">No seminar registrations yet. Register and complete payment to track certificate status here.</p>';
@@ -3548,8 +3572,12 @@ async function loadDoctorCertificateTracking(quiet) {
                     statusColor +
                     ';">' +
                     escapeHtml(r.certStatusLabel || '—') +
-                    (r.canDownload
-                        ? ' <a href="#" onclick="switchTab(\'tab-certificate\');return false;" style="color:#0f766e;">Download</a>'
+                    (r.canDownload && r.certId
+                        ? ' <button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.78rem;margin-left:6px;" onclick="openDoctorCertificateDownload(' +
+                          Number(r.certId) +
+                          ',' +
+                          Number(r.seminarId) +
+                          ');return false;">Download</button>'
                         : '') +
                     '</td></tr>';
             });
@@ -3562,9 +3590,26 @@ async function loadDoctorCertificateTracking(quiet) {
         }
     } catch (e) {
         console.error(e);
-        if (!quiet) wrap.innerHTML = '<p style="color:#b91c1c;">Could not load certificate tracking.</p>';
+        if (!quiet) {
+            wrap.innerHTML =
+                '<p style="color:#b91c1c;text-align:center;">' +
+                escapeHtml(e.message || 'Could not load certificate status.') +
+                '</p>';
+        }
         if (live) live.textContent = 'Update failed';
     }
+}
+
+function openDoctorCertificateDownload(certId, seminarId) {
+    if (!currentUser) return;
+    const uid = doctorNumericUserId();
+    if (!uid) return alert('Please sign in again.');
+    const viewUrl =
+        '/certificate/view?uc=' +
+        encodeURIComponent(String(certId)) +
+        '&uid=' +
+        encodeURIComponent(String(uid));
+    downloadDoctorCertificate(viewUrl);
 }
 
 async function loadDoctorDashboardStats() {

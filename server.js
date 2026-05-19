@@ -4214,30 +4214,8 @@ function isPublicListEnabled(val) {
     return val === 1 || val === true || val === '1' || val === 't' || val === 'true';
 }
 
-// Doctor certificate tracking (live check-in + approval status per seminar)
-app.get('/api/doctor/certificate-tracking/:userId', (req, res) => {
-    const uid = parseInt(req.params.userId, 10);
-    if (Number.isNaN(uid)) return res.status(400).json({ error: 'Invalid user' });
-    db.all(
-        `SELECT r.id AS registration_id, r.application_no, r.status AS reg_status, r.seminar_id,
-                s.title AS seminar_title, IFNULL(s.cert_scans_required, 1) AS cert_scans_required,
-                o.status AS order_status,
-                t.id AS ticket_id, IFNULL(t.scan_count, 0) AS scan_count, IFNULL(t.is_scanned, 0) AS is_scanned,
-                t.scan_time, t.ticket_id_string,
-                uc.id AS cert_id, IFNULL(uc.scan_verified, 0) AS scan_verified, IFNULL(uc.enabled, 0) AS cert_enabled,
-                ct.file_path AS template_path
-         FROM registrations r
-         JOIN seminars s ON s.id = r.seminar_id
-         LEFT JOIN orders o ON o.registration_id = r.id AND lower(trim(o.status)) = 'success'
-         LEFT JOIN tickets t ON t.order_id = o.id
-         LEFT JOIN user_certificates uc ON uc.user_id = r.user_id AND uc.seminar_id = r.seminar_id
-         LEFT JOIN certificate_templates ct ON ct.id = uc.template_id AND IFNULL(ct.is_active, 1) = 1
-         WHERE r.user_id = ? AND IFNULL(r.status, '') NOT IN ('rejected', 'cancelled')
-         ORDER BY r.id DESC`,
-        [uid],
-        (err, rows) => {
-            if (err) return res.status(500).json({ error: err.message });
-            const out = (rows || []).map((row) => {
+function mapDoctorCertificateTrackingRows(rows) {
+    return (rows || []).map((row) => {
                 const scansRequired = certVerify.normalizeCertScansRequired(row.cert_scans_required);
                 const scanCount = Number(row.scan_count) || 0;
                 const paid = String(row.order_status || '').toLowerCase() === 'success';
@@ -4266,30 +4244,79 @@ app.get('/api/doctor/certificate-tracking/:userId', (req, res) => {
                     certStatus = 'issued';
                     certStatusLabel = 'Certificate issued — download available';
                 }
-                return {
-                    registrationId: row.registration_id,
-                    seminarId: row.seminar_id,
-                    seminarTitle: row.seminar_title,
-                    applicationNo: row.application_no,
-                    ticketId: row.ticket_id_string,
-                    regStatus: row.reg_status,
-                    paid,
-                    scanCount,
-                    scansRequired,
-                    checkinComplete,
-                    scanTime: row.scan_time,
-                    scanVerified: !!Number(row.scan_verified),
-                    certEnabled: !!Number(row.cert_enabled),
-                    certId: row.cert_id,
-                    templatePath: row.template_path,
-                    certStatus,
-                    certStatusLabel,
-                    canDownload: !!Number(row.cert_enabled) && !!row.template_path
-                };
-            });
-            res.json(out);
+        return {
+            registrationId: row.registration_id,
+            seminarId: row.seminar_id,
+            seminarTitle: row.seminar_title,
+            applicationNo: row.application_no,
+            ticketId: row.ticket_id_string,
+            regStatus: row.reg_status,
+            paid,
+            scanCount,
+            scansRequired,
+            checkinComplete,
+            scanTime: row.scan_time,
+            scanVerified: !!Number(row.scan_verified),
+            certEnabled: !!Number(row.cert_enabled),
+            certId: row.cert_id,
+            templatePath: row.template_path,
+            certStatus,
+            certStatusLabel,
+            canDownload: !!Number(row.cert_enabled) && !!row.template_path
+        };
+    });
+}
+
+const DOCTOR_CERT_TRACKING_SQL = `SELECT r.id AS registration_id, r.application_no, r.status AS reg_status, r.seminar_id,
+                s.title AS seminar_title, COALESCE(s.cert_scans_required, 1) AS cert_scans_required,
+                o.status AS order_status,
+                t.id AS ticket_id, COALESCE(t.scan_count, 0) AS scan_count, COALESCE(t.is_scanned, 0) AS is_scanned,
+                t.scan_time, t.ticket_id_string,
+                uc.id AS cert_id, COALESCE(uc.scan_verified, 0) AS scan_verified, COALESCE(uc.enabled, 0) AS cert_enabled,
+                ct.file_path AS template_path
+         FROM registrations r
+         JOIN seminars s ON s.id = r.seminar_id
+         LEFT JOIN orders o ON o.registration_id = r.id AND lower(trim(o.status)) = 'success'
+         LEFT JOIN tickets t ON t.order_id = o.id
+         LEFT JOIN user_certificates uc ON uc.user_id = r.user_id AND uc.seminar_id = r.seminar_id
+         LEFT JOIN certificate_templates ct ON ct.id = uc.template_id AND COALESCE(ct.is_active, 1) = 1
+         WHERE r.user_id = ? AND COALESCE(r.status, '') NOT IN ('rejected', 'cancelled')
+         ORDER BY r.id DESC`;
+
+const DOCTOR_CERT_TRACKING_SQL_LEGACY = `SELECT r.id AS registration_id, r.application_no, r.status AS reg_status, r.seminar_id,
+                s.title AS seminar_title, 1 AS cert_scans_required,
+                o.status AS order_status,
+                t.id AS ticket_id, CASE WHEN COALESCE(t.is_scanned, 0) = 1 THEN 1 ELSE 0 END AS scan_count,
+                COALESCE(t.is_scanned, 0) AS is_scanned,
+                t.scan_time, t.ticket_id_string,
+                uc.id AS cert_id, COALESCE(uc.scan_verified, 0) AS scan_verified, COALESCE(uc.enabled, 0) AS cert_enabled,
+                ct.file_path AS template_path
+         FROM registrations r
+         JOIN seminars s ON s.id = r.seminar_id
+         LEFT JOIN orders o ON o.registration_id = r.id AND lower(trim(o.status)) = 'success'
+         LEFT JOIN tickets t ON t.order_id = o.id
+         LEFT JOIN user_certificates uc ON uc.user_id = r.user_id AND uc.seminar_id = r.seminar_id
+         LEFT JOIN certificate_templates ct ON ct.id = uc.template_id AND COALESCE(ct.is_active, 1) = 1
+         WHERE r.user_id = ? AND COALESCE(r.status, '') NOT IN ('rejected', 'cancelled')
+         ORDER BY r.id DESC`;
+
+function queryDoctorCertificateTracking(uid, res, sql, retried) {
+    db.all(sql, [uid], (err, rows) => {
+        if (err && !retried && /scan_count|cert_scans_required|does not exist|column/i.test(String(err.message || ''))) {
+            return queryDoctorCertificateTracking(uid, res, DOCTOR_CERT_TRACKING_SQL_LEGACY, true);
         }
-    );
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(mapDoctorCertificateTrackingRows(rows));
+    });
+}
+
+// Doctor certificate tracking (live check-in + approval status per seminar) — Certificates tab only
+app.get('/api/doctor/certificate-tracking/:userId', withAuxiliaryTables, (req, res) => {
+    const uid = parseInt(req.params.userId, 10);
+    if (!Number.isInteger(uid) || uid < 1) return res.status(400).json({ error: 'Invalid user' });
+    certVerify.ensureCertificateVerifySchema(db, () => {}, () => {
+        queryDoctorCertificateTracking(uid, res, DOCTOR_CERT_TRACKING_SQL, false);
+    });
 });
 
 // Doctor dashboard statistics (tolerant of optional auxiliary tables on PostgreSQL)
