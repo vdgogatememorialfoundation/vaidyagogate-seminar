@@ -45,6 +45,7 @@ const whatsappWebhook = require('./lib/whatsapp-webhook');
 const { ensureSupportTicketSchema } = require('./lib/support-tickets-schema');
 const { ensureContactInquiriesSchema } = require('./lib/contact-inquiries-schema');
 const paymentsMod = require('./lib/payments-module');
+const adminPaymentFlow = require('./lib/admin-payment-flow');
 const { registerPaymentsRoutes } = require('./lib/routes-payments');
 const seminarCapacity = require('./lib/seminar-capacity');
 const authUsers = require('./lib/auth-users');
@@ -1948,15 +1949,22 @@ try {
 }
 
 function listDoctorPaymentOptions(callback) {
-    db.all(`SELECT * FROM payment_gateways WHERE is_active = 1`, [], (err, rows) => {
+    db.all(`SELECT * FROM payment_gateways`, [], (err, rows) => {
         if (err) return callback(err);
-        const options = [];
-        (rows || []).forEach((row) => {
-            options.push(...paymentGatewayOptions.expandGatewayRow(row));
+        adminPaymentFlow.loadUpiConfig(db, (eUpi, upiCfg) => {
+            if (eUpi) return callback(eUpi);
+            callback(null, adminPaymentFlow.buildDoctorPaymentMethods(rows || [], upiCfg));
         });
-        callback(null, options);
     });
 }
+
+const doctorPaymentDeps = () => ({
+    getOrCreatePendingOrder,
+    fulfillRegistrationPayment,
+    portalTracking,
+    notifEngine,
+    notifyTicketIssued
+});
 
 function resolveDoctorPaymentOption(paymentOptionId, callback) {
     db.all(`SELECT * FROM payment_gateways WHERE is_active = 1`, [], (err, rows) => {
@@ -4694,20 +4702,59 @@ app.get('/api/payments/options', (req, res) => {
             success: true,
             options: (options || []).map((o) => ({
                 id: o.id,
+                type: o.type,
                 gateway: o.gateway,
                 mode: o.mode,
-                label: o.label
+                label: o.label,
+                description: o.description || ''
             })),
             mockAvailable: !(options && options.length)
         });
     });
 });
 
-// 6. Payments: Process Payment (Dynamic Gateway)
+function finishDoctorPayment(res, err, out) {
+    if (err) return res.status(500).json({ success: false, error: err.message });
+    if (!out) return res.status(500).json({ success: false, error: 'No response from payment service' });
+    if (out.error) return res.status(400).json({ success: false, error: out.error });
+    if (out.paid) {
+        return res.json({
+            success: true,
+            paid: true,
+            message: out.message,
+            gateway: out.gateway,
+            orderId: out.orderIdString,
+            orderDbId: out.orderDbId
+        });
+    }
+    const body = {
+        success: true,
+        paid: false,
+        message: out.message,
+        paymentType: out.paymentType,
+        orderDbId: out.orderDbId,
+        orderId: out.orderIdString,
+        amount: out.amount,
+        pollRequired: !!out.pollRequired,
+        qrImageUrl: out.qrImageUrl,
+        qrShortUrl: out.qrShortUrl,
+        manualConfirm: !!out.manualConfirm
+    };
+    if (out.paymentType === 'razorpay_checkout') {
+        body.gateway = 'razorpay';
+        body.keyId = out.keyId;
+        body.order = out.razorpayOrder;
+        body.mode = out.mode;
+    }
+    res.json(body);
+}
+
+// 6. Payments: Process Payment (unified — DQR, Razorpay checkout, mock)
 app.post('/api/payments/process', (req, res) => {
-    const { registrationId, amount, userId, paymentOption } = req.body;
+    const { registrationId, amount, userId, paymentOption, methodId, cancelPending } = req.body;
     const regId = parseInt(registrationId, 10);
     const uid = parseInt(userId, 10);
+    const mid = String(methodId || paymentOption || '').trim();
     if (Number.isNaN(regId) || regId < 1) {
         return res.status(400).json({
             success: false,
@@ -4741,145 +4788,50 @@ app.post('/api/payments/process', (req, res) => {
             });
         }
 
-        const startPayment = (gateway) => {
-        if (!gateway) {
-                const mockTxn = 'MOCK' + generateId();
-                fulfillRegistrationPayment(regId, uid, amount, 'mock', mockTxn, (err, meta) => {
-                    if (err) return res.status(500).json({ success: false, error: err.message });
-                    const msg =
-                        meta && meta.skipped
-                            ? 'Payment recorded. No e-ticket was issued because this registration is not eligible.'
-                            : meta && meta.alreadyPaid
-                              ? 'Payment was already recorded. Your e-ticket is in Participant tickets.'
-                              : 'Payment successful, e-ticket generated.';
-                    res.json({
-                        success: true,
-                        orderId: (meta && meta.orderIdString) || '',
-                        gateway: 'mock',
-                        message: msg,
-                        transactionId: mockTxn,
-                        eTicketSkipped: !!(meta && meta.skipped)
-                    });
-                });
-            return;
-        }
-
-        if (gateway.name === 'razorpay') {
-            const razorpay = new Razorpay({
-                key_id: gateway.config.key_id,
-                    key_secret: gateway.config.key_secret
-            });
-                const gwTag =
-                    gateway.mode === 'live' ? 'razorpay_live' : gateway.mode === 'test' ? 'razorpay_test' : 'razorpay';
-
-                const beginRazorpayOrder = (orderIdStr, localOrderId) => {
-                    const options = {
-                        amount: amount * 100,
-                        currency: 'INR',
-                        receipt: orderIdStr.length > 40 ? orderIdStr.slice(0, 40) : orderIdStr
-                    };
-                    razorpay.orders.create(options, (err, rzOrder) => {
-                        if (err) {
-                            db.run(`DELETE FROM orders WHERE id = ? AND status = 'pending' AND provider_order_id IS NULL`, [
-                                localOrderId
-                            ]);
-                            return res.status(500).json({
-                                success: false,
-                                error: err.message || 'Razorpay order could not be created. Check Admin payment keys.'
-                            });
-                        }
-                        db.run(`UPDATE orders SET provider_order_id = ? WHERE id = ?`, [rzOrder.id, localOrderId], (uErr) => {
-                            if (uErr) return res.status(500).json({ success: false, error: uErr.message });
-                            res.json({
-                                success: true,
-                                order: rzOrder,
-                                keyId: gateway.config.key_id,
-                                gateway: 'razorpay',
-                                mode: gateway.mode,
-                                paymentOption: paymentOption || gateway.mode
-                            });
-                        });
-                    });
-                };
-
-                db.get(
-                    `SELECT id, order_id_string, provider_order_id FROM orders WHERE registration_id = ? AND status = 'pending' ORDER BY id DESC LIMIT 1`,
-                    [regId],
-                    (ePend, pending) => {
-                        if (ePend) return res.status(500).json({ success: false, error: ePend.message });
-                        if (pending && pending.provider_order_id) {
-                            return res.status(400).json({
-                                success: false,
-                                error: 'A payment is already in progress for this application. Complete it or contact support.'
-                            });
-                        }
-                        if (pending) {
-                            return db.run(
-                                `UPDATE orders SET amount = ?, payment_gateway = ? WHERE id = ?`,
-                                [amount, gwTag, pending.id],
-                                (uAmt) => {
-                                    if (uAmt) return res.status(500).json({ success: false, error: uAmt.message });
-                                    beginRazorpayOrder(pending.order_id_string, pending.id);
-                                }
-                            );
-                        }
-                        const orderIdStr = 'ORD_' + generateId();
-                        db.run(
-                            `INSERT INTO orders (order_id_string, registration_id, amount, status, payment_gateway) VALUES (?, ?, ?, 'pending', ?)`,
-                            [orderIdStr, regId, amount, gwTag],
-                            function (insErr) {
-                                if (insErr) return res.status(500).json({ success: false, error: insErr.message });
-                                beginRazorpayOrder(orderIdStr, this.lastID);
-                            }
+        const runInitiate = () => {
+            if (!mid) {
+                return listDoctorPaymentOptions((eList, options) => {
+                    if (eList) return res.status(500).json({ success: false, error: eList.message });
+                    if (options && options.length === 1) {
+                        return adminPaymentFlow.initiateAdminPayment(
+                            db,
+                            doctorPaymentDeps(),
+                            { registrationId: regId, methodId: options[0].id, amount },
+                            (e, o) => finishDoctorPayment(res, e, o)
                         );
                     }
-                );
-        } else if (gateway.name === 'payu') {
-            res.json({ success: true, message: 'PayU integration pending', gateway: 'payu' });
-        } else if (gateway.name === 'easebuzz') {
-            res.json({ success: true, message: 'Easebuzz integration pending', gateway: 'easebuzz' });
-        } else if (gateway.name === 'paytm') {
-            res.json({ success: true, message: 'Paytm integration pending', gateway: 'paytm' });
-        } else if (gateway.name === 'phonepe') {
-            res.json({ success: true, message: 'PhonePe integration pending', gateway: 'phonepe' });
-        } else if (gateway.name === 'cashfree') {
-            res.json({ success: true, message: 'Cashfree integration pending', gateway: 'cashfree' });
-        } else {
-                res.status(400).json({ success: false, error: 'Unsupported gateway' });
+                    if (options && options.length > 1) {
+                        return res.status(400).json({
+                            success: false,
+                            error: 'Choose a payment method from the dropdown before paying.',
+                            options: options.map((o) => ({
+                                id: o.id,
+                                label: o.label,
+                                type: o.type,
+                                description: o.description || ''
+                            }))
+                        });
+                    }
+                    return adminPaymentFlow.initiateAdminPayment(
+                        db,
+                        doctorPaymentDeps(),
+                        { registrationId: regId, methodId: 'mock', amount },
+                        (e, o) => finishDoctorPayment(res, e, o)
+                    );
+                });
             }
+            adminPaymentFlow.initiateAdminPayment(
+                db,
+                doctorPaymentDeps(),
+                { registrationId: regId, methodId: mid, amount },
+                (e, o) => finishDoctorPayment(res, e, o)
+            );
         };
 
-        if (paymentOption) {
-            resolveDoctorPaymentOption(paymentOption, (eGw, gateway) => {
-                if (eGw) return res.status(500).json({ success: false, error: eGw.message });
-                if (!gateway) {
-                    return res.status(400).json({
-                        success: false,
-                        error: 'Selected payment method is not available. Refresh the page and choose another option.'
-                    });
-                }
-                startPayment(gateway);
-            });
-        } else {
-            listDoctorPaymentOptions((eList, options) => {
-                if (eList) return res.status(500).json({ success: false, error: eList.message });
-                if (options && options.length === 1) {
-                    return startPayment({
-                        name: options[0].gateway,
-                        mode: options[0].mode,
-                        config: options[0].config
-                    });
-                }
-                if (options && options.length > 1) {
-                    return res.status(400).json({
-                        success: false,
-                        error: 'Choose a payment method from the dropdown before paying.',
-                        options: options.map((o) => ({ id: o.id, label: o.label }))
-                    });
-                }
-                startPayment(null);
-            });
+        if (cancelPending) {
+            return adminPaymentFlow.cancelPendingOrdersForRegistration(db, regId, () => runInitiate());
         }
+        runInitiate();
     });
 });
 

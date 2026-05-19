@@ -7310,12 +7310,21 @@ let __coLookup = null;
 let __coRegId = null;
 let __coOrderDbId = null;
 let __coMethodId = 'dqr';
+let __coPaymentMethods = [];
 
 function updateCoFinalAmount() {
     const fee = parseFloat(document.getElementById('co-amount')?.value || '0') || 0;
     const disc = parseFloat(document.getElementById('co-discount')?.value || '0') || 0;
     const fin = document.getElementById('co-final');
     if (fin) fin.value = String(Math.max(0, Math.round((fee - disc) * 100) / 100));
+}
+
+function updateCoMethodDesc() {
+    const sel = document.getElementById('co-method');
+    const hint = document.getElementById('co-method-desc');
+    if (!sel || !hint) return;
+    const m = (__coPaymentMethods || []).find((x) => x.id === sel.value);
+    hint.textContent = (m && m.description) || '';
 }
 
 async function loadCreateOrderPaymentMethods() {
@@ -7327,11 +7336,14 @@ async function loadCreateOrderPaymentMethods() {
         const data = await res.json();
         if (!res.ok) return;
         const methods = (data.methods || []).filter((m) => m.available);
+        __coPaymentMethods = methods;
         sel.innerHTML = methods.map((m) => '<option value="' + escAdmin(m.id) + '">' + escAdmin(m.label) + '</option>').join('');
         if (methods.length) __coMethodId = methods[0].id;
         sel.onchange = () => {
             __coMethodId = sel.value;
+            updateCoMethodDesc();
         };
+        updateCoMethodDesc();
     } catch (e) {
         console.error(e);
     }
@@ -7600,11 +7612,38 @@ async function loadAdminEnrichedOrders() {
                         ')">Refund</button>'
                 );
             }
-            if (o.registration_id && o.registration_status !== 'cancelled' && o.status !== 'success') {
+            const st = String(o.status || '').toLowerCase();
+            if (st === 'pending' && o.registration_id) {
+                actions.push(
+                    '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;margin-right:4px;" onclick="adminRetryOrderPayment(' +
+                        o.registration_id +
+                        ',' +
+                        o.id +
+                        ')">Retry</button>'
+                );
+                actions.push(
+                    '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;background:#b91c1c;border:none;margin-right:4px;" onclick="adminCancelPendingOrder(' +
+                        o.id +
+                        ')">Cancel</button>'
+                );
+                actions.push(
+                    '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;background:#64748b;border:none;margin-right:4px;" onclick="adminPollOrderPayment(' +
+                        o.id +
+                        ')">Check</button>'
+                );
+            }
+            if (o.registration_id && o.registration_status !== 'cancelled' && st !== 'success') {
                 actions.push(
                     '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;background:#7c3aed;border:none;" onclick="adminWaiveAndTicket(' +
                         o.registration_id +
                         ')">Waive &amp; ticket</button>'
+                );
+            }
+            if (o.e_ticket_id) {
+                actions.push(
+                    '<span style="font-size:0.78rem;color:#0f766e;margin-left:4px;">Ticket <code>' +
+                        escAdmin(o.e_ticket_id) +
+                        '</code></span>'
                 );
             }
             tbody.innerHTML +=
@@ -7662,6 +7701,82 @@ async function adminRefundOrderPrompt(orderDbId) {
     } catch (e) {
         console.error(e);
         alert('Network error.');
+    }
+}
+
+async function adminCancelPendingOrder(orderDbId) {
+    const adm = getStoredAdminUser();
+    if (!adm?.id) return alert('Not logged in.');
+    if (!confirm('Cancel this pending order? The doctor can start a new payment attempt.')) return;
+    try {
+        const res = await fetch('/api/admin/payments/cancel-order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orderDbId, adminUserId: adm.id })
+        });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Failed');
+        alert(data.message || 'Order cancelled.');
+        loadAdminEnrichedOrders();
+    } catch (e) {
+        alert(e.message || 'Failed');
+    }
+}
+
+async function adminPollOrderPayment(orderDbId) {
+    const adm = getStoredAdminUser();
+    if (!adm?.id) return;
+    __coOrderDbId = orderDbId;
+    await pollAdminCreateOrderPayment();
+    loadAdminEnrichedOrders();
+}
+
+async function adminRetryOrderPayment(registrationId, orderDbId) {
+    const adm = getStoredAdminUser();
+    if (!adm?.id) return alert('Not logged in.');
+    await loadCreateOrderPaymentMethods();
+    const methods = __coPaymentMethods || [];
+    if (!methods.length) return alert('No payment methods configured.');
+    let pick = methods[0].id;
+    if (methods.length > 1) {
+        const labels = methods.map((m, i) => i + 1 + '. ' + m.label).join('\n');
+        const n = prompt('Choose payment method (enter number):\n' + labels, '1');
+        if (n === null) return;
+        const idx = parseInt(n, 10) - 1;
+        if (idx >= 0 && idx < methods.length) pick = methods[idx].id;
+    }
+    const o = __adminEnrichedOrdersCache.find((x) => Number(x.id) === Number(orderDbId));
+    const amount = o ? Number(o.amount) : null;
+    try {
+        const res = await fetch('/api/admin/payments/retry', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                registrationId,
+                adminUserId: adm.id,
+                methodId: pick,
+                amount
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Retry failed');
+        __coOrderDbId = data.orderDbId;
+        if (data.paymentType === 'razorpay_checkout' && data.razorpayOrder && data.keyId) {
+            openAdminRazorpayCheckout(data, () => pollAdminCreateOrderPayment());
+        } else if (data.qrImageUrl) {
+            const qrBlock = document.getElementById('co-qr-block');
+            const qrImg = document.getElementById('co-qr-img');
+            if (qrImg) qrImg.src = data.qrImageUrl;
+            if (qrBlock) qrBlock.classList.remove('hidden');
+            alert(data.message || 'QR ready — scan to pay.');
+        } else if (data.paid) {
+            alert(data.message || 'Paid.');
+        } else {
+            alert(data.message || 'Payment started.');
+        }
+        loadAdminEnrichedOrders();
+    } catch (e) {
+        alert(e.message || 'Failed');
     }
 }
 
