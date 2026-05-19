@@ -1468,7 +1468,9 @@ function backfillTicketsForPaidOrders(cb) {
     );
 }
 
-function notifyTicketIssued(userId, registrationId, ticketId) {
+function notifyTicketIssued(userId, registrationId, ticketId, channelOpts) {
+    const sendEmail = !channelOpts || channelOpts.email !== false;
+    const sendWhatsapp = !channelOpts || channelOpts.whatsapp !== false;
     if (!userId || !registrationId || !ticketId) return;
     db.get(
         `SELECT r.seminar_id, r.application_no, t.qr_code_data, t.ticket_id_string, t.is_scanned, t.scan_time,
@@ -1540,7 +1542,7 @@ function notifyTicketIssued(userId, registrationId, ticketId) {
                                 ticketId +
                                 '\nDownload / print: ' +
                                 pdfUrl;
-                            if (u.email) {
+                            if (sendEmail && u.email) {
                                 notifEngine.enqueueDirectMessage(
                                     db,
                                     {
@@ -1559,7 +1561,7 @@ function notifyTicketIssued(userId, registrationId, ticketId) {
                                     () => {}
                                 );
                             }
-                            if (u.phone) {
+                            if (sendWhatsapp && u.phone) {
                                 notifEngine.enqueueDirectMessage(
                                     db,
                                     {
@@ -8829,6 +8831,205 @@ app.post('/api/support-ticket/:ticketId/reply', (req, res) => {
             db.run(`UPDATE support_tickets SET updated_at = CURRENT_TIMESTAMP WHERE ticket_id = ?`, [ticketId]);
             res.json({ success: true, messageId: this.lastID });
         });
+});
+
+// ==================== ADMIN E-TICKETS (lookup / generate / send) ====================
+
+const ADMIN_ETICKET_LOOKUP_SQL = `
+        SELECT r.id AS registration_id, r.application_no, r.status AS registration_status,
+               u.id AS user_id, u.first_name, u.last_name, u.email, u.phone,
+               s.id AS seminar_id, s.title AS seminar_title, s.price AS seminar_price,
+               o.id AS order_db_id, o.order_id_string, o.status AS payment_status, o.payment_date,
+               t.id AS ticket_row_id, t.ticket_id_string, t.is_scanned, IFNULL(t.scan_count, 0) AS scan_count,
+               t.scan_time, IFNULL(t.is_valid, 1) AS is_valid, t.qr_code_data
+        FROM registrations r
+        JOIN users u ON u.id = r.user_id
+        JOIN seminars s ON s.id = r.seminar_id
+        LEFT JOIN orders o ON o.registration_id = r.id AND LOWER(TRIM(o.status)) = 'success'
+        LEFT JOIN tickets t ON t.order_id = o.id`;
+
+function adminLookupEtickets(db, q, cb) {
+    const raw = String(q || '').trim();
+    if (!raw) return cb(null, []);
+    const clauses = [
+        'TRIM(r.application_no) = TRIM(?)',
+        'TRIM(t.ticket_id_string) = TRIM(?)'
+    ];
+    const params = [raw, raw];
+    if (raw.includes('@')) {
+        clauses.push('LOWER(TRIM(u.email)) = LOWER(TRIM(?))');
+        params.push(raw);
+    }
+    const digits = raw.replace(/\D/g, '');
+    if (digits.length >= 10) {
+        const tail = digits.slice(-10);
+        clauses.push(
+            `REPLACE(REPLACE(REPLACE(REPLACE(u.phone,' ',''),'-',''),'+',''),'.','') LIKE ?`
+        );
+        params.push('%' + tail + '%');
+    }
+    db.all(
+        `${ADMIN_ETICKET_LOOKUP_SQL} WHERE (${clauses.join(' OR ')}) ORDER BY r.id DESC, t.id DESC LIMIT 25`,
+        params,
+        cb
+    );
+}
+
+app.get('/api/admin/e-tickets/lookup', (req, res) => {
+    const q = String(req.query.q || '').trim();
+    const actingAdminId = parseInt(req.query.actingAdminId, 10);
+    if (!q) return res.status(400).json({ error: 'q is required (ticket ID, application ID, email, or phone)' });
+    assertAdminPortalActor(actingAdminId, (eAct) => {
+        if (eAct) return res.status(eAct.message === 'FORBIDDEN' ? 403 : 500).json({ error: 'Admin access required' });
+        adminLookupEtickets(db, q, (err, rows) => {
+            if (err) return res.status(500).json({ error: err.message });
+            const base = notifEngine.publicBaseUrl();
+            const list = (rows || []).map((row) => ({
+                registrationId: row.registration_id,
+                applicationNo: row.application_no,
+                registrationStatus: row.registration_status,
+                userId: row.user_id,
+                doctorName: [row.first_name, row.last_name].filter(Boolean).join(' ').trim(),
+                email: row.email,
+                phone: row.phone,
+                seminarId: row.seminar_id,
+                seminarTitle: row.seminar_title,
+                paymentStatus: row.payment_status,
+                orderIdString: row.order_id_string,
+                ticketIdString: row.ticket_id_string,
+                ticketRowId: row.ticket_row_id,
+                isScanned: !!Number(row.is_scanned),
+                scanCount: Number(row.scan_count) || 0,
+                scanTime: row.scan_time,
+                isValid: row.is_valid !== 0 && row.is_valid !== false,
+                hasTicket: !!row.ticket_id_string,
+                ticketPreviewUrl:
+                    row.ticket_id_string && row.user_id
+                        ? `${base}/api/doctor/ticket-document/${encodeURIComponent(row.ticket_id_string)}?userId=${encodeURIComponent(String(row.user_id))}`
+                        : null
+            }));
+            res.json({ success: true, results: list });
+        });
+    });
+});
+
+app.post('/api/admin/e-tickets/generate', (req, res) => {
+    const registrationId = parseInt((req.body && req.body.registrationId) || '', 10);
+    const actingAdminId = parseInt((req.body && req.body.actingAdminId) || '', 10);
+    if (!Number.isInteger(registrationId) || registrationId < 1) {
+        return res.status(400).json({ error: 'registrationId is required' });
+    }
+    assertAdminPortalActor(actingAdminId, (eAct) => {
+        if (eAct) return res.status(eAct.message === 'FORBIDDEN' ? 403 : 500).json({ error: 'Admin access required' });
+        db.get(
+            `SELECT r.id, s.price FROM registrations r JOIN seminars s ON s.id = r.seminar_id WHERE r.id = ?`,
+            [registrationId],
+            (eReg, reg) => {
+                if (eReg) return res.status(500).json({ error: eReg.message });
+                if (!reg) return res.status(404).json({ error: 'Registration not found' });
+                ensureParticipantTicketForRegistration(
+                    registrationId,
+                    { createOrderIfMissing: true, amount: Number(reg.price) || 0 },
+                    (err, out) => {
+                        if (err) return res.status(500).json({ error: err.message });
+                        if (out && out.skipped) {
+                            return res.status(400).json({
+                                error: 'Cannot issue e-ticket for a rejected or cancelled registration.'
+                            });
+                        }
+                        if (out && out.reason === 'no_order' && !out.ticketId) {
+                            return res.status(400).json({
+                                error: 'No successful payment order found. Use Payments → waive/issue or confirm payment first.'
+                            });
+                        }
+                        activityLog.logActivity(db, {
+                            user_id: actingAdminId,
+                            action: 'eticket.generate',
+                            resource_type: 'registration',
+                            resource_id: String(registrationId),
+                            meta: { ticketId: out && out.ticketId }
+                        });
+                        res.json({
+                            success: true,
+                            registrationId,
+                            ticketId: (out && out.ticketId) || null,
+                            orderIdString: (out && out.orderIdString) || null,
+                            message: out && out.ticketId ? 'E-ticket generated or refreshed.' : 'No ticket was created.'
+                        });
+                    }
+                );
+            }
+        );
+    });
+});
+
+app.post('/api/admin/e-tickets/send', (req, res) => {
+    const registrationId = parseInt((req.body && req.body.registrationId) || '', 10);
+    const ticketIdString = String((req.body && req.body.ticketIdString) || '').trim();
+    const sendEmail = !!(req.body && req.body.sendEmail);
+    const sendWhatsapp = !!(req.body && req.body.sendWhatsapp);
+    const actingAdminId = parseInt((req.body && req.body.actingAdminId) || '', 10);
+    if (!sendEmail && !sendWhatsapp) {
+        return res.status(400).json({ error: 'Select at least one channel: email or WhatsApp' });
+    }
+    if (!Number.isInteger(registrationId) || registrationId < 1) {
+        return res.status(400).json({ error: 'registrationId is required' });
+    }
+    assertAdminPortalActor(actingAdminId, (eAct) => {
+        if (eAct) return res.status(eAct.message === 'FORBIDDEN' ? 403 : 500).json({ error: 'Admin access required' });
+        const finishSend = (userId, regId, ticketId) => {
+            if (!ticketId) {
+                return res.status(400).json({ error: 'No e-ticket ID on file. Click Generate ticket first.' });
+            }
+            notifyTicketIssued(userId, regId, ticketId, { email: sendEmail, whatsapp: sendWhatsapp });
+            activityLog.logActivity(db, {
+                user_id: actingAdminId,
+                action: 'eticket.send',
+                resource_type: 'registration',
+                resource_id: String(regId),
+                meta: { ticketId, sendEmail, sendWhatsapp }
+            });
+            const parts = [];
+            if (sendEmail) parts.push('email');
+            if (sendWhatsapp) parts.push('WhatsApp');
+            res.json({
+                success: true,
+                message: 'E-ticket sent via ' + parts.join(' and ') + '.',
+                ticketId
+            });
+        };
+        if (ticketIdString) {
+            db.get(
+                `SELECT r.id AS registration_id, r.user_id, t.ticket_id_string
+                 FROM tickets t
+                 JOIN orders o ON o.id = t.order_id
+                 JOIN registrations r ON r.id = o.registration_id
+                 WHERE TRIM(t.ticket_id_string) = TRIM(?) AND r.id = ?`,
+                [ticketIdString, registrationId],
+                (e, row) => {
+                    if (e) return res.status(500).json({ error: e.message });
+                    if (!row) return res.status(404).json({ error: 'Ticket not found for this registration' });
+                    finishSend(row.user_id, row.registration_id, row.ticket_id_string);
+                }
+            );
+            return;
+        }
+        db.get(
+            `SELECT r.user_id, t.ticket_id_string
+             FROM registrations r
+             LEFT JOIN orders o ON o.registration_id = r.id AND LOWER(TRIM(o.status)) = 'success'
+             LEFT JOIN tickets t ON t.order_id = o.id
+             WHERE r.id = ?
+             ORDER BY t.id DESC
+             LIMIT 1`,
+            [registrationId],
+            (e, row) => {
+                if (e) return res.status(500).json({ error: e.message });
+                if (!row) return res.status(404).json({ error: 'Registration not found' });
+                finishSend(row.user_id, registrationId, row.ticket_id_string);
+            }
+        );
+    });
 });
 
 // Admin: Get All Support Tickets

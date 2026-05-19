@@ -703,6 +703,7 @@ const ADMIN_MODULE_TAB_DEFS = [
     ['tab-case-mgmt', 'Case management'],
     ['tab-analytics', 'Analytics'],
     ['tab-reports', 'Reports & exports'],
+    ['tab-etickets', 'E-tickets'],
     ['tab-scanner-logs', 'Scanner activity'],
     ['tab-activity-logs', 'User & doctor activity'],
     ['tab-notifications', 'Notifications'],
@@ -3260,6 +3261,199 @@ async function loadAdminScannerLogs() {
     } catch (e) {
         console.error(e);
         tbody.innerHTML = '<tr><td colspan="7">Error</td></tr>';
+    }
+}
+
+let __adminEticketSelection = null;
+
+function initAdminEticketsTab() {
+    const st = document.getElementById('eticket-lookup-status');
+    if (st) st.textContent = '';
+    const wrap = document.getElementById('eticket-results-wrap');
+    if (wrap) wrap.classList.add('hidden');
+    __adminEticketSelection = null;
+}
+
+function renderAdminEticketDetail(row) {
+    __adminEticketSelection = row;
+    const wrap = document.getElementById('eticket-results-wrap');
+    const panel = document.getElementById('eticket-detail-panel');
+    const preview = document.getElementById('eticket-preview-link');
+    const actSt = document.getElementById('eticket-action-status');
+    if (!wrap || !panel) return;
+    wrap.classList.remove('hidden');
+    if (actSt) actSt.textContent = '';
+    const pay = String(row.paymentStatus || '').toLowerCase() === 'success' ? 'Paid' : row.paymentStatus || '—';
+    panel.innerHTML =
+        '<p><strong>Doctor:</strong> ' +
+        escAdmin(row.doctorName) +
+        '<br><strong>Email:</strong> ' +
+        escAdmin(row.email) +
+        ' · <strong>Phone:</strong> ' +
+        escAdmin(row.phone) +
+        '</p>' +
+        '<p><strong>Seminar:</strong> ' +
+        escAdmin(row.seminarTitle) +
+        '<br><strong>Application:</strong> <code>' +
+        escAdmin(row.applicationNo) +
+        '</code> · <strong>Status:</strong> ' +
+        escAdmin(row.registrationStatus) +
+        '</p>' +
+        '<p><strong>Payment:</strong> ' +
+        escAdmin(pay) +
+        (row.orderIdString ? ' · Order <code>' + escAdmin(row.orderIdString) + '</code>' : '') +
+        '</p>' +
+        '<p><strong>E-ticket ID:</strong> ' +
+        (row.ticketIdString ? '<code>' + escAdmin(row.ticketIdString) + '</code>' : '<span style="color:#b45309;">Not generated yet</span>') +
+        '<br><strong>Scanned:</strong> ' +
+        (row.isScanned ? 'Yes' + (row.scanTime ? ' (' + escAdmin(row.scanTime) + ')' : '') : 'No') +
+        (row.scanCount > 0 ? ' · scans: ' + row.scanCount : '') +
+        '</p>';
+    if (preview) {
+        if (row.ticketPreviewUrl) {
+            preview.href = row.ticketPreviewUrl;
+            preview.classList.remove('hidden');
+        } else {
+            preview.href = '#';
+            preview.classList.add('hidden');
+        }
+    }
+}
+
+async function adminEticketLookup() {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return alert('Not logged in.');
+    const q = String((document.getElementById('eticket-search-q') || {}).value || '').trim();
+    const st = document.getElementById('eticket-lookup-status');
+    if (!q) return alert('Enter a ticket ID, application ID, email, or phone.');
+    if (st) {
+        st.style.color = '#64748b';
+        st.textContent = 'Searching…';
+    }
+    try {
+        const res = await fetch(
+            '/api/admin/e-tickets/lookup?q=' +
+                encodeURIComponent(q) +
+                '&actingAdminId=' +
+                encodeURIComponent(adm.id)
+        );
+        const data = await res.json();
+        if (!res.ok) {
+            if (st) {
+                st.style.color = '#b91c1c';
+                st.textContent = data.error || 'Lookup failed.';
+            }
+            document.getElementById('eticket-results-wrap')?.classList.add('hidden');
+            return;
+        }
+        const rows = data.results || [];
+        if (!rows.length) {
+            if (st) {
+                st.style.color = '#b45309';
+                st.textContent = 'No matching registration or ticket found.';
+            }
+            document.getElementById('eticket-results-wrap')?.classList.add('hidden');
+            return;
+        }
+        if (st) {
+            st.style.color = '#059669';
+            st.textContent = rows.length === 1 ? '1 match found.' : rows.length + ' matches — showing the latest.';
+        }
+        renderAdminEticketDetail(rows[0]);
+    } catch (e) {
+        console.error(e);
+        if (st) {
+            st.style.color = '#b91c1c';
+            st.textContent = 'Network error.';
+        }
+    }
+}
+
+async function adminEticketGenerate() {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return alert('Not logged in.');
+    const row = __adminEticketSelection;
+    if (!row || !row.registrationId) return alert('Look up a ticket first.');
+    const actSt = document.getElementById('eticket-action-status');
+    if (actSt) {
+        actSt.style.color = '#64748b';
+        actSt.textContent = 'Generating…';
+    }
+    try {
+        const res = await fetch('/api/admin/e-tickets/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ registrationId: row.registrationId, actingAdminId: adm.id })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            if (actSt) {
+                actSt.style.color = '#b91c1c';
+                actSt.textContent = data.error || 'Could not generate ticket.';
+            }
+            return;
+        }
+        if (actSt) {
+            actSt.style.color = '#059669';
+            actSt.textContent = data.message || 'Ticket ready.';
+        }
+        const q = row.ticketIdString || row.applicationNo || row.email || '';
+        if (q) {
+            document.getElementById('eticket-search-q').value = data.ticketId || q;
+            await adminEticketLookup();
+        }
+    } catch (e) {
+        console.error(e);
+        if (actSt) {
+            actSt.style.color = '#b91c1c';
+            actSt.textContent = 'Network error.';
+        }
+    }
+}
+
+async function adminEticketSend(sendEmail, sendWhatsapp) {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return alert('Not logged in.');
+    const row = __adminEticketSelection;
+    if (!row || !row.registrationId) return alert('Look up a ticket first.');
+    if (!row.ticketIdString) {
+        return alert('No e-ticket on file. Click Generate / refresh ticket first.');
+    }
+    const actSt = document.getElementById('eticket-action-status');
+    if (actSt) {
+        actSt.style.color = '#64748b';
+        actSt.textContent = 'Sending…';
+    }
+    try {
+        const res = await fetch('/api/admin/e-tickets/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                registrationId: row.registrationId,
+                ticketIdString: row.ticketIdString,
+                sendEmail: !!sendEmail,
+                sendWhatsapp: !!sendWhatsapp,
+                actingAdminId: adm.id
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            if (actSt) {
+                actSt.style.color = '#b91c1c';
+                actSt.textContent = data.error || 'Send failed.';
+            }
+            return;
+        }
+        if (actSt) {
+            actSt.style.color = '#059669';
+            actSt.textContent = data.message || 'Sent.';
+        }
+    } catch (e) {
+        console.error(e);
+        if (actSt) {
+            actSt.style.color = '#b91c1c';
+            actSt.textContent = 'Network error.';
+        }
     }
 }
 

@@ -118,6 +118,7 @@
                 <a class="menu-item" data-admin-module="tab-case-mgmt" onclick="switchTab('tab-case-mgmt'); initAdminCaseMgmtTab();"><i class="fas fa-briefcase-medical"></i> Case Management</a>
                 <a class="menu-item" data-admin-module="tab-analytics" onclick="switchTab('tab-analytics'); initAdminAnalyticsTab();"><i class="fas fa-chart-pie"></i> Analytics</a>
                 <a class="menu-item" data-admin-module="tab-reports" onclick="switchTab('tab-reports'); initAdminReportsTab();"><i class="fas fa-file-export"></i> Reports &amp; Exports</a>
+                <a class="menu-item" data-admin-module="tab-etickets" onclick="switchTab('tab-etickets'); initAdminEticketsTab();"><i class="fas fa-ticket-alt"></i> E-tickets</a>
                 <a class="menu-item" data-admin-module="tab-scanner-logs" onclick="switchTab('tab-scanner-logs'); initAdminScannerLogsTab();"><i class="fas fa-qrcode"></i> Scanner Activity</a>
                 <a class="menu-item" data-admin-module="tab-activity-logs" onclick="switchTab('tab-activity-logs'); initAdminActivityLogsTab();"><i class="fas fa-history"></i> User &amp; doctor activity</a>
                 <a class="menu-item" data-admin-module="tab-notifications" onclick="switchTab('tab-notifications'); initAdminNotificationsTab();"><i class="fas fa-bell"></i> Notifications</a>
@@ -1007,6 +1008,36 @@
                         <thead><tr><th>Time (IST)</th><th>User</th><th>Role</th><th>Action</th><th>Resource</th><th>Details</th><th>IP</th></tr></thead>
                         <tbody id="activity-logs-list"><tr><td colspan="7" style="text-align:center;">Loading…</td></tr></tbody>
                     </table>
+                </div>
+            </div>
+
+            <!-- E-tickets: lookup, generate, send -->
+            <div id="tab-etickets" class="tab-pane hidden">
+                <h2 style="margin-bottom: 12px;">E-tickets</h2>
+                <p style="color:#64748b;margin-bottom:18px;max-width:900px;">Look up a doctor’s e-ticket by <strong>12-digit ticket ID</strong>, <strong>application ID</strong>, <strong>email</strong>, or <strong>phone</strong>. Generate if missing, preview the printable ticket, then send via email and/or WhatsApp.</p>
+                <div class="card" style="margin-bottom:16px;">
+                    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;">
+                        <div style="flex:1;min-width:220px;">
+                            <label>Search</label>
+                            <input type="text" id="eticket-search-q" placeholder="Ticket ID, application ID, email, or phone" style="width:100%;">
+                        </div>
+                        <button type="button" class="btn-primary" onclick="adminEticketLookup()"><i class="fas fa-search"></i> Look up</button>
+                    </div>
+                    <p id="eticket-lookup-status" style="margin-top:10px;font-size:0.88rem;color:#64748b;"></p>
+                </div>
+                <div id="eticket-results-wrap" class="hidden">
+                    <div class="card">
+                        <h3 style="margin:0 0 12px;color:#1a237e;">Ticket details</h3>
+                        <div id="eticket-detail-panel" style="font-size:0.9rem;line-height:1.6;"></div>
+                        <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:16px;">
+                            <button type="button" class="btn-primary" style="background:#15803d;" onclick="adminEticketGenerate()">Generate / refresh ticket</button>
+                            <button type="button" class="btn-primary" onclick="adminEticketSend(true, false)">Send email</button>
+                            <button type="button" class="btn-primary" style="background:#0d9488;" onclick="adminEticketSend(false, true)">Send WhatsApp</button>
+                            <button type="button" class="btn-primary" style="background:#7c3aed;" onclick="adminEticketSend(true, true)">Send both</button>
+                            <a id="eticket-preview-link" class="btn-primary" style="background:#64748b;text-decoration:none;display:inline-flex;align-items:center;" href="#" target="_blank" rel="noopener">Preview ticket</a>
+                        </div>
+                        <p id="eticket-action-status" style="margin-top:12px;font-weight:600;font-size:0.88rem;"></p>
+                    </div>
                 </div>
             </div>
 
