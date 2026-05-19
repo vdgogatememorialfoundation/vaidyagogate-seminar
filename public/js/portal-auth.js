@@ -170,6 +170,16 @@
         const verifyBtnEmail = document.getElementById(prefix + '-verify-otp-email');
         const verifyBtnPhone = document.getElementById(prefix + '-verify-otp-phone');
 
+        function validatedLoginEmail() {
+            const raw = String((document.getElementById(opts.emailInputId) || {}).value || '').trim();
+            if (typeof validateEmailClient === 'function') {
+                return validateEmailClient(raw, 'Email');
+            }
+            return raw
+                ? { valid: true, cleanedEmail: raw.toLowerCase() }
+                : { valid: false, message: 'Enter your email first.' };
+        }
+
         async function precheckEmail(email) {
             const res = await fetch('/api/auth/login-otp/precheck', {
                 method: 'POST',
@@ -180,11 +190,10 @@
         }
 
         async function sendOtp(channel) {
-            const email = String((document.getElementById(opts.emailInputId) || {}).value || '')
-                .trim()
-                .toLowerCase();
+            const ev = validatedLoginEmail();
+            if (!ev.valid) return alert(ev.message);
+            const email = ev.cleanedEmail;
             const password = (document.getElementById(opts.passwordInputId) || {}).value;
-            if (!email) return alert('Enter your email first.');
             const pc = await precheckEmail(email);
             if (pc.needsSignup) {
                 return alert(pc.message || 'No account with this email. Please create an account first.');
@@ -207,11 +216,10 @@
         }
 
         async function sendBothOtps() {
-            const email = String((document.getElementById(opts.emailInputId) || {}).value || '')
-                .trim()
-                .toLowerCase();
+            const ev = validatedLoginEmail();
+            if (!ev.valid) return alert(ev.message);
+            const email = ev.cleanedEmail;
             const password = (document.getElementById(opts.passwordInputId) || {}).value;
-            if (!email) return alert('Enter your email first.');
             const pc = await precheckEmail(email);
             if (pc.needsSignup) {
                 return alert(pc.message || 'No account with this email. Please create an account first.');
@@ -228,9 +236,9 @@
         }
 
         async function verifyOtp(channel) {
-            const email = String((document.getElementById(opts.emailInputId) || {}).value || '')
-                .trim()
-                .toLowerCase();
+            const ev = validatedLoginEmail();
+            if (!ev.valid) return alert(ev.message);
+            const email = ev.cleanedEmail;
             const password = (document.getElementById(opts.passwordInputId) || {}).value;
             const codeEl = document.getElementById(
                 channel === 'email' ? prefix + '-email-otp' : prefix + '-phone-otp'
@@ -263,9 +271,9 @@
 
         form.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const email = String((document.getElementById(opts.emailInputId) || {}).value || '')
-                .trim()
-                .toLowerCase();
+            const ev = validatedLoginEmail();
+            if (!ev.valid) return alert(ev.message);
+            const email = ev.cleanedEmail;
             const password = (document.getElementById(opts.passwordInputId) || {}).value;
             const body = { email, password, portal: portal === 'doctor' ? 'doctor' : portal };
             if (otpPanel && otpPanel.style.display === 'block') {

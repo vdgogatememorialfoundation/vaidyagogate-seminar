@@ -498,7 +498,13 @@
         }
         async function handleForgotPassword(e) {
             e.preventDefault();
-            const email = String((document.getElementById('forgot_email') || {}).value || '').trim().toLowerCase();
+            const emailRaw = String((document.getElementById('forgot_email') || {}).value || '').trim();
+            let email = emailRaw.toLowerCase();
+            if (typeof validateEmailClient === 'function') {
+                const ev = validateEmailClient(emailRaw, 'Email');
+                if (!ev.valid) return alert(ev.message);
+                email = ev.cleanedEmail;
+            }
             const st = document.getElementById('forgot_status');
             if (st) { st.textContent = 'Sending…'; }
             try {
@@ -538,9 +544,18 @@
             }
         }
 
+        function loginEmailValidated() {
+            const raw = String((document.getElementById('login_email') || {}).value || '').trim();
+            if (typeof validateEmailClient !== 'function') {
+                return raw ? { valid: true, cleanedEmail: raw.toLowerCase() } : { valid: false, message: 'Enter your email first.' };
+            }
+            return validateEmailClient(raw, 'Email');
+        }
+
         async function precheckLoginEmail() {
-            const email = String((document.getElementById('login_email') || {}).value || '').trim().toLowerCase();
-            if (!email) return { ok: false, message: 'Enter your email first.' };
+            const ev = loginEmailValidated();
+            if (!ev.valid) return { ok: false, message: ev.message };
+            const email = ev.cleanedEmail;
             const res = await fetch('/api/auth/login-otp/precheck', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -550,9 +565,10 @@
         }
 
         async function sendLoginOtp(channel) {
-            const email = String((document.getElementById('login_email') || {}).value || '').trim().toLowerCase();
+            const ev = loginEmailValidated();
+            if (!ev.valid) return alert(ev.message);
+            const email = ev.cleanedEmail;
             const password = (document.getElementById('login_password') || {}).value;
-            if (!email) return alert('Enter your email first.');
             try {
                 const pc = await precheckLoginEmail();
                 if (pc.needsSignup) return alert(pc.message || 'No account found.');
@@ -579,9 +595,10 @@
         }
 
         async function sendLoginOtpBoth() {
-            const email = String((document.getElementById('login_email') || {}).value || '').trim().toLowerCase();
+            const ev = loginEmailValidated();
+            if (!ev.valid) return alert(ev.message);
+            const email = ev.cleanedEmail;
             const password = (document.getElementById('login_password') || {}).value;
-            if (!email) return alert('Enter your email first.');
             try {
                 const pc = await precheckLoginEmail();
                 if (pc.needsSignup) {
@@ -605,7 +622,9 @@
         }
 
         async function verifyLoginOtp(channel) {
-            const email = String((document.getElementById('login_email') || {}).value || '').trim().toLowerCase();
+            const ev = loginEmailValidated();
+            if (!ev.valid) return alert(ev.message);
+            const email = ev.cleanedEmail;
             const password = (document.getElementById('login_password') || {}).value;
             const codeEl = document.getElementById(channel === 'email' ? 'login_email_otp' : 'login_phone_otp');
             const okEl = document.getElementById(channel === 'email' ? 'login_email_otp_ok' : 'login_phone_otp_ok');
@@ -665,6 +684,11 @@
                 channel === 'email'
                     ? String((document.getElementById('signup_email') || {}).value || '').trim()
                     : String((document.getElementById('signup_phone') || {}).value || '').trim();
+            if (typeof validateOtpDestinationClient === 'function') {
+                const v = validateOtpDestinationClient(channel, raw, channel === 'email' ? 'Email' : 'Phone');
+                if (!v.valid) return '';
+                return channel === 'email' ? v.cleanedEmail : v.cleanedPhone;
+            }
             if (channel === 'email') return raw.toLowerCase();
             const digits = raw.replace(/\D/g, '');
             if (digits.length >= 10) return digits.slice(-10);
@@ -672,6 +696,14 @@
         }
 
         async function sendSignupOtp(channel) {
+            const raw =
+                channel === 'email'
+                    ? String((document.getElementById('signup_email') || {}).value || '').trim()
+                    : String((document.getElementById('signup_phone') || {}).value || '').trim();
+            if (typeof validateOtpDestinationClient === 'function') {
+                const v = validateOtpDestinationClient(channel, raw, channel === 'email' ? 'Email' : 'Phone');
+                if (!v.valid) return alert(v.message);
+            }
             const dest = signupOtpDestination(channel);
             if (!dest) {
                 alert(channel === 'email' ? 'Enter your email first.' : 'Enter your phone first.');
@@ -938,6 +970,22 @@
                     subject: document.getElementById('contact_subject').value.trim(),
                     message: document.getElementById('contact_message').value.trim()
                 };
+                if (typeof validateEmailClient === 'function') {
+                    const ev = validateEmailClient(payload.email, 'Email');
+                    if (!ev.valid) {
+                        if (statusEl) statusEl.textContent = '';
+                        return alert(ev.message);
+                    }
+                    payload.email = ev.cleanedEmail;
+                }
+                if (payload.phone && typeof validatePhoneClient === 'function') {
+                    const pv = validatePhoneClient(payload.phone, 'Phone', { required: false });
+                    if (!pv.valid) {
+                        if (statusEl) statusEl.textContent = '';
+                        return alert(pv.message);
+                    }
+                    payload.phone = pv.cleanedPhone;
+                }
                 if (statusEl) statusEl.textContent = 'Sending…';
                 try {
                     const res = await fetch('/api/public/contact-inquiry', {
@@ -1061,7 +1109,9 @@
 
         async function handleLogin(e) {
             e.preventDefault();
-            const email = String(document.getElementById('login_email').value || '').trim().toLowerCase();
+            const ev = loginEmailValidated();
+            if (!ev.valid) return alert(ev.message);
+            const email = ev.cleanedEmail;
             const password = document.getElementById('login_password').value;
             const body = { email, password };
             const lo = document.getElementById('login_otp_panel');
@@ -1136,8 +1186,20 @@
                 const ln = validatePersonNameClient(lastName, 'Last name');
                 if (!ln.valid) return alert(ln.message);
             }
-            const email = String(document.getElementById('signup_email').value || '').trim().toLowerCase();
-            const phone = String(document.getElementById('signup_phone').value || '').trim();
+            const emailRaw = String(document.getElementById('signup_email').value || '').trim();
+            const phoneRaw = String(document.getElementById('signup_phone').value || '').trim();
+            let email = emailRaw.toLowerCase();
+            let phone = phoneRaw;
+            if (typeof validateEmailClient === 'function') {
+                const ev = validateEmailClient(emailRaw, 'Email');
+                if (!ev.valid) return alert(ev.message);
+                email = ev.cleanedEmail;
+            }
+            if (typeof validatePhoneClient === 'function') {
+                const pv = validatePhoneClient(phoneRaw, 'Phone');
+                if (!pv.valid) return alert(pv.message);
+                phone = pv.cleanedPhone;
+            }
             const password = document.getElementById('signup_password').value;
 
             const body = { firstName, lastName, email, phone, password, role: 'doctor' };
@@ -1507,5 +1569,6 @@
     </script>
     <script src="/js/site-branding.js"></script>
     <script src="/js/name-validation.js"></script>
+    <script src="/js/contact-validation.js"></script>
 </body>
 </html>

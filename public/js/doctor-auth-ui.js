@@ -46,21 +46,35 @@
     }
 
     function signupOtpDest(channel) {
-        if (channel === 'email') {
-            return String((document.getElementById('doctor-signup-email') || {}).value || '')
-                .trim()
-                .toLowerCase();
+        const raw =
+            channel === 'email'
+                ? String((document.getElementById('doctor-signup-email') || {}).value || '').trim()
+                : String((document.getElementById('doctor-signup-phone') || {}).value || '').trim();
+        if (typeof validateOtpDestinationClient === 'function') {
+            const v = validateOtpDestinationClient(channel, raw, channel === 'email' ? 'Email' : 'Phone');
+            if (!v.valid) return '';
+            return channel === 'email' ? v.cleanedEmail : v.cleanedPhone;
         }
-        return String((document.getElementById('doctor-signup-phone') || {}).value || '').trim();
+        if (channel === 'email') return raw.toLowerCase();
+        const digits = raw.replace(/\D/g, '');
+        return digits.length >= 10 ? digits.slice(-10) : digits;
     }
 
     async function sendSignupOtp(channel) {
+        const raw =
+            channel === 'email'
+                ? String((document.getElementById('doctor-signup-email') || {}).value || '').trim()
+                : String((document.getElementById('doctor-signup-phone') || {}).value || '').trim();
+        if (typeof validateOtpDestinationClient === 'function') {
+            const v = validateOtpDestinationClient(channel, raw, channel === 'email' ? 'Email' : 'Phone');
+            if (!v.valid) return alert(v.message);
+        }
         const dest = signupOtpDest(channel);
         if (!dest) return alert(channel === 'email' ? 'Enter email first.' : 'Enter phone first.');
-        const res = await fetch('/api/auth/signup-otp/send', {
+        const res = await fetch('/api/otp/send', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ channel, destination: dest })
+            body: JSON.stringify({ channel, destination: dest, purpose: 'signup' })
         });
         const data = await res.json();
         if (!res.ok) return alert(data.error || 'Could not send code.');
@@ -78,10 +92,10 @@
         );
         const code = String((codeEl || {}).value || '').trim();
         if (!dest || !code) return alert('Enter contact and code.');
-        const res = await fetch('/api/auth/signup-otp/verify', {
+        const res = await fetch('/api/otp/verify', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ channel, destination: dest, code })
+            body: JSON.stringify({ channel, destination: dest, code, purpose: 'signup' })
         });
         const data = await res.json();
         if (!res.ok) return alert(data.error || 'Invalid code.');
@@ -115,10 +129,20 @@
         e.preventDefault();
         const firstName = String((document.getElementById('doctor-signup-firstname') || {}).value || '').trim();
         const lastName = String((document.getElementById('doctor-signup-lastname') || {}).value || '').trim();
-        const email = String((document.getElementById('doctor-signup-email') || {}).value || '')
-            .trim()
-            .toLowerCase();
-        const phone = String((document.getElementById('doctor-signup-phone') || {}).value || '').trim();
+        const emailRaw = String((document.getElementById('doctor-signup-email') || {}).value || '').trim();
+        const phoneRaw = String((document.getElementById('doctor-signup-phone') || {}).value || '').trim();
+        let email = emailRaw.toLowerCase();
+        let phone = phoneRaw;
+        if (typeof validateEmailClient === 'function') {
+            const ev = validateEmailClient(emailRaw, 'Email');
+            if (!ev.valid) return alert(ev.message);
+            email = ev.cleanedEmail;
+        }
+        if (typeof validatePhoneClient === 'function') {
+            const pv = validatePhoneClient(phoneRaw, 'Phone');
+            if (!pv.valid) return alert(pv.message);
+            phone = pv.cleanedPhone;
+        }
         const password = (document.getElementById('doctor-signup-password') || {}).value;
         const errEl = document.getElementById('doctor-signup-err');
 

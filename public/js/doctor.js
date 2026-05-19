@@ -486,9 +486,9 @@ const DEFAULT_REGISTRATION_FALLBACK_FIELDS = [
     { key: 'phone', label: 'Phone', type: 'tel', step: 1, enabled: true, required: true, verifyOtp: true },
     { key: 'address', label: 'Address', type: 'textarea', step: 2, enabled: true, required: true },
     { key: 'pin', label: 'Pincode', type: 'text', step: 2, enabled: true, required: true },
-    { key: 'city', label: 'City', type: 'text', step: 2, enabled: true, required: true },
-    { key: 'state', label: 'State', type: 'text', step: 2, enabled: true, required: true },
-    { key: 'country', label: 'Country', type: 'text', step: 2, enabled: true, required: true },
+    { key: 'city', label: 'City', type: 'select', step: 2, enabled: true, required: true },
+    { key: 'state', label: 'State', type: 'select', step: 2, enabled: true, required: true },
+    { key: 'country', label: 'Country', type: 'select', step: 2, enabled: true, required: true },
     {
         key: 'qual',
         label: 'Qualification',
@@ -578,16 +578,32 @@ function registrationOtpDestination(fieldKey) {
         fieldKey === 'email'
             ? String((document.getElementById('reg-email') || {}).value || '').trim()
             : String((document.getElementById('reg-phone') || {}).value || '').trim();
-    if (fieldKey === 'email') return raw.toLowerCase();
-    const digits = raw.replace(/\D/g, '');
-    if (digits.length >= 10) return digits.slice(-10);
-    return digits;
+    if (fieldKey === 'email') {
+        if (typeof validateEmailClient !== 'function') return raw.toLowerCase();
+        const ev = validateEmailClient(raw, 'Email');
+        return ev.valid ? ev.cleanedEmail : '';
+    }
+    if (typeof validatePhoneClient !== 'function') {
+        const digits = raw.replace(/\D/g, '');
+        return digits.length >= 10 ? digits.slice(-10) : digits;
+    }
+    const pv = validatePhoneClient(raw, 'Phone');
+    return pv.valid ? pv.cleanedPhone : '';
 }
 
 async function sendRegistrationOtpForField(fieldKey) {
     const sid = activeSeminarIdForReg;
     if (sid == null) return alert('Seminar not selected.');
     const channel = fieldKey === 'email' ? 'email' : 'phone';
+    const raw =
+        fieldKey === 'email'
+            ? String((document.getElementById('reg-email') || {}).value || '').trim()
+            : String((document.getElementById('reg-phone') || {}).value || '').trim();
+    const destCheck =
+        typeof validateOtpDestinationClient === 'function'
+            ? validateOtpDestinationClient(channel, raw, fieldKey === 'email' ? 'Email' : 'Phone')
+            : { valid: !!raw };
+    if (!destCheck.valid) return alert(destCheck.message);
     const dest = registrationOtpDestination(fieldKey);
     if (!dest) return alert(channel === 'email' ? 'Enter your email first.' : 'Enter your phone first.');
     const purpose = window.__otpOnStep1 ? 'registration' : 'registration_field';
@@ -684,6 +700,14 @@ async function sendRegistrationSubmitOtpForField(fieldKey) {
     const sid = activeSeminarIdForReg;
     if (sid == null) return alert('Seminar not selected.');
     const channel = fieldKey === 'email' ? 'email' : 'phone';
+    const raw =
+        fieldKey === 'email'
+            ? String((document.getElementById('reg-email') || {}).value || '').trim()
+            : String((document.getElementById('reg-phone') || {}).value || '').trim();
+    if (typeof validateOtpDestinationClient === 'function') {
+        const destCheck = validateOtpDestinationClient(channel, raw, fieldKey === 'email' ? 'Email' : 'Phone');
+        if (!destCheck.valid) return alert(destCheck.message);
+    }
     const dest = registrationOtpDestination(fieldKey);
     if (!dest) return alert(channel === 'email' ? 'Enter your email first.' : 'Enter your phone first.');
     const body = { channel, destination: dest, purpose: 'registration_submit', seminarId: sid };
@@ -801,10 +825,20 @@ function validateRegistrationAgainstConfigForSteps(upToStepInclusive) {
             if (v === undefined || v === null || String(v).trim() === '') {
                 return `Please complete: ${f.label || f.key}`;
             }
-            if (f.key === 'phone' || f.key === 'whatsapp') {
-                const digits = String(v).replace(/\D/g, '');
-                if (digits.length < 10) {
-                    return `Enter a valid ${f.label || f.key} (at least 10 digits)`;
+            if (f.key === 'email' || (f.type || '').toLowerCase() === 'email') {
+                if (typeof validateEmailClient === 'function') {
+                    const ev = validateEmailClient(v, f.label || 'Email');
+                    if (!ev.valid) return ev.message;
+                }
+            }
+            if (f.key === 'phone' || f.key === 'whatsapp' || (f.type || '').toLowerCase() === 'tel') {
+                if (typeof validatePhoneClient === 'function') {
+                    const pv = validatePhoneClient(
+                        v,
+                        f.label || (f.key === 'whatsapp' ? 'WhatsApp' : 'Phone'),
+                        { required: f.required !== false }
+                    );
+                    if (!pv.valid) return pv.message;
                 }
             }
             const t = (f.type || 'text').toLowerCase();
@@ -920,6 +954,7 @@ async function loadRegistrationFormConfigAndApply(seminarIdOpt) {
         }
     });
     refreshRegistrationRequiredAttributes();
+    await initRegistrationAddressUi();
 }
 
 function syncRegistrationOtpUi() {
@@ -1636,6 +1671,21 @@ async function submitCasePresentation() {
         const ne = validateRegistrationNamesClient(form);
         if (ne) return alert(ne);
     }
+    if (typeof validateEmailClient === 'function' && String(form.email || '').trim()) {
+        const ev = validateEmailClient(form.email, 'Email');
+        if (!ev.valid) return alert(ev.message);
+        form.email = ev.cleanedEmail;
+    }
+    if (typeof validatePhoneClient === 'function' && String(form.phone || '').trim()) {
+        const pv = validatePhoneClient(form.phone, 'Phone');
+        if (!pv.valid) return alert(pv.message);
+        form.phone = pv.cleanedPhone;
+    }
+    if (typeof validatePhoneClient === 'function' && String(form.whatsapp || '').trim()) {
+        const wv = validatePhoneClient(form.whatsapp, 'WhatsApp');
+        if (!wv.valid) return alert(wv.message);
+        form.whatsapp = wv.cleanedPhone;
+    }
     const fileInput = document.getElementById('case-files');
     const maxFiles = (activeCaseProgram && activeCaseProgram.maxFilesPerSubmission) || 5;
     const maxMb = (activeCaseProgram && activeCaseProgram.maxFileSizeMb) || 50;
@@ -2183,13 +2233,107 @@ function downloadPdf() {
     }
 }
 
-function autofillAddress() {
-    const pin = document.getElementById('reg-pin').value;
-    if(pin.length === 6) {
-        // Mock Pincode API
-        document.getElementById('reg-city').value = 'Pune';
-        document.getElementById('reg-state').value = 'Maharashtra';
-        document.getElementById('reg-country').value = 'India';
+let __regPinLookupTimer = null;
+
+function fillRegSelectOptions(sel, options, placeholder) {
+    if (!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = '';
+    const opt0 = document.createElement('option');
+    opt0.value = '';
+    opt0.textContent = placeholder || 'Select';
+    sel.appendChild(opt0);
+    for (const v of options || []) {
+        const o = document.createElement('option');
+        o.value = v;
+        o.textContent = v;
+        sel.appendChild(o);
+    }
+    if (prev && (options || []).includes(prev)) sel.value = prev;
+    else if ((options || []).length === 1) sel.value = options[0];
+}
+
+function setRegPinHint(msg, isError) {
+    const el = document.getElementById('reg-pin-hint');
+    if (!el) return;
+    el.textContent = msg || '';
+    el.classList.toggle('hidden', !msg);
+    el.style.color = isError ? '#b91c1c' : '#64748b';
+}
+
+function clearPinDerivedAddress() {
+    fillRegSelectOptions(document.getElementById('reg-city'), [], 'Select city');
+    fillRegSelectOptions(document.getElementById('reg-state'), [], 'Select state');
+    setRegPinHint('');
+}
+
+function onRegPinInput() {
+    const pinEl = document.getElementById('reg-pin');
+    if (!pinEl) return;
+    const pin = String(pinEl.value || '').replace(/\D/g, '').slice(0, 6);
+    if (pinEl.value !== pin) pinEl.value = pin;
+    clearTimeout(__regPinLookupTimer);
+    if (pin.length === 6) {
+        __regPinLookupTimer = setTimeout(() => autofillAddress(), 400);
+    } else if (pin.length < 6) {
+        clearPinDerivedAddress();
+    }
+}
+
+async function populateRegistrationCountrySelect() {
+    const sel = document.getElementById('reg-country');
+    if (!sel || sel.dataset.populated === '1') return;
+    try {
+        const r = await fetch('/api/public/countries');
+        const data = await r.json();
+        const list = (data && data.countries) || [];
+        fillRegSelectOptions(sel, list, 'Select country');
+        if (list.includes('India')) sel.value = 'India';
+        sel.dataset.populated = '1';
+    } catch (e) {
+        console.warn('[countries]', e);
+    }
+}
+
+async function initRegistrationAddressUi() {
+    await populateRegistrationCountrySelect();
+    const pinEl = document.getElementById('reg-pin');
+    if (pinEl && pinEl.dataset.bound !== '1') {
+        pinEl.dataset.bound = '1';
+        pinEl.addEventListener('input', onRegPinInput);
+    }
+}
+
+async function autofillAddress() {
+    const pinEl = document.getElementById('reg-pin');
+    if (!pinEl) return;
+    const pin = String(pinEl.value || '').replace(/\D/g, '');
+    if (pin.length !== 6) {
+        if (pin.length) setRegPinHint('Enter a valid 6-digit PIN code', true);
+        return;
+    }
+    setRegPinHint('Looking up PIN…');
+    try {
+        const r = await fetch(`/api/public/pincode-lookup?pin=${encodeURIComponent(pin)}`);
+        const data = await r.json();
+        if (!data || !data.ok) {
+            setRegPinHint((data && data.error) || 'PIN not found', true);
+            clearPinDerivedAddress();
+            return;
+        }
+        fillRegSelectOptions(document.getElementById('reg-city'), data.cities || [], 'Select city');
+        fillRegSelectOptions(document.getElementById('reg-state'), data.states || [], 'Select state');
+        const countrySel = document.getElementById('reg-country');
+        const country = data.country || 'India';
+        if (countrySel && country && [...countrySel.options].some((o) => o.value === country)) {
+            countrySel.value = country;
+        }
+        const cities = data.cities || [];
+        setRegPinHint(
+            cities.length > 1 ? 'Multiple areas for this PIN — choose city' : 'City and state filled from PIN'
+        );
+    } catch (e) {
+        setRegPinHint('Could not look up PIN. Try again.', true);
     }
 }
 
@@ -3729,3 +3873,10 @@ async function updateApplication() {
     }
 }
 
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        initRegistrationAddressUi();
+    });
+} else {
+    initRegistrationAddressUi();
+}

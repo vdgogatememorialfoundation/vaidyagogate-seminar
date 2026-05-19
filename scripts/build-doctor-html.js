@@ -221,11 +221,12 @@ ${styleExtra}
                         <div id="step-2" class="form-step hidden">
                             <motion class="form-group"><label>Address</label><textarea id="reg-addr" rows="2"></textarea></div>
                             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
-                                <div class="form-group"><label>PIN code</label><input type="text" id="reg-pin" onblur="autofillAddress()"></div>
-                                <div class="form-group"><label>City</label><input type="text" id="reg-city"></div>
-                                <div class="form-group"><label>State</label><input type="text" id="reg-state"></div>
+                                <div class="form-group"><label>PIN code</label><input type="text" id="reg-pin" inputmode="numeric" maxlength="6" placeholder="6-digit PIN" onblur="autofillAddress()"></motion>
+                                <div class="form-group"><label>City</label><select id="reg-city"><option value="">Select city</option></select></div>
+                                <div class="form-group"><label>State</label><select id="reg-state"><option value="">Select state</option></select></div>
                             </div>
-                            <div class="form-group"><label>Country</label><input type="text" id="reg-country" value="India"></div>
+                            <p id="reg-pin-hint" class="hidden" style="font-size:0.85rem;color:#64748b;margin:-4px 0 8px;"></p>
+                            <div class="form-group"><label>Country</label><select id="reg-country"><option value="">Select country</option></select></div>
                             <button type="button" class="btn-primary" onclick="nextStep(3)">Next</button>
                             <button type="button" class="btn-primary" style="background:#64748b;margin-left:8px;" onclick="nextStep(1)">Back</button>
                         </div>

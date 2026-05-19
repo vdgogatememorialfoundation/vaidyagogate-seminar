@@ -18,6 +18,8 @@ const portalUrls = require('./lib/portal-urls');
 const { subdomainPortalMiddleware } = require('./lib/subdomain-portal');
 const otpLib = require('./lib/otp');
 const portalAuthPolicy = require('./lib/portal-auth-policy');
+const pincodeLookup = require('./lib/pincode-lookup');
+const countriesList = require('./lib/countries');
 const designatedNotify = require('./lib/designated-notify');
 const ticketHtml = require('./lib/ticket-html');
 const {
@@ -29,6 +31,7 @@ const {
 const paymentGatewayOptions = require('./lib/payment-gateway-options');
 const { ensureBootstrapAdmin } = require('./lib/ensure-bootstrap-admin');
 const { validatePersonName, validateRegistrationPersonNames } = require('./lib/name-validation');
+const contactValidation = require('./lib/contact-validation');
 const refundLib = require('./lib/refunds');
 const branding = require('./lib/branding');
 const extModules = require('./lib/extended-modules');
@@ -366,6 +369,19 @@ app.get('/api/public/portal-auth', (req, res) => {
         if (e) console.warn('[portal-auth-policy]', e.message);
         res.json(portalAuthPolicy.publicPortalAuthPayload());
     });
+});
+
+app.get('/api/public/countries', (req, res) => {
+    res.json({ countries: countriesList.getCountries() });
+});
+
+app.get('/api/public/pincode-lookup', async (req, res) => {
+    try {
+        const result = await pincodeLookup.lookupPincode(req.query.pin);
+        res.json(result);
+    } catch (e) {
+        res.status(500).json({ ok: false, error: 'PIN lookup failed' });
+    }
 });
 
 const uploadsDir = path.join(__dirname, 'public', 'uploads');
@@ -1227,6 +1243,8 @@ function persistScrollingAnnouncementsSanitizeIfNeeded(callback) {
 function validateFormDataAgainstRegistrationConfig(formData, hasCertificateFile, fields, qualOverride) {
     const nameErr = validateRegistrationPersonNames(formData);
     if (nameErr) return nameErr;
+    const contactErr = contactValidation.validateFormContactFields(formData, fields);
+    if (contactErr) return contactErr;
     return validateDynamicForm(formData, hasCertificateFile, fields, qualOverride);
 }
 
@@ -2328,9 +2346,11 @@ app.get('/api/auth/login-otp-required', withIntegrationSettingsLoaded, (req, res
 
 /** Signup/login: detect existing account (optional password match → suggest login). */
 app.post('/api/auth/account-check', (req, res) => {
-    const emailNorm = authUsers.normalizeEmail((req.body && req.body.email) || '');
+    const emailNormRaw = authUsers.normalizeEmail((req.body && req.body.email) || '');
     const password = req.body && req.body.password != null ? String(req.body.password) : '';
-    if (!emailNorm) return res.status(400).json({ error: 'Email is required' });
+    const acEmailV = contactValidation.validateEmail(emailNormRaw);
+    if (!acEmailV.valid) return res.status(400).json({ error: acEmailV.message });
+    const emailNorm = acEmailV.cleanedEmail;
     authUsers.findUserByEmail(db, emailNorm, (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!row) {
@@ -2355,14 +2375,9 @@ app.post('/api/auth/account-check', (req, res) => {
 });
 
 app.get('/api/auth/email-available', (req, res) => {
-    const email = String((req.query && req.query.email) || '')
-        .trim()
-        .toLowerCase();
-    if (!email) return res.status(400).json({ error: 'Email is required' });
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-        return res.status(400).json({ error: 'Enter a valid email address' });
-    }
-    const emailNorm = authUsers.normalizeEmail(email);
+    const emailAvailV = contactValidation.validateEmail((req.query && req.query.email) || '');
+    if (!emailAvailV.valid) return res.status(400).json({ error: emailAvailV.message });
+    const emailNorm = emailAvailV.cleanedEmail;
     db.get(`SELECT id FROM users WHERE ${authUsers.sqlEmailMatches('email')}`, [emailNorm], (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ available: !row });
@@ -2371,8 +2386,9 @@ app.get('/api/auth/email-available', (req, res) => {
 
 /** Check whether an email is registered before login OTP (no password). */
 app.post('/api/auth/login-otp/precheck', (req, res) => {
-    const emailNorm = authUsers.normalizeEmail((req.body && req.body.email) || '');
-    if (!emailNorm) return res.status(400).json({ error: 'Email is required' });
+    const precheckEmailV = contactValidation.validateEmail((req.body && req.body.email) || '');
+    if (!precheckEmailV.valid) return res.status(400).json({ error: precheckEmailV.message });
+    const emailNorm = precheckEmailV.cleanedEmail;
     authUsers.findUserByEmail(db, emailNorm, (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!row) {
@@ -2392,8 +2408,11 @@ app.post('/api/auth/login-otp/precheck', (req, res) => {
 });
 
 function resolveLoginUserForOtp(email, password, cb) {
-    const emailNorm = authUsers.normalizeEmail(email);
-    if (!emailNorm) return cb(null, { status: 400, error: 'Email is required' });
+    const loginOtpEmailV = contactValidation.validateEmail(email);
+    if (!loginOtpEmailV.valid) {
+        return cb(null, { status: 400, error: loginOtpEmailV.message });
+    }
+    const emailNorm = loginOtpEmailV.cleanedEmail;
     authUsers.findUserByEmail(db, emailNorm, (err, row) => {
         if (err) return cb(err);
         if (!row) {
@@ -2510,8 +2529,17 @@ app.post('/api/otp/send', withIntegrationSettingsLoaded, (req, res) => {
     if (channel !== 'phone' && channel !== 'email') {
         return res.status(400).json({ error: 'channel must be phone or email' });
     }
-    const dest = String(destination).trim();
+    let dest = String(destination).trim();
     if (!dest) return res.status(400).json({ error: 'destination required' });
+    if (channel === 'email') {
+        const ev = contactValidation.validateEmail(dest);
+        if (!ev.valid) return res.status(400).json({ error: ev.message });
+        dest = ev.cleanedEmail;
+    } else {
+        const pv = contactValidation.validatePhone(dest);
+        if (!pv.valid) return res.status(400).json({ error: pv.message });
+        dest = pv.cleanedPhone;
+    }
 
     const meta = {};
     if (seminarId != null && seminarId !== '') meta.seminarId = parseInt(seminarId, 10);
@@ -2683,8 +2711,16 @@ function requireAdminSensitiveOtpIfEnabled(actorAdminId, phoneTok, emailTok, nex
 
 app.post('/api/auth/signup', (req, res) => {
     const { firstName, lastName, email, phone, password, role, phoneOtpToken, emailOtpToken } = req.body;
-    const emailNorm = String(email || '').trim().toLowerCase();
-    const phoneNorm = String(phone || '').trim();
+    const emailV = contactValidation.validateEmail(email);
+    if (!emailV.valid) {
+        return res.status(400).json({ error: emailV.message });
+    }
+    const phoneV = contactValidation.validatePhone(phone);
+    if (!phoneV.valid) {
+        return res.status(400).json({ error: phoneV.message });
+    }
+    const emailNorm = emailV.cleanedEmail;
+    const phoneNorm = phoneV.cleanedPhone;
 
     const firstNameValidation = validateDoctorName(firstName);
     if (!firstNameValidation.valid) {
@@ -2805,7 +2841,11 @@ app.post('/api/auth/login', (req, res) => {
     if (!email || password === undefined || password === null) {
         return res.status(400).json({ error: 'Email and password are required' });
     }
-    const emailNorm = authUsers.normalizeEmail(email);
+    const loginEmailV = contactValidation.validateEmail(email);
+    if (!loginEmailV.valid) {
+        return res.status(400).json({ error: loginEmailV.message });
+    }
+    const emailNorm = loginEmailV.cleanedEmail;
     portalAuthPolicy.loadPortalAuthConfig(db, (ePol) => {
         if (ePol) console.warn('[portal-auth-policy] login', ePol.message);
         authUsers.findUserByEmailAndPassword(db, emailNorm, password, (err, row) => {
@@ -4118,10 +4158,9 @@ app.post('/api/auth/change-password', (req, res) => {
 
 // Forgot password — email + WhatsApp (no plain password stored)
 app.post('/api/auth/forgot-password', (req, res) => {
-    const emailNorm = String((req.body && req.body.email) || '')
-        .trim()
-        .toLowerCase();
-    if (!emailNorm) return res.status(400).json({ error: 'Email is required' });
+    const forgotEmailV = contactValidation.validateEmail((req.body && req.body.email) || '');
+    if (!forgotEmailV.valid) return res.status(400).json({ error: forgotEmailV.message });
+    const emailNorm = forgotEmailV.cleanedEmail;
     const respond = () => res.json({ success: true, message: 'If an account exists, reset instructions were sent.' });
     authUsers.findUserByEmail(db, emailNorm, (err, user) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -7420,20 +7459,30 @@ app.get('/api/feedback/user/:userId', (req, res) => {
 app.post('/api/public/contact-inquiry', (req, res) => {
     const { name, email, phone, subject, message } = req.body || {};
     const n = String(name || '').trim();
-    const em = String(email || '').trim().toLowerCase();
     const sub = String(subject || '').trim();
     const msg = String(message || '').trim();
-    if (!n || !em || !sub || !msg) {
+    const contactEmailV = contactValidation.validateEmail(email);
+    if (!n || !sub || !msg) {
         return res.status(400).json({ error: 'Name, email, subject, and message are required.' });
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
-        return res.status(400).json({ error: 'Please enter a valid email address.' });
+    if (!contactEmailV.valid) {
+        return res.status(400).json({ error: contactEmailV.message });
+    }
+    const em = contactEmailV.cleanedEmail;
+    const phoneRaw = String(phone || '').trim();
+    let phoneStored = null;
+    if (phoneRaw) {
+        const contactPhoneV = contactValidation.validatePhone(phoneRaw, 'Phone', { required: false });
+        if (!contactPhoneV.valid) {
+            return res.status(400).json({ error: contactPhoneV.message });
+        }
+        phoneStored = contactPhoneV.cleanedPhone;
     }
     ensureContactInquiriesSchema(db, ignoreSchemaMigrationErr, () => {
         db.run(
             `INSERT INTO contact_inquiries (name, email, phone, subject, message, status, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, 'new', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-            [n, em, String(phone || '').trim() || null, sub, msg],
+            [n, em, phoneStored, sub, msg],
             function (err) {
                 if (err) {
                     const m = String(err.message || '');
