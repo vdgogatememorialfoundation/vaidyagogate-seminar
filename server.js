@@ -1993,6 +1993,19 @@ function withIntegrationSettingsLoaded(req, res, next) {
     });
 }
 
+function withAuxiliaryTables(req, res, next) {
+    if (pgDb && typeof pgDb.ensureAuxiliaryTables === 'function') {
+        return pgDb
+            .ensureAuxiliaryTables()
+            .then(() => next())
+            .catch((e) => {
+                console.warn('[aux-tables]', e.message);
+                next();
+            });
+    }
+    next();
+}
+
 function integrationSettingsJson(data) {
     const masked = integrationSettings.maskSecretsForClient(data);
     masked.email_configured = integrationSettings.isEmailConfiguredFromSettings();
@@ -2394,17 +2407,20 @@ app.get('/api/auth/login-otp-required', withIntegrationSettingsLoaded, (req, res
 app.post('/api/auth/account-check', (req, res) => {
     const emailNormRaw = authUsers.normalizeEmail((req.body && req.body.email) || '');
     const password = req.body && req.body.password != null ? String(req.body.password) : '';
+    const phoneRaw = (req.body && req.body.phone) || '';
     const acEmailV = contactValidation.validateEmail(emailNormRaw);
     if (!acEmailV.valid) return res.status(400).json({ error: acEmailV.message });
     const emailNorm = acEmailV.cleanedEmail;
-    authUsers.findUserByEmail(db, emailNorm, (err, row) => {
-        if (err) return res.status(500).json({ error: err.message });
+
+    function respondEmail(row) {
         if (!row) {
             return res.json({
                 exists: false,
                 available: true,
                 passwordMatch: false,
-                needsLogin: false
+                needsLogin: false,
+                phoneTaken: false,
+                emailTaken: false
             });
         }
         const passwordMatch = !!(password && row.password === password);
@@ -2413,10 +2429,40 @@ app.post('/api/auth/account-check', (req, res) => {
             available: false,
             passwordMatch,
             needsLogin: true,
+            phoneTaken: false,
+            emailTaken: true,
             message: passwordMatch
                 ? 'An account with this email already exists. Please sign in with your password.'
                 : 'This email is already registered. Please sign in or use Forgot password.'
         });
+    }
+
+    function checkEmail() {
+        authUsers.findUserByEmail(db, emailNorm, (err, row) => {
+            if (err) return res.status(500).json({ error: err.message });
+            respondEmail(row);
+        });
+    }
+
+    const phoneTrim = String(phoneRaw || '').trim();
+    if (!phoneTrim) return checkEmail();
+    const acPhoneV = contactValidation.validatePhone(phoneTrim);
+    if (!acPhoneV.valid) return res.status(400).json({ error: acPhoneV.message });
+    authUsers.findUserByPhone(db, acPhoneV.cleanedPhone, (pErr, phoneRow) => {
+        if (pErr) return res.status(500).json({ error: pErr.message });
+        if (phoneRow) {
+            return res.json({
+                exists: true,
+                available: false,
+                passwordMatch: false,
+                needsLogin: true,
+                phoneTaken: true,
+                emailTaken: false,
+                message:
+                    'This mobile number is already registered. Sign in with that account or use a different number (email can be new, but phone cannot be reused).'
+            });
+        }
+        checkEmail();
     });
 });
 
@@ -2567,7 +2613,7 @@ app.post('/api/auth/login-otp/verify', (req, res) => {
 });
 
 // OTP: send & verify (used by homepage signup + doctor registration)
-app.post('/api/otp/send', withIntegrationSettingsLoaded, (req, res) => {
+app.post('/api/otp/send', withIntegrationSettingsLoaded, withAuxiliaryTables, (req, res) => {
     const { channel, destination, purpose, seminarId, fieldKey, userId } = req.body || {};
     if (!channel || !destination || !purpose) {
         return res.status(400).json({ error: 'channel, destination, and purpose are required' });
@@ -2648,10 +2694,23 @@ app.post('/api/otp/send', withIntegrationSettingsLoaded, (req, res) => {
     });
 });
 
-app.post('/api/otp/verify', (req, res) => {
+app.post('/api/otp/verify', withAuxiliaryTables, (req, res) => {
     const { channel, destination, purpose, code, seminarId, fieldKey, userId } = req.body || {};
     if (!channel || !destination || !purpose || !code) {
         return res.status(400).json({ error: 'channel, destination, purpose, and code are required' });
+    }
+    let dest = String(destination).trim();
+    if (!dest) return res.status(400).json({ error: 'destination required' });
+    if (channel === 'email') {
+        const ev = contactValidation.validateEmail(dest);
+        if (!ev.valid) return res.status(400).json({ error: ev.message });
+        dest = ev.cleanedEmail;
+    } else if (channel === 'phone') {
+        const pv = contactValidation.validatePhone(dest);
+        if (!pv.valid) return res.status(400).json({ error: pv.message });
+        dest = pv.cleanedPhone;
+    } else {
+        return res.status(400).json({ error: 'channel must be phone or email' });
     }
     const meta = {};
     if (seminarId != null && seminarId !== '') meta.seminarId = parseInt(seminarId, 10);
@@ -2676,7 +2735,7 @@ app.post('/api/otp/verify', (req, res) => {
         db,
         {
             channel,
-            destination,
+            destination: dest,
             purpose,
             code,
             meta,
@@ -2804,20 +2863,32 @@ app.post('/api/auth/signup', (req, res) => {
         const evFlag = portalAuthPolicy.getPortalAuthConfig().requireEmailVerification ? 0 : 1;
 
         function insertUser() {
-            authUsers.findUserByEmail(db, emailNorm, (dupErr, existing) => {
-                if (dupErr) return res.status(500).json({ error: dupErr.message });
-                if (existing) {
-                    const pw = password != null ? String(password) : '';
-                    const passwordMatch = !!(pw && existing.password === pw);
+            authUsers.findUserByPhone(db, phoneNorm, (phErr, phoneExisting) => {
+                if (phErr) return res.status(500).json({ error: phErr.message });
+                if (phoneExisting) {
                     return res.status(409).json({
-                        error: passwordMatch
-                            ? 'An account with this email already exists. Please sign in.'
-                            : 'Email already registered. Please sign in instead.',
+                        error:
+                            'This mobile number is already registered to another account. Sign in with that account or use a different number.',
                         needsLogin: true,
-                        passwordMatch
+                        phoneTaken: true
                     });
                 }
-            doInsertUser();
+                authUsers.findUserByEmail(db, emailNorm, (dupErr, existing) => {
+                    if (dupErr) return res.status(500).json({ error: dupErr.message });
+                    if (existing) {
+                        const pw = password != null ? String(password) : '';
+                        const passwordMatch = !!(pw && existing.password === pw);
+                        return res.status(409).json({
+                            error: passwordMatch
+                                ? 'An account with this email already exists. Please sign in.'
+                                : 'Email already registered. Please sign in instead.',
+                            needsLogin: true,
+                            passwordMatch,
+                            emailTaken: true
+                        });
+                    }
+                    doInsertUser();
+                });
             });
         }
 

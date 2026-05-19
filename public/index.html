@@ -1095,11 +1095,11 @@
             openAuthModal('login');
         }
 
-        async function accountCheck(email, password) {
+        async function accountCheck(email, password, phone) {
             const res = await fetch('/api/auth/account-check', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password: password || '' })
+                body: JSON.stringify({ email, password: password || '', phone: phone || '' })
             });
             const { data, parseFailed } = await HttpJson.readJsonResponse(res);
             if (parseFailed) throw new Error('account-check-parse');
@@ -1224,8 +1224,16 @@
             }
 
             try {
-                const check = await accountCheck(email, password);
+                const check = await accountCheck(email, password, phone);
                 if (!check.ok && check.error) return alert(check.error);
+                if (check.phoneTaken) {
+                    alert(
+                        check.message ||
+                            'This mobile number is already registered. Sign in with that account or use a different number.'
+                    );
+                    switchAuthTab('login');
+                    return;
+                }
                 if (check.exists) {
                     if (check.passwordMatch) {
                         redirectToLoginTab(

@@ -90,34 +90,51 @@
     }
 
     async function verifySignupOtp(channel) {
-        const dest = signupOtpDest(channel);
-        const codeEl = document.getElementById(
-            channel === 'email' ? 'doctor-signup-email-otp' : 'doctor-signup-phone-otp'
-        );
-        const okEl = document.getElementById(
-            channel === 'email' ? 'doctor-signup-email-otp-ok' : 'doctor-signup-phone-otp-ok'
-        );
-        const code = String((codeEl || {}).value || '').trim();
-        if (!dest || !code) return alert('Enter contact and code.');
-        const res = await fetch('/api/otp/verify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ channel, destination: dest, code, purpose: 'signup' })
-        });
-        const readJson = window.HttpJson ? window.HttpJson.readJsonResponse : null;
-        const errMsg = window.HttpJson ? window.HttpJson.apiErrorMessage : null;
-        const parsed = readJson ? await readJson(res) : { data: await res.json(), parseFailed: false };
-        const data = parsed.data;
-        if (parsed.parseFailed || !res.ok) {
-            return alert(
-                parsed.parseFailed
-                    ? errMsg(res, data, true)
-                    : data.error || 'Invalid code.'
+        try {
+            const dest = signupOtpDest(channel);
+            const codeEl = document.getElementById(
+                channel === 'email' ? 'doctor-signup-email-otp' : 'doctor-signup-phone-otp'
             );
+            const okEl = document.getElementById(
+                channel === 'email' ? 'doctor-signup-email-otp-ok' : 'doctor-signup-phone-otp-ok'
+            );
+            const code = String((codeEl || {}).value || '').trim();
+            if (!dest || !code) return alert('Enter contact and code.');
+            const res = await fetch('/api/otp/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ channel, destination: dest, code, purpose: 'signup' })
+            });
+            const readJson = window.HttpJson ? window.HttpJson.readJsonResponse : null;
+            const errMsg = window.HttpJson ? window.HttpJson.apiErrorMessage : null;
+            let parsed;
+            if (readJson) {
+                parsed = await readJson(res);
+            } else {
+                try {
+                    parsed = { data: await res.json(), parseFailed: false };
+                } catch (parseErr) {
+                    parsed = { data: {}, parseFailed: true };
+                }
+            }
+            const data = parsed.data;
+            if (parsed.parseFailed || !res.ok) {
+                return alert(
+                    parsed.parseFailed && errMsg
+                        ? errMsg(res, data, true)
+                        : (data && data.error) || 'Invalid code.'
+                );
+            }
+            if (!data || !data.token) {
+                return alert('Verification did not return a token. Please try again.');
+            }
+            if (channel === 'email') signupEmailOtpToken = data.token;
+            else signupPhoneOtpToken = data.token;
+            if (okEl) okEl.textContent = 'Verified';
+        } catch (err) {
+            console.error(err);
+            alert('Could not verify code. Check your connection and try again.');
         }
-        if (channel === 'email') signupEmailOtpToken = data.token;
-        else signupPhoneOtpToken = data.token;
-        if (okEl) okEl.textContent = 'Verified';
     }
 
     async function refreshSignupOtpPanel() {
@@ -132,18 +149,22 @@
         }
     }
 
-    async function accountCheck(email, password) {
+    async function accountCheck(email, password, phone) {
         const res = await fetch('/api/auth/account-check', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email, password: password || '' })
+            body: JSON.stringify({ email, password: password || '', phone: phone || '' })
         });
         if (window.HttpJson) {
             const { data, parseFailed } = await window.HttpJson.readJsonResponse(res);
             if (parseFailed) throw new Error('account-check-parse');
             return { ok: res.ok, ...data };
         }
-        return { ok: res.ok, ...(await res.json()) };
+        try {
+            return { ok: res.ok, ...(await res.json()) };
+        } catch (_) {
+            throw new Error('account-check-parse');
+        }
     }
 
     async function handleDoctorSignup(e) {
@@ -175,7 +196,15 @@
         }
 
         try {
-            const check = await accountCheck(email, password);
+            const check = await accountCheck(email, password, phone);
+            if (check.phoneTaken) {
+                alert(
+                    check.message ||
+                        'This mobile number is already registered. Sign in with that account or use a different number.'
+                );
+                switchDoctorAuthTab('login');
+                return;
+            }
             if (check.exists) {
                 if (check.passwordMatch) {
                     if (

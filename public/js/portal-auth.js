@@ -180,13 +180,26 @@
                 : { valid: false, message: 'Enter your email first.' };
         }
 
+        async function readApiJson(res) {
+            if (global.HttpJson) {
+                const { data, parseFailed } = await global.HttpJson.readJsonResponse(res);
+                return { data, parseFailed };
+            }
+            try {
+                return { data: await res.json(), parseFailed: false };
+            } catch (_) {
+                return { data: {}, parseFailed: true };
+            }
+        }
+
         async function precheckEmail(email) {
             const res = await fetch('/api/auth/login-otp/precheck', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email })
             });
-            return res.json();
+            const { data } = await readApiJson(res);
+            return data;
         }
 
         async function sendOtp(channel) {
@@ -203,12 +216,15 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password, channel })
             });
-            const data = await res.json();
-            if (!res.ok) {
+            const { data, parseFailed } = await readApiJson(res);
+            if (parseFailed || !res.ok) {
                 if (data.needsSignup) {
                     return alert(data.error || 'No account found. Please create an account first.');
                 }
-                return alert(data.error || 'Could not send code.');
+                const msg = parseFailed && global.HttpJson
+                    ? global.HttpJson.apiErrorMessage(res, data, true)
+                    : data.error || 'Could not send code.';
+                return alert(msg);
             }
             if (data.debugCode) console.info('Login OTP debug:', data.debugCode);
             if (global.OtpUi) global.OtpUi.notifyOtpSent(channel, data);
@@ -229,8 +245,13 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password })
             });
-            const data = await res.json();
-            if (!res.ok) return alert(data.error || 'Could not send codes.');
+            const { data, parseFailed } = await readApiJson(res);
+            if (parseFailed || !res.ok) {
+                const msg = parseFailed && global.HttpJson
+                    ? global.HttpJson.apiErrorMessage(res, data, true)
+                    : data.error || 'Could not send codes.';
+                return alert(msg);
+            }
             if (global.OtpUi) global.OtpUi.notifyOtpSent(null, data, { both: true });
             else alert('OTP sent successfully to your email and WhatsApp.');
         }
@@ -253,8 +274,14 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, password, channel, code })
             });
-            const data = await res.json();
-            if (!res.ok) return alert(data.error || 'Invalid code.');
+            const { data, parseFailed } = await readApiJson(res);
+            if (parseFailed || !res.ok) {
+                const msg = parseFailed && global.HttpJson
+                    ? global.HttpJson.apiErrorMessage(res, data, true)
+                    : data.error || 'Invalid code.';
+                return alert(msg);
+            }
+            if (!data.token) return alert('Verification failed. Please try again.');
             if (channel === 'email') emailOtpToken = data.token;
             else phoneOtpToken = data.token;
             if (okEl) okEl.textContent = 'Verified';

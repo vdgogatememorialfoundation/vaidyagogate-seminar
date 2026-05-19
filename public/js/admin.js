@@ -4582,9 +4582,10 @@ async function proxyInitiatePayment() {
     }
 }
 
-function openProxyRazorpayCheckout(data) {
+function openAdminRazorpayCheckout(data, onPaid) {
     if (typeof Razorpay === 'undefined') {
-        return alert('Razorpay checkout script not loaded.');
+        alert('Razorpay checkout script not loaded. Refresh the page and allow pop-ups for this site.');
+        return false;
     }
     const options = {
         key: data.keyId,
@@ -4594,11 +4595,34 @@ function openProxyRazorpayCheckout(data) {
         description: 'Registration ' + (data.applicationNo || ''),
         order_id: data.razorpayOrder.id,
         handler: function () {
-            proxyPollPaymentOnce();
+            if (typeof onPaid === 'function') onPaid();
+        },
+        modal: {
+            ondismiss: function () {
+                const msg = document.getElementById('co-pay-msg');
+                if (msg) msg.textContent = 'Payment window closed — try again or use Check status.';
+            }
         }
     };
     const rzp = new Razorpay(options);
-    rzp.open();
+    rzp.on('payment.failed', function (resp) {
+        alert(
+            (resp.error && resp.error.description) ||
+                'Payment failed or was cancelled. You can try again.'
+        );
+    });
+    try {
+        rzp.open();
+        return true;
+    } catch (e) {
+        console.error(e);
+        alert('Could not open Razorpay. Allow pop-ups for admin.vaidyagogate.org and try again.');
+        return false;
+    }
+}
+
+function openProxyRazorpayCheckout(data) {
+    openAdminRazorpayCheckout(data, () => proxyPollPaymentOnce());
 }
 
 async function proxyMarkUpiPaid() {
@@ -7417,7 +7441,16 @@ async function initiateAdminCreateOrderPayment() {
     const amount = parseFloat(document.getElementById('co-final')?.value || '0');
     const discount = parseFloat(document.getElementById('co-discount')?.value || '0');
     const msg = document.getElementById('co-pay-msg');
-    if (msg) msg.textContent = 'Starting payment…';
+    const qrBlock = document.getElementById('co-qr-block');
+    const qrImg = document.getElementById('co-qr-img');
+    const qrAmt = document.getElementById('co-qr-amount');
+    const markBtn = document.getElementById('co-mark-upi-btn');
+    if (msg) {
+        msg.style.color = '#0f766e';
+        msg.textContent = 'Starting payment…';
+    }
+    if (qrBlock) qrBlock.classList.add('hidden');
+    if (markBtn) markBtn.classList.add('hidden');
     try {
         const res = await fetch('/api/admin/payments/initiate', {
             method: 'POST',
@@ -7430,7 +7463,16 @@ async function initiateAdminCreateOrderPayment() {
                 discountAmount: discount
             })
         });
-        const data = await res.json();
+        let data = {};
+        if (window.HttpJson) {
+            const parsed = await window.HttpJson.readJsonResponse(res);
+            data = parsed.data;
+            if (parsed.parseFailed) {
+                throw new Error(window.HttpJson.apiErrorMessage(res, data, true));
+            }
+        } else {
+            data = await res.json();
+        }
         if (!res.ok) throw new Error(data.error || 'Failed');
         if (data.paid) {
             if (msg) {
@@ -7443,22 +7485,36 @@ async function initiateAdminCreateOrderPayment() {
             return;
         }
         __coOrderDbId = data.orderDbId;
-        const qrBlock = document.getElementById('co-qr-block');
-        const qrImg = document.getElementById('co-qr-img');
-        const qrAmt = document.getElementById('co-qr-amount');
-        const markBtn = document.getElementById('co-mark-upi-btn');
+        if (data.paymentType === 'razorpay_checkout' && data.razorpayOrder && data.keyId) {
+            if (msg) msg.textContent = 'Opening Razorpay checkout… allow pop-ups if prompted.';
+            const opened = openAdminRazorpayCheckout(data, () => pollAdminCreateOrderPayment());
+            if (!opened && msg) {
+                msg.style.color = '#b45309';
+                msg.textContent =
+                    'Checkout could not open. Allow pop-ups, then click Start payment again or use Check status after the doctor pays.';
+            }
+            return;
+        }
         if (data.qrImageUrl && qrImg) {
-            qrImg.src = data.qrImageUrl;
+            qrImg.src =
+                String(data.qrImageUrl).indexOf('http') === 0 || String(data.qrImageUrl).indexOf('/') === 0
+                    ? data.qrImageUrl
+                    : data.qrImageUrl;
             if (qrBlock) qrBlock.classList.remove('hidden');
         }
         if (qrAmt) qrAmt.textContent = 'Amount: ₹' + (data.amount || amount);
         if (data.manualConfirm && markBtn) markBtn.classList.remove('hidden');
-        else if (markBtn) markBtn.classList.add('hidden');
-        if (msg) msg.textContent = data.message || 'Payment started.';
+        if (msg) {
+            msg.style.color = '#0f766e';
+            msg.textContent = data.message || 'Payment started.';
+        }
+        if (data.pollRequired && data.paymentType === 'dqr') {
+            pollAdminCreateOrderPayment();
+        }
     } catch (e) {
         if (msg) {
             msg.style.color = '#b91c1c';
-            msg.textContent = e.message;
+            msg.textContent = e.message || 'Payment failed';
         }
     }
 }

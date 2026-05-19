@@ -3304,11 +3304,20 @@ async function processPayment(appId, amount, appNo, paymentOption) {
             })
         });
         let result = {};
-        try {
-            result = await res.json();
-        } catch (_) {
-            alert('Payment service returned an invalid response. Check that the site is not in maintenance mode and try again.');
-            return;
+        if (window.HttpJson) {
+            const parsed = await window.HttpJson.readJsonResponse(res);
+            result = parsed.data;
+            if (parsed.parseFailed) {
+                alert(window.HttpJson.apiErrorMessage(res, result, true));
+                return;
+            }
+        } else {
+            try {
+                result = await res.json();
+            } catch (_) {
+                alert('Payment service returned an invalid response. Check that the site is not in maintenance mode and try again.');
+                return;
+            }
         }
         if (!res.ok || !result.success) {
             alert(result.error || result.message || 'Payment could not be started. Check the server console or try again.');
@@ -3386,7 +3395,14 @@ async function processPayment(appId, amount, appNo, paymentOption) {
                             'Payment failed or was cancelled. You can try again from My Applications.'
                     );
                 });
-                rzp.open();
+                try {
+                    rzp.open();
+                } catch (openErr) {
+                    console.error(openErr);
+                    alert(
+                        'Could not open the payment window. Refresh the page, disable ad blockers, and try Pay again.'
+                    );
+                }
             } else {
                 // Mock gateway or other: payment already completed on server for mock
                 alert(`Payment processed via ${result.gateway || 'Mock Gateway'}! You can open Orders, Receipts, and Participant tickets from the menu.`);
