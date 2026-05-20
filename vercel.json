@@ -14,7 +14,7 @@
   "crons": [
     {
       "path": "/api/cron/process-notifications",
-      "schedule": "*/5 * * * *"
+      "schedule": "0 9 * * *"
     }
   ],
   "env": {
