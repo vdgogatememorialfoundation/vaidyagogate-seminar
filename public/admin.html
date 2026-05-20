@@ -943,7 +943,7 @@
                         <div><label>Max presentations per doctor</label><input type="number" id="case-prog-max-per-user" min="1" max="10" value="2" style="width:100%;padding:8px;"></div>
                         <div><label>Total presentation slots</label><input type="number" id="case-prog-max-total" min="1" placeholder="Unlimited if empty" style="width:100%;padding:8px;"></div>
                         <div><label>Max files per submission</label><input type="number" id="case-prog-max-files" min="1" max="10" value="5" style="width:100%;padding:8px;"></div>
-                        <div><label>Max file size (MB each)</label><input type="number" id="case-prog-max-mb" min="1" max="200" value="50" style="width:100%;padding:8px;"><p style="font-size:0.78rem;color:#64748b;margin:4px 0 0;">On Vercel (free hosting) uploads are capped at <strong>4 MB</strong> per file regardless of this setting. Ask doctors to compress PDF/PPT and large photos.</p></div>
+                        <div><label>Max file size (MB each)</label><input type="number" id="case-prog-max-mb" min="1" max="250" value="100" style="width:100%;padding:8px;"><p style="font-size:0.78rem;color:#64748b;margin:4px 0 0;">Default <strong>100 MB</strong>, max <strong>250 MB</strong> per file when Cloudflare R2 is configured. Without R2, server uploads stay at ~4 MB on Vercel.</p></div>
                         <div style="grid-column:1/-1;">
                             <label>Enabled categories</label>
                             <label style="display:inline-flex;align-items:center;gap:6px;margin-right:16px;font-weight:500;"><input type="checkbox" id="case-cat-agnikarma" checked> Agnikarma</label>

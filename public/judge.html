@@ -39,7 +39,14 @@
         code { background: #f1f5f9; padding: 2px 8px; border-radius: 6px; font-size: 0.82rem; }
         #case-score-overlay { position: fixed; inset: 0; z-index: 10000; background: rgba(49,46,129,0.4); display: flex; align-items: center; justify-content: center; padding: 20px; }
         #case-score-overlay.hidden { display: none !important; }
-        .score-panel { background: #fff; border-radius: 16px; border: 1px solid #e0e7ff; max-width: 520px; width: 100%; max-height: 90vh; overflow-y: auto; padding: 24px; box-shadow: 0 24px 60px rgba(67,56,202,0.25); }
+        .score-panel { background: #fff; border-radius: 16px; border: 1px solid #e0e7ff; max-width: 920px; width: 100%; max-height: 92vh; overflow-y: auto; padding: 24px; box-shadow: 0 24px 60px rgba(67,56,202,0.25); }
+        .case-files-grid { display: grid; gap: 12px; margin-bottom: 16px; }
+        .case-file-card { border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; background: #f8fafc; }
+        .case-file-card h4 { font-size: 0.88rem; margin: 0 0 8px; color: #334155; word-break: break-all; }
+        .case-file-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+        .case-file-preview { width: 100%; min-height: 280px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; }
+        .case-file-preview iframe, .case-file-preview video { width: 100%; min-height: 280px; border: 0; border-radius: 8px; }
+        .case-file-preview img { max-width: 100%; max-height: 360px; display: block; margin: 0 auto; }
         .score-panel h3 { font-family: 'Fraunces', Georgia, serif; color: #312e81; margin-bottom: 8px; }
         .crit-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 10px 0; padding: 10px 12px; background: #f8fafc; border-radius: 10px; }
         .crit-row input { width: 72px; padding: 8px; border: 1px solid #c7d2fe; border-radius: 8px; text-align: center; }
@@ -125,7 +132,7 @@
             <h3 id="case-score-title">Score submission</h3>
             <p class="muted" id="case-score-meta"></p>
             <div id="case-score-locked" class="locked-banner hidden">Scores submitted and locked — cannot be changed.</div>
-            <div id="case-score-files" class="muted" style="margin-bottom:12px;"></div>
+            <div id="case-score-files" class="case-files-grid"></div>
             <div id="case-score-criteria"></div>
             <label style="display:block;margin-top:12px;font-size:0.82rem;font-weight:700;color:#4338ca;">Remarks (optional)</label>
             <textarea id="case-score-remarks" rows="2" style="width:100%;padding:8px;border:1px solid #c7d2fe;border-radius:8px;margin-top:4px;"></textarea>
@@ -322,12 +329,62 @@
                     lockedEl.classList.toggle('hidden', !locked);
                     const filesEl = document.getElementById('case-score-files');
                     const files = data.files || [];
-                    if (files.length) {
-                        filesEl.innerHTML =
-                            'Files: ' +
-                            files
-                                .map((f) => '<a href="' + escapeHtml(f.file_path) + '" target="_blank">' + escapeHtml(f.original_name || 'file') + '</a>')
-                                .join(' · ');
+                    filesEl.innerHTML = '';
+                    if (!files.length) {
+                        filesEl.innerHTML = '<p class="muted">No files attached.</p>';
+                    } else {
+                        files.forEach((f) => {
+                            const card = document.createElement('div');
+                            card.className = 'case-file-card';
+                            const kind = f.preview_kind || 'download';
+                            const viewUrl = f.view_url || f.file_path;
+                            const dlUrl = f.download_url || viewUrl;
+                            card.innerHTML =
+                                '<h4>' +
+                                escapeHtml(f.original_name || 'File') +
+                                '</h4>' +
+                                '<div class="case-file-actions">' +
+                                '<button type="button" class="btn case-preview-btn">Preview</button>' +
+                                '<a class="btn" href="' +
+                                escapeHtml(dlUrl) +
+                                '" target="_blank" rel="noopener">Download</a>' +
+                                '</div>' +
+                                '<div class="case-file-preview hidden"></div>';
+                            filesEl.appendChild(card);
+                            const previewBox = card.querySelector('.case-file-preview');
+                            card.querySelector('.case-preview-btn').addEventListener('click', async () => {
+                                let url = viewUrl;
+                                if (f.id && jid) {
+                                    try {
+                                        const ar = await fetch(
+                                            '/api/case/files/' +
+                                                f.id +
+                                                '/access?judgeUserId=' +
+                                                encodeURIComponent(jid) +
+                                                '&download=0'
+                                        );
+                                        const ad = await ar.json();
+                                        if (ar.ok && ad.url) url = ad.url;
+                                    } catch (_) {}
+                                }
+                                previewBox.classList.remove('hidden');
+                                if (kind === 'pdf') {
+                                    previewBox.innerHTML =
+                                        '<iframe src="' + escapeHtml(url) + '" title="PDF preview"></iframe>';
+                                } else if (kind === 'video') {
+                                    previewBox.innerHTML =
+                                        '<video controls src="' +
+                                        escapeHtml(url) +
+                                        '" style="width:100%;"></video>';
+                                } else if (kind === 'image') {
+                                    previewBox.innerHTML =
+                                        '<img src="' + escapeHtml(url) + '" alt="Preview">';
+                                } else {
+                                    previewBox.innerHTML =
+                                        '<p class="muted" style="padding:16px;">Preview not available for this file type. Use <strong>Download</strong> (PowerPoint/ZIP open locally).</p>';
+                                }
+                            });
+                        });
                     }
                     let html =
                         '<table class="crit-table" style="width:100%;border-collapse:collapse;margin-bottom:8px;"><thead><tr style="background:#eef2ff;"><th style="text-align:left;padding:8px;">Criterion</th><th style="text-align:center;padding:8px;">Max</th><th style="text-align:center;padding:8px;">Your marks</th></tr></thead><tbody>';

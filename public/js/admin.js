@@ -2552,7 +2552,7 @@ function resetAdminCaseProgramForm() {
     const mf = document.getElementById('case-prog-max-files');
     if (mf) mf.value = '5';
     const mm = document.getElementById('case-prog-max-mb');
-    if (mm) mm.value = '50';
+    if (mm) mm.value = '100';
     const ag = document.getElementById('case-cat-agnikarma');
     const vi = document.getElementById('case-cat-viddhakarma');
     if (ag) ag.checked = true;
@@ -2586,7 +2586,7 @@ async function editAdminCaseProgram(id) {
         document.getElementById('case-prog-max-per-user').value = String(p.maxPresentationsPerUser != null ? p.maxPresentationsPerUser : p.max_presentations_per_user != null ? p.max_presentations_per_user : 2);
         document.getElementById('case-prog-max-total').value = p.maxTotalSubmissions != null ? String(p.maxTotalSubmissions) : p.max_total_submissions != null ? String(p.max_total_submissions) : '';
         document.getElementById('case-prog-max-files').value = String(p.maxFilesPerSubmission != null ? p.maxFilesPerSubmission : p.max_files_per_submission != null ? p.max_files_per_submission : 5);
-        document.getElementById('case-prog-max-mb').value = String(p.maxFileSizeMb != null ? p.maxFileSizeMb : p.max_file_size_mb != null ? p.max_file_size_mb : 50);
+        document.getElementById('case-prog-max-mb').value = String(p.maxFileSizeMb != null ? p.maxFileSizeMb : p.max_file_size_mb != null ? p.max_file_size_mb : 100);
         const cats = p.enabledCategories || [];
         document.getElementById('case-cat-agnikarma').checked = cats.indexOf('agnikarma') !== -1;
         document.getElementById('case-cat-viddhakarma').checked = cats.indexOf('viddhakarma') !== -1;

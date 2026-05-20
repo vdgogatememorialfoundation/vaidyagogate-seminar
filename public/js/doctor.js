@@ -3,10 +3,28 @@ let currentRegistrationId = null;
 let __doctorAllowedTabs = null;
 window.__portalFlags = window.__portalFlags || {};
 
-/** Matches Vercel/serverless body limit in production. */
+/** Fallback when R2 is off (Vercel body limit). */
 const UPLOAD_HOST_CAP_MB = 4;
+let __caseUploadConfig = null;
 
-function effectiveCaseMaxMb(program) {
+async function ensureCaseUploadConfig(programId) {
+    if (!window.CaseR2Upload) return null;
+    const pid = programId || activeCaseProgramId;
+    if (__caseUploadConfig && __caseUploadConfig._programId === pid) return __caseUploadConfig;
+    try {
+        __caseUploadConfig = await CaseR2Upload.loadConfig(pid);
+        __caseUploadConfig._programId = pid;
+    } catch (e) {
+        console.warn('[case-upload]', e);
+        __caseUploadConfig = { r2Enabled: false };
+    }
+    return __caseUploadConfig;
+}
+
+function effectiveCaseMaxMb(program, config) {
+    if (config && config.r2Enabled) {
+        return config.effectiveMaxMb || config.defaultMaxMb || 100;
+    }
     const requested = (program && program.maxFileSizeMb) || 50;
     return Math.min(requested, UPLOAD_HOST_CAP_MB);
 }
@@ -1669,9 +1687,27 @@ function applyCaseFormConfigFromProgram(program) {
     const fileFg = document.getElementById('case-files') && document.getElementById('case-files').closest('.form-group');
     if (fileFg && program) {
         const maxF = program.maxFilesPerSubmission || 5;
-        const maxMb = effectiveCaseMaxMb(program);
-        const lab = fileFg.querySelector('label');
-        if (lab) lab.textContent = 'Upload (max ' + maxF + ' files, ' + maxMb + ' MB each) *';
+        ensureCaseUploadConfig(program.id).then((cfg) => {
+            const maxMb = effectiveCaseMaxMb(program, cfg);
+            const lab = fileFg.querySelector('label');
+            if (lab) {
+                lab.textContent =
+                    'Upload (max ' +
+                    maxF +
+                    ' files, ' +
+                    maxMb +
+                    ' MB each)' +
+                    (cfg && cfg.r2Enabled ? ' — secure cloud storage' : '') +
+                    ' *';
+            }
+            const hint = document.getElementById('case-files-hint');
+            if (hint && cfg && cfg.r2Enabled) {
+                hint.textContent =
+                    'Large PDF/PPT/video supported (up to ' +
+                    maxMb +
+                    ' MB each). Upload shows progress; use Wi‑Fi for big files.';
+            }
+        });
     }
     const note = document.getElementById('case-program-limits-note');
     if (note && program) {
@@ -1903,35 +1939,111 @@ async function submitCasePresentation() {
     }
     const fileInput = document.getElementById('case-files');
     const maxFiles = (activeCaseProgram && activeCaseProgram.maxFilesPerSubmission) || 5;
-    const maxMb = effectiveCaseMaxMb(activeCaseProgram);
+    const uploadCfg = await ensureCaseUploadConfig(activeCaseProgramId);
+    const maxMb = effectiveCaseMaxMb(activeCaseProgram, uploadCfg);
+    const useR2 = uploadCfg && CaseR2Upload.isEnabled(uploadCfg) && fileInput?.files?.length;
     const filesField = (activeCaseProgram && activeCaseProgram.formConfig && activeCaseProgram.formConfig.fields || []).find(
         (f) => f.key === 'files'
     );
     const filesRequired = !filesField || filesField.enabled === false ? false : filesField.required !== false;
     if (filesRequired && !fileInput?.files?.length) return alert('Select at least one file');
     if (fileInput?.files?.length > maxFiles) return alert('Maximum ' + maxFiles + ' files');
-    const preparedFiles = [];
+
+    const progressEl = document.getElementById('case-upload-progress');
+    const setProgress = (msg) => {
+        if (progressEl) {
+            progressEl.style.display = msg ? 'block' : 'none';
+            progressEl.textContent = msg || '';
+        }
+    };
+
+    let uploadedFileIds = [];
     if (fileInput?.files?.length) {
         for (let i = 0; i < fileInput.files.length; i++) {
             const raw = fileInput.files[i];
             if (raw.size > maxMb * 1024 * 1024) {
-                const PU = window.PortalUpload;
                 return alert(
-                    PU && PU.compressHelpMessage
-                        ? PU.compressHelpMessage(raw)
-                        : 'Each file must be under ' + maxMb + ' MB. Compress PDF/photos and try again.'
+                    'Each file must be under ' +
+                        maxMb +
+                        ' MB ("' +
+                        raw.name +
+                        '" is ' +
+                        (CaseR2Upload ? CaseR2Upload.formatBytes(raw.size) : Math.ceil(raw.size / 1048576) + ' MB') +
+                        ').'
                 );
             }
-            const ready = await prepareUploadFileOrAlert(raw);
-            if (!ready) return;
-            preparedFiles.push(ready);
+        }
+        if (useR2) {
+            try {
+                setProgress('Uploading files to secure storage… 0%');
+                uploadedFileIds = await CaseR2Upload.uploadFiles(fileInput.files, {
+                    userId: uid,
+                    caseProgramId: activeCaseProgramId,
+                    onFileProgress: (idx, total, name, pct) => {
+                        setProgress(
+                            'Uploading ' +
+                                (idx + 1) +
+                                '/' +
+                                total +
+                                ': ' +
+                                name +
+                                ' — ' +
+                                pct +
+                                '%'
+                        );
+                    }
+                });
+            } catch (upErr) {
+                setProgress('');
+                return alert(upErr.message || 'File upload failed');
+            }
+            setProgress('');
+        } else {
+            const preparedFiles = [];
+            for (let i = 0; i < fileInput.files.length; i++) {
+                const ready = await prepareUploadFileOrAlert(fileInput.files[i]);
+                if (!ready) return;
+                preparedFiles.push(ready);
+            }
+            const fdLegacy = new FormData();
+            fdLegacy.append('userId', String(uid));
+            fdLegacy.append('caseProgramId', String(activeCaseProgramId));
+            fdLegacy.append('formData', JSON.stringify(form));
+            preparedFiles.forEach((f) => fdLegacy.append('files', f));
+            try {
+                const res = await fetch('/api/case/submit', { method: 'POST', body: fdLegacy });
+                const text = await res.text();
+                let data = {};
+                try {
+                    data = text ? JSON.parse(text) : {};
+                } catch (_) {
+                    return alert('Server error (' + res.status + ').');
+                }
+                if (data.success) {
+                    alert(
+                        'Application submitted. Your application ID is ' +
+                            (data.applicationNo || data.submissionId) +
+                            '. Track status under Track case applications.'
+                    );
+                    cancelCaseApplication();
+                    loadCaseApplicationsTracker();
+                    switchTab('tab-case-track');
+                } else alert(data.error || 'Submit failed');
+            } catch (e) {
+                console.error(e);
+                alert('Network error: ' + (e.message || 'Could not reach server'));
+            }
+            return;
         }
     }
+
     const fd = new FormData();
     fd.append('userId', String(uid));
     fd.append('caseProgramId', String(activeCaseProgramId));
     fd.append('formData', JSON.stringify(form));
-    preparedFiles.forEach((f) => fd.append('files', f));
+    if (uploadedFileIds.length) {
+        fd.append('uploadedFileIds', JSON.stringify(uploadedFileIds));
+    }
     try {
         const res = await fetch('/api/case/submit', { method: 'POST', body: fd });
         const text = await res.text();
@@ -4739,15 +4851,19 @@ function initDoctorUploadHints() {
                 caseHint.style.color = '#64748b';
                 return;
             }
-            const maxMb = effectiveCaseMaxMb(activeCaseProgram);
-            const lines = files.map((f) => f.name + ' (' + PU.formatBytes(f.size) + ')');
-            const over = files.some((f) => f.size > maxMb * 1024 * 1024);
-            caseHint.textContent =
-                files.length +
-                ' file(s): ' +
-                lines.join(', ') +
-                (over ? ' — some files are too large; compress before submitting.' : ' — OK if each is under ' + maxMb + ' MB.');
-            caseHint.style.color = over ? '#b91c1c' : '#15803d';
+            ensureCaseUploadConfig(activeCaseProgramId).then((cfg) => {
+                const maxMb = effectiveCaseMaxMb(activeCaseProgram, cfg);
+                const lines = files.map((f) => f.name + ' (' + PU.formatBytes(f.size) + ')');
+                const over = files.some((f) => f.size > maxMb * 1024 * 1024);
+                caseHint.textContent =
+                    files.length +
+                    ' file(s): ' +
+                    lines.join(', ') +
+                    (over
+                        ? ' — some files exceed ' + maxMb + ' MB; compress or split before submitting.'
+                        : ' — OK (max ' + maxMb + ' MB each).');
+                caseHint.style.color = over ? '#b91c1c' : '#15803d';
+            });
         });
     }
 }
