@@ -37,6 +37,21 @@
         if (p === 'whatsapp') return 'fab fa-whatsapp';
         return 'fas fa-link';
     }
+    window.socialIcon = socialIcon;
+
+    function renderPillLink(url, iconClass, label, extraClass) {
+        return (
+            '<a href="' +
+            escHtml(url) +
+            '" target="_blank" rel="noopener noreferrer" class="' +
+            escHtml(extraClass || 'social-link-btn') +
+            '"><i class="' +
+            escHtml(iconClass || 'fas fa-link') +
+            '" aria-hidden="true"></i><span class="social-pill-label">' +
+            escHtml(label || 'Open') +
+            '</span></a>'
+        );
+    }
 
     window.renderSocialLinks = function renderSocialLinks(cms) {
         const links = Array.isArray(cms && cms.socialLinks) ? cms.socialLinks.filter((l) => l && l.url) : [];
@@ -45,18 +60,11 @@
                   .map((l) => {
                       const p = String(l.platform || 'link').toLowerCase().replace(/[^a-z0-9]+/g, '_');
                       const pillClass = 'social-pill social-pill--' + (p || 'link');
-                      return (
-                          '<a href="' +
-                          escHtml(l.url) +
-                          '" target="_blank" rel="noopener noreferrer" class="social-link-btn ' +
-                          escHtml(pillClass) +
-                          '" title="' +
-                          escHtml(l.label || l.platform || '') +
-                          '"><i class="' +
-                          socialIcon(l.platform) +
-                          '" aria-hidden="true"></i><span class="social-pill-label">' +
-                          escHtml(l.label || l.platform || 'Follow') +
-                          '</span></a>'
+                      return renderPillLink(
+                          l.url,
+                          socialIcon(l.platform),
+                          l.label || l.platform || 'Follow',
+                          'social-link-btn ' + pillClass
                       );
                   })
                   .join('')
@@ -114,10 +122,10 @@
     }
 
     const DEFAULT_FEATURES = [
-        { icon: 'fa-microphone-alt', title: 'Expert faculty', text: 'Renowned practitioners and researchers from across India.' },
-        { icon: 'fa-certificate', title: 'CME & certificates', text: 'Structured learning with documented participation.' },
-        { icon: 'fa-trophy', title: 'Case presentations', text: 'Clinical excellence in Agnikarma and related disciplines.' },
-        { icon: 'fa-network-wired', title: 'Professional network', text: 'Connect with peers, mentors, and institutions nationwide.' }
+        { icon: 'fa-microphone-alt', title: 'Curated faculty', text: 'Sessions led by trusted Ayurvedic clinicians and researchers.' },
+        { icon: 'fa-certificate', title: 'Verified credentials', text: 'Participation and certificate records with transparent verification.' },
+        { icon: 'fa-trophy', title: 'Clinical excellence', text: 'Case-focused learning built around practical, modern workflows.' },
+        { icon: 'fa-network-wired', title: 'Nationwide network', text: 'Collaborate with peers, institutions, and mentors across India.' }
     ];
 
     function renderFeatureCards(cards) {

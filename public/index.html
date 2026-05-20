@@ -13,6 +13,7 @@
     <link rel="stylesheet" href="/css/vgmf-site.css">
     <link rel="stylesheet" href="/css/vgmf-congress.css">
     <link rel="stylesheet" href="/css/vgmf-home-redesign.css">
+    <link rel="stylesheet" href="/css/vgmf-public-premium.css">
     <script src="/js/portal-datetime.js"></script>
 </head>
 <body class="congress-site vgmf-redesign" oncontextmenu="return false;">
@@ -28,7 +29,7 @@
                 <span><i class="fas fa-calendar-alt"></i> <span id="top-date">National Seminar 2026</span></span>
             </div>
             <div>
-                <a href="/doctor.html"><i class="fas fa-user"></i> Doctor sign in</a>
+                <a href="/doctor.html"><i class="fas fa-user"></i> Sign in</a>
                 <span style="opacity:0.5;margin:0 8px;">|</span>
                 <a href="#" data-portal-auth="signup" onclick="openRegisterModal(); return false;"><i class="fas fa-user-plus"></i> Create account</a>
             </div>
@@ -50,15 +51,15 @@
             <button type="button" class="cg-menu-toggle" id="cg-menu-toggle" aria-label="Menu"><i class="fas fa-bars"></i></button>
             <nav class="cg-nav" id="cg-nav">
                 <a href="#" data-nav-section="home" class="active">Home</a>
-                <a href="#" data-nav-section="about">About</a>
-                <a href="#" data-nav-section="schedule">Programme</a>
+                <a href="#" data-nav-section="about">Foundation</a>
+                <a href="#" data-nav-section="schedule">Agenda</a>
                 <a href="#" data-nav-section="gallery">Gallery</a>
                 <a href="#" id="nav-verify" data-nav-section="verify"><i class="fas fa-shield-check" aria-hidden="true"></i> Delegates</a>
                 <a href="/verify-certificate.html"><i class="fas fa-award" aria-hidden="true"></i> Certificate</a>
                 <a href="#" data-nav-section="contact">Contact</a>
                 <a id="nav-wix-home" href="https://www.vaidyagogate.org" target="_blank" rel="noopener" class="hidden">Main site</a>
-                <a href="/doctor.html">Doctor portal</a>
-                <a href="/?register=1" class="cg-btn-register" data-portal-auth="signup" onclick="openRegisterModal(); return false;">Register</a>
+                <a href="/doctor.html">Portal</a>
+                <a href="/?register=1" class="cg-btn-register" data-portal-auth="signup" onclick="openRegisterModal(); return false;">Create account</a>
     </nav>
         </div>
     </header>
@@ -97,7 +98,7 @@
     <section class="vg-how-section" aria-labelledby="vg-how-title">
         <span class="vg-section-label">Registration journey</span>
         <h2 id="vg-how-title">How it works</h2>
-        <p>Register online, get verified, pay securely, and receive your e-ticket — all from one doctor portal.</p>
+        <p>Complete your seminar journey in one streamlined flow: profile, verification, payment, e-ticket, and certificate readiness.</p>
         <div class="vg-steps">
             <article class="vg-step">
                 <div class="vg-step-num">1</div>
@@ -126,12 +127,12 @@
         <span class="vg-section-label">Quick help</span>
         <h2 style="font-family:'Libre Baskerville',Georgia,serif;font-size:1.5rem;margin-bottom:16px;color:#0f172a;">Everything you need</h2>
         <div class="vg-help-grid">
-            <a href="/doctor.html" class="vg-help-card"><i class="fas fa-user-md"></i><div><strong>Doctor portal</strong><span>Sign in, applications, payments, tickets</span></div></a>
-            <a href="/verify-certificate.html" class="vg-help-card"><i class="fas fa-award"></i><div><strong>Certificate verify</strong><span>OTP-based authenticity check</span></div></a>
+            <a href="/doctor.html" class="vg-help-card"><i class="fas fa-user-md"></i><div><strong>Doctor workspace</strong><span>Profile, applications, payments and tickets</span></div></a>
+            <a href="/verify-certificate.html" class="vg-help-card"><i class="fas fa-award"></i><div><strong>Certificate authenticity</strong><span>Secure OTP-based validation</span></div></a>
             <a href="#" class="vg-help-card" data-nav-section="verify" onclick="showSection('verify');return false;"><i class="fas fa-shield-check"></i><div><strong>Delegate list</strong><span>Search paid participants</span></div></a>
-            <a href="#" class="vg-help-card" data-nav-section="schedule" onclick="showSection('schedule');return false;"><i class="fas fa-calendar-alt"></i><div><strong>Programme</strong><span>Sessions, speakers, timings</span></div></a>
+            <a href="#" class="vg-help-card" data-nav-section="schedule" onclick="showSection('schedule');return false;"><i class="fas fa-calendar-alt"></i><div><strong>Event agenda</strong><span>Sessions, speakers, and timings</span></div></a>
             <a href="#" class="vg-help-card" data-nav-section="contact" onclick="showSection('contact');return false;"><i class="fas fa-envelope"></i><div><strong>Contact</strong><span>Questions about registration</span></div></a>
-            <a href="#" class="vg-help-card" data-portal-auth="signup" onclick="openRegisterModal();return false;"><i class="fas fa-user-plus"></i><div><strong>Register now</strong><span>Create your doctor account</span></div></a>
+            <a href="#" class="vg-help-card" data-portal-auth="signup" onclick="openRegisterModal();return false;"><i class="fas fa-user-plus"></i><div><strong>Start enrollment</strong><span>Create your doctor account</span></div></a>
         </div>
     </section>
 
@@ -174,7 +175,7 @@
 
             <section class="vgmf-section" id="seminars-section">
                 <div class="section-head">
-                    <h2>Seminars open for registration</h2>
+                    <h2>Open seminar windows</h2>
                     <p>Apply through the secure doctor portal</p>
             </div>
                 <div id="open-seminars-strip" class="open-seminars-strip"></div>
@@ -438,7 +439,7 @@
                 </ul>
                 </div>
             <div class="footer-col">
-                <h4>Doctor portal</h4>
+                <h4>Doctor access</h4>
                 <ul>
                     <li><a href="/doctor.html">Sign in</a></li>
                     <li><a href="#" data-portal-auth="signup" onclick="openRegisterModal(); return false;">Create account</a></li>
@@ -855,14 +856,6 @@
             refreshSignupOtpPanel();
         });
 
-
-        function socialIcon(platform) {
-            const p = String(platform || '').toLowerCase();
-            if (p === 'youtube') return 'fab fa-youtube';
-            if (p === 'facebook') return 'fab fa-facebook';
-            if (p === 'instagram') return 'fab fa-instagram';
-            return 'fas fa-link';
-        }
 
         function renderAboutGallerySocial(cms) {
             const aboutEl = document.getElementById('about-content');

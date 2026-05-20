@@ -18,16 +18,16 @@
     }
 
     const QUICK_ACCESS = [
-        { icon: 'fa-user-plus', title: 'Register now', text: 'Create doctor account', action: 'register' },
-        { icon: 'fa-user-md', title: 'Doctor portal', text: 'Sign in & applications', href: '/doctor.html' },
-        { icon: 'fa-calendar-alt', title: 'Programme', text: 'Schedule & sessions', section: 'schedule' },
-        { icon: 'fa-microphone', title: 'Speakers', text: 'Faculty & experts', section: 'home', anchor: 'speakers-section' },
-        { icon: 'fa-ticket-alt', title: 'Seminars', text: 'Open registration', section: 'home', anchor: 'seminars-section' },
-        { icon: 'fa-images', title: 'Gallery', text: 'Photos & memories', section: 'gallery' },
-        { icon: 'fa-shield-check', title: 'Verify delegate', text: 'Paid participants', section: 'verify' },
-        { icon: 'fa-award', title: 'Certificate', text: 'OTP verify', href: '/verify-certificate.html' },
-        { icon: 'fa-info-circle', title: 'About', text: 'Our foundation', section: 'about' },
-        { icon: 'fa-envelope', title: 'Contact', text: 'Get in touch', section: 'contact' }
+        { icon: 'fa-user-plus', title: 'Start enrollment', text: 'Create your doctor account', action: 'register' },
+        { icon: 'fa-user-md', title: 'Doctor workspace', text: 'Sign in and manage applications', href: '/doctor.html' },
+        { icon: 'fa-calendar-alt', title: 'Event agenda', text: 'Sessions and timings', section: 'schedule' },
+        { icon: 'fa-microphone', title: 'Faculty board', text: 'Featured experts', section: 'home', anchor: 'speakers-section' },
+        { icon: 'fa-ticket-alt', title: 'Open windows', text: 'Current registrations', section: 'home', anchor: 'seminars-section' },
+        { icon: 'fa-images', title: 'Seminar gallery', text: 'Past highlights', section: 'gallery' },
+        { icon: 'fa-shield-check', title: 'Delegate directory', text: 'Paid participant lookup', section: 'verify' },
+        { icon: 'fa-award', title: 'Certificate authenticity', text: 'OTP validation', href: '/verify-certificate.html' },
+        { icon: 'fa-info-circle', title: 'Foundation profile', text: 'Mission and history', section: 'about' },
+        { icon: 'fa-envelope', title: 'Support desk', text: 'Contact the office', section: 'contact' }
     ];
 
     let heroIndex = 0;

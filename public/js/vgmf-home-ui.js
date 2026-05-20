@@ -4,16 +4,16 @@
 (function () {
     const SEARCH_ITEMS = [
         { icon: 'fa-home', label: 'Home', section: 'home' },
-        { icon: 'fa-info-circle', label: 'About foundation', section: 'about' },
-        { icon: 'fa-calendar-alt', label: 'Programme & schedule', section: 'schedule' },
-        { icon: 'fa-images', label: 'Gallery', section: 'gallery' },
-        { icon: 'fa-shield-check', label: 'Verify delegate', section: 'verify' },
-        { icon: 'fa-award', label: 'Verify certificate', href: '/verify-certificate.html' },
-        { icon: 'fa-envelope', label: 'Contact us', section: 'contact' },
-        { icon: 'fa-user-md', label: 'Doctor portal sign in', href: '/doctor.html' },
-        { icon: 'fa-user-plus', label: 'Create doctor account', action: 'register' },
-        { icon: 'fa-microphone', label: 'Speakers', section: 'home', anchor: 'speakers-section' },
-        { icon: 'fa-ticket-alt', label: 'Open seminars', section: 'home', anchor: 'seminars-section' }
+        { icon: 'fa-info-circle', label: 'Foundation profile', section: 'about' },
+        { icon: 'fa-calendar-alt', label: 'Event agenda', section: 'schedule' },
+        { icon: 'fa-images', label: 'Seminar gallery', section: 'gallery' },
+        { icon: 'fa-shield-check', label: 'Delegate directory', section: 'verify' },
+        { icon: 'fa-award', label: 'Certificate authenticity', href: '/verify-certificate.html' },
+        { icon: 'fa-envelope', label: 'Support desk', section: 'contact' },
+        { icon: 'fa-user-md', label: 'Doctor workspace', href: '/doctor.html' },
+        { icon: 'fa-user-plus', label: 'Start enrollment', action: 'register' },
+        { icon: 'fa-microphone', label: 'Faculty board', section: 'home', anchor: 'speakers-section' },
+        { icon: 'fa-ticket-alt', label: 'Open registration windows', section: 'home', anchor: 'seminars-section' }
     ];
 
     function bindScrollProgress() {

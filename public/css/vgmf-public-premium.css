@@ -1,0 +1,203 @@
+:root {
+    --vp-bg: #f5f7fb;
+    --vp-surface: #ffffff;
+    --vp-surface-soft: #f8fafc;
+    --vp-text: #0f172a;
+    --vp-muted: #475569;
+    --vp-line: #dbe3ef;
+    --vp-brand: #0f766e;
+    --vp-brand-strong: #115e59;
+    --vp-radius: 16px;
+    --vp-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
+    --vp-shadow-soft: 0 8px 18px rgba(15, 23, 42, 0.06);
+    --vp-hero-grad: radial-gradient(circle at 20% 20%, #134e4a, #0f172a 78%);
+}
+
+body.vgmf-redesign {
+    background: linear-gradient(180deg, #f8fbff 0%, #f4f7fb 70%, #eef2f7 100%);
+    color: var(--vp-text);
+}
+
+.vgmf-redesign .cg-header {
+    backdrop-filter: blur(10px);
+    background: rgba(255, 255, 255, 0.92);
+    border-bottom: 1px solid rgba(219, 227, 239, 0.8);
+}
+
+.vgmf-redesign .cg-logo-text h1 {
+    letter-spacing: -0.02em;
+    font-weight: 800;
+}
+
+.vgmf-redesign .cg-logo-text p {
+    color: var(--vp-muted);
+}
+
+.vgmf-redesign .congress-hero {
+    border-radius: 0 0 28px 28px;
+    overflow: hidden;
+    box-shadow: var(--vp-shadow);
+    margin-bottom: 24px;
+}
+
+.vgmf-redesign .congress-hero-slide .congress-hero-bg {
+    background-image: var(--vp-hero-grad);
+}
+
+.vgmf-redesign .congress-hero-content h2 {
+    letter-spacing: -0.025em;
+    line-height: 1.1;
+}
+
+.vgmf-redesign .cg-quick {
+    padding-top: 20px;
+}
+
+.vgmf-redesign .cg-quick-card {
+    border: 1px solid var(--vp-line);
+    background: var(--vp-surface);
+    border-radius: var(--vp-radius);
+    box-shadow: var(--vp-shadow-soft);
+    transition: transform 220ms ease, box-shadow 220ms ease, border-color 220ms ease;
+}
+
+.vgmf-redesign .cg-quick-card:hover,
+.vgmf-redesign .cg-quick-card:focus-visible {
+    transform: translateY(-3px);
+    box-shadow: var(--vp-shadow);
+    border-color: #b8c7df;
+}
+
+.vgmf-redesign .cg-quick-icon {
+    background: linear-gradient(135deg, #ecfeff, #f0fdfa);
+    color: var(--vp-brand);
+}
+
+.vgmf-redesign .vg-stats-strip,
+.vgmf-redesign .vg-how-section,
+.vgmf-redesign .vg-help-hub,
+.vgmf-redesign .vgmf-section,
+.vgmf-redesign .page-panel,
+.vgmf-redesign .verify-panel,
+.vgmf-redesign .contact-grid {
+    border: 1px solid var(--vp-line);
+    border-radius: var(--vp-radius);
+    background: var(--vp-surface);
+    box-shadow: var(--vp-shadow-soft);
+}
+
+.vgmf-redesign .vg-stats-strip strong {
+    color: var(--vp-brand-strong);
+}
+
+.vgmf-redesign .section-head h2,
+.vgmf-redesign .vg-how-section h2 {
+    letter-spacing: -0.02em;
+}
+
+.vgmf-redesign .feature-card,
+.vgmf-redesign .speaker-card,
+.vgmf-redesign .seminar-pill,
+.vgmf-redesign .notice-card,
+.vgmf-redesign .vg-help-card {
+    border: 1px solid var(--vp-line);
+    border-radius: 14px;
+    background: var(--vp-surface-soft);
+    transition: transform 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
+}
+
+.vgmf-redesign .feature-card:hover,
+.vgmf-redesign .speaker-card:hover,
+.vgmf-redesign .seminar-pill:hover,
+.vgmf-redesign .vg-help-card:hover {
+    transform: translateY(-2px);
+    border-color: #b8c7df;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+}
+
+.vgmf-redesign .notices-panel {
+    border-left: 1px solid var(--vp-line);
+}
+
+.vgmf-redesign .btn-primary,
+.vgmf-redesign .cg-btn-primary,
+.vgmf-redesign .cg-btn-register {
+    background: linear-gradient(135deg, #0f766e, #0b5f58);
+    border: 1px solid transparent;
+    box-shadow: 0 8px 18px rgba(15, 118, 110, 0.25);
+}
+
+.vgmf-redesign .btn-primary:hover,
+.vgmf-redesign .cg-btn-primary:hover,
+.vgmf-redesign .cg-btn-register:hover {
+    background: linear-gradient(135deg, #0c675f, #0a524c);
+}
+
+.vgmf-redesign .footer {
+    margin-top: 40px;
+    border-top: 1px solid var(--vp-line);
+    background: #0f172a;
+    color: #e2e8f0;
+}
+
+.vgmf-redesign .footer a {
+    color: #cde8ff;
+}
+
+.vgmf-redesign .footer a:hover {
+    color: #ffffff;
+}
+
+.vgmf-redesign .vg-search-panel {
+    border: 1px solid var(--vp-line);
+    border-radius: var(--vp-radius);
+    box-shadow: var(--vp-shadow);
+}
+
+.vgmf-redesign .verify-table th {
+    background: #f8fbff;
+}
+
+.vgmf-redesign .verify-table tr:hover td {
+    background: #f2f8ff;
+}
+
+@keyframes vpFadeUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.vgmf-redesign .vg-stats-strip,
+.vgmf-redesign .vg-how-section,
+.vgmf-redesign .vg-help-hub,
+.vgmf-redesign .vgmf-section,
+.vgmf-redesign #aboutSection,
+.vgmf-redesign #scheduleSection,
+.vgmf-redesign #contactSection,
+.vgmf-redesign #verifySection,
+.vgmf-redesign #gallerySection {
+    animation: vpFadeUp 420ms ease both;
+}
+
+@media (max-width: 920px) {
+    .vgmf-redesign .notices-panel {
+        border-left: 0;
+        border-top: 1px solid var(--vp-line);
+        padding-top: 16px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .vgmf-redesign * {
+        animation-duration: 1ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 1ms !important;
+        scroll-behavior: auto !important;
+    }
+}
