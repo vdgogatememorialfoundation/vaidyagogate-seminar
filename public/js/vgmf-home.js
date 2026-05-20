@@ -174,6 +174,15 @@
         setText('top-email', top.email);
         setText('top-phone', top.phone);
         setText('top-date', top.dateLine);
+        const emailLink = document.getElementById('top-email-link');
+        const phoneLink = document.getElementById('top-phone-link');
+        if (emailLink && top.email) {
+            emailLink.href = 'mailto:' + String(top.email).trim();
+        }
+        if (phoneLink && top.phone) {
+            const digits = String(top.phone).replace(/\D/g, '');
+            phoneLink.href = digits ? 'tel:+' + (digits.length === 10 ? '91' + digits : digits) : '#';
+        }
 
         const contact = cms.contact || {};
         ['contact-address', 'contact-page-address'].forEach((id) => setText(id, contact.address));

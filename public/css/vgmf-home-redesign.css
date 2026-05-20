@@ -623,9 +623,6 @@
     .vg-stats-grid {
         grid-template-columns: 1fr;
     }
-    .vgmf-redesign .cg-utility span:nth-child(2) {
-        display: none;
-    }
 }
 
 /* ===== Full relayout pass (premium v2) ===== */

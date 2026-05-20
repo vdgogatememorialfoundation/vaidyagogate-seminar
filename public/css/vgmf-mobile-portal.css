@@ -146,13 +146,29 @@
 
 /* —— Premium redesign on small screens —— */
 @media (max-width: 768px) {
-    .vgmf-redesign .cg-utility-inner > div:last-child {
-        width: 100%;
+    .vgmf-redesign .cg-site-top {
+        background: #ffffff;
+    }
+
+    .vgmf-redesign .cg-utility-contacts {
+        background: #f0fdfa;
+        border: 1px solid #99f6e4;
+        border-radius: 12px;
+        padding: 10px 12px;
+    }
+
+    .vgmf-redesign .cg-utility-email .cg-utility-link,
+    .vgmf-redesign .cg-utility-phone .cg-utility-link {
+        color: #047857;
+        font-weight: 800;
+    }
+
+    .vgmf-redesign .cg-utility-auth {
         justify-content: flex-start;
         gap: 12px 16px;
     }
 
-    .vgmf-redesign .cg-utility-inner > div:last-child a {
+    .vgmf-redesign .cg-utility-auth a {
         min-height: 44px;
         display: inline-flex;
         align-items: center;

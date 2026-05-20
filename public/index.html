@@ -22,16 +22,26 @@
     <div class="vg-scroll-progress" id="vg-scroll-progress" aria-hidden="true"></div>
     <div id="site-preloader" aria-hidden="true"><div class="preloader-ring"></div><p style="color:var(--muted);font-weight:600;">Loading seminar portal…</p></div>
 
-    <div class="cg-utility">
+    <div class="cg-site-top" id="cg-site-top">
+    <div class="cg-utility" aria-label="Contact and account">
         <div class="cg-utility-inner">
-            <div>
-                <span><i class="fas fa-envelope"></i> <span id="top-email">info@vaidyagogate.org</span></span>
-                <span><i class="fas fa-phone"></i> <span id="top-phone">+91 9876543210</span></span>
-                <span><i class="fas fa-calendar-alt"></i> <span id="top-date">National Seminar 2026</span></span>
+            <div class="cg-utility-contacts">
+                <span class="cg-utility-item cg-utility-email">
+                    <i class="fas fa-envelope" aria-hidden="true"></i>
+                    <a href="mailto:info@vaidyagogate.org" id="top-email-link" class="cg-utility-link"><span id="top-email">info@vaidyagogate.org</span></a>
+                </span>
+                <span class="cg-utility-item cg-utility-phone">
+                    <i class="fas fa-phone" aria-hidden="true"></i>
+                    <a href="tel:+919876543210" id="top-phone-link" class="cg-utility-link"><span id="top-phone">+91 9876543210</span></a>
+                </span>
+                <span class="cg-utility-item cg-utility-date">
+                    <i class="fas fa-calendar-alt" aria-hidden="true"></i>
+                    <span id="top-date">National Seminar 2026</span>
+                </span>
             </div>
-            <div>
+            <div class="cg-utility-auth">
                 <a href="#" onclick="openAuthModal('login'); return false;"><i class="fas fa-user"></i> Sign in</a>
-                <span style="opacity:0.5;margin:0 8px;">|</span>
+                <span class="cg-utility-sep" aria-hidden="true">|</span>
                 <a href="#" data-portal-auth="signup" onclick="openRegisterModal(); return false;"><i class="fas fa-user-plus"></i> Create account</a>
             </div>
         </div>
@@ -64,6 +74,7 @@
     </nav>
         </div>
     </header>
+    </div>
     <div class="cg-nav-backdrop" id="cg-nav-backdrop" aria-hidden="true"></div>
 
     <div id="scrolling-announce-wrap" class="cg-ticker hidden" aria-label="Announcements">

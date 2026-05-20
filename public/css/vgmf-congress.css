@@ -88,9 +88,26 @@
     gap: 8px 20px;
 }
 .cg-utility span { display: inline-flex; align-items: center; gap: 8px; opacity: 0.95; }
-.cg-utility a { color: #0d9488; font-weight: 700; text-decoration: none; }
-.cg-utility a:hover { color: #059669; text-decoration: underline; }
-.cg-utility i { color: #f97316; }
+.cg-utility-contacts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; min-width: 0; }
+.cg-utility-item { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; }
+.cg-utility-link {
+    color: #0d9488;
+    font-weight: 700;
+    text-decoration: none;
+    word-break: break-all;
+}
+.cg-utility-link:hover { color: #059669; text-decoration: underline; }
+.cg-utility-auth { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.cg-utility-sep { opacity: 0.5; margin: 0 4px; }
+.cg-utility a:not(.cg-utility-link) { color: #0d9488; font-weight: 700; text-decoration: none; }
+.cg-utility a:not(.cg-utility-link):hover { color: #059669; text-decoration: underline; }
+.cg-utility i { color: #f97316; flex-shrink: 0; }
+
+.cg-site-top {
+    position: relative;
+    z-index: 1000;
+    background: #ffffff;
+}
 
 /* Sticky header */
 .cg-header {
@@ -1035,18 +1052,58 @@
 }
 @media (max-width: 768px) {
     .congress-site { overflow-x: clip; }
-    .cg-utility { font-size: 0.72rem; padding: 10px 0; }
+    .cg-site-top {
+        position: sticky;
+        top: 0;
+        z-index: 1001;
+        padding-top: env(safe-area-inset-top, 0px);
+        box-shadow: 0 4px 20px rgba(15, 23, 42, 0.08);
+    }
+    .cg-header {
+        position: relative;
+        top: auto;
+    }
+    .vgmf-redesign .cg-header {
+        padding-top: 0;
+    }
+    .cg-utility {
+        font-size: 0.8rem;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--cg-line);
+    }
     .cg-utility-inner {
         flex-direction: column;
-        align-items: flex-start;
+        align-items: stretch;
         gap: 10px;
         padding: 0 16px;
     }
-    .cg-utility-inner > div {
+    .cg-utility-contacts {
         display: flex;
-        flex-wrap: wrap;
-        gap: 8px 14px;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
         width: 100%;
+        order: 1;
+    }
+    .cg-utility-item {
+        width: 100%;
+        font-size: 0.85rem;
+        line-height: 1.35;
+    }
+    .cg-utility-email,
+    .cg-utility-phone {
+        display: flex !important;
+    }
+    .cg-utility-link {
+        flex: 1;
+        min-width: 0;
+        font-size: 0.9rem;
+    }
+    .cg-utility-auth {
+        width: 100%;
+        order: 2;
+        padding-top: 4px;
+        border-top: 1px solid var(--cg-line);
     }
     .cg-header-inner { padding: 10px 16px; gap: 10px; }
     .cg-logo-text h1 { font-size: 0.82rem; max-width: 58vw; line-height: 1.2; }
@@ -1127,7 +1184,7 @@
 @media (max-width: 480px) {
     .cg-quick-grid { grid-template-columns: 1fr; }
     .cg-logo-text h1 { font-size: 0.78rem; max-width: 52vw; }
-    .cg-utility span:nth-child(3) { display: none; }
+    .cg-utility-date { display: none; }
     #speakers-grid { grid-template-columns: 1fr; }
     .congress-hero { min-height: 420px; }
     .cg-fab-register {
