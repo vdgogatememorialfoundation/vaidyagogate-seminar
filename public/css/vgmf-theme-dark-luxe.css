@@ -1,0 +1,200 @@
+:root {
+    --dl-bg: #071018;
+    --dl-bg-soft: #0b1722;
+    --dl-surface: #0e1d2b;
+    --dl-surface-2: #132638;
+    --dl-text: #e8f0fb;
+    --dl-muted: #9ab0c8;
+    --dl-line: #254056;
+    --dl-brand: #35c59d;
+    --dl-brand-2: #1ca37f;
+    --dl-accent: #74b9ff;
+    --dl-gold: #dcc07a;
+    --dl-shadow: 0 20px 45px rgba(0, 0, 0, 0.4);
+}
+
+body.vgmf-redesign {
+    background: radial-gradient(circle at 10% 10%, #0f2435, #061019 56%, #050b12 100%);
+    color: var(--dl-text);
+}
+
+.vgmf-redesign .cg-utility,
+.vgmf-redesign .cg-header {
+    background: rgba(7, 16, 24, 0.9);
+    border-color: var(--dl-line);
+}
+
+.vgmf-redesign .cg-logo-text h1,
+.vgmf-redesign .cg-logo-text p,
+.vgmf-redesign .cg-utility span,
+.vgmf-redesign .cg-utility a,
+.vgmf-redesign .cg-nav a {
+    color: var(--dl-text);
+}
+
+.vgmf-redesign .cg-nav a:hover,
+.vgmf-redesign .cg-nav a.active {
+    background: rgba(116, 185, 255, 0.14);
+    color: #d5e8ff;
+}
+
+.vgmf-redesign .congress-hero-overlay {
+    background: linear-gradient(115deg, rgba(4, 22, 29, 0.94) 0%, rgba(7, 44, 52, 0.68) 45%, rgba(7, 16, 24, 0.5) 100%);
+}
+
+.vgmf-redesign .cg-ticker {
+    background: linear-gradient(90deg, rgba(53, 197, 157, 0.14), rgba(116, 185, 255, 0.12));
+    border-color: var(--dl-line);
+}
+
+.vgmf-redesign .cg-ticker-badge {
+    background: linear-gradient(135deg, #35c59d, #1ca37f);
+}
+
+.vgmf-redesign .vg-stats-strip,
+.vgmf-redesign .vg-how-section,
+.vgmf-redesign .vg-help-hub,
+.vgmf-redesign .vgmf-section,
+.vgmf-redesign #homeSection,
+.vgmf-redesign #aboutSection,
+.vgmf-redesign #gallerySection,
+.vgmf-redesign #verifySection,
+.vgmf-redesign #scheduleSection,
+.vgmf-redesign #contactSection,
+.vgmf-redesign .page-panel,
+.vgmf-redesign .verify-panel,
+.vgmf-redesign .contact-grid {
+    background: linear-gradient(180deg, rgba(14, 29, 43, 0.9), rgba(11, 23, 34, 0.95));
+    border-color: var(--dl-line);
+    color: var(--dl-text);
+    box-shadow: var(--dl-shadow);
+}
+
+.vgmf-redesign .section-head h2,
+.vgmf-redesign .vg-how-section h2,
+.vgmf-redesign .vg-help-hub h2,
+.vgmf-redesign .feature-card h3,
+.vgmf-redesign .speaker-card h3,
+.vgmf-redesign .seminar-pill h4 {
+    color: #f2f7ff;
+}
+
+.vgmf-redesign .section-head p,
+.vgmf-redesign .vg-how-section > p,
+.vgmf-redesign .feature-card p,
+.vgmf-redesign .speaker-card p,
+.vgmf-redesign .vg-help-card span,
+.vgmf-redesign .seminar-pill p,
+.vgmf-redesign .contact-info,
+.vgmf-redesign .contact-form,
+.vgmf-redesign .schedule-picker,
+.vgmf-redesign .notice-card p {
+    color: var(--dl-muted);
+}
+
+.vgmf-redesign .feature-card,
+.vgmf-redesign .speaker-card,
+.vgmf-redesign .seminar-pill,
+.vgmf-redesign .notice-card,
+.vgmf-redesign .vg-help-card,
+.vgmf-redesign .contact-info,
+.vgmf-redesign .contact-form,
+.vgmf-redesign .schedule-picker {
+    background: linear-gradient(180deg, var(--dl-surface), var(--dl-surface-2));
+    border-color: #2c4a62;
+}
+
+.vgmf-redesign .card-icon,
+.vgmf-redesign .vg-help-card i,
+.vgmf-redesign .cg-quick-icon {
+    background: linear-gradient(135deg, rgba(53, 197, 157, 0.22), rgba(116, 185, 255, 0.2));
+    color: #9cebd2;
+}
+
+.vgmf-redesign .btn-primary,
+.vgmf-redesign .cg-btn-register,
+.vgmf-redesign .cg-btn-primary {
+    background: linear-gradient(135deg, #35c59d, #1ca37f);
+    box-shadow: 0 10px 24px rgba(53, 197, 157, 0.24);
+}
+
+.vgmf-redesign .btn-primary:hover,
+.vgmf-redesign .cg-btn-register:hover,
+.vgmf-redesign .cg-btn-primary:hover {
+    background: linear-gradient(135deg, #2cb58f, #17886a);
+}
+
+.vgmf-redesign input,
+.vgmf-redesign select,
+.vgmf-redesign textarea {
+    background: rgba(7, 16, 24, 0.65);
+    color: #eaf4ff;
+    border-color: #35546b;
+}
+
+.vgmf-redesign input::placeholder,
+.vgmf-redesign textarea::placeholder {
+    color: #86a2bb;
+}
+
+.vgmf-redesign .verify-table th {
+    background: rgba(53, 197, 157, 0.14);
+    color: #dffef4;
+}
+
+.vgmf-redesign .verify-table td {
+    border-color: #2e4a62;
+    color: #d8e8fa;
+}
+
+.vgmf-redesign .verify-table tr:hover td {
+    background: rgba(116, 185, 255, 0.1);
+}
+
+body.verify-page {
+    background: radial-gradient(circle at 12% 12%, #123045, #081521 54%, #050b12 100%);
+    color: var(--dl-text);
+}
+
+.verify-page .cv-card {
+    background: linear-gradient(180deg, #102031, #0b1722);
+    border-color: #2d4c65;
+    box-shadow: var(--dl-shadow);
+}
+
+.verify-page .cv-card h1 {
+    color: #eef7ff;
+}
+
+.verify-page .cv-card p.cv-lead,
+.verify-page .cv-field label,
+.verify-page .cv-meta dt {
+    color: #9eb6cc;
+}
+
+.verify-page .cv-field input,
+.verify-page .cv-field select,
+.verify-page .cv-meta {
+    background: rgba(7, 16, 24, 0.7);
+    border-color: #35536b;
+    color: #ebf4ff;
+}
+
+.verify-page .cv-countdown-grid .box {
+    background: rgba(53, 197, 157, 0.14);
+    border-color: rgba(53, 197, 157, 0.25);
+}
+
+.verify-page .cv-btn-primary {
+    background: linear-gradient(135deg, #35c59d, #1ca37f);
+}
+
+.verify-page .cv-btn-secondary {
+    background: rgba(10, 26, 39, 0.9);
+    border-color: #33516a;
+    color: #d7e7fa;
+}
+
+.verify-page .cv-back {
+    color: #98caff;
+}
