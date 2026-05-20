@@ -1,5 +1,7 @@
 let currentUser = null;
 let currentRegistrationId = null;
+let __doctorAllowedTabs = null;
+window.__portalFlags = window.__portalFlags || {};
 
 function doctorNumericUserId() {
     if (!currentUser) return null;
@@ -20,6 +22,51 @@ function requireDoctorUserId() {
 
 function doctorUserIdOrAlert() {
     return requireDoctorUserId();
+}
+
+function parseDoctorModulesMap(raw) {
+    if (!raw) return null;
+    if (typeof raw === 'object') return raw;
+    try {
+        const o = JSON.parse(String(raw));
+        return o && typeof o === 'object' ? o : null;
+    } catch (_) {
+        return null;
+    }
+}
+
+function applyDoctorModuleAccessFromUser(user) {
+    const category = String((user && user.doctor_category) || 'regular').toLowerCase();
+    let mods = parseDoctorModulesMap(user && user.doctor_modules);
+    if (!mods && category === 'volunteer') {
+        mods = {
+            'tab-dashboard': true,
+            'tab-profile': true,
+            'tab-volunteer': true,
+            'tab-ticket': true,
+            'tab-certificate': true,
+            'tab-reset-pwd': true
+        };
+    }
+    __doctorAllowedTabs = mods && Object.keys(mods).length ? new Set(Object.keys(mods).filter((k) => !!mods[k])) : null;
+    document.querySelectorAll('.menu-item[data-tab]').forEach((el) => {
+        const tab = el.getAttribute('data-tab');
+        if (!tab) return;
+        const enabled = !__doctorAllowedTabs || __doctorAllowedTabs.has(tab);
+        el.classList.toggle('hidden', !enabled);
+    });
+    if (__doctorAllowedTabs && !__doctorAllowedTabs.has('tab-volunteer')) {
+        const nav = document.getElementById('nav-volunteer');
+        if (nav) nav.classList.add('hidden');
+    }
+}
+
+async function loadPortalFlags() {
+    try {
+        const res = await fetch('/api/public/portal-flags', { cache: 'no-store' });
+        const data = await res.json();
+        if (res.ok && data) window.__portalFlags = data;
+    } catch (_) {}
 }
 
 const DOCTOR_TRACK_POLL_MS = 4000;
@@ -462,6 +509,7 @@ function initDoctorMobileNav() {
 
 function bootDoctorDashboard(user) {
     currentUser = user;
+    applyDoctorModuleAccessFromUser(currentUser);
     fetch('/api/public/portal-urls')
         .then((r) => r.json())
         .then((u) => {
@@ -482,11 +530,12 @@ function bootDoctorDashboard(user) {
         loadProfile();
     loadDoctorPaymentOptions().then(() => {
         loadDoctorPortalYear().then(() => {
-            loadSeminarsGrid();
-            loadApplications();
+            if (!__doctorAllowedTabs || __doctorAllowedTabs.has('tab-seminars')) loadSeminarsGrid();
+            if (!__doctorAllowedTabs || __doctorAllowedTabs.has('tab-applications')) loadApplications();
         });
     });
     loadDoctorDashboardStats();
+    loadPortalFlags();
     loadRegistrationFormConfigAndApply();
     loadDoctorPortalUpdatesFromCms();
     loadSiteBranding();
@@ -1342,7 +1391,9 @@ function proceedFromSeminarTnc() {
     nextStep(1);
 }
 
-async function startRegistration(seminarId) {
+async function startRegistration(seminarId, opts) {
+    opts = opts || {};
+    const volunteerBypass = !!opts.volunteerBypass;
     const s = activeSeminars.find((x) => Number(x.id) === Number(seminarId));
     const seminarTitle = s && s.title ? s.title : 'Seminar';
     const regSet = window.__userRegisteredSeminarIds;
@@ -1351,7 +1402,7 @@ async function startRegistration(seminarId) {
         switchTab('tab-applications');
         return;
     }
-    if (s && registrationWindowState(s).state !== 'open') {
+    if (!volunteerBypass && s && registrationWindowState(s).state !== 'open') {
         if (registrationWindowState(s).state === 'upcoming') {
             alert('Registration has not opened yet for this seminar. Please wait until the countdown reaches zero.');
         } else {
@@ -1407,6 +1458,20 @@ async function startRegistration(seminarId) {
     nextStep(hasTerms || window.__seminarCancellationSummary ? 0 : 1);
 }
 
+/** Assigned volunteers may need to register after the public window closes; server still enforces rules on submit. */
+async function startRegistrationVolunteerFlow(seminarId) {
+    const sid = Number(seminarId);
+    if (!Number.isFinite(sid) || sid <= 0) return;
+    if (!activeSeminars.some((x) => Number(x.id) === sid)) {
+        alert(
+            'This seminar is not in your current list. Open Seminars from the menu to refresh, or contact the organiser if it still does not appear.'
+        );
+        return;
+    }
+    switchTab('tab-seminars');
+    await startRegistration(sid, { volunteerBypass: true });
+}
+
 function cancelRegistration() {
     activeSeminarIdForReg = null;
     window.__draftApplicationNo = null;
@@ -1431,6 +1496,10 @@ function cancelRegistration() {
 
 function switchTab(tabId, menuEl) {
     if (!tabId) return;
+    if (__doctorAllowedTabs && !__doctorAllowedTabs.has(tabId)) {
+        alert('This section is disabled for your account. Please contact admin if you need access.');
+        return;
+    }
     const pane = document.getElementById(tabId);
     if (!pane) {
         console.warn('[doctor] Unknown tab:', tabId);
@@ -1497,6 +1566,7 @@ function switchTab(tabId, menuEl) {
     syncDoctorTrackingPolls();
 }
 window.switchTab = switchTab;
+window.startRegistrationVolunteerFlow = startRegistrationVolunteerFlow;
 
 let activeCaseProgramId = null;
 let activeCasePrograms = [];
@@ -1718,9 +1788,21 @@ async function loadDoctorVolunteerPanel() {
         rows.forEach((v) => {
             const card = document.createElement('div');
             card.style.cssText = 'border:1px solid #e2e8f0;padding:14px;border-radius:8px;margin-bottom:12px;';
+            const st = String(v.status || '').toLowerCase();
+            const sid = Number(v.seminar_id);
+            const pending = st === 'pending';
+            const cta =
+                pending && Number.isFinite(sid) && sid > 0
+                    ? '<p style="margin-top:10px;"><button type="button" class="btn-primary" onclick="void window.startRegistrationVolunteerFlow(' +
+                      sid +
+                      ')">Complete seminar registration (required)</button></p><p style="font-size:0.82rem;color:#64748b;margin-top:6px;">Registration is mandatory before the organiser can approve your volunteer role and issue your free ticket.</p>'
+                    : '';
             const ticket = v.volunteer_ticket_id_string
                 ? '<p>Volunteer ticket: <code>' + escapeHtml(v.volunteer_ticket_id_string) + '</code></p>'
                 : '<p style="color:#64748b;">Ticket will be issued after admin verification (no payment required).</p>';
+            const certNote = pending
+                ? '<p style="font-size:0.88rem;color:#64748b;margin-top:8px;">After approval: participant-style certificate eligibility follows venue QR check-in; volunteer certificate is enabled separately by the organiser when ready.</p>'
+                : '<p style="font-size:0.88rem;color:#64748b;margin-top:8px;">Participant certificate: eligible only after your entry QR is scanned at the venue. Volunteer certificate: when enabled by the organiser. No check-in means no participant certificate.</p>';
             card.innerHTML =
                 '<h4 style="margin:0 0 8px;">' +
                 escapeHtml(v.title || 'Seminar') +
@@ -1728,7 +1810,8 @@ async function loadDoctorVolunteerPanel() {
                 escapeHtml(v.status) +
                 '</strong></p>' +
                 ticket +
-                '<p style="font-size:0.88rem;color:#64748b;margin-top:8px;">You receive both a volunteer certificate and a participant certificate once verified.</p>';
+                cta +
+                certNote;
             panel.appendChild(card);
         });
     } catch (e) {
@@ -2546,8 +2629,17 @@ async function verifyNcism() {
         if (statusEl) statusEl.classList.add('hidden');
         return alert('Enter your NCISM / registration number (at least 4 characters).');
     }
-    if (!fileInput || !fileInput.files || !fileInput.files[0]) {
+    const ocrDisabled = !!(window.__portalFlags && window.__portalFlags.ncism_disable_ocr);
+    if (!ocrDisabled && (!fileInput || !fileInput.files || !fileInput.files[0])) {
         return alert('Upload your registration certificate (PDF or image), then click Verify ID.');
+    }
+    if (ocrDisabled) {
+        if (statusEl) {
+            statusEl.classList.remove('hidden');
+            statusEl.style.color = '#0f766e';
+            statusEl.textContent = 'Auto OCR verification is disabled by admin. Submission will go for manual review.';
+        }
+        return alert('Auto OCR verification is currently disabled. Please continue and submit for manual verification.');
     }
     const fd = new FormData();
     fd.append('ncism', ncism);

@@ -612,6 +612,7 @@ async function loadUsers() {
                 doctorsBody.innerHTML = '<tr><td colspan="6" style="text-align:center;">No doctors registered</td></tr>';
             }
             doctors.forEach((u) => {
+                const cat = String(u.doctor_category || 'regular').toLowerCase() === 'volunteer' ? 'volunteer' : 'regular';
                 doctorsBody.innerHTML += `
                 <tr>
                     <td><strong>${u.user_id_string}</strong></td>
@@ -622,6 +623,11 @@ async function loadUsers() {
                     <td>
                         <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-right:6px;" onclick="openAdminUserDetail(${u.id})">View</button>
                         ${adminUserToggleBtn(u)}
+                        <select id="doctor-cat-${u.id}" style="margin-left:6px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:4px;">
+                            <option value="regular" ${cat === 'regular' ? 'selected' : ''}>Regular</option>
+                            <option value="volunteer" ${cat === 'volunteer' ? 'selected' : ''}>Volunteer</option>
+                        </select>
+                        <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-left:6px;background:#0f766e;" onclick="saveDoctorAccessFromList(${u.id})">Save access</button>
                     </td>
                 </tr>`;
                 if (proxySelect) {
@@ -683,6 +689,52 @@ async function updateUserRole(userId, newRole) {
     }
 }
 
+async function saveDoctorAccess(userId, doctorCategory, doctorModules) {
+    try {
+        const res = await fetch(`/api/admin/users/${userId}/doctor-access`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                doctor_category: doctorCategory,
+                doctor_modules: doctorModules || {}
+            })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) return { ok: false, error: data.error || 'Could not save doctor access.' };
+        return { ok: true, data };
+    } catch (_) {
+        return { ok: false, error: 'Network error saving doctor access.' };
+    }
+}
+
+async function saveDoctorAccessFromList(userId) {
+    const sel = document.getElementById('doctor-cat-' + userId);
+    if (!sel) return;
+    const category = sel.value === 'volunteer' ? 'volunteer' : 'regular';
+    const r = await saveDoctorAccess(userId, category, {});
+    if (!r.ok) return alert(r.error);
+    await loadUsers();
+    alert('Doctor access updated.');
+}
+
+async function saveDoctorAccessFromDetail(userId) {
+    const catEl = document.getElementById('admin-edit-doc-category');
+    const category = catEl && catEl.value === 'volunteer' ? 'volunteer' : 'regular';
+    const modules = {};
+    document.querySelectorAll('#admin-edit-doc-modules input[data-doc-mod]').forEach((inp) => {
+        const id = inp.getAttribute('data-doc-mod');
+        if (id && inp.checked) modules[id] = true;
+    });
+    const r = await saveDoctorAccess(userId, category, modules);
+    if (!r.ok) return alert(r.error);
+    if (__adminUserDetailCache && __adminUserDetailCache.user && Number(__adminUserDetailCache.user.id) === Number(userId)) {
+        __adminUserDetailCache.user.doctor_category = category;
+        __adminUserDetailCache.user.doctor_modules = JSON.stringify(r.data.doctor_modules || modules || {});
+    }
+    await loadUsers();
+    alert('Doctor access saved.');
+}
+
 const ADMIN_MODULE_TAB_DEFS = [
     ['tab-staff-users', 'Staff users'],
     ['tab-doctors', 'Doctors'],
@@ -712,7 +764,35 @@ const ADMIN_MODULE_TAB_DEFS = [
     ['tab-settings', 'Global settings']
 ];
 
+const DOCTOR_MODULE_TAB_DEFS = [
+    ['tab-dashboard', 'Dashboard'],
+    ['tab-profile', 'My profile'],
+    ['tab-seminars', 'Available seminars'],
+    ['tab-applications', 'Track seminar applications'],
+    ['tab-abstract', 'Case presentation'],
+    ['tab-case-track', 'Track case applications'],
+    ['tab-volunteer', 'Volunteer'],
+    ['tab-feedback', 'Seminar feedback'],
+    ['tab-support', 'Support tickets'],
+    ['tab-orders', 'Orders'],
+    ['tab-receipts', 'Receipts'],
+    ['tab-payments', 'Payments'],
+    ['tab-ticket', 'Participant tickets'],
+    ['tab-certificate', 'Certificates'],
+    ['tab-reset-pwd', 'Change password']
+];
+
 function parseAdminModulesObject(str) {
+    if (str == null || !String(str).trim()) return {};
+    try {
+        const o = JSON.parse(str);
+        return o && typeof o === 'object' ? o : {};
+    } catch (_) {
+        return {};
+    }
+}
+
+function parseDoctorModulesObject(str) {
     if (str == null || !String(str).trim()) return {};
     try {
         const o = JSON.parse(str);
@@ -1560,6 +1640,29 @@ function renderAdminUserDetailTab() {
                     <div class="form-group"><label>Qualification</label><input type="text" id="admin-edit-qual" value="${escAdmin(u.qualification || '')}" style="width:100%;padding:8px;"></div>
                     <p><strong>Password (stored):</strong> <code>${escAdmin(u.password)}</code></p>
                     <p><strong>Role:</strong> ${escAdmin(u.user_role || u.role)}</p>
+                    ${
+                        String(u.user_role || u.role || '').toLowerCase() === 'doctor'
+                            ? `<div style="margin:10px 0;padding:10px;border:1px solid #dbeafe;border-radius:8px;background:#f8fbff;">
+                    <p style="margin:0 0 8px;"><strong>Doctor access control</strong></p>
+                    <div class="form-group"><label>Category</label>
+                        <select id="admin-edit-doc-category" style="width:100%;padding:8px;">
+                            <option value="regular" ${String(u.doctor_category || 'regular').toLowerCase() === 'volunteer' ? '' : 'selected'}>Regular doctor</option>
+                            <option value="volunteer" ${String(u.doctor_category || '').toLowerCase() === 'volunteer' ? 'selected' : ''}>Volunteer doctor</option>
+                        </select>
+                    </div>
+                    <p style="font-size:0.82rem;color:#475569;margin:6px 0 8px;">For volunteers, keep only Volunteer/essential modules enabled.</p>
+                    <div id="admin-edit-doc-modules" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                        ${DOCTOR_MODULE_TAB_DEFS.map(
+                            ([id, title]) =>
+                                `<label style="display:flex;align-items:center;gap:6px;font-size:0.85rem;"><input type="checkbox" data-doc-mod="${id}" ${
+                                    parseDoctorModulesObject(u.doctor_modules)[id] ? 'checked' : ''
+                                }> ${title}</label>`
+                        ).join('')}
+                    </div>
+                    <button type="button" class="btn-primary" style="margin-top:10px;background:#0f766e;" onclick="saveDoctorAccessFromDetail(${u.id})">Save doctor access</button>
+                    </div>`
+                            : ''
+                    }
                     <p><strong>Status:</strong> ${Number(u.is_banned) === 1 ? 'Banned' : u.is_disabled ? 'Disabled' : 'Active'}</p>
                     ${Number(u.is_banned) === 1 && u.ban_reason ? `<p><strong>Ban reason:</strong> ${escAdmin(u.ban_reason)}</p>` : ''}
                     ${u.banned_at ? `<p><strong>Banned at:</strong> ${escAdmin(u.banned_at)}</p>` : ''}
@@ -4386,6 +4489,14 @@ async function loadSettings() {
         document.getElementById('setting-domain').value = settings.domain || '';
         document.getElementById('setting-pg').value = settings.payment_gateway || 'mock';
         document.getElementById('setting-disabled').value = settings.is_site_disabled || '0';
+        let portalFlags = {};
+        try {
+            portalFlags = settings.portal_flags ? JSON.parse(settings.portal_flags) : {};
+        } catch (_) {
+            portalFlags = {};
+        }
+        const ocrToggle = document.getElementById('setting-ncism-disable-ocr');
+        if (ocrToggle) ocrToggle.checked = !!portalFlags.ncism_disable_ocr;
         await loadMaintenanceSettings();
 
         // Load payment gateways
@@ -4444,10 +4555,15 @@ function setAdminSettingsSaveMsg(text, isError) {
 }
 
 async function saveSiteConfigSettings() {
+    const ocrToggle = document.getElementById('setting-ncism-disable-ocr');
+    const portalFlags = {
+        ncism_disable_ocr: !!(ocrToggle && ocrToggle.checked)
+    };
     const settings = [
         { key: 'site_name', value: document.getElementById('setting-sitename').value },
         { key: 'domain', value: document.getElementById('setting-domain').value },
-        { key: 'payment_gateway', value: document.getElementById('setting-pg').value }
+        { key: 'payment_gateway', value: document.getElementById('setting-pg').value },
+        { key: 'portal_flags', value: JSON.stringify(portalFlags) }
     ];
     try {
         await fetch('/api/admin/global_settings', {

@@ -511,7 +511,13 @@ function ensureCriticalUserColumns(callback) {
                 ignoreDup(err3);
                 db.run(`ALTER TABLE users ADD COLUMN last_login_at TEXT`, (err4) => {
                     ignoreDup(err4);
-                    afterUsers();
+                    db.run(`ALTER TABLE users ADD COLUMN doctor_category TEXT DEFAULT 'regular'`, (err5) => {
+                        ignoreDup(err5);
+                        db.run(`ALTER TABLE users ADD COLUMN doctor_modules TEXT`, (err6) => {
+                            ignoreDup(err6);
+                            afterUsers();
+                        });
+                    });
                 });
             });
         });
@@ -2430,6 +2436,31 @@ function parseAdminModulesJson(str) {
     } catch (_) {
         return null;
     }
+}
+
+function parseDoctorModulesJson(str) {
+    if (str == null || !String(str).trim()) return null;
+    try {
+        const o = JSON.parse(str);
+        return o && typeof o === 'object' ? o : null;
+    } catch (_) {
+        return null;
+    }
+}
+
+function sanitizeDoctorCategory(v) {
+    const c = String(v == null ? '' : v).trim().toLowerCase();
+    return c === 'volunteer' ? 'volunteer' : 'regular';
+}
+
+function sanitizeDoctorModulesInput(raw) {
+    const src = raw && typeof raw === 'object' ? raw : {};
+    const out = {};
+    Object.keys(src).forEach((k) => {
+        if (!k) return;
+        out[String(k)] = !!src[k];
+    });
+    return out;
 }
 
 app.get('/api/auth/signup-otp-required', withIntegrationSettingsLoaded, (req, res) => {
@@ -6478,6 +6509,7 @@ app.get('/api/admin/users/:userId/detail', (req, res) => {
 
     db.get(
         `SELECT id, user_id_string, first_name, middle_name, last_name, email, phone, password, role, user_role,
+                doctor_category, doctor_modules,
                 is_disabled, IFNULL(is_banned,0) AS is_banned, ban_reason, banned_at,
                 IFNULL(is_demo,0) AS is_demo, created_at FROM users WHERE id = ?`,
         [uid],
@@ -7550,7 +7582,7 @@ app.post('/api/admin/users/create', (req, res) => {
 // Admin: Get Users
 app.get('/api/admin/users', (req, res) => {
     db.all(
-        `SELECT id, user_id_string, first_name, last_name, email, phone, role, user_role, is_disabled,
+        `SELECT id, user_id_string, first_name, last_name, email, phone, role, user_role, doctor_category, doctor_modules, is_disabled,
                 IFNULL(is_banned,0) AS is_banned, ban_reason, IFNULL(is_demo,0) AS is_demo, admin_modules FROM users ORDER BY id DESC`,
         [],
         (err, rows) => {
@@ -7571,6 +7603,46 @@ app.post('/api/admin/users/:userId/role', (req, res) => {
     db.run(`UPDATE users SET user_role = ? WHERE id = ?`, [user_role, req.params.userId], function(err) {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ success: true, message: `User role updated to ${user_role}` });
+    });
+});
+
+// Admin: Update doctor category + per-user doctor modules
+app.post('/api/admin/users/:userId/doctor-access', (req, res) => {
+    const uid = parseInt(req.params.userId, 10);
+    if (!Number.isInteger(uid) || uid < 1) return res.status(400).json({ error: 'Invalid user id' });
+    const doctor_category = sanitizeDoctorCategory(req.body && req.body.doctor_category);
+    const modulesObj = sanitizeDoctorModulesInput(req.body && req.body.doctor_modules);
+    const hasModules = Object.keys(modulesObj).length > 0;
+    const categoryPreset =
+        doctor_category === 'volunteer'
+            ? {
+                  'tab-dashboard': true,
+                  'tab-profile': true,
+                  'tab-volunteer': true,
+                  'tab-ticket': true,
+                  'tab-certificate': true,
+                  'tab-reset-pwd': true
+              }
+            : null;
+    const finalModules = hasModules ? modulesObj : categoryPreset;
+    const modulesJson = finalModules ? JSON.stringify(finalModules) : null;
+    db.get(`SELECT id, role, user_role FROM users WHERE id = ?`, [uid], (e0, row0) => {
+        if (e0) return res.status(500).json({ error: e0.message });
+        if (!row0) return res.status(404).json({ error: 'User not found' });
+        const ur = String(row0.user_role || row0.role || '').toLowerCase();
+        if (ur !== 'doctor') return res.status(400).json({ error: 'Doctor access settings are only valid for doctor accounts.' });
+        db.run(
+            `UPDATE users SET doctor_category = ?, doctor_modules = ? WHERE id = ?`,
+            [doctor_category, modulesJson, uid],
+            function (err) {
+                if (err) return res.status(500).json({ error: err.message });
+                res.json({
+                    success: true,
+                    doctor_category,
+                    doctor_modules: finalModules || null
+                });
+            }
+        );
     });
 });
 
@@ -8241,6 +8313,25 @@ app.get('/api/global_settings', (req, res) => {
         rows.forEach(r => settings[r.key] = r.value);
         res.json(settings);
     });
+});
+
+app.get('/api/public/portal-flags', (req, res) => {
+    db.get(
+        `SELECT value FROM global_settings WHERE key = 'portal_flags'`,
+        [],
+        (err, row) => {
+            if (err) return res.status(500).json({ error: err.message });
+            let flags = {};
+            try {
+                flags = row && row.value ? JSON.parse(row.value) : {};
+            } catch (_) {
+                flags = {};
+            }
+            res.json({
+                ncism_disable_ocr: !!(flags && flags.ncism_disable_ocr)
+            });
+        }
+    );
 });
 
 // Admin: Update Global Settings
