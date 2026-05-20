@@ -4259,12 +4259,11 @@ function mapDoctorCertificateTrackingRows(rows) {
                         scansRequired === 2
                             ? `Check-in ${scanCount}/${scansRequired} scans`
                             : 'Awaiting venue check-in';
-                } else if (!Number(row.scan_verified)) {
-                    certStatus = 'processing';
-                    certStatusLabel = 'Check-in recorded';
                 } else if (!Number(row.cert_enabled)) {
-                    certStatus = 'awaiting_approval';
-                    certStatusLabel = 'Awaiting foundation approval';
+                    certStatus = Number(row.scan_verified) ? 'awaiting_approval' : 'checked_in';
+                    certStatusLabel = Number(row.scan_verified)
+                        ? 'Checked in — awaiting certificate approval'
+                        : 'Checked in at venue';
                 } else if (!row.template_path) {
                     certStatus = 'approved_pending_design';
                     certStatusLabel = 'Approved — certificate preparing';
@@ -5913,6 +5912,27 @@ function safeDisableCertificatesForRegistration(registrationId, cb) {
     );
 }
 
+function promoteRegistrationToCertificateIssued(registrationId, cb) {
+    if (!registrationId) return cb && cb(null);
+    db.run(
+        `UPDATE registrations SET status = 'certificate_issued'
+         WHERE id = ? AND COALESCE(status, '') NOT IN ('rejected', 'cancelled')
+           AND status IN ('checked_in', 'completed', 'e_ticket_issued', 'approved_pending_payment', 'certificate_issued')`,
+        [registrationId],
+        (err) => {
+            if (err) return cb && cb(err);
+            portalTracking.logRegistrationEvent(
+                db,
+                registrationId,
+                'certificate_issued',
+                'E-certificate issued',
+                'Your e-certificate has been approved and is ready for download.',
+                () => cb && cb(null)
+            );
+        }
+    );
+}
+
 function enableCertificateForRegistration(registrationId, cb) {
     db.get(
         `SELECT r.user_id, r.seminar_id, r.form_data, u.first_name, u.middle_name, u.last_name
@@ -5940,7 +5960,8 @@ function enableCertificateForRegistration(registrationId, cb) {
                         [row.user_id, row.seminar_id, registrationId, displayName, tpl ? tpl.id : null],
                         (e3) => {
                             if (e3 && /relation .* does not exist/i.test(e3.message)) return cb && cb(null);
-                            cb && cb(e3);
+                            if (e3) return cb && cb(e3);
+                            promoteRegistrationToCertificateIssued(registrationId, cb);
                         }
                     );
                 }
@@ -6825,8 +6846,8 @@ app.post('/api/admin/certificates/:id/toggle', (req, res) => {
     const id = parseInt(req.params.id, 10);
     const enabled = req.body && req.body.enabled ? 1 : 0;
     if (enabled) {
-        return db.get(
-            `SELECT uc.id, uc.user_id, uc.seminar_id, r.application_no, u.user_id_string
+        return         db.get(
+            `SELECT uc.id, uc.user_id, uc.seminar_id, uc.registration_id, r.application_no, u.user_id_string
              FROM user_certificates uc
              JOIN users u ON u.id = uc.user_id
              LEFT JOIN registrations r ON r.id = uc.registration_id
@@ -6844,15 +6865,21 @@ app.post('/api/admin/certificates/:id/toggle', (req, res) => {
                         [id],
                         function (err) {
                             if (err) return res.status(500).json({ error: err.message });
-                            notifEngine.notify(db, 'CERTIFICATE_AVAILABLE', {
-                                userId: row.user_id,
-                                seminarId: row.seminar_id,
-                                vars: {
-                                    certificate_url:
-                                        notifEngine.publicBaseUrl() + '/doctor.html#tab-certificates'
-                                }
-                            });
-                            res.json({ success: true });
+                            const finishEnable = () => {
+                                notifEngine.notify(db, 'CERTIFICATE_AVAILABLE', {
+                                    userId: row.user_id,
+                                    seminarId: row.seminar_id,
+                                    vars: {
+                                        certificate_url:
+                                            notifEngine.publicBaseUrl() + '/doctor.html#tab-certificates'
+                                    }
+                                });
+                                res.json({ success: true });
+                            };
+                            if (row.registration_id) {
+                                return promoteRegistrationToCertificateIssued(row.registration_id, finishEnable);
+                            }
+                            finishEnable();
                         }
                     );
                 });
@@ -8797,8 +8824,6 @@ app.post('/api/admin/email/bulk', (req, res) => {
 });
 
 // ==================== SUPPORT TICKET ENDPOINTS ====================
-
-const PG_INT_MAX = 2147483647;
 
 /** Resolve portal user ID (12-digit), USR_… string, email, or small internal users.id. */
 function resolveDoctorUserRef(raw, cb) {
