@@ -59,20 +59,21 @@
             <div class="vg-header-actions">
                 <button type="button" class="vg-btn-icon" id="vg-search-open" aria-label="Search site"><i class="fas fa-search"></i></button>
             </div>
-            <button type="button" class="cg-menu-toggle" id="cg-menu-toggle" aria-label="Menu"><i class="fas fa-bars"></i></button>
-            <nav class="cg-nav" id="cg-nav">
-                <a href="#" data-nav-section="home" class="active">Home</a>
-                <a href="#" data-nav-section="about">Foundation</a>
-                <a href="#" data-nav-section="schedule">Agenda</a>
-                <a href="#" data-nav-section="gallery">Gallery</a>
-                <a href="#" id="nav-verify" data-nav-section="verify"><i class="fas fa-shield-check" aria-hidden="true"></i> Delegates</a>
-                <a href="/verify-certificate.html"><i class="fas fa-award" aria-hidden="true"></i> Certificate</a>
-                <a href="#" data-nav-section="contact">Contact</a>
-                <a id="nav-wix-home" href="https://www.vaidyagogate.org" target="_blank" rel="noopener" class="hidden">Main site</a>
-                <a href="/doctor.html">Portal</a>
-                <a href="/?register=1" class="cg-btn-register" data-portal-auth="signup" onclick="openRegisterModal(); return false;">Create account</a>
-    </nav>
+            <button type="button" class="cg-menu-toggle" id="cg-menu-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="cg-nav"><i class="fas fa-bars"></i></button>
         </div>
+        <nav class="cg-nav" id="cg-nav" aria-label="Site menu">
+            <a href="#" data-nav-section="home" class="active">Home</a>
+            <a href="#" data-nav-section="about">Foundation</a>
+            <a href="#" data-nav-section="schedule">Agenda</a>
+            <a href="#" data-nav-section="gallery">Gallery</a>
+            <a href="#" id="nav-verify" data-nav-section="verify"><i class="fas fa-shield-check" aria-hidden="true"></i> Delegates</a>
+            <a href="/verify-certificate.html"><i class="fas fa-award" aria-hidden="true"></i> Certificate</a>
+            <a href="#" data-nav-section="contact">Contact</a>
+            <a href="#" onclick="openAuthModal('login'); return false;"><i class="fas fa-user" aria-hidden="true"></i> Sign in</a>
+            <a id="nav-wix-home" href="https://www.vaidyagogate.org" target="_blank" rel="noopener" class="hidden">Main site</a>
+            <a href="/doctor.html">Portal</a>
+            <a href="/?register=1" class="cg-btn-register" data-portal-auth="signup" onclick="openRegisterModal(); return false;">Create account</a>
+        </nav>
     </header>
     </div>
     <div class="cg-nav-backdrop" id="cg-nav-backdrop" aria-hidden="true"></div>

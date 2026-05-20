@@ -404,12 +404,20 @@
             nav.classList.remove('mobile-open');
             backdrop?.classList.remove('open');
             document.body.classList.remove('cg-nav-open');
+            toggle.setAttribute('aria-expanded', 'false');
+            nav.setAttribute('aria-hidden', 'true');
         };
+        const openNav = () => {
+            nav.classList.add('mobile-open');
+            backdrop?.classList.add('open');
+            document.body.classList.add('cg-nav-open');
+            toggle.setAttribute('aria-expanded', 'true');
+            nav.setAttribute('aria-hidden', 'false');
+        };
+        close();
         toggle.addEventListener('click', () => {
-            const open = !nav.classList.contains('mobile-open');
-            nav.classList.toggle('mobile-open', open);
-            backdrop?.classList.toggle('open', open);
-            document.body.classList.toggle('cg-nav-open', open);
+            if (nav.classList.contains('mobile-open')) close();
+            else openNav();
         });
         backdrop?.addEventListener('click', close);
         nav.querySelectorAll('a[data-nav-section]').forEach((a) => {

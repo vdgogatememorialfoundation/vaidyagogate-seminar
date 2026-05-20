@@ -298,52 +298,7 @@
         margin-right: 0 !important;
     }
 
-    /* Navigation: full-height drawer only (never inline in header row) */
-    .cg-header .cg-nav {
-        display: flex !important;
-        position: fixed !important;
-        top: 0 !important;
-        right: 0 !important;
-        left: auto !important;
-        width: min(88vw, 300px) !important;
-        height: 100dvh !important;
-        max-height: 100dvh !important;
-        margin: 0 !important;
-        transform: translateX(105%) !important;
-        flex-direction: column !important;
-        align-items: stretch !important;
-        padding: calc(env(safe-area-inset-top, 0px) + 12px) 14px 24px !important;
-        gap: 4px !important;
-        z-index: 10050 !important;
-        overflow-y: auto !important;
-        -webkit-overflow-scrolling: touch;
-        box-shadow: -12px 0 40px rgba(15, 23, 42, 0.18);
-    }
-
-    .cg-header .cg-nav.mobile-open {
-        transform: translateX(0) !important;
-    }
-
-    .cg-header .cg-nav a {
-        width: 100%;
-        justify-content: flex-start;
-        padding: 14px 14px !important;
-        font-size: 0.95rem !important;
-        border-radius: 10px;
-        min-height: 48px;
-    }
-
-    .cg-header .cg-nav .cg-btn-register {
-        margin-top: 8px;
-        text-align: center;
-        justify-content: center;
-    }
-
-    .cg-nav-backdrop.open {
-        z-index: 10040;
-    }
-
-    /* Top bar: contacts only; sign-in lives in menu drawer */
+    /* Top bar: contacts only; sign-in is in menu drawer */
     .cg-utility-auth {
         display: none !important;
     }
