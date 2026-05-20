@@ -29,6 +29,73 @@ function effectiveCaseMaxMb(program, config) {
     return Math.min(requested, UPLOAD_HOST_CAP_MB);
 }
 
+function setInlineUploadSuccess(el, textEl, message, show) {
+    if (!el) return;
+    if (!show) {
+        el.classList.add('hidden');
+        if (textEl) textEl.textContent = '';
+        return;
+    }
+    el.classList.remove('hidden');
+    if (textEl) textEl.textContent = message;
+}
+
+function getRegCertFileLabel() {
+    const inp = document.getElementById('reg-cert-file');
+    const f = inp && inp.files && inp.files[0];
+    return f ? f.name : '';
+}
+
+function updateRegCertUploadUi(opts) {
+    const options = opts || {};
+    const name = getRegCertFileLabel();
+    const successEl = document.getElementById('reg-cert-success');
+    const successText = document.getElementById('reg-cert-success-text');
+    if (options.uploaded) {
+        setInlineUploadSuccess(
+            successEl,
+            successText,
+            'Certificate uploaded successfully' + (name ? ': ' + name : '') + '.',
+            true
+        );
+    } else if (name) {
+        setInlineUploadSuccess(
+            successEl,
+            successText,
+            'Certificate selected: ' + name + ' — click Verify ID to upload, or it uploads when you submit.',
+            true
+        );
+    } else {
+        setInlineUploadSuccess(successEl, successText, '', false);
+    }
+}
+
+function updateCaseFilesSuccessUi(message) {
+    const el = document.getElementById('case-files-success');
+    const text = document.getElementById('case-files-success-text');
+    setInlineUploadSuccess(el, text, message || '', !!message);
+}
+
+function updateRegistrationPreviewCertificate() {
+    const qual = document.getElementById('reg-qual') && document.getElementById('reg-qual').value;
+    const needsCert = qual === 'PG' || qual === 'Practicing Vaidya' || qual === 'Practitioner';
+    const certName = getRegCertFileLabel();
+    const certBox = document.getElementById('prev-cert-box');
+    const certVal = document.getElementById('prev-cert-val');
+    const pdfBadge = document.getElementById('reg-pdf-cert-badge');
+    if (needsCert && certName) {
+        if (certBox) certBox.classList.remove('hidden');
+        if (certVal) {
+            certVal.textContent = 'Uploaded — ' + certName;
+            certVal.style.color = '#059669';
+        }
+        if (pdfBadge) pdfBadge.classList.remove('hidden');
+    } else {
+        if (certBox) certBox.classList.add('hidden');
+        if (pdfBadge) pdfBadge.classList.add('hidden');
+    }
+}
+
 async function prepareUploadFileOrAlert(file) {
     const PU = window.PortalUpload;
     if (!PU) {
@@ -1993,8 +2060,14 @@ async function submitCasePresentation() {
                         );
                     }
                 });
+                updateCaseFilesSuccessUi(
+                    'All ' +
+                        uploadedFileIds.length +
+                        ' file(s) uploaded successfully to secure storage. Submitting application…'
+                );
             } catch (upErr) {
                 setProgress('');
+                updateCaseFilesSuccessUi('');
                 return alert(upErr.message || 'File upload failed');
             }
             setProgress('');
@@ -2020,6 +2093,9 @@ async function submitCasePresentation() {
                     return alert('Server error (' + res.status + ').');
                 }
                 if (data.success) {
+                    updateCaseFilesSuccessUi(
+                        'Application submitted successfully. ID: ' + (data.applicationNo || data.submissionId)
+                    );
                     alert(
                         'Application submitted. Your application ID is ' +
                             (data.applicationNo || data.submissionId) +
@@ -2054,6 +2130,7 @@ async function submitCasePresentation() {
             return alert('Server error (' + res.status + '). Restart the server after updates.');
         }
         if (data.success) {
+            updateCaseFilesSuccessUi('Case presentation submitted successfully.');
             alert(
                 'Application submitted. Your application ID is ' +
                     (data.applicationNo || data.submissionId) +
@@ -2062,9 +2139,13 @@ async function submitCasePresentation() {
             cancelCaseApplication();
             loadCaseApplicationsTracker();
             switchTab('tab-case-track');
-        } else alert(data.error || 'Submit failed');
+        } else {
+            updateCaseFilesSuccessUi('');
+            alert(data.error || 'Submit failed');
+        }
     } catch (e) {
         console.error(e);
+        updateCaseFilesSuccessUi('');
         alert('Network error: ' + (e.message || 'Could not reach server'));
     }
 }
@@ -2513,14 +2594,12 @@ async function nextStep(step) {
         if(qual === 'PG' || qual === 'Practicing Vaidya' || qual === 'Practitioner') {
             document.getElementById('prev-ncism-box').classList.remove('hidden');
             document.getElementById('prev-ncism').innerText = document.getElementById('reg-ncism').value;
-            if(document.getElementById('reg-cert-file').files.length > 0) {
-                document.getElementById('prev-cert-box').classList.remove('hidden');
-            } else {
-                document.getElementById('prev-cert-box').classList.add('hidden');
-            }
+            updateRegistrationPreviewCertificate();
         } else {
             document.getElementById('prev-ncism-box').classList.add('hidden');
             document.getElementById('prev-cert-box').classList.add('hidden');
+            const pdfBadge = document.getElementById('reg-pdf-cert-badge');
+            if (pdfBadge) pdfBadge.classList.add('hidden');
         }
 
         document.getElementById('prev-college').innerText = document.getElementById('reg-college').value;
@@ -2636,6 +2715,11 @@ function generatePdfBlob(qrImgElement) {
     const qual = document.getElementById('reg-qual').value;
     if (qual === 'PG' || qual === 'Practicing Vaidya' || qual === 'Practitioner') {
         drawTableRow('Registration ID', document.getElementById('reg-ncism').value);
+        const certName = getRegCertFileLabel();
+        drawTableRow(
+            'NCISM certificate',
+            certName ? 'Uploaded — ' + certName : 'Not attached'
+        );
     }
     drawTableRow('College', document.getElementById('reg-college').value);
     drawTableRow('College city / state', `${document.getElementById('reg-ccity').value}, ${document.getElementById('reg-cstate').value}`);
@@ -2838,18 +2922,29 @@ async function verifyNcism() {
                     'Could not read number from file automatically — your application will be reviewed manually.';
             }
         }
+        updateRegCertUploadUi({ uploaded: true });
+        updateRegistrationPreviewCertificate();
         if (check.status === 'match') {
-            alert('Registration number matches the uploaded certificate.');
+            setInlineUploadSuccess(
+                document.getElementById('reg-cert-success'),
+                document.getElementById('reg-cert-success-text'),
+                'Certificate uploaded successfully and matches your registration number.',
+                true
+            );
         } else if (check.status === 'mismatch') {
-            alert(
-                'FLAG: The number on your certificate does not match what you entered.\n\nEntered: ' +
-                    ncism +
-                    '\nFound on document: ' +
-                    ((check.extracted || []).join(', ') || check.bestMatch || '—') +
-                    '\n\nYou may continue; admin will verify manually.'
+            setInlineUploadSuccess(
+                document.getElementById('reg-cert-success'),
+                document.getElementById('reg-cert-success-text'),
+                'Certificate uploaded successfully. Number mismatch — admin will verify manually.',
+                true
             );
         } else {
-            alert('Certificate uploaded. Automatic read was inconclusive — admin will verify your documents.');
+            setInlineUploadSuccess(
+                document.getElementById('reg-cert-success'),
+                document.getElementById('reg-cert-success-text'),
+                'Certificate uploaded successfully. Automatic read was inconclusive — admin will review.',
+                true
+            );
         }
     } catch (e) {
         console.error(e);
@@ -2954,6 +3049,9 @@ async function submitApplication() {
             );
         }
         if (result.success) {
+            if (certFile) {
+                updateRegCertUploadUi({ uploaded: true });
+            }
             alert(`Application submitted successfully. Your application number is ${result.applicationNo}. You can track status under View Applications.`);
             cancelRegistration();
             loadApplications();
@@ -4832,8 +4930,12 @@ async function updateApplication() {
 
 function initDoctorUploadHints() {
     const PU = window.PortalUpload;
+    const regCertInp = document.getElementById('reg-cert-file');
+    if (regCertInp) {
+        regCertInp.addEventListener('change', () => updateRegCertUploadUi({ uploaded: false }));
+    }
     if (!PU) return;
-    PU.bindFileHint(document.getElementById('reg-cert-file'), document.getElementById('reg-cert-hint'));
+    PU.bindFileHint(regCertInp, document.getElementById('reg-cert-hint'));
     PU.bindFileHint(
         document.getElementById('seminar-doc-resubmit-cert'),
         document.getElementById('seminar-doc-resubmit-cert-hint')
@@ -4842,6 +4944,7 @@ function initDoctorUploadHints() {
     const caseHint = document.getElementById('case-files-hint');
     if (caseInp && caseHint) {
         caseInp.addEventListener('change', () => {
+            updateCaseFilesSuccessUi('');
             const files = Array.from(caseInp.files || []);
             if (!files.length) {
                 caseHint.textContent =
@@ -4851,6 +4954,10 @@ function initDoctorUploadHints() {
                 caseHint.style.color = '#64748b';
                 return;
             }
+            const names = files.map((f) => f.name).join(', ');
+            updateCaseFilesSuccessUi(
+                files.length + ' file(s) selected (' + names + '). Click Submit to upload and apply.'
+            );
             ensureCaseUploadConfig(activeCaseProgramId).then((cfg) => {
                 const maxMb = effectiveCaseMaxMb(activeCaseProgram, cfg);
                 const lines = files.map((f) => f.name + ' (' + PU.formatBytes(f.size) + ')');
