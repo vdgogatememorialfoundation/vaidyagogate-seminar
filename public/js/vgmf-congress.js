@@ -29,6 +29,7 @@
         { icon: 'fa-info-circle', title: 'Foundation profile', text: 'Mission and history', section: 'about' },
         { icon: 'fa-envelope', title: 'Support desk', text: 'Contact the office', section: 'contact' }
     ];
+    window.VGMF_QUICK_ACCESS = QUICK_ACCESS;
 
     let heroIndex = 0;
     let heroTimer = null;

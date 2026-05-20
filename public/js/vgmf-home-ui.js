@@ -2,19 +2,18 @@
  * Main site UI — search, stats, scroll progress, back-to-top
  */
 (function () {
-    const SEARCH_ITEMS = [
-        { icon: 'fa-home', label: 'Home', section: 'home' },
-        { icon: 'fa-info-circle', label: 'Foundation profile', section: 'about' },
-        { icon: 'fa-calendar-alt', label: 'Event agenda', section: 'schedule' },
-        { icon: 'fa-images', label: 'Seminar gallery', section: 'gallery' },
-        { icon: 'fa-shield-check', label: 'Delegate directory', section: 'verify' },
-        { icon: 'fa-award', label: 'Certificate authenticity', href: '/verify-certificate.html' },
-        { icon: 'fa-envelope', label: 'Support desk', section: 'contact' },
-        { icon: 'fa-user-md', label: 'Doctor workspace', href: '/doctor.html' },
-        { icon: 'fa-user-plus', label: 'Start enrollment', action: 'register' },
-        { icon: 'fa-microphone', label: 'Faculty board', section: 'home', anchor: 'speakers-section' },
-        { icon: 'fa-ticket-alt', label: 'Open registration windows', section: 'home', anchor: 'seminars-section' }
-    ];
+    const SEARCH_ITEMS = (function buildSearchItems() {
+        const base = Array.isArray(window.VGMF_QUICK_ACCESS) ? window.VGMF_QUICK_ACCESS : [];
+        const mapped = base.map((x) => ({
+            icon: x.icon,
+            label: x.title,
+            section: x.section,
+            href: x.href,
+            action: x.action,
+            anchor: x.anchor
+        }));
+        return [{ icon: 'fa-home', label: 'Home', section: 'home' }, ...mapped];
+    })();
 
     function bindScrollProgress() {
         const bar = document.getElementById('vg-scroll-progress');

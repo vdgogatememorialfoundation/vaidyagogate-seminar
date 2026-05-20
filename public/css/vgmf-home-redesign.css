@@ -627,3 +627,173 @@
         display: none;
     }
 }
+
+/* ===== Full relayout pass (premium v2) ===== */
+.vgmf-redesign .main-content {
+    display: grid;
+    gap: 28px;
+}
+
+.vgmf-redesign #homeSection,
+.vgmf-redesign #aboutSection,
+.vgmf-redesign #gallerySection,
+.vgmf-redesign #verifySection,
+.vgmf-redesign #scheduleSection,
+.vgmf-redesign #contactSection {
+    border: 1px solid #d8e1ee;
+    border-radius: 22px;
+    padding: clamp(18px, 3.5vw, 34px);
+    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+    box-shadow: 0 18px 36px rgba(15, 23, 42, 0.08);
+}
+
+.vgmf-redesign .home-split {
+    display: grid;
+    grid-template-columns: minmax(0, 2.2fr) minmax(280px, 1fr);
+    gap: 20px;
+    align-items: start;
+}
+
+.vgmf-redesign .notices-panel {
+    position: sticky;
+    top: 104px;
+    max-height: 78vh;
+    overflow: auto;
+}
+
+.vgmf-redesign .cards-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.vgmf-redesign .feature-card,
+.vgmf-redesign .speaker-card,
+.vgmf-redesign .seminar-pill,
+.vgmf-redesign .notice-card,
+.vgmf-redesign .vg-help-card {
+    background: #fff;
+}
+
+.vgmf-redesign .speaker-card {
+    text-align: left;
+    padding: 18px;
+}
+
+.vgmf-redesign .speaker-card h3 {
+    font-size: 1.02rem;
+    margin-bottom: 6px;
+}
+
+.vgmf-redesign .open-seminars-strip {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+}
+
+.vgmf-redesign .seminar-pill {
+    display: grid;
+    gap: 10px;
+    align-content: start;
+    padding: 18px;
+}
+
+.vgmf-redesign .verify-panel {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: 14px;
+    align-items: end;
+}
+
+.vgmf-redesign .verify-panel #verify-results {
+    grid-column: 1 / -1;
+}
+
+.vgmf-redesign .contact-grid {
+    display: grid;
+    grid-template-columns: 0.9fr 1.1fr;
+    gap: 18px;
+}
+
+.vgmf-redesign .contact-info,
+.vgmf-redesign .contact-form {
+    background: #fff;
+    border: 1px solid #dde6f2;
+    border-radius: 16px;
+    padding: 18px;
+}
+
+.vgmf-redesign .schedule-picker {
+    border: 1px solid #dbe5f1;
+    border-radius: 14px;
+    padding: 14px;
+    background: #fff;
+    margin-bottom: 14px;
+}
+
+.vgmf-redesign .schedule-table tbody tr {
+    transition: background-color 160ms ease;
+}
+
+.vgmf-redesign .schedule-table tbody tr:hover {
+    background: #f0f7ff;
+}
+
+.vgmf-redesign .footer-container {
+    max-width: 1280px;
+}
+
+.vgmf-redesign .footer-col {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 14px;
+    padding: 14px;
+}
+
+.vgmf-redesign .cg-quick-card,
+.vgmf-redesign .vg-help-card,
+.vgmf-redesign .feature-card {
+    overflow: hidden;
+}
+
+.vgmf-redesign .cg-quick-card::after,
+.vgmf-redesign .vg-help-card::after,
+.vgmf-redesign .feature-card::after {
+    content: '';
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 2px;
+    background: linear-gradient(90deg, #0f766e, #0ea5e9);
+    opacity: 0;
+    transition: opacity 180ms ease;
+}
+
+.vgmf-redesign .cg-quick-card:hover::after,
+.vgmf-redesign .vg-help-card:hover::after,
+.vgmf-redesign .feature-card:hover::after {
+    opacity: 1;
+}
+
+@media (max-width: 1080px) {
+    .vgmf-redesign .home-split {
+        grid-template-columns: 1fr;
+    }
+
+    .vgmf-redesign .notices-panel {
+        position: relative;
+        top: 0;
+        max-height: none;
+    }
+
+    .vgmf-redesign .contact-grid,
+    .vgmf-redesign .verify-panel {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 840px) {
+    .vgmf-redesign .cards-grid,
+    .vgmf-redesign .open-seminars-strip {
+        grid-template-columns: 1fr;
+    }
+}
