@@ -62,7 +62,7 @@ function updateRegCertUploadUi(opts) {
         setInlineUploadSuccess(
             successEl,
             successText,
-            'Certificate selected: ' + name + ' — click Verify ID to upload, or it uploads when you submit.',
+            'Certificate selected: ' + name + '. Click Verify ID to upload, or it uploads when you submit.',
             true
         );
     } else {
@@ -80,9 +80,9 @@ function regCertStatusLabel() {
     const name = getRegCertFileLabel();
     if (!name) return '';
     if (window.__regCertServerUploaded) {
-        return 'Uploaded successfully — ' + name;
+        return 'Uploaded successfully: ' + name;
     }
-    return 'Attached — ' + name + ' (uploads when you verify ID or submit)';
+    return 'Attached: ' + name + ' (uploads when you verify ID or submit)';
 }
 
 function updateRegistrationPreviewCertificate() {
@@ -103,8 +103,8 @@ function updateRegistrationPreviewCertificate() {
             pdfBadge.innerHTML =
                 '<i class="fas fa-file-circle-check"></i> ' +
                 (window.__regCertServerUploaded
-                    ? 'NCISM certificate uploaded — shown in PDF preview below'
-                    : 'NCISM certificate attached — shown in PDF preview below');
+                    ? 'NCISM certificate uploaded (shown in PDF preview below)'
+                    : 'NCISM certificate attached (shown in PDF preview below)');
         }
     } else {
         if (certBox) certBox.classList.add('hidden');
@@ -185,14 +185,14 @@ function renderCasePreviewSummary() {
                 ' (' +
                 fmt(file.size) +
                 ')' +
-                (ok ? ' — <strong>uploaded successfully</strong>' : ' — ready to upload') +
+                (ok ? ' - <strong>uploaded successfully</strong>' : ' - ready to upload') +
                 '</li>';
         });
         filesHtml += '</ul></div>';
     }
     box.innerHTML =
         '<div class="preview-row"><span class="lbl">Program</span><span class="val">' +
-        escapeHtmlDoctor((activeCaseProgram && activeCaseProgram.title) || '—') +
+        escapeHtmlDoctor((activeCaseProgram && activeCaseProgram.title) || '-') +
         '</span></div>' +
         '<div class="preview-row"><span class="lbl">Name</span><span class="val">' +
         escapeHtmlDoctor([f.fname, f.mname, f.lname].filter(Boolean).join(' ')) +
@@ -217,7 +217,7 @@ function renderCasePreviewSummary() {
         if (uploadedCount === files.length) {
             badge.classList.remove('hidden');
             badgeText.textContent =
-                uploadedCount + ' document(s) uploaded successfully — included in application PDF below';
+                uploadedCount + ' document(s) uploaded successfully (included in application PDF below)';
         } else if (uploadedCount > 0) {
             badge.classList.remove('hidden');
             badgeText.textContent = uploadedCount + ' of ' + files.length + ' document(s) uploaded';
@@ -247,7 +247,7 @@ function generateCasePreviewPdf() {
     const PU = window.PortalUpload;
     const fmt = PU && PU.formatBytes ? PU.formatBytes.bind(PU) : (n) => String(n);
 
-    let y = pdfCongressHeader(doc, 'Case presentation — draft preview');
+    let y = pdfCongressHeader(doc, 'Case presentation - draft preview');
     const drawSection = (title) => {
         y = pdfCongressSectionTitle(doc, y + 4, title, accent, ink);
     };
@@ -256,7 +256,7 @@ function generateCasePreviewPdf() {
         doc.setFontSize(9.5);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(...muted);
-        const lines = doc.splitTextToSize(String(value || '—'), 118);
+        const lines = doc.splitTextToSize(String(value || '-'), 118);
         doc.text(label, 18, y + 7);
         doc.setFont('helvetica', 'normal');
         doc.setTextColor(...ink);
@@ -267,7 +267,7 @@ function generateCasePreviewPdf() {
     };
 
     drawSection('Program');
-    drawTableRow('Case program', (activeCaseProgram && activeCaseProgram.title) || '—');
+    drawTableRow('Case program', (activeCaseProgram && activeCaseProgram.title) || '-');
     drawSection('Applicant');
     drawTableRow('Full name', [f.fname, f.mname, f.lname].filter(Boolean).join(' '));
     drawTableRow('Email', f.email);
@@ -283,7 +283,7 @@ function generateCasePreviewPdf() {
         files.forEach((file, idx) => {
             drawTableRow(
                 'File ' + (idx + 1),
-                (file.uploaded ? 'Uploaded successfully — ' : 'Attached — ') +
+                (file.uploaded ? 'Uploaded successfully: ' : 'Attached: ') +
                     file.name +
                     ' (' +
                     fmt(file.size) +
@@ -373,12 +373,12 @@ async function goToCasePreview() {
         const useR2 = uploadCfg && window.CaseR2Upload && CaseR2Upload.isEnabled(uploadCfg);
         if (useR2) {
             try {
-                setProgress('Uploading documents… 0%');
+                setProgress('Uploading documents... 0%');
                 window.__caseStagedUploadIds = await CaseR2Upload.uploadFiles(fileInput.files, {
                     userId: uid,
                     caseProgramId: activeCaseProgramId,
                     onFileProgress: (idx, total, name, pct) => {
-                        setProgress('Uploading ' + (idx + 1) + '/' + total + ': ' + name + ' — ' + pct + '%');
+                        setProgress('Uploading ' + (idx + 1) + '/' + total + ': ' + name + ' - ' + pct + '%');
                     }
                 });
                 window.__caseStagedFileMeta = Array.from(fileInput.files).map((f) => ({
@@ -2154,8 +2154,8 @@ async function loadCaseProgramsGrid() {
             const regLine =
                 p.registration_start || p.registration_end
                     ? `<p style="font-size:0.8rem;color:#64748b;margin-top:6px;">Applications: ${escapeHtml(
-                          p.registration_start ? formatTrackDateTime(p.registration_start) : '—'
-                      )} → ${escapeHtml(p.registration_end ? formatTrackDateTime(p.registration_end) : '—')}</p>`
+                          p.registration_start ? formatTrackDateTime(p.registration_start) : '-'
+                      )} to ${escapeHtml(p.registration_end ? formatTrackDateTime(p.registration_end) : '-')}</p>`
                     : '';
             let btn = '';
             if (win === 'open') {
@@ -2389,7 +2389,7 @@ async function submitCasePresentation() {
                                 total +
                                 ': ' +
                                 name +
-                                ' — ' +
+                                ' - ' +
                                 pct +
                                 '%'
                         );
@@ -3015,7 +3015,7 @@ function generatePdfBlob(qrImgElement) {
         doc.setFontSize(9.5);
         doc.setFont('helvetica', 'bold');
         doc.setTextColor(...muted);
-        const lines = doc.splitTextToSize(String(value || '—'), 118);
+        const lines = doc.splitTextToSize(String(value || '-'), 118);
         const rowH = Math.max(10, lines.length * lh - 1);
         doc.setDrawColor(226, 232, 240);
         doc.line(14, y + rowH, 196, y + rowH);
