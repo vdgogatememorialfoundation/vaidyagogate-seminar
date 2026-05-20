@@ -320,8 +320,8 @@ function renderSeminarApplicationTrackerCard(a) {
             (reason
                 ? '<p style="margin:0 0 10px;font-size:0.9rem;color:#7c2d12;">Admin note: ' + escapeHtml(reason) + '</p>'
                 : '') +
-            '<button type="button" class="btn-warning" onclick="openSeminarDocumentResubmit(' +
-            JSON.stringify(String(a.application_no || '')) +
+            '<button type="button" class="btn-warning" onclick="openSeminarDocumentResubmitById(' +
+            Number(a.id) +
             ')">Re-upload certificate &amp; NCISM</button></div>';
     }
     const payBtn =
@@ -4376,55 +4376,149 @@ async function editApplication(index) {
     switchTab('tab-seminars');
 }
 
+function seminarResubmitNeedsCertificate(qual) {
+    const q = String(qual || '').trim();
+    return q === 'PG' || q === 'Practicing Vaidya' || q === 'Practitioner';
+}
+
+function closeSeminarDocumentResubmitModal() {
+    const modal = document.getElementById('seminar-doc-resubmit-modal');
+    if (modal) modal.classList.add('hidden');
+    window.__seminarResubmitAppId = null;
+}
+window.closeSeminarDocumentResubmitModal = closeSeminarDocumentResubmitModal;
+
+function openSeminarDocumentResubmitModal(app) {
+    if (!app || !app.id) {
+        alert('Application not found. Open My Applications, refresh the page, and try again.');
+        return;
+    }
+    window.__seminarResubmitAppId = app.id;
+    let formData = {};
+    try {
+        formData = JSON.parse(app.form_data || '{}');
+    } catch (_) {}
+    const label = document.getElementById('seminar-doc-resubmit-label');
+    const reasonEl = document.getElementById('seminar-doc-resubmit-reason');
+    const ncismEl = document.getElementById('seminar-doc-resubmit-ncism');
+    const certEl = document.getElementById('seminar-doc-resubmit-cert');
+    const certHint = document.getElementById('seminar-doc-resubmit-cert-hint');
+    const modal = document.getElementById('seminar-doc-resubmit-modal');
+    if (!modal || !ncismEl || !certEl) return;
+    if (label) {
+        label.textContent =
+            'Application ' + (app.application_no || app.id) + ' — same application number, corrected files only.';
+    }
+    let reason = '';
+    try {
+        const dr =
+            typeof app.doc_review === 'object' && app.doc_review
+                ? app.doc_review
+                : app.doc_review_json
+                  ? JSON.parse(app.doc_review_json)
+                  : null;
+        reason = (dr && dr.rejection_reason) || '';
+    } catch (_) {}
+    if (reasonEl) {
+        if (reason) {
+            reasonEl.textContent = 'Admin note: ' + reason;
+            reasonEl.classList.remove('hidden');
+        } else {
+            reasonEl.textContent = '';
+            reasonEl.classList.add('hidden');
+        }
+    }
+    ncismEl.value = formData.ncism || '';
+    certEl.value = '';
+    const needsCert = seminarResubmitNeedsCertificate(formData.qual);
+    certEl.required = needsCert;
+    if (certHint) {
+        certHint.textContent = needsCert
+            ? 'Upload your registration certificate (required for your qualification).'
+            : 'Upload a certificate only if admin asked you to replace the file.';
+    }
+    modal.classList.remove('hidden');
+}
+window.openSeminarDocumentResubmitModal = openSeminarDocumentResubmitModal;
+
+function openSeminarDocumentResubmitById(regId) {
+    const a = (userApplications || []).find((x) => Number(x.id) === Number(regId));
+    if (!a) {
+        alert('Application not found. Refresh My Applications and try again.');
+        return;
+    }
+    openSeminarDocumentResubmitModal(a);
+}
+window.openSeminarDocumentResubmitById = openSeminarDocumentResubmitById;
+
 function openSeminarDocumentResubmitByIndex(index) {
     const a = userApplications[index];
     if (!a) return;
-    window.__seminarResubmitAppId = a.id;
-    openSeminarDocumentResubmit(a.application_no);
+    openSeminarDocumentResubmitModal(a);
 }
 
 function openSeminarDocumentResubmit(applicationNo) {
+    const a = (userApplications || []).find((x) => String(x.application_no) === String(applicationNo));
+    if (!a) {
+        alert('Application not found. Refresh My Applications and try again.');
+        return;
+    }
+    openSeminarDocumentResubmitModal(a);
+}
+window.openSeminarDocumentResubmit = openSeminarDocumentResubmit;
+
+async function submitSeminarDocumentResubmit() {
+    const appId = window.__seminarResubmitAppId;
+    const uid = doctorNumericUserId();
+    if (!uid) {
+        alert('Please sign out and sign in again, then try re-upload.');
+        return;
+    }
+    if (!appId) {
+        alert('Application not found. Close this dialog and open Re-upload again from My Applications.');
+        return;
+    }
+    const ncismEl = document.getElementById('seminar-doc-resubmit-ncism');
+    const certEl = document.getElementById('seminar-doc-resubmit-cert');
+    const ncism = String((ncismEl && ncismEl.value) || '').trim();
+    if (!ncism) {
+        alert('Enter your NCISM / registration number.');
+        return;
+    }
+    const app = (userApplications || []).find((x) => Number(x.id) === Number(appId));
     let formData = {};
-    const app =
-        userApplications.find((x) => String(x.application_no) === String(applicationNo)) ||
-        userApplications.find((x) => x.id === window.__seminarResubmitAppId);
     if (app) {
-        window.__seminarResubmitAppId = app.id;
         try {
             formData = JSON.parse(app.form_data || '{}');
         } catch (_) {}
     }
-    const ncism = prompt(
-        'Application ' +
-            (applicationNo || '') +
-            ' — enter corrected NCISM / registration number:',
-        formData.ncism || ''
-    );
-    if (ncism === null) return;
-    const fileInput = document.createElement('input');
-    fileInput.type = 'file';
-    fileInput.accept = '.pdf,.jpg,.jpeg,.png';
-    fileInput.onchange = async () => {
-        if (!fileInput.files || !fileInput.files[0]) return;
-        const fd = new FormData();
-        fd.append('ncism', ncism.trim());
-        fd.append('certificate', fileInput.files[0]);
-        try {
-            const res = await fetch('/api/applications/' + window.__seminarResubmitAppId + '/resubmit-documents', {
-                method: 'POST',
-                body: fd
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) return alert(data.error || 'Resubmit failed');
-            alert(data.message || 'Documents resubmitted.');
-            loadApplications();
-        } catch (e) {
-            console.error(e);
-            alert('Network error');
-        }
-    };
-    fileInput.click();
+    const needsCert = seminarResubmitNeedsCertificate(formData.qual);
+    if (needsCert && (!certEl || !certEl.files || !certEl.files[0])) {
+        alert('Please upload your certificate document.');
+        return;
+    }
+    const fd = new FormData();
+    fd.append('userId', String(uid));
+    fd.append('ncism', ncism);
+    if (certEl && certEl.files && certEl.files[0]) {
+        fd.append('certificate', certEl.files[0]);
+    }
+    try {
+        const res = await fetch('/api/applications/' + appId + '/resubmit-documents', {
+            method: 'POST',
+            body: fd
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return alert(data.error || 'Resubmit failed');
+        closeSeminarDocumentResubmitModal();
+        alert(data.message || 'Documents resubmitted.');
+        loadApplications();
+    } catch (e) {
+        console.error(e);
+        alert('Network error. Please try again.');
+    }
 }
+window.submitSeminarDocumentResubmit = submitSeminarDocumentResubmit;
 
 async function updateApplication() {
     if(!window.editingApplicationId) {

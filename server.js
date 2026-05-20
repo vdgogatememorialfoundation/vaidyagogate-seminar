@@ -440,6 +440,19 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage: storage, limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB max
 const memoryUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+function withCertificateUpload(req, res, next) {
+    (process.env.VERCEL ? memoryUpload : upload).single('certificate')(req, res, (err) => {
+        if (err) {
+            return res.status(400).json({
+                error:
+                    err.code === 'LIMIT_FILE_SIZE'
+                        ? 'Certificate file is too large.'
+                        : err.message || 'Upload failed'
+            });
+        }
+        next();
+    });
+}
 const fileStore = require('./lib/file-store');
 const caseUpload = fileStore.createUploadHandler(upload, memoryUpload);
 
@@ -3821,16 +3834,7 @@ function respondApplicationsList(uid, yearFilter, res) {
 }
 
 // 5. Seminars: Register (Application Submission)
-app.post('/api/applications/submit', (req, res, next) => {
-    (process.env.VERCEL ? memoryUpload : upload).single('certificate')(req, res, (err) => {
-        if (err) {
-            return res.status(400).json({
-                error: err.code === 'LIMIT_FILE_SIZE' ? 'Certificate file is too large.' : err.message || 'Upload failed'
-            });
-        }
-        next();
-    });
-}, (req, res) => {
+app.post('/api/applications/submit', withCertificateUpload, (req, res) => {
     let {
         userId,
         seminarId,
@@ -4126,7 +4130,7 @@ app.get('/api/applications/:userId', (req, res) => {
     respondApplicationsList(uid, yearFilter, res);
 });
 // 5c. Edit Application
-app.put('/api/applications/:applicationId', upload.single('certificate'), (req, res) => {
+app.put('/api/applications/:applicationId', withCertificateUpload, (req, res) => {
     let { formData, phoneOtpToken, emailOtpToken, fieldOtpTokens } = req.body;
     
     if (typeof formData === 'string') {
@@ -6070,12 +6074,7 @@ app.get('/api/admin/analytics/seminar/:seminarId', (req, res) => {
     });
 });
 
-app.post('/api/applications/check-ncism-certificate', (req, res, next) => {
-    (process.env.VERCEL ? memoryUpload : upload).single('certificate')(req, res, (err) => {
-        if (err) return res.status(400).json({ error: err.message || 'Upload failed' });
-        next();
-    });
-}, (req, res) => {
+app.post('/api/applications/check-ncism-certificate', withCertificateUpload, (req, res) => {
     let entered = String((req.body && req.body.ncism) || '').trim();
     if (!entered && req.body && req.body.formData) {
         try {
@@ -6145,10 +6144,14 @@ app.post('/api/admin/applications/:applicationId/document-verify', (req, res) =>
 });
 
 // Doctor: re-upload certificate / NCISM on same application after admin document rejection
-app.post('/api/applications/:applicationId/resubmit-documents', upload.single('certificate'), (req, res) => {
+app.post('/api/applications/:applicationId/resubmit-documents', withCertificateUpload, (req, res) => {
     const appId = parseInt(req.params.applicationId, 10);
+    const userId = parsePositiveUserId(req.body && req.body.userId);
     if (!Number.isInteger(appId) || appId < 1) {
         return res.status(400).json({ error: 'Invalid application id' });
+    }
+    if (!userId) {
+        return res.status(400).json({ error: 'Invalid user. Please sign in again.' });
     }
     db.get(
         `SELECT id, user_id, seminar_id, status, form_data, application_no FROM registrations WHERE id = ?`,
@@ -6156,6 +6159,9 @@ app.post('/api/applications/:applicationId/resubmit-documents', upload.single('c
         (err, row) => {
             if (err) return res.status(500).json({ error: err.message });
             if (!row) return res.status(404).json({ error: 'Application not found' });
+            if (Number(row.user_id) !== userId) {
+                return res.status(403).json({ error: 'This application does not belong to your account.' });
+            }
             if (String(row.status || '').toLowerCase() !== 'revision_required') {
                 return res.status(400).json({
                     error: 'Document resubmission is only available when admin requested corrections.'

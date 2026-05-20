@@ -236,7 +236,6 @@ ${styleExtra}
                                 <label>Qualification</label>
                                 <select id="reg-qual" onchange="toggleRegBlock()">
                                     <option value="">Select</option>
-                                    <option value="UG">UG</option>
                                     <option value="PG">PG</option>
                                     <option value="Practicing Vaidya">Practicing Vaidya</option>
                                     <option value="Practitioner">Practitioner</option>
