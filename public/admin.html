@@ -719,10 +719,16 @@
                     </div>
                     <div style="margin-top:18px;"><label>Legacy slides JSON (fallback if no DB banners)</label><textarea id="cms-slides" rows="4" placeholder='[{"src":"/uploads/a.jpg","caption":"","link":""}]'></textarea></div>
                     <div style="margin-top:22px;padding-top:16px;border-top:1px solid #e2e8f0;">
-                        <label style="font-weight:700;">Past seminar gallery</label>
-                        <p style="color:#64748b;font-size:0.88rem;margin:6px 0 10px;">Photos shown on the public website Gallery section. Upload each image, add a caption and year, then click <strong>Save website &amp; portal content</strong>.</p>
-                        <div id="cms-gallery-rows"></div>
-                        <button type="button" class="btn-primary" style="margin-top:8px;padding:8px 14px;font-size:0.9rem;background:#0d9488;" onclick="cmsAddGalleryRow()">+ Add gallery photo</button>
+                        <label style="font-weight:700;">Main site menu</label>
+                        <p style="color:#64748b;font-size:0.88rem;margin:6px 0 10px;">Edit navigation labels and pages shown on the public website header. Use <strong>Section</strong> for in-page tabs, or leave section empty and set a <strong>URL</strong> (e.g. Certificate page).</p>
+                        <div id="cms-menu-rows"></div>
+                        <button type="button" class="btn-primary" style="margin-top:8px;padding:8px 14px;font-size:0.9rem;background:#0d9488;" onclick="cmsAddMenuRow()">+ Add menu item</button>
+                    </div>
+                    <div style="margin-top:22px;padding-top:16px;border-top:1px solid #e2e8f0;">
+                        <label style="font-weight:700;">Past seminar gallery (by year)</label>
+                        <p style="color:#64748b;font-size:0.88rem;margin:6px 0 10px;">Group photos by year (e.g. 2025 — 10 images, 2024 — 20 images). Use <strong>Upload multiple images</strong> per year, then click <strong>Save website &amp; portal content</strong>. Max 10 MB per image.</p>
+                        <div id="cms-gallery-years"></div>
+                        <button type="button" class="btn-primary" style="margin-top:8px;padding:8px 14px;font-size:0.9rem;background:#0d9488;" onclick="cmsAddGalleryYear()">+ Add year album</button>
                     </div>
                     <div style="margin-top:22px;padding-top:16px;border-top:1px solid #e2e8f0;">
                         <label style="font-weight:700;">About us</label>
@@ -1570,7 +1576,16 @@
                         <div><label>Hero image path</label><input type="text" id="seminar-hero-image" placeholder="/uploads/hero.jpg"><input type="file" id="seminar-hero-file" accept="image/*" style="margin-top:8px;"><button type="button" class="btn-primary" style="margin-top:8px;padding:6px 12px;font-size:0.85rem;" onclick="uploadSeminarHeroOrFlyer('hero')">Upload hero</button></div>
                         <div><label>Flyer PDF path</label><input type="text" id="seminar-flyer" placeholder="/uploads/flyer.pdf"><input type="file" id="seminar-flyer-file" accept=".pdf,application/pdf" style="margin-top:8px;"><button type="button" class="btn-primary" style="margin-top:8px;padding:6px 12px;font-size:0.85rem;" onclick="uploadSeminarHeroOrFlyer('flyer')">Upload flyer</button></div>
                     </div>
-                    <div style="margin-top:12px;"><label>Gallery paths (JSON array of image URLs)</label><textarea id="seminar-gallery" rows="2" placeholder='["/uploads/g1.jpg"]'></textarea></div>
+                    <div style="margin-top:12px;">
+                        <label>Seminar gallery images (by year, JSON)</label>
+                        <p style="color:#64748b;font-size:0.82rem;margin:4px 0 8px;">Optional per-seminar album. Example: <code>[{"year":"2025","images":[{"src":"/uploads/a.jpg","caption":""}]}]</code></p>
+                        <textarea id="seminar-gallery" rows="3" placeholder='[{"year":"2025","images":[{"src":"/uploads/g1.jpg","caption":""}]}]'></textarea>
+                        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;align-items:center;">
+                            <input type="file" id="seminar-gallery-files" accept="image/*" multiple>
+                            <input type="text" id="seminar-gallery-upload-year" placeholder="Year e.g. 2025" style="width:120px;padding:8px;">
+                            <button type="button" class="btn-primary" style="padding:6px 12px;font-size:0.85rem;" onclick="uploadSeminarGalleryBatch()">Upload images to year</button>
+                        </div>
+                    </div>
                 </div>
                 <div style="background: #f0fdf4; padding: 15px; border: 1px solid #bbf7d0; border-radius: 12px; margin-top:12px;">
                     <h4 style="margin-bottom: 10px; color:#166534;">Scanner & Check-in Controls</h4>

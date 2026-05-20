@@ -293,6 +293,14 @@ svg {
         touch-action: manipulation;
     }
 
+    #cg-nav-menu-links,
+    #cg-nav-menu-fixed {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        gap: 4px;
+    }
+
     #cg-nav.cg-nav a {
         min-height: 48px;
         display: flex;
@@ -346,6 +354,14 @@ svg {
         justify-content: flex-end;
         gap: 6px;
         overflow: visible;
+    }
+
+    #cg-nav-menu-links,
+    #cg-nav-menu-fixed {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
     }
 
     .cg-nav-backdrop,

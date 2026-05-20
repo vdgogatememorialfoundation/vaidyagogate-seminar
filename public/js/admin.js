@@ -5784,9 +5784,11 @@ async function saveSeminar(e) {
     const id = document.getElementById('seminar-id').value;
     let galleryVal = (document.getElementById('seminar-gallery') || {}).value || '[]';
     try {
-        galleryVal = JSON.stringify(JSON.parse(galleryVal || '[]'));
+        const parsed = JSON.parse(galleryVal || '[]');
+        if (!Array.isArray(parsed)) throw new Error('not array');
+        galleryVal = JSON.stringify(parsed);
     } catch (_) {
-        alert('Gallery paths must be valid JSON array');
+        alert('Gallery must be valid JSON (array of paths or year albums).');
         return;
     }
     const regFormOverride = buildSeminarFormOverrideJsonFromUi();
@@ -7007,16 +7009,47 @@ async function saveAdminRegistrationFormConfig() {
 
 let __siteCmsEditing = null;
 
-async function uploadAdminAssetFromInput(fileInputEl) {
-    const f = fileInputEl.files && fileInputEl.files[0];
-    if (!f) return null;
+const ADMIN_UPLOAD_MAX_MB = 10;
+
+async function uploadAdminAssetFromInput(fileInputEl, options) {
+    const opts = options || {};
+    const files = opts.multiple
+        ? Array.from((fileInputEl && fileInputEl.files) || [])
+        : [(fileInputEl && fileInputEl.files && fileInputEl.files[0]) || null].filter(Boolean);
+    if (!files.length) {
+        if (!opts.silent) alert('Choose a file first.');
+        return opts.multiple ? [] : null;
+    }
+    for (const f of files) {
+        if (f.size > ADMIN_UPLOAD_MAX_MB * 1024 * 1024) {
+            alert(`"${f.name}" is too large. Maximum ${ADMIN_UPLOAD_MAX_MB} MB per file.`);
+            return opts.multiple ? [] : null;
+        }
+    }
+    if (files.length === 1 && !opts.multiple) {
+        const fd = new FormData();
+        fd.append('file', files[0]);
+        const res = await fetch('/api/admin/upload-asset', { method: 'POST', body: fd });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            alert(data.error || `Upload failed (${res.status})`);
+            return null;
+        }
+        if (data.success && data.path) return data.path;
+        alert(data.error || 'Upload failed');
+        return null;
+    }
     const fd = new FormData();
-    fd.append('file', f);
-    const res = await fetch('/api/admin/upload-asset', { method: 'POST', body: fd });
+    files.forEach((f) => fd.append('files', f));
+    const res = await fetch('/api/admin/upload-assets', { method: 'POST', body: fd });
     const data = await res.json().catch(() => ({}));
-    if (data.success && data.path) return data.path;
+    if (!res.ok) {
+        alert(data.error || `Upload failed (${res.status})`);
+        return [];
+    }
+    if (data.success && Array.isArray(data.paths)) return data.paths;
     alert(data.error || 'Upload failed');
-    return null;
+    return [];
 }
 
 function cmsParseJsonArray(raw, fieldLabel) {
@@ -7113,59 +7146,182 @@ function cmsFillDoctorRows(items) {
     (items || []).forEach((it) => cmsAddDoctorUpdateRow(it));
 }
 
-function cmsCollectGalleryFromDom() {
-    const root = document.getElementById('cms-gallery-rows');
-    if (!root) return [];
-    return Array.from(root.querySelectorAll('.cms-gallery-row'))
-        .map((row) => ({
-            src: (row.querySelector('.cg-src') || {}).value || '',
-            caption: (row.querySelector('.cg-cap') || {}).value || '',
-            year: (row.querySelector('.cg-year') || {}).value || ''
-        }))
-        .filter((x) => x.src || x.caption);
+function cmsGroupGalleryFlat(items) {
+    const byYear = new Map();
+    (items || []).forEach((g) => {
+        const year = String((g && g.year) || '').trim() || 'Archive';
+        if (!byYear.has(year)) byYear.set(year, { year, title: '', images: [] });
+        const src = String((g && g.src) || '').trim();
+        if (!src) return;
+        byYear.get(year).images.push({ src, caption: String((g && g.caption) || '').trim() });
+    });
+    return [...byYear.values()].sort((a, b) => String(b.year).localeCompare(String(a.year)));
 }
 
-function cmsFillGalleryRows(items) {
-    const root = document.getElementById('cms-gallery-rows');
+function cmsCollectGalleryYearsFromDom() {
+    const root = document.getElementById('cms-gallery-years');
+    if (!root) return [];
+    return Array.from(root.querySelectorAll('.cms-gallery-year'))
+        .map((yearRow) => {
+            const year = ((yearRow.querySelector('.cgy-year') || {}).value || '').trim();
+            const title = ((yearRow.querySelector('.cgy-title') || {}).value || '').trim();
+            const images = Array.from(yearRow.querySelectorAll('.cgy-image-row'))
+                .map((imgRow) => ({
+                    src: ((imgRow.querySelector('.cgy-src') || {}).value || '').trim(),
+                    caption: ((imgRow.querySelector('.cgy-cap') || {}).value || '').trim()
+                }))
+                .filter((img) => img.src);
+            return { year, title, images };
+        })
+        .filter((yg) => yg.year && yg.images.length);
+}
+
+function cmsFillGalleryYears(yearGroups) {
+    const root = document.getElementById('cms-gallery-years');
     if (!root) return;
     root.innerHTML = '';
-    (items || []).forEach((it) => cmsAddGalleryRow(it));
+    (yearGroups || []).forEach((yg) => cmsAddGalleryYear(yg));
 }
 
-function cmsAddGalleryRow(prefill) {
-    const root = document.getElementById('cms-gallery-rows');
+function cmsAddGalleryYear(prefill) {
+    const root = document.getElementById('cms-gallery-years');
     if (!root) return;
     const p = prefill || {};
     const wrap = document.createElement('div');
-    wrap.className = 'cms-gallery-row';
+    wrap.className = 'cms-gallery-year';
     wrap.style.cssText =
-        'margin-bottom:12px;padding:12px;border:1px solid #e2e8f0;border-radius:10px;background:#fafafa;display:grid;grid-template-columns:1fr 1fr;gap:8px;';
+        'margin-bottom:16px;padding:14px;border:1px solid #cbd5e1;border-radius:12px;background:#f8fafc;';
     wrap.innerHTML = `
-        <div style="grid-column:1/-1;"><label style="font-size:0.8rem;">Caption</label><input class="cg-cap" type="text" style="width:100%" placeholder="National Seminar 2024"></div>
-        <div><label style="font-size:0.8rem;">Year</label><input class="cg-year" type="text" style="width:100%" placeholder="2024"></div>
-        <div><label style="font-size:0.8rem;">Image path</label><input class="cg-src" type="text" style="width:100%" placeholder="/uploads/photo.jpg"></div>
-        <div style="grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap;">
-          <input type="file" class="cg-file" accept="image/*" style="max-width:180px;">
-          <button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;" onclick="cmsUploadGalleryImage(this)">Upload image</button>
-          <button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;background:#64748b;" onclick="this.closest('.cms-gallery-row').remove()">Remove</button>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+          <div><label style="font-size:0.8rem;font-weight:700;">Year</label><input class="cgy-year" type="text" style="width:100%" placeholder="2025"></div>
+          <div><label style="font-size:0.8rem;font-weight:700;">Album title (optional)</label><input class="cgy-title" type="text" style="width:100%" placeholder="National Seminar 2025"></div>
+        </div>
+        <div class="cgy-images"></div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center;">
+          <input type="file" class="cgy-batch-files" accept="image/*" multiple style="max-width:220px;">
+          <button type="button" class="btn-primary" style="padding:6px 12px;font-size:0.82rem;" onclick="cmsUploadGalleryYearBatch(this)">Upload multiple images</button>
+          <button type="button" class="btn-primary" style="padding:6px 12px;font-size:0.82rem;background:#0d9488;" onclick="cmsAddGalleryImageRow(this)">+ Add image row</button>
+          <button type="button" class="btn-primary" style="padding:6px 12px;font-size:0.82rem;background:#64748b;" onclick="this.closest('.cms-gallery-year').remove()">Remove year</button>
         </div>`;
-    const cap = wrap.querySelector('.cg-cap');
-    const yr = wrap.querySelector('.cg-year');
-    const src = wrap.querySelector('.cg-src');
-    if (cap) cap.value = p.caption || '';
-    if (yr) yr.value = p.year || '';
-    if (src) src.value = p.src || '';
+    const yearInp = wrap.querySelector('.cgy-year');
+    const titleInp = wrap.querySelector('.cgy-title');
+    if (yearInp) yearInp.value = p.year || '';
+    if (titleInp) titleInp.value = p.title || '';
+    const imagesHost = wrap.querySelector('.cgy-images');
+    (p.images || []).forEach((img) => cmsAppendGalleryImageRow(imagesHost, img));
     root.appendChild(wrap);
 }
 
-async function cmsUploadGalleryImage(btn) {
-    const row = btn.closest('.cms-gallery-row');
+function cmsAppendGalleryImageRow(host, prefill) {
+    if (!host) return;
+    const img = prefill || {};
+    const row = document.createElement('div');
+    row.className = 'cgy-image-row';
+    row.style.cssText =
+        'display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;padding:8px;border:1px dashed #e2e8f0;border-radius:8px;background:#fff;';
+    row.innerHTML = `
+        <div style="grid-column:1/-1;"><label style="font-size:0.78rem;">Caption</label><input class="cgy-cap" type="text" style="width:100%" placeholder="Opening ceremony"></div>
+        <div style="grid-column:1/-1;"><label style="font-size:0.78rem;">Image path</label><input class="cgy-src" type="text" style="width:100%" placeholder="/uploads/photo.jpg"></div>
+        <div style="grid-column:1/-1;display:flex;gap:8px;flex-wrap:wrap;">
+          <input type="file" class="cgy-file" accept="image/*" style="max-width:180px;">
+          <button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;" onclick="cmsUploadGalleryImageRow(this)">Upload</button>
+          <button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;background:#64748b;" onclick="this.closest('.cgy-image-row').remove()">Remove</button>
+        </div>`;
+    const cap = row.querySelector('.cgy-cap');
+    const src = row.querySelector('.cgy-src');
+    if (cap) cap.value = img.caption || '';
+    if (src) src.value = img.src || '';
+    host.appendChild(row);
+}
+
+function cmsAddGalleryImageRow(btn) {
+    const yearRow = btn.closest('.cms-gallery-year');
+    if (!yearRow) return;
+    cmsAppendGalleryImageRow(yearRow.querySelector('.cgy-images'), {});
+}
+
+async function cmsUploadGalleryImageRow(btn) {
+    const row = btn.closest('.cgy-image-row');
     if (!row) return;
-    const fileInp = row.querySelector('.cg-file');
+    const fileInp = row.querySelector('.cgy-file');
     const path = await uploadAdminAssetFromInput(fileInp);
-    fileInp.value = '';
-    const pathEl = row.querySelector('.cg-src');
+    if (fileInp) fileInp.value = '';
+    const pathEl = row.querySelector('.cgy-src');
     if (path && pathEl) pathEl.value = path;
+}
+
+async function cmsUploadGalleryYearBatch(btn) {
+    const yearRow = btn.closest('.cms-gallery-year');
+    if (!yearRow) return;
+    const fileInp = yearRow.querySelector('.cgy-batch-files');
+    const paths = await uploadAdminAssetFromInput(fileInp, { multiple: true });
+    if (fileInp) fileInp.value = '';
+    if (!paths || !paths.length) return;
+    const host = yearRow.querySelector('.cgy-images');
+    paths.forEach((path) => cmsAppendGalleryImageRow(host, { src: path, caption: '' }));
+}
+
+const CMS_MENU_SECTIONS = [
+    { value: 'home', label: 'Home' },
+    { value: 'about', label: 'Foundation / About' },
+    { value: 'schedule', label: 'Agenda / Schedule' },
+    { value: 'gallery', label: 'Gallery' },
+    { value: 'verify', label: 'Delegates / Verify' },
+    { value: 'contact', label: 'Contact' },
+    { value: '', label: 'External page (use URL)' }
+];
+
+function cmsCollectMenuFromDom() {
+    const root = document.getElementById('cms-menu-rows');
+    if (!root) return [];
+    return Array.from(root.querySelectorAll('.cms-menu-row'))
+        .map((row, idx) => ({
+            label: ((row.querySelector('.cm-label') || {}).value || '').trim(),
+            section: ((row.querySelector('.cm-section') || {}).value || '').trim(),
+            href: ((row.querySelector('.cm-href') || {}).value || '').trim(),
+            visible: (row.querySelector('.cm-visible') || {}).checked !== false,
+            order: parseInt((row.querySelector('.cm-order') || {}).value, 10) || idx + 1
+        }))
+        .filter((item) => item.label);
+}
+
+function cmsFillMenuRows(items) {
+    const root = document.getElementById('cms-menu-rows');
+    if (!root) return;
+    root.innerHTML = '';
+    (items || []).forEach((it) => cmsAddMenuRow(it));
+}
+
+function cmsAddMenuRow(prefill) {
+    const root = document.getElementById('cms-menu-rows');
+    if (!root) return;
+    const p = prefill || {};
+    const wrap = document.createElement('div');
+    wrap.className = 'cms-menu-row';
+    wrap.style.cssText =
+        'margin-bottom:10px;padding:12px;border:1px solid #e2e8f0;border-radius:10px;background:#fafafa;display:grid;grid-template-columns:1.2fr 1fr 1fr 80px 70px;gap:8px;align-items:end;';
+    const sectionOpts = CMS_MENU_SECTIONS.map(
+        (s) =>
+            `<option value="${s.value.replace(/"/g, '&quot;')}">${s.label}</option>`
+    ).join('');
+    wrap.innerHTML = `
+        <div><label style="font-size:0.78rem;">Label</label><input class="cm-label" type="text" style="width:100%" placeholder="Gallery"></div>
+        <div><label style="font-size:0.78rem;">Section</label><select class="cm-section" style="width:100%">${sectionOpts}</select></div>
+        <div><label style="font-size:0.78rem;">URL (external)</label><input class="cm-href" type="text" style="width:100%" placeholder="/verify-certificate.html"></div>
+        <div><label style="font-size:0.78rem;">Order</label><input class="cm-order" type="number" min="1" style="width:100%" value="1"></div>
+        <div><label style="font-size:0.78rem;display:flex;align-items:center;gap:6px;padding-bottom:8px;"><input class="cm-visible" type="checkbox" checked> Show</label>
+          <button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.78rem;background:#64748b;width:100%;" onclick="this.closest('.cms-menu-row').remove()">Remove</button></div>`;
+    const label = wrap.querySelector('.cm-label');
+    const section = wrap.querySelector('.cm-section');
+    const href = wrap.querySelector('.cm-href');
+    const order = wrap.querySelector('.cm-order');
+    const visible = wrap.querySelector('.cm-visible');
+    if (label) label.value = p.label || '';
+    if (section) section.value = p.section || '';
+    if (href) href.value = p.href || '';
+    if (order) order.value = String(p.order != null ? p.order : root.querySelectorAll('.cms-menu-row').length);
+    if (visible) visible.checked = p.visible !== false;
+    root.appendChild(wrap);
 }
 
 function cmsAddScrollingRow(prefill) {
@@ -7770,7 +7926,12 @@ async function loadAdminSiteCms() {
         cmsFillDoctorRows(cms.doctorUpdates || []);
         cmsFillAboutRows(cms.aboutSections || []);
         cmsFillSocialRows(cms.socialLinks || []);
-        cmsFillGalleryRows(cms.pastSeminarGallery || []);
+        const galleryYears =
+            Array.isArray(cms.seminarGalleryYears) && cms.seminarGalleryYears.length
+                ? cms.seminarGalleryYears
+                : cmsGroupGalleryFlat(cms.pastSeminarGallery || []);
+        cmsFillGalleryYears(galleryYears);
+        cmsFillMenuRows(cms.siteMenu || []);
         cmsApplyHeroFieldsToForm(cms);
         cmsFillSpeakerRows(cms.speakers || []);
         cmsFillFeatureRows(cms.featureCards || []);
@@ -7863,7 +8024,14 @@ async function saveAdminSiteCms() {
     const reviews = cmsCollectReviewsFromDom();
     const aboutSections = cmsCollectAboutFromDom();
     const socialLinks = cmsCollectSocialFromDom();
-    const pastSeminarGallery = cmsCollectGalleryFromDom();
+    const seminarGalleryYears = cmsCollectGalleryYearsFromDom();
+    const pastSeminarGallery = seminarGalleryYears.reduce((acc, yg) => {
+        (yg.images || []).forEach((img) => {
+            acc.push({ src: img.src, caption: img.caption || yg.title || '', year: yg.year });
+        });
+        return acc;
+    }, []);
+    const siteMenu = cmsCollectMenuFromDom();
     try {
         const cms = {
             tickerText: (document.getElementById('cms-ticker') || {}).value || '',
@@ -7876,6 +8044,8 @@ async function saveAdminSiteCms() {
             aboutSections,
             socialLinks,
             pastSeminarGallery,
+            seminarGalleryYears,
+            siteMenu,
             speakers: cmsCollectSpeakersFromDom(),
             ...cmsCollectHeroFieldsFromForm()
         };
@@ -7912,6 +8082,40 @@ async function cmsApplyUploadedPath(targetInputId) {
         const t = document.getElementById(targetInputId);
         if (t) t.value = path;
     }
+}
+
+async function uploadSeminarGalleryBatch() {
+    const fileInp = document.getElementById('seminar-gallery-files');
+    const yearInp = document.getElementById('seminar-gallery-upload-year');
+    const ta = document.getElementById('seminar-gallery');
+    if (!fileInp || !ta) return;
+    const year = ((yearInp && yearInp.value) || '').trim() || String(new Date().getFullYear());
+    const paths = await uploadAdminAssetFromInput(fileInp, { multiple: true });
+    fileInp.value = '';
+    if (!paths || !paths.length) return;
+    let albums = [];
+    try {
+        const parsed = JSON.parse(ta.value || '[]');
+        if (Array.isArray(parsed)) {
+            if (parsed.length && typeof parsed[0] === 'string') {
+                albums = [{ year: 'Archive', title: '', images: parsed.map((src) => ({ src, caption: '' })) }];
+            } else {
+                albums = parsed;
+            }
+        }
+    } catch (_) {
+        albums = [];
+    }
+    let bucket = albums.find((a) => String(a.year) === year);
+    if (!bucket) {
+        bucket = { year, title: '', images: [] };
+        albums.push(bucket);
+    }
+    if (!Array.isArray(bucket.images)) bucket.images = [];
+    paths.forEach((src) => bucket.images.push({ src, caption: '' }));
+    albums.sort((a, b) => String(b.year).localeCompare(String(a.year)));
+    ta.value = JSON.stringify(albums, null, 2);
+    if (yearInp && !yearInp.value) yearInp.value = year;
 }
 
 async function uploadSeminarHeroOrFlyer(kind) {

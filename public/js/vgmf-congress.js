@@ -305,10 +305,59 @@
         render();
     };
 
+    function galleryItemsFromCms(cms) {
+        if (Array.isArray(cms.seminarGalleryYears) && cms.seminarGalleryYears.length) {
+            const out = [];
+            cms.seminarGalleryYears.forEach((yg) => {
+                const year = yg.year || 'Archive';
+                (yg.images || []).forEach((img) => {
+                    if (img && img.src) {
+                        out.push({
+                            src: img.src,
+                            caption: img.caption || yg.title || '',
+                            year
+                        });
+                    }
+                });
+            });
+            return out;
+        }
+        return Array.isArray(cms.pastSeminarGallery) ? cms.pastSeminarGallery : [];
+    }
+
+    window.applySiteMenu = function applySiteMenu(cms) {
+        const host = document.getElementById('cg-nav-menu-links');
+        if (!host || !cms) return;
+        const items = Array.isArray(cms.siteMenu) ? cms.siteMenu.filter((i) => i && i.visible !== false) : [];
+        if (!items.length) return;
+        items.sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+        host.innerHTML = items
+            .map((item) => {
+                const label = esc(item.label || '');
+                const href = String(item.href || '').trim();
+                const section = String(item.section || '').trim();
+                if (href && (href.startsWith('/') || href.startsWith('http'))) {
+                    const ext = href.startsWith('http') ? ' target="_blank" rel="noopener noreferrer"' : '';
+                    return '<a href="' + esc(href) + '"' + ext + '>' + label + '</a>';
+                }
+                if (section) {
+                    return (
+                        '<a href="#" data-nav-section="' +
+                        esc(section) +
+                        '">' +
+                        label +
+                        '</a>'
+                    );
+                }
+                return '';
+            })
+            .join('');
+    };
+
     window.renderCongressPastSeminars = function renderCongressPastSeminars(cms) {
         const root = document.getElementById('cg-past-timeline');
         if (!root) return;
-        const gallery = Array.isArray(cms.pastSeminarGallery) ? cms.pastSeminarGallery : [];
+        const gallery = galleryItemsFromCms(cms);
         if (!gallery.length) {
             root.innerHTML = '<p style="color:#64748b;">Past seminar highlights coming soon.</p>';
             return;
@@ -454,26 +503,23 @@
             close();
         });
         backdrop?.addEventListener('click', close);
-        nav.addEventListener('click', (e) => {
-            e.stopPropagation();
-        });
-        nav.querySelectorAll('a').forEach((a) => {
-            a.addEventListener('click', (e) => {
-                const section = a.getAttribute('data-nav-section');
-                if (section) {
-                    e.preventDefault();
-                    if (mq.matches) close();
-                    if (typeof window.showSection === 'function') {
-                        window.showSection(section);
-                    }
-                    nav.querySelectorAll('a[data-nav-section]').forEach((link) => {
-                        link.classList.toggle('active', link === a);
-                    });
-                    return;
-                }
+        if (!nav.dataset.navClickBound) {
+            nav.dataset.navClickBound = '1';
+            nav.addEventListener('click', (e) => {
+                const a = e.target.closest('a[data-nav-section]');
+                if (!a) return;
+                e.preventDefault();
+                e.stopPropagation();
                 if (mq.matches) close();
+                const section = a.getAttribute('data-nav-section');
+                if (section && typeof window.showSection === 'function') {
+                    window.showSection(section);
+                }
+                nav.querySelectorAll('a[data-nav-section]').forEach((link) => {
+                    link.classList.toggle('active', link === a);
+                });
             });
-        });
+        }
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape' && nav.classList.contains('mobile-open')) close();
         });
@@ -511,6 +557,7 @@
     const origApply = window.applySiteCms;
     window.applySiteCms = function (cms) {
         if (origApply) origApply(cms);
+        if (typeof window.applySiteMenu === 'function') window.applySiteMenu(cms);
         renderCongressHero(cms);
         renderCongressTicker(cms.scrollingAnnouncements || []);
         renderCongressPastSeminars(cms);

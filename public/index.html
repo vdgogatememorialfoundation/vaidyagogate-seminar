@@ -12,7 +12,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="/css/vgmf-site.css">
     <link rel="stylesheet" href="/css/vgmf-congress.css">
-    <link rel="stylesheet" href="/css/vgmf-responsive.css?v=20260520c">
+    <link rel="stylesheet" href="/css/vgmf-responsive.css?v=20260520d">
     <script src="/js/portal-datetime.js"></script>
 </head>
 <body class="congress-site">
@@ -59,17 +59,21 @@
         </header>
         <nav class="cg-nav" id="cg-nav" aria-label="Site menu" aria-hidden="true">
             <button type="button" class="cg-nav-close" id="cg-nav-close" aria-label="Close menu"><i class="fas fa-times"></i></button>
-            <a href="#" data-nav-section="home" class="active">Home</a>
-            <a href="#" data-nav-section="about">Foundation</a>
-            <a href="#" data-nav-section="schedule">Agenda</a>
-            <a href="#" data-nav-section="gallery">Gallery</a>
-            <a href="#" id="nav-verify" data-nav-section="verify">Delegates</a>
-            <a href="/verify-certificate.html">Certificate</a>
-            <a href="#" data-nav-section="contact">Contact</a>
-            <a href="#" onclick="openAuthModal('login'); return false;">Sign in</a>
-            <a id="nav-wix-home" href="https://www.vaidyagogate.org" target="_blank" rel="noopener" class="hidden">Main site</a>
-            <a href="/doctor.html">Portal</a>
-            <a href="/?register=1" class="cg-btn-register" data-portal-auth="signup" onclick="openRegisterModal(); return false;">Create account</a>
+            <span id="cg-nav-menu-links">
+                <a href="#" data-nav-section="home" class="active">Home</a>
+                <a href="#" data-nav-section="about">Foundation</a>
+                <a href="#" data-nav-section="schedule">Agenda</a>
+                <a href="#" data-nav-section="gallery">Gallery</a>
+                <a href="#" id="nav-verify" data-nav-section="verify">Delegates</a>
+                <a href="/verify-certificate.html">Certificate</a>
+                <a href="#" data-nav-section="contact">Contact</a>
+            </span>
+            <span id="cg-nav-menu-fixed">
+                <a href="#" onclick="openAuthModal('login'); return false;">Sign in</a>
+                <a id="nav-wix-home" href="https://www.vaidyagogate.org" target="_blank" rel="noopener" class="hidden">Main site</a>
+                <a href="/doctor.html">Portal</a>
+                <a href="/?register=1" class="cg-btn-register" data-portal-auth="signup" onclick="openRegisterModal(); return false;">Create account</a>
+            </span>
         </nav>
     </div>
     </div>
@@ -427,7 +431,7 @@
     <script src="/js/portal-content-protection.js"></script>
     <script src="/js/portal-scrolling-announcements.js"></script>
     <script src="/js/vgmf-home.js"></script>
-    <script src="/js/vgmf-congress.js?v=20260520d"></script>
+    <script src="/js/vgmf-congress.js?v=20260520e"></script>
     <script src="/js/vgmf-home-stats.js"></script>
     <script src="/js/vgmf-marketing.js"></script>
     <script src="/js/otp-ui.js"></script>
@@ -815,6 +819,22 @@
         });
 
 
+        function galleryItemsFromCms(cms) {
+            if (Array.isArray(cms.seminarGalleryYears) && cms.seminarGalleryYears.length) {
+                const out = [];
+                cms.seminarGalleryYears.forEach((yg) => {
+                    const year = yg.year || '';
+                    (yg.images || []).forEach((img) => {
+                        if (img && img.src) {
+                            out.push({ src: img.src, caption: img.caption || yg.title || '', year });
+                        }
+                    });
+                });
+                return out;
+            }
+            return Array.isArray(cms.pastSeminarGallery) ? cms.pastSeminarGallery : [];
+        }
+
         function renderAboutGallerySocial(cms) {
             const aboutEl = document.getElementById('about-content');
             if (aboutEl) {
@@ -826,10 +846,54 @@
             if (typeof renderSocialLinks === 'function') renderSocialLinks(cms);
             const grid = document.getElementById('gallery-grid');
             if (grid) {
-                const gal = Array.isArray(cms.pastSeminarGallery) ? cms.pastSeminarGallery : [];
-                grid.innerHTML = gal.length
-                    ? gal.map((g) => '<div class="card"><img src="' + escHtml(g.src || '') + '" alt="" style="width:100%;height:160px;object-fit:cover;"><div class="card-content"><h3>' + escHtml(g.caption || '') + '</h3><p style="color:#78716c;">' + escHtml(g.year || '') + '</p></div></div>').join('')
-                    : '<p style="color:#78716c;">No gallery images yet.</p>';
+                const yearGroups = Array.isArray(cms.seminarGalleryYears) && cms.seminarGalleryYears.length
+                    ? cms.seminarGalleryYears
+                    : null;
+                if (yearGroups) {
+                    grid.innerHTML = yearGroups
+                        .slice()
+                        .sort((a, b) => String(b.year || '').localeCompare(String(a.year || '')))
+                        .map((yg) => {
+                            const imgs = (yg.images || [])
+                                .map(
+                                    (g) =>
+                                        '<div class="card"><img src="' +
+                                        escHtml(g.src || '') +
+                                        '" alt="" style="width:100%;height:160px;object-fit:cover;"><div class="card-content"><h3>' +
+                                        escHtml(g.caption || '') +
+                                        '</h3></div></div>'
+                                )
+                                .join('');
+                            return (
+                                '<section style="grid-column:1/-1;margin-bottom:24px;"><h3 style="font-family:Fraunces,Georgia,serif;color:#0f766e;margin:0 0 12px;">' +
+                                escHtml(yg.title || 'Seminar ' + (yg.year || '')) +
+                                ' <span style="color:#78716c;font-size:0.9rem;">(' +
+                                escHtml(yg.year || '') +
+                                ' · ' +
+                                (yg.images || []).length +
+                                ' photos)</span></h3><div class="cards-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;">' +
+                                (imgs || '<p style="color:#78716c;">No images for this year.</p>') +
+                                '</div></section>'
+                            );
+                        })
+                        .join('');
+                } else {
+                    const gal = galleryItemsFromCms(cms);
+                    grid.innerHTML = gal.length
+                        ? gal
+                              .map(
+                                  (g) =>
+                                      '<div class="card"><img src="' +
+                                      escHtml(g.src || '') +
+                                      '" alt="" style="width:100%;height:160px;object-fit:cover;"><div class="card-content"><h3>' +
+                                      escHtml(g.caption || '') +
+                                      '</h3><p style="color:#78716c;">' +
+                                      escHtml(g.year || '') +
+                                      '</p></div></div>'
+                              )
+                              .join('')
+                        : '<p style="color:#78716c;">No gallery images yet.</p>';
+                }
             }
         }
 

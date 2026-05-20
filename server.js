@@ -438,22 +438,27 @@ const storage = multer.diskStorage({
         cb(null, Date.now() + '-' + Math.round(Math.random() * 1E9) + path.extname(file.originalname))
     }
 });
-const upload = multer({ storage: storage, limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB max
-const memoryUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+const UPLOAD_MAX_BYTES = 10 * 1024 * 1024; // 10MB — safe for Vercel/serverless body limits
+const upload = multer({ storage: storage, limits: { fileSize: UPLOAD_MAX_BYTES } });
+const memoryUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: UPLOAD_MAX_BYTES } });
+
+function uploadErrorMessage(err) {
+    if (!err) return 'Upload failed';
+    if (err.code === 'LIMIT_FILE_SIZE') return 'File is too large (max 10 MB per file).';
+    if (err.code === 'LIMIT_FILE_COUNT') return 'Too many files in one upload.';
+    return err.message || 'Upload failed';
+}
+
 function withCertificateUpload(req, res, next) {
     (process.env.VERCEL ? memoryUpload : upload).single('certificate')(req, res, (err) => {
         if (err) {
-            return res.status(400).json({
-                error:
-                    err.code === 'LIMIT_FILE_SIZE'
-                        ? 'Certificate file is too large.'
-                        : err.message || 'Upload failed'
-            });
+            return res.status(400).json({ error: uploadErrorMessage(err) });
         }
         next();
     });
 }
 const fileStore = require('./lib/file-store');
+const siteCmsHelpers = require('./lib/site-cms-helpers');
 const caseUpload = fileStore.createUploadHandler(upload, memoryUpload);
 
 app.get('/uploads/:filename', fileStore.serveUploadHandler(db, uploadsDir));
@@ -648,6 +653,8 @@ const DEFAULT_PUBLIC_SITE_CMS = {
         }
     ],
     pastSeminarGallery: [],
+    seminarGalleryYears: [],
+    siteMenu: siteCmsHelpers.DEFAULT_SITE_MENU,
     doctorUpdates: [
         {
             title: 'Doctor portal',
@@ -1208,7 +1215,7 @@ function loadPublicSiteCms(callback) {
             }
         }
         base.scrollingAnnouncements = sanitizeScrollingAnnouncements(base.scrollingAnnouncements);
-        callback(null, base);
+        callback(null, siteCmsHelpers.normalizeSiteCms(base));
     });
 }
 
@@ -3570,8 +3577,21 @@ app.post('/api/admin/site-cms', (req, res) => {
     if (!incoming || typeof incoming !== 'object') {
         return res.status(400).json({ error: 'cms object required' });
     }
-    for (let i = 0; i < ['doctorUpdates', 'slides', 'publicNotices', 'reviews', 'scrollingAnnouncements', 'aboutSections', 'socialLinks', 'pastSeminarGallery', 'speakers'].length; i++) {
-        const k = ['doctorUpdates', 'slides', 'publicNotices', 'reviews', 'scrollingAnnouncements', 'aboutSections', 'socialLinks', 'pastSeminarGallery', 'speakers'][i];
+    const arrayKeys = [
+        'doctorUpdates',
+        'slides',
+        'publicNotices',
+        'reviews',
+        'scrollingAnnouncements',
+        'aboutSections',
+        'socialLinks',
+        'pastSeminarGallery',
+        'seminarGalleryYears',
+        'siteMenu',
+        'speakers'
+    ];
+    for (let i = 0; i < arrayKeys.length; i++) {
+        const k = arrayKeys[i];
         if (incoming[k] !== undefined && !Array.isArray(incoming[k])) {
             return res.status(400).json({ error: `${k} must be an array` });
         }
@@ -3583,9 +3603,31 @@ app.post('/api/admin/site-cms', (req, res) => {
             ...incoming,
             version: 1
         };
-        ['doctorUpdates', 'slides', 'publicNotices', 'reviews', 'scrollingAnnouncements', 'aboutSections', 'socialLinks', 'pastSeminarGallery', 'speakers'].forEach((k) => {
+        [
+            'doctorUpdates',
+            'slides',
+            'publicNotices',
+            'reviews',
+            'scrollingAnnouncements',
+            'aboutSections',
+            'socialLinks',
+            'pastSeminarGallery',
+            'seminarGalleryYears',
+            'siteMenu',
+            'speakers'
+        ].forEach((k) => {
             if (incoming[k] !== undefined) merged[k] = incoming[k];
         });
+        if (incoming.seminarGalleryYears !== undefined) {
+            merged.seminarGalleryYears = incoming.seminarGalleryYears;
+            merged.pastSeminarGallery = siteCmsHelpers.flattenGalleryYears(incoming.seminarGalleryYears);
+        } else if (incoming.pastSeminarGallery !== undefined) {
+            merged.pastSeminarGallery = incoming.pastSeminarGallery;
+            merged.seminarGalleryYears = siteCmsHelpers.groupGalleryToYears(incoming.pastSeminarGallery);
+        }
+        if (incoming.siteMenu !== undefined) {
+            merged.siteMenu = siteCmsHelpers.normalizeSiteMenu(incoming.siteMenu);
+        }
         if (typeof incoming.tickerText === 'string') merged.tickerText = incoming.tickerText;
         if (typeof incoming.bannerImage === 'string') merged.bannerImage = incoming.bannerImage;
         ['topBar', 'hero', 'contact', 'schedulePage', 'footer'].forEach((k) => {
@@ -3598,7 +3640,8 @@ app.post('/api/admin/site-cms', (req, res) => {
         if (Array.isArray(incoming.faq)) merged.faq = incoming.faq;
         if (Array.isArray(incoming.speakers)) merged.speakers = incoming.speakers;
         merged.scrollingAnnouncements = sanitizeScrollingAnnouncements(merged.scrollingAnnouncements);
-        const payload = JSON.stringify(merged);
+        const normalized = siteCmsHelpers.normalizeSiteCms(merged);
+        const payload = JSON.stringify(normalized);
         upsertGlobalSetting('public_site_cms', payload, (err) => {
             if (err) return res.status(500).json({ error: err.message });
             res.json({ success: true });
@@ -3689,16 +3732,57 @@ app.post('/api/admin/broadcast-venue-update', (req, res) => {
     });
 });
 
-app.post('/api/admin/upload-asset', caseUpload.single('file'), (req, res) => {
+function withUploadAsset(req, res, next) {
+    caseUpload.single('file')(req, res, (err) => {
+        if (err) return res.status(400).json({ error: uploadErrorMessage(err) });
+        next();
+    });
+}
+
+function withUploadAssets(req, res, next) {
+    caseUpload.array('files', 40)(req, res, (err) => {
+        if (err) return res.status(400).json({ error: uploadErrorMessage(err) });
+        next();
+    });
+}
+
+function persistOneUploadAsset(file, cb) {
+    if (!file) return cb(null, null);
+    fileStore.persistToGlobalAsset(db, upsertGlobalSetting, file, 'upload_asset_', (err, assetPath) => {
+        if (err) return cb(err);
+        if (assetPath) return cb(null, assetPath);
+        if (file.filename) return cb(null, '/uploads/' + file.filename);
+        cb(new Error('Upload could not be saved'));
+    });
+}
+
+app.post('/api/admin/upload-asset', withUploadAsset, (req, res) => {
     if (!req.file) {
         return res.status(400).json({ error: 'file is required' });
     }
-    fileStore.persistToGlobalAsset(db, upsertGlobalSetting, req.file, 'upload_asset_', (err, assetPath) => {
+    persistOneUploadAsset(req.file, (err, assetPath) => {
         if (err) return res.status(500).json({ error: err.message });
-        if (assetPath) return res.json({ success: true, path: assetPath });
-        if (!req.file.filename) return res.status(400).json({ error: 'file is required' });
-        res.json({ success: true, path: '/uploads/' + req.file.filename });
+        res.json({ success: true, path: assetPath });
     });
+});
+
+app.post('/api/admin/upload-assets', withUploadAssets, (req, res) => {
+    const files = req.files || [];
+    if (!files.length) {
+        return res.status(400).json({ error: 'At least one file is required' });
+    }
+    const paths = [];
+    let i = 0;
+    const nextFile = () => {
+        if (i >= files.length) return res.json({ success: true, paths });
+        persistOneUploadAsset(files[i], (err, assetPath) => {
+            if (err) return res.status(500).json({ error: err.message });
+            if (assetPath) paths.push(assetPath);
+            i += 1;
+            nextFile();
+        });
+    };
+    nextFile();
 });
 
 app.get('/api/assets/:key', fileStore.serveAssetHandler(db));
