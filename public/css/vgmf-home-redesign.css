@@ -640,11 +640,11 @@
 .vgmf-redesign #verifySection,
 .vgmf-redesign #scheduleSection,
 .vgmf-redesign #contactSection {
-    border: 1px solid #d8e1ee;
-    border-radius: 22px;
-    padding: clamp(18px, 3.5vw, 34px);
-    background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
-    box-shadow: 0 18px 36px rgba(15, 23, 42, 0.08);
+    border: 1px solid #e2e8f0;
+    border-radius: 18px;
+    padding: clamp(16px, 3vw, 28px);
+    background: #ffffff;
+    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.06);
 }
 
 .vgmf-redesign .home-split {
@@ -656,8 +656,8 @@
 
 .vgmf-redesign .notices-panel {
     position: sticky;
-    top: 104px;
-    max-height: 78vh;
+    top: 96px;
+    max-height: 74vh;
     overflow: auto;
 }
 
@@ -672,7 +672,7 @@
 .vgmf-redesign .seminar-pill,
 .vgmf-redesign .notice-card,
 .vgmf-redesign .vg-help-card {
-    background: #fff;
+    background: #f8fbff;
 }
 
 .vgmf-redesign .speaker-card {
@@ -717,9 +717,9 @@
 
 .vgmf-redesign .contact-info,
 .vgmf-redesign .contact-form {
-    background: #fff;
-    border: 1px solid #dde6f2;
-    border-radius: 16px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
     padding: 18px;
 }
 
@@ -744,10 +744,10 @@
 }
 
 .vgmf-redesign .footer-col {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: transparent;
+    border: 0;
     border-radius: 14px;
-    padding: 14px;
+    padding: 0;
 }
 
 .vgmf-redesign .cg-quick-card,
@@ -772,6 +772,10 @@
 .vgmf-redesign .vg-help-card:hover::after,
 .vgmf-redesign .feature-card:hover::after {
     opacity: 1;
+}
+
+.vgmf-redesign #experience-pillars .feature-card {
+    background: #ffffff;
 }
 
 @media (max-width: 1080px) {
