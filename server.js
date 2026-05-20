@@ -43,6 +43,7 @@ const siteKillSwitch = require('./lib/site-kill-switch');
 const activityLog = require('./lib/activity-log');
 const whatsappWebhook = require('./lib/whatsapp-webhook');
 const { ensureSupportTicketSchema } = require('./lib/support-tickets-schema');
+const supportTicketNotify = require('./lib/support-ticket-notify');
 const { ensureContactInquiriesSchema } = require('./lib/contact-inquiries-schema');
 const paymentsMod = require('./lib/payments-module');
 const adminPaymentFlow = require('./lib/admin-payment-flow');
@@ -2014,6 +2015,37 @@ function withAuxiliaryTables(req, res, next) {
             });
     }
     next();
+}
+
+function withSupportTickets(req, res, next) {
+    const run = () => ensureSupportTicketSchema(db, ignoreSchemaMigrationErr, next);
+    if (pgDb && typeof pgDb.ensureAuxiliaryTables === 'function') {
+        return pgDb
+            .ensureAuxiliaryTables()
+            .then(run)
+            .catch((e) => {
+                console.warn('[support-tickets-schema]', e.message);
+                run();
+            });
+    }
+    run();
+}
+
+function formatCheckInTimeForNotify(at) {
+    try {
+        const d = at ? new Date(at) : new Date();
+        return d.toLocaleString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            weekday: 'short',
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    } catch (_) {
+        return new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+    }
 }
 
 function integrationSettingsJson(data) {
@@ -5380,22 +5412,33 @@ app.post('/api/scanner/mark', (req, res) => {
                     function (err2) {
                         if (err2) return res.status(500).json({ success: false, error: err2.message });
                         const regId = row.registration_id;
-                        const finishScanResponse = (checkedInAtIso) => {
+                        const finishScanResponse = (scanAtIso) => {
                             syncCertificateEligibilityForTicket(row.ticket_id, () => {
                                 const doctorName = buildDisplayNameFromFormData(row.form_data, {
                                     first_name: row.doctor_first_name,
                                     last_name: row.doctor_last_name
                                 });
-                                notifEngine.notify(db, 'CHECK_IN_SUCCESS', {
-                                    userId: row.doctor_user_id,
-                                    seminarId: row.seminar_id,
-                                    registrationId: regId || null,
-                                    vars: {
-                                        ticket_id: row.ticket_id_string,
-                                        payment_status: row.payment_status === 'success' ? 'PAID' : 'UNPAID',
-                                        approval_status: 'checked_in'
+                                const atIso = scanAtIso || new Date().toISOString();
+                                notifEngine.notify(
+                                    db,
+                                    'CHECK_IN_SUCCESS',
+                                    {
+                                        userId: row.doctor_user_id,
+                                        seminarId: row.seminar_id,
+                                        registrationId: regId || null,
+                                        immediate: true,
+                                        vars: {
+                                            ticket_id: row.ticket_id_string,
+                                            payment_status:
+                                                row.payment_status === 'success' ? 'PAID' : 'UNPAID',
+                                            approval_status: 'checked_in',
+                                            check_in_time: formatCheckInTimeForNotify(atIso)
+                                        }
+                                    },
+                                    (nErr) => {
+                                        if (nErr) console.warn('[scanner] check-in notify:', nErr.message);
                                     }
-                                });
+                                );
 
                                 const certEligibleNow =
                                     String(row.payment_status || '').toLowerCase() === 'success' &&
@@ -5432,7 +5475,7 @@ app.post('/api/scanner/mark', (req, res) => {
                                         ticketId: row.ticket_id_string,
                                         registrationType: 'checked_in',
                                         paymentStatus: row.payment_status === 'success' ? 'PAID' : 'UNPAID',
-                                        checkedInAt: checkedInAtIso || new Date().toISOString()
+                                        checkedInAt: atIso
                                     },
                                     scannedByStaffId: staffId
                                 });
@@ -6866,14 +6909,15 @@ app.post('/api/admin/certificates/:id/toggle', (req, res) => {
                         function (err) {
                             if (err) return res.status(500).json({ error: err.message });
                             const finishEnable = () => {
-                                notifEngine.notify(db, 'CERTIFICATE_AVAILABLE', {
-                                    userId: row.user_id,
-                                    seminarId: row.seminar_id,
-                                    vars: {
-                                        certificate_url:
-                                            notifEngine.publicBaseUrl() + '/doctor.html#tab-certificates'
-                                    }
-                                });
+                            notifEngine.notify(db, 'CERTIFICATE_AVAILABLE', {
+                                userId: row.user_id,
+                                seminarId: row.seminar_id,
+                                immediate: true,
+                                vars: {
+                                    certificate_url:
+                                        notifEngine.publicBaseUrl() + '/doctor.html#tab-certificates'
+                                }
+                            });
                                 res.json({ success: true });
                             };
                             if (row.registration_id) {
@@ -8949,7 +8993,10 @@ function createSupportTicketRecord(opts, cb) {
                     [ticketId, senderId, senderType, description],
                     function (err2) {
                         if (err2) return cb(err2);
-                        cb(null, { ticketId, userId: uid });
+                        supportTicketNotify.notifySupportTicketCreated(db, ticketId, (nErr) => {
+                            if (nErr) console.warn('[support-ticket] create notify:', nErr.message);
+                            cb(null, { ticketId, userId: uid });
+                        });
                     }
                 );
             }
@@ -8961,6 +9008,10 @@ function createSupportTicketRecord(opts, cb) {
     }
     ensureSupportTicketSchema(db, ignoreSchemaMigrationErr, runInsert);
 }
+
+app.use('/api/support-ticket', withSupportTickets);
+app.use('/api/admin/support-ticket', withSupportTickets);
+app.use('/api/admin/support-tickets', withSupportTickets);
 
 // Create Support Ticket (doctor portal)
 app.post('/api/support-ticket/create', (req, res) => {
@@ -9091,17 +9142,35 @@ app.get('/api/support-ticket/:ticketId', (req, res) => {
 app.post('/api/support-ticket/:ticketId/reply', (req, res) => {
     const { ticketId } = req.params;
     const { senderId, senderType, message, attachment_path } = req.body;
-    
-    db.run(`INSERT INTO ticket_messages (ticket_id, sender_id, sender_type, message, attachment_path) 
+    const msg = message && String(message).trim();
+    if (!msg) return res.status(400).json({ error: 'Message is required' });
+
+    db.run(
+        `INSERT INTO ticket_messages (ticket_id, sender_id, sender_type, message, attachment_path) 
             VALUES (?, ?, ?, ?, ?)`,
-        [ticketId, senderId, senderType, message, attachment_path || null],
-        function(err) {
+        [ticketId, senderId, senderType, msg, attachment_path || null],
+        function (err) {
             if (err) return res.status(500).json({ error: err.message });
-            
-            // Update ticket's updated_at timestamp
-            db.run(`UPDATE support_tickets SET updated_at = CURRENT_TIMESTAMP WHERE ticket_id = ?`, [ticketId]);
-            res.json({ success: true, messageId: this.lastID });
-        });
+            const messageId = this.lastID;
+
+            db.run(
+                `UPDATE support_tickets SET updated_at = CURRENT_TIMESTAMP WHERE ticket_id = ? OR tracking_id = ?`,
+                [ticketId, ticketId],
+                () => {
+                    supportTicketNotify.notifySupportTicketReply(
+                        db,
+                        ticketId,
+                        senderType,
+                        msg,
+                        (nErr) => {
+                            if (nErr) console.warn('[support-ticket] reply notify:', nErr.message);
+                            res.json({ success: true, messageId });
+                        }
+                    );
+                }
+            );
+        }
+    );
 });
 
 // ==================== ADMIN E-TICKETS (lookup / generate / send) ====================
@@ -9426,11 +9495,40 @@ function startBackgroundWorkers() {
 
 function flushNotificationQueue() {
     try {
-        notifEngine.processQueueOnce(db);
+        if (notifEngine.drainNotificationQueue) {
+            notifEngine.drainNotificationQueue(db, 4).catch((e) => {
+                console.warn('[notifications] drain', e.message);
+            });
+        } else {
+            notifEngine.processQueueOnce(db);
+        }
     } catch (e) {
         console.warn('[notifications] flush', e.message);
     }
 }
+
+app.get('/api/cron/process-notifications', (req, res) => {
+    const secret = process.env.CRON_SECRET;
+    if (secret) {
+        const auth = req.headers.authorization || '';
+        if (auth !== `Bearer ${secret}`) return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const run = () => {
+        if (!notifEngine.drainNotificationQueue) {
+            notifEngine.processQueueOnce(db);
+            return res.json({ ok: true, mode: 'once' });
+        }
+        notifEngine
+            .drainNotificationQueue(db, 12)
+            .then(() => res.json({ ok: true, mode: 'drain' }))
+            .catch((e) => res.status(500).json({ error: e.message }));
+    };
+    if (appReadyResolved) return run();
+    if (appReadyPromise) {
+        return appReadyPromise.then(run).catch((e) => res.status(503).json({ error: e.message }));
+    }
+    run();
+});
 
 module.exports = app;
 

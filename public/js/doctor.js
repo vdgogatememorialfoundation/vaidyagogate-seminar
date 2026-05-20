@@ -4023,10 +4023,18 @@ async function loadTickets() {
     if (!currentUser) return;
     const uid = doctorNumericUserId();
     if (!uid) return;
+    const list = document.getElementById('tickets-list');
+    if (!list) return;
     try {
         const res = await fetch('/api/support-ticket/user/' + uid);
         const tickets = await res.json();
-        const list = document.getElementById('tickets-list');
+        if (!res.ok) {
+            list.innerHTML =
+                '<tr><td colspan="4" style="text-align:center;color:#b91c1c;">' +
+                escapeHtml((tickets && tickets.error) || 'Could not load tickets') +
+                '</td></tr>';
+            return;
+        }
         list.innerHTML = '';
         if (!tickets || tickets.length === 0) {
             list.innerHTML = '<tr><td colspan="4" style="text-align: center;">No tickets found.</td></tr>';
@@ -4053,6 +4061,10 @@ async function loadTickets() {
         });
     } catch (err) {
         console.error(err);
+        if (list) {
+            list.innerHTML =
+                '<tr><td colspan="4" style="text-align:center;color:#b91c1c;">Network error loading tickets.</td></tr>';
+        }
     }
 }
 

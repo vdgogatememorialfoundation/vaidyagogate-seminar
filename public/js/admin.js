@@ -6561,9 +6561,12 @@ async function loadSupportTickets() {
 
 async function viewSupportTicket(ticketId) {
     try {
-        const res = await fetch(`/api/support-ticket/${ticketId}`);
+        const res = await fetch(`/api/support-ticket/${encodeURIComponent(ticketId)}`);
         const ticket = await res.json();
-        
+        if (!res.ok) {
+            return alert((ticket && ticket.error) || 'Could not load ticket');
+        }
+
         currentViewingTicketId = ticketId;
         
         const infoHtml = `
@@ -6572,7 +6575,7 @@ async function viewSupportTicket(ticketId) {
                 <p><strong>Doctor:</strong> ${ticket.first_name} ${ticket.last_name} (${ticket.email})</p>
                 <p><strong>Subject:</strong> ${ticket.subject}</p>
                 <p><strong>Category:</strong> ${ticket.category}</p>
-                <p><strong>Priority:</strong> ${ticket.priority.toUpperCase()}</p>
+                <p><strong>Priority:</strong> ${String(ticket.priority || 'medium').toUpperCase()}</p>
                 <p><strong>Status:</strong> ${ticket.status}</p>
                 <p><strong>Description:</strong> ${ticket.description}</p>
             </div>
@@ -6580,7 +6583,7 @@ async function viewSupportTicket(ticketId) {
         
         document.getElementById('ticket-info').innerHTML = infoHtml;
         
-        const messagesHtml = ticket.messages.map(m => `
+        const messagesHtml = (Array.isArray(ticket.messages) ? ticket.messages : []).map(m => `
             <div style="margin-bottom: 10px; padding: 10px; background: ${m.sender_type === 'admin' ? '#e0e7ff' : '#f0fdf4'}; border-radius: 4px;">
                 <strong>${m.sender_type === 'admin' ? '🔵 Admin' : '👤 ' + m.first_name}:</strong> ${m.message}
                 <br><small style="color: #64748b;">${new Date(m.created_at).toLocaleString()}</small>
