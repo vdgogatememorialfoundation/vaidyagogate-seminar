@@ -593,8 +593,15 @@
         margin-top: -32px;
     }
     .vgmf-redesign .cg-quick-grid {
-        grid-template-columns: repeat(2, 1fr);
+        grid-template-columns: 1fr;
         gap: 10px;
+    }
+    .vgmf-redesign .cards-grid,
+    .vgmf-redesign #experience-pillars .cards-grid {
+        grid-template-columns: 1fr;
+    }
+    .vgmf-redesign .home-split {
+        grid-template-columns: 1fr;
     }
     .vgmf-redesign .cg-quick-card {
         min-height: 108px;
