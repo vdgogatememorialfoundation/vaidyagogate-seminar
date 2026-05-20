@@ -5009,6 +5009,16 @@ async function proxyInitiatePayment() {
         } else if (data.paymentType === 'easebuzz_checkout' && data.paymentUrl) {
             const w = window.open(data.paymentUrl, '_blank', 'noopener');
             if (!w && confirm('Open Easebuzz payment in this tab?')) window.location.href = data.paymentUrl;
+        } else if (data.paymentType === 'cashfree_checkout' && data.paymentSessionId) {
+            openAdminCashfreeCheckout(data);
+        } else if (
+            (data.paymentType === 'payu_checkout' || data.paymentType === 'paytm_checkout') &&
+            data.formAction
+        ) {
+            submitAdminPgForm(data);
+        } else if (data.paymentType === 'phonepe_checkout' && data.paymentUrl) {
+            const w = window.open(data.paymentUrl, '_blank', 'noopener');
+            if (!w && confirm('Open PhonePe in this tab?')) window.location.href = data.paymentUrl;
         }
         if (data.pollRequired) startProxyPaymentPoll();
         else if (pollSt) pollSt.textContent = data.message || '';
@@ -5016,6 +5026,51 @@ async function proxyInitiatePayment() {
     } catch (e) {
         console.error(e);
         alert('Network error');
+    }
+}
+
+function submitAdminPgForm(data) {
+    if (!data.formAction || !data.formFields) return alert('Payment form missing.');
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = data.formAction;
+    form.target = '_blank';
+    Object.entries(data.formFields).forEach(([k, v]) => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = k;
+        input.value = v != null ? String(v) : '';
+        form.appendChild(input);
+    });
+    document.body.appendChild(form);
+    form.submit();
+    form.remove();
+}
+
+function loadAdminCashfreeSdk() {
+    return new Promise((resolve, reject) => {
+        if (typeof Cashfree !== 'undefined') return resolve();
+        const s = document.createElement('script');
+        s.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
+        s.async = true;
+        s.onload = () => resolve();
+        s.onerror = () => reject(new Error('Cashfree SDK failed to load'));
+        document.head.appendChild(s);
+    });
+}
+
+async function openAdminCashfreeCheckout(data) {
+    try {
+        await loadAdminCashfreeSdk();
+        const cashfree = Cashfree({
+            mode: data.cashfreeMode === 'production' ? 'production' : 'sandbox'
+        });
+        await cashfree.checkout({
+            paymentSessionId: data.paymentSessionId,
+            redirectTarget: '_blank'
+        });
+    } catch (e) {
+        alert(e.message || 'Could not open Cashfree checkout.');
     }
 }
 
@@ -8136,6 +8191,27 @@ async function initiateAdminCreateOrderPayment() {
             if (data.pollRequired) pollAdminCreateOrderPayment();
             return;
         }
+        if (data.paymentType === 'cashfree_checkout' && data.paymentSessionId) {
+            if (msg) msg.textContent = 'Opening Cashfree checkout…';
+            openAdminCashfreeCheckout(data);
+            if (data.pollRequired) pollAdminCreateOrderPayment();
+            return;
+        }
+        if (
+            (data.paymentType === 'payu_checkout' || data.paymentType === 'paytm_checkout') &&
+            data.formAction
+        ) {
+            submitAdminPgForm(data);
+            if (msg) msg.textContent = data.message || 'PayU/Paytm checkout opened.';
+            if (data.pollRequired) pollAdminCreateOrderPayment();
+            return;
+        }
+        if (data.paymentType === 'phonepe_checkout' && data.paymentUrl) {
+            const w = window.open(data.paymentUrl, '_blank', 'noopener');
+            if (!w && confirm('Open PhonePe in this tab?')) window.location.href = data.paymentUrl;
+            if (data.pollRequired) pollAdminCreateOrderPayment();
+            return;
+        }
         if (data.qrImageUrl && qrImg) {
             qrImg.src =
                 String(data.qrImageUrl).indexOf('http') === 0 || String(data.qrImageUrl).indexOf('/') === 0
@@ -8395,6 +8471,19 @@ async function adminRetryOrderPayment(registrationId, orderDbId) {
         } else if (data.paymentType === 'easebuzz_checkout' && data.paymentUrl) {
             const w = window.open(data.paymentUrl, '_blank', 'noopener');
             if (!w && confirm('Open Easebuzz in this tab?')) window.location.href = data.paymentUrl;
+            pollAdminCreateOrderPayment();
+        } else if (data.paymentType === 'cashfree_checkout' && data.paymentSessionId) {
+            openAdminCashfreeCheckout(data);
+            pollAdminCreateOrderPayment();
+        } else if (
+            (data.paymentType === 'payu_checkout' || data.paymentType === 'paytm_checkout') &&
+            data.formAction
+        ) {
+            submitAdminPgForm(data);
+            pollAdminCreateOrderPayment();
+        } else if (data.paymentType === 'phonepe_checkout' && data.paymentUrl) {
+            const w = window.open(data.paymentUrl, '_blank', 'noopener');
+            if (!w && confirm('Open PhonePe in this tab?')) window.location.href = data.paymentUrl;
             pollAdminCreateOrderPayment();
         } else if (data.qrImageUrl) {
             const qrBlock = document.getElementById('co-qr-block');

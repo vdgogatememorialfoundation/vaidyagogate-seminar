@@ -3402,6 +3402,98 @@ function downloadViewedAppPdf() {
     doc.save(`Application_${app.application_no}.pdf`);
 }
 
+function loadCashfreeSdk() {
+    return new Promise((resolve, reject) => {
+        if (typeof Cashfree !== 'undefined') return resolve();
+        const existing = document.querySelector('script[data-cashfree-sdk]');
+        if (existing) {
+            existing.addEventListener('load', () => resolve());
+            existing.addEventListener('error', () => reject(new Error('Cashfree SDK failed to load')));
+            return;
+        }
+        const s = document.createElement('script');
+        s.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
+        s.async = true;
+        s.setAttribute('data-cashfree-sdk', '1');
+        s.onload = () => resolve();
+        s.onerror = () => reject(new Error('Could not load Cashfree checkout.'));
+        document.head.appendChild(s);
+    });
+}
+
+async function openDoctorCashfreeCheckout(result) {
+    if (!result.paymentSessionId) {
+        alert('Cashfree session missing. Try again or choose another method.');
+        return false;
+    }
+    try {
+        await loadCashfreeSdk();
+    } catch (e) {
+        alert(e.message || 'Cashfree checkout could not load.');
+        return false;
+    }
+    const mode = result.cashfreeMode === 'production' ? 'production' : 'sandbox';
+    try {
+        const cashfree = Cashfree({ mode });
+        const checkoutResult = await cashfree.checkout({
+            paymentSessionId: result.paymentSessionId,
+            redirectTarget: '_blank'
+        });
+        if (checkoutResult && checkoutResult.error) {
+            alert(checkoutResult.error.message || 'Cashfree checkout failed.');
+            return false;
+        }
+        alert(
+            result.message ||
+                'Cashfree checkout opened. Complete payment in the new tab; this page will update when payment is received.'
+        );
+        return true;
+    } catch (e) {
+        console.error(e);
+        alert('Could not open Cashfree checkout. Allow pop-ups and try again.');
+        return false;
+    }
+}
+
+function submitPgFormCheckout(result) {
+    if (!result.formAction || !result.formFields) {
+        alert('Payment form data missing. Try again.');
+        return false;
+    }
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = result.formAction;
+    form.target = '_blank';
+    form.style.display = 'none';
+    Object.entries(result.formFields).forEach(([k, v]) => {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = k;
+        input.value = v != null ? String(v) : '';
+        form.appendChild(input);
+    });
+    document.body.appendChild(form);
+    form.submit();
+    setTimeout(() => form.remove(), 2000);
+    return true;
+}
+
+function openDoctorPaymentUrl(result) {
+    if (!result.paymentUrl) {
+        alert('Payment URL missing. Try again.');
+        return false;
+    }
+    const opened = window.open(result.paymentUrl, '_blank', 'noopener');
+    if (!opened) {
+        if (confirm('Allow pop-ups or continue payment in this tab?')) {
+            window.location.href = result.paymentUrl;
+            return true;
+        }
+        return false;
+    }
+    return true;
+}
+
 function loadRazorpayCheckoutScript() {
     return new Promise((resolve, reject) => {
         if (typeof Razorpay !== 'undefined') return resolve();
@@ -3609,22 +3701,30 @@ async function processPayment(appId, amount, appNo, paymentOption, cancelPending
             ensureDoctorPaymentPoll();
             return;
         }
-        if (result.paymentType === 'easebuzz_checkout' && result.paymentUrl) {
-            const opened = window.open(result.paymentUrl, '_blank', 'noopener');
-            if (!opened) {
-                if (
-                    confirm(
-                        'Allow pop-ups to open Easebuzz payment, or continue on this page?\n\nClick OK to pay in this tab.'
-                    )
-                ) {
-                    window.location.href = result.paymentUrl;
-                }
-            } else {
-                alert(
-                    result.message ||
-                        'Easebuzz payment page opened in a new tab. Complete payment there; this page will update when payment is received.'
-                );
-            }
+        if (result.paymentType === 'cashfree_checkout' && result.paymentSessionId) {
+            await openDoctorCashfreeCheckout(result);
+            ensureDoctorPaymentPoll();
+            return;
+        }
+        if (
+            (result.paymentType === 'payu_checkout' || result.paymentType === 'paytm_checkout') &&
+            result.formAction
+        ) {
+            submitPgFormCheckout(result);
+            alert(result.message || 'Payment page opened in a new tab.');
+            ensureDoctorPaymentPoll();
+            return;
+        }
+        if (
+            (result.paymentType === 'easebuzz_checkout' ||
+                result.paymentType === 'phonepe_checkout') &&
+            result.paymentUrl
+        ) {
+            openDoctorPaymentUrl(result);
+            alert(
+                result.message ||
+                    'Payment page opened in a new tab. Complete payment there; this page will update when payment is received.'
+            );
             ensureDoctorPaymentPoll();
             return;
         }
