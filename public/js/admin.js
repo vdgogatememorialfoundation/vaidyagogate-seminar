@@ -5043,6 +5043,13 @@ function openAdminHostedCheckout(data, onPoll) {
         if (typeof onPoll === 'function') onPoll();
         return true;
     }
+    if (data.easebuzzAccessKey) {
+        const payUrl = 'https://pay.easebuzz.in/pay/' + encodeURIComponent(data.easebuzzAccessKey);
+        const w = window.open(payUrl, '_blank', 'noopener');
+        if (!w && confirm('Open Easebuzz payment in this tab?')) window.location.href = payUrl;
+        if (typeof onPoll === 'function') onPoll();
+        return true;
+    }
     return false;
 }
 
@@ -8059,7 +8066,10 @@ async function lookupAdminCreateOrder() {
         else if (data.canCollectPayment) html += '<p style="color:#0f766e;">Ready to collect payment below.</p>';
         if (box) box.innerHTML = html;
         if (data.canCollectPayment && data.registration) {
-            document.getElementById('co-amount').value = String(data.suggestedAmount || 0);
+            const feeEl = document.getElementById('co-amount');
+            const discEl = document.getElementById('co-discount');
+            if (feeEl) feeEl.value = String(data.seminar && data.seminar.price != null ? data.seminar.price : data.suggestedAmount || 0);
+            if (discEl) discEl.value = '0';
             updateCoFinalAmount();
             if (panel) panel.classList.remove('hidden');
             await loadCreateOrderPaymentMethods();
@@ -8097,7 +8107,7 @@ async function initiateAdminCreateOrderPayment() {
     const adm = getStoredAdminUser();
     if (!adm?.id || !__coRegId) return alert('Look up doctor and ensure application first.');
     const methodId = document.getElementById('co-method')?.value || __coMethodId || 'dqr';
-    const amount = parseFloat(document.getElementById('co-final')?.value || '0');
+    const amount = parseFloat(document.getElementById('co-amount')?.value || '0');
     const discount = parseFloat(document.getElementById('co-discount')?.value || '0');
     const msg = document.getElementById('co-pay-msg');
     const qrBlock = document.getElementById('co-qr-block');

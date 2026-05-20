@@ -1710,19 +1710,32 @@ function insertParticipantTicket(orderDbId, userId, orderIdStr, registrationId, 
 
 /** Reuse existing pending order or create one (avoids duplicate pending rows per registration). */
 function getOrCreatePendingOrder(registrationId, amount, cb) {
+    const amt = amount != null && !Number.isNaN(Number(amount)) ? Number(amount) : 1500;
     db.get(
-        `SELECT id, order_id_string FROM orders WHERE registration_id = ? AND status = 'pending' ORDER BY id DESC LIMIT 1`,
+        `SELECT id, order_id_string, amount FROM orders WHERE registration_id = ? AND status = 'pending' ORDER BY id DESC LIMIT 1`,
         [registrationId],
         (e, row) => {
             if (e) return cb && cb(e);
-            if (row) return cb && cb(null, row);
+            if (row) {
+                if (Math.abs(Number(row.amount) - amt) > 0.009) {
+                    return db.run(
+                        `UPDATE orders SET amount = ? WHERE id = ? AND status = 'pending'`,
+                        [amt, row.id],
+                        (uErr) => {
+                            if (uErr) return cb(uErr);
+                            cb(null, { id: row.id, order_id_string: row.order_id_string });
+                        }
+                    );
+                }
+                return cb(null, row);
+            }
             const orderIdStr = 'ORD_' + generateId();
             db.run(
                 `INSERT INTO orders (order_id_string, registration_id, amount, status) VALUES (?, ?, ?, 'pending')`,
-                [orderIdStr, registrationId, amount != null ? amount : 1500],
+                [orderIdStr, registrationId, amt],
                 function (insErr) {
-                    if (insErr) return cb && cb(insErr);
-                    cb && cb(null, { id: this.lastID, order_id_string: orderIdStr });
+                    if (insErr) return cb(insErr);
+                    cb(null, { id: this.lastID, order_id_string: orderIdStr });
                 }
             );
         }
@@ -4911,7 +4924,7 @@ function finishDoctorPayment(res, err, out) {
 
 // 6. Payments: Process Payment (unified — DQR, Razorpay checkout, mock)
 app.post('/api/payments/process', (req, res) => {
-    const { registrationId, amount, userId, paymentOption, methodId, cancelPending } = req.body;
+    const { registrationId, userId, paymentOption, methodId, cancelPending } = req.body;
     const regId = parseInt(registrationId, 10);
     const uid = parseInt(userId, 10);
     const mid = String(methodId || paymentOption || '').trim();
@@ -4956,7 +4969,7 @@ app.post('/api/payments/process', (req, res) => {
                         return adminPaymentFlow.initiateAdminPayment(
                             db,
                             doctorPaymentDeps(),
-                            { registrationId: regId, methodId: options[0].id, amount },
+                            { registrationId: regId, methodId: options[0].id },
                             (e, o) => finishDoctorPayment(res, e, o)
                         );
                     }
@@ -4975,7 +4988,7 @@ app.post('/api/payments/process', (req, res) => {
                     return adminPaymentFlow.initiateAdminPayment(
                         db,
                         doctorPaymentDeps(),
-                        { registrationId: regId, methodId: 'mock', amount },
+                        { registrationId: regId, methodId: 'mock' },
                         (e, o) => finishDoctorPayment(res, e, o)
                     );
                 });
@@ -4983,7 +4996,7 @@ app.post('/api/payments/process', (req, res) => {
             adminPaymentFlow.initiateAdminPayment(
                 db,
                 doctorPaymentDeps(),
-                { registrationId: regId, methodId: mid, amount },
+                { registrationId: regId, methodId: mid },
                 (e, o) => finishDoctorPayment(res, e, o)
             );
         };

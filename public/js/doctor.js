@@ -3425,7 +3425,6 @@ function submitHostedFormPost(formPost) {
     const f = document.createElement('form');
     f.method = 'POST';
     f.action = formPost.action;
-    f.target = '_blank';
     Object.entries(formPost.fields || {}).forEach(([k, v]) => {
         const inp = document.createElement('input');
         inp.type = 'hidden';
@@ -3435,53 +3434,46 @@ function submitHostedFormPost(formPost) {
     });
     document.body.appendChild(f);
     f.submit();
-    setTimeout(() => f.remove(), 2000);
+}
+
+function openPaymentUrlInPage(url, message) {
+    if (!url) return false;
+    try {
+        sessionStorage.setItem(
+            'vgmf_payment_return',
+            JSON.stringify({ ts: Date.now(), returnTo: window.location.pathname + (window.location.hash || '') })
+        );
+    } catch (_) {}
+    if (message) {
+        try {
+            sessionStorage.setItem('vgmf_payment_msg', message);
+        } catch (_) {}
+    }
+    window.location.href = url;
+    return true;
 }
 
 async function openHostedPaymentCheckout(result) {
+    const msg =
+        result.message ||
+        'Redirecting to secure payment. After paying, return to My Applications for your e-ticket.';
+
     if (result.formPost && result.formPost.action) {
         submitHostedFormPost(result.formPost);
-        alert(result.message || 'Opening secure payment page…');
+        alert(msg);
         ensureDoctorPaymentPoll();
         return true;
     }
-    if (result.easebuzzAccessKey && result.easebuzzKey) {
-        try {
-            await loadEasebuzzCheckoutScript();
-            const env = result.easebuzzEnv === 'prod' ? 'prod' : 'test';
-            const eb = new EasebuzzCheckout(result.easebuzzKey, env);
-            eb.initiatePayment({
-                access_key: result.easebuzzAccessKey,
-                onResponse: function () {
-                    ensureDoctorPaymentPoll();
-                    loadApplications();
-                }
-            });
-            ensureDoctorPaymentPoll();
-            return true;
-        } catch (sdkErr) {
-            console.warn('[easebuzz-sdk]', sdkErr);
-        }
-    }
+
     if (result.paymentUrl) {
-        const opened = window.open(result.paymentUrl, '_blank', 'noopener');
-        if (!opened) {
-            if (
-                confirm(
-                    'Allow pop-ups for the payment window, or open the payment page in this tab?'
-                )
-            ) {
-                window.location.href = result.paymentUrl;
-            }
-        } else {
-            alert(
-                result.message ||
-                    'Payment page opened in a new tab. Complete payment there; this page will update automatically.'
-            );
-        }
-        ensureDoctorPaymentPoll();
-        return true;
+        return openPaymentUrlInPage(result.paymentUrl, msg);
     }
+
+    if (result.easebuzzAccessKey && result.easebuzzKey) {
+        const payUrl = 'https://pay.easebuzz.in/pay/' + encodeURIComponent(result.easebuzzAccessKey);
+        return openPaymentUrlInPage(payUrl, msg);
+    }
+
     return false;
 }
 
@@ -3636,7 +3628,6 @@ async function processPayment(appId, amount, appNo, paymentOption, cancelPending
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 registrationId: regId,
-                amount,
                 userId: uid,
                 methodId,
                 paymentOption: methodId,
@@ -3693,13 +3684,16 @@ async function processPayment(appId, amount, appNo, paymentOption, cancelPending
             return;
         }
         if (
-            result.paymentType &&
-            String(result.paymentType).endsWith('_checkout') &&
+            (result.paymentUrl || result.formPost || result.easebuzzAccessKey) &&
             result.gateway !== 'razorpay'
         ) {
             const opened = await openHostedPaymentCheckout(result);
             if (!opened) {
-                alert(result.error || result.message || 'Could not open payment gateway. Check pop-ups and try again.');
+                alert(
+                    result.error ||
+                        result.message ||
+                        'Could not open payment gateway. Try another method or contact the seminar office.'
+                );
             }
             return;
         }
