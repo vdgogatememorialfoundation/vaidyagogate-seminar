@@ -3,7 +3,13 @@
  * Not a security boundary — determined users can still access assets.
  */
 (function () {
+    function isFormField(el) {
+        if (!el || !el.closest) return false;
+        return !!el.closest('input, textarea, select, [contenteditable="true"], label');
+    }
+
     function block(e) {
+        if (isFormField(e.target)) return;
         e.preventDefault();
         e.stopPropagation();
         return false;

@@ -465,6 +465,12 @@
             const signupForm = document.getElementById('doctor-signup-form');
             if (signupForm) signupForm.addEventListener('submit', handleDoctorSignup);
             if (isStandaloneDoctorApp()) switchDoctorAuthTab('login');
+            const params = new URLSearchParams(window.location.search);
+            if (params.get('register') === '1' || params.get('signup') === '1') {
+                switchDoctorAuthTab('signup');
+            } else if (params.get('login') === '1') {
+                switchDoctorAuthTab('login');
+            }
         }
     };
 

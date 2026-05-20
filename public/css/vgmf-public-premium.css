@@ -1,27 +1,29 @@
 :root {
-    --vp-bg: #f5f7fb;
+    --vp-bg: #f3faf7;
     --vp-surface: #ffffff;
-    --vp-surface-soft: #f8fafc;
+    --vp-surface-soft: #f6fcf9;
     --vp-text: #0f172a;
     --vp-muted: #475569;
-    --vp-line: #dbe3ef;
+    --vp-line: #d2e6de;
     --vp-brand: #0f766e;
-    --vp-brand-strong: #115e59;
+    --vp-brand-strong: #0d5a54;
+    --vp-brand-soft: #dff5ee;
     --vp-radius: 16px;
-    --vp-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
-    --vp-shadow-soft: 0 8px 18px rgba(15, 23, 42, 0.06);
-    --vp-hero-grad: radial-gradient(circle at 18% 18%, #ecfeff, #dff7f2 54%, #cfeee7 100%);
+    --vp-shadow: 0 14px 36px rgba(13, 90, 84, 0.1);
+    --vp-shadow-soft: 0 8px 20px rgba(13, 90, 84, 0.07);
+    --vp-hero-grad: radial-gradient(circle at 20% 10%, #f6fffc, #e5f8f2 56%, #d2efe6 100%);
 }
 
 body.vgmf-redesign {
-    background: linear-gradient(180deg, #f8fbff 0%, #f4f7fb 70%, #eef2f7 100%);
+    background: linear-gradient(180deg, #f7fdfb 0%, #f2faf7 60%, #edf7f3 100%);
     color: var(--vp-text);
 }
 
 .vgmf-redesign .cg-header {
     backdrop-filter: blur(10px);
-    background: rgba(255, 255, 255, 0.92);
-    border-bottom: 1px solid rgba(219, 227, 239, 0.8);
+    background: rgba(255, 255, 255, 0.96);
+    border-bottom: 1px solid rgba(210, 230, 222, 0.9);
+    box-shadow: 0 4px 20px rgba(13, 90, 84, 0.08);
 }
 
 .vgmf-redesign .cg-logo-text h1 {
@@ -45,12 +47,41 @@ body.vgmf-redesign {
 }
 
 .vgmf-redesign .congress-hero-overlay {
-    background: linear-gradient(120deg, rgba(15, 118, 110, 0.72) 0%, rgba(14, 165, 233, 0.28) 46%, rgba(255, 255, 255, 0.06) 100%);
+    background: linear-gradient(
+        120deg,
+        rgba(13, 90, 84, 0.74) 0%,
+        rgba(15, 118, 110, 0.54) 44%,
+        rgba(255, 255, 255, 0.12) 100%
+    );
 }
 
 .vgmf-redesign .congress-hero-content h2 {
     letter-spacing: -0.025em;
     line-height: 1.1;
+    text-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
+}
+
+.vgmf-redesign .congress-hero-actions .cg-btn-primary,
+.vgmf-redesign .congress-hero-actions .btn-primary {
+    position: relative;
+    overflow: hidden;
+}
+
+.vgmf-redesign .congress-hero-actions .cg-btn-primary::after,
+.vgmf-redesign .congress-hero-actions .btn-primary::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -120%;
+    width: 60%;
+    height: 100%;
+    background: linear-gradient(90deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0.34), rgba(255, 255, 255, 0));
+    transition: left 360ms ease;
+}
+
+.vgmf-redesign .congress-hero-actions .cg-btn-primary:hover::after,
+.vgmf-redesign .congress-hero-actions .btn-primary:hover::after {
+    left: 125%;
 }
 
 .vgmf-redesign .cg-quick {
@@ -107,7 +138,7 @@ body.vgmf-redesign {
     border: 1px solid var(--vp-line);
     border-radius: 14px;
     background: var(--vp-surface-soft);
-    transition: transform 200ms ease, border-color 200ms ease, box-shadow 200ms ease;
+    transition: transform 200ms ease, border-color 200ms ease, box-shadow 200ms ease, background-color 200ms ease;
 }
 
 .vgmf-redesign .feature-card:hover,
@@ -115,8 +146,33 @@ body.vgmf-redesign {
 .vgmf-redesign .seminar-pill:hover,
 .vgmf-redesign .vg-help-card:hover {
     transform: translateY(-2px);
-    border-color: #b8c7df;
-    box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
+    border-color: #a8d8c7;
+    box-shadow: 0 12px 24px rgba(13, 90, 84, 0.12);
+    background-color: #ffffff;
+}
+
+.vgmf-redesign .card-icon,
+.vgmf-redesign .cg-quick-icon,
+.vgmf-redesign .vg-help-card i {
+    position: relative;
+    border: 1px solid #b8e0d3;
+    box-shadow: 0 6px 14px rgba(15, 118, 110, 0.14);
+}
+
+.vgmf-redesign .card-icon::before,
+.vgmf-redesign .cg-quick-icon::before,
+.vgmf-redesign .vg-help-card i::before {
+    animation: vpIconPulse 3.2s ease-in-out infinite;
+}
+
+@keyframes vpIconPulse {
+    0%,
+    100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.08);
+    }
 }
 
 .vgmf-redesign .notices-panel {
@@ -129,6 +185,15 @@ body.vgmf-redesign {
     background: linear-gradient(135deg, #0f766e, #0b5f58);
     border: 1px solid transparent;
     box-shadow: 0 8px 18px rgba(15, 118, 110, 0.25);
+}
+
+.vgmf-redesign .btn-primary:focus-visible,
+.vgmf-redesign .cg-btn-primary:focus-visible,
+.vgmf-redesign .cg-btn-register:focus-visible,
+.vgmf-redesign a:focus-visible,
+.vgmf-redesign button:focus-visible {
+    outline: 3px solid rgba(15, 118, 110, 0.28);
+    outline-offset: 2px;
 }
 
 .vgmf-redesign .btn-primary:hover,
@@ -171,11 +236,11 @@ body.vgmf-redesign {
 }
 
 .vgmf-redesign .verify-table th {
-    background: #f8fbff;
+    background: #f0faf6;
 }
 
 .vgmf-redesign .verify-table tr:hover td {
-    background: #f2f8ff;
+    background: #eef9f4;
 }
 
 @keyframes vpFadeUp {
@@ -191,7 +256,6 @@ body.vgmf-redesign {
 
 .vgmf-redesign .vg-stats-strip,
 .vgmf-redesign .vg-how-section,
-.vgmf-redesign .vg-help-hub,
 .vgmf-redesign .vgmf-section,
 .vgmf-redesign #aboutSection,
 .vgmf-redesign #scheduleSection,
@@ -201,11 +265,65 @@ body.vgmf-redesign {
     animation: vpFadeUp 420ms ease both;
 }
 
+.vgmf-redesign .vgmf-section {
+    animation-delay: 40ms;
+}
+
+.vgmf-redesign .feature-card,
+.vgmf-redesign .speaker-card,
+.vgmf-redesign .seminar-pill {
+    animation: vpFadeUp 420ms ease both;
+}
+
 @media (max-width: 920px) {
     .vgmf-redesign .notices-panel {
         border-left: 0;
         border-top: 1px solid var(--vp-line);
         padding-top: 16px;
+    }
+
+    .vgmf-redesign .home-split {
+        gap: 18px;
+    }
+
+    .vgmf-redesign .cg-quick {
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+}
+
+@media (max-width: 768px) {
+    .vgmf-redesign .congress-site .main-content {
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+
+    .vgmf-redesign .vg-skip-link {
+        font-size: 0.85rem;
+    }
+
+    .vgmf-redesign #site-preloader p {
+        font-size: 0.9rem;
+    }
+
+    .vgmf-redesign .cg-ticker-inner {
+        padding: 0 16px;
+    }
+
+    .vgmf-redesign .open-seminars-strip {
+        padding-left: 16px;
+        padding-right: 16px;
+    }
+
+    .vgmf-redesign .seminar-pill {
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .vgmf-redesign .contact-grid .contact-form button,
+    .vgmf-redesign .verify-panel button {
+        min-height: 48px;
+        width: 100%;
     }
 }
 

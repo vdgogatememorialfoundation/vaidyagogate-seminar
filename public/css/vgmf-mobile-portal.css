@@ -1,0 +1,247 @@
+/**
+ * Mobile-first fixes: doctor/public auth, touch targets, premium layout on phones.
+ */
+
+/* —— Doctor portal auth (login / signup) —— */
+@media (max-width: 768px) {
+    #auth-overlay {
+        align-items: flex-end;
+        padding: 0;
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    #auth-overlay .doctor-auth-card,
+    #auth-overlay > div {
+        max-width: 100% !important;
+        width: 100% !important;
+        border-radius: 20px 20px 0 0 !important;
+        max-height: 92dvh;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        padding: 24px 18px calc(20px + env(safe-area-inset-bottom, 0px)) !important;
+        margin: 0 !important;
+    }
+
+    #auth-overlay input,
+    #auth-overlay select,
+    #auth-overlay textarea,
+    #auth-overlay button,
+    #doctor-forgot-password-overlay input,
+    #doctor-forgot-password-overlay button,
+    #doctor-reset-password-overlay input,
+    #doctor-reset-password-overlay button {
+        font-size: 16px !important;
+        min-height: 44px;
+        touch-action: manipulation;
+    }
+
+    #auth-overlay input[type="text"],
+    #auth-overlay input[type="email"],
+    #auth-overlay input[type="password"],
+    #auth-overlay input[type="tel"] {
+        padding: 12px 14px !important;
+    }
+
+    #auth-overlay button[type="submit"],
+    #auth-overlay #doctor-auth-tab-login,
+    #auth-overlay #doctor-auth-tab-signup {
+        min-height: 48px;
+    }
+
+    #auth-overlay [style*="grid-template-columns:1fr 1fr"],
+    #auth-overlay [style*="grid-template-columns: 1fr 1fr"] {
+        grid-template-columns: 1fr !important;
+    }
+
+    #auth-overlay .doctor-otp-row,
+    #auth-overlay [id*="otp-panel"] > div {
+        flex-direction: column;
+        align-items: stretch !important;
+        gap: 10px !important;
+    }
+
+    #auth-overlay [id*="otp-panel"] button {
+        width: 100%;
+        justify-content: center;
+    }
+
+    #auth-overlay [id*="otp-panel"] input[placeholder="Code"] {
+        max-width: 100% !important;
+        width: 100%;
+    }
+
+    body.doctor-standalone-app #auth-overlay {
+        align-items: center;
+        padding: 16px;
+    }
+
+    body.doctor-standalone-app #auth-overlay .doctor-auth-card,
+    body.doctor-standalone-app #auth-overlay > div {
+        border-radius: 16px !important;
+        max-height: none;
+    }
+}
+
+/* —— Public homepage auth modal —— */
+@media (max-width: 768px) {
+    #authModal .modal-content,
+    #signupSuccessModal .modal-content,
+    #forgotPasswordModal .modal-content {
+        max-height: 92dvh;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    #authModal input,
+    #authModal select,
+    #authModal textarea,
+    #authModal button,
+    #forgotPasswordModal input,
+    #forgotPasswordModal button {
+        font-size: 16px !important;
+        touch-action: manipulation;
+    }
+
+    #authModal .form-group input,
+    #authModal .form-group textarea {
+        min-height: 48px;
+    }
+
+    #authModal button[type="submit"],
+    #authModal .auth-tab-btn {
+        min-height: 48px;
+    }
+
+    #authModal #signupForm > form > div[style*="grid-template-columns"] {
+        grid-template-columns: 1fr !important;
+    }
+
+    #authModal #login_otp_panel button,
+    #authModal #signup_otp_panel button,
+    #authModal #login_otp_panel input,
+    #authModal #signup_otp_panel input {
+        min-height: 44px;
+    }
+
+    #authModal #login_email_otp,
+    #authModal #login_phone_otp,
+    #authModal #signup_email_otp,
+    #authModal #signup_phone_otp {
+        max-width: 100% !important;
+        width: 100%;
+        min-height: 48px;
+    }
+
+    #authModal #login_otp_panel > div,
+    #authModal #signup_otp_panel > div {
+        flex-direction: column;
+        align-items: stretch !important;
+    }
+
+    #authModal #login_otp_panel button,
+    #authModal #signup_otp_panel button {
+        width: 100%;
+    }
+}
+
+/* —— Premium redesign on small screens —— */
+@media (max-width: 768px) {
+    .vgmf-redesign .cg-utility-inner > div:last-child {
+        width: 100%;
+        justify-content: flex-start;
+        gap: 12px 16px;
+    }
+
+    .vgmf-redesign .cg-utility-inner > div:last-child a {
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+        padding: 4px 0;
+        touch-action: manipulation;
+    }
+
+    .vgmf-redesign .vg-header-actions .vg-btn-icon {
+        min-width: 44px;
+        min-height: 44px;
+    }
+
+    .vgmf-redesign .congress-hero {
+        border-radius: 0 0 20px 20px;
+        margin-bottom: 16px;
+    }
+
+    .vgmf-redesign .cg-quick-card {
+        min-height: 88px;
+    }
+
+    .vgmf-redesign .vg-stats-strip,
+    .vgmf-redesign .vg-how-section,
+    .vgmf-redesign .vg-help-hub,
+    .vgmf-redesign .vgmf-section,
+    .vgmf-redesign .page-panel,
+    .vgmf-redesign .verify-panel {
+        margin-left: 0;
+        margin-right: 0;
+        padding: 18px 16px;
+    }
+
+    .vgmf-redesign .feature-card,
+    .vgmf-redesign .speaker-card {
+        padding: 16px;
+    }
+
+    .vgmf-redesign .cg-btn-register {
+        min-height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .vgmf-redesign .cg-fab-register {
+        min-height: 48px;
+        min-width: 48px;
+        padding: 0 18px;
+        font-size: 0.9rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .vgmf-redesign .cg-logo-zone {
+        min-width: 0;
+        flex: 1;
+    }
+
+    .vgmf-redesign .congress-hero-content {
+        padding-bottom: 64px;
+    }
+
+    .vgmf-redesign .vg-scroll-progress {
+        height: 3px;
+    }
+}
+
+/* —— Certificate verify page —— */
+@media (max-width: 768px) {
+    .verify-page .cv-wrap {
+        padding: 20px 16px 40px;
+        padding-bottom: calc(40px + env(safe-area-inset-bottom, 0px));
+    }
+
+    .verify-page .cv-card {
+        padding: 22px 18px;
+        border-radius: 16px;
+    }
+
+    .verify-page input,
+    .verify-page select,
+    .verify-page button {
+        font-size: 16px !important;
+        min-height: 48px;
+        touch-action: manipulation;
+    }
+
+    .verify-page .cv-countdown-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 10px;
+    }
+}

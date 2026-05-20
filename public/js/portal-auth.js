@@ -337,12 +337,26 @@
                 }
                 if (!res.ok || !data.success) {
                     if (data.needsSignup) {
-                        const go =
-                            confirm(
-                                (data.error || 'No account found with this email.') +
-                                    '\n\nCreate an account on the seminar homepage?'
-                            );
-                        if (go) window.location.href = '/?register=1';
+                        const msg = data.error || 'No account found with this email.';
+                        if (
+                            portal === 'doctor' &&
+                            /doctor\.html/i.test(String(global.location.pathname || '')) &&
+                            global.DoctorAuthUi &&
+                            typeof global.DoctorAuthUi.switchDoctorAuthTab === 'function'
+                        ) {
+                            global.DoctorAuthUi.switchDoctorAuthTab('signup');
+                            if (opts.onError) opts.onError(msg + ' Use Create account to register.');
+                            else alert(msg + ' Switch to Create account and register.');
+                            return;
+                        }
+                        const go = confirm(msg + '\n\nCreate an account now?');
+                        if (go) {
+                            if (/\/doctor\.html/i.test(String(global.location.pathname || ''))) {
+                                global.location.href = '/doctor.html?register=1';
+                            } else {
+                                global.location.href = '/?register=1';
+                            }
+                        }
                         return;
                     }
                     const msg =

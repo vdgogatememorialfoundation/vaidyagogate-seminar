@@ -14,9 +14,10 @@
     <link rel="stylesheet" href="/css/vgmf-congress.css">
     <link rel="stylesheet" href="/css/vgmf-home-redesign.css">
     <link rel="stylesheet" href="/css/vgmf-public-premium.css">
+    <link rel="stylesheet" href="/css/vgmf-mobile-portal.css">
     <script src="/js/portal-datetime.js"></script>
 </head>
-<body class="congress-site vgmf-redesign" oncontextmenu="return false;">
+<body class="congress-site vgmf-redesign">
     <a href="#main-content" class="vg-skip-link">Skip to main content</a>
     <div class="vg-scroll-progress" id="vg-scroll-progress" aria-hidden="true"></div>
     <div id="site-preloader" aria-hidden="true"><div class="preloader-ring"></div><p style="color:var(--muted);font-weight:600;">Loading seminar portal…</p></div>
@@ -29,7 +30,7 @@
                 <span><i class="fas fa-calendar-alt"></i> <span id="top-date">National Seminar 2026</span></span>
             </div>
             <div>
-                <a href="/doctor.html"><i class="fas fa-user"></i> Sign in</a>
+                <a href="#" onclick="openAuthModal('login'); return false;"><i class="fas fa-user"></i> Sign in</a>
                 <span style="opacity:0.5;margin:0 8px;">|</span>
                 <a href="#" data-portal-auth="signup" onclick="openRegisterModal(); return false;"><i class="fas fa-user-plus"></i> Create account</a>
             </div>
@@ -453,7 +454,7 @@
             <div class="footer-col">
                 <h4>Doctor access</h4>
                 <ul>
-                    <li><a href="/doctor.html">Sign in</a></li>
+                    <li><a href="#" onclick="openAuthModal('login'); return false;">Sign in</a></li>
                     <li><a href="#" data-portal-auth="signup" onclick="openRegisterModal(); return false;">Create account</a></li>
                 </ul>
                 </div>
@@ -768,11 +769,16 @@
         }
 
         /** Public site login is for doctors only; staff use their own portal URLs. */
+        function doctorPortalUrl() {
+            const app = new URLSearchParams(window.location.search).get('app') === '1';
+            return '/doctor.html' + (app ? '?app=1' : '');
+        }
+
         function routeUserAfterLogin(user) {
             if (isDoctorAccount(user)) {
                 localStorage.setItem('seminar_doctor_user', JSON.stringify(user));
                 currentUserId = user.id;
-                window.location.href = '/doctor.html';
+                window.location.href = doctorPortalUrl();
                 return;
             }
             alert(
@@ -1727,21 +1733,22 @@
             document.getElementById('site-preloader')?.classList.add('done');
         });
 
-        (function handleAuthDeepLink() {
+        showSection('home');
+        loadPublicCmsAndApply();
+        refreshPortalAuthUi().then(() => {
             const params = new URLSearchParams(window.location.search);
             if (params.get('emailVerified') === '1') {
                 alert('Your email address has been verified. You can sign in now.');
+                window.history.replaceState({}, '', window.location.pathname);
             }
             if (params.get('register') === '1' || params.get('signup') === '1') {
                 openRegisterModal();
+                window.history.replaceState({}, '', window.location.pathname);
             } else if (params.get('login') === '1') {
                 openAuthModal('login');
+                window.history.replaceState({}, '', window.location.pathname);
             }
-        })();
-
-        showSection('home');
-        loadPublicCmsAndApply();
-        refreshPortalAuthUi();
+        });
         if (typeof applyPortalUrls === 'function') applyPortalUrls();
         if (typeof loadOpenSeminarsStrip === 'function') loadOpenSeminarsStrip();
         loadNotices();
@@ -1752,6 +1759,5 @@
     <script src="/js/site-branding.js"></script>
     <script src="/js/name-validation.js"></script>
     <script src="/js/contact-validation.js"></script>
-    <script>document.addEventListener('contextmenu',function(e){e.preventDefault();});</script>
 </body>
 </html>

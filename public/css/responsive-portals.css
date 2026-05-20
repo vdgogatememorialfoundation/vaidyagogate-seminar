@@ -254,6 +254,25 @@ body.doctor-nav-open {
     .notification-bar {
         padding: 10px 14px !important;
     }
+
+    #auth-overlay {
+        padding: 0;
+        align-items: flex-end;
+    }
+
+    #auth-overlay .doctor-auth-card {
+        border-radius: 18px 18px 0 0;
+        max-height: 92dvh;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    #auth-overlay input,
+    #auth-overlay button {
+        font-size: 16px !important;
+        min-height: 44px;
+        touch-action: manipulation;
+    }
 }
 
 /* Judge + shared portal mobile */
