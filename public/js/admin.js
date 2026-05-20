@@ -6343,6 +6343,106 @@ async function sendAdminBulkEmail() {
 
 // ==================== SUPPORT TICKETS ====================
 let currentViewingTicketId = null;
+let __adminStResolvedDoctor = null;
+
+function clearAdminSupportTicketDoctorPreview() {
+    __adminStResolvedDoctor = null;
+    const hid = document.getElementById('admin-st-create-resolved-id');
+    const prev = document.getElementById('admin-st-doctor-preview');
+    if (hid) hid.value = '';
+    if (prev) {
+        prev.style.display = 'none';
+        prev.innerHTML = '';
+    }
+}
+
+async function adminLookupDoctorForSupportTicket() {
+    const adm = getStoredAdminUser();
+    const msgEl = document.getElementById('admin-st-create-msg');
+    const q = ((document.getElementById('admin-st-create-user-id') || {}).value || '').trim();
+    clearAdminSupportTicketDoctorPreview();
+    if (!adm || !adm.id) {
+        alert('Admin session expired. Please sign in again.');
+        return;
+    }
+    if (!q) {
+        if (msgEl) {
+            msgEl.style.color = '#b91c1c';
+            msgEl.textContent = 'Enter the doctor 12-digit portal user ID or email, then click Look up doctor.';
+        }
+        return;
+    }
+    if (msgEl) {
+        msgEl.style.color = '#64748b';
+        msgEl.textContent = 'Looking up doctor…';
+    }
+    try {
+        const res = await fetch(
+            '/api/admin/support-ticket/doctor-lookup?actingAdminId=' +
+                encodeURIComponent(adm.id) +
+                '&q=' +
+                encodeURIComponent(q)
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.doctor) {
+            if (msgEl) {
+                msgEl.style.color = '#b91c1c';
+                msgEl.textContent = data.error || 'Doctor not found.';
+            }
+            return;
+        }
+        __adminStResolvedDoctor = data.doctor;
+        const hid = document.getElementById('admin-st-create-resolved-id');
+        if (hid) hid.value = String(data.doctor.id);
+        const prev = document.getElementById('admin-st-doctor-preview');
+        if (prev) {
+            const regs = (data.doctor.registrations || [])
+                .map(
+                    (r) =>
+                        '<li><strong>' +
+                        escAdmin(r.seminarTitle || 'Seminar') +
+                        '</strong> — App ' +
+                        escAdmin(r.applicationNo || '—') +
+                        ' · ' +
+                        escAdmin(r.status || '') +
+                        '</li>'
+                )
+                .join('');
+            prev.innerHTML =
+                '<p style="margin:0 0 8px;font-weight:700;color:#1e40af;">Confirm this doctor before creating the ticket</p>' +
+                '<p style="margin:4px 0;"><strong>Name:</strong> ' +
+                escAdmin(data.doctor.name) +
+                '</p>' +
+                '<p style="margin:4px 0;"><strong>Portal user ID:</strong> <code>' +
+                escAdmin(data.doctor.userIdString) +
+                '</code></p>' +
+                '<p style="margin:4px 0;"><strong>Email:</strong> ' +
+                escAdmin(data.doctor.email) +
+                ' · <strong>Phone:</strong> ' +
+                escAdmin(data.doctor.phone) +
+                '</p>' +
+                '<p style="margin:4px 0;font-size:0.82rem;color:#64748b;">Internal account number (database): ' +
+                escAdmin(String(data.doctor.id)) +
+                '</p>' +
+                (regs
+                    ? '<p style="margin:10px 0 4px;font-weight:600;">Recent seminar applications</p><ul style="margin:0;padding-left:18px;">' +
+                      regs +
+                      '</ul>'
+                    : '<p style="margin:8px 0 0;color:#64748b;">No seminar applications on file.</p>');
+            prev.style.display = 'block';
+        }
+        if (msgEl) {
+            msgEl.style.color = '#059669';
+            msgEl.textContent = 'Doctor found. You can create the support ticket now.';
+        }
+    } catch (e) {
+        console.error(e);
+        if (msgEl) {
+            msgEl.style.color = '#b91c1c';
+            msgEl.textContent = 'Lookup failed.';
+        }
+    }
+}
 
 async function adminCreateSupportTicketForDoctor() {
     const adm = getStoredAdminUser();
@@ -6351,7 +6451,7 @@ async function adminCreateSupportTicketForDoctor() {
         return;
     }
     const msgEl = document.getElementById('admin-st-create-msg');
-    const targetUserId = parseInt((document.getElementById('admin-st-create-user-id') || {}).value, 10);
+    const targetUserRef = ((document.getElementById('admin-st-create-user-id') || {}).value || '').trim();
     const subject = ((document.getElementById('admin-st-create-subject') || {}).value || '').trim();
     const description = ((document.getElementById('admin-st-create-description') || {}).value || '').trim();
     const category = (document.getElementById('admin-st-create-category') || {}).value || 'general';
@@ -6359,10 +6459,10 @@ async function adminCreateSupportTicketForDoctor() {
         msgEl.style.color = '#64748b';
         msgEl.textContent = '';
     }
-    if (!Number.isInteger(targetUserId) || targetUserId < 1) {
+    if (!__adminStResolvedDoctor || !__adminStResolvedDoctor.id) {
         if (msgEl) {
             msgEl.style.color = '#b91c1c';
-            msgEl.textContent = 'Enter the doctor numeric user ID (from user details / registrations).';
+            msgEl.textContent = 'Click Look up doctor first and confirm the details shown.';
         }
         return;
     }
@@ -6379,7 +6479,7 @@ async function adminCreateSupportTicketForDoctor() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 actingAdminId: adm.id,
-                targetUserId,
+                targetUserRef: targetUserRef || __adminStResolvedDoctor.userIdString,
                 category,
                 subject,
                 description
@@ -6399,6 +6499,11 @@ async function adminCreateSupportTicketForDoctor() {
         }
         const descEl = document.getElementById('admin-st-create-description');
         if (descEl) descEl.value = '';
+        const subjEl = document.getElementById('admin-st-create-subject');
+        if (subjEl) subjEl.value = '';
+        const uidEl = document.getElementById('admin-st-create-user-id');
+        if (uidEl) uidEl.value = '';
+        clearAdminSupportTicketDoctorPreview();
         loadSupportTickets();
     } catch (e) {
         console.error(e);

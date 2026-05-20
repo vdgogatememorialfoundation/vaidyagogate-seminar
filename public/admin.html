@@ -408,9 +408,14 @@
                 <div class="card" style="margin-bottom: 16px;">
                     <h3 style="margin:0 0 12px;font-size:1rem;color:#1e40af;">Create ticket for a doctor</h3>
                     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;">
-                        <div>
-                            <label style="font-size:0.82rem;color:#64748b;">Doctor user ID (numeric)</label>
-                            <input type="number" id="admin-st-create-user-id" placeholder="e.g. 42" min="1" style="width:100%;">
+                        <div style="grid-column:1/-1;">
+                            <label style="font-size:0.82rem;color:#64748b;">Doctor portal user ID (12-digit) or email</label>
+                            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+                                <input type="text" id="admin-st-create-user-id" placeholder="e.g. 155760896418 or doctor@example.com" style="flex:1;min-width:200px;padding:8px;" autocomplete="off">
+                                <button type="button" class="btn-primary" style="padding:8px 14px;" onclick="adminLookupDoctorForSupportTicket()">Look up doctor</button>
+                            </div>
+                            <input type="hidden" id="admin-st-create-resolved-id" value="">
+                            <div id="admin-st-doctor-preview" style="display:none;margin-top:12px;padding:12px;border:1px solid #bfdbfe;border-radius:8px;background:#eff6ff;font-size:0.88rem;"></div>
                         </div>
                         <div>
                             <label style="font-size:0.82rem;color:#64748b;">Category</label>

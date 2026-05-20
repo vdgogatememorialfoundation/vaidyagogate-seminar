@@ -8798,9 +8798,111 @@ app.post('/api/admin/email/bulk', (req, res) => {
 
 // ==================== SUPPORT TICKET ENDPOINTS ====================
 
+const PG_INT_MAX = 2147483647;
+
+/** Resolve portal user ID (12-digit), USR_… string, email, or small internal users.id. */
+function resolveDoctorUserRef(raw, cb) {
+    const s = String(raw || '').trim();
+    if (!s) return cb(new Error('Doctor user identifier is required'));
+
+    const finish = (e, row) => {
+        if (e) return cb(e);
+        if (!row) return cb(new Error('No doctor account found for that identifier.'));
+        const role = String(row.user_role || row.role || '').toLowerCase();
+        if (role && role !== 'doctor' && role !== 'judge_user') {
+            return cb(new Error('That account is not a doctor portal user (role: ' + role + ').'));
+        }
+        if (Number(row.is_disabled) === 1) {
+            return cb(new Error('That doctor account is disabled.'));
+        }
+        cb(null, row);
+    };
+
+    const selectCols = `id, user_id_string, first_name, middle_name, last_name, email, phone, role, user_role, IFNULL(is_disabled, 0) AS is_disabled`;
+
+    if (s.includes('@')) {
+        return db.get(
+            `SELECT ${selectCols} FROM users WHERE LOWER(TRIM(email)) = LOWER(TRIM(?)) LIMIT 1`,
+            [s],
+            finish
+        );
+    }
+
+    const digitsOnly = s.replace(/\D/g, '');
+    const looksLikePortalId = digitsOnly.length >= 10 || /^USR_/i.test(s);
+    if (looksLikePortalId) {
+        const portalId = /^USR_/i.test(s) ? s : digitsOnly;
+        return db.get(
+            `SELECT ${selectCols} FROM users
+             WHERE TRIM(user_id_string) = TRIM(?)
+                OR TRIM(user_id_string) = TRIM(?)
+             LIMIT 1`,
+            [portalId, s],
+            finish
+        );
+    }
+
+    const asInt = parseInt(s, 10);
+    const normalizedNum = s.replace(/^0+/, '') || '0';
+    const isInternalId =
+        !Number.isNaN(asInt) &&
+        asInt >= 1 &&
+        asInt <= PG_INT_MAX &&
+        (String(asInt) === normalizedNum || String(asInt) === s);
+    if (isInternalId) {
+        return db.get(`SELECT ${selectCols} FROM users WHERE id = ? LIMIT 1`, [asInt], (e, row) => {
+            if (e) return cb(e);
+            if (row) return finish(null, row);
+            db.get(
+                `SELECT ${selectCols} FROM users WHERE TRIM(user_id_string) = TRIM(?) LIMIT 1`,
+                [s],
+                finish
+            );
+        });
+    }
+
+    return cb(
+        new Error(
+            'Enter the doctor 12-digit portal user ID (shown in admin user list), or the small internal account number — not the portal ID in the numeric-only field.'
+        )
+    );
+}
+
+function doctorSupportTicketLookupPayload(userRow, cb) {
+    const uid = userRow.id;
+    db.all(
+        `SELECT r.id AS registration_id, r.application_no, r.status, s.title AS seminar_title, s.event_date
+         FROM registrations r
+         LEFT JOIN seminars s ON s.id = r.seminar_id
+         WHERE r.user_id = ?
+         ORDER BY r.id DESC
+         LIMIT 8`,
+        [uid],
+        (e, regs) => {
+            if (e) return cb(e);
+            const name = [userRow.first_name, userRow.middle_name, userRow.last_name].filter(Boolean).join(' ').trim();
+            cb(null, {
+                id: uid,
+                userIdString: userRow.user_id_string || '',
+                name,
+                email: userRow.email || '',
+                phone: userRow.phone || '',
+                role: userRow.user_role || userRow.role || 'doctor',
+                registrations: (regs || []).map((r) => ({
+                    registrationId: r.registration_id,
+                    applicationNo: r.application_no,
+                    status: r.status,
+                    seminarTitle: r.seminar_title,
+                    eventDate: r.event_date
+                }))
+            });
+        }
+    );
+}
+
 function createSupportTicketRecord(opts, cb) {
     const uid = parseInt(opts.userId, 10);
-    if (Number.isNaN(uid) || uid < 1) return cb(new Error('Invalid user'));
+    if (Number.isNaN(uid) || uid < 1 || uid > PG_INT_MAX) return cb(new Error('Invalid user'));
     const subject = opts.subject && String(opts.subject).trim();
     const description = opts.description && String(opts.description).trim();
     if (!subject) return cb(new Error('Subject is required'));
@@ -8850,22 +8952,47 @@ app.post('/api/support-ticket/create', (req, res) => {
     );
 });
 
+// Admin: look up doctor before creating a support ticket (portal ID or internal id)
+app.get('/api/admin/support-ticket/doctor-lookup', (req, res) => {
+    const actingAdminId = parseInt(req.query.actingAdminId, 10);
+    const q = String(req.query.q || '').trim();
+    if (!Number.isInteger(actingAdminId) || actingAdminId < 1) {
+        return res.status(400).json({ error: 'actingAdminId is required' });
+    }
+    if (!q) return res.status(400).json({ error: 'q is required (portal user ID, email, or internal account number)' });
+    assertAdminPortalActor(actingAdminId, (eAct) => {
+        if (eAct) return res.status(eAct.message === 'FORBIDDEN' ? 403 : 500).json({ error: 'Admin access required' });
+        resolveDoctorUserRef(q, (e, row) => {
+            if (e) return res.status(400).json({ error: e.message });
+            doctorSupportTicketLookupPayload(row, (e2, doctor) => {
+                if (e2) return res.status(500).json({ error: e2.message });
+                res.json({ success: true, doctor });
+            });
+        });
+    });
+});
+
 // Admin: create support ticket on behalf of a doctor
 app.post('/api/admin/support-ticket/create', (req, res) => {
     const body = req.body || {};
     const actingAdminId = parseInt(body.actingAdminId, 10);
-    const targetUserId = parseInt(body.targetUserId, 10);
+    const targetRef =
+        body.targetUserRef != null
+            ? String(body.targetUserRef).trim()
+            : body.targetUserId != null
+              ? String(body.targetUserId).trim()
+              : '';
     if (!Number.isInteger(actingAdminId) || actingAdminId < 1) {
         return res.status(400).json({ error: 'actingAdminId is required' });
     }
-    if (!Number.isInteger(targetUserId) || targetUserId < 1) {
-        return res.status(400).json({ error: 'targetUserId is required' });
+    if (!targetRef) {
+        return res.status(400).json({ error: 'Doctor portal user ID or account reference is required' });
     }
     assertAdminPortalActor(actingAdminId, (eAct) => {
         if (eAct) return res.status(eAct.message === 'FORBIDDEN' ? 403 : 500).json({ error: 'Admin access required' });
-        db.get(`SELECT id FROM users WHERE id = ?`, [targetUserId], (eU, doc) => {
-            if (eU) return res.status(500).json({ error: eU.message });
-            if (!doc) return res.status(404).json({ error: 'Doctor user not found' });
+        resolveDoctorUserRef(targetRef, (eU, doc) => {
+            if (eU) return res.status(400).json({ error: eU.message });
+            const targetUserId = doc.id;
             createSupportTicketRecord(
                 {
                     userId: targetUserId,
@@ -8886,9 +9013,16 @@ app.post('/api/admin/support-ticket/create', (req, res) => {
                         action: 'support_ticket.create',
                         resource_type: 'support_ticket',
                         resource_id: out.ticketId,
-                        meta: { targetUserId }
+                        meta: { targetUserId, targetUserRef: doc.user_id_string || targetRef }
                     });
-                    res.json({ success: true, ticketId: out.ticketId });
+                    res.json({
+                        success: true,
+                        ticketId: out.ticketId,
+                        doctor: {
+                            id: targetUserId,
+                            userIdString: doc.user_id_string
+                        }
+                    });
                 }
             );
         });
