@@ -312,27 +312,13 @@
                 });
                 const { data, parseFailed } = await readApiJson(res);
                 if (res.status === 403 && data.needsEmailVerification) {
-                    const again = confirm(
-                        (data.error || 'Please verify your email before signing in.') +
-                            '\n\nSend another verification email now?'
-                    );
-                    if (again) {
-                        try {
-                            const r2 = await fetch('/api/auth/resend-verification', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ email, password })
-                            });
-                            const d2 = await r2.json();
-                            const m = d2.success ? d2.message || 'Verification email queued.' : d2.error || 'Could not resend.';
-                            if (opts.onError) opts.onError(m);
-                            else alert(m);
-                        } catch (_) {
-                            const m = 'Could not resend verification email.';
-                            if (opts.onError) opts.onError(m);
-                            else alert(m);
-                        }
-                    }
+                    const msg =
+                        data.error ||
+                        (data.useLoginOtp || (otpPanel && otpPanel.style.display !== 'none')
+                            ? 'Verify your email with the Email OTP above (Send → enter code → Verify), then sign in again.'
+                            : 'Please verify your email before signing in.');
+                    if (opts.onError) opts.onError(msg);
+                    else alert(msg);
                     return;
                 }
                 if (!res.ok || !data.success) {

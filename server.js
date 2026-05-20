@@ -2920,8 +2920,14 @@ function queuePortalEmailVerification(db, userId, cb) {
                         [userId, th, exp],
                         function (ierr) {
                             if (ierr) return cb && cb(ierr);
+                            const base = String(notifEngine.publicBaseUrl() || '')
+                                .trim()
+                                .replace(/\/$/, '');
+                            if (!base || !/^https?:\/\//i.test(base)) {
+                                return cb(null, { skipped: true, reason: 'no_public_base_url' });
+                            }
                             const verify_link =
-                                notifEngine.publicBaseUrl() + '/api/auth/verify-email?t=' + encodeURIComponent(rawToken);
+                                base + '/api/auth/verify-email?t=' + encodeURIComponent(rawToken);
                             notifEngine.notify(
                                 db,
                                 'EMAIL_VERIFICATION',
@@ -2993,7 +2999,8 @@ app.post('/api/auth/signup', (req, res) => {
                 error: 'New account registration is currently closed. Please sign in if you already have an account.'
             });
         }
-        const evFlag = portalAuthPolicy.getPortalAuthConfig().requireEmailVerification ? 0 : 1;
+        const requireEv = portalAuthPolicy.getPortalAuthConfig().requireEmailVerification;
+        const evFlag = requireEv && !signupOtpRequired() ? 0 : 1;
 
         function insertUser() {
             authUsers.findUserByPhone(db, phoneNorm, (phErr, phoneExisting) => {
@@ -3154,12 +3161,32 @@ app.post('/api/auth/login', withAuxiliaryTables, (req, res) => {
                 if (Number(row.is_disabled) === 1) {
                     return res.status(403).json({ error: 'Your account has been disabled. Please contact support.' });
                 }
-                if (portalAuthPolicy.getPortalAuthConfig().requireEmailVerification && Number(row.email_verified) === 0) {
-                    return res.status(403).json({
-                        error: 'Please verify your email before signing in. Check your inbox for the verification link.',
-                        needsEmailVerification: true,
-                        email: row.email
+
+                function markEmailVerifiedFromOtp(cb) {
+                    if (!portalAuthPolicy.getPortalAuthConfig().requireEmailVerification) {
+                        return cb();
+                    }
+                    if (Number(row.email_verified) === 1) return cb();
+                    db.run(`UPDATE users SET email_verified = 1 WHERE id = ?`, [row.id], (uErr) => {
+                        if (!uErr) row.email_verified = 1;
+                        cb(uErr);
                     });
+                }
+
+                function blockUnverifiedEmailLinkOnly() {
+                    if (
+                        portalAuthPolicy.getPortalAuthConfig().requireEmailVerification &&
+                        Number(row.email_verified) === 0
+                    ) {
+                        return res.status(403).json({
+                            error:
+                                'Verify your email with the OTP code above (Email → Send → Verify), then sign in again.',
+                            needsEmailVerification: true,
+                            email: row.email,
+                            useLoginOtp: true
+                        });
+                    }
+                    return null;
                 }
 
                 function sendUser() {
@@ -3194,12 +3221,19 @@ app.post('/api/auth/login', withAuxiliaryTables, (req, res) => {
                         { phoneToken: phoneOtpToken, emailToken: emailOtpToken },
                         (verr, vr) => {
                             if (verr) return res.status(500).json({ error: verr.message });
-                            if (!vr || !vr.ok) return res.status(400).json({ error: (vr && vr.error) || 'Invalid OTP verification' });
-                            sendUser();
+                            if (!vr || !vr.ok) {
+                                return res.status(400).json({ error: (vr && vr.error) || 'Invalid OTP verification' });
+                            }
+                            markEmailVerifiedFromOtp((uErr) => {
+                                if (uErr) return res.status(500).json({ error: uErr.message });
+                                sendUser();
+                            });
                         }
                     );
                     return;
                 }
+                const block = blockUnverifiedEmailLinkOnly();
+                if (block) return block;
                 sendUser();
         });
     });
