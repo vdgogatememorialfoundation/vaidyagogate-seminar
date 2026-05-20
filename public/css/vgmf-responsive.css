@@ -145,6 +145,16 @@ svg {
 
 /* Mobile / tablet: nav is off-canvas overlay, never in document flow */
 @media (max-width: 900px) {
+    .cg-shell {
+        padding-top: 0;
+        gap: 0;
+    }
+
+    .cg-utility {
+        padding: 0 !important;
+        border-bottom: none;
+    }
+
     .cg-utility-auth {
         display: none !important;
     }
@@ -152,17 +162,68 @@ svg {
     .cg-utility-inner {
         flex-direction: column;
         align-items: stretch;
+        justify-content: flex-start;
+        padding: 6px 12px 0 !important;
+        gap: 0 !important;
     }
 
     .cg-utility-contacts {
+        flex: 0 0 auto !important;
         flex-direction: column;
         align-items: stretch;
         width: 100%;
+        gap: 0 !important;
     }
 
     .cg-utility-item {
         width: 100%;
-        font-size: 0.88rem;
+        font-size: 0.78rem;
+        line-height: 1.25;
+        padding: 2px 0;
+    }
+
+    .cg-utility-date {
+        display: none;
+    }
+
+    .cg-header {
+        position: relative;
+        top: auto;
+        border-top: 1px solid var(--cg-line);
+        border-bottom: 1px solid var(--cg-line);
+        box-shadow: none !important;
+    }
+
+    .cg-header-inner {
+        padding: 6px 12px !important;
+        gap: 8px;
+    }
+
+    .cg-header-row {
+        margin: 0;
+        padding: 0;
+    }
+
+    .cg-logo-zone {
+        padding: 0;
+    }
+
+    .cg-logo-text p {
+        margin-top: 0;
+    }
+
+    .congress-hero {
+        min-height: min(48vh, 360px);
+    }
+
+    .vg-stats-strip {
+        margin-top: 8px;
+        padding: 0 12px;
+    }
+
+    #countdown-region .countdown-strip {
+        margin-top: 12px;
+        margin-bottom: 12px;
     }
 
     /* Nav/backdrop must sit on body (see vgmf-congress.js) — below z-index avoids blocking drawer */

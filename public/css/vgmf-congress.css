@@ -1061,8 +1061,8 @@
     .congress-site { overflow-x: clip; }
     .cg-utility {
         font-size: 0.8rem;
-        padding: 10px 0;
-        border-bottom: 1px solid var(--cg-line);
+        padding: 0;
+        border-bottom: none;
     }
     .cg-menu-toggle { display: flex; align-items: center; justify-content: center; }
     .congress-hero { min-height: min(72vh, 500px); }
