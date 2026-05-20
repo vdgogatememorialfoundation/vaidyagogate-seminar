@@ -5799,24 +5799,41 @@ app.put('/api/admin/seminars/:id', (req, res) => {
 function deleteRegistrationCascade(registrationId, cb) {
     const rid = parseInt(registrationId, 10);
     if (!Number.isInteger(rid) || rid < 1) return cb(new Error('Invalid registration id'));
-    db.run(`DELETE FROM registration_status_log WHERE registration_id = ?`, [rid], () => {
-        db.run(`DELETE FROM registration_reminder_log WHERE registration_id = ?`, [rid], () => {
-            db.run(`DELETE FROM user_certificates WHERE registration_id = ?`, [rid], () => {
-                db.get(`SELECT id FROM orders WHERE registration_id = ?`, [rid], (e0, orderRow) => {
-                    const finishOrders = () => {
-                        db.run(`DELETE FROM orders WHERE registration_id = ?`, [rid], () => {
-                            db.run(`DELETE FROM registrations WHERE id = ?`, [rid], function (e3) {
-                                if (e3) return cb(e3);
-                                cb(null, { deleted: this.changes > 0 });
-                            });
-                        });
-                    };
-                    if (e0 || !orderRow) return finishOrders();
-                    db.run(`DELETE FROM tickets WHERE order_id = ?`, [orderRow.id], () => finishOrders());
-                });
-            });
+
+    const steps = [
+        [`DELETE FROM registration_status_log WHERE registration_id = ?`, [rid]],
+        [`DELETE FROM registration_reminder_log WHERE registration_id = ?`, [rid]],
+        [`DELETE FROM seminar_feedback WHERE registration_id = ?`, [rid]],
+        [`DELETE FROM application_edits WHERE application_id = ?`, [rid]],
+        [`DELETE FROM user_certificates WHERE registration_id = ?`, [rid]],
+        [`DELETE FROM volunteer_certificates WHERE registration_id = ?`, [rid]],
+        [`DELETE FROM interactive_session_registrations WHERE registration_id = ?`, [rid]],
+        [`UPDATE case_submissions SET registration_id = NULL WHERE registration_id = ?`, [rid]],
+        [`DELETE FROM refunds WHERE registration_id = ?`, [rid]],
+        [
+            `DELETE FROM refunds WHERE order_id IN (SELECT id FROM orders WHERE registration_id = ?)`,
+            [rid]
+        ],
+        [
+            `DELETE FROM tickets WHERE order_id IN (SELECT id FROM orders WHERE registration_id = ?)`,
+            [rid]
+        ],
+        [`DELETE FROM orders WHERE registration_id = ?`, [rid]],
+        [`DELETE FROM registrations WHERE id = ?`, [rid]]
+    ];
+
+    let i = 0;
+    const next = (err) => {
+        if (err) return cb(err);
+        if (i >= steps.length) return cb(null, { deleted: true });
+        const [sql, params] = steps[i++];
+        db.run(sql, params, function (runErr) {
+            if (runErr) return cb(runErr);
+            if (i === steps.length) return cb(null, { deleted: this.changes > 0 });
+            next();
         });
-    });
+    };
+    next();
 }
 
 app.delete('/api/admin/registrations/:id', (req, res) => {
