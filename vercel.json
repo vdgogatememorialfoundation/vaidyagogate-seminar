@@ -11,11 +11,6 @@
     { "src": "/(.*\\.(png|jpg|jpeg|gif|webp|svg|ico|woff2?|webmanifest))", "dest": "/public/$1" },
     { "src": "/(.*)", "dest": "server.js" }
   ],
-  "functions": {
-    "server.js": {
-      "maxDuration": 60
-    }
-  },
   "crons": [
     {
       "path": "/api/cron/process-notifications",
