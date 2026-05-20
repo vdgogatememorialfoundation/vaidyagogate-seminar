@@ -10,7 +10,7 @@
     --vp-radius: 16px;
     --vp-shadow: 0 12px 30px rgba(15, 23, 42, 0.08);
     --vp-shadow-soft: 0 8px 18px rgba(15, 23, 42, 0.06);
-    --vp-hero-grad: radial-gradient(circle at 20% 20%, #134e4a, #0f172a 78%);
+    --vp-hero-grad: radial-gradient(circle at 18% 18%, #ecfeff, #dff7f2 54%, #cfeee7 100%);
 }
 
 body.vgmf-redesign {
@@ -42,6 +42,10 @@ body.vgmf-redesign {
 
 .vgmf-redesign .congress-hero-slide .congress-hero-bg {
     background-image: var(--vp-hero-grad);
+}
+
+.vgmf-redesign .congress-hero-overlay {
+    background: linear-gradient(120deg, rgba(15, 118, 110, 0.72) 0%, rgba(14, 165, 233, 0.28) 46%, rgba(255, 255, 255, 0.06) 100%);
 }
 
 .vgmf-redesign .congress-hero-content h2 {
@@ -136,16 +140,28 @@ body.vgmf-redesign {
 .vgmf-redesign .footer {
     margin-top: 40px;
     border-top: 1px solid var(--vp-line);
-    background: #0f172a;
-    color: #e2e8f0;
+    background: linear-gradient(180deg, #ffffff 0%, #f2f8ff 100%);
+    color: #0f172a;
+}
+
+.vgmf-redesign .footer-col {
+    background: #ffffff;
+    border: 1px solid #d7e4f4;
+}
+
+.vgmf-redesign .footer h4,
+.vgmf-redesign .footer p,
+.vgmf-redesign .footer li,
+.vgmf-redesign .footer .footer-credit {
+    color: #334155;
 }
 
 .vgmf-redesign .footer a {
-    color: #cde8ff;
+    color: #0f766e;
 }
 
 .vgmf-redesign .footer a:hover {
-    color: #ffffff;
+    color: #0b5f58;
 }
 
 .vgmf-redesign .vg-search-panel {
