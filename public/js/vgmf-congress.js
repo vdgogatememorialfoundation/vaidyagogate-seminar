@@ -459,11 +459,10 @@
         });
         nav.querySelectorAll('a').forEach((a) => {
             a.addEventListener('click', (e) => {
-                if (!mq.matches) return;
                 const section = a.getAttribute('data-nav-section');
                 if (section) {
                     e.preventDefault();
-                    close();
+                    if (mq.matches) close();
                     if (typeof window.showSection === 'function') {
                         window.showSection(section);
                     }
@@ -472,7 +471,7 @@
                     });
                     return;
                 }
-                close();
+                if (mq.matches) close();
             });
         });
         document.addEventListener('keydown', (e) => {
