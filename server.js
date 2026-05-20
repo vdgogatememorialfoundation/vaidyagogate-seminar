@@ -444,7 +444,9 @@ const memoryUpload = multer({ storage: multer.memoryStorage(), limits: { fileSiz
 
 function uploadErrorMessage(err) {
     if (!err) return 'Upload failed';
-    if (err.code === 'LIMIT_FILE_SIZE') return 'File is too large (max 4 MB per file).';
+    if (err.code === 'LIMIT_FILE_SIZE') {
+        return 'File is too large (max 4 MB per file on this server). Compress PDF/photos and try again.';
+    }
     if (err.code === 'LIMIT_FILE_COUNT') return 'Too many files in one upload.';
     return err.message || 'Upload failed';
 }

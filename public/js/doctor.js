@@ -3,6 +3,29 @@ let currentRegistrationId = null;
 let __doctorAllowedTabs = null;
 window.__portalFlags = window.__portalFlags || {};
 
+/** Matches Vercel/serverless body limit in production. */
+const UPLOAD_HOST_CAP_MB = 4;
+
+function effectiveCaseMaxMb(program) {
+    const requested = (program && program.maxFileSizeMb) || 50;
+    return Math.min(requested, UPLOAD_HOST_CAP_MB);
+}
+
+async function prepareUploadFileOrAlert(file) {
+    const PU = window.PortalUpload;
+    if (!PU) {
+        alert('Upload helper failed to load. Refresh the page and try again.');
+        return null;
+    }
+    const prep = await PU.prepareFileForUpload(file);
+    if (!prep.ok) {
+        alert(prep.error);
+        return null;
+    }
+    if (prep.note) console.info('[upload]', prep.note);
+    return prep.file;
+}
+
 function doctorNumericUserId() {
     if (!currentUser) return null;
     const raw = currentUser.id != null ? currentUser.id : currentUser.user_id;
@@ -1646,7 +1669,7 @@ function applyCaseFormConfigFromProgram(program) {
     const fileFg = document.getElementById('case-files') && document.getElementById('case-files').closest('.form-group');
     if (fileFg && program) {
         const maxF = program.maxFilesPerSubmission || 5;
-        const maxMb = program.maxFileSizeMb || 50;
+        const maxMb = effectiveCaseMaxMb(program);
         const lab = fileFg.querySelector('label');
         if (lab) lab.textContent = 'Upload (max ' + maxF + ' files, ' + maxMb + ' MB each) *';
     }
@@ -1880,27 +1903,35 @@ async function submitCasePresentation() {
     }
     const fileInput = document.getElementById('case-files');
     const maxFiles = (activeCaseProgram && activeCaseProgram.maxFilesPerSubmission) || 5;
-    const maxMb = (activeCaseProgram && activeCaseProgram.maxFileSizeMb) || 50;
+    const maxMb = effectiveCaseMaxMb(activeCaseProgram);
     const filesField = (activeCaseProgram && activeCaseProgram.formConfig && activeCaseProgram.formConfig.fields || []).find(
         (f) => f.key === 'files'
     );
     const filesRequired = !filesField || filesField.enabled === false ? false : filesField.required !== false;
     if (filesRequired && !fileInput?.files?.length) return alert('Select at least one file');
     if (fileInput?.files?.length > maxFiles) return alert('Maximum ' + maxFiles + ' files');
-    if (fileInput?.files) {
+    const preparedFiles = [];
+    if (fileInput?.files?.length) {
         for (let i = 0; i < fileInput.files.length; i++) {
-            if (fileInput.files[i].size > maxMb * 1024 * 1024) {
-                return alert('Each file must be under ' + maxMb + ' MB');
+            const raw = fileInput.files[i];
+            if (raw.size > maxMb * 1024 * 1024) {
+                const PU = window.PortalUpload;
+                return alert(
+                    PU && PU.compressHelpMessage
+                        ? PU.compressHelpMessage(raw)
+                        : 'Each file must be under ' + maxMb + ' MB. Compress PDF/photos and try again.'
+                );
             }
+            const ready = await prepareUploadFileOrAlert(raw);
+            if (!ready) return;
+            preparedFiles.push(ready);
         }
     }
     const fd = new FormData();
     fd.append('userId', String(uid));
     fd.append('caseProgramId', String(activeCaseProgramId));
     fd.append('formData', JSON.stringify(form));
-    if (fileInput && fileInput.files) {
-        for (let i = 0; i < fileInput.files.length; i++) fd.append('files', fileInput.files[i]);
-    }
+    preparedFiles.forEach((f) => fd.append('files', f));
     try {
         const res = await fetch('/api/case/submit', { method: 'POST', body: fd });
         const text = await res.text();
@@ -2125,14 +2156,16 @@ async function submitCaseFileResubmits(submissionId) {
     fd.append('submissionId', String(submissionId));
     const ids = [];
     let hasFile = false;
-    inputs.forEach((inp) => {
+    for (const inp of inputs) {
         const fid = inp.getAttribute('data-file-id');
         if (inp.files && inp.files[0] && fid) {
-            fd.append('files', inp.files[0]);
+            const ready = await prepareUploadFileOrAlert(inp.files[0]);
+            if (!ready) return;
+            fd.append('files', ready);
             ids.push(fid);
             hasFile = true;
         }
-    });
+    }
     if (!hasFile) return alert('Select at least one replacement file.');
     fd.append('replaceFileIds', ids.join(','));
     try {
@@ -2666,9 +2699,11 @@ async function verifyNcism() {
         }
         return alert('Auto OCR verification is currently disabled. Please continue and submit for manual verification.');
     }
+    const certReady = await prepareUploadFileOrAlert(fileInput.files[0]);
+    if (!certReady) return;
     const fd = new FormData();
     fd.append('ncism', ncism);
-    fd.append('certificate', fileInput.files[0]);
+    fd.append('certificate', certReady);
     try {
         const res = await fetch('/api/applications/check-ncism-certificate', { method: 'POST', body: fd });
         const data = await res.json();
@@ -2785,7 +2820,9 @@ async function submitApplication() {
     
     const certFile = document.getElementById('reg-cert-file').files[0];
     if (certFile) {
-        payload.append('certificate', certFile);
+        const certReady = await prepareUploadFileOrAlert(certFile);
+        if (!certReady) return;
+        payload.append('certificate', certReady);
     }
 
     try {
@@ -4614,7 +4651,9 @@ async function submitSeminarDocumentResubmit() {
     fd.append('userId', String(uid));
     fd.append('ncism', ncism);
     if (certEl && certEl.files && certEl.files[0]) {
-        fd.append('certificate', certEl.files[0]);
+        const certReady = await prepareUploadFileOrAlert(certEl.files[0]);
+        if (!certReady) return;
+        fd.append('certificate', certReady);
     }
     try {
         const res = await fetch('/api/applications/' + appId + '/resubmit-documents', {
@@ -4679,10 +4718,46 @@ async function updateApplication() {
     }
 }
 
+function initDoctorUploadHints() {
+    const PU = window.PortalUpload;
+    if (!PU) return;
+    PU.bindFileHint(document.getElementById('reg-cert-file'), document.getElementById('reg-cert-hint'));
+    PU.bindFileHint(
+        document.getElementById('seminar-doc-resubmit-cert'),
+        document.getElementById('seminar-doc-resubmit-cert-hint')
+    );
+    const caseInp = document.getElementById('case-files');
+    const caseHint = document.getElementById('case-files-hint');
+    if (caseInp && caseHint) {
+        caseInp.addEventListener('change', () => {
+            const files = Array.from(caseInp.files || []);
+            if (!files.length) {
+                caseHint.textContent =
+                    'Each file max ' +
+                    UPLOAD_HOST_CAP_MB +
+                    ' MB on cloud hosting. Compress PDF/PPT; photos from iPhone are resized automatically.';
+                caseHint.style.color = '#64748b';
+                return;
+            }
+            const maxMb = effectiveCaseMaxMb(activeCaseProgram);
+            const lines = files.map((f) => f.name + ' (' + PU.formatBytes(f.size) + ')');
+            const over = files.some((f) => f.size > maxMb * 1024 * 1024);
+            caseHint.textContent =
+                files.length +
+                ' file(s): ' +
+                lines.join(', ') +
+                (over ? ' — some files are too large; compress before submitting.' : ' — OK if each is under ' + maxMb + ' MB.');
+            caseHint.style.color = over ? '#b91c1c' : '#15803d';
+        });
+    }
+}
+
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => {
         initRegistrationAddressUi();
+        initDoctorUploadHints();
     });
 } else {
     initRegistrationAddressUi();
+    initDoctorUploadHints();
 }
