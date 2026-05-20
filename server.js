@@ -438,13 +438,13 @@ const storage = multer.diskStorage({
         cb(null, Date.now() + '-' + Math.round(Math.random() * 1E9) + path.extname(file.originalname))
     }
 });
-const UPLOAD_MAX_BYTES = 10 * 1024 * 1024; // 10MB — safe for Vercel/serverless body limits
+const UPLOAD_MAX_BYTES = 4 * 1024 * 1024; // match Vercel ~4.5 MB request body limit
 const upload = multer({ storage: storage, limits: { fileSize: UPLOAD_MAX_BYTES } });
 const memoryUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: UPLOAD_MAX_BYTES } });
 
 function uploadErrorMessage(err) {
     if (!err) return 'Upload failed';
-    if (err.code === 'LIMIT_FILE_SIZE') return 'File is too large (max 10 MB per file).';
+    if (err.code === 'LIMIT_FILE_SIZE') return 'File is too large (max 4 MB per file).';
     if (err.code === 'LIMIT_FILE_COUNT') return 'Too many files in one upload.';
     return err.message || 'Upload failed';
 }

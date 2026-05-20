@@ -7009,7 +7009,112 @@ async function saveAdminRegistrationFormConfig() {
 
 let __siteCmsEditing = null;
 
-const ADMIN_UPLOAD_MAX_MB = 10;
+/** Vercel/serverless rejects request bodies above ~4.5 MB (413). */
+const ADMIN_UPLOAD_MAX_BYTES = 4 * 1024 * 1024;
+const ADMIN_UPLOAD_MAX_RAW_MB = 25;
+
+function uploadErrorText(status, data, fileName) {
+    if (status === 413) {
+        return (
+            (fileName ? `"${fileName}" ` : 'File ') +
+            'is too large for the server (about 4 MB per image after compression). Use a smaller photo or fewer images at once.'
+        );
+    }
+    return (data && data.error) || `Upload failed (${status})`;
+}
+
+async function compressImageFileForUpload(file) {
+    if (!file || !String(file.type || '').startsWith('image/')) return file;
+    if (file.size < 800 * 1024 && !/heic|heif/i.test(file.name || '')) return file;
+    return new Promise((resolve) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        img.onload = () => {
+            URL.revokeObjectURL(url);
+            let w = img.width;
+            let h = img.height;
+            const maxDim = 1920;
+            if (w > maxDim || h > maxDim) {
+                if (w >= h) {
+                    h = Math.round((h * maxDim) / w);
+                    w = maxDim;
+                } else {
+                    w = Math.round((w * maxDim) / h);
+                    h = maxDim;
+                }
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return resolve(file);
+            ctx.drawImage(img, 0, 0, w, h);
+            canvas.toBlob(
+                (blob) => {
+                    if (!blob) return resolve(file);
+                    const base = String(file.name || 'image').replace(/\.[^.]+$/i, '') || 'image';
+                    resolve(
+                        new File([blob], base + '.jpg', {
+                            type: 'image/jpeg',
+                            lastModified: Date.now()
+                        })
+                    );
+                },
+                'image/jpeg',
+                0.82
+            );
+        };
+        img.onerror = () => {
+            URL.revokeObjectURL(url);
+            resolve(file);
+        };
+        img.src = url;
+    });
+}
+
+async function uploadOneAdminAssetFile(rawFile) {
+    if (!rawFile) return null;
+    if (rawFile.size > ADMIN_UPLOAD_MAX_RAW_MB * 1024 * 1024) {
+        alert(`"${rawFile.name}" is too large (max ${ADMIN_UPLOAD_MAX_RAW_MB} MB before compression).`);
+        return null;
+    }
+    const file = await compressImageFileForUpload(rawFile);
+    if (file.size > ADMIN_UPLOAD_MAX_BYTES) {
+        alert(uploadErrorText(413, {}, rawFile.name));
+        return null;
+    }
+    const fd = new FormData();
+    fd.append('file', file);
+    const res = await fetch('/api/admin/upload-asset', { method: 'POST', body: fd });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        alert(uploadErrorText(res.status, data, rawFile.name));
+        return null;
+    }
+    if (data.success && data.path) return data.path;
+    alert(data.error || 'Upload failed');
+    return null;
+}
+
+async function uploadAdminAssetFilesSequential(files, opts) {
+    const list = Array.from(files || []);
+    const paths = [];
+    const btn = opts && opts.progressBtn;
+    const total = list.length;
+    for (let i = 0; i < total; i++) {
+        if (btn) {
+            btn.disabled = true;
+            btn.textContent = `Uploading ${i + 1}/${total}…`;
+        }
+        const path = await uploadOneAdminAssetFile(list[i]);
+        if (path) paths.push(path);
+    }
+    if (btn) {
+        btn.disabled = false;
+        btn.textContent = opts.progressLabel || 'Upload multiple images';
+    }
+    return paths;
+}
 
 async function uploadAdminAssetFromInput(fileInputEl, options) {
     const opts = options || {};
@@ -7020,36 +7125,13 @@ async function uploadAdminAssetFromInput(fileInputEl, options) {
         if (!opts.silent) alert('Choose a file first.');
         return opts.multiple ? [] : null;
     }
-    for (const f of files) {
-        if (f.size > ADMIN_UPLOAD_MAX_MB * 1024 * 1024) {
-            alert(`"${f.name}" is too large. Maximum ${ADMIN_UPLOAD_MAX_MB} MB per file.`);
-            return opts.multiple ? [] : null;
-        }
-    }
     if (files.length === 1 && !opts.multiple) {
-        const fd = new FormData();
-        fd.append('file', files[0]);
-        const res = await fetch('/api/admin/upload-asset', { method: 'POST', body: fd });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) {
-            alert(data.error || `Upload failed (${res.status})`);
-            return null;
-        }
-        if (data.success && data.path) return data.path;
-        alert(data.error || 'Upload failed');
-        return null;
+        return uploadOneAdminAssetFile(files[0]);
     }
-    const fd = new FormData();
-    files.forEach((f) => fd.append('files', f));
-    const res = await fetch('/api/admin/upload-assets', { method: 'POST', body: fd });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-        alert(data.error || `Upload failed (${res.status})`);
-        return [];
-    }
-    if (data.success && Array.isArray(data.paths)) return data.paths;
-    alert(data.error || 'Upload failed');
-    return [];
+    return uploadAdminAssetFilesSequential(files, {
+        progressBtn: opts.progressBtn,
+        progressLabel: opts.progressLabel
+    });
 }
 
 function cmsParseJsonArray(raw, fieldLabel) {
@@ -7254,7 +7336,11 @@ async function cmsUploadGalleryYearBatch(btn) {
     const yearRow = btn.closest('.cms-gallery-year');
     if (!yearRow) return;
     const fileInp = yearRow.querySelector('.cgy-batch-files');
-    const paths = await uploadAdminAssetFromInput(fileInp, { multiple: true });
+    const paths = await uploadAdminAssetFromInput(fileInp, {
+        multiple: true,
+        progressBtn: btn,
+        progressLabel: 'Upload multiple images'
+    });
     if (fileInp) fileInp.value = '';
     if (!paths || !paths.length) return;
     const host = yearRow.querySelector('.cgy-images');
