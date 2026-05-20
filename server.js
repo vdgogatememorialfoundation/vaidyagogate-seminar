@@ -4895,6 +4895,11 @@ function finishDoctorPayment(res, err, out) {
         body.order = out.razorpayOrder;
         body.mode = out.mode;
     }
+    if (out.paymentType === 'easebuzz_checkout') {
+        body.gateway = 'easebuzz';
+        body.mode = out.mode;
+        body.paymentUrl = out.paymentUrl;
+    }
     res.json(body);
 }
 

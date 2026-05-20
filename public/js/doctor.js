@@ -540,6 +540,31 @@ function bootDoctorDashboard(user) {
     loadDoctorPortalUpdatesFromCms();
     loadSiteBranding();
     initDoctorVolunteerNav();
+    handleEasebuzzPaymentReturnQuery();
+}
+
+function handleEasebuzzPaymentReturnQuery() {
+    try {
+        const p = new URLSearchParams(window.location.search);
+        const payment = p.get('payment');
+        if (!payment) return;
+        const msg = p.get('msg');
+        if (payment === 'success') {
+            alert(
+                msg ||
+                    'Payment successful. Your e-ticket will appear under Participant tickets and My Applications.'
+            );
+            if (typeof loadApplications === 'function') loadApplications();
+            if (typeof loadDoctorDashboardStats === 'function') loadDoctorDashboardStats();
+            if (typeof loadDoctorEventTickets === 'function') loadDoctorEventTickets();
+        } else if (payment === 'failed') {
+            alert(msg || 'Payment was not completed. You can try again from My Applications.');
+        } else if (payment === 'error') {
+            alert(msg || 'Payment could not be verified. Contact the seminar office if money was debited.');
+        }
+        const clean = window.location.pathname + (window.location.hash || '');
+        window.history.replaceState({}, '', clean);
+    } catch (_) {}
 }
 
 window.onload = () => {
@@ -3581,6 +3606,25 @@ async function processPayment(appId, amount, appNo, paymentOption, cancelPending
                 return;
             }
             openDoctorRazorpayCheckout(result, regId, methodId);
+            ensureDoctorPaymentPoll();
+            return;
+        }
+        if (result.paymentType === 'easebuzz_checkout' && result.paymentUrl) {
+            const opened = window.open(result.paymentUrl, '_blank', 'noopener');
+            if (!opened) {
+                if (
+                    confirm(
+                        'Allow pop-ups to open Easebuzz payment, or continue on this page?\n\nClick OK to pay in this tab.'
+                    )
+                ) {
+                    window.location.href = result.paymentUrl;
+                }
+            } else {
+                alert(
+                    result.message ||
+                        'Easebuzz payment page opened in a new tab. Complete payment there; this page will update when payment is received.'
+                );
+            }
             ensureDoctorPaymentPoll();
             return;
         }

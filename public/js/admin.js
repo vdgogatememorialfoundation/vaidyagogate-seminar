@@ -5006,6 +5006,9 @@ async function proxyInitiatePayment() {
         else if (markBtn) markBtn.classList.add('hidden');
         if (data.paymentType === 'razorpay_checkout' && data.razorpayOrder && data.keyId) {
             openProxyRazorpayCheckout(data);
+        } else if (data.paymentType === 'easebuzz_checkout' && data.paymentUrl) {
+            const w = window.open(data.paymentUrl, '_blank', 'noopener');
+            if (!w && confirm('Open Easebuzz payment in this tab?')) window.location.href = data.paymentUrl;
         }
         if (data.pollRequired) startProxyPaymentPoll();
         else if (pollSt) pollSt.textContent = data.message || '';
@@ -8124,6 +8127,15 @@ async function initiateAdminCreateOrderPayment() {
             }
             return;
         }
+        if (data.paymentType === 'easebuzz_checkout' && data.paymentUrl) {
+            if (msg) msg.textContent = 'Opening Easebuzz payment page… allow pop-ups if prompted.';
+            const w = window.open(data.paymentUrl, '_blank', 'noopener');
+            if (!w) {
+                if (confirm('Open Easebuzz payment in this tab?')) window.location.href = data.paymentUrl;
+            }
+            if (data.pollRequired) pollAdminCreateOrderPayment();
+            return;
+        }
         if (data.qrImageUrl && qrImg) {
             qrImg.src =
                 String(data.qrImageUrl).indexOf('http') === 0 || String(data.qrImageUrl).indexOf('/') === 0
@@ -8380,6 +8392,10 @@ async function adminRetryOrderPayment(registrationId, orderDbId) {
         __coOrderDbId = data.orderDbId;
         if (data.paymentType === 'razorpay_checkout' && data.razorpayOrder && data.keyId) {
             openAdminRazorpayCheckout(data, () => pollAdminCreateOrderPayment());
+        } else if (data.paymentType === 'easebuzz_checkout' && data.paymentUrl) {
+            const w = window.open(data.paymentUrl, '_blank', 'noopener');
+            if (!w && confirm('Open Easebuzz in this tab?')) window.location.href = data.paymentUrl;
+            pollAdminCreateOrderPayment();
         } else if (data.qrImageUrl) {
             const qrBlock = document.getElementById('co-qr-block');
             const qrImg = document.getElementById('co-qr-img');
