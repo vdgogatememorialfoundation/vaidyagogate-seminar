@@ -173,6 +173,14 @@ function bootstrapApp(done) {
                 })
             );
         }
+        tasks.push(
+            new Promise((resolve) => {
+                paymentGatewayOptions.activateGatewaysWithCredentials(db, (err) => {
+                    if (err) console.warn('[payment-gateways] auto-activate:', err.message);
+                    resolve();
+                });
+            })
+        );
         return tasks.length ? Promise.all(tasks) : Promise.resolve();
     };
     if (pgDb.ensureMissingCoreTables) {
@@ -895,6 +903,15 @@ function ensurePortalSchema(next) {
                                                                                                                                 db,
                                                                                                                                 ignoreSchemaMigrationErr,
                                                                                                                                 () => {
+                                                                                                                                    paymentGatewayOptions.activateGatewaysWithCredentials(
+                                                                                                                                        db,
+                                                                                                                                        (pgActErr) => {
+                                                                                                                                            if (pgActErr) {
+                                                                                                                                                console.warn(
+                                                                                                                                                    '[payment-gateways] auto-activate:',
+                                                                                                                                                    pgActErr.message
+                                                                                                                                                );
+                                                                                                                                            }
                                                                                                                             seedGlobalSettingIfMissing(
                                                                                                                                 integrationSettings.SETTINGS_KEY,
                                                                                                                                 '{}',
@@ -904,6 +921,8 @@ function ensurePortalSchema(next) {
                                                                                                                                     });
                                                                                                                                 }
                                                                                                                             );
+                                                                                                                                        }
+                                                                                                                                    );
                                                                                                                                 }
                                                                                                                             );
                                                                                                                         }

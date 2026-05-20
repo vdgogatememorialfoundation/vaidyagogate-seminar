@@ -3584,6 +3584,15 @@ async function processPayment(appId, amount, appNo, paymentOption, cancelPending
             ensureDoctorPaymentPoll();
             return;
         }
+        if (result.paymentType === 'manual_gateway' || result.manualConfirm) {
+            alert(
+                result.message ||
+                    'Payment request recorded. Complete payment using your chosen method; your e-ticket will appear once our team confirms receipt.'
+            );
+            loadApplications();
+            ensureDoctorPaymentPoll();
+            return;
+        }
         alert(result.message || 'Payment request created.');
         ensureDoctorPaymentPoll();
     } catch (err) {
