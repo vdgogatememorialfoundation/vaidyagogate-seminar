@@ -6583,12 +6583,15 @@ async function viewSupportTicket(ticketId) {
         
         document.getElementById('ticket-info').innerHTML = infoHtml;
         
-        const messagesHtml = (Array.isArray(ticket.messages) ? ticket.messages : []).map(m => `
-            <div style="margin-bottom: 10px; padding: 10px; background: ${m.sender_type === 'admin' ? '#e0e7ff' : '#f0fdf4'}; border-radius: 4px;">
-                <strong>${m.sender_type === 'admin' ? '🔵 Admin' : '👤 ' + m.first_name}:</strong> ${m.message}
-                <br><small style="color: #64748b;">${new Date(m.created_at).toLocaleString()}</small>
-            </div>
-        `).join('');
+        const messagesHtml = (Array.isArray(ticket.messages) ? ticket.messages : []).map(m => {
+            const isAdmin = String(m.sender_type || '').toLowerCase() === 'admin';
+            const who = isAdmin ? 'Admin' : escAdmin([m.first_name, m.last_name].filter(Boolean).join(' ') || 'Doctor');
+            return `
+            <div style="margin-bottom: 10px; padding: 10px; background: ${isAdmin ? '#e0e7ff' : '#f0fdf4'}; border-radius: 4px;">
+                <strong>${isAdmin ? '🔵 Admin' : '👤 ' + who}:</strong> ${escAdmin(m.message || '')}
+                <br><small style="color: #64748b;">${m.created_at ? new Date(m.created_at).toLocaleString() : ''}</small>
+            </div>`;
+        }).join('');
         
         document.getElementById('ticket-messages').innerHTML = messagesHtml || '<p style="text-align: center; color: #94a3b8;">No messages yet</p>';
         document.getElementById('ticket-reply-input').value = '';
@@ -6647,11 +6650,14 @@ async function submitTicketReply() {
             body: JSON.stringify({ senderId: adm && adm.id ? adm.id : 1, senderType: 'admin', message: message })
         });
         
-        if(res.ok) {
+        const data = await res.json();
+        if (res.ok && data.success) {
             document.getElementById('ticket-reply-input').value = '';
             viewSupportTicket(currentViewingTicketId);
+        } else {
+            alert((data && data.error) || 'Could not send reply');
         }
-    } catch(err) { console.error(err); }
+    } catch(err) { console.error(err); alert('Network error sending reply'); }
 }
 
 // Call loading functions when tab changes

@@ -4041,23 +4041,16 @@ async function loadTickets() {
             return;
         }
         tickets.forEach((t) => {
-            if (t.ticket_id) {
+            const tid = t.ticket_id || t.tracking_id;
+            if (!tid) return;
+            const safeId = escapeHtml(String(tid)).replace(/'/g, '&#39;');
             list.innerHTML += `
                 <tr>
-                    <td><strong>${t.ticket_id}</strong></td>
-                    <td>${t.subject || '—'}</td>
-                    <td><span style="background: #fef3c7; padding: 5px; border-radius: 5px;">${t.status || 'open'}</span></td>
-                    <td><button type="button" class="btn-primary" style="padding: 5px 10px;" onclick="openTicketThread('${t.ticket_id}', false)">Open</button></td>
+                    <td><strong>${escapeHtml(String(tid))}</strong></td>
+                    <td>${escapeHtml(t.subject || '—')}</td>
+                    <td><span style="background: #fef3c7; padding: 5px; border-radius: 5px;">${escapeHtml(t.status || 'open')}</span></td>
+                    <td><button type="button" class="btn-primary" style="padding: 5px 10px;" onclick="openTicketThread('${safeId}')">Open</button></td>
                 </tr>`;
-            } else if (t.tracking_id) {
-                list.innerHTML += `
-                <tr>
-                    <td><strong>${t.tracking_id}</strong> <span style="font-size:0.75rem;color:#64748b;">(legacy)</span></td>
-                    <td>${t.subject || '—'}</td>
-                    <td><span style="background: #fef3c7; padding: 5px; border-radius: 5px;">${t.status || 'Open'}</span></td>
-                    <td><button type="button" class="btn-primary" style="padding: 5px 10px;" onclick="openTicketThread('${t.tracking_id}', true)">Open</button></td>
-                </tr>`;
-            }
         });
     } catch (err) {
         console.error(err);
@@ -4071,12 +4064,12 @@ async function loadTickets() {
 let currentTicketId = null;
 let currentLegacyTrackingId = null;
 
-async function openTicketThread(id, isLegacy) {
-    currentTicketId = isLegacy ? null : id;
-    currentLegacyTrackingId = isLegacy ? id : null;
+async function openTicketThread(id) {
+    currentTicketId = id;
+    currentLegacyTrackingId = null;
     document.getElementById('support-main-view').classList.add('hidden');
     document.getElementById('support-chat-view').classList.remove('hidden');
-    document.getElementById('chat-title').innerText = isLegacy ? `Legacy ticket (${id})` : `Ticket ${id}`;
+    document.getElementById('chat-title').innerText = 'Ticket ' + id;
     await loadChatMessages();
 }
 
@@ -4090,36 +4083,41 @@ function closeChat() {
 async function loadChatMessages() {
         const box = document.getElementById('chat-messages');
     if (!box) return;
-        box.innerHTML = '';
+    box.innerHTML = '<p style="color:#64748b;text-align:center;">Loading messages…</p>';
+    if (!currentTicketId) {
+        box.innerHTML = '<p style="color:#b91c1c;text-align:center;">No ticket selected.</p>';
+        return;
+    }
     try {
-        if (currentTicketId) {
-            const res = await fetch('/api/support-ticket/' + encodeURIComponent(currentTicketId));
-            const ticket = await res.json();
-            const messages = ticket.messages || [];
-            messages.forEach((m) => {
-                const isDoc = m.sender_type !== 'admin';
+        const res = await fetch('/api/support-ticket/' + encodeURIComponent(currentTicketId));
+        const ticket = await res.json();
+        if (!res.ok) {
+            box.innerHTML =
+                '<p style="color:#b91c1c;text-align:center;">' +
+                escapeHtml((ticket && ticket.error) || 'Could not load messages') +
+                '</p>';
+            return;
+        }
+        const messages = Array.isArray(ticket.messages) ? ticket.messages : [];
+        if (!messages.length) {
+            box.innerHTML = '<p style="color:#64748b;text-align:center;">No messages yet. Send a reply below.</p>';
+            return;
+        }
+        box.innerHTML = '';
+        messages.forEach((m) => {
+            const st = String(m.sender_type || '').toLowerCase();
+            const isDoc = st !== 'admin';
                 box.innerHTML += `
                 <div style="align-self: ${isDoc ? 'flex-end' : 'flex-start'}; background: ${isDoc ? '#1a237e' : 'white'}; color: ${isDoc ? 'white' : '#334155'}; border: 1px solid ${isDoc ? '#1a237e' : '#cbd5e1'}; padding: 10px 15px; border-radius: 8px; max-width: 80%;">
                     <p style="font-size: 0.8rem; margin-bottom: 5px; color: ${isDoc ? '#c7d2fe' : '#64748b'};"><strong>${isDoc ? 'You' : 'Admin'}</strong> — ${new Date(m.created_at).toLocaleString()}</p>
                     <p>${(m.message || '').replace(/</g, '&lt;')}</p>
                 </div>`;
-            });
-        } else if (currentLegacyTrackingId) {
-            const res = await fetch('/api/support/ticket/' + encodeURIComponent(currentLegacyTrackingId) + '/messages');
-            const messages = await res.json();
-            messages.forEach((m) => {
-            const isDoc = m.sender === 'doctor';
-            box.innerHTML += `
-                <div style="align-self: ${isDoc ? 'flex-end' : 'flex-start'}; background: ${isDoc ? '#1a237e' : 'white'}; color: ${isDoc ? 'white' : '#334155'}; border: 1px solid ${isDoc ? '#1a237e' : '#cbd5e1'}; padding: 10px 15px; border-radius: 8px; max-width: 80%;">
-                    <p style="font-size: 0.8rem; margin-bottom: 5px; color: ${isDoc ? '#c7d2fe' : '#64748b'};"><strong>${isDoc ? 'You' : 'Admin'}</strong> — ${new Date(m.created_at).toLocaleString()}</p>
-                    <p>${(m.message || '').replace(/</g, '&lt;')}</p>
-                </div>`;
-            });
-        }
+        });
     } catch (err) {
         console.error(err);
+        box.innerHTML = '<p style="color:#b91c1c;text-align:center;">Network error loading messages.</p>';
     }
-        box.scrollTop = box.scrollHeight;
+    box.scrollTop = box.scrollHeight;
 }
 
 async function sendReply() {
@@ -4127,28 +4125,19 @@ async function sendReply() {
     const msg = (msgInput && msgInput.value.trim()) || '';
     if (!msg) return;
     try {
-        if (currentTicketId) {
-            const uid = doctorNumericUserId();
-            const res = await fetch('/api/support-ticket/' + encodeURIComponent(currentTicketId) + '/reply', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ senderId: uid, senderType: 'user', message: msg })
-            });
-            if ((await res.json()).success) {
-                msgInput.value = '';
-                await loadChatMessages();
-            }
-        } else if (currentLegacyTrackingId) {
-            const res = await fetch('/api/support/ticket/' + encodeURIComponent(currentLegacyTrackingId) + '/reply', {
+        if (!currentTicketId) return alert('Open a ticket first.');
+        const uid = doctorNumericUserId();
+        const res = await fetch('/api/support-ticket/' + encodeURIComponent(currentTicketId) + '/reply', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: msg, sender: 'doctor' })
+            body: JSON.stringify({ senderId: uid, senderType: 'user', message: msg })
         });
-            if ((await res.json()).success) {
-            msgInput.value = '';
-            await loadChatMessages();
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            return alert((data && data.error) || 'Could not send reply');
         }
-        }
+        msgInput.value = '';
+        await loadChatMessages();
     } catch (err) {
         console.error(err);
     }

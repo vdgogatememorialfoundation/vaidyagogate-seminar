@@ -8969,6 +8969,119 @@ function doctorSupportTicketLookupPayload(userRow, cb) {
     );
 }
 
+const SUPPORT_TICKET_LIST_COLS = `st.id, st.user_id, st.category, st.subject, st.description, st.priority, st.status,
+    st.attachment_path, st.created_at, st.updated_at, st.assigned_to_admin,
+    st.ticket_id AS ticket_id_raw, st.tracking_id,
+    COALESCE(NULLIF(TRIM(st.ticket_id), ''), NULLIF(TRIM(st.tracking_id), '')) AS ticket_id`;
+
+function resolveSupportTicketByRef(ticketRef, cb) {
+    const ref = String(ticketRef || '').trim();
+    if (!ref) return cb(new Error('Ticket id required'));
+    db.get(
+        `SELECT st.id, st.ticket_id, st.tracking_id, st.user_id, st.category, st.subject, st.description,
+                st.priority, st.status, st.created_at, st.updated_at, st.attachment_path,
+                u.first_name, u.last_name, u.email
+         FROM support_tickets st
+         LEFT JOIN users u ON st.user_id = u.id
+         WHERE TRIM(COALESCE(st.ticket_id, '')) = TRIM(?)
+            OR TRIM(COALESCE(st.tracking_id, '')) = TRIM(?)
+            OR CAST(st.id AS TEXT) = TRIM(?)`,
+        [ref, ref, ref],
+        cb
+    );
+}
+
+function canonicalTicketMessageId(ticketRow) {
+    if (!ticketRow) return '';
+    const tid = ticketRow.ticket_id && String(ticketRow.ticket_id).trim();
+    if (tid) return tid;
+    const trk = ticketRow.tracking_id && String(ticketRow.tracking_id).trim();
+    return trk || '';
+}
+
+function fetchTicketMessages(ticketRow, cb) {
+    const ids = [];
+    const canonical = canonicalTicketMessageId(ticketRow);
+    if (canonical) ids.push(canonical);
+    const rawTid = ticketRow.ticket_id && String(ticketRow.ticket_id).trim();
+    const rawTrk = ticketRow.tracking_id && String(ticketRow.tracking_id).trim();
+    if (rawTid && !ids.includes(rawTid)) ids.push(rawTid);
+    if (rawTrk && !ids.includes(rawTrk)) ids.push(rawTrk);
+
+    const loadNewMessages = (next) => {
+        if (!ids.length) return next(null, []);
+        const ph = ids.map(() => '?').join(',');
+        db.all(
+            `SELECT tm.id, tm.ticket_id, tm.sender_id, tm.sender_type, tm.message, tm.attachment_path, tm.created_at,
+                    u.first_name, u.last_name
+             FROM ticket_messages tm
+             LEFT JOIN users u ON tm.sender_id = u.id
+             WHERE tm.ticket_id IN (${ph})
+             ORDER BY tm.created_at ASC`,
+            ids,
+            (err, rows) => next(err, rows || [])
+        );
+    };
+
+    const loadLegacyMessages = (next) => {
+        if (!ticketRow.id) return next(null, []);
+        db.all(
+            `SELECT sm.id, sm.sender, sm.message, sm.created_at
+             FROM support_messages sm
+             WHERE sm.ticket_id = ?
+             ORDER BY sm.created_at ASC`,
+            [ticketRow.id],
+            (err, rows) => {
+                if (err && /does not exist|relation/i.test(String(err.message || ''))) {
+                    return next(null, []);
+                }
+                if (err) return next(err);
+                const mapped = (rows || []).map((m) => ({
+                    id: 'legacy_' + m.id,
+                    message: m.message,
+                    created_at: m.created_at,
+                    sender_type: String(m.sender || '').toLowerCase() === 'admin' ? 'admin' : 'user',
+                    first_name: String(m.sender || '').toLowerCase() === 'admin' ? 'Admin' : '',
+                    last_name: ''
+                }));
+                next(null, mapped);
+            }
+        );
+    };
+
+    loadNewMessages((e1, newMsgs) => {
+        if (e1) return cb(e1);
+        loadLegacyMessages((e2, legacyMsgs) => {
+            if (e2) return cb(e2);
+            const all = [...(newMsgs || []), ...(legacyMsgs || [])];
+            all.sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
+            if (!all.length && ticketRow.description) {
+                all.push({
+                    id: 'initial_description',
+                    message: ticketRow.description,
+                    created_at: ticketRow.created_at,
+                    sender_type: 'user',
+                    first_name: ticketRow.first_name || 'Doctor',
+                    last_name: ticketRow.last_name || ''
+                });
+            }
+            cb(null, all);
+        });
+    });
+}
+
+function getSupportTicketPayload(ticketRef, cb) {
+    resolveSupportTicketByRef(ticketRef, (err, ticket) => {
+        if (err) return cb(err);
+        if (!ticket) return cb(null, null);
+        fetchTicketMessages(ticket, (e2, messages) => {
+            if (e2) return cb(e2);
+            const tid = canonicalTicketMessageId(ticket);
+            cb(null, Object.assign({}, ticket, { ticket_id: tid, messages: messages || [] }));
+        });
+    });
+}
+
 function createSupportTicketRecord(opts, cb) {
     const uid = parseInt(opts.userId, 10);
     if (Number.isNaN(uid) || uid < 1 || uid > PG_INT_MAX) return cb(new Error('Invalid user'));
@@ -9109,32 +9222,24 @@ app.post('/api/admin/support-ticket/create', (req, res) => {
 app.get('/api/support-ticket/user/:userId', (req, res) => {
     const { userId } = req.params;
     db.all(
-        `SELECT *, COALESCE(ticket_id, tracking_id) AS ticket_id FROM support_tickets WHERE user_id = ? ORDER BY created_at DESC`,
+        `SELECT ${SUPPORT_TICKET_LIST_COLS} FROM support_tickets st WHERE st.user_id = ? ORDER BY st.created_at DESC`,
         [userId],
         (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(rows || []);
+            if (err) return res.status(500).json({ error: err.message });
+            res.json(rows || []);
         }
     );
 });
 
 // Get Ticket Details with Messages
 app.get('/api/support-ticket/:ticketId', (req, res) => {
-    const { ticketId } = req.params;
-    db.get(`SELECT st.*, u.first_name, u.last_name, u.email FROM support_tickets st 
-            LEFT JOIN users u ON st.user_id = u.id 
-            WHERE st.ticket_id = ? OR st.tracking_id = ?`, [ticketId, ticketId], (err, ticket) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
-        const tid = ticket.ticket_id || ticket.tracking_id;
-        
-        db.all(`SELECT tm.*, u.first_name, u.last_name FROM ticket_messages tm 
-                LEFT JOIN users u ON tm.sender_id = u.id 
-                WHERE tm.ticket_id = ? 
-                ORDER BY tm.created_at ASC`, [tid, tid], (err, messages) => {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json({ ...ticket, ticket_id: tid, messages: messages || [] });
-        });
+    getSupportTicketPayload(req.params.ticketId, (err, payload) => {
+        if (err) {
+            console.error('[support-ticket/get]', err.message);
+            return res.status(500).json({ error: err.message });
+        }
+        if (!payload) return res.status(404).json({ error: 'Ticket not found' });
+        res.json(payload);
     });
 });
 
@@ -9145,32 +9250,38 @@ app.post('/api/support-ticket/:ticketId/reply', (req, res) => {
     const msg = message && String(message).trim();
     if (!msg) return res.status(400).json({ error: 'Message is required' });
 
-    db.run(
-        `INSERT INTO ticket_messages (ticket_id, sender_id, sender_type, message, attachment_path) 
-            VALUES (?, ?, ?, ?, ?)`,
-        [ticketId, senderId, senderType, msg, attachment_path || null],
-        function (err) {
-            if (err) return res.status(500).json({ error: err.message });
-            const messageId = this.lastID;
+    resolveSupportTicketByRef(ticketId, (err, ticket) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+        const canonical = canonicalTicketMessageId(ticket);
 
-            db.run(
-                `UPDATE support_tickets SET updated_at = CURRENT_TIMESTAMP WHERE ticket_id = ? OR tracking_id = ?`,
-                [ticketId, ticketId],
-                () => {
-                    supportTicketNotify.notifySupportTicketReply(
-                        db,
-                        ticketId,
-                        senderType,
-                        msg,
-                        (nErr) => {
-                            if (nErr) console.warn('[support-ticket] reply notify:', nErr.message);
-                            res.json({ success: true, messageId });
-                        }
-                    );
-                }
-            );
-        }
-    );
+        db.run(
+            `INSERT INTO ticket_messages (ticket_id, sender_id, sender_type, message, attachment_path) 
+            VALUES (?, ?, ?, ?, ?)`,
+            [canonical, senderId, senderType, msg, attachment_path || null],
+            function (err2) {
+                if (err2) return res.status(500).json({ error: err2.message });
+                const messageId = this.lastID;
+
+                db.run(
+                    `UPDATE support_tickets SET updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+                    [ticket.id],
+                    () => {
+                        supportTicketNotify.notifySupportTicketReply(
+                            db,
+                            canonical,
+                            senderType,
+                            msg,
+                            (nErr) => {
+                                if (nErr) console.warn('[support-ticket] reply notify:', nErr.message);
+                                res.json({ success: true, messageId });
+                            }
+                        );
+                    }
+                );
+            }
+        );
+    });
 });
 
 // ==================== ADMIN E-TICKETS (lookup / generate / send) ====================
@@ -9388,7 +9499,7 @@ app.post('/api/admin/e-tickets/send', (req, res) => {
 // Admin: Get All Support Tickets
 app.get('/api/admin/support-tickets', (req, res) => {
     const { status, category, priority } = req.query;
-    let query = `SELECT st.*, COALESCE(st.ticket_id, st.tracking_id) AS ticket_id,
+    let query = `SELECT ${SUPPORT_TICKET_LIST_COLS},
                         u.first_name, u.last_name, u.email FROM support_tickets st 
                  LEFT JOIN users u ON st.user_id = u.id WHERE 1=1`;
     const params = [];
