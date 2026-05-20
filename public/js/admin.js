@@ -5006,19 +5006,8 @@ async function proxyInitiatePayment() {
         else if (markBtn) markBtn.classList.add('hidden');
         if (data.paymentType === 'razorpay_checkout' && data.razorpayOrder && data.keyId) {
             openProxyRazorpayCheckout(data);
-        } else if (data.paymentType === 'easebuzz_checkout' && data.paymentUrl) {
-            const w = window.open(data.paymentUrl, '_blank', 'noopener');
-            if (!w && confirm('Open Easebuzz payment in this tab?')) window.location.href = data.paymentUrl;
-        } else if (data.paymentType === 'cashfree_checkout' && data.paymentSessionId) {
-            openAdminCashfreeCheckout(data);
-        } else if (
-            (data.paymentType === 'payu_checkout' || data.paymentType === 'paytm_checkout') &&
-            data.formAction
-        ) {
-            submitAdminPgForm(data);
-        } else if (data.paymentType === 'phonepe_checkout' && data.paymentUrl) {
-            const w = window.open(data.paymentUrl, '_blank', 'noopener');
-            if (!w && confirm('Open PhonePe in this tab?')) window.location.href = data.paymentUrl;
+        } else if (data.paymentType && String(data.paymentType).endsWith('_checkout') && data.gateway !== 'razorpay') {
+            openAdminHostedCheckout(data, () => startProxyPaymentPoll());
         }
         if (data.pollRequired) startProxyPaymentPoll();
         else if (pollSt) pollSt.textContent = data.message || '';
@@ -5029,49 +5018,32 @@ async function proxyInitiatePayment() {
     }
 }
 
-function submitAdminPgForm(data) {
-    if (!data.formAction || !data.formFields) return alert('Payment form missing.');
-    const form = document.createElement('form');
-    form.method = 'POST';
-    form.action = data.formAction;
-    form.target = '_blank';
-    Object.entries(data.formFields).forEach(([k, v]) => {
-        const input = document.createElement('input');
-        input.type = 'hidden';
-        input.name = k;
-        input.value = v != null ? String(v) : '';
-        form.appendChild(input);
-    });
-    document.body.appendChild(form);
-    form.submit();
-    form.remove();
-}
-
-function loadAdminCashfreeSdk() {
-    return new Promise((resolve, reject) => {
-        if (typeof Cashfree !== 'undefined') return resolve();
-        const s = document.createElement('script');
-        s.src = 'https://sdk.cashfree.com/js/v3/cashfree.js';
-        s.async = true;
-        s.onload = () => resolve();
-        s.onerror = () => reject(new Error('Cashfree SDK failed to load'));
-        document.head.appendChild(s);
-    });
-}
-
-async function openAdminCashfreeCheckout(data) {
-    try {
-        await loadAdminCashfreeSdk();
-        const cashfree = Cashfree({
-            mode: data.cashfreeMode === 'production' ? 'production' : 'sandbox'
+function openAdminHostedCheckout(data, onPoll) {
+    if (data.formPost && data.formPost.action) {
+        const f = document.createElement('form');
+        f.method = 'POST';
+        f.action = data.formPost.action;
+        f.target = '_blank';
+        Object.entries(data.formPost.fields || {}).forEach(([k, v]) => {
+            const inp = document.createElement('input');
+            inp.type = 'hidden';
+            inp.name = k;
+            inp.value = String(v);
+            f.appendChild(inp);
         });
-        await cashfree.checkout({
-            paymentSessionId: data.paymentSessionId,
-            redirectTarget: '_blank'
-        });
-    } catch (e) {
-        alert(e.message || 'Could not open Cashfree checkout.');
+        document.body.appendChild(f);
+        f.submit();
+        setTimeout(() => f.remove(), 2000);
+        if (typeof onPoll === 'function') onPoll();
+        return true;
     }
+    if (data.paymentUrl) {
+        const w = window.open(data.paymentUrl, '_blank', 'noopener');
+        if (!w && confirm('Open payment page in this tab?')) window.location.href = data.paymentUrl;
+        if (typeof onPoll === 'function') onPoll();
+        return true;
+    }
+    return false;
 }
 
 function openAdminRazorpayCheckout(data, onPaid) {
@@ -8182,34 +8154,13 @@ async function initiateAdminCreateOrderPayment() {
             }
             return;
         }
-        if (data.paymentType === 'easebuzz_checkout' && data.paymentUrl) {
-            if (msg) msg.textContent = 'Opening Easebuzz payment page… allow pop-ups if prompted.';
-            const w = window.open(data.paymentUrl, '_blank', 'noopener');
-            if (!w) {
-                if (confirm('Open Easebuzz payment in this tab?')) window.location.href = data.paymentUrl;
+        if (data.paymentType && String(data.paymentType).endsWith('_checkout') && data.gateway !== 'razorpay') {
+            if (msg) msg.textContent = 'Opening payment page… allow pop-ups if prompted.';
+            const opened = openAdminHostedCheckout(data, () => pollAdminCreateOrderPayment());
+            if (!opened && msg) {
+                msg.style.color = '#b45309';
+                msg.textContent = 'Could not open payment page. Allow pop-ups and try again.';
             }
-            if (data.pollRequired) pollAdminCreateOrderPayment();
-            return;
-        }
-        if (data.paymentType === 'cashfree_checkout' && data.paymentSessionId) {
-            if (msg) msg.textContent = 'Opening Cashfree checkout…';
-            openAdminCashfreeCheckout(data);
-            if (data.pollRequired) pollAdminCreateOrderPayment();
-            return;
-        }
-        if (
-            (data.paymentType === 'payu_checkout' || data.paymentType === 'paytm_checkout') &&
-            data.formAction
-        ) {
-            submitAdminPgForm(data);
-            if (msg) msg.textContent = data.message || 'PayU/Paytm checkout opened.';
-            if (data.pollRequired) pollAdminCreateOrderPayment();
-            return;
-        }
-        if (data.paymentType === 'phonepe_checkout' && data.paymentUrl) {
-            const w = window.open(data.paymentUrl, '_blank', 'noopener');
-            if (!w && confirm('Open PhonePe in this tab?')) window.location.href = data.paymentUrl;
-            if (data.pollRequired) pollAdminCreateOrderPayment();
             return;
         }
         if (data.qrImageUrl && qrImg) {
@@ -8468,23 +8419,8 @@ async function adminRetryOrderPayment(registrationId, orderDbId) {
         __coOrderDbId = data.orderDbId;
         if (data.paymentType === 'razorpay_checkout' && data.razorpayOrder && data.keyId) {
             openAdminRazorpayCheckout(data, () => pollAdminCreateOrderPayment());
-        } else if (data.paymentType === 'easebuzz_checkout' && data.paymentUrl) {
-            const w = window.open(data.paymentUrl, '_blank', 'noopener');
-            if (!w && confirm('Open Easebuzz in this tab?')) window.location.href = data.paymentUrl;
-            pollAdminCreateOrderPayment();
-        } else if (data.paymentType === 'cashfree_checkout' && data.paymentSessionId) {
-            openAdminCashfreeCheckout(data);
-            pollAdminCreateOrderPayment();
-        } else if (
-            (data.paymentType === 'payu_checkout' || data.paymentType === 'paytm_checkout') &&
-            data.formAction
-        ) {
-            submitAdminPgForm(data);
-            pollAdminCreateOrderPayment();
-        } else if (data.paymentType === 'phonepe_checkout' && data.paymentUrl) {
-            const w = window.open(data.paymentUrl, '_blank', 'noopener');
-            if (!w && confirm('Open PhonePe in this tab?')) window.location.href = data.paymentUrl;
-            pollAdminCreateOrderPayment();
+        } else if (data.paymentType && String(data.paymentType).endsWith('_checkout') && data.gateway !== 'razorpay') {
+            openAdminHostedCheckout(data, () => pollAdminCreateOrderPayment());
         } else if (data.qrImageUrl) {
             const qrBlock = document.getElementById('co-qr-block');
             const qrImg = document.getElementById('co-qr-img');

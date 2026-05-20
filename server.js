@@ -4895,28 +4895,16 @@ function finishDoctorPayment(res, err, out) {
         body.order = out.razorpayOrder;
         body.mode = out.mode;
     }
-    if (out.paymentType === 'easebuzz_checkout') {
-        body.gateway = 'easebuzz';
-        body.mode = out.mode;
-        body.paymentUrl = out.paymentUrl;
-    }
-    if (out.paymentType === 'cashfree_checkout') {
-        body.gateway = 'cashfree';
-        body.mode = out.mode;
-        body.paymentSessionId = out.paymentSessionId;
-        body.cashfreeMode = out.cashfreeMode;
-        body.cashfreeOrderId = out.cashfreeOrderId;
-    }
-    if (out.paymentType === 'payu_checkout' || out.paymentType === 'paytm_checkout') {
+    if (out.paymentType && String(out.paymentType).endsWith('_checkout') && out.gateway !== 'razorpay') {
         body.gateway = out.gateway;
         body.mode = out.mode;
-        body.formAction = out.formAction;
-        body.formFields = out.formFields;
-    }
-    if (out.paymentType === 'phonepe_checkout') {
-        body.gateway = 'phonepe';
-        body.mode = out.mode;
-        body.paymentUrl = out.paymentUrl;
+        if (out.paymentUrl) body.paymentUrl = out.paymentUrl;
+        if (out.formPost) body.formPost = out.formPost;
+        if (out.easebuzzAccessKey) {
+            body.easebuzzAccessKey = out.easebuzzAccessKey;
+            body.easebuzzKey = out.easebuzzKey;
+            body.easebuzzEnv = out.easebuzzEnv;
+        }
     }
     res.json(body);
 }
