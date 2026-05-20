@@ -76,6 +76,15 @@ function updateCaseFilesSuccessUi(message) {
     setInlineUploadSuccess(el, text, message || '', !!message);
 }
 
+function regCertStatusLabel() {
+    const name = getRegCertFileLabel();
+    if (!name) return '';
+    if (window.__regCertServerUploaded) {
+        return 'Uploaded successfully — ' + name;
+    }
+    return 'Attached — ' + name + ' (uploads when you verify ID or submit)';
+}
+
 function updateRegistrationPreviewCertificate() {
     const qual = document.getElementById('reg-qual') && document.getElementById('reg-qual').value;
     const needsCert = qual === 'PG' || qual === 'Practicing Vaidya' || qual === 'Practitioner';
@@ -86,14 +95,335 @@ function updateRegistrationPreviewCertificate() {
     if (needsCert && certName) {
         if (certBox) certBox.classList.remove('hidden');
         if (certVal) {
-            certVal.textContent = 'Uploaded — ' + certName;
+            certVal.textContent = regCertStatusLabel();
             certVal.style.color = '#059669';
         }
-        if (pdfBadge) pdfBadge.classList.remove('hidden');
+        if (pdfBadge) {
+            pdfBadge.classList.remove('hidden');
+            pdfBadge.innerHTML =
+                '<i class="fas fa-file-circle-check"></i> ' +
+                (window.__regCertServerUploaded
+                    ? 'NCISM certificate uploaded — shown in PDF preview below'
+                    : 'NCISM certificate attached — shown in PDF preview below');
+        }
     } else {
         if (certBox) certBox.classList.add('hidden');
         if (pdfBadge) pdfBadge.classList.add('hidden');
     }
+    refreshRegistrationPreviewPdfIfVisible();
+}
+
+function refreshRegistrationPreviewPdfIfVisible() {
+    const step5 = document.getElementById('step-5');
+    if (!step5 || step5.classList.contains('hidden')) return;
+    const qrImg = document.getElementById('prev-qrcode');
+    if (qrImg && qrImg.src) {
+        generatePdfBlob(qrImg.complete ? qrImg : null);
+    } else {
+        generatePdfBlob(null);
+    }
+}
+
+window.__caseStagedUploadIds = null;
+window.__caseStagedFileMeta = [];
+
+function getCaseFormSnapshot() {
+    return {
+        fname: (document.getElementById('case-fname') || {}).value || '',
+        mname: (document.getElementById('case-mname') || {}).value || '',
+        lname: (document.getElementById('case-lname') || {}).value || '',
+        email: (document.getElementById('case-email') || {}).value || '',
+        phone: (document.getElementById('case-phone') || {}).value || '',
+        whatsapp: (document.getElementById('case-whatsapp') || {}).value || '',
+        category: (document.getElementById('case-category') || {}).value || '',
+        topic: (document.getElementById('case-topic') || {}).value || ''
+    };
+}
+
+function getCaseSelectedFileMeta() {
+    const inp = document.getElementById('case-files');
+    const list = [];
+    if (inp && inp.files) {
+        for (let i = 0; i < inp.files.length; i++) {
+            const f = inp.files[i];
+            list.push({
+                name: f.name,
+                size: f.size,
+                uploaded: !!(window.__caseStagedUploadIds && window.__caseStagedUploadIds.length)
+            });
+        }
+    }
+    if (window.__caseStagedFileMeta && window.__caseStagedFileMeta.length) {
+        return window.__caseStagedFileMeta.map((m) => ({
+            name: m.name,
+            size: m.size,
+            uploaded: true
+        }));
+    }
+    return list;
+}
+
+function renderCasePreviewSummary() {
+    const box = document.getElementById('case-prev-summary');
+    if (!box) return;
+    const f = getCaseFormSnapshot();
+    const files = getCaseSelectedFileMeta();
+    const PU = window.PortalUpload;
+    const fmt = PU && PU.formatBytes ? PU.formatBytes.bind(PU) : (n) => String(n);
+    let filesHtml = '';
+    if (files.length) {
+        filesHtml =
+            '<div style="margin-top:12px;padding-top:10px;border-top:1px solid #e2e8f0;"><strong style="color:#0f766e;">Documents</strong><ul style="margin:8px 0 0;padding-left:18px;font-size:0.88rem;">';
+        files.forEach((file) => {
+            const ok = file.uploaded;
+            filesHtml +=
+                '<li style="margin-bottom:6px;color:' +
+                (ok ? '#059669' : '#475569') +
+                ';">' +
+                (ok ? '<i class="fas fa-check-circle"></i> ' : '') +
+                escapeHtmlDoctor(file.name) +
+                ' (' +
+                fmt(file.size) +
+                ')' +
+                (ok ? ' — <strong>uploaded successfully</strong>' : ' — ready to upload') +
+                '</li>';
+        });
+        filesHtml += '</ul></div>';
+    }
+    box.innerHTML =
+        '<div class="preview-row"><span class="lbl">Program</span><span class="val">' +
+        escapeHtmlDoctor((activeCaseProgram && activeCaseProgram.title) || '—') +
+        '</span></div>' +
+        '<div class="preview-row"><span class="lbl">Name</span><span class="val">' +
+        escapeHtmlDoctor([f.fname, f.mname, f.lname].filter(Boolean).join(' ')) +
+        '</span></div>' +
+        '<div class="preview-row"><span class="lbl">Email / Phone</span><span class="val">' +
+        escapeHtmlDoctor(f.email + ' / ' + f.phone) +
+        '</span></div>' +
+        '<div class="preview-row"><span class="lbl">WhatsApp</span><span class="val">' +
+        escapeHtmlDoctor(f.whatsapp) +
+        '</span></div>' +
+        '<div class="preview-row"><span class="lbl">Category</span><span class="val">' +
+        escapeHtmlDoctor(f.category) +
+        '</span></div>' +
+        '<div class="preview-row"><span class="lbl">Case topic</span><span class="val">' +
+        escapeHtmlDoctor(f.topic) +
+        '</span></div>' +
+        filesHtml;
+    const badge = document.getElementById('case-pdf-docs-badge');
+    const badgeText = document.getElementById('case-pdf-docs-badge-text');
+    if (badge && badgeText && files.length) {
+        const uploadedCount = files.filter((x) => x.uploaded).length;
+        if (uploadedCount === files.length) {
+            badge.classList.remove('hidden');
+            badgeText.textContent =
+                uploadedCount + ' document(s) uploaded successfully — included in application PDF below';
+        } else if (uploadedCount > 0) {
+            badge.classList.remove('hidden');
+            badgeText.textContent = uploadedCount + ' of ' + files.length + ' document(s) uploaded';
+        } else {
+            badge.classList.add('hidden');
+        }
+    }
+}
+
+function escapeHtmlDoctor(s) {
+    return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function generateCasePreviewPdf() {
+    if (!window.jspdf) return;
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    const accent = [15, 118, 110];
+    const ink = [15, 23, 42];
+    const muted = [71, 85, 105];
+    const f = getCaseFormSnapshot();
+    const files = getCaseSelectedFileMeta();
+    const PU = window.PortalUpload;
+    const fmt = PU && PU.formatBytes ? PU.formatBytes.bind(PU) : (n) => String(n);
+
+    let y = pdfCongressHeader(doc, 'Case presentation — draft preview');
+    const drawSection = (title) => {
+        y = pdfCongressSectionTitle(doc, y + 4, title, accent, ink);
+    };
+    const drawTableRow = (label, value) => {
+        const lh = 6.2;
+        doc.setFontSize(9.5);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(...muted);
+        const lines = doc.splitTextToSize(String(value || '—'), 118);
+        doc.text(label, 18, y + 7);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...ink);
+        doc.text(lines, 72, y + 7);
+        y += Math.max(10, lines.length * lh);
+        doc.setDrawColor(226, 232, 240);
+        doc.line(14, y, 196, y);
+    };
+
+    drawSection('Program');
+    drawTableRow('Case program', (activeCaseProgram && activeCaseProgram.title) || '—');
+    drawSection('Applicant');
+    drawTableRow('Full name', [f.fname, f.mname, f.lname].filter(Boolean).join(' '));
+    drawTableRow('Email', f.email);
+    drawTableRow('Phone', f.phone);
+    drawTableRow('WhatsApp', f.whatsapp);
+    drawSection('Presentation');
+    drawTableRow('Category', f.category);
+    drawTableRow('Case topic', f.topic);
+    drawSection('Documents submitted');
+    if (!files.length) {
+        drawTableRow('Files', 'None attached');
+    } else {
+        files.forEach((file, idx) => {
+            drawTableRow(
+                'File ' + (idx + 1),
+                (file.uploaded ? 'Uploaded successfully — ' : 'Attached — ') +
+                    file.name +
+                    ' (' +
+                    fmt(file.size) +
+                    ')'
+            );
+        });
+    }
+
+    y += 8;
+    doc.setFontSize(11);
+    doc.setTextColor(180, 83, 9);
+    doc.setFont('helvetica', 'bold');
+    doc.text('DRAFT PREVIEW — confirm and submit', 105, y, { align: 'center' });
+
+    const pdfBlob = doc.output('blob');
+    if (currentCasePdfBlobUrl) URL.revokeObjectURL(currentCasePdfBlobUrl);
+    currentCasePdfBlobUrl = URL.createObjectURL(pdfBlob);
+    const iframe = document.getElementById('case-pdf-viewer');
+    if (iframe) iframe.src = currentCasePdfBlobUrl;
+}
+
+async function validateCaseFormBeforePreviewOrSubmit() {
+    const uid = doctorUserIdOrAlert();
+    if (!uid) return null;
+    if (!activeCaseProgramId) return alert('Select a case program first.'), null;
+    const form = getCaseFormSnapshot();
+    if (typeof validateRegistrationNamesClient === 'function') {
+        const ne = validateRegistrationNamesClient(form);
+        if (ne) return alert(ne), null;
+    }
+    if (typeof validateEmailClient === 'function' && String(form.email || '').trim()) {
+        const ev = validateEmailClient(form.email, 'Email');
+        if (!ev.valid) return alert(ev.message), null;
+        form.email = ev.cleanedEmail;
+    }
+    if (typeof validatePhoneClient === 'function' && String(form.phone || '').trim()) {
+        const pv = validatePhoneClient(form.phone, 'Phone');
+        if (!pv.valid) return alert(pv.message), null;
+        form.phone = pv.cleanedPhone;
+    }
+    if (typeof validatePhoneClient === 'function' && String(form.whatsapp || '').trim()) {
+        const wv = validatePhoneClient(form.whatsapp, 'WhatsApp');
+        if (!wv.valid) return alert(wv.message), null;
+        form.whatsapp = wv.cleanedPhone;
+    }
+    const fileInput = document.getElementById('case-files');
+    const maxFiles = (activeCaseProgram && activeCaseProgram.maxFilesPerSubmission) || 5;
+    const filesField = (activeCaseProgram && activeCaseProgram.formConfig && activeCaseProgram.formConfig.fields || []).find(
+        (f) => f.key === 'files'
+    );
+    const filesRequired = !filesField || filesField.enabled === false ? false : filesField.required !== false;
+    if (
+        filesRequired &&
+        !fileInput?.files?.length &&
+        !(window.__caseStagedUploadIds && window.__caseStagedUploadIds.length)
+    ) {
+        return alert('Select at least one file'), null;
+    }
+    if (fileInput?.files?.length > maxFiles) return alert('Maximum ' + maxFiles + ' files'), null;
+    return { uid, form, fileInput };
+}
+
+async function goToCasePreview() {
+    const validated = await validateCaseFormBeforePreviewOrSubmit();
+    if (!validated) return;
+    const { uid, fileInput } = validated;
+    const uploadCfg = await ensureCaseUploadConfig(activeCaseProgramId);
+    const maxMb = effectiveCaseMaxMb(activeCaseProgram, uploadCfg);
+    const progressEl = document.getElementById('case-upload-progress');
+    const setProgress = (msg) => {
+        if (progressEl) {
+            progressEl.style.display = msg ? 'block' : 'none';
+            progressEl.textContent = msg || '';
+        }
+    };
+
+    window.__caseStagedUploadIds = null;
+    window.__caseStagedFileMeta = [];
+
+    if (fileInput?.files?.length) {
+        for (let i = 0; i < fileInput.files.length; i++) {
+            const raw = fileInput.files[i];
+            if (raw.size > maxMb * 1024 * 1024) {
+                return alert('Each file must be under ' + maxMb + ' MB ("' + raw.name + '").');
+            }
+        }
+        const useR2 = uploadCfg && window.CaseR2Upload && CaseR2Upload.isEnabled(uploadCfg);
+        if (useR2) {
+            try {
+                setProgress('Uploading documents… 0%');
+                window.__caseStagedUploadIds = await CaseR2Upload.uploadFiles(fileInput.files, {
+                    userId: uid,
+                    caseProgramId: activeCaseProgramId,
+                    onFileProgress: (idx, total, name, pct) => {
+                        setProgress('Uploading ' + (idx + 1) + '/' + total + ': ' + name + ' — ' + pct + '%');
+                    }
+                });
+                window.__caseStagedFileMeta = Array.from(fileInput.files).map((f) => ({
+                    name: f.name,
+                    size: f.size
+                }));
+                updateCaseFilesSuccessUi(
+                    'All ' + window.__caseStagedUploadIds.length + ' document(s) uploaded successfully.'
+                );
+            } catch (e) {
+                setProgress('');
+                updateCaseFilesSuccessUi('');
+                return alert(e.message || 'Upload failed');
+            }
+            setProgress('');
+        } else {
+            window.__caseStagedFileMeta = Array.from(fileInput.files).map((f) => ({
+                name: f.name,
+                size: f.size,
+                uploaded: false
+            }));
+        }
+    }
+
+    document.getElementById('case-step-form').classList.add('hidden');
+    document.getElementById('case-step-preview').classList.remove('hidden');
+    renderCasePreviewSummary();
+    generateCasePreviewPdf();
+}
+
+function backFromCasePreview() {
+    document.getElementById('case-step-preview').classList.add('hidden');
+    document.getElementById('case-step-form').classList.remove('hidden');
+}
+
+function cancelCaseApplication() {
+    window.__caseStagedUploadIds = null;
+    window.__caseStagedFileMeta = [];
+    const stepForm = document.getElementById('case-step-form');
+    const stepPrev = document.getElementById('case-step-preview');
+    if (stepForm) stepForm.classList.remove('hidden');
+    if (stepPrev) stepPrev.classList.add('hidden');
+    activeCaseProgramId = null;
+    activeCaseProgram = null;
+    loadCaseProgramsGrid();
 }
 
 async function prepareUploadFileOrAlert(file) {
@@ -1858,6 +2188,12 @@ async function loadCaseProgramsGrid() {
 
 async function startCaseApplication(programId) {
     activeCaseProgramId = programId;
+    window.__caseStagedUploadIds = null;
+    window.__caseStagedFileMeta = [];
+    const stepForm = document.getElementById('case-step-form');
+    const stepPrev = document.getElementById('case-step-preview');
+    if (stepForm) stepForm.classList.remove('hidden');
+    if (stepPrev) stepPrev.classList.add('hidden');
     const prog = activeCasePrograms.find((p) => Number(p.id) === Number(programId));
     activeCaseProgram = prog || null;
     const grid = document.getElementById('case-programs-grid');
@@ -1902,12 +2238,6 @@ async function startCaseApplication(programId) {
     } catch (e) {
         console.error(e);
     }
-}
-
-function cancelCaseApplication() {
-    activeCaseProgramId = null;
-    activeCaseProgram = null;
-    loadCaseProgramsGrid();
 }
 
 async function initDoctorVolunteerNav() {
@@ -2013,7 +2343,9 @@ async function submitCasePresentation() {
         (f) => f.key === 'files'
     );
     const filesRequired = !filesField || filesField.enabled === false ? false : filesField.required !== false;
-    if (filesRequired && !fileInput?.files?.length) return alert('Select at least one file');
+    if (filesRequired && !fileInput?.files?.length && !(window.__caseStagedUploadIds && window.__caseStagedUploadIds.length)) {
+        return alert('Select at least one file');
+    }
     if (fileInput?.files?.length > maxFiles) return alert('Maximum ' + maxFiles + ' files');
 
     const progressEl = document.getElementById('case-upload-progress');
@@ -2024,8 +2356,11 @@ async function submitCasePresentation() {
         }
     };
 
-    let uploadedFileIds = [];
-    if (fileInput?.files?.length) {
+    let uploadedFileIds =
+        window.__caseStagedUploadIds && window.__caseStagedUploadIds.length
+            ? window.__caseStagedUploadIds.slice()
+            : [];
+    if (!uploadedFileIds.length && fileInput?.files?.length) {
         for (let i = 0; i < fileInput.files.length; i++) {
             const raw = fileInput.files[i];
             if (raw.size > maxMb * 1024 * 1024) {
@@ -2715,14 +3050,16 @@ function generatePdfBlob(qrImgElement) {
     const qual = document.getElementById('reg-qual').value;
     if (qual === 'PG' || qual === 'Practicing Vaidya' || qual === 'Practitioner') {
         drawTableRow('Registration ID', document.getElementById('reg-ncism').value);
-        const certName = getRegCertFileLabel();
-        drawTableRow(
-            'NCISM certificate',
-            certName ? 'Uploaded — ' + certName : 'Not attached'
-        );
     }
     drawTableRow('College', document.getElementById('reg-college').value);
     drawTableRow('College city / state', `${document.getElementById('reg-ccity').value}, ${document.getElementById('reg-cstate').value}`);
+    drawSection('Documents uploaded');
+    const certDoc = regCertStatusLabel();
+    if (qual === 'PG' || qual === 'Practicing Vaidya' || qual === 'Practitioner') {
+        drawTableRow('NCISM certificate', certDoc || 'Not attached');
+    } else {
+        drawTableRow('NCISM certificate', 'Not required for this qualification');
+    }
 
     const terms = window.__seminarTermsText || '';
     if (terms) {
@@ -2922,6 +3259,7 @@ async function verifyNcism() {
                     'Could not read number from file automatically — your application will be reviewed manually.';
             }
         }
+        window.__regCertServerUploaded = true;
         updateRegCertUploadUi({ uploaded: true });
         updateRegistrationPreviewCertificate();
         if (check.status === 'match') {
@@ -3050,6 +3388,7 @@ async function submitApplication() {
         }
         if (result.success) {
             if (certFile) {
+                window.__regCertServerUploaded = true;
                 updateRegCertUploadUi({ uploaded: true });
             }
             alert(`Application submitted successfully. Your application number is ${result.applicationNo}. You can track status under View Applications.`);
@@ -4932,7 +5271,10 @@ function initDoctorUploadHints() {
     const PU = window.PortalUpload;
     const regCertInp = document.getElementById('reg-cert-file');
     if (regCertInp) {
-        regCertInp.addEventListener('change', () => updateRegCertUploadUi({ uploaded: false }));
+        regCertInp.addEventListener('change', () => {
+        window.__regCertServerUploaded = false;
+        updateRegCertUploadUi({ uploaded: false });
+    });
     }
     if (!PU) return;
     PU.bindFileHint(regCertInp, document.getElementById('reg-cert-hint'));
