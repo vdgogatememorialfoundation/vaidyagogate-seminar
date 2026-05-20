@@ -167,37 +167,9 @@
     margin-left: auto;
 }
 
-/* Desktop: nav sits in header row */
+/* Desktop nav layout — see vgmf-responsive.css */
 @media (min-width: 901px) {
-    .cg-header {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-    }
-    .cg-header-inner {
-        flex: 1 1 auto;
-        min-width: 0;
-    }
-    #cg-nav.cg-nav {
-        position: static;
-        width: auto;
-        height: auto;
-        max-height: none;
-        transform: none;
-        visibility: visible;
-        pointer-events: auto;
-        flex-direction: row;
-        flex-wrap: wrap;
-        justify-content: flex-end;
-        padding: 0;
-        margin-left: auto;
-        box-shadow: none;
-        overflow: visible;
-    }
     .cg-menu-toggle {
-        display: none !important;
-    }
-    .cg-nav-backdrop {
         display: none !important;
     }
 }
@@ -1085,102 +1057,14 @@
 @media (max-width: 1024px) {
     .cg-quick-grid { grid-template-columns: repeat(3, 1fr); }
 }
-@media (max-width: 768px) {
+@media (max-width: 900px) {
     .congress-site { overflow-x: clip; }
-    .cg-site-top {
-        position: sticky;
-        top: 0;
-        z-index: 1001;
-        padding-top: env(safe-area-inset-top, 0px);
-        box-shadow: 0 4px 20px rgba(15, 23, 42, 0.08);
-    }
-    .cg-header {
-        position: relative;
-        top: auto;
-    }
-    .vgmf-redesign .cg-header {
-        padding-top: 0;
-    }
     .cg-utility {
         font-size: 0.8rem;
         padding: 10px 0;
         border-bottom: 1px solid var(--cg-line);
     }
-    .cg-utility-inner {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 10px;
-        padding: 0 16px;
-    }
-    .cg-utility-contacts {
-        display: flex;
-        flex-direction: column;
-        align-items: stretch;
-        gap: 8px;
-        width: 100%;
-        order: 1;
-    }
-    .cg-utility-item {
-        width: 100%;
-        font-size: 0.85rem;
-        line-height: 1.35;
-    }
-    .cg-utility-email,
-    .cg-utility-phone {
-        display: flex !important;
-    }
-    .cg-utility-link {
-        flex: 1;
-        min-width: 0;
-        font-size: 0.9rem;
-    }
-    .cg-utility-auth {
-        display: none !important;
-    }
-    .cg-header-inner { padding: 10px 16px; gap: 10px; }
-    .cg-logo-text h1 { font-size: 0.82rem; max-width: 58vw; line-height: 1.2; }
-    .cg-logo-text p { font-size: 0.6rem; letter-spacing: 0.1em; }
     .cg-menu-toggle { display: flex; align-items: center; justify-content: center; }
-    #cg-nav.cg-nav {
-        position: fixed;
-        top: 0;
-        right: 0;
-        bottom: 0;
-        left: auto;
-        width: min(300px, 88vw);
-        max-width: 100%;
-        height: 100dvh;
-        margin: 0;
-        background: var(--cg-white);
-        flex-direction: column;
-        align-items: stretch;
-        padding: calc(env(safe-area-inset-top, 0px) + 16px) 18px 24px;
-        gap: 4px;
-        transform: translate3d(100%, 0, 0);
-        transition: transform 0.28s var(--cg-ease), visibility 0.28s;
-        visibility: hidden;
-        pointer-events: none;
-        box-shadow: -8px 0 32px rgba(0, 0, 0, 0.15);
-        z-index: 10050;
-        overflow-y: auto;
-        -webkit-overflow-scrolling: touch;
-    }
-    #cg-nav.cg-nav a {
-        min-height: 48px;
-        display: flex;
-        align-items: center;
-        width: 100%;
-        justify-content: flex-start;
-    }
-    #cg-nav.cg-nav.mobile-open {
-        transform: translate3d(0, 0, 0);
-        visibility: visible;
-        pointer-events: auto;
-    }
-    .cg-nav-backdrop.open {
-        display: block;
-        z-index: 10040;
-    }
     .congress-hero { min-height: min(72vh, 500px); }
     .congress-hero-content { padding: 36px 16px 80px; }
     .congress-hero-content h2 { font-size: clamp(1.65rem, 7vw, 2.25rem); }

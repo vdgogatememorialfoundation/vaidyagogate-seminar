@@ -12,17 +12,14 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="/css/vgmf-site.css">
     <link rel="stylesheet" href="/css/vgmf-congress.css">
-    <link rel="stylesheet" href="/css/vgmf-home-redesign.css">
-    <link rel="stylesheet" href="/css/vgmf-public-premium.css">
-    <link rel="stylesheet" href="/css/vgmf-mobile-portal.css">
+    <link rel="stylesheet" href="/css/vgmf-responsive.css?v=20260520b">
     <script src="/js/portal-datetime.js"></script>
 </head>
-<body class="congress-site vgmf-redesign">
+<body class="congress-site">
     <a href="#main-content" class="vg-skip-link">Skip to main content</a>
-    <div class="vg-scroll-progress" id="vg-scroll-progress" aria-hidden="true"></div>
     <div id="site-preloader" aria-hidden="true"><div class="preloader-ring"></div><p style="color:var(--muted);font-weight:600;">Loading seminar portal…</p></div>
 
-    <div class="cg-site-top" id="cg-site-top">
+    <div class="cg-shell" id="cg-site-top">
     <div class="cg-utility" aria-label="Contact and account">
         <div class="cg-utility-inner">
             <div class="cg-utility-contacts">
@@ -47,34 +44,34 @@
         </div>
     </div>
 
-    <header class="cg-header" id="cg-header">
-        <div class="cg-header-inner">
-            <a href="#" class="cg-logo-zone" onclick="showSection('home'); return false;">
-                <div data-site-logo data-logo-height="52px" data-logo-width="52px" data-logo-fallback="icon"><i class="fas fa-leaf" style="font-size:1.5rem;color:#0f766e;"></i></div>
-                <div class="cg-logo-text">
-                    <h1>Vaidya Gogate Memorial Foundation</h1>
-                    <p>National Seminar Portal</p>
-                </div>
-            </a>
-            <div class="vg-header-actions">
-                <button type="button" class="vg-btn-icon" id="vg-search-open" aria-label="Search site"><i class="fas fa-search"></i></button>
+    <div class="cg-header-row">
+        <header class="cg-header" id="cg-header">
+            <div class="cg-header-inner">
+                <a href="#" class="cg-logo-zone" onclick="showSection('home'); return false;">
+                    <div data-site-logo data-logo-height="48px" data-logo-width="48px" data-logo-fallback="icon"><i class="fas fa-leaf" style="font-size:1.5rem;color:#0f766e;"></i></div>
+                    <div class="cg-logo-text">
+                        <h1>Vaidya Gogate Memorial Foundation</h1>
+                        <p>National Seminar Portal</p>
+                    </div>
+                </a>
+                <button type="button" class="cg-menu-toggle" id="cg-menu-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="cg-nav"><i class="fas fa-bars"></i></button>
             </div>
-            <button type="button" class="cg-menu-toggle" id="cg-menu-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="cg-nav"><i class="fas fa-bars"></i></button>
-        </div>
-        <nav class="cg-nav" id="cg-nav" aria-label="Site menu">
+        </header>
+        <nav class="cg-nav" id="cg-nav" aria-label="Site menu" aria-hidden="true">
+            <button type="button" class="cg-nav-close" id="cg-nav-close" aria-label="Close menu"><i class="fas fa-times"></i></button>
             <a href="#" data-nav-section="home" class="active">Home</a>
             <a href="#" data-nav-section="about">Foundation</a>
             <a href="#" data-nav-section="schedule">Agenda</a>
             <a href="#" data-nav-section="gallery">Gallery</a>
-            <a href="#" id="nav-verify" data-nav-section="verify"><i class="fas fa-shield-check" aria-hidden="true"></i> Delegates</a>
-            <a href="/verify-certificate.html"><i class="fas fa-award" aria-hidden="true"></i> Certificate</a>
+            <a href="#" id="nav-verify" data-nav-section="verify">Delegates</a>
+            <a href="/verify-certificate.html">Certificate</a>
             <a href="#" data-nav-section="contact">Contact</a>
-            <a href="#" onclick="openAuthModal('login'); return false;"><i class="fas fa-user" aria-hidden="true"></i> Sign in</a>
+            <a href="#" onclick="openAuthModal('login'); return false;">Sign in</a>
             <a id="nav-wix-home" href="https://www.vaidyagogate.org" target="_blank" rel="noopener" class="hidden">Main site</a>
             <a href="/doctor.html">Portal</a>
             <a href="/?register=1" class="cg-btn-register" data-portal-auth="signup" onclick="openRegisterModal(); return false;">Create account</a>
         </nav>
-    </header>
+    </div>
     </div>
     <div class="cg-nav-backdrop" id="cg-nav-backdrop" aria-hidden="true"></div>
 
@@ -101,63 +98,6 @@
     <section class="vg-stats-strip" aria-label="Seminar highlights">
         <div class="vg-stats-grid" id="vg-stats-grid">
             <div class="vg-stat"><strong>…</strong><span>Loading</span></div>
-        </div>
-    </section>
-
-    <section class="vgmf-section" id="experience-pillars" aria-label="Experience pillars">
-        <div class="section-head">
-            <h2>Designed for a seamless delegate experience</h2>
-            <p>Every step is structured to keep registration, onboarding, and event participation clear and stress-free.</p>
-        </div>
-        <div class="cards-grid">
-            <article class="feature-card">
-                <div class="card-icon"><i class="fas fa-route"></i></div>
-                <h3>Single guided flow</h3>
-                <p>Account creation, profile completion, payment, and ticket access follow one logical path.</p>
-            </article>
-            <article class="feature-card">
-                <div class="card-icon"><i class="fas fa-shield-alt"></i></div>
-                <h3>Verified confidence</h3>
-                <p>Delegate and certificate checks keep records authentic for institutions and attendees.</p>
-            </article>
-            <article class="feature-card">
-                <div class="card-icon"><i class="fas fa-mobile-alt"></i></div>
-                <h3>Mobile first interactions</h3>
-                <p>Fast loading sections, clear actions, and responsive controls reduce friction on any screen.</p>
-            </article>
-            <article class="feature-card">
-                <div class="card-icon"><i class="fas fa-hand-holding-heart"></i></div>
-                <h3>Support-ready touchpoints</h3>
-                <p>Contact and support channels are visible throughout key pages for quick resolution.</p>
-            </article>
-        </div>
-    </section>
-
-    <section class="vg-how-section" aria-labelledby="vg-how-title">
-        <span class="vg-section-label">Registration journey</span>
-        <h2 id="vg-how-title">How it works</h2>
-        <p>Complete your seminar journey in one streamlined flow: profile, verification, payment, e-ticket, and certificate readiness.</p>
-        <div class="vg-steps">
-            <article class="vg-step">
-                <div class="vg-step-num">1</div>
-                <h3>Create account</h3>
-                <p>Sign up with email and WhatsApp verification on the secure doctor portal.</p>
-            </article>
-            <article class="vg-step">
-                <div class="vg-step-num">2</div>
-                <h3>Apply &amp; pay</h3>
-                <p>Submit your seminar application, complete payment, and track status in real time.</p>
-            </article>
-            <article class="vg-step">
-                <div class="vg-step-num">3</div>
-                <h3>E-ticket QR</h3>
-                <p>Download your printable e-ticket with QR code for venue entry scanning.</p>
-            </article>
-            <article class="vg-step">
-                <div class="vg-step-num">4</div>
-                <h3>Certificate</h3>
-                <p>After check-in, receive your e-certificate when approved by the foundation.</p>
-            </article>
         </div>
     </section>
 
@@ -435,18 +375,6 @@
         </div>
         
     <div id="cg-speaker-modal" class="cg-modal" aria-hidden="true"><div class="cg-modal-panel"><button type="button" class="cg-modal-close" id="cg-speaker-modal-close">&times;</button><div id="cg-speaker-modal-body"></div></div></div>
-    <div id="vg-search-modal" class="vg-search-modal" aria-hidden="true" role="dialog" aria-label="Search site">
-        <div class="vg-search-panel">
-            <div class="vg-search-head">
-                <input type="search" id="vg-search-input" placeholder="Search pages (Ctrl+K)" autocomplete="off" aria-label="Search">
-                <button type="button" class="vg-btn-icon" id="vg-search-close" aria-label="Close search"><i class="fas fa-times"></i></button>
-            </div>
-            <div class="vg-search-results" id="vg-search-results"></div>
-        </div>
-    </div>
-
-    <button type="button" class="vg-back-top" id="vg-back-top" aria-label="Back to top"><i class="fas fa-arrow-up"></i></button>
-
     <footer class="footer">
         <div class="footer-container">
             <div class="footer-col">
@@ -499,8 +427,8 @@
     <script src="/js/portal-content-protection.js"></script>
     <script src="/js/portal-scrolling-announcements.js"></script>
     <script src="/js/vgmf-home.js"></script>
-    <script src="/js/vgmf-congress.js"></script>
-    <script src="/js/vgmf-home-ui.js"></script>
+    <script src="/js/vgmf-congress.js?v=20260520b"></script>
+    <script src="/js/vgmf-home-stats.js"></script>
     <script src="/js/vgmf-marketing.js"></script>
     <script src="/js/otp-ui.js"></script>
     <script src="/js/http-json.js"></script>

@@ -1,0 +1,459 @@
+/**
+ * Mobile-first responsive layer — load last.
+ * Fixes nav drawer, full-width layout, touch targets on all viewports.
+ */
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+}
+
+body.congress-site,
+body.verify-page {
+    margin: 0;
+    overflow-x: hidden;
+    width: 100%;
+    max-width: 100vw;
+}
+
+.vg-skip-link {
+    position: absolute;
+    left: -9999px;
+    top: auto;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+}
+
+.vg-skip-link:focus {
+    position: fixed;
+    left: 16px;
+    top: 16px;
+    z-index: 20000;
+    width: auto;
+    height: auto;
+    padding: 12px 16px;
+    background: #0f766e;
+    color: #fff;
+    border-radius: 8px;
+    font-weight: 700;
+    text-decoration: none;
+}
+
+body.verify-page .cv-wrap {
+    width: 100%;
+    max-width: 100%;
+    padding: 16px;
+    box-sizing: border-box;
+}
+
+body.verify-page .cv-card,
+body.verify-page .cv-countdown-grid {
+    width: 100%;
+    max-width: 100%;
+}
+
+img,
+video,
+svg {
+    max-width: 100%;
+    height: auto;
+}
+
+.cg-shell {
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    background: #fff;
+    padding-top: env(safe-area-inset-top, 0);
+    box-shadow: 0 2px 16px rgba(15, 23, 42, 0.06);
+}
+
+.cg-utility-inner {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 8px 16px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 16px;
+}
+
+.cg-utility-contacts {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 14px;
+    min-width: 0;
+    flex: 1 1 200px;
+}
+
+.cg-utility-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.8rem;
+    min-width: 0;
+}
+
+.cg-utility-link {
+    word-break: break-all;
+}
+
+.cg-header-row {
+    max-width: 1280px;
+    margin: 0 auto;
+    width: 100%;
+}
+
+.cg-header-inner {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    width: 100%;
+    min-width: 0;
+}
+
+.cg-logo-zone {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.cg-logo-text h1 {
+    font-size: clamp(0.78rem, 3.5vw, 1.05rem);
+    line-height: 1.25;
+    overflow-wrap: anywhere;
+}
+
+.cg-menu-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    margin-left: auto;
+}
+
+/* Mobile / tablet: nav is off-canvas overlay, never in document flow */
+@media (max-width: 900px) {
+    .cg-utility-auth {
+        display: none !important;
+    }
+
+    .cg-utility-inner {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .cg-utility-contacts {
+        flex-direction: column;
+        align-items: stretch;
+        width: 100%;
+    }
+
+    .cg-utility-item {
+        width: 100%;
+        font-size: 0.88rem;
+    }
+
+    /* Nav/backdrop must sit on body (see vgmf-congress.js) — below z-index avoids blocking drawer */
+    #cg-nav.cg-nav {
+        display: none !important;
+        position: fixed;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: auto;
+        width: min(300px, 88vw);
+        height: 100dvh;
+        margin: 0;
+        padding: calc(env(safe-area-inset-top, 0px) + 56px) 18px 24px;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 4px;
+        background: #fff;
+        box-shadow: -8px 0 32px rgba(0, 0, 0, 0.18);
+        z-index: 10002;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+        transform: none;
+        visibility: visible;
+        pointer-events: auto;
+        touch-action: manipulation;
+    }
+
+    #cg-nav.cg-nav.mobile-open {
+        display: flex !important;
+    }
+
+    .cg-nav-backdrop {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.45);
+        z-index: 10001;
+        pointer-events: auto;
+        touch-action: manipulation;
+    }
+
+    .cg-nav-backdrop.open {
+        display: block;
+    }
+
+    body.cg-nav-open .cg-menu-toggle {
+        position: relative;
+        z-index: 10003;
+    }
+
+    .cg-nav-close {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: absolute;
+        top: calc(env(safe-area-inset-top, 0px) + 12px);
+        right: 14px;
+        width: 44px;
+        height: 44px;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        background: #fff;
+        color: #0f766e;
+        font-size: 1.25rem;
+        cursor: pointer;
+        touch-action: manipulation;
+    }
+
+    #cg-nav.cg-nav a {
+        min-height: 48px;
+        display: flex;
+        align-items: center;
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    body.cg-nav-open {
+        overflow: hidden;
+    }
+}
+
+/* Desktop: horizontal nav in header row */
+@media (min-width: 901px) {
+    .cg-header-row {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 0 20px 12px;
+    }
+
+    .cg-header {
+        flex: 1 1 auto;
+        min-width: 0;
+        border: none;
+        box-shadow: none;
+        position: static;
+    }
+
+    .cg-header-inner {
+        padding: 12px 0;
+    }
+
+    .cg-menu-toggle {
+        display: none !important;
+    }
+
+    #cg-nav.cg-nav {
+        display: flex !important;
+        position: static;
+        width: auto;
+        height: auto;
+        margin: 0;
+        padding: 0;
+        box-shadow: none;
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 6px;
+        overflow: visible;
+    }
+
+    .cg-nav-backdrop,
+    .cg-nav-close {
+        display: none !important;
+    }
+}
+
+/* Content: single column, full width */
+.congress-hero,
+.vg-stats-strip,
+.vgmf-section,
+.main-content,
+.cg-ticker-inner,
+#countdown-region,
+.footer-container {
+    width: 100%;
+    max-width: 100%;
+}
+
+.vg-stats-strip {
+    max-width: 1280px;
+    margin: 20px auto 0;
+    padding: 0 16px;
+}
+
+.vg-stats-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    padding: 16px;
+    max-width: 1280px;
+    margin: 0 auto;
+    background: linear-gradient(135deg, #ecfdf5 0%, #fff 50%, #fff7ed 100%);
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    box-shadow: 0 8px 28px rgba(15, 23, 42, 0.08);
+}
+
+.vg-stat {
+    text-align: center;
+    padding: 8px;
+}
+
+.vg-stat strong {
+    display: block;
+    font-size: clamp(1.35rem, 4vw, 1.85rem);
+    font-weight: 800;
+    color: #0f766e;
+    line-height: 1.1;
+}
+
+.vg-stat span {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+}
+
+@media (min-width: 640px) {
+    .vg-stats-grid {
+        grid-template-columns: repeat(4, 1fr);
+    }
+}
+
+.congress-site .cards-grid,
+.congress-site .home-split,
+.congress-site .speakers-grid,
+.congress-site .cg-quick-grid,
+.congress-site .contact-grid {
+    grid-template-columns: 1fr;
+}
+
+@media (min-width: 768px) {
+    .congress-site .cards-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    .congress-site .home-split {
+        grid-template-columns: 1.2fr 0.8fr;
+    }
+    .congress-site .speakers-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (min-width: 1024px) {
+    .congress-site .cards-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+    .congress-site .speakers-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+.congress-hero {
+    min-height: min(70vh, 520px);
+}
+
+.congress-hero-content {
+    padding: 32px 16px 72px;
+}
+
+.congress-hero-actions {
+    flex-direction: column;
+    width: 100%;
+    max-width: 320px;
+}
+
+.congress-hero-actions a {
+    width: 100%;
+    min-height: 48px;
+    justify-content: center;
+}
+
+.congress-site .main-content {
+    padding: 24px 16px 64px;
+}
+
+.congress-site .form-group input,
+.congress-site .form-group textarea,
+.congress-site .form-group select {
+    font-size: 16px;
+    min-height: 48px;
+}
+
+.cg-ticker,
+.cg-ticker-inner,
+.cg-ticker-viewport {
+    max-width: 100%;
+    overflow: hidden;
+}
+
+.cg-ticker-track {
+    max-width: 100%;
+}
+
+.cg-fab-register {
+    right: max(12px, env(safe-area-inset-right, 0px));
+    bottom: max(16px, env(safe-area-inset-bottom, 0px));
+    min-height: 48px;
+    z-index: 900;
+}
+
+/* Modals & auth */
+.modal-content,
+.cg-modal-panel {
+    width: min(100%, 440px);
+    max-height: min(90dvh, 720px);
+    overflow-y: auto;
+}
+
+@media (max-width: 480px) {
+    .cg-utility-date {
+        display: none;
+    }
+    .vg-stats-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html {
+        scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+    }
+}
