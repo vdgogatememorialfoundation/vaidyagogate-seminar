@@ -3,14 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#059669">
+    <meta name="description" content="Vaidya Gogate Memorial Foundation National Seminar — register, e-tickets, programme, and certificate verification.">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <title>Vaidya Gogate Memorial Foundation | National Seminar</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="/css/vgmf-site.css">
     <link rel="stylesheet" href="/css/vgmf-congress.css">
+    <link rel="stylesheet" href="/css/vgmf-home-redesign.css">
     <script src="/js/portal-datetime.js"></script>
 </head>
-<body class="congress-site" oncontextmenu="return false;">
+<body class="congress-site vgmf-redesign" oncontextmenu="return false;">
+    <a href="#main-content" class="vg-skip-link">Skip to main content</a>
+    <div class="vg-scroll-progress" id="vg-scroll-progress" aria-hidden="true"></div>
     <div id="site-preloader" aria-hidden="true"><div class="preloader-ring"></div><p style="color:var(--muted);font-weight:600;">Loading seminar portal…</p></div>
 
     <div class="cg-utility">
@@ -37,6 +44,9 @@
                     <p>National Seminar Portal</p>
                 </div>
             </a>
+            <div class="vg-header-actions">
+                <button type="button" class="vg-btn-icon" id="vg-search-open" aria-label="Search site"><i class="fas fa-search"></i></button>
+            </div>
             <button type="button" class="cg-menu-toggle" id="cg-menu-toggle" aria-label="Menu"><i class="fas fa-bars"></i></button>
             <nav class="cg-nav" id="cg-nav">
                 <a href="#" data-nav-section="home" class="active">Home</a>
@@ -78,12 +88,59 @@
         <div class="cg-quick-grid" id="cg-quick-grid"></div>
     </section>
 
+    <section class="vg-stats-strip" aria-label="Seminar highlights">
+        <div class="vg-stats-grid" id="vg-stats-grid">
+            <div class="vg-stat"><strong>…</strong><span>Loading</span></div>
+        </div>
+    </section>
+
+    <section class="vg-how-section" aria-labelledby="vg-how-title">
+        <span class="vg-section-label">Registration journey</span>
+        <h2 id="vg-how-title">How it works</h2>
+        <p>Register online, get verified, pay securely, and receive your e-ticket — all from one doctor portal.</p>
+        <div class="vg-steps">
+            <article class="vg-step">
+                <div class="vg-step-num">1</div>
+                <h3>Create account</h3>
+                <p>Sign up with email and WhatsApp verification on the secure doctor portal.</p>
+            </article>
+            <article class="vg-step">
+                <div class="vg-step-num">2</div>
+                <h3>Apply &amp; pay</h3>
+                <p>Submit your seminar application, complete payment, and track status in real time.</p>
+            </article>
+            <article class="vg-step">
+                <div class="vg-step-num">3</div>
+                <h3>E-ticket QR</h3>
+                <p>Download your printable e-ticket with QR code for venue entry scanning.</p>
+            </article>
+            <article class="vg-step">
+                <div class="vg-step-num">4</div>
+                <h3>Certificate</h3>
+                <p>After check-in, receive your e-certificate when approved by the foundation.</p>
+            </article>
+        </div>
+    </section>
+
+    <section class="vg-help-hub" aria-label="Help and tools">
+        <span class="vg-section-label">Quick help</span>
+        <h2 style="font-family:'Libre Baskerville',Georgia,serif;font-size:1.5rem;margin-bottom:16px;color:#0f172a;">Everything you need</h2>
+        <div class="vg-help-grid">
+            <a href="/doctor.html" class="vg-help-card"><i class="fas fa-user-md"></i><div><strong>Doctor portal</strong><span>Sign in, applications, payments, tickets</span></div></a>
+            <a href="/verify-certificate.html" class="vg-help-card"><i class="fas fa-award"></i><div><strong>Certificate verify</strong><span>OTP-based authenticity check</span></div></a>
+            <a href="#" class="vg-help-card" data-nav-section="verify" onclick="showSection('verify');return false;"><i class="fas fa-shield-check"></i><div><strong>Delegate list</strong><span>Search paid participants</span></div></a>
+            <a href="#" class="vg-help-card" data-nav-section="schedule" onclick="showSection('schedule');return false;"><i class="fas fa-calendar-alt"></i><div><strong>Programme</strong><span>Sessions, speakers, timings</span></div></a>
+            <a href="#" class="vg-help-card" data-nav-section="contact" onclick="showSection('contact');return false;"><i class="fas fa-envelope"></i><div><strong>Contact</strong><span>Questions about registration</span></div></a>
+            <a href="#" class="vg-help-card" data-portal-auth="signup" onclick="openRegisterModal();return false;"><i class="fas fa-user-plus"></i><div><strong>Register now</strong><span>Create your doctor account</span></div></a>
+        </div>
+    </section>
+
     <a href="#" class="cg-fab-register" id="cg-fab-register" data-portal-auth="signup" onclick="openRegisterModal(); return false;"><i class="fas fa-user-plus"></i> Register</a>
 
     <div id="countdown-region"></div>
     <div id="cert-verify-countdown-region" class="hidden" style="max-width:960px;margin:0 auto 16px;padding:0 16px;"></div>
 
-    <main class="main-content">
+    <main class="main-content" id="main-content">
         <div id="homeSection">
             <section id="cg-video-section" class="cg-section hidden">
                 <div class="cg-section-head"><h2>Video learning hub</h2><p>Seminar recordings and featured sessions</p></div>
@@ -352,6 +409,18 @@
         </div>
         
     <div id="cg-speaker-modal" class="cg-modal" aria-hidden="true"><div class="cg-modal-panel"><button type="button" class="cg-modal-close" id="cg-speaker-modal-close">&times;</button><div id="cg-speaker-modal-body"></div></div></div>
+    <div id="vg-search-modal" class="vg-search-modal" aria-hidden="true" role="dialog" aria-label="Search site">
+        <div class="vg-search-panel">
+            <div class="vg-search-head">
+                <input type="search" id="vg-search-input" placeholder="Search pages (Ctrl+K)" autocomplete="off" aria-label="Search">
+                <button type="button" class="vg-btn-icon" id="vg-search-close" aria-label="Close search"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="vg-search-results" id="vg-search-results"></div>
+        </div>
+    </div>
+
+    <button type="button" class="vg-back-top" id="vg-back-top" aria-label="Back to top"><i class="fas fa-arrow-up"></i></button>
+
     <footer class="footer">
         <div class="footer-container">
             <div class="footer-col">
@@ -405,6 +474,7 @@
     <script src="/js/portal-scrolling-announcements.js"></script>
     <script src="/js/vgmf-home.js"></script>
     <script src="/js/vgmf-congress.js"></script>
+    <script src="/js/vgmf-home-ui.js"></script>
     <script src="/js/vgmf-marketing.js"></script>
     <script src="/js/otp-ui.js"></script>
     <script src="/js/http-json.js"></script>

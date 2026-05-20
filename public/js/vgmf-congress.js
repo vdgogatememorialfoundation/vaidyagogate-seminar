@@ -18,11 +18,15 @@
     }
 
     const QUICK_ACCESS = [
-        { icon: 'fa-user-plus', title: 'Register now', text: 'Doctor portal registration', href: '/doctor.html', action: 'register' },
+        { icon: 'fa-user-plus', title: 'Register now', text: 'Create doctor account', action: 'register' },
+        { icon: 'fa-user-md', title: 'Doctor portal', text: 'Sign in & applications', href: '/doctor.html' },
+        { icon: 'fa-calendar-alt', title: 'Programme', text: 'Schedule & sessions', section: 'schedule' },
         { icon: 'fa-microphone', title: 'Speakers', text: 'Faculty & experts', section: 'home', anchor: 'speakers-section' },
+        { icon: 'fa-ticket-alt', title: 'Seminars', text: 'Open registration', section: 'home', anchor: 'seminars-section' },
         { icon: 'fa-images', title: 'Gallery', text: 'Photos & memories', section: 'gallery' },
         { icon: 'fa-shield-check', title: 'Verify delegate', text: 'Paid participants', section: 'verify' },
-        { icon: 'fa-award', title: 'Verify certificate', text: 'OTP authenticity check', href: '/verify-certificate.html' },
+        { icon: 'fa-award', title: 'Certificate', text: 'OTP verify', href: '/verify-certificate.html' },
+        { icon: 'fa-info-circle', title: 'About', text: 'Our foundation', section: 'about' },
         { icon: 'fa-envelope', title: 'Contact', text: 'Get in touch', section: 'contact' }
     ];
 
