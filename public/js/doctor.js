@@ -3834,8 +3834,13 @@ async function loadDoctorEventTickets() {
     const box = document.getElementById('tickets-container');
     if (!box || !currentUser) return;
     box.innerHTML = '<p style="color:#64748b;">Loading…</p>';
+    const uid = doctorNumericUserId();
+    if (!uid) {
+        box.innerHTML = '<p style="color:#b91c1c;">Please sign out and sign in again.</p>';
+        return;
+    }
     try {
-        const res = await fetch('/api/doctor/event-tickets/' + currentUser.id);
+        const res = await fetch('/api/doctor/event-tickets/' + uid);
         const rows = await res.json();
         if (!rows || rows.length === 0) {
             box.innerHTML = '<p style="color:#64748b;">No participant tickets yet. After payment is confirmed (or admin issues your e-ticket), your QR entry ticket appears here.</p>';
@@ -3863,7 +3868,7 @@ async function loadDoctorEventTickets() {
                     ${statusLine}
                     ${
                         !invalid && t.ticket_id_string
-                            ? `<p style="margin:12px 0 0;"><a href="/api/doctor/ticket-document/${encodeURIComponent(t.ticket_id_string)}?userId=${encodeURIComponent(String(currentUser.id))}" target="_blank" rel="noopener" class="btn-primary" style="display:inline-block;padding:8px 14px;text-decoration:none;font-size:0.88rem;">Download / print e-ticket (PDF)</a></p>`
+                            ? `<p style="margin:12px 0 0;"><a href="/api/doctor/ticket-document/${encodeURIComponent(t.ticket_id_string)}?userId=${encodeURIComponent(String(uid))}" target="_blank" rel="noopener" class="btn-primary" style="display:inline-block;padding:8px 14px;text-decoration:none;font-size:0.88rem;">Download / print e-ticket (PDF)</a></p>`
                             : ''
                     }
                 </div>
@@ -4016,8 +4021,10 @@ async function submitDashboardFeedback(e) {
 
 async function loadTickets() {
     if (!currentUser) return;
+    const uid = doctorNumericUserId();
+    if (!uid) return;
     try {
-        const res = await fetch('/api/support-ticket/user/' + currentUser.id);
+        const res = await fetch('/api/support-ticket/user/' + uid);
         const tickets = await res.json();
         const list = document.getElementById('tickets-list');
         list.innerHTML = '';
@@ -4109,10 +4116,11 @@ async function sendReply() {
     if (!msg) return;
     try {
         if (currentTicketId) {
+            const uid = doctorNumericUserId();
             const res = await fetch('/api/support-ticket/' + encodeURIComponent(currentTicketId) + '/reply', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ senderId: currentUser.id, senderType: 'user', message: msg })
+                body: JSON.stringify({ senderId: uid, senderType: 'user', message: msg })
             });
             if ((await res.json()).success) {
                 msgInput.value = '';
@@ -4138,6 +4146,11 @@ async function submitSupportTicket() {
     const category = document.getElementById('ticket-cat').value;
     const subject = document.getElementById('ticket-subj').value.trim();
     const description = document.getElementById('ticket-desc').value.trim();
+    const uid = doctorNumericUserId();
+    if (!uid) {
+        alert('Session expired. Please sign out and sign in again.');
+        return;
+    }
     if (!subject || !description) {
         alert('Subject and description are required.');
         return;
@@ -4146,7 +4159,7 @@ async function submitSupportTicket() {
         const res = await fetch('/api/support-ticket/create', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: currentUser.id, category, subject, description })
+            body: JSON.stringify({ userId: uid, category, subject, description })
         });
         const result = await res.json();
         if (!res.ok || !result.success) {
