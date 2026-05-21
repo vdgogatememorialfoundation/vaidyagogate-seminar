@@ -602,7 +602,8 @@ async function loadUsers() {
                         <select onchange="updateUserRole(${u.id}, this.value)" style="width:100%;padding:5px;border-radius:4px;border:1px solid #ccc;">
                             <option value="judge_user" ${userRole === 'judge_user' ? 'selected' : ''}>Judge</option>
                             <option value="co_admin" ${userRole === 'co_admin' ? 'selected' : ''}>Co Admin</option>
-                            <option value="scanner_portal_user" ${userRole === 'scanner_portal_user' ? 'selected' : ''}>Scanner</option>
+                            <option value="scanner_portal_user" ${userRole === 'scanner_portal_user' ? 'selected' : ''}>Scanner (volunteer)</option>
+                            <option value="scanner_dashboard_user" ${userRole === 'scanner_dashboard_user' ? 'selected' : ''}>Live scanner dashboard</option>
                             <option value="reviewer" ${userRole === 'reviewer' ? 'selected' : ''}>Reviewer</option>
                         </select>
                     </td>
@@ -775,6 +776,9 @@ const ADMIN_MODULE_TAB_DEFS = [
     ['tab-reports', 'Reports & exports'],
     ['tab-etickets', 'E-tickets'],
     ['tab-scanner-logs', 'Scanner activity'],
+    ['tab-live-scanner', 'Live check-in board'],
+    ['tab-pos', 'On-spot POS'],
+    ['tab-feedback-form', 'Feedback form editor'],
     ['tab-activity-logs', 'User & doctor activity'],
     ['tab-notifications', 'Notifications'],
     ['tab-system-platform', 'System health'],
@@ -817,6 +821,99 @@ function parseDoctorModulesObject(str) {
         return o && typeof o === 'object' ? o : {};
     } catch (_) {
         return {};
+    }
+}
+
+function openAdminLiveScannerBoard() {
+    window.open('/admin-live-scanner.html', '_blank', 'noopener');
+}
+
+async function initAdminPosTab() {
+    const sel = document.getElementById('pos-seminar');
+    if (!sel) return;
+    try {
+        const res = await fetch('/api/seminars?bucket=current');
+        const data = await res.json();
+        const list = data.seminars || data || [];
+        sel.innerHTML = '<option value="">Select seminar</option>';
+        list.forEach((s) => {
+            const o = document.createElement('option');
+            o.value = s.id;
+            o.textContent = s.title;
+            if (s.price) o.dataset.price = s.price;
+            sel.appendChild(o);
+        });
+        sel.onchange = () => {
+            const opt = sel.selectedOptions[0];
+            const priceEl = document.getElementById('pos-amount');
+            if (priceEl && opt && opt.dataset.price) priceEl.value = opt.dataset.price;
+        };
+    } catch (e) {
+        console.warn(e);
+    }
+}
+
+async function submitAdminPosRegistration() {
+    const actor = getStoredAdminUser();
+    if (!actor) return alert('Sign in as admin first.');
+    const status = document.getElementById('pos-status');
+    try {
+        const res = await fetch('/api/admin/pos/register', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                actingAdminId: actor.id,
+                seminarId: document.getElementById('pos-seminar').value,
+                firstName: document.getElementById('pos-fname').value,
+                lastName: document.getElementById('pos-lname').value,
+                phone: document.getElementById('pos-phone').value,
+                email: document.getElementById('pos-email').value,
+                amount: document.getElementById('pos-amount').value,
+                paymentMethod: 'cash'
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed');
+        status.textContent =
+            'Done. Ticket ' + (data.ticketId || '—') + ' — doctor must complete profile in portal.';
+        status.style.color = '#059669';
+    } catch (e) {
+        status.textContent = e.message;
+        status.style.color = '#b91c1c';
+    }
+}
+
+async function loadAdminFeedbackFormConfig() {
+    const actor = getStoredAdminUser();
+    if (!actor) return;
+    const ta = document.getElementById('feedback-form-json');
+    try {
+        const res = await fetch('/api/admin/feedback-form?actingAdminId=' + encodeURIComponent(actor.id));
+        const cfg = await res.json();
+        if (ta) ta.value = JSON.stringify(cfg, null, 2);
+    } catch (e) {
+        console.warn(e);
+    }
+}
+
+async function saveAdminFeedbackFormConfig() {
+    const actor = getStoredAdminUser();
+    if (!actor) return alert('Sign in as admin first.');
+    const st = document.getElementById('feedback-form-save-status');
+    try {
+        const cfg = JSON.parse(document.getElementById('feedback-form-json').value || '{}');
+        const res = await fetch('/api/admin/feedback-form', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: actor.id, config: cfg })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Save failed');
+        st.textContent = 'Feedback form saved.';
+        st.style.color = '#059669';
+    } catch (e) {
+        st.textContent = e.message;
+        st.style.color = '#b91c1c';
     }
 }
 
@@ -2618,6 +2715,8 @@ async function editAdminCaseProgram(id) {
                 : (p.registration_end || '').slice(0, 16);
         document.getElementById('case-prog-max-per-user').value = String(p.maxPresentationsPerUser != null ? p.maxPresentationsPerUser : p.max_presentations_per_user != null ? p.max_presentations_per_user : 2);
         document.getElementById('case-prog-max-total').value = p.maxTotalSubmissions != null ? String(p.maxTotalSubmissions) : p.max_total_submissions != null ? String(p.max_total_submissions) : '';
+        const caseSeatsEl = document.getElementById('case-prog-show-seats');
+        if (caseSeatsEl) caseSeatsEl.checked = p.showSeatsPublic !== false && p.show_seats_public !== 0;
         document.getElementById('case-prog-max-files').value = String(p.maxFilesPerSubmission != null ? p.maxFilesPerSubmission : p.max_files_per_submission != null ? p.max_files_per_submission : 5);
         document.getElementById('case-prog-max-mb').value = String(p.maxFileSizeMb != null ? p.maxFileSizeMb : p.max_file_size_mb != null ? p.max_file_size_mb : 100);
         const cats = p.enabledCategories || [];
@@ -2886,6 +2985,7 @@ async function saveAdminCaseProgram() {
             : (document.getElementById('case-prog-end') || {}).value || null,
         maxPresentationsPerUser: (document.getElementById('case-prog-max-per-user') || {}).value || 2,
         maxTotalSubmissions: (document.getElementById('case-prog-max-total') || {}).value || null,
+        showSeatsPublic: document.getElementById('case-prog-show-seats')?.checked !== false,
         maxFilesPerSubmission: (document.getElementById('case-prog-max-files') || {}).value || 5,
         maxFileSizeMb: (document.getElementById('case-prog-max-mb') || {}).value || 100,
         enabledCategories: enabledCategories,
@@ -6096,6 +6196,8 @@ function editSeminar(index) {
     if (py) py.value = s.portal_year || adminPortalYear || new Date().getFullYear();
     
     document.getElementById('seminar-capacity').value = s.capacity || 0;
+    const showSeatsEl = document.getElementById('seminar-show-seats-public');
+    if (showSeatsEl) showSeatsEl.checked = s.show_seats_public == null || Number(s.show_seats_public) !== 0;
     document.getElementById('seminar-price').value = s.price || 0;
     document.getElementById('seminar-active').value = s.is_active ? '1' : '0';
     
@@ -6169,6 +6271,7 @@ async function saveSeminar(e) {
             ? window.PortalDateTime.fromDatetimeLocal(document.getElementById('seminar-event-date').value)
             : document.getElementById('seminar-event-date').value,
         capacity: parseInt(document.getElementById('seminar-capacity').value) || 0,
+        show_seats_public: document.getElementById('seminar-show-seats-public')?.checked !== false,
         price: parseFloat(document.getElementById('seminar-price').value) || 0,
         is_active: document.getElementById('seminar-active').value === '1',
         checkin_enabled: document.getElementById('seminar-checkin-enabled').value === '1',
@@ -8136,6 +8239,72 @@ function cmsAddFaqRow(prefill) {
     root.appendChild(wrap);
 }
 
+function cmsFillFooterLinkRows(foot) {
+    const exploreWrap = document.getElementById('cms-footer-explore-rows');
+    const doctorWrap = document.getElementById('cms-footer-doctor-rows');
+    if (!exploreWrap || !doctorWrap) return;
+    const explore = (foot && foot.exploreLinks) || [];
+    const doctor = (foot && foot.doctorLinks) || [];
+    exploreWrap.innerHTML = '';
+    doctorWrap.innerHTML = '';
+    explore.forEach((l) => cmsAddFooterExploreRow(l));
+    doctor.forEach((l) => cmsAddFooterDoctorRow(l));
+    if (!explore.length) cmsAddFooterExploreRow();
+    if (!doctor.length) cmsAddFooterDoctorRow();
+}
+
+function cmsAddFooterExploreRow(prefill) {
+    const wrap = document.getElementById('cms-footer-explore-rows');
+    if (!wrap) return;
+    const row = document.createElement('div');
+    row.className = 'cms-footer-link-row';
+    row.style.cssText = 'display:grid;grid-template-columns:1fr 140px;gap:8px;margin-bottom:8px;';
+    row.innerHTML =
+        '<input type="text" class="cms-fexpl-label" placeholder="Label" style="width:100%;">' +
+        '<input type="text" class="cms-fexpl-section" placeholder="Section key" style="width:100%;">';
+    if (prefill) {
+        row.querySelector('.cms-fexpl-label').value = prefill.label || '';
+        row.querySelector('.cms-fexpl-section').value = prefill.section || '';
+    }
+    wrap.appendChild(row);
+}
+
+function cmsAddFooterDoctorRow(prefill) {
+    const wrap = document.getElementById('cms-footer-doctor-rows');
+    if (!wrap) return;
+    const row = document.createElement('div');
+    row.className = 'cms-footer-link-row';
+    row.style.cssText = 'display:grid;grid-template-columns:1fr 120px;gap:8px;margin-bottom:8px;';
+    row.innerHTML =
+        '<input type="text" class="cms-fdoc-label" placeholder="Label" style="width:100%;">' +
+        '<select class="cms-fdoc-action" style="width:100%;"><option value="login">login</option><option value="signup">signup</option></select>';
+    if (prefill) {
+        row.querySelector('.cms-fdoc-label').value = prefill.label || '';
+        row.querySelector('.cms-fdoc-action').value = prefill.action || 'login';
+    }
+    wrap.appendChild(row);
+}
+
+function cmsCollectFooterExploreLinks() {
+    const rows = document.querySelectorAll('#cms-footer-explore-rows .cms-footer-link-row');
+    return Array.from(rows)
+        .map((row) => ({
+            label: (row.querySelector('.cms-fexpl-label') || {}).value || '',
+            section: (row.querySelector('.cms-fexpl-section') || {}).value || ''
+        }))
+        .filter((l) => l.label.trim());
+}
+
+function cmsCollectFooterDoctorLinks() {
+    const rows = document.querySelectorAll('#cms-footer-doctor-rows .cms-footer-link-row');
+    return Array.from(rows)
+        .map((row) => ({
+            label: (row.querySelector('.cms-fdoc-label') || {}).value || '',
+            action: (row.querySelector('.cms-fdoc-action') || {}).value || 'login'
+        }))
+        .filter((l) => l.label.trim());
+}
+
 function cmsApplyHeroFieldsToForm(cms) {
     const hero = cms.hero || {};
     const top = cms.topBar || {};
@@ -8171,6 +8340,11 @@ function cmsApplyHeroFieldsToForm(cms) {
     set('cms-contact-hours', contact.hours);
     set('cms-footer-tagline', foot.tagline);
     set('cms-footer-copy', foot.copyright);
+    set('cms-footer-explore-title', foot.exploreTitle);
+    set('cms-footer-doctor-title', foot.doctorTitle);
+    set('cms-footer-contact-title', foot.contactTitle);
+    set('cms-footer-credit', foot.creditHtml);
+    cmsFillFooterLinkRows(foot);
 }
 
 function cmsCollectHeroFieldsFromForm() {
@@ -8207,7 +8381,13 @@ function cmsCollectHeroFieldsFromForm() {
         },
         footer: {
             tagline: gv('cms-footer-tagline'),
-            copyright: gv('cms-footer-copy')
+            copyright: gv('cms-footer-copy'),
+            exploreTitle: gv('cms-footer-explore-title'),
+            doctorTitle: gv('cms-footer-doctor-title'),
+            contactTitle: gv('cms-footer-contact-title'),
+            creditHtml: gv('cms-footer-credit'),
+            exploreLinks: cmsCollectFooterExploreLinks(),
+            doctorLinks: cmsCollectFooterDoctorLinks()
         },
         featureCards: cmsCollectFeatureCardsFromDom(),
         faq: cmsCollectFaqFromDom()

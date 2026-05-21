@@ -539,19 +539,11 @@
 
                 <div id="tab-feedback" class="tab-pane hidden">
                     <h2 class="section-title">Seminar feedback</h2>
-                    <p style="color:#64748b;margin:-10px 0 20px;">Share your experience after attending a seminar.</p>
+                    <p class="tab-intro-feedback" style="color:#64748b;margin:-10px 0 20px;">Share your experience after attending a seminar.</p>
                     <div class="card">
                         <form id="dash-feedback-form" onsubmit="submitDashboardFeedback(event)">
                             <div class="form-group"><label>Seminar attended</label><select id="dfb-seminar" required></select></div>
-                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-                                <div class="form-group"><label>Overall (1–5)</label><select id="dfb-rating" required><option value="">—</option><option value="5">5</option><option value="4">4</option><option value="3">3</option><option value="2">2</option><option value="1">1</option></select></div>
-                                <div class="form-group"><label>Content (1–5)</label><select id="dfb-content" required><option value="">—</option><option value="5">5</option><option value="4">4</option><option value="3">3</option><option value="2">2</option><option value="1">1</option></select></div>
-                                <div class="form-group"><label>Speaker (1–5)</label><select id="dfb-speaker" required><option value="">—</option><option value="5">5</option><option value="4">4</option><option value="3">3</option><option value="2">2</option><option value="1">1</option></select></div>
-                                <div class="form-group"><label>Organization (1–5)</label><select id="dfb-org" required><option value="">—</option><option value="5">5</option><option value="4">4</option><option value="3">3</option><option value="2">2</option><option value="1">1</option></select></div>
-                            </div>
-                            <div class="form-group"><label>Experience</label><textarea id="dfb-exp" rows="2" required></textarea></div>
-                            <div class="form-group"><label>Suggestions</label><textarea id="dfb-sug" rows="2"></textarea></div>
-                            <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;margin-bottom:12px;"><input type="checkbox" id="dfb-again" checked> Interested in future seminars</label>
+                            <div id="dash-feedback-fields"></div>
                             <button type="submit" class="btn-primary" style="width:100%;">Submit feedback</button>
                         </form>
                     </div>

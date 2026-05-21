@@ -50,6 +50,10 @@ const paymentsMod = require('./lib/payments-module');
 const adminPaymentFlow = require('./lib/admin-payment-flow');
 const { registerPaymentsRoutes } = require('./lib/routes-payments');
 const seminarCapacity = require('./lib/seminar-capacity');
+const ticketScanEvents = require('./lib/ticket-scan-events');
+const feedbackFormConfig = require('./lib/feedback-form-config');
+const { registerLiveScannerRoutes } = require('./lib/routes-live-scanner');
+const { registerPosRoutes } = require('./lib/pos-onspot');
 const authUsers = require('./lib/auth-users');
 const authLoginOtp = require('./lib/auth-login-otp');
 const certRender = require('./lib/certificate-render');
@@ -764,7 +768,22 @@ const DEFAULT_PUBLIC_SITE_CMS = {
     ],
     footer: {
         tagline: 'Promoting Ayurveda education since 1972',
-        copyright: '© 2026 Vaidya Gogate Memorial Foundation. All rights reserved.'
+        copyright: '© 2026 Vaidya Gogate Memorial Foundation. All rights reserved.',
+        exploreTitle: 'Explore',
+        doctorTitle: 'Doctor access',
+        contactTitle: 'Contact',
+        creditHtml:
+            'Developed by <a href="https://capturevisualstudios.com" target="_blank" rel="noopener noreferrer">Capture Visual Studios</a>',
+        exploreLinks: [
+            { label: 'Home', section: 'home' },
+            { label: 'About', section: 'about' },
+            { label: 'Schedule', section: 'schedule' },
+            { label: 'Gallery', section: 'gallery' }
+        ],
+        doctorLinks: [
+            { label: 'Sign in', action: 'login' },
+            { label: 'Create account', action: 'signup' }
+        ]
     }
 };
 const DEFAULT_PUBLIC_SITE_CMS_JSON = JSON.stringify(DEFAULT_PUBLIC_SITE_CMS);
@@ -926,6 +945,9 @@ function ensurePortalSchema(next) {
                                             ignoreSchemaMigrationErr(h7c);
                                         db.run(`ALTER TABLE seminars ADD COLUMN certificate_verify_enabled INTEGER DEFAULT 0`, (h7d) => {
                                             ignoreSchemaMigrationErr(h7d);
+                                        db.run(`ALTER TABLE seminars ADD COLUMN show_seats_public INTEGER DEFAULT 1`, (h7s) => {
+                                            ignoreSchemaMigrationErr(h7s);
+                                            ticketScanEvents.ensureTicketScanEventsTable(db, () => {});
                                         db.run(`ALTER TABLE tickets ADD COLUMN ticket_id_string TEXT`, (e2) => {
                                             ignoreSchemaMigrationErr(e2);
                                             db.run(`ALTER TABLE tickets ADD COLUMN is_valid INTEGER DEFAULT 1`, (e2b) => {
@@ -1037,8 +1059,8 @@ function ensurePortalSchema(next) {
                 });
             });
         });
-        }
-    );
+        });
+    });
 }
 
 function ensureCertificateSchema(next) {
@@ -1629,12 +1651,22 @@ function notifyTicketIssued(userId, registrationId, ticketId, channelOpts) {
                 ticket_pdf_url: pdfUrl,
                 payment_status: 'PAID'
             };
-            notifEngine.notify(db, 'TICKET_ISSUED', {
-                userId,
-                seminarId,
-                registrationId,
-                vars
-            });
+            notifEngine.notify(
+                db,
+                'TICKET_ISSUED',
+                {
+                    userId,
+                    seminarId,
+                    registrationId,
+                    vars,
+                    immediate: true
+                },
+                () => {
+                    try {
+                        notifEngine.drainNotificationQueue(db, 6);
+                    } catch (_) {}
+                }
+            );
             if (row && row.qr_code_data) {
                 ticketHtml
                     .buildTicketHtmlFromRow(
@@ -1685,7 +1717,8 @@ function notifyTicketIssued(userId, registrationId, ticketId, channelOpts) {
                                             pdfUrl +
                                             '</a></p>',
                                         text: 'E-ticket: ' + pdfUrl,
-                                        event_key: 'TICKET_ISSUED'
+                                        event_key: 'TICKET_ISSUED',
+                                        immediate: true
                                     },
                                     () => {}
                                 );
@@ -1697,7 +1730,8 @@ function notifyTicketIssued(userId, registrationId, ticketId, channelOpts) {
                                         channel: 'whatsapp',
                                         destination: u.phone,
                                         body: waLine,
-                                        event_key: 'TICKET_ISSUED'
+                                        event_key: 'TICKET_ISSUED',
+                                        immediate: true
                                     },
                                     () => {}
                                 );
@@ -1798,10 +1832,45 @@ function insertParticipantTicket(orderDbId, userId, orderIdStr, registrationId, 
     });
 }
 
+function markRegistrationETicketIssued(registrationId, cb) {
+    db.run(
+        `UPDATE registrations SET status = 'e_ticket_issued'
+         WHERE id = ? AND status NOT IN ('checked_in', 'certificate_issued', 'rejected', 'cancelled')`,
+        [registrationId],
+        (err) => cb && cb(err)
+    );
+}
+
+function recordScanEventForDashboard(seminarId, staffId, payload) {
+    const sid = parseInt(seminarId, 10);
+    if (!Number.isInteger(sid) || sid < 1) return;
+    ticketScanEvents.recordTicketScanEvent(
+        db,
+        {
+            seminar_id: sid,
+            scanned_by: staffId,
+            ticket_db_id: payload.ticket_db_id,
+            ticket_id_string: payload.ticket_id_string,
+            application_no: payload.application_no,
+            doctor_user_id: payload.doctor_user_id,
+            doctor_name: payload.doctor_name,
+            outcome: payload.outcome || 'failed',
+            message: payload.message || null
+        },
+        () => {}
+    );
+}
+
 /** Reuse existing pending order or create one (avoids duplicate pending rows per registration). */
 function getOrCreatePendingOrder(registrationId, amount, cb) {
     const amt = amount != null && !Number.isNaN(Number(amount)) ? Number(amount) : 1500;
     db.get(
+        `SELECT id, order_id_string, amount FROM orders WHERE registration_id = ? AND status = 'success' ORDER BY id DESC LIMIT 1`,
+        [registrationId],
+        (eSuccess, paid) => {
+            if (eSuccess) return cb && cb(eSuccess);
+            if (paid) return cb(null, paid);
+            db.get(
         `SELECT id, order_id_string, amount FROM orders WHERE registration_id = ? AND status = 'pending' ORDER BY id DESC LIMIT 1`,
         [registrationId],
         (e, row) => {
@@ -1828,6 +1897,8 @@ function getOrCreatePendingOrder(registrationId, amount, cb) {
                     cb(null, { id: this.lastID, order_id_string: orderIdStr });
                 }
             );
+        }
+    );
         }
     );
 }
@@ -1946,25 +2017,35 @@ function fulfillRegistrationPayment(registrationId, userId, amount, gatewayName,
         (eExist, paid) => {
             if (eExist) return cb(eExist);
             if (paid) {
-                return db.get(
-                    `SELECT application_no FROM registrations WHERE id = ?`,
+                return db.run(
+                    `DELETE FROM orders WHERE registration_id = ? AND status = 'pending'`,
                     [registrationId],
-                    (gErr, regRow) => {
-                        if (gErr) return cb(gErr);
-                        insertParticipantTicket(
-                            paid.id,
-                            userId,
-                            paid.order_id_string || '',
-                            registrationId,
-                            regRow && regRow.application_no,
-                            (eT, etk, qr, meta) =>
-                                cb(eT, {
-                                    orderId: paid.id,
-                                    orderIdString: paid.order_id_string,
-                                    alreadyPaid: true,
-                                    ticketId: etk,
-                                    skipped: meta && meta.skipped
-                                })
+                    () => {
+                        db.get(
+                            `SELECT application_no FROM registrations WHERE id = ?`,
+                            [registrationId],
+                            (gErr, regRow) => {
+                                if (gErr) return cb(gErr);
+                                insertParticipantTicket(
+                                    paid.id,
+                                    userId,
+                                    paid.order_id_string || '',
+                                    registrationId,
+                                    regRow && regRow.application_no,
+                                    (eT, etk, qr, meta) => {
+                                        if (!eT && etk && !(meta && meta.skipped)) {
+                                            markRegistrationETicketIssued(registrationId, () => {});
+                                        }
+                                        cb(eT, {
+                                            orderId: paid.id,
+                                            orderIdString: paid.order_id_string,
+                                            alreadyPaid: true,
+                                            ticketId: etk,
+                                            skipped: meta && meta.skipped
+                                        });
+                                    }
+                                );
+                            }
                         );
                     }
                 );
@@ -1986,7 +2067,7 @@ function fulfillRegistrationPayment(registrationId, userId, amount, gatewayName,
                                     registrationId,
                                     orderDbId
                                 ]);
-                                db.run(`UPDATE registrations SET status = 'completed' WHERE id = ?`, [registrationId]);
+                                db.run(`UPDATE registrations SET status = 'e_ticket_issued' WHERE id = ?`, [registrationId]);
                                 activityLog.logActivity(db, {
                                     user_id: userId,
                                     action: 'payment.completed',
@@ -2009,13 +2090,17 @@ function fulfillRegistrationPayment(registrationId, userId, amount, gatewayName,
                                             orderStr,
                                             registrationId,
                                             regRow && regRow.application_no,
-                                            (eT, etk, qr, meta) =>
+                                            (eT, etk, qr, meta) => {
+                                                if (!eT && etk && !(meta && meta.skipped)) {
+                                                    markRegistrationETicketIssued(registrationId, () => {});
+                                                }
                                                 cb(eT, {
                                                     orderId: orderDbId,
                                                     orderIdString: orderStr,
                                                     ticketId: etk,
                                                     skipped: meta && meta.skipped
-                                                })
+                                                });
+                                            }
                                         );
                                     }
                                 );
@@ -5834,6 +5919,15 @@ app.post('/api/scanner/mark', (req, res) => {
                                     scanMsg +=
                                         ' Certificate eligibility recorded — awaiting admin approval to issue.';
                                 }
+                                recordScanEventForDashboard(selectedSeminarId, staffId, {
+                                    ticket_db_id: row.ticket_id,
+                                    ticket_id_string: row.ticket_id_string,
+                                    application_no: row.application_no,
+                                    doctor_user_id: row.doctor_user_id,
+                                    doctor_name: doctorName,
+                                    outcome: 'success',
+                                    message: scanMsg
+                                });
                                 res.json({
                                     success: true,
                                     sound: 'success',
@@ -5949,7 +6043,8 @@ app.post('/api/admin/seminars', (req, res) => {
         otp_on_submit,
         public_list_enabled,
         cert_scans_required,
-        is_active
+        is_active,
+        show_seats_public
     } = req.body;
     const certScansReq = certVerify.normalizeCertScansRequired(cert_scans_required);
     const rfj = registration_form_json != null && String(registration_form_json).trim() !== '' ? String(registration_form_json) : null;
@@ -5963,6 +6058,8 @@ app.post('/api/admin/seminars', (req, res) => {
         !otpApp || otp_on_submit === false || otp_on_submit === 0 || otp_on_submit === '0' ? 0 : 1;
     const pubList = public_list_enabled ? 1 : 0;
     const activeFlag = is_active === false || is_active === 0 || is_active === '0' ? 0 : 1;
+    const showSeats =
+        show_seats_public === false || show_seats_public === 0 || show_seats_public === '0' ? 0 : 1;
     const regStart = seminarDt.normalizeSeminarDateTimeForStorage(registration_start);
     const regEnd = seminarDt.normalizeSeminarRegistrationEndForStorage(registration_end);
     const eventDt = seminarDt.normalizeSeminarDateTimeForStorage(event_date);
@@ -5971,8 +6068,8 @@ app.post('/api/admin/seminars', (req, res) => {
         const portalYear =
             Number.isInteger(bodyYear) && bodyYear > 2000 ? bodyYear : defaultYear;
         db.run(
-            `INSERT INTO seminars (title, description, registration_start, registration_end, event_date, capacity, price, checkin_enabled, checkin_date, location_url, terms_conditions, hero_image_path, flyer_path, gallery_paths, registration_form_json, cancellation_policy_json, whatsapp_group_url, otp_on_application, otp_on_step1, otp_on_submit, public_list_enabled, cert_scans_required, portal_year, is_active) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO seminars (title, description, registration_start, registration_end, event_date, capacity, price, checkin_enabled, checkin_date, location_url, terms_conditions, hero_image_path, flyer_path, gallery_paths, registration_form_json, cancellation_policy_json, whatsapp_group_url, otp_on_application, otp_on_step1, otp_on_submit, public_list_enabled, cert_scans_required, portal_year, is_active, show_seats_public) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 title,
                 description,
@@ -5997,7 +6094,8 @@ app.post('/api/admin/seminars', (req, res) => {
                 pubList,
                 certScansReq,
                 portalYear,
-                activeFlag
+                activeFlag,
+                showSeats
             ],
             function (err) {
             if (err) return res.status(500).json({ error: err.message });
@@ -6035,7 +6133,8 @@ app.put('/api/admin/seminars/:id', (req, res) => {
         otp_on_submit,
         public_list_enabled,
         cert_scans_required,
-        portal_year
+        portal_year,
+        show_seats_public
     } = req.body;
     const certScansReq = certVerify.normalizeCertScansRequired(cert_scans_required);
     const rfj = registration_form_json != null && String(registration_form_json).trim() !== '' ? String(registration_form_json) : null;
@@ -6048,6 +6147,8 @@ app.put('/api/admin/seminars/:id', (req, res) => {
     const otpSubmit =
         !otpApp || otp_on_submit === false || otp_on_submit === 0 || otp_on_submit === '0' ? 0 : 1;
     const pubList = public_list_enabled ? 1 : 0;
+    const showSeats =
+        show_seats_public === false || show_seats_public === 0 || show_seats_public === '0' ? 0 : 1;
     const py = portal_year != null ? parseInt(portal_year, 10) : null;
     const regStart = seminarDt.normalizeSeminarDateTimeForStorage(registration_start);
     const regEnd = seminarDt.normalizeSeminarRegistrationEndForStorage(registration_end);
@@ -6056,7 +6157,7 @@ app.put('/api/admin/seminars/:id', (req, res) => {
         if (ePy) return res.status(500).json({ error: ePy.message });
         const finalPortalYear = Number.isInteger(py) && py > 2000 ? py : defaultYear;
         db.run(
-            `UPDATE seminars SET title=?, description=?, registration_start=?, registration_end=?, event_date=?, capacity=?, price=?, checkin_enabled=?, checkin_date=?, is_active=?, location_url=?, terms_conditions=?, hero_image_path=?, flyer_path=?, gallery_paths=?, registration_form_json=?, cancellation_policy_json=?, whatsapp_group_url=?, otp_on_application=?, otp_on_step1=?, otp_on_submit=?, public_list_enabled=?, cert_scans_required=?, portal_year=? WHERE id=?`,
+            `UPDATE seminars SET title=?, description=?, registration_start=?, registration_end=?, event_date=?, capacity=?, price=?, checkin_enabled=?, checkin_date=?, is_active=?, location_url=?, terms_conditions=?, hero_image_path=?, flyer_path=?, gallery_paths=?, registration_form_json=?, cancellation_policy_json=?, whatsapp_group_url=?, otp_on_application=?, otp_on_step1=?, otp_on_submit=?, public_list_enabled=?, cert_scans_required=?, portal_year=?, show_seats_public=? WHERE id=?`,
             [
                 title,
                 description,
@@ -6082,6 +6183,7 @@ app.put('/api/admin/seminars/:id', (req, res) => {
                 pubList,
                 certScansReq,
                 finalPortalYear,
+                showSeats,
                 req.params.id
             ],
             function (err) {
@@ -7606,13 +7708,67 @@ function assertAdminPortalActor(adminId, cb) {
         (e, adm) => {
             if (e) return cb(e, null);
             if (!adm) return cb(new Error('FORBIDDEN'), null);
+            const ur = String(adm.user_role || '').toLowerCase();
             const ok =
-                String(adm.role || '').toLowerCase() === 'admin' || String(adm.user_role || '').toLowerCase() === 'co_admin';
+                String(adm.role || '').toLowerCase() === 'admin' ||
+                ur === 'co_admin' ||
+                ur === 'scanner_dashboard_user';
             if (!ok) return cb(new Error('FORBIDDEN'), null);
             cb(null, adm);
         }
     );
 }
+
+function requireAdminActor(req, res, next) {
+    const aid = parseInt(
+        (req.query && req.query.actingAdminId) || (req.body && req.body.actingAdminId) || '',
+        10
+    );
+    if (!Number.isInteger(aid) || aid < 1) {
+        res.status(400).json({ error: 'actingAdminId is required' });
+        return;
+    }
+    assertAdminPortalActor(aid, (err, adm) => {
+        if (err || !adm) return res.status(403).json({ error: 'Admin access required' });
+        next(adm);
+    });
+}
+
+registerLiveScannerRoutes(app, { db, requireAdminActor });
+registerPosRoutes(app, {
+    db,
+    generateId,
+    requireAdminActor,
+    getOrCreatePendingOrder,
+    fulfillRegistrationPayment,
+    seminarCapacity,
+    activityLog
+});
+
+app.get('/api/public/feedback-form', (req, res) => {
+    feedbackFormConfig.loadFeedbackFormConfig(db, (err, cfg) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(cfg);
+    });
+});
+
+app.get('/api/admin/feedback-form', (req, res) => {
+    requireAdminActor(req, res, () => {
+        feedbackFormConfig.loadFeedbackFormConfig(db, (err, cfg) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json(cfg);
+        });
+    });
+});
+
+app.post('/api/admin/feedback-form', (req, res) => {
+    requireAdminActor(req, res, () => {
+        feedbackFormConfig.saveFeedbackFormConfig(db, req.body && req.body.config, (err, cfg) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ success: true, config: cfg });
+        });
+    });
+});
 
 app.get('/api/admin/portal-auth-config', (req, res) => {
     const aid = parseInt(req.query.actingAdminId, 10);
@@ -9351,22 +9507,16 @@ function isFeedbackEligibleRegistration(row) {
 
 // Submit Seminar Feedback
 app.post('/api/feedback/submit', (req, res) => {
-    const {
-        userId,
-        seminarId,
-        registrationId,
-        rating,
-        contentQuality,
-        speakerQuality,
-        organizationQuality,
-        overallExperience,
-        suggestions,
-        wouldAttendAgain
-    } = req.body;
+    const { userId, seminarId, registrationId, answers } = req.body;
     const uid = parsePositiveUserId(userId);
     const sid = parseInt(seminarId, 10);
     if (!uid) return res.status(400).json({ error: 'Invalid user' });
     if (!Number.isInteger(sid) || sid < 1) return res.status(400).json({ error: 'Invalid seminar' });
+
+    feedbackFormConfig.loadFeedbackFormConfig(db, (cfgErr, formCfg) => {
+        if (cfgErr) return res.status(500).json({ error: cfgErr.message });
+        const mapped = feedbackFormConfig.mapFeedbackAnswers(formCfg.fields, { answers, ...req.body });
+        if (mapped.error) return res.status(400).json({ error: mapped.error });
 
     db.get(`SELECT id, event_date, title FROM seminars WHERE id = ?`, [sid], (err, sem) => {
             if (err) return res.status(500).json({ error: err.message });
@@ -9410,22 +9560,46 @@ app.post('/api/feedback/submit', (req, res) => {
                                 : reg.id;
                         const storedRegId = Number.isInteger(regId) && regId > 0 ? regId : reg.id;
 
+                        const answersJson = JSON.stringify(mapped.answersJson || {});
                         db.run(
-                            `INSERT INTO seminar_feedback (user_id, seminar_id, registration_id, rating, content_quality, speaker_quality, organization_quality, overall_experience, suggestions, would_attend_again) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                            `INSERT INTO seminar_feedback (user_id, seminar_id, registration_id, rating, content_quality, speaker_quality, organization_quality, overall_experience, suggestions, would_attend_again, answers_json) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
                             [
                                 uid,
                                 sid,
                                 storedRegId,
-                                rating || 5,
-                                contentQuality || 5,
-                                speakerQuality || 5,
-                                organizationQuality || 5,
-                                overallExperience,
-                                suggestions,
-                                wouldAttendAgain ? 1 : 0
+                                mapped.rating || 5,
+                                mapped.contentQuality || 5,
+                                mapped.speakerQuality || 5,
+                                mapped.organizationQuality || 5,
+                                mapped.overallExperience,
+                                mapped.suggestions,
+                                mapped.wouldAttendAgain ? 1 : 0,
+                                answersJson
                             ],
                             function (insErr) {
+                                if (insErr && /no such column|answers_json/i.test(String(insErr.message))) {
+                                    return db.run(
+                                        `INSERT INTO seminar_feedback (user_id, seminar_id, registration_id, rating, content_quality, speaker_quality, organization_quality, overall_experience, suggestions, would_attend_again) 
+                                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                                        [
+                                            uid,
+                                            sid,
+                                            storedRegId,
+                                            mapped.rating || 5,
+                                            mapped.contentQuality || 5,
+                                            mapped.speakerQuality || 5,
+                                            mapped.organizationQuality || 5,
+                                            mapped.overallExperience,
+                                            mapped.suggestions,
+                                            mapped.wouldAttendAgain ? 1 : 0
+                                        ],
+                                        function (insErr2) {
+                                            if (insErr2) return res.status(500).json({ error: insErr2.message });
+                                            res.json({ success: true, id: this.lastID });
+                                        }
+                                    );
+                                }
                                 if (insErr) return res.status(500).json({ error: insErr.message });
             res.json({ success: true, id: this.lastID });
                             }
@@ -9435,6 +9609,7 @@ app.post('/api/feedback/submit', (req, res) => {
             }
         );
         });
+    });
 });
 
 app.get('/api/feedback/eligible-seminars/:userId', (req, res) => {
@@ -10614,7 +10789,7 @@ function startBackgroundWorkers() {
             } catch (e) {
                 console.warn('[notifications] queue tick', e.message);
             }
-        }, 20000);
+        }, 8000);
     }
 }
 

@@ -121,6 +121,9 @@
                 <a class="menu-item" data-admin-module="tab-reports" onclick="switchTab('tab-reports'); initAdminReportsTab();"><i class="fas fa-file-export"></i> Reports &amp; Exports</a>
                 <a class="menu-item" data-admin-module="tab-etickets" onclick="switchTab('tab-etickets'); initAdminEticketsTab();"><i class="fas fa-ticket-alt"></i> E-tickets</a>
                 <a class="menu-item" data-admin-module="tab-scanner-logs" onclick="switchTab('tab-scanner-logs'); initAdminScannerLogsTab();"><i class="fas fa-qrcode"></i> Scanner Activity</a>
+                <a class="menu-item" data-admin-module="tab-live-scanner" onclick="openAdminLiveScannerBoard();"><i class="fas fa-tv"></i> Live check-in board</a>
+                <a class="menu-item" data-admin-module="tab-pos" onclick="switchTab('tab-pos'); initAdminPosTab();"><i class="fas fa-cash-register"></i> On-spot POS</a>
+                <a class="menu-item" data-admin-module="tab-feedback-form" onclick="switchTab('tab-feedback-form'); loadAdminFeedbackFormConfig();"><i class="fas fa-edit"></i> Feedback form editor</a>
                 <a class="menu-item" data-admin-module="tab-activity-logs" onclick="switchTab('tab-activity-logs'); initAdminActivityLogsTab();"><i class="fas fa-history"></i> User &amp; doctor activity</a>
                 <a class="menu-item" data-admin-module="tab-notifications" onclick="switchTab('tab-notifications'); initAdminNotificationsTab();"><i class="fas fa-bell"></i> Notifications</a>
                 <a class="menu-item" data-admin-module="tab-system-platform" onclick="switchTab('tab-system-platform'); initAdminSystemHealth('platform');"><i class="fas fa-server"></i> System health</a>
@@ -759,6 +762,12 @@
                         <div><label>Office hours</label><input type="text" id="cms-contact-hours" style="width:100%"></div>
                         <div style="grid-column:1/-1;"><label>Footer tagline</label><input type="text" id="cms-footer-tagline" style="width:100%"></div>
                         <div style="grid-column:1/-1;"><label>Footer copyright</label><input type="text" id="cms-footer-copy" style="width:100%"></div>
+                        <div><label>Footer column: Explore title</label><input type="text" id="cms-footer-explore-title" style="width:100%"></div>
+                        <div><label>Footer column: Doctor access title</label><input type="text" id="cms-footer-doctor-title" style="width:100%"></div>
+                        <div><label>Footer column: Contact title</label><input type="text" id="cms-footer-contact-title" style="width:100%"></div>
+                        <div style="grid-column:1/-1;"><label>Footer credit HTML</label><input type="text" id="cms-footer-credit" style="width:100%"></div>
+                        <div style="grid-column:1/-1;"><label>Explore links</label><div id="cms-footer-explore-rows"></div><button type="button" class="btn-primary" style="margin-top:6px;padding:6px 12px;font-size:0.85rem;" onclick="cmsAddFooterExploreRow()">+ Link</button></div>
+                        <div style="grid-column:1/-1;"><label>Doctor access links</label><div id="cms-footer-doctor-rows"></div><button type="button" class="btn-primary" style="margin-top:6px;padding:6px 12px;font-size:0.85rem;" onclick="cmsAddFooterDoctorRow()">+ Link</button></div>
                     </div>
                     <p style="color:#64748b;font-size:0.85rem;margin:12px 0 8px;">Homepage images: max <strong>4 MB</strong> per file on this server. iPhone photos are auto-compressed.</p>
                     <div style="margin-top:8px;display:grid;gap:10px;max-width:520px;">
@@ -1037,6 +1046,7 @@
                         <div><label>Registration closes (IST)</label><input type="datetime-local" id="case-prog-end" style="width:100%;padding:8px;"></div>
                         <div><label>Max presentations per doctor</label><input type="number" id="case-prog-max-per-user" min="1" max="10" value="2" style="width:100%;padding:8px;"></div>
                         <div><label>Total presentation slots</label><input type="number" id="case-prog-max-total" min="1" placeholder="Unlimited if empty" style="width:100%;padding:8px;"></div>
+                        <div style="grid-column:1/-1;"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="case-prog-show-seats" checked> Show seat/slot count to doctors on case registration</label></div>
                         <div><label>Max files per submission</label><input type="number" id="case-prog-max-files" min="1" max="10" value="5" style="width:100%;padding:8px;"></div>
                         <div><label>Max file size (MB each)</label><input type="number" id="case-prog-max-mb" min="1" max="250" value="100" style="width:100%;padding:8px;"><p style="font-size:0.78rem;color:#64748b;margin:4px 0 0;">Default <strong>100 MB</strong>, max <strong>250 MB</strong> per file when Cloudflare R2 is configured. Without R2, server uploads stay at ~4 MB on Vercel.</p></div>
                         <div style="grid-column:1/-1;">
@@ -1210,6 +1220,34 @@
                         </div>
                         <p id="eticket-action-status" style="margin-top:12px;font-weight:600;font-size:0.88rem;"></p>
                     </div>
+                </div>
+            </div>
+
+            <div id="tab-pos" class="tab-pane hidden">
+                <h2 style="margin-bottom:12px;">On-spot POS registration</h2>
+                <p style="color:#64748b;margin-bottom:16px;">Register a doctor at the venue, record cash payment, and issue an e-ticket immediately. They must complete their profile later in the doctor portal.</p>
+                <div class="card" style="max-width:640px;">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                        <div><label>Seminar</label><select id="pos-seminar" style="width:100%;padding:8px;"></select></div>
+                        <div><label>Amount (₹)</label><input type="number" id="pos-amount" min="0" step="1" style="width:100%;padding:8px;"></div>
+                        <div><label>First name</label><input type="text" id="pos-fname" style="width:100%;padding:8px;"></div>
+                        <div><label>Last name</label><input type="text" id="pos-lname" style="width:100%;padding:8px;"></div>
+                        <div><label>Phone</label><input type="text" id="pos-phone" style="width:100%;padding:8px;"></div>
+                        <div><label>Email (optional)</label><input type="email" id="pos-email" style="width:100%;padding:8px;"></div>
+                    </div>
+                    <button type="button" class="btn-primary" style="margin-top:16px;" onclick="submitAdminPosRegistration()">Register &amp; issue ticket</button>
+                    <p id="pos-status" style="margin-top:12px;font-weight:600;"></p>
+                </div>
+            </div>
+
+            <div id="tab-feedback-form" class="tab-pane hidden">
+                <h2 style="margin-bottom:12px;">Feedback form editor</h2>
+                <p style="color:#64748b;margin-bottom:16px;">Edit fields shown in the doctor portal feedback tab. Save JSON or use the builder below.</p>
+                <div class="card">
+                    <label>Form JSON</label>
+                    <textarea id="feedback-form-json" rows="14" style="width:100%;font-family:monospace;font-size:0.85rem;"></textarea>
+                    <button type="button" class="btn-primary" style="margin-top:12px;" onclick="saveAdminFeedbackFormConfig()">Save feedback form</button>
+                    <p id="feedback-form-save-status" style="margin-top:10px;font-weight:600;"></p>
                 </div>
             </div>
 
@@ -1632,6 +1670,7 @@
                     <div><label>Event Date (Main) <span style="font-weight:normal;color:#64748b;">(IST)</span></label><input type="datetime-local" id="seminar-event-date" required></div>
                     <div><label>Portal year</label><input type="number" id="seminar-portal-year" min="2000" max="2100" placeholder="e.g. 2027"></div>
                     <div><label>Capacity</label><input type="number" id="seminar-capacity" required></div>
+                    <div style="grid-column:1/-1;"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="seminar-show-seats-public" checked> Show seat count publicly on registration</label></div>
                 </div>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                     <div><label>Price (&#8377;)</label><input type="number" id="seminar-price" step="0.01" value="0" required></div>

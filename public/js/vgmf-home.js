@@ -181,6 +181,46 @@
         setText('schedule-page-subtitle', cms.schedulePage && cms.schedulePage.subtitle);
         setText('footer-tagline', cms.footer && cms.footer.tagline);
         setText('footer-copyright', cms.footer && cms.footer.copyright);
+        const foot = cms.footer || {};
+        setText('footer-explore-title', foot.exploreTitle || 'Explore');
+        setText('footer-doctor-title', foot.doctorTitle || 'Doctor access');
+        const contactCol = document.querySelector('.footer-col h4');
+        if (foot.contactTitle) {
+            const contactH = document.getElementById('footer-contact-heading');
+            if (contactH) contactH.textContent = foot.contactTitle;
+        }
+        const creditEl = document.querySelector('.footer-credit');
+        if (creditEl && foot.creditHtml) creditEl.innerHTML = foot.creditHtml;
+        const exploreUl = document.getElementById('footer-explore-links');
+        if (exploreUl && Array.isArray(foot.exploreLinks) && foot.exploreLinks.length) {
+            exploreUl.innerHTML = foot.exploreLinks
+                .map(
+                    (l) =>
+                        '<li><a href="#" data-menu-key="' +
+                        escHtml(l.section || 'home') +
+                        '" onclick="showSection(\'' +
+                        escHtml(l.section || 'home') +
+                        '\'); return false;">' +
+                        escHtml(l.label) +
+                        '</a></li>'
+                )
+                .join('');
+        }
+        const doctorUl = document.getElementById('footer-doctor-links');
+        if (doctorUl && Array.isArray(foot.doctorLinks) && foot.doctorLinks.length) {
+            doctorUl.innerHTML = foot.doctorLinks
+                .map((l) => {
+                    const action = l.action === 'signup' ? 'openRegisterModal()' : 'openAuthModal(\'login\')';
+                    return (
+                        '<li><a href="#" onclick="' +
+                        action +
+                        '; return false;">' +
+                        escHtml(l.label) +
+                        '</a></li>'
+                    );
+                })
+                .join('');
+        }
 
         const top = cms.topBar || {};
         setText('top-email', top.email);

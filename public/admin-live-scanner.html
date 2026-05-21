@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live check-in board | VGMF Admin</title>
+    <link rel="stylesheet" href="/css/admin-live-scanner.css">
+</head>
+<body class="live-scanner-page">
+    <header class="live-scanner-header">
+        <div>
+            <h1 style="margin:0;font-size:1.2rem;">Live check-in board</h1>
+            <p style="margin:4px 0 0;font-size:0.85rem;opacity:0.85;">BookMyShow-style feed — updates every second while volunteers scan.</p>
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <select id="live-scanner-seminar" style="min-width:220px;padding:8px;border-radius:8px;border:none;"></select>
+            <button type="button" id="live-scanner-back" style="padding:8px 14px;border-radius:8px;border:none;background:#0d9488;color:#fff;cursor:pointer;">← Admin portal</button>
+        </div>
+        <div class="live-scanner-stats">
+            <div class="live-scanner-stat"><span>Success</span><strong id="ls-stat-ok">0</strong></div>
+            <div class="live-scanner-stat"><span>Duplicate</span><strong id="ls-stat-dup">0</strong></div>
+            <div class="live-scanner-stat"><span>Failed</span><strong id="ls-stat-fail">0</strong></div>
+            <div class="live-scanner-stat"><span>Tickets scanned</span><strong id="ls-stat-tix">0</strong></div>
+        </div>
+    </header>
+    <main id="live-scan-grid" class="live-scanner-grid" aria-live="polite"></main>
+    <script src="/js/admin-live-scanner.js"></script>
+</body>
+</html>

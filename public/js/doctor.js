@@ -2041,6 +2041,7 @@ function switchTab(tabId, menuEl) {
         stopCertTrackingPoll();
     }
     if (tabId === 'tab-feedback') {
+        loadDashboardFeedbackForm();
         loadDashboardFeedbackSeminars();
     }
     if (tabId === 'tab-support') {
@@ -4943,6 +4944,40 @@ async function loadDashboardFeedbackSeminars() {
     }
 }
 
+async function loadDashboardFeedbackForm() {
+    const host = document.getElementById('dash-feedback-fields');
+    if (!host) return;
+    try {
+        const res = await fetch('/api/public/feedback-form');
+        const cfg = await res.json();
+        const titleEl = document.querySelector('#tab-feedback .section-title');
+        const introEl = document.querySelector('#tab-feedback .tab-intro-feedback');
+        if (titleEl && cfg.title) titleEl.textContent = cfg.title;
+        if (introEl && cfg.intro) introEl.textContent = cfg.intro;
+        host.innerHTML = '';
+        (cfg.fields || []).forEach((f) => {
+            const wrap = document.createElement('div');
+            wrap.className = 'form-group';
+            if (f.type === 'rating') {
+                let opts = '<option value="">—</option>';
+                const max = f.max || 5;
+                const min = f.min || 1;
+                for (let i = max; i >= min; i--) opts += `<option value="${i}">${i}</option>`;
+                wrap.innerHTML = `<label>${escapeHtml(f.label)}</label><select id="dfb-${f.id}" ${f.required ? 'required' : ''}>${opts}</select>`;
+            } else if (f.type === 'textarea') {
+                wrap.innerHTML = `<label>${escapeHtml(f.label)}</label><textarea id="dfb-${f.id}" rows="${f.rows || 2}" ${f.required ? 'required' : ''}></textarea>`;
+            } else if (f.type === 'checkbox') {
+                wrap.innerHTML = `<label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="dfb-${f.id}" ${f.defaultChecked ? 'checked' : ''}> ${escapeHtml(f.label)}</label>`;
+            } else {
+                wrap.innerHTML = `<label>${escapeHtml(f.label)}</label><input type="text" id="dfb-${f.id}" ${f.required ? 'required' : ''}>`;
+            }
+            host.appendChild(wrap);
+        });
+    } catch (e) {
+        console.warn('feedback form', e);
+    }
+}
+
 async function submitDashboardFeedback(e) {
     e.preventDefault();
     if (!currentUser) return;
@@ -4957,6 +4992,13 @@ async function submitDashboardFeedback(e) {
         regOpt && regOpt.getAttribute('data-registration-id')
             ? parseInt(regOpt.getAttribute('data-registration-id'), 10)
             : null;
+    const answers = {};
+    document.querySelectorAll('[id^="dfb-"]').forEach((el) => {
+        if (el.id === 'dfb-seminar') return;
+        const key = el.id.replace(/^dfb-/, '');
+        if (el.type === 'checkbox') answers[key] = el.checked;
+        else answers[key] = el.value;
+    });
     try {
         const res = await fetch('/api/feedback/submit', {
             method: 'POST',
@@ -4965,13 +5007,7 @@ async function submitDashboardFeedback(e) {
                 userId: currentUser.id,
                 seminarId,
                 registrationId: Number.isInteger(registrationId) ? registrationId : null,
-                rating: parseInt(document.getElementById('dfb-rating').value, 10),
-                contentQuality: parseInt(document.getElementById('dfb-content').value, 10),
-                speakerQuality: parseInt(document.getElementById('dfb-speaker').value, 10),
-                organizationQuality: parseInt(document.getElementById('dfb-org').value, 10),
-                overallExperience: document.getElementById('dfb-exp').value,
-                suggestions: document.getElementById('dfb-sug').value,
-                wouldAttendAgain: document.getElementById('dfb-again').checked
+                answers
             })
         });
         const data = await res.json();
