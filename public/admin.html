@@ -878,7 +878,7 @@
                     <h3 style="margin:0 0 10px;color:#6d28d9;">Additional payments (doctor portal)</h3>
                     <p style="font-size:0.88rem;color:#64748b;margin:0 0 12px;">Create extra charges (workshop fee, late fee, etc.). Doctors see them under Payments; you can mark cash received at the desk.</p>
                     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;max-width:960px;">
-                        <div><label>Doctor user ID</label><input type="number" id="sup-pay-user-id" style="width:100%;padding:8px;"></div>
+                        <div><label>Doctor portal User ID</label><input type="text" id="sup-pay-user-id" placeholder="e.g. USR_TINBS1V70" autocomplete="off" style="width:100%;padding:8px;"></div>
                         <div><label>Seminar (optional)</label><select id="sup-pay-seminar" style="width:100%;padding:8px;"><option value="">—</option></select></div>
                         <div><label>Amount (₹)</label><input type="number" id="sup-pay-amount" step="0.01" style="width:100%;padding:8px;"></div>
                     </div>
@@ -944,7 +944,7 @@
             <!-- Certificate management -->
             <div id="tab-certificates" class="tab-pane hidden cert-mgmt-theme">
                 <h2 class="cert-mgmt-heading">Certificate Management</h2>
-                <p class="cert-mgmt-intro">Apply the <strong>VGMF gold certificate design</strong> (participant or volunteer) or upload a custom file, then enable certificates for checked-in doctors. Each certificate must show <strong>PRN No.</strong>, <strong>Application No.</strong>, and a <strong>verification QR</strong>. After the seminar ends, enable the public verify page and dispatch notifications.</p>
+                <p class="cert-mgmt-intro">Apply the <strong>VGMF gold certificate design</strong> for <strong>participant</strong> and <strong>volunteer</strong> separately, then enable each type from the candidates list (switch Template type). Participation certificates require venue check-in; volunteer certificates can be enabled for approved volunteers. Each certificate must show <strong>PRN No.</strong>, <strong>Application No.</strong>, and a <strong>verification QR</strong>.</p>
                 <div class="card cert-mgmt-card">
                     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px;">
                         <div>
@@ -953,7 +953,7 @@
                         </div>
                         <div>
                             <label>Template type</label>
-                            <select id="cert-mgmt-type" style="width:100%;padding:8px;" onchange="loadCertTemplateConfig()">
+                            <select id="cert-mgmt-type" style="width:100%;padding:8px;" onchange="loadCertTemplateConfig(); loadAdminCertificateCandidates();">
                                 <option value="participant">Participant</option>
                                 <option value="volunteer">Volunteer</option>
                             </select>
@@ -1516,7 +1516,7 @@
                 
                 <div class="card" style="margin-top: 20px;">
                     <h3>Payment Gateway Configurations</h3>
-                    <p style="color: #64748b; font-size: 0.9rem; margin-bottom: 20px;">Configure your payment gateways below. Enter the required keys from your gateway's developer dashboard.</p>
+                    <p style="color: #64748b; font-size: 0.9rem; margin-bottom: 20px;">Live doctor payments use <strong>Razorpay</strong> or <strong>Cashfree</strong> only. Enable one (or both); saving updates the default gateway in Site configuration for new transactions.</p>
                     
                     <!-- Razorpay -->
                     <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
@@ -1534,56 +1534,15 @@
                         <label style="margin-top: 10px; display:block;"><input type="checkbox" id="pg-razorpay-active"> Enable Razorpay gateway</label>
                     </div>
                     
-                    <!-- PayU -->
-                    <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-                        <h4>PayU</h4>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
-                            <div><label>Merchant Key</label><input type="text" id="pg-payu-merchant-key" placeholder="..."></div>
-                            <div><label>Merchant Salt</label><input type="password" id="pg-payu-merchant-salt" placeholder="..."></div>
-                            <div><label>Merchant ID</label><input type="text" id="pg-payu-merchant-id" placeholder="..."></div>
-                        </div>
-                        <label style="margin-top: 10px;"><input type="checkbox" id="pg-payu-active"> Enable PayU</label>
-                    </div>
-                    
-                    <!-- Easebuzz -->
-                    <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-                        <h4>Easebuzz</h4>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                            <div><label>Merchant Key</label><input type="text" id="pg-easebuzz-merchant-key" placeholder="..."></div>
-                            <div><label>Merchant Salt</label><input type="password" id="pg-easebuzz-merchant-salt" placeholder="..."></div>
-                        </div>
-                        <label style="margin-top: 10px;"><input type="checkbox" id="pg-easebuzz-active"> Enable Easebuzz</label>
-                    </div>
-                    
-                    <!-- Paytm -->
-                    <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-                        <h4>Paytm</h4>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
-                            <div><label>Merchant ID</label><input type="text" id="pg-paytm-merchant-id" placeholder="..."></div>
-                            <div><label>Merchant Key</label><input type="text" id="pg-paytm-merchant-key" placeholder="..."></div>
-                            <div><label>Website</label><input type="text" id="pg-paytm-website" placeholder="WEBSTAGING"></div>
-                        </div>
-                        <label style="margin-top: 10px;"><input type="checkbox" id="pg-paytm-active"> Enable Paytm</label>
-                    </div>
-                    
-                    <!-- PhonePe -->
-                    <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-                        <h4>PhonePe</h4>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                            <div><label>Merchant ID</label><input type="text" id="pg-phonepe-merchant-id" placeholder="..."></div>
-                            <div><label>Salt Key</label><input type="password" id="pg-phonepe-salt-key" placeholder="..."></div>
-                        </div>
-                        <label style="margin-top: 10px;"><input type="checkbox" id="pg-phonepe-active"> Enable PhonePe</label>
-                    </div>
-                    
                     <!-- Cashfree -->
                     <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-                        <h4>Cashfree</h4>
+                        <h4>Cashfree (Live)</h4>
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                             <div><label>App ID</label><input type="text" id="pg-cashfree-app-id" placeholder="..."></div>
                             <div><label>Secret Key</label><input type="password" id="pg-cashfree-secret-key" placeholder="..."></div>
                         </div>
-                        <label style="margin-top: 10px;"><input type="checkbox" id="pg-cashfree-active"> Enable Cashfree</label>
+                        <label style="margin-top: 10px; display:block;"><input type="checkbox" id="pg-cashfree-live-enabled"> Enable Live mode for doctors</label>
+                        <label style="margin-top: 10px; display:block;"><input type="checkbox" id="pg-cashfree-active"> Enable Cashfree gateway</label>
                     </div>
                 </div>
                 

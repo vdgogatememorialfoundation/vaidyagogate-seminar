@@ -62,6 +62,7 @@ const certVerify = require('./lib/certificate-verify');
 const docVerify = require('./lib/application-document-verify');
 const seminarPurge = require('./lib/seminar-purge');
 const supplementalPayments = require('./lib/supplemental-payments');
+const { safeInternalUserRowId } = require('./lib/internal-user-id');
 const regCertVerify = require('./lib/registration-certificate-verify');
 const seminarAnalytics = require('./lib/seminar-analytics');
 const { filterConfirmedRows } = require('./lib/confirmed-participants');
@@ -4091,8 +4092,7 @@ app.post('/api/abstracts/submit', upload.fields([{ name: 'video', maxCount: 1 },
 });
 
 function parsePositiveUserId(raw) {
-    const n = parseInt(raw, 10);
-    return Number.isInteger(n) && n > 0 ? n : null;
+    return safeInternalUserRowId(raw);
 }
 
 /** Link registrations saved without user_id (bad session) to the signed-in account by email in form_data. */

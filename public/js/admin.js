@@ -2397,11 +2397,17 @@ async function loadAdminCertificateCandidates() {
     }
     tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Loading…</td></tr>';
     try {
-        const res = await fetch(`/api/admin/certificates/candidates?seminarId=${encodeURIComponent(sid)}`);
+        const certType = document.getElementById('cert-mgmt-type')?.value || 'participant';
+        const res = await fetch(
+            `/api/admin/certificates/candidates?seminarId=${encodeURIComponent(sid)}&certType=${encodeURIComponent(certType)}`
+        );
         const rows = await res.json();
         if (!Array.isArray(rows) || !rows.length) {
-            tbody.innerHTML =
-                '<tr><td colspan="9" style="text-align:center;">No registrations for this seminar yet.</td></tr>';
+            const emptyMsg =
+                certType === 'volunteer'
+                    ? 'No approved volunteers for this seminar yet.'
+                    : 'No registrations for this seminar yet.';
+            tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;">${emptyMsg}</td></tr>`;
             return;
         }
         tbody.innerHTML = '';
@@ -2416,7 +2422,14 @@ async function loadAdminCertificateCandidates() {
                     : scanCt > 0
                       ? scanCt + '/' + scansReq
                       : 'No';
-            const cert = r.cert_enabled ? 'Enabled' : r.scan_verified ? 'Eligible' : 'Locked';
+            const certLabel = certType === 'volunteer' ? 'Volunteer cert' : 'Participant cert';
+            const cert = r.cert_enabled
+                ? 'Enabled'
+                : certType === 'volunteer'
+                  ? 'Ready'
+                  : r.scan_verified
+                    ? 'Eligible'
+                    : 'Locked';
             const appCell = r.application_no
                 ? escAdmin(r.application_no)
                 : '<span style="color:#b91c1c;font-weight:600;">Missing</span>';
@@ -2432,7 +2445,7 @@ async function loadAdminCertificateCandidates() {
                 <td>${paid}</td>
                 <td>${checked}</td>
                 <td><code>${escAdmin(r.ticket_id_string || '—')}</code></td>
-                <td>${cert}</td>
+                <td title="${escAdmin(certLabel)}">${cert}</td>
             </tr>`;
         });
     } catch (e) {
@@ -2449,6 +2462,7 @@ function toggleAllCertCandidates(on) {
 
 async function bulkEnableAdminCertificates(enabled) {
     const sid = document.getElementById('cert-mgmt-seminar')?.value;
+    const certType = document.getElementById('cert-mgmt-type')?.value || 'participant';
     if (!sid) return alert('Select a seminar');
     const userIds = [];
     document.querySelectorAll('.cert-cand-cb:checked').forEach((cb) => {
@@ -2459,7 +2473,12 @@ async function bulkEnableAdminCertificates(enabled) {
         const res = await fetch('/api/admin/certificates/bulk-toggle', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ seminarId: parseInt(sid, 10), userIds, enabled: !!enabled })
+            body: JSON.stringify({
+                seminarId: parseInt(sid, 10),
+                userIds,
+                enabled: !!enabled,
+                certType
+            })
         });
         const data = await res.json();
         if (data.success) {
@@ -5030,27 +5049,15 @@ async function loadSettings() {
                 document.getElementById('pg-razorpay-live-enabled').checked =
                     !!live.enabled || !!(live.key_id && live.key_secret);
                 document.getElementById('pg-razorpay-active').checked = pg.is_active;
-            } else if (pg.name === 'payu') {
-                document.getElementById('pg-payu-merchant-key').value = config.merchant_key || '';
-                document.getElementById('pg-payu-merchant-salt').value = config.merchant_salt || '';
-                document.getElementById('pg-payu-merchant-id').value = config.merchant_id || '';
-                document.getElementById('pg-payu-active').checked = pg.is_active;
-            } else if (pg.name === 'easebuzz') {
-                document.getElementById('pg-easebuzz-merchant-key').value = config.merchant_key || '';
-                document.getElementById('pg-easebuzz-merchant-salt').value = config.merchant_salt || '';
-                document.getElementById('pg-easebuzz-active').checked = pg.is_active;
-            } else if (pg.name === 'paytm') {
-                document.getElementById('pg-paytm-merchant-id').value = config.merchant_id || '';
-                document.getElementById('pg-paytm-merchant-key').value = config.merchant_key || '';
-                document.getElementById('pg-paytm-website').value = config.website || '';
-                document.getElementById('pg-paytm-active').checked = pg.is_active;
-            } else if (pg.name === 'phonepe') {
-                document.getElementById('pg-phonepe-merchant-id').value = config.merchant_id || '';
-                document.getElementById('pg-phonepe-salt-key').value = config.salt_key || '';
-                document.getElementById('pg-phonepe-active').checked = pg.is_active;
             } else if (pg.name === 'cashfree') {
-                document.getElementById('pg-cashfree-app-id').value = config.app_id || '';
-                document.getElementById('pg-cashfree-secret-key').value = config.secret_key || '';
+                const live = config.live || {};
+                document.getElementById('pg-cashfree-app-id').value = live.app_id || config.app_id || '';
+                document.getElementById('pg-cashfree-secret-key').value = live.secret_key || config.secret_key || '';
+                const cfLiveEl = document.getElementById('pg-cashfree-live-enabled');
+                if (cfLiveEl) {
+                    cfLiveEl.checked =
+                        live.enabled !== false && !!(live.app_id || config.app_id) && !!(live.secret_key || config.secret_key);
+                }
                 document.getElementById('pg-cashfree-active').checked = pg.is_active;
             }
         });
@@ -5216,7 +5223,10 @@ function previewLiveSiteDuringMaintenance() {
 }
         
 async function savePaymentGatewaysSettings() {
-        const gateways = [
+    const cfAppId = document.getElementById('pg-cashfree-app-id').value.trim();
+    const cfSecret = document.getElementById('pg-cashfree-secret-key').value.trim();
+    const cfLiveOn = document.getElementById('pg-cashfree-live-enabled')?.checked;
+    const gateways = [
         {
             name: 'razorpay',
             is_active: document.getElementById('pg-razorpay-active').checked,
@@ -5233,22 +5243,51 @@ async function savePaymentGatewaysSettings() {
                 }
             }
         },
-            { name: 'payu', is_active: document.getElementById('pg-payu-active').checked, config: { merchant_key: document.getElementById('pg-payu-merchant-key').value, merchant_salt: document.getElementById('pg-payu-merchant-salt').value, merchant_id: document.getElementById('pg-payu-merchant-id').value } },
-            { name: 'easebuzz', is_active: document.getElementById('pg-easebuzz-active').checked, config: { merchant_key: document.getElementById('pg-easebuzz-merchant-key').value, merchant_salt: document.getElementById('pg-easebuzz-merchant-salt').value } },
-            { name: 'paytm', is_active: document.getElementById('pg-paytm-active').checked, config: { merchant_id: document.getElementById('pg-paytm-merchant-id').value, merchant_key: document.getElementById('pg-paytm-merchant-key').value, website: document.getElementById('pg-paytm-website').value } },
-            { name: 'phonepe', is_active: document.getElementById('pg-phonepe-active').checked, config: { merchant_id: document.getElementById('pg-phonepe-merchant-id').value, salt_key: document.getElementById('pg-phonepe-salt-key').value } },
-            { name: 'cashfree', is_active: document.getElementById('pg-cashfree-active').checked, config: { app_id: document.getElementById('pg-cashfree-app-id').value, secret_key: document.getElementById('pg-cashfree-secret-key').value } }
-        ];
+        {
+            name: 'cashfree',
+            is_active: document.getElementById('pg-cashfree-active').checked,
+            config: {
+                app_id: cfAppId,
+                secret_key: cfSecret,
+                live: {
+                    enabled: !!cfLiveOn,
+                    app_id: cfAppId,
+                    secret_key: cfSecret
+                }
+            }
+        }
+    ];
+    const legacyOff = ['payu', 'easebuzz', 'paytm', 'phonepe'].map((name) => ({
+        name,
+        is_active: false,
+        config: {}
+    }));
     try {
-        for (const gw of gateways) {
+        for (const gw of [...gateways, ...legacyOff]) {
             await fetch(`/api/admin/payment_gateways/${gw.name}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ is_active: gw.is_active, config: gw.config })
             });
         }
+        const razActive = gateways[0].is_active && gateways[0].config.live.enabled;
+        const cfActive = gateways[1].is_active && gateways[1].config.live.enabled;
+        let defaultPg = null;
+        if (razActive) defaultPg = 'razorpay';
+        else if (cfActive) defaultPg = 'cashfree';
+        if (defaultPg) {
+            await fetch('/api/admin/global_settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ settings: [{ key: 'payment_gateway', value: defaultPg }] })
+            });
+            const sel = document.getElementById('setting-pg');
+            if (sel) sel.value = defaultPg;
+        }
         setAdminSettingsSaveMsg(
-            'Payment gateways saved. For Razorpay Live: enable the gateway and Live mode, enter rzp_live_ Key ID and Secret, then save again.'
+            defaultPg
+                ? `Payment gateways saved. Default live gateway set to ${defaultPg} (Site configuration).`
+                : 'Payment gateways saved. Enable Razorpay or Cashfree Live mode for doctor payments.'
         );
     } catch (err) {
         console.error(err);
@@ -9679,7 +9718,7 @@ async function createAdminSupplementalPayment() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 actingAdminId: adm.id,
-                userId: document.getElementById('sup-pay-user-id')?.value,
+                userIdString: String(document.getElementById('sup-pay-user-id')?.value || '').trim(),
                 seminarId: document.getElementById('sup-pay-seminar')?.value || null,
                 title: document.getElementById('sup-pay-title')?.value,
                 description: document.getElementById('sup-pay-desc')?.value,
