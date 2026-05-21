@@ -37,9 +37,9 @@
                 </span>
             </div>
             <div class="cg-utility-auth">
-                <a href="#" onclick="openAuthModal('login'); return false;"><i class="fas fa-user"></i> Sign in</a>
+                <a href="#" class="cg-utility-signin" onclick="openAuthModal('login'); return false;"><i class="fas fa-user"></i> Sign in</a>
                 <span class="cg-utility-sep" aria-hidden="true">|</span>
-                <a href="#" data-portal-auth="signup" onclick="openRegisterModal(); return false;"><i class="fas fa-user-plus"></i> Create account</a>
+                <a href="#" class="cg-utility-signup" data-portal-auth="signup" onclick="openRegisterModal(); return false;"><i class="fas fa-user-plus"></i> Create account</a>
             </div>
         </div>
     </div>
@@ -67,10 +67,6 @@
                 <a href="#" id="nav-verify" data-nav-section="verify">Delegates</a>
                 <a href="/verify-certificate.html" data-menu-key="certificate">Certificate</a>
                 <a href="#" data-nav-section="contact">Contact</a>
-            </span>
-            <span id="cg-nav-menu-fixed">
-                <a href="#" onclick="openAuthModal('login'); return false;">Sign in</a>
-                <a href="/?register=1" class="cg-btn-register" data-portal-auth="signup" onclick="openRegisterModal(); return false;">Create account</a>
             </span>
         </nav>
     </div>
@@ -454,6 +450,20 @@
                 document.querySelectorAll('[data-portal-auth="signup"]').forEach((el) => {
                     el.style.display = window.__portalAuth.showSignup !== false ? '' : 'none';
                 });
+                const utilAuth = document.querySelector('.cg-utility-auth');
+                if (utilAuth) {
+                    const showIn = utilAuth.querySelector('.cg-utility-signin');
+                    const showUp = utilAuth.querySelector('.cg-utility-signup');
+                    const showSep = utilAuth.querySelector('.cg-utility-sep');
+                    if (showIn) showIn.style.display = window.__portalAuth.showLogin !== false ? '' : 'none';
+                    if (showUp) showUp.style.display = window.__portalAuth.showSignup !== false ? '' : 'none';
+                    if (showSep) {
+                        showSep.style.display =
+                            window.__portalAuth.showLogin !== false && window.__portalAuth.showSignup !== false
+                                ? ''
+                                : 'none';
+                    }
+                }
                 const tabLogin = document.getElementById('auth-tab-login');
                 const tabSignup = document.getElementById('auth-tab-signup');
                 if (tabLogin) tabLogin.style.display = window.__portalAuth.showLogin !== false ? '' : 'none';

@@ -298,11 +298,6 @@
         margin-right: 0 !important;
     }
 
-    /* Top bar: contacts only; sign-in is in menu drawer */
-    .cg-utility-auth {
-        display: none !important;
-    }
-
     .cg-utility-inner {
         padding: 8px 12px !important;
         gap: 8px !important;

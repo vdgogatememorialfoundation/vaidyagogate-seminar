@@ -155,10 +155,6 @@ svg {
         border-bottom: none;
     }
 
-    .cg-utility-auth {
-        display: none !important;
-    }
-
     .cg-utility-inner {
         flex-direction: column;
         align-items: stretch;
@@ -293,8 +289,7 @@ svg {
         touch-action: manipulation;
     }
 
-    #cg-nav-menu-links,
-    #cg-nav-menu-fixed {
+    #cg-nav-menu-links {
         display: flex;
         flex-direction: column;
         width: 100%;
@@ -356,8 +351,7 @@ svg {
         overflow: visible;
     }
 
-    #cg-nav-menu-links,
-    #cg-nav-menu-fixed {
+    #cg-nav-menu-links {
         display: flex;
         flex-wrap: wrap;
         align-items: center;

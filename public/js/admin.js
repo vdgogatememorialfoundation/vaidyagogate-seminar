@@ -8543,6 +8543,12 @@ async function savePortalAuthAdminConfig() {
             if (id && inp.checked) adminEnabledPages[id] = true;
         });
         config.adminEnabledPages = adminEnabledPages;
+        const websiteMenuPages = {};
+        document.querySelectorAll('#website-menu-pages-checkboxes input[data-website-menu-key]').forEach((inp) => {
+            const id = inp.getAttribute('data-website-menu-key');
+            if (id && inp.checked) websiteMenuPages[id] = true;
+        });
+        config.websiteMenuPages = websiteMenuPages;
     }
     try {
         const res = await fetch('/api/admin/portal-auth-config', {
