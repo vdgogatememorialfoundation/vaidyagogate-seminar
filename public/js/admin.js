@@ -2920,9 +2920,23 @@ async function openAdminCaseDetail(subId) {
                           escAdmin(j.user_id_string) +
                           ')</span>' +
                           '<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">' +
-                          '<input type="text" class="case-transfer-judge-ref" data-from-judge="' +
+                          '<select class="case-transfer-judge-select" data-from-judge="' +
                           j.id +
-                          '" placeholder="Transfer to judge portal ID" style="flex:1;min-width:160px;padding:6px 8px;">' +
+                          '" style="flex:1;min-width:180px;padding:6px 8px;"><option value="">Transfer to…</option>' +
+                          (__adminReviewers || [])
+                              .filter((x) => x.id !== j.id)
+                              .map(
+                                  (x) =>
+                                      '<option value="' +
+                                      x.id +
+                                      '">' +
+                                      escAdmin(x.first_name) +
+                                      ' ' +
+                                      escAdmin(x.last_name) +
+                                      '</option>'
+                              )
+                              .join('') +
+                          '</select>' +
                           '<button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;background:#b45309;" onclick="adminTransferCaseJudge(' +
                           sub.id +
                           ',' +
@@ -3005,9 +3019,9 @@ async function openAdminCaseDetail(subId) {
 
 
 async function adminTransferCaseJudge(subId, fromJudgeId) {
-    const inp = document.querySelector('.case-transfer-judge-ref[data-from-judge="' + fromJudgeId + '"]');
-    const toRef = inp && inp.value ? inp.value.trim() : '';
-    if (!toRef) return alert('Enter target judge portal user ID');
+    const sel = document.querySelector('.case-transfer-judge-select[data-from-judge="' + fromJudgeId + '"]');
+    const toJudgeUserId = sel ? parseInt(sel.value, 10) : NaN;
+    if (!Number.isInteger(toJudgeUserId) || toJudgeUserId < 1) return alert('Select a judge from the list');
     const adm = getStoredAdminUser();
     try {
         const res = await fetch('/api/admin/case/submissions/' + subId + '/transfer-judge', {
@@ -3015,13 +3029,13 @@ async function adminTransferCaseJudge(subId, fromJudgeId) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 fromJudgeId,
-                toJudgeUserIdString: toRef,
+                toJudgeUserId,
                 actingAdminId: adm && adm.id
             })
         });
         const data = await res.json();
         if (data.success) {
-            alert('Case transferred to ' + toRef);
+            alert('Case transferred successfully');
             openAdminCaseDetail(subId);
         } else alert(data.error || 'Transfer failed');
     } catch (e) {
@@ -5293,26 +5307,98 @@ async function submitProxyApp() {
     }
 }
 
-async function transferApplication() {
-    const appId = document.getElementById('transfer-app-id').value;
-    const newUserIdStr = document.getElementById('transfer-user-id').value;
+async function lookupTransferApplication() {
+    const applicationRef = document.getElementById('transfer-app-id')?.value?.trim();
+    const transferType = document.getElementById('transfer-type')?.value || 'auto';
+    const preview = document.getElementById('transfer-lookup-preview');
+    const adm = getStoredAdminUser();
+    if (!applicationRef) return alert('Enter application number or ID');
+    if (preview) preview.innerHTML = '<span class="muted">Looking up…</span>';
+    try {
+        const res = await fetch(
+            '/api/admin/applications/transfer-lookup?actingAdminId=' +
+                encodeURIComponent(adm && adm.id) +
+                '&applicationRef=' +
+                encodeURIComponent(applicationRef) +
+                '&transferType=' +
+                encodeURIComponent(transferType)
+        );
+        const data = await res.json();
+        if (!res.ok) {
+            if (preview) preview.innerHTML = '<span style="color:#b91c1c;">' + escAdmin(data.error || 'Not found') + '</span>';
+            return;
+        }
+        let html = '';
+        if (data.seminar) {
+            html +=
+                '<p><strong>Seminar:</strong> ' +
+                escAdmin(data.seminar.applicationNo) +
+                ' · ' +
+                escAdmin(data.seminar.status) +
+                ' · Owner: ' +
+                escAdmin(data.seminar.ownerName) +
+                ' (' +
+                escAdmin(data.seminar.ownerPortalId) +
+                ')</p>';
+        }
+        if (data.case) {
+            html +=
+                '<p><strong>Case:</strong> ' +
+                escAdmin(data.case.applicationNo) +
+                ' · ' +
+                escAdmin(data.case.status) +
+                ' · ' +
+                escAdmin(data.case.topic || '') +
+                ' · Owner: ' +
+                escAdmin(data.case.ownerName) +
+                ' (' +
+                escAdmin(data.case.ownerPortalId) +
+                ')</p>';
+        }
+        if (preview) preview.innerHTML = html || '<span class="muted">No match</span>';
+    } catch (e) {
+        console.error(e);
+        if (preview) preview.innerHTML = '<span style="color:#b91c1c;">Network error</span>';
+    }
+}
 
-    if(!appId || !newUserIdStr) return alert("Please fill both fields.");
+async function transferApplication() {
+    const applicationRef = document.getElementById('transfer-app-id')?.value?.trim();
+    const targetUserRef = document.getElementById('transfer-user-id')?.value?.trim();
+    const transferType = document.getElementById('transfer-type')?.value || 'auto';
+    const adm = getStoredAdminUser();
+
+    if (!applicationRef || !targetUserRef) return alert('Please fill application reference and target user.');
+
+    if (!confirm('Transfer this application to the target user account?')) return;
 
     try {
         const res = await fetch('/api/admin/applications/transfer', {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ applicationId: appId, newUserIdStr })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                applicationRef,
+                targetUserRef,
+                transferType,
+                actingAdminId: adm && adm.id
+            })
         });
         const result = await res.json();
-        if(result.success) {
-            alert("Application Transferred Successfully!");
+        if (result.success) {
+            let msg = 'Transfer completed.';
+            if (result.seminar) msg += '\nSeminar: ' + (result.seminar.applicationNo || result.seminar.id);
+            if (result.case) msg += '\nCase: ' + (result.case.applicationNo || result.case.id);
+            if (result.targetUser) msg += '\nNew owner: ' + (result.targetUser.name || '') + ' (' + (result.targetUser.userIdString || '') + ')';
+            alert(msg);
+            lookupTransferApplication();
             loadApplications();
         } else {
-            alert("Transfer failed: " + result.error);
+            alert('Transfer failed: ' + (result.error || 'Unknown error'));
         }
-    } catch(err) { console.error(err); }
+    } catch (err) {
+        console.error(err);
+        alert('Network error');
+    }
 }
 
 // Seminars Logic

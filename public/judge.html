@@ -159,7 +159,9 @@
             <div style="margin-bottom:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
                 <button type="button" class="btn" id="case-contact-participant-btn"><i class="fas fa-comments"></i> Messages</button>
                 <span class="muted" style="font-size:0.82rem;">Wrong assignment?</span>
-                <input type="text" id="case-transfer-judge-ref" placeholder="Other judge portal ID" style="padding:6px 10px;max-width:180px;border:1px solid #c7d2fe;border-radius:8px;">
+                <select id="case-transfer-judge-select" style="padding:6px 10px;max-width:220px;border:1px solid #c7d2fe;border-radius:8px;">
+                    <option value="">Transfer to judge…</option>
+                </select>
                 <button type="button" class="btn" id="case-transfer-judge-btn" style="background:#b45309;color:#fff;border-color:#b45309;"><i class="fas fa-exchange-alt"></i> Transfer case</button>
             </div>
             <div id="case-score-locked" class="locked-banner hidden">Scores submitted and locked — cannot be changed.</div>
@@ -208,6 +210,7 @@
             let activeScoreSubmissionId = null;
             let caseCriteriaDefs = [];
             let activeParticipant = null;
+            let judgePeerList = [];
             const contactOverlay = document.getElementById('case-contact-overlay');
 
             function judgeNumericUserId(u) {
@@ -237,6 +240,32 @@
                     PortalAuth.renderLoginTime('judge-login-time', u);
                 }
                 loadCaseAssignments();
+                loadJudgePeerList();
+            }
+
+            async function loadJudgePeerList() {
+                const sel = document.getElementById('case-transfer-judge-select');
+                if (!sel || !user) return;
+                try {
+                    const jid = judgeNumericUserId();
+                    const res = await fetch(
+                        '/api/judge/case/reviewers?judgeUserId=' +
+                            encodeURIComponent(jid) +
+                            '&judgeUserIdString=' +
+                            encodeURIComponent(judgePortalIdString())
+                    );
+                    const data = await res.json();
+                    judgePeerList = data.judges || [];
+                    sel.innerHTML = '<option value="">Transfer to judge…</option>';
+                    judgePeerList.forEach((j) => {
+                        const opt = document.createElement('option');
+                        opt.value = String(j.id);
+                        opt.textContent = (j.name || 'Judge') + (j.user_id_string ? '' : '');
+                        sel.appendChild(opt);
+                    });
+                } catch (e) {
+                    console.error(e);
+                }
             }
 
             function escapeHtml(s) {
@@ -610,9 +639,13 @@
 
             document.getElementById('case-transfer-judge-btn').addEventListener('click', async () => {
                 if (!user || !activeScoreSubmissionId) return;
-                const toRef = document.getElementById('case-transfer-judge-ref')?.value?.trim();
-                if (!toRef) return alert('Enter the other judge portal user ID');
-                if (!confirm('Transfer this case to judge ' + toRef + '? You will no longer see it in your list.')) return;
+                const toJudgeId = parseInt(document.getElementById('case-transfer-judge-select')?.value, 10);
+                if (!Number.isInteger(toJudgeId) || toJudgeId < 1) {
+                    return alert('Select a judge from the list');
+                }
+                const picked = judgePeerList.find((j) => j.id === toJudgeId);
+                const label = picked ? picked.name : 'selected judge';
+                if (!confirm('Transfer this case to ' + label + '? You will no longer see it in your list.')) return;
                 try {
                     const jid = judgeNumericUserId();
                     const res = await fetch(
@@ -623,13 +656,13 @@
                             body: JSON.stringify({
                                 judgeUserId: jid,
                                 judgeUserIdString: judgePortalIdString(),
-                                toJudgeUserIdString: toRef
+                                toJudgeUserId: toJudgeId
                             })
                         }
                     );
                     const data = await res.json();
                     if (!res.ok) return alert(data.error || 'Transfer failed');
-                    alert('Case transferred to ' + toRef);
+                    alert('Case transferred to ' + label);
                     scoreOverlay.classList.add('hidden');
                     contactOverlay.classList.add('hidden');
                     activeScoreSubmissionId = null;

@@ -467,12 +467,22 @@
             <div id="tab-transfer" class="tab-pane hidden">
                 <h2 style="margin-bottom: 20px;">Internal Application Transfer</h2>
                 <div class="card">
-                    <p style="color: #64748b; margin-bottom: 20px;">Transfer an existing application from one User ID to another User ID.</p>
-                    <label>Application ID (e.g. 123456789012)</label>
-                    <input type="text" id="transfer-app-id" placeholder="Application Database ID">
-                    <label style="margin-top: 15px; display: block;">Target User's 12-Digit ID</label>
-                    <input type="text" id="transfer-user-id" placeholder="e.g. 481938501234">
-                    <button class="btn-primary" style="margin-top: 15px;" onclick="transferApplication()">Execute Transfer</button>
+                    <p style="color: #64748b; margin-bottom: 16px;">Move a seminar registration or case presentation to another doctor account (including pending approval). Use the application number shown in the portal.</p>
+                    <label>Application type</label>
+                    <select id="transfer-type" style="margin-bottom:12px;">
+                        <option value="auto">Auto-detect (seminar or case)</option>
+                        <option value="seminar">Seminar registration only</option>
+                        <option value="case">Case presentation only</option>
+                    </select>
+                    <label>Application number or internal ID</label>
+                    <input type="text" id="transfer-app-id" placeholder="e.g. 123456789012">
+                    <label style="margin-top: 12px; display: block;">Target user (portal ID, email, or account number)</label>
+                    <input type="text" id="transfer-user-id" placeholder="e.g. 481938501234 or doctor@email.com">
+                    <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;">
+                        <button type="button" class="btn-primary" style="background:#64748b;" onclick="lookupTransferApplication()">Look up</button>
+                        <button type="button" class="btn-primary" onclick="transferApplication()">Execute transfer</button>
+                    </div>
+                    <div id="transfer-lookup-preview" style="margin-top:14px;font-size:0.9rem;color:#334155;"></div>
                 </div>
             </div>
 

@@ -8198,18 +8198,217 @@ app.post('/api/admin/users/:userId/demo', (req, res) => {
     });
 });
 
-// Admin: Transfer Application
+// Admin: Transfer Application (seminar registration and/or case presentation)
 app.post('/api/admin/applications/transfer', (req, res) => {
-    const { applicationId, newUserIdStr } = req.body;
-    // Find new user id by string
-    db.get(`SELECT id FROM users WHERE user_id_string = ?`, [newUserIdStr], (err, user) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (!user) return res.status(404).json({ error: 'Target User ID not found' });
-        
-        db.run(`UPDATE registrations SET user_id = ? WHERE id = ?`, [user.id, applicationId], function(err) {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json({ success: true });
+    const body = req.body || {};
+    const actingAdminId = parseInt(body.actingAdminId, 10);
+    const applicationRef = String(
+        body.applicationRef || body.applicationId || body.applicationNo || ''
+    ).trim();
+    const targetUserRef = String(
+        body.targetUserRef || body.newUserIdStr || body.targetUserId || ''
+    ).trim();
+    const transferType = String(body.transferType || body.type || 'auto').toLowerCase();
+
+    if (!applicationRef) return res.status(400).json({ error: 'Application number or ID is required' });
+    if (!targetUserRef) return res.status(400).json({ error: 'Target user portal ID or email is required' });
+
+    assertAdminPortalActor(actingAdminId, (eAct) => {
+        if (eAct) return res.status(eAct.message === 'FORBIDDEN' ? 403 : 500).json({ error: 'Admin access required' });
+        resolvePortalUserRef(targetUserRef, (eU, targetUser) => {
+            if (eU) return res.status(400).json({ error: eU.message });
+
+            const asInt = parseInt(applicationRef, 10);
+            const trySeminar = transferType === 'seminar' || transferType === 'registration' || transferType === 'auto';
+            const tryCase = transferType === 'case' || transferType === 'case_presentation' || transferType === 'auto';
+
+            const transferSeminar = (cb) => {
+                if (!trySeminar) return cb(null, null);
+                const sql =
+                    Number.isInteger(asInt) && asInt > 0 && /^\d+$/.test(applicationRef)
+                        ? `SELECT id, user_id, application_no, status FROM registrations WHERE id = ? OR TRIM(application_no) = TRIM(?) LIMIT 1`
+                        : `SELECT id, user_id, application_no, status FROM registrations WHERE TRIM(application_no) = TRIM(?) LIMIT 1`;
+                const params =
+                    Number.isInteger(asInt) && asInt > 0 && /^\d+$/.test(applicationRef)
+                        ? [asInt, applicationRef]
+                        : [applicationRef];
+                db.get(sql, params, (eR, reg) => {
+                    if (eR) return cb(eR);
+                    if (!reg) return cb(null, null);
+                    if (reg.user_id === targetUser.id) {
+                        return cb(new Error('Seminar application already belongs to that user'));
+                    }
+                    db.run(`UPDATE registrations SET user_id = ? WHERE id = ?`, [targetUser.id, reg.id], (eUp) => {
+                        if (eUp) return cb(eUp);
+                        db.run(
+                            `UPDATE tickets SET user_id = ?
+                             WHERE order_id IN (SELECT id FROM orders WHERE registration_id = ?)`,
+                            [targetUser.id, reg.id],
+                            () => {
+                                db.run(
+                                    `UPDATE user_certificates SET user_id = ? WHERE registration_id = ?`,
+                                    [targetUser.id, reg.id],
+                                    () => {
+                                        db.run(
+                                            `UPDATE seminar_feedback SET user_id = ? WHERE registration_id = ?`,
+                                            [targetUser.id, reg.id],
+                                            () =>
+                                                cb(null, {
+                                                    kind: 'seminar',
+                                                    id: reg.id,
+                                                    applicationNo: reg.application_no,
+                                                    status: reg.status
+                                                })
+                                        );
+                                    }
+                                );
+                            }
+                        );
+                    });
+                });
+            };
+
+            const transferCase = (cb) => {
+                if (!tryCase) return cb(null, null);
+                const sql =
+                    Number.isInteger(asInt) && asInt > 0 && /^\d+$/.test(applicationRef)
+                        ? `SELECT id, user_id, application_no, status FROM case_submissions WHERE id = ? OR TRIM(application_no) = TRIM(?) LIMIT 1`
+                        : `SELECT id, user_id, application_no, status FROM case_submissions WHERE TRIM(application_no) = TRIM(?) LIMIT 1`;
+                const params =
+                    Number.isInteger(asInt) && asInt > 0 && /^\d+$/.test(applicationRef)
+                        ? [asInt, applicationRef]
+                        : [applicationRef];
+                db.get(sql, params, (eC, sub) => {
+                    if (eC) return cb(eC);
+                    if (!sub) return cb(null, null);
+                    if (sub.user_id === targetUser.id) {
+                        return cb(new Error('Case application already belongs to that user'));
+                    }
+                    db.run(`UPDATE case_submissions SET user_id = ? WHERE id = ?`, [targetUser.id, sub.id], (eUp) => {
+                        if (eUp) return cb(eUp);
+                        cb(null, {
+                            kind: 'case',
+                            id: sub.id,
+                            applicationNo: sub.application_no,
+                            status: sub.status
+                        });
+                    });
+                });
+            };
+
+            transferSeminar((eS, seminarOut) => {
+                if (eS) return res.status(400).json({ error: eS.message });
+                transferCase((eC, caseOut) => {
+                    if (eC) return res.status(400).json({ error: eC.message });
+                    if (!seminarOut && !caseOut) {
+                        return res.status(404).json({
+                            error: 'No matching seminar registration or case application found for that reference.'
+                        });
+                    }
+                    activityLog.logActivity(db, {
+                        user_id: actingAdminId,
+                        action: 'application.transfer',
+                        resource_type: seminarOut ? 'registration' : 'case_submission',
+                        resource_id: String((seminarOut && seminarOut.id) || (caseOut && caseOut.id)),
+                        meta: {
+                            applicationRef,
+                            targetUserId: targetUser.id,
+                            targetUserRef: targetUser.user_id_string,
+                            seminar: seminarOut,
+                            case: caseOut
+                        }
+                    });
+                    res.json({
+                        success: true,
+                        targetUser: {
+                            id: targetUser.id,
+                            userIdString: targetUser.user_id_string,
+                            name: [targetUser.first_name, targetUser.last_name].filter(Boolean).join(' ')
+                        },
+                        seminar: seminarOut,
+                        case: caseOut
+                    });
+                });
+            });
         });
+    });
+});
+
+// Admin: preview application transfer lookup
+app.get('/api/admin/applications/transfer-lookup', (req, res) => {
+    const applicationRef = String(req.query.applicationRef || req.query.q || '').trim();
+    const transferType = String(req.query.transferType || 'auto').toLowerCase();
+    const actingAdminId = parseInt(req.query.actingAdminId, 10);
+    if (!applicationRef) return res.status(400).json({ error: 'applicationRef is required' });
+    assertAdminPortalActor(actingAdminId, (eAct) => {
+        if (eAct) return res.status(eAct.message === 'FORBIDDEN' ? 403 : 500).json({ error: 'Admin access required' });
+        const asInt = parseInt(applicationRef, 10);
+        const out = { seminar: null, case: null };
+        let pending = 0;
+        const done = () => {
+            pending--;
+            if (pending > 0) return;
+            if (!out.seminar && !out.case) {
+                return res.status(404).json({ error: 'No application found', applicationRef });
+            }
+            res.json({ success: true, ...out });
+        };
+        if (transferType === 'seminar' || transferType === 'registration' || transferType === 'auto') {
+            pending++;
+            const sql =
+                Number.isInteger(asInt) && asInt > 0 && /^\d+$/.test(applicationRef)
+                    ? `SELECT r.id, r.application_no, r.status, u.first_name, u.last_name, u.user_id_string
+                       FROM registrations r JOIN users u ON u.id = r.user_id
+                       WHERE r.id = ? OR TRIM(r.application_no) = TRIM(?) LIMIT 1`
+                    : `SELECT r.id, r.application_no, r.status, u.first_name, u.last_name, u.user_id_string
+                       FROM registrations r JOIN users u ON u.id = r.user_id
+                       WHERE TRIM(r.application_no) = TRIM(?) LIMIT 1`;
+            const params =
+                Number.isInteger(asInt) && asInt > 0 && /^\d+$/.test(applicationRef)
+                    ? [asInt, applicationRef]
+                    : [applicationRef];
+            db.get(sql, params, (e, row) => {
+                if (!e && row) {
+                    out.seminar = {
+                        id: row.id,
+                        applicationNo: row.application_no,
+                        status: row.status,
+                        ownerName: [row.first_name, row.last_name].filter(Boolean).join(' '),
+                        ownerPortalId: row.user_id_string
+                    };
+                }
+                done();
+            });
+        }
+        if (transferType === 'case' || transferType === 'case_presentation' || transferType === 'auto') {
+            pending++;
+            const sql =
+                Number.isInteger(asInt) && asInt > 0 && /^\d+$/.test(applicationRef)
+                    ? `SELECT cs.id, cs.application_no, cs.status, cs.title, u.first_name, u.last_name, u.user_id_string
+                       FROM case_submissions cs JOIN users u ON u.id = cs.user_id
+                       WHERE cs.id = ? OR TRIM(cs.application_no) = TRIM(?) LIMIT 1`
+                    : `SELECT cs.id, cs.application_no, cs.status, cs.title, u.first_name, u.last_name, u.user_id_string
+                       FROM case_submissions cs JOIN users u ON u.id = cs.user_id
+                       WHERE TRIM(cs.application_no) = TRIM(?) LIMIT 1`;
+            const params =
+                Number.isInteger(asInt) && asInt > 0 && /^\d+$/.test(applicationRef)
+                    ? [asInt, applicationRef]
+                    : [applicationRef];
+            db.get(sql, params, (e, row) => {
+                if (!e && row) {
+                    out.case = {
+                        id: row.id,
+                        applicationNo: row.application_no,
+                        status: row.status,
+                        topic: row.title,
+                        ownerName: [row.first_name, row.last_name].filter(Boolean).join(' '),
+                        ownerPortalId: row.user_id_string
+                    };
+                }
+                done();
+            });
+        }
+        if (pending === 0) res.status(400).json({ error: 'Invalid transferType' });
     });
 });
 
