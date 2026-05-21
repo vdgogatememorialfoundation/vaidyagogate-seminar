@@ -7709,6 +7709,12 @@ app.post('/api/admin/portal-auth-config', (req, res) => {
         if (e) return res.status(500).json({ error: e.message });
         if (!adm) return res.status(403).json({ error: 'Invalid administrator' });
         const merged = portalAuthPolicy.merge(config);
+        const isSuper =
+            String(adm.role || '').toLowerCase() === 'admin' &&
+            String(adm.user_role || '').toLowerCase() !== 'co_admin';
+        if (!isSuper) {
+            delete merged.adminEnabledPages;
+        }
         upsertGlobalSetting(portalAuthPolicy.KEY, JSON.stringify(merged), (err) => {
             if (err) return res.status(500).json({ error: err.message });
             portalAuthPolicy.loadPortalAuthConfig(db, () => {

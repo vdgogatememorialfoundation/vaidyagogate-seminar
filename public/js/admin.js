@@ -238,9 +238,15 @@ function isSuperAdminUser() {
     return String(u.role || '').toLowerCase() === 'admin' && String(u.user_role || '').toLowerCase() !== 'co_admin';
 }
 
-function coAdminCanAccessTab(tabId) {
+function adminCanAccessTab(tabId) {
     let checkId = tabId === 'tab-seminar-details' ? 'tab-seminars' : tabId;
     if (checkId === 'tab-users') checkId = 'tab-staff-users';
+    const globalPages = window.__adminEnabledPages || {};
+    const globalKeys = Object.keys(globalPages);
+    if (globalKeys.length) {
+        const anyOn = globalKeys.some((k) => globalPages[k] === true);
+        if (anyOn && globalPages[checkId] !== true) return false;
+    }
     const u = getStoredAdminUser();
     if (String(u.user_role || '').toLowerCase() !== 'co_admin') return true;
     let raw = {};
@@ -259,7 +265,7 @@ function applyCoAdminSidebarVisibility() {
     document.querySelectorAll('.menu-item[data-admin-module]').forEach((el) => {
         const m = el.getAttribute('data-admin-module');
         if (!m) return;
-        if (!coAdminCanAccessTab(m)) el.classList.add('hidden');
+        if (!adminCanAccessTab(m)) el.classList.add('hidden');
         else el.classList.remove('hidden');
     });
 }
@@ -276,7 +282,9 @@ window.onload = () => {
         document.getElementById('auth-overlay').classList.add('hidden');
         document.getElementById('dashboard-main').classList.remove('hidden');
         loadAllData();
-        applyCoAdminSidebarVisibility();
+        loadPortalAuthAdminForm()
+            .then(() => applyCoAdminSidebarVisibility())
+            .catch(() => applyCoAdminSidebarVisibility());
         refreshAdminSensitiveOtpRequirement();
     }
 };
@@ -426,7 +434,7 @@ document.getElementById('btn-logout').addEventListener('click', () => {
 });
 
 function switchTab(tabId) {
-    if (!coAdminCanAccessTab(tabId)) {
+    if (!adminCanAccessTab(tabId)) {
         alert(
             'You do not have access to this module. Ask the super administrator to enable it under Users & CRM → Modules (co-admin accounts only).'
         );
@@ -5978,7 +5986,7 @@ async function loadSeminars() {
 }
 
 function editSeminar(index) {
-    if (!coAdminCanAccessTab('tab-seminars')) {
+    if (!adminCanAccessTab('tab-seminars')) {
         alert('You do not have access to seminar management.');
         return;
     }
@@ -6141,7 +6149,7 @@ let currentManageSeminarId = null;
 let currentSeminarApps = [];
 
 async function manageSeminar(id, title) {
-    if (!coAdminCanAccessTab('tab-seminars')) {
+    if (!adminCanAccessTab('tab-seminars')) {
         alert('You do not have access to seminar management.');
         return;
     }
@@ -8441,12 +8449,40 @@ async function loadPortalAuthAdminForm() {
         setChk('pa-req-login-otp', d.config.requireLoginOtp);
         setChk('pa-req-email-verify', d.config.requireEmailVerification);
         setChk('pa-req-admin-sensitive-otp', d.config.requireAdminOtpForSensitive);
+        window.__adminEnabledPages = d.config.adminEnabledPages || {};
+        renderAdminGlobalPagesCheckboxes();
         if (eff) {
             eff.textContent = `Effective signup OTP: ${d.signupOtpEffective ? 'on' : 'off'} · Effective login OTP: ${d.loginOtpEffective ? 'on' : 'off'} (environment variables can still override).`;
         }
     } catch (_) {
         if (eff) eff.textContent = '';
     }
+}
+
+function renderAdminGlobalPagesCheckboxes() {
+    const wrap = document.getElementById('admin-global-pages-checkboxes');
+    const card = document.getElementById('admin-pages-policy-card');
+    if (!wrap) return;
+    const superUser = isSuperAdminUser();
+    if (card) card.style.display = superUser ? '' : 'none';
+    if (!superUser) return;
+    const pages = window.__adminEnabledPages || {};
+    const keys = Object.keys(pages);
+    const restrict = keys.length && keys.some((k) => pages[k] === true);
+    wrap.innerHTML = ADMIN_MODULE_TAB_DEFS.map(([id, title]) => {
+        const checked = !restrict || pages[id] === true;
+        return (
+            '<label style="display:flex;align-items:center;gap:8px;font-size:0.88rem;cursor:pointer;">' +
+            '<input type="checkbox" data-global-admin-tab="' +
+            id +
+            '" ' +
+            (checked ? 'checked' : '') +
+            '>' +
+            '<span>' +
+            title +
+            '</span></label>'
+        );
+    }).join('');
 }
 
 async function savePortalAuthAdminConfig() {
@@ -8462,6 +8498,14 @@ async function savePortalAuthAdminConfig() {
         requireEmailVerification: gv('pa-req-email-verify'),
         requireAdminOtpForSensitive: gv('pa-req-admin-sensitive-otp')
     };
+    if (isSuperAdminUser()) {
+        const adminEnabledPages = {};
+        document.querySelectorAll('#admin-global-pages-checkboxes input[data-global-admin-tab]').forEach((inp) => {
+            const id = inp.getAttribute('data-global-admin-tab');
+            if (id && inp.checked) adminEnabledPages[id] = true;
+        });
+        config.adminEnabledPages = adminEnabledPages;
+    }
     try {
         const res = await fetch('/api/admin/portal-auth-config', {
             method: 'POST',
@@ -8476,6 +8520,7 @@ async function savePortalAuthAdminConfig() {
         if (data.success) {
             await loadPortalAuthAdminForm();
             await refreshAdminSensitiveOtpRequirement();
+            applyCoAdminSidebarVisibility();
         }
     } catch (e) {
         if (msg) {

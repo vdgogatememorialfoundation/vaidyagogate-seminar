@@ -361,13 +361,6 @@
             const res = await fetch('/api/public/portal-urls');
             const u = await res.json();
             window.__portalUrls = u;
-            if (u.wix) {
-                const w = document.getElementById('nav-wix-home');
-                if (w) {
-                    w.href = u.wix;
-                    w.classList.remove('hidden');
-                }
-            }
         } catch (_) {}
     };
 
