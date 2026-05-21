@@ -229,7 +229,7 @@
                         <h4 style="color: #64748b;">Total Revenue</h4>
                         <h2 id="stat-revenue" style="color: #3b82f6;">&#8377;0</h2>
                     </div>
-                    <div class="card" style="margin-bottom: 0;">
+                    <div class="card" style="margin-bottom: 0;" id="stat-seats-card">
                         <h4 style="color: #64748b;">Seats</h4>
                         <h2 id="stat-seats" style="color: #7c3aed;font-size:1.05rem;">—</h2>
                     </div>
@@ -1242,10 +1242,18 @@
 
             <div id="tab-feedback-form" class="tab-pane hidden">
                 <h2 style="margin-bottom:12px;">Feedback form editor</h2>
-                <p style="color:#64748b;margin-bottom:16px;">Edit fields shown in the doctor portal feedback tab. Save JSON or use the builder below.</p>
+                <p style="color:#64748b;margin-bottom:16px;">Build the doctor portal feedback form below, or edit advanced JSON. Click <strong>Save feedback form</strong> when done.</p>
+                <div class="card" style="margin-bottom:16px;">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+                        <div><label>Form title</label><input type="text" id="feedback-form-title" style="width:100%;" oninput="syncFeedbackFormJsonFromBuilder()"></div>
+                        <div style="grid-column:1/-1;"><label>Intro text</label><input type="text" id="feedback-form-intro" style="width:100%;" oninput="syncFeedbackFormJsonFromBuilder()"></div>
+                    </div>
+                    <div id="feedback-form-fields"></div>
+                    <button type="button" class="btn-primary" style="margin-top:8px;background:#0d9488;" onclick="addFeedbackFormField()">+ Add field</button>
+                </div>
                 <div class="card">
-                    <label>Form JSON</label>
-                    <textarea id="feedback-form-json" rows="14" style="width:100%;font-family:monospace;font-size:0.85rem;"></textarea>
+                    <label>Advanced JSON (optional)</label>
+                    <textarea id="feedback-form-json" rows="10" style="width:100%;font-family:monospace;font-size:0.85rem;" onchange="loadAdminFeedbackFormConfigFromJson()"></textarea>
                     <button type="button" class="btn-primary" style="margin-top:12px;" onclick="saveAdminFeedbackFormConfig()">Save feedback form</button>
                     <p id="feedback-form-save-status" style="margin-top:10px;font-weight:600;"></p>
                 </div>

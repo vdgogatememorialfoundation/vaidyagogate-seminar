@@ -12,9 +12,13 @@
 
     function getActor() {
         try {
-            const raw = sessionStorage.getItem('adminUser') || localStorage.getItem('adminUser');
+            const raw =
+                localStorage.getItem('admin_user') ||
+                sessionStorage.getItem('admin_user') ||
+                sessionStorage.getItem('adminUser');
             if (!raw) return null;
-            return JSON.parse(raw);
+            const u = JSON.parse(raw);
+            return u && u.id ? u : null;
         } catch (_) {
             return null;
         }

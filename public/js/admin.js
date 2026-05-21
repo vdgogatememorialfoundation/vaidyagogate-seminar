@@ -825,7 +825,20 @@ function parseDoctorModulesObject(str) {
 }
 
 function openAdminLiveScannerBoard() {
-    window.open('/admin-live-scanner.html', '_blank', 'noopener');
+    const actor = getStoredAdminUser();
+    if (!actor || !actor.id) {
+        alert('Sign in to the admin portal first.');
+        return;
+    }
+    try {
+        sessionStorage.setItem('admin_user', JSON.stringify(actor));
+    } catch (_) {}
+    const w = window.open('/admin-live-scanner.html', '_blank', 'noopener,noreferrer');
+    if (!w) {
+        if (confirm('Pop-up blocked. Open the live board in this tab instead?')) {
+            location.href = '/admin-live-scanner.html';
+        }
+    }
 }
 
 async function initAdminPosTab() {
@@ -883,29 +896,143 @@ async function submitAdminPosRegistration() {
     }
 }
 
+function adminActorId() {
+    const u = getStoredAdminUser();
+    return u && u.id ? u.id : null;
+}
+
 async function loadAdminFeedbackFormConfig() {
-    const actor = getStoredAdminUser();
-    if (!actor) return;
+    const aid = adminActorId();
+    if (!aid) return;
     const ta = document.getElementById('feedback-form-json');
     try {
-        const res = await fetch('/api/admin/feedback-form?actingAdminId=' + encodeURIComponent(actor.id));
+        const res = await fetch('/api/admin/feedback-form?actingAdminId=' + encodeURIComponent(aid));
         const cfg = await res.json();
         if (ta) ta.value = JSON.stringify(cfg, null, 2);
+        renderFeedbackFormBuilder(cfg);
     } catch (e) {
         console.warn(e);
     }
 }
 
+function renderFeedbackFormBuilder(cfg) {
+    const titleEl = document.getElementById('feedback-form-title');
+    const introEl = document.getElementById('feedback-form-intro');
+    if (titleEl) titleEl.value = (cfg && cfg.title) || '';
+    if (introEl) introEl.value = (cfg && cfg.intro) || '';
+    const wrap = document.getElementById('feedback-form-fields');
+    if (!wrap) return;
+    const fields = (cfg && cfg.fields) || [];
+    wrap.innerHTML = '';
+    fields.forEach((f, i) => {
+        const row = document.createElement('div');
+        row.className = 'card';
+        row.style.cssText = 'margin-bottom:10px;padding:12px;display:grid;grid-template-columns:1fr 120px 80px 60px auto;gap:8px;align-items:end;';
+        row.dataset.index = String(i);
+        const typeOpts = ['rating', 'textarea', 'text', 'checkbox', 'select']
+            .map((t) => `<option value="${t}" ${f.type === t ? 'selected' : ''}>${t}</option>`)
+            .join('');
+        row.innerHTML =
+            '<div><label style="font-size:0.75rem;">Label</label><input type="text" class="ffb-label" value="' +
+            String(f.label || '').replace(/"/g, '&quot;') +
+            '" style="width:100%;"></div>' +
+            '<div><label style="font-size:0.75rem;">Field ID</label><input type="text" class="ffb-id" value="' +
+            String(f.id || '').replace(/"/g, '&quot;') +
+            '" style="width:100%;"></div>' +
+            '<div><label style="font-size:0.75rem;">Type</label><select class="ffb-type" style="width:100%;">' +
+            typeOpts +
+            '</select></div>' +
+            '<div><label style="font-size:0.75rem;">Required</label><input type="checkbox" class="ffb-req" ' +
+            (f.required ? 'checked' : '') +
+            '></div>' +
+            '<button type="button" class="btn-primary" style="background:#b91c1c;padding:6px 10px;" onclick="removeFeedbackFormField(this)">Remove</button>';
+        wrap.appendChild(row);
+    });
+}
+
+function collectFeedbackFormFromBuilder() {
+    const rows = document.querySelectorAll('#feedback-form-fields .card');
+    const fields = [];
+    rows.forEach((row) => {
+        const id = (row.querySelector('.ffb-id') || {}).value || '';
+        const label = (row.querySelector('.ffb-label') || {}).value || '';
+        const type = (row.querySelector('.ffb-type') || {}).value || 'text';
+        const required = !!(row.querySelector('.ffb-req') || {}).checked;
+        if (!String(id).trim() && !String(label).trim()) return;
+        const f = {
+            id: String(id).trim() || 'field_' + (fields.length + 1),
+            type,
+            label: String(label).trim() || id,
+            required
+        };
+        if (type === 'rating') {
+            f.min = 1;
+            f.max = 5;
+        }
+        if (type === 'textarea') f.rows = 2;
+        if (type === 'checkbox') f.defaultChecked = true;
+        fields.push(f);
+    });
+    let cfg = {};
+    try {
+        cfg = JSON.parse(document.getElementById('feedback-form-json').value || '{}');
+    } catch (_) {
+        cfg = { version: 1 };
+    }
+    cfg.version = cfg.version || 1;
+    const titleEl = document.getElementById('feedback-form-title');
+    const introEl = document.getElementById('feedback-form-intro');
+    cfg.title = (titleEl && titleEl.value.trim()) || cfg.title || 'Seminar feedback';
+    cfg.intro =
+        (introEl && introEl.value.trim()) ||
+        cfg.intro ||
+        'Share your experience after attending a seminar.';
+    cfg.fields = fields;
+    return cfg;
+}
+
+function loadAdminFeedbackFormConfigFromJson() {
+    const ta = document.getElementById('feedback-form-json');
+    if (!ta) return;
+    try {
+        const cfg = JSON.parse(ta.value || '{}');
+        renderFeedbackFormBuilder(cfg);
+    } catch (e) {
+        alert('Invalid JSON: ' + e.message);
+    }
+}
+
+function syncFeedbackFormJsonFromBuilder() {
+    const cfg = collectFeedbackFormFromBuilder();
+    const ta = document.getElementById('feedback-form-json');
+    if (ta) ta.value = JSON.stringify(cfg, null, 2);
+}
+
+function addFeedbackFormField() {
+    const cfg = collectFeedbackFormFromBuilder();
+    cfg.fields = cfg.fields || [];
+    cfg.fields.push({ id: 'newField', type: 'text', label: 'New question', required: false });
+    renderFeedbackFormBuilder(cfg);
+    syncFeedbackFormJsonFromBuilder();
+}
+
+function removeFeedbackFormField(btn) {
+    const row = btn && btn.closest('.card');
+    if (row) row.remove();
+    syncFeedbackFormJsonFromBuilder();
+}
+
 async function saveAdminFeedbackFormConfig() {
-    const actor = getStoredAdminUser();
-    if (!actor) return alert('Sign in as admin first.');
+    const aid = adminActorId();
+    if (!aid) return alert('Sign in as admin first.');
     const st = document.getElementById('feedback-form-save-status');
     try {
+        syncFeedbackFormJsonFromBuilder();
         const cfg = JSON.parse(document.getElementById('feedback-form-json').value || '{}');
         const res = await fetch('/api/admin/feedback-form', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ actingAdminId: actor.id, config: cfg })
+            body: JSON.stringify({ actingAdminId: aid, config: cfg })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Save failed');
@@ -2985,7 +3112,7 @@ async function saveAdminCaseProgram() {
             : (document.getElementById('case-prog-end') || {}).value || null,
         maxPresentationsPerUser: (document.getElementById('case-prog-max-per-user') || {}).value || 2,
         maxTotalSubmissions: (document.getElementById('case-prog-max-total') || {}).value || null,
-        showSeatsPublic: document.getElementById('case-prog-show-seats')?.checked !== false,
+        showSeatsPublic: document.getElementById('case-prog-show-seats')?.checked === true,
         maxFilesPerSubmission: (document.getElementById('case-prog-max-files') || {}).value || 5,
         maxFileSizeMb: (document.getElementById('case-prog-max-mb') || {}).value || 100,
         enabledCategories: enabledCategories,
@@ -6271,7 +6398,7 @@ async function saveSeminar(e) {
             ? window.PortalDateTime.fromDatetimeLocal(document.getElementById('seminar-event-date').value)
             : document.getElementById('seminar-event-date').value,
         capacity: parseInt(document.getElementById('seminar-capacity').value) || 0,
-        show_seats_public: document.getElementById('seminar-show-seats-public')?.checked !== false,
+        show_seats_public: document.getElementById('seminar-show-seats-public')?.checked === true,
         price: parseFloat(document.getElementById('seminar-price').value) || 0,
         is_active: document.getElementById('seminar-active').value === '1',
         checkin_enabled: document.getElementById('seminar-checkin-enabled').value === '1',
@@ -6359,8 +6486,13 @@ async function manageSeminar(id, title) {
         document.getElementById('stat-approved-apps').innerText = stats.approved_apps || 0;
         document.getElementById('stat-pending-payments').innerText = stats.pending_payments || 0;
         document.getElementById('stat-revenue').innerText = '₹' + (stats.total_revenue || 0);
+        const semRow = (globalSeminars || []).find((s) => Number(s.id) === Number(id));
+        const showSeats =
+            !semRow || semRow.show_seats_public == null || Number(semRow.show_seats_public) !== 0;
+        const seatsCard = document.getElementById('stat-seats-card');
         const seatsEl = document.getElementById('stat-seats');
-        if (seatsEl) {
+        if (seatsCard) seatsCard.style.display = showSeats ? '' : 'none';
+        if (seatsEl && showSeats) {
             if (stats.unlimited_seats) seatsEl.textContent = (stats.filled || 0) + ' / ∞';
             else if (stats.capacity > 0) {
                 seatsEl.textContent = (stats.filled || 0) + ' / ' + stats.capacity;

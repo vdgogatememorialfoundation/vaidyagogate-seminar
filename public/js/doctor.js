@@ -2162,7 +2162,7 @@ function applyCaseFormConfigFromProgram(program) {
         if (program.instructions) parts.push(program.instructions);
         if (program.maxPresentationsPerUser)
             parts.push('Up to ' + program.maxPresentationsPerUser + ' presentation(s) per doctor in this program.');
-        if (program.slotsRemaining != null)
+        if (program.showSeatsPublic !== false && program.slotsRemaining != null)
             parts.push(program.slotsRemaining + ' slot(s) remaining.');
         note.textContent = parts.join(' ');
         note.style.display = parts.length ? 'block' : 'none';
@@ -2218,7 +2218,7 @@ async function loadCaseProgramsGrid() {
                 btn = '<p style="color:#94a3b8;margin-top:10px;font-size:0.88rem;">Applications closed for this program</p>';
             }
             const slots =
-                p.slotsRemaining != null
+                p.showSeatsPublic !== false && p.slotsRemaining != null
                     ? `<p style="font-size:0.82rem;margin-top:6px;color:#0f766e;">${p.slotsRemaining} slot(s) left</p>`
                     : '';
             card.innerHTML = `<h4 style="margin:0 0 6px;">${escapeHtml(p.title)}</h4>
