@@ -105,6 +105,17 @@ function bootstrapTimeoutMs() {
     return 55000;
 }
 
+let supplementalEventRoutesMounted = false;
+function mountSupplementalAndEventRoutes() {
+    if (supplementalEventRoutesMounted) return;
+    supplementalEventRoutesMounted = true;
+    supplementalPayments.registerSupplementalPaymentRoutes(app, db, {
+        fileStore,
+        parsePositiveUserId
+    });
+    eventPages.registerEventPageRoutes(app, db, { fileStore, parsePositiveUserId });
+}
+
 function mountPaymentsRoutes() {
     registerPaymentsRoutes(app, {
         db,
@@ -120,16 +131,12 @@ function mountPaymentsRoutes() {
         notifyTicketIssued,
         assertAdminPortalActor
     });
-    supplementalPayments.registerSupplementalPaymentRoutes(app, db, {
-        fileStore,
-        parsePositiveUserId
-    });
-    eventPages.registerEventPageRoutes(app, db, { fileStore, parsePositiveUserId });
 }
 
 function bootstrapApp(done) {
     mountExtendedRoutes();
     mountPaymentsRoutes();
+    mountSupplementalAndEventRoutes();
     eventPages.ensureEventPageSchema(db, (e) => {
         if (e) console.warn('[event-pages] schema:', e.message);
     }, () => {});
