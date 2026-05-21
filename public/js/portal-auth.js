@@ -5,7 +5,6 @@
 (function (global) {
     const KEYS = {
         doctor: 'seminar_doctor_user',
-        event: 'seminar_event_user',
         judge: 'seminar_judge_user',
         scanner: 'seminar_scanner_user'
     };
@@ -20,7 +19,7 @@
         if (!user) return false;
         if (isAdminPortalUser(user) || isJudgeUser(user) || isScannerUser(user)) return false;
         const { ur, r } = normRole(user);
-        return ur === 'doctor' || r === 'doctor';
+        return ur === 'doctor' || r === 'doctor' || ur === 'event_attendee';
     }
 
     function isJudgeUser(user) {
@@ -41,7 +40,6 @@
     function allowedForPortal(user, portal) {
         if (!user) return false;
         if (portal === 'doctor') return isDoctorUser(user);
-        if (portal === 'event') return isEventAttendeeUser(user) || isDoctorUser(user);
         if (portal === 'judge') return isJudgeUser(user);
         if (portal === 'scanner') return isScannerUser(user);
         return false;
@@ -138,7 +136,6 @@
         if (isAdminPortalUser(user)) return 'Use the admin portal: /admin.html';
         if (isJudgeUser(user)) return 'Use the judge portal: /judge.html';
         if (isScannerUser(user)) return 'Use the scanner portal: /scanner.html';
-        if (isEventAttendeeUser(user)) return 'Use your event registration link: /event-register.html';
         if (isDoctorUser(user)) return 'Use the doctor portal: /doctor.html';
         if (r === 'admin') return 'Use the admin portal: /admin.html';
         return 'This account cannot access this portal. Please sign in with the correct account.';
@@ -382,7 +379,6 @@
         clearUser,
         allowedForPortal,
         isDoctorUser,
-        isEventAttendeeUser,
         isJudgeUser,
         isScannerUser,
         isAdminPortalUser,

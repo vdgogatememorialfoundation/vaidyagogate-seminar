@@ -411,70 +411,36 @@
         const section = document.getElementById('seminars-section');
         if (!wrap) return;
         try {
-            const [semRes, evRes] = await Promise.all([
-                fetch('/api/seminars?bucket=current'),
-                fetch('/api/public/events')
-            ]);
-            const payload = await semRes.json();
-            const events = evRes.ok ? await evRes.json() : [];
+            const res = await fetch('/api/seminars?bucket=current');
+            const payload = await res.json();
             const list = payload.seminars || [];
-            const pills = [];
-            (Array.isArray(events) ? events : []).forEach((ev) => {
-                const ed =
-                    ev.eventDate && window.PortalDateTime && window.PortalDateTime.formatEvent
-                        ? window.PortalDateTime.formatEvent(ev.eventDate)
-                        : ev.eventDate
-                          ? String(ev.eventDate)
-                          : '';
-                pills.push(
-                    '<article class="seminar-pill">' +
-                    '<h4>' +
-                    escHtml(ev.title || 'Event') +
-                    '</h4>' +
-                    '<p>' +
-                    escHtml(ev.subtitle || '') +
-                    '</p>' +
-                    (ed ? '<p class="seminar-meta"><i class="fas fa-calendar"></i> ' + escHtml(ed) + '</p>' : '') +
-                    '<a href="' +
-                    escHtml(ev.registerUrl || ev.pageUrl || '/event.html') +
-                    '" class="btn-primary" style="margin-top:auto;text-align:center;">' +
-                    (ev.portalMode === 'standalone' ? 'View event' : 'Register') +
-                    '</a></article>'
-                );
-            });
-            list.forEach((s) => {
-                if (s.event_slug && String(s.public_page_enabled) === '1') return;
-                const ed =
-                    s.event_date && window.PortalDateTime && window.PortalDateTime.formatEvent
-                        ? window.PortalDateTime.formatEvent(s.event_date)
-                        : s.event_date
-                          ? String(s.event_date)
-                          : '';
-                const regHref =
-                    String(s.portal_mode || 'doctor') === 'standalone' && s.event_slug
-                        ? '/event-register.html?event=' + encodeURIComponent(s.event_slug)
-                        : '/doctor.html?seminarId=' + s.id;
-                pills.push(
-                    '<article class="seminar-pill">' +
-                    '<h4>' +
-                    escHtml(s.title || 'Seminar') +
-                    '</h4>' +
-                    '<p>' +
-                    escHtml(s.description || '') +
-                    '</p>' +
-                    (ed ? '<p class="seminar-meta"><i class="fas fa-calendar"></i> ' + escHtml(ed) + '</p>' : '') +
-                    '<a href="' +
-                    escHtml(regHref) +
-                    '" class="btn-primary" style="margin-top:auto;text-align:center;">Register</a>' +
-                    '</article>'
-                );
-            });
-            if (!pills.length) {
+            if (!list.length) {
                 wrap.innerHTML =
                     '<p class="muted">No seminars are open for registration at the moment. Please check back soon.</p>';
                 return;
             }
-            wrap.innerHTML = pills.join('');
+            wrap.innerHTML = list
+                .map((s) => {
+                    const ed =
+                        s.event_date && window.PortalDateTime && window.PortalDateTime.formatEvent
+                            ? window.PortalDateTime.formatEvent(s.event_date)
+                            : s.event_date
+                              ? String(s.event_date)
+                              : '';
+                    return (
+                        '<article class="seminar-pill">' +
+                        '<h4>' +
+                        escHtml(s.title || 'Seminar') +
+                        '</h4>' +
+                        '<p>' +
+                        escHtml(s.description || '') +
+                        '</p>' +
+                        (ed ? '<p class="seminar-meta"><i class="fas fa-calendar"></i> ' + escHtml(ed) + '</p>' : '') +
+                        '<a href="/doctor.html" class="btn-primary" style="margin-top:auto;text-align:center;">Register</a>' +
+                        '</article>'
+                    );
+                })
+                .join('');
             if (section) section.classList.remove('hidden');
         } catch (e) {
             console.error(e);

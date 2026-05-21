@@ -62,7 +62,6 @@ const certVerify = require('./lib/certificate-verify');
 const docVerify = require('./lib/application-document-verify');
 const seminarPurge = require('./lib/seminar-purge');
 const supplementalPayments = require('./lib/supplemental-payments');
-const eventPages = require('./lib/event-pages');
 const regCertVerify = require('./lib/registration-certificate-verify');
 const seminarAnalytics = require('./lib/seminar-analytics');
 const { filterConfirmedRows } = require('./lib/confirmed-participants');
@@ -105,15 +104,9 @@ function bootstrapTimeoutMs() {
     return 55000;
 }
 
-let supplementalEventRoutesMounted = false;
-function mountSupplementalAndEventRoutes() {
-    if (supplementalEventRoutesMounted) return;
-    supplementalEventRoutesMounted = true;
-    supplementalPayments.registerSupplementalPaymentRoutes(app, db, {
-        fileStore,
-        parsePositiveUserId
-    });
-    eventPages.registerEventPageRoutes(app, db, { fileStore, parsePositiveUserId });
+function paymentAmountForSeminar(row) {
+    const p = row && row.price != null ? Number(row.price) : NaN;
+    return Number.isFinite(p) && p > 0 ? p : 1500;
 }
 
 function mountPaymentsRoutes() {
@@ -131,15 +124,15 @@ function mountPaymentsRoutes() {
         notifyTicketIssued,
         assertAdminPortalActor
     });
+    supplementalPayments.registerSupplementalPaymentRoutes(app, db, {
+        fileStore,
+        parsePositiveUserId
+    });
 }
 
 function bootstrapApp(done) {
     mountExtendedRoutes();
     mountPaymentsRoutes();
-    mountSupplementalAndEventRoutes();
-    eventPages.ensureEventPageSchema(db, (e) => {
-        if (e) console.warn('[event-pages] schema:', e.message);
-    }, () => {});
     startBackgroundWorkers();
     persistScrollingAnnouncementsSanitizeIfNeeded(() => {});
 
@@ -3543,13 +3536,6 @@ app.put('/api/admin/portal/year', (req, res) => {
 // 3. Seminars: current year vs past years
 app.get('/api/seminars', (req, res) => {
     const bucket = String((req.query && req.query.bucket) || 'current').toLowerCase();
-    const portalFilter = String((req.query && req.query.portal) || 'doctor').toLowerCase();
-    const includeAll = portalFilter === 'all';
-    const portalClause = includeAll
-        ? ''
-        : portalFilter === 'standalone'
-          ? ` AND lower(trim(IFNULL(portal_mode, 'doctor'))) = 'standalone' `
-          : ` AND lower(trim(IFNULL(portal_mode, 'doctor'))) != 'standalone' `;
     portalTracking.getPortalYear(db, (eY, portalYear) => {
         if (eY) return res.status(500).json({ error: eY.message });
         const yearQ = req.query && req.query.year != null ? parseInt(req.query.year, 10) : portalYear;
@@ -3557,16 +3543,12 @@ app.get('/api/seminars', (req, res) => {
         let sql;
         let params;
         if (bucket === 'past') {
-            sql =
-                `SELECT * FROM seminars WHERE is_active = 1 AND portal_year IS NOT NULL AND portal_year < ?` +
-                portalClause +
-                ` ORDER BY event_date DESC, id DESC`;
+            sql = `SELECT * FROM seminars WHERE is_active = 1 AND portal_year IS NOT NULL AND portal_year < ? ORDER BY event_date DESC, id DESC`;
             params = [activeYear];
         } else {
             sql =
                 `SELECT * FROM seminars WHERE is_active = 1 AND ` +
                 portalTracking.seminarPortalYearMatchSql() +
-                portalClause +
                 ` ORDER BY event_date ASC, id DESC`;
             params = [activeYear, activeYear];
         }
@@ -4152,8 +4134,7 @@ function fetchApplicationsForUser(uid, yearFilter, cb) {
     const baseSelect = `SELECT r.id, r.seminar_id, r.application_no, r.status, r.form_data, r.created_at,
                 r.created_at AS updated_at,
                 s.title AS seminar_title, s.whatsapp_group_url, s.cancellation_policy_json, s.terms_conditions,
-                s.event_date AS seminar_event_date, s.price AS seminar_price, s.portal_year,
-                IFNULL(s.payment_required, 1) AS payment_required, s.portal_mode`;
+                s.event_date AS seminar_event_date, s.price AS seminar_price, s.portal_year`;
     const fromWhere = ` FROM registrations r
          LEFT JOIN seminars s ON r.seminar_id = s.id
          WHERE r.user_id = ?`;
@@ -4257,17 +4238,11 @@ app.post('/api/applications/submit', withCertificateUpload, (req, res) => {
         }
 
         db.get(
-            `SELECT registration_start, registration_end, otp_on_application, otp_on_step1, otp_on_submit, title,
-                    IFNULL(registration_enabled, 1) AS registration_enabled, IFNULL(payment_required, 1) AS payment_required,
-                    portal_mode, price
-             FROM seminars WHERE id = ? AND is_active = 1`,
+            `SELECT registration_start, registration_end, otp_on_application, otp_on_step1, otp_on_submit, title FROM seminars WHERE id = ? AND is_active = 1`,
             [seminarId],
             (err2, sem) => {
             if (err2) return res.status(500).json({ error: err2.message });
             if (!sem) return res.status(400).json({ error: 'Seminar not found or is not active.' });
-            if (Number(sem.registration_enabled) === 0) {
-                return res.status(400).json({ error: 'Registration is closed for this event.' });
-            }
 
             const now = Date.now();
             const rs = seminarDt.parseSeminarMs(sem.registration_start);
@@ -6705,7 +6680,7 @@ app.post('/api/admin/applications/:applicationId/document-verify', (req, res) =>
         db,
         req.params.applicationId,
         req.body || {},
-        { portalTracking, notifEngine, getOrCreatePendingOrder, ensureParticipantTicketForRegistration },
+        { portalTracking, notifEngine, getOrCreatePendingOrder },
         (err, result) => {
             if (err) return res.status(500).json({ error: err.message });
             if (!result || !result.ok) return res.status(400).json({ error: (result && result.error) || 'Verify failed' });
@@ -6898,19 +6873,7 @@ app.post('/api/admin/applications/status', (req, res) => {
                         });
         
         if (newSt === 'approved_pending_payment') {
-            db.get(
-                `SELECT s.price, s.payment_required FROM registrations r LEFT JOIN seminars s ON s.id = r.seminar_id WHERE r.id = ?`,
-                [applicationId],
-                (eAmt, semRow) => {
-                    if (!eAmt && semRow && Number(semRow.payment_required) !== 0) {
-                        getOrCreatePendingOrder(
-                            applicationId,
-                            eventPages.paymentAmountForSeminar(semRow),
-                            () => {}
-                        );
-                    }
-                }
-            );
+            getOrCreatePendingOrder(applicationId, 1500, () => {});
         }
         if (
             (newSt === 'e_ticket_issued' || newSt === 'completed') &&
@@ -6920,7 +6883,7 @@ app.post('/api/admin/applications/status', (req, res) => {
                 `SELECT s.price FROM registrations r LEFT JOIN seminars s ON s.id = r.seminar_id WHERE r.id = ?`,
                 [applicationId],
                 (eAmt2, semRow2) => {
-                    const amt = eventPages.paymentAmountForSeminar(semRow2 || {});
+                    const amt = paymentAmountForSeminar(semRow2 || {});
                     ensureParticipantTicketForRegistration(
                         applicationId,
                         { createOrderIfMissing: true, promotePendingToSuccess: true, amount: amt },
@@ -8472,7 +8435,7 @@ app.get('/api/admin/users', (req, res) => {
 // Admin: Update User Role
 app.post('/api/admin/users/:userId/role', (req, res) => {
     const { user_role } = req.body;
-    const validRoles = ['doctor', 'event_attendee', 'judge_user', 'co_admin', 'scanner_portal_user', 'reviewer'];
+    const validRoles = ['doctor', 'judge_user', 'co_admin', 'scanner_portal_user', 'reviewer'];
     
     if (!validRoles.includes(user_role)) {
         return res.status(400).json({ error: 'Invalid role' });

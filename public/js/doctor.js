@@ -735,47 +735,8 @@ function renderTrackerStepsHtml(timeline) {
     return html;
 }
 
-function isEventPortalMode() {
-    return !!window.__eventPortalMode;
-}
-
-function isEventAttendeeUser(user) {
-    return typeof PortalAuth !== 'undefined' && PortalAuth.isEventAttendeeUser(user);
-}
-
-function applyEventPortalNav() {
-    const allowed = new Set([
-        'tab-applications',
-        'tab-seminars',
-        'tab-ticket',
-        'tab-payments',
-        'tab-support',
-        'tab-reset-pwd'
-    ]);
-    document.querySelectorAll('.sidebar .menu-item[data-tab]').forEach((el) => {
-        const t = el.getAttribute('data-tab');
-        el.style.display = allowed.has(t) ? '' : 'none';
-    });
-    const h2 = document.querySelector('.sidebar h2');
-    if (h2) h2.textContent = 'Event portal';
-    const grid = document.getElementById('seminars-grid-container');
-    if (grid && isEventPortalMode()) {
-        const wrap = grid.closest('#tab-seminars');
-        const title = document.getElementById('seminars-title');
-        if (title) title.textContent = 'Your application';
-    }
-}
-
-function parseDoctorUrlParams() {
-    const q = new URLSearchParams(window.location.search);
-    window.__eventPortalMode = q.get('eventPortal') === '1';
-    const sid = parseInt(q.get('seminarId') || '', 10);
-    window.__deepLinkSeminarId = Number.isInteger(sid) && sid > 0 ? sid : null;
-}
-
 function renderSeminarApplicationTrackerCard(a) {
     const tl = a.timeline || {};
-    const paymentRequired = Number(a.payment_required) !== 0;
     const payAmt = Number(a.seminar_price) > 0 ? Number(a.seminar_price) : 1500;
     const st = String(a.status || '').toLowerCase();
     const isPaid = st === 'completed' || st === 'checked_in';
@@ -813,7 +774,7 @@ function renderSeminarApplicationTrackerCard(a) {
             '</button></div>';
     }
     const payBtn =
-        paymentRequired && st === 'approved_pending_payment' && !isPaid
+        st === 'approved_pending_payment' && !isPaid
             ? paymentGatewaySelectHtml(a.id) +
               '<button class="btn-success" style="margin-top:10px;" onclick="processPayment(' +
               a.id +
@@ -826,9 +787,7 @@ function renderSeminarApplicationTrackerCard(a) {
               '))">Make Payment (₹' +
               payAmt +
               ')</button>'
-            : !paymentRequired && st === 'completed'
-              ? '<p style="margin-top:10px;font-size:0.88rem;color:#059669;"><i class="fas fa-check-circle"></i> No payment required for this event.</p>'
-              : '';
+            : '';
     const waBlock = renderWhatsappLinkBlock(a);
     const yearBadge = a.portal_year
         ? '<span style="font-size:0.75rem;background:#e0f2fe;color:#0369a1;padding:2px 8px;border-radius:6px;margin-left:8px;">' +
@@ -999,13 +958,6 @@ function initDoctorMobileNav() {
 
 function bootDoctorDashboard(user) {
     currentUser = user;
-    parseDoctorUrlParams();
-    if (isEventAttendeeUser(currentUser) && !isEventPortalMode()) {
-        alert('Please use your event registration link to access this portal.');
-        window.location.href = '/event-register.html';
-        return;
-    }
-    if (isEventPortalMode()) applyEventPortalNav();
     applyDoctorModuleAccessFromUser(currentUser);
     fetch('/api/public/portal-urls')
         .then((r) => r.json())
@@ -1065,15 +1017,8 @@ function handleEasebuzzPaymentReturnQuery() {
 }
 
 window.onload = () => {
-    parseDoctorUrlParams();
-    const existing =
-        typeof PortalAuth !== 'undefined'
-            ? PortalAuth.getUser('doctor') || (isEventPortalMode() ? PortalAuth.getUser('event') : null)
-            : null;
+    const existing = typeof PortalAuth !== 'undefined' ? PortalAuth.getUser('doctor') : null;
     if (existing) {
-        if (PortalAuth.getUser('event') && !PortalAuth.getUser('doctor')) {
-            PortalAuth.setUser('doctor', existing);
-        }
         bootDoctorDashboard(existing);
         return;
     }
@@ -1905,8 +1850,7 @@ async function loadSeminarsGrid() {
         const container = document.getElementById('seminars-grid-container');
     if (!container) return;
     try {
-        const portalQ = isEventPortalMode() ? '&portal=all' : '';
-        const res = await fetch('/api/seminars?bucket=current' + portalQ, { cache: 'no-store' });
+        const res = await fetch('/api/seminars?bucket=current', { cache: 'no-store' });
         const payload = await res.json();
         if (payload.portalYear != null) {
             doctorPortalYear = payload.portalYear;
@@ -1946,17 +1890,6 @@ async function loadSeminarsGrid() {
         });
         if (hasUpcoming) {
             startSeminarGridCountdownTimer();
-        }
-        if (window.__deepLinkSeminarId) {
-            const sid = window.__deepLinkSeminarId;
-            const s = activeSeminars.find((x) => Number(x.id) === Number(sid));
-            if (s && !registeredSeminarIds.has(Number(sid))) {
-                if (isEventPortalMode()) container.innerHTML = '';
-                switchTab('tab-seminars');
-                startRegistration(sid);
-            } else if (registeredSeminarIds.has(Number(sid))) {
-                switchTab('tab-applications');
-            }
         }
     } catch (err) {
         console.error(err);
