@@ -2697,6 +2697,55 @@ async function populateCaseResultsProgramSelect() {
     }
 }
 
+function downloadCaseMarksheet(format) {
+    const programId = document.getElementById('case-results-program')?.value || '';
+    const q = programId ? '?programId=' + encodeURIComponent(programId) + '&' : '?';
+    const fmt = format || 'xlsx';
+    if (fmt === 'pdf') {
+        window.open('/api/admin/case/marksheet' + (programId ? '?programId=' + encodeURIComponent(programId) : '') + '&format=pdf', '_blank');
+        return;
+    }
+    window.location.href = '/api/admin/case/marksheet' + (programId ? '?programId=' + encodeURIComponent(programId) + '&' : '?') + 'format=xlsx';
+}
+
+async function loadAdminCaseMarksheetPreview() {
+    const panel = document.getElementById('case-marksheet-panel');
+    if (!panel) return;
+    panel.innerHTML = '<p style="color:#64748b;">Loading…</p>';
+    const programId = document.getElementById('case-results-program')?.value || '';
+    const q = programId ? '?programId=' + encodeURIComponent(programId) : '';
+    try {
+        const res = await fetch('/api/admin/case/marksheet' + q);
+        const data = await res.json();
+        const rows = (data.rows || []).slice(0, 80);
+        if (!rows.length) {
+            panel.innerHTML = '<p style="color:#64748b;">No marksheet rows yet.</p>';
+            return;
+        }
+        const keys = Object.keys(rows[0]);
+        let html = '<table class="data-table" style="font-size:0.78rem;"><thead><tr>';
+        keys.forEach((k) => {
+            html += '<th>' + escAdmin(k) + '</th>';
+        });
+        html += '</tr></thead><tbody>';
+        rows.forEach((r) => {
+            html += '<tr>';
+            keys.forEach((k) => {
+                html += '<td>' + escAdmin(r[k] != null ? String(r[k]) : '') + '</td>';
+            });
+            html += '</tr>';
+        });
+        html += '</tbody></table>';
+        if ((data.rows || []).length > 80) {
+            html += '<p style="color:#64748b;font-size:0.82rem;margin-top:8px;">Showing first 80 rows — download Excel for full marksheet.</p>';
+        }
+        panel.innerHTML = html;
+    } catch (e) {
+        console.error(e);
+        panel.innerHTML = '<p style="color:#b91c1c;">Could not load marksheet.</p>';
+    }
+}
+
 async function loadAdminCaseResults() {
     const panel = document.getElementById('case-results-panel');
     if (!panel) return;
@@ -2718,14 +2767,21 @@ async function loadAdminCaseResults() {
             const s = r.avg_score != null ? Number(r.avg_score) : null;
             if (s != null && (topScore == null || s > topScore)) topScore = s;
         });
+        const passPct = 60;
+        const passMin = (totalMax * passPct) / 100;
         let html =
             '<table class="data-table"><thead><tr><th>Rank</th><th>App</th><th>Doctor</th><th>Topic</th><th>Avg / ' +
             escAdmin(String(totalMax)) +
-            '</th><th>Judges</th><th>Status</th></tr></thead><tbody>';
+            '</th><th>Judges</th><th>Auto eligibility</th><th>Status</th></tr></thead><tbody>';
         rows.forEach((r, idx) => {
             const avg = r.avg_score != null ? Number(r.avg_score) : null;
             const isTop = avg != null && topScore != null && avg === topScore && (r.judges_scored || 0) > 0;
             const name = [r.first_name, r.last_name].filter(Boolean).join(' ');
+            let elig = 'Pending scores';
+            if (r.plagiarism_zero) elig = 'Disqualified';
+            else if ((r.judges_scored || 0) > 0 && avg != null) {
+                elig = avg >= passMin ? 'Eligible' : 'Not eligible';
+            }
             html +=
                 '<tr style="' +
                 (isTop ? 'background:#ecfdf5;font-weight:700;' : '') +
@@ -2743,12 +2799,15 @@ async function loadAdminCaseResults() {
                 '</td><td>' +
                 escAdmin(String(r.judges_scored || 0)) +
                 '</td><td>' +
+                escAdmin(elig) +
+                '</td><td>' +
                 escAdmin(r.status || '—') +
                 '</td></tr>';
         });
         html += '</tbody></table>';
         panel.innerHTML = html;
         window.__caseCriteriaDefs = criteria;
+        loadAdminCaseMarksheetPreview();
     } catch (e) {
         console.error(e);
         panel.innerHTML = '<p style="color:#b91c1c;">Could not load results.</p>';

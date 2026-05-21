@@ -1061,10 +1061,17 @@
                     <h3 style="margin-bottom:8px;">Case results (auto-ranked)</h3>
                     <p style="color:#64748b;font-size:0.88rem;margin-bottom:12px;">Average judge scores. Highest row highlighted — you still choose admission via <strong>Mark winner</strong>.</p>
                     <label style="font-size:0.82rem;font-weight:700;">Program filter</label>
-                    <select id="case-results-program" style="width:100%;max-width:360px;padding:8px;margin:8px 0 12px;" onchange="loadAdminCaseResults()">
+                    <select id="case-results-program" style="width:100%;max-width:360px;padding:8px;margin:8px 0 12px;" onchange="loadAdminCaseResults(); loadAdminCaseMarksheetPreview();">
                         <option value="">All programs</option>
                     </select>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+                        <button type="button" class="btn-primary" style="background:#0f766e;" onclick="downloadCaseMarksheet('xlsx')"><i class="fas fa-file-excel"></i> Download Excel marksheet</button>
+                        <button type="button" class="btn-primary" style="background:#1e40af;" onclick="downloadCaseMarksheet('pdf')"><i class="fas fa-file-pdf"></i> Download PDF / print</button>
+                    </div>
+                    <p style="font-size:0.82rem;color:#64748b;margin-bottom:10px;">Marksheet includes each judge’s criteria scores, totals, doctor &amp; judge IDs, and auto eligibility (≥60% of max by default).</p>
                     <div id="case-results-panel"><p style="color:#64748b;">Loading results…</p></div>
+                    <h4 style="margin:20px 0 10px;">Full marksheet preview</h4>
+                    <div id="case-marksheet-panel" style="overflow-x:auto;"><p style="color:#64748b;">Loading marksheet…</p></div>
                 </div>
             </div>
 

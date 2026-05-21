@@ -1,0 +1,230 @@
+/* Judge portal — refreshed layout */
+.judge-app-shell {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 24px 20px 56px;
+}
+
+.judge-topbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 24px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #e0e7ff;
+}
+
+.judge-topbar h1 {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 1.75rem;
+    color: #312e81;
+    letter-spacing: -0.02em;
+    margin: 0;
+}
+
+.judge-topbar .sub {
+    color: #6366f1;
+    font-size: 0.92rem;
+    margin-top: 6px;
+    max-width: 48ch;
+    line-height: 1.45;
+}
+
+.judge-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.judge-stat-card {
+    background: #fff;
+    border: 1px solid #e0e7ff;
+    border-radius: 14px;
+    padding: 14px 16px;
+    box-shadow: 0 4px 16px rgba(49, 46, 129, 0.06);
+}
+
+.judge-stat-card .label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #64748b;
+    font-weight: 700;
+}
+
+.judge-stat-card .value {
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: #4338ca;
+    margin-top: 4px;
+}
+
+.judge-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 14px;
+}
+
+.judge-filter-tabs {
+    display: inline-flex;
+    background: #eef2ff;
+    border-radius: 999px;
+    padding: 4px;
+    gap: 4px;
+}
+
+.judge-filter-tabs button {
+    border: none;
+    background: transparent;
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #4338ca;
+    cursor: pointer;
+}
+
+.judge-filter-tabs button.active {
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(67, 56, 202, 0.15);
+}
+
+.judge-card {
+    background: #fff;
+    border-radius: 16px;
+    border: 1px solid #e0e7ff;
+    box-shadow: 0 12px 40px rgba(49, 46, 129, 0.07);
+    overflow: hidden;
+}
+
+.judge-card-head {
+    padding: 16px 18px;
+    border-bottom: 1px solid #f1f5f9;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+
+.judge-card-head h2 {
+    font-size: 1rem;
+    color: #4338ca;
+    margin: 0;
+    font-weight: 800;
+}
+
+.judge-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.judge-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+}
+
+.judge-table th {
+    text-align: left;
+    padding: 12px 14px;
+    background: linear-gradient(180deg, #f5f3ff, #eef2ff);
+    color: #4338ca;
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-bottom: 1px solid #e0e7ff;
+    white-space: nowrap;
+}
+
+.judge-table td {
+    padding: 14px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+    color: #334155;
+}
+
+.judge-table tr:hover td {
+    background: #fafaff;
+}
+
+.judge-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.judge-badge-pending {
+    background: #fef3c7;
+    color: #92400e;
+}
+
+.judge-badge-done {
+    background: #d1fae5;
+    color: #047857;
+}
+
+.judge-badge-status {
+    background: #e0e7ff;
+    color: #3730a3;
+}
+
+.judge-btn-primary {
+    background: linear-gradient(135deg, #7c3aed, #6366f1);
+    color: #fff;
+    border: none;
+}
+
+.judge-btn-primary:hover {
+    filter: brightness(1.05);
+}
+
+.judge-info-strip {
+    background: linear-gradient(135deg, #ede9fe 0%, #eef2ff 100%);
+    border: 1px solid #c7d2fe;
+    border-radius: 14px;
+    padding: 14px 18px;
+    margin-bottom: 18px;
+    font-size: 0.88rem;
+    color: #475569;
+    line-height: 1.5;
+}
+
+.judge-info-strip strong {
+    color: #4338ca;
+}
+
+.score-panel-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+}
+
+@media (max-width: 800px) {
+    .score-panel-grid {
+        grid-template-columns: 1fr;
+    }
+    .judge-app-shell {
+        padding: 16px 12px 40px;
+    }
+    .judge-table {
+        min-width: 720px;
+    }
+}
+
+.contact-panel {
+    max-width: 560px;
+}
+
+.msg-thread {
+    max-height: 320px;
+}

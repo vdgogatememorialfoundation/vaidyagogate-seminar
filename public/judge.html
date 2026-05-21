@@ -7,6 +7,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700&family=Fraunces:opsz,wght@9..144,600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="/css/responsive-portals.css">
+    <link rel="stylesheet" href="/css/judge-portal.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
@@ -122,12 +123,12 @@
         </div>
     </div>
 
-    <div id="app" class="wrap judge-wrap hidden">
-        <header class="judge-header">
+    <div id="app" class="judge-app-shell hidden">
+        <header class="judge-topbar">
             <div>
                 <div data-site-logo data-logo-height="40px" style="margin-bottom:10px;"></div>
                 <h1><i class="fas fa-gavel" style="color:#7c3aed;"></i> Judge Portal</h1>
-                <p class="sub">Score case presentations · view participant contact details · message participants (your name | VGMF).</p>
+                <p class="sub">Score cases, preview files, and message participants. Replies by email appear in your thread when inbound mail is configured.</p>
             </div>
             <div class="judge-header-actions" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
                 <span class="badge" id="whoami"></span>
@@ -136,18 +137,33 @@
                 <button type="button" class="btn" id="btn-logout"><i class="fas fa-sign-out-alt"></i> Logout</button>
             </div>
         </header>
-        <div class="card" style="margin-bottom:16px;padding:14px 16px;background:linear-gradient(135deg,#ede9fe,#eef2ff);border:1px solid #c7d2fe;">
-            <strong style="color:#4338ca;"><i class="fas fa-envelope"></i> Contact participants</strong>
-            <p style="margin:6px 0 0;font-size:0.88rem;color:#475569;">Open a case → view application and contact details → use <strong>Messages</strong> to send a note and read participant replies. Outbound email uses <em>Your name | Vaidya Gogate Memorial Foundation</em>.</p>
+        <div class="judge-stat-grid">
+            <div class="judge-stat-card"><div class="label">Assignments</div><div class="value" id="judge-stat-total">—</div></div>
+            <div class="judge-stat-card"><div class="label">Scored (locked)</div><div class="value" id="judge-stat-scored">—</div></div>
+            <div class="judge-stat-card"><div class="label">Pending marks</div><div class="value" id="judge-stat-pending">—</div></div>
         </div>
-        <div class="card judge-card-scroll" style="margin-bottom:20px;">
-            <h3 style="padding:14px 14px 0;font-size:1rem;color:#4338ca;">Case presentations</h3>
-            <table>
-                <thead>
-                    <tr><th>App ID</th><th>Doctor</th><th>Category</th><th>Topic</th><th>Status</th><th>Your score</th><th>Actions</th></tr>
-                </thead>
-                <tbody id="case-tbody"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
-            </table>
+        <div class="judge-info-strip">
+            <strong><i class="fas fa-comments"></i> Messages</strong> — Open a case → <strong>Messages</strong>. Email notifications use <em>Your name | Vaidya Gogate Memorial Foundation</em>. Participants can reply in the doctor portal or by email (synced when webhook is set).
+        </div>
+        <div class="judge-card">
+            <div class="judge-card-head">
+                <h2><i class="fas fa-folder-open"></i> Case presentations</h2>
+                <div class="judge-toolbar">
+                    <div class="judge-filter-tabs" id="judge-filter-tabs">
+                        <button type="button" class="active" data-filter="all">All</button>
+                        <button type="button" data-filter="pending">Pending score</button>
+                        <button type="button" data-filter="scored">Scored</button>
+                    </div>
+                </div>
+            </div>
+            <div class="judge-table-wrap">
+                <table class="judge-table">
+                    <thead>
+                        <tr><th>App ID</th><th>Doctor</th><th>Category</th><th>Topic</th><th>Status</th><th>Your score</th><th>Actions</th></tr>
+                    </thead>
+                    <tbody id="case-tbody"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
+                </table>
+            </div>
         </div>
     </div>
 
@@ -171,7 +187,7 @@
             <textarea id="case-score-remarks" rows="2" style="width:100%;padding:8px;border:1px solid #c7d2fe;border-radius:8px;margin-top:4px;"></textarea>
             <p style="margin-top:10px;font-weight:700;">Total: <span id="case-score-total">0</span> / <span id="case-score-total-max">25</span></p>
             <div class="score-actions">
-                <button type="button" class="btn btn-submit" id="case-score-submit">Submit marks (locks scores)</button>
+                <button type="button" class="btn btn-submit judge-btn-primary" id="case-score-submit">Submit marks (locks scores)</button>
                 <button type="button" class="btn" id="case-score-cancel">Cancel</button>
             </div>
         </div>
@@ -211,6 +227,8 @@
             let caseCriteriaDefs = [];
             let activeParticipant = null;
             let judgePeerList = [];
+            let caseRowsCache = [];
+            let caseFilter = 'all';
             const contactOverlay = document.getElementById('case-contact-overlay');
 
             function judgeNumericUserId(u) {
@@ -309,6 +327,61 @@
                 return caseCriteriaDefs;
             }
 
+            function updateJudgeStats(rows) {
+                const total = rows.length;
+                const scored = rows.filter((c) => c.my_score_locked).length;
+                const pending = total - scored;
+                const elT = document.getElementById('judge-stat-total');
+                const elS = document.getElementById('judge-stat-scored');
+                const elP = document.getElementById('judge-stat-pending');
+                if (elT) elT.textContent = String(total);
+                if (elS) elS.textContent = String(scored);
+                if (elP) elP.textContent = String(pending);
+            }
+
+            function filteredCaseRows() {
+                if (caseFilter === 'pending') {
+                    return caseRowsCache.filter((c) => !c.my_score_locked);
+                }
+                if (caseFilter === 'scored') {
+                    return caseRowsCache.filter((c) => c.my_score_locked);
+                }
+                return caseRowsCache;
+            }
+
+            function renderCaseTable() {
+                const caseBody = document.getElementById('case-tbody');
+                if (!caseBody) return;
+                const rows = filteredCaseRows();
+                if (!rows.length) {
+                    caseBody.innerHTML =
+                        '<tr><td colspan="7" class="empty">No cases in this filter.</td></tr>';
+                    return;
+                }
+                caseBody.innerHTML = '';
+                rows.forEach((c) => {
+                    const name = [c.first_name, c.last_name].filter(Boolean).join(' ') || '—';
+                    const locked = !!c.my_score_locked;
+                    const scoreTxt =
+                        c.my_total_score != null ? String(c.my_total_score) + (locked ? ' ✓' : '') : '—';
+                    const btnLabel = locked ? 'View' : 'Score';
+                    const scoreBadge = locked
+                        ? '<span class="judge-badge judge-badge-done">' + escapeHtml(scoreTxt) + '</span>'
+                        : '<span class="judge-badge judge-badge-pending">Pending</span>';
+                    const tr = document.createElement('tr');
+                    tr.innerHTML =
+                        '<td><code>' + escapeHtml(String(c.application_no || c.id)) + '</code></td>' +
+                        '<td><strong>' + escapeHtml(name) + '</strong></td>' +
+                        '<td>' + escapeHtml(c.category || '—') + '</td>' +
+                        '<td>' + escapeHtml(c.title || '—') + '</td>' +
+                        '<td><span class="judge-badge judge-badge-status">' + escapeHtml(c.status || '—') + '</span></td>' +
+                        '<td id="score-cell-' + c.id + '">' + scoreBadge + '</td>' +
+                        '<td style="white-space:nowrap;">' +
+                        '<button type="button" class="btn judge-btn-primary" onclick="openCaseScore(' + c.id + ')">' + btnLabel + '</button></td>';
+                    caseBody.appendChild(tr);
+                });
+            }
+
             async function loadCaseAssignments() {
                 const caseBody = document.getElementById('case-tbody');
                 if (!caseBody || !user) return;
@@ -327,33 +400,29 @@
                     );
                     const rows = await res.json();
                     if (!Array.isArray(rows) || !rows.length) {
+                        caseRowsCache = [];
+                        updateJudgeStats([]);
                         caseBody.innerHTML = '<tr><td colspan="7" class="empty">No case assignments.</td></tr>';
                         return;
                     }
-                    caseBody.innerHTML = '';
-                    rows.forEach((c) => {
-                        const name = [c.first_name, c.last_name].filter(Boolean).join(' ') || '—';
-                        const scoreTxt =
-                            c.my_total_score != null
-                                ? String(c.my_total_score) + (c.my_score_locked ? ' (locked)' : '')
-                                : '—';
-                        const btnLabel = c.my_score_locked ? 'View / contact' : 'Score / contact';
-                        const tr = document.createElement('tr');
-                        tr.innerHTML =
-                            '<td><code>' + escapeHtml(String(c.application_no || c.id)) + '</code></td>' +
-                            '<td><strong>' + escapeHtml(name) + '</strong></td>' +
-                            '<td>' + escapeHtml(c.category || '—') + '</td>' +
-                            '<td>' + escapeHtml(c.title || '—') + '</td>' +
-                            '<td>' + escapeHtml(c.status || '—') + '</td>' +
-                            '<td id="score-cell-' + c.id + '">' + escapeHtml(scoreTxt) + '</td>' +
-                            '<td style="white-space:nowrap;"><button type="button" class="btn" onclick="openCaseScore(' + c.id + ')">' + btnLabel + '</button></td>';
-                        caseBody.appendChild(tr);
-                    });
+                    caseRowsCache = rows;
+                    updateJudgeStats(rows);
+                    renderCaseTable();
                 } catch (e) {
                     console.error(e);
                     caseBody.innerHTML = '<tr><td colspan="7" class="empty">Error loading cases.</td></tr>';
                 }
             }
+
+            document.getElementById('judge-filter-tabs')?.addEventListener('click', (ev) => {
+                const btn = ev.target.closest('button[data-filter]');
+                if (!btn) return;
+                caseFilter = btn.getAttribute('data-filter') || 'all';
+                document.querySelectorAll('#judge-filter-tabs button').forEach((b) => {
+                    b.classList.toggle('active', b === btn);
+                });
+                renderCaseTable();
+            });
 
             window.openCaseScore = async function (submissionId) {
                 if (!user) return;

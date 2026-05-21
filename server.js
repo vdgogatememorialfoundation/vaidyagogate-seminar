@@ -4946,6 +4946,11 @@ app.post('/api/webhooks/whatsapp', (req, res) => {
     });
 });
 
+const inboundMailReply = require('./lib/inbound-mail-reply');
+app.post('/api/webhooks/inbound-email', (req, res) => {
+    inboundMailReply.handleInboundMail(db, req, res);
+});
+
 app.get('/api/admin/integrations/whatsapp-delivery-events', withIntegrationSettingsLoaded, (req, res) => {
     const messageId = String((req.query && req.query.messageId) || '').trim();
     if (!messageId) return res.status(400).json({ error: 'messageId required' });
