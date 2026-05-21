@@ -5432,19 +5432,28 @@ function cmsFillSeminarExtraRows(items) {
 async function loadSeminarFormOverrideUi(overrideJson) {
     const tbody = document.getElementById('seminar-reg-override-tbody');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="4">Loading…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5">Loading…</td></tr>';
     let globalFields = [];
+    let globalBirthMin = null;
+    let globalBirthMax = null;
     try {
         const res = await fetch('/api/registration-form-config');
         const data = await res.json();
         globalFields = data.fields || [];
+        globalBirthMin = data.birthYearMin;
+        globalBirthMax = data.birthYearMax;
     } catch (_) {}
+    window.__seminarGlobalFields = globalFields;
     window.__seminarGlobalFieldKeys = globalFields.map((f) => f.key);
     let overrideFields = [];
+    let seminarBirthMin = null;
+    let seminarBirthMax = null;
     if (overrideJson && String(overrideJson).trim()) {
         try {
             const parsed = JSON.parse(overrideJson);
             if (parsed && Array.isArray(parsed.fields)) overrideFields = parsed.fields;
+            seminarBirthMin = parsed.birthYearMin;
+            seminarBirthMax = parsed.birthYearMax;
         } catch (_) {}
     }
     const byKey = {};
@@ -5460,14 +5469,45 @@ async function loadSeminarFormOverrideUi(overrideJson) {
         const enabled = ov.enabled != null ? ov.enabled !== false : f.enabled !== false;
         const required = ov.required != null ? !!ov.required : !!f.required;
         const label = ov.label != null && String(ov.label).trim() ? ov.label : f.label || f.key;
+        const opts =
+            ov.options != null && Array.isArray(ov.options)
+                ? ov.options
+                : f.options;
+        let optCell = '—';
+        if (f.key === 'qual' && Array.isArray(opts)) {
+            optCell =
+                '<span class="muted" style="font-size:0.78rem;">' +
+                opts.map((o) => o.label || o.value).join(', ') +
+                '</span>';
+        }
         window.__seminarOverrideFieldKeys.push(f.key);
         tbody.innerHTML += `<tr>
             <td><code>${String(f.key).replace(/</g, '&lt;')}</code></td>
             <td><input type="text" class="sem-ov-label" data-idx="${idx}" value="${String(label).replace(/"/g, '&quot;')}" oninput="updateSeminarPolicyPreviews()"></td>
             <td><input type="checkbox" class="sem-ov-en" data-idx="${idx}" ${enabled ? 'checked' : ''} onchange="updateSeminarPolicyPreviews()"></td>
             <td><input type="checkbox" class="sem-ov-req" data-idx="${idx}" ${required ? 'checked' : ''} onchange="updateSeminarPolicyPreviews()"></td>
+            <td>${optCell}</td>
         </tr>`;
     });
+    const qualGlobal = globalFields.find((f) => f.key === 'qual');
+    const qualOv = byKey.qual || {};
+    const qualOpts =
+        qualOv.options != null && Array.isArray(qualOv.options)
+            ? qualOv.options.map((o) => o.value)
+            : qualGlobal && Array.isArray(qualGlobal.options)
+              ? qualGlobal.options.map((o) => o.value)
+              : ADMIN_QUAL_OPTION_DEFS.map((o) => o.value);
+    const qualWrap = document.getElementById('seminar-qual-options-wrap');
+    if (qualWrap) {
+        qualWrap.style.display = globalFields.some((f) => f.key === 'qual') ? 'block' : 'none';
+        renderQualOptionCheckboxes('seminar-qual-options', qualOpts);
+    }
+    const minEl = document.getElementById('seminar-birth-year-min');
+    const maxEl = document.getElementById('seminar-birth-year-max');
+    if (minEl) minEl.value = seminarBirthMin != null ? seminarBirthMin : '';
+    if (maxEl) maxEl.value = seminarBirthMax != null ? seminarBirthMax : '';
+    window.__seminarGlobalBirthMin = globalBirthMin;
+    window.__seminarGlobalBirthMax = globalBirthMax;
     if (!extras.length) {
         cmsFillSeminarExtraRows([]);
     }
@@ -5478,23 +5518,70 @@ function buildSeminarFormOverrideJsonFromUi() {
     const tbody = document.getElementById('seminar-reg-override-tbody');
     if (!tbody || !window.__seminarOverrideFieldKeys) return null;
     const fields = [];
+    const globals = window.__seminarGlobalFields || [];
     window.__seminarOverrideFieldKeys.forEach((key, idx) => {
         const labelEl = tbody.querySelector(`.sem-ov-label[data-idx="${idx}"]`);
         const enEl = tbody.querySelector(`.sem-ov-en[data-idx="${idx}"]`);
         const reqEl = tbody.querySelector(`.sem-ov-req[data-idx="${idx}"]`);
-        fields.push({
+        const g = globals.find((x) => x.key === key) || {};
+        const row = {
             key,
             label: labelEl ? labelEl.value : key,
             enabled: !!(enEl && enEl.checked),
             required: !!(reqEl && reqEl.checked)
-        });
+        };
+        if (key === 'qual') {
+            const qualOpts = collectQualOptionsFromContainer('seminar-qual-options');
+            if (qualOpts.length) row.options = qualOpts;
+        }
+        fields.push(row);
     });
     const extras = collectSeminarExtraFieldsFromDom();
     const allFields = fields.concat(extras);
-    const anyDisabled = fields.some((f) => !f.enabled);
-    const anyLabelChange = fields.some((f) => f.label && f.label !== f.key);
-    if (!extras.length && !anyDisabled && !anyLabelChange) return null;
-    return JSON.stringify({ fields: allFields });
+    const minEl = document.getElementById('seminar-birth-year-min');
+    const maxEl = document.getElementById('seminar-birth-year-max');
+    const birthYearMin =
+        minEl && minEl.value !== '' && !Number.isNaN(parseInt(minEl.value, 10))
+            ? parseInt(minEl.value, 10)
+            : null;
+    const birthYearMax =
+        maxEl && maxEl.value !== '' && !Number.isNaN(parseInt(maxEl.value, 10))
+            ? parseInt(maxEl.value, 10)
+            : null;
+    const anyDisabled = fields.some((f, i) => {
+        const g = globals.find((x) => x.key === f.key);
+        return g && f.enabled !== (g.enabled !== false);
+    });
+    const anyRequiredChange = fields.some((f) => {
+        const g = globals.find((x) => x.key === f.key);
+        return g && !!f.required !== !!g.required;
+    });
+    const anyLabelChange = fields.some((f) => {
+        const g = globals.find((x) => x.key === f.key);
+        return g && String(f.label || '') !== String(g.label || f.key);
+    });
+    const qualOpts = collectQualOptionsFromContainer('seminar-qual-options');
+    const gQual = globals.find((x) => x.key === 'qual');
+    const gQualVals = (gQual && gQual.options ? gQual.options : ADMIN_QUAL_OPTION_DEFS).map((o) => o.value).sort().join('|');
+    const qualChanged = qualOpts.map((o) => o.value).sort().join('|') !== gQualVals;
+    const birthChanged =
+        birthYearMin !== window.__seminarGlobalBirthMin || birthYearMax !== window.__seminarGlobalBirthMax;
+    if (
+        !extras.length &&
+        !anyDisabled &&
+        !anyRequiredChange &&
+        !anyLabelChange &&
+        !qualChanged &&
+        !birthChanged &&
+        birthYearMin == null &&
+        birthYearMax == null
+    ) {
+        return null;
+    }
+    const payload = { version: 1, fields: allFields };
+    if (birthYearMin != null) payload.birthYearMin = birthYearMin;
+    if (birthYearMax != null) payload.birthYearMax = birthYearMax;
+    return JSON.stringify(payload);
 }
 
 function updateSeminarPolicyPreviews() {
@@ -5513,11 +5600,18 @@ function updateSeminarPolicyPreviews() {
         try {
             const parsed = JSON.parse(built);
             const enabled = (parsed.fields || []).filter((f) => f.enabled !== false);
-            formPrev.textContent =
+            let prev =
                 'Doctors will see: ' +
                 (enabled.length
                     ? enabled.map((f) => f.label || f.key).join(', ')
                     : 'no fields (check at least one is enabled)');
+            const qo = collectQualOptionsFromContainer('seminar-qual-options');
+            if (qo.length) prev += ' · Qualification: ' + qo.map((o) => o.label).join(', ');
+            const bmin = document.getElementById('seminar-birth-year-min');
+            const bmax = document.getElementById('seminar-birth-year-max');
+            if (bmin && bmin.value) prev += ' · Birth year from ' + bmin.value;
+            if (bmax && bmax.value) prev += ' to ' + bmax.value;
+            formPrev.textContent = prev;
         } catch (_) {
             formPrev.textContent = 'Invalid form override.';
         }
@@ -6888,7 +6982,49 @@ function downloadParticipantsPdf() {
 
 let __adminOrdersCache = [];
 
-const ADMIN_REG_FIELD_TYPES = ['text', 'textarea', 'email', 'tel', 'number', 'select', 'checkbox', 'file'];
+const ADMIN_REG_FIELD_TYPES = ['text', 'textarea', 'email', 'tel', 'number', 'date', 'select', 'checkbox', 'file'];
+
+const ADMIN_QUAL_OPTION_DEFS = [
+    { value: 'Practicing Vaidya', label: 'Practicing Vaidya' },
+    { value: 'Practitioner', label: 'Practitioner' },
+    { value: 'PG', label: 'PG' }
+];
+
+function renderQualOptionCheckboxes(containerId, selectedValues) {
+    const root = document.getElementById(containerId);
+    if (!root) return;
+    const sel = new Set((selectedValues || []).map((v) => String(v)));
+    if (!sel.size) ADMIN_QUAL_OPTION_DEFS.forEach((o) => sel.add(o.value));
+    root.innerHTML = ADMIN_QUAL_OPTION_DEFS.map((o) => {
+        const id = containerId + '-q-' + o.value.replace(/\s+/g, '-');
+        return (
+            '<label style="display:inline-flex;align-items:center;gap:6px;"><input type="checkbox" class="qual-opt-cb" data-container="' +
+            containerId +
+            '" id="' +
+            id +
+            '" value="' +
+            o.value.replace(/"/g, '&quot;') +
+            '" ' +
+            (sel.has(o.value) ? 'checked' : '') +
+            ' onchange="updateSeminarPolicyPreviews()"> ' +
+            o.label +
+            '</label>'
+        );
+    }).join('');
+}
+
+function collectQualOptionsFromContainer(containerId) {
+    const root = document.getElementById(containerId);
+    if (!root) return [];
+    const out = [];
+    root.querySelectorAll('.qual-opt-cb:checked').forEach((cb) => {
+        const v = String(cb.value || '').trim();
+        if (!v) return;
+        const def = ADMIN_QUAL_OPTION_DEFS.find((o) => o.value === v);
+        out.push({ value: v, label: def ? def.label : v });
+    });
+    return out;
+}
 
 function adminRegFieldTypeOptions(selected) {
     const sel = String(selected || 'text').toLowerCase();
@@ -6946,6 +7082,15 @@ async function loadAdminRegistrationFormConfig(skipFetch) {
             const data = await res.json();
             fields = data.fields || [];
             window.__adminRegFieldRowsCache = fields;
+            const qual = fields.find((f) => f.key === 'qual');
+            renderQualOptionCheckboxes(
+                'admin-global-qual-options',
+                qual && qual.options ? qual.options.map((o) => o.value) : null
+            );
+            const bmin = document.getElementById('admin-birth-year-min');
+            const bmax = document.getElementById('admin-birth-year-max');
+            if (bmin) bmin.value = data.birthYearMin != null ? data.birthYearMin : '';
+            if (bmax) bmax.value = data.birthYearMax != null ? data.birthYearMax : '';
         }
         tbody.innerHTML = '';
         window.__adminRegFieldRows = [];
@@ -6968,7 +7113,7 @@ async function saveAdminRegistrationFormConfig() {
         const key = keyEl ? String(keyEl.value || '').trim() : r.key;
         const typeEl = document.getElementById(`reg-field-type-${idx}`);
         const stepEl = document.getElementById(`reg-field-step-${idx}`);
-        return {
+        const row = {
             key: key || r.key,
             label: (document.getElementById(`reg-field-label-${idx}`) || {}).value || key || r.key,
             type: typeEl ? typeEl.value : 'text',
@@ -6980,12 +7125,23 @@ async function saveAdminRegistrationFormConfig() {
                     ? r.onlyWhenAdvancedQual
                     : ['ncism', 'certificate'].indexOf(r.key) !== -1
         };
+        if (row.key === 'qual') {
+            const qualOpts = collectQualOptionsFromContainer('admin-global-qual-options');
+            if (qualOpts.length) row.options = qualOpts;
+        }
+        return row;
     });
+    const birthYearMin = parseInt((document.getElementById('admin-birth-year-min') || {}).value, 10);
+    const birthYearMax = parseInt((document.getElementById('admin-birth-year-max') || {}).value, 10);
     try {
         const res = await fetch('/api/admin/registration-form-config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fields })
+            body: JSON.stringify({
+                fields,
+                birthYearMin: Number.isInteger(birthYearMin) ? birthYearMin : null,
+                birthYearMax: Number.isInteger(birthYearMax) ? birthYearMax : null
+            })
         });
         const data = await res.json();
         if (data.success) {

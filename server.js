@@ -591,6 +591,7 @@ const DEFAULT_REGISTRATION_FORM_CONFIG = {
         { key: 'lname', label: 'Last name', type: 'text', step: 1, enabled: true, required: true },
         { key: 'email', label: 'Email', type: 'email', step: 1, enabled: true, required: true, verifyOtp: true },
         { key: 'phone', label: 'Phone', type: 'tel', step: 1, enabled: true, required: true, verifyOtp: true },
+        { key: 'dob', label: 'Date of birth', type: 'date', step: 1, enabled: true, required: true },
         { key: 'address', label: 'Address', type: 'textarea', step: 2, enabled: true, required: true },
         { key: 'pin', label: 'Pincode', type: 'text', step: 2, enabled: true, required: true },
         { key: 'city', label: 'City', type: 'text', step: 2, enabled: true, required: true },
@@ -1152,18 +1153,30 @@ function migrateLegacyRegistrationFormConfig(done) {
     });
 }
 
-function loadGlobalRegistrationFormFields(callback) {
+const regFormCfg = require('./lib/registration-form-config');
+
+function loadGlobalRegistrationFormConfig(callback) {
     db.get(`SELECT value FROM global_settings WHERE key = 'registration_form_config'`, [], (err, row) => {
         if (err || !row || !row.value) {
-            return callback(null, sanitizeRegistrationFormFields(DEFAULT_REGISTRATION_FORM_CONFIG.fields));
+            const def = regFormCfg.buildConfigPayload(DEFAULT_REGISTRATION_FORM_CONFIG.fields, {});
+            return callback(null, def);
         }
         try {
-            const parsed = JSON.parse(row.value);
-            const fields = Array.isArray(parsed.fields) ? parsed.fields : DEFAULT_REGISTRATION_FORM_CONFIG.fields;
-            callback(null, sanitizeRegistrationFormFields(fields));
+            const parsed = regFormCfg.parseRegistrationFormPayload(JSON.parse(row.value));
+            if (!parsed.fields.length) {
+                parsed.fields = DEFAULT_REGISTRATION_FORM_CONFIG.fields;
+            }
+            callback(null, regFormCfg.buildConfigPayload(parsed.fields, parsed));
         } catch (_) {
-            callback(null, sanitizeRegistrationFormFields(DEFAULT_REGISTRATION_FORM_CONFIG.fields));
+            callback(null, regFormCfg.buildConfigPayload(DEFAULT_REGISTRATION_FORM_CONFIG.fields, {}));
         }
+    });
+}
+
+function loadGlobalRegistrationFormFields(callback) {
+    loadGlobalRegistrationFormConfig((e, cfg) => {
+        if (e) return callback(e);
+        callback(null, cfg.fields);
     });
 }
 
@@ -1174,24 +1187,38 @@ function loadRegistrationFormConfig(seminarIdOrNull, callback) {
         cb = seminarIdOrNull;
         seminarId = null;
     }
-    if (seminarId != null && seminarId !== '' && !Number.isNaN(Number(seminarId))) {
+    const finish = (cfg) => cb(null, cfg);
+
+    loadGlobalRegistrationFormConfig((eGlobal, globalCfg) => {
+        if (eGlobal) return cb(eGlobal);
+        if (seminarId == null || seminarId === '' || Number.isNaN(Number(seminarId))) {
+            return finish(globalCfg);
+        }
         const sid = Number(seminarId);
         db.get(`SELECT registration_form_json FROM seminars WHERE id = ?`, [sid], (err, row) => {
-            if (!err && row && row.registration_form_json && String(row.registration_form_json).trim()) {
-                try {
-                    const parsed = JSON.parse(row.registration_form_json);
-                    if (parsed && Array.isArray(parsed.fields) && parsed.fields.length) {
-                        return cb(null, sanitizeRegistrationFormFields(parsed.fields));
-                    }
-                } catch (_) {
-                    /* fall through */
-                }
+            if (err) return cb(err);
+            if (!row || !row.registration_form_json || !String(row.registration_form_json).trim()) {
+                return finish(globalCfg);
             }
-            loadGlobalRegistrationFormFields(cb);
+            const seminarParsed = regFormCfg.parseRegistrationFormPayload(row.registration_form_json);
+            if (!seminarParsed.fields.length) {
+                return finish({
+                    ...globalCfg,
+                    birthYearMin: seminarParsed.birthYearMin != null ? seminarParsed.birthYearMin : globalCfg.birthYearMin,
+                    birthYearMax: seminarParsed.birthYearMax != null ? seminarParsed.birthYearMax : globalCfg.birthYearMax
+                });
+            }
+            const mergedFields = regFormCfg.mergeRegistrationFields(globalCfg.fields, seminarParsed.fields);
+            finish(
+                regFormCfg.buildConfigPayload(mergedFields, {
+                    birthYearMin:
+                        seminarParsed.birthYearMin != null ? seminarParsed.birthYearMin : globalCfg.birthYearMin,
+                    birthYearMax:
+                        seminarParsed.birthYearMax != null ? seminarParsed.birthYearMax : globalCfg.birthYearMax
+                })
+            );
         });
-        return;
-    }
-    loadGlobalRegistrationFormFields(cb);
+    });
 }
 
 function loadPublicSiteCms(callback) {
@@ -1340,12 +1367,12 @@ function persistScrollingAnnouncementsSanitizeIfNeeded(callback) {
     });
 }
 
-function validateFormDataAgainstRegistrationConfig(formData, hasCertificateFile, fields, qualOverride) {
+function validateFormDataAgainstRegistrationConfig(formData, hasCertificateFile, fields, qualOverride, policy) {
     const nameErr = validateRegistrationPersonNames(formData);
     if (nameErr) return nameErr;
     const contactErr = contactValidation.validateFormContactFields(formData, fields);
     if (contactErr) return contactErr;
-    return validateDynamicForm(formData, hasCertificateFile, fields, qualOverride);
+    return regFormCfg.validateFormWithPolicy(formData, hasCertificateFile, fields, qualOverride, policy);
 }
 
 function parseMaybeJson(val) {
@@ -3367,12 +3394,14 @@ function registrationOtpChannelFlags(cb) {
 app.get('/api/registration-form-config', (req, res) => {
     const raw = req.query && req.query.seminarId;
     const sid = raw != null && String(raw).trim() !== '' ? parseInt(raw, 10) : null;
-    loadRegistrationFormConfig(Number.isNaN(sid) ? null : sid, (e, fields) => {
+    loadRegistrationFormConfig(Number.isNaN(sid) ? null : sid, (e, cfg) => {
         if (e) return res.status(500).json({ error: e.message });
         registrationOtpChannelFlags((eFlags, flags) => {
             if (eFlags) return res.status(500).json({ error: eFlags.message });
             const base = {
-                fields: fields || [],
+                fields: (cfg && cfg.fields) || [],
+                birthYearMin: cfg && cfg.birthYearMin != null ? cfg.birthYearMin : null,
+                birthYearMax: cfg && cfg.birthYearMax != null ? cfg.birthYearMax : null,
                 otpOnApplication: false,
                 submitOtpRequired: false,
                 ...flags
@@ -3803,13 +3832,21 @@ app.post('/api/admin/upload-assets', withUploadAssets, (req, res) => {
 app.get('/api/assets/:key', fileStore.serveAssetHandler(db));
 
 app.post('/api/admin/registration-form-config', (req, res) => {
-    const { fields } = req.body;
+    const { fields, birthYearMin, birthYearMax } = req.body;
     if (!Array.isArray(fields)) return res.status(400).json({ error: 'fields must be an array' });
-    const normalized = fields.map((f) => ({
-        ...f,
-        required: f.enabled === false ? false : !!f.required
-    }));
-    const payload = JSON.stringify({ version: 1, fields: normalized });
+    const normalized = sanitizeRegistrationFormFields(
+        fields.map((f) => ({
+            ...f,
+            required: f.enabled === false ? false : !!f.required,
+            options:
+                f.key === 'qual' && Array.isArray(f.options)
+                    ? regFormCfg.normalizeQualOptions(f.options)
+                    : f.options
+        }))
+    );
+    const payload = JSON.stringify(
+        regFormCfg.buildConfigPayload(normalized, { birthYearMin, birthYearMax })
+    );
     upsertGlobalSetting('registration_form_config', payload, (e) => {
         if (e) return res.status(500).json({ error: e.message });
         res.json({ success: true });
@@ -4054,15 +4091,17 @@ app.post('/api/applications/submit', withCertificateUpload, (req, res) => {
                     formData.certificate_path = certPath;
                 }
 
-                loadRegistrationFormConfig(seminarId, (cfgErr, regFields) => {
+                loadRegistrationFormConfig(seminarId, (cfgErr, regCfg) => {
                     if (cfgErr) return res.status(500).json({ error: cfgErr.message });
-                    const list = regFields || [];
+                    const list = (regCfg && regCfg.fields) || [];
                     const hasCertFile =
                         !!req.file || !!(formData && formData.certificate_path);
                     const validationError = validateFormDataAgainstRegistrationConfig(
                         formData || {},
                         hasCertFile,
-                        list
+                        list,
+                        null,
+                        regCfg
                     );
                     if (validationError) {
                         return res.status(400).json({ error: validationError });
@@ -4322,10 +4361,16 @@ app.put('/api/applications/:applicationId', withCertificateUpload, (req, res) =>
             const merged = { ...prev, ...(formData || {}) };
             const hasCert = !!req.file || !!merged.certificate_path;
 
-            loadRegistrationFormConfig(row.seminar_id, (cfgErr, regFields) => {
+            loadRegistrationFormConfig(row.seminar_id, (cfgErr, regCfg) => {
                 if (cfgErr) return res.status(500).json({ error: cfgErr.message });
-                const list = regFields || [];
-                const validationError = validateFormDataAgainstRegistrationConfig(merged, hasCert, list);
+                const list = (regCfg && regCfg.fields) || [];
+                const validationError = validateFormDataAgainstRegistrationConfig(
+                    merged,
+                    hasCert,
+                    list,
+                    null,
+                    regCfg
+                );
                 if (validationError) {
                     return res.status(400).json({ error: validationError });
                 }
@@ -8378,9 +8423,15 @@ function runAdminRegistrationUpsertBody(req, res, tid, sid, aid, formData) {
     const fdJson = JSON.stringify(stored);
     const hasCert = !!stored.certificate_path;
 
-    loadRegistrationFormConfig(sid, (cfgErr, regFields) => {
+    loadRegistrationFormConfig(sid, (cfgErr, regCfg) => {
         if (cfgErr) return res.status(500).json({ error: cfgErr.message });
-        const validationError = validateFormDataAgainstRegistrationConfig(stored, hasCert, regFields || []);
+        const validationError = validateFormDataAgainstRegistrationConfig(
+            stored,
+            hasCert,
+            (regCfg && regCfg.fields) || [],
+            null,
+            regCfg
+        );
         if (validationError) return res.status(400).json({ error: validationError });
 
         db.get(`SELECT id, form_data FROM registrations WHERE user_id = ? AND seminar_id = ?`, [tid, sid], (e2, reg) => {

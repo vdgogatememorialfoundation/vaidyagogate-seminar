@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Judge portal | VGMF National Seminar</title>
+    <title>Judge Portal | VGMF National Seminar</title>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400..700&family=Fraunces:opsz,wght@9..144,600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="/css/responsive-portals.css">
@@ -84,8 +84,8 @@
 <body data-portal-theme="judge">
     <div id="auth-overlay">
         <div class="auth-card">
-            <h2><i class="fas fa-gavel"></i> Judge portal sign-in</h2>
-            <p>Sign in with your judge or reviewer account for this portal.</p>
+            <h2><i class="fas fa-gavel"></i> Judge Portal Sign In</h2>
+            <p>Sign in with your judge or reviewer account.</p>
             <form id="judge-login-form">
                 <label for="judge-email">Email</label>
                 <input type="email" id="judge-email" required autocomplete="email">
@@ -111,7 +111,7 @@
                     </div>
                 </div>
                 <p id="login-err" class="hidden"></p>
-                <button type="submit" class="btn-primary">Sign in to judge workspace</button>
+                <button type="submit" class="btn-primary">Sign in to Judge Portal</button>
             </form>
         </div>
     </div>
@@ -120,8 +120,8 @@
         <header class="judge-header">
             <div>
                 <div data-site-logo data-logo-height="40px" style="margin-bottom:10px;"></div>
-                <h1><i class="fas fa-gavel" style="color:#7c3aed;"></i> Judge & reviewer workspace</h1>
-                <p class="sub">Case presentations submitted by doctors for scoring.</p>
+                <h1><i class="fas fa-gavel" style="color:#7c3aed;"></i> Judge Portal</h1>
+                <p class="sub">Score case presentations · view full participant details · email participants via the organisation (your name | VGMF).</p>
             </div>
             <div class="judge-header-actions" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
                 <span class="badge" id="whoami"></span>
@@ -130,11 +130,15 @@
                 <button type="button" class="btn" id="btn-logout"><i class="fas fa-sign-out-alt"></i> Logout</button>
             </div>
         </header>
+        <div class="card" style="margin-bottom:16px;padding:14px 16px;background:linear-gradient(135deg,#ede9fe,#eef2ff);border:1px solid #c7d2fe;">
+            <strong style="color:#4338ca;"><i class="fas fa-envelope"></i> Contact participants</strong>
+            <p style="margin:6px 0 0;font-size:0.88rem;color:#475569;">Open a case → view email, phone, WhatsApp → use <strong>Contact participant</strong>. Messages are sent from the foundation email as <em>Your name | Vaidya Gogate Memorial Foundation</em> (admin can monitor all messages).</p>
+        </div>
         <div class="card judge-card-scroll" style="margin-bottom:20px;">
             <h3 style="padding:14px 14px 0;font-size:1rem;color:#4338ca;">Case presentations</h3>
             <table>
                 <thead>
-                    <tr><th>App ID</th><th>Doctor</th><th>Category</th><th>Topic</th><th>Status</th><th>Your score</th><th>Action</th></tr>
+                    <tr><th>App ID</th><th>Doctor</th><th>Category</th><th>Topic</th><th>Status</th><th>Your score</th><th>Actions</th></tr>
                 </thead>
                 <tbody id="case-tbody"><tr><td colspan="7" class="empty">Loading…</td></tr></tbody>
             </table>
@@ -296,7 +300,7 @@
                             c.my_total_score != null
                                 ? String(c.my_total_score) + (c.my_score_locked ? ' (locked)' : '')
                                 : '—';
-                        const btnLabel = c.my_score_locked ? 'View marks' : 'Enter marks';
+                        const btnLabel = c.my_score_locked ? 'View / contact' : 'Score / contact';
                         const tr = document.createElement('tr');
                         tr.innerHTML =
                             '<td><code>' + escapeHtml(String(c.application_no || c.id)) + '</code></td>' +
@@ -305,7 +309,7 @@
                             '<td>' + escapeHtml(c.title || '—') + '</td>' +
                             '<td>' + escapeHtml(c.status || '—') + '</td>' +
                             '<td id="score-cell-' + c.id + '">' + escapeHtml(scoreTxt) + '</td>' +
-                            '<td><button type="button" class="btn" onclick="openCaseScore(' + c.id + ')">' + btnLabel + '</button></td>';
+                            '<td style="white-space:nowrap;"><button type="button" class="btn" onclick="openCaseScore(' + c.id + ')">' + btnLabel + '</button></td>';
                         caseBody.appendChild(tr);
                     });
                 } catch (e) {

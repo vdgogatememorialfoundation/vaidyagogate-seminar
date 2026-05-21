@@ -1045,6 +1045,7 @@ const REGISTRATION_FIELD_IDS = {
     city: 'reg-city',
     state: 'reg-state',
     country: 'reg-country',
+    dob: 'reg-dob',
     qual: 'reg-qual',
     ncism: 'reg-ncism',
     certificate: 'reg-cert-file',
@@ -1060,6 +1061,7 @@ const DEFAULT_REGISTRATION_FALLBACK_FIELDS = [
     { key: 'lname', label: 'Last name', type: 'text', step: 1, enabled: true, required: true },
     { key: 'email', label: 'Email', type: 'email', step: 1, enabled: true, required: true, verifyOtp: true },
     { key: 'phone', label: 'Phone', type: 'tel', step: 1, enabled: true, required: true, verifyOtp: true },
+    { key: 'dob', label: 'Date of birth', type: 'date', step: 1, enabled: true, required: true },
     { key: 'address', label: 'Address', type: 'textarea', step: 2, enabled: true, required: true },
     { key: 'pin', label: 'Pincode', type: 'text', step: 2, enabled: true, required: true },
     { key: 'city', label: 'City', type: 'select', step: 2, enabled: true, required: true },
@@ -1112,6 +1114,45 @@ const REGISTRATION_PREVIEW_STEP = 5;
 function needsAdvancedQualDoctor() {
     const q = (document.getElementById('reg-qual') || {}).value || '';
     return q === 'PG' || q === 'Practicing Vaidya' || q === 'Practitioner';
+}
+
+function updateRegistrationDobHint() {
+    const hint = document.getElementById('reg-dob-hint');
+    const el = document.getElementById('reg-dob');
+    if (!hint || !el) return;
+    const min = window.__registrationBirthYearMin;
+    const max = window.__registrationBirthYearMax;
+    if (min == null && max == null) {
+        hint.classList.add('hidden');
+        el.removeAttribute('min');
+        el.removeAttribute('max');
+        return;
+    }
+    hint.classList.remove('hidden');
+    let msg = 'Eligible birth years: ';
+    if (min != null && max != null) msg += min + '–' + max;
+    else if (min != null) msg += 'from ' + min;
+    else msg += 'up to ' + max;
+    hint.textContent = msg;
+    if (min != null) el.min = min + '-01-01';
+    if (max != null) el.max = max + '-12-31';
+}
+
+function validateRegistrationDobClient() {
+    const el = document.getElementById('reg-dob');
+    if (!el || el.closest('.form-group')?.classList.contains('hidden')) return null;
+    const fields = getRegistrationFieldsForValidation();
+    const dobField = fields.find((f) => f.key === 'dob');
+    if (!dobField || dobField.enabled === false) return null;
+    const v = String(el.value || '').trim();
+    if (dobField.required && !v) return 'Date of birth is required.';
+    if (!v) return null;
+    const y = parseInt(v.slice(0, 4), 10);
+    const min = window.__registrationBirthYearMin;
+    const max = window.__registrationBirthYearMax;
+    if (min != null && y < min) return 'Date of birth is too early for this seminar (minimum year ' + min + ').';
+    if (max != null && y > max) return 'Date of birth is too late for this seminar (maximum year ' + max + ').';
+    return null;
 }
 
 function collectRegistrationFormData() {
@@ -1396,6 +1437,11 @@ function validateRegistrationAgainstConfigForSteps(upToStepInclusive) {
                 if (f.required !== false && !hasCert) return `Please upload: ${f.label || 'Certificate'}`;
                 continue;
             }
+            if (f.key === 'dob') {
+                const de = validateRegistrationDobClient();
+                if (de) return de;
+                continue;
+            }
             if (f.required === false) continue;
             const v = fd[f.key];
             if (v === undefined || v === null || String(v).trim() === '') {
@@ -1476,6 +1522,9 @@ async function loadRegistrationFormConfigAndApply(seminarIdOpt) {
         const res = await fetch(url);
         const data = await res.json();
         window.__registrationFormFields = data.fields || [];
+        window.__registrationBirthYearMin = data.birthYearMin != null ? data.birthYearMin : null;
+        window.__registrationBirthYearMax = data.birthYearMax != null ? data.birthYearMax : null;
+        updateRegistrationDobHint();
         window.__otpOnApplication = !!data.otpOnApplication;
         window.__otpOnStep1 = !!data.otpOnStep1;
         window.__otpOnSubmit = !!data.otpOnSubmit;
@@ -1975,7 +2024,7 @@ function switchTab(tabId, menuEl) {
     if (menuEl) {
         menuEl.classList.add('active');
     } else if (typeof event !== 'undefined' && event && event.currentTarget) {
-        event.currentTarget.classList.add('active');
+    event.currentTarget.classList.add('active');
     } else {
         document.querySelectorAll('.menu-item').forEach((m) => {
             const t = m.getAttribute('data-tab');
@@ -2984,12 +3033,12 @@ function pdfAddQrCode(doc, qrImgElement, x, y, sizeMm) {
     const w = qrImgElement.naturalWidth || qrImgElement.width;
     const h = qrImgElement.naturalHeight || qrImgElement.height;
     if (!w || !h) return;
-    const canvas = document.createElement('canvas');
+        const canvas = document.createElement('canvas');
     canvas.width = w;
     canvas.height = h;
-    const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext('2d');
     ctx.drawImage(qrImgElement, 0, 0, w, h);
-    const imgData = canvas.toDataURL('image/png');
+        const imgData = canvas.toDataURL('image/png');
     const sz = sizeMm || 34;
     doc.addImage(imgData, 'PNG', x, y, sz, sz);
     doc.setDrawColor(203, 213, 225);
@@ -3039,6 +3088,8 @@ function generatePdfBlob(qrImgElement) {
     );
     drawTableRow('Email', document.getElementById('reg-email').value);
     drawTableRow('Phone', document.getElementById('reg-phone').value);
+    const dobEl = document.getElementById('reg-dob');
+    if (dobEl && dobEl.value) drawTableRow('Date of birth', dobEl.value);
     drawTableRow('Address', document.getElementById('reg-addr').value);
     drawTableRow(
         'City / State / PIN',
@@ -3253,7 +3304,7 @@ async function verifyNcism() {
                     'Mismatch: certificate shows ' +
                     (check.bestMatch || (check.extracted || []).join(', ') || '?') +
                     ' — admin will verify manually.';
-            } else {
+    } else {
                 statusEl.style.color = '#b45309';
                 statusEl.textContent =
                     'Could not read number from file automatically — your application will be reviewed manually.';
@@ -3329,6 +3380,7 @@ async function submitApplication() {
         lname: document.getElementById('reg-lname').value,
         email: document.getElementById('reg-email').value,
         phone: document.getElementById('reg-phone').value,
+        dob: document.getElementById('reg-dob') ? document.getElementById('reg-dob').value : '',
         address: document.getElementById('reg-addr').value,
         pin: document.getElementById('reg-pin').value,
         city: document.getElementById('reg-city').value,
@@ -3667,8 +3719,8 @@ async function loadApplications(silentPoll) {
         const trackerContainer = document.getElementById('applications-tracker-container');
         if (list) list.innerHTML = '<tr><td colspan="3">Please sign in again.</td></tr>';
         if (trackerContainer) trackerContainer.innerHTML = '<p style="color:#64748b;">Sign in to track applications.</p>';
-        return;
-    }
+            return;
+        }
     const list = document.getElementById('applications-list');
     const trackerContainer = document.getElementById('applications-tracker-container');
     try {
@@ -3722,7 +3774,7 @@ async function loadApplications(silentPoll) {
             }
             
             if (list) {
-                list.innerHTML += `
+            list.innerHTML += `
                 <tr>
                     <td><strong>${a.application_no}</strong></td>
                     <td><span style="background: ${a.status === 'rejected' ? '#fee2e2' : '#fef3c7'}; padding: 5px; border-radius: 5px;">${a.status.toUpperCase()}</span></td>
@@ -4088,17 +4140,17 @@ function openDoctorRazorpayCheckout(result, regId, methodId) {
         alert('Online payment could not be started. Try another method or contact the seminar office.');
         return;
     }
-    const options = {
+                const options = {
         key: checkoutKey,
-        amount: result.order.amount,
+                    amount: result.order.amount,
         currency: result.order.currency || 'INR',
-        name: 'Vaidya Gogate Memorial Foundation National Seminar',
-        description: 'Seminar Registration',
-        order_id: result.order.id,
-        handler: function (response) {
-            fetch('/api/payments/verify', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                    name: 'Vaidya Gogate Memorial Foundation National Seminar',
+                    description: 'Seminar Registration',
+                    order_id: result.order.id,
+                    handler: function (response) {
+                        fetch('/api/payments/verify', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     applicationId: regId,
                     paymentData: response,
@@ -4110,26 +4162,26 @@ function openDoctorRazorpayCheckout(result, regId, methodId) {
             })
                 .then((r) => r.json())
                 .then((verifyResult) => {
-                    if (verifyResult.success) {
+                            if (verifyResult.success) {
                         alert(verifyResult.message || 'Payment successful. Your e-ticket is in Participant tickets.');
-                        loadApplications();
+                                loadApplications();
                         loadDoctorDashboardStats();
                         loadDoctorOrders();
                         loadDoctorReceipts();
                         loadDoctorEventTickets();
-                    } else {
+                            } else {
                         alert(verifyResult.error || 'Payment verification failed');
-                    }
-                });
-        },
-        prefill: {
+                            }
+                        });
+                    },
+                    prefill: {
             name: (currentUser.first_name || '') + ' ' + (currentUser.last_name || ''),
             email: currentUser.email || '',
             contact: currentUser.phone || ''
         },
         theme: { color: '#0f766e' }
-    };
-    const rzp = new Razorpay(options);
+                };
+                const rzp = new Razorpay(options);
     rzp.on('payment.failed', function (resp) {
         alert(
             (resp.error && resp.error.description) ||
@@ -4137,7 +4189,7 @@ function openDoctorRazorpayCheckout(result, regId, methodId) {
         );
     });
     try {
-        rzp.open();
+                rzp.open();
     } catch (openErr) {
         console.error(openErr);
         alert('Could not open payment. Allow pop-ups and try again.');
@@ -4228,7 +4280,7 @@ async function processPayment(appId, amount, appNo, paymentOption, cancelPending
                 alert(window.HttpJson.apiErrorMessage(res, result, true));
                 return;
             }
-        } else {
+            } else {
             try {
                 result = await res.json();
             } catch (_) {
@@ -4247,7 +4299,7 @@ async function processPayment(appId, amount, appNo, paymentOption, cancelPending
         }
         if (result.paid) {
             alert(result.message || 'Payment recorded.');
-            loadApplications();
+                loadApplications();
             loadDoctorDashboardStats();
             loadDoctorOrders();
             loadDoctorReceipts();
@@ -4907,7 +4959,7 @@ async function loadChatMessages() {
         messages.forEach((m) => {
             const st = String(m.sender_type || '').toLowerCase();
             const isDoc = st !== 'admin';
-                box.innerHTML += `
+            box.innerHTML += `
                 <div style="align-self: ${isDoc ? 'flex-end' : 'flex-start'}; background: ${isDoc ? '#1a237e' : 'white'}; color: ${isDoc ? 'white' : '#334155'}; border: 1px solid ${isDoc ? '#1a237e' : '#cbd5e1'}; padding: 10px 15px; border-radius: 8px; max-width: 80%;">
                     <p style="font-size: 0.8rem; margin-bottom: 5px; color: ${isDoc ? '#c7d2fe' : '#64748b'};"><strong>${isDoc ? 'You' : 'Admin'}</strong> — ${new Date(m.created_at).toLocaleString()}</p>
                     <p>${(m.message || '').replace(/</g, '&lt;')}</p>
@@ -4917,7 +4969,7 @@ async function loadChatMessages() {
         console.error(err);
         box.innerHTML = '<p style="color:#b91c1c;text-align:center;">Network error loading messages.</p>';
     }
-    box.scrollTop = box.scrollHeight;
+        box.scrollTop = box.scrollHeight;
 }
 
 async function sendReply() {
@@ -4936,11 +4988,11 @@ async function sendReply() {
         if (!res.ok || !data.success) {
             return alert((data && data.error) || 'Could not send reply');
         }
-        msgInput.value = '';
-        await loadChatMessages();
+            msgInput.value = '';
+            await loadChatMessages();
     } catch (err) {
         console.error(err);
-    }
+        }
 }
 
 async function submitSupportTicket() {
@@ -5010,7 +5062,7 @@ async function loadProfile() {
         const res = await fetch(`/api/doctor/profile/${uid}`);
         const profile = await res.json();
         window.__doctorProfile = profile && profile.id ? profile : null;
-
+        
         if (profile && profile.id) {
             document.getElementById('profile-specialization').value = profile.specialization || '';
             document.getElementById('profile-registration-no').value = profile.registration_no || '';
@@ -5028,7 +5080,7 @@ async function loadProfile() {
 
 async function saveProfile(event) {
     event.preventDefault();
-
+    
     const formData = new FormData();
     const uid = doctorNumericUserId();
     if (!uid) return alert('Session invalid. Please sign in again with your email.');
@@ -5040,7 +5092,7 @@ async function saveProfile(event) {
     formData.append('hospital_name', document.getElementById('profile-hospital').value);
     formData.append('contact_number', document.getElementById('profile-contact').value);
     formData.append('bio', document.getElementById('profile-bio').value);
-
+    
     let profilePhoto = document.getElementById('profile-photo').files[0];
     if (profilePhoto) {
         try {
@@ -5055,7 +5107,7 @@ async function saveProfile(event) {
         }
         formData.append('profilePhoto', profilePhoto);
     }
-
+    
     try {
         const res = await fetch('/api/doctor/profile', {
             method: 'POST',

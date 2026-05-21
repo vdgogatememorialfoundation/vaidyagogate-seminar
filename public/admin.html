@@ -554,6 +554,16 @@
                         <thead><tr><th>Field key</th><th>Label (shown to doctor)</th><th>Type</th><th>Step</th><th>Enabled</th><th>Required</th><th></th></tr></thead>
                         <tbody id="admin-reg-fields-tbody"></tbody>
                     </table>
+                    <div style="margin-top:16px;padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;">
+                        <label style="font-weight:700;color:#166534;">Qualification options (PG / Practicing Vaidya / Practitioner)</label>
+                        <p style="font-size:0.82rem;color:#64748b;margin:6px 0 10px;">Choose which choices appear in the doctor registration dropdown.</p>
+                        <div id="admin-global-qual-options" style="display:flex;flex-wrap:wrap;gap:14px;font-size:0.9rem;"></div>
+                    </div>
+                    <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:480px;">
+                        <div><label style="font-size:0.82rem;font-weight:700;">Earliest birth year allowed</label><input type="number" id="admin-birth-year-min" min="1900" max="2100" placeholder="e.g. 1960" style="width:100%;padding:8px;"></div>
+                        <div><label style="font-size:0.82rem;font-weight:700;">Latest birth year allowed</label><input type="number" id="admin-birth-year-max" min="1900" max="2100" placeholder="e.g. 2006" style="width:100%;padding:8px;"></div>
+                    </div>
+                    <p style="font-size:0.78rem;color:#64748b;margin-top:6px;">Leave blank for no birth-year restriction. Doctors enter date of birth on step 1.</p>
                     <button type="button" class="btn-primary" style="margin-top:10px;background:#0d9488;" onclick="adminAddRegistrationFieldRow()">+ Add field</button>
                     <button type="button" class="btn-primary" style="margin-top:16px;margin-left:8px;" onclick="saveAdminRegistrationFormConfig()">Save registration form</button>
                     <p id="admin-reg-form-msg" style="margin-top:10px;font-weight:600;"></p>
@@ -1610,9 +1620,17 @@
                         <label style="font-weight:600;">Registration form override (this seminar)</label>
                         <p style="font-size:0.82rem;color:#64748b;margin:6px 0 10px;">Toggle fields for this seminar.</p>
                         <table class="data-table" style="font-size:0.88rem;">
-                            <thead><tr><th>Field</th><th>Label</th><th>On</th><th>Required</th></tr></thead>
+                            <thead><tr><th>Field</th><th>Label</th><th>On</th><th>Required</th><th>Options</th></tr></thead>
                             <tbody id="seminar-reg-override-tbody"></tbody>
                         </table>
+                        <div id="seminar-qual-options-wrap" style="margin-top:10px;padding:10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;display:none;">
+                            <label style="font-weight:700;font-size:0.88rem;color:#166534;">Qualification choices for this seminar</label>
+                            <div id="seminar-qual-options" style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;font-size:0.88rem;"></div>
+                        </div>
+                        <div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:480px;">
+                            <div><label style="font-size:0.8rem;">Earliest birth year (override)</label><input type="number" id="seminar-birth-year-min" min="1900" max="2100" placeholder="Global default" style="width:100%;padding:6px;" oninput="updateSeminarPolicyPreviews()"></div>
+                            <div><label style="font-size:0.8rem;">Latest birth year (override)</label><input type="number" id="seminar-birth-year-max" min="1900" max="2100" placeholder="Global default" style="width:100%;padding:6px;" oninput="updateSeminarPolicyPreviews()"></div>
+                        </div>
                         <p id="seminar-form-preview" style="margin-top:10px;font-size:0.88rem;color:#334155;background:#f8fafc;padding:10px;border-radius:6px;"></p>
                     </div>
                     <div style="margin-top:14px;padding:12px;background:#fff;border:1px solid #e2e8f0;border-radius:8px;">
