@@ -464,7 +464,15 @@ const fileStore = require('./lib/file-store');
 
 /** Multer middleware: memory on Vercel, disk locally; assigns stable filenames. */
 function withMemoryAwareUpload(field) {
-    return fileStore.createUploadHandler(upload, memoryUpload).single(field);
+    const mw = fileStore.createUploadHandler(upload, memoryUpload).single(field);
+    return (req, res, next) => {
+        mw(req, res, (err) => {
+            if (err) {
+                return res.status(400).json({ error: uploadErrorMessage(err) });
+            }
+            next();
+        });
+    };
 }
 const siteCmsHelpers = require('./lib/site-cms-helpers');
 const caseUpload = fileStore.createUploadHandler(upload, memoryUpload);
@@ -4485,28 +4493,7 @@ app.post('/api/applications/:applicationId/cancel', (req, res) => {
 
 // 6. Doctor Profile Management
 // Create or update doctor profile
-app.post('/api/doctor/profile', (req, res) => {
-    withMemoryAwareUpload('profilePhoto')(req, res, (uploadErr) => {
-        if (uploadErr) {
-            return res.status(400).json({ error: uploadErrorMessage(uploadErr) });
-        }
-        // #region agent log
-        try {
-            const dbg = require('./lib/debug-agent-log');
-            dbg.agentLog(
-                'server.js:doctor/profile',
-                'profile save request',
-                {
-                    vercel: !!process.env.VERCEL,
-                    useBlob: fileStore.useBlobStore(),
-                    hasFile: !!req.file,
-                    bufferLen: req.file && req.file.buffer ? req.file.buffer.length : 0,
-                    filePath: req.file && req.file.path ? 'set' : 'none'
-                },
-                'H1'
-            );
-        } catch (_) {}
-        // #endregion
+app.post('/api/doctor/profile', withMemoryAwareUpload('profilePhoto'), (req, res) => {
         const userId = parseInt(req.body.userId, 10);
         if (!Number.isInteger(userId) || userId < 1) {
             return res.status(400).json({ error: 'Invalid session. Please sign in again.' });
@@ -4592,17 +4579,6 @@ app.post('/api/doctor/profile', (req, res) => {
 
         if (req.file) {
             return fileStore.persistMulterFile(db, req.file, uploadsDir, (pErr, photoPath) => {
-                // #region agent log
-                try {
-                    const dbg = require('./lib/debug-agent-log');
-                    dbg.agentLog(
-                        'server.js:doctor/profile:persist',
-                        pErr ? 'persist failed' : 'persist ok',
-                        { err: pErr ? pErr.message : null, photoPath: photoPath || null },
-                        'H3'
-                    );
-                } catch (_) {}
-                // #endregion
                 if (pErr) return res.status(500).json({ error: pErr.message });
                 saveProfile(photoPath);
             });
@@ -10597,9 +10573,9 @@ function startBackgroundWorkers() {
                         console.log('[notifications] VGMF 2026 default templates synced');
                     });
                 }
+            });
         });
     });
-});
     if (jobsModule && typeof jobsModule.startWorkers === 'function' && !process.env.VERCEL) {
         jobsModule.startWorkers(db);
     } else if (process.env.VERCEL) {
@@ -10671,6 +10647,12 @@ app.get('/api/cron/pending-registration-reminders', (req, res) => {
         return appReadyPromise.then(run).catch((e) => res.status(503).json({ error: e.message }));
     }
     run();
+});
+
+app.use((err, req, res, next) => {
+    if (res.headersSent) return next(err);
+    console.error('[express] unhandled error:', err && err.message ? err.message : err);
+    res.status(500).json({ error: 'Internal server error' });
 });
 
 module.exports = app;
