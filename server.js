@@ -62,6 +62,7 @@ const certVerify = require('./lib/certificate-verify');
 const docVerify = require('./lib/application-document-verify');
 const seminarPurge = require('./lib/seminar-purge');
 const supplementalPayments = require('./lib/supplemental-payments');
+const eventPages = require('./lib/event-pages');
 const regCertVerify = require('./lib/registration-certificate-verify');
 const seminarAnalytics = require('./lib/seminar-analytics');
 const { filterConfirmedRows } = require('./lib/confirmed-participants');
@@ -123,11 +124,15 @@ function mountPaymentsRoutes() {
         fileStore,
         parsePositiveUserId
     });
+    eventPages.registerEventPageRoutes(app, db, { fileStore, parsePositiveUserId });
 }
 
 function bootstrapApp(done) {
     mountExtendedRoutes();
     mountPaymentsRoutes();
+    eventPages.ensureEventPageSchema(db, (e) => {
+        if (e) console.warn('[event-pages] schema:', e.message);
+    }, () => {});
     startBackgroundWorkers();
     persistScrollingAnnouncementsSanitizeIfNeeded(() => {});
 
@@ -666,9 +671,10 @@ const DEFAULT_REGISTRATION_FORM_CONFIG = {
         },
         { key: 'ncism', label: 'Medical registration / NCISM', type: 'text', step: 3, enabled: true, required: true, onlyWhenAdvancedQual: true },
         { key: 'certificate', label: 'Certificate upload', type: 'file', step: 3, enabled: true, required: true, onlyWhenAdvancedQual: true },
-        { key: 'college', label: 'College name', type: 'text', step: 4, enabled: true, required: true },
-        { key: 'ccity', label: 'College city', type: 'text', step: 4, enabled: true, required: true },
-        { key: 'cstate', label: 'College state', type: 'text', step: 4, enabled: true, required: true },
+        { key: 'cpin', label: 'College PIN code', type: 'text', step: 4, enabled: true, required: true, onlyWhenPgCollege: true },
+        { key: 'college', label: 'College name', type: 'text', step: 4, enabled: true, required: true, onlyWhenPgCollege: true },
+        { key: 'ccity', label: 'College city', type: 'text', step: 4, enabled: true, required: true, onlyWhenPgCollege: true },
+        { key: 'cstate', label: 'College state', type: 'text', step: 4, enabled: true, required: true, onlyWhenPgCollege: true },
         {
             key: 'agree_terms',
             label: 'I confirm the information is accurate',
@@ -1887,6 +1893,24 @@ function recordScanEventForDashboard(seminarId, staffId, payload) {
         },
         () => {}
     );
+}
+
+function logScanDashboard(seminarId, staffId, outcome, message, row) {
+    const name = row
+        ? buildDisplayNameFromFormData(row.form_data, {
+              first_name: row.doctor_first_name,
+              last_name: row.doctor_last_name
+          })
+        : null;
+    recordScanEventForDashboard(seminarId, staffId, {
+        ticket_db_id: row && row.ticket_id,
+        ticket_id_string: row && row.ticket_id_string,
+        application_no: row && row.application_no,
+        doctor_user_id: row && row.doctor_user_id,
+        doctor_name: name,
+        outcome: outcome || 'failed',
+        message: message || null
+    });
 }
 
 /** Reuse existing pending order or create one (avoids duplicate pending rows per registration). */
@@ -5754,6 +5778,7 @@ app.post('/api/scanner/mark', (req, res) => {
             function proceedWithScanRow(err, row, regHint) {
                 if (err) return res.status(500).json({ success: false, error: err.message });
                 if (!row) {
+                    logScanDashboard(selectedSeminarId, staffId, 'not_found', 'Ticket or application not found', null);
                     return res.status(404).json({
                         success: false,
                         error: 'Not found. Scan e-ticket QR, or enter E-ticket ID / Application ID.',
@@ -5761,6 +5786,14 @@ app.post('/api/scanner/mark', (req, res) => {
                     });
                 }
                 if (row.error === 'unpaid') {
+                    const unpaidRow = row.regRow || row;
+                    logScanDashboard(
+                        selectedSeminarId,
+                        staffId,
+                        'unpaid',
+                        'Payment not confirmed',
+                        unpaidRow
+                    );
                     return res.status(403).json({
                         success: false,
                         error: 'Application found but payment is not confirmed.',
@@ -5774,6 +5807,7 @@ app.post('/api/scanner/mark', (req, res) => {
 
                 const accountBlock = doctorAccountBlockForScan(row);
                 if (accountBlock) {
+                    logScanDashboard(selectedSeminarId, staffId, 'account_blocked', accountBlock.error, row);
                     return res.status(403).json({
                         success: false,
                         error: accountBlock.error,
@@ -5789,23 +5823,26 @@ app.post('/api/scanner/mark', (req, res) => {
 
                 const payOk = String(row.payment_status || '').toLowerCase() === 'success';
                 if (!payOk) {
+                    logScanDashboard(selectedSeminarId, staffId, 'unpaid', 'Payment is not confirmed for this ticket', row);
                     return res.status(403).json({
                         success: false,
                         error: 'Payment is not confirmed for this ticket.',
                         sound: 'error',
-                        doctor: {
-                            userId: row.doctor_user_id,
-                            userIdString: row.doctor_user_id_string,
-                            name: buildDisplayNameFromFormData(row.form_data, row),
-                            applicationNo: row.application_no,
-                            seminarTitle: row.seminar_title,
+                        doctor: doctorPayloadFromScanRow(row, {
                             ticketId: row.ticket_id_string,
                             paymentStatus: 'UNPAID'
-                        }
+                        })
                     });
                 }
                 const regSt = String(row.registration_status || '').toLowerCase();
                 if (regSt === 'cancelled' || regSt === 'rejected') {
+                    logScanDashboard(
+                        selectedSeminarId,
+                        staffId,
+                        'invalid',
+                        regSt === 'cancelled' ? 'Registration cancelled' : 'Registration rejected',
+                        row
+                    );
                     return res.status(403).json({
                         success: false,
                         error:
@@ -5823,22 +5860,23 @@ app.post('/api/scanner/mark', (req, res) => {
                     });
                 }
                 if (Number(row.is_valid) === 0 || row.is_valid === false) {
+                    logScanDashboard(selectedSeminarId, staffId, 'invalid', 'Ticket no longer valid', row);
                     return res.status(403).json({
                         success: false,
                         error: 'Ticket is no longer valid (cancelled registration).',
-                        doctor: {
-                            userId: row.doctor_user_id,
-                            userIdString: row.doctor_user_id_string,
-                            name: buildDisplayNameFromFormData(row.form_data, row),
-                            email: row.doctor_email,
-                            phone: row.doctor_phone,
-                            applicationNo: row.application_no
-                        }
+                        doctor: doctorPayloadFromScanRow(row)
                     });
                 }
                 const scansRequired = certVerify.normalizeCertScansRequired(row.cert_scans_required);
                 const currentScanCount = Number(row.scan_count) || (row.is_scanned ? 1 : 0);
                 if (currentScanCount >= scansRequired) {
+                    logScanDashboard(
+                        selectedSeminarId,
+                        staffId,
+                        'duplicate',
+                        scansRequired === 2 ? 'Entry and exit scans already recorded' : 'Check-in already completed',
+                        row
+                    );
                     return res.status(400).json({
                         success: false,
                         error:
@@ -5860,19 +5898,21 @@ app.post('/api/scanner/mark', (req, res) => {
 
                 const ticketSeminarId = Number(row.seminar_id);
                 if (ticketSeminarId !== selectedSeminarId) {
+                    logScanDashboard(
+                        selectedSeminarId,
+                        staffId,
+                        'wrong_seminar',
+                        'Ticket is for ' + (row.seminar_title || 'another seminar'),
+                        row
+                    );
                     return res.status(403).json({
                         success: false,
                         error: `Wrong seminar selected. This ticket is for "${row.seminar_title}". Choose that seminar in the dropdown, then scan again.`,
                         sound: 'wrong_seminar',
-                        doctor: {
-                            userId: row.doctor_user_id,
-                            userIdString: row.doctor_user_id_string,
-                            name: buildDisplayNameFromFormData(row.form_data, row),
-                            seminarTitle: row.seminar_title,
+                        doctor: doctorPayloadFromScanRow(row, {
                             ticketId: row.ticket_id_string,
-                            applicationNo: row.application_no,
                             orderId: row.order_id_string
-                        }
+                        })
                     });
                 }
 
@@ -5881,6 +5921,7 @@ app.post('/api/scanner/mark', (req, res) => {
                     row.checkin_enabled === 1 ||
                     row.checkin_enabled === '1';
                 if (!checkinOn) {
+                    logScanDashboard(selectedSeminarId, staffId, 'checkin_disabled', 'Check-in disabled for seminar', row);
                     return res.status(403).json({
                         success: false,
                         error: 'Check-in is currently disabled for this seminar.',
@@ -5900,17 +5941,13 @@ app.post('/api/scanner/mark', (req, res) => {
                     const expected =
                         normalizeCheckinDateYmd(row.checkin_date) ||
                         String(row.checkin_date || '').slice(0, 10);
+                    const dateMsg = `Check-in only for ${expected || 'configured date'} (today ${today})`;
+                    logScanDashboard(selectedSeminarId, staffId, 'wrong_date', dateMsg, row);
                     return res.status(403).json({
                         success: false,
                         error: `Check-in is only open for ${expected || 'the configured date'} (today in India is ${today}). In Admin → Seminars, set "Check-in allowed date" to today (${today}), or leave it blank to allow any day while check-in is enabled.`,
                         sound: 'wrong_date',
-                        doctor: {
-                            userId: row.doctor_user_id,
-                            userIdString: row.doctor_user_id_string,
-                            name: buildDisplayNameFromFormData(row.form_data, row),
-                            applicationNo: row.application_no,
-                            seminarTitle: row.seminar_title
-                        }
+                        doctor: doctorPayloadFromScanRow(row)
                     });
                 }
 

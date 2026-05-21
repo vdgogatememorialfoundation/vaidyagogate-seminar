@@ -83,3 +83,39 @@
     margin-top: 8px;
     font-size: 0.85rem;
 }
+.scan-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    gap: 8px;
+}
+.scan-outcome-badge {
+    font-size: 0.68rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    opacity: 0.85;
+}
+.scan-card-time {
+    font-size: 0.72rem;
+    opacity: 0.75;
+}
+.scan-card-ids {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin: 8px 0;
+    font-size: 0.78rem;
+}
+.scan-card-ids .lbl {
+    display: block;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    opacity: 0.75;
+}
+.scan-card-ids code {
+    display: block;
+    margin-top: 2px;
+    word-break: break-all;
+}

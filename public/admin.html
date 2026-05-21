@@ -123,6 +123,7 @@
                 <a class="menu-item" data-admin-module="tab-scanner-logs" onclick="switchTab('tab-scanner-logs'); initAdminScannerLogsTab();"><i class="fas fa-qrcode"></i> Scanner Activity</a>
                 <a class="menu-item" data-admin-module="tab-live-scanner" onclick="openAdminLiveScannerBoard();"><i class="fas fa-tv"></i> Live check-in board</a>
                 <a class="menu-item" data-admin-module="tab-pos" onclick="switchTab('tab-pos'); initAdminPosTab();"><i class="fas fa-cash-register"></i> On-spot POS</a>
+                <a class="menu-item" data-admin-module="tab-event-pages" onclick="switchTab('tab-event-pages'); loadAdminEventPagesModule();"><i class="fas fa-globe"></i> Event pages</a>
                 <a class="menu-item" data-admin-module="tab-feedback-form" onclick="switchTab('tab-feedback-form'); loadAdminFeedbackFormConfig();"><i class="fas fa-edit"></i> Feedback form editor</a>
                 <a class="menu-item" data-admin-module="tab-activity-logs" onclick="switchTab('tab-activity-logs'); initAdminActivityLogsTab();"><i class="fas fa-history"></i> User &amp; doctor activity</a>
                 <a class="menu-item" data-admin-module="tab-notifications" onclick="switchTab('tab-notifications'); initAdminNotificationsTab();"><i class="fas fa-bell"></i> Notifications</a>
@@ -1259,6 +1260,40 @@
                     </div>
                     <button type="button" class="btn-primary" style="margin-top:16px;" onclick="submitAdminPosRegistration()">Register &amp; issue ticket</button>
                     <p id="pos-status" style="margin-top:12px;font-weight:600;"></p>
+                </div>
+            </div>
+
+            <div id="tab-event-pages" class="tab-pane hidden">
+                <h2 style="margin-bottom:12px;">Event pages &amp; portal modes</h2>
+                <p style="color:#64748b;margin-bottom:16px;">Publish a dedicated page per seminar (e.g. <code>yoursite.org/event.html?event=slug</code>). Choose doctor portal registration or a standalone public event (custom signup — phase 2). DNS: point <code>seminar.vaidyagogate.org</code> to this site; use URL slug below.</p>
+                <div class="card" style="margin-bottom:16px;">
+                    <label>Select seminar</label>
+                    <select id="event-page-seminar" style="width:100%;max-width:480px;padding:8px;" onchange="loadAdminEventPageEditor()"></select>
+                </div>
+                <div id="event-page-editor" class="card hidden">
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                        <div><label>Public URL slug</label><input type="text" id="event-page-slug" placeholder="e.g. national-seminar-2026" style="width:100%;padding:8px;"></div>
+                        <div><label>Portal mode</label><select id="event-page-portal-mode" style="width:100%;padding:8px;"><option value="doctor">Doctor portal (standard registration)</option><option value="standalone">Standalone public event (no doctor dashboard)</option></select></div>
+                    </div>
+                    <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:16px;">
+                        <label><input type="checkbox" id="event-page-public"> Publish public event page</label>
+                        <label><input type="checkbox" id="event-page-reg-enabled" checked> Registration enabled</label>
+                        <label><input type="checkbox" id="event-page-pay-required" checked> Payment required</label>
+                    </div>
+                    <div style="margin-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                        <div><label>Hero title</label><input type="text" id="event-page-hero-title" style="width:100%;padding:8px;"></div>
+                        <div><label>Hero subtitle</label><input type="text" id="event-page-hero-sub" style="width:100%;padding:8px;"></div>
+                    </div>
+                    <p style="margin-top:12px;font-size:0.88rem;color:#64748b;">Preview: <a id="event-page-preview-link" href="#" target="_blank" rel="noopener">Open public page</a></p>
+                    <button type="button" class="btn-primary" style="margin-top:14px;background:#0d9488;" onclick="saveAdminEventPageConfig()">Save event page</button>
+                    <p id="event-page-save-status" style="margin-top:10px;font-weight:600;"></p>
+                </div>
+                <div class="card" style="margin-top:16px;">
+                    <h3 style="margin:0 0 10px;font-size:1rem;">All events</h3>
+                    <table class="data-table">
+                        <thead><tr><th>Seminar</th><th>Slug</th><th>Published</th><th>Mode</th><th>Reg</th><th>Pay</th></tr></thead>
+                        <tbody id="event-pages-list-tbody"><tr><td colspan="6" style="text-align:center;">Select Event pages tab to load</td></tr></tbody>
+                    </table>
                 </div>
             </div>
 

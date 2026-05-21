@@ -779,6 +779,7 @@ const ADMIN_MODULE_TAB_DEFS = [
     ['tab-live-scanner', 'Live check-in board'],
     ['tab-pos', 'On-spot POS'],
     ['tab-feedback-form', 'Feedback form editor'],
+    ['tab-event-pages', 'Event pages'],
     ['tab-activity-logs', 'User & doctor activity'],
     ['tab-notifications', 'Notifications'],
     ['tab-system-platform', 'System health'],
@@ -899,6 +900,112 @@ async function submitAdminPosRegistration() {
 function adminActorId() {
     const u = getStoredAdminUser();
     return u && u.id ? u.id : null;
+}
+
+async function loadAdminEventPagesModule() {
+    await fillAdminSeminarSelect('event-page-seminar', true);
+    const tbody = document.getElementById('event-pages-list-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="6">Loading…</td></tr>';
+    try {
+        const res = await fetch('/api/admin/event-pages');
+        const rows = await res.json();
+        if (!Array.isArray(rows) || !rows.length) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#64748b;">No seminars</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows
+            .map((r) => {
+                const pub = Number(r.public_page_enabled) === 1;
+                return (
+                    '<tr><td>' +
+                    escAdmin(r.title || '') +
+                    '</td><td><code>' +
+                    escAdmin(r.event_slug || '—') +
+                    '</code></td><td>' +
+                    (pub ? 'Yes' : 'No') +
+                    '</td><td>' +
+                    escAdmin(r.portal_mode || 'doctor') +
+                    '</td><td>' +
+                    (Number(r.registration_enabled) !== 0 ? 'On' : 'Off') +
+                    '</td><td>' +
+                    (Number(r.payment_required) !== 0 ? 'Yes' : 'No') +
+                    '</td></tr>'
+                );
+            })
+            .join('');
+        const sel = document.getElementById('event-page-seminar');
+        if (sel && sel.value) loadAdminEventPageEditor();
+    } catch (e) {
+        console.error(e);
+        tbody.innerHTML = '<tr><td colspan="6">Error</td></tr>';
+    }
+}
+
+async function loadAdminEventPageEditor() {
+    const sid = document.getElementById('event-page-seminar')?.value;
+    const panel = document.getElementById('event-page-editor');
+    if (!sid || !panel) {
+        if (panel) panel.classList.add('hidden');
+        return;
+    }
+    panel.classList.remove('hidden');
+    try {
+        const res = await fetch('/api/admin/event-pages');
+        const rows = await res.json();
+        const row = (rows || []).find((r) => String(r.id) === String(sid));
+        if (!row) return;
+        document.getElementById('event-page-slug').value = row.event_slug || '';
+        document.getElementById('event-page-portal-mode').value = row.portal_mode === 'standalone' ? 'standalone' : 'doctor';
+        document.getElementById('event-page-public').checked = Number(row.public_page_enabled) === 1;
+        document.getElementById('event-page-reg-enabled').checked = Number(row.registration_enabled) !== 0;
+        document.getElementById('event-page-pay-required').checked = Number(row.payment_required) !== 0;
+        const slug = (row.event_slug || '').trim();
+        const preview = document.getElementById('event-page-preview-link');
+        if (preview) {
+            preview.href = slug ? '/event.html?event=' + encodeURIComponent(slug) : '#';
+            preview.style.pointerEvents = slug ? '' : 'none';
+        }
+        document.getElementById('event-page-hero-title').value = row.title || '';
+        document.getElementById('event-page-hero-sub').value = '';
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function saveAdminEventPageConfig() {
+    const sid = document.getElementById('event-page-seminar')?.value;
+    const st = document.getElementById('event-page-save-status');
+    if (!sid) return alert('Select a seminar first.');
+    try {
+        const res = await fetch('/api/admin/event-pages/' + sid, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                eventSlug: document.getElementById('event-page-slug').value,
+                portalMode: document.getElementById('event-page-portal-mode').value,
+                publicPageEnabled: document.getElementById('event-page-public').checked,
+                registrationEnabled: document.getElementById('event-page-reg-enabled').checked,
+                paymentRequired: document.getElementById('event-page-pay-required').checked,
+                eventPage: {
+                    heroTitle: document.getElementById('event-page-hero-title').value,
+                    heroSubtitle: document.getElementById('event-page-hero-sub').value
+                }
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Save failed');
+        if (st) {
+            st.style.color = '#059669';
+            st.textContent = 'Event page saved.';
+        }
+        loadAdminEventPagesModule();
+    } catch (e) {
+        if (st) {
+            st.style.color = '#b91c1c';
+            st.textContent = e.message;
+        }
+    }
 }
 
 async function loadAdminFeedbackFormConfig() {
@@ -1129,10 +1236,15 @@ const ADMIN_BEHALF_FIELD_DEFAULTS = [
         ]
     },
     { key: 'ncism', label: 'NCISM / Reg. no.', type: 'text', enabled: true, required: true, onlyWhenAdvancedQual: true },
-    { key: 'college', label: 'College', type: 'text', enabled: true, required: true },
-    { key: 'ccity', label: 'College city', type: 'text', enabled: true, required: true },
-    { key: 'cstate', label: 'College state', type: 'text', enabled: true, required: false }
+    { key: 'cpin', label: 'College PIN', type: 'text', enabled: true, required: true, onlyWhenPgCollege: true },
+    { key: 'college', label: 'College', type: 'text', enabled: true, required: true, onlyWhenPgCollege: true },
+    { key: 'ccity', label: 'College city', type: 'text', enabled: true, required: true, onlyWhenPgCollege: true },
+    { key: 'cstate', label: 'College state', type: 'text', enabled: true, required: false, onlyWhenPgCollege: true }
 ];
+
+function adminQualIsPg(qual) {
+    return String(qual || '').trim() === 'PG';
+}
 
 function adminBehalfNeedsAdvancedQual() {
     const el = document.getElementById('behalf-f-qual');
@@ -4227,15 +4339,76 @@ async function adminLiveEditOtpPayload() {
 let __adminEditFormFields = [];
 let __adminEditFormPrefix = 'appedit-f-';
 
+async function adminPincodeAutofill(prefix, pinKey) {
+    const pinEl = document.getElementById(prefix + pinKey);
+    if (!pinEl) return;
+    const pin = String(pinEl.value || '').replace(/\D/g, '');
+    if (pin.length !== 6) return;
+    try {
+        const r = await fetch('/api/public/pincode-lookup?pin=' + encodeURIComponent(pin));
+        const data = await r.json();
+        if (!data || !data.ok) return;
+        const cityKey = pinKey === 'cpin' ? 'ccity' : 'city';
+        const stateKey = pinKey === 'cpin' ? 'cstate' : 'state';
+        const cityEl = document.getElementById(prefix + cityKey);
+        const stateEl = document.getElementById(prefix + stateKey);
+        if (cityEl && (data.cities || []).length) cityEl.value = data.cities[0];
+        if (stateEl && (data.states || []).length) stateEl.value = data.states[0];
+        if (pinKey === 'pin') {
+            const countryEl = document.getElementById(prefix + 'country');
+            if (countryEl && data.country) countryEl.value = data.country;
+        }
+    } catch (_) {}
+}
+
+function formatAdminApplicationDetailsHtml(formData, certLink) {
+    const fd = formData || {};
+    const rows = [
+        ['Name', [fd.fname, fd.mname, fd.lname].filter(Boolean).join(' ')],
+        ['Email', fd.email],
+        ['Phone', fd.phone],
+        ['Date of birth', fd.dob],
+        ['Address', fd.address],
+        ['PIN / City / State', [fd.pin, fd.city, fd.state].filter(Boolean).join(', ')],
+        ['Country', fd.country],
+        ['Qualification', fd.qual]
+    ];
+    if (seminarNeedsDocReview(fd.qual)) {
+        rows.push(['NCISM / Reg. no.', fd.ncism || '—']);
+    }
+    if (adminQualIsPg(fd.qual)) {
+        rows.push(['College PIN', fd.cpin || '—']);
+        rows.push(['College', [fd.college, fd.ccity, fd.cstate].filter(Boolean).join(', ')]);
+    }
+    let html = '';
+    rows.forEach(([k, v]) => {
+        if (v == null || String(v).trim() === '') return;
+        html += '<p><strong>' + escAdmin(k) + ':</strong> ' + escAdmin(String(v)) + '</p>';
+    });
+    if (certLink) html += certLink;
+    if (fd.additional_documents && Array.isArray(fd.additional_documents) && fd.additional_documents.length) {
+        html += '<p><strong>Additional documents:</strong></p><ul>';
+        fd.additional_documents.forEach((d) => {
+            const href = d.path ? publicFileHref(d.path) : '';
+            html +=
+                '<li>' +
+                escAdmin(d.label || 'Document') +
+                (href ? ' — <a href="' + escAdmin(href) + '" target="_blank" rel="noopener">View</a>' : '') +
+                '</li>';
+        });
+        html += '</ul>';
+    }
+    return html;
+}
+
 function renderAdminDynamicFormFields(hostId, fields, prefix, existingData) {
     const host = document.getElementById(hostId);
     if (!host) return;
     __adminEditFormPrefix = prefix;
     __adminEditFormFields = fields || [];
-    const adv =
-        String((existingData && existingData.qual) || '').trim() === 'PG' ||
-        String((existingData && existingData.qual) || '').trim() === 'Practicing Vaidya' ||
-        String((existingData && existingData.qual) || '').trim() === 'Practitioner';
+    const qual = String((existingData && existingData.qual) || '').trim();
+    const adv = seminarNeedsDocReview(qual);
+    const isPg = adminQualIsPg(qual);
     const list = (__adminEditFormFields || []).filter((f) => f.enabled !== false);
     if (!list.length) {
         host.innerHTML = '<p class="muted">No form fields configured for this seminar.</p>';
@@ -4245,6 +4418,7 @@ function renderAdminDynamicFormFields(hostId, fields, prefix, existingData) {
     list.forEach((f) => {
         if (f.key === 'certificate') return;
         if (f.onlyWhenAdvancedQual && !adv) return;
+        if (f.onlyWhenPgCollege && !isPg) return;
         const id = prefix + f.key;
         const req = f.required ? ' *' : '';
         const span = f.type === 'textarea' ? 'grid-column:1/-1;' : '';
@@ -4258,9 +4432,19 @@ function renderAdminDynamicFormFields(hostId, fields, prefix, existingData) {
                 html += '<option value="' + escAdmin(String(v)) + '">' + escAdmin(o.label || v) + '</option>';
             });
             html += '</select>';
+        } else if (f.type === 'date') {
+            html += '<input type="date" id="' + id + '" style="width:100%;padding:8px;">';
+        } else if (f.type === 'checkbox' || f.type === 'boolean') {
+            html +=
+                '<label style="display:flex;align-items:center;gap:8px;margin-top:6px;"><input type="checkbox" id="' +
+                id +
+                '"> ' +
+                escAdmin(f.label || f.key) +
+                '</label>';
         } else {
             const ty = f.type === 'email' ? 'email' : f.type === 'tel' ? 'tel' : 'text';
-            html += '<input type="' + ty + '" id="' + id + '" style="width:100%;padding:8px;">';
+            const pinAttr = f.key === 'pin' || f.key === 'cpin' ? ' maxlength="6" inputmode="numeric"' : '';
+            html += '<input type="' + ty + '" id="' + id + '" style="width:100%;padding:8px;"' + pinAttr + '>';
         }
         html += '</div>';
     });
@@ -4268,7 +4452,9 @@ function renderAdminDynamicFormFields(hostId, fields, prefix, existingData) {
     host.innerHTML = html;
     list.forEach((f) => {
         const el = document.getElementById(prefix + f.key);
-        if (el && existingData && existingData[f.key] != null) el.value = existingData[f.key];
+        if (!el || !existingData) return;
+        if (el.type === 'checkbox') el.checked = !!existingData[f.key] && existingData[f.key] !== '0';
+        else if (existingData[f.key] != null) el.value = existingData[f.key];
     });
     const qualEl = document.getElementById(prefix + 'qual');
     if (qualEl) {
@@ -4276,15 +4462,24 @@ function renderAdminDynamicFormFields(hostId, fields, prefix, existingData) {
             renderAdminDynamicFormFields(hostId, __adminEditFormFields, prefix, collectAdminDynamicFormData(prefix))
         );
     }
+    ['pin', 'cpin'].forEach((pk) => {
+        const pel = document.getElementById(prefix + pk);
+        if (pel) pel.addEventListener('blur', () => adminPincodeAutofill(prefix, pk));
+    });
 }
 
 function collectAdminDynamicFormData(prefix) {
     const o = { country: 'India' };
+    const qualEl = document.getElementById(prefix + 'qual');
+    const qual = qualEl ? qualEl.value : '';
     (__adminEditFormFields || ADMIN_BEHALF_FIELD_DEFAULTS).forEach((f) => {
         if (f.key === 'certificate' || f.enabled === false) return;
+        if (f.onlyWhenAdvancedQual && !seminarNeedsDocReview(qual)) return;
+        if (f.onlyWhenPgCollege && !adminQualIsPg(qual)) return;
         const el = document.getElementById(prefix + f.key);
         if (!el) return;
-        o[f.key] = el.value;
+        if (el.type === 'checkbox') o[f.key] = el.checked ? '1' : '';
+        else o[f.key] = el.value;
     });
     return o;
 }
@@ -4510,18 +4705,8 @@ function viewFullApplication(index) {
         <p><strong>Status:</strong> ${escAdmin(String(a.status || '').toUpperCase())}</p>
         <p><strong>Portal ID:</strong> ${escAdmin(a.user_id_string || '')}</p>
         <hr style="margin:10px 0;">
-        <p><strong>Name:</strong> ${escAdmin(formData.fname || '')} ${escAdmin(formData.lname || '')}</p>
-        <p><strong>Email:</strong> ${escAdmin(formData.email || '')}</p>
-        <p><strong>Phone:</strong> ${escAdmin(formData.phone || '')}</p>
-        <p><strong>Address:</strong> ${escAdmin(formData.address || '')}, ${escAdmin(formData.city || '')}, ${escAdmin(formData.state || '')} - ${escAdmin(formData.pin || '')}</p>
-        <hr style="margin:10px 0;">
-        <p><strong>Qualification:</strong> ${escAdmin(formData.qual || '')}</p>
-        <p><strong>NCISM / Reg. no.:</strong> ${escAdmin(formData.ncism || '—')}</p>
-        ${formatNcismCertificateCheckHtml(
-            Object.assign({}, formData.ncism_certificate_check || {}, { _appId: a.id })
-        )}
-        <p><strong>College:</strong> ${escAdmin(formData.college || '')}, ${escAdmin(formData.ccity || '')}</p>
-        ${certLink}
+        ${formatAdminApplicationDetailsHtml(formData, certLink)}
+        ${needsDocs ? formatNcismCertificateCheckHtml(Object.assign({}, formData.ncism_certificate_check || {}, { _appId: a.id })) : ''}
         ${verifyBlock}
         <hr style="margin:16px 0;">
         <h4 style="margin:0 0 8px;">Edit registration form (live)</h4>
@@ -7673,7 +7858,11 @@ async function saveAdminRegistrationFormConfig() {
             onlyWhenAdvancedQual:
                 typeof r.onlyWhenAdvancedQual === 'boolean'
                     ? r.onlyWhenAdvancedQual
-                    : ['ncism', 'certificate'].indexOf(r.key) !== -1
+                    : ['ncism', 'certificate'].indexOf(r.key) !== -1,
+            onlyWhenPgCollege:
+                typeof r.onlyWhenPgCollege === 'boolean'
+                    ? r.onlyWhenPgCollege
+                    : ['college', 'ccity', 'cstate', 'cpin'].indexOf(row.key) !== -1
         };
         if (row.key === 'qual') {
             const qualOpts = collectQualOptionsFromContainer('admin-global-qual-options');

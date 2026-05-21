@@ -34,8 +34,22 @@
     }
 
     function cardClass(outcome) {
-        if (outcome === 'success') return 'success';
-        if (outcome === 'duplicate') return 'duplicate';
+        const o = String(outcome || 'failed');
+        if (o === 'success') return 'success';
+        if (o === 'duplicate') return 'duplicate';
+        if (
+            [
+                'not_found',
+                'unpaid',
+                'invalid',
+                'wrong_seminar',
+                'wrong_date',
+                'checkin_disabled',
+                'account_blocked'
+            ].includes(o)
+        ) {
+            return o;
+        }
         return 'failed';
     }
 
@@ -45,26 +59,34 @@
         const el = document.createElement('article');
         el.className = 'scan-card ' + cardClass(ev.outcome);
         el.dataset.id = String(ev.id);
+        const outcomeLabel = String(ev.outcome || 'failed').replace(/_/g, ' ');
         const title =
             ev.outcome === 'success'
                 ? '✓ Checked in'
                 : ev.outcome === 'duplicate'
                   ? '↻ Duplicate scan'
-                  : '✕ ' + (ev.outcome || 'failed').replace(/_/g, ' ');
+                  : '✕ ' + outcomeLabel;
         el.innerHTML =
+            '<div class="scan-card-head"><span class="scan-outcome-badge">' +
+            esc(outcomeLabel) +
+            '</span><span class="scan-card-time">' +
+            esc(ev.createdAt || '') +
+            '</span></div>' +
             '<h4>' +
             esc(title) +
             '</h4>' +
             '<div class="meta"><strong>' +
             esc(ev.doctorName || 'Guest') +
-            '</strong><br>' +
-            esc(ev.ticketId || ev.applicationNo || '—') +
-            '</div>' +
+            '</strong></div>' +
+            '<div class="scan-card-ids">' +
+            '<div><span class="lbl">Ticket</span><code>' +
+            esc(ev.ticketId || '—') +
+            '</code></div>' +
+            '<div><span class="lbl">Application</span><code>' +
+            esc(ev.applicationNo || '—') +
+            '</code></div></div>' +
             (ev.message ? '<div class="reason">' + esc(ev.message) + '</div>' : '') +
-            '<div class="meta" style="margin-top:6px;">' +
-            esc(ev.createdAt || '') +
-            (ev.scannerName ? ' · ' + esc(ev.scannerName) : '') +
-            '</div>';
+            (ev.scannerName ? '<div class="meta" style="margin-top:6px;">Scanner: ' + esc(ev.scannerName) + '</div>' : '');
         grid.prepend(el);
         while (grid.children.length > 120) grid.removeChild(grid.lastChild);
     }

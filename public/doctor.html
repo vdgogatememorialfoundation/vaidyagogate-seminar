@@ -383,7 +383,7 @@
                         <div id="step-3" class="form-step hidden">
                             <div class="form-group">
                                 <label>Qualification</label>
-                                <select id="reg-qual" onchange="toggleRegBlock()">
+                                <select id="reg-qual" onchange="toggleRegBlock(); toggleCollegeStep();">
                                     <option value="">Select</option>
                                     <option value="PG">PG</option>
                                     <option value="Practicing Vaidya">Practicing Vaidya</option>
@@ -395,17 +395,20 @@
                                 <p id="ncism-status" class="hidden" style="color:#059669;font-weight:600;">Verified</p>
                                 <div class="form-group"><label>Certificate upload</label><input type="file" id="reg-cert-file" accept=".pdf,.jpg,.jpeg,.png,image/*"><p id="reg-cert-hint" style="font-size:0.8rem;color:#64748b;margin:6px 0 0;">Max 4 MB per file on this server. iPhone photos are auto-compressed; PDFs may need compression (ilovepdf.com).</p><p id="reg-cert-success" class="hidden" style="font-size:0.85rem;color:#059669;font-weight:600;margin:6px 0 0;"><i class="fas fa-check-circle"></i> <span id="reg-cert-success-text"></span></p></div>
                             </div>
-                            <button type="button" class="btn-primary" onclick="nextStep(4)">Next</button>
+                            <button type="button" class="btn-primary" onclick="nextRegistrationStepFromQual()">Next</button>
                             <button type="button" class="btn-primary" style="background:#64748b;margin-left:8px;" onclick="nextStep(2)">Back</button>
                         </div>
 
                         <div id="step-4" class="form-step hidden">
+                            <p id="step-4-pg-hint" style="font-size:0.88rem;color:#64748b;margin:0 0 12px;">College details apply to <strong>PG</strong> applicants only.</p>
+                            <div class="form-group"><label>College PIN code</label><input type="text" id="reg-cpin" inputmode="numeric" maxlength="6" placeholder="6-digit PIN" onblur="autofillCollegeAddress()"></div>
+                            <p id="reg-cpin-hint" class="hidden" style="font-size:0.85rem;color:#64748b;margin:-4px 0 8px;"></p>
                             <div class="form-group"><label>College</label><input type="text" id="reg-college"></div>
                             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
                                 <div class="form-group"><label>College city</label><input type="text" id="reg-ccity"></div>
                                 <div class="form-group"><label>College state</label><input type="text" id="reg-cstate"></div>
                             </div>
-                            <button type="button" class="btn-primary" onclick="nextStep(5)">Preview</button>
+                            <button type="button" class="btn-primary" onclick="nextRegistrationStepAfterCollege()">Preview</button>
                             <button type="button" class="btn-primary" style="background:#64748b;margin-left:8px;" onclick="nextStep(3)">Back</button>
                         </div>
 
@@ -422,8 +425,10 @@
                                     <div class="preview-row"><span class="lbl">Qualification</span><span class="val" id="prev-qual"></span></div>
                                     <div id="prev-ncism-box" class="preview-row hidden"><span class="lbl">Reg. ID</span><span class="val" id="prev-ncism"></span></div>
                                     <div id="prev-cert-box" class="preview-row hidden"><span class="lbl">NCISM certificate</span><span class="val" id="prev-cert-val" style="color:#059669;font-weight:600;">—</span></div>
+                                    <div id="prev-college-box">
                                     <div class="preview-row"><span class="lbl">College</span><span class="val" id="prev-college"></span></div>
                                     <div class="preview-row"><span class="lbl">College loc.</span><span class="val" id="prev-cloc"></span></div>
+                                    </div>
                                     <div id="prev-tnc-block" style="margin-top:14px;display:none;">
                                         <h5 style="margin-bottom:8px;">Seminar terms</h5>
                                         <div id="prev-tnc-text" style="white-space:pre-wrap;font-size:0.86rem;color:#475569;max-height:140px;overflow:auto;"></div>

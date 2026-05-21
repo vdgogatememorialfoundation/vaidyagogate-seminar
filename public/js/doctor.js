@@ -1060,10 +1060,16 @@ const REGISTRATION_FIELD_IDS = {
     qual: 'reg-qual',
     ncism: 'reg-ncism',
     certificate: 'reg-cert-file',
+    cpin: 'reg-cpin',
     college: 'reg-college',
     ccity: 'reg-ccity',
     cstate: 'reg-cstate'
 };
+
+function registrationQualIsPg() {
+    const q = String((document.getElementById('reg-qual') || {}).value || '').trim();
+    return q === 'PG';
+}
 
 /** Matches server DEFAULT_REGISTRATION_FORM_CONFIG when API fields are empty. */
 const DEFAULT_REGISTRATION_FALLBACK_FIELDS = [
@@ -1093,9 +1099,10 @@ const DEFAULT_REGISTRATION_FALLBACK_FIELDS = [
     },
     { key: 'ncism', label: 'Medical registration / NCISM', type: 'text', step: 3, enabled: true, required: true, onlyWhenAdvancedQual: true },
     { key: 'certificate', label: 'Certificate upload', type: 'file', step: 3, enabled: true, required: true, onlyWhenAdvancedQual: true },
-    { key: 'college', label: 'College name', type: 'text', step: 4, enabled: true, required: true },
-    { key: 'ccity', label: 'College city', type: 'text', step: 4, enabled: true, required: true },
-    { key: 'cstate', label: 'College state', type: 'text', step: 4, enabled: true, required: true }
+    { key: 'cpin', label: 'College PIN code', type: 'text', step: 4, enabled: true, required: true, onlyWhenPgCollege: true },
+    { key: 'college', label: 'College name', type: 'text', step: 4, enabled: true, required: true, onlyWhenPgCollege: true },
+    { key: 'ccity', label: 'College city', type: 'text', step: 4, enabled: true, required: true, onlyWhenPgCollege: true },
+    { key: 'cstate', label: 'College state', type: 'text', step: 4, enabled: true, required: true, onlyWhenPgCollege: true }
 ];
 
 function getRegistrationFieldsForValidation() {
@@ -1430,6 +1437,7 @@ function validateRegistrationAgainstConfigForSteps(upToStepInclusive) {
             const fStep = f.step != null ? parseInt(f.step, 10) : 1;
             if (Number.isNaN(fStep) || fStep !== sn) continue;
             if (f.onlyWhenAdvancedQual && !adv) continue;
+            if (f.onlyWhenPgCollege && !registrationQualIsPg()) continue;
             const fk = String(f.key || '');
             if (fk === 'phone_otp' || fk === 'email_otp' || (f.type || '').toLowerCase() === 'otp') {
                 if (f.enabled && f.required) {
@@ -3121,8 +3129,14 @@ async function nextStep(step) {
             if (pdfBadge) pdfBadge.classList.add('hidden');
         }
 
-        document.getElementById('prev-college').innerText = document.getElementById('reg-college').value;
-        document.getElementById('prev-cloc').innerText = `${document.getElementById('reg-ccity').value}, ${document.getElementById('reg-cstate').value}`;
+        const prevCollegeBox = document.getElementById('prev-college-box');
+        if (registrationQualIsPg()) {
+            if (prevCollegeBox) prevCollegeBox.classList.remove('hidden');
+            document.getElementById('prev-college').innerText = document.getElementById('reg-college').value;
+            document.getElementById('prev-cloc').innerText = `${document.getElementById('reg-ccity').value}, ${document.getElementById('reg-cstate').value}`;
+        } else if (prevCollegeBox) {
+            prevCollegeBox.classList.add('hidden');
+        }
         
         const qrImg = document.getElementById('prev-qrcode');
         qrImg.onload = () => generatePdfBlob(qrImg);
@@ -3353,6 +3367,11 @@ async function initRegistrationAddressUi() {
         pinEl.dataset.bound = '1';
         pinEl.addEventListener('input', onRegPinInput);
     }
+    const cpinEl = document.getElementById('reg-cpin');
+    if (cpinEl && cpinEl.dataset.bound !== '1') {
+        cpinEl.dataset.bound = '1';
+        cpinEl.addEventListener('input', onRegCpinInput);
+    }
 }
 
 async function autofillAddress() {
@@ -3396,6 +3415,75 @@ function toggleRegBlock() {
         document.getElementById('reg-block').classList.add('hidden');
     }
     refreshRegistrationRequiredAttributes();
+}
+
+function toggleCollegeStep() {
+    const step4 = document.getElementById('step-4');
+    if (!step4) return;
+    const isPg = registrationQualIsPg();
+    step4.querySelectorAll('input').forEach((inp) => {
+        if (inp.id && inp.id.startsWith('reg-c')) inp.required = isPg;
+    });
+    const hint = document.getElementById('step-4-pg-hint');
+    if (hint) hint.style.display = isPg ? '' : 'none';
+}
+
+function nextRegistrationStepAfterCollege() {
+    return nextStep(5);
+}
+
+function nextRegistrationStepFromQual() {
+    if (registrationQualIsPg()) return nextStep(4);
+    return nextStep(5);
+}
+
+let __regCpinLookupTimer = null;
+
+function setRegCpinHint(msg, isError) {
+    const el = document.getElementById('reg-cpin-hint');
+    if (!el) return;
+    el.textContent = msg || '';
+    el.classList.toggle('hidden', !msg);
+    el.style.color = isError ? '#b91c1c' : '#64748b';
+}
+
+async function autofillCollegeAddress() {
+    if (!registrationQualIsPg()) return;
+    const pinEl = document.getElementById('reg-cpin');
+    if (!pinEl) return;
+    const pin = String(pinEl.value || '').replace(/\D/g, '');
+    if (pin.length !== 6) {
+        if (pin.length) setRegCpinHint('Enter a valid 6-digit PIN code', true);
+        return;
+    }
+    setRegCpinHint('Looking up college PIN…');
+    try {
+        const r = await fetch(`/api/public/pincode-lookup?pin=${encodeURIComponent(pin)}`);
+        const data = await r.json();
+        if (!data || !data.ok) {
+            setRegCpinHint((data && data.error) || 'PIN not found', true);
+            return;
+        }
+        const cityEl = document.getElementById('reg-ccity');
+        const stateEl = document.getElementById('reg-cstate');
+        if (cityEl && (data.cities || []).length) cityEl.value = data.cities[0];
+        if (stateEl && (data.states || []).length) stateEl.value = data.states[0];
+        setRegCpinHint(
+            (data.cities || []).length > 1 ? 'Multiple areas — city set to first match' : 'College city and state filled from PIN'
+        );
+    } catch (e) {
+        setRegCpinHint('Could not look up PIN. Try again.', true);
+    }
+}
+
+function onRegCpinInput() {
+    const pinEl = document.getElementById('reg-cpin');
+    if (!pinEl) return;
+    const pin = String(pinEl.value || '').replace(/\D/g, '').slice(0, 6);
+    if (pinEl.value !== pin) pinEl.value = pin;
+    clearTimeout(__regCpinLookupTimer);
+    if (pin.length === 6) __regCpinLookupTimer = setTimeout(() => autofillCollegeAddress(), 400);
+    else if (pin.length < 6) setRegCpinHint('');
 }
 
 async function verifyNcism() {
@@ -3523,6 +3611,7 @@ async function submitApplication() {
         country: document.getElementById('reg-country').value,
         qual: document.getElementById('reg-qual').value,
         ncism: document.getElementById('reg-ncism').value,
+        cpin: document.getElementById('reg-cpin') ? document.getElementById('reg-cpin').value : '',
         college: document.getElementById('reg-college').value,
         ccity: document.getElementById('reg-ccity').value,
         cstate: document.getElementById('reg-cstate').value,
