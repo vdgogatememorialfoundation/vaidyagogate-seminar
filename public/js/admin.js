@@ -779,7 +779,7 @@ const ADMIN_MODULE_TAB_DEFS = [
     ['tab-live-scanner', 'Live check-in board'],
     ['tab-pos', 'On-spot POS'],
     ['tab-feedback-form', 'Feedback form editor'],
-    ['tab-event-pages', 'Event pages'],
+    ['tab-event-pages', 'Portals & events'],
     ['tab-activity-logs', 'User & doctor activity'],
     ['tab-notifications', 'Notifications'],
     ['tab-system-platform', 'System health'],
@@ -906,17 +906,33 @@ async function loadAdminEventPagesModule() {
     await fillAdminSeminarSelect('event-page-seminar', true);
     const tbody = document.getElementById('event-pages-list-tbody');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="6">Loading…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7">Loading…</td></tr>';
     try {
         const res = await fetch('/api/admin/event-pages');
         const rows = await res.json();
         if (!Array.isArray(rows) || !rows.length) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#64748b;">No seminars</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#64748b;">No seminars</td></tr>';
             return;
         }
         tbody.innerHTML = rows
             .map((r) => {
                 const pub = Number(r.public_page_enabled) === 1;
+                const slug = (r.event_slug || '').trim();
+                const pubLink = slug
+                    ? '<a href="/event.html?event=' +
+                      encodeURIComponent(slug) +
+                      '" target="_blank" rel="noopener">Page</a>'
+                    : '—';
+                const regLink =
+                    slug && r.portal_mode === 'standalone'
+                        ? '<a href="/event-register.html?event=' +
+                          encodeURIComponent(slug) +
+                          '" target="_blank" rel="noopener">Register</a>'
+                        : slug
+                          ? '<a href="/doctor.html?seminarId=' +
+                            encodeURIComponent(r.id) +
+                            '" target="_blank" rel="noopener">Doctor</a>'
+                          : '—';
                 return (
                     '<tr><td>' +
                     escAdmin(r.title || '') +
@@ -930,6 +946,10 @@ async function loadAdminEventPagesModule() {
                     (Number(r.registration_enabled) !== 0 ? 'On' : 'Off') +
                     '</td><td>' +
                     (Number(r.payment_required) !== 0 ? 'Yes' : 'No') +
+                    '</td><td>' +
+                    pubLink +
+                    ' · ' +
+                    regLink +
                     '</td></tr>'
                 );
             })
@@ -938,7 +958,7 @@ async function loadAdminEventPagesModule() {
         if (sel && sel.value) loadAdminEventPageEditor();
     } catch (e) {
         console.error(e);
-        tbody.innerHTML = '<tr><td colspan="6">Error</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7">Error</td></tr>';
     }
 }
 
@@ -951,10 +971,10 @@ async function loadAdminEventPageEditor() {
     }
     panel.classList.remove('hidden');
     try {
-        const res = await fetch('/api/admin/event-pages');
-        const rows = await res.json();
-        const row = (rows || []).find((r) => String(r.id) === String(sid));
-        if (!row) return;
+        const res = await fetch('/api/admin/event-pages/' + encodeURIComponent(sid));
+        const row = await res.json();
+        if (!res.ok) return;
+        const page = row.eventPage || {};
         document.getElementById('event-page-slug').value = row.event_slug || '';
         document.getElementById('event-page-portal-mode').value = row.portal_mode === 'standalone' ? 'standalone' : 'doctor';
         document.getElementById('event-page-public').checked = Number(row.public_page_enabled) === 1;
@@ -966,8 +986,12 @@ async function loadAdminEventPageEditor() {
             preview.href = slug ? '/event.html?event=' + encodeURIComponent(slug) : '#';
             preview.style.pointerEvents = slug ? '' : 'none';
         }
-        document.getElementById('event-page-hero-title').value = row.title || '';
-        document.getElementById('event-page-hero-sub').value = '';
+        document.getElementById('event-page-hero-title').value = page.heroTitle || row.title || '';
+        document.getElementById('event-page-hero-sub').value = page.heroSubtitle || '';
+        const homeCb = document.getElementById('event-page-homepage');
+        if (homeCb) homeCb.checked = page.showOnHomepage !== false;
+        const secTa = document.getElementById('event-page-sections-json');
+        if (secTa) secTa.value = JSON.stringify(page.sections || [], null, 2);
     } catch (e) {
         console.error(e);
     }
@@ -987,10 +1011,24 @@ async function saveAdminEventPageConfig() {
                 publicPageEnabled: document.getElementById('event-page-public').checked,
                 registrationEnabled: document.getElementById('event-page-reg-enabled').checked,
                 paymentRequired: document.getElementById('event-page-pay-required').checked,
-                eventPage: {
-                    heroTitle: document.getElementById('event-page-hero-title').value,
-                    heroSubtitle: document.getElementById('event-page-hero-sub').value
-                }
+                eventPage: (function () {
+                    let sections = [];
+                    const secTa = document.getElementById('event-page-sections-json');
+                    if (secTa && secTa.value.trim()) {
+                        try {
+                            sections = JSON.parse(secTa.value);
+                            if (!Array.isArray(sections)) sections = [];
+                        } catch (_) {
+                            throw new Error('Sections JSON is invalid.');
+                        }
+                    }
+                    return {
+                        heroTitle: document.getElementById('event-page-hero-title').value,
+                        heroSubtitle: document.getElementById('event-page-hero-sub').value,
+                        showOnHomepage: document.getElementById('event-page-homepage')?.checked !== false,
+                        sections
+                    };
+                })()
             })
         });
         const data = await res.json();
