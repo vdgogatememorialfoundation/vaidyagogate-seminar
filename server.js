@@ -7714,6 +7714,7 @@ app.post('/api/admin/portal-auth-config', (req, res) => {
             String(adm.user_role || '').toLowerCase() !== 'co_admin';
         if (!isSuper) {
             delete merged.adminEnabledPages;
+            delete merged.websiteMenuPages;
         }
         upsertGlobalSetting(portalAuthPolicy.KEY, JSON.stringify(merged), (err) => {
             if (err) return res.status(500).json({ error: err.message });

@@ -743,6 +743,16 @@ async function saveDoctorAccessFromDetail(userId) {
     alert('Doctor access saved.');
 }
 
+const WEBSITE_MENU_PAGE_DEFS = [
+    ['home', 'Home'],
+    ['about', 'Foundation'],
+    ['schedule', 'Agenda'],
+    ['gallery', 'Gallery'],
+    ['verify', 'Delegates (participant search)'],
+    ['certificate', 'Certificate verification'],
+    ['contact', 'Contact']
+];
+
 const ADMIN_MODULE_TAB_DEFS = [
     ['tab-staff-users', 'Staff users'],
     ['tab-doctors', 'Doctors'],
@@ -8450,7 +8460,9 @@ async function loadPortalAuthAdminForm() {
         setChk('pa-req-email-verify', d.config.requireEmailVerification);
         setChk('pa-req-admin-sensitive-otp', d.config.requireAdminOtpForSensitive);
         window.__adminEnabledPages = d.config.adminEnabledPages || {};
+        window.__websiteMenuPages = d.config.websiteMenuPages || {};
         renderAdminGlobalPagesCheckboxes();
+        renderWebsiteMenuPagesCheckboxes();
         if (eff) {
             eff.textContent = `Effective signup OTP: ${d.signupOtpEffective ? 'on' : 'off'} · Effective login OTP: ${d.loginOtpEffective ? 'on' : 'off'} (environment variables can still override).`;
         }
@@ -8474,6 +8486,32 @@ function renderAdminGlobalPagesCheckboxes() {
         return (
             '<label style="display:flex;align-items:center;gap:8px;font-size:0.88rem;cursor:pointer;">' +
             '<input type="checkbox" data-global-admin-tab="' +
+            id +
+            '" ' +
+            (checked ? 'checked' : '') +
+            '>' +
+            '<span>' +
+            title +
+            '</span></label>'
+        );
+    }).join('');
+}
+
+function renderWebsiteMenuPagesCheckboxes() {
+    const wrap = document.getElementById('website-menu-pages-checkboxes');
+    const card = document.getElementById('website-menu-policy-card');
+    if (!wrap) return;
+    const superUser = isSuperAdminUser();
+    if (card) card.style.display = superUser ? '' : 'none';
+    if (!superUser) return;
+    const pages = window.__websiteMenuPages || {};
+    const keys = Object.keys(pages);
+    const restrict = keys.length && keys.some((k) => pages[k] === true);
+    wrap.innerHTML = WEBSITE_MENU_PAGE_DEFS.map(([id, title]) => {
+        const checked = !restrict || pages[id] === true;
+        return (
+            '<label style="display:flex;align-items:center;gap:8px;font-size:0.88rem;cursor:pointer;">' +
+            '<input type="checkbox" data-website-menu-key="' +
             id +
             '" ' +
             (checked ? 'checked' : '') +

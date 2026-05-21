@@ -65,7 +65,7 @@
                 <a href="#" data-nav-section="schedule">Agenda</a>
                 <a href="#" data-nav-section="gallery">Gallery</a>
                 <a href="#" id="nav-verify" data-nav-section="verify">Delegates</a>
-                <a href="/verify-certificate.html">Certificate</a>
+                <a href="/verify-certificate.html" data-menu-key="certificate">Certificate</a>
                 <a href="#" data-nav-section="contact">Contact</a>
             </span>
             <span id="cg-nav-menu-fixed">
@@ -387,10 +387,10 @@
             <div class="footer-col">
                 <h4>Explore</h4>
                 <ul>
-                    <li><a href="#" onclick="showSection('home'); return false;">Home</a></li>
-                    <li><a href="#" onclick="showSection('about'); return false;">About</a></li>
-                    <li><a href="#" onclick="showSection('schedule'); return false;">Schedule</a></li>
-                    <li><a href="#" onclick="showSection('gallery'); return false;">Gallery</a></li>
+                    <li><a href="#" data-menu-key="home" onclick="showSection('home'); return false;">Home</a></li>
+                    <li><a href="#" data-menu-key="about" onclick="showSection('about'); return false;">About</a></li>
+                    <li><a href="#" data-menu-key="schedule" onclick="showSection('schedule'); return false;">Schedule</a></li>
+                    <li><a href="#" data-menu-key="gallery" onclick="showSection('gallery'); return false;">Gallery</a></li>
                 </ul>
                 </div>
             <div class="footer-col">
@@ -458,7 +458,39 @@
                 const tabSignup = document.getElementById('auth-tab-signup');
                 if (tabLogin) tabLogin.style.display = window.__portalAuth.showLogin !== false ? '' : 'none';
                 if (tabSignup) tabSignup.style.display = window.__portalAuth.showSignup !== false ? '' : 'none';
+                applyWebsiteMenuVisibility();
             } catch (_) {}
+        }
+
+        function applyWebsiteMenuVisibility() {
+            const pages = (window.__portalAuth && window.__portalAuth.websiteMenuPages) || {};
+            const keys = Object.keys(pages);
+            const restrict = keys.length && keys.some((k) => pages[k] === true);
+            const isShown = (key) => !restrict || pages[key] === true;
+            document
+                .querySelectorAll('#cg-nav-menu-links a[data-nav-section], #cg-nav-menu-links a[data-menu-key]')
+                .forEach((a) => {
+                    const key = a.getAttribute('data-menu-key') || a.getAttribute('data-nav-section');
+                    if (!key) return;
+                    a.style.display = isShown(key) ? '' : 'none';
+                });
+            document.querySelectorAll('footer a[data-menu-key]').forEach((a) => {
+                const key = a.getAttribute('data-menu-key');
+                if (!key) return;
+                const li = a.closest('li');
+                if (li) li.style.display = isShown(key) ? '' : 'none';
+            });
+            const verifyNav = document.getElementById('nav-verify');
+            if (verifyNav && !isShown('verify')) {
+                verifyNav.style.display = 'none';
+                if (
+                    typeof showSection === 'function' &&
+                    document.getElementById('verifySection') &&
+                    !document.getElementById('verifySection').classList.contains('hidden')
+                ) {
+                    showSection('home');
+                }
+            }
         }
 
         function setOtpPanelVisible(panel, visible) {
