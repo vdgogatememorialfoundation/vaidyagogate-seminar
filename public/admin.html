@@ -1506,7 +1506,9 @@
             <h2 style="color: #1a237e; margin-bottom: 20px;">Register New User</h2>
             <div style="display: grid; gap: 10px;">
                 <input type="text" id="newuser-first" placeholder="First Name (no Dr./Vd. titles)" required>
+                <input type="text" id="newuser-middle" placeholder="Middle Name (optional)">
                 <input type="text" id="newuser-last" placeholder="Last Name" required>
+                <input type="text" id="newuser-portal-id" placeholder="Portal User ID (optional, 10+ digits; auto-generated if blank)" inputmode="numeric" pattern="[0-9]*">
                 <input type="email" id="newuser-email" placeholder="Email Address" required>
                 <input type="tel" id="newuser-phone" placeholder="Phone Number" required>
                 <select id="newuser-role" required style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
@@ -1785,6 +1787,15 @@
             </div>
             
             <div id="ticket-info" style="background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 15px;"></div>
+            <div style="margin-bottom:15px;padding:12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;">
+                <h4 style="margin:0 0 8px;color:#9a3412;">Transfer ticket to another account</h4>
+                <p style="font-size:0.85rem;color:#64748b;margin-bottom:8px;">Portal user ID, email, or internal account number. Doctor and judge accounts are allowed.</p>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <input type="text" id="ticket-transfer-user-ref" placeholder="Target portal user ID" style="flex:1;min-width:180px;padding:8px;border:1px solid #cbd5e1;border-radius:6px;">
+                    <button type="button" class="btn-primary" style="background:#b45309;" onclick="adminTransferSupportTicket()">Transfer ticket</button>
+                </div>
+                <p id="ticket-transfer-msg" class="hidden" style="font-size:0.85rem;margin-top:8px;font-weight:600;"></p>
+            </div>
             
             <div style="margin-bottom: 15px;">
                 <h4>Messages</h4>

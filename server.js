@@ -7917,6 +7917,7 @@ app.post('/api/admin/otp/verify', (req, res) => {
 app.post('/api/admin/users/create', (req, res) => {
     const {
         firstName,
+        middleName,
         lastName,
         email,
         phone,
@@ -7925,7 +7926,9 @@ app.post('/api/admin/users/create', (req, res) => {
         actingAdminId,
         adminPhoneOtpToken,
         adminEmailOtpToken,
-        isDemo
+        isDemo,
+        userIdString,
+        user_id_string
     } = req.body || {};
     const demoFlag =
         isDemo === true || isDemo === 1 || isDemo === '1' || isDemo === 'true' ? 1 : 0;
@@ -7945,16 +7948,24 @@ app.post('/api/admin/users/create', (req, res) => {
         for (let i = 0; i < 12; i++) finalPassword += chars.charAt(Math.floor(Math.random() * chars.length));
     }
 
-    const userIdStr = generateId();
+    let userIdStr = String(userIdString || user_id_string || '').trim().replace(/\D/g, '');
+    if (!userIdStr) userIdStr = generateId();
+    else if (userIdStr.length < 10) {
+        return res.status(400).json({ error: 'Custom portal user ID must be at least 10 digits.' });
+    }
     const cleanFirst = userRole === 'doctor' || roleCol === 'doctor' ? validateDoctorName(firstName).cleanedName : String(firstName).trim();
+    const cleanMiddle = String(middleName || '').trim() || null;
     const cleanLast = userRole === 'doctor' || roleCol === 'doctor' ? validateDoctorName(lastName).cleanedName : String(lastName).trim();
 
     requireAdminSensitiveOtpIfEnabled(actingAdminId, adminPhoneOtpToken, adminEmailOtpToken, (eOtp, okOtp, msgOtp) => {
         if (eOtp) return res.status(500).json({ error: eOtp.message });
         if (!okOtp) return res.status(400).json({ error: msgOtp || 'Admin verification required' });
+        db.get(`SELECT id FROM users WHERE user_id_string = ? LIMIT 1`, [userIdStr], (eDup, dup) => {
+            if (eDup) return res.status(500).json({ error: eDup.message });
+            if (dup) return res.status(400).json({ error: 'That portal user ID is already in use.' });
         db.run(
-            `INSERT INTO users (user_id_string, first_name, last_name, email, phone, password, role, user_role, email_verified, is_demo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
-            [userIdStr, cleanFirst, cleanLast, email, phone, finalPassword, roleCol, userRole, demoFlag],
+            `INSERT INTO users (user_id_string, first_name, middle_name, last_name, email, phone, password, role, user_role, email_verified, is_demo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+            [userIdStr, cleanFirst, cleanMiddle, cleanLast, email, phone, finalPassword, roleCol, userRole, demoFlag],
         function (err) {
             if (err) return res.status(500).json({ error: err.message });
                 const newId = this.lastID;
@@ -7987,6 +7998,7 @@ app.post('/api/admin/users/create', (req, res) => {
             }
         );
         });
+    });
 });
 
 // Admin: Get Users
@@ -9781,6 +9793,7 @@ app.post('/api/support-ticket/:ticketId/reply', (req, res) => {
                             msg,
                             (nErr) => {
                                 if (nErr) console.warn('[support-ticket] reply notify:', nErr.message);
+                                flushNotificationQueue();
                                 res.json({ success: true, messageId });
                             }
                         );
@@ -10036,26 +10049,172 @@ app.get('/api/admin/support-tickets', (req, res) => {
 app.put('/api/admin/support-ticket/:ticketId/status', (req, res) => {
     const { ticketId } = req.params;
     const { status, adminId } = req.body;
-    
-    db.run(`UPDATE support_tickets SET status = ?, assigned_to_admin = ?, updated_at = CURRENT_TIMESTAMP WHERE ticket_id = ? OR tracking_id = ?`,
-        [status, adminId || null, ticketId, ticketId],
-        function(err) {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json({ success: true });
-        });
+    if (!status) return res.status(400).json({ error: 'status is required' });
+
+    resolveSupportTicketByRef(ticketId, (err, ticket) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+        const oldStatus = ticket.status;
+        const canonical = canonicalTicketMessageId(ticket);
+
+        db.run(
+            `UPDATE support_tickets SET status = ?, assigned_to_admin = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+            [status, adminId || null, ticket.id],
+            function (updErr) {
+                if (updErr) return res.status(500).json({ error: updErr.message });
+                supportTicketNotify.notifySupportTicketStatusChange(
+                    db,
+                    canonical,
+                    oldStatus,
+                    status,
+                    (nErr) => {
+                        if (nErr) console.warn('[support-ticket] status notify:', nErr.message);
+                        flushNotificationQueue();
+                        res.json({ success: true });
+                    }
+                );
+            }
+        );
+    });
 });
 
 // Admin: Update Ticket Priority
 app.put('/api/admin/support-ticket/:ticketId/priority', (req, res) => {
     const { ticketId } = req.params;
     const { priority } = req.body;
-    
-    db.run(`UPDATE support_tickets SET priority = ?, updated_at = CURRENT_TIMESTAMP WHERE ticket_id = ? OR tracking_id = ?`,
-        [priority, ticketId, ticketId],
-        function(err) {
+    if (!priority) return res.status(400).json({ error: 'priority is required' });
+
+    resolveSupportTicketByRef(ticketId, (err, ticket) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+        const oldPriority = ticket.priority;
+        const canonical = canonicalTicketMessageId(ticket);
+
+        db.run(
+            `UPDATE support_tickets SET priority = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+            [priority, ticket.id],
+            function (updErr) {
+                if (updErr) return res.status(500).json({ error: updErr.message });
+                supportTicketNotify.notifySupportTicketPriorityChange(
+                    db,
+                    canonical,
+                    oldPriority,
+                    priority,
+                    (nErr) => {
+                        if (nErr) console.warn('[support-ticket] priority notify:', nErr.message);
+                        flushNotificationQueue();
+                        res.json({ success: true });
+                    }
+                );
+            }
+        );
+    });
+});
+
+/** Resolve any portal user (doctor, judge, admin, etc.) by portal ID, email, or internal id. */
+function resolvePortalUserRef(raw, cb) {
+    const s = String(raw || '').trim();
+    if (!s) return cb(new Error('User identifier is required'));
+
+    const finish = (e, row) => {
+        if (e) return cb(e);
+        if (!row) return cb(new Error('No account found for that identifier.'));
+        if (Number(row.is_disabled) === 1) return cb(new Error('That account is disabled.'));
+        cb(null, row);
+    };
+
+    const selectCols = `id, user_id_string, first_name, middle_name, last_name, email, phone, role, user_role, IFNULL(is_disabled, 0) AS is_disabled`;
+
+    if (s.includes('@')) {
+        return db.get(
+            `SELECT ${selectCols} FROM users WHERE LOWER(TRIM(email)) = LOWER(TRIM(?)) LIMIT 1`,
+            [s],
+            finish
+        );
+    }
+
+    const digitsOnly = s.replace(/\D/g, '');
+    const looksLikePortalId = digitsOnly.length >= 10 || /^USR_/i.test(s);
+    if (looksLikePortalId) {
+        const portalId = /^USR_/i.test(s) ? s : digitsOnly;
+        return db.get(
+            `SELECT ${selectCols} FROM users
+             WHERE TRIM(user_id_string) = TRIM(?) OR TRIM(user_id_string) = TRIM(?)
+             LIMIT 1`,
+            [portalId, s],
+            finish
+        );
+    }
+
+    const asInt = parseInt(s, 10);
+    if (Number.isInteger(asInt) && asInt > 0 && /^\d+$/.test(s)) {
+        return db.get(`SELECT ${selectCols} FROM users WHERE id = ? LIMIT 1`, [asInt], finish);
+    }
+
+    return cb(new Error('Could not parse user identifier. Use portal user ID, email, or internal account number.'));
+}
+
+// Admin: transfer support ticket to another user account
+app.put('/api/admin/support-ticket/:ticketId/transfer', (req, res) => {
+    const { ticketId } = req.params;
+    const body = req.body || {};
+    const actingAdminId = parseInt(body.actingAdminId, 10);
+    const targetRef =
+        body.targetUserRef != null
+            ? String(body.targetUserRef).trim()
+            : body.targetUserId != null
+              ? String(body.targetUserId).trim()
+              : '';
+    if (!targetRef) return res.status(400).json({ error: 'Target user ID is required' });
+
+    assertAdminPortalActor(actingAdminId, (eAct) => {
+        if (eAct) return res.status(eAct.message === 'FORBIDDEN' ? 403 : 500).json({ error: 'Admin access required' });
+        resolveSupportTicketByRef(ticketId, (err, ticket) => {
             if (err) return res.status(500).json({ error: err.message });
-            res.json({ success: true });
+            if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+            resolvePortalUserRef(targetRef, (eU, targetUser) => {
+                if (eU) return res.status(400).json({ error: eU.message });
+                const oldUserId = ticket.user_id;
+                const canonical = canonicalTicketMessageId(ticket);
+                if (oldUserId === targetUser.id) {
+                    return res.status(400).json({ error: 'Ticket already belongs to that user' });
+                }
+
+                db.run(
+                    `UPDATE support_tickets SET user_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+                    [targetUser.id, ticket.id],
+                    (updErr) => {
+                        if (updErr) return res.status(500).json({ error: updErr.message });
+                        const note =
+                            'Ticket transferred to account ' +
+                            (targetUser.user_id_string || targetUser.id) +
+                            ' by admin.';
+                        db.run(
+                            `INSERT INTO ticket_messages (ticket_id, sender_id, sender_type, message) VALUES (?, ?, ?, ?)`,
+                            [canonical, actingAdminId || 0, 'admin', note],
+                            () => {
+                                supportTicketNotify.notifySupportTicketTransferred(
+                                    db,
+                                    canonical,
+                                    oldUserId,
+                                    targetUser,
+                                    (nErr) => {
+                                        if (nErr) console.warn('[support-ticket] transfer notify:', nErr.message);
+                                        flushNotificationQueue();
+                                        res.json({
+                                            success: true,
+                                            userId: targetUser.id,
+                                            userIdString: targetUser.user_id_string
+                                        });
+                                    }
+                                );
+                            }
+                        );
+                    }
+                );
+            });
         });
+    });
 });
 
 function startBackgroundWorkers() {

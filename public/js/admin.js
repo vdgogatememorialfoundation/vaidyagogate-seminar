@@ -1420,8 +1420,11 @@ async function adminCreateUser() {
     }
 
     const adm = getStoredAdminUser();
+    const middleName = document.getElementById('newuser-middle')?.value?.trim() || '';
+    const customPortalId = document.getElementById('newuser-portal-id')?.value?.trim() || '';
     const data = {
         firstName,
+        middleName,
         lastName,
         email,
         phone,
@@ -1430,6 +1433,7 @@ async function adminCreateUser() {
         adminPhoneOtpToken: __adminSensitivePhoneOtpToken,
         adminEmailOtpToken: __adminSensitiveEmailOtpToken
     };
+    if (customPortalId) data.userIdString = customPortalId.replace(/\D/g, '');
     if (useCustom) data.password = customPass.trim();
     const demoChk = document.getElementById('newuser-is-demo');
     if (demoChk && demoChk.checked && adminDemoAccountsEnabled()) data.isDemo = true;
@@ -1462,7 +1466,9 @@ async function adminCreateUser() {
             );
 
             document.getElementById('newuser-first').value = '';
+            if (document.getElementById('newuser-middle')) document.getElementById('newuser-middle').value = '';
             document.getElementById('newuser-last').value = '';
+            if (document.getElementById('newuser-portal-id')) document.getElementById('newuser-portal-id').value = '';
             document.getElementById('newuser-email').value = '';
             document.getElementById('newuser-phone').value = '';
             if (document.getElementById('newuser-pass')) document.getElementById('newuser-pass').value = '';
@@ -2902,11 +2908,29 @@ async function openAdminCaseDetail(subId) {
             judgeOpts = '<p class="muted">No judge accounts. In Staff users, set role to Judge (judge_user).</p>';
         }
         const assignedHtml = assigned.length
-            ? '<p style="margin:8px 0;"><strong>Assigned:</strong> ' +
+            ? '<div style="margin:8px 0;"><strong>Assigned judges</strong>' +
               assigned
-                  .map((j) => escAdmin(j.first_name) + ' ' + escAdmin(j.last_name) + ' (' + escAdmin(j.user_id_string) + ')')
-                  .join(', ') +
-              '</p>'
+                  .map(
+                      (j) =>
+                          '<div style="margin:8px 0;padding:8px;border:1px solid #e2e8f0;border-radius:8px;">' +
+                          escAdmin(j.first_name) +
+                          ' ' +
+                          escAdmin(j.last_name) +
+                          ' <span class="muted">(' +
+                          escAdmin(j.user_id_string) +
+                          ')</span>' +
+                          '<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">' +
+                          '<input type="text" class="case-transfer-judge-ref" data-from-judge="' +
+                          j.id +
+                          '" placeholder="Transfer to judge portal ID" style="flex:1;min-width:160px;padding:6px 8px;">' +
+                          '<button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;background:#b45309;" onclick="adminTransferCaseJudge(' +
+                          sub.id +
+                          ',' +
+                          j.id +
+                          ')">Transfer</button></div></div>'
+                  )
+                  .join('') +
+              '</div>'
             : '';
         let html = `<h3>Application <code>${escAdmin(sub.application_no || sub.id)}</code></h3>
             <p class="muted">${escAdmin(sub.first_name)} ${escAdmin(sub.last_name)} · ${escAdmin(sub.category)} · ${escAdmin(sub.status)}</p>
@@ -2979,6 +3003,69 @@ async function openAdminCaseDetail(subId) {
     }
 }
 
+
+async function adminTransferCaseJudge(subId, fromJudgeId) {
+    const inp = document.querySelector('.case-transfer-judge-ref[data-from-judge="' + fromJudgeId + '"]');
+    const toRef = inp && inp.value ? inp.value.trim() : '';
+    if (!toRef) return alert('Enter target judge portal user ID');
+    const adm = getStoredAdminUser();
+    try {
+        const res = await fetch('/api/admin/case/submissions/' + subId + '/transfer-judge', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                fromJudgeId,
+                toJudgeUserIdString: toRef,
+                actingAdminId: adm && adm.id
+            })
+        });
+        const data = await res.json();
+        if (data.success) {
+            alert('Case transferred to ' + toRef);
+            openAdminCaseDetail(subId);
+        } else alert(data.error || 'Transfer failed');
+    } catch (e) {
+        console.error(e);
+        alert('Network error');
+    }
+}
+
+async function adminTransferSupportTicket() {
+    if (!currentViewingTicketId) return alert('Open a ticket first');
+    const ref = document.getElementById('ticket-transfer-user-ref')?.value?.trim();
+    if (!ref) return alert('Enter target portal user ID');
+    const adm = getStoredAdminUser();
+    const msgEl = document.getElementById('ticket-transfer-msg');
+    try {
+        const res = await fetch(
+            '/api/admin/support-ticket/' + encodeURIComponent(currentViewingTicketId) + '/transfer',
+            {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ targetUserRef: ref, actingAdminId: adm && adm.id })
+            }
+        );
+        const data = await res.json();
+        if (!res.ok) {
+            if (msgEl) {
+                msgEl.textContent = data.error || 'Transfer failed';
+                msgEl.style.color = '#b91c1c';
+                msgEl.classList.remove('hidden');
+            }
+            return;
+        }
+        if (msgEl) {
+            msgEl.textContent = 'Transferred to ' + (data.userIdString || ref);
+            msgEl.style.color = '#059669';
+            msgEl.classList.remove('hidden');
+        }
+        viewSupportTicket(currentViewingTicketId);
+        loadSupportTickets();
+    } catch (e) {
+        console.error(e);
+        alert('Network error');
+    }
+}
 
 async function assignCaseJudgeByPortalId(subId) {
     const uidStr = document.getElementById('case-judge-id-string')?.value?.trim();
