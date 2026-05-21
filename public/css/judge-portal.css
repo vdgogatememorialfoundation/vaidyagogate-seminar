@@ -1,31 +1,50 @@
-/* VGMF Judge Portal — foundation teal theme */
+/* VGMF Judge Portal — premium foundation theme */
 :root {
-    --jp-teal: #0f766e;
-    --jp-teal-dark: #064e3b;
-    --jp-teal-light: #ccfbf1;
-    --jp-gold: #b45309;
-    --jp-bg: #f0fdfa;
+    --jp-emerald: #059669;
+    --jp-emerald-dark: #047857;
+    --jp-emerald-deep: #064e3b;
+    --jp-emerald-muted: #10b981;
+    --jp-gold: #d97706;
+    --jp-gold-light: #fef3c7;
+    --jp-bg: #f1f5f9;
+    --jp-bg-accent: #ecfdf5;
     --jp-surface: #ffffff;
-    --jp-border: #99f6e4;
-    --jp-text: #134e4a;
+    --jp-border: #e2e8f0;
+    --jp-border-teal: #a7f3d0;
+    --jp-text: #0f172a;
+    --jp-text-soft: #475569;
     --jp-muted: #64748b;
-    --jp-shadow: 0 12px 40px rgba(6, 78, 59, 0.08);
+    --jp-radius: 14px;
+    --jp-radius-lg: 20px;
+    --jp-shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.06);
+    --jp-shadow: 0 8px 30px rgba(6, 78, 59, 0.08);
+    --jp-shadow-lg: 0 20px 50px rgba(6, 78, 59, 0.15);
+    --jp-font: 'DM Sans', system-ui, sans-serif;
+    --jp-display: 'Fraunces', Georgia, serif;
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
 }
 
 body[data-portal-theme='judge'] {
-    font-family: 'DM Sans', system-ui, sans-serif;
-    background:
-        radial-gradient(900px 480px at 100% -20%, rgba(15, 118, 110, 0.12), transparent 55%),
-        linear-gradient(180deg, var(--jp-bg) 0%, #ecfeff 50%, #f8fafc 100%);
+    margin: 0;
+    font-family: var(--jp-font);
+    font-size: 15px;
+    line-height: 1.5;
     color: var(--jp-text);
+    background: var(--jp-bg);
     min-height: 100vh;
+    -webkit-font-smoothing: antialiased;
 }
 
 body[data-portal-theme='judge'] .hidden {
     display: none !important;
 }
 
-/* Auth */
+/* ─── Auth ─── */
 body[data-portal-theme='judge'] #auth-overlay {
     position: fixed;
     inset: 0;
@@ -33,351 +52,991 @@ body[data-portal-theme='judge'] #auth-overlay {
     display: flex;
     align-items: center;
     justify-content: center;
-    padding: 20px;
-    background: rgba(6, 78, 59, 0.45);
-    backdrop-filter: blur(8px);
+    padding: 24px;
+    background:
+        linear-gradient(145deg, rgba(6, 78, 59, 0.92) 0%, rgba(4, 120, 87, 0.88) 50%, rgba(2, 44, 34, 0.94) 100%),
+        url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='0.04'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+    backdrop-filter: blur(4px);
+}
+
+.jp-auth-wrap {
+    width: 100%;
+    max-width: 440px;
+}
+
+.jp-auth-brand {
+    text-align: center;
+    margin-bottom: 24px;
+    color: #fff;
+}
+
+.jp-auth-brand [data-site-logo] {
+    display: inline-flex;
+    justify-content: center;
+    margin-bottom: 12px;
+    filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.2));
+}
+
+.jp-auth-brand h1 {
+    font-family: var(--jp-display);
+    font-size: 1.35rem;
+    font-weight: 600;
+    margin: 0 0 4px;
+    letter-spacing: -0.02em;
+}
+
+.jp-auth-brand p {
+    margin: 0;
+    font-size: 0.88rem;
+    opacity: 0.85;
 }
 
 body[data-portal-theme='judge'] .auth-card {
     background: var(--jp-surface);
-    border-radius: 20px;
-    border: 1px solid var(--jp-border);
-    padding: 32px;
-    width: 100%;
-    max-width: 420px;
-    box-shadow: 0 24px 64px rgba(6, 78, 59, 0.2);
+    border-radius: var(--jp-radius-lg);
+    padding: 32px 28px;
+    box-shadow: var(--jp-shadow-lg);
+    border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
 body[data-portal-theme='judge'] .auth-card h2 {
-    font-family: 'Fraunces', Georgia, serif;
-    color: var(--jp-teal-dark);
-    margin-bottom: 8px;
-    font-size: 1.45rem;
+    font-family: var(--jp-display);
+    font-size: 1.25rem;
+    color: var(--jp-emerald-deep);
+    margin: 0 0 6px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+body[data-portal-theme='judge'] .auth-card h2 i {
+    color: var(--jp-emerald);
+    font-size: 1.1rem;
+}
+
+body[data-portal-theme='judge'] .auth-card > p {
+    color: var(--jp-muted);
+    font-size: 0.9rem;
+    margin-bottom: 22px;
 }
 
 body[data-portal-theme='judge'] .auth-card label {
-    color: var(--jp-teal-dark);
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--jp-emerald-deep);
+    margin: 14px 0 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
 }
 
 body[data-portal-theme='judge'] .auth-card input {
-    border-color: #a7f3d0;
+    width: 100%;
+    padding: 12px 14px;
+    border: 1px solid var(--jp-border);
+    border-radius: 10px;
+    font-size: 1rem;
+    transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 body[data-portal-theme='judge'] .auth-card input:focus {
-    border-color: var(--jp-teal);
-    box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.2);
+    outline: none;
+    border-color: var(--jp-emerald);
+    box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.2);
 }
 
 body[data-portal-theme='judge'] .btn-primary {
-    background: linear-gradient(135deg, var(--jp-teal), #14b8a6);
+    width: 100%;
+    margin-top: 20px;
+    padding: 14px 20px;
+    border: none;
     border-radius: 12px;
+    background: linear-gradient(135deg, var(--jp-emerald-dark), var(--jp-emerald));
+    color: #fff;
+    font-weight: 800;
+    font-size: 0.95rem;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(5, 150, 105, 0.35);
+    transition: transform 0.15s, box-shadow 0.15s;
+}
+
+body[data-portal-theme='judge'] .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 20px rgba(5, 150, 105, 0.4);
 }
 
 body[data-portal-theme='judge'] .otp-btn {
-    border-color: #a7f3d0;
-    background: var(--jp-bg);
-    color: var(--jp-teal-dark);
+    padding: 8px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--jp-border-teal);
+    background: var(--jp-bg-accent);
+    color: var(--jp-emerald-deep);
+    font-size: 0.78rem;
+    font-weight: 700;
+    cursor: pointer;
 }
 
-/* Shell */
-.judge-app-shell {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 24px 20px 56px;
-}
-
-.judge-topbar {
+body[data-portal-theme='judge'] .otp-row {
     display: flex;
     flex-wrap: wrap;
-    align-items: flex-end;
+    gap: 8px;
+    align-items: center;
+    margin-top: 10px;
+}
+
+body[data-portal-theme='judge'] #login-err {
+    color: #dc2626;
+    font-size: 0.88rem;
+    margin-top: 12px;
+    font-weight: 600;
+}
+
+/* ─── App shell ─── */
+.judge-app-shell {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.jp-header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: var(--jp-surface);
+    border-bottom: 1px solid var(--jp-border);
+    box-shadow: var(--jp-shadow-sm);
+}
+
+.jp-header-inner {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 14px 24px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     justify-content: space-between;
     gap: 16px;
-    margin-bottom: 24px;
-    padding-bottom: 20px;
-    border-bottom: 2px solid var(--jp-border);
 }
 
-.judge-topbar h1 {
-    font-family: 'Fraunces', Georgia, serif;
-    font-size: 1.75rem;
-    color: var(--jp-teal-dark);
-    letter-spacing: -0.02em;
+.jp-header-brand {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    min-width: 0;
+}
+
+.jp-header-brand [data-site-logo] {
+    flex-shrink: 0;
+}
+
+.jp-header-titles h1 {
+    font-family: var(--jp-display);
+    font-size: 1.35rem;
+    font-weight: 600;
+    color: var(--jp-emerald-deep);
     margin: 0;
+    letter-spacing: -0.02em;
+    display: flex;
+    align-items: center;
+    gap: 8px;
 }
 
-.judge-topbar h1 i {
-    color: var(--jp-teal);
+.jp-header-titles h1 i {
+    color: var(--jp-emerald);
+    font-size: 1.15rem;
 }
 
-.judge-topbar .sub {
+.jp-header-titles .jp-tagline {
+    margin: 2px 0 0;
+    font-size: 0.82rem;
     color: var(--jp-muted);
-    font-size: 0.92rem;
-    margin-top: 6px;
-    max-width: 50ch;
-    line-height: 1.45;
 }
 
-body[data-portal-theme='judge'] .badge {
-    background: var(--jp-surface);
-    border: 1px solid var(--jp-border);
-    color: var(--jp-teal-dark);
+.jp-header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
 }
 
-body[data-portal-theme='judge'] .btn {
-    background: var(--jp-surface);
-    color: var(--jp-teal-dark);
-    border: 1px solid #a7f3d0;
-    border-radius: 12px;
-    font-weight: 700;
+.jp-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    background: var(--jp-bg-accent);
+    border: 1px solid var(--jp-border-teal);
+    color: var(--jp-emerald-deep);
 }
 
-body[data-portal-theme='judge'] .btn:hover {
-    background: var(--jp-teal-light);
+.jp-pill i {
+    color: var(--jp-emerald);
+    font-size: 0.8rem;
 }
 
-.judge-stat-grid {
+.jp-pill-time {
+    background: #f0fdf4;
+    font-size: 0.78rem;
+    font-weight: 500;
+}
+
+.jp-main {
+    flex: 1;
+    max-width: 1280px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 28px 24px 48px;
+}
+
+/* Stats */
+.jp-stats {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 12px;
-    margin-bottom: 20px;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
 }
 
-.judge-stat-card {
+@media (max-width: 700px) {
+    .jp-stats {
+        grid-template-columns: 1fr;
+    }
+}
+
+.jp-stat {
     background: var(--jp-surface);
     border: 1px solid var(--jp-border);
-    border-radius: 14px;
-    padding: 16px 18px;
-    box-shadow: var(--jp-shadow);
+    border-radius: var(--jp-radius);
+    padding: 20px 22px;
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    box-shadow: var(--jp-shadow-sm);
+    transition: box-shadow 0.2s, border-color 0.2s;
 }
 
-.judge-stat-card .label {
+.jp-stat:hover {
+    box-shadow: var(--jp-shadow);
+    border-color: var(--jp-border-teal);
+}
+
+.jp-stat-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    flex-shrink: 0;
+}
+
+.jp-stat-icon--total {
+    background: linear-gradient(135deg, #ecfdf5, #d1fae5);
+    color: var(--jp-emerald-dark);
+}
+
+.jp-stat-icon--done {
+    background: linear-gradient(135deg, #d1fae5, #a7f3d0);
+    color: #047857;
+}
+
+.jp-stat-icon--pending {
+    background: linear-gradient(135deg, var(--jp-gold-light), #fde68a);
+    color: var(--jp-gold);
+}
+
+.jp-stat-body .jp-stat-label {
     font-size: 0.72rem;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
-    color: var(--jp-muted);
+    letter-spacing: 0.07em;
     font-weight: 700;
+    color: var(--jp-muted);
 }
 
-.judge-stat-card .value {
-    font-size: 1.55rem;
+.jp-stat-body .jp-stat-value {
+    font-size: 1.75rem;
     font-weight: 800;
-    color: var(--jp-teal);
+    color: var(--jp-text);
+    line-height: 1.2;
     margin-top: 4px;
 }
 
-.judge-info-strip {
-    background: linear-gradient(135deg, #ecfdf5, #f0fdfa);
-    border: 1px solid var(--jp-border);
-    border-left: 4px solid var(--jp-teal);
-    border-radius: 12px;
-    padding: 14px 18px;
-    margin-bottom: 18px;
+/* Tip banner */
+.jp-tip {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    background: linear-gradient(90deg, var(--jp-bg-accent) 0%, #fff 100%);
+    border: 1px solid var(--jp-border-teal);
+    border-radius: var(--jp-radius);
+    padding: 16px 20px;
+    margin-bottom: 24px;
+}
+
+.jp-tip-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 10px;
+    background: var(--jp-emerald);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.jp-tip-text {
     font-size: 0.88rem;
-    color: #475569;
-    line-height: 1.5;
+    color: var(--jp-text-soft);
+    line-height: 1.55;
 }
 
-.judge-info-strip strong {
-    color: var(--jp-teal-dark);
+.jp-tip-text strong {
+    color: var(--jp-emerald-deep);
 }
 
-.judge-card {
+.jp-tip-text .msg-source-email {
+    font-size: 0.68rem;
+    background: #e0f2fe;
+    color: #0369a1;
+    padding: 2px 7px;
+    border-radius: 4px;
+    font-weight: 700;
+}
+
+/* Cases panel */
+.jp-panel {
     background: var(--jp-surface);
-    border-radius: 16px;
     border: 1px solid var(--jp-border);
+    border-radius: var(--jp-radius-lg);
     box-shadow: var(--jp-shadow);
     overflow: hidden;
 }
 
-.judge-card-head {
-    padding: 16px 18px;
-    border-bottom: 1px solid #e2e8f0;
+.jp-panel-head {
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--jp-border);
     display: flex;
     flex-wrap: wrap;
+    align-items: center;
     justify-content: space-between;
+    gap: 16px;
+    background: linear-gradient(180deg, #fafafa 0%, #fff 100%);
+}
+
+.jp-panel-head h2 {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: var(--jp-emerald-deep);
+    display: flex;
     align-items: center;
     gap: 10px;
-    background: linear-gradient(180deg, #f0fdfa, #fff);
 }
 
-.judge-card-head h2 {
-    font-size: 1rem;
-    color: var(--jp-teal-dark);
-    margin: 0;
-    font-weight: 800;
+.jp-panel-head h2 i {
+    color: var(--jp-emerald);
 }
 
-.judge-filter-tabs {
+.jp-tabs {
     display: inline-flex;
-    background: #ecfdf5;
-    border-radius: 999px;
+    background: #f1f5f9;
+    border-radius: 10px;
     padding: 4px;
-    gap: 4px;
+    gap: 2px;
 }
 
-.judge-filter-tabs button {
+.jp-tabs button {
     border: none;
     background: transparent;
-    padding: 8px 14px;
-    border-radius: 999px;
+    padding: 9px 16px;
+    border-radius: 8px;
     font-size: 0.82rem;
     font-weight: 700;
-    color: var(--jp-teal-dark);
+    color: var(--jp-muted);
     cursor: pointer;
+    transition: background 0.15s, color 0.15s;
 }
 
-.judge-filter-tabs button.active {
+.jp-tabs button:hover {
+    color: var(--jp-emerald-deep);
+}
+
+.jp-tabs button.active {
     background: var(--jp-surface);
-    box-shadow: 0 2px 8px rgba(6, 78, 59, 0.12);
-    color: var(--jp-teal);
+    color: var(--jp-emerald-dark);
+    box-shadow: var(--jp-shadow-sm);
 }
 
-.judge-table-wrap {
+.jp-table-wrap {
     overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
 }
 
-.judge-table {
+.jp-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.88rem;
+    font-size: 0.9rem;
 }
 
-.judge-table th {
+.jp-table thead th {
     text-align: left;
-    padding: 12px 14px;
-    background: var(--jp-teal);
-    color: #fff;
-    font-size: 0.7rem;
+    padding: 14px 18px;
+    background: var(--jp-emerald-deep);
+    color: #ecfdf5;
+    font-size: 0.68rem;
+    font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: 0.08em;
+    white-space: nowrap;
 }
 
-.judge-table td {
-    padding: 14px;
+.jp-table tbody td {
+    padding: 16px 18px;
     border-bottom: 1px solid #f1f5f9;
     vertical-align: middle;
+    color: var(--jp-text-soft);
 }
 
-.judge-table tr:hover td {
-    background: #f0fdfa;
+.jp-table tbody tr:last-child td {
+    border-bottom: none;
 }
 
-.judge-badge {
+.jp-table tbody tr:hover td {
+    background: #f8fafc;
+}
+
+.jp-table tbody td strong {
+    color: var(--jp-text);
+}
+
+.jp-table code {
+    background: var(--jp-bg-accent);
+    color: var(--jp-emerald-deep);
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.jp-badge {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
+    padding: 5px 11px;
     border-radius: 999px;
     font-size: 0.75rem;
     font-weight: 700;
 }
 
-.judge-badge-pending {
-    background: #fef3c7;
-    color: #92400e;
+.jp-badge--pending {
+    background: var(--jp-gold-light);
+    color: #b45309;
 }
 
-.judge-badge-done {
+.jp-badge--done {
     background: #d1fae5;
     color: #047857;
 }
 
-.judge-badge-status {
-    background: #ccfbf1;
-    color: var(--jp-teal-dark);
+.jp-badge--status {
+    background: #ecfdf5;
+    color: var(--jp-emerald-deep);
+    border: 1px solid var(--jp-border-teal);
 }
 
-.judge-btn-primary {
-    background: linear-gradient(135deg, var(--jp-teal), #14b8a6) !important;
+.jp-table .empty {
+    padding: 56px 24px;
+    text-align: center;
+    color: var(--jp-muted);
+}
+
+/* Buttons */
+body[data-portal-theme='judge'] .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 18px;
+    border-radius: 10px;
+    border: 1px solid var(--jp-border);
+    background: var(--jp-surface);
+    color: var(--jp-text);
+    font-weight: 700;
+    font-size: 0.88rem;
+    cursor: pointer;
+    text-decoration: none;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+body[data-portal-theme='judge'] .btn:hover {
+    background: #f8fafc;
+    border-color: var(--jp-border-teal);
+    color: var(--jp-emerald-deep);
+}
+
+body[data-portal-theme='judge'] .btn-ghost {
+    background: transparent;
+}
+
+body[data-portal-theme='judge'] .btn-logout:hover {
+    background: #fef2f2;
+    border-color: #fecaca;
+    color: #b91c1c;
+}
+
+.jp-btn-action {
+    background: linear-gradient(135deg, var(--jp-emerald-dark), var(--jp-emerald)) !important;
     color: #fff !important;
     border: none !important;
+    padding: 9px 18px !important;
+    border-radius: 10px !important;
+    box-shadow: 0 2px 8px rgba(5, 150, 105, 0.3);
 }
 
-/* Modals */
+.jp-btn-action:hover {
+    filter: brightness(1.05);
+    color: #fff !important;
+}
+
+/* ─── Modals ─── */
 body[data-portal-theme='judge'] #case-score-overlay,
 body[data-portal-theme='judge'] #case-contact-overlay {
-    background: rgba(6, 78, 59, 0.5);
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(6px);
 }
 
-body[data-portal-theme='judge'] .score-panel,
-body[data-portal-theme='judge'] .contact-panel {
+body[data-portal-theme='judge'] #case-contact-overlay {
+    z-index: 10001;
+}
+
+.jp-modal {
+    background: var(--jp-surface);
+    border-radius: var(--jp-radius-lg);
+    width: 100%;
+    max-height: 92vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: var(--jp-shadow-lg);
     border: 1px solid var(--jp-border);
-    border-radius: 18px;
-    box-shadow: 0 24px 64px rgba(6, 78, 59, 0.25);
 }
 
-body[data-portal-theme='judge'] .score-panel h3,
-body[data-portal-theme='judge'] .contact-panel h3 {
-    font-family: 'Fraunces', Georgia, serif;
-    color: var(--jp-teal-dark);
+.jp-modal--wide {
+    max-width: 960px;
 }
 
-body[data-portal-theme='judge'] .participant-panel {
-    background: #f0fdfa;
-    border-color: var(--jp-border);
+.jp-modal--chat {
+    max-width: 560px;
 }
 
-body[data-portal-theme='judge'] .participant-panel dt {
-    color: var(--jp-teal-dark);
+.jp-modal-head {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--jp-border);
+    background: linear-gradient(180deg, var(--jp-bg-accent) 0%, #fff 100%);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    flex-shrink: 0;
 }
 
-body[data-portal-theme='judge'] .msg-thread {
+.jp-modal-head h3 {
+    font-family: var(--jp-display);
+    font-size: 1.2rem;
+    color: var(--jp-emerald-deep);
+    margin: 0 0 4px;
+}
+
+.jp-modal-meta {
+    font-size: 0.88rem;
+    color: var(--jp-muted);
+    margin: 0;
+}
+
+.jp-modal-close {
+    border: none;
+    background: #f1f5f9;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    cursor: pointer;
+    color: var(--jp-muted);
+    flex-shrink: 0;
+}
+
+.jp-modal-close:hover {
+    background: #e2e8f0;
+    color: var(--jp-text);
+}
+
+.jp-modal-body {
+    padding: 24px;
+    overflow-y: auto;
+    flex: 1;
+}
+
+.jp-modal-foot {
+    padding: 16px 24px;
+    border-top: 1px solid var(--jp-border);
+    background: #fafafa;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    flex-shrink: 0;
+}
+
+/* Score modal sections */
+.jp-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 20px;
+    padding: 14px 16px;
     background: #f8fafc;
-    border-color: #e2e8f0;
+    border-radius: 12px;
+    border: 1px solid var(--jp-border);
 }
 
-body[data-portal-theme='judge'] .msg-bubble.judge {
-    background: #ccfbf1;
-    border-color: #5eead4;
+.jp-toolbar .jp-toolbar-label {
+    font-size: 0.82rem;
+    color: var(--jp-muted);
+    margin-right: 4px;
 }
 
-body[data-portal-theme='judge'] .msg-bubble.participant {
-    background: #fffbeb;
-    border-color: #fcd34d;
+body[data-portal-theme='judge'] .jp-select {
+    padding: 9px 12px;
+    border: 1px solid var(--jp-border);
+    border-radius: 10px;
+    font-size: 0.88rem;
+    max-width: 240px;
+    background: #fff;
 }
 
-body[data-portal-theme='judge'] .msg-source-email {
-    font-size: 0.68rem;
-    background: #e0f2fe;
-    color: #0369a1;
-    padding: 2px 6px;
-    border-radius: 4px;
-    margin-left: 6px;
-}
-
-body[data-portal-theme='judge'] .btn-submit,
-body[data-portal-theme='judge'] .judge-btn-primary {
-    background: linear-gradient(135deg, var(--jp-teal), #14b8a6) !important;
+body[data-portal-theme='judge'] .btn-transfer {
+    background: var(--jp-gold) !important;
     color: #fff !important;
     border: none !important;
 }
 
-body[data-portal-theme='judge'] .locked-banner {
-    background: #fffbeb;
+body[data-portal-theme='judge'] .btn-transfer:hover {
+    background: #b45309 !important;
+    color: #fff !important;
+}
+
+.jp-locked {
+    background: var(--jp-gold-light);
     color: #92400e;
+    padding: 12px 16px;
+    border-radius: 10px;
+    font-size: 0.88rem;
+    font-weight: 600;
     border: 1px solid #fcd34d;
+    margin-bottom: 16px;
+}
+
+.participant-panel {
+    background: var(--jp-bg-accent);
+    border: 1px solid var(--jp-border-teal);
+    border-radius: 12px;
+    padding: 18px;
+    margin-bottom: 18px;
+}
+
+.participant-panel h4 {
+    margin: 0 0 12px;
+    font-size: 0.95rem;
+    color: var(--jp-emerald-deep);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.participant-panel dl {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    gap: 8px 14px;
+    margin: 0;
+    font-size: 0.88rem;
+}
+
+.participant-panel dt {
+    font-weight: 700;
+    color: var(--jp-muted);
+}
+
+.participant-panel dd {
+    margin: 0;
+    color: var(--jp-text);
+}
+
+.case-files-grid {
+    display: grid;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.case-file-card {
+    border: 1px solid var(--jp-border);
+    border-radius: 12px;
+    padding: 14px 16px;
+    background: #fafafa;
+}
+
+.case-file-card h4 {
+    font-size: 0.88rem;
+    margin: 0 0 10px;
+    color: var(--jp-text);
+    word-break: break-all;
+}
+
+.case-file-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.case-file-preview {
+    margin-top: 10px;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--jp-border);
+    background: #fff;
+}
+
+.case-file-preview iframe,
+.case-file-preview video {
+    width: 100%;
+    min-height: 280px;
+    border: 0;
+    display: block;
+}
+
+.case-file-preview img {
+    max-width: 100%;
+    max-height: 360px;
+    display: block;
+    margin: 0 auto;
+}
+
+.jp-crit-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 16px;
+    font-size: 0.9rem;
+}
+
+.jp-crit-table thead th {
+    text-align: left;
+    padding: 12px 14px;
+    background: var(--jp-emerald-deep);
+    color: #fff;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.jp-crit-table thead th:nth-child(2),
+.jp-crit-table thead th:nth-child(3) {
+    text-align: center;
+}
+
+.jp-crit-table tbody td {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--jp-border);
+}
+
+.jp-crit-table tbody td:nth-child(2),
+.jp-crit-table tbody td:nth-child(3) {
+    text-align: center;
+}
+
+.jp-crit-input {
+    width: 72px;
+    padding: 8px;
+    text-align: center;
+    border: 1px solid var(--jp-border-teal);
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 700;
+}
+
+.jp-crit-input:focus {
+    outline: none;
+    border-color: var(--jp-emerald);
+    box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.15);
+}
+
+.jp-crit-input:disabled {
+    background: #f1f5f9;
+    color: var(--jp-muted);
+}
+
+.jp-field-label {
+    display: block;
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: var(--jp-emerald-deep);
+    margin: 16px 0 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.jp-textarea,
+.jp-input {
+    width: 100%;
+    padding: 12px 14px;
+    border: 1px solid var(--jp-border);
+    border-radius: 10px;
+    font-family: inherit;
+    font-size: 0.95rem;
+}
+
+.jp-textarea:focus,
+.jp-input:focus {
+    outline: none;
+    border-color: var(--jp-emerald);
+    box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.15);
+}
+
+.jp-score-total {
+    margin: 16px 0;
+    padding: 14px 18px;
+    background: var(--jp-bg-accent);
+    border-radius: 10px;
+    font-size: 1.1rem;
+    font-weight: 800;
+    color: var(--jp-emerald-deep);
+}
+
+.jp-score-total span {
+    color: var(--jp-emerald);
+    font-size: 1.35rem;
+}
+
+/* Messages */
+.msg-thread {
+    flex: 1;
+    overflow-y: auto;
+    max-height: 300px;
+    min-height: 120px;
+    margin: 0 0 16px;
+    padding: 12px;
+    background: #f8fafc;
+    border-radius: 12px;
+    border: 1px solid var(--jp-border);
+}
+
+.msg-bubble {
+    margin-bottom: 12px;
+    padding: 12px 14px;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    max-width: 92%;
+}
+
+.msg-bubble.judge {
+    margin-right: auto;
+    margin-left: 0;
+    background: #ecfdf5;
+    border: 1px solid var(--jp-border-teal);
+}
+
+.msg-bubble.participant {
+    margin-left: auto;
+    margin-right: 0;
+    background: #fff;
+    border: 1px solid var(--jp-border);
+    box-shadow: var(--jp-shadow-sm);
+}
+
+.msg-bubble .msg-meta {
+    font-size: 0.72rem;
+    color: var(--jp-muted);
+    margin-bottom: 6px;
+    font-weight: 600;
+}
+
+.msg-bubble .msg-body {
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: var(--jp-text);
+}
+
+.msg-source-email {
+    font-size: 0.65rem;
+    background: #dbeafe;
+    color: #1d4ed8;
+    padding: 2px 7px;
+    border-radius: 4px;
+    margin-left: 6px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.jp-err {
+    color: #dc2626;
+    font-size: 0.88rem;
+    margin-top: 10px;
+    font-weight: 600;
 }
 
 body[data-portal-theme='judge'] .muted {
     color: var(--jp-muted);
 }
 
-body[data-portal-theme='judge'] code {
-    background: #ecfdf5;
-    color: var(--jp-teal-dark);
+body[data-portal-theme='judge'] .btn-submit {
+    background: linear-gradient(135deg, var(--jp-emerald-dark), var(--jp-emerald)) !important;
+    color: #fff !important;
+    border: none !important;
 }
 
-body[data-portal-theme='judge'] .empty {
-    padding: 48px 24px;
-    text-align: center;
-    color: var(--jp-muted);
+body[data-portal-theme='judge'] .btn-submit:hover {
+    filter: brightness(1.05);
 }
 
+body[data-portal-theme='judge'] .btn-submit:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+}
+
+/* Mobile */
 @media (max-width: 768px) {
-    .judge-app-shell {
-        padding: 16px 12px 40px;
+    .jp-header-inner {
+        padding: 12px 16px;
     }
-    .judge-table {
+
+    .jp-main {
+        padding: 20px 16px 40px;
+    }
+
+    .jp-table {
         min-width: 720px;
+    }
+
+    .jp-modal {
+        max-height: 95vh;
+        border-radius: 16px 16px 0 0;
+    }
+
+    body[data-portal-theme='judge'] .btn,
+    body[data-portal-theme='judge'] .btn-primary {
+        min-height: 44px;
+    }
+
+    body[data-portal-theme='judge'] .auth-card input {
+        font-size: 16px;
     }
 }
