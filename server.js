@@ -342,6 +342,10 @@ app.get('/api/health', (req, res) => {
                         pgDb.listMissingAuxTables ? pgDb.listMissingAuxTables() : Promise.resolve([])
                     ]).then(([coreMissing, auxMissing]) => {
                         const missing = [...coreMissing, ...auxMissing];
+                        if (pgDb.getSchemaApplyErrors) {
+                            const errs = pgDb.getSchemaApplyErrors();
+                            if (errs.length) payload.schemaApplyErrors = errs.slice(0, 5);
+                        }
                         if (missing.length) {
                             payload.ok = false;
                             payload.schema = { missingTables: missing };
@@ -356,7 +360,12 @@ app.get('/api/health', (req, res) => {
                         .then(() => reportSchema())
                         .catch(() => reportSchema());
                 }
-                return reportSchema().catch(() => res.json(payload));
+                return reportSchema().catch((e) => {
+                    payload.ok = false;
+                    payload.schema = { checkError: sanitizeDbError(e) };
+                    payload.hint = publicDatabaseHint('DB_CONNECT_FAILED');
+                    res.json(payload);
+                });
             }
             return res.json(payload);
         }
