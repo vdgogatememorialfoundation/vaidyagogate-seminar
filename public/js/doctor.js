@@ -5032,6 +5032,21 @@ async function loadTickets() {
 
 let currentTicketId = null;
 let currentLegacyTrackingId = null;
+let supportChatPollTimer = null;
+
+function startSupportChatPoll() {
+    stopSupportChatPoll();
+    supportChatPollTimer = setInterval(() => {
+        if (currentTicketId) loadChatMessages(true);
+    }, 5000);
+}
+
+function stopSupportChatPoll() {
+    if (supportChatPollTimer) {
+        clearInterval(supportChatPollTimer);
+        supportChatPollTimer = null;
+    }
+}
 
 async function openTicketThread(id) {
     currentTicketId = id;
@@ -5040,19 +5055,21 @@ async function openTicketThread(id) {
     document.getElementById('support-chat-view').classList.remove('hidden');
     document.getElementById('chat-title').innerText = 'Ticket ' + id;
     await loadChatMessages();
+    startSupportChatPoll();
 }
 
 function closeChat() {
     currentTicketId = null;
     currentLegacyTrackingId = null;
+    stopSupportChatPoll();
     document.getElementById('support-chat-view').classList.add('hidden');
     document.getElementById('support-main-view').classList.remove('hidden');
 }
 
-async function loadChatMessages() {
+async function loadChatMessages(silent) {
         const box = document.getElementById('chat-messages');
     if (!box) return;
-    box.innerHTML = '<p style="color:#64748b;text-align:center;">Loading messages…</p>';
+    if (!silent) box.innerHTML = '<p style="color:#64748b;text-align:center;">Loading messages…</p>';
     if (!currentTicketId) {
         box.innerHTML = '<p style="color:#b91c1c;text-align:center;">No ticket selected.</p>';
         return;
@@ -5076,9 +5093,13 @@ async function loadChatMessages() {
         messages.forEach((m) => {
             const st = String(m.sender_type || '').toLowerCase();
             const isDoc = st !== 'admin';
+            const viaEmail =
+                m.source === 'email'
+                    ? ' <span style="font-size:0.72rem;background:#e0f2fe;color:#0369a1;padding:2px 6px;border-radius:4px;">Email</span>'
+                    : '';
             box.innerHTML += `
-                <div style="align-self: ${isDoc ? 'flex-end' : 'flex-start'}; background: ${isDoc ? '#1a237e' : 'white'}; color: ${isDoc ? 'white' : '#334155'}; border: 1px solid ${isDoc ? '#1a237e' : '#cbd5e1'}; padding: 10px 15px; border-radius: 8px; max-width: 80%;">
-                    <p style="font-size: 0.8rem; margin-bottom: 5px; color: ${isDoc ? '#c7d2fe' : '#64748b'};"><strong>${isDoc ? 'You' : 'Admin'}</strong> — ${new Date(m.created_at).toLocaleString()}</p>
+                <div style="align-self: ${isDoc ? 'flex-end' : 'flex-start'}; background: ${isDoc ? '#0f766e' : 'white'}; color: ${isDoc ? 'white' : '#334155'}; border: 1px solid ${isDoc ? '#0f766e' : '#cbd5e1'}; padding: 10px 15px; border-radius: 8px; max-width: 80%;">
+                    <p style="font-size: 0.8rem; margin-bottom: 5px; color: ${isDoc ? '#ccfbf1' : '#64748b'};"><strong>${isDoc ? 'You' : 'Admin'}</strong>${viaEmail} — ${new Date(m.created_at).toLocaleString()}</p>
                     <p>${(m.message || '').replace(/</g, '&lt;')}</p>
                 </div>`;
         });

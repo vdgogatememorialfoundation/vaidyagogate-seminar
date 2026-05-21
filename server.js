@@ -4950,6 +4950,9 @@ const inboundMailReply = require('./lib/inbound-mail-reply');
 app.post('/api/webhooks/inbound-email', (req, res) => {
     inboundMailReply.handleInboundMail(db, req, res);
 });
+app.post('/api/webhooks/mailparser', (req, res) => {
+    inboundMailReply.handleInboundMail(db, req, res);
+});
 
 app.get('/api/admin/integrations/whatsapp-delivery-events', withIntegrationSettingsLoaded, (req, res) => {
     const messageId = String((req.query && req.query.messageId) || '').trim();
@@ -9743,7 +9746,7 @@ function fetchTicketMessages(ticketRow, cb) {
         const ph = ids.map(() => '?').join(',');
         db.all(
             `SELECT tm.id, tm.ticket_id, tm.sender_id, tm.sender_type, tm.message, tm.attachment_path, tm.created_at,
-                    u.first_name, u.last_name
+                    tm.source, u.first_name, u.last_name
              FROM ticket_messages tm
              LEFT JOIN users u ON tm.sender_id = u.id
              WHERE tm.ticket_id IN (${ph})
