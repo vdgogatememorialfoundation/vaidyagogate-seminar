@@ -4481,7 +4481,8 @@ app.post('/api/applications/:applicationId/cancel', (req, res) => {
 // 6. Doctor Profile Management
 // Create or update doctor profile
 app.post('/api/doctor/profile', (req, res) => {
-    upload.single('profilePhoto')(req, res, (uploadErr) => {
+    const profileUpload = (process.env.VERCEL ? memoryUpload : upload).single('profilePhoto');
+    profileUpload(req, res, (uploadErr) => {
         if (uploadErr) {
             return res.status(400).json({ error: uploadErrorMessage(uploadErr) });
         }
@@ -4498,8 +4499,8 @@ app.post('/api/doctor/profile', (req, res) => {
             contact_number,
             bio
         } = req.body;
-        const profilePhoto = req.file ? req.file.filename : null;
 
+        const saveProfile = (profilePhotoPath) => {
         db.get(`SELECT id, profile_photo_path FROM doctor_profile WHERE user_id = ?`, [userId], (err, row) => {
             if (err) return res.status(500).json({ error: err.message });
 
@@ -4507,10 +4508,10 @@ app.post('/api/doctor/profile', (req, res) => {
             const expVal = Number.isFinite(expYears) && expYears >= 0 ? expYears : 0;
 
             if (row) {
-                const sql = profilePhoto
+                const sql = profilePhotoPath
                     ? `UPDATE doctor_profile SET specialization=?, registration_no=?, qualifications=?, experience_years=?, hospital_name=?, contact_number=?, bio=?, profile_photo_path=?, updated_at=CURRENT_TIMESTAMP WHERE user_id=?`
                     : `UPDATE doctor_profile SET specialization=?, registration_no=?, qualifications=?, experience_years=?, hospital_name=?, contact_number=?, bio=?, updated_at=CURRENT_TIMESTAMP WHERE user_id=?`;
-                const params = profilePhoto
+                const params = profilePhotoPath
                     ? [
                           specialization,
                           registration_no,
@@ -4519,7 +4520,7 @@ app.post('/api/doctor/profile', (req, res) => {
                           hospital_name,
                           contact_number,
                           bio,
-                          profilePhoto,
+                          profilePhotoPath,
                           userId
                       ]
                     : [
@@ -4534,7 +4535,11 @@ app.post('/api/doctor/profile', (req, res) => {
                       ];
                 db.run(sql, params, function (runErr) {
                     if (runErr) return res.status(500).json({ error: runErr.message });
-                    res.json({ success: true, message: 'Profile updated successfully' });
+                    res.json({
+                        success: true,
+                        message: 'Profile updated successfully',
+                        profilePhotoUrl: profilePhotoPath || fileStore.publicFileUrl(row.profile_photo_path)
+                    });
                 });
             } else {
                 db.run(
@@ -4548,19 +4553,29 @@ app.post('/api/doctor/profile', (req, res) => {
                         hospital_name,
                         contact_number,
                         bio,
-                        profilePhoto
+                        profilePhotoPath
                     ],
                     function (runErr) {
                         if (runErr) return res.status(500).json({ error: runErr.message });
                         res.json({
                             success: true,
                             message: 'Profile created successfully',
-                            profileId: this.lastID
+                            profileId: this.lastID,
+                            profilePhotoUrl: profilePhotoPath || null
                         });
                     }
                 );
             }
         });
+        };
+
+        if (req.file) {
+            return fileStore.persistMulterFile(db, req.file, uploadsDir, (pErr, photoPath) => {
+                if (pErr) return res.status(500).json({ error: pErr.message });
+                saveProfile(photoPath);
+            });
+        }
+        saveProfile(null);
     });
 });
 
@@ -4568,7 +4583,12 @@ app.post('/api/doctor/profile', (req, res) => {
 app.get('/api/doctor/profile/:userId', (req, res) => {
     db.get(`SELECT * FROM doctor_profile WHERE user_id = ?`, [req.params.userId], (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(row || {});
+        if (!row) return res.json({});
+        const out = { ...row };
+        if (out.profile_photo_path) {
+            out.profile_photo_url = fileStore.publicFileUrl(out.profile_photo_path);
+        }
+        res.json(out);
     });
 });
 
