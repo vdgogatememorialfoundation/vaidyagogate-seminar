@@ -401,7 +401,9 @@
                     items
                         .map(
                             (it) =>
-                                '<figure><img src="' +
+                                '<figure><img class="vgmf-gallery-thumb" src="' +
+                                esc(mediaUrl(it.src)) +
+                                '" data-gallery-src="' +
                                 esc(mediaUrl(it.src)) +
                                 '" alt="' +
                                 esc(it.caption || '') +

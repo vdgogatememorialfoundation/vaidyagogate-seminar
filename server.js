@@ -5952,9 +5952,10 @@ app.post('/api/scanner/mark', (req, res) => {
                 }
 
                 const newScanCount = currentScanCount + 1;
+                const scanAtIst = seminarDt.scanTimeNowForStorage();
                 db.run(
-                    `UPDATE tickets SET scan_count = ?, is_scanned = 1, scan_time = CURRENT_TIMESTAMP, scanned_by = ? WHERE id = ?`,
-                    [newScanCount, staffId, row.ticket_id],
+                    `UPDATE tickets SET scan_count = ?, is_scanned = 1, scan_time = ?, scanned_by = ? WHERE id = ?`,
+                    [newScanCount, scanAtIst, staffId, row.ticket_id],
                     function (err2) {
                         if (err2) return res.status(500).json({ success: false, error: err2.message });
                         const regId = row.registration_id;

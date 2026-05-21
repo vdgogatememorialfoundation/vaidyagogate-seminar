@@ -4,6 +4,47 @@
     let pollTimer = null;
     let clockTimer = null;
     let actor = null;
+    let soundEnabled = true;
+    let audioCtx = null;
+
+    function ensureAudio() {
+        if (!audioCtx) {
+            const Ctx = window.AudioContext || window.webkitAudioContext;
+            if (Ctx) audioCtx = new Ctx();
+        }
+        if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
+    }
+
+    function playTone(freq, duration, type, gain) {
+        if (!soundEnabled || !audioCtx) return;
+        const o = audioCtx.createOscillator();
+        const g = audioCtx.createGain();
+        o.type = type || 'sine';
+        o.frequency.value = freq;
+        const vol = gain != null ? gain : 0.12;
+        g.gain.setValueAtTime(vol, audioCtx.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+        o.connect(g);
+        g.connect(audioCtx.destination);
+        o.start();
+        o.stop(audioCtx.currentTime + duration);
+    }
+
+    function playScanSound(outcome) {
+        ensureAudio();
+        const o = String(outcome || 'failed');
+        if (o === 'success') {
+            playTone(523, 0.1, 'sine', 0.14);
+            setTimeout(() => playTone(784, 0.12, 'sine', 0.12), 90);
+            setTimeout(() => playTone(1046, 0.14, 'sine', 0.1), 180);
+        } else if (o === 'duplicate') {
+            playTone(440, 0.08, 'triangle', 0.1);
+            setTimeout(() => playTone(440, 0.08, 'triangle', 0.1), 120);
+        } else {
+            playTone(180, 0.22, 'sawtooth', 0.08);
+            setTimeout(() => playTone(140, 0.28, 'sawtooth', 0.07), 160);
+        }
+    }
 
     function esc(s) {
         const d = document.createElement('div');
@@ -64,22 +105,31 @@
         return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
     }
 
+    function parseFeedTime(iso) {
+        if (!iso) return null;
+        const s = String(iso).trim();
+        if (!s) return null;
+        if (/Z$|[+-]\d{2}(:?\d{2})?$/i.test(s)) return new Date(s);
+        let norm = s.includes('T') ? s : s.replace(' ', 'T');
+        if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(norm)) norm += ':00';
+        const d = new Date(norm + 'Z');
+        return Number.isNaN(d.getTime()) ? null : d;
+    }
+
     function formatCardTime(iso) {
-        if (!iso) return '';
-        try {
-            const d = new Date(iso);
-            if (Number.isNaN(d.getTime())) return String(iso);
-            return d.toLocaleString('en-IN', {
-                timeZone: 'Asia/Kolkata',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                day: 'numeric',
-                month: 'short'
-            });
-        } catch (_) {
-            return String(iso);
-        }
+        const d = parseFeedTime(iso);
+        if (!d) return iso ? String(iso) : '';
+        return d.toLocaleString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            weekday: 'short',
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true
+        });
     }
 
     function outcomeTitle(outcome) {
@@ -181,8 +231,11 @@
                     encodeURIComponent(lastEventId)
             );
             (data.events || []).forEach((ev) => {
-                if (ev.id > lastEventId) lastEventId = ev.id;
-                prependCard(ev);
+                if (ev.id > lastEventId) {
+                    lastEventId = ev.id;
+                    prependCard(ev);
+                    playScanSound(ev.outcome);
+                }
             });
             await refreshStats();
             setLiveState(true, 'Live · updating');
@@ -232,10 +285,22 @@
             startPoll();
         }
         sel.addEventListener('change', () => {
+            ensureAudio();
             if (sel.value) startPoll();
             else stopPoll();
             updateEmptyState();
         });
+        const soundBtn = document.getElementById('kiosk-sound-toggle');
+        if (soundBtn) {
+            soundBtn.addEventListener('click', () => {
+                soundEnabled = !soundEnabled;
+                soundBtn.classList.toggle('is-on', soundEnabled);
+                soundBtn.innerHTML = soundEnabled
+                    ? '<i class="fas fa-volume-high"></i> Sounds on'
+                    : '<i class="fas fa-volume-xmark"></i> Sounds off';
+                if (soundEnabled) ensureAudio();
+            });
+        }
         document.getElementById('live-scanner-back').addEventListener('click', () => {
             window.location.href = '/admin.html';
         });

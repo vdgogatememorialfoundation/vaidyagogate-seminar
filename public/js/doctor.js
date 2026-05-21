@@ -608,6 +608,13 @@ function formatTrackDateTime(iso) {
     return iso ? String(iso) : '';
 }
 
+function formatScanDateTime(iso) {
+    if (window.PortalDateTime && window.PortalDateTime.formatScan) {
+        return window.PortalDateTime.formatScan(iso);
+    }
+    return formatTrackDateTime(iso);
+}
+
 function formatEventDate(iso) {
     if (window.PortalDateTime && window.PortalDateTime.formatEvent) {
         return window.PortalDateTime.formatEvent(iso);
@@ -4942,7 +4949,7 @@ async function loadDoctorEventTickets() {
             const showQr = !invalid && !t.is_scanned && t.qr_code_data;
             const qr = showQr ? `/api/qrcode/${encodeURIComponent(t.qr_code_data)}` : '';
             const scanned = t.is_scanned
-                ? `Checked in · ${t.scan_time ? formatTrackDateTime(t.scan_time) : 'venue'}`
+                ? `Checked in · ${t.scan_time ? formatScanDateTime(t.scan_time) : 'venue'}`
                 : 'Not scanned yet — show this QR at entry';
             const statusLine = invalid
                 ? `<p style="margin:8px 0 0;font-size:0.9rem;color:#b91c1c;font-weight:600;">Invalid — registration ${regSt === 'cancelled' ? 'cancelled' : regSt === 'rejected' ? 'rejected' : 'no longer active'}. Do not use this QR for entry.</p>`

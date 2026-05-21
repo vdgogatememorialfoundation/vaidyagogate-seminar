@@ -75,6 +75,34 @@
     }
 
     /** Admin lists / tickets: IST wall clock; date-only for midnight & common UTC artifacts. */
+    /** Check-in scan_time from DB: UTC naive legacy rows or IST ISO (+05:30). */
+    function parseScanDateTime(iso) {
+        if (!iso) return null;
+        const s = String(iso).trim();
+        if (!s) return null;
+        if (/Z$|[+-]\d{2}(:?\d{2})?$/i.test(s)) return parsePortalDateTime(s);
+        let norm = s.includes('T') ? s : s.replace(' ', 'T');
+        if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(norm)) norm += ':00';
+        const d = new Date(norm + 'Z');
+        return Number.isNaN(d.getTime()) ? null : d;
+    }
+
+    function formatScanDateTime(iso) {
+        const d = parseScanDateTime(iso);
+        if (!d || Number.isNaN(d.getTime())) return iso ? String(iso) : '';
+        return d.toLocaleString('en-IN', {
+            timeZone: PORTAL_DISPLAY_TZ,
+            weekday: 'short',
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true
+        });
+    }
+
     function formatEventDisplay(iso) {
         const local = toDatetimeLocal(iso);
         if (!local) return iso ? String(iso).trim() : '';
@@ -116,6 +144,7 @@
         toDatetimeLocal,
         format: formatPortalDateTime,
         formatLong: formatPortalDateTimeLong,
-        formatEvent: formatEventDisplay
+        formatEvent: formatEventDisplay,
+        formatScan: formatScanDateTime
     };
 })(typeof window !== 'undefined' ? window : global);

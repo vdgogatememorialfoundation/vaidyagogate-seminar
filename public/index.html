@@ -13,7 +13,9 @@
     <link rel="stylesheet" href="/css/vgmf-site.css">
     <link rel="stylesheet" href="/css/vgmf-congress.css">
     <link rel="stylesheet" href="/css/vgmf-responsive.css?v=20260520d">
+    <link rel="stylesheet" href="/css/gallery-lightbox.css">
     <script src="/js/portal-datetime.js"></script>
+    <script src="/js/gallery-lightbox.js"></script>
 </head>
 <body class="congress-site" data-portal-theme="public">
     <a href="#main-content" class="vg-skip-link">Skip to main content</a>
@@ -898,7 +900,9 @@
                             const imgs = (yg.images || [])
                                 .map(
                                     (g) =>
-                                        '<div class="card"><img src="' +
+                                        '<div class="card"><img class="vgmf-gallery-thumb" src="' +
+                                        escHtml(g.src || '') +
+                                        '" data-gallery-src="' +
                                         escHtml(g.src || '') +
                                         '" alt="" style="width:100%;height:160px;object-fit:cover;"><div class="card-content"><h3>' +
                                         escHtml(g.caption || '') +
@@ -924,7 +928,9 @@
                         ? gal
                               .map(
                                   (g) =>
-                                      '<div class="card"><img src="' +
+                                      '<div class="card"><img class="vgmf-gallery-thumb" src="' +
+                                      escHtml(g.src || '') +
+                                      '" data-gallery-src="' +
                                       escHtml(g.src || '') +
                                       '" alt="" style="width:100%;height:160px;object-fit:cover;"><div class="card-content"><h3>' +
                                       escHtml(g.caption || '') +
