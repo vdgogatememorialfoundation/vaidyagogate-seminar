@@ -32,7 +32,13 @@
         .participant-panel dt { font-weight: 700; color: #4338ca; }
         #case-contact-overlay { position: fixed; inset: 0; z-index: 10001; background: rgba(49,46,129,0.45); display: flex; align-items: center; justify-content: center; padding: 20px; }
         #case-contact-overlay.hidden { display: none !important; }
-        .contact-panel { background: #fff; border-radius: 16px; max-width: 480px; width: 100%; padding: 24px; border: 1px solid #e0e7ff; }
+        .contact-panel { background: #fff; border-radius: 16px; max-width: 520px; width: 100%; padding: 24px; border: 1px solid #e0e7ff; max-height: 90vh; display: flex; flex-direction: column; }
+        .msg-thread { flex: 1; overflow-y: auto; max-height: 280px; margin: 12px 0; padding: 8px; background: #f8fafc; border-radius: 10px; border: 1px solid #e2e8f0; }
+        .msg-bubble { margin-bottom: 10px; padding: 10px 12px; border-radius: 10px; font-size: 0.88rem; line-height: 1.45; }
+        .msg-bubble.judge { background: #ede9fe; border: 1px solid #c7d2fe; margin-left: 0; margin-right: 24px; }
+        .msg-bubble.participant { background: #ecfdf5; border: 1px solid #a7f3d0; margin-left: 24px; margin-right: 0; }
+        .msg-bubble .msg-meta { font-size: 0.72rem; color: #64748b; margin-bottom: 4px; font-weight: 600; }
+        .msg-bubble .msg-body { white-space: pre-wrap; word-break: break-word; }
         .otp-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 8px; }
         .otp-btn { padding: 6px 12px; border-radius: 8px; border: 1px solid #c7d2fe; background: #f5f3ff; cursor: pointer; font-size: 0.8rem; font-weight: 700; color: #4338ca; }
         #login-err { color: #b91c1c; font-size: 0.85rem; margin-top: 10px; font-weight: 600; }
@@ -121,7 +127,7 @@
             <div>
                 <div data-site-logo data-logo-height="40px" style="margin-bottom:10px;"></div>
                 <h1><i class="fas fa-gavel" style="color:#7c3aed;"></i> Judge Portal</h1>
-                <p class="sub">Score case presentations · view full participant details · email participants via the organisation (your name | VGMF).</p>
+                <p class="sub">Score case presentations · view participant contact details · message participants (your name | VGMF).</p>
             </div>
             <div class="judge-header-actions" style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
                 <span class="badge" id="whoami"></span>
@@ -132,7 +138,7 @@
         </header>
         <div class="card" style="margin-bottom:16px;padding:14px 16px;background:linear-gradient(135deg,#ede9fe,#eef2ff);border:1px solid #c7d2fe;">
             <strong style="color:#4338ca;"><i class="fas fa-envelope"></i> Contact participants</strong>
-            <p style="margin:6px 0 0;font-size:0.88rem;color:#475569;">Open a case → view email, phone, WhatsApp → use <strong>Contact participant</strong>. Messages are sent from the foundation email as <em>Your name | Vaidya Gogate Memorial Foundation</em> (admin can monitor all messages).</p>
+            <p style="margin:6px 0 0;font-size:0.88rem;color:#475569;">Open a case → view application and contact details → use <strong>Messages</strong> to send a note and read participant replies. Outbound email uses <em>Your name | Vaidya Gogate Memorial Foundation</em>.</p>
         </div>
         <div class="card judge-card-scroll" style="margin-bottom:20px;">
             <h3 style="padding:14px 14px 0;font-size:1rem;color:#4338ca;">Case presentations</h3>
@@ -151,7 +157,7 @@
             <p class="muted" id="case-score-meta"></p>
             <div id="case-participant-panel" class="participant-panel hidden"></div>
             <div style="margin-bottom:12px;">
-                <button type="button" class="btn" id="case-contact-participant-btn"><i class="fas fa-envelope"></i> Contact participant</button>
+                <button type="button" class="btn" id="case-contact-participant-btn"><i class="fas fa-comments"></i> Messages</button>
             </div>
             <div id="case-score-locked" class="locked-banner hidden">Scores submitted and locked — cannot be changed.</div>
             <div id="case-score-files" class="case-files-grid"></div>
@@ -168,17 +174,17 @@
 
     <div id="case-contact-overlay" class="hidden" role="dialog" aria-modal="true">
         <div class="contact-panel">
-            <h3 style="color:#312e81;margin-bottom:8px;font-family:'Fraunces',Georgia,serif;">Email participant</h3>
-            <p class="muted" style="margin-bottom:12px;font-size:0.85rem;">Sent via organisation email as <strong id="case-contact-from-label">Judge | Vaidya Gogate Memorial Foundation</strong>. Admin receives a copy when configured.</p>
-            <label style="font-size:0.82rem;font-weight:700;color:#4338ca;">To</label>
-            <input type="email" id="case-contact-to" readonly style="width:100%;padding:8px;margin:4px 0 10px;background:#f1f5f9;border:1px solid #c7d2fe;border-radius:8px;">
-            <label style="font-size:0.82rem;font-weight:700;color:#4338ca;">Subject</label>
-            <input type="text" id="case-contact-subject" style="width:100%;padding:8px;margin:4px 0 10px;border:1px solid #c7d2fe;border-radius:8px;">
-            <label style="font-size:0.82rem;font-weight:700;color:#4338ca;">Message</label>
-            <textarea id="case-contact-message" rows="5" style="width:100%;padding:8px;border:1px solid #c7d2fe;border-radius:8px;"></textarea>
-            <div class="score-actions" style="margin-top:14px;">
-                <button type="button" class="btn btn-submit" id="case-contact-send">Send email</button>
-                <button type="button" class="btn" id="case-contact-cancel">Cancel</button>
+            <h3 style="color:#312e81;margin-bottom:4px;font-family:'Fraunces',Georgia,serif;">Messages</h3>
+            <p class="muted" style="margin-bottom:8px;font-size:0.85rem;">Application <strong id="case-contact-app-label">—</strong> · <span id="case-contact-to-label">—</span></p>
+            <p class="muted" style="margin-bottom:8px;font-size:0.82rem;">From: <strong id="case-contact-from-label">Judge | Vaidya Gogate Memorial Foundation</strong></p>
+            <div id="case-contact-thread" class="msg-thread"><p class="muted" style="padding:8px;">Loading…</p></div>
+            <label id="case-contact-subject-wrap" style="font-size:0.82rem;font-weight:700;color:#4338ca;">Subject (first message only)</label>
+            <input type="text" id="case-contact-subject" style="width:100%;padding:8px;margin:4px 0 8px;border:1px solid #c7d2fe;border-radius:8px;">
+            <label style="font-size:0.82rem;font-weight:700;color:#4338ca;">Your reply</label>
+            <textarea id="case-contact-message" rows="4" style="width:100%;padding:8px;border:1px solid #c7d2fe;border-radius:8px;" placeholder="Type your message…"></textarea>
+            <div class="score-actions" style="margin-top:12px;">
+                <button type="button" class="btn btn-submit" id="case-contact-send">Send</button>
+                <button type="button" class="btn" id="case-contact-cancel">Close</button>
             </div>
             <p id="case-contact-err" class="hidden" style="color:#b91c1c;font-size:0.85rem;margin-top:8px;font-weight:600;"></p>
         </div>
@@ -223,8 +229,7 @@
                 user = u;
                 overlay.classList.add('hidden');
                 app.classList.remove('hidden');
-                whoami.textContent =
-                    (u.first_name || '') + ' ' + (u.last_name || '') + ' · ID ' + (u.user_id_string || u.id);
+                whoami.textContent = [u.first_name, u.last_name].filter(Boolean).join(' ').trim() || 'Judge';
                 if (typeof PortalAuth !== 'undefined' && PortalAuth.renderLoginTime) {
                     PortalAuth.renderLoginTime('judge-login-time', u);
                 }
@@ -304,7 +309,7 @@
                         const tr = document.createElement('tr');
                         tr.innerHTML =
                             '<td><code>' + escapeHtml(String(c.application_no || c.id)) + '</code></td>' +
-                            '<td><strong>' + escapeHtml(name) + '</strong><div class="muted">' + escapeHtml(c.user_id_string || '') + '</div></td>' +
+                            '<td><strong>' + escapeHtml(name) + '</strong></td>' +
                             '<td>' + escapeHtml(c.category || '—') + '</td>' +
                             '<td>' + escapeHtml(c.title || '—') + '</td>' +
                             '<td>' + escapeHtml(c.status || '—') + '</td>' +
@@ -376,8 +381,8 @@
                         partEl.innerHTML =
                             '<h4 style="margin:0 0 10px;color:#4338ca;font-size:0.95rem;"><i class="fas fa-user-md"></i> Participant details</h4>' +
                             '<dl>' +
+                            '<dt>Application</dt><dd><code>' + escapeHtml(p.application_no || '—') + '</code></dd>' +
                             '<dt>Name</dt><dd>' + escapeHtml(p.fullName || '—') + '</dd>' +
-                            '<dt>Portal ID</dt><dd>' + escapeHtml(p.user_id_string || '—') + '</dd>' +
                             '<dt>Email</dt><dd>' + escapeHtml(p.email || '—') + '</dd>' +
                             '<dt>Phone</dt><dd>' + escapeHtml(p.phone || '—') + '</dd>' +
                             '<dt>WhatsApp</dt><dd>' + escapeHtml(p.whatsapp || '—') + '</dd>' +
@@ -498,17 +503,102 @@
                 activeParticipant = null;
             });
 
-            document.getElementById('case-contact-participant-btn').addEventListener('click', () => {
-                if (!activeParticipant || !activeParticipant.email) {
-                    alert('No participant email on file for this submission.');
+            function formatMsgTime(iso) {
+                if (!iso) return '';
+                try {
+                    return new Date(iso).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' });
+                } catch (_) {
+                    return String(iso);
+                }
+            }
+
+            function renderContactThread(messages) {
+                const box = document.getElementById('case-contact-thread');
+                const subWrap = document.getElementById('case-contact-subject-wrap');
+                const subInp = document.getElementById('case-contact-subject');
+                if (!box) return;
+                const list = messages || [];
+                if (!list.length) {
+                    box.innerHTML = '<p class="muted" style="padding:8px;">No messages yet. Send the first message below.</p>';
+                    if (subWrap) subWrap.classList.remove('hidden');
+                    if (subInp) subInp.classList.remove('hidden');
                     return;
                 }
-                document.getElementById('case-contact-to').value = activeParticipant.email;
+                if (subWrap) subWrap.classList.add('hidden');
+                if (subInp) subInp.classList.add('hidden');
+                box.innerHTML = list
+                    .map((m) => {
+                        const isJudge = m.direction === 'judge';
+                        const who = isJudge
+                            ? 'You'
+                            : escapeHtml(m.authorName || 'Participant');
+                        return (
+                            '<div class="msg-bubble ' +
+                            (isJudge ? 'judge' : 'participant') +
+                            '">' +
+                            '<div class="msg-meta">' +
+                            who +
+                            ' · ' +
+                            escapeHtml(formatMsgTime(m.createdAt)) +
+                            '</div>' +
+                            '<div class="msg-body">' +
+                            escapeHtml(m.body || '') +
+                            '</div></div>'
+                        );
+                    })
+                    .join('');
+                box.scrollTop = box.scrollHeight;
+            }
+
+            async function loadContactThread() {
+                const box = document.getElementById('case-contact-thread');
+                if (!box || !activeScoreSubmissionId) return;
+                box.innerHTML = '<p class="muted" style="padding:8px;">Loading…</p>';
+                try {
+                    const jid = judgeNumericUserId();
+                    const res = await fetch(
+                        '/api/judge/case/submissions/' +
+                            activeScoreSubmissionId +
+                            '/messages?judgeUserId=' +
+                            encodeURIComponent(jid) +
+                            '&judgeUserIdString=' +
+                            encodeURIComponent(judgePortalIdString())
+                    );
+                    const data = await res.json();
+                    if (!res.ok) {
+                        box.innerHTML =
+                            '<p style="color:#b91c1c;padding:8px;">' + escapeHtml(data.error || 'Could not load messages') + '</p>';
+                        return;
+                    }
+                    renderContactThread(data.messages || []);
+                } catch (e) {
+                    box.innerHTML = '<p style="color:#b91c1c;padding:8px;">Network error</p>';
+                }
+            }
+
+            document.getElementById('case-contact-participant-btn').addEventListener('click', () => {
+                if (!activeParticipant) {
+                    alert('Participant details not loaded.');
+                    return;
+                }
+                const appLbl = document.getElementById('case-contact-app-label');
+                const toLbl = document.getElementById('case-contact-to-label');
+                if (appLbl) appLbl.textContent = activeParticipant.application_no || '—';
+                if (toLbl) {
+                    toLbl.textContent =
+                        (activeParticipant.fullName || 'Participant') +
+                        (activeParticipant.email ? ' · ' + activeParticipant.email : '');
+                }
                 document.getElementById('case-contact-subject').value =
                     'Regarding your case presentation (' + (activeParticipant.application_no || '') + ')';
                 document.getElementById('case-contact-message').value = '';
                 document.getElementById('case-contact-err').classList.add('hidden');
+                const subWrap = document.getElementById('case-contact-subject-wrap');
+                const subInp = document.getElementById('case-contact-subject');
+                if (subWrap) subWrap.classList.remove('hidden');
+                if (subInp) subInp.classList.remove('hidden');
                 contactOverlay.classList.remove('hidden');
+                loadContactThread();
             });
 
             document.getElementById('case-contact-cancel').addEventListener('click', () => {
@@ -546,8 +636,9 @@
                         errEl.classList.remove('hidden');
                         return;
                     }
-                    alert('Email sent to participant.');
-                    contactOverlay.classList.add('hidden');
+                    errEl.classList.add('hidden');
+                    document.getElementById('case-contact-message').value = '';
+                    await loadContactThread();
                 } catch (e) {
                     errEl.textContent = 'Network error';
                     errEl.classList.remove('hidden');

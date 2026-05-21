@@ -2663,6 +2663,14 @@ function viewCaseApplication(index) {
         locked +
         '</p>' +
         '<hr style="margin:16px 0;border:0;border-top:1px solid #cbd5e1;">' +
+        '<h4 style="color:#4338ca;margin-bottom:8px;"><i class="fas fa-comments"></i> Messages from judges</h4>' +
+        '<div id="case-judge-messages-thread" class="muted" style="font-size:0.88rem;margin-bottom:8px;">Loading messages…</div>' +
+        '<textarea id="case-judge-reply-input" rows="3" style="width:100%;padding:8px;border:1px solid #c7d2fe;border-radius:8px;font-size:0.9rem;" placeholder="Reply to the judge…"></textarea>' +
+        '<button type="button" class="btn-primary" style="margin-top:8px;padding:8px 14px;" onclick="sendCaseJudgeReply(' +
+        c.id +
+        ')"><i class="fas fa-paper-plane"></i> Send reply</button>' +
+        '<p id="case-judge-reply-err" class="hidden" style="color:#b91c1c;font-size:0.85rem;margin-top:6px;"></p>' +
+        '<hr style="margin:16px 0;border:0;border-top:1px solid #cbd5e1;">' +
         '<h4 style="color:#0f766e;margin-bottom:12px;"><i class="fas fa-route"></i> Case presentation tracking</h4>' +
         renderTrackerStepsHtml(c.timeline || {}) +
         '<button type="button" class="btn-primary" style="margin-top:16px;background:#0f766e;" onclick="downloadCaseApplicationPdf()"><i class="fas fa-file-pdf"></i> Download application PDF</button>' +
@@ -2676,6 +2684,115 @@ function viewCaseApplication(index) {
     }
     if (String(c.status || '').toLowerCase() === 'revision_required') {
         loadCaseResubmitPanel(c.id);
+    }
+    loadCaseJudgeMessages(c.id);
+}
+
+function formatCaseMessageTime(iso) {
+    if (!iso) return '';
+    try {
+        return new Date(iso).toLocaleString('en-IN', { dateStyle: 'short', timeStyle: 'short' });
+    } catch (_) {
+        return String(iso);
+    }
+}
+
+function renderCaseJudgeMessages(messages) {
+    const box = document.getElementById('case-judge-messages-thread');
+    if (!box) return;
+    const list = messages || [];
+    if (!list.length) {
+        box.innerHTML = '<p class="muted">No messages from judges yet.</p>';
+        return;
+    }
+    box.innerHTML = list
+        .map((m) => {
+            const isJudge = m.direction === 'judge';
+            const who = isJudge
+                ? escapeHtml(m.judgeName || 'Judge')
+                : 'You';
+            const bg = isJudge ? '#ede9fe' : '#ecfdf5';
+            const border = isJudge ? '#c7d2fe' : '#a7f3d0';
+            return (
+                '<div style="margin-bottom:10px;padding:10px 12px;background:' +
+                bg +
+                ';border:1px solid ' +
+                border +
+                ';border-radius:8px;">' +
+                '<div style="font-size:0.72rem;color:#64748b;font-weight:600;margin-bottom:4px;">' +
+                who +
+                ' · ' +
+                escapeHtml(formatCaseMessageTime(m.createdAt)) +
+                '</div>' +
+                '<div style="white-space:pre-wrap;word-break:break-word;">' +
+                escapeHtml(m.body || '') +
+                '</div></div>'
+            );
+        })
+        .join('');
+}
+
+async function loadCaseJudgeMessages(submissionId) {
+    const box = document.getElementById('case-judge-messages-thread');
+    const uid = doctorNumericUserId();
+    if (!box || !uid) return;
+    box.innerHTML = '<p class="muted">Loading messages…</p>';
+    try {
+        const res = await fetch(
+            '/api/doctor/case/submissions/' +
+                submissionId +
+                '/messages?userId=' +
+                encodeURIComponent(uid)
+        );
+        const data = await res.json();
+        if (!res.ok) {
+            box.innerHTML =
+                '<p style="color:#b91c1c;">' + escapeHtml(data.error || 'Could not load messages') + '</p>';
+            return;
+        }
+        renderCaseJudgeMessages(data.messages || []);
+    } catch (e) {
+        console.error(e);
+        box.innerHTML = '<p style="color:#b91c1c;">Network error loading messages.</p>';
+    }
+}
+
+async function sendCaseJudgeReply(submissionId) {
+    const uid = doctorNumericUserId();
+    if (!uid) return alert('Please sign in again.');
+    const inp = document.getElementById('case-judge-reply-input');
+    const errEl = document.getElementById('case-judge-reply-err');
+    const message = inp && inp.value ? inp.value.trim() : '';
+    if (!message) {
+        if (errEl) {
+            errEl.textContent = 'Please enter a reply.';
+            errEl.classList.remove('hidden');
+        }
+        return;
+    }
+    if (errEl) errEl.classList.add('hidden');
+    try {
+        const res = await fetch('/api/doctor/case/submissions/' + submissionId + '/reply', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: uid, message })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            if (errEl) {
+                errEl.textContent = data.error || 'Could not send reply';
+                errEl.classList.remove('hidden');
+            }
+            return;
+        }
+        if (inp) inp.value = '';
+        await loadCaseJudgeMessages(submissionId);
+    } catch (e) {
+        console.error(e);
+        if (errEl) {
+            errEl.textContent = 'Network error';
+            errEl.classList.remove('hidden');
+        }
     }
 }
 
