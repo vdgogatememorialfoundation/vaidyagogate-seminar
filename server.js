@@ -461,6 +461,11 @@ function withCertificateUpload(req, res, next) {
     });
 }
 const fileStore = require('./lib/file-store');
+
+/** Multer middleware: memory on Vercel, disk locally; assigns stable filenames. */
+function withMemoryAwareUpload(field) {
+    return fileStore.createUploadHandler(upload, memoryUpload).single(field);
+}
 const siteCmsHelpers = require('./lib/site-cms-helpers');
 const caseUpload = fileStore.createUploadHandler(upload, memoryUpload);
 
@@ -4481,11 +4486,27 @@ app.post('/api/applications/:applicationId/cancel', (req, res) => {
 // 6. Doctor Profile Management
 // Create or update doctor profile
 app.post('/api/doctor/profile', (req, res) => {
-    const profileUpload = (process.env.VERCEL ? memoryUpload : upload).single('profilePhoto');
-    profileUpload(req, res, (uploadErr) => {
+    withMemoryAwareUpload('profilePhoto')(req, res, (uploadErr) => {
         if (uploadErr) {
             return res.status(400).json({ error: uploadErrorMessage(uploadErr) });
         }
+        // #region agent log
+        try {
+            const dbg = require('./lib/debug-agent-log');
+            dbg.agentLog(
+                'server.js:doctor/profile',
+                'profile save request',
+                {
+                    vercel: !!process.env.VERCEL,
+                    useBlob: fileStore.useBlobStore(),
+                    hasFile: !!req.file,
+                    bufferLen: req.file && req.file.buffer ? req.file.buffer.length : 0,
+                    filePath: req.file && req.file.path ? 'set' : 'none'
+                },
+                'H1'
+            );
+        } catch (_) {}
+        // #endregion
         const userId = parseInt(req.body.userId, 10);
         if (!Number.isInteger(userId) || userId < 1) {
             return res.status(400).json({ error: 'Invalid session. Please sign in again.' });
@@ -4571,12 +4592,22 @@ app.post('/api/doctor/profile', (req, res) => {
 
         if (req.file) {
             return fileStore.persistMulterFile(db, req.file, uploadsDir, (pErr, photoPath) => {
+                // #region agent log
+                try {
+                    const dbg = require('./lib/debug-agent-log');
+                    dbg.agentLog(
+                        'server.js:doctor/profile:persist',
+                        pErr ? 'persist failed' : 'persist ok',
+                        { err: pErr ? pErr.message : null, photoPath: photoPath || null },
+                        'H3'
+                    );
+                } catch (_) {}
+                // #endregion
                 if (pErr) return res.status(500).json({ error: pErr.message });
                 saveProfile(photoPath);
             });
         }
         saveProfile(null);
-    });
 });
 
 // Get doctor profile
@@ -6228,16 +6259,23 @@ app.get('/api/admin/seminars/:id/capacity', (req, res) => {
 });
 
 // Admin: Add Notice
-app.post('/api/admin/notices', upload.single('pdf'), (req, res) => {
+app.post('/api/admin/notices', withMemoryAwareUpload('pdf'), (req, res) => {
     const { seminar_id, message } = req.body;
-    const pdfPath = req.file ? req.file.filename : null;
-    
-    db.run(`INSERT INTO notices (seminar_id, message, pdf_path) VALUES (?, ?, ?)`,
-        [seminar_id || null, message, pdfPath],
-        function(err) {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json({ success: true, noticeId: this.lastID });
-        });
+    const finish = (pdfPath) => {
+        db.run(
+            `INSERT INTO notices (seminar_id, message, pdf_path) VALUES (?, ?, ?)`,
+            [seminar_id || null, message, pdfPath],
+            function (err) {
+                if (err) return res.status(500).json({ error: err.message });
+                res.json({ success: true, noticeId: this.lastID });
+            }
+        );
+    };
+    if (!req.file) return finish(null);
+    fileStore.persistMulterFile(db, req.file, uploadsDir, (pErr, stored) => {
+        if (pErr) return res.status(500).json({ error: pErr.message });
+        finish(stored ? stored.replace(/^\/uploads\//, '') : null);
+    });
 });
 
 // Admin: Get Seminar Live Scans
@@ -7097,7 +7135,7 @@ app.get('/api/admin/certificates/template-config', (req, res) => {
     });
 });
 
-app.post('/api/admin/certificates/signature-image', upload.single('signatureFile'), (req, res) => {
+app.post('/api/admin/certificates/signature-image', withMemoryAwareUpload('signatureFile'), (req, res) => {
     const seminarId = parseInt(req.body && req.body.seminarId, 10);
     const certType =
         req.body && String(req.body.certType || 'participant').toLowerCase() === 'volunteer'
@@ -7108,7 +7146,7 @@ app.post('/api/admin/certificates/signature-image', upload.single('signatureFile
     if (!Number.isInteger(seminarId) || seminarId < 1) {
         return res.status(400).json({ error: 'seminarId is required' });
     }
-    const relPath = '/uploads/' + req.file.filename;
+    const applySignature = (relPath) => {
     const col = side === 'left' ? 'signature_left_path' : 'signature_right_path';
     certRender.getActiveTemplate(db, seminarId, certType, (e, tpl) => {
         if (e) return res.status(500).json({ error: e.message });
@@ -7130,6 +7168,11 @@ app.post('/api/admin/certificates/signature-image', upload.single('signatureFile
                 });
             }
         );
+    });
+    };
+    fileStore.persistMulterFile(db, req.file, uploadsDir, (pErr, relPath) => {
+        if (pErr) return res.status(500).json({ error: pErr.message });
+        applySignature(relPath);
     });
 });
 
@@ -7158,66 +7201,76 @@ app.post('/api/admin/certificates/preview', (req, res) => {
 });
 
 // Admin: certificate template upload
-app.post('/api/admin/certificates/template', upload.single('templateFile'), (req, res) => {
+app.post('/api/admin/certificates/template', withMemoryAwareUpload('templateFile'), (req, res) => {
     const seminarId = parseInt(req.body.seminarId, 10);
     const adminUserId = parseInt(req.body.adminUserId, 10);
     if (!req.file) return res.status(400).json({ error: 'templateFile is required (image or document)' });
     if (!Number.isInteger(seminarId) || seminarId < 1) return res.status(400).json({ error: 'seminarId is required' });
 
-    const relPath = '/uploads/' + req.file.filename;
     const certType =
         req.body && String(req.body.certType || 'participant').toLowerCase() === 'volunteer'
             ? 'volunteer'
             : 'participant';
-    db.run(
-        `UPDATE certificate_templates SET is_active = 0 WHERE seminar_id = ? AND IFNULL(cert_type,'participant') = ?`,
-        [seminarId, certType],
-        () => {
+    fileStore.persistMulterFile(db, req.file, uploadsDir, (pErr, relPath) => {
+        if (pErr) return res.status(500).json({ error: pErr.message });
         db.run(
-            `INSERT INTO certificate_templates (seminar_id, file_path, original_name, mime_type, uploaded_by, is_active, cert_type) VALUES (?, ?, ?, ?, ?, 1, ?)`,
-            [seminarId, relPath, req.file.originalname, req.file.mimetype, Number.isInteger(adminUserId) ? adminUserId : null, certType],
-            function (err) {
-                if (err) return res.status(500).json({ error: err.message });
-                const templateId = this.lastID;
-                const linkEnabledCerts = (cbLink) => {
-                    if (certType !== 'participant') return cbLink();
-                    db.run(
-                        `UPDATE user_certificates SET template_id = ?, updated_at = CURRENT_TIMESTAMP
-                         WHERE seminar_id = ? AND enabled = 1`,
-                        [templateId, seminarId],
-                        () => cbLink()
-                    );
-                };
-                linkEnabledCerts(() => {
-                db.all(
-                    `SELECT t.id FROM tickets t
-                     JOIN orders o ON o.id = t.order_id AND o.status = 'success'
-                     JOIN registrations r ON r.id = o.registration_id AND r.seminar_id = ?
-                     WHERE t.is_scanned = 1`,
-                    [seminarId],
-                    (e2, tickets) => {
-                        if (e2) return res.status(500).json({ error: e2.message });
-                        const list = tickets || [];
-                        let i = 0;
-                        const next = () => {
-                            if (i >= list.length) {
-                                return res.json({
-                                    success: true,
-                                    templateId,
-                                    filePath: relPath,
-                                    refreshedEligible: list.length,
-                                    linkedEnabledCertificates: true
-                                });
-                            }
-                            syncCertificateEligibilityForTicket(list[i].id, () => {
-                                i++;
-                                next();
-                            });
+            `UPDATE certificate_templates SET is_active = 0 WHERE seminar_id = ? AND IFNULL(cert_type,'participant') = ?`,
+            [seminarId, certType],
+            () => {
+                db.run(
+                    `INSERT INTO certificate_templates (seminar_id, file_path, original_name, mime_type, uploaded_by, is_active, cert_type) VALUES (?, ?, ?, ?, ?, 1, ?)`,
+                    [
+                        seminarId,
+                        relPath,
+                        req.file.originalname,
+                        req.file.mimetype,
+                        Number.isInteger(adminUserId) ? adminUserId : null,
+                        certType
+                    ],
+                    function (err) {
+                        if (err) return res.status(500).json({ error: err.message });
+                        const templateId = this.lastID;
+                        const linkEnabledCerts = (cbLink) => {
+                            if (certType !== 'participant') return cbLink();
+                            db.run(
+                                `UPDATE user_certificates SET template_id = ?, updated_at = CURRENT_TIMESTAMP
+                                 WHERE seminar_id = ? AND enabled = 1`,
+                                [templateId, seminarId],
+                                () => cbLink()
+                            );
                         };
-                        next();
+                        linkEnabledCerts(() => {
+                            db.all(
+                                `SELECT t.id FROM tickets t
+                                 JOIN orders o ON o.id = t.order_id AND o.status = 'success'
+                                 JOIN registrations r ON r.id = o.registration_id AND r.seminar_id = ?
+                                 WHERE t.is_scanned = 1`,
+                                [seminarId],
+                                (e2, tickets) => {
+                                    if (e2) return res.status(500).json({ error: e2.message });
+                                    const list = tickets || [];
+                                    let i = 0;
+                                    const next = () => {
+                                        if (i >= list.length) {
+                                            return res.json({
+                                                success: true,
+                                                templateId,
+                                                filePath: relPath,
+                                                refreshedEligible: list.length,
+                                                linkedEnabledCertificates: true
+                                            });
+                                        }
+                                        syncCertificateEligibilityForTicket(list[i].id, () => {
+                                            i++;
+                                            next();
+                                        });
+                                    };
+                                    next();
+                                }
+                            );
+                        });
                     }
                 );
-                });
             }
         );
     });
