@@ -15,7 +15,7 @@
     <link rel="stylesheet" href="/css/vgmf-responsive.css?v=20260520d">
     <script src="/js/portal-datetime.js"></script>
 </head>
-<body class="congress-site">
+<body class="congress-site" data-portal-theme="public">
     <a href="#main-content" class="vg-skip-link">Skip to main content</a>
     <div id="site-preloader" aria-hidden="true"><div class="preloader-ring"></div><p style="color:var(--muted);font-weight:600;">Loading seminar portal…</p></div>
 
@@ -71,7 +71,7 @@
             <span id="cg-nav-menu-fixed">
                 <a href="#" onclick="openAuthModal('login'); return false;">Sign in</a>
                 <a id="nav-wix-home" href="https://www.vaidyagogate.org" target="_blank" rel="noopener" class="hidden">Main site</a>
-                <a href="/doctor.html">Portal</a>
+                <a href="/doctor.html">Doctor's Portal Sign In</a>
                 <a href="/?register=1" class="cg-btn-register" data-portal-auth="signup" onclick="openRegisterModal(); return false;">Create account</a>
             </span>
         </nav>
@@ -122,7 +122,7 @@
                 <div>
                     <div class="section-head left">
                         <h2 id="section-features-title">Programme highlights</h2>
-                        <p id="section-features-subtitle">Clinical learning, research, and professional networking</p>
+                        <p id="section-features-subtitle">Clinical learning, research and professional networking</p>
                     </div>
                     <div class="cards-grid" id="feature-cards-grid"></div>
                 </div>
@@ -431,6 +431,7 @@
     <script src="/js/portal-content-protection.js"></script>
     <script src="/js/portal-scrolling-announcements.js"></script>
     <script src="/js/vgmf-home.js"></script>
+    <script src="/js/portal-theme.js"></script>
     <script src="/js/vgmf-congress.js?v=20260520e"></script>
     <script src="/js/vgmf-home-stats.js"></script>
     <script src="/js/vgmf-marketing.js"></script>
@@ -1550,9 +1551,13 @@
         // Countdown: uses each seminar's registration_start / registration_end, then event_date (admin "Set as homepage countdown" picks the featured seminar).
         function getCountdownTargetForSeminar(s) {
             const now = Date.now();
-            const regStart = s.registration_start ? new Date(s.registration_start).getTime() : null;
-            const regEnd = s.registration_end ? new Date(s.registration_end).getTime() : null;
-            const eventT = s.event_date ? new Date(s.event_date).getTime() : null;
+            const parseMs =
+                window.PortalDateTime && window.PortalDateTime.parseMs
+                    ? (v) => window.PortalDateTime.parseMs(v)
+                    : (v) => (v ? new Date(v).getTime() : null);
+            const regStart = parseMs(s.registration_start);
+            const regEnd = parseMs(s.registration_end);
+            const eventT = parseMs(s.event_date);
             if (regStart != null && !Number.isNaN(regStart) && now < regStart) {
                 return { t: regStart, label: 'Registration opens in' };
             }

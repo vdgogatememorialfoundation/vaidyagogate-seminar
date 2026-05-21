@@ -589,6 +589,55 @@
                     <button type="button" class="btn-primary" style="background:#b45309;" onclick="saveDesignatedNotifyConfig()">Save designated contacts</button>
                     <p id="dn-save-msg" style="margin-top:8px;font-weight:600;font-size:0.9rem;"></p>
                         </div>
+                <div class="card" style="margin-bottom:18px;border:1px solid #ddd6fe;background:#f5f3ff;">
+                    <h3 style="margin:0 0 10px;color:#5b21b6;font-size:1.05rem;">Portal themes (main site, doctor, judge)</h3>
+                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:12px;">Primary colours and accents for each portal. Doctors and judges see changes after refresh.</p>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;">
+                        <div><strong style="font-size:0.85rem;color:#0f766e;">Public site</strong>
+                            <label style="font-size:0.78rem;display:block;margin-top:8px;">Primary</label><input type="color" id="pt-public-primary" value="#0f766e" style="width:100%;height:36px;">
+                            <label style="font-size:0.78rem;display:block;margin-top:6px;">Accent (gold)</label><input type="color" id="pt-public-accent" value="#c9a227" style="width:100%;height:36px;">
+                        </div>
+                        <div><strong style="font-size:0.85rem;color:#0f766e;">Doctor portal</strong>
+                            <label style="font-size:0.78rem;display:block;margin-top:8px;">Primary / sidebar</label><input type="color" id="pt-doctor-primary" value="#0f766e" style="width:100%;height:36px;">
+                            <label style="font-size:0.78rem;display:block;margin-top:6px;">Accent</label><input type="color" id="pt-doctor-accent" value="#fbbf24" style="width:100%;height:36px;">
+                        </div>
+                        <div><strong style="font-size:0.85rem;color:#5b21b6;">Judge portal</strong>
+                            <label style="font-size:0.78rem;display:block;margin-top:8px;">Primary</label><input type="color" id="pt-judge-primary" value="#7c3aed" style="width:100%;height:36px;">
+                            <label style="font-size:0.78rem;display:block;margin-top:6px;">Accent</label><input type="color" id="pt-judge-accent" value="#a78bfa" style="width:100%;height:36px;">
+                        </div>
+                    </div>
+                    <button type="button" class="btn-primary" style="margin-top:12px;background:#5b21b6;" onclick="savePortalThemesAdmin()">Save portal themes</button>
+                    <p id="pt-save-msg" style="margin-top:8px;font-weight:600;font-size:0.9rem;"></p>
+                </div>
+                <div class="card" style="margin-bottom:18px;border:1px solid #fecaca;background:#fef2f2;">
+                    <h3 style="margin:0 0 10px;color:#b91c1c;font-size:1.05rem;">Pending registration reminders</h3>
+                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:10px;">Email/WhatsApp nudges for doctors who have not completed documents (uses notification template <code>REGISTRATION_PENDING_REMINDER</code>). Runs daily on server cron (10:00 UTC on Vercel).</p>
+                    <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;margin-bottom:8px;"><input type="checkbox" id="pr-enabled"> Enable automatic reminders</label>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;max-width:640px;">
+                        <div><label style="font-size:0.82rem;">Every N days</label><input type="number" id="pr-interval-days" min="1" max="30" value="3" style="width:100%;padding:8px;"></div>
+                        <div><label style="font-size:0.82rem;">Max reminders per application</label><input type="number" id="pr-max-reminders" min="1" max="20" value="5" style="width:100%;padding:8px;"></div>
+                        <div><label style="font-size:0.82rem;display:flex;align-items:center;gap:6px;margin-top:22px;"><input type="checkbox" id="pr-require-docs" checked> Only if documents missing</label></div>
+                    </div>
+                    <p style="font-size:0.82rem;color:#64748b;margin:10px 0 6px;">Statuses (comma-separated):</p>
+                    <input type="text" id="pr-statuses" style="width:100%;max-width:640px;padding:8px;" value="submitted,pending_approval,revision_required">
+                    <div style="margin-top:10px;display:flex;gap:14px;font-size:0.9rem;">
+                        <label><input type="checkbox" id="pr-ch-email" checked> Email</label>
+                        <label><input type="checkbox" id="pr-ch-wa" checked> WhatsApp</label>
+                    </div>
+                    <button type="button" class="btn-primary" style="margin-top:12px;background:#b91c1c;" onclick="savePendingReminderAdminConfig()">Save reminder settings</button>
+                    <p id="pr-save-msg" style="margin-top:8px;font-weight:600;font-size:0.9rem;"></p>
+                </div>
+                <div class="card" style="margin-bottom:18px;border:1px solid #c7d2fe;background:#eef2ff;">
+                    <h3 style="margin:0 0 10px;color:#4338ca;font-size:1.05rem;">Judge → participant emails (monitoring)</h3>
+                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:10px;">When judges contact participants, emails are sent from the organisation address with sender name <em>Judge Name | Vaidya Gogate Memorial Foundation</em>. A copy goes to the admin contact email if configured.</p>
+                    <button type="button" class="btn-primary" style="background:#4338ca;padding:8px 14px;font-size:0.9rem;" onclick="loadJudgeCommunicationsAdmin()">Refresh log</button>
+                    <div style="overflow-x:auto;margin-top:12px;">
+                        <table style="width:100%;font-size:0.85rem;border-collapse:collapse;">
+                            <thead><tr style="background:#e0e7ff;"><th style="padding:8px;text-align:left;">When</th><th>Judge</th><th>To</th><th>Subject</th><th>Status</th></tr></thead>
+                            <tbody id="judge-comm-tbody"><tr><td colspan="5" style="padding:12px;color:#64748b;">Click Refresh log</td></tr></tbody>
+                        </table>
+                    </div>
+                </div>
                 <div class="card" style="margin-bottom:18px;border:1px solid #bbf7d0;background:#f0fdf4;">
                     <h3 style="margin:0 0 10px;color:#166534;font-size:1.05rem;">Venue change broadcast</h3>
                     <p style="color:#64748b;font-size:0.88rem;margin-bottom:10px;">After updating <em>Venue line</em> below, send email and WhatsApp to all <strong>paid</strong> registrants. Seminar dates in notifications use India Standard Time (IST).</p>

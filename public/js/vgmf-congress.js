@@ -19,7 +19,7 @@
 
     const QUICK_ACCESS = [
         { icon: 'fa-user-plus', title: 'Start enrollment', text: 'Create your doctor account', action: 'register' },
-        { icon: 'fa-user-md', title: 'Doctor workspace', text: 'Sign in and manage applications', href: '/doctor.html' },
+        { icon: 'fa-user-md', title: "Doctor's Portal Sign In", text: 'Sign in and manage applications', href: '/doctor.html' },
         { icon: 'fa-calendar-alt', title: 'Event agenda', text: 'Sessions and timings', section: 'schedule' },
         { icon: 'fa-microphone', title: 'Faculty board', text: 'Featured experts', section: 'home', anchor: 'speakers-section' },
         { icon: 'fa-ticket-alt', title: 'Open windows', text: 'Current registrations', section: 'home', anchor: 'seminars-section' },
@@ -72,7 +72,7 @@
                 title: sl.title || (cms.hero && cms.hero.title) || 'National Seminar',
                 subtitle: sl.subtitle || (cms.hero && cms.hero.subtitle) || '',
                 cta: sl.cta || (cms.hero && cms.hero.ctaPrimary) || 'Register now',
-                link: sl.link || '/doctor.html',
+                link: sl.link || '#register',
                 cta2: sl.cta2 || '',
                 link2: sl.link2 || ''
             });
@@ -83,7 +83,7 @@
                 title: cms.hero.title || 'National Seminar',
                 subtitle: cms.hero.subtitle || '',
                 cta: cms.hero.ctaPrimary || 'Register now',
-                link: '/doctor.html',
+                link: '#register',
                 cta2: cms.hero.ctaSecondary || 'View programme',
                 link2: '#schedule'
             });
@@ -94,7 +94,7 @@
                 title: 'VGMF National Seminar',
                 subtitle: 'Ayurveda · Education · Excellence',
                 cta: 'Register now',
-                link: '/doctor.html',
+                link: '#register',
                 cta2: 'Programme',
                 link2: '#'
             });
@@ -123,6 +123,23 @@
         heroTimer = setInterval(() => showHeroSlide(heroIndex + 1), 6000);
     }
 
+    function heroPrimaryCtaAttrs(sl) {
+        const link = String(sl.link || '').trim();
+        const cta = String(sl.cta || '');
+        const isRegister =
+            link === '#register' ||
+            link === '/doctor.html' ||
+            /register/i.test(cta) ||
+            /register/i.test(link);
+        if (isRegister) {
+            return {
+                href: '#',
+                onclick: ' onclick="if(typeof openRegisterModal===\'function\'){openRegisterModal();}return false;"'
+            };
+        }
+        return { href: esc(link || '#'), onclick: '' };
+    }
+
     window.renderCongressHero = function renderCongressHero(cms) {
         const root = document.getElementById('congress-hero-slides');
         const dots = document.getElementById('congress-hero-dots');
@@ -137,6 +154,7 @@
                     sl.cta2 && sl.link2
                         ? `<a href="${esc(sl.link2)}" class="cg-btn-ghost" onclick="${sl.link2 === '#' ? "showSection('schedule');return false;" : ''}">${esc(sl.cta2)}</a>`
                         : '';
+                const primary = heroPrimaryCtaAttrs(sl);
                 return (
                     '<div class="congress-hero-slide' +
                     (i === 0 ? ' is-active' : '') +
@@ -157,8 +175,10 @@
                     '</p>' +
                     '<div class="congress-hero-actions">' +
                     '<a href="' +
-                    esc(sl.link) +
-                    '" class="cg-btn-primary">' +
+                    primary.href +
+                    '" class="cg-btn-primary"' +
+                    primary.onclick +
+                    '>' +
                     esc(sl.cta) +
                     ' <i class="fas fa-arrow-right"></i></a>' +
                     cta2 +
@@ -558,6 +578,13 @@
     window.applySiteCms = function (cms) {
         if (origApply) origApply(cms);
         if (typeof window.applySiteMenu === 'function') window.applySiteMenu(cms);
+        const featSub = document.getElementById('section-features-subtitle');
+        if (featSub && cms && cms.featuresSubtitle) {
+            featSub.textContent = String(cms.featuresSubtitle)
+                .trim()
+                .replace(/^,\s*/, '')
+                .replace(/,\s+and\b/gi, ' and');
+        }
         renderCongressHero(cms);
         renderCongressTicker(cms.scrollingAnnouncements || []);
         renderCongressPastSeminars(cms);

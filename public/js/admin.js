@@ -2787,7 +2787,7 @@ async function saveAdminCaseProgram() {
         maxPresentationsPerUser: (document.getElementById('case-prog-max-per-user') || {}).value || 2,
         maxTotalSubmissions: (document.getElementById('case-prog-max-total') || {}).value || null,
         maxFilesPerSubmission: (document.getElementById('case-prog-max-files') || {}).value || 5,
-        maxFileSizeMb: (document.getElementById('case-prog-max-mb') || {}).value || 50,
+        maxFileSizeMb: (document.getElementById('case-prog-max-mb') || {}).value || 100,
         enabledCategories: enabledCategories,
         isActive: document.getElementById('case-prog-active') ? document.getElementById('case-prog-active').checked !== false : true,
         formConfig: collectCaseProgramFormConfig(),
@@ -7794,6 +7794,162 @@ async function loadDesignatedNotifyAdminForm() {
     } catch (_) {}
 }
 
+function themeColorInput(id, theme, key) {
+    const el = document.getElementById(id);
+    if (!el || !theme) return;
+    const v = theme[key];
+    if (v && /^#[0-9a-f]{3,8}$/i.test(v)) el.value = v;
+}
+
+async function loadPortalThemesAdminForm() {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return;
+    try {
+        const res = await fetch(`/api/admin/portal-themes?actingAdminId=${encodeURIComponent(adm.id)}`);
+        const d = await res.json();
+        if (!d.success || !d.themes) return;
+        themeColorInput('pt-public-primary', d.themes.public, 'primary');
+        themeColorInput('pt-public-accent', d.themes.public, 'accent');
+        themeColorInput('pt-doctor-primary', d.themes.doctor, 'primary');
+        themeColorInput('pt-doctor-accent', d.themes.doctor, 'accent');
+        themeColorInput('pt-judge-primary', d.themes.judge, 'primary');
+        themeColorInput('pt-judge-accent', d.themes.judge, 'accent');
+    } catch (_) {}
+}
+
+async function savePortalThemesAdmin() {
+    const adm = getStoredAdminUser();
+    const msg = document.getElementById('pt-save-msg');
+    if (!adm || !adm.id) return;
+    const pick = (id) => (document.getElementById(id) || {}).value || '';
+    const themes = {
+        public: { primary: pick('pt-public-primary'), accent: pick('pt-public-accent') },
+        doctor: { primary: pick('pt-doctor-primary'), accent: pick('pt-doctor-accent'), sidebar: pick('pt-doctor-primary') },
+        judge: { primary: pick('pt-judge-primary'), accent: pick('pt-judge-accent'), primaryMid: pick('pt-judge-primary') }
+    };
+    try {
+        const res = await fetch('/api/admin/portal-themes', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: adm.id, themes })
+        });
+        const data = await res.json();
+        if (msg) {
+            msg.style.color = data.success ? '#15803d' : '#b91c1c';
+            msg.textContent = data.success ? 'Portal themes saved.' : data.error || 'Save failed.';
+        }
+    } catch (e) {
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = 'Network error.';
+        }
+    }
+}
+
+async function loadPendingReminderAdminForm() {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return;
+    try {
+        const res = await fetch(
+            `/api/admin/pending-registration-reminder-config?actingAdminId=${encodeURIComponent(adm.id)}`
+        );
+        const d = await res.json();
+        if (!d.success || !d.config) return;
+        const c = d.config;
+        const en = document.getElementById('pr-enabled');
+        if (en) en.checked = !!c.enabled;
+        const id = document.getElementById('pr-interval-days');
+        if (id) id.value = c.intervalDays || 3;
+        const mx = document.getElementById('pr-max-reminders');
+        if (mx) mx.value = c.maxReminders || 5;
+        const rd = document.getElementById('pr-require-docs');
+        if (rd) rd.checked = c.requireMissingDocuments !== false;
+        const st = document.getElementById('pr-statuses');
+        if (st && Array.isArray(c.statuses)) st.value = c.statuses.join(',');
+        const ch = c.channels || {};
+        const ce = document.getElementById('pr-ch-email');
+        if (ce) ce.checked = ch.email !== false;
+        const cw = document.getElementById('pr-ch-wa');
+        if (cw) cw.checked = ch.whatsapp !== false;
+    } catch (_) {}
+}
+
+async function savePendingReminderAdminConfig() {
+    const adm = getStoredAdminUser();
+    const msg = document.getElementById('pr-save-msg');
+    if (!adm || !adm.id) return;
+    const statuses = String((document.getElementById('pr-statuses') || {}).value || '')
+        .split(/[,]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+    const config = {
+        enabled: !!(document.getElementById('pr-enabled') || {}).checked,
+        intervalDays: parseInt((document.getElementById('pr-interval-days') || {}).value, 10) || 3,
+        maxReminders: parseInt((document.getElementById('pr-max-reminders') || {}).value, 10) || 5,
+        requireMissingDocuments: !!(document.getElementById('pr-require-docs') || {}).checked,
+        statuses,
+        channels: {
+            email: !!(document.getElementById('pr-ch-email') || {}).checked,
+            whatsapp: !!(document.getElementById('pr-ch-wa') || {}).checked
+        }
+    };
+    try {
+        const res = await fetch('/api/admin/pending-registration-reminder-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: adm.id, config })
+        });
+        const data = await res.json();
+        if (msg) {
+            msg.style.color = data.success ? '#15803d' : '#b91c1c';
+            msg.textContent = data.success ? 'Reminder settings saved.' : data.error || 'Save failed.';
+        }
+    } catch (e) {
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = 'Network error.';
+        }
+    }
+}
+
+async function loadJudgeCommunicationsAdmin() {
+    const adm = getStoredAdminUser();
+    const tbody = document.getElementById('judge-comm-tbody');
+    if (!tbody || !adm || !adm.id) return;
+    tbody.innerHTML = '<tr><td colspan="5" style="padding:12px;">Loading…</td></tr>';
+    try {
+        const res = await fetch(
+            `/api/admin/judge-communications?actingAdminId=${encodeURIComponent(adm.id)}&limit=80`
+        );
+        const d = await res.json();
+        const rows = d.communications || [];
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="5" style="padding:12px;color:#64748b;">No judge emails logged yet.</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows
+            .map((r) => {
+                const judge = [r.judge_first, r.judge_last].filter(Boolean).join(' ') || r.judge_uid || '—';
+                return (
+                    '<tr><td style="padding:8px;border-bottom:1px solid #e2e8f0;">' +
+                    (r.created_at || '').slice(0, 19) +
+                    '</td><td style="padding:8px;border-bottom:1px solid #e2e8f0;">' +
+                    judge +
+                    '</td><td style="padding:8px;border-bottom:1px solid #e2e8f0;">' +
+                    (r.to_address || '') +
+                    '</td><td style="padding:8px;border-bottom:1px solid #e2e8f0;">' +
+                    (r.subject || '') +
+                    '</td><td style="padding:8px;border-bottom:1px solid #e2e8f0;">' +
+                    (r.status || '') +
+                    '</td></tr>'
+                );
+            })
+            .join('');
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="5" style="padding:12px;color:#b91c1c;">Could not load log.</td></tr>';
+    }
+}
+
 async function saveDesignatedNotifyConfig() {
     const adm = getStoredAdminUser();
     const msg = document.getElementById('dn-save-msg');
@@ -7899,6 +8055,9 @@ async function loadAdminSiteCms() {
     if (!tickerEl) return;
     loadPortalAuthAdminForm().catch(console.error);
     loadDesignatedNotifyAdminForm().catch(console.error);
+    loadPortalThemesAdminForm().catch(console.error);
+    loadPendingReminderAdminForm().catch(console.error);
+    loadJudgeCommunicationsAdmin().catch(console.error);
     populateVenueBroadcastSeminars().catch(console.error);
     try {
         const res = await fetch('/api/public/site-cms');

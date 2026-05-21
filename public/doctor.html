@@ -5,20 +5,28 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta name="theme-color" content="#0f766e">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <title>Doctor portal | VGMF National Seminar</title>
+    <title>Doctor's Portal | VGMF National Seminar</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="/css/responsive-portals.css">
     <link rel="stylesheet" href="/css/vgmf-portal-bright.css">
     <link rel="stylesheet" href="/css/vgmf-mobile-portal.css">
     <style>
+        :root {
+            --doctor-primary: #0f766e;
+            --doctor-primary-dark: #115e59;
+            --doctor-accent: #fbbf24;
+            --doctor-sidebar: #0f766e;
+            --doctor-bg: #f8fafc;
+            --doctor-text: #134e4a;
+        }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Inter', system-ui, sans-serif; background: linear-gradient(180deg, #f0fdfa 0%, #ecfeff 35%, #f8fafc 100%); color: #134e4a; }
+        body { font-family: 'Inter', system-ui, sans-serif; background: linear-gradient(180deg, #f0fdfa 0%, #ecfeff 35%, var(--doctor-bg) 100%); color: var(--doctor-text); }
         
         .hidden { display: none !important; }
         .dashboard-container { display: flex; min-height: 100vh; }
         
-        .sidebar { width: 288px; background: linear-gradient(185deg, #115e59 0%, #0f766e 55%, #134e4a 100%); box-shadow: 8px 0 32px rgba(15, 118, 110, 0.18); display: flex; flex-direction: column; z-index: 10; color: #ccfbf1; }
+        .sidebar { width: 288px; background: linear-gradient(185deg, var(--doctor-primary-dark) 0%, var(--doctor-sidebar) 55%, #134e4a 100%); box-shadow: 8px 0 32px rgba(15, 118, 110, 0.18); display: flex; flex-direction: column; z-index: 10; color: #ccfbf1; }
         .sidebar-header { padding: 28px 22px 22px; border-bottom: 1px solid rgba(204, 251, 241, 0.15); }
         .sidebar-header h2 { font-size: 1.15rem; margin-bottom: 6px; font-weight: 800; letter-spacing: -0.02em; color: #f0fdfa; }
         .sidebar-header p { font-size: 0.78rem; color: #99f6e4; text-transform: uppercase; letter-spacing: 0.12em; font-weight: 600; }
@@ -31,7 +39,7 @@
         .main-content { flex: 1; display: flex; flex-direction: column; min-width: 0; }
         
         .top-header { background: rgba(255,255,255,0.92); backdrop-filter: blur(10px); padding: 14px 28px; box-shadow: 0 1px 0 rgba(15, 118, 110, 0.08); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; border-bottom: 1px solid #ccfbf1; }
-        .header-title { font-weight: 800; color: #0f766e; font-size: 1rem; letter-spacing: -0.02em; }
+        .header-title { font-weight: 800; color: var(--doctor-primary); font-size: 1rem; letter-spacing: -0.02em; }
         .user-info { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
         .hi-user { font-weight: 700; color: #134e4a; }
         .user-id { background: linear-gradient(135deg, #ccfbf1, #99f6e4); color: #115e59; padding: 6px 14px; border-radius: 999px; font-size: 0.8rem; font-weight: 700; border: 1px solid #5eead4; }
@@ -99,13 +107,13 @@
         #seminar-track-live, #case-track-live { font-size: 0.82rem; color: #0f766e; font-weight: 700; margin-bottom: 10px; }
     </style>
 </head>
-<body class="portal-bright">
+<body class="portal-bright" data-portal-theme="doctor">
 
     <!-- Doctor portal login -->
     <div id="auth-overlay">
         <div class="doctor-auth-card" style="background:#fff;border-radius:16px;padding:32px;width:100%;max-width:420px;box-shadow:0 24px 50px rgba(15,118,110,0.2);border:1px solid #99f6e4;">
             <div data-site-logo data-logo-height="44px" style="margin-bottom:12px;"></div>
-            <h2 id="doctor-auth-title" style="color:#0f766e;margin-bottom:12px;font-size:1.35rem;">Doctor portal sign-in</h2>
+            <h2 id="doctor-auth-title" style="color:#0f766e;margin-bottom:12px;font-size:1.35rem;">Doctor's Portal Sign In</h2>
             <div style="display:flex;gap:8px;margin-bottom:16px;">
                 <button type="button" id="doctor-auth-tab-login" class="btn-primary" style="flex:1;padding:10px;" onclick="DoctorAuthUi.switchDoctorAuthTab('login')">Sign in</button>
                 <button type="button" id="doctor-auth-tab-signup" class="btn-primary" style="flex:1;padding:10px;opacity:0.75;background:#64748b;" onclick="DoctorAuthUi.switchDoctorAuthTab('signup')">Create account</button>
@@ -186,7 +194,7 @@
         <aside class="sidebar">
             <div class="sidebar-header">
                 <div data-site-logo data-logo-height="40px" data-logo-fallback="icon" style="margin-bottom:10px;"></div>
-                <h2>Doctor portal</h2>
+                <h2>Doctor's Portal</h2>
                 <p>VGMF National Seminar (<span id="doctor-portal-year-label">2026</span>)</p>
             </div>
             <div class="menu-items">
@@ -213,7 +221,7 @@
         <div class="main-content">
             <header class="top-header">
                 <button type="button" class="doctor-menu-toggle" id="doctor-menu-toggle" aria-label="Open menu"><i class="fas fa-bars"></i></button>
-                <div class="header-title">Vaidya Gogate Memorial Foundation — Doctor workspace</div>
+                <div class="header-title">Vaidya Gogate Memorial Foundation — Doctor's Portal</div>
                 <div class="user-info">
                     <span class="hi-user" id="header-name">Hi, Doctor</span>
                     <span class="user-id" id="header-id">ID: —</span>
@@ -223,7 +231,7 @@
                 </div>
             </header>
 
-            <div class="notification-bar"><i class="fas fa-info-circle"></i> Complete your profile before registering for seminars.</div>
+            <div class="notification-bar" id="profile-complete-banner"><i class="fas fa-info-circle"></i> Complete your profile before registering for seminars.</div>
 
             <div class="announcements-box">
                 <h4 style="color: #0f766e; margin-bottom: 10px;"><i class="fas fa-bullhorn"></i> Updates from the office</h4>
@@ -266,7 +274,8 @@
                             <div class="form-group"><label>Qualifications</label><textarea id="profile-qualifications" rows="2"></textarea></div>
                             <div class="form-group"><label>Years of experience</label><input type="number" id="profile-experience" min="0"></div>
                             <div class="form-group"><label>Hospital / clinic</label><input type="text" id="profile-hospital"></div>
-                            <div class="form-group"><label>Contact number</label><input type="text" id="profile-contact"></div>
+                            <div class="form-group"><label>Your mobile (from account)</label><input type="text" id="profile-account-phone" readonly style="background:#f1f5f9;color:#475569;"></div>
+                            <div class="form-group"><label>Hospital / clinic contact <span style="font-weight:400;color:#64748b;">(optional)</span></label><input type="tel" id="profile-contact" placeholder="Reception or clinic number if different from your mobile"></div>
                             <div class="form-group"><label>Bio</label><textarea id="profile-bio" rows="3"></textarea></div>
                             <div class="form-group"><label>Profile photo</label><input type="file" id="profile-photo" accept="image/*"></div>
                             <button type="submit" class="btn-primary">Save profile</button>
@@ -738,6 +747,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
     <script src="/js/portal-content-protection.js"></script>
+    <script src="/js/portal-theme.js"></script>
     <script src="/js/portal-datetime.js"></script>
     <script src="/js/site-branding.js"></script>
     <script src="/js/otp-ui.js"></script>

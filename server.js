@@ -682,8 +682,8 @@ const DEFAULT_PUBLIC_SITE_CMS = {
         subtitle: 'Advancements in Ayurveda & Integrative Medicine',
         venue: 'Convention Centre, Pune',
         image: '',
-        ctaPrimary: 'Register Now',
-        ctaSecondary: 'View Schedule'
+        ctaPrimary: 'Register now',
+        ctaSecondary: 'View programme'
     },
     heroStats: [
         { value: '50+', label: 'Expert Speakers' },
@@ -925,6 +925,12 @@ function ensurePortalSchema(next) {
                                                                                                                                 db,
                                                                                                                                 ignoreSchemaMigrationErr,
                                                                                                                                 () => {
+                                                                                                                                    judgeContact.ensureSchema(
+                                                                                                                                        db,
+                                                                                                                                        () => {
+                                                                                                                                            pendingRegReminders.ensureSchema(
+                                                                                                                                                db,
+                                                                                                                                                () => {
                                                                                                                                     paymentGatewayOptions.activateGatewaysWithCredentials(
                                                                                                                                         db,
                                                                                                                                         (pgActErr) => {
@@ -943,6 +949,10 @@ function ensurePortalSchema(next) {
                                                                                                                                     });
                                                                                                                                 }
                                                                                                                             );
+                                                                                                                                        }
+                                                                                                                                    );
+                                                                                                                                                }
+                                                                                                                                            );
                                                                                                                                         }
                                                                                                                                     );
                                                                                                                                 }
@@ -1960,6 +1970,9 @@ function fulfillRegistrationPayment(registrationId, userId, amount, gatewayName,
 }
 
 const casePresentation = require('./lib/case-presentation');
+const judgeContact = require('./lib/judge-participant-contact');
+const pendingRegReminders = require('./lib/pending-registration-reminders');
+const portalThemeMod = require('./lib/portal-theme');
 
 let extendedRoutesMounted = false;
 function mountExtendedRoutes() {
@@ -4420,32 +4433,87 @@ app.post('/api/applications/:applicationId/cancel', (req, res) => {
 
 // 6. Doctor Profile Management
 // Create or update doctor profile
-app.post('/api/doctor/profile', upload.single('profilePhoto'), (req, res) => {
-    const { userId, specialization, registration_no, qualifications, experience_years, hospital_name, contact_number, bio } = req.body;
-    
-    const profilePhoto = req.file ? req.file.filename : null;
-    
-    // Check if profile exists
-    db.get(`SELECT id FROM doctor_profile WHERE user_id = ?`, [userId], (err, row) => {
-        if (err) return res.status(500).json({ error: err.message });
-        
-        if (row) {
-            // Update existing profile
-            db.run(`UPDATE doctor_profile SET specialization=?, registration_no=?, qualifications=?, experience_years=?, hospital_name=?, contact_number=?, bio=?, profile_photo_path=?, updated_at=CURRENT_TIMESTAMP WHERE user_id=?`,
-                [specialization, registration_no, qualifications, experience_years || 0, hospital_name, contact_number, bio, profilePhoto || null, userId],
-                function(err) {
-                    if (err) return res.status(500).json({ error: err.message });
+app.post('/api/doctor/profile', (req, res) => {
+    upload.single('profilePhoto')(req, res, (uploadErr) => {
+        if (uploadErr) {
+            return res.status(400).json({ error: uploadErrorMessage(uploadErr) });
+        }
+        const userId = parseInt(req.body.userId, 10);
+        if (!Number.isInteger(userId) || userId < 1) {
+            return res.status(400).json({ error: 'Invalid session. Please sign in again.' });
+        }
+        const {
+            specialization,
+            registration_no,
+            qualifications,
+            experience_years,
+            hospital_name,
+            contact_number,
+            bio
+        } = req.body;
+        const profilePhoto = req.file ? req.file.filename : null;
+
+        db.get(`SELECT id, profile_photo_path FROM doctor_profile WHERE user_id = ?`, [userId], (err, row) => {
+            if (err) return res.status(500).json({ error: err.message });
+
+            const expYears = parseInt(experience_years, 10);
+            const expVal = Number.isFinite(expYears) && expYears >= 0 ? expYears : 0;
+
+            if (row) {
+                const sql = profilePhoto
+                    ? `UPDATE doctor_profile SET specialization=?, registration_no=?, qualifications=?, experience_years=?, hospital_name=?, contact_number=?, bio=?, profile_photo_path=?, updated_at=CURRENT_TIMESTAMP WHERE user_id=?`
+                    : `UPDATE doctor_profile SET specialization=?, registration_no=?, qualifications=?, experience_years=?, hospital_name=?, contact_number=?, bio=?, updated_at=CURRENT_TIMESTAMP WHERE user_id=?`;
+                const params = profilePhoto
+                    ? [
+                          specialization,
+                          registration_no,
+                          qualifications,
+                          expVal,
+                          hospital_name,
+                          contact_number,
+                          bio,
+                          profilePhoto,
+                          userId
+                      ]
+                    : [
+                          specialization,
+                          registration_no,
+                          qualifications,
+                          expVal,
+                          hospital_name,
+                          contact_number,
+                          bio,
+                          userId
+                      ];
+                db.run(sql, params, function (runErr) {
+                    if (runErr) return res.status(500).json({ error: runErr.message });
                     res.json({ success: true, message: 'Profile updated successfully' });
                 });
-        } else {
-            // Create new profile
-            db.run(`INSERT INTO doctor_profile (user_id, specialization, registration_no, qualifications, experience_years, hospital_name, contact_number, bio, profile_photo_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [userId, specialization, registration_no, qualifications, experience_years || 0, hospital_name, contact_number, bio, profilePhoto || null],
-                function(err) {
-                    if (err) return res.status(500).json({ error: err.message });
-                    res.json({ success: true, message: 'Profile created successfully', profileId: this.lastID });
-                });
-        }
+            } else {
+                db.run(
+                    `INSERT INTO doctor_profile (user_id, specialization, registration_no, qualifications, experience_years, hospital_name, contact_number, bio, profile_photo_path) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [
+                        userId,
+                        specialization,
+                        registration_no,
+                        qualifications,
+                        expVal,
+                        hospital_name,
+                        contact_number,
+                        bio,
+                        profilePhoto
+                    ],
+                    function (runErr) {
+                        if (runErr) return res.status(500).json({ error: runErr.message });
+                        res.json({
+                            success: true,
+                            message: 'Profile created successfully',
+                            profileId: this.lastID
+                        });
+                    }
+                );
+            }
+        });
     });
 });
 
@@ -5785,7 +5853,7 @@ app.post('/api/admin/seminars', (req, res) => {
     const pubList = public_list_enabled ? 1 : 0;
     const activeFlag = is_active === false || is_active === 0 || is_active === '0' ? 0 : 1;
     const regStart = seminarDt.normalizeSeminarDateTimeForStorage(registration_start);
-    const regEnd = seminarDt.normalizeSeminarDateTimeForStorage(registration_end);
+    const regEnd = seminarDt.normalizeSeminarRegistrationEndForStorage(registration_end);
     const eventDt = seminarDt.normalizeSeminarDateTimeForStorage(event_date);
     const bodyYear = req.body && req.body.portal_year != null ? parseInt(req.body.portal_year, 10) : null;
     portalTracking.getPortalYear(db, (ePy, defaultYear) => {
@@ -5871,7 +5939,7 @@ app.put('/api/admin/seminars/:id', (req, res) => {
     const pubList = public_list_enabled ? 1 : 0;
     const py = portal_year != null ? parseInt(portal_year, 10) : null;
     const regStart = seminarDt.normalizeSeminarDateTimeForStorage(registration_start);
-    const regEnd = seminarDt.normalizeSeminarDateTimeForStorage(registration_end);
+    const regEnd = seminarDt.normalizeSeminarRegistrationEndForStorage(registration_end);
     const eventDt = seminarDt.normalizeSeminarDateTimeForStorage(event_date);
     portalTracking.getPortalYear(db, (ePy, defaultYear) => {
         if (ePy) return res.status(500).json({ error: ePy.message });
@@ -7448,6 +7516,117 @@ app.get('/api/admin/designated-notify-config', (req, res) => {
             if (err) return res.status(500).json({ error: err.message });
             res.json({ success: true, config: cfg });
         });
+    });
+});
+
+app.get('/api/public/portal-theme/:portal', (req, res) => {
+    const portal = String(req.params.portal || 'public').toLowerCase();
+    if (!['public', 'doctor', 'judge'].includes(portal)) {
+        return res.status(400).json({ error: 'Invalid portal (public, doctor, judge)' });
+    }
+    portalThemeMod.loadTheme(db, portal, (err, theme) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ portal, theme });
+    });
+});
+
+app.get('/api/admin/portal-themes', (req, res) => {
+    const aid = parseInt(req.query.actingAdminId, 10);
+    if (!Number.isInteger(aid) || aid < 1) {
+        return res.status(400).json({ error: 'actingAdminId query parameter is required' });
+    }
+    assertAdminPortalActor(aid, (e, adm) => {
+        if (e && e.message === 'BAD_ACTOR') return res.status(400).json({ error: 'actingAdminId is required' });
+        if (e && e.message === 'FORBIDDEN') return res.status(403).json({ error: 'Administrator access required' });
+        if (e) return res.status(500).json({ error: e.message });
+        if (!adm) return res.status(403).json({ error: 'Invalid administrator' });
+        portalThemeMod.loadAllThemes(db, (err, themes) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ success: true, themes });
+        });
+    });
+});
+
+app.post('/api/admin/portal-themes', (req, res) => {
+    const { actingAdminId, themes } = req.body || {};
+    const aid = parseInt(actingAdminId, 10);
+    if (!Number.isInteger(aid) || aid < 1) return res.status(400).json({ error: 'actingAdminId is required' });
+    if (!themes || typeof themes !== 'object') return res.status(400).json({ error: 'themes object required' });
+    assertAdminPortalActor(aid, (e, adm) => {
+        if (e && e.message === 'BAD_ACTOR') return res.status(400).json({ error: 'actingAdminId is required' });
+        if (e && e.message === 'FORBIDDEN') return res.status(403).json({ error: 'Administrator access required' });
+        if (e) return res.status(500).json({ error: e.message });
+        if (!adm) return res.status(403).json({ error: 'Invalid administrator' });
+        const portals = ['public', 'doctor', 'judge'].filter((p) => themes[p]);
+        if (!portals.length) return res.status(400).json({ error: 'No themes provided' });
+        let i = 0;
+        const saved = {};
+        const nextPortal = (err) => {
+            if (err) return res.status(500).json({ error: err.message });
+            if (i >= portals.length) return res.json({ success: true, themes: saved });
+            const p = portals[i++];
+            portalThemeMod.saveTheme(db, p, themes[p], (e2, norm) => {
+                if (e2) return res.status(500).json({ error: e2.message });
+                saved[p] = norm;
+                nextPortal();
+            });
+        };
+        nextPortal();
+    });
+});
+
+app.get('/api/admin/pending-registration-reminder-config', (req, res) => {
+    const aid = parseInt(req.query.actingAdminId, 10);
+    if (!Number.isInteger(aid) || aid < 1) {
+        return res.status(400).json({ error: 'actingAdminId query parameter is required' });
+    }
+    assertAdminPortalActor(aid, (e, adm) => {
+        if (e && e.message === 'BAD_ACTOR') return res.status(400).json({ error: 'actingAdminId is required' });
+        if (e && e.message === 'FORBIDDEN') return res.status(403).json({ error: 'Administrator access required' });
+        if (e) return res.status(500).json({ error: e.message });
+        if (!adm) return res.status(403).json({ error: 'Invalid administrator' });
+        pendingRegReminders.loadConfig(db, (err, config) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ success: true, config });
+        });
+    });
+});
+
+app.post('/api/admin/pending-registration-reminder-config', (req, res) => {
+    const { actingAdminId, config } = req.body || {};
+    const aid = parseInt(actingAdminId, 10);
+    if (!Number.isInteger(aid) || aid < 1) return res.status(400).json({ error: 'actingAdminId is required' });
+    if (!config || typeof config !== 'object') return res.status(400).json({ error: 'config object required' });
+    assertAdminPortalActor(aid, (e, adm) => {
+        if (e && e.message === 'BAD_ACTOR') return res.status(400).json({ error: 'actingAdminId is required' });
+        if (e && e.message === 'FORBIDDEN') return res.status(403).json({ error: 'Administrator access required' });
+        if (e) return res.status(500).json({ error: e.message });
+        if (!adm) return res.status(403).json({ error: 'Invalid administrator' });
+        pendingRegReminders.saveConfig(db, config, (err, norm) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ success: true, config: norm });
+        });
+    });
+});
+
+app.get('/api/admin/judge-communications', (req, res) => {
+    const aid = parseInt(req.query.actingAdminId, 10);
+    if (!Number.isInteger(aid) || aid < 1) {
+        return res.status(400).json({ error: 'actingAdminId query parameter is required' });
+    }
+    assertAdminPortalActor(aid, (e, adm) => {
+        if (e && e.message === 'BAD_ACTOR') return res.status(400).json({ error: 'actingAdminId is required' });
+        if (e && e.message === 'FORBIDDEN') return res.status(403).json({ error: 'Administrator access required' });
+        if (e) return res.status(500).json({ error: e.message });
+        if (!adm) return res.status(403).json({ error: 'Invalid administrator' });
+        judgeContact.listCommunications(
+            db,
+            { limit: req.query.limit, offset: req.query.offset },
+            (err, rows) => {
+                if (err) return res.status(500).json({ error: err.message });
+                res.json({ success: true, communications: rows });
+            }
+        );
     });
 });
 
@@ -9895,12 +10074,20 @@ function flushNotificationQueue() {
     }
 }
 
-app.get('/api/cron/process-notifications', (req, res) => {
+function authorizeCron(req, res) {
     const secret = process.env.CRON_SECRET;
     if (secret) {
         const auth = req.headers.authorization || '';
-        if (auth !== `Bearer ${secret}`) return res.status(401).json({ error: 'Unauthorized' });
+        if (auth !== `Bearer ${secret}`) {
+            res.status(401).json({ error: 'Unauthorized' });
+            return false;
+        }
     }
+    return true;
+}
+
+app.get('/api/cron/process-notifications', (req, res) => {
+    if (!authorizeCron(req, res)) return;
     const run = () => {
         if (!notifEngine.drainNotificationQueue) {
             notifEngine.processQueueOnce(db);
@@ -9910,6 +10097,21 @@ app.get('/api/cron/process-notifications', (req, res) => {
             .drainNotificationQueue(db, 12)
             .then(() => res.json({ ok: true, mode: 'drain' }))
             .catch((e) => res.status(500).json({ error: e.message }));
+    };
+    if (appReadyResolved) return run();
+    if (appReadyPromise) {
+        return appReadyPromise.then(run).catch((e) => res.status(503).json({ error: e.message }));
+    }
+    run();
+});
+
+app.get('/api/cron/pending-registration-reminders', (req, res) => {
+    if (!authorizeCron(req, res)) return;
+    const run = () => {
+        pendingRegReminders.runPendingRegistrationReminders(db, (err, result) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ ok: true, ...(result || {}) });
+        });
     };
     if (appReadyResolved) return run();
     if (appReadyPromise) {

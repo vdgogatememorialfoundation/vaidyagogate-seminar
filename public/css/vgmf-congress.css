@@ -254,7 +254,7 @@
     display: flex;
     gap: 32px;
     width: max-content;
-    animation: cg-ticker-scroll 40s linear infinite;
+    animation: cg-ticker-scroll 16s linear infinite;
 }
 .cg-ticker:hover .cg-ticker-track { animation-play-state: paused; }
 @keyframes cg-ticker-scroll {
@@ -1082,11 +1082,16 @@
     .cg-quick { margin-top: 0; padding: 0 16px; }
     .cg-quick-grid { grid-template-columns: 1fr; margin-top: 0; gap: 12px; }
     .cg-quick-card { padding: 18px 12px; }
-    .cg-fab-register { display: inline-flex; }
+    .cg-fab-register {
+        display: inline-flex;
+        visibility: visible;
+        opacity: 1;
+    }
     .congress-hero-arrows .prev { left: 8px; }
     .congress-hero-arrows .next { right: 8px; }
     .cg-past-year { grid-template-columns: 1fr; }
-    .congress-site .main-content { padding: 32px 16px 72px; }
+    .congress-site .main-content { padding: 32px 16px 88px; }
+    .congress-site #homeSection { scroll-margin-bottom: 72px; }
     .congress-site .home-split {
         grid-template-columns: 1fr;
         gap: 20px;

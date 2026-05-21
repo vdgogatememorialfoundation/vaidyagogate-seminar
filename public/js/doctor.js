@@ -191,7 +191,7 @@ function renderCasePreviewSummary() {
         filesHtml += '</ul></div>';
     }
     box.innerHTML =
-        '<div class="preview-row"><span class="lbl">Program</span><span class="val">' +
+        '<div class="preview-row"><span class="lbl">Programme</span><span class="val">' +
         escapeHtmlDoctor((activeCaseProgram && activeCaseProgram.title) || '-') +
         '</span></div>' +
         '<div class="preview-row"><span class="lbl">Name</span><span class="val">' +
@@ -266,7 +266,7 @@ function generateCasePreviewPdf() {
         doc.line(14, y, 196, y);
     };
 
-    drawSection('Program');
+    drawSection('Programme');
     drawTableRow('Case program', (activeCaseProgram && activeCaseProgram.title) || '-');
     drawSection('Applicant');
     drawTableRow('Full name', [f.fname, f.mname, f.lname].filter(Boolean).join(' '));
@@ -2554,7 +2554,7 @@ async function loadCaseApplicationsTracker(silentPoll) {
         });
         html +=
             '<div class="card" style="margin-top:8px;"><table class="data-table"><thead><tr>' +
-            '<th>Application ID</th><th>Program</th><th>Category</th><th>Topic</th><th>Status</th><th>Files</th><th></th></tr></thead><tbody>';
+            '<th>Application ID</th><th>Programme</th><th>Category</th><th>Topic</th><th>Status</th><th>Files</th><th></th></tr></thead><tbody>';
         rows.forEach((s, index) => {
             html +=
                 '<tr><td><code>' +
@@ -2593,7 +2593,7 @@ function viewCaseApplication(index) {
         '<p><strong>Application ID:</strong> ' +
         escapeHtml(c.application_no || String(c.id)) +
         '</p>' +
-        '<p><strong>Program:</strong> ' +
+        '<p><strong>Programme:</strong> ' +
         escapeHtml(c.program_title || '—') +
         '</p>' +
         '<p><strong>Category:</strong> ' +
@@ -2734,7 +2734,7 @@ function downloadCaseApplicationPdf() {
     };
     y = pdfCongressSectionTitle(doc, y + 4, 'Application', accent, ink);
     row('Application ID', c.application_no || c.id);
-    row('Program', c.program_title);
+    row('Programme', c.program_title);
     row('Category', c.category);
     row('Topic / title', c.title);
     row('Status', caseApplicationStatusLabel(c.status));
@@ -4984,14 +4984,34 @@ async function submitSupportTicket() {
 }
 
 // Doctor Profile Management
+function isDoctorProfileComplete(profile) {
+    const p = profile || {};
+    return !!(
+        String(p.specialization || '').trim() &&
+        String(p.registration_no || '').trim() &&
+        String(p.hospital_name || '').trim()
+    );
+}
+
+function updateProfileCompleteBanner(profile) {
+    const bar = document.getElementById('profile-complete-banner');
+    if (!bar) return;
+    bar.style.display = isDoctorProfileComplete(profile) ? 'none' : '';
+}
+
 async function loadProfile() {
     try {
         const uid = doctorNumericUserId();
         if (!uid) return;
+        const accountPhoneEl = document.getElementById('profile-account-phone');
+        if (accountPhoneEl && currentUser && currentUser.phone) {
+            accountPhoneEl.value = currentUser.phone;
+        }
         const res = await fetch(`/api/doctor/profile/${uid}`);
         const profile = await res.json();
-        
-        if(profile && profile.id) {
+        window.__doctorProfile = profile && profile.id ? profile : null;
+
+        if (profile && profile.id) {
             document.getElementById('profile-specialization').value = profile.specialization || '';
             document.getElementById('profile-registration-no').value = profile.registration_no || '';
             document.getElementById('profile-qualifications').value = profile.qualifications || '';
@@ -5000,14 +5020,15 @@ async function loadProfile() {
             document.getElementById('profile-contact').value = profile.contact_number || '';
             document.getElementById('profile-bio').value = profile.bio || '';
         }
-    } catch(err) {
+        updateProfileCompleteBanner(window.__doctorProfile);
+    } catch (err) {
         console.error('Error loading profile:', err);
     }
 }
 
 async function saveProfile(event) {
     event.preventDefault();
-    
+
     const formData = new FormData();
     const uid = doctorNumericUserId();
     if (!uid) return alert('Session invalid. Please sign in again with your email.');
@@ -5019,27 +5040,54 @@ async function saveProfile(event) {
     formData.append('hospital_name', document.getElementById('profile-hospital').value);
     formData.append('contact_number', document.getElementById('profile-contact').value);
     formData.append('bio', document.getElementById('profile-bio').value);
-    
-    const profilePhoto = document.getElementById('profile-photo').files[0];
-    if(profilePhoto) {
+
+    let profilePhoto = document.getElementById('profile-photo').files[0];
+    if (profilePhoto) {
+        try {
+            if (window.PortalUpload && typeof window.PortalUpload.compressImageFile === 'function') {
+                profilePhoto = await window.PortalUpload.compressImageFile(profilePhoto, {
+                    maxDim: 1600,
+                    quality: 0.85
+                });
+            }
+        } catch (e) {
+            console.warn('Profile photo compress skipped', e);
+        }
         formData.append('profilePhoto', profilePhoto);
     }
-    
+
     try {
         const res = await fetch('/api/doctor/profile', {
             method: 'POST',
             body: formData
         });
-        const result = await res.json();
-        if(result.success) {
-            alert('✅ Profile saved successfully! You can now apply for seminars.');
-            return true;
-        } else {
-            alert('Error: ' + result.error);
+        let result = {};
+        try {
+            result = await res.json();
+        } catch (_) {
+            result = {};
         }
-    } catch(err) {
+        if (res.ok && result.success) {
+            window.__doctorProfile = {
+                ...(window.__doctorProfile || {}),
+                specialization: document.getElementById('profile-specialization').value,
+                registration_no: document.getElementById('profile-registration-no').value,
+                hospital_name: document.getElementById('profile-hospital').value
+            };
+            updateProfileCompleteBanner(window.__doctorProfile);
+            alert('✅ Profile saved successfully! You can now apply for seminars.');
+            await loadProfile();
+            return true;
+        }
+        const msg =
+            result.error ||
+            (res.status === 413
+                ? 'Photo is too large. Try a smaller image or skip the photo for now.'
+                : 'Could not save profile (HTTP ' + res.status + ').');
+        alert('Error saving profile: ' + msg);
+    } catch (err) {
         console.error('Error saving profile:', err);
-        alert('Error saving profile. Please try again.');
+        alert('Error saving profile: ' + (err.message || 'Network error. Check connection and try again.'));
     }
     return false;
 }

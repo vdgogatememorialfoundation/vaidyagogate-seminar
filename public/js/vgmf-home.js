@@ -10,9 +10,19 @@
             .replace(/"/g, '&quot;');
     }
 
+    function sanitizeDisplayText(text) {
+        if (text == null) return text;
+        let s = String(text).trim();
+        s = s.replace(/^,\s*/, '');
+        s = s.replace(/,\s+and\b/gi, ' and');
+        return s;
+    }
+
     function setText(id, text) {
         const el = document.getElementById(id);
-        if (el && text != null && String(text).trim()) el.textContent = text;
+        if (el && text != null && String(text).trim()) {
+            el.textContent = sanitizeDisplayText(text);
+        }
     }
 
     function setHtml(id, html) {

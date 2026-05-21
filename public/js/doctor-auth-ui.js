@@ -42,7 +42,7 @@
             btnUp.style.opacity = showLogin ? '0.7' : '1';
         }
         const title = document.getElementById('doctor-auth-title');
-        if (title) title.textContent = showLogin ? 'Doctor portal sign-in' : 'Create doctor account';
+        if (title) title.textContent = showLogin ? "Doctor's Portal Sign In" : 'Create doctor account';
     }
 
     function signupOtpDest(channel) {
