@@ -2,6 +2,7 @@
     const pollMs = 1000;
     let lastEventId = 0;
     let pollTimer = null;
+    let clockTimer = null;
     let actor = null;
 
     function esc(s) {
@@ -53,42 +54,109 @@
         return 'failed';
     }
 
+    function initials(name) {
+        const parts = String(name || 'Guest')
+            .trim()
+            .split(/\s+/)
+            .filter(Boolean);
+        if (!parts.length) return '?';
+        if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+
+    function formatCardTime(iso) {
+        if (!iso) return '';
+        try {
+            const d = new Date(iso);
+            if (Number.isNaN(d.getTime())) return String(iso);
+            return d.toLocaleString('en-IN', {
+                timeZone: 'Asia/Kolkata',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                day: 'numeric',
+                month: 'short'
+            });
+        } catch (_) {
+            return String(iso);
+        }
+    }
+
+    function outcomeTitle(outcome) {
+        if (outcome === 'success') return 'Checked in';
+        if (outcome === 'duplicate') return 'Already scanned';
+        return String(outcome || 'failed').replace(/_/g, ' ');
+    }
+
+    function setLiveState(active, label) {
+        const pill = document.getElementById('kiosk-live-pill');
+        const lbl = document.getElementById('kiosk-live-label');
+        if (pill) pill.classList.toggle('is-live', !!active);
+        if (lbl) lbl.textContent = label || (active ? 'Live' : 'Paused');
+    }
+
+    function updateEmptyState() {
+        const grid = document.getElementById('live-scan-grid');
+        const empty = document.getElementById('live-scan-empty');
+        if (!empty) return;
+        const hasEvent = !!(document.getElementById('live-scanner-seminar') || {}).value;
+        const hasCards = grid && grid.children.length > 0;
+        empty.classList.toggle('hidden', !hasEvent || hasCards);
+    }
+
+    function tickClock() {
+        const el = document.getElementById('kiosk-clock');
+        if (!el) return;
+        el.textContent = new Date().toLocaleString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            weekday: 'short',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        });
+    }
+
     function prependCard(ev) {
         const grid = document.getElementById('live-scan-grid');
         if (!grid) return;
         const el = document.createElement('article');
-        el.className = 'scan-card ' + cardClass(ev.outcome);
+        el.className = 'scan-card is-new ' + cardClass(ev.outcome);
         el.dataset.id = String(ev.id);
         const outcomeLabel = String(ev.outcome || 'failed').replace(/_/g, ' ');
-        const title =
-            ev.outcome === 'success'
-                ? '✓ Checked in'
-                : ev.outcome === 'duplicate'
-                  ? '↻ Duplicate scan'
-                  : '✕ ' + outcomeLabel;
+        const name = ev.doctorName || 'Guest';
         el.innerHTML =
-            '<div class="scan-card-head"><span class="scan-outcome-badge">' +
+            '<div class="scan-card-head">' +
+            '<span class="scan-card-avatar" aria-hidden="true">' +
+            esc(initials(name)) +
+            '</span>' +
+            '<div class="scan-card-head-main">' +
+            '<span class="scan-outcome-badge">' +
             esc(outcomeLabel) +
-            '</span><span class="scan-card-time">' +
-            esc(ev.createdAt || '') +
-            '</span></div>' +
+            '</span>' +
             '<h4>' +
-            esc(title) +
+            esc(outcomeTitle(ev.outcome)) +
             '</h4>' +
             '<div class="meta"><strong>' +
-            esc(ev.doctorName || 'Guest') +
+            esc(name) +
             '</strong></div>' +
+            '</div>' +
+            '<span class="scan-card-time">' +
+            esc(formatCardTime(ev.createdAt)) +
+            '</span></div>' +
             '<div class="scan-card-ids">' +
-            '<div><span class="lbl">Ticket</span><code>' +
+            '<div><span class="lbl">E-ticket</span><code>' +
             esc(ev.ticketId || '—') +
             '</code></div>' +
             '<div><span class="lbl">Application</span><code>' +
             esc(ev.applicationNo || '—') +
             '</code></div></div>' +
             (ev.message ? '<div class="reason">' + esc(ev.message) + '</div>' : '') +
-            (ev.scannerName ? '<div class="meta" style="margin-top:6px;">Scanner: ' + esc(ev.scannerName) + '</div>' : '');
+            (ev.scannerName
+                ? '<div class="scan-card-scanner"><i class="fas fa-user-check"></i> ' + esc(ev.scannerName) + '</div>'
+                : '');
         grid.prepend(el);
-        while (grid.children.length > 120) grid.removeChild(grid.lastChild);
+        while (grid.children.length > 80) grid.removeChild(grid.lastChild);
+        updateEmptyState();
     }
 
     async function refreshStats() {
@@ -117,14 +185,17 @@
                 prependCard(ev);
             });
             await refreshStats();
+            setLiveState(true, 'Live · updating');
         } catch (e) {
             console.warn('[live-scanner]', e.message);
+            setLiveState(false, 'Connection issue');
         }
     }
 
     function stopPoll() {
         if (pollTimer) clearInterval(pollTimer);
         pollTimer = null;
+        setLiveState(false, 'Select event');
     }
 
     function startPoll() {
@@ -132,6 +203,8 @@
         lastEventId = 0;
         const grid = document.getElementById('live-scan-grid');
         if (grid) grid.innerHTML = '';
+        updateEmptyState();
+        setLiveState(true, 'Connecting…');
         pollEvents();
         pollTimer = setInterval(pollEvents, pollMs);
     }
@@ -142,22 +215,31 @@
             window.location.href = '/admin.html';
             return;
         }
+        tickClock();
+        clockTimer = setInterval(tickClock, 1000);
         const seminars = await api('/api/admin/live-scanner/seminars');
         const sel = document.getElementById('live-scanner-seminar');
-        sel.innerHTML = '<option value="">Select event</option>';
+        sel.innerHTML = '<option value="">Choose event…</option>';
         (seminars || []).forEach((s) => {
             const o = document.createElement('option');
             o.value = s.id;
-            o.textContent = (s.title || 'Event') + ' · ' + (s.event_date || '').slice(0, 10);
+            const date = s.event_date ? String(s.event_date).slice(0, 10) : '';
+            o.textContent = (s.title || 'Event') + (date ? ' · ' + date : '');
             sel.appendChild(o);
         });
+        if ((seminars || []).length === 1) {
+            sel.value = String(seminars[0].id);
+            startPoll();
+        }
         sel.addEventListener('change', () => {
             if (sel.value) startPoll();
             else stopPoll();
+            updateEmptyState();
         });
         document.getElementById('live-scanner-back').addEventListener('click', () => {
             window.location.href = '/admin.html';
         });
+        updateEmptyState();
     }
 
     document.addEventListener('DOMContentLoaded', init);

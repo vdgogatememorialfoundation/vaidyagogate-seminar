@@ -1101,8 +1101,8 @@ const DEFAULT_REGISTRATION_FALLBACK_FIELDS = [
     { key: 'certificate', label: 'Certificate upload', type: 'file', step: 3, enabled: true, required: true, onlyWhenAdvancedQual: true },
     { key: 'cpin', label: 'College PIN code', type: 'text', step: 4, enabled: true, required: true, onlyWhenPgCollege: true },
     { key: 'college', label: 'College name', type: 'text', step: 4, enabled: true, required: true, onlyWhenPgCollege: true },
-    { key: 'ccity', label: 'College city', type: 'text', step: 4, enabled: true, required: true, onlyWhenPgCollege: true },
-    { key: 'cstate', label: 'College state', type: 'text', step: 4, enabled: true, required: true, onlyWhenPgCollege: true }
+    { key: 'ccity', label: 'College city', type: 'select', step: 4, enabled: true, required: true, onlyWhenPgCollege: true },
+    { key: 'cstate', label: 'College state', type: 'select', step: 4, enabled: true, required: true, onlyWhenPgCollege: true }
 ];
 
 function getRegistrationFieldsForValidation() {
@@ -3447,6 +3447,12 @@ function setRegCpinHint(msg, isError) {
     el.style.color = isError ? '#b91c1c' : '#64748b';
 }
 
+function clearCollegePinDerived() {
+    fillRegSelectOptions(document.getElementById('reg-ccity'), [], 'Select city');
+    fillRegSelectOptions(document.getElementById('reg-cstate'), [], 'Select state');
+    setRegCpinHint('');
+}
+
 async function autofillCollegeAddress() {
     if (!registrationQualIsPg()) return;
     const pinEl = document.getElementById('reg-cpin');
@@ -3454,25 +3460,27 @@ async function autofillCollegeAddress() {
     const pin = String(pinEl.value || '').replace(/\D/g, '');
     if (pin.length !== 6) {
         if (pin.length) setRegCpinHint('Enter a valid 6-digit PIN code', true);
+        clearCollegePinDerived();
         return;
     }
-    setRegCpinHint('Looking up college PIN…');
+    setRegCpinHint('Looking up PIN…');
     try {
         const r = await fetch(`/api/public/pincode-lookup?pin=${encodeURIComponent(pin)}`);
         const data = await r.json();
         if (!data || !data.ok) {
             setRegCpinHint((data && data.error) || 'PIN not found', true);
+            clearCollegePinDerived();
             return;
         }
-        const cityEl = document.getElementById('reg-ccity');
-        const stateEl = document.getElementById('reg-cstate');
-        if (cityEl && (data.cities || []).length) cityEl.value = data.cities[0];
-        if (stateEl && (data.states || []).length) stateEl.value = data.states[0];
+        fillRegSelectOptions(document.getElementById('reg-ccity'), data.cities || [], 'Select city');
+        fillRegSelectOptions(document.getElementById('reg-cstate'), data.states || [], 'Select state');
+        const cities = data.cities || [];
         setRegCpinHint(
-            (data.cities || []).length > 1 ? 'Multiple areas — city set to first match' : 'College city and state filled from PIN'
+            cities.length > 1 ? 'Multiple areas for this PIN — choose city' : 'City and state filled from PIN'
         );
     } catch (e) {
         setRegCpinHint('Could not look up PIN. Try again.', true);
+        clearCollegePinDerived();
     }
 }
 
@@ -3482,9 +3490,14 @@ function onRegCpinInput() {
     const pin = String(pinEl.value || '').replace(/\D/g, '').slice(0, 6);
     if (pinEl.value !== pin) pinEl.value = pin;
     clearTimeout(__regCpinLookupTimer);
-    if (pin.length === 6) __regCpinLookupTimer = setTimeout(() => autofillCollegeAddress(), 400);
-    else if (pin.length < 6) setRegCpinHint('');
+    if (pin.length === 6) {
+        __regCpinLookupTimer = setTimeout(() => autofillCollegeAddress(), 400);
+    } else if (pin.length < 6) {
+        clearCollegePinDerived();
+    }
 }
+
+window.autofillCollegeAddress = autofillCollegeAddress;
 
 async function verifyNcism() {
     const ncism = String(document.getElementById('reg-ncism')?.value || '').trim();
@@ -4922,12 +4935,6 @@ async function loadDoctorEventTickets() {
             box.innerHTML = '<p style="color:#64748b;">No participant tickets yet. After payment is confirmed (or admin issues your e-ticket), your QR entry ticket appears here.</p>';
             return;
         }
-        const profileUrl =
-            window.__doctorProfile &&
-            (window.__doctorProfile.profile_photo_url || window.__doctorProfile.profilePhotoUrl);
-        const photoCol = profileUrl
-            ? `<div><img src="${escapeHtml(profileUrl)}" alt="Profile" style="width:96px;height:96px;border-radius:12px;object-fit:cover;border:2px solid #cbd5e1;"></div>`
-            : '<div style="width:96px;"></div>';
         let html = '<div style="display:flex;flex-direction:column;gap:20px;">';
         rows.forEach((t) => {
             const regSt = String(t.registration_status || '').toLowerCase();
@@ -4940,8 +4947,7 @@ async function loadDoctorEventTickets() {
             const statusLine = invalid
                 ? `<p style="margin:8px 0 0;font-size:0.9rem;color:#b91c1c;font-weight:600;">Invalid — registration ${regSt === 'cancelled' ? 'cancelled' : regSt === 'rejected' ? 'rejected' : 'no longer active'}. Do not use this QR for entry.</p>`
                 : `<p style="margin:8px 0 0;font-size:0.85rem;color:#64748b;">${escapeHtml(scanned)}</p>`;
-            html += `<div style="border:1px solid ${invalid ? '#fecaca' : '#e2e8f0'};border-radius:12px;padding:16px;display:grid;grid-template-columns:96px 128px 1fr;gap:16px;align-items:start;${invalid ? 'opacity:0.85;background:#fef2f2;' : ''}">
-                ${photoCol}
+            html += `<div style="border:1px solid ${invalid ? '#fecaca' : '#e2e8f0'};border-radius:12px;padding:16px;display:grid;grid-template-columns:128px 1fr;gap:16px;align-items:start;${invalid ? 'opacity:0.85;background:#fef2f2;' : ''}">
                 <div>${qr ? `<img src="${qr}" alt="QR code" style="width:128px;height:128px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;">` : (t.is_scanned ? '<span style="color:#059669;font-size:0.85rem;font-weight:700;"><i class="fas fa-check-circle"></i> QR used at entry</span>' : '<span style="color:#94a3b8;font-size:0.85rem;">QR unavailable</span>')}</div>
                 <div>
                     <h4 style="margin:0 0 8px;color:#1a237e;">${escapeHtml(t.seminar_title || 'Seminar')}</h4>

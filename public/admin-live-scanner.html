@@ -3,28 +3,80 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Live check-in board | VGMF Admin</title>
+    <title>Live check-in kiosk | VGMF</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,500;0,9..40,700;1,9..40,600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="/css/admin-live-scanner.css">
 </head>
 <body class="live-scanner-page">
-    <header class="live-scanner-header">
-        <div>
-            <h1 style="margin:0;font-size:1.2rem;">Live check-in board</h1>
-            <p style="margin:4px 0 0;font-size:0.85rem;opacity:0.85;">BookMyShow-style feed — updates every second while volunteers scan.</p>
+    <header class="kiosk-topbar">
+        <div class="kiosk-brand">
+            <span class="kiosk-brand-mark" aria-hidden="true"><i class="fas fa-qrcode"></i></span>
+            <div>
+                <p class="kiosk-eyebrow">VGMF venue display</p>
+                <h1 class="kiosk-title">Live check-in</h1>
+            </div>
         </div>
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-            <select id="live-scanner-seminar" style="min-width:220px;padding:8px;border-radius:8px;border:none;"></select>
-            <button type="button" id="live-scanner-back" style="padding:8px 14px;border-radius:8px;border:none;background:#0d9488;color:#fff;cursor:pointer;">← Back to admin</button>
-            <a href="/scanner.html" target="_blank" rel="noopener" style="color:#94a3b8;font-size:0.85rem;">Volunteer scanner →</a>
-        </div>
-        <div class="live-scanner-stats">
-            <div class="live-scanner-stat"><span>Success</span><strong id="ls-stat-ok">0</strong></div>
-            <div class="live-scanner-stat"><span>Duplicate</span><strong id="ls-stat-dup">0</strong></div>
-            <div class="live-scanner-stat"><span>Failed</span><strong id="ls-stat-fail">0</strong></div>
-            <div class="live-scanner-stat"><span>Tickets scanned</span><strong id="ls-stat-tix">0</strong></div>
+        <div class="kiosk-controls">
+            <label class="kiosk-select-wrap">
+                <span class="kiosk-select-label">Event</span>
+                <select id="live-scanner-seminar" class="kiosk-select"></select>
+            </label>
+            <div class="kiosk-live-pill" id="kiosk-live-pill" title="Polling every second">
+                <span class="kiosk-live-dot"></span>
+                <span id="kiosk-live-label">Select event</span>
+            </div>
+            <time id="kiosk-clock" class="kiosk-clock"></time>
+            <button type="button" id="live-scanner-back" class="kiosk-btn kiosk-btn-ghost">
+                <i class="fas fa-arrow-left"></i> Admin
+            </button>
+            <a href="/scanner.html" target="_blank" rel="noopener" class="kiosk-btn kiosk-btn-accent">
+                <i class="fas fa-mobile-screen"></i> Scanner app
+            </a>
         </div>
     </header>
-    <main id="live-scan-grid" class="live-scanner-grid" aria-live="polite"></main>
+
+    <section class="kiosk-stats" aria-label="Check-in statistics">
+        <article class="kiosk-stat kiosk-stat--ok">
+            <div class="kiosk-stat-icon"><i class="fas fa-circle-check"></i></div>
+            <div>
+                <span class="kiosk-stat-label">Checked in</span>
+                <strong id="ls-stat-ok" class="kiosk-stat-value">0</strong>
+            </div>
+        </article>
+        <article class="kiosk-stat kiosk-stat--dup">
+            <div class="kiosk-stat-icon"><i class="fas fa-rotate-right"></i></div>
+            <div>
+                <span class="kiosk-stat-label">Duplicate scans</span>
+                <strong id="ls-stat-dup" class="kiosk-stat-value">0</strong>
+            </div>
+        </article>
+        <article class="kiosk-stat kiosk-stat--fail">
+            <div class="kiosk-stat-icon"><i class="fas fa-circle-xmark"></i></div>
+            <div>
+                <span class="kiosk-stat-label">Rejected</span>
+                <strong id="ls-stat-fail" class="kiosk-stat-value">0</strong>
+            </div>
+        </article>
+        <article class="kiosk-stat kiosk-stat--total">
+            <div class="kiosk-stat-icon"><i class="fas fa-ticket"></i></div>
+            <div>
+                <span class="kiosk-stat-label">Unique tickets scanned</span>
+                <strong id="ls-stat-tix" class="kiosk-stat-value">0</strong>
+            </div>
+        </article>
+    </section>
+
+    <main class="kiosk-main">
+        <div id="live-scan-empty" class="kiosk-empty">
+            <div class="kiosk-empty-icon"><i class="fas fa-tv"></i></div>
+            <h2>Waiting for scans</h2>
+            <p>Choose an event above. New check-ins appear here in real time as volunteers scan QR codes.</p>
+        </div>
+        <div id="live-scan-grid" class="live-scanner-grid" aria-live="polite"></div>
+    </main>
     <script src="/js/admin-live-scanner.js"></script>
 </body>
 </html>
