@@ -141,6 +141,20 @@ function bootstrapApp(done) {
 
     // Vercel: never block requests on the long SQLite-style migration chain (60s function cap).
     if (process.env.VERCEL) {
+        if (pgDb && pgDb.ensureAuxiliaryTables) {
+            return pgDb
+                .ensureAuxiliaryTables()
+                .then((stillMissing) => {
+                    if (stillMissing && stillMissing.length) {
+                        console.warn('[bootstrap] auxiliary tables still missing:', stillMissing.join(', '));
+                    }
+                    scheduleDeferredMigrations();
+                })
+                .catch((e) => {
+                    console.warn('[bootstrap] auxiliary tables:', e.message);
+                    scheduleDeferredMigrations();
+                });
+        }
         return scheduleDeferredMigrations();
     }
 
@@ -322,11 +336,11 @@ app.get('/api/health', (req, res) => {
             payload.ok = true;
             payload.bootstrap.state = 'ready';
             if (pgDb && pgDb.listMissingCoreTables) {
-                return Promise.all([
-                    pgDb.listMissingCoreTables(),
-                    pgDb.listMissingAuxTables ? pgDb.listMissingAuxTables() : Promise.resolve([])
-                ])
-                    .then(([coreMissing, auxMissing]) => {
+                const reportSchema = () =>
+                    Promise.all([
+                        pgDb.listMissingCoreTables(),
+                        pgDb.listMissingAuxTables ? pgDb.listMissingAuxTables() : Promise.resolve([])
+                    ]).then(([coreMissing, auxMissing]) => {
                         const missing = [...coreMissing, ...auxMissing];
                         if (missing.length) {
                             payload.ok = false;
@@ -335,8 +349,14 @@ app.get('/api/health', (req, res) => {
                                 'PostgreSQL schema is incomplete. Redeploy after fixing DATABASE_URL, or run schema-postgres.sql on Neon.';
                         }
                         res.json(payload);
-                    })
-                    .catch(() => res.json(payload));
+                    });
+                if (pgDb.ensureAuxiliaryTables) {
+                    return pgDb
+                        .ensureAuxiliaryTables()
+                        .then(() => reportSchema())
+                        .catch(() => reportSchema());
+                }
+                return reportSchema().catch(() => res.json(payload));
             }
             return res.json(payload);
         }
