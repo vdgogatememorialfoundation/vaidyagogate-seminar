@@ -337,8 +337,14 @@
                     const name = [c.first_name, c.last_name].filter(Boolean).join(' ') || '—';
                     const locked = !!c.my_score_locked;
                     const scoreTxt = c.my_total_score != null ? String(c.my_total_score) : '—';
+                    const statusLabel =
+                        locked && String(c.status || '').toLowerCase() === 'judging'
+                            ? 'Judged (you)'
+                            : locked
+                              ? 'Scored'
+                              : String(c.status || '—');
                     const scoreBadge = locked
-                        ? '<span class="jp-badge jp-badge--done">' + escapeHtml(scoreTxt) + ' ✓</span>'
+                        ? '<span class="jp-badge jp-badge--done">Judged · ' + escapeHtml(scoreTxt) + '</span>'
                         : '<span class="jp-badge jp-badge--pending">Pending</span>';
                     const tr = document.createElement('tr');
                     tr.innerHTML =
@@ -346,7 +352,7 @@
                         '<td><strong>' + escapeHtml(name) + '</strong></td>' +
                         '<td>' + escapeHtml(c.category || '—') + '</td>' +
                         '<td>' + escapeHtml(c.title || '—') + '</td>' +
-                        '<td><span class="jp-badge jp-badge--status">' + escapeHtml(c.status || '—') + '</span></td>' +
+                        '<td><span class="jp-badge jp-badge--status">' + escapeHtml(statusLabel) + '</span></td>' +
                         '<td>' + scoreBadge + '</td>' +
                         '<td><button type="button" class="btn jp-btn-action" onclick="openCaseScore(' + c.id + ')">' +
                         (locked ? 'View' : 'Score') +

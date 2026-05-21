@@ -44,6 +44,7 @@ const activityLog = require('./lib/activity-log');
 const whatsappWebhook = require('./lib/whatsapp-webhook');
 const { ensureSupportTicketSchema } = require('./lib/support-tickets-schema');
 const supportTicketNotify = require('./lib/support-ticket-notify');
+const supportTicketSla = require('./lib/support-ticket-sla');
 const { ensureContactInquiriesSchema } = require('./lib/contact-inquiries-schema');
 const paymentsMod = require('./lib/payments-module');
 const adminPaymentFlow = require('./lib/admin-payment-flow');
@@ -463,6 +464,7 @@ const fileStore = require('./lib/file-store');
 const siteCmsHelpers = require('./lib/site-cms-helpers');
 const caseUpload = fileStore.createUploadHandler(upload, memoryUpload);
 
+app.get('/uploads/api/assets/:key', fileStore.serveAssetHandler(db));
 app.get('/uploads/:filename', fileStore.serveUploadHandler(db, uploadsDir));
 if (fileStore.useBlobStore()) {
     fileStore.ensureSchema(db, (e) => {
@@ -4325,11 +4327,6 @@ app.put('/api/applications/:applicationId', withCertificateUpload, (req, res) =>
     }
     const fieldOtpTokensObj = parseMaybeJson(fieldOtpTokens) || (fieldOtpTokens && typeof fieldOtpTokens === 'object' ? fieldOtpTokens : {});
     
-    if (req.file) {
-        formData = formData || {};
-        formData.certificate_path = req.file.filename;
-    }
-    
     db.get(
         `SELECT r.user_id, r.seminar_id, r.status, r.form_data, IFNULL(s.otp_on_application, 0) AS otp_on_application
          FROM registrations r
@@ -4358,8 +4355,12 @@ app.put('/api/applications/:applicationId', withCertificateUpload, (req, res) =>
             } catch (_) {
                 prev = {};
             }
-            const merged = { ...prev, ...(formData || {}) };
-            const hasCert = !!req.file || !!merged.certificate_path;
+
+            persistUploadedCertificate(req, (certErr, certPath) => {
+                if (certErr) return res.status(500).json({ error: certErr.message });
+                const merged = { ...prev, ...(formData || {}) };
+                if (certPath) merged.certificate_path = certPath;
+                const hasCert = !!req.file || !!merged.certificate_path;
 
             loadRegistrationFormConfig(row.seminar_id, (cfgErr, regCfg) => {
                 if (cfgErr) return res.status(500).json({ error: cfgErr.message });
@@ -4458,6 +4459,7 @@ app.put('/api/applications/:applicationId', withCertificateUpload, (req, res) =>
                     return;
                 }
                 runFieldOtps();
+            });
             });
         }
     );
@@ -7645,6 +7647,40 @@ app.get('/api/admin/pending-registration-reminder-config', (req, res) => {
     });
 });
 
+app.get('/api/admin/support-ticket-config', (req, res) => {
+    const aid = parseInt(req.query.actingAdminId, 10);
+    if (!Number.isInteger(aid) || aid < 1) {
+        return res.status(400).json({ error: 'actingAdminId query parameter is required' });
+    }
+    assertAdminPortalActor(aid, (e, adm) => {
+        if (e && e.message === 'BAD_ACTOR') return res.status(400).json({ error: 'actingAdminId is required' });
+        if (e && e.message === 'FORBIDDEN') return res.status(403).json({ error: 'Administrator access required' });
+        if (e) return res.status(500).json({ error: e.message });
+        if (!adm) return res.status(403).json({ error: 'Invalid administrator' });
+        supportTicketSla.loadConfig(db, (err, config) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ success: true, config });
+        });
+    });
+});
+
+app.post('/api/admin/support-ticket-config', (req, res) => {
+    const { actingAdminId, config } = req.body || {};
+    const aid = parseInt(actingAdminId, 10);
+    if (!Number.isInteger(aid) || aid < 1) return res.status(400).json({ error: 'actingAdminId is required' });
+    if (!config || typeof config !== 'object') return res.status(400).json({ error: 'config object required' });
+    assertAdminPortalActor(aid, (e, adm) => {
+        if (e && e.message === 'BAD_ACTOR') return res.status(400).json({ error: 'actingAdminId is required' });
+        if (e && e.message === 'FORBIDDEN') return res.status(403).json({ error: 'Administrator access required' });
+        if (e) return res.status(500).json({ error: e.message });
+        if (!adm) return res.status(403).json({ error: 'Invalid administrator' });
+        supportTicketSla.saveConfig(db, config, (err, norm) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ success: true, config: norm });
+        });
+    });
+});
+
 app.post('/api/admin/pending-registration-reminder-config', (req, res) => {
     const { actingAdminId, config } = req.body || {};
     const aid = parseInt(actingAdminId, 10);
@@ -9703,7 +9739,7 @@ function doctorSupportTicketLookupPayload(userRow, cb) {
 }
 
 const SUPPORT_TICKET_LIST_COLS = `st.id, st.user_id, st.category, st.subject, st.description, st.priority, st.status,
-    st.attachment_path, st.created_at, st.updated_at, st.assigned_to_admin,
+    st.attachment_path, st.created_at, st.updated_at, st.expected_response_at, st.assigned_to_admin,
     st.ticket_id AS ticket_id_raw, st.tracking_id,
     COALESCE(NULLIF(TRIM(st.ticket_id), ''), NULLIF(TRIM(st.tracking_id), '')) AS ticket_id`;
 
@@ -9712,7 +9748,7 @@ function resolveSupportTicketByRef(ticketRef, cb) {
     if (!ref) return cb(new Error('Ticket id required'));
     db.get(
         `SELECT st.id, st.ticket_id, st.tracking_id, st.user_id, st.category, st.subject, st.description,
-                st.priority, st.status, st.created_at, st.updated_at, st.attachment_path,
+                st.priority, st.status, st.expected_response_at, st.created_at, st.updated_at, st.attachment_path,
                 u.first_name, u.last_name, u.email
          FROM support_tickets st
          LEFT JOIN users u ON st.user_id = u.id
@@ -9827,11 +9863,12 @@ function createSupportTicketRecord(opts, cb) {
     const senderType = opts.senderType || 'user';
     const senderId = parseInt(opts.senderId, 10) || uid;
 
-    const runInsert = () => {
+    const runInsert = (slaMeta) => {
+        const expectedAt = slaMeta && slaMeta.iso ? slaMeta.iso : null;
         db.run(
-            `INSERT INTO support_tickets (ticket_id, tracking_id, user_id, category, subject, description, attachment_path, priority, status, created_at, updated_at) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-            [ticketId, ticketId, uid, cat, subject, description, opts.attachment_path || null, opts.priority || 'medium'],
+            `INSERT INTO support_tickets (ticket_id, tracking_id, user_id, category, subject, description, attachment_path, priority, status, expected_response_at, created_at, updated_at) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+            [ticketId, ticketId, uid, cat, subject, description, opts.attachment_path || null, opts.priority || 'medium', expectedAt],
             function (err) {
                 if (err) return cb(err);
                 db.run(
@@ -9841,7 +9878,13 @@ function createSupportTicketRecord(opts, cb) {
                         if (err2) return cb(err2);
                         supportTicketNotify.notifySupportTicketCreated(db, ticketId, (nErr) => {
                             if (nErr) console.warn('[support-ticket] create notify:', nErr.message);
-                            cb(null, { ticketId, userId: uid });
+                            cb(null, {
+                                ticketId,
+                                userId: uid,
+                                expectedResponseAt: expectedAt,
+                                expectedResponseHours: slaMeta && slaMeta.hours,
+                                expectedResponseDisplay: supportTicketSla.formatExpectedDisplay(expectedAt)
+                            });
                         });
                     }
                 );
@@ -9849,10 +9892,16 @@ function createSupportTicketRecord(opts, cb) {
         );
     };
 
-    if (pgDb && pgDb.ensureAuxiliaryTables) {
-        return pgDb.ensureAuxiliaryTables().then(runInsert).catch((e) => cb(e));
-    }
-    ensureSupportTicketSchema(db, ignoreSchemaMigrationErr, runInsert);
+    const afterSla = (slaMeta) => {
+        if (pgDb && pgDb.ensureAuxiliaryTables) {
+            return pgDb.ensureAuxiliaryTables().then(() => runInsert(slaMeta)).catch((e) => cb(e));
+        }
+        ensureSupportTicketSchema(db, ignoreSchemaMigrationErr, () => runInsert(slaMeta));
+    };
+    supportTicketSla.loadConfig(db, (slaErr) => {
+        if (slaErr) console.warn('[support-ticket-sla]', slaErr.message);
+        afterSla(supportTicketSla.computeExpectedResponseAt(cat));
+    });
 }
 
 app.use('/api/support-ticket', withSupportTickets);
@@ -9869,7 +9918,14 @@ app.post('/api/support-ticket/create', (req, res) => {
                 console.error('[support-ticket/create]', err.message);
                 return res.status(500).json({ error: err.message || 'Could not create ticket. Please try again.' });
             }
-            res.json({ success: true, ticketId: out.ticketId, id: out.ticketId });
+            res.json({
+                success: true,
+                ticketId: out.ticketId,
+                id: out.ticketId,
+                expectedResponseAt: out.expectedResponseAt,
+                expectedResponseHours: out.expectedResponseHours,
+                expectedResponseDisplay: out.expectedResponseDisplay
+            });
         }
     );
 });

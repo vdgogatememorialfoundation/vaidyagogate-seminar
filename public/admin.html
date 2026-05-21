@@ -620,6 +620,21 @@
                     <button type="button" class="btn-primary" style="background:#b45309;" onclick="saveDesignatedNotifyConfig()">Save designated contacts</button>
                     <p id="dn-save-msg" style="margin-top:8px;font-weight:600;font-size:0.9rem;"></p>
                         </div>
+                <div class="card" style="margin-bottom:18px;border:1px solid #bae6fd;background:#f0f9ff;">
+                    <h3 style="margin:0 0 10px;color:#0369a1;font-size:1.05rem;">Support ticket response time (SLA)</h3>
+                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:10px;">When a doctor logs a support ticket, they see the expected response time. Default applies to all categories unless overridden below.</p>
+                    <label style="font-size:0.82rem;font-weight:700;">Default response time (hours)</label>
+                    <input type="number" id="sts-default-hours" min="1" max="720" value="24" style="width:120px;padding:8px;margin:6px 0 14px;">
+                    <label style="font-size:0.82rem;font-weight:700;">Hours by category (optional)</label>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin:8px 0 12px;">
+                        <div><span style="font-size:0.8rem;">General</span><input type="number" id="sts-cat-general" min="1" max="720" placeholder="24" style="width:100%;padding:6px;"></div>
+                        <div><span style="font-size:0.8rem;">Registration</span><input type="number" id="sts-cat-registration" min="1" max="720" placeholder="48" style="width:100%;padding:6px;"></div>
+                        <div><span style="font-size:0.8rem;">Payment</span><input type="number" id="sts-cat-payment" min="1" max="720" placeholder="24" style="width:100%;padding:6px;"></div>
+                        <div><span style="font-size:0.8rem;">Technical</span><input type="number" id="sts-cat-technical" min="1" max="720" placeholder="48" style="width:100%;padding:6px;"></div>
+                    </div>
+                    <button type="button" class="btn-primary" style="background:#0284c7;" onclick="saveSupportTicketSlaConfig()">Save support SLA</button>
+                    <p id="sts-save-msg" style="margin-top:8px;font-weight:600;font-size:0.9rem;"></p>
+                </div>
                 <div class="card" style="margin-bottom:18px;border:1px solid #ddd6fe;background:#f5f3ff;">
                     <h3 style="margin:0 0 10px;color:#5b21b6;font-size:1.05rem;">Portal themes (main site, doctor, judge)</h3>
                     <p style="color:#64748b;font-size:0.88rem;margin-bottom:12px;">Primary colours and accents for each portal. Doctors and judges see changes after refresh.</p>
@@ -1048,6 +1063,16 @@
                     <button type="button" class="btn-primary" onclick="saveAdminCaseProgram()">Save program</button>
                     <button type="button" class="btn-primary" style="background:#64748b;margin-left:8px;" onclick="resetAdminCaseProgramForm()">Clear / new</button>
                     <div id="case-prog-list" style="margin-top:14px;"></div>
+                    <hr style="margin:18px 0;">
+                    <h4 style="margin:0 0 8px;">Priority select (no application yet)</h4>
+                    <p style="color:#64748b;font-size:0.85rem;margin-bottom:10px;">Creates a pre-filled case application for a doctor who was selected but never applied. They complete missing fields in the doctor portal; review is fast-tracked. Seminar registration override is applied when the program is linked to a seminar.</p>
+                    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;">
+                        <div><label style="font-size:0.8rem;">Program</label><select id="case-priority-program" style="min-width:220px;padding:8px;"><option value="">— Select program —</option></select></div>
+                        <div><label style="font-size:0.8rem;">Doctor portal ID / email</label><input type="text" id="case-priority-user" placeholder="USR_… or email" style="padding:8px;min-width:200px;"></div>
+                        <div><label style="font-size:0.8rem;">Category</label><select id="case-priority-category" style="padding:8px;"><option value="agnikarma">Agnikarma</option><option value="viddhakarma">Viddhakarma</option><option value="both">Both</option></select></div>
+                        <button type="button" class="btn-primary" style="background:#7c3aed;" onclick="adminPriorityInviteDoctor()">Create priority application</button>
+                    </div>
+                    <p id="case-priority-msg" style="margin-top:8px;font-size:0.88rem;font-weight:600;"></p>
                 </div>
                 <div class="card">
                     <button type="button" class="btn-primary" style="background:#64748b;margin-bottom:12px;" onclick="loadAdminCaseSubmissions()">Refresh submissions</button>

@@ -1623,6 +1623,15 @@ function switchAdminUserDetailTab(tab) {
     renderAdminUserDetailTab();
 }
 
+function publicFileHref(stored) {
+    const p = String(stored || '').trim();
+    if (!p) return '';
+    if (/^https?:\/\//i.test(p)) return p;
+    if (p.startsWith('/uploads/api/assets/')) return '/api/assets/' + p.slice('/uploads/api/assets/'.length);
+    if (p.startsWith('/')) return p;
+    return '/uploads/' + p;
+}
+
 function escAdmin(s) {
     return String(s == null ? '' : s)
         .replace(/&/g, '&amp;')
@@ -2832,6 +2841,14 @@ async function loadAdminCasePrograms() {
             return;
         }
         box.innerHTML = '<h4 style="margin:0 0 10px;">Saved programs</h4>';
+        const priSel = document.getElementById('case-priority-program');
+        if (priSel) {
+            priSel.innerHTML = '<option value="">— Select program —</option>';
+            rows.forEach(function (p) {
+                priSel.innerHTML +=
+                    '<option value="' + p.id + '">' + String(p.title || '').replace(/</g, '&lt;') + '</option>';
+            });
+        }
         rows.forEach(function (p) {
             const used = p.submissionCount != null ? p.submissionCount : p.submission_count || 0;
             const capMax = p.maxTotalSubmissions != null ? p.maxTotalSubmissions : p.max_total_submissions;
@@ -3927,7 +3944,9 @@ async function loadApplications() {
             let formData = {};
             try { formData = JSON.parse(a.form_data || '{}'); } catch(e){}
             
-            const fileLink = formData.certificate_path ? `<br><a href="/uploads/${formData.certificate_path}" target="_blank" style="color:blue;font-size:0.8rem;">📄 View Certificate</a>` : '';
+            const fileLink = formData.certificate_path
+                ? `<br><a href="${escAdmin(publicFileHref(formData.certificate_path))}" target="_blank" style="color:blue;font-size:0.8rem;">📄 View Certificate</a>`
+                : '';
             const candidateName = formData.fname ? `${formData.fname} ${formData.lname || ''}` : `${a.first_name || ''} ${a.last_name || ''}`;
 
             tbody.innerHTML += `
@@ -4225,7 +4244,7 @@ function viewFullApplication(index) {
     const certPath = formData.certificate_path ? String(formData.certificate_path) : '';
     const certLink = certPath
         ? '<p><a href="' +
-          escAdmin(certPath) +
+          escAdmin(publicFileHref(certPath)) +
           '" target="_blank" rel="noopener">View certificate document</a></p>'
         : '<p class="muted">No certificate file on record.</p>';
     const st = String(a.status || '').toLowerCase();
@@ -7076,6 +7095,17 @@ async function viewSupportTicket(ticketId) {
                 <p><strong>Category:</strong> ${ticket.category}</p>
                 <p><strong>Priority:</strong> ${String(ticket.priority || 'medium').toUpperCase()}</p>
                 <p><strong>Status:</strong> ${ticket.status}</p>
+                ${
+                    ticket.expected_response_at
+                        ? '<p><strong>Expected response by:</strong> ' +
+                          new Date(ticket.expected_response_at).toLocaleString('en-IN', {
+                              timeZone: 'Asia/Kolkata',
+                              dateStyle: 'medium',
+                              timeStyle: 'short'
+                          }) +
+                          ' IST</p>'
+                        : ''
+                }
                 <p><strong>Description:</strong> ${ticket.description}</p>
             </div>
         `;
@@ -8184,6 +8214,99 @@ function cmsCollectHeroFieldsFromForm() {
     };
 }
 
+async function loadSupportTicketSlaAdminForm() {
+    const adm = getStoredAdminUser();
+    const def = document.getElementById('sts-default-hours');
+    if (!def || !adm || !adm.id) return;
+    try {
+        const res = await fetch(
+            '/api/admin/support-ticket-config?actingAdminId=' + encodeURIComponent(adm.id)
+        );
+        const d = await res.json();
+        if (!d.success || !d.config) return;
+        def.value = String(d.config.defaultResponseHours || 24);
+        const by = d.config.byCategory || {};
+        const set = (id, key) => {
+            const el = document.getElementById(id);
+            if (el && by[key] != null) el.value = String(by[key]);
+        };
+        set('sts-cat-general', 'general');
+        set('sts-cat-registration', 'registration');
+        set('sts-cat-payment', 'payment');
+        set('sts-cat-technical', 'technical');
+    } catch (_) {}
+}
+
+async function saveSupportTicketSlaConfig() {
+    const adm = getStoredAdminUser();
+    const msg = document.getElementById('sts-save-msg');
+    if (!adm || !adm.id) return;
+    const num = (id) => {
+        const v = parseInt((document.getElementById(id) || {}).value, 10);
+        return Number.isFinite(v) && v > 0 ? v : null;
+    };
+    const config = {
+        defaultResponseHours: num('sts-default-hours') || 24,
+        byCategory: {}
+    };
+    ['general', 'registration', 'payment', 'technical'].forEach((cat) => {
+        const h = num('sts-cat-' + cat);
+        if (h) config.byCategory[cat] = h;
+    });
+    try {
+        const res = await fetch('/api/admin/support-ticket-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: adm.id, config })
+        });
+        const d = await res.json();
+        if (msg) {
+            msg.style.color = d.success ? '#15803d' : '#b91c1c';
+            msg.textContent = d.success ? 'Support SLA saved.' : d.error || 'Save failed';
+        }
+    } catch (e) {
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = 'Network error';
+        }
+    }
+}
+
+async function adminPriorityInviteDoctor() {
+    const programId = parseInt((document.getElementById('case-priority-program') || {}).value, 10);
+    const userRef = String((document.getElementById('case-priority-user') || {}).value || '').trim();
+    const category = (document.getElementById('case-priority-category') || {}).value || 'agnikarma';
+    const msgEl = document.getElementById('case-priority-msg');
+    const adm = getStoredAdminUser();
+    if (!programId) return alert('Select a case program');
+    if (!userRef) return alert('Enter doctor portal ID or email');
+    if (!adm || !adm.id) return alert('Admin session required');
+    if (msgEl) msgEl.textContent = 'Creating…';
+    try {
+        const res = await fetch('/api/admin/case/programs/' + programId + '/priority-invite', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userRef, category, actingAdminId: adm.id })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            if (msgEl) {
+                msgEl.style.color = '#b91c1c';
+                msgEl.textContent = data.error || 'Failed';
+            }
+            return alert(data.error || 'Failed');
+        }
+        if (msgEl) {
+            msgEl.style.color = '#15803d';
+            msgEl.textContent = data.message + ' App ' + (data.applicationNo || data.submissionId);
+        }
+        loadAdminCaseSubmissions();
+    } catch (e) {
+        console.error(e);
+        if (msgEl) msgEl.textContent = 'Network error';
+    }
+}
+
 async function loadDesignatedNotifyAdminForm() {
     const adm = getStoredAdminUser();
     const em = document.getElementById('dn-emails');
@@ -8461,6 +8584,7 @@ async function loadAdminSiteCms() {
     if (!tickerEl) return;
     loadPortalAuthAdminForm().catch(console.error);
     loadDesignatedNotifyAdminForm().catch(console.error);
+    loadSupportTicketSlaAdminForm().catch(console.error);
     loadPortalThemesAdminForm().catch(console.error);
     loadPendingReminderAdminForm().catch(console.error);
     loadJudgeCommunicationsAdmin().catch(console.error);

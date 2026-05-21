@@ -13,7 +13,9 @@
     function mediaUrl(path) {
         if (!path) return '';
         const p = String(path).trim();
-        if (p.startsWith('http') || p.startsWith('/')) return p;
+        if (p.startsWith('http')) return p;
+        if (p.startsWith('/uploads/api/assets/')) return '/api/assets/' + p.slice('/uploads/api/assets/'.length);
+        if (p.startsWith('/')) return p;
         return '/uploads/' + p;
     }
 

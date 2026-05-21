@@ -2537,7 +2537,9 @@ async function submitCasePresentation() {
 function caseApplicationStatusLabel(st) {
     const s = String(st || 'submitted').toLowerCase();
     if (s === 'revision_required') return 'Re-upload documents required';
+    if (s === 'priority_invited') return 'Complete application (priority)';
     if (s === 'judging') return 'Judges scoring';
+    if (s === 'judged') return 'Judged — awaiting final result';
     if (s === 'under_review') return 'Admin reviewing files';
     if (s === 'approved_for_judging') return 'Ready for judges';
     if (s === 'selected') return 'Selected / winner';
@@ -5084,6 +5086,21 @@ async function loadChatMessages(silent) {
                 '</p>';
             return;
         }
+        const titleEl = document.getElementById('chat-title');
+        if (titleEl) {
+            let t = 'Ticket ' + (ticket.ticket_id || currentTicketId);
+            if (ticket.expected_response_at) {
+                t +=
+                    ' · Expected response ' +
+                    new Date(ticket.expected_response_at).toLocaleString('en-IN', {
+                        timeZone: 'Asia/Kolkata',
+                        dateStyle: 'medium',
+                        timeStyle: 'short'
+                    }) +
+                    ' IST';
+            }
+            titleEl.innerText = t;
+        }
         const messages = Array.isArray(ticket.messages) ? ticket.messages : [];
         if (!messages.length) {
             box.innerHTML = '<p style="color:#64748b;text-align:center;">No messages yet. Send a reply below.</p>';
@@ -5158,7 +5175,11 @@ async function submitSupportTicket() {
             return;
         }
         if (result.success) {
-            document.getElementById('ticket-result').innerText = 'Ticket created: ' + result.ticketId;
+            let msg = 'Ticket created: ' + result.ticketId;
+            if (result.expectedResponseDisplay) {
+                msg += ' — Expected response by ' + result.expectedResponseDisplay + ' (IST)';
+            }
+            document.getElementById('ticket-result').innerText = msg;
             document.getElementById('ticket-subj').value = '';
             document.getElementById('ticket-desc').value = '';
             setTimeout(() => {
