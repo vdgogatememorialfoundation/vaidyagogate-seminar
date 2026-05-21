@@ -166,6 +166,16 @@
         resultBox.innerHTML = html;
     }
 
+    function profilePhotoHtml(d) {
+        const url = d && (d.profilePhotoUrl || d.profile_photo_url);
+        if (!url) return '';
+        return (
+            '<div class="scan-profile-photo-wrap"><img class="scan-profile-photo" src="' +
+            String(url).replace(/"/g, '&quot;') +
+            '" alt="Profile photo"></div>'
+        );
+    }
+
     function metaHtml(d, extra) {
         const rows = [
             ['Name', d.name],
@@ -316,10 +326,13 @@
                         : '';
                 renderResult(
                     true,
-                    '<strong><i class="fas fa-check-circle"></i> ' +
+                    '<div class="scan-result-top">' +
+                        profilePhotoHtml(d) +
+                        '<div class="scan-result-body"><strong><i class="fas fa-check-circle"></i> ' +
                         (result.message || 'Checked in').replace(/</g, '&lt;') +
                         '</strong>' +
                         metaHtml(d) +
+                        '</div></div>' +
                         scanNote +
                         '<p style="margin-top:10px;font-size:0.85rem;opacity:0.85;">Next scan in a moment…</p>',
                     'ok'
@@ -342,11 +355,14 @@
                         : '';
                 renderResult(
                     false,
-                    '<strong><i class="fas fa-times-circle"></i> ' +
+                    '<div class="scan-result-top">' +
+                        profilePhotoHtml(d) +
+                        '<div class="scan-result-body"><strong><i class="fas fa-times-circle"></i> ' +
                         err.replace(/</g, '&lt;') +
                         '</strong>' +
                         banNote +
-                        (d && (d.name || d.userIdString || d.applicationNo) ? metaHtml(d) : ''),
+                        (d && (d.name || d.userIdString || d.applicationNo) ? metaHtml(d) : '') +
+                        '</div></div>',
                     isDup ? 'warn' : 'bad'
                 );
                 pushHistory(err.slice(0, 60), false);

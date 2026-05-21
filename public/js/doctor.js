@@ -741,8 +741,9 @@ function renderSeminarApplicationTrackerCard(a) {
     const st = String(a.status || '').toLowerCase();
     const isPaid = st === 'completed' || st === 'checked_in';
     let revisionBlock = '';
-    if (st === 'revision_required') {
+    if (st === 'revision_required' || st === 'documents_requested') {
         let reason = '';
+        let requested = '';
         try {
             const dr =
                 typeof a.doc_review === 'object' && a.doc_review
@@ -751,16 +752,26 @@ function renderSeminarApplicationTrackerCard(a) {
                       ? JSON.parse(a.doc_review_json)
                       : null;
             reason = (dr && dr.rejection_reason) || '';
+            if (dr && dr.requested_docs && dr.requested_docs.length) {
+                requested = dr.requested_docs.join(', ');
+            }
         } catch (_) {}
         revisionBlock =
             '<div style="background:#fff7ed;border:1px solid #fdba74;border-radius:8px;padding:12px;margin-bottom:12px;">' +
-            '<p style="margin:0 0 8px;font-weight:600;color:#9a3412;"><i class="fas fa-exclamation-triangle"></i> Re-upload documents (same application no.)</p>' +
+            '<p style="margin:0 0 8px;font-weight:600;color:#9a3412;"><i class="fas fa-exclamation-triangle"></i> ' +
+            (st === 'documents_requested' ? 'Additional documents requested' : 'Re-upload documents (same application no.)') +
+            '</p>' +
             (reason
                 ? '<p style="margin:0 0 10px;font-size:0.9rem;color:#7c2d12;">Admin note: ' + escapeHtml(reason) + '</p>'
                 : '') +
+            (requested
+                ? '<p style="margin:0 0 10px;font-size:0.9rem;color:#7c2d12;">Requested: ' + escapeHtml(requested) + '</p>'
+                : '') +
             '<button type="button" class="btn-warning" onclick="openSeminarDocumentResubmitById(' +
             Number(a.id) +
-            ')">Re-upload certificate &amp; NCISM</button></div>';
+            ')">' +
+            (st === 'documents_requested' ? 'Upload additional documents' : 'Re-upload certificate &amp; NCISM') +
+            '</button></div>';
     }
     const payBtn =
         st === 'approved_pending_payment' && !isPaid
@@ -2053,6 +2064,9 @@ function switchTab(tabId, menuEl) {
     if (tabId === 'tab-receipts') {
         loadDoctorReceipts();
     }
+    if (tabId === 'tab-payments') {
+        loadDoctorSupplementalPayments();
+    }
     if (tabId === 'tab-ticket') {
         loadDoctorEventTickets();
     }
@@ -2538,6 +2552,7 @@ async function submitCasePresentation() {
 function caseApplicationStatusLabel(st) {
     const s = String(st || 'submitted').toLowerCase();
     if (s === 'revision_required') return 'Re-upload documents required';
+    if (s === 'documents_requested') return 'Additional documents requested';
     if (s === 'priority_invited') return 'Complete application (priority)';
     if (s === 'judging') return 'Judges scoring';
     if (s === 'judged') return 'Judged — awaiting final result';
@@ -3877,12 +3892,12 @@ async function loadApplications(silentPoll) {
             // Render Table Row
             const st = String(a.status || '').toLowerCase();
             const canEdit = a.status === 'submitted' || a.status === 'pending_approval';
-            const needsResubmit = st === 'revision_required';
+            const needsResubmit = st === 'revision_required' || st === 'documents_requested';
             const editBtn = canEdit
                 ? `<button class="btn-warning" style="padding: 5px 10px; margin-right: 5px;" onclick="editApplication(${index})">Edit</button>`
                 : '';
             const resubmitBtn = needsResubmit
-                ? `<button class="btn-warning" style="padding: 5px 10px; margin-right: 5px;" onclick="openSeminarDocumentResubmitByIndex(${index})">Re-upload docs</button>`
+                ? `<button class="btn-warning" style="padding: 5px 10px; margin-right: 5px;" onclick="openSeminarDocumentResubmitByIndex(${index})">${st === 'documents_requested' ? 'Upload docs' : 'Re-upload docs'}</button>`
                 : '';
             const cancelStatus = doctorCancelRequestStatus(a.id);
             const canRequestCancel = doctorCanCancelApplication(a) && cancelStatus !== 'Cancellation pending review';
@@ -4818,6 +4833,12 @@ async function loadDoctorEventTickets() {
             box.innerHTML = '<p style="color:#64748b;">No participant tickets yet. After payment is confirmed (or admin issues your e-ticket), your QR entry ticket appears here.</p>';
             return;
         }
+        const profileUrl =
+            window.__doctorProfile &&
+            (window.__doctorProfile.profile_photo_url || window.__doctorProfile.profilePhotoUrl);
+        const photoCol = profileUrl
+            ? `<div><img src="${escapeHtml(profileUrl)}" alt="Profile" style="width:96px;height:96px;border-radius:12px;object-fit:cover;border:2px solid #cbd5e1;"></div>`
+            : '<div style="width:96px;"></div>';
         let html = '<div style="display:flex;flex-direction:column;gap:20px;">';
         rows.forEach((t) => {
             const regSt = String(t.registration_status || '').toLowerCase();
@@ -4830,8 +4851,9 @@ async function loadDoctorEventTickets() {
             const statusLine = invalid
                 ? `<p style="margin:8px 0 0;font-size:0.9rem;color:#b91c1c;font-weight:600;">Invalid — registration ${regSt === 'cancelled' ? 'cancelled' : regSt === 'rejected' ? 'rejected' : 'no longer active'}. Do not use this QR for entry.</p>`
                 : `<p style="margin:8px 0 0;font-size:0.85rem;color:#64748b;">${escapeHtml(scanned)}</p>`;
-            html += `<div style="border:1px solid ${invalid ? '#fecaca' : '#e2e8f0'};border-radius:12px;padding:16px;display:grid;grid-template-columns:140px 1fr;gap:16px;align-items:start;${invalid ? 'opacity:0.85;background:#fef2f2;' : ''}">
-                <div>${qr ? `<img src="${qr}" alt="QR" style="width:128px;height:128px;border:1px solid #cbd5e1;border-radius:8px;">` : (t.is_scanned ? '<span style="color:#059669;font-size:0.85rem;font-weight:700;"><i class="fas fa-check-circle"></i> QR used at entry</span>' : '<span style="color:#94a3b8;font-size:0.85rem;">QR unavailable</span>')}</div>
+            html += `<div style="border:1px solid ${invalid ? '#fecaca' : '#e2e8f0'};border-radius:12px;padding:16px;display:grid;grid-template-columns:96px 128px 1fr;gap:16px;align-items:start;${invalid ? 'opacity:0.85;background:#fef2f2;' : ''}">
+                ${photoCol}
+                <div>${qr ? `<img src="${qr}" alt="QR code" style="width:128px;height:128px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;">` : (t.is_scanned ? '<span style="color:#059669;font-size:0.85rem;font-weight:700;"><i class="fas fa-check-circle"></i> QR used at entry</span>' : '<span style="color:#94a3b8;font-size:0.85rem;">QR unavailable</span>')}</div>
                 <div>
                     <h4 style="margin:0 0 8px;color:#1a237e;">${escapeHtml(t.seminar_title || 'Seminar')}</h4>
                     <p style="margin:0 0 6px;font-size:0.9rem;"><strong>E‑ticket ID:</strong> <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px;">${escapeHtml(t.ticket_id_string || '—')}</code></p>
@@ -5246,6 +5268,33 @@ function updateProfileCompleteBanner(profile) {
     bar.style.display = isDoctorProfileComplete(profile) ? 'none' : '';
 }
 
+function updateDoctorProfilePhotoUi(profile) {
+    const url = profile && (profile.profile_photo_url || profile.profilePhotoUrl);
+    const headerImg = document.getElementById('header-profile-photo');
+    const sideWrap = document.getElementById('sidebar-profile-photo-wrap');
+    const sideImg = document.getElementById('sidebar-profile-photo');
+    const prevWrap = document.getElementById('profile-photo-preview-wrap');
+    const prevImg = document.getElementById('profile-photo-preview');
+    if (url) {
+        if (headerImg) {
+            headerImg.src = url;
+            headerImg.classList.remove('hidden');
+        }
+        if (sideImg && sideWrap) {
+            sideImg.src = url;
+            sideWrap.classList.remove('hidden');
+        }
+        if (prevImg && prevWrap) {
+            prevImg.src = url;
+            prevWrap.classList.remove('hidden');
+        }
+    } else {
+        if (headerImg) headerImg.classList.add('hidden');
+        if (sideWrap) sideWrap.classList.add('hidden');
+        if (prevWrap) prevWrap.classList.add('hidden');
+    }
+}
+
 async function loadProfile() {
     try {
         const uid = doctorNumericUserId();
@@ -5267,11 +5316,81 @@ async function loadProfile() {
             document.getElementById('profile-contact').value = profile.contact_number || '';
             document.getElementById('profile-bio').value = profile.bio || '';
         }
+        updateDoctorProfilePhotoUi(window.__doctorProfile);
         updateProfileCompleteBanner(window.__doctorProfile);
     } catch (err) {
         console.error('Error loading profile:', err);
     }
 }
+
+async function loadDoctorSupplementalPayments() {
+    const box = document.getElementById('doctor-supplemental-payments-list');
+    if (!box) return;
+    const uid = doctorNumericUserId();
+    if (!uid) {
+        box.innerHTML = '<p style="color:#b91c1c;">Please sign in again.</p>';
+        return;
+    }
+    box.innerHTML = '<p style="color:#64748b;">Loading…</p>';
+    try {
+        const res = await fetch('/api/doctor/supplemental-payments?userId=' + encodeURIComponent(uid));
+        const rows = await res.json();
+        if (!Array.isArray(rows) || !rows.length) {
+            box.innerHTML = '<p style="color:#64748b;">No additional payments pending.</p>';
+            return;
+        }
+        let html = '<table class="data-table"><thead><tr><th>Title</th><th>Seminar</th><th>Amount</th><th>Status</th><th></th></tr></thead><tbody>';
+        rows.forEach((r) => {
+            const st = String(r.status || '').toLowerCase();
+            const paid = st === 'paid';
+            html +=
+                '<tr><td><strong>' +
+                escapeHtml(r.title || '—') +
+                '</strong>' +
+                (r.description ? '<br><span style="font-size:0.85rem;color:#64748b;">' + escapeHtml(r.description) + '</span>' : '') +
+                '</td><td>' +
+                escapeHtml(r.seminar_title || '—') +
+                '</td><td>₹' +
+                escapeHtml(String(r.amount != null ? r.amount : '—')) +
+                '</td><td>' +
+                escapeHtml(paid ? 'Paid' : 'Pending') +
+                '</td><td>' +
+                (paid
+                    ? escapeHtml(r.order_id_string || '—')
+                    : '<button type="button" class="btn-success" style="padding:6px 12px;font-size:0.85rem;" onclick="payDoctorSupplemental(' +
+                      Number(r.id) +
+                      ',' +
+                      Number(r.amount) +
+                      ')">Pay (test/mock)</button>') +
+                '</td></tr>';
+        });
+        html += '</tbody></table>';
+        box.innerHTML = html;
+    } catch (e) {
+        console.error(e);
+        box.innerHTML = '<p style="color:#b91c1c;">Could not load payments.</p>';
+    }
+}
+
+async function payDoctorSupplemental(id, amount) {
+    const uid = doctorNumericUserId();
+    if (!uid) return alert('Please sign in again.');
+    if (!confirm('Pay additional charge ₹' + amount + ' using test/mock gateway?')) return;
+    try {
+        const res = await fetch('/api/payments/process-supplemental', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ supplementalId: id, userId: uid, methodId: 'mock' })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return alert(data.error || 'Payment failed');
+        alert(data.message || 'Payment recorded.');
+        loadDoctorSupplementalPayments();
+    } catch (e) {
+        alert('Network error');
+    }
+}
+window.payDoctorSupplemental = payDoctorSupplemental;
 
 async function saveProfile(event) {
     event.preventDefault();
@@ -5398,10 +5517,19 @@ function openSeminarDocumentResubmitModal(app) {
     const certEl = document.getElementById('seminar-doc-resubmit-cert');
     const certHint = document.getElementById('seminar-doc-resubmit-cert-hint');
     const modal = document.getElementById('seminar-doc-resubmit-modal');
-    if (!modal || !ncismEl || !certEl) return;
+    const addGroup = document.getElementById('seminar-doc-resubmit-additional-group');
+    const certGroup = document.getElementById('seminar-doc-resubmit-cert-group');
+    const st = String(app.status || '').toLowerCase();
+    const isAdditional = st === 'documents_requested';
+    if (!modal || !ncismEl) return;
+    if (certGroup) certGroup.style.display = isAdditional ? 'none' : '';
+    if (addGroup) addGroup.classList.toggle('hidden', !isAdditional);
+    if (ncismEl.parentElement) ncismEl.parentElement.style.display = isAdditional ? 'none' : '';
     if (label) {
         label.textContent =
-            'Application ' + (app.application_no || app.id) + ' — same application number, corrected files only.';
+            'Application ' +
+            (app.application_no || app.id) +
+            (isAdditional ? ' — upload additional verification documents.' : ' — same application number, corrected files only.');
     }
     let reason = '';
     try {
@@ -5412,6 +5540,9 @@ function openSeminarDocumentResubmitModal(app) {
                   ? JSON.parse(app.doc_review_json)
                   : null;
         reason = (dr && dr.rejection_reason) || '';
+        if (dr && dr.requested_docs && dr.requested_docs.length && reasonEl) {
+            reason += (reason ? '\n' : '') + 'Requested: ' + dr.requested_docs.join(', ');
+        }
     } catch (_) {}
     if (reasonEl) {
         if (reason) {
@@ -5423,9 +5554,9 @@ function openSeminarDocumentResubmitModal(app) {
         }
     }
     ncismEl.value = formData.ncism || '';
-    certEl.value = '';
-    const needsCert = seminarResubmitNeedsCertificate(formData.qual);
-    certEl.required = needsCert;
+    if (certEl) certEl.value = '';
+    const needsCert = !isAdditional && seminarResubmitNeedsCertificate(formData.qual);
+    if (certEl) certEl.required = needsCert;
     if (certHint) {
         certHint.textContent = needsCert
             ? 'Upload your registration certificate (required for your qualification).'
@@ -5474,30 +5605,44 @@ async function submitSeminarDocumentResubmit() {
     }
     const ncismEl = document.getElementById('seminar-doc-resubmit-ncism');
     const certEl = document.getElementById('seminar-doc-resubmit-cert');
-    const ncism = String((ncismEl && ncismEl.value) || '').trim();
-    if (!ncism) {
-        alert('Enter your NCISM / registration number.');
-        return;
-    }
+    const addEl = document.getElementById('seminar-doc-resubmit-additional');
+    const addLabelEl = document.getElementById('seminar-doc-resubmit-add-label');
     const app = (userApplications || []).find((x) => Number(x.id) === Number(appId));
+    const st = app ? String(app.status || '').toLowerCase() : '';
+    const isAdditional = st === 'documents_requested';
     let formData = {};
     if (app) {
         try {
             formData = JSON.parse(app.form_data || '{}');
         } catch (_) {}
     }
-    const needsCert = seminarResubmitNeedsCertificate(formData.qual);
+    const ncism = String((ncismEl && ncismEl.value) || '').trim();
+    if (!isAdditional && !ncism) {
+        alert('Enter your NCISM / registration number.');
+        return;
+    }
+    const needsCert = !isAdditional && seminarResubmitNeedsCertificate(formData.qual);
     if (needsCert && (!certEl || !certEl.files || !certEl.files[0])) {
         alert('Please upload your certificate document.');
         return;
     }
+    if (isAdditional && (!addEl || !addEl.files || !addEl.files[0])) {
+        alert('Please upload the additional document admin requested.');
+        return;
+    }
     const fd = new FormData();
     fd.append('userId', String(uid));
-    fd.append('ncism', ncism);
+    if (ncism) fd.append('ncism', ncism);
     if (certEl && certEl.files && certEl.files[0]) {
         const certReady = await prepareUploadFileOrAlert(certEl.files[0]);
         if (!certReady) return;
         fd.append('certificate', certReady);
+    }
+    if (addEl && addEl.files && addEl.files[0]) {
+        const addReady = await prepareUploadFileOrAlert(addEl.files[0]);
+        if (!addReady) return;
+        fd.append('additionalDoc', addReady);
+        if (addLabelEl && addLabelEl.value.trim()) fd.append('additionalDocLabel', addLabelEl.value.trim());
     }
     try {
         const res = await fetch('/api/applications/' + appId + '/resubmit-documents', {

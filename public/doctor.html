@@ -41,6 +41,9 @@
         .top-header { background: rgba(255,255,255,0.92); backdrop-filter: blur(10px); padding: 14px 28px; box-shadow: 0 1px 0 rgba(15, 118, 110, 0.08); display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; border-bottom: 1px solid #ccfbf1; }
         .header-title { font-weight: 800; color: var(--doctor-primary); font-size: 1rem; letter-spacing: -0.02em; }
         .user-info { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+        .doctor-header-photo { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; border: 2px solid #5eead4; background: #ccfbf1; flex-shrink: 0; }
+        .doctor-sidebar-photo-wrap { display: flex; justify-content: center; margin-bottom: 12px; }
+        .doctor-sidebar-photo { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; border: 3px solid rgba(251, 191, 36, 0.85); background: rgba(0,0,0,0.15); }
         .hi-user { font-weight: 700; color: #134e4a; }
         .user-id { background: linear-gradient(135deg, #ccfbf1, #99f6e4); color: #115e59; padding: 6px 14px; border-radius: 999px; font-size: 0.8rem; font-weight: 700; border: 1px solid #5eead4; }
         .portal-login-time { display: block; width: 100%; font-size: 0.75rem; color: #0f766e; font-weight: 600; margin-top: 4px; }
@@ -194,6 +197,9 @@
         <aside class="sidebar">
             <div class="sidebar-header">
                 <div data-site-logo data-logo-height="40px" data-logo-fallback="icon" style="margin-bottom:10px;"></div>
+                <div class="doctor-sidebar-photo-wrap hidden" id="sidebar-profile-photo-wrap">
+                    <img id="sidebar-profile-photo" class="doctor-sidebar-photo" alt="Your profile photo" src="">
+                </div>
                 <h2>Doctor's Portal</h2>
                 <p>VGMF National Seminar (<span id="doctor-portal-year-label">2026</span>)</p>
             </div>
@@ -223,6 +229,7 @@
                 <button type="button" class="doctor-menu-toggle" id="doctor-menu-toggle" aria-label="Open menu"><i class="fas fa-bars"></i></button>
                 <div class="header-title">Vaidya Gogate Memorial Foundation — Doctor's Portal</div>
                 <div class="user-info">
+                    <img id="header-profile-photo" class="doctor-header-photo hidden" alt="Profile photo" src="">
                     <span class="hi-user" id="header-name">Hi, Doctor</span>
                     <span class="user-id" id="header-id">ID: —</span>
                     <span class="portal-login-time hidden" id="header-login-time"></span>
@@ -234,7 +241,7 @@
             <div class="notification-bar" id="profile-complete-banner"><i class="fas fa-info-circle"></i> Complete your profile before registering for seminars.</div>
 
             <div class="announcements-box">
-                <h4 style="color: #0f766e; margin-bottom: 10px;"><i class="fas fa-bullhorn"></i> Updates from the office</h4>
+                <h4 style="color: #0f766e; margin-bottom: 10px;"><i class="fas fa-bullhorn"></i> Updates</h4>
                 <ul id="doctor-updates-list" style="list-style-position: inside; color: #64748b; font-size: 0.9rem;">
                     <li style="color:#94a3b8;">Loading…</li>
                 </ul>
@@ -277,7 +284,10 @@
                             <div class="form-group"><label>Your mobile (from account)</label><input type="text" id="profile-account-phone" readonly style="background:#f1f5f9;color:#475569;"></div>
                             <div class="form-group"><label>Hospital / clinic contact <span style="font-weight:400;color:#64748b;">(optional)</span></label><input type="tel" id="profile-contact" placeholder="Reception or clinic number if different from your mobile"></div>
                             <div class="form-group"><label>Bio</label><textarea id="profile-bio" rows="3"></textarea></div>
-                            <div class="form-group"><label>Profile photo</label><input type="file" id="profile-photo" accept="image/*"></div>
+                            <div class="form-group"><label>Profile photo</label>
+                                <div id="profile-photo-preview-wrap" class="hidden" style="margin-bottom:10px;"><img id="profile-photo-preview" alt="Profile preview" style="width:96px;height:96px;border-radius:12px;object-fit:cover;border:1px solid #cbd5e1;"></div>
+                                <input type="file" id="profile-photo" accept="image/*">
+                            </div>
                             <button type="submit" class="btn-primary">Save profile</button>
                         </form>
                     </div>
@@ -613,7 +623,11 @@
 
                 <div id="tab-payments" class="tab-pane hidden">
                     <h2 class="section-title">Payments</h2>
-                    <p style="color:#64748b;margin:-10px 0 16px;">When your application is approved, use the <strong>Pay now</strong> button on the seminar application tracker.</p>
+                    <p style="color:#64748b;margin:-10px 0 16px;">Seminar registration fees are paid from <strong>Track seminar applications</strong>. Additional charges from the office appear below.</p>
+                    <div class="card" style="margin-bottom:16px;">
+                        <h3 style="color:#0f766e;margin:0 0 10px;font-size:1rem;">Additional payments</h3>
+                        <div id="doctor-supplemental-payments-list"><p style="color:#64748b;">Loading…</p></div>
+                    </div>
                     <div class="card" id="make-payments-container"><p style="color:#64748b;">Open <strong>Track seminar applications</strong> to complete payment for approved registrations.</p></div>
                 </div>
 
@@ -662,10 +676,16 @@
                 <label style="font-weight:600;">NCISM / registration number</label>
                 <input type="text" id="seminar-doc-resubmit-ncism" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;">
             </div>
-            <div class="form-group">
+            <div class="form-group" id="seminar-doc-resubmit-cert-group">
                 <label style="font-weight:600;">Certificate (PDF or image)</label>
                 <input type="file" id="seminar-doc-resubmit-cert" accept=".pdf,.jpg,.jpeg,.png" style="width:100%;">
                 <p id="seminar-doc-resubmit-cert-hint" style="font-size:0.8rem;color:#64748b;margin:6px 0 0;"></p>
+            </div>
+            <div class="form-group hidden" id="seminar-doc-resubmit-additional-group">
+                <label style="font-weight:600;">Additional verification document</label>
+                <input type="text" id="seminar-doc-resubmit-add-label" placeholder="e.g. ID proof, address proof" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:8px;">
+                <input type="file" id="seminar-doc-resubmit-additional" accept=".pdf,.jpg,.jpeg,.png" style="width:100%;">
+                <p style="font-size:0.8rem;color:#64748b;margin:6px 0 0;">Upload what admin requested. You can submit more than once if needed.</p>
             </div>
             <div style="display:flex;gap:10px;margin-top:16px;flex-wrap:wrap;">
                 <button type="button" class="btn-warning" onclick="submitSeminarDocumentResubmit()">Submit documents</button>

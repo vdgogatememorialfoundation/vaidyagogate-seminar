@@ -60,6 +60,8 @@ const certRender = require('./lib/certificate-render');
 const certTemplateCfg = require('./lib/certificate-template-config');
 const certVerify = require('./lib/certificate-verify');
 const docVerify = require('./lib/application-document-verify');
+const seminarPurge = require('./lib/seminar-purge');
+const supplementalPayments = require('./lib/supplemental-payments');
 const regCertVerify = require('./lib/registration-certificate-verify');
 const seminarAnalytics = require('./lib/seminar-analytics');
 const { filterConfirmedRows } = require('./lib/confirmed-participants');
@@ -116,6 +118,10 @@ function mountPaymentsRoutes() {
         portalTracking,
         notifyTicketIssued,
         assertAdminPortalActor
+    });
+    supplementalPayments.registerSupplementalPaymentRoutes(app, db, {
+        fileStore,
+        parsePositiveUserId
     });
 }
 
@@ -1453,12 +1459,34 @@ function parseMaybeJson(val) {
     }
 }
 
+function certificateFileFromReq(req) {
+    if (req.file) return req.file;
+    if (req.files && req.files.certificate && req.files.certificate[0]) return req.files.certificate[0];
+    return null;
+}
+
+function additionalDocFileFromReq(req) {
+    if (req.files && req.files.additionalDoc && req.files.additionalDoc[0]) return req.files.additionalDoc[0];
+    return null;
+}
+
 function persistUploadedCertificate(req, cb) {
-    if (!req.file) return cb(null, null);
-    fileStore.persistToGlobalAsset(db, upsertGlobalSetting, req.file, 'cert_', (err, assetPath) => {
+    const certFile = certificateFileFromReq(req);
+    if (!certFile) return cb(null, null);
+    fileStore.persistToGlobalAsset(db, upsertGlobalSetting, certFile, 'cert_', (err, assetPath) => {
         if (err) return cb(err);
         if (assetPath) return cb(null, assetPath);
-        cb(null, req.file.filename ? '/uploads/' + req.file.filename : null);
+        cb(null, certFile.filename ? '/uploads/' + certFile.filename : null);
+    });
+}
+
+function withApplicationDocUpload(req, res, next) {
+    (process.env.VERCEL ? memoryUpload : upload).fields([
+        { name: 'certificate', maxCount: 1 },
+        { name: 'additionalDoc', maxCount: 1 }
+    ])(req, res, (err) => {
+        if (err) return res.status(400).json({ error: uploadErrorMessage(err) });
+        next();
     });
 }
 
@@ -5392,6 +5420,26 @@ app.post('/api/payments/process', (req, res) => {
     });
 });
 
+function doctorProfileUrlFromRow(row) {
+    if (!row || !row.profile_photo_path) return null;
+    return fileStore.publicFileUrl(row.profile_photo_path);
+}
+
+function doctorPayloadFromScanRow(row, extra) {
+    const base = {
+        userId: row.doctor_user_id,
+        userIdString: row.doctor_user_id_string,
+        name: buildDisplayNameFromFormData(row.form_data, row),
+        email: row.doctor_email,
+        phone: row.doctor_phone,
+        applicationNo: row.application_no,
+        seminarTitle: row.seminar_title,
+        ticketId: row.ticket_id_string,
+        profilePhotoUrl: doctorProfileUrlFromRow(row)
+    };
+    return extra ? Object.assign(base, extra) : base;
+}
+
 const SCANNER_TICKET_LOOKUP_SQL = `
         SELECT t.id AS ticket_id, t.is_scanned, IFNULL(t.scan_count, 0) AS scan_count, t.ticket_id_string, IFNULL(t.is_valid, 1) AS is_valid,
                t.qr_code_data,
@@ -5400,12 +5448,14 @@ const SCANNER_TICKET_LOOKUP_SQL = `
                u.id AS doctor_user_id, u.user_id_string AS doctor_user_id_string,
                u.first_name AS doctor_first_name, u.last_name AS doctor_last_name, u.email AS doctor_email, u.phone AS doctor_phone,
                IFNULL(u.is_disabled, 0) AS doctor_is_disabled, IFNULL(u.is_banned, 0) AS doctor_is_banned, u.ban_reason AS doctor_ban_reason,
+               dp.profile_photo_path AS profile_photo_path,
                r.id AS registration_id, r.application_no, r.form_data, r.status AS registration_status, o.status AS payment_status
         FROM tickets t
         JOIN orders o ON t.order_id = o.id
         JOIN registrations r ON o.registration_id = r.id
         JOIN seminars s ON r.seminar_id = s.id
-        JOIN users u ON t.user_id = u.id`;
+        JOIN users u ON t.user_id = u.id
+        LEFT JOIN doctor_profile dp ON dp.user_id = u.id`;
 
 function ticketLookupInvalid(row) {
     if (!row) return false;
@@ -5498,10 +5548,12 @@ const SCANNER_REG_LOOKUP_SQL = `
                IFNULL(s.cert_scans_required, 1) AS cert_scans_required,
                u.id AS doctor_user_id, u.user_id_string AS doctor_user_id_string,
                u.first_name AS doctor_first_name, u.last_name AS doctor_last_name, u.email AS doctor_email, u.phone AS doctor_phone,
-               IFNULL(u.is_disabled, 0) AS doctor_is_disabled, IFNULL(u.is_banned, 0) AS doctor_is_banned, u.ban_reason AS doctor_ban_reason
+               IFNULL(u.is_disabled, 0) AS doctor_is_disabled, IFNULL(u.is_banned, 0) AS doctor_is_banned, u.ban_reason AS doctor_ban_reason,
+               dp.profile_photo_path AS profile_photo_path
         FROM registrations r
         JOIN users u ON u.id = r.user_id
         JOIN seminars s ON s.id = r.seminar_id
+        LEFT JOIN doctor_profile dp ON dp.user_id = u.id
         LEFT JOIN orders o ON o.registration_id = r.id AND lower(trim(o.status)) = 'success'
         LEFT JOIN tickets t ON t.order_id = o.id`;
 
@@ -5727,16 +5779,11 @@ app.post('/api/scanner/mark', (req, res) => {
                         error: accountBlock.error,
                         sound: 'error',
                         accountStatus: accountBlock.accountStatus,
-                        doctor: {
-                            userId: row.doctor_user_id,
-                            userIdString: row.doctor_user_id_string,
-                            name: buildDisplayNameFromFormData(row.form_data, row),
-                            applicationNo: row.application_no,
-                            seminarTitle: row.seminar_title,
+                        doctor: doctorPayloadFromScanRow(row, {
                             ticketId: row.ticket_id_string,
                             accountStatus: accountBlock.accountStatus,
                             banReason: accountBlock.banReason || undefined
-                        }
+                        })
                     });
                 }
 
@@ -5935,19 +5982,13 @@ app.post('/api/scanner/mark', (req, res) => {
                                     scanCount: newScanCount,
                                     scansRequired,
                                     certificateEligible: certEligibleNow,
-                                    doctor: {
-                                        userId: row.doctor_user_id,
-                                        userIdString: row.doctor_user_id_string,
+                                    doctor: doctorPayloadFromScanRow(row, {
                                         name: doctorName,
-                                        email: row.doctor_email,
-                                        phone: row.doctor_phone,
-                                        applicationNo: row.application_no,
-                                        seminarTitle: row.seminar_title,
                                         ticketId: row.ticket_id_string,
                                         registrationType: 'checked_in',
                                         paymentStatus: row.payment_status === 'success' ? 'PAID' : 'UNPAID',
                                         checkedInAt: atIso
-                                    },
+                                    }),
                                     scannedByStaffId: staffId
                                 });
                             });
@@ -6278,8 +6319,9 @@ app.delete('/api/admin/seminars/:id', (req, res) => {
             let i = 0;
             const next = () => {
                 if (i >= (regs || []).length) {
-                    db.run(`DELETE FROM notices WHERE seminar_id = ?`, [sid], () => {
-                        db.run(`DELETE FROM certificate_templates WHERE seminar_id = ?`, [sid], () => removeSeminar());
+                    seminarPurge.purgeSeminarOrphanData(db, sid, (eOrphan) => {
+                        if (eOrphan) return res.status(500).json({ error: eOrphan.message });
+                        removeSeminar();
                     });
                     return;
                 }
@@ -6292,6 +6334,23 @@ app.delete('/api/admin/seminars/:id', (req, res) => {
             next();
         });
         });
+});
+
+// Admin: purge test seminar data (registrations/orders/tickets/scans) — keeps doctor accounts
+app.post('/api/admin/seminars/:id/purge-test-data', (req, res) => {
+    const sid = parseInt(req.params.id, 10);
+    if (!Number.isInteger(sid) || sid < 1) return res.status(400).json({ error: 'Invalid seminar id' });
+    const deleteSeminar = String((req.query && req.query.deleteSeminar) || (req.body && req.body.deleteSeminar) || '') === '1';
+    seminarPurge.purgeSeminarTestData(db, sid, deleteRegistrationCascade, { deleteSeminar }, (err, result) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({
+            success: true,
+            message: deleteSeminar
+                ? 'Seminar and all related registration data removed. Doctor accounts were not deleted.'
+                : 'All registrations and seminar activity data removed. Seminar record kept. Doctor accounts were not deleted.',
+            ...result
+        });
+    });
 });
 
 // Admin: Set Countdown Active
@@ -6438,6 +6497,7 @@ const ALLOWED_REGISTRATION_STATUSES = new Set([
     'submitted',
     'pending_approval',
     'revision_required',
+    'documents_requested',
     'approved_pending_payment',
     'completed',
     'e_ticket_issued',
@@ -6593,7 +6653,7 @@ app.post('/api/admin/applications/:applicationId/document-verify', (req, res) =>
 });
 
 // Doctor: re-upload certificate / NCISM on same application after admin document rejection
-app.post('/api/applications/:applicationId/resubmit-documents', withCertificateUpload, (req, res) => {
+app.post('/api/applications/:applicationId/resubmit-documents', withApplicationDocUpload, (req, res) => {
     const appId = parseInt(req.params.applicationId, 10);
     const userId = parsePositiveUserId(req.body && req.body.userId);
     if (!Number.isInteger(appId) || appId < 1) {
@@ -6611,9 +6671,10 @@ app.post('/api/applications/:applicationId/resubmit-documents', withCertificateU
             if (Number(row.user_id) !== userId) {
                 return res.status(403).json({ error: 'This application does not belong to your account.' });
             }
-            if (String(row.status || '').toLowerCase() !== 'revision_required') {
+            const resubmitSt = String(row.status || '').toLowerCase();
+            if (resubmitSt !== 'revision_required' && resubmitSt !== 'documents_requested') {
                 return res.status(400).json({
-                    error: 'Document resubmission is only available when admin requested corrections.'
+                    error: 'Document resubmission is only available when admin requested corrections or additional documents.'
                 });
             }
             let formData = {};
@@ -6633,10 +6694,27 @@ app.post('/api/applications/:applicationId/resubmit-documents', withCertificateU
                     /* ignore */
                 }
             }
+            const saveAdditionalDoc = (next) => {
+                const addFile = additionalDocFileFromReq(req);
+                if (!addFile) return next();
+                return fileStore.persistMulterFile(db, addFile, uploadsDir, (aErr, addPath) => {
+                    if (aErr) return res.status(500).json({ error: aErr.message });
+                    if (addPath) {
+                        formData.additional_documents = formData.additional_documents || [];
+                        if (!Array.isArray(formData.additional_documents)) formData.additional_documents = [];
+                        formData.additional_documents.push({
+                            path: addPath,
+                            label: String((req.body && req.body.additionalDocLabel) || 'Additional document').trim(),
+                            uploaded_at: new Date().toISOString()
+                        });
+                    }
+                    next();
+                });
+            };
             persistUploadedCertificate(req, (certErr, certPath) => {
                 if (certErr) return res.status(500).json({ error: certErr.message });
                 if (certPath) formData.certificate_path = certPath;
-                if (docVerify.needsAdvancedQualDocs(formData)) {
+                if (resubmitSt === 'revision_required' && docVerify.needsAdvancedQualDocs(formData)) {
                     if (!formData.ncism || !String(formData.ncism).trim()) {
                         return res.status(400).json({ error: 'NCISM / registration number is required.' });
                     }
@@ -6644,50 +6722,62 @@ app.post('/api/applications/:applicationId/resubmit-documents', withCertificateU
                         return res.status(400).json({ error: 'Please upload your certificate document.' });
                     }
                 }
-                const saveResubmit = (mergedStored) => {
-                db.run(
-                    `UPDATE registrations SET form_data = ?, status = 'pending_approval', doc_review_json = NULL WHERE id = ?`,
-                    [JSON.stringify(mergedStored), appId],
-                    (e2) => {
-                        if (e2) return res.status(500).json({ error: e2.message });
-                        portalTracking.logRegistrationEvent(
-                            db,
-                            appId,
-                            'pending_approval',
-                            'Documents resubmitted',
-                            'Updated certificate/NCISM received — under review again.',
-                            () => {}
-                        );
-                        notifEngine.notify(db, 'APPLICATION_UNDER_REVIEW', {
-                            userId: row.user_id,
-                            seminarId: row.seminar_id,
-                            registrationId: appId,
-                            vars: { application_no: row.application_no || '' }
-                        });
-                        res.json({
-                            success: true,
-                            message:
-                                'Documents resubmitted on application ' +
-                                (row.application_no || appId) +
-                                '. Admin will review again.'
-                        });
+                if (resubmitSt === 'documents_requested') {
+                    const hasAdd =
+                        (formData.additional_documents && formData.additional_documents.length) ||
+                        additionalDocFileFromReq(req);
+                    if (!hasAdd && !certPath) {
+                        return res.status(400).json({ error: 'Upload at least one additional document.' });
                     }
-                );
-                };
-                if (formData.certificate_path && formData.ncism) {
-                    return regCertVerify.verifyCertificateForRegistration(
-                        db,
-                        fileStore,
-                        uploadsDir,
-                        formData,
-                        (verr, check) => {
-                            if (verr) console.warn('[ncism-verify]', verr.message);
-                            if (check) formData.ncism_certificate_check = check;
-                            saveResubmit(sanitizeFormDataForStorage(formData));
-                        }
-                    );
                 }
-                saveResubmit(sanitizeFormDataForStorage(formData));
+                saveAdditionalDoc(() => {
+                    const saveResubmit = (mergedStored) => {
+                        db.run(
+                            `UPDATE registrations SET form_data = ?, status = 'pending_approval', doc_review_json = NULL WHERE id = ?`,
+                            [JSON.stringify(mergedStored), appId],
+                            (e2) => {
+                                if (e2) return res.status(500).json({ error: e2.message });
+                                portalTracking.logRegistrationEvent(
+                                    db,
+                                    appId,
+                                    'pending_approval',
+                                    'Documents resubmitted',
+                                    resubmitSt === 'documents_requested'
+                                        ? 'Additional verification documents received — under review again.'
+                                        : 'Updated certificate/NCISM received — under review again.',
+                                    () => {}
+                                );
+                                notifEngine.notify(db, 'APPLICATION_UNDER_REVIEW', {
+                                    userId: row.user_id,
+                                    seminarId: row.seminar_id,
+                                    registrationId: appId,
+                                    vars: { application_no: row.application_no || '' }
+                                });
+                                res.json({
+                                    success: true,
+                                    message:
+                                        'Documents resubmitted on application ' +
+                                        (row.application_no || appId) +
+                                        '. Admin will review again.'
+                                });
+                            }
+                        );
+                    };
+                    if (formData.certificate_path && formData.ncism && resubmitSt === 'revision_required') {
+                        return regCertVerify.verifyCertificateForRegistration(
+                            db,
+                            fileStore,
+                            uploadsDir,
+                            formData,
+                            (verr, check) => {
+                                if (verr) console.warn('[ncism-verify]', verr.message);
+                                if (check) formData.ncism_certificate_check = check;
+                                saveResubmit(sanitizeFormDataForStorage(formData));
+                            }
+                        );
+                    }
+                    saveResubmit(sanitizeFormDataForStorage(formData));
+                });
             });
         }
     );

@@ -262,6 +262,26 @@ body.scanner-body.has-logo-theme {
 .result-meta dt { font-weight: 700; font-size: 0.7rem; opacity: 0.92; }
 .result-meta dd { margin: 0 0 8px; word-break: break-word; }
 
+.scan-result-top {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+}
+
+.scan-result-body { flex: 1; min-width: 0; }
+
+.scan-profile-photo-wrap { flex-shrink: 0; }
+
+.scan-profile-photo {
+    width: 72px;
+    height: 72px;
+    border-radius: 12px;
+    object-fit: cover;
+    border: 2px solid rgba(255, 255, 255, 0.65);
+    background: rgba(0, 0, 0, 0.15);
+    display: block;
+}
+
 .stats-row {
     display: grid;
     grid-template-columns: repeat(3, 1fr);

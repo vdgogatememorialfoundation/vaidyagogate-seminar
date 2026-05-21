@@ -871,7 +871,29 @@
                 <p style="color:#64748b;margin-bottom:16px;">View all payments per doctor, issue refunds (full or partial), waive fees and issue e-tickets, and approve cancellation requests with IST-based refund policy. Razorpay and Cashfree refunds are sent automatically; PayU, Easebuzz, Paytm, and PhonePe are recorded for manual completion in the gateway dashboard.</p>
                 <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
                     <button type="button" class="btn-primary admin-payments-subtab active" data-pay-tab="orders" style="background:#0d9488;" onclick="switchAdminPaymentsTab('orders')">Orders</button>
+                    <button type="button" class="btn-primary admin-payments-subtab" data-pay-tab="supplemental" style="background:#7c3aed;" onclick="switchAdminPaymentsTab('supplemental')">Additional payments</button>
                     <button type="button" class="btn-primary admin-payments-subtab" data-pay-tab="cancellations" style="background:#64748b;" onclick="switchAdminPaymentsTab('cancellations')">Cancellation requests</button>
+                </div>
+                <div id="admin-payments-panel-supplemental" class="card hidden" style="margin-bottom:16px;border:1px solid #ddd6fe;background:#faf5ff;">
+                    <h3 style="margin:0 0 10px;color:#6d28d9;">Additional payments (doctor portal)</h3>
+                    <p style="font-size:0.88rem;color:#64748b;margin:0 0 12px;">Create extra charges (workshop fee, late fee, etc.). Doctors see them under Payments; you can mark cash received at the desk.</p>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;max-width:960px;">
+                        <div><label>Doctor user ID</label><input type="number" id="sup-pay-user-id" style="width:100%;padding:8px;"></div>
+                        <div><label>Seminar (optional)</label><select id="sup-pay-seminar" style="width:100%;padding:8px;"><option value="">—</option></select></div>
+                        <div><label>Amount (₹)</label><input type="number" id="sup-pay-amount" step="0.01" style="width:100%;padding:8px;"></div>
+                    </div>
+                    <div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:960px;">
+                        <div><label>Title</label><input type="text" id="sup-pay-title" placeholder="e.g. Workshop fee" style="width:100%;padding:8px;"></div>
+                        <div><label>Description</label><input type="text" id="sup-pay-desc" style="width:100%;padding:8px;"></div>
+                    </div>
+                    <button type="button" class="btn-primary" style="margin-top:12px;background:#7c3aed;" onclick="createAdminSupplementalPayment()">Create charge</button>
+                    <p id="sup-pay-create-status" style="margin-top:8px;font-size:0.88rem;"></p>
+                    <hr style="margin:16px 0;">
+                    <button type="button" class="btn-primary" style="background:#64748b;margin-bottom:10px;" onclick="loadAdminSupplementalPayments()">Refresh list</button>
+                    <table class="data-table">
+                        <thead><tr><th>ID</th><th>Doctor</th><th>Title</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead>
+                        <tbody id="admin-supplemental-tbody"><tr><td colspan="6" style="text-align:center;">—</td></tr></tbody>
+                    </table>
                 </div>
                 <div class="card" style="margin-bottom:16px;border:1px solid #99f6e4;background:#f0fdfa;">
                     <h3 style="margin:0 0 10px;color:#0f766e;">Create / record order</h3>

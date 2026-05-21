@@ -4485,8 +4485,10 @@ function viewFullApplication(index) {
         ? `<hr style="margin:14px 0;">
         <h4 style="margin:0 0 8px;">Verify application</h4>
         ${docChecks}
-        <div class="form-group" style="margin-top:10px;"><label>Reason (required for rejections)</label>
+        <div class="form-group" style="margin-top:10px;"><label>Reason (required for rejections / document requests)</label>
         <textarea id="admin-verify-reason" rows="3" style="width:100%;" placeholder="e.g. NCISM number does not match certificate"></textarea>
+        <div class="form-group" style="margin-top:8px;"><label>Additional documents needed (comma-separated)</label>
+        <input type="text" id="admin-verify-requested-docs" style="width:100%;padding:8px;" placeholder="e.g. ID proof, address proof"></div>
         <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;">
         <button type="button" class="btn-primary" style="background:#15803d;" onclick="adminVerifySeminarApplication(${a.id},'approve')">Approve application</button>
         ${
@@ -4496,9 +4498,10 @@ function viewFullApplication(index) {
                   ",'reject_documents')\">Reject documents only</button>"
                 : ''
         }
+        <button type="button" class="btn-primary" style="background:#7c3aed;" onclick="adminVerifySeminarApplication(${a.id},'request_documents')">Request additional documents</button>
         <button type="button" class="btn-primary" style="background:#b91c1c;" onclick="adminVerifySeminarApplication(${a.id},'reject_application')">Reject entire application</button>
         </div>
-        <p class="muted" style="font-size:0.85rem;margin-top:8px;">Reject documents: doctor keeps the same application number and re-uploads certificate/NCISM only.</p>`
+        <p class="muted" style="font-size:0.85rem;margin-top:8px;">Reject documents: doctor re-uploads certificate/NCISM. Request additional: doctor uploads extra verification files on the same application.</p>`
         : '<p class="muted" style="margin-top:12px;">Verification actions appear when status is Submitted or Under review.</p>';
 
     const content = document.getElementById('admin-view-content');
@@ -4538,6 +4541,10 @@ function viewFullApplication(index) {
 
 async function adminVerifySeminarApplication(appId, decision) {
     const reason = (document.getElementById('admin-verify-reason')?.value || '').trim();
+    const requestedDocsRaw = (document.getElementById('admin-verify-requested-docs')?.value || '').trim();
+    const requestedDocs = requestedDocsRaw
+        ? requestedDocsRaw.split(',').map((x) => x.trim()).filter(Boolean)
+        : [];
     const infoOk = !!document.getElementById('admin-verify-info')?.checked;
     const ncismOk = !!document.getElementById('admin-verify-ncism')?.checked;
     const certificateOk = !!document.getElementById('admin-verify-cert')?.checked;
@@ -4550,6 +4557,7 @@ async function adminVerifySeminarApplication(appId, decision) {
     const labels = {
         approve: 'Approve this application?',
         reject_documents: 'Request document re-upload on the same application number?',
+        request_documents: 'Ask the doctor to upload additional verification documents?',
         reject_application: 'Reject this entire application?'
     };
     if (!confirm(labels[decision] || 'Continue?')) return;
@@ -4557,7 +4565,7 @@ async function adminVerifySeminarApplication(appId, decision) {
         const res = await fetch('/api/admin/applications/' + appId + '/document-verify', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ decision, reason, infoOk, ncismOk, certificateOk })
+            body: JSON.stringify({ decision, reason, infoOk, ncismOk, certificateOk, requestedDocs })
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) return alert(data.error || 'Verification failed');
@@ -6114,6 +6122,32 @@ function updateSeminarPolicyPreviews() {
     }
 }
 
+async function purgeAdminSeminarTestData(seminarId, title) {
+    if (
+        !confirm(
+            'Purge ALL registration data for "' +
+                title +
+                '"?\n\nRemoves applications, orders, tickets, scans, and feedback for this seminar. Doctor accounts stay registered. The seminar record is kept unless you check "also delete seminar" below.'
+        )
+    ) {
+        return;
+    }
+    const alsoDelete = confirm('Also delete the seminar record itself? (Cancel = keep seminar, only purge registrations)');
+    try {
+        const res = await fetch(
+            '/api/admin/seminars/' + seminarId + '/purge-test-data?deleteSeminar=' + (alsoDelete ? '1' : '0'),
+            { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return alert(data.error || 'Purge failed');
+        alert(data.message || 'Test data purged.');
+        loadSeminars();
+    } catch (e) {
+        console.error(e);
+        alert('Network error');
+    }
+}
+
 async function deleteAdminSeminar(seminarId, title) {
     if (!confirm('Delete or deactivate seminar "' + title + '"?\n\nIf registrations exist it will be deactivated only. Hold Shift while confirming to permanently delete all related data.')) {
         return;
@@ -6280,6 +6314,7 @@ async function loadSeminars() {
                     <td>
                         <button class="btn-success" style="padding: 5px 10px; font-size: 0.85rem;" onclick="manageSeminar(${s.id}, '${String(s.title).replace(/'/g, "\\'")}')">Manage</button>
                         <button class="btn-primary" style="padding: 5px 10px; font-size: 0.85rem;" onclick="editSeminar(${idx})">Edit</button>
+                        <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.85rem;background:#7c3aed;margin-left:4px;" onclick="purgeAdminSeminarTestData(${s.id}, '${String(s.title).replace(/'/g, "\\'")}')">Purge test data</button>
                         <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.85rem;background:#b91c1c;margin-left:4px;" onclick="deleteAdminSeminar(${s.id}, '${String(s.title).replace(/'/g, "\\'")}')">Delete</button>
                     </td>
                 </tr>`;
@@ -9191,16 +9226,20 @@ let __adminCancelRequestsCache = [];
 
 function switchAdminPaymentsTab(tab) {
     __adminPaymentsTab = tab;
+    const tabColors = { orders: '#0d9488', supplemental: '#7c3aed', cancellations: '#64748b' };
     document.querySelectorAll('.admin-payments-subtab').forEach((btn) => {
         const on = btn.getAttribute('data-pay-tab') === tab;
-        btn.style.background = on ? '#0d9488' : '#64748b';
+        btn.style.background = on ? tabColors[tab] || '#0d9488' : '#64748b';
         btn.classList.toggle('active', on);
     });
     const ordersPanel = document.getElementById('admin-payments-panel-orders');
     const cancelPanel = document.getElementById('admin-payments-panel-cancellations');
+    const supPanel = document.getElementById('admin-payments-panel-supplemental');
     if (ordersPanel) ordersPanel.classList.toggle('hidden', tab !== 'orders');
     if (cancelPanel) cancelPanel.classList.toggle('hidden', tab !== 'cancellations');
+    if (supPanel) supPanel.classList.toggle('hidden', tab !== 'supplemental');
     if (tab === 'orders') loadAdminEnrichedOrders();
+    else if (tab === 'supplemental') loadAdminSupplementalPayments();
     else loadAdminCancellationRequests();
 }
 
@@ -9495,7 +9534,117 @@ async function pollAdminCreateOrderPayment() {
 
 async function loadAdminPaymentsModule() {
     await fillAdminSeminarSelect('co-seminar', false);
+    await fillAdminSeminarSelect('sup-pay-seminar', true);
     switchAdminPaymentsTab(__adminPaymentsTab || 'orders');
+}
+
+async function loadAdminSupplementalPayments() {
+    const tbody = document.getElementById('admin-supplemental-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="6">Loading…</td></tr>';
+    try {
+        const res = await fetch('/api/admin/supplemental-payments');
+        const rows = await res.json();
+        if (!Array.isArray(rows) || !rows.length) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#64748b;">No additional charges yet</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows
+            .map((r) => {
+                const paid = String(r.status || '').toLowerCase() === 'paid';
+                const name =
+                    escAdmin((r.first_name || '') + ' ' + (r.last_name || '')).trim() ||
+                    escAdmin(r.email || '');
+                return (
+                    '<tr><td>' +
+                    r.id +
+                    '</td><td>' +
+                    name +
+                    '<br><span style="font-size:0.78rem;color:#64748b;">' +
+                    escAdmin(r.user_id_string || '') +
+                    '</span></td><td>' +
+                    escAdmin(r.title || '') +
+                    (r.description ? '<br><span style="font-size:0.78rem;color:#64748b;">' + escAdmin(r.description) + '</span>' : '') +
+                    '</td><td>₹' +
+                    escAdmin(String(r.amount != null ? r.amount : '—')) +
+                    '</td><td>' +
+                    escAdmin(paid ? 'Paid' : 'Pending') +
+                    '</td><td>' +
+                    (paid
+                        ? escAdmin(r.order_id_string || '—')
+                        : '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.78rem;background:#15803d;" onclick="markAdminSupplementalPaid(' +
+                          r.id +
+                          ')">Mark paid (cash)</button> <button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.78rem;background:#b91c1c;" onclick="deleteAdminSupplemental(' +
+                          r.id +
+                          ')">Remove</button>') +
+                    '</td></tr>'
+                );
+            })
+            .join('');
+    } catch (e) {
+        console.error(e);
+        tbody.innerHTML = '<tr><td colspan="6">Error loading</td></tr>';
+    }
+}
+
+async function createAdminSupplementalPayment() {
+    const adm = getStoredAdminUser();
+    const st = document.getElementById('sup-pay-create-status');
+    if (!adm || !adm.id) return alert('Sign in as admin first.');
+    try {
+        const res = await fetch('/api/admin/supplemental-payments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                actingAdminId: adm.id,
+                userId: document.getElementById('sup-pay-user-id')?.value,
+                seminarId: document.getElementById('sup-pay-seminar')?.value || null,
+                title: document.getElementById('sup-pay-title')?.value,
+                description: document.getElementById('sup-pay-desc')?.value,
+                amount: document.getElementById('sup-pay-amount')?.value
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed');
+        if (st) {
+            st.style.color = '#15803d';
+            st.textContent = 'Charge created (id ' + data.id + '). Doctor will see it under Payments.';
+        }
+        loadAdminSupplementalPayments();
+    } catch (e) {
+        if (st) {
+            st.style.color = '#b91c1c';
+            st.textContent = e.message;
+        }
+    }
+}
+
+async function markAdminSupplementalPaid(id) {
+    if (!confirm('Mark this additional payment as received (cash)?')) return;
+    try {
+        const res = await fetch('/api/admin/supplemental-payments/' + id + '/mark-paid', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ method: 'cash' })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed');
+        loadAdminSupplementalPayments();
+    } catch (e) {
+        alert(e.message);
+    }
+}
+
+async function deleteAdminSupplemental(id) {
+    if (!confirm('Remove this pending charge?')) return;
+    try {
+        const res = await fetch('/api/admin/supplemental-payments/' + id, { method: 'DELETE' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed');
+        loadAdminSupplementalPayments();
+    } catch (e) {
+        alert(e.message);
+    }
 }
 
 async function loadAdminEnrichedOrders() {
