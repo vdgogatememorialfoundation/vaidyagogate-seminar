@@ -134,6 +134,8 @@ function mountPaymentsRoutes() {
 function bootstrapApp(done) {
     mountExtendedRoutes();
     mountPaymentsRoutes();
+    const r2Storage = require('./lib/r2-storage');
+    r2Storage.warmupR2().catch((e) => console.warn('[r2] warmup:', e.message));
     startBackgroundWorkers();
     persistScrollingAnnouncementsSanitizeIfNeeded(() => {});
 

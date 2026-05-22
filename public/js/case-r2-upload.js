@@ -16,6 +16,9 @@
         const res = await fetch('/api/case/uploads/config' + q, { cache: 'no-store' });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || 'Could not load upload settings');
+        if (data.r2SetupError) {
+            data.r2Enabled = false;
+        }
         cachedConfig = data;
         return data;
     }

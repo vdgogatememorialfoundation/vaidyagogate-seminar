@@ -14,6 +14,10 @@ async function ensureCaseUploadConfig(programId) {
     try {
         __caseUploadConfig = await CaseR2Upload.loadConfig(pid);
         __caseUploadConfig._programId = pid;
+        if (__caseUploadConfig.r2SetupError) {
+            console.warn('[case-upload]', __caseUploadConfig.r2SetupError);
+            __caseUploadConfig.r2Enabled = false;
+        }
     } catch (e) {
         console.warn('[case-upload]', e);
         __caseUploadConfig = { r2Enabled: false };
