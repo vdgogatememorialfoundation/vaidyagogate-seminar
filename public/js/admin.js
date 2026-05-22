@@ -583,6 +583,8 @@ function openAdminCreateUserModal(kind) {
     const roleSel = document.getElementById('newuser-role');
     if (!modal) return;
     window.__adminCreateUserKind = kind === 'doctor' ? 'doctor' : 'staff';
+    const staffDupHint = document.getElementById('newuser-staff-dup-hint');
+    if (staffDupHint) staffDupHint.style.display = kind === 'staff' ? 'block' : 'none';
     resetAdminSensitiveOtpTokens();
     ['cau-sens-phone-ok', 'cau-sens-email-ok', 'beh-sens-phone-ok', 'beh-sens-email-ok'].forEach((id) => {
         const el = document.getElementById(id);
@@ -1957,6 +1959,7 @@ async function adminCreateUser() {
         phone,
         role: userRole,
         createKind,
+        allowStaffTestDuplicate: createKind === 'staff',
         actingAdminId: adm && adm.id,
         adminPhoneOtpToken: __adminSensitivePhoneOtpToken,
         adminEmailOtpToken: __adminSensitiveEmailOtpToken

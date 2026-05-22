@@ -3275,11 +3275,12 @@ app.post('/api/auth/signup', (req, res) => {
                         phoneTaken: true
                     });
                 }
-                authUsers.findUserByEmail(db, emailNorm, (dupErr, existing) => {
+                const usersEmailPolicy = require('./lib/users-email-policy');
+                usersEmailPolicy.doctorEmailTaken(db, emailNorm, null, (dupErr, taken, existing) => {
                     if (dupErr) return res.status(500).json({ error: dupErr.message });
-                    if (existing) {
+                    if (taken) {
                         const pw = password != null ? String(password) : '';
-                        const passwordMatch = !!(pw && existing.password === pw);
+                        const passwordMatch = !!(pw && existing && existing.password === pw);
                         return res.status(409).json({
                             error: passwordMatch
                                 ? 'An account with this email already exists. Please sign in.'
@@ -3387,18 +3388,40 @@ app.post('/api/auth/signup', (req, res) => {
 app.post('/api/auth/login', withAuxiliaryTables, (req, res) => {
     const { email, password, phoneOtpToken, emailOtpToken } = req.body;
     if (!email || password === undefined || password === null) {
-        return res.status(400).json({ error: 'Email and password are required' });
+        return res.status(400).json({ error: 'Email or portal user ID and password are required' });
     }
-    const loginEmailV = contactValidation.validateEmail(email);
-    if (!loginEmailV.valid) {
-        return res.status(400).json({ error: loginEmailV.message });
+    const usersEmailPolicy = require('./lib/users-email-policy');
+    const portalIdLogin = usersEmailPolicy.isPortalIdLogin(email);
+    let loginEmailV = { valid: true, cleanedEmail: '' };
+    if (!portalIdLogin) {
+        loginEmailV = contactValidation.validateEmail(email);
+        if (!loginEmailV.valid) {
+            return res.status(400).json({ error: loginEmailV.message });
+        }
     }
-    const emailNorm = loginEmailV.cleanedEmail;
     portalAuthPolicy.loadPortalAuthConfig(db, (ePol) => {
         if (ePol) console.warn('[portal-auth-policy] login', ePol.message);
-        authUsers.findUserByEmailAndPassword(db, emailNorm, password, (err, row) => {
+        const loginPortal = portalAuthPolicy.normalizeLoginPortal(
+            (req.body && req.body.portal) || 'public'
+        );
+        usersEmailPolicy.findUserForLogin(
+            db,
+            { identifier: email, password, portal: loginPortal },
+            (err, row, extra) => {
         if (err) return res.status(500).json({ error: err.message });
+                if (extra && extra.ambiguous) {
+                    return res.status(400).json({
+                        error: extra.hint || 'Multiple accounts use this email. Sign in with your 12-digit Portal User ID.'
+                    });
+                }
                 if (!row) {
+                    if (portalIdLogin) {
+                        return res.status(401).json({
+                            error: 'No account found with this portal user ID, or password is wrong.',
+                            needsLogin: true
+                        });
+                    }
+                    const emailNorm = loginEmailV.cleanedEmail;
                     return authUsers.findUserByEmail(db, emailNorm, (e2, exists) => {
                         if (e2) return res.status(500).json({ error: e2.message });
                         if (!exists) {
@@ -3470,9 +3493,6 @@ app.post('/api/auth/login', withAuxiliaryTables, (req, res) => {
                     });
                 }
 
-                const loginPortal = portalAuthPolicy.normalizeLoginPortal(
-                    (req.body && req.body.portal) || 'public'
-                );
                 if (loginOtpRequired(loginPortal) && !portalAuthPolicy.isStaffPortalAccount(row)) {
                     if (!phoneOtpToken || !emailOtpToken) {
                         return res.status(400).json({ error: 'Phone and email OTP verification is required to log in.' });
@@ -3497,7 +3517,8 @@ app.post('/api/auth/login', withAuxiliaryTables, (req, res) => {
                 const block = blockUnverifiedEmailLinkOnly();
                 if (block) return block;
                 sendUser();
-        });
+        }
+        );
     });
 });
 
@@ -8487,87 +8508,108 @@ app.post('/api/admin/users/create', (req, res) => {
         db.get(`SELECT id FROM users WHERE user_id_string = ? LIMIT 1`, [userIdStr], (eDup, dup) => {
             if (eDup) return res.status(500).json({ error: eDup.message });
             if (dup) return res.status(400).json({ error: 'That portal user ID is already in use.' });
-            const authUsers = require('./lib/auth-users');
-            db.get(
-                `SELECT id, user_id_string, email, user_role, role FROM users WHERE ${authUsers.sqlEmailMatches('email')} LIMIT 1`,
-                [emailNorm],
-                (eEmail, existing) => {
-                    if (eEmail) return res.status(500).json({ error: eEmail.message });
-                    if (existing) {
-                        const list = userRoles.isDoctorPortalAccount(existing) ? 'Doctors' : 'Staff users';
-                        const adminUserLookup = require('./lib/admin-user-lookup');
-                        return res.status(409).json({
-                            error: `This email is already used by ${list} (portal ID ${existing.user_id_string || '—'}). Open that account to change role — do not create a second login.`,
-                            existingUserId: existing.id,
-                            existingUser: adminUserLookup.mapUserForAdminResponse(existing),
-                            accountList: userRoles.isDoctorPortalAccount(existing) ? 'doctors' : 'staff'
-                        });
+            const usersEmailPolicy = require('./lib/users-email-policy');
+            const adminUserLookup = require('./lib/admin-user-lookup');
+
+            const proceedInsert = () => {
+                db.run(
+                    `INSERT INTO users (user_id_string, first_name, middle_name, last_name, email, phone, password, role, user_role, email_verified, is_demo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+                    [
+                        userIdStr,
+                        cleanFirst,
+                        cleanMiddle,
+                        cleanLast,
+                        emailNorm,
+                        phone,
+                        finalPassword,
+                        roleCol,
+                        userRole,
+                        demoFlag
+                    ],
+                    function (err) {
+                        if (err) {
+                            if (/unique|duplicate/i.test(String(err.message || ''))) {
+                                return res.status(409).json({
+                                    error:
+                                        'Portal user ID already exists, or email is already used by a doctor account. Staff test accounts may share an email — use a new portal ID.'
+                                });
+                            }
+                            return res.status(500).json({ error: err.message });
+                        }
+                        const insertedId = this.lastID;
+                        db.get(
+                            `SELECT id, user_id_string, user_role, role FROM users WHERE user_id_string = ? LIMIT 1`,
+                            [userIdStr],
+                            (eVerify, saved) => {
+                                if (eVerify) return res.status(500).json({ error: eVerify.message });
+                                if (!saved || !saved.id) {
+                                    return res.status(500).json({
+                                        error:
+                                            'Account was not saved to the database. Wait a few seconds and try again, or check Vercel DATABASE_URL for Production.'
+                                    });
+                                }
+                                const newId = saved.id || insertedId;
+                                notifEngine.notify(
+                                    db,
+                                    'ACCOUNT_CREATED',
+                                    {
+                                        userId: newId,
+                                        vars: { temporary_password: finalPassword }
+                                    },
+                                    () => {
+                                        flushNotificationQueue();
+                                    }
+                                );
+                                designatedNotify.notifyDesignatedAccountCreated(
+                                    db,
+                                    newId,
+                                    { source: 'admin create user', temporary_password: finalPassword },
+                                    () => {
+                                        flushNotificationQueue();
+                                    }
+                                );
+                                res.json({
+                                    success: true,
+                                    verified: true,
+                                    userId: newId,
+                                    user_id_string: saved.user_id_string || userIdStr,
+                                    user_role: userRole,
+                                    accountList: userRoles.isDoctorPortalAccount({
+                                        user_role: saved.user_role || userRole,
+                                        role: saved.role || roleCol
+                                    })
+                                        ? 'doctors'
+                                        : 'staff',
+                                    generatedPassword: finalPassword,
+                                    isDemo: !!demoFlag,
+                                    loginHint:
+                                        createKind === 'staff'
+                                            ? 'Staff login: use this portal ID + password (same email as another account is allowed for testing).'
+                                            : undefined
+                                });
+                            }
+                        );
                     }
-        db.run(
-            `INSERT INTO users (user_id_string, first_name, middle_name, last_name, email, phone, password, role, user_role, email_verified, is_demo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
-            [userIdStr, cleanFirst, cleanMiddle, cleanLast, emailNorm, phone, finalPassword, roleCol, userRole, demoFlag],
-        function (err) {
-            if (err) {
-                if (/unique|duplicate/i.test(String(err.message || ''))) {
+                );
+            };
+
+            if (createKind === 'staff') {
+                return proceedInsert();
+            }
+
+            usersEmailPolicy.doctorEmailTaken(db, emailNorm, null, (eEmail, taken, existing) => {
+                if (eEmail) return res.status(500).json({ error: eEmail.message });
+                if (taken) {
+                    const list = userRoles.isDoctorPortalAccount(existing) ? 'Doctors' : 'Staff users';
                     return res.status(409).json({
-                        error: 'Email or portal ID already exists. Use Find any account to open the existing user.'
+                        error: `This email is already used by a doctor account (${list}, portal ID ${existing && existing.user_id_string ? existing.user_id_string : '—'}). Create a staff test account with the same email under Staff users instead.`,
+                        existingUserId: existing && existing.id,
+                        existingUser: existing ? adminUserLookup.mapUserForAdminResponse(existing) : null,
+                        accountList: userRoles.isDoctorPortalAccount(existing) ? 'doctors' : 'staff'
                     });
                 }
-                return res.status(500).json({ error: err.message });
-            }
-            const insertedId = this.lastID;
-            db.get(
-                `SELECT id, user_id_string, user_role, role FROM users WHERE user_id_string = ? LIMIT 1`,
-                [userIdStr],
-                (eVerify, saved) => {
-                    if (eVerify) return res.status(500).json({ error: eVerify.message });
-                    if (!saved || !saved.id) {
-                        return res.status(500).json({
-                            error:
-                                'Account was not saved to the database. Wait a few seconds and try again, or check Vercel DATABASE_URL for Production.'
-                        });
-                    }
-                    const newId = saved.id || insertedId;
-                    notifEngine.notify(
-                        db,
-                        'ACCOUNT_CREATED',
-                        {
-                            userId: newId,
-                            vars: { temporary_password: finalPassword }
-                        },
-                        () => {
-                            flushNotificationQueue();
-                        }
-                    );
-                    designatedNotify.notifyDesignatedAccountCreated(
-                        db,
-                        newId,
-                        { source: 'admin create user', temporary_password: finalPassword },
-                        () => {
-                            flushNotificationQueue();
-                        }
-                    );
-                    res.json({
-                        success: true,
-                        verified: true,
-                        userId: newId,
-                        user_id_string: saved.user_id_string || userIdStr,
-                        user_role: userRole,
-                        accountList: userRoles.isDoctorPortalAccount({
-                            user_role: saved.user_role || userRole,
-                            role: saved.role || roleCol
-                        })
-                            ? 'doctors'
-                            : 'staff',
-                        generatedPassword: finalPassword,
-                        isDemo: !!demoFlag
-                    });
-                }
-            );
-            }
-        );
-                }
-            );
+                proceedInsert();
+            });
         });
     },
         { targetUserRole: userRole }
