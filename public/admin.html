@@ -157,16 +157,19 @@
                     <p id="admin-user-lookup-msg" style="margin:8px 0 0;font-size:0.85rem;color:#64748b;"></p>
                 </div>
                 <div class="card">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 15px;align-items:center;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 15px;align-items:center;flex-wrap:wrap;gap:12px;">
                         <div>
                             <h3 style="margin:0;">Non-doctor accounts</h3>
                             <p id="staff-users-count" style="margin:4px 0 0;font-size:0.82rem;color:#64748b;"></p>
                         </div>
                         <button class="btn-primary" onclick="openAdminCreateUserModal('staff')">+ Create staff user</button>
                     </div>
+                    <div style="margin-bottom:12px;">
+                        <input type="search" id="staff-users-search" placeholder="Search staff by name, email, phone, portal ID, or role…" oninput="adminFilterStaffUsersList()" style="width:100%;max-width:520px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;">
+                    </div>
                     <table class="data-table">
-                        <thead><tr><th>12-Digit ID</th><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
-                        <tbody id="staff-users-list"><tr><td colspan="6" style="text-align: center;">Loading…</td></tr></tbody>
+                        <thead><tr><th>12-Digit ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
+                        <tbody id="staff-users-list"><tr><td colspan="7" style="text-align: center;">Loading…</td></tr></tbody>
                     </table>
                 </div>
             </div>
@@ -193,6 +196,11 @@
             <div id="tab-applications" class="tab-pane hidden">
                 <h2 style="margin-bottom: 20px;">Application Processing Queue</h2>
                 <div class="card">
+                    <div style="margin-bottom:12px;">
+                        <label for="applications-search" style="font-weight:600;font-size:0.9rem;">Search applications</label>
+                        <input type="search" id="applications-search" placeholder="Application no., doctor ID, name, email, phone, or status…" oninput="adminFilterApplicationsList()" style="width:100%;max-width:560px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;margin-top:6px;">
+                        <p id="applications-search-count" style="margin:6px 0 0;font-size:0.82rem;color:#64748b;"></p>
+                    </div>
                     <table class="data-table">
                         <thead><tr><th>App ID (Barcode)</th><th>Doctor ID</th><th>Doctor Name</th><th>Current Status</th><th>Action</th></tr></thead>
                         <tbody id="applications-list"><tr><td colspan="5" style="text-align: center;">Loading applications...</td></tr></tbody>
@@ -1933,6 +1941,7 @@
     <script src="/js/admin-system-health.js"></script>
     <script src="/js/otp-ui.js"></script>
     <script src="/js/portal-upload.js?v=20260522"></script>
-    <script src="/js/admin.js?v=20260522"></script>
+    <script src="/js/user-roles.js?v=20260522b"></script>
+    <script src="/js/admin.js?v=20260522b"></script>
 </body>
 </html>

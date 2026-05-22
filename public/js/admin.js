@@ -526,10 +526,16 @@ async function refreshSeminarDashboard() {
 }
 
 function isDoctorAccount(u) {
-    const ur = String((u && u.user_role) || '')
+    if (!u) return false;
+    if (u.account_list === 'staff') return false;
+    if (u.account_list === 'doctors') return true;
+    if (typeof UserRoles !== 'undefined' && UserRoles.isDoctorPortalAccount) {
+        return UserRoles.isDoctorPortalAccount(u);
+    }
+    const ur = String(u.user_role || '')
         .trim()
         .toLowerCase();
-    const r = String((u && u.role) || '')
+    const r = String(u.role || '')
         .trim()
         .toLowerCase();
     const staffRoles = [
@@ -540,7 +546,7 @@ function isDoctorAccount(u) {
         'reviewer',
         'admin'
     ];
-    if (staffRoles.includes(ur)) return false;
+    if (staffRoles.includes(ur) || staffRoles.includes(r)) return false;
     if (r === 'admin' && ur !== 'doctor') return false;
     if (ur === 'doctor' || ur === 'event_attendee') return true;
     return r === 'doctor' && !ur;
@@ -617,7 +623,7 @@ async function loadUsers() {
         if (!res.ok || !Array.isArray(users)) {
             const err = (users && users.error) || 'Could not load users';
             if (staffBody) {
-                staffBody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#b91c1c;">${escAdmin(err)}</td></tr>`;
+                staffBody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#b91c1c;">${escAdmin(err)}</td></tr>`;
             }
             if (doctorsBody) {
                 doctorsBody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#b91c1c;">${escAdmin(err)}</td></tr>`;
@@ -632,48 +638,12 @@ async function loadUsers() {
             if (isDoctorAccount(u)) doctors.push(u);
             else staff.push(u);
         });
+        window.__adminStaffUsers = staff;
+        window.__adminDoctorUsers = doctors;
         window.__adminUsersCounts = { staff: staff.length, doctors: doctors.length };
 
         if (staffBody) {
-            const countEl = document.getElementById('staff-users-count');
-            if (countEl) {
-                countEl.textContent = `${staff.length} staff account${staff.length === 1 ? '' : 's'}`;
-            }
-            if (!staff.length) {
-                staffBody.innerHTML =
-                    '<tr><td colspan="6" style="text-align:center;">No staff users yet. Use “+ Create staff user” and pick Judge / Co Admin / Scanner / Reviewer.</td></tr>';
-            }
-            staff.forEach((u) => {
-                const hi =
-                    window.__highlightAdminUserId && Number(u.id) === Number(window.__highlightAdminUserId)
-                        ? ' style="background:#ecfdf5;"'
-                        : '';
-                const userRole = u.user_role || u.role || '';
-                const modulesBtn =
-                    isSuperAdminUser() && String(userRole).toLowerCase() === 'co_admin'
-                        ? `<button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-left:6px;background:#0d9488;" onclick="openAdminModulesModal(${u.id})">Modules</button>`
-                        : '';
-                staffBody.innerHTML += `
-                <tr${hi}>
-                    <td><strong>${u.user_id_string}</strong></td>
-                    <td>${escAdmin(u.first_name)} ${escAdmin(u.last_name)}</td>
-                    <td>${escAdmin(u.email)}</td>
-                    <td>
-                        <select onchange="updateUserRole(${u.id}, this.value)" style="width:100%;padding:5px;border-radius:4px;border:1px solid #ccc;">
-                            <option value="judge_user" ${userRole === 'judge_user' ? 'selected' : ''}>Judge</option>
-                            <option value="co_admin" ${userRole === 'co_admin' ? 'selected' : ''}>Co Admin</option>
-                            <option value="scanner_portal_user" ${userRole === 'scanner_portal_user' ? 'selected' : ''}>Scanner (volunteer)</option>
-                            <option value="scanner_dashboard_user" ${userRole === 'scanner_dashboard_user' ? 'selected' : ''}>Live scanner dashboard</option>
-                            <option value="reviewer" ${userRole === 'reviewer' ? 'selected' : ''}>Reviewer</option>
-                        </select>
-                    </td>
-                    <td>${adminUserStatusBadge(u)}</td>
-                    <td>
-                        <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-right:6px;" onclick="openAdminUserDetail(${u.id})">View</button>
-                        ${adminUserToggleBtn(u)}${modulesBtn}
-                    </td>
-                </tr>`;
-            });
+            renderStaffUsersTable(staff);
         }
 
         if (doctorsBody) {
@@ -718,6 +688,100 @@ async function loadUsers() {
     } catch (err) {
         console.error(err);
     }
+}
+
+function adminStaffUserRoleValue(u) {
+    const ur = String((u && u.user_role) || '').trim().toLowerCase();
+    const r = String((u && u.role) || '').trim().toLowerCase();
+    const staffVals = [
+        'judge_user',
+        'co_admin',
+        'scanner_portal_user',
+        'scanner_dashboard_user',
+        'reviewer'
+    ];
+    if (staffVals.includes(ur)) return ur;
+    if (staffVals.includes(r)) return r;
+    return ur || r || 'judge_user';
+}
+
+function renderStaffUsersTable(staffList) {
+    const staffBody = document.getElementById('staff-users-list');
+    if (!staffBody) return;
+    const q = String((document.getElementById('staff-users-search') || {}).value || '')
+        .trim()
+        .toLowerCase();
+    let rows = staffList || window.__adminStaffUsers || [];
+    if (q) {
+        rows = rows.filter((u) => {
+            const blob = [
+                u.user_id_string,
+                u.first_name,
+                u.last_name,
+                u.email,
+                u.phone,
+                u.user_role,
+                u.role
+            ]
+                .join(' ')
+                .toLowerCase();
+            return blob.includes(q);
+        });
+    }
+    const countEl = document.getElementById('staff-users-count');
+    const total = (window.__adminStaffUsers || staffList || []).length;
+    if (countEl) {
+        countEl.textContent = q
+            ? `${rows.length} of ${total} staff account${total === 1 ? '' : 's'}`
+            : `${total} staff account${total === 1 ? '' : 's'}`;
+    }
+    if (!total) {
+        staffBody.innerHTML =
+            '<tr><td colspan="7" style="text-align:center;">No staff users yet. Use “+ Create staff user” and pick Judge / Co Admin / Scanner / Reviewer.</td></tr>';
+        return;
+    }
+    if (!rows.length) {
+        staffBody.innerHTML =
+            '<tr><td colspan="7" style="text-align:center;">No staff users match your search.</td></tr>';
+        return;
+    }
+    staffBody.innerHTML = '';
+    rows.forEach((u) => {
+        const hi =
+            window.__highlightAdminUserId && Number(u.id) === Number(window.__highlightAdminUserId)
+                ? ' style="background:#ecfdf5;"'
+                : '';
+        const userRole = adminStaffUserRoleValue(u);
+        const modulesBtn =
+            isSuperAdminUser() && String(userRole).toLowerCase() === 'co_admin'
+                ? `<button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-left:6px;background:#0d9488;" onclick="openAdminModulesModal(${u.id})">Modules</button>`
+                : '';
+        staffBody.innerHTML += `
+                <tr${hi}>
+                    <td><strong>${u.user_id_string}</strong></td>
+                    <td>${escAdmin(u.first_name)} ${escAdmin(u.last_name)}</td>
+                    <td>${escAdmin(u.email)}</td>
+                    <td>${escAdmin(u.phone || '—')}</td>
+                    <td>
+                        <select onchange="updateUserRole(${u.id}, this.value)" style="width:100%;padding:5px;border-radius:4px;border:1px solid #ccc;">
+                            <option value="judge_user" ${userRole === 'judge_user' ? 'selected' : ''}>Judge</option>
+                            <option value="co_admin" ${userRole === 'co_admin' ? 'selected' : ''}>Co Admin</option>
+                            <option value="scanner_portal_user" ${userRole === 'scanner_portal_user' ? 'selected' : ''}>Scanner (volunteer)</option>
+                            <option value="scanner_dashboard_user" ${userRole === 'scanner_dashboard_user' ? 'selected' : ''}>Live scanner dashboard</option>
+                            <option value="reviewer" ${userRole === 'reviewer' ? 'selected' : ''}>Reviewer</option>
+                        </select>
+                    </td>
+                    <td>${adminUserStatusBadge(u)}</td>
+                    <td>
+                        <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-right:6px;" onclick="openAdminUserDetail(${u.id})">View</button>
+                        ${adminUserToggleBtn(u)}${modulesBtn}
+                    </td>
+                </tr>`;
+    });
+}
+
+function adminFilterStaffUsersList() {
+    renderStaffUsersTable(window.__adminStaffUsers || []);
 }
 
 async function adminLookupUserByEmail() {
@@ -4352,20 +4416,74 @@ async function loadApplications() {
     try {
         const res = await fetch('/api/admin/applications');
         const apps = await res.json();
-        globalAdminApps = apps;
-        const tbody = document.getElementById('applications-list');
-        tbody.innerHTML = '';
+        globalAdminApps = Array.isArray(apps) ? apps : [];
+        renderApplicationsTable();
+    } catch(err) { console.error(err); }
+}
 
-        apps.forEach((a, index) => {
-            let formData = {};
-            try { formData = JSON.parse(a.form_data || '{}'); } catch(e){}
-            
-            const fileLink = formData.certificate_path
-                ? `<br><a href="${escAdmin(publicFileHref(formData.certificate_path))}" target="_blank" style="color:blue;font-size:0.8rem;">📄 View Certificate</a>`
-                : '';
-            const candidateName = formData.fname ? `${formData.fname} ${formData.lname || ''}` : `${a.first_name || ''} ${a.last_name || ''}`;
+function adminApplicationSearchBlob(a) {
+    let formData = {};
+    try {
+        formData = JSON.parse(a.form_data || '{}');
+    } catch (_) {}
+    const candidateName = formData.fname
+        ? `${formData.fname} ${formData.lname || ''}`
+        : `${a.first_name || ''} ${a.last_name || ''}`;
+    return [
+        a.application_no,
+        a.user_id_string,
+        candidateName,
+        a.first_name,
+        a.last_name,
+        a.status,
+        formData.fname,
+        formData.lname,
+        formData.email,
+        formData.phone
+    ]
+        .join(' ')
+        .toLowerCase();
+}
 
-            tbody.innerHTML += `
+function renderApplicationsTable() {
+    const tbody = document.getElementById('applications-list');
+    if (!tbody) return;
+    const q = String((document.getElementById('applications-search') || {}).value || '')
+        .trim()
+        .toLowerCase();
+    const apps = globalAdminApps || [];
+    const filtered = q ? apps.filter((a) => adminApplicationSearchBlob(a).includes(q)) : apps;
+    const countEl = document.getElementById('applications-search-count');
+    if (countEl) {
+        countEl.textContent = q
+            ? `${filtered.length} of ${apps.length} application${apps.length === 1 ? '' : 's'}`
+            : `${apps.length} application${apps.length === 1 ? '' : 's'}`;
+    }
+    tbody.innerHTML = '';
+    if (!apps.length) {
+        tbody.innerHTML =
+            '<tr><td colspan="5" style="text-align:center;">No applications yet.</td></tr>';
+        return;
+    }
+    if (!filtered.length) {
+        tbody.innerHTML =
+            '<tr><td colspan="5" style="text-align:center;">No applications match your search.</td></tr>';
+        return;
+    }
+    filtered.forEach((a) => {
+        const index = apps.indexOf(a);
+        let formData = {};
+        try {
+            formData = JSON.parse(a.form_data || '{}');
+        } catch (_) {}
+        const fileLink = formData.certificate_path
+            ? `<br><a href="${escAdmin(publicFileHref(formData.certificate_path))}" target="_blank" style="color:blue;font-size:0.8rem;">📄 View Certificate</a>`
+            : '';
+        const candidateName = formData.fname
+            ? `${formData.fname} ${formData.lname || ''}`
+            : `${a.first_name || ''} ${a.last_name || ''}`;
+
+        tbody.innerHTML += `
                 <tr>
                     <td>
                         <strong>${a.application_no}</strong>
@@ -4384,8 +4502,11 @@ async function loadApplications() {
                     </td>
                 </tr>
             `;
-        });
-    } catch(err) { console.error(err); }
+    });
+}
+
+function adminFilterApplicationsList() {
+    renderApplicationsTable();
 }
 
 function seminarNeedsDocReview(qual) {
