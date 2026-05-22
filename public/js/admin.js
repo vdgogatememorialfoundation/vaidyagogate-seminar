@@ -1055,6 +1055,7 @@ const ADMIN_MODULE_TAB_DEFS = [
     ['tab-admin-payments', 'Payments'],
     ['tab-certificates', 'Certificate management'],
     ['tab-volunteers', 'Volunteers'],
+    ['tab-volunteer-assignments', 'Volunteer assignments'],
     ['tab-case-mgmt', 'Case management'],
     ['tab-analytics', 'Analytics'],
     ['tab-reports', 'Reports & exports'],
@@ -2937,6 +2938,103 @@ async function toggleAdminCertificate(id, enabled) {
     }
 }
 
+let __adminVolunteerAssignmentsCache = [];
+
+function refreshVolunteerAdminPanels() {
+    loadAdminVolunteers().catch(console.error);
+    loadAdminVolunteerAssignments().catch(console.error);
+}
+
+async function initAdminVolunteerAssignmentsTab() {
+    await fillAdminSeminarSelect('vol-assign-seminar', true);
+    await loadAdminVolunteerAssignments();
+}
+
+async function loadAdminVolunteerAssignments() {
+    const tbody = document.getElementById('vol-assign-list');
+    if (!tbody) return;
+    const sid = document.getElementById('vol-assign-seminar')?.value;
+    const st = document.getElementById('vol-assign-status')?.value || '';
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Loading…</td></tr>';
+    try {
+        let url = '/api/admin/volunteer-assignments?';
+        if (sid) url += 'seminarId=' + encodeURIComponent(sid) + '&';
+        if (st) url += 'status=' + encodeURIComponent(st) + '&';
+        const res = await fetch(url);
+        const data = await res.json();
+        __adminVolunteerAssignmentsCache = Array.isArray(data.assignments) ? data.assignments : [];
+        renderAdminVolunteerAssignmentsTable();
+    } catch (e) {
+        console.error(e);
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Error loading assignments</td></tr>';
+    }
+}
+
+function renderAdminVolunteerAssignmentsTable() {
+    const tbody = document.getElementById('vol-assign-list');
+    if (!tbody) return;
+    const all = __adminVolunteerAssignmentsCache || [];
+    const q = adminSearchQ('vol-assign-search');
+    const rows = adminSearchFilter(all, q, (v) => {
+        const name = [v.first_name, v.last_name].filter(Boolean).join(' ');
+        return [
+            v.seminar_title,
+            name,
+            v.user_id_string,
+            v.email,
+            v.status,
+            v.registration_status,
+            v.volunteer_ticket_id_string,
+            v.application_no,
+            v.notes
+        ]
+            .join(' ')
+            .toLowerCase();
+    });
+    adminSearchSetCount('vol-assign-search-count', q, rows.length, all.length, 'assignments');
+    if (!all.length) {
+        tbody.innerHTML =
+            '<tr><td colspan="7" style="text-align:center;">No volunteer assignments yet. Use <strong>Add volunteer</strong> or the Volunteers tab.</td></tr>';
+        return;
+    }
+    if (!rows.length) {
+        tbody.innerHTML =
+            '<tr><td colspan="7" style="text-align:center;">No assignments match your search.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = '';
+    rows.forEach((v) => {
+        const name = [v.first_name, v.last_name].filter(Boolean).join(' ');
+        const regSt = String(v.registration_status || '').toLowerCase();
+        const hasTicket = !!(v.volunteer_ticket_id_string && String(v.volunteer_ticket_id_string).trim());
+        const assignId = v.assignment_id != null ? v.assignment_id : v.id;
+        let actions = '';
+        if (!hasTicket && regSt === 'submitted') {
+            actions =
+                '<span style="font-size:0.8rem;color:#059669;">Auto-issue pending</span>';
+        } else if (!hasTicket && String(v.status).toLowerCase() === 'pending') {
+            actions =
+                `<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.8rem;" onclick="approveAdminVolunteer(${assignId})">Issue ticket (₹0)</button>`;
+        } else if (!hasTicket) {
+            actions = '<span style="font-size:0.8rem;color:#64748b;">Waiting for registration</span>';
+        } else {
+            actions = '<span style="font-size:0.8rem;color:#059669;">Ticket issued</span>';
+        }
+        const eventLine = v.event_date
+            ? '<div class="muted" style="font-size:0.78rem;">' + escAdmin(String(v.event_date).slice(0, 10)) + '</div>'
+            : '';
+        tbody.innerHTML += `<tr>
+                <td><strong>${escAdmin(v.seminar_title || '—')}</strong>${eventLine}</td>
+                <td>${escAdmin(name)}<div class="muted">${escAdmin(v.user_id_string || '')} · ${escAdmin(v.email || '')}</div></td>
+                <td>${escAdmin(v.status || '—')}</td>
+                <td>${escAdmin(v.registration_status || '—')}${v.application_no ? '<div class="muted">' + escAdmin(v.application_no) + '</div>' : ''}</td>
+                <td><code>${escAdmin(v.volunteer_ticket_id_string || '—')}</code></td>
+                <td>${escAdmin(v.notes || '—')}</td>
+                <td>${actions}</td>
+            </tr>`;
+    });
+}
+
 async function initAdminVolunteersTab() {
     await fillAdminSeminarSelect('vol-mgmt-seminar', false);
     await loadAdminVolunteers();
@@ -2987,7 +3085,7 @@ async function addAdminVolunteer() {
                 data.message ||
                     'Volunteer assigned. They must complete registration in the doctor portal; free ticket (₹0) and messages are sent only after that.'
             );
-            loadAdminVolunteers();
+            refreshVolunteerAdminPanels();
         } else alert(data.error || 'Failed');
     } catch (e) {
         console.error(e);
@@ -3006,7 +3104,7 @@ async function approveAdminVolunteer(volId) {
         const data = await res.json();
         if (data.success) {
             alert(data.message || 'Approved');
-            loadAdminVolunteers();
+            refreshVolunteerAdminPanels();
         } else alert(data.error || 'Failed');
     } catch (e) {
         console.error(e);

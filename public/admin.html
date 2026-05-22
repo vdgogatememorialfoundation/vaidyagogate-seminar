@@ -117,6 +117,7 @@
                 <a class="menu-item" data-admin-module="tab-admin-payments" onclick="switchTab('tab-admin-payments'); loadAdminPaymentsModule();"><i class="fas fa-file-invoice-dollar"></i> Payments</a>
                 <a class="menu-item" data-admin-module="tab-certificates" onclick="switchTab('tab-certificates'); initAdminCertificatesTab();"><i class="fas fa-award"></i> Certificate Management</a>
                 <a class="menu-item" data-admin-module="tab-volunteers" onclick="switchTab('tab-volunteers'); initAdminVolunteersTab();"><i class="fas fa-hands-helping"></i> Volunteers</a>
+                <a class="menu-item" data-admin-module="tab-volunteer-assignments" onclick="switchTab('tab-volunteer-assignments'); initAdminVolunteerAssignmentsTab();"><i class="fas fa-clipboard-list"></i> Volunteer assignments</a>
                 <a class="menu-item" data-admin-module="tab-case-mgmt" onclick="switchTab('tab-case-mgmt'); initAdminCaseMgmtTab();"><i class="fas fa-briefcase-medical"></i> Case Management</a>
                 <a class="menu-item" data-admin-module="tab-analytics" onclick="switchTab('tab-analytics'); initAdminAnalyticsTab();"><i class="fas fa-chart-pie"></i> Analytics</a>
                 <a class="menu-item" data-admin-module="tab-reports" onclick="switchTab('tab-reports'); initAdminReportsTab();"><i class="fas fa-file-export"></i> Reports &amp; Exports</a>
@@ -1143,6 +1144,32 @@
                 </div>
             </div>
 
+            <div id="tab-volunteer-assignments" class="tab-pane hidden">
+                <h2 style="margin-bottom: 12px;">Volunteer assignments</h2>
+                <p style="color:#64748b;margin-bottom:18px;max-width:900px;">Same records doctors see under <strong>Volunteer</strong> in the doctor portal. Track registration progress, tickets, and issue free tickets (₹0) after they submit registration.</p>
+                <div class="card" style="margin-bottom:16px;">
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;align-items:flex-end;">
+                        <div><label>Seminar</label><select id="vol-assign-seminar" style="width:100%;padding:8px;" onchange="loadAdminVolunteerAssignments()"></select></div>
+                        <div><label>Assignment status</label><select id="vol-assign-status" style="width:100%;padding:8px;" onchange="loadAdminVolunteerAssignments()">
+                            <option value="">All</option>
+                            <option value="pending">Pending</option>
+                            <option value="approved">Approved (ticket issued)</option>
+                        </select></div>
+                        <div><button type="button" class="btn-primary" onclick="loadAdminVolunteerAssignments()"><i class="fas fa-sync"></i> Refresh</button></div>
+                        <div><button type="button" class="btn-primary" style="background:#0f766e;" onclick="switchTab('tab-volunteers'); initAdminVolunteersTab();">Add volunteer</button></div>
+                    </div>
+                </div>
+                <div class="card">
+                    <label for="vol-assign-search" style="font-weight:600;font-size:0.9rem;">Search assignments</label>
+                    <input type="search" id="vol-assign-search" placeholder="Seminar, name, portal ID, email, ticket, registration status…" oninput="renderAdminVolunteerAssignmentsTable()" style="width:100%;max-width:640px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;margin-top:6px;">
+                    <p id="vol-assign-search-count" style="margin:6px 0 12px;font-size:0.82rem;color:#64748b;"></p>
+                    <table class="data-table">
+                        <thead><tr><th>Seminar</th><th>Doctor</th><th>Assignment</th><th>Registration</th><th>Ticket (₹0)</th><th>Notes</th><th>Actions</th></tr></thead>
+                        <tbody id="vol-assign-list"><tr><td colspan="7" style="text-align:center;">Loading…</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+
             <div id="tab-volunteers" class="tab-pane hidden">
                 <h2 style="margin-bottom: 20px;">Volunteer management</h2>
                 <div class="card">
@@ -2056,6 +2083,6 @@
     <script src="/js/portal-upload.js?v=20260522"></script>
     <script src="/js/user-roles.js?v=20260522f"></script>
     <script src="/js/admin-list-search.js?v=20260522a"></script>
-    <script src="/js/admin.js?v=20260523a"></script>
+    <script src="/js/admin.js?v=20260523b"></script>
 </body>
 </html>
