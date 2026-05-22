@@ -40,6 +40,18 @@ function resetAdminSensitiveOtpTokens() {
     __adminSensitiveEmailOtpToken = null;
 }
 
+function isStaffUserRoleClient(userRole) {
+    const ur = String(userRole || '')
+        .trim()
+        .toLowerCase();
+    return !!ur && ur !== 'doctor';
+}
+
+function isStaffUserRecord(u) {
+    if (!u) return false;
+    return isStaffUserRoleClient(u.user_role || u.role);
+}
+
 function sensitiveOtpFieldIds(ctx) {
     if (ctx === 'behalf') {
         return {
@@ -114,7 +126,11 @@ async function refreshAdminSensitiveOtpRequirement() {
         __requireAdminSensitiveOtp = false;
     }
     const wrapCreate = document.getElementById('newuser-admin-otp-wrap');
-    const show = !!__requireAdminSensitiveOtp;
+    const roleSel = document.getElementById('newuser-role');
+    const creatingStaff =
+        window.__adminCreateUserKind === 'staff' ||
+        (roleSel && isStaffUserRoleClient(roleSel.value));
+    const show = !!__requireAdminSensitiveOtp && !creatingStaff;
     if (wrapCreate) wrapCreate.style.display = show ? 'block' : 'none';
     if (!show) resetAdminSensitiveOtpTokens();
 }
@@ -544,6 +560,7 @@ function openAdminCreateUserModal(kind) {
     const modal = document.getElementById('admin-create-user-modal');
     const roleSel = document.getElementById('newuser-role');
     if (!modal) return;
+    window.__adminCreateUserKind = kind === 'doctor' ? 'doctor' : 'staff';
     resetAdminSensitiveOtpTokens();
     ['cau-sens-phone-ok', 'cau-sens-email-ok', 'beh-sens-phone-ok', 'beh-sens-email-ok'].forEach((id) => {
         const el = document.getElementById(id);
@@ -557,6 +574,10 @@ function openAdminCreateUserModal(kind) {
             opt.hidden = kind === 'doctor' ? !isDoc : isDoc;
         });
         roleSel.value = kind === 'doctor' ? 'doctor' : 'judge_user';
+        if (!roleSel.__otpRoleBound) {
+            roleSel.__otpRoleBound = true;
+            roleSel.addEventListener('change', () => refreshAdminSensitiveOtpRequirement());
+        }
     }
     const title = modal.querySelector('h2');
     if (title) title.textContent = kind === 'doctor' ? 'Register new doctor' : 'Register new staff user';
@@ -1662,8 +1683,13 @@ async function adminCreateUser() {
     }
 
     await refreshAdminSensitiveOtpRequirement();
-    if (__requireAdminSensitiveOtp && (!__adminSensitivePhoneOtpToken || !__adminSensitiveEmailOtpToken)) {
-        return alert('Verify both your admin email and WhatsApp OTP before creating a user.');
+    const staffCreate = isStaffUserRoleClient(userRole);
+    if (
+        !staffCreate &&
+        __requireAdminSensitiveOtp &&
+        (!__adminSensitivePhoneOtpToken || !__adminSensitiveEmailOtpToken)
+    ) {
+        return alert('Verify both your admin email and WhatsApp OTP before creating a doctor account.');
     }
 
     const adm = getStoredAdminUser();
@@ -1891,7 +1917,7 @@ function renderAdminUserDetailTab() {
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
                 <div>
                     <h4>Account (editable)</h4>
-                    <p class="muted" style="font-size:0.85rem;">Portal login — admin OTP may be required to save.</p>
+                    <p class="muted" style="font-size:0.85rem;">Portal login — admin OTP may be required to save doctor accounts only.</p>
                     <p><strong>User ID:</strong> ${escAdmin(u.user_id_string)}</p>
                     <div class="form-group"><label>First name</label><input type="text" id="admin-edit-first" value="${escAdmin(u.first_name)}" style="width:100%;padding:8px;"></div>
                     <div class="form-group"><label>Middle name</label><input type="text" id="admin-edit-middle" value="${escAdmin(u.middle_name || '')}" style="width:100%;padding:8px;"></div>
@@ -4228,12 +4254,19 @@ function seminarNeedsDocReview(qual) {
     return q === 'PG' || q === 'Practicing Vaidya' || q === 'Practitioner';
 }
 
-async function adminLiveEditOtpPayload() {
+async function adminLiveEditOtpPayload(targetUserId) {
     await refreshAdminSensitiveOtpRequirement();
     const adm = getStoredAdminUser();
     if (!adm || !adm.id) {
         alert('Not logged in.');
         return null;
+    }
+    const targetUser =
+        targetUserId != null && window.__adminUsersById
+            ? window.__adminUsersById[targetUserId]
+            : null;
+    if (isStaffUserRecord(targetUser)) {
+        return { adminUserId: adm.id };
     }
     if (__requireAdminSensitiveOtp && (!__adminSensitivePhoneOtpToken || !__adminSensitiveEmailOtpToken)) {
         alert(
@@ -4437,7 +4470,7 @@ async function adminSaveApplicationFormEdit(applicationId) {
 }
 
 async function adminSaveUserAccountEdit(userId) {
-    const otp = await adminLiveEditOtpPayload();
+    const otp = await adminLiveEditOtpPayload(userId);
     if (!otp) return;
     const body = {
         firstName: document.getElementById('admin-edit-first')?.value,

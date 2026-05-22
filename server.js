@@ -2890,6 +2890,12 @@ app.post('/api/auth/login-otp/send-both', withIntegrationSettingsLoaded, withAux
         if (out.status !== 200) {
             return res.status(out.status).json({ error: out.error, needsSignup: !!out.needsSignup });
         }
+        if (portalAuthPolicy.isStaffPortalAccount(out.row)) {
+            return res.status(400).json({
+                error:
+                    'Login OTP is not used for staff accounts. Sign in with email and password at the admin, judge, or scanner portal.'
+            });
+        }
         authLoginOtp.sendLoginOtpsForUser(db, out.row, (e2, result) => {
             if (e2) return res.status(500).json({ error: e2.message });
             if (!result.ok) {
@@ -2914,6 +2920,12 @@ app.post('/api/auth/login-otp/send', withIntegrationSettingsLoaded, withAuxiliar
         if (err) return res.status(500).json({ error: err.message });
         if (out.status !== 200) {
             return res.status(out.status).json({ error: out.error, needsSignup: !!out.needsSignup });
+        }
+        if (portalAuthPolicy.isStaffPortalAccount(out.row)) {
+            return res.status(400).json({
+                error:
+                    'Login OTP is not used for staff accounts. Sign in with email and password at the admin, judge, or scanner portal.'
+            });
         }
         authLoginOtp.sendLoginOtpChannel(db, out.row, channel, (e2, result) => {
             if (e2) return res.status(500).json({ error: e2.message });
@@ -3179,28 +3191,44 @@ function queuePortalEmailVerification(db, userId, cb) {
     });
 }
 
-function requireAdminSensitiveOtpIfEnabled(actorAdminId, phoneTok, emailTok, next) {
-    portalAuthPolicy.loadPortalAuthConfig(db, () => {
-        if (!portalAuthPolicy.getPortalAuthConfig().requireAdminOtpForSensitive) {
-            return next(null, true, null);
-        }
-        const aid = parseInt(actorAdminId, 10);
-        if (!Number.isInteger(aid) || aid < 1) {
-            return next(null, false, 'actingAdminId is required when admin confirmation OTP is enabled.');
-        }
-        if (!phoneTok || !emailTok) {
-            return next(
-                null,
-                false,
-                'Admin email and WhatsApp OTP verification is required for this action. Send codes to your admin phone and email, then verify.'
-            );
-        }
-        otpLib.validateAdminConfirmOtpTokens(db, aid, { phoneToken: phoneTok, emailToken: emailTok }, (e, vr) => {
-            if (e) return next(e);
-            if (!vr || !vr.ok) return next(null, false, (vr && vr.error) || 'Invalid admin OTP');
-            next(null, true, null);
+function requireAdminSensitiveOtpIfEnabled(actorAdminId, phoneTok, emailTok, next, meta) {
+    meta = meta || {};
+    const runOtpGate = () => {
+        portalAuthPolicy.loadPortalAuthConfig(db, () => {
+            if (!portalAuthPolicy.getPortalAuthConfig().requireAdminOtpForSensitive) {
+                return next(null, true, null);
+            }
+            const aid = parseInt(actorAdminId, 10);
+            if (!Number.isInteger(aid) || aid < 1) {
+                return next(null, false, 'actingAdminId is required when admin confirmation OTP is enabled.');
+            }
+            if (!phoneTok || !emailTok) {
+                return next(
+                    null,
+                    false,
+                    'Admin email and WhatsApp OTP verification is required for this action. Send codes to your admin phone and email, then verify.'
+                );
+            }
+            otpLib.validateAdminConfirmOtpTokens(db, aid, { phoneToken: phoneTok, emailToken: emailTok }, (e, vr) => {
+                if (e) return next(e);
+                if (!vr || !vr.ok) return next(null, false, (vr && vr.error) || 'Invalid admin OTP');
+                next(null, true, null);
+            });
         });
-    });
+    };
+    if (meta.targetUserRole && portalAuthPolicy.isStaffUserRole(meta.targetUserRole)) {
+        return next(null, true, null);
+    }
+    const targetUid = parseInt(meta.targetUserId, 10);
+    if (Number.isInteger(targetUid) && targetUid > 0) {
+        return db.get(`SELECT user_role, role FROM users WHERE id = ?`, [targetUid], (e, row) => {
+            if (!e && row && portalAuthPolicy.isStaffPortalAccount(row)) {
+                return next(null, true, null);
+            }
+            runOtpGate();
+        });
+    }
+    runOtpGate();
 }
 
 app.post('/api/auth/signup', (req, res) => {
@@ -3445,7 +3473,7 @@ app.post('/api/auth/login', withAuxiliaryTables, (req, res) => {
                 const loginPortal = portalAuthPolicy.normalizeLoginPortal(
                     (req.body && req.body.portal) || 'public'
                 );
-                if (loginOtpRequired(loginPortal)) {
+                if (loginOtpRequired(loginPortal) && !portalAuthPolicy.isStaffPortalAccount(row)) {
                     if (!phoneOtpToken || !emailOtpToken) {
                         return res.status(400).json({ error: 'Phone and email OTP verification is required to log in.' });
                     }
@@ -8391,7 +8419,11 @@ app.post('/api/admin/users/create', (req, res) => {
     const cleanMiddle = String(middleName || '').trim() || null;
     const cleanLast = userRole === 'doctor' || roleCol === 'doctor' ? validateDoctorName(lastName).cleanedName : String(lastName).trim();
 
-    requireAdminSensitiveOtpIfEnabled(actingAdminId, adminPhoneOtpToken, adminEmailOtpToken, (eOtp, okOtp, msgOtp) => {
+    requireAdminSensitiveOtpIfEnabled(
+        actingAdminId,
+        adminPhoneOtpToken,
+        adminEmailOtpToken,
+        (eOtp, okOtp, msgOtp) => {
         if (eOtp) return res.status(500).json({ error: eOtp.message });
         if (!okOtp) return res.status(400).json({ error: msgOtp || 'Admin verification required' });
         db.get(`SELECT id FROM users WHERE user_id_string = ? LIMIT 1`, [userIdStr], (eDup, dup) => {
@@ -8432,7 +8464,9 @@ app.post('/api/admin/users/create', (req, res) => {
             }
         );
         });
-    });
+    },
+        { targetUserRole: userRole }
+    );
 });
 
 // Admin: Get Users
@@ -9250,7 +9284,11 @@ app.put('/api/admin/users/:userId/account', (req, res) => {
         if (!admResult || !admResult.ok) {
             return res.status(403).json({ error: (admResult && admResult.error) || 'Forbidden' });
         }
-        requireAdminSensitiveOtpIfEnabled(aid, adminPhoneOtpToken, adminEmailOtpToken, (eOtp, okOtp, msgOtp) => {
+        requireAdminSensitiveOtpIfEnabled(
+            aid,
+            adminPhoneOtpToken,
+            adminEmailOtpToken,
+            (eOtp, okOtp, msgOtp) => {
             if (eOtp) return res.status(500).json({ error: eOtp.message });
             if (!okOtp) return res.status(400).json({ error: msgOtp || 'Admin verification required' });
 
@@ -9292,7 +9330,9 @@ app.put('/api/admin/users/:userId/account', (req, res) => {
                     res.json({ success: true, message: 'Account updated' });
                 }
             );
-        });
+        },
+            { targetUserId: uid }
+        );
     });
 });
 
