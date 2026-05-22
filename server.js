@@ -8565,10 +8565,14 @@ app.get('/api/admin/users', (req, res) => {
         (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(
-            (rows || []).map((r) => ({
-                ...r,
-                account_list: userRoles.isDoctorPortalAccount(r) ? 'doctors' : 'staff'
-            }))
+            (rows || []).map((r) => {
+                const eff = userRoles.effectiveUserRole(r);
+                return {
+                    ...r,
+                    effective_user_role: eff || r.user_role || r.role,
+                    account_list: userRoles.isDoctorPortalAccount(r) ? 'doctors' : 'staff'
+                };
+            })
         );
     });
 });

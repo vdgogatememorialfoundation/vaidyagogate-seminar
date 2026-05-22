@@ -461,6 +461,9 @@ function switchTab(tabId) {
     if (tabId === 'tab-behalf-reg' || tabId === 'tab-site-cms') {
         refreshAdminSensitiveOtpRequirement();
     }
+    if (tabId === 'tab-staff-users' || tabId === 'tab-doctors') {
+        loadUsers();
+    }
 }
 
 let adminAutoRefreshInterval = null;
@@ -687,10 +690,19 @@ async function loadUsers() {
         }
     } catch (err) {
         console.error(err);
+        const staffBody = document.getElementById('staff-users-list');
+        if (staffBody) {
+            staffBody.innerHTML =
+                '<tr><td colspan="7" style="text-align:center;color:#b91c1c;">Could not load users. Hard refresh (Ctrl+F5) and try again.</td></tr>';
+        }
     }
 }
 
 function adminStaffUserRoleValue(u) {
+    if (typeof UserRoles !== 'undefined' && UserRoles.effectiveUserRole) {
+        const eff = UserRoles.effectiveUserRole(u);
+        if (eff) return eff;
+    }
     const ur = String((u && u.user_role) || '').trim().toLowerCase();
     const r = String((u && u.role) || '').trim().toLowerCase();
     const staffVals = [
@@ -703,6 +715,12 @@ function adminStaffUserRoleValue(u) {
     if (staffVals.includes(ur)) return ur;
     if (staffVals.includes(r)) return r;
     return ur || r || 'judge_user';
+}
+
+function adminClearStaffUsersSearch() {
+    const el = document.getElementById('staff-users-search');
+    if (el) el.value = '';
+    renderStaffUsersTable(window.__adminStaffUsers || []);
 }
 
 function renderStaffUsersTable(staffList) {
@@ -742,7 +760,10 @@ function renderStaffUsersTable(staffList) {
     }
     if (!rows.length) {
         staffBody.innerHTML =
-            '<tr><td colspan="7" style="text-align:center;">No staff users match your search.</td></tr>';
+            '<tr><td colspan="7" style="text-align:center;">No staff users match this search. ' +
+            (total
+                ? `${total} staff account${total === 1 ? '' : 's'} exist — <button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.82rem;" onclick="adminClearStaffUsersSearch()">Clear search</button> to show all. Also check the <strong>Doctors</strong> tab if the account was saved as Doctor.</td></tr>`
+                : '</td></tr>');
         return;
     }
     staffBody.innerHTML = '';
@@ -806,6 +827,7 @@ async function adminLookupUserByEmail() {
             msg.style.color = '#047857';
             msg.textContent = `${u.first_name} ${u.last_name} — role ${u.user_role || u.role} — listed under “${data.accountList === 'staff' ? 'Staff users' : 'Doctors'}”.`;
         }
+        adminClearStaffUsersSearch();
         window.__highlightAdminUserId = u.id;
         switchTab(data.accountList === 'staff' ? 'tab-staff-users' : 'tab-doctors');
         loadUsers();
@@ -1917,6 +1939,9 @@ async function adminCreateUser() {
                 `User created.\n\nUser ID: ${result.user_id_string}\nPassword: ${finalPassword}\nRole: ${userRole}\n\nThis account is listed under “${listName}” in admin (not both tabs).\n\nEmail and WhatsApp notifications were queued (if Zoho / WhatsApp are configured).\n\n(Copy from the green box in this dialog if needed.)`
             );
             document.getElementById('admin-create-user-modal').classList.add('hidden');
+            adminClearStaffUsersSearch();
+            const lookupEl = document.getElementById('admin-user-lookup');
+            if (lookupEl) lookupEl.value = result.user_id_string || '';
             switchTab(staffAccount ? 'tab-staff-users' : 'tab-doctors');
             window.__highlightAdminUserId = result.userId;
 

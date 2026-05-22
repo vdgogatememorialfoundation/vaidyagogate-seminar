@@ -25,13 +25,24 @@
             .toLowerCase();
     }
 
+    function effectiveUserRole(row) {
+        if (!row) return '';
+        const ur = normalizeUserRole(row.user_role);
+        const r = normalizeUserRole(row.role);
+        if (ur && ur !== 'doctor' && ur !== 'event_attendee') return ur;
+        if (STAFF_USER_ROLES.has(r) || ADMIN_CREATABLE_STAFF_ROLES.some((s) => s === r)) return r;
+        return ur || r || '';
+    }
+
     function isStaffPortalAccount(row) {
         if (!row) return false;
         const ur = normalizeUserRole(row.user_role);
         const r = normalizeUserRole(row.role);
-        if (STAFF_USER_ROLES.has(ur) || STAFF_USER_ROLES.has(r)) return true;
-        if (ADMIN_CREATABLE_STAFF_ROLES.some((s) => s === ur || s === r)) return true;
-        if (r === 'admin' && ur !== 'doctor') return true;
+        const eff = effectiveUserRole(row);
+        if (STAFF_USER_ROLES.has(ur) || STAFF_USER_ROLES.has(r) || STAFF_USER_ROLES.has(eff)) return true;
+        if (ADMIN_CREATABLE_STAFF_ROLES.some((s) => s === ur || s === r || s === eff)) return true;
+        if (r === 'admin' && ur && ur !== 'doctor') return true;
+        if (!ur && r === 'admin') return true;
         return false;
     }
 
@@ -54,6 +65,7 @@
         STAFF_USER_ROLES,
         ADMIN_CREATABLE_STAFF_ROLES,
         normalizeUserRole,
+        effectiveUserRole,
         isStaffPortalAccount,
         isDoctorPortalAccount,
         roleColumnForUserRole

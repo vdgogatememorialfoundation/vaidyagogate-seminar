@@ -164,8 +164,9 @@
                         </div>
                         <button class="btn-primary" onclick="openAdminCreateUserModal('staff')">+ Create staff user</button>
                     </div>
-                    <div style="margin-bottom:12px;">
-                        <input type="search" id="staff-users-search" placeholder="Search staff by name, email, phone, portal ID, or role…" oninput="adminFilterStaffUsersList()" style="width:100%;max-width:520px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;">
+                    <div style="margin-bottom:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+                        <input type="search" id="staff-users-search" placeholder="Search staff by name, email, phone, portal ID, or role…" oninput="adminFilterStaffUsersList()" style="flex:1;min-width:200px;max-width:520px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;">
+                        <button type="button" class="btn-secondary" onclick="adminClearStaffUsersSearch()">Clear search</button>
                     </div>
                     <table class="data-table">
                         <thead><tr><th>12-Digit ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
@@ -1941,7 +1942,7 @@
     <script src="/js/admin-system-health.js"></script>
     <script src="/js/otp-ui.js"></script>
     <script src="/js/portal-upload.js?v=20260522"></script>
-    <script src="/js/user-roles.js?v=20260522b"></script>
-    <script src="/js/admin.js?v=20260522b"></script>
+    <script src="/js/user-roles.js?v=20260522c"></script>
+    <script src="/js/admin.js?v=20260522c"></script>
 </body>
 </html>
