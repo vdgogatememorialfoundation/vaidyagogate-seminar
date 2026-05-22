@@ -58,6 +58,7 @@ const siteSeoMod = require('./lib/site-seo');
 const emailDeliveryPolicy = require('./lib/email-delivery-policy');
 const volunteerCertFlow = require('./lib/volunteer-cert-flow');
 const volunteerTicketFlow = require('./lib/volunteer-ticket-flow');
+const regPaymentStatus = require('./lib/registration-payment-status');
 
 function volunteerTicketDeps() {
     return {
@@ -67,7 +68,8 @@ function volunteerTicketDeps() {
         certVerify,
         notifEngine,
         notifyTicketIssued,
-        buildDisplayNameFromFormData
+        buildDisplayNameFromFormData,
+        markRegistrationETicketIssued: regPaymentStatus.markRegistrationETicketIssued
     };
 }
 const authUsers = require('./lib/auth-users');
@@ -1624,7 +1626,10 @@ function backfillTicketsForPaidOrders(cb) {
                     row.application_no,
                     (eT, etk) => {
                         if (eT) return cb && cb(eT);
-                        if (etk) created++;
+                        if (etk) {
+                            created++;
+                            markRegistrationETicketIssued(row.registration_id, () => {});
+                        }
                         next();
                     }
                 );
@@ -1868,12 +1873,7 @@ function insertParticipantTicket(orderDbId, userId, orderIdStr, registrationId, 
 }
 
 function markRegistrationETicketIssued(registrationId, cb) {
-    db.run(
-        `UPDATE registrations SET status = 'e_ticket_issued'
-         WHERE id = ? AND status NOT IN ('checked_in', 'certificate_issued', 'rejected', 'cancelled')`,
-        [registrationId],
-        (err) => cb && cb(err)
-    );
+    regPaymentStatus.markRegistrationETicketIssued(db, registrationId, cb);
 }
 
 function recordScanEventForDashboard(seminarId, staffId, payload) {
@@ -2070,6 +2070,7 @@ function fulfillRegistrationPayment(registrationId, userId, amount, gatewayName,
         (eExist, paid) => {
             if (eExist) return cb(eExist);
             if (paid) {
+                markRegistrationETicketIssued(registrationId, () => {});
                 return db.run(
                     `DELETE FROM orders WHERE registration_id = ? AND status = 'pending'`,
                     [registrationId],
@@ -2086,9 +2087,7 @@ function fulfillRegistrationPayment(registrationId, userId, amount, gatewayName,
                                     registrationId,
                                     regRow && regRow.application_no,
                                     (eT, etk, qr, meta) => {
-                                        if (!eT && etk && !(meta && meta.skipped)) {
-                                            markRegistrationETicketIssued(registrationId, () => {});
-                                        }
+                                        if (!eT) markRegistrationETicketIssued(registrationId, () => {});
                                         cb(eT, {
                                             orderId: paid.id,
                                             orderIdString: paid.order_id_string,
@@ -2120,7 +2119,7 @@ function fulfillRegistrationPayment(registrationId, userId, amount, gatewayName,
                                     registrationId,
                                     orderDbId
                                 ]);
-                                db.run(`UPDATE registrations SET status = 'e_ticket_issued' WHERE id = ?`, [registrationId]);
+                                markRegistrationETicketIssued(registrationId, () => {});
                                 activityLog.logActivity(db, {
                                     user_id: userId,
                                     action: 'payment.completed',
@@ -2144,9 +2143,7 @@ function fulfillRegistrationPayment(registrationId, userId, amount, gatewayName,
                                             registrationId,
                                             regRow && regRow.application_no,
                                             (eT, etk, qr, meta) => {
-                                                if (!eT && etk && !(meta && meta.skipped)) {
-                                                    markRegistrationETicketIssued(registrationId, () => {});
-                                                }
+                                                if (!eT) markRegistrationETicketIssued(registrationId, () => {});
                                                 cb(eT, {
                                                     orderId: orderDbId,
                                                     orderIdString: orderStr,
@@ -7053,6 +7050,7 @@ app.post('/api/payments/verify', (req, res) => {
                                 });
                             }
                             if (ord.status === 'success') {
+                                markRegistrationETicketIssued(applicationId, () => {});
                                 return db.get(
                                     `SELECT user_id, application_no FROM registrations WHERE id = ?`,
                                     [applicationId],
@@ -7067,6 +7065,7 @@ app.post('/api/payments/verify', (req, res) => {
                                             regRow.application_no,
                                             (eTix) => {
                                                 if (eTix) return res.status(500).json({ error: eTix.message });
+                                                markRegistrationETicketIssued(applicationId, () => {});
                                                 res.json({
                                                     success: true,
                                                     message:
@@ -7096,8 +7095,8 @@ app.post('/api/payments/verify', (req, res) => {
                                             [applicationId, ord.id],
                                             () => {}
                                         );
-                                        db.run(`UPDATE registrations SET status = 'completed' WHERE id = ?`, [applicationId], () => {
-                                            portalTracking.registrationStatusToLog('completed', '').forEach((entry) => {
+                                        markRegistrationETicketIssued(applicationId, () => {
+                                            portalTracking.registrationStatusToLog('e_ticket_issued', '').forEach((entry) => {
                                                 portalTracking.logRegistrationEvent(
                                                     db,
                                                     applicationId,
@@ -7138,6 +7137,7 @@ app.post('/api/payments/verify', (req, res) => {
                                                         existingTix.ticket_id_string &&
                                                         String(existingTix.ticket_id_string).trim();
                                                     if (hasEtk) {
+                                                        markRegistrationETicketIssued(applicationId, () => {});
                                                         return res.json({
                                                             success: true,
                                                             message: 'Payment verified',
@@ -7172,6 +7172,7 @@ app.post('/api/payments/verify', (req, res) => {
                                                     regRow && regRow.application_no,
                                                     (e3) => {
                                                         if (e3) return res.status(500).json({ error: e3.message });
+                                                        markRegistrationETicketIssued(applicationId, () => {});
                                                         res.json({
                                                             success: true,
                                                             message: 'Payment verified and e-ticket generated',
@@ -9406,6 +9407,23 @@ app.get('/api/admin/registrations/lookup', (req, res) => {
     );
 });
 
+function respondAdminRegUpsertWithVolunteerTicket(res, payload, tid, sid, registrationId) {
+    volunteerTicketFlow.tryFulfillVolunteerAfterRegistration(
+        db,
+        volunteerTicketDeps(),
+        { userId: tid, seminarId: sid, registrationId },
+        (vErr, vRes) => {
+            if (vErr) console.warn('[volunteer-ticket] admin upsert:', vErr.message);
+            if (vRes && vRes.issued) {
+                payload.volunteerTicketIssued = true;
+                payload.volunteerTicketId = vRes.ticketId;
+                if (vRes.message) payload.volunteerMessage = vRes.message;
+            }
+            res.json(payload);
+        }
+    );
+}
+
 function runAdminRegistrationUpsertBody(req, res, tid, sid, aid, formData) {
     const stored =
         formData && typeof formData === 'object'
@@ -9441,12 +9459,18 @@ function runAdminRegistrationUpsertBody(req, res, tid, sid, aid, formData) {
                         if (!result || !result.ok) {
                             return res.status(400).json({ error: (result && result.error) || 'Update failed' });
                         }
-                        res.json({
-                            success: true,
-                            registrationId: reg.id,
-                            applicationNo: result.applicationNo,
-                            created: false
-                        });
+                        respondAdminRegUpsertWithVolunteerTicket(
+                            res,
+                            {
+                                success: true,
+                                registrationId: reg.id,
+                                applicationNo: result.applicationNo,
+                                created: false
+                            },
+                            tid,
+                            sid,
+                            reg.id
+                        );
                     }
                 );
             }
@@ -9471,12 +9495,18 @@ function runAdminRegistrationUpsertBody(req, res, tid, sid, aid, formData) {
                             { userId: tid, seminarId: sid, registrationId: newRegId },
                             () => {}
                         );
-                        res.json({
-                            success: true,
-                            registrationId: newRegId,
-                            applicationNo,
-                            created: true
-                        });
+                        respondAdminRegUpsertWithVolunteerTicket(
+                            res,
+                            {
+                                success: true,
+                                registrationId: newRegId,
+                                applicationNo,
+                                created: true
+                            },
+                            tid,
+                            sid,
+                            newRegId
+                        );
                     }
                 );
             });
@@ -9560,12 +9590,36 @@ app.put('/api/admin/applications/:applicationId/form-data', (req, res) => {
                     if (!result || !result.ok) {
                         return res.status(400).json({ error: (result && result.error) || 'Update failed' });
                     }
-                    res.json({
-                        success: true,
-                        registrationId: result.registrationId,
-                        applicationNo: result.applicationNo,
-                        formData: result.formData
-                    });
+                    db.get(
+                        `SELECT user_id, seminar_id FROM registrations WHERE id = ?`,
+                        [result.registrationId],
+                        (eMeta, regMeta) => {
+                            const payload = {
+                                success: true,
+                                registrationId: result.registrationId,
+                                applicationNo: result.applicationNo,
+                                formData: result.formData
+                            };
+                            if (eMeta || !regMeta) return res.json(payload);
+                            volunteerTicketFlow.tryFulfillVolunteerAfterRegistration(
+                                db,
+                                volunteerTicketDeps(),
+                                {
+                                    userId: regMeta.user_id,
+                                    seminarId: regMeta.seminar_id,
+                                    registrationId: result.registrationId
+                                },
+                                (vErr, vRes) => {
+                                    if (vErr) console.warn('[volunteer-ticket] admin form edit:', vErr.message);
+                                    if (vRes && vRes.issued) {
+                                        payload.volunteerTicketIssued = true;
+                                        payload.volunteerTicketId = vRes.ticketId;
+                                    }
+                                    res.json(payload);
+                                }
+                            );
+                        }
+                    );
                 }
             );
         });
