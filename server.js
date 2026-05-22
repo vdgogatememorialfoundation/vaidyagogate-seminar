@@ -7150,6 +7150,45 @@ app.post('/api/payments/verify', (req, res) => {
     });
 });
 
+// Admin: find account(s) — register before /:userId routes
+app.get('/api/admin/users/lookup', (req, res) => {
+    const adminUserLookup = require('./lib/admin-user-lookup');
+    const email = String(req.query.email || '').trim();
+    const portalId = String(req.query.portalId || req.query.user_id_string || '').trim();
+    const q = String(req.query.q || req.query.query || email || portalId || '').trim();
+    if (!q) {
+        return res.status(400).json({
+            error: 'Enter email, 12-digit portal ID, phone, or name (e.g. Nitin).'
+        });
+    }
+    adminUserLookup.searchAdminUsers(db, q, (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!rows.length) {
+            return res.json({
+                found: false,
+                hint:
+                    'No account in the database matches that search. If you just created a user, the save may have failed — create again. For Mr Nitin Thatte, search Nitin or thattenitin13@gmail.com (portal ID 645390302736, Doctors tab).'
+            });
+        }
+        const matches = rows.map(adminUserLookup.mapUserForAdminResponse);
+        const user = matches[0];
+        const accountList = user.account_list;
+        res.json({
+            found: true,
+            accountList,
+            user,
+            matches,
+            multiple: matches.length > 1,
+            hint:
+                matches.length > 1
+                    ? `${matches.length} accounts match — pick the correct one in the list below.`
+                    : accountList === 'staff'
+                      ? 'Open Staff users tab'
+                      : 'Open Doctors tab (includes public website sign-ups)'
+        });
+    });
+});
+
 // Admin: full user detail (profile, registrations, orders, scans, activity)
 app.get('/api/admin/users/:userId/detail', (req, res) => {
     const uid = parseInt(req.params.userId, 10);
@@ -8450,15 +8489,17 @@ app.post('/api/admin/users/create', (req, res) => {
             if (dup) return res.status(400).json({ error: 'That portal user ID is already in use.' });
             const authUsers = require('./lib/auth-users');
             db.get(
-                `SELECT id, email, user_role, role FROM users WHERE ${authUsers.sqlEmailMatches('email')} LIMIT 1`,
+                `SELECT id, user_id_string, email, user_role, role FROM users WHERE ${authUsers.sqlEmailMatches('email')} LIMIT 1`,
                 [emailNorm],
                 (eEmail, existing) => {
                     if (eEmail) return res.status(500).json({ error: eEmail.message });
                     if (existing) {
                         const list = userRoles.isDoctorPortalAccount(existing) ? 'Doctors' : 'Staff users';
+                        const adminUserLookup = require('./lib/admin-user-lookup');
                         return res.status(409).json({
-                            error: `Email already registered (listed under “${list}” in admin). Use a different email or open that tab to edit the account.`,
+                            error: `This email is already used by ${list} (portal ID ${existing.user_id_string || '—'}). Open that account to change role — do not create a second login.`,
                             existingUserId: existing.id,
+                            existingUser: adminUserLookup.mapUserForAdminResponse(existing),
                             accountList: userRoles.isDoctorPortalAccount(existing) ? 'doctors' : 'staff'
                         });
                     }
@@ -8466,38 +8507,63 @@ app.post('/api/admin/users/create', (req, res) => {
             `INSERT INTO users (user_id_string, first_name, middle_name, last_name, email, phone, password, role, user_role, email_verified, is_demo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
             [userIdStr, cleanFirst, cleanMiddle, cleanLast, emailNorm, phone, finalPassword, roleCol, userRole, demoFlag],
         function (err) {
-            if (err) return res.status(500).json({ error: err.message });
-                const newId = this.lastID;
-            notifEngine.notify(
-                db,
-                'ACCOUNT_CREATED',
-                {
-                    userId: newId,
-                    vars: { temporary_password: finalPassword }
-                },
-                () => {
-                    flushNotificationQueue();
+            if (err) {
+                if (/unique|duplicate/i.test(String(err.message || ''))) {
+                    return res.status(409).json({
+                        error: 'Email or portal ID already exists. Use Find any account to open the existing user.'
+                    });
+                }
+                return res.status(500).json({ error: err.message });
+            }
+            const insertedId = this.lastID;
+            db.get(
+                `SELECT id, user_id_string, user_role, role FROM users WHERE user_id_string = ? LIMIT 1`,
+                [userIdStr],
+                (eVerify, saved) => {
+                    if (eVerify) return res.status(500).json({ error: eVerify.message });
+                    if (!saved || !saved.id) {
+                        return res.status(500).json({
+                            error:
+                                'Account was not saved to the database. Wait a few seconds and try again, or check Vercel DATABASE_URL for Production.'
+                        });
+                    }
+                    const newId = saved.id || insertedId;
+                    notifEngine.notify(
+                        db,
+                        'ACCOUNT_CREATED',
+                        {
+                            userId: newId,
+                            vars: { temporary_password: finalPassword }
+                        },
+                        () => {
+                            flushNotificationQueue();
+                        }
+                    );
+                    designatedNotify.notifyDesignatedAccountCreated(
+                        db,
+                        newId,
+                        { source: 'admin create user', temporary_password: finalPassword },
+                        () => {
+                            flushNotificationQueue();
+                        }
+                    );
+                    res.json({
+                        success: true,
+                        verified: true,
+                        userId: newId,
+                        user_id_string: saved.user_id_string || userIdStr,
+                        user_role: userRole,
+                        accountList: userRoles.isDoctorPortalAccount({
+                            user_role: saved.user_role || userRole,
+                            role: saved.role || roleCol
+                        })
+                            ? 'doctors'
+                            : 'staff',
+                        generatedPassword: finalPassword,
+                        isDemo: !!demoFlag
+                    });
                 }
             );
-            designatedNotify.notifyDesignatedAccountCreated(
-                db,
-                newId,
-                { source: 'admin create user', temporary_password: finalPassword },
-                () => {
-                    flushNotificationQueue();
-                }
-            );
-            res.json({
-                success: true,
-                userId: newId,
-                user_id_string: userIdStr,
-                user_role: userRole,
-                accountList: userRoles.isDoctorPortalAccount({ user_role: userRole, role: roleCol })
-                    ? 'doctors'
-                    : 'staff',
-                generatedPassword: finalPassword,
-                isDemo: !!demoFlag
-            });
             }
         );
                 }
@@ -8506,44 +8572,6 @@ app.post('/api/admin/users/create', (req, res) => {
     },
         { targetUserRole: userRole }
     );
-});
-
-// Admin: find account(s) by email, portal ID, phone, or name
-app.get('/api/admin/users/lookup', (req, res) => {
-    const adminUserLookup = require('./lib/admin-user-lookup');
-    const email = String(req.query.email || '').trim();
-    const portalId = String(req.query.portalId || req.query.user_id_string || '').trim();
-    const q = String(req.query.q || req.query.query || email || portalId || '').trim();
-    if (!q) {
-        return res.status(400).json({
-            error: 'Enter email, 12-digit portal ID, phone, or name (e.g. Nitin).'
-        });
-    }
-    adminUserLookup.searchAdminUsers(db, q, (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (!rows.length) {
-            return res.json({
-                found: false,
-                hint: 'No match. Try full email, 12-digit portal ID from the create alert, phone number, or first name.'
-            });
-        }
-        const matches = rows.map(adminUserLookup.mapUserForAdminResponse);
-        const user = matches[0];
-        const accountList = user.account_list;
-        res.json({
-            found: true,
-            accountList,
-            user,
-            matches,
-            multiple: matches.length > 1,
-            hint:
-                matches.length > 1
-                    ? `${matches.length} accounts match — pick the correct one in the list below.`
-                    : accountList === 'staff'
-                      ? 'Open Staff users tab'
-                      : 'Open Doctors tab (includes public website sign-ups)'
-        });
-    });
 });
 
 // Admin: Get Users

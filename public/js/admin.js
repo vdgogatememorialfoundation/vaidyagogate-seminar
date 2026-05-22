@@ -858,7 +858,9 @@ async function adminLookupUserByEmail() {
         if (!data.found) {
             if (msg) {
                 msg.style.color = '#b91c1c';
-                msg.textContent = data.hint || 'No account found. Try full email, portal ID from create alert, phone, or first name.';
+                msg.textContent =
+                    data.hint ||
+                    'No account in the database. Hard refresh (Ctrl+F5), then search by name, email, or phone. Portal ID 533520779781 is not saved — recreate the staff user or find Nitin under Doctors.';
             }
             return;
         }
@@ -1972,6 +1974,19 @@ async function adminCreateUser() {
         });
         const result = await res.json();
         if (!res.ok) {
+            if (result.existingUserId) {
+                if (result.accountList === 'doctors') switchTab('tab-doctors');
+                else if (result.accountList === 'staff') switchTab('tab-staff-users');
+                if (
+                    confirm(
+                        (result.error || 'Account already exists.') +
+                            '\n\nOpen that account now?'
+                    )
+                ) {
+                    adminOpenExistingUser(result.existingUserId, result.accountList);
+                }
+                return;
+            }
             if (result.accountList === 'doctors') switchTab('tab-doctors');
             else if (result.accountList === 'staff') switchTab('tab-staff-users');
             return alert(result.error || 'Could not create user');
@@ -1995,15 +2010,10 @@ async function adminCreateUser() {
             const staffAccount =
                 result.accountList === 'staff' || isStaffUserRoleClient(userRole);
             const listName = staffAccount ? 'Staff users' : 'Doctors';
-            alert(
-                `User created.\n\nUser ID: ${result.user_id_string}\nPassword: ${finalPassword}\nRole: ${userRole}\n\nThis account is listed under “${listName}” in admin (not both tabs).\n\nEmail and WhatsApp notifications were queued (if Zoho / WhatsApp are configured).\n\n(Copy from the green box in this dialog if needed.)`
-            );
             document.getElementById('admin-create-user-modal').classList.add('hidden');
             adminClearStaffUsersSearch();
             const lookupEl = document.getElementById('admin-user-lookup');
             if (lookupEl) lookupEl.value = result.user_id_string || '';
-            switchTab(staffAccount ? 'tab-staff-users' : 'tab-doctors');
-            window.__highlightAdminUserId = result.userId;
 
             document.getElementById('newuser-first').value = '';
             if (document.getElementById('newuser-middle')) document.getElementById('newuser-middle').value = '';
@@ -2012,7 +2022,33 @@ async function adminCreateUser() {
             document.getElementById('newuser-email').value = '';
             document.getElementById('newuser-phone').value = '';
             if (document.getElementById('newuser-pass')) document.getElementById('newuser-pass').value = '';
-            loadUsers();
+            await loadUsers();
+            try {
+                const verifyRes = await fetch(
+                    '/api/admin/users/lookup?q=' + encodeURIComponent(result.user_id_string || '')
+                );
+                const verify = await verifyRes.json();
+                if (!verify.found) {
+                    alert(
+                        'Warning: The server could not confirm this account in the database.\n\n' +
+                            'Portal ID: ' +
+                            (result.user_id_string || '—') +
+                            '\n\nPlease create the user again. If this repeats, check Vercel Production → DATABASE_URL (Neon).'
+                    );
+                } else {
+                    alert(
+                        `User saved to database.\n\nPortal ID: ${verify.user.user_id_string}\nPassword: ${finalPassword}\nRole: ${userRole}\n\nListed under “${listName}”.`
+                    );
+                    adminApplyLookupMatch(verify.user, verify.accountList);
+                }
+            } catch (_) {
+                alert(
+                    `User created (unverified).\n\nPortal ID: ${result.user_id_string}\nPassword: ${finalPassword}`
+                );
+                switchTab(staffAccount ? 'tab-staff-users' : 'tab-doctors');
+                window.__highlightAdminUserId = result.userId;
+                loadUsers();
+            }
         } else {
             alert('Error: ' + result.error);
         }
@@ -2020,6 +2056,12 @@ async function adminCreateUser() {
         console.error(err);
         alert('Error creating user');
     }
+}
+
+function adminOpenExistingUser(userId, accountList) {
+    window.__highlightAdminUserId = userId;
+    switchTab(accountList === 'staff' ? 'tab-staff-users' : 'tab-doctors');
+    loadUsers().then(() => openAdminUserDetail(userId));
 }
 
 let __adminUserDetailCache = null;
