@@ -56,6 +56,7 @@ const { registerLiveScannerRoutes } = require('./lib/routes-live-scanner');
 const { registerPosRoutes } = require('./lib/pos-onspot');
 const siteSeoMod = require('./lib/site-seo');
 const emailDeliveryPolicy = require('./lib/email-delivery-policy');
+const volunteerCertFlow = require('./lib/volunteer-cert-flow');
 const authUsers = require('./lib/auth-users');
 const authLoginOtp = require('./lib/auth-login-otp');
 const certRender = require('./lib/certificate-render');
@@ -1170,58 +1171,13 @@ function invalidateTicketsForRegistration(registrationId, cb) {
 }
 
 function syncCertificateEligibilityForTicket(ticketId, cb) {
-    const q = `
-        SELECT t.id AS ticket_id, t.is_scanned, IFNULL(t.scan_count, 0) AS scan_count, t.scan_time, t.user_id, t.order_id,
-               r.id AS registration_id, r.seminar_id, r.form_data,
-               u.first_name, u.middle_name, u.last_name,
-               o.status AS order_status,
-               IFNULL(s.cert_scans_required, 1) AS cert_scans_required
-        FROM tickets t
-        JOIN orders o ON o.id = t.order_id
-        JOIN registrations r ON r.id = o.registration_id
-        JOIN seminars s ON s.id = r.seminar_id
-        JOIN users u ON u.id = t.user_id
-        WHERE t.id = ?
-    `;
-    db.get(q, [ticketId], (err, row) => {
-        if (err) return cb && cb(err);
-        if (!row) return cb && cb(null);
-        const displayName = buildDisplayNameFromFormData(row.form_data, row);
-        const paid = String(row.order_status || '').toLowerCase() === 'success';
-        const scansOk = certVerify.ticketMeetsScanRequirement(row.scan_count, row.cert_scans_required);
-        const paidAndScanned = paid && scansOk ? 1 : 0;
-        db.get(
-            `SELECT id FROM certificate_templates WHERE seminar_id = ? AND is_active = 1 ORDER BY id DESC LIMIT 1`,
-            [row.seminar_id],
-            (e2, tpl) => {
-                if (e2) return cb && cb(e2);
-                const scanVerified = paidAndScanned && tpl ? 1 : 0;
-                db.run(
-                    `INSERT INTO user_certificates (user_id, seminar_id, ticket_id, registration_id, display_name, template_id, enabled, scan_verified, scan_time, updated_at)
-                     VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, CURRENT_TIMESTAMP)
-                     ON CONFLICT(user_id, seminar_id) DO UPDATE SET
-                       ticket_id = excluded.ticket_id,
-                       registration_id = excluded.registration_id,
-                       display_name = excluded.display_name,
-                       template_id = COALESCE(excluded.template_id, user_certificates.template_id),
-                       scan_verified = excluded.scan_verified,
-                       scan_time = excluded.scan_time,
-                       updated_at = CURRENT_TIMESTAMP`,
-                    [
-                        row.user_id,
-                        row.seminar_id,
-                        row.ticket_id,
-                        row.registration_id,
-                        displayName,
-                        tpl ? tpl.id : null,
-                        scanVerified,
-                        row.scan_time || null
-                    ],
-                    () => cb && cb(null)
-                );
-            }
-        );
-    });
+    volunteerCertFlow.syncDualCertEligibilityFromTicketScan(
+        db,
+        certVerify,
+        ticketId,
+        buildDisplayNameFromFormData,
+        cb
+    );
 }
 
 function migrateLegacyRegistrationFormConfig(done) {
@@ -6079,8 +6035,20 @@ app.post('/api/scanner/mark', (req, res) => {
                                     }
                                 } else if (certEligibleNow) {
                                     scanMsg +=
-                                        ' Certificate eligibility recorded — awaiting admin approval to issue.';
+                                        ' Participation & Volunteer certificate attendance recorded (if assigned as seminar volunteer).';
                                 }
+                                db.get(
+                                    `SELECT 1 AS ok FROM seminar_volunteers WHERE user_id = ? AND seminar_id = ? AND status = 'approved' LIMIT 1`,
+                                    [row.doctor_user_id, row.seminar_id],
+                                    (_eSv, svRow) => {
+                                        if (svRow && svRow.ok) {
+                                            scanMsg +=
+                                                ' Dual certificates (Participation + Volunteer) updated from this QR scan.';
+                                        }
+                                        sendScanSuccess();
+                                    }
+                                );
+                                function sendScanSuccess() {
                                 recordScanEventForDashboard(selectedSeminarId, staffId, {
                                     ticket_db_id: row.ticket_id,
                                     ticket_id_string: row.ticket_id_string,
@@ -6106,6 +6074,7 @@ app.post('/api/scanner/mark', (req, res) => {
                                     }),
                                     scannedByStaffId: staffId
                                 });
+                                }
                             });
                         };
 
@@ -7742,10 +7711,10 @@ app.get('/api/public/certificate-verify/schedule', (req, res) => {
 });
 
 app.post('/api/public/certificate-verify/lookup', (req, res) => {
-    const { seminarId, applicationNo, prn, token } = req.body || {};
+    const { seminarId, applicationNo, prn, token, certKind } = req.body || {};
     certVerify.resolveCertForPublicLookup(
         db,
-        { seminarId, applicationNo, prn, token },
+        { seminarId, applicationNo, prn, token, certKind },
         (err, out) => {
             if (err) return res.status(500).json({ error: err.message });
             if (!out || !out.ok) return res.status(400).json(out || { ok: false, error: 'Lookup failed' });
@@ -7753,6 +7722,7 @@ app.post('/api/public/certificate-verify/lookup', (req, res) => {
                 ok: true,
                 seminar: out.seminar,
                 certId: out.cert.id,
+                certKind: out.cert.kind || 'participant',
                 displayName: out.cert.displayName,
                 applicationNo: out.cert.applicationNo,
                 prn: out.cert.prn,
@@ -8775,11 +8745,59 @@ app.post('/api/admin/users/:userId/doctor-access', (req, res) => {
             [doctor_category, modulesJson, uid],
             function (err) {
                 if (err) return res.status(500).json({ error: err.message });
-                res.json({
-                    success: true,
-                    doctor_category,
-                    doctor_modules: finalModules || null
-                });
+                const respond = (extra) => {
+                    res.json({
+                        success: true,
+                        doctor_category,
+                        doctor_modules: finalModules || null,
+                        ...(extra || {})
+                    });
+                };
+                if (doctor_category !== 'volunteer') return respond();
+                db.all(
+                    `SELECT sv.seminar_id, sv.user_id, r.id AS registration_id, r.form_data,
+                            t.id AS ticket_id
+                     FROM seminar_volunteers sv
+                     JOIN registrations r ON r.user_id = sv.user_id AND r.seminar_id = sv.seminar_id
+                     LEFT JOIN orders o ON o.registration_id = r.id AND o.status = 'success'
+                     LEFT JOIN tickets t ON t.order_id = o.id
+                     WHERE sv.user_id = ? AND sv.status = 'approved'`,
+                    [uid],
+                    (eSv, volRows) => {
+                        if (eSv || !volRows || !volRows.length) return respond();
+                        let left = volRows.length;
+                        let issued = 0;
+                        volRows.forEach((vr) => {
+                            const dn = buildDisplayNameFromFormData(vr.form_data, {});
+                            volunteerCertFlow.autoIssueDualVolunteerCertificates(
+                                db,
+                                certVerify,
+                                {
+                                    userId: uid,
+                                    seminarId: vr.seminar_id,
+                                    registrationId: vr.registration_id,
+                                    displayName: dn,
+                                    ticketId: vr.ticket_id,
+                                    adminUserId: null,
+                                    scanVerified: 0
+                                },
+                                () => {
+                                    issued++;
+                                    left--;
+                                    if (left === 0) {
+                                        respond({
+                                            dualCertificatesSynced: issued,
+                                            message:
+                                                'Doctor set as volunteer. Dual certificates ensured for ' +
+                                                issued +
+                                                ' approved seminar assignment(s).'
+                                        });
+                                    }
+                                }
+                            );
+                        });
+                    }
+                );
             }
         );
     });

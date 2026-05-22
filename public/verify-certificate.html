@@ -39,8 +39,16 @@
                     <select id="cv-seminar"><option value="">Loading seminars…</option></select>
                 </div>
                 <div class="cv-field">
+                    <label for="cv-cert-kind">Certificate type</label>
+                    <select id="cv-cert-kind">
+                        <option value="">Either (use QR if both match)</option>
+                        <option value="participant">Participation</option>
+                        <option value="volunteer">Volunteer</option>
+                    </select>
+                </div>
+                <div class="cv-field">
                     <label for="cv-application">Application or volunteer ticket number</label>
-                    <input type="text" id="cv-application" inputmode="numeric" placeholder="Application or volunteer ticket ID" maxlength="24">
+                    <input type="text" id="cv-application" inputmode="numeric" placeholder="APP_… or VOL_… ticket ID" maxlength="24">
                 </div>
                 <div class="cv-field">
                     <label for="cv-prn">Portal registration number (doctor identifier)</label>

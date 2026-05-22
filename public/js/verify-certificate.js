@@ -30,11 +30,14 @@
     }
 
     function lookupPayload() {
+        const kindEl = document.getElementById('cv-cert-kind');
+        const certKind = kindEl && kindEl.value ? kindEl.value : undefined;
         return {
             seminarId: state.seminarId,
             applicationNo: state.applicationNo || undefined,
             prn: state.prn || undefined,
-            token: state.token || undefined
+            token: state.token || undefined,
+            certKind
         };
     }
 
@@ -162,6 +165,7 @@
             const data = await res.json();
             if (!res.ok || !data.ok) throw new Error(data.error || 'Certificate not found');
             state.certId = data.certId;
+            state.certKind = data.certKind || '';
             state.displayName = data.displayName || '';
             state.maskedEmail = data.maskedEmail || '';
             state.maskedPhone = data.maskedPhone || '';
@@ -182,8 +186,15 @@
             }
             const hint = document.getElementById('cv-otp-hint');
             if (hint) {
+                const kindLabel =
+                    data.certKind === 'volunteer'
+                        ? 'Volunteer certificate'
+                        : data.certKind === 'participant'
+                          ? 'Participation certificate'
+                          : 'Certificate';
                 hint.textContent =
-                    'Certificate found for ' +
+                    kindLabel +
+                    ' found for ' +
                     (data.displayName || 'participant') +
                     '. One-time passwords will be sent to ' +
                     state.maskedEmail +
@@ -261,7 +272,14 @@
             document.getElementById('cv-result-message').textContent = data.message || '';
             const meta = document.getElementById('cv-result-meta');
             if (meta) {
+                const kindLabel =
+                    data.certKind === 'volunteer' || state.certKind === 'volunteer'
+                        ? 'Volunteer'
+                        : 'Participation';
                 meta.innerHTML =
+                    '<dt>Certificate type</dt><dd>' +
+                    escapeHtml(kindLabel) +
+                    '</dd>' +
                     '<dt>Name on certificate</dt><dd>' +
                     escapeHtml(data.displayName || state.displayName) +
                     '</dd>' +
