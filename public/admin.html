@@ -188,6 +188,11 @@
                         </div>
                         <button class="btn-primary" onclick="openAdminCreateUserModal('doctor')">+ Create doctor</button>
                     </div>
+                    <div style="margin-bottom:12px;">
+                        <label for="doctors-search" style="font-weight:600;font-size:0.9rem;">Search doctors</label>
+                        <input type="search" id="doctors-search" placeholder="Portal ID, name, email, or phone…" oninput="renderDoctorsUsersTable()" style="width:100%;max-width:560px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;margin-top:6px;">
+                        <p id="doctors-search-count" style="margin:6px 0 0;font-size:0.82rem;color:#64748b;"></p>
+                    </div>
                     <table class="data-table">
                         <thead><tr><th>12-Digit ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Status</th><th>Actions</th></tr></thead>
                         <tbody id="doctors-list"><tr><td colspan="6" style="text-align: center;">Loading…</td></tr></tbody>
@@ -218,6 +223,11 @@
                     <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
                         <h3>Active Seminars</h3>
                         <button class="btn-primary" onclick="openCreateSeminarModal()">+ Create Seminar</button>
+                    </div>
+                    <div style="margin-bottom:12px;">
+                        <label for="seminars-search" style="font-weight:600;font-size:0.9rem;">Search seminars</label>
+                        <input type="search" id="seminars-search" placeholder="ID, title, year, or status…" oninput="renderSeminarsTable()" style="width:100%;max-width:560px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;margin-top:6px;">
+                        <p id="seminars-search-count" style="margin:6px 0 0;font-size:0.82rem;color:#64748b;"></p>
                     </div>
                     <table class="data-table">
                         <thead><tr><th>ID</th><th>Title</th><th>Event Date</th><th>Price</th><th>Check-in Enabled?</th><th>Actions</th></tr></thead>
@@ -300,6 +310,11 @@
                         <h3>All Event Schedules</h3>
                         <button class="btn-primary" onclick="openEventScheduleModal()">+ Create New Schedule</button>
                     </div>
+                    <div style="margin-bottom:12px;">
+                        <label for="event-schedules-search" style="font-weight:600;font-size:0.9rem;">Search schedules</label>
+                        <input type="search" id="event-schedules-search" placeholder="Title, seminar, speaker, or location…" oninput="renderEventSchedulesTable()" style="width:100%;max-width:560px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;margin-top:6px;">
+                        <p id="event-schedules-search-count" style="margin:6px 0 0;font-size:0.82rem;color:#64748b;"></p>
+                    </div>
                     <table class="data-table">
                         <thead><tr><th>Title</th><th>Seminar</th><th>Start Time</th><th>End Time</th><th>Speaker</th><th>Actions</th></tr></thead>
                         <tbody id="event-schedules-list"><tr><td colspan="6" style="text-align: center;">Loading schedules...</td></tr></tbody>
@@ -340,6 +355,11 @@
                     </div>
                     
                     <h3 style="margin-top: 20px; margin-bottom: 10px;">Detailed Feedback</h3>
+                    <div style="margin-bottom:12px;">
+                        <label for="feedback-search" style="font-weight:600;font-size:0.9rem;">Search feedback</label>
+                        <input type="search" id="feedback-search" placeholder="Attendee name or comments…" oninput="renderFeedbackTable()" style="width:100%;max-width:560px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;margin-top:6px;">
+                        <p id="feedback-search-count" style="margin:6px 0 0;font-size:0.82rem;color:#64748b;"></p>
+                    </div>
                     <table class="data-table">
                         <thead><tr><th>Attendee Name</th><th>Rating</th><th>Content</th><th>Speaker</th><th>Organization</th><th>Comments</th></tr></thead>
                         <tbody id="feedback-list"><tr><td colspan="6" style="text-align: center;">Select a seminar to view feedback</td></tr></tbody>
@@ -361,6 +381,11 @@
                             <option value="closed">Closed</option>
                         </select>
                         <button type="button" class="btn-primary" onclick="loadContactInquiries()"><i class="fas fa-sync"></i> Refresh</button>
+                    </div>
+                    <div style="margin-bottom:12px;">
+                        <label for="contact-inquiries-search" style="font-weight:600;font-size:0.9rem;">Search inquiries</label>
+                        <input type="search" id="contact-inquiries-search" placeholder="Name, email, phone, subject, or status…" oninput="renderContactInquiriesTable()" style="width:100%;max-width:560px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;margin-top:6px;">
+                        <p id="contact-inquiries-search-count" style="margin:6px 0 0;font-size:0.82rem;color:#64748b;"></p>
                     </div>
                     <table class="data-table">
                         <thead><tr><th>Date</th><th>Name</th><th>Email</th><th>Phone</th><th>Subject</th><th>Status</th><th>Action</th></tr></thead>
@@ -485,6 +510,11 @@
                             <option value="high">High</option>
                             <option value="urgent">Urgent</option>
                         </select>
+                    </div>
+                    <div style="margin-bottom:12px;">
+                        <label for="support-tickets-search" style="font-weight:600;font-size:0.9rem;">Search tickets</label>
+                        <input type="search" id="support-tickets-search" placeholder="Ticket ID, doctor, subject, category, or status…" oninput="renderSupportTicketsTable()" style="width:100%;max-width:560px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;margin-top:6px;">
+                        <p id="support-tickets-search-count" style="margin:6px 0 0;font-size:0.82rem;color:#64748b;"></p>
                     </div>
                     <table class="data-table">
                         <thead><tr><th>Ticket ID</th><th>Doctor Name</th><th>Subject</th><th>Category</th><th>Priority</th><th>Status</th><th>Created</th><th>Action</th></tr></thead>
@@ -649,6 +679,38 @@
                     <button type="button" class="btn-primary" style="background:#b45309;" onclick="saveDesignatedNotifyConfig()">Save designated contacts</button>
                     <p id="dn-save-msg" style="margin-top:8px;font-weight:600;font-size:0.9rem;"></p>
                         </div>
+                <div class="card" style="margin-bottom:18px;border:1px solid #fed7aa;background:#fff7ed;">
+                    <h3 style="margin:0 0 10px;color:#c2410c;font-size:1.05rem;">Email delivery (venue / bulk)</h3>
+                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:12px;">Protects free Zoho SMTP from <code>550 unusual sending activity</code> during on-spot registration (500+ delegates). POS registrations succeed even when mail is deferred.</p>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:720px;">
+                        <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="ed-pos-skip-email" checked> Skip participant email at POS (recommended)</label>
+                        <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="ed-pos-skip-staff" checked> Skip staff alert emails for POS accounts</label>
+                        <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="ed-queue-all" checked> Queue all emails (no instant SMTP burst)</label>
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-top:12px;max-width:720px;">
+                        <div><label style="font-size:0.82rem;font-weight:700;">Max emails / hour</label><input type="number" id="ed-max-hour" min="10" max="500" value="80" style="width:100%;padding:8px;"></div>
+                        <div><label style="font-size:0.82rem;font-weight:700;">Min gap (ms)</label><input type="number" id="ed-min-gap" min="500" max="60000" value="2500" style="width:100%;padding:8px;"></div>
+                        <div><label style="font-size:0.82rem;font-weight:700;">Defer on rate limit (min)</label><input type="number" id="ed-defer-min" min="5" max="240" value="45" style="width:100%;padding:8px;"></div>
+                    </div>
+                    <p style="font-size:0.8rem;color:#64748b;margin:10px 0 0;">Schedule Vercel cron <code>GET /api/cron/process-notifications</code> with <code>CRON_SECRET</code> to drain the queue overnight.</p>
+                    <button type="button" class="btn-primary" style="margin-top:10px;background:#c2410c;" onclick="saveNotificationDeliveryConfig()">Save email delivery policy</button>
+                    <p id="ed-save-msg" style="margin-top:8px;font-weight:600;font-size:0.9rem;"></p>
+                </div>
+                <div class="card" style="margin-bottom:18px;border:1px solid #bbf7d0;background:#f0fdf4;">
+                    <h3 style="margin:0 0 10px;color:#15803d;font-size:1.05rem;">SEO &amp; Google visibility</h3>
+                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:12px;">Page title, description, Open Graph, robots, sitemap (<a href="/sitemap.xml" target="_blank" rel="noopener">/sitemap.xml</a>), and favicon. Saved with <strong>Save website &amp; portal content</strong>.</p>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:900px;">
+                        <div style="grid-column:1/-1;"><label>Site title (browser tab)</label><input type="text" id="seo-title" style="width:100%;padding:8px;"></div>
+                        <div style="grid-column:1/-1;"><label>Meta description</label><textarea id="seo-description" rows="2" style="width:100%;padding:8px;"></textarea></div>
+                        <div style="grid-column:1/-1;"><label>Keywords (comma-separated)</label><input type="text" id="seo-keywords" style="width:100%;padding:8px;"></div>
+                        <div><label>Canonical URL</label><input type="url" id="seo-canonical" placeholder="https://seminar.vaidyagogate.org" style="width:100%;padding:8px;"></div>
+                        <div><label>OG image URL</label><input type="url" id="seo-og-image" style="width:100%;padding:8px;"></div>
+                        <div><label>Google Search Console verification</label><input type="text" id="seo-google-verify" placeholder="meta content value" style="width:100%;padding:8px;"></div>
+                        <div><label>Bing verification</label><input type="text" id="seo-bing-verify" style="width:100%;padding:8px;"></div>
+                        <div><label>Favicon path or URL</label><input type="text" id="seo-favicon" placeholder="/favicon.svg" style="width:100%;padding:8px;"></div>
+                        <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;margin-top:24px;"><input type="checkbox" id="seo-robots-index" checked> Allow search engines (index)</label>
+                    </div>
+                </div>
                 <div class="card" style="margin-bottom:18px;border:1px solid #bae6fd;background:#f0f9ff;">
                     <h3 style="margin:0 0 10px;color:#0369a1;font-size:1.05rem;">Support ticket response time (SLA)</h3>
                     <p style="color:#64748b;font-size:0.88rem;margin-bottom:10px;">When a doctor logs a support ticket, they see the expected response time. Default applies to all categories unless overridden below.</p>
@@ -916,6 +978,11 @@
                     <p id="sup-pay-create-status" style="margin-top:8px;font-size:0.88rem;"></p>
                     <hr style="margin:16px 0;">
                     <button type="button" class="btn-primary" style="background:#64748b;margin-bottom:10px;" onclick="loadAdminSupplementalPayments()">Refresh list</button>
+                    <div style="margin-bottom:12px;">
+                        <label for="supplemental-payments-search" style="font-weight:600;font-size:0.9rem;">Search additional payments</label>
+                        <input type="search" id="supplemental-payments-search" placeholder="Doctor ID, name, email, title, or status…" oninput="renderAdminSupplementalPaymentsTable()" style="width:100%;max-width:560px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;margin-top:6px;">
+                        <p id="supplemental-payments-search-count" style="margin:6px 0 0;font-size:0.82rem;color:#64748b;"></p>
+                    </div>
                     <table class="data-table">
                         <thead><tr><th>ID</th><th>Doctor</th><th>Title</th><th>Amount</th><th>Status</th><th>Actions</th></tr></thead>
                         <tbody id="admin-supplemental-tbody"><tr><td colspan="6" style="text-align:center;">—</td></tr></tbody>
@@ -950,6 +1017,11 @@
                 </div>
                 <div id="admin-payments-panel-orders" class="card">
                     <button type="button" class="btn-primary" style="margin-bottom:12px;background:#64748b;" onclick="loadAdminEnrichedOrders()">Refresh orders</button>
+                    <div style="margin-bottom:12px;">
+                        <label for="payments-orders-search" style="font-weight:600;font-size:0.9rem;">Search orders</label>
+                        <input type="search" id="payments-orders-search" placeholder="Order ID, doctor, seminar, application, gateway, or status…" oninput="renderAdminEnrichedOrdersTable()" style="width:100%;max-width:560px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;margin-top:6px;">
+                        <p id="payments-orders-search-count" style="margin:6px 0 0;font-size:0.82rem;color:#64748b;"></p>
+                    </div>
                     <table class="data-table">
                         <thead><tr><th>Order</th><th>Doctor</th><th>Seminar</th><th>App</th><th>Gateway</th><th>Amount</th><th>Refunded</th><th>Status</th><th>Actions</th></tr></thead>
                         <tbody id="admin-orders-tbody"><tr><td colspan="9" style="text-align:center;">Open this tab or click Refresh</td></tr></tbody>
@@ -959,6 +1031,11 @@
                     <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
                         <label>Status <select id="admin-cancel-req-filter" onchange="loadAdminCancellationRequests()"><option value="">All</option><option value="pending" selected>Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select></label>
                         <button type="button" class="btn-primary" style="background:#64748b;" onclick="loadAdminCancellationRequests()">Refresh</button>
+                    </div>
+                    <div style="margin-bottom:12px;">
+                        <label for="cancellation-requests-search" style="font-weight:600;font-size:0.9rem;">Search cancellation requests</label>
+                        <input type="search" id="cancellation-requests-search" placeholder="Doctor, seminar, application, reason, or status…" oninput="renderAdminCancellationRequestsTable()" style="width:100%;max-width:560px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;margin-top:6px;">
+                        <p id="cancellation-requests-search-count" style="margin:6px 0 0;font-size:0.82rem;color:#64748b;"></p>
                     </div>
                     <table class="data-table">
                         <thead><tr><th>Requested</th><th>Doctor</th><th>Seminar</th><th>App</th><th>Reason</th><th>Policy refund</th><th>Status</th><th>Actions</th></tr></thead>
@@ -1054,6 +1131,11 @@
                             <button type="button" class="btn-primary" style="background:#64748b;" onclick="bulkEnableAdminCertificates(0)">Disable selected</button>
                         </div>
                     </div>
+                    <div style="margin-bottom:12px;">
+                        <label for="cert-candidates-search" style="font-weight:600;font-size:0.9rem;">Search candidates</label>
+                        <input type="search" id="cert-candidates-search" placeholder="PRN, name, application no., ticket, or status…" oninput="renderAdminCertificateCandidatesTable()" style="width:100%;max-width:560px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;margin-top:6px;">
+                        <p id="cert-candidates-search-count" style="margin:6px 0 0;font-size:0.82rem;color:#64748b;"></p>
+                    </div>
                     <table class="data-table">
                         <thead><tr><th><input type="checkbox" id="cert-cand-select-all" onchange="toggleAllCertCandidates(this.checked)"></th><th>PRN No.</th><th>Name</th><th>Application No.</th><th>Reg. status</th><th>Paid</th><th>Scans</th><th>Ticket</th><th>Certificate</th></tr></thead>
                         <tbody id="cert-mgmt-list"><tr><td colspan="9" style="text-align:center;">Select a seminar</td></tr></tbody>
@@ -1072,6 +1154,11 @@
                     <button type="button" class="btn-primary" onclick="addAdminVolunteer()">Add volunteer</button>
                 </div>
                 <div class="card" style="margin-top:16px;">
+                    <div style="margin-bottom:12px;">
+                        <label for="volunteers-search" style="font-weight:600;font-size:0.9rem;">Search volunteers</label>
+                        <input type="search" id="volunteers-search" placeholder="Portal ID, name, email, ticket, or status…" oninput="renderAdminVolunteersTable()" style="width:100%;max-width:560px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;margin-top:6px;">
+                        <p id="volunteers-search-count" style="margin:6px 0 0;font-size:0.82rem;color:#64748b;"></p>
+                    </div>
                     <table class="data-table">
                         <thead><tr><th>Doctor</th><th>Status</th><th>Volunteer ticket</th><th>Notes</th><th>Actions</th></tr></thead>
                         <tbody id="vol-mgmt-list"><tr><td colspan="5" style="text-align:center;">Select a seminar</td></tr></tbody>
@@ -1120,6 +1207,11 @@
                     <p id="case-prog-msg" style="font-weight:600;margin-bottom:10px;"></p>
                     <button type="button" class="btn-primary" onclick="saveAdminCaseProgram()">Save program</button>
                     <button type="button" class="btn-primary" style="background:#64748b;margin-left:8px;" onclick="resetAdminCaseProgramForm()">Clear / new</button>
+                    <div style="margin-top:14px;margin-bottom:8px;">
+                        <label for="case-prog-search" style="font-weight:600;font-size:0.9rem;">Search saved programs</label>
+                        <input type="search" id="case-prog-search" placeholder="Program title or dates…" oninput="renderAdminCaseProgramsList()" style="width:100%;max-width:560px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;margin-top:6px;">
+                        <p id="case-prog-search-count" style="margin:6px 0 0;font-size:0.82rem;color:#64748b;"></p>
+                    </div>
                     <div id="case-prog-list" style="margin-top:14px;"></div>
                     <hr style="margin:18px 0;">
                     <h4 style="margin:0 0 8px;">Priority select (no application yet)</h4>
@@ -1134,6 +1226,11 @@
                 </div>
                 <div class="card">
                     <button type="button" class="btn-primary" style="background:#64748b;margin-bottom:12px;" onclick="loadAdminCaseSubmissions()">Refresh submissions</button>
+                    <div style="margin-bottom:12px;">
+                        <label for="case-submissions-search" style="font-weight:600;font-size:0.9rem;">Search submissions</label>
+                        <input type="search" id="case-submissions-search" placeholder="Application ID, doctor, category, topic, or status…" oninput="renderAdminCaseSubmissionsTable()" style="width:100%;max-width:560px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;margin-top:6px;">
+                        <p id="case-submissions-search-count" style="margin:6px 0 0;font-size:0.82rem;color:#64748b;"></p>
+                    </div>
                     <table class="data-table">
                         <thead><tr><th>App ID</th><th>Doctor</th><th>Category</th><th>Topic</th><th>Status</th><th>Files</th><th>Actions</th></tr></thead>
                         <tbody id="case-mgmt-list"><tr><td colspan="6" style="text-align:center;">Loading…</td></tr></tbody>
@@ -1283,6 +1380,10 @@
                         <div><label>Phone</label><input type="text" id="pos-phone" style="width:100%;padding:8px;"></div>
                         <div><label>Email (optional)</label><input type="email" id="pos-email" style="width:100%;padding:8px;"></div>
                     </div>
+                    <label style="display:flex;align-items:flex-start;gap:8px;margin-top:14px;font-size:0.88rem;color:#475569;max-width:560px;">
+                        <input type="checkbox" id="pos-send-ticket-email" style="margin-top:3px;">
+                        <span>Queue ticket email after registration (off by default — use printed QR at venue; avoids Zoho rate limits)</span>
+                    </label>
                     <button type="button" class="btn-primary" style="margin-top:16px;" onclick="submitAdminPosRegistration()">Register &amp; issue ticket</button>
                     <p id="pos-status" style="margin-top:12px;font-weight:600;"></p>
                 </div>
@@ -1317,6 +1418,11 @@
                             <select id="scanner-log-seminar" style="width:100%;padding:8px;" onchange="loadAdminScannerLogs()"><option value="">All seminars</option></select>
                         </div>
                         <button type="button" class="btn-primary" onclick="loadAdminScannerLogs()"><i class="fas fa-sync"></i> Refresh</button>
+                    </div>
+                    <div style="margin-bottom:12px;">
+                        <label for="scanner-logs-search" style="font-weight:600;font-size:0.9rem;">Search scan logs</label>
+                        <input type="search" id="scanner-logs-search" placeholder="Doctor ID, name, app no., ticket, scanner, or seminar…" oninput="renderAdminScannerLogsTable()" style="width:100%;max-width:560px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;margin-top:6px;">
+                        <p id="scanner-logs-search-count" style="margin:6px 0 0;font-size:0.82rem;color:#64748b;"></p>
                     </div>
                     <table class="data-table">
                         <thead><tr><th>Time</th><th>Doctor ID</th><th>Doctor name</th><th>App no.</th><th>Ticket</th><th>Scanned by (staff)</th><th>Seminar</th></tr></thead>
@@ -1948,6 +2054,7 @@
     <script src="/js/otp-ui.js"></script>
     <script src="/js/portal-upload.js?v=20260522"></script>
     <script src="/js/user-roles.js?v=20260522f"></script>
-    <script src="/js/admin.js?v=20260522f"></script>
+    <script src="/js/admin-list-search.js?v=20260522a"></script>
+    <script src="/js/admin.js?v=20260522i"></script>
 </body>
 </html>

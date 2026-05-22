@@ -251,6 +251,54 @@ function isSuperAdminUser() {
     return String(u.role || '').toLowerCase() === 'admin' && String(u.user_role || '').toLowerCase() !== 'co_admin';
 }
 
+function adminCanDeleteUsers() {
+    const u = getStoredAdminUser();
+    if (!u || !u.id) return false;
+    const ur = String(u.user_role || '').toLowerCase();
+    const r = String(u.role || '').toLowerCase();
+    return (r === 'admin' && ur !== 'co_admin') || ur === 'co_admin';
+}
+
+async function adminDeleteUserAccount(userId, displayName, portalId) {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return alert('Not logged in.');
+    if (!adminCanDeleteUsers()) {
+        return alert('Only Super Admin or Co Admin can permanently delete accounts.');
+    }
+    const expected = String(portalId || '').trim();
+    if (!expected) return alert('Portal ID missing for this user.');
+    const typed = prompt(
+        'PERMANENT DELETE\n\n' +
+            'User: ' +
+            (displayName || 'Account') +
+            '\nPortal ID: ' +
+            expected +
+            '\n\nThis removes registrations, orders, tickets, certificates, case submissions, support tickets, and the login account.\n\nType the portal ID exactly to confirm:',
+        ''
+    );
+    if (typed === null) return;
+    if (String(typed).trim().toLowerCase() !== expected.toLowerCase()) {
+        return alert('Portal ID did not match. Deletion cancelled.');
+    }
+    if (!confirm('Delete account ' + expected + ' permanently? This cannot be undone.')) return;
+    try {
+        const res = await fetch('/api/admin/users/' + encodeURIComponent(userId) + '/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: adm.id, confirmPortalId: String(typed).trim() })
+        });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Delete failed');
+        alert(data.message || 'Account deleted.');
+        closeAdminUserDetailModal();
+        __adminUserDetailCache = null;
+        loadUsers();
+    } catch (e) {
+        console.error(e);
+        alert('Network error.');
+    }
+}
+
 function adminCanAccessTab(tabId) {
     let checkId = tabId === 'tab-seminar-details' ? 'tab-seminars' : tabId;
     if (checkId === 'tab-users') checkId = 'tab-staff-users';
@@ -652,40 +700,7 @@ async function loadUsers() {
         }
 
         if (doctorsBody) {
-            const docCountEl = document.getElementById('doctors-users-count');
-            if (docCountEl) {
-                docCountEl.textContent = `${doctors.length} doctor account${doctors.length === 1 ? '' : 's'}`;
-            }
-            if (!doctors.length) {
-                doctorsBody.innerHTML = '<tr><td colspan="6" style="text-align:center;">No doctors registered</td></tr>';
-            }
-            doctors.forEach((u) => {
-                const hi =
-                    window.__highlightAdminUserId && Number(u.id) === Number(window.__highlightAdminUserId)
-                        ? ' style="background:#ecfdf5;"'
-                        : '';
-                const cat = String(u.doctor_category || 'regular').toLowerCase() === 'volunteer' ? 'volunteer' : 'regular';
-                doctorsBody.innerHTML += `
-                <tr${hi}>
-                    <td><strong>${u.user_id_string}</strong></td>
-                    <td>${escAdmin(u.first_name)} ${escAdmin(u.last_name)}</td>
-                    <td>${escAdmin(u.email)}</td>
-                    <td>${escAdmin(u.phone || '—')}</td>
-                    <td>${adminUserStatusBadge(u)}</td>
-                    <td>
-                        <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-right:6px;" onclick="openAdminUserDetail(${u.id})">View</button>
-                        ${adminUserToggleBtn(u)}
-                        <select id="doctor-cat-${u.id}" style="margin-left:6px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:4px;">
-                            <option value="regular" ${cat === 'regular' ? 'selected' : ''}>Regular</option>
-                            <option value="volunteer" ${cat === 'volunteer' ? 'selected' : ''}>Volunteer</option>
-                        </select>
-                        <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-left:6px;background:#0f766e;" onclick="saveDoctorAccessFromList(${u.id})">Save access</button>
-                    </td>
-                </tr>`;
-                if (proxySelect) {
-            proxySelect.innerHTML += `<option value="${u.id}">${u.first_name} ${u.last_name} (${u.user_id_string})</option>`;
-                }
-            });
+            renderDoctorsUsersTable();
         }
         if (window.__highlightAdminUserId) {
             window.__highlightAdminUserId = null;
@@ -799,6 +814,11 @@ function renderStaffUsersTable(staffList) {
                     <td>
                         <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-right:6px;" onclick="openAdminUserDetail(${u.id})">View</button>
                         ${adminUserToggleBtn(u)}${modulesBtn}
+                        ${
+                            adminCanDeleteUsers()
+                                ? `<button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-left:6px;background:#b91c1c;" onclick="adminDeleteUserAccount(${u.id}, '${String((u.first_name || '') + ' ' + (u.last_name || '')).trim().replace(/'/g, "\\'")}', '${String(u.user_id_string || '').replace(/'/g, "\\'")}')">Delete</button>`
+                                : ''
+                        }
                     </td>
                 </tr>`;
     });
@@ -1146,13 +1166,16 @@ async function submitAdminPosRegistration() {
                 phone: document.getElementById('pos-phone').value,
                 email: document.getElementById('pos-email').value,
                 amount: document.getElementById('pos-amount').value,
-                paymentMethod: 'cash'
+                paymentMethod: 'cash',
+                sendTicketEmail: !!(document.getElementById('pos-send-ticket-email') || {}).checked
             })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed');
-        status.textContent =
+        let note =
             'Done. Ticket ' + (data.ticketId || '—') + ' — doctor must complete profile in portal.';
+        if (data.emailNote) note += ' ' + data.emailNote;
+        status.textContent = note;
         status.style.color = '#059669';
     } catch (e) {
         status.textContent = e.message;
@@ -2144,6 +2167,17 @@ function renderAdminUserDetailActions() {
             escAdmin(u.ban_reason) +
             '</span>';
     }
+    if (adminCanDeleteUsers()) {
+        const dn = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email || '';
+        html +=
+            '<button type="button" class="btn-primary" style="background:#b91c1c;border:none;margin-left:8px;" onclick="adminDeleteUserAccount(' +
+            u.id +
+            ", '" +
+            String(dn).replace(/'/g, "\\'") +
+            "', '" +
+            String(u.user_id_string || '').replace(/'/g, "\\'") +
+            "')\">Delete account</button>";
+    }
     bar.innerHTML = html;
 }
 
@@ -2760,56 +2794,8 @@ async function loadAdminCertificateCandidates() {
             `/api/admin/certificates/candidates?seminarId=${encodeURIComponent(sid)}&certType=${encodeURIComponent(certType)}`
         );
         const rows = await res.json();
-        if (!Array.isArray(rows) || !rows.length) {
-            const emptyMsg =
-                certType === 'volunteer'
-                    ? 'No approved volunteers for this seminar yet.'
-                    : 'No registrations for this seminar yet.';
-            tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;">${emptyMsg}</td></tr>`;
-            return;
-        }
-        tbody.innerHTML = '';
-        rows.forEach((r) => {
-            const name = [r.first_name, r.last_name].filter(Boolean).join(' ') || '—';
-            const paid = r.order_status === 'success' ? 'Yes' : 'No';
-            const scansReq = Number(r.cert_scans_required) === 2 ? 2 : 1;
-            const scanCt = Number(r.scan_count) || 0;
-            const checked =
-                scanCt >= scansReq
-                    ? 'Yes (' + scanCt + '/' + scansReq + ')'
-                    : scanCt > 0
-                      ? scanCt + '/' + scansReq
-                      : 'No';
-            const certLabel = certType === 'volunteer' ? 'Volunteer cert' : 'Participant cert';
-            const cert = r.cert_enabled
-                ? 'Enabled'
-                : certType === 'volunteer'
-                  ? 'Ready'
-                  : r.scan_verified
-                    ? 'Eligible'
-                    : 'Locked';
-            const appDisplay =
-                certType === 'volunteer'
-                    ? r.ticket_id_string || r.application_no
-                    : r.application_no;
-            const appCell = appDisplay
-                ? escAdmin(appDisplay)
-                : '<span style="color:#b91c1c;font-weight:600;">Missing</span>';
-            const prnCell = r.user_id_string
-                ? escAdmin(r.user_id_string)
-                : '<span style="color:#b91c1c;">Missing PRN</span>';
-            tbody.innerHTML += `<tr>
-                <td><input type="checkbox" class="cert-cand-cb" data-user-id="${r.user_id}" value="${r.user_id}"></td>
-                <td>${prnCell}</td>
-                <td>${escAdmin(name)}</td>
-                <td>${appCell}</td>
-                <td>${escAdmin(r.reg_status || '—')}</td>
-                <td>${paid}</td>
-                <td>${checked}</td>
-                <td><code>${escAdmin(r.ticket_id_string || '—')}</code></td>
-                <td title="${escAdmin(certLabel)}">${cert}</td>
-            </tr>`;
-        });
+        __adminCertCandidatesCache = Array.isArray(rows) ? rows : [];
+        renderAdminCertificateCandidatesTable();
     } catch (e) {
         console.error(e);
         tbody.innerHTML = '<tr><td colspan="9">Error loading</td></tr>';
@@ -2968,25 +2954,8 @@ async function loadAdminVolunteers() {
     try {
         const res = await fetch(`/api/admin/volunteers?seminarId=${encodeURIComponent(sid)}`);
         const rows = await res.json();
-        if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No volunteers assigned</td></tr>';
-            return;
-        }
-        tbody.innerHTML = '';
-        rows.forEach((v) => {
-            const name = [v.first_name, v.last_name].filter(Boolean).join(' ');
-            let actions = '';
-            if (v.status === 'pending') {
-                actions = `<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.8rem;" onclick="approveAdminVolunteer(${v.id})">Approve &amp; issue ticket</button>`;
-            }
-            tbody.innerHTML += `<tr>
-                <td>${escAdmin(name)}<div class="muted">${escAdmin(v.user_id_string)} · ${escAdmin(v.email)}</div></td>
-                <td>${escAdmin(v.status)}</td>
-                <td><code>${escAdmin(v.volunteer_ticket_id_string || '—')}</code></td>
-                <td>${escAdmin(v.notes || '—')}</td>
-                <td>${actions || '—'}</td>
-            </tr>`;
-        });
+        __adminVolunteersCache = Array.isArray(rows) ? rows : [];
+        renderAdminVolunteersTable();
     } catch (e) {
         console.error(e);
         tbody.innerHTML = '<tr><td colspan="5">Error</td></tr>';
@@ -3448,28 +3417,8 @@ async function loadAdminCasePrograms() {
             box.innerHTML = '<p style="color:#b91c1c;">Could not load programs (HTTP ' + res.status + '). Restart the server.</p>';
             return;
         }
-        if (!Array.isArray(rows) || !rows.length) {
-            box.innerHTML = '<p style="color:#64748b;">No programs yet. Fill the form above and click Save program.</p>';
-            return;
-        }
-        box.innerHTML = '<h4 style="margin:0 0 10px;">Saved programs</h4>';
-        const priSel = document.getElementById('case-priority-program');
-        if (priSel) {
-            priSel.innerHTML = '<option value="">— Select program —</option>';
-            rows.forEach(function (p) {
-                priSel.innerHTML +=
-                    '<option value="' + p.id + '">' + String(p.title || '').replace(/</g, '&lt;') + '</option>';
-            });
-        }
-        rows.forEach(function (p) {
-            const used = p.submissionCount != null ? p.submissionCount : p.submission_count || 0;
-            const capMax = p.maxTotalSubmissions != null ? p.maxTotalSubmissions : p.max_total_submissions;
-            const cap = capMax != null ? ' · ' + used + '/' + capMax + ' slots' : ' · ' + used + ' submission(s)';
-            box.innerHTML += '<div style="padding:10px 0;border-bottom:1px solid #e2e8f0;display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;"><div><strong>' +
-                String(p.title || '').replace(/</g, '&lt;') + '</strong><span style="color:#64748b;font-size:0.85rem;"> · ' +
-                String(p.registration_start || '—').replace(/</g, '&lt;') + ' → ' + String(p.registration_end || '—').replace(/</g, '&lt;') + cap +
-                '</span></div><span><button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.8rem;background:#64748b;" onclick="editAdminCaseProgram(' + p.id + ')">Edit</button> <button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.8rem;background:#b91c1c;" onclick="deleteAdminCaseProgram(' + p.id + ', \'' + String(p.title || '').replace(/'/g, "\\'") + '\')">Delete</button></span></div>';
-        });
+        __adminCaseProgramsCache = Array.isArray(rows) ? rows : [];
+        renderAdminCaseProgramsList();
 
     } catch (e) {
         console.error(e);
@@ -3543,26 +3492,8 @@ async function loadAdminCaseSubmissions() {
     try {
         const res = await fetch('/api/admin/case/submissions');
         const rows = await res.json();
-        if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No submissions</td></tr>';
-            return;
-        }
-        tbody.innerHTML = '';
-        rows.forEach((s) => {
-            const name = [s.first_name, s.last_name].filter(Boolean).join(' ');
-            tbody.innerHTML += `<tr>
-                <td><code>${escAdmin(s.application_no || s.id)}</code></td>
-                <td>${escAdmin(name)}<div class="muted">${escAdmin(s.user_id_string)}</div></td>
-                <td>${escAdmin(s.category || '—')}</td>
-                <td>${escAdmin(s.title)}</td>
-                <td>${escAdmin(s.status)}</td>
-                <td>${s.file_count || 0}</td>
-                <td>
-                    <button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.8rem;" onclick="openAdminCaseDetail(${s.id})">Review</button>
-                    <button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.8rem;background:#b91c1c;margin-left:4px;" onclick="deleteAdminCaseSubmission(${s.id})">Delete</button>
-                </td>
-            </tr>`;
-        });
+        __adminCaseSubmissionsCache = Array.isArray(rows) ? rows : [];
+        renderAdminCaseSubmissionsTable();
     } catch (e) {
         console.error(e);
         tbody.innerHTML = '<tr><td colspan="7">Error</td></tr>';
@@ -4207,27 +4138,8 @@ async function loadAdminScannerLogs() {
     try {
         const res = await fetch('/api/admin/scanner/logs' + q);
         const rows = await res.json();
-        if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No scans yet</td></tr>';
-            return;
-        }
-        tbody.innerHTML = '';
-        rows.forEach((s) => {
-            const t = s.scan_time ? new Date(s.scan_time).toLocaleString() : '—';
-            const doc = `${s.doctor_first_name || ''} ${s.doctor_last_name || ''}`.trim();
-            const staff = s.scanner_first_name
-                ? `${s.scanner_first_name} ${s.scanner_last_name || ''} (${s.scanner_user_id_string || ''})`
-                : '—';
-            tbody.innerHTML += `<tr>
-                <td>${escAdmin(t)}</td>
-                <td><strong>${escAdmin(s.doctor_user_id_string)}</strong></td>
-                <td>${escAdmin(doc)}</td>
-                <td>${escAdmin(s.application_no)}</td>
-                <td>${escAdmin(s.ticket_id_string)}</td>
-                <td>${escAdmin(staff)}</td>
-                <td>${escAdmin(s.seminar_title)}</td>
-            </tr>`;
-        });
+        __adminScannerLogsCache = Array.isArray(rows) ? rows : [];
+        renderAdminScannerLogsTable();
     } catch (e) {
         console.error(e);
         tbody.innerHTML = '<tr><td colspan="7">Error</td></tr>';
@@ -4640,6 +4552,843 @@ function renderApplicationsTable() {
 
 function adminFilterApplicationsList() {
     renderApplicationsTable();
+}
+
+function adminSearchQ(inputId) {
+    if (typeof AdminListSearch !== 'undefined') return AdminListSearch.query(inputId);
+    return String((document.getElementById(inputId) || {}).value || '')
+        .trim()
+        .toLowerCase();
+}
+
+function adminSearchFilter(items, q, blobFn) {
+    if (typeof AdminListSearch !== 'undefined') return AdminListSearch.filter(items, q, blobFn);
+    const list = Array.isArray(items) ? items : [];
+    if (!q) return list;
+    return list.filter((item) => blobFn(item).includes(q));
+}
+
+function adminSearchSetCount(countId, q, shown, total, noun) {
+    if (typeof AdminListSearch !== 'undefined') {
+        AdminListSearch.setCount(countId, q, shown, total, noun);
+        return;
+    }
+    const el = document.getElementById(countId);
+    if (!el) return;
+    const n = noun || 'items';
+    const t = total === 1 ? n.replace(/s$/, '') : n;
+    el.textContent = q && total !== shown ? `${shown} of ${total} ${t}` : `${total} ${t}`;
+}
+
+function renderDoctorsUsersTable() {
+    const doctorsBody = document.getElementById('doctors-list');
+    const proxySelect = document.getElementById('proxy-user-select');
+    if (!doctorsBody) return;
+    const all = window.__adminDoctorUsers || [];
+    const q = adminSearchQ('doctors-search');
+    const rows = adminSearchFilter(all, q, (u) =>
+        [u.user_id_string, u.first_name, u.last_name, u.email, u.phone, u.doctor_category]
+            .join(' ')
+            .toLowerCase()
+    );
+    adminSearchSetCount('doctors-search-count', q, rows.length, all.length, 'doctors');
+    const docCountEl = document.getElementById('doctors-users-count');
+    if (docCountEl && !q) {
+        docCountEl.textContent = `${all.length} doctor account${all.length === 1 ? '' : 's'}`;
+    }
+    doctorsBody.innerHTML = '';
+    if (!all.length) {
+        doctorsBody.innerHTML =
+            '<tr><td colspan="6" style="text-align:center;">No doctors registered</td></tr>';
+        return;
+    }
+    if (!rows.length) {
+        doctorsBody.innerHTML =
+            '<tr><td colspan="6" style="text-align:center;">No doctors match your search.</td></tr>';
+        return;
+    }
+    if (proxySelect) {
+        proxySelect.innerHTML = '<option value="">Select a user...</option>';
+    }
+    rows.forEach((u) => {
+        const hi =
+            window.__highlightAdminUserId && Number(u.id) === Number(window.__highlightAdminUserId)
+                ? ' style="background:#ecfdf5;"'
+                : '';
+        const cat = String(u.doctor_category || 'regular').toLowerCase() === 'volunteer' ? 'volunteer' : 'regular';
+        doctorsBody.innerHTML += `
+                <tr${hi}>
+                    <td><strong>${u.user_id_string}</strong></td>
+                    <td>${escAdmin(u.first_name)} ${escAdmin(u.last_name)}</td>
+                    <td>${escAdmin(u.email)}</td>
+                    <td>${escAdmin(u.phone || '—')}</td>
+                    <td>${adminUserStatusBadge(u)}</td>
+                    <td>
+                        <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-right:6px;" onclick="openAdminUserDetail(${u.id})">View</button>
+                        ${adminUserToggleBtn(u)}
+                        <select id="doctor-cat-${u.id}" style="margin-left:6px;padding:4px 6px;border:1px solid #cbd5e1;border-radius:4px;">
+                            <option value="regular" ${cat === 'regular' ? 'selected' : ''}>Regular</option>
+                            <option value="volunteer" ${cat === 'volunteer' ? 'selected' : ''}>Volunteer</option>
+                        </select>
+                        <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-left:6px;background:#0f766e;" onclick="saveDoctorAccessFromList(${u.id})">Save access</button>
+                        ${
+                            adminCanDeleteUsers()
+                                ? `<button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-left:6px;background:#b91c1c;" onclick="adminDeleteUserAccount(${u.id}, '${String((u.first_name || '') + ' ' + (u.last_name || '')).trim().replace(/'/g, "\\'")}', '${String(u.user_id_string || '').replace(/'/g, "\\'")}')">Delete</button>`
+                                : ''
+                        }
+                    </td>
+                </tr>`;
+        if (proxySelect) {
+            proxySelect.innerHTML += `<option value="${u.id}">${u.first_name} ${u.last_name} (${u.user_id_string})</option>`;
+        }
+    });
+}
+
+function renderAdminCertificateCandidatesTable() {
+    const tbody = document.getElementById('cert-mgmt-list');
+    if (!tbody) return;
+    const sid = document.getElementById('cert-mgmt-seminar')?.value;
+    if (!sid) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Select a seminar</td></tr>';
+        return;
+    }
+    const certType = document.getElementById('cert-mgmt-type')?.value || 'participant';
+    const all = __adminCertCandidatesCache || [];
+    const q = adminSearchQ('cert-candidates-search');
+    const rows = adminSearchFilter(all, q, (r) => {
+        const name = [r.first_name, r.last_name].filter(Boolean).join(' ');
+        const appDisplay =
+            certType === 'volunteer' ? r.ticket_id_string || r.application_no : r.application_no;
+        return [r.user_id_string, name, appDisplay, r.reg_status, r.order_status, r.ticket_id_string]
+            .join(' ')
+            .toLowerCase();
+    });
+    adminSearchSetCount('cert-candidates-search-count', q, rows.length, all.length, 'candidates');
+    if (!all.length) {
+        const emptyMsg =
+            certType === 'volunteer'
+                ? 'No approved volunteers for this seminar yet.'
+                : 'No registrations for this seminar yet.';
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;">${emptyMsg}</td></tr>`;
+        return;
+    }
+    if (!rows.length) {
+        tbody.innerHTML =
+            '<tr><td colspan="9" style="text-align:center;">No candidates match your search.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = '';
+    rows.forEach((r) => {
+        const name = [r.first_name, r.last_name].filter(Boolean).join(' ') || '—';
+        const paid = r.order_status === 'success' ? 'Yes' : 'No';
+        const scansReq = Number(r.cert_scans_required) === 2 ? 2 : 1;
+        const scanCt = Number(r.scan_count) || 0;
+        const checked =
+            scanCt >= scansReq
+                ? 'Yes (' + scanCt + '/' + scansReq + ')'
+                : scanCt > 0
+                  ? scanCt + '/' + scansReq
+                  : 'No';
+        const certLabel = certType === 'volunteer' ? 'Volunteer cert' : 'Participant cert';
+        const cert = r.cert_enabled
+            ? 'Enabled'
+            : certType === 'volunteer'
+              ? 'Ready'
+              : r.scan_verified
+                ? 'Eligible'
+                : 'Locked';
+        const appDisplay =
+            certType === 'volunteer' ? r.ticket_id_string || r.application_no : r.application_no;
+        const appCell = appDisplay
+            ? escAdmin(appDisplay)
+            : '<span style="color:#b91c1c;font-weight:600;">Missing</span>';
+        const prnCell = r.user_id_string
+            ? escAdmin(r.user_id_string)
+            : '<span style="color:#b91c1c;">Missing PRN</span>';
+        tbody.innerHTML += `<tr>
+                <td><input type="checkbox" class="cert-cand-cb" data-user-id="${r.user_id}" value="${r.user_id}"></td>
+                <td>${prnCell}</td>
+                <td>${escAdmin(name)}</td>
+                <td>${appCell}</td>
+                <td>${escAdmin(r.reg_status || '—')}</td>
+                <td>${paid}</td>
+                <td>${checked}</td>
+                <td><code>${escAdmin(r.ticket_id_string || '—')}</code></td>
+                <td title="${escAdmin(certLabel)}">${cert}</td>
+            </tr>`;
+    });
+}
+
+function renderAdminVolunteersTable() {
+    const tbody = document.getElementById('vol-mgmt-list');
+    if (!tbody) return;
+    const sid = document.getElementById('vol-mgmt-seminar')?.value;
+    if (!sid) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">Select a seminar</td></tr>';
+        return;
+    }
+    const all = __adminVolunteersCache || [];
+    const q = adminSearchQ('volunteers-search');
+    const rows = adminSearchFilter(all, q, (v) => {
+        const name = [v.first_name, v.last_name].filter(Boolean).join(' ');
+        return [name, v.user_id_string, v.email, v.status, v.volunteer_ticket_id_string, v.notes]
+            .join(' ')
+            .toLowerCase();
+    });
+    adminSearchSetCount('volunteers-search-count', q, rows.length, all.length, 'volunteers');
+    if (!all.length) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No volunteers assigned</td></tr>';
+        return;
+    }
+    if (!rows.length) {
+        tbody.innerHTML =
+            '<tr><td colspan="5" style="text-align:center;">No volunteers match your search.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = '';
+    rows.forEach((v) => {
+        const name = [v.first_name, v.last_name].filter(Boolean).join(' ');
+        let actions = '';
+        if (v.status === 'pending') {
+            actions = `<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.8rem;" onclick="approveAdminVolunteer(${v.id})">Approve &amp; issue ticket</button>`;
+        }
+        tbody.innerHTML += `<tr>
+                <td>${escAdmin(name)}<div class="muted">${escAdmin(v.user_id_string)} · ${escAdmin(v.email)}</div></td>
+                <td>${escAdmin(v.status)}</td>
+                <td><code>${escAdmin(v.volunteer_ticket_id_string || '—')}</code></td>
+                <td>${escAdmin(v.notes || '—')}</td>
+                <td>${actions || '—'}</td>
+            </tr>`;
+    });
+}
+
+function renderSupportTicketsTable() {
+    const tbody = document.getElementById('support-tickets-list');
+    if (!tbody) return;
+    const all = __supportTicketsCache || [];
+    const q = adminSearchQ('support-tickets-search');
+    const rows = adminSearchFilter(all, q, (t) =>
+        [
+            t.ticket_id,
+            t.tracking_id,
+            t.first_name,
+            t.last_name,
+            t.email,
+            t.subject,
+            t.category,
+            t.priority,
+            t.status
+        ]
+            .join(' ')
+            .toLowerCase()
+    );
+    adminSearchSetCount('support-tickets-search-count', q, rows.length, all.length, 'tickets');
+    tbody.innerHTML = '';
+    if (!all.length) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">No support tickets.</td></tr>';
+        return;
+    }
+    if (!rows.length) {
+        tbody.innerHTML =
+            '<tr><td colspan="8" style="text-align: center;">No tickets match your search.</td></tr>';
+        return;
+    }
+    rows.forEach((t) => {
+        const created = new Date(t.created_at).toLocaleDateString();
+        const tid = t.ticket_id || t.tracking_id || '—';
+        const pri = (t.priority || 'medium').toUpperCase();
+        const priorityColor = t.priority === 'urgent' ? '#ef4444' : t.priority === 'high' ? '#f59e0b' : '#3b82f6';
+        const statusBg = t.status === 'closed' ? '#cbd5e1' : t.status === 'resolved' ? '#10b981' : '#fbbf24';
+        tbody.innerHTML += `
+                <tr>
+                    <td><strong>${escAdmin(tid)}</strong></td>
+                    <td>${t.first_name} ${t.last_name}</td>
+                    <td>${t.subject}</td>
+                    <td>${t.category}</td>
+                    <td style="color: ${priorityColor}; font-weight: 600;">${pri}</td>
+                    <td style="background: ${statusBg}; padding: 5px; border-radius: 4px;">${escAdmin(t.status || '')}</td>
+                    <td>${created}</td>
+                    <td><button class="btn-primary" style="padding: 5px 10px; font-size: 0.8rem;" onclick="viewSupportTicket('${escAdmin(tid).replace(/'/g, "\\'")}')">View</button></td>
+                </tr>
+            `;
+    });
+}
+
+function renderAdminCaseSubmissionsTable() {
+    const tbody = document.getElementById('case-mgmt-list');
+    if (!tbody) return;
+    const all = __adminCaseSubmissionsCache || [];
+    const q = adminSearchQ('case-submissions-search');
+    const rows = adminSearchFilter(all, q, (s) => {
+        const name = [s.first_name, s.last_name].filter(Boolean).join(' ');
+        return [s.application_no, s.id, name, s.user_id_string, s.category, s.title, s.status]
+            .join(' ')
+            .toLowerCase();
+    });
+    adminSearchSetCount('case-submissions-search-count', q, rows.length, all.length, 'submissions');
+    if (!all.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No submissions</td></tr>';
+        return;
+    }
+    if (!rows.length) {
+        tbody.innerHTML =
+            '<tr><td colspan="7" style="text-align:center;">No submissions match your search.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = '';
+    rows.forEach((s) => {
+        const name = [s.first_name, s.last_name].filter(Boolean).join(' ');
+        tbody.innerHTML += `<tr>
+                <td><code>${escAdmin(s.application_no || s.id)}</code></td>
+                <td>${escAdmin(name)}<div class="muted">${escAdmin(s.user_id_string)}</div></td>
+                <td>${escAdmin(s.category || '—')}</td>
+                <td>${escAdmin(s.title)}</td>
+                <td>${escAdmin(s.status)}</td>
+                <td>${s.file_count || 0}</td>
+                <td>
+                    <button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.8rem;" onclick="openAdminCaseDetail(${s.id})">Review</button>
+                    <button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.8rem;background:#b91c1c;margin-left:4px;" onclick="deleteAdminCaseSubmission(${s.id})">Delete</button>
+                </td>
+            </tr>`;
+    });
+}
+
+function renderAdminCaseProgramsList() {
+    const box = document.getElementById('case-prog-list');
+    if (!box) return;
+    const all = __adminCaseProgramsCache || [];
+    const q = adminSearchQ('case-prog-search');
+    const rows = adminSearchFilter(all, q, (p) =>
+        [p.title, p.description, p.registration_start, p.registration_end].join(' ').toLowerCase()
+    );
+    adminSearchSetCount('case-prog-search-count', q, rows.length, all.length, 'programs');
+    if (!all.length) {
+        box.innerHTML = '<p style="color:#64748b;">No programs yet. Fill the form above and click Save program.</p>';
+        return;
+    }
+    box.innerHTML = '<h4 style="margin:0 0 10px;">Saved programs</h4>';
+    const priSel = document.getElementById('case-priority-program');
+    if (priSel) {
+        priSel.innerHTML = '<option value="">— Select program —</option>';
+        all.forEach(function (p) {
+            priSel.innerHTML +=
+                '<option value="' + p.id + '">' + String(p.title || '').replace(/</g, '&lt;') + '</option>';
+        });
+    }
+    if (!rows.length) {
+        box.innerHTML += '<p style="color:#64748b;">No programs match your search.</p>';
+        return;
+    }
+    rows.forEach(function (p) {
+        const used = p.submissionCount != null ? p.submissionCount : p.submission_count || 0;
+        const capMax = p.maxTotalSubmissions != null ? p.maxTotalSubmissions : p.max_total_submissions;
+        const cap = capMax != null ? ' · ' + used + '/' + capMax + ' slots' : ' · ' + used + ' submission(s)';
+        box.innerHTML +=
+            '<div style="padding:10px 0;border-bottom:1px solid #e2e8f0;display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;"><div><strong>' +
+            String(p.title || '').replace(/</g, '&lt;') +
+            '</strong><span style="color:#64748b;font-size:0.85rem;"> · ' +
+            String(p.registration_start || '—').replace(/</g, '&lt;') +
+            ' → ' +
+            String(p.registration_end || '—').replace(/</g, '&lt;') +
+            cap +
+            '</span></div><span><button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.8rem;background:#64748b;" onclick="editAdminCaseProgram(' +
+            p.id +
+            ')">Edit</button> <button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.8rem;background:#b91c1c;" onclick="deleteAdminCaseProgram(' +
+            p.id +
+            ', \'' +
+            String(p.title || '').replace(/'/g, "\\'") +
+            '\')">Delete</button></span></div>';
+    });
+}
+
+function renderAdminEnrichedOrdersTable() {
+    const tbody = document.getElementById('admin-orders-tbody');
+    if (!tbody) return;
+    const all = __adminEnrichedOrdersCache || [];
+    const q = adminSearchQ('payments-orders-search');
+    const rows = adminSearchFilter(all, q, (o) =>
+        [
+            o.order_id_string,
+            o.id,
+            o.first_name,
+            o.last_name,
+            o.user_id_string,
+            o.user_id,
+            o.seminar_title,
+            o.application_no,
+            o.payment_gateway,
+            o.status,
+            o.e_ticket_id
+        ]
+            .join(' ')
+            .toLowerCase()
+    );
+    adminSearchSetCount('payments-orders-search-count', q, rows.length, all.length, 'orders');
+    tbody.innerHTML = '';
+    if (!all.length) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#94a3b8;">No orders.</td></tr>';
+        return;
+    }
+    if (!rows.length) {
+        tbody.innerHTML =
+            '<tr><td colspan="9" style="text-align:center;color:#94a3b8;">No orders match your search.</td></tr>';
+        return;
+    }
+    rows.forEach((o) => {
+        const doc = escAdmin((o.first_name || '') + ' ' + (o.last_name || '') + ' (' + (o.user_id_string || o.user_id || '') + ')');
+        const refunded = Number(o.refunded_amount) || 0;
+        const amt = Number(o.amount) || 0;
+        const canRefund = o.status === 'success' && refunded < amt - 0.01;
+        const actions = [];
+        if (o.status === 'success') {
+            actions.push(
+                '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;margin-right:4px;" onclick="openAdminOrderReceipt(' +
+                    o.id +
+                    ')">Receipt</button>'
+            );
+        }
+        if (canRefund) {
+            actions.push(
+                '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;background:#b45309;border:none;" onclick="adminRefundOrderPrompt(' +
+                    o.id +
+                    ')">Refund</button>'
+            );
+        }
+        const st = String(o.status || '').toLowerCase();
+        if (st === 'pending' && o.registration_id) {
+            actions.push(
+                '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;margin-right:4px;" onclick="adminRetryOrderPayment(' +
+                    o.registration_id +
+                    ',' +
+                    o.id +
+                    ')">Retry</button>'
+            );
+            actions.push(
+                '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;background:#b91c1c;border:none;margin-right:4px;" onclick="adminCancelPendingOrder(' +
+                    o.id +
+                    ')">Cancel</button>'
+            );
+            actions.push(
+                '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;background:#64748b;border:none;margin-right:4px;" onclick="adminPollOrderPayment(' +
+                    o.id +
+                    ')">Check</button>'
+            );
+        }
+        if (o.registration_id && o.registration_status !== 'cancelled' && st !== 'success') {
+            actions.push(
+                '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;background:#7c3aed;border:none;" onclick="adminWaiveAndTicket(' +
+                    o.registration_id +
+                    ')">Waive &amp; ticket</button>'
+            );
+        }
+        if (o.e_ticket_id) {
+            actions.push(
+                '<span style="font-size:0.78rem;color:#0f766e;margin-left:4px;">Ticket <code>' +
+                    escAdmin(o.e_ticket_id) +
+                    '</code></span>'
+            );
+        }
+        tbody.innerHTML +=
+            '<tr><td><strong>' +
+            escAdmin(o.order_id_string || o.id) +
+            '</strong></td><td>' +
+            doc +
+            '</td><td>' +
+            escAdmin(o.seminar_title || '—') +
+            '</td><td>' +
+            escAdmin(o.application_no || '—') +
+            '</td><td>' +
+            escAdmin(o.payment_gateway || '—') +
+            '</td><td>₹' +
+            escAdmin(amt) +
+            '</td><td>₹' +
+            escAdmin(refunded) +
+            (o.refund_status ? ' (' + escAdmin(o.refund_status) + ')' : '') +
+            '</td><td>' +
+            escAdmin(o.status) +
+            '</td><td>' +
+            (actions.join('') || '—') +
+            '</td></tr>';
+    });
+}
+
+function renderAdminSupplementalPaymentsTable() {
+    const tbody = document.getElementById('admin-supplemental-tbody');
+    if (!tbody) return;
+    const all = __adminSupplementalCache || [];
+    const q = adminSearchQ('supplemental-payments-search');
+    const rows = adminSearchFilter(all, q, (r) =>
+        [r.first_name, r.last_name, r.email, r.user_id_string, r.title, r.description, r.status, r.order_id_string]
+            .join(' ')
+            .toLowerCase()
+    );
+    adminSearchSetCount('supplemental-payments-search-count', q, rows.length, all.length, 'charges');
+    if (!all.length) {
+        tbody.innerHTML =
+            '<tr><td colspan="6" style="text-align:center;color:#64748b;">No additional charges yet</td></tr>';
+        return;
+    }
+    if (!rows.length) {
+        tbody.innerHTML =
+            '<tr><td colspan="6" style="text-align:center;color:#64748b;">No charges match your search.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = rows
+        .map((r) => {
+            const paid = String(r.status || '').toLowerCase() === 'paid';
+            const name =
+                escAdmin((r.first_name || '') + ' ' + (r.last_name || '')).trim() || escAdmin(r.email || '');
+            return (
+                '<tr><td>' +
+                r.id +
+                '</td><td>' +
+                name +
+                '<br><span style="font-size:0.78rem;color:#64748b;">' +
+                escAdmin(r.user_id_string || '') +
+                '</span></td><td>' +
+                escAdmin(r.title || '') +
+                (r.description
+                    ? '<br><span style="font-size:0.78rem;color:#64748b;">' + escAdmin(r.description) + '</span>'
+                    : '') +
+                '</td><td>₹' +
+                escAdmin(String(r.amount != null ? r.amount : '—')) +
+                '</td><td>' +
+                escAdmin(paid ? 'Paid' : 'Pending') +
+                '</td><td>' +
+                (paid
+                    ? escAdmin(r.order_id_string || '—')
+                    : '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.78rem;background:#15803d;" onclick="markAdminSupplementalPaid(' +
+                      r.id +
+                      ')">Mark paid (cash)</button> <button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.78rem;background:#b91c1c;" onclick="deleteAdminSupplemental(' +
+                      r.id +
+                      ')">Remove</button>') +
+                '</td></tr>'
+            );
+        })
+        .join('');
+}
+
+function renderAdminCancellationRequestsTable() {
+    const tbody = document.getElementById('admin-cancel-req-tbody');
+    if (!tbody) return;
+    const all = __adminCancelRequestsCache || [];
+    const q = adminSearchQ('cancellation-requests-search');
+    const rows = adminSearchFilter(all, q, (r) =>
+        [
+            r.first_name,
+            r.last_name,
+            r.user_id_string,
+            r.seminar_title,
+            r.application_no,
+            r.reason,
+            r.status,
+            r.refund_amount,
+            r.refund_percent
+        ]
+            .join(' ')
+            .toLowerCase()
+    );
+    adminSearchSetCount('cancellation-requests-search-count', q, rows.length, all.length, 'requests');
+    tbody.innerHTML = '';
+    if (!all.length) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#94a3b8;">No requests.</td></tr>';
+        return;
+    }
+    if (!rows.length) {
+        tbody.innerHTML =
+            '<tr><td colspan="8" style="text-align:center;color:#94a3b8;">No requests match your search.</td></tr>';
+        return;
+    }
+    rows.forEach((r) => {
+        const doc = escAdmin((r.first_name || '') + ' ' + (r.last_name || '') + ' (' + (r.user_id_string || '') + ')');
+        const when = r.requested_at
+            ? new Date(r.requested_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
+            : '—';
+        const pol = '₹' + (r.refund_amount || 0) + ' (' + (r.refund_percent || 0) + '%)';
+        let actions = '—';
+        if (r.status === 'pending') {
+            actions =
+                '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;margin-right:4px;" onclick="adminResolveCancelRequest(' +
+                r.id +
+                ',\'approve\')">Approve</button>' +
+                '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;background:#64748b;border:none;" onclick="adminResolveCancelRequest(' +
+                r.id +
+                ',\'reject\')">Reject</button>';
+        }
+        tbody.innerHTML +=
+            '<tr><td>' +
+            escAdmin(when) +
+            '</td><td>' +
+            doc +
+            '</td><td>' +
+            escAdmin(r.seminar_title) +
+            '</td><td>' +
+            escAdmin(r.application_no) +
+            '</td><td style="max-width:200px;font-size:0.85rem;">' +
+            escAdmin(r.reason) +
+            '</td><td>' +
+            escAdmin(pol) +
+            '</td><td>' +
+            escAdmin(r.status) +
+            '</td><td>' +
+            actions +
+            '</td></tr>';
+    });
+}
+
+function renderSeminarsTable() {
+    const tbody = document.getElementById('seminars-list');
+    if (!tbody) return;
+    const all = globalSeminars || [];
+    const q = adminSearchQ('seminars-search');
+    const year = typeof adminPortalYear !== 'undefined' ? adminPortalYear : new Date().getFullYear();
+    const filteredAll = all.filter(
+        (s) =>
+            Number(s.portal_year) === year ||
+            (!s.portal_year && s.event_date && new Date(s.event_date).getFullYear() === year)
+    );
+    const pastAll = all.filter((s) => Number(s.portal_year) < year);
+    const blobFn = (s) =>
+        [s.id, s.title, s.description, s.portal_year, s.price, s.is_active, s.checkin_enabled]
+            .join(' ')
+            .toLowerCase();
+    const filtered = adminSearchFilter(filteredAll, q, blobFn);
+    const past = adminSearchFilter(pastAll, q, blobFn);
+    const shown = filtered.length + past.length;
+    const total = filteredAll.length + pastAll.length;
+    adminSearchSetCount('seminars-search-count', q, shown, total, 'seminars');
+    tbody.innerHTML = '';
+    if (!filtered.length && !past.length) {
+        if (!total) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">No seminars found.</td></tr>';
+        } else {
+            tbody.innerHTML =
+                '<tr><td colspan="7" style="text-align: center;">No seminars match your search.</td></tr>';
+        }
+        return;
+    }
+    const renderRow = (s, pastRow) => {
+        const idx = globalSeminars.indexOf(s);
+        const checkinStatus = s.checkin_enabled
+            ? `<span style="color:green;font-weight:bold;">Yes (${s.checkin_date || 'Any'})</span>`
+            : `<span style="color:red;">No</span>`;
+        const activeStatus = s.is_active ? '' : '<span style="color:red; font-size: 0.8rem;">(Inactive)</span>';
+        const yearTag = s.portal_year
+            ? `<span style="font-size:0.75rem;color:#64748b;">${s.portal_year}</span>`
+            : '';
+        return `
+                <tr style="${pastRow ? 'opacity:0.85;background:#f8fafc;' : ''}">
+                    <td>${s.id}</td>
+                    <td><strong>${s.title}</strong> ${activeStatus} ${yearTag}</td>
+                    <td>${s.event_date ? (window.PortalDateTime && window.PortalDateTime.formatEvent ? window.PortalDateTime.formatEvent(s.event_date) : window.PortalDateTime ? window.PortalDateTime.format(s.event_date) : new Date(s.event_date).toLocaleString()) : '—'}</td>
+                    <td>₹${s.price || 0}</td>
+                    <td>${checkinStatus}</td>
+                    <td>${pastRow ? '<em>Past year</em>' : 'Current'}</td>
+                    <td>
+                        <button class="btn-success" style="padding: 5px 10px; font-size: 0.85rem;" onclick="manageSeminar(${s.id}, '${String(s.title).replace(/'/g, "\\'")}')">Manage</button>
+                        <button class="btn-primary" style="padding: 5px 10px; font-size: 0.85rem;" onclick="editSeminar(${idx})">Edit</button>
+                        <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.85rem;background:#7c3aed;margin-left:4px;" onclick="purgeAdminSeminarTestData(${s.id}, '${String(s.title).replace(/'/g, "\\'")}')">Purge test data</button>
+                        <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.85rem;background:#b91c1c;margin-left:4px;" onclick="deleteAdminSeminar(${s.id}, '${String(s.title).replace(/'/g, "\\'")}')">Delete</button>
+                    </td>
+                </tr>`;
+    };
+    if (filtered.length) {
+        tbody.innerHTML +=
+            '<tr><td colspan="7" style="background:#ecfdf5;font-weight:700;color:#047857;">Current portal year (' +
+            year +
+            ')</td></tr>';
+        filtered.forEach((s) => {
+            tbody.innerHTML += renderRow(s, false);
+        });
+    }
+    if (past.length) {
+        tbody.innerHTML +=
+            '<tr><td colspan="7" style="background:#f1f5f9;font-weight:700;color:#475569;">Past seminars (archive)</td></tr>';
+        past.forEach((s) => {
+            tbody.innerHTML += renderRow(s, true);
+        });
+    }
+}
+
+function renderContactInquiriesTable() {
+    const tbody = document.getElementById('contact-inquiries-list');
+    if (!tbody) return;
+    const all = __adminContactInquiriesCache || [];
+    const q = adminSearchQ('contact-inquiries-search');
+    const rows = adminSearchFilter(all, q, (r) =>
+        [r.name, r.email, r.phone, r.subject, r.status, r.message].join(' ').toLowerCase()
+    );
+    adminSearchSetCount('contact-inquiries-search-count', q, rows.length, all.length, 'inquiries');
+    tbody.innerHTML = '';
+    if (!all.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No contact requests yet.</td></tr>';
+        return;
+    }
+    if (!rows.length) {
+        tbody.innerHTML =
+            '<tr><td colspan="7" style="text-align:center;">No inquiries match your search.</td></tr>';
+        return;
+    }
+    rows.forEach((r) => {
+        const created = r.created_at ? new Date(r.created_at).toLocaleString() : '—';
+        const subj = (r.subject || '').length > 40 ? r.subject.slice(0, 40) + '…' : r.subject || '—';
+        tbody.innerHTML += `
+                <tr>
+                    <td>${created}</td>
+                    <td>${escapeHtml(r.name || '')}</td>
+                    <td><a href="mailto:${escapeHtml(r.email || '')}">${escapeHtml(r.email || '')}</a></td>
+                    <td>${escapeHtml(r.phone || '—')}</td>
+                    <td>${escapeHtml(subj)}</td>
+                    <td>${escapeHtml(r.status || 'new')}</td>
+                    <td><button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;" onclick="openContactInquiry(${r.id})">View</button></td>
+                </tr>`;
+    });
+}
+
+function renderFeedbackTable() {
+    const tbody = document.getElementById('feedback-list');
+    if (!tbody) return;
+    const seminarId = document.getElementById('feedback-seminar-filter')?.value;
+    if (!seminarId) {
+        tbody.innerHTML =
+            '<tr><td colspan="6" style="text-align: center;">Select a seminar to view feedback</td></tr>';
+        return;
+    }
+    const all = __adminFeedbackCache || [];
+    const q = adminSearchQ('feedback-search');
+    const rows = adminSearchFilter(all, q, (f) =>
+        [f.first_name, f.last_name, f.overall_experience, f.rating].join(' ').toLowerCase()
+    );
+    adminSearchSetCount('feedback-search-count', q, rows.length, all.length, 'responses');
+    tbody.innerHTML = '';
+    if (!all.length) {
+        tbody.innerHTML =
+            '<tr><td colspan="6" style="text-align: center;">No feedback for this seminar yet.</td></tr>';
+        return;
+    }
+    if (!rows.length) {
+        tbody.innerHTML =
+            '<tr><td colspan="6" style="text-align: center;">No feedback matches your search.</td></tr>';
+        return;
+    }
+    rows.forEach((f) => {
+        tbody.innerHTML += `
+                <tr>
+                    <td>${f.first_name} ${f.last_name}</td>
+                    <td>${f.rating}/5</td>
+                    <td>${f.content_quality}/5</td>
+                    <td>${f.speaker_quality}/5</td>
+                    <td>${f.organization_quality}/5</td>
+                    <td><small>${f.overall_experience || '-'}</small></td>
+                </tr>
+            `;
+    });
+}
+
+function renderEventSchedulesTable() {
+    const tbody = document.getElementById('event-schedules-list');
+    if (!tbody) return;
+    const all = __eventSchedulesCache || [];
+    const q = adminSearchQ('event-schedules-search');
+    const rows = adminSearchFilter(all, q, (s) =>
+        [s.title, s.seminar_title, s.seminar_id, s.speaker_name, s.location, s.description]
+            .join(' ')
+            .toLowerCase()
+    );
+    adminSearchSetCount('event-schedules-search-count', q, rows.length, all.length, 'schedules');
+    tbody.innerHTML = '';
+    if (!all.length) {
+        tbody.innerHTML =
+            '<tr><td colspan="6" style="text-align:center;">No event schedules yet. Click <strong>+ Create New Schedule</strong>.</td></tr>';
+        return;
+    }
+    if (!rows.length) {
+        tbody.innerHTML =
+            '<tr><td colspan="6" style="text-align:center;">No schedules match your search.</td></tr>';
+        return;
+    }
+    rows.forEach((s) => {
+        const tr = document.createElement('tr');
+        const startTime = s.start_time ? new Date(s.start_time).toLocaleString() : '—';
+        const endTime = s.end_time ? new Date(s.end_time).toLocaleString() : '—';
+        tr.innerHTML = `
+                <td><strong></strong></td>
+                <td></td>
+                    <td>${startTime}</td>
+                    <td>${endTime}</td>
+                <td></td>
+                <td></td>`;
+        tr.cells[0].querySelector('strong').textContent = s.title || '';
+        tr.cells[1].textContent = s.seminar_title || (s.seminar_id ? `Seminar #${s.seminar_id}` : '—');
+        tr.cells[4].textContent = s.speaker_name || '—';
+        const actions = document.createElement('td');
+        const editBtn = document.createElement('button');
+        editBtn.className = 'btn-primary';
+        editBtn.style.cssText = 'padding:5px 10px;font-size:0.8rem;margin-right:6px;';
+        editBtn.textContent = 'Edit';
+        editBtn.type = 'button';
+        editBtn.onclick = () => editEventScheduleById(s.id);
+        const delBtn = document.createElement('button');
+        delBtn.className = 'btn-danger';
+        delBtn.style.cssText = 'padding:5px 10px;font-size:0.8rem;';
+        delBtn.textContent = 'Delete';
+        delBtn.type = 'button';
+        delBtn.onclick = () => deleteEventSchedule(s.id);
+        actions.appendChild(editBtn);
+        actions.appendChild(delBtn);
+        tr.replaceChild(actions, tr.cells[5]);
+        tbody.appendChild(tr);
+    });
+}
+
+function renderAdminScannerLogsTable() {
+    const tbody = document.getElementById('scanner-logs-list');
+    if (!tbody) return;
+    const all = __adminScannerLogsCache || [];
+    const q = adminSearchQ('scanner-logs-search');
+    const rows = adminSearchFilter(all, q, (s) => {
+        const doc = `${s.doctor_first_name || ''} ${s.doctor_last_name || ''}`.trim();
+        const staff = s.scanner_first_name
+            ? `${s.scanner_first_name} ${s.scanner_last_name || ''} (${s.scanner_user_id_string || ''})`
+            : '';
+        return [
+            s.doctor_user_id_string,
+            doc,
+            s.application_no,
+            s.ticket_id_string,
+            staff,
+            s.seminar_title
+        ]
+            .join(' ')
+            .toLowerCase();
+    });
+    adminSearchSetCount('scanner-logs-search-count', q, rows.length, all.length, 'scans');
+    if (!all.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No scans yet</td></tr>';
+        return;
+    }
+    if (!rows.length) {
+        tbody.innerHTML =
+            '<tr><td colspan="7" style="text-align:center;">No scans match your search.</td></tr>';
+        return;
+    }
+    tbody.innerHTML = '';
+    rows.forEach((s) => {
+        const t = s.scan_time ? new Date(s.scan_time).toLocaleString() : '—';
+        const doc = `${s.doctor_first_name || ''} ${s.doctor_last_name || ''}`.trim();
+        const staff = s.scanner_first_name
+            ? `${s.scanner_first_name} ${s.scanner_last_name || ''} (${s.scanner_user_id_string || ''})`
+            : '—';
+        tbody.innerHTML += `<tr>
+                <td>${escAdmin(t)}</td>
+                <td><strong>${escAdmin(s.doctor_user_id_string)}</strong></td>
+                <td>${escAdmin(doc)}</td>
+                <td>${escAdmin(s.application_no)}</td>
+                <td>${escAdmin(s.ticket_id_string)}</td>
+                <td>${escAdmin(staff)}</td>
+                <td>${escAdmin(s.seminar_title)}</td>
+            </tr>`;
+    });
 }
 
 function seminarNeedsDocReview(qual) {
@@ -6829,52 +7578,7 @@ async function loadSeminars() {
         await loadAdminPortalYear();
         const res = await fetch('/api/admin/seminars/all');
         globalSeminars = await res.json();
-        const tbody = document.getElementById('seminars-list');
-        tbody.innerHTML = '';
-        const filtered = (globalSeminars || []).filter(
-            (s) => Number(s.portal_year) === adminPortalYear || (!s.portal_year && s.event_date && new Date(s.event_date).getFullYear() === adminPortalYear)
-        );
-        const past = (globalSeminars || []).filter((s) => Number(s.portal_year) < adminPortalYear);
-        
-        if (!filtered.length && !past.length) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align: center;">No seminars found.</td></tr>';
-            return;
-        }
-
-        const renderRow = (s, i, pastRow) => {
-            const idx = globalSeminars.indexOf(s);
-            const checkinStatus = s.checkin_enabled ? `<span style="color:green;font-weight:bold;">Yes (${s.checkin_date || 'Any'})</span>` : `<span style="color:red;">No</span>`;
-            const activeStatus = s.is_active ? '' : '<span style="color:red; font-size: 0.8rem;">(Inactive)</span>';
-            const yearTag = s.portal_year ? `<span style="font-size:0.75rem;color:#64748b;">${s.portal_year}</span>` : '';
-            return `
-                <tr style="${pastRow ? 'opacity:0.85;background:#f8fafc;' : ''}">
-                    <td>${s.id}</td>
-                    <td><strong>${s.title}</strong> ${activeStatus} ${yearTag}</td>
-                    <td>${s.event_date ? (window.PortalDateTime && window.PortalDateTime.formatEvent ? window.PortalDateTime.formatEvent(s.event_date) : window.PortalDateTime ? window.PortalDateTime.format(s.event_date) : new Date(s.event_date).toLocaleString()) : '—'}</td>
-                    <td>₹${s.price || 0}</td>
-                    <td>${checkinStatus}</td>
-                    <td>${pastRow ? '<em>Past year</em>' : 'Current'}</td>
-                    <td>
-                        <button class="btn-success" style="padding: 5px 10px; font-size: 0.85rem;" onclick="manageSeminar(${s.id}, '${String(s.title).replace(/'/g, "\\'")}')">Manage</button>
-                        <button class="btn-primary" style="padding: 5px 10px; font-size: 0.85rem;" onclick="editSeminar(${idx})">Edit</button>
-                        <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.85rem;background:#7c3aed;margin-left:4px;" onclick="purgeAdminSeminarTestData(${s.id}, '${String(s.title).replace(/'/g, "\\'")}')">Purge test data</button>
-                        <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.85rem;background:#b91c1c;margin-left:4px;" onclick="deleteAdminSeminar(${s.id}, '${String(s.title).replace(/'/g, "\\'")}')">Delete</button>
-                    </td>
-                </tr>`;
-        };
-
-        if (filtered.length) {
-            tbody.innerHTML += '<tr><td colspan="7" style="background:#ecfdf5;font-weight:700;color:#047857;">Current portal year (' + adminPortalYear + ')</td></tr>';
-            filtered.forEach((s) => {
-                tbody.innerHTML += renderRow(s, 0, false);
-            });
-        }
-        if (past.length) {
-            tbody.innerHTML += '<tr><td colspan="7" style="background:#f1f5f9;font-weight:700;color:#475569;">Past seminars (archive)</td></tr>';
-            past.forEach((s) => {
-                tbody.innerHTML += renderRow(s, 0, true);
-            });
-        }
+        renderSeminarsTable();
     } catch (err) { console.error(err); }
 }
 
@@ -7242,44 +7946,7 @@ async function loadEventSchedules() {
             return;
         }
         __eventSchedulesCache = Array.isArray(schedules) ? schedules : [];
-        tbody.innerHTML = '';
-        if (!__eventSchedulesCache.length) {
-            tbody.innerHTML =
-                '<tr><td colspan="6" style="text-align:center;">No event schedules yet. Click <strong>+ Create New Schedule</strong>.</td></tr>';
-            return;
-        }
-        __eventSchedulesCache.forEach((s) => {
-            const tr = document.createElement('tr');
-            const startTime = s.start_time ? new Date(s.start_time).toLocaleString() : '—';
-            const endTime = s.end_time ? new Date(s.end_time).toLocaleString() : '—';
-            tr.innerHTML = `
-                <td><strong></strong></td>
-                <td></td>
-                    <td>${startTime}</td>
-                    <td>${endTime}</td>
-                <td></td>
-                <td></td>`;
-            tr.cells[0].querySelector('strong').textContent = s.title || '';
-            tr.cells[1].textContent = s.seminar_title || (s.seminar_id ? `Seminar #${s.seminar_id}` : '—');
-            tr.cells[4].textContent = s.speaker_name || '—';
-            const actions = document.createElement('td');
-            const editBtn = document.createElement('button');
-            editBtn.className = 'btn-primary';
-            editBtn.style.cssText = 'padding:5px 10px;font-size:0.8rem;margin-right:6px;';
-            editBtn.textContent = 'Edit';
-            editBtn.type = 'button';
-            editBtn.onclick = () => editEventScheduleById(s.id);
-            const delBtn = document.createElement('button');
-            delBtn.className = 'btn-danger';
-            delBtn.style.cssText = 'padding:5px 10px;font-size:0.8rem;';
-            delBtn.textContent = 'Delete';
-            delBtn.type = 'button';
-            delBtn.onclick = () => deleteEventSchedule(s.id);
-            actions.appendChild(editBtn);
-            actions.appendChild(delBtn);
-            tr.replaceChild(actions, tr.cells[5]);
-            tbody.appendChild(tr);
-        });
+        renderEventSchedulesTable();
     } catch (err) {
         console.error(err);
         tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#b91c1c;">Network error loading schedules</td></tr>';
@@ -7405,27 +8072,8 @@ async function loadFeedbackForSeminar() {
         // Load feedback details
         const feedbackRes = await fetch(`/api/admin/feedback/seminar/${seminarId}`);
         const feedbacks = await feedbackRes.json();
-        
-        const tbody = document.getElementById('feedback-list');
-        tbody.innerHTML = '';
-        
-        if(feedbacks.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center;">No feedback for this seminar yet.</td></tr>';
-            return;
-        }
-
-        feedbacks.forEach(f => {
-            tbody.innerHTML += `
-                <tr>
-                    <td>${f.first_name} ${f.last_name}</td>
-                    <td>${f.rating}/5</td>
-                    <td>${f.content_quality}/5</td>
-                    <td>${f.speaker_quality}/5</td>
-                    <td>${f.organization_quality}/5</td>
-                    <td><small>${f.overall_experience || '-'}</small></td>
-                </tr>
-            `;
-        });
+        __adminFeedbackCache = Array.isArray(feedbacks) ? feedbacks : [];
+        renderFeedbackTable();
     } catch(err) { console.error(err); }
 }
 
@@ -7448,27 +8096,8 @@ async function loadContactInquiries() {
         if (status) url += `?status=${encodeURIComponent(status)}`;
         const res = await fetch(url);
         const rows = await res.json();
-        const tbody = document.getElementById('contact-inquiries-list');
-        if (!tbody) return;
-        tbody.innerHTML = '';
-        if (!Array.isArray(rows) || rows.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No contact requests yet.</td></tr>';
-            return;
-        }
-        rows.forEach((r) => {
-            const created = r.created_at ? new Date(r.created_at).toLocaleString() : '—';
-            const subj = (r.subject || '').length > 40 ? (r.subject.slice(0, 40) + '…') : (r.subject || '—');
-            tbody.innerHTML += `
-                <tr>
-                    <td>${created}</td>
-                    <td>${escapeHtml(r.name || '')}</td>
-                    <td><a href="mailto:${escapeHtml(r.email || '')}">${escapeHtml(r.email || '')}</a></td>
-                    <td>${escapeHtml(r.phone || '—')}</td>
-                    <td>${escapeHtml(subj)}</td>
-                    <td>${escapeHtml(r.status || 'new')}</td>
-                    <td><button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;" onclick="openContactInquiry(${r.id})">View</button></td>
-                </tr>`;
-        });
+        __adminContactInquiriesCache = Array.isArray(rows) ? rows : [];
+        renderContactInquiriesTable();
     } catch (err) {
         console.error(err);
     }
@@ -7858,35 +8487,8 @@ async function loadSupportTickets() {
         
         const res = await fetch(url);
         const tickets = await res.json();
-        
-        const tbody = document.getElementById('support-tickets-list');
-        tbody.innerHTML = '';
-        
-        if(tickets.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align: center;">No support tickets.</td></tr>';
-            return;
-        }
-
-        tickets.forEach(t => {
-            const created = new Date(t.created_at).toLocaleDateString();
-            const tid = t.ticket_id || t.tracking_id || '—';
-            const pri = (t.priority || 'medium').toUpperCase();
-            const priorityColor = t.priority === 'urgent' ? '#ef4444' : (t.priority === 'high' ? '#f59e0b' : '#3b82f6');
-            const statusBg = t.status === 'closed' ? '#cbd5e1' : (t.status === 'resolved' ? '#10b981' : '#fbbf24');
-            
-            tbody.innerHTML += `
-                <tr>
-                    <td><strong>${escAdmin(tid)}</strong></td>
-                    <td>${t.first_name} ${t.last_name}</td>
-                    <td>${t.subject}</td>
-                    <td>${t.category}</td>
-                    <td style="color: ${priorityColor}; font-weight: 600;">${pri}</td>
-                    <td style="background: ${statusBg}; padding: 5px; border-radius: 4px;">${escAdmin(t.status || '')}</td>
-                    <td>${created}</td>
-                    <td><button class="btn-primary" style="padding: 5px 10px; font-size: 0.8rem;" onclick="viewSupportTicket('${escAdmin(tid).replace(/'/g, "\\'")}')">View</button></td>
-                </tr>
-            `;
-        });
+        __supportTicketsCache = Array.isArray(tickets) ? tickets : [];
+        renderSupportTicketsTable();
     } catch(err) { console.error(err); }
 }
 
@@ -9217,6 +9819,98 @@ async function loadDesignatedNotifyAdminForm() {
     } catch (_) {}
 }
 
+function cmsApplySeoFieldsToForm(seo) {
+    const s = seo || {};
+    const set = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.value = val != null ? String(val) : '';
+    };
+    set('seo-title', s.title);
+    set('seo-description', s.description);
+    set('seo-keywords', s.keywords);
+    set('seo-canonical', s.canonicalUrl);
+    set('seo-og-image', s.ogImage);
+    set('seo-google-verify', s.googleSiteVerification);
+    set('seo-bing-verify', s.bingSiteVerification);
+    set('seo-favicon', s.faviconUrl || '/favicon.svg');
+    const ri = document.getElementById('seo-robots-index');
+    if (ri) ri.checked = s.robotsIndex !== false;
+}
+
+function cmsCollectSeoFieldsFromForm() {
+    const gv = (id) => ((document.getElementById(id) || {}).value || '').trim();
+    const ri = document.getElementById('seo-robots-index');
+    return {
+        title: gv('seo-title'),
+        description: gv('seo-description'),
+        keywords: gv('seo-keywords'),
+        canonicalUrl: gv('seo-canonical'),
+        ogImage: gv('seo-og-image'),
+        googleSiteVerification: gv('seo-google-verify'),
+        bingSiteVerification: gv('seo-bing-verify'),
+        faviconUrl: gv('seo-favicon') || '/favicon.svg',
+        robotsIndex: ri ? !!ri.checked : true
+    };
+}
+
+async function loadNotificationDeliveryAdminForm() {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return;
+    try {
+        const res = await fetch(
+            `/api/admin/notification-delivery-config?actingAdminId=${encodeURIComponent(adm.id)}`
+        );
+        const d = await res.json();
+        if (!d.success || !d.config) return;
+        const c = d.config;
+        const setChk = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.checked = !!val;
+        };
+        setChk('ed-pos-skip-email', c.posSkipParticipantEmail);
+        setChk('ed-pos-skip-staff', c.posSkipStaffAlerts);
+        setChk('ed-queue-all', c.queueAllEmails);
+        const mh = document.getElementById('ed-max-hour');
+        if (mh) mh.value = c.emailMaxPerHour != null ? c.emailMaxPerHour : 80;
+        const mg = document.getElementById('ed-min-gap');
+        if (mg) mg.value = c.emailMinGapMs != null ? c.emailMinGapMs : 2500;
+        const dm = document.getElementById('ed-defer-min');
+        if (dm) dm.value = c.deferMinutesOnRateLimit != null ? c.deferMinutesOnRateLimit : 45;
+    } catch (_) {}
+}
+
+async function saveNotificationDeliveryConfig() {
+    const adm = getStoredAdminUser();
+    const msg = document.getElementById('ed-save-msg');
+    if (!adm || !adm.id) return;
+    const gv = (id) => !!(document.getElementById(id) || {}).checked;
+    const config = {
+        posSkipParticipantEmail: gv('ed-pos-skip-email'),
+        posSkipStaffAlerts: gv('ed-pos-skip-staff'),
+        queueAllEmails: gv('ed-queue-all'),
+        emailMaxPerHour: parseInt((document.getElementById('ed-max-hour') || {}).value, 10) || 80,
+        emailMinGapMs: parseInt((document.getElementById('ed-min-gap') || {}).value, 10) || 2500,
+        deferMinutesOnRateLimit: parseInt((document.getElementById('ed-defer-min') || {}).value, 10) || 45
+    };
+    try {
+        const res = await fetch('/api/admin/notification-delivery-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: adm.id, config })
+        });
+        const data = await res.json();
+        if (msg) {
+            msg.style.color = data.success ? '#15803d' : '#b91c1c';
+            msg.textContent = data.success ? 'Email delivery policy saved.' : data.error || 'Save failed.';
+        }
+    } catch (e) {
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = 'Network error.';
+        }
+    }
+}
+
 function themeColorInput(id, theme, key) {
     const el = document.getElementById(id);
     if (!el || !theme) return;
@@ -9478,6 +10172,7 @@ async function loadAdminSiteCms() {
     if (!tickerEl) return;
     loadPortalAuthAdminForm().catch(console.error);
     loadDesignatedNotifyAdminForm().catch(console.error);
+    loadNotificationDeliveryAdminForm().catch(console.error);
     loadSupportTicketSlaAdminForm().catch(console.error);
     loadPortalThemesAdminForm().catch(console.error);
     loadPendingReminderAdminForm().catch(console.error);
@@ -9505,6 +10200,7 @@ async function loadAdminSiteCms() {
         cmsFillGalleryYears(galleryYears);
         cmsFillMenuRows(cms.siteMenu || []);
         cmsApplyHeroFieldsToForm(cms);
+        cmsApplySeoFieldsToForm(cms.seo || {});
         cmsFillSpeakerRows(cms.speakers || []);
         cmsFillFeatureRows(cms.featureCards || []);
         cmsFillFaqRows(cms.faq || []);
@@ -9690,6 +10386,7 @@ async function saveAdminSiteCms() {
             seminarGalleryYears,
             siteMenu,
             speakers: cmsCollectSpeakersFromDom(),
+            seo: cmsCollectSeoFieldsFromForm(),
             ...cmsCollectHeroFieldsFromForm()
         };
         const res = await fetch('/api/admin/site-cms', {
@@ -9770,6 +10467,15 @@ async function uploadSeminarHeroOrFlyer(kind) {
 let __adminPaymentsTab = 'orders';
 let __adminEnrichedOrdersCache = [];
 let __adminCancelRequestsCache = [];
+let __adminCertCandidatesCache = [];
+let __adminVolunteersCache = [];
+let __supportTicketsCache = [];
+let __adminCaseSubmissionsCache = [];
+let __adminCaseProgramsCache = [];
+let __adminSupplementalCache = [];
+let __adminContactInquiriesCache = [];
+let __adminFeedbackCache = [];
+let __adminScannerLogsCache = [];
 
 function switchAdminPaymentsTab(tab) {
     __adminPaymentsTab = tab;
@@ -10092,42 +10798,8 @@ async function loadAdminSupplementalPayments() {
     try {
         const res = await fetch('/api/admin/supplemental-payments');
         const rows = await res.json();
-        if (!Array.isArray(rows) || !rows.length) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#64748b;">No additional charges yet</td></tr>';
-            return;
-        }
-        tbody.innerHTML = rows
-            .map((r) => {
-                const paid = String(r.status || '').toLowerCase() === 'paid';
-                const name =
-                    escAdmin((r.first_name || '') + ' ' + (r.last_name || '')).trim() ||
-                    escAdmin(r.email || '');
-                return (
-                    '<tr><td>' +
-                    r.id +
-                    '</td><td>' +
-                    name +
-                    '<br><span style="font-size:0.78rem;color:#64748b;">' +
-                    escAdmin(r.user_id_string || '') +
-                    '</span></td><td>' +
-                    escAdmin(r.title || '') +
-                    (r.description ? '<br><span style="font-size:0.78rem;color:#64748b;">' + escAdmin(r.description) + '</span>' : '') +
-                    '</td><td>₹' +
-                    escAdmin(String(r.amount != null ? r.amount : '—')) +
-                    '</td><td>' +
-                    escAdmin(paid ? 'Paid' : 'Pending') +
-                    '</td><td>' +
-                    (paid
-                        ? escAdmin(r.order_id_string || '—')
-                        : '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.78rem;background:#15803d;" onclick="markAdminSupplementalPaid(' +
-                          r.id +
-                          ')">Mark paid (cash)</button> <button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.78rem;background:#b91c1c;" onclick="deleteAdminSupplemental(' +
-                          r.id +
-                          ')">Remove</button>') +
-                    '</td></tr>'
-                );
-            })
-            .join('');
+        __adminSupplementalCache = Array.isArray(rows) ? rows : [];
+        renderAdminSupplementalPaymentsTable();
     } catch (e) {
         console.error(e);
         tbody.innerHTML = '<tr><td colspan="6">Error loading</td></tr>';
@@ -10203,87 +10875,7 @@ async function loadAdminEnrichedOrders() {
         const rows = await res.json();
         __adminEnrichedOrdersCache = Array.isArray(rows) ? rows : [];
         __adminOrdersCache = __adminEnrichedOrdersCache;
-        tbody.innerHTML = '';
-        if (!__adminEnrichedOrdersCache.length) {
-            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#94a3b8;">No orders.</td></tr>';
-            return;
-        }
-        __adminEnrichedOrdersCache.forEach((o) => {
-            const doc = escAdmin((o.first_name || '') + ' ' + (o.last_name || '') + ' (' + (o.user_id_string || o.user_id || '') + ')');
-            const refunded = Number(o.refunded_amount) || 0;
-            const amt = Number(o.amount) || 0;
-            const canRefund = o.status === 'success' && refunded < amt - 0.01;
-            const actions = [];
-            if (o.status === 'success') {
-                actions.push(
-                    '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;margin-right:4px;" onclick="openAdminOrderReceipt(' +
-                        o.id +
-                        ')">Receipt</button>'
-                );
-            }
-            if (canRefund) {
-                actions.push(
-                    '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;background:#b45309;border:none;" onclick="adminRefundOrderPrompt(' +
-                        o.id +
-                        ')">Refund</button>'
-                );
-            }
-            const st = String(o.status || '').toLowerCase();
-            if (st === 'pending' && o.registration_id) {
-                actions.push(
-                    '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;margin-right:4px;" onclick="adminRetryOrderPayment(' +
-                        o.registration_id +
-                        ',' +
-                        o.id +
-                        ')">Retry</button>'
-                );
-                actions.push(
-                    '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;background:#b91c1c;border:none;margin-right:4px;" onclick="adminCancelPendingOrder(' +
-                        o.id +
-                        ')">Cancel</button>'
-                );
-                actions.push(
-                    '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;background:#64748b;border:none;margin-right:4px;" onclick="adminPollOrderPayment(' +
-                        o.id +
-                        ')">Check</button>'
-                );
-            }
-            if (o.registration_id && o.registration_status !== 'cancelled' && st !== 'success') {
-                actions.push(
-                    '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;background:#7c3aed;border:none;" onclick="adminWaiveAndTicket(' +
-                        o.registration_id +
-                        ')">Waive &amp; ticket</button>'
-                );
-            }
-            if (o.e_ticket_id) {
-                actions.push(
-                    '<span style="font-size:0.78rem;color:#0f766e;margin-left:4px;">Ticket <code>' +
-                        escAdmin(o.e_ticket_id) +
-                        '</code></span>'
-                );
-            }
-            tbody.innerHTML +=
-                '<tr><td><strong>' +
-                escAdmin(o.order_id_string || o.id) +
-                '</strong></td><td>' +
-                doc +
-                '</td><td>' +
-                escAdmin(o.seminar_title || '—') +
-                '</td><td>' +
-                escAdmin(o.application_no || '—') +
-                '</td><td>' +
-                escAdmin(o.payment_gateway || '—') +
-                '</td><td>₹' +
-                escAdmin(amt) +
-                '</td><td>₹' +
-                escAdmin(refunded) +
-                (o.refund_status ? ' (' + escAdmin(o.refund_status) + ')' : '') +
-                '</td><td>' +
-                escAdmin(o.status) +
-                '</td><td>' +
-                (actions.join('') || '—') +
-                '</td></tr>';
-        });
+        renderAdminEnrichedOrdersTable();
     } catch (e) {
         console.error(e);
         tbody.innerHTML = '<tr><td colspan="9">Failed to load</td></tr>';
@@ -10430,44 +11022,7 @@ async function loadAdminCancellationRequests() {
         const res = await fetch('/api/admin/cancellation-requests' + q);
         const rows = await res.json();
         __adminCancelRequestsCache = Array.isArray(rows) ? rows : [];
-        tbody.innerHTML = '';
-        if (!__adminCancelRequestsCache.length) {
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#94a3b8;">No requests.</td></tr>';
-            return;
-        }
-        __adminCancelRequestsCache.forEach((r) => {
-            const doc = escAdmin((r.first_name || '') + ' ' + (r.last_name || '') + ' (' + (r.user_id_string || '') + ')');
-            const when = r.requested_at ? new Date(r.requested_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : '—';
-            const pol = '₹' + (r.refund_amount || 0) + ' (' + (r.refund_percent || 0) + '%)';
-            let actions = '—';
-            if (r.status === 'pending') {
-                actions =
-                    '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;margin-right:4px;" onclick="adminResolveCancelRequest(' +
-                    r.id +
-                    ',\'approve\')">Approve</button>' +
-                    '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;background:#64748b;border:none;" onclick="adminResolveCancelRequest(' +
-                    r.id +
-                    ',\'reject\')">Reject</button>';
-            }
-            tbody.innerHTML +=
-                '<tr><td>' +
-                escAdmin(when) +
-                '</td><td>' +
-                doc +
-                '</td><td>' +
-                escAdmin(r.seminar_title) +
-                '</td><td>' +
-                escAdmin(r.application_no) +
-                '</td><td style="max-width:200px;font-size:0.85rem;">' +
-                escAdmin(r.reason) +
-                '</td><td>' +
-                escAdmin(pol) +
-                '</td><td>' +
-                escAdmin(r.status) +
-                '</td><td>' +
-                actions +
-                '</td></tr>';
-        });
+        renderAdminCancellationRequestsTable();
     } catch (e) {
         console.error(e);
         tbody.innerHTML = '<tr><td colspan="8">Failed to load</td></tr>';

@@ -54,6 +54,8 @@ const ticketScanEvents = require('./lib/ticket-scan-events');
 const feedbackFormConfig = require('./lib/feedback-form-config');
 const { registerLiveScannerRoutes } = require('./lib/routes-live-scanner');
 const { registerPosRoutes } = require('./lib/pos-onspot');
+const siteSeoMod = require('./lib/site-seo');
+const emailDeliveryPolicy = require('./lib/email-delivery-policy');
 const authUsers = require('./lib/auth-users');
 const authLoginOtp = require('./lib/auth-login-otp');
 const certRender = require('./lib/certificate-render');
@@ -781,6 +783,7 @@ const DEFAULT_PUBLIC_SITE_CMS = {
             a: 'After your application is approved and payment is confirmed, your QR e-ticket appears in the Doctor portal.'
         }
     ],
+    seo: { ...siteSeoMod.DEFAULT_SEO },
     footer: {
         tagline: 'Promoting Ayurveda education since 1972',
         copyright: '© 2026 Vaidya Gogate Memorial Foundation. All rights reserved.',
@@ -976,6 +979,10 @@ function ensurePortalSchema(next) {
                                                         seedGlobalSettingIfMissing('registration_form_config', DEFAULT_REGISTRATION_FORM_CONFIG_JSON, () => {
                                                             migrateLegacyRegistrationFormConfig(() => {
                                                             seedGlobalSettingIfMissing('public_site_cms', DEFAULT_PUBLIC_SITE_CMS_JSON, () => {
+                                                                seedGlobalSettingIfMissing(
+                                                                    emailDeliveryPolicy.KEY,
+                                                                    JSON.stringify(emailDeliveryPolicy.DEFAULT_CONFIG),
+                                                                    () => {
                                                                 ensureMessagingOtpSchema(() => {
                                                                     ensureCertificateSchema(() => {
                                                                         extModules.ensureExtendedModulesSchema(
@@ -1054,6 +1061,7 @@ function ensurePortalSchema(next) {
                                                                         );
                                                                     });
                                                                 });
+                                                            });
                                                             });
                                                             });
                                                         });
@@ -1329,15 +1337,19 @@ function loadPublicSiteCms(callback) {
                     }
                     if (!Array.isArray(base.faq)) base.faq = DEFAULT_PUBLIC_SITE_CMS.faq;
                     if (!base.footer || typeof base.footer !== 'object') base.footer = { ...DEFAULT_PUBLIC_SITE_CMS.footer };
+                    base.seo = siteSeoMod.normalizeSeo(base.seo || DEFAULT_PUBLIC_SITE_CMS.seo);
                 }
             } catch (_) {
                 /* keep defaults */
             }
         }
+        if (!base.seo) base.seo = siteSeoMod.normalizeSeo(DEFAULT_PUBLIC_SITE_CMS.seo);
         base.scrollingAnnouncements = sanitizeScrollingAnnouncements(base.scrollingAnnouncements);
         callback(null, siteCmsHelpers.normalizeSiteCms(base));
     });
 }
+
+siteSeoMod.registerSiteSeoRoutes(app, { db, loadPublicSiteCms });
 
 function isSeminarRegistrationOpen(row) {
     const now = Date.now();
@@ -1654,13 +1666,28 @@ function backfillTicketsForPaidOrders(cb) {
 }
 
 function notifyTicketIssued(userId, registrationId, ticketId, channelOpts) {
-    const sendEmail = !channelOpts || channelOpts.email !== false;
-    const sendWhatsapp = !!(channelOpts && channelOpts.whatsapp === true);
-    const sendTemplateNotify = !!(
-        channelOpts &&
-        (channelOpts.templateNotify === true || channelOpts.whatsapp === true)
-    );
+    channelOpts = channelOpts || {};
     if (!userId || !registrationId || !ticketId) return;
+    emailDeliveryPolicy.loadConfig(db, (eCfg, deliveryCfg) => {
+        const skipPosEmail = emailDeliveryPolicy.shouldSkipPosParticipantEmail(deliveryCfg, channelOpts);
+        const sendEmail = !skipPosEmail && channelOpts.email !== false;
+        const sendWhatsapp = !!(channelOpts.whatsapp === true);
+        const sendTemplateNotify = !!(channelOpts.templateNotify === true || channelOpts.whatsapp === true);
+        const drainImmediate = channelOpts.immediate === true && !emailDeliveryPolicy.shouldDeferImmediateEmail(deliveryCfg);
+        runNotifyTicketIssued(
+            userId,
+            registrationId,
+            ticketId,
+            { sendEmail, sendWhatsapp, sendTemplateNotify, drainImmediate }
+        );
+    });
+}
+
+function runNotifyTicketIssued(userId, registrationId, ticketId, opts) {
+    const sendEmail = opts.sendEmail;
+    const sendWhatsapp = opts.sendWhatsapp;
+    const sendTemplateNotify = opts.sendTemplateNotify;
+    const drainImmediate = opts.drainImmediate;
     db.get(
         `SELECT r.seminar_id, r.application_no, t.qr_code_data, t.ticket_id_string, t.is_scanned, t.scan_time,
                 IFNULL(t.is_valid, 1) AS is_valid, o.status AS payment_status,
@@ -1698,10 +1725,11 @@ function notifyTicketIssued(userId, registrationId, ticketId, channelOpts) {
                         seminarId,
                         registrationId,
                         vars,
-                        immediate: true,
+                        immediate: drainImmediate,
                         skipWhatsapp: !sendWhatsapp
                     },
                     () => {
+                        if (!drainImmediate) return;
                         try {
                             notifEngine.drainNotificationQueue(db, 1);
                         } catch (_) {}
@@ -1759,7 +1787,7 @@ function notifyTicketIssued(userId, registrationId, ticketId, channelOpts) {
                                             '</a></p>',
                                         text: 'E-ticket: ' + pdfUrl,
                                         event_key: 'TICKET_ISSUED',
-                                        immediate: true
+                                        immediate: drainImmediate
                                     },
                                     () => {}
                                 );
@@ -1772,7 +1800,7 @@ function notifyTicketIssued(userId, registrationId, ticketId, channelOpts) {
                                         destination: u.phone,
                                         body: waLine,
                                         event_key: 'TICKET_ISSUED',
-                                        immediate: true,
+                                        immediate: drainImmediate,
                                         userId
                                     },
                                     () => {}
@@ -3917,6 +3945,9 @@ app.post('/api/admin/site-cms', (req, res) => {
         if (Array.isArray(incoming.featureCards)) merged.featureCards = incoming.featureCards;
         if (Array.isArray(incoming.faq)) merged.faq = incoming.faq;
         if (Array.isArray(incoming.speakers)) merged.speakers = incoming.speakers;
+        if (incoming.seo && typeof incoming.seo === 'object') {
+            merged.seo = siteSeoMod.normalizeSeo({ ...(merged.seo || {}), ...incoming.seo });
+        }
         merged.scrollingAnnouncements = sanitizeScrollingAnnouncements(merged.scrollingAnnouncements);
         const normalized = siteCmsHelpers.normalizeSiteCms(merged);
         const payload = JSON.stringify(normalized);
@@ -7979,7 +8010,9 @@ registerPosRoutes(app, {
     getOrCreatePendingOrder,
     fulfillRegistrationPayment,
     seminarCapacity,
-    activityLog
+    activityLog,
+    notifyTicketIssued,
+    emailDeliveryPolicy
 });
 
 app.get('/api/public/feedback-form', (req, res) => {
@@ -8187,6 +8220,40 @@ app.get('/api/admin/judge-communications', (req, res) => {
                 res.json({ success: true, communications: rows });
             }
         );
+    });
+});
+
+app.get('/api/admin/notification-delivery-config', (req, res) => {
+    const aid = parseInt(req.query.actingAdminId, 10);
+    if (!Number.isInteger(aid) || aid < 1) {
+        return res.status(400).json({ error: 'actingAdminId query parameter is required' });
+    }
+    assertAdminPortalActor(aid, (e, adm) => {
+        if (e && e.message === 'BAD_ACTOR') return res.status(400).json({ error: 'actingAdminId is required' });
+        if (e && e.message === 'FORBIDDEN') return res.status(403).json({ error: 'Administrator access required' });
+        if (e) return res.status(500).json({ error: e.message });
+        if (!adm) return res.status(403).json({ error: 'Invalid administrator' });
+        emailDeliveryPolicy.loadConfig(db, (err, config) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ success: true, config });
+        });
+    });
+});
+
+app.post('/api/admin/notification-delivery-config', (req, res) => {
+    const { actingAdminId, config } = req.body || {};
+    const aid = parseInt(actingAdminId, 10);
+    if (!Number.isInteger(aid) || aid < 1) return res.status(400).json({ error: 'actingAdminId is required' });
+    if (!config || typeof config !== 'object') return res.status(400).json({ error: 'config object required' });
+    assertAdminPortalActor(aid, (e, adm) => {
+        if (e && e.message === 'BAD_ACTOR') return res.status(400).json({ error: 'actingAdminId is required' });
+        if (e && e.message === 'FORBIDDEN') return res.status(403).json({ error: 'Administrator access required' });
+        if (e) return res.status(500).json({ error: e.message });
+        if (!adm) return res.status(403).json({ error: 'Invalid administrator' });
+        emailDeliveryPolicy.saveConfig(db, config, (err, norm) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ success: true, config: norm });
+        });
     });
 });
 
@@ -8723,6 +8790,57 @@ app.get('/api/admin/user-roles', (req, res) => {
     db.all(`SELECT * FROM user_roles`, [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(rows || []);
+    });
+});
+
+// Admin: permanently delete doctor or staff account (requires portal ID confirmation)
+app.post('/api/admin/users/:userId/delete', (req, res) => {
+    const targetId = parseInt(req.params.userId, 10);
+    const actingAdminId = parseInt((req.body && req.body.actingAdminId) || '', 10);
+    const confirmPortalId = (req.body && req.body.confirmPortalId) || '';
+    if (!Number.isInteger(targetId) || targetId < 1) {
+        return res.status(400).json({ error: 'Invalid user id' });
+    }
+    assertAdminPortalActor(actingAdminId, (err) => {
+        if (err && err.message === 'BAD_ACTOR') {
+            return res.status(400).json({ error: 'actingAdminId is required' });
+        }
+        if (err && err.message === 'FORBIDDEN') {
+            return res.status(403).json({ error: 'Administrator access required' });
+        }
+        if (err) return res.status(500).json({ error: err.message });
+        const adminDeleteUser = require('./lib/admin-delete-user');
+        adminDeleteUser.deleteUserAccount(
+            db,
+            targetId,
+            deleteRegistrationCascade,
+            { actingAdminId, confirmPortalId },
+            (delErr, result) => {
+                if (delErr) {
+                    const msg = delErr.message || 'Delete failed';
+                    const code =
+                        /not found|confirmation|cannot delete|invalid/i.test(msg) ? 400 : 500;
+                    return res.status(code).json({ error: msg });
+                }
+                activityLog.logActivity(db, {
+                    user_id: actingAdminId,
+                    action: 'admin.user.deleted',
+                    resource_type: 'user',
+                    resource_id: String(targetId),
+                    meta: {
+                        portalId: result && result.portalId,
+                        accountType: result && result.accountType
+                    }
+                });
+                res.json({
+                    success: true,
+                    message:
+                        'Account ' +
+                        (result && result.portalId ? result.portalId : targetId) +
+                        ' and related portal data were permanently removed.'
+                });
+            }
+        );
     });
 });
 
@@ -11206,7 +11324,7 @@ function startBackgroundWorkers() {
 function flushNotificationQueue() {
     try {
         if (notifEngine.drainNotificationQueue) {
-            notifEngine.drainNotificationQueue(db, 4).catch((e) => {
+            notifEngine.drainNotificationQueue(db, 1).catch((e) => {
                 console.warn('[notifications] drain', e.message);
             });
         } else {
