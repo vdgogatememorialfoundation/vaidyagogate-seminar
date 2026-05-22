@@ -333,6 +333,7 @@ CREATE TABLE IF NOT EXISTS volunteer_certificates (
                                 template_id INTEGER,
                                 enabled INTEGER DEFAULT 0,
                                 scan_verified INTEGER DEFAULT 0,
+                                scan_time TIMESTAMPTZ,
                                 updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                                 UNIQUE(user_id, seminar_id)
                             );
