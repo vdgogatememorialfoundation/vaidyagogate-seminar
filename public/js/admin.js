@@ -790,6 +790,7 @@ function renderStaffUsersTable(staffList) {
                             <option value="scanner_portal_user" ${userRole === 'scanner_portal_user' ? 'selected' : ''}>Scanner (volunteer)</option>
                             <option value="scanner_dashboard_user" ${userRole === 'scanner_dashboard_user' ? 'selected' : ''}>Live scanner dashboard</option>
                             <option value="reviewer" ${userRole === 'reviewer' ? 'selected' : ''}>Reviewer</option>
+                            <option value="doctor" ${userRole === 'doctor' ? 'selected' : ''}>Doctor (doctor portal)</option>
                         </select>
                     </td>
                     <td>${adminUserStatusBadge(u)}</td>
@@ -805,32 +806,71 @@ function adminFilterStaffUsersList() {
     renderStaffUsersTable(window.__adminStaffUsers || []);
 }
 
+function adminApplyLookupMatch(u, accountList) {
+    const msg = document.getElementById('admin-user-lookup-msg');
+    const matchesBox = document.getElementById('admin-user-lookup-matches');
+    if (matchesBox) matchesBox.innerHTML = '';
+    if (msg) {
+        msg.style.color = '#047857';
+        msg.textContent = `${u.first_name} ${u.last_name} — ${u.user_id_string} — role ${u.effective_user_role || u.user_role || u.role} — under “${accountList === 'staff' ? 'Staff users' : 'Doctors'}”.`;
+    }
+    adminClearStaffUsersSearch();
+    window.__highlightAdminUserId = u.id;
+    switchTab(accountList === 'staff' ? 'tab-staff-users' : 'tab-doctors');
+    loadUsers();
+}
+
+function adminRenderLookupMatches(matches) {
+    const box = document.getElementById('admin-user-lookup-matches');
+    if (!box || !matches || matches.length < 2) {
+        if (box) box.innerHTML = '';
+        return;
+    }
+    window.__adminLookupMatches = matches;
+    box.innerHTML =
+        '<p style="font-size:0.85rem;color:#64748b;margin:0 0 6px;">Multiple accounts — click to open:</p>' +
+        matches
+            .map((u, i) => {
+                const label = `${escAdmin(u.first_name)} ${escAdmin(u.last_name)} · ${escAdmin(u.user_id_string)} · ${escAdmin(u.email || '')} · ${escAdmin(u.effective_user_role || u.user_role || u.role)} (${u.account_list === 'staff' ? 'Staff' : 'Doctors'})`;
+                return `<button type="button" class="btn-secondary" style="display:block;width:100%;text-align:left;margin:4px 0;padding:8px 10px;" onclick="adminPickLookupMatch(${i})">${label}</button>`;
+            })
+            .join('');
+}
+
+function adminPickLookupMatch(index) {
+    const matches = window.__adminLookupMatches || [];
+    const u = matches[index];
+    if (!u) return;
+    adminApplyLookupMatch(u, u.account_list || 'staff');
+}
+
 async function adminLookupUserByEmail() {
     const input = document.getElementById('admin-user-lookup');
     const msg = document.getElementById('admin-user-lookup-msg');
+    const matchesBox = document.getElementById('admin-user-lookup-matches');
     const raw = String((input && input.value) || '').trim();
-    if (!raw) return alert('Enter an email address or 12-digit portal ID.');
-    const q = raw.includes('@') ? `email=${encodeURIComponent(raw.toLowerCase())}` : `portalId=${encodeURIComponent(raw.replace(/\D/g, ''))}`;
+    if (!raw) return alert('Enter email, portal ID, phone, or name (e.g. Nitin).');
+    if (matchesBox) matchesBox.innerHTML = '';
     try {
-        const res = await fetch('/api/admin/users/lookup?' + q);
+        const res = await fetch('/api/admin/users/lookup?q=' + encodeURIComponent(raw));
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Lookup failed');
         if (!data.found) {
             if (msg) {
                 msg.style.color = '#b91c1c';
-                msg.textContent = 'No account found with that email or portal ID.';
+                msg.textContent = data.hint || 'No account found. Try full email, portal ID from create alert, phone, or first name.';
             }
             return;
         }
-        const u = data.user;
-        if (msg) {
-            msg.style.color = '#047857';
-            msg.textContent = `${u.first_name} ${u.last_name} — role ${u.user_role || u.role} — listed under “${data.accountList === 'staff' ? 'Staff users' : 'Doctors'}”.`;
+        if (data.multiple && data.matches && data.matches.length > 1) {
+            if (msg) {
+                msg.style.color = '#0369a1';
+                msg.textContent = data.hint || `${data.matches.length} accounts found.`;
+            }
+            adminRenderLookupMatches(data.matches);
+            return;
         }
-        adminClearStaffUsersSearch();
-        window.__highlightAdminUserId = u.id;
-        switchTab(data.accountList === 'staff' ? 'tab-staff-users' : 'tab-doctors');
-        loadUsers();
+        adminApplyLookupMatch(data.user, data.accountList);
     } catch (e) {
         if (msg) {
             msg.style.color = '#b91c1c';
@@ -877,8 +917,20 @@ async function updateUserRole(userId, newRole) {
         });
         const result = await res.json();
         if (result.success) {
-            alert(`Role updated to ${newRole}`);
+            const tab =
+                newRole === 'doctor' ? 'tab-doctors' : 'tab-staff-users';
+            if (newRole === 'doctor') {
+                alert(`Role updated to Doctor. Account is now under the Doctors tab (doctor portal login).`);
+            } else {
+                alert(`Role updated to ${newRole}. Account is under Staff users.`);
+            }
+            switchTab(tab);
+            window.__highlightAdminUserId = userId;
             loadUsers();
+            if (__adminUserDetailCache && __adminUserDetailCache.user && Number(__adminUserDetailCache.user.id) === Number(userId)) {
+                __adminUserDetailCache.user.user_role = newRole;
+                renderAdminUserDetailTab();
+            }
         } else {
             alert('Error: ' + result.error);
         }
@@ -894,6 +946,14 @@ async function adminMoveUserToStaffRole(userId) {
     if (!newRole) return alert('Choose a staff role.');
     await updateUserRole(userId, newRole);
     switchTab('tab-staff-users');
+    window.__highlightAdminUserId = userId;
+    loadUsers();
+}
+
+async function adminMoveUserToDoctorPortal(userId) {
+    if (!confirm('Move this account to the Doctor portal? They will sign in at the doctor login page (not staff portals).')) return;
+    await updateUserRole(userId, 'doctor');
+    switchTab('tab-doctors');
     window.__highlightAdminUserId = userId;
     loadUsers();
 }
@@ -2150,7 +2210,10 @@ function renderAdminUserDetailTab() {
                         <button type="button" class="btn-primary" style="padding:6px 12px;font-size:0.85rem;" onclick="adminMoveUserToStaffRole(${u.id})">Move to Staff users</button>
                     </div>
                     </div>`
-                            : ''
+                            : `<div style="margin:10px 0;padding:10px;border:1px solid #dbeafe;border-radius:8px;background:#f8fbff;">
+                    <p style="margin:0 0 8px;font-size:0.88rem;"><strong>Doctor portal access</strong> — one login cannot be staff and doctor at the same time. Move to Doctors to let this person use the doctor portal (seminar registration, case upload, etc.).</p>
+                    <button type="button" class="btn-primary" style="padding:6px 12px;font-size:0.85rem;background:#0f766e;" onclick="adminMoveUserToDoctorPortal(${u.id})">Move to Doctor portal</button>
+                    </div>`
                     }
                     ${
                         String(u.user_role || u.role || '').toLowerCase() === 'doctor'

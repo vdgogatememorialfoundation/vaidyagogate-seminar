@@ -8448,8 +8448,9 @@ app.post('/api/admin/users/create', (req, res) => {
         db.get(`SELECT id FROM users WHERE user_id_string = ? LIMIT 1`, [userIdStr], (eDup, dup) => {
             if (eDup) return res.status(500).json({ error: eDup.message });
             if (dup) return res.status(400).json({ error: 'That portal user ID is already in use.' });
+            const authUsers = require('./lib/auth-users');
             db.get(
-                `SELECT id, email, user_role FROM users WHERE lower(trim(email)) = ? LIMIT 1`,
+                `SELECT id, email, user_role, role FROM users WHERE ${authUsers.sqlEmailMatches('email')} LIMIT 1`,
                 [emailNorm],
                 (eEmail, existing) => {
                     if (eEmail) return res.status(500).json({ error: eEmail.message });
@@ -8507,65 +8508,52 @@ app.post('/api/admin/users/create', (req, res) => {
     );
 });
 
-// Admin: find account by email (which admin tab it appears under)
+// Admin: find account(s) by email, portal ID, phone, or name
 app.get('/api/admin/users/lookup', (req, res) => {
-    const userRoles = require('./lib/user-roles');
-    const email = String(req.query.email || '')
-        .trim()
-        .toLowerCase();
-    const portalId = String(req.query.portalId || req.query.user_id_string || '')
-        .trim()
-        .replace(/\D/g, '');
-    if (!email && !portalId) {
-        return res.status(400).json({ error: 'Provide email or portalId query parameter.' });
-    }
-    const run = (sql, params) => {
-        db.get(sql, params, (err, row) => {
-            if (err) return res.status(500).json({ error: err.message });
-            if (!row) return res.json({ found: false });
-            const accountList = userRoles.isDoctorPortalAccount(row) ? 'doctors' : 'staff';
-            res.json({
-                found: true,
-                accountList,
-                user: {
-                    id: row.id,
-                    user_id_string: row.user_id_string,
-                    first_name: row.first_name,
-                    last_name: row.last_name,
-                    email: row.email,
-                    role: row.role,
-                    user_role: row.user_role
-                },
-                hint:
-                    accountList === 'staff'
-                        ? 'Open Staff users tab'
-                        : 'Open Doctors tab (includes public website sign-ups)'
-            });
+    const adminUserLookup = require('./lib/admin-user-lookup');
+    const email = String(req.query.email || '').trim();
+    const portalId = String(req.query.portalId || req.query.user_id_string || '').trim();
+    const q = String(req.query.q || req.query.query || email || portalId || '').trim();
+    if (!q) {
+        return res.status(400).json({
+            error: 'Enter email, 12-digit portal ID, phone, or name (e.g. Nitin).'
         });
-    };
-    if (portalId) {
-        return run(
-            `SELECT id, user_id_string, first_name, last_name, email, role, user_role FROM users WHERE user_id_string = ?`,
-            [portalId]
-        );
     }
-    run(
-        `SELECT id, user_id_string, first_name, last_name, email, role, user_role FROM users WHERE lower(trim(email)) = ?`,
-        [email]
-    );
+    adminUserLookup.searchAdminUsers(db, q, (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!rows.length) {
+            return res.json({
+                found: false,
+                hint: 'No match. Try full email, 12-digit portal ID from the create alert, phone number, or first name.'
+            });
+        }
+        const matches = rows.map(adminUserLookup.mapUserForAdminResponse);
+        const user = matches[0];
+        const accountList = user.account_list;
+        res.json({
+            found: true,
+            accountList,
+            user,
+            matches,
+            multiple: matches.length > 1,
+            hint:
+                matches.length > 1
+                    ? `${matches.length} accounts match — pick the correct one in the list below.`
+                    : accountList === 'staff'
+                      ? 'Open Staff users tab'
+                      : 'Open Doctors tab (includes public website sign-ups)'
+        });
+    });
 });
 
 // Admin: Get Users
 app.get('/api/admin/users', (req, res) => {
     const userRoles = require('./lib/user-roles');
-    db.all(
-        `SELECT id, user_id_string, first_name, last_name, email, phone, role, user_role, doctor_category, doctor_modules, is_disabled,
-                IFNULL(is_banned,0) AS is_banned, ban_reason, IFNULL(is_demo,0) AS is_demo, admin_modules FROM users ORDER BY id DESC`,
-        [],
-        (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
+    const adminUserLookup = require('./lib/admin-user-lookup');
+    const filterQ = String(req.query.q || req.query.search || '').trim();
+    const sendList = (list) => {
         res.json(
-            (rows || []).map((r) => {
+            (list || []).map((r) => {
                 const eff = userRoles.effectiveUserRole(r);
                 return {
                     ...r,
@@ -8574,6 +8562,28 @@ app.get('/api/admin/users', (req, res) => {
                 };
             })
         );
+    };
+    const fullCols = `id, user_id_string, first_name, middle_name, last_name, email, phone, role, user_role, doctor_category, doctor_modules, is_disabled,
+                IFNULL(is_banned,0) AS is_banned, ban_reason, IFNULL(is_demo,0) AS is_demo, admin_modules`;
+    if (filterQ) {
+        return adminUserLookup.searchAdminUsers(db, filterQ, (sErr, matched) => {
+            if (sErr) return res.status(500).json({ error: sErr.message });
+            const ids = (matched || []).map((m) => m.id);
+            if (!ids.length) return sendList([]);
+            const placeholders = ids.map(() => '?').join(',');
+            db.all(
+                `SELECT ${fullCols} FROM users WHERE id IN (${placeholders}) ORDER BY id DESC`,
+                ids,
+                (err, rows) => {
+                    if (err) return res.status(500).json({ error: err.message });
+                    sendList(rows);
+                }
+            );
+        });
+    }
+    db.all(`SELECT ${fullCols} FROM users ORDER BY id DESC`, [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        sendList(rows);
     });
 });
 

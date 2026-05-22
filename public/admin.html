@@ -151,9 +151,10 @@
                 <div class="card" style="margin-bottom:16px;padding:14px 18px;border-left-color:#0d9488;">
                     <label for="admin-user-lookup" style="font-weight:600;font-size:0.9rem;">Find any account</label>
                     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;align-items:center;">
-                        <input type="text" id="admin-user-lookup" placeholder="Email or 12-digit portal ID" style="flex:1;min-width:200px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;">
+                        <input type="text" id="admin-user-lookup" placeholder="Email, portal ID, phone, or name (e.g. Nitin)" style="flex:1;min-width:200px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;">
                         <button type="button" class="btn-primary" onclick="adminLookupUserByEmail()">Find</button>
                     </div>
+                    <div id="admin-user-lookup-matches" style="margin-top:8px;"></div>
                     <p id="admin-user-lookup-msg" style="margin:8px 0 0;font-size:0.85rem;color:#64748b;"></p>
                 </div>
                 <div class="card">
@@ -1942,7 +1943,7 @@
     <script src="/js/admin-system-health.js"></script>
     <script src="/js/otp-ui.js"></script>
     <script src="/js/portal-upload.js?v=20260522"></script>
-    <script src="/js/user-roles.js?v=20260522c"></script>
-    <script src="/js/admin.js?v=20260522c"></script>
+    <script src="/js/user-roles.js?v=20260522d"></script>
+    <script src="/js/admin.js?v=20260522d"></script>
 </body>
 </html>
