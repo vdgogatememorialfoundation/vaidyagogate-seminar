@@ -529,8 +529,24 @@ async function refreshSeminarDashboard() {
 }
 
 function isDoctorAccount(u) {
-    const ur = String(u.user_role || u.role || 'doctor').toLowerCase();
-    return ur === 'doctor';
+    const ur = String((u && u.user_role) || '')
+        .trim()
+        .toLowerCase();
+    const r = String((u && u.role) || '')
+        .trim()
+        .toLowerCase();
+    const staffRoles = [
+        'co_admin',
+        'judge_user',
+        'scanner_portal_user',
+        'scanner_dashboard_user',
+        'reviewer',
+        'admin'
+    ];
+    if (staffRoles.includes(ur)) return false;
+    if (r === 'admin' && ur !== 'doctor') return false;
+    if (ur === 'doctor' || ur === 'event_attendee') return true;
+    return r === 'doctor' && !ur;
 }
 
 function adminDemoAccountsEnabled() {
@@ -595,6 +611,17 @@ async function loadUsers() {
         if (doctorsBody) doctorsBody.innerHTML = '';
         if (proxySelect) proxySelect.innerHTML = '<option value="">Select a user...</option>';
         window.__adminUsersById = {};
+
+        if (!res.ok || !Array.isArray(users)) {
+            const err = (users && users.error) || 'Could not load users';
+            if (staffBody) {
+                staffBody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#b91c1c;">${escAdmin(err)}</td></tr>`;
+            }
+            if (doctorsBody) {
+                doctorsBody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#b91c1c;">${escAdmin(err)}</td></tr>`;
+            }
+            return;
+        }
 
         const staff = [];
         const doctors = [];
@@ -1734,9 +1761,13 @@ async function adminCreateUser() {
                 prev.style.display = 'block';
             }
 
+            const staffAccount = isStaffUserRoleClient(userRole);
+            const listName = staffAccount ? 'Staff users' : 'Doctors';
             alert(
-                `User created.\n\nUser ID: ${result.user_id_string}\nPassword: ${finalPassword}\n\nEmail and WhatsApp notifications were queued (if Zoho / WhatsApp are configured).\n\n(Copy from the green box in this dialog if needed.)`
+                `User created.\n\nUser ID: ${result.user_id_string}\nPassword: ${finalPassword}\nRole: ${userRole}\n\nThis account is listed under “${listName}” in admin (not both tabs).\n\nEmail and WhatsApp notifications were queued (if Zoho / WhatsApp are configured).\n\n(Copy from the green box in this dialog if needed.)`
             );
+            document.getElementById('admin-create-user-modal').classList.add('hidden');
+            switchTab(staffAccount ? 'tab-staff-users' : 'tab-doctors');
 
             document.getElementById('newuser-first').value = '';
             if (document.getElementById('newuser-middle')) document.getElementById('newuser-middle').value = '';

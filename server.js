@@ -8394,8 +8394,9 @@ app.post('/api/admin/users/create', (req, res) => {
     } = req.body || {};
     const demoFlag =
         isDemo === true || isDemo === 1 || isDemo === '1' || isDemo === 'true' ? 1 : 0;
+    const userRoles = require('./lib/user-roles');
     const userRole = role || 'doctor';
-    const roleCol = String(userRole).toLowerCase() === 'co_admin' ? 'admin' : String(userRole).toLowerCase() === 'admin' ? 'admin' : 'doctor';
+    const roleCol = userRoles.roleColumnForUserRole(userRole);
 
     if (userRole === 'doctor' || roleCol === 'doctor') {
         const fn = validateDoctorName(firstName);
@@ -8458,6 +8459,10 @@ app.post('/api/admin/users/create', (req, res) => {
                 success: true,
                 userId: newId,
                 user_id_string: userIdStr,
+                user_role: userRole,
+                accountList: userRoles.isDoctorPortalAccount({ user_role: userRole, role: roleCol })
+                    ? 'doctors'
+                    : 'staff',
                 generatedPassword: finalPassword,
                 isDemo: !!demoFlag
             });
@@ -8471,29 +8476,41 @@ app.post('/api/admin/users/create', (req, res) => {
 
 // Admin: Get Users
 app.get('/api/admin/users', (req, res) => {
+    const userRoles = require('./lib/user-roles');
     db.all(
         `SELECT id, user_id_string, first_name, last_name, email, phone, role, user_role, doctor_category, doctor_modules, is_disabled,
                 IFNULL(is_banned,0) AS is_banned, ban_reason, IFNULL(is_demo,0) AS is_demo, admin_modules FROM users ORDER BY id DESC`,
         [],
         (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(rows || []);
+        res.json(
+            (rows || []).map((r) => ({
+                ...r,
+                account_list: userRoles.isDoctorPortalAccount(r) ? 'doctors' : 'staff'
+            }))
+        );
     });
 });
 
 // Admin: Update User Role
 app.post('/api/admin/users/:userId/role', (req, res) => {
     const { user_role } = req.body;
-    const validRoles = ['doctor', 'judge_user', 'co_admin', 'scanner_portal_user', 'reviewer'];
-    
+    const userRoles = require('./lib/user-roles');
+    const validRoles = ['doctor'].concat(userRoles.ADMIN_CREATABLE_STAFF_ROLES);
+
     if (!validRoles.includes(user_role)) {
         return res.status(400).json({ error: 'Invalid role' });
     }
-    
-    db.run(`UPDATE users SET user_role = ? WHERE id = ?`, [user_role, req.params.userId], function(err) {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ success: true, message: `User role updated to ${user_role}` });
-    });
+
+    const roleCol = userRoles.roleColumnForUserRole(user_role);
+    db.run(
+        `UPDATE users SET user_role = ?, role = ? WHERE id = ?`,
+        [user_role, roleCol, req.params.userId],
+        function (err) {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ success: true, message: `User role updated to ${user_role}` });
+        }
+    );
 });
 
 // Admin: Update doctor category + per-user doctor modules

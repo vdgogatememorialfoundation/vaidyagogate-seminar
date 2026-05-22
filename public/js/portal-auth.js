@@ -29,7 +29,7 @@
 
     function isScannerUser(user) {
         const { ur } = normRole(user);
-        return ur === 'scanner_portal_user';
+        return ur === 'scanner_portal_user' || ur === 'scanner_dashboard_user';
     }
 
     function isAdminPortalUser(user) {
