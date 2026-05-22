@@ -582,11 +582,16 @@ function openAdminCreateUserModal(kind) {
     refreshAdminSensitiveOtpRequirement();
     if (roleSel) {
         Array.from(roleSel.options).forEach((opt) => {
-            if (!opt.value) return;
             const isDoc = opt.value === 'doctor';
-            opt.hidden = kind === 'doctor' ? !isDoc : isDoc;
+            const isEmpty = !opt.value;
+            if (kind === 'doctor') {
+                opt.hidden = !isDoc && !isEmpty;
+            } else {
+                opt.hidden = isDoc || isEmpty;
+            }
         });
         roleSel.value = kind === 'doctor' ? 'doctor' : 'judge_user';
+        roleSel.required = true;
         if (!roleSel.__otpRoleBound) {
             roleSel.__otpRoleBound = true;
             roleSel.addEventListener('change', () => refreshAdminSensitiveOtpRequirement());
@@ -627,19 +632,29 @@ async function loadUsers() {
             if (isDoctorAccount(u)) doctors.push(u);
             else staff.push(u);
         });
+        window.__adminUsersCounts = { staff: staff.length, doctors: doctors.length };
 
         if (staffBody) {
+            const countEl = document.getElementById('staff-users-count');
+            if (countEl) {
+                countEl.textContent = `${staff.length} staff account${staff.length === 1 ? '' : 's'}`;
+            }
             if (!staff.length) {
-                staffBody.innerHTML = '<tr><td colspan="6" style="text-align:center;">No staff users</td></tr>';
+                staffBody.innerHTML =
+                    '<tr><td colspan="6" style="text-align:center;">No staff users yet. Use “+ Create staff user” and pick Judge / Co Admin / Scanner / Reviewer.</td></tr>';
             }
             staff.forEach((u) => {
+                const hi =
+                    window.__highlightAdminUserId && Number(u.id) === Number(window.__highlightAdminUserId)
+                        ? ' style="background:#ecfdf5;"'
+                        : '';
                 const userRole = u.user_role || u.role || '';
                 const modulesBtn =
                     isSuperAdminUser() && String(userRole).toLowerCase() === 'co_admin'
                         ? `<button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-left:6px;background:#0d9488;" onclick="openAdminModulesModal(${u.id})">Modules</button>`
                         : '';
                 staffBody.innerHTML += `
-                <tr>
+                <tr${hi}>
                     <td><strong>${u.user_id_string}</strong></td>
                     <td>${escAdmin(u.first_name)} ${escAdmin(u.last_name)}</td>
                     <td>${escAdmin(u.email)}</td>
@@ -662,13 +677,21 @@ async function loadUsers() {
         }
 
         if (doctorsBody) {
+            const docCountEl = document.getElementById('doctors-users-count');
+            if (docCountEl) {
+                docCountEl.textContent = `${doctors.length} doctor account${doctors.length === 1 ? '' : 's'}`;
+            }
             if (!doctors.length) {
                 doctorsBody.innerHTML = '<tr><td colspan="6" style="text-align:center;">No doctors registered</td></tr>';
             }
             doctors.forEach((u) => {
+                const hi =
+                    window.__highlightAdminUserId && Number(u.id) === Number(window.__highlightAdminUserId)
+                        ? ' style="background:#ecfdf5;"'
+                        : '';
                 const cat = String(u.doctor_category || 'regular').toLowerCase() === 'volunteer' ? 'volunteer' : 'regular';
                 doctorsBody.innerHTML += `
-                <tr>
+                <tr${hi}>
                     <td><strong>${u.user_id_string}</strong></td>
                     <td>${escAdmin(u.first_name)} ${escAdmin(u.last_name)}</td>
                     <td>${escAdmin(u.email)}</td>
@@ -689,8 +712,44 @@ async function loadUsers() {
                 }
             });
         }
+        if (window.__highlightAdminUserId) {
+            window.__highlightAdminUserId = null;
+        }
     } catch (err) {
         console.error(err);
+    }
+}
+
+async function adminLookupUserByEmail() {
+    const input = document.getElementById('admin-user-lookup');
+    const msg = document.getElementById('admin-user-lookup-msg');
+    const raw = String((input && input.value) || '').trim();
+    if (!raw) return alert('Enter an email address or 12-digit portal ID.');
+    const q = raw.includes('@') ? `email=${encodeURIComponent(raw.toLowerCase())}` : `portalId=${encodeURIComponent(raw.replace(/\D/g, ''))}`;
+    try {
+        const res = await fetch('/api/admin/users/lookup?' + q);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Lookup failed');
+        if (!data.found) {
+            if (msg) {
+                msg.style.color = '#b91c1c';
+                msg.textContent = 'No account found with that email or portal ID.';
+            }
+            return;
+        }
+        const u = data.user;
+        if (msg) {
+            msg.style.color = '#047857';
+            msg.textContent = `${u.first_name} ${u.last_name} — role ${u.user_role || u.role} — listed under “${data.accountList === 'staff' ? 'Staff users' : 'Doctors'}”.`;
+        }
+        window.__highlightAdminUserId = u.id;
+        switchTab(data.accountList === 'staff' ? 'tab-staff-users' : 'tab-doctors');
+        loadUsers();
+    } catch (e) {
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = e.message || 'Lookup failed';
+        }
     }
 }
 
@@ -741,6 +800,16 @@ async function updateUserRole(userId, newRole) {
         console.error(err);
         alert('Error updating role');
     }
+}
+
+async function adminMoveUserToStaffRole(userId) {
+    const sel = document.getElementById('admin-edit-staff-role');
+    const newRole = sel ? sel.value : 'judge_user';
+    if (!newRole) return alert('Choose a staff role.');
+    await updateUserRole(userId, newRole);
+    switchTab('tab-staff-users');
+    window.__highlightAdminUserId = userId;
+    loadUsers();
 }
 
 async function saveDoctorAccess(userId, doctorCategory, doctorModules) {
@@ -1685,10 +1754,23 @@ async function adminCreateUser() {
     const lastName = document.getElementById('newuser-last').value.trim();
     const email = document.getElementById('newuser-email').value.trim();
     const phone = document.getElementById('newuser-phone').value.trim();
-    const userRole = document.getElementById('newuser-role')?.value || 'doctor';
-    
-    if (!firstName || !lastName || !email || !phone || !userRole) {
+    const userRole = String((document.getElementById('newuser-role') || {}).value || '').trim();
+    const createKind = window.__adminCreateUserKind === 'doctor' ? 'doctor' : 'staff';
+
+    if (!firstName || !lastName || !email || !phone) {
         alert('Please fill all required fields');
+        return;
+    }
+    if (!userRole) {
+        alert('Select a role for this account.');
+        return;
+    }
+    if (createKind === 'staff' && userRole === 'doctor') {
+        alert('For staff accounts, choose Judge, Co Admin, Scanner, or Reviewer — not Doctor.');
+        return;
+    }
+    if (createKind === 'doctor' && userRole !== 'doctor') {
+        alert('Use “Create doctor” with role Doctor, or use “Create staff user” for other roles.');
         return;
     }
     
@@ -1726,6 +1808,7 @@ async function adminCreateUser() {
         email,
         phone,
         role: userRole,
+        createKind,
         actingAdminId: adm && adm.id,
         adminPhoneOtpToken: __adminSensitivePhoneOtpToken,
         adminEmailOtpToken: __adminSensitiveEmailOtpToken
@@ -1742,6 +1825,11 @@ async function adminCreateUser() {
             body: JSON.stringify(data)
         });
         const result = await res.json();
+        if (!res.ok) {
+            if (result.accountList === 'doctors') switchTab('tab-doctors');
+            else if (result.accountList === 'staff') switchTab('tab-staff-users');
+            return alert(result.error || 'Could not create user');
+        }
         if (result.success) {
             resetAdminSensitiveOtpTokens();
             ['cau-sens-phone-ok', 'cau-sens-email-ok'].forEach((id) => {
@@ -1758,13 +1846,15 @@ async function adminCreateUser() {
                 prev.style.display = 'block';
             }
 
-            const staffAccount = isStaffUserRoleClient(userRole);
+            const staffAccount =
+                result.accountList === 'staff' || isStaffUserRoleClient(userRole);
             const listName = staffAccount ? 'Staff users' : 'Doctors';
             alert(
                 `User created.\n\nUser ID: ${result.user_id_string}\nPassword: ${finalPassword}\nRole: ${userRole}\n\nThis account is listed under “${listName}” in admin (not both tabs).\n\nEmail and WhatsApp notifications were queued (if Zoho / WhatsApp are configured).\n\n(Copy from the green box in this dialog if needed.)`
             );
             document.getElementById('admin-create-user-modal').classList.add('hidden');
             switchTab(staffAccount ? 'tab-staff-users' : 'tab-doctors');
+            window.__highlightAdminUserId = result.userId;
 
             document.getElementById('newuser-first').value = '';
             if (document.getElementById('newuser-middle')) document.getElementById('newuser-middle').value = '';
@@ -1955,7 +2045,24 @@ function renderAdminUserDetailTab() {
                     <div class="form-group"><label>WhatsApp</label><input type="tel" id="admin-edit-whatsapp" value="${escAdmin(u.whatsapp || u.phone || '')}" style="width:100%;padding:8px;"></div>
                     <div class="form-group"><label>Qualification</label><input type="text" id="admin-edit-qual" value="${escAdmin(u.qualification || '')}" style="width:100%;padding:8px;"></div>
                     <p><strong>Password (stored):</strong> <code>${escAdmin(u.password)}</code></p>
-                    <p><strong>Role:</strong> ${escAdmin(u.user_role || u.role)}</p>
+                    <p><strong>Role:</strong> ${escAdmin(u.user_role || u.role)} · <span class="muted">Listed under: ${isDoctorAccount(u) ? 'Doctors' : 'Staff users'}</span></p>
+                    ${
+                        isDoctorAccount(u)
+                            ? `<div style="margin:10px 0;padding:10px;border:1px solid #fed7aa;border-radius:8px;background:#fffbeb;">
+                    <p style="margin:0 0 8px;font-size:0.88rem;"><strong>Should this be a staff account?</strong> Choose a staff role and save — the account will move to the Staff users tab.</p>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+                        <select id="admin-edit-staff-role" style="padding:8px;border-radius:6px;border:1px solid #cbd5e1;">
+                            <option value="judge_user">Judge</option>
+                            <option value="co_admin">Co Admin</option>
+                            <option value="scanner_portal_user">Scanner (volunteer)</option>
+                            <option value="scanner_dashboard_user">Live scanner dashboard</option>
+                            <option value="reviewer">Reviewer</option>
+                        </select>
+                        <button type="button" class="btn-primary" style="padding:6px 12px;font-size:0.85rem;" onclick="adminMoveUserToStaffRole(${u.id})">Move to Staff users</button>
+                    </div>
+                    </div>`
+                            : ''
+                    }
                     ${
                         String(u.user_role || u.role || '').toLowerCase() === 'doctor'
                             ? `<div style="margin:10px 0;padding:10px;border:1px solid #dbeafe;border-radius:8px;background:#f8fbff;">

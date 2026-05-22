@@ -148,9 +148,20 @@
             <div id="tab-staff-users" class="tab-pane">
                 <h2 style="margin-bottom: 20px;">Staff &amp; portal users</h2>
                 <p style="color:#64748b;font-size:0.88rem;margin:-8px 0 16px;">Judge, co-admin, scanner, and reviewer accounts appear here. Doctors and accounts created on the public website appear under the <strong>Doctors</strong> tab.</p>
+                <div class="card" style="margin-bottom:16px;padding:14px 18px;border-left-color:#0d9488;">
+                    <label for="admin-user-lookup" style="font-weight:600;font-size:0.9rem;">Find any account</label>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;align-items:center;">
+                        <input type="text" id="admin-user-lookup" placeholder="Email or 12-digit portal ID" style="flex:1;min-width:200px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;">
+                        <button type="button" class="btn-primary" onclick="adminLookupUserByEmail()">Find</button>
+                    </div>
+                    <p id="admin-user-lookup-msg" style="margin:8px 0 0;font-size:0.85rem;color:#64748b;"></p>
+                </div>
                 <div class="card">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
-                        <h3>Non-doctor accounts</h3>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 15px;align-items:center;">
+                        <div>
+                            <h3 style="margin:0;">Non-doctor accounts</h3>
+                            <p id="staff-users-count" style="margin:4px 0 0;font-size:0.82rem;color:#64748b;"></p>
+                        </div>
                         <button class="btn-primary" onclick="openAdminCreateUserModal('staff')">+ Create staff user</button>
                     </div>
                     <table class="data-table">
@@ -164,8 +175,11 @@
             <div id="tab-doctors" class="tab-pane hidden">
                 <h2 style="margin-bottom: 20px;">Doctors</h2>
                 <div class="card">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
-                        <h3>Registered doctors</h3>
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 15px;align-items:center;">
+                        <div>
+                            <h3 style="margin:0;">Registered doctors</h3>
+                            <p id="doctors-users-count" style="margin:4px 0 0;font-size:0.82rem;color:#64748b;"></p>
+                        </div>
                         <button class="btn-primary" onclick="openAdminCreateUserModal('doctor')">+ Create doctor</button>
                     </div>
                     <table class="data-table">

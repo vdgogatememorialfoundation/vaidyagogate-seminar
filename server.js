@@ -8395,8 +8395,26 @@ app.post('/api/admin/users/create', (req, res) => {
     const demoFlag =
         isDemo === true || isDemo === 1 || isDemo === '1' || isDemo === 'true' ? 1 : 0;
     const userRoles = require('./lib/user-roles');
-    const userRole = role || 'doctor';
+    const createKind = String((req.body && req.body.createKind) || '')
+        .trim()
+        .toLowerCase();
+    let userRole = userRoles.normalizeUserRole(role);
+    if (createKind === 'staff') {
+        if (!userRole || userRole === 'doctor') {
+            return res.status(400).json({
+                error: 'Select a staff role (Judge, Co Admin, Scanner, or Reviewer). Doctor accounts belong under Doctors → Create doctor.'
+            });
+        }
+        if (!userRoles.ADMIN_CREATABLE_STAFF_ROLES.includes(userRole)) {
+            return res.status(400).json({ error: 'Invalid staff role selected.' });
+        }
+    } else if (!userRole) {
+        userRole = 'doctor';
+    }
     const roleCol = userRoles.roleColumnForUserRole(userRole);
+    const emailNorm = String(email || '')
+        .trim()
+        .toLowerCase();
 
     if (userRole === 'doctor' || roleCol === 'doctor') {
         const fn = validateDoctorName(firstName);
@@ -8430,9 +8448,22 @@ app.post('/api/admin/users/create', (req, res) => {
         db.get(`SELECT id FROM users WHERE user_id_string = ? LIMIT 1`, [userIdStr], (eDup, dup) => {
             if (eDup) return res.status(500).json({ error: eDup.message });
             if (dup) return res.status(400).json({ error: 'That portal user ID is already in use.' });
+            db.get(
+                `SELECT id, email, user_role FROM users WHERE lower(trim(email)) = ? LIMIT 1`,
+                [emailNorm],
+                (eEmail, existing) => {
+                    if (eEmail) return res.status(500).json({ error: eEmail.message });
+                    if (existing) {
+                        const list = userRoles.isDoctorPortalAccount(existing) ? 'Doctors' : 'Staff users';
+                        return res.status(409).json({
+                            error: `Email already registered (listed under “${list}” in admin). Use a different email or open that tab to edit the account.`,
+                            existingUserId: existing.id,
+                            accountList: userRoles.isDoctorPortalAccount(existing) ? 'doctors' : 'staff'
+                        });
+                    }
         db.run(
             `INSERT INTO users (user_id_string, first_name, middle_name, last_name, email, phone, password, role, user_role, email_verified, is_demo) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
-            [userIdStr, cleanFirst, cleanMiddle, cleanLast, email, phone, finalPassword, roleCol, userRole, demoFlag],
+            [userIdStr, cleanFirst, cleanMiddle, cleanLast, emailNorm, phone, finalPassword, roleCol, userRole, demoFlag],
         function (err) {
             if (err) return res.status(500).json({ error: err.message });
                 const newId = this.lastID;
@@ -8468,9 +8499,59 @@ app.post('/api/admin/users/create', (req, res) => {
             });
             }
         );
+                }
+            );
         });
     },
         { targetUserRole: userRole }
+    );
+});
+
+// Admin: find account by email (which admin tab it appears under)
+app.get('/api/admin/users/lookup', (req, res) => {
+    const userRoles = require('./lib/user-roles');
+    const email = String(req.query.email || '')
+        .trim()
+        .toLowerCase();
+    const portalId = String(req.query.portalId || req.query.user_id_string || '')
+        .trim()
+        .replace(/\D/g, '');
+    if (!email && !portalId) {
+        return res.status(400).json({ error: 'Provide email or portalId query parameter.' });
+    }
+    const run = (sql, params) => {
+        db.get(sql, params, (err, row) => {
+            if (err) return res.status(500).json({ error: err.message });
+            if (!row) return res.json({ found: false });
+            const accountList = userRoles.isDoctorPortalAccount(row) ? 'doctors' : 'staff';
+            res.json({
+                found: true,
+                accountList,
+                user: {
+                    id: row.id,
+                    user_id_string: row.user_id_string,
+                    first_name: row.first_name,
+                    last_name: row.last_name,
+                    email: row.email,
+                    role: row.role,
+                    user_role: row.user_role
+                },
+                hint:
+                    accountList === 'staff'
+                        ? 'Open Staff users tab'
+                        : 'Open Doctors tab (includes public website sign-ups)'
+            });
+        });
+    };
+    if (portalId) {
+        return run(
+            `SELECT id, user_id_string, first_name, last_name, email, role, user_role FROM users WHERE user_id_string = ?`,
+            [portalId]
+        );
+    }
+    run(
+        `SELECT id, user_id_string, first_name, last_name, email, role, user_role FROM users WHERE lower(trim(email)) = ?`,
+        [email]
     );
 });
 
