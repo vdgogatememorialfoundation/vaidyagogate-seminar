@@ -2364,14 +2364,13 @@ async function loadDoctorVolunteerPanel() {
                 pending && Number.isFinite(sid) && sid > 0
                     ? '<p style="margin-top:10px;"><button type="button" class="btn-primary" onclick="void window.startRegistrationVolunteerFlow(' +
                       sid +
-                      ')">Complete seminar registration (required)</button></p><p style="font-size:0.82rem;color:#64748b;margin-top:6px;">Registration is mandatory before the organiser can approve your volunteer role and issue your free ticket.</p>'
+                      ')">Complete seminar registration (required)</button></p><p style="font-size:0.82rem;color:#64748b;margin-top:6px;">You are assigned as a volunteer for this seminar. Complete registration here first. Your free e-ticket (₹0) and email/WhatsApp messages are sent automatically after you submit — no payment step.</p>'
                     : '';
             const ticket = v.volunteer_ticket_id_string
-                ? '<p>Volunteer ticket: <code>' + escapeHtml(v.volunteer_ticket_id_string) + '</code></p>'
-                : '<p style="color:#64748b;">Ticket will be issued after admin verification (no payment required).</p>';
-            const certNote = pending
-                ? '<p style="font-size:0.88rem;color:#64748b;margin-top:8px;">After approval: participant-style certificate eligibility follows venue QR check-in; volunteer certificate is enabled separately by the organiser when ready.</p>'
-                : '<p style="font-size:0.88rem;color:#64748b;margin-top:8px;">Participant certificate: eligible only after your entry QR is scanned at the venue. Volunteer certificate: when enabled by the organiser. No check-in means no participant certificate.</p>';
+                ? '<p>Volunteer ticket: <code>' + escapeHtml(v.volunteer_ticket_id_string) + '</code> (₹0)</p>'
+                : '<p style="color:#64748b;">Free e-ticket is issued automatically after you submit seminar registration.</p>';
+            const certNote =
+                '<p style="font-size:0.88rem;color:#64748b;margin-top:8px;">After your ticket is issued: Participation and Volunteer certificates appear in the Certificates tab. Venue QR scan updates both.</p>';
             card.innerHTML =
                 '<h4 style="margin:0 0 8px;">' +
                 escapeHtml(v.title || 'Seminar') +

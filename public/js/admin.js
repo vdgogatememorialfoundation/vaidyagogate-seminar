@@ -2968,14 +2968,25 @@ async function addAdminVolunteer() {
     const notes = document.getElementById('vol-mgmt-notes')?.value || '';
     if (!sid || !userIdString) return alert('Seminar and doctor portal User ID required');
     try {
+        const admin = getStoredAdminUser();
         const res = await fetch('/api/admin/volunteers', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ seminarId: parseInt(sid, 10), userIdString, notes })
+            body: JSON.stringify({
+                seminarId: parseInt(sid, 10),
+                userIdString,
+                notes,
+                setVolunteerRole: true,
+                actingAdminId: admin && admin.id
+            })
         });
         const data = await res.json();
         if (data.success) {
             document.getElementById('vol-mgmt-user-id').value = '';
+            alert(
+                data.message ||
+                    'Volunteer assigned. They must complete registration in the doctor portal; free ticket (₹0) and messages are sent only after that.'
+            );
             loadAdminVolunteers();
         } else alert(data.error || 'Failed');
     } catch (e) {
@@ -2985,7 +2996,7 @@ async function addAdminVolunteer() {
 
 async function approveAdminVolunteer(volId) {
     const admin = getStoredAdminUser();
-    if (!confirm('Approve volunteer and create free registration + ticket?')) return;
+    if (!confirm('Issue free volunteer ticket (₹0)? Doctor must have completed seminar registration first.')) return;
     try {
         const res = await fetch(`/api/admin/volunteers/${volId}/approve`, {
             method: 'POST',
@@ -4749,12 +4760,21 @@ function renderAdminVolunteersTable() {
     rows.forEach((v) => {
         const name = [v.first_name, v.last_name].filter(Boolean).join(' ');
         let actions = '';
-        if (v.status === 'pending') {
-            actions = `<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.8rem;" onclick="approveAdminVolunteer(${v.id})">Approve &amp; issue ticket</button>`;
+        const regSt = String(v.registration_status || '').toLowerCase();
+        const hasTicket = !!(v.volunteer_ticket_id_string && String(v.volunteer_ticket_id_string).trim());
+        if (!hasTicket && regSt === 'submitted') {
+            actions =
+                '<span style="font-size:0.8rem;color:#059669;">Registration done — ticket auto-issues</span>';
+        } else if (!hasTicket && v.status === 'pending') {
+            actions =
+                '<span style="font-size:0.8rem;color:#b45309;">Awaiting registration</span> ' +
+                `<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.8rem;margin-left:6px;" onclick="approveAdminVolunteer(${v.id})">Issue ticket (₹0)</button>`;
+        } else if (!hasTicket) {
+            actions = '<span style="font-size:0.8rem;color:#64748b;">Waiting for doctor to register</span>';
         }
         tbody.innerHTML += `<tr>
                 <td>${escAdmin(name)}<div class="muted">${escAdmin(v.user_id_string)} · ${escAdmin(v.email)}</div></td>
-                <td>${escAdmin(v.status)}</td>
+                <td>${escAdmin(v.status)}${regSt ? ' · reg: ' + escAdmin(regSt) : ''}</td>
                 <td><code>${escAdmin(v.volunteer_ticket_id_string || '—')}</code></td>
                 <td>${escAdmin(v.notes || '—')}</td>
                 <td>${actions || '—'}</td>

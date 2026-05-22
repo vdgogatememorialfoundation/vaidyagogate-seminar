@@ -57,6 +57,19 @@ const { registerPosRoutes } = require('./lib/pos-onspot');
 const siteSeoMod = require('./lib/site-seo');
 const emailDeliveryPolicy = require('./lib/email-delivery-policy');
 const volunteerCertFlow = require('./lib/volunteer-cert-flow');
+const volunteerTicketFlow = require('./lib/volunteer-ticket-flow');
+
+function volunteerTicketDeps() {
+    return {
+        generateId,
+        insertParticipantTicket,
+        syncCertificateEligibilityForTicket,
+        certVerify,
+        notifEngine,
+        notifyTicketIssued,
+        buildDisplayNameFromFormData
+    };
+}
 const authUsers = require('./lib/auth-users');
 const authLoginOtp = require('./lib/auth-login-otp');
 const certRender = require('./lib/certificate-render');
@@ -2196,6 +2209,8 @@ function mountExtendedRoutes() {
             docVerify,
             portalTracking,
             notifEngine,
+            notifyTicketIssued,
+            volunteerTicketDeps: volunteerTicketDeps(),
             requireAdminSensitiveOtpIfEnabled
         });
     } catch (routeErr) {
@@ -4402,12 +4417,39 @@ app.post('/api/applications/submit', withCertificateUpload, (req, res) => {
                                     resource_id: applicationNo,
                                     meta: { applicationId: newId }
                                 });
-                                const finishResponse = () =>
-                                    res.json({ success: true, applicationId: newId, applicationNo });
-                                if (!otpTokensToConsume.length) return finishResponse();
+                                const finishResponse = (extra) => {
+                                    const payload = {
+                                        success: true,
+                                        applicationId: newId,
+                                        applicationNo,
+                                        ...(extra || {})
+                                    };
+                                    res.json(payload);
+                                };
+                                const afterVolunteerTicket = () => {
+                                    volunteerTicketFlow.tryFulfillVolunteerAfterRegistration(
+                                        db,
+                                        volunteerTicketDeps(),
+                                        { userId, seminarId, registrationId: newId },
+                                        (vErr, vRes) => {
+                                            const extra = {};
+                                            if (vRes && vRes.issued) {
+                                                extra.volunteerTicketIssued = true;
+                                                extra.volunteerTicketId = vRes.ticketId;
+                                                extra.message = vRes.message;
+                                            }
+                                            if (!otpTokensToConsume.length) return finishResponse(extra);
+                                            otpLib.consumeVerificationTokens(db, otpTokensToConsume, (cErr) => {
+                                                if (cErr) console.warn('[otp] consume after submit:', cErr.message);
+                                                finishResponse(extra);
+                                            });
+                                        }
+                                    );
+                                };
+                                if (!otpTokensToConsume.length) return afterVolunteerTicket();
                                 otpLib.consumeVerificationTokens(db, otpTokensToConsume, (cErr) => {
                                     if (cErr) console.warn('[otp] consume after submit:', cErr.message);
-                                    finishResponse();
+                                    afterVolunteerTicket();
                                 });
                                     }
                                 );
@@ -8745,59 +8787,11 @@ app.post('/api/admin/users/:userId/doctor-access', (req, res) => {
             [doctor_category, modulesJson, uid],
             function (err) {
                 if (err) return res.status(500).json({ error: err.message });
-                const respond = (extra) => {
-                    res.json({
-                        success: true,
-                        doctor_category,
-                        doctor_modules: finalModules || null,
-                        ...(extra || {})
-                    });
-                };
-                if (doctor_category !== 'volunteer') return respond();
-                db.all(
-                    `SELECT sv.seminar_id, sv.user_id, r.id AS registration_id, r.form_data,
-                            t.id AS ticket_id
-                     FROM seminar_volunteers sv
-                     JOIN registrations r ON r.user_id = sv.user_id AND r.seminar_id = sv.seminar_id
-                     LEFT JOIN orders o ON o.registration_id = r.id AND o.status = 'success'
-                     LEFT JOIN tickets t ON t.order_id = o.id
-                     WHERE sv.user_id = ? AND sv.status = 'approved'`,
-                    [uid],
-                    (eSv, volRows) => {
-                        if (eSv || !volRows || !volRows.length) return respond();
-                        let left = volRows.length;
-                        let issued = 0;
-                        volRows.forEach((vr) => {
-                            const dn = buildDisplayNameFromFormData(vr.form_data, {});
-                            volunteerCertFlow.autoIssueDualVolunteerCertificates(
-                                db,
-                                certVerify,
-                                {
-                                    userId: uid,
-                                    seminarId: vr.seminar_id,
-                                    registrationId: vr.registration_id,
-                                    displayName: dn,
-                                    ticketId: vr.ticket_id,
-                                    adminUserId: null,
-                                    scanVerified: 0
-                                },
-                                () => {
-                                    issued++;
-                                    left--;
-                                    if (left === 0) {
-                                        respond({
-                                            dualCertificatesSynced: issued,
-                                            message:
-                                                'Doctor set as volunteer. Dual certificates ensured for ' +
-                                                issued +
-                                                ' approved seminar assignment(s).'
-                                        });
-                                    }
-                                }
-                            );
-                        });
-                    }
-                );
+                res.json({
+                    success: true,
+                    doctor_category,
+                    doctor_modules: finalModules || null
+                });
             }
         );
     });
