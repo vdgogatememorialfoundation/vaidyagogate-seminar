@@ -41,10 +41,7 @@ function resetAdminSensitiveOtpTokens() {
 }
 
 function isStaffUserRoleClient(userRole) {
-    const ur = String(userRole || '')
-        .trim()
-        .toLowerCase();
-    return !!ur && ur !== 'doctor';
+    return !isDoctorAccount({ user_role: userRole, role: userRole === 'co_admin' ? 'admin' : 'doctor' });
 }
 
 function isStaffUserRecord(u) {
