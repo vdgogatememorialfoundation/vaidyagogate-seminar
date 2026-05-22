@@ -53,6 +53,27 @@
         return xhrPutWithProgress(url, blob, mimeType);
     }
 
+    async function uploadViaServer(file, init, userId, onProgress) {
+        const proxyMaxMb = (cachedConfig && cachedConfig.serverProxyMaxMb) || 4;
+        if (file.size > proxyMaxMb * 1024 * 1024) {
+            throw new Error(
+                'Direct upload blocked (browser/R2). File is over ' +
+                    proxyMaxMb +
+                    ' MB server relay limit — compress the PDF or configure R2 CORS for your site domain.'
+            );
+        }
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('uploadId', init.uploadId);
+        fd.append('userId', String(userId));
+        if (onProgress) onProgress(10, 0, file.size);
+        const res = await fetch('/api/case/uploads/via-server', { method: 'POST', body: fd });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Server upload failed');
+        if (onProgress) onProgress(100, file.size, file.size);
+        return init.uploadId;
+    }
+
     async function uploadFile(file, opts) {
         const options = opts || {};
         const userId = options.userId;
@@ -74,43 +95,60 @@
         const init = await initRes.json().catch(() => ({}));
         if (!initRes.ok) throw new Error(init.error || 'Upload init failed');
 
-        if (init.multipart && init.parts && init.parts.length) {
-            const completedParts = [];
-            let uploaded = 0;
-            for (const part of init.parts) {
-                const start = (part.partNumber - 1) * (init.partSize || 8 * 1024 * 1024);
-                const end = Math.min(file.size, start + part.size);
-                const chunk = file.slice(start, end);
-                const etag = await uploadSinglePart(part.url, chunk, file.type);
-                completedParts.push({ partNumber: part.partNumber, etag });
-                uploaded += chunk.size;
-                if (onProgress) onProgress(Math.round((uploaded / file.size) * 100), uploaded, file.size);
+        const tryDirectThenServer = async (directFn) => {
+            try {
+                return await directFn();
+            } catch (directErr) {
+                const msg = String(directErr && directErr.message ? directErr.message : '');
+                const networkish =
+                    /network error|failed to fetch|upload failed \(http/i.test(msg) ||
+                    directErr.name === 'TypeError';
+                if (!networkish || !cachedConfig || !cachedConfig.serverProxyEnabled) throw directErr;
+                return uploadViaServer(file, init, userId, onProgress);
             }
-            const completeRes = await fetch('/api/case/uploads/complete', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    uploadId: init.uploadId,
-                    userId,
-                    parts: completedParts
-                })
+        };
+
+        if (init.multipart && init.parts && init.parts.length) {
+            return tryDirectThenServer(async () => {
+                const completedParts = [];
+                let uploaded = 0;
+                for (const part of init.parts) {
+                    const start = (part.partNumber - 1) * (init.partSize || 8 * 1024 * 1024);
+                    const end = Math.min(file.size, start + part.size);
+                    const chunk = file.slice(start, end);
+                    const etag = await uploadSinglePart(part.url, chunk, file.type);
+                    completedParts.push({ partNumber: part.partNumber, etag });
+                    uploaded += chunk.size;
+                    if (onProgress) onProgress(Math.round((uploaded / file.size) * 100), uploaded, file.size);
+                }
+                const completeRes = await fetch('/api/case/uploads/complete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        uploadId: init.uploadId,
+                        userId,
+                        parts: completedParts
+                    })
+                });
+                const complete = await completeRes.json().catch(() => ({}));
+                if (!completeRes.ok) throw new Error(complete.error || 'Upload complete failed');
+                return init.uploadId;
             });
-            const complete = await completeRes.json().catch(() => ({}));
-            if (!completeRes.ok) throw new Error(complete.error || 'Upload complete failed');
-            return init.uploadId;
         }
 
         const part = init.parts && init.parts[0];
         if (!part || !part.url) throw new Error('No upload URL returned');
-        await xhrPutWithProgress(part.url, file, file.type, onProgress);
-        const completeRes = await fetch('/api/case/uploads/complete', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ uploadId: init.uploadId, userId })
+        return tryDirectThenServer(async () => {
+            await xhrPutWithProgress(part.url, file, file.type, onProgress);
+            const completeRes = await fetch('/api/case/uploads/complete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ uploadId: init.uploadId, userId })
+            });
+            const complete = await completeRes.json().catch(() => ({}));
+            if (!completeRes.ok) throw new Error(complete.error || 'Upload complete failed');
+            return init.uploadId;
         });
-        const complete = await completeRes.json().catch(() => ({}));
-        if (!completeRes.ok) throw new Error(complete.error || 'Upload complete failed');
-        return init.uploadId;
     }
 
     async function uploadFiles(files, opts) {

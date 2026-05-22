@@ -3410,7 +3410,8 @@ async function autofillAddress() {
             cities.length > 1 ? 'Multiple areas for this PIN — choose city' : 'City and state filled from PIN'
         );
     } catch (e) {
-        setRegPinHint('Could not look up PIN. Try again.', true);
+        setRegPinHint('Could not look up PIN. Check your connection and try again.', true);
+        clearPinDerivedAddress();
     }
 }
 
