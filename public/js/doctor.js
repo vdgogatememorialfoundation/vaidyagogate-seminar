@@ -1012,9 +1012,14 @@ function handleEasebuzzPaymentReturnQuery() {
         if (payment === 'success') {
             alert(
                 msg ||
-                    'Payment successful. Your e-ticket will appear under Participant tickets and My Applications.'
+                    'Payment successful. Your e-ticket is under Participant tickets. Join the seminar WhatsApp group from My Applications when shown.'
             );
-            if (typeof loadApplications === 'function') loadApplications();
+            const lastReg = sessionStorage.getItem('doctor_last_pay_reg');
+            if (typeof loadApplications === 'function') {
+                loadApplications().then(() => {
+                    if (lastReg) showPostPaymentWhatsappBanner(lastReg);
+                });
+            }
             if (typeof loadDoctorDashboardStats === 'function') loadDoctorDashboardStats();
             if (typeof loadDoctorEventTickets === 'function') loadDoctorEventTickets();
         } else if (payment === 'failed') {
@@ -3807,14 +3812,63 @@ function evaluateDoctorCancellationClient(policy, eventDate) {
     return { allowed: true };
 }
 
-function seminarShowsWhatsappLink(app) {
+function registrationIsPaidForWhatsapp(app) {
     const st = String((app && app.status) || '').toLowerCase();
+    return ['completed', 'checked_in', 'e_ticket_issued', 'certificate_issued'].includes(st);
+}
+
+function seminarShowsWhatsappLink(app) {
     return (
-        (st === 'approved_pending_payment' || st === 'completed' || st === 'checked_in') &&
+        registrationIsPaidForWhatsapp(app) &&
         app &&
         app.whatsapp_group_url &&
         String(app.whatsapp_group_url).trim()
     );
+}
+
+/** QR scan value: prefer 12-digit e-ticket ID (short URL); legacy rows may store JSON in qr_code_data. */
+function ticketQrScanPayload(t) {
+    if (!t) return '';
+    const tid = t.ticket_id_string && String(t.ticket_id_string).trim();
+    if (tid) return tid;
+    const raw = t.qr_code_data && String(t.qr_code_data).trim();
+    if (!raw) return '';
+    if (raw.startsWith('{')) {
+        try {
+            const j = JSON.parse(raw);
+            if (j.ticketId) return String(j.ticketId).trim();
+        } catch (_) {}
+        return '';
+    }
+    return raw.length > 200 ? '' : raw;
+}
+
+function ticketQrImageUrl(t) {
+    const payload = ticketQrScanPayload(t);
+    return payload ? '/api/qrcode/' + encodeURIComponent(payload) : '';
+}
+
+function showPostPaymentWhatsappBanner(regId) {
+    const app = (userApplications || []).find((a) => Number(a.id) === Number(regId));
+    if (!app || !seminarShowsWhatsappLink(app)) return;
+    const block = renderWhatsappLinkBlock(app);
+    if (!block) return;
+    let el = document.getElementById('post-pay-wa-banner');
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'post-pay-wa-banner';
+        const host =
+            document.getElementById('applications-list') ||
+            document.getElementById('seminar-applications-list') ||
+            document.querySelector('#tab-applications .card');
+        if (!host) return;
+        host.insertBefore(el, host.firstChild);
+    }
+    el.innerHTML =
+        '<div style="margin-bottom:16px;padding:14px;background:#ecfdf5;border:1px solid #6ee7b7;border-radius:12px;">' +
+        '<p style="margin:0 0 10px;font-weight:600;color:#047857;"><i class="fas fa-check-circle"></i> Payment confirmed</p>' +
+        block +
+        '</div>';
 }
 
 function renderWhatsappLinkBlock(app) {
@@ -4082,6 +4136,7 @@ async function doctorPollPaymentStatus() {
             const st = await res.json();
             if (st.paid) {
                 await loadApplications(true);
+                showPostPaymentWhatsappBanner(a.id);
                 loadDoctorDashboardStats();
                 loadDoctorOrders();
                 loadDoctorReceipts();
@@ -4412,8 +4467,13 @@ function openDoctorRazorpayCheckout(result, regId, methodId) {
                 .then((r) => r.json())
                 .then((verifyResult) => {
                             if (verifyResult.success) {
-                        alert(verifyResult.message || 'Payment successful. Your e-ticket is in Participant tickets.');
-                                loadApplications();
+                        alert(
+                            verifyResult.message ||
+                                'Payment successful. Your e-ticket is under Participant tickets. Join the seminar WhatsApp group from My Applications when the link appears.'
+                        );
+                                loadApplications().then(() => {
+                                    showPostPaymentWhatsappBanner(regId);
+                                });
                         loadDoctorDashboardStats();
                         loadDoctorOrders();
                         loadDoctorReceipts();
@@ -4505,6 +4565,9 @@ async function processPayment(appId, amount, appNo, paymentOption, cancelPending
         alert('Could not determine your application record. Please refresh the page, open “My Applications”, and click Pay again.');
         return;
     }
+    try {
+        sessionStorage.setItem('doctor_last_pay_reg', String(regId));
+    } catch (_) {}
     const methodId = paymentOption || getPaymentOptionForReg(regId);
     if (!methodId && (window.__doctorPaymentOptions || []).length > 1) {
         return alert('Please choose a payment method from the dropdown first.');
@@ -4548,7 +4611,7 @@ async function processPayment(appId, amount, appNo, paymentOption, cancelPending
         }
         if (result.paid) {
             alert(result.message || 'Payment recorded.');
-                loadApplications();
+            loadApplications().then(() => showPostPaymentWhatsappBanner(regId));
             loadDoctorDashboardStats();
             loadDoctorOrders();
             loadDoctorReceipts();
@@ -4951,8 +5014,9 @@ async function loadDoctorEventTickets() {
         rows.forEach((t) => {
             const regSt = String(t.registration_status || '').toLowerCase();
             const invalid = regSt === 'cancelled' || regSt === 'rejected' || t.is_valid === 0;
-            const showQr = !invalid && !t.is_scanned && t.qr_code_data;
-            const qr = showQr ? `/api/qrcode/${encodeURIComponent(t.qr_code_data)}` : '';
+            const qrPayload = ticketQrScanPayload(t);
+            const showQr = !invalid && !t.is_scanned && qrPayload;
+            const qr = showQr ? ticketQrImageUrl(t) : '';
             const scanned = t.is_scanned
                 ? `Checked in · ${t.scan_time ? formatScanDateTime(t.scan_time) : 'venue'}`
                 : 'Not scanned yet — show this QR at entry';

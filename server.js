@@ -1643,10 +1643,7 @@ function backfillTicketsForPaidOrders(cb) {
                     row.application_no,
                     (eT, etk) => {
                         if (eT) return cb && cb(eT);
-                        if (etk) {
-                            created++;
-                            notifyTicketIssued(row.user_id, row.registration_id, etk);
-                        }
+                        if (etk) created++;
                         next();
                     }
                 );
@@ -1658,7 +1655,11 @@ function backfillTicketsForPaidOrders(cb) {
 
 function notifyTicketIssued(userId, registrationId, ticketId, channelOpts) {
     const sendEmail = !channelOpts || channelOpts.email !== false;
-    const sendWhatsapp = !channelOpts || channelOpts.whatsapp !== false;
+    const sendWhatsapp = !!(channelOpts && channelOpts.whatsapp === true);
+    const sendTemplateNotify = !!(
+        channelOpts &&
+        (channelOpts.templateNotify === true || channelOpts.whatsapp === true)
+    );
     if (!userId || !registrationId || !ticketId) return;
     db.get(
         `SELECT r.seminar_id, r.application_no, t.qr_code_data, t.ticket_id_string, t.is_scanned, t.scan_time,
@@ -1688,22 +1689,25 @@ function notifyTicketIssued(userId, registrationId, ticketId, channelOpts) {
                 ticket_pdf_url: pdfUrl,
                 payment_status: 'PAID'
             };
-            notifEngine.notify(
-                db,
-                'TICKET_ISSUED',
-                {
-                    userId,
-                    seminarId,
-                    registrationId,
-                    vars,
-                    immediate: true
-                },
-                () => {
-                    try {
-                        notifEngine.drainNotificationQueue(db, 6);
-                    } catch (_) {}
-                }
-            );
+            if (sendTemplateNotify) {
+                notifEngine.notify(
+                    db,
+                    'TICKET_ISSUED',
+                    {
+                        userId,
+                        seminarId,
+                        registrationId,
+                        vars,
+                        immediate: true,
+                        skipWhatsapp: !sendWhatsapp
+                    },
+                    () => {
+                        try {
+                            notifEngine.drainNotificationQueue(db, 1);
+                        } catch (_) {}
+                    }
+                );
+            }
             if (row && row.qr_code_data) {
                 ticketHtml
                     .buildTicketHtmlFromRow(
@@ -1768,7 +1772,8 @@ function notifyTicketIssued(userId, registrationId, ticketId, channelOpts) {
                                         destination: u.phone,
                                         body: waLine,
                                         event_key: 'TICKET_ISSUED',
-                                        immediate: true
+                                        immediate: true,
+                                        userId
                                     },
                                     () => {}
                                 );
@@ -1828,17 +1833,14 @@ function insertParticipantTicket(orderDbId, userId, orderIdStr, registrationId, 
                                             orderDbId,
                                             qrData,
                                             (e3, etk2, qr2) => {
-                                                if (!e3 && etk2) notifyTicketIssued(userId, registrationId, etk2);
                                                 cb && cb(e3, etk2, qr2);
                                             }
                                         );
                                     }
-                                    if (!err && etk) notifyTicketIssued(userId, registrationId, etk);
                                     cb && cb(null, etk, qrData);
                                 }
                             );
                         }
-                        if (!err && etk) notifyTicketIssued(userId, registrationId, etk);
                         cb && cb(err, etk, qrData);
                     }
                 );
@@ -1859,7 +1861,6 @@ function insertParticipantTicket(orderDbId, userId, orderIdStr, registrationId, 
                     orderDbId,
                     existing.qr_code_data,
                     (eFix, etk, qr) => {
-                        if (!eFix && etk) notifyTicketIssued(userId, registrationId, etk);
                         cb && cb(eFix, etk, qr);
                     }
                 );
@@ -4357,12 +4358,6 @@ app.post('/api/applications/submit', withCertificateUpload, (req, res) => {
                                             seminarId,
                                             registrationId: newId
                                         });
-                                        notifEngine.notify(db, 'SEMINAR_REGISTRATION_SUCCESS', {
-                                    userId,
-                                    seminarId,
-                                    registrationId: newId,
-                                    vars: { approval_status: 'submitted' }
-                                });
                                 activityLog.logFromRequest(db, req, {
                                     user_id: userId,
                                     seminar_id: seminarId,
@@ -6862,10 +6857,19 @@ app.post('/api/admin/applications/status', (req, res) => {
             db.get(`SELECT user_id, seminar_id FROM registrations WHERE id = ?`, [applicationId], (eN, regRow) => {
                 if (!eN && regRow) {
                     let ev = 'APPLICATION_UNDER_REVIEW';
-                    if (newSt === 'approved_pending_payment' || newSt === 'completed') ev = 'APPLICATION_APPROVED';
+                    if (newSt === 'approved_pending_payment') ev = 'APPLICATION_APPROVED';
                     else if (newSt === 'rejected') ev = 'APPLICATION_REJECTED';
                     else if (newSt === 'revision_required') ev = 'APPLICATION_REVISION_REQUIRED';
                     else if (newSt === 'cancelled') ev = 'REGISTRATION_CANCELLED';
+                    else if (
+                        newSt === 'completed' ||
+                        newSt === 'e_ticket_issued' ||
+                        newSt === 'checked_in' ||
+                        newSt === 'certificate_issued'
+                    ) {
+                        ev = null;
+                    }
+                    if (!ev) return;
                     notifEngine.notify(db, ev, {
                         userId: regRow.user_id,
                         seminarId: regRow.seminar_id,
@@ -6893,7 +6897,12 @@ app.post('/api/admin/applications/status', (req, res) => {
                         (eTix, tixMeta) => {
                             if (eTix || !tixMeta || tixMeta.skipped || !tixMeta.ticketId) return;
                             db.get(`SELECT user_id FROM registrations WHERE id = ?`, [applicationId], (eU, regU) => {
-                                if (!eU && regU) notifyTicketIssued(regU.user_id, applicationId, tixMeta.ticketId);
+                                if (!eU && regU) {
+                                    notifyTicketIssued(regU.user_id, applicationId, tixMeta.ticketId, {
+                                        email: true,
+                                        whatsapp: false
+                                    });
+                                }
                             });
                         }
                     );
@@ -7012,7 +7021,7 @@ app.post('/api/payments/verify', (req, res) => {
                                                 [ord.id, applicationId],
                                                 (ePay, pr) => {
                                                     if (!ePay && pr) {
-                                                        notifEngine.notify(db, 'PAYMENT_SUCCESS', {
+                                                        notifEngine.notifyRegistrationPaid(db, {
                                                             userId: pr.user_id,
                                                             seminarId: pr.seminar_id,
                                                             registrationId: applicationId,
@@ -7687,6 +7696,7 @@ app.post('/api/public/certificate-verify/otp/send-both', withIntegrationSettings
             if (!pv.valid) return res.status(400).json({ error: 'Certificate holder mobile is not on file.' });
             const meta = {
                 certId: out.cert.id,
+                certKind: out.cert.kind || 'participant',
                 seminarId: out.seminar.id,
                 userId: out.cert.userId
             };
@@ -7744,6 +7754,7 @@ app.post('/api/public/certificate-verify/confirm', (req, res) => {
             }
             const meta = {
                 certId: out.cert.id,
+                certKind: out.cert.kind || 'participant',
                 seminarId: out.seminar.id,
                 userId: out.cert.userId
             };
@@ -7787,6 +7798,7 @@ app.post('/api/public/certificate-verify/confirm', (req, res) => {
                                 db,
                                 {
                                     certId: out.cert.id,
+                                    certKind: out.cert.kind || 'participant',
                                     emailToken: r1.token,
                                     phoneToken: r2.token
                                 },
@@ -10589,12 +10601,47 @@ app.post('/api/admin/e-tickets/generate', (req, res) => {
                                 message: out && out.ticketId ? 'E-ticket generated or refreshed.' : 'No ticket was created.'
                             });
                         };
+                        const afterTicketRow = () => {
+                            if (out && out.ticketId) {
+                                db.run(
+                                    `UPDATE registrations SET status = 'e_ticket_issued'
+                                     WHERE id = ? AND IFNULL(status,'') NOT IN ('checked_in','completed','certificate_issued','cancelled','rejected')`,
+                                    [registrationId],
+                                    () => afterGenerate()
+                                );
+                            } else {
+                                afterGenerate();
+                            }
+                        };
                         if (out && out.ticketId) {
-                            db.run(
-                                `UPDATE registrations SET status = 'e_ticket_issued'
-                                 WHERE id = ? AND IFNULL(status,'') NOT IN ('checked_in','completed','certificate_issued','cancelled','rejected')`,
+                            db.get(
+                                `SELECT t.id, t.ticket_id_string, t.qr_code_data, o.order_id_string, o.id AS order_db_id,
+                                        r.application_no, r.user_id
+                                 FROM tickets t
+                                 JOIN orders o ON o.id = t.order_id
+                                 JOIN registrations r ON r.id = o.registration_id
+                                 WHERE r.id = ?
+                                 ORDER BY t.id DESC LIMIT 1`,
                                 [registrationId],
-                                () => afterGenerate()
+                                (eTix, tixRow) => {
+                                    if (
+                                        eTix ||
+                                        !tixRow ||
+                                        (tixRow.ticket_id_string && String(tixRow.ticket_id_string).trim())
+                                    ) {
+                                        return afterTicketRow();
+                                    }
+                                    ensureTicketIdString(
+                                        tixRow.id,
+                                        tixRow.order_id_string,
+                                        registrationId,
+                                        tixRow.application_no,
+                                        tixRow.user_id,
+                                        tixRow.order_db_id,
+                                        tixRow.qr_code_data,
+                                        () => afterTicketRow()
+                                    );
+                                }
                             );
                         } else {
                             afterGenerate();
@@ -10624,7 +10671,11 @@ app.post('/api/admin/e-tickets/send', (req, res) => {
             if (!ticketId) {
                 return res.status(400).json({ error: 'No e-ticket ID on file. Click Generate ticket first.' });
             }
-            notifyTicketIssued(userId, regId, ticketId, { email: sendEmail, whatsapp: sendWhatsapp });
+            notifyTicketIssued(userId, regId, ticketId, {
+                email: sendEmail,
+                whatsapp: sendWhatsapp,
+                templateNotify: sendEmail || sendWhatsapp
+            });
             flushNotificationQueue();
             activityLog.logActivity(db, {
                 user_id: actingAdminId,

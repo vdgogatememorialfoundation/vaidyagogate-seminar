@@ -2115,7 +2115,7 @@ async function loadCertVerifySettings() {
             status.textContent =
                 'Public verification is live for “' +
                 (data.title || 'this seminar') +
-                '”. Visitors can verify at /verify-certificate.html';
+                '”. Visitors can verify participant and volunteer certificates at /verify-certificate.html';
         } else if (data.enabled && data.countdown) {
             status.style.color = '#0369a1';
             status.textContent =

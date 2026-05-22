@@ -5,12 +5,14 @@
 
     function parsePortalDateTime(iso) {
         if (!iso) return null;
+        if (iso instanceof Date) return Number.isNaN(iso.getTime()) ? null : iso;
         const s = String(iso).trim();
         if (!s) return null;
         if (/Z$|[+-]\d{2}(:?\d{2})?$/i.test(s)) return new Date(s);
         let norm = s.includes('T') ? s : s.replace(' ', 'T');
         if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(norm)) norm += ':00';
-        return new Date(norm + IST_OFFSET);
+        // Naive = legacy UTC digits; current DB strings use +05:30 (IST wall clock).
+        return new Date(norm + 'Z');
     }
 
     function partsInIst(d) {
