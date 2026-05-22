@@ -2456,8 +2456,12 @@ async function loadAdminCertificateCandidates() {
                   : r.scan_verified
                     ? 'Eligible'
                     : 'Locked';
-            const appCell = r.application_no
-                ? escAdmin(r.application_no)
+            const appDisplay =
+                certType === 'volunteer'
+                    ? r.ticket_id_string || r.application_no
+                    : r.application_no;
+            const appCell = appDisplay
+                ? escAdmin(appDisplay)
                 : '<span style="color:#b91c1c;font-weight:600;">Missing</span>';
             const prnCell = r.user_id_string
                 ? escAdmin(r.user_id_string)
