@@ -1790,6 +1790,20 @@ function registrationWindowState(seminar) {
     return { state: 'open' };
 }
 
+function hasRegistrationOverrideForSeminar(seminarId) {
+    const set = window.__registrationOverrideSeminarIds;
+    return !!(set && set.has(Number(seminarId)));
+}
+
+/** Honors per-user admin override when public registration has closed. */
+function effectiveRegistrationWindowState(seminar) {
+    const w = registrationWindowState(seminar);
+    if (w.state === 'closed' && seminar && hasRegistrationOverrideForSeminar(seminar.id)) {
+        return { state: 'open', viaOverride: true };
+    }
+    return w;
+}
+
 function formatCountdownTo(targetMs) {
     const diff = Math.max(0, targetMs - Date.now());
     if (diff <= 0) return 'Opening now…';
@@ -1849,7 +1863,7 @@ function startSeminarGridCountdownTimer() {
 }
 
 function renderSeminarGridCard(s, readOnlyPast, alreadyRegistered) {
-    const win = registrationWindowState(s);
+    const win = effectiveRegistrationWindowState(s);
     const regStartLabel = s.registration_start
         ? formatTrackDateTime(s.registration_start)
         : '';
@@ -1882,10 +1896,16 @@ function renderSeminarGridCard(s, readOnlyPast, alreadyRegistered) {
             '<p style="font-size:0.85rem;color:#b45309;"><i class="fas fa-lock"></i> Registration closed.</p>' +
             '<button type="button" disabled class="btn-primary" style="width:100%;opacity:0.55;margin-top:8px;">Registration closed</button>';
     } else {
+        const overrideNote = win.viaOverride
+            ? '<p style="font-size:0.85rem;color:#0f766e;margin-bottom:10px;"><i class="fas fa-user-check"></i> You have admin approval to register for this seminar after the public window closed.</p>'
+            : '';
         actionBlock =
-            (regEndLabel
+            overrideNote +
+            (regEndLabel && !win.viaOverride
                 ? '<p style="font-size:0.8rem;color:#64748b;margin-bottom:10px;">Closes ' + escapeHtml(regEndLabel) + '</p>'
-                : '') +
+                : win.viaOverride
+                  ? '<p style="font-size:0.8rem;color:#64748b;margin-bottom:10px;">Public registration closed — your account is exempt.</p>'
+                  : '') +
             '<button type="button" class="btn-primary" onclick="startRegistration(' +
             s.id +
             ')" style="width:100%;">Register now</button>';
@@ -1929,7 +1949,7 @@ async function loadSeminarsGrid() {
         }
         activeSeminars = payload.seminars || [];
         const registeredSeminarIds = new Set();
-        const uid = typeof resolveCurrentUserId === 'function' ? resolveCurrentUserId() : null;
+        const uid = doctorNumericUserId();
         if (uid) {
             try {
                 const appRes = await fetch('/api/applications/' + encodeURIComponent(uid), { cache: 'no-store' });
@@ -1943,6 +1963,23 @@ async function loadSeminarsGrid() {
             }
         }
         window.__userRegisteredSeminarIds = registeredSeminarIds;
+        window.__registrationOverrideSeminarIds = new Set();
+        if (uid) {
+            try {
+                const ovRes = await fetch('/api/doctor/registration-overrides/' + encodeURIComponent(uid), {
+                    cache: 'no-store'
+                });
+                if (ovRes.ok) {
+                    const ovData = await ovRes.json();
+                    (ovData.seminarIds || []).forEach((id) => {
+                        const n = Number(id);
+                        if (n > 0) window.__registrationOverrideSeminarIds.add(n);
+                    });
+                }
+            } catch (ovErr) {
+                console.warn('Could not load registration overrides', ovErr);
+            }
+        }
         container.innerHTML = '';
         
         if (!activeSeminars.length) {
@@ -2003,7 +2040,7 @@ async function startRegistration(seminarId, opts) {
         switchTab('tab-applications');
         return;
     }
-    if (!volunteerBypass && s && registrationWindowState(s).state !== 'open') {
+    if (!volunteerBypass && s && effectiveRegistrationWindowState(s).state !== 'open') {
         if (registrationWindowState(s).state === 'upcoming') {
             alert('Registration has not opened yet for this seminar. Please wait until the countdown reaches zero.');
         } else {
