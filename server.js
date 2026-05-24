@@ -675,7 +675,7 @@ const DEFAULT_REGISTRATION_FORM_CONFIG = {
     version: 1,
     fields: [
         { key: 'fname', label: 'First name', type: 'text', step: 1, enabled: true, required: true },
-        { key: 'mname', label: 'Middle name', type: 'text', step: 1, enabled: true, required: true },
+        { key: 'mname', label: 'Middle name', type: 'text', step: 1, enabled: true, required: false },
         { key: 'lname', label: 'Last name', type: 'text', step: 1, enabled: true, required: true },
         { key: 'email', label: 'Email', type: 'email', step: 1, enabled: true, required: true, verifyOtp: true },
         { key: 'phone', label: 'Phone', type: 'tel', step: 1, enabled: true, required: true, verifyOtp: true },
@@ -1440,6 +1440,10 @@ function persistScrollingAnnouncementsSanitizeIfNeeded(callback) {
 }
 
 function validateFormDataAgainstRegistrationConfig(formData, hasCertificateFile, fields, qualOverride, policy) {
+    const fd = formData && typeof formData === 'object' ? formData : {};
+    if (fd.source === 'pos' || fd.onSpot === true) {
+        return null;
+    }
     const nameErr = validateRegistrationPersonNames(formData);
     if (nameErr) return nameErr;
     const contactErr = contactValidation.validateFormContactFields(formData, fields);
@@ -9993,7 +9997,12 @@ app.get('/api/event-schedules', (req, res) => {
         [],
         (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(rows || []);
+        const out = (rows || []).map((row) => ({
+            ...row,
+            start_time: seminarDt.normalizeSeminarDateTimeForStorage(row.start_time) || row.start_time,
+            end_time: seminarDt.normalizeSeminarDateTimeForStorage(row.end_time) || row.end_time
+        }));
+        res.json(out);
         }
     );
 });

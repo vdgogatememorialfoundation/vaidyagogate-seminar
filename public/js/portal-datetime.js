@@ -11,8 +11,8 @@
         if (/Z$|[+-]\d{2}(:?\d{2})?$/i.test(s)) return new Date(s);
         let norm = s.includes('T') ? s : s.replace(' ', 'T');
         if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(norm)) norm += ':00';
-        // Naive = legacy UTC digits; current DB strings use +05:30 (IST wall clock).
-        return new Date(norm + 'Z');
+        // Naive = IST wall clock (no Z — avoids shifting 9:45 AM to midnight/wrong hour).
+        return new Date(norm + IST_OFFSET);
     }
 
     function partsInIst(d) {

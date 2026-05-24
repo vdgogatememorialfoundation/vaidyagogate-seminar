@@ -1098,7 +1098,7 @@ function registrationFieldStep(f) {
 /** Matches server DEFAULT_REGISTRATION_FORM_CONFIG when API fields are empty. */
 const DEFAULT_REGISTRATION_FALLBACK_FIELDS = [
     { key: 'fname', label: 'First name', type: 'text', step: 1, enabled: true, required: true },
-    { key: 'mname', label: 'Middle name', type: 'text', step: 1, enabled: true, required: true },
+    { key: 'mname', label: 'Middle name', type: 'text', step: 1, enabled: true, required: false },
     { key: 'lname', label: 'Last name', type: 'text', step: 1, enabled: true, required: true },
     { key: 'email', label: 'Email', type: 'email', step: 1, enabled: true, required: true, verifyOtp: true },
     { key: 'phone', label: 'Phone', type: 'tel', step: 1, enabled: true, required: true, verifyOtp: true },
@@ -1461,7 +1461,7 @@ function validateRegistrationAgainstConfigForSteps(upToStepInclusive) {
             const fStep = registrationFieldStep(f);
             if (fStep !== sn) continue;
             if (f.onlyWhenAdvancedQual && !adv) continue;
-            if (f.onlyWhenPgCollege && !registrationQualIsPg()) continue;
+            if ((f.onlyWhenPgCollege || REGISTRATION_COLLEGE_KEYS.has(f.key)) && !registrationQualIsPg()) continue;
             const fk = String(f.key || '');
             if (fk === 'phone_otp' || fk === 'email_otp' || (f.type || '').toLowerCase() === 'otp') {
                 if (f.enabled && f.required) {
@@ -1618,7 +1618,7 @@ async function loadRegistrationFormConfigAndApply(seminarIdOpt) {
             if (lab && f.label) lab.textContent = f.label + (f.required ? ' *' : '');
         }
         if (f.key !== 'certificate') {
-            const pgOk = !f.onlyWhenPgCollege || registrationQualIsPg();
+            const pgOk = !(f.onlyWhenPgCollege || REGISTRATION_COLLEGE_KEYS.has(f.key)) || registrationQualIsPg();
             el.required = !!(
                 f.enabled &&
                 f.required &&
@@ -1695,7 +1695,7 @@ function refreshRegistrationRequiredAttributes() {
             el.required = false;
             return;
         }
-        if (f.onlyWhenPgCollege && !registrationQualIsPg()) {
+        if ((f.onlyWhenPgCollege || REGISTRATION_COLLEGE_KEYS.has(f.key)) && !registrationQualIsPg()) {
             el.required = false;
             return;
         }

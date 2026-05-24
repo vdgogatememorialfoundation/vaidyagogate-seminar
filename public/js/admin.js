@@ -1183,6 +1183,7 @@ async function submitAdminPosRegistration() {
                 actingAdminId: actor.id,
                 seminarId: document.getElementById('pos-seminar').value,
                 firstName: document.getElementById('pos-fname').value,
+                middleName: (document.getElementById('pos-mname') || {}).value || '',
                 lastName: document.getElementById('pos-lname').value,
                 phone: document.getElementById('pos-phone').value,
                 email: document.getElementById('pos-email').value,
@@ -1466,6 +1467,7 @@ function renderAdminBehalfFormFields() {
     fields.forEach((f) => {
         if (f.key === 'certificate') return;
         if (f.onlyWhenAdvancedQual && !adv) return;
+        if (f.onlyWhenPgCollege && !adminQualIsPg((document.getElementById('behalf-f-qual') || {}).value)) return;
         const id = 'behalf-f-' + f.key;
         const req = f.required ? ' *' : '';
         const span = f.type === 'textarea' ? 'grid-column:1/-1;' : '';
@@ -1502,8 +1504,11 @@ function renderAdminBehalfFormFields() {
 
 function collectAdminBehalfFormData() {
     const o = { country: 'India' };
+    const qual = (document.getElementById('behalf-f-qual') || {}).value;
+    const isPg = adminQualIsPg(qual);
     (__behalfFormFields || ADMIN_BEHALF_FIELD_DEFAULTS).forEach((f) => {
         if (f.key === 'certificate' || f.enabled === false) return;
+        if (f.onlyWhenPgCollege && !isPg) return;
         const el = document.getElementById('behalf-f-' + f.key);
         if (!el) return;
         o[f.key] = el.value;
