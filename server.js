@@ -882,6 +882,17 @@ function ensureMessagingOtpSchema(next) {
             consumed INTEGER DEFAULT 0,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )`);
+        db.run(
+            `CREATE TABLE IF NOT EXISTS application_edits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            application_id INTEGER,
+            edited_by_user_id INTEGER,
+            changes TEXT,
+            edited_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (application_id) REFERENCES registrations(id)
+        )`,
+            (aeErr) => ignoreSchemaMigrationErr(aeErr)
+        );
         db.run(`ALTER TABLE users ADD COLUMN email_verified INTEGER DEFAULT 1`, (evErr) => {
             ignoreSchemaMigrationErr(evErr);
         });
@@ -6439,7 +6450,9 @@ function deleteRegistrationCascade(registrationId, cb) {
         if (i >= steps.length) return cb(null, { deleted: true });
         const [sql, params] = steps[i++];
         db.run(sql, params, function (runErr) {
-            if (runErr) return cb(runErr);
+            if (runErr && !/no such table|does not exist|undefined table/i.test(String(runErr.message))) {
+                return cb(runErr);
+            }
             if (i === steps.length) return cb(null, { deleted: this.changes > 0 });
             next();
         });
