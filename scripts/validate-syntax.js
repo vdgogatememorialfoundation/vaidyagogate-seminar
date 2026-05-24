@@ -5,7 +5,15 @@ const path = require('path');
 const { execSync } = require('child_process');
 
 const root = path.join(__dirname, '..');
-const files = ['server.js', path.join('lib', 'extended-schema-pg.js')];
+const files = [
+    'server.js',
+    path.join('lib', 'extended-schema-pg.js'),
+    path.join('lib', 'extended-modules.js'),
+    path.join('lib', 'routes-ext.js'),
+    path.join('lib', 'certificate-verify.js'),
+    path.join('lib', 'notification-engine.js'),
+    path.join('lib', 'db-pg.js')
+];
 
 let failed = false;
 for (const rel of files) {

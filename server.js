@@ -6425,6 +6425,8 @@ function deleteRegistrationCascade(registrationId, cb) {
     const steps = [
         [`DELETE FROM registration_status_log WHERE registration_id = ?`, [rid]],
         [`DELETE FROM registration_reminder_log WHERE registration_id = ?`, [rid]],
+        [`DELETE FROM pending_registration_reminder_log WHERE registration_id = ?`, [rid]],
+        [`DELETE FROM cancellation_requests WHERE registration_id = ?`, [rid]],
         [`DELETE FROM seminar_feedback WHERE registration_id = ?`, [rid]],
         [`DELETE FROM application_edits WHERE application_id = ?`, [rid]],
         [`DELETE FROM user_certificates WHERE registration_id = ?`, [rid]],
@@ -6432,6 +6434,7 @@ function deleteRegistrationCascade(registrationId, cb) {
         [`DELETE FROM interactive_session_registrations WHERE registration_id = ?`, [rid]],
         [`UPDATE case_submissions SET registration_id = NULL WHERE registration_id = ?`, [rid]],
         [`DELETE FROM refunds WHERE registration_id = ?`, [rid]],
+        [`DELETE FROM supplemental_payments WHERE registration_id = ?`, [rid]],
         [
             `DELETE FROM refunds WHERE order_id IN (SELECT id FROM orders WHERE registration_id = ?)`,
             [rid]
