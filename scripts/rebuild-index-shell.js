@@ -300,7 +300,7 @@ const shell = `<!DOCTYPE html>
     <footer class="footer">
         <div class="footer-container">
             <div class="footer-col">
-                <h4>Foundation</h4>
+                <h4>Vaidya Gogate Memorial Foundation</h4>
                 <p id="footer-tagline">Promoting Ayurveda education since 1972</p>
             </div>
             <div class="footer-col">
