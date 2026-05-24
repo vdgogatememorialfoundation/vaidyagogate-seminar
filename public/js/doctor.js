@@ -5465,6 +5465,41 @@ function updateDoctorProfilePhotoUi(profile) {
     }
 }
 
+function formatDoctorAccountDateTime(iso) {
+    if (!iso) return '—';
+    if (window.PortalDateTime && window.PortalDateTime.format) {
+        return window.PortalDateTime.format(iso);
+    }
+    try {
+        return new Date(iso).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+    } catch (_) {
+        return String(iso);
+    }
+}
+
+function renderDoctorAccountMeta(meta) {
+    const createdEl = document.getElementById('profile-account-created');
+    const activatedEl = document.getElementById('profile-account-activated');
+    const noteEl = document.getElementById('profile-account-activated-note');
+    if (!createdEl && !activatedEl) return;
+    const m = meta || {};
+    if (createdEl) createdEl.textContent = formatDoctorAccountDateTime(m.createdAt);
+    if (activatedEl) {
+        activatedEl.textContent = m.activatedAt
+            ? formatDoctorAccountDateTime(m.activatedAt)
+            : m.pendingActivation
+              ? 'Pending email verification'
+              : '—';
+    }
+    if (noteEl) {
+        noteEl.textContent = m.lastLoginAt
+            ? 'Last login: ' + formatDoctorAccountDateTime(m.lastLoginAt)
+            : m.pendingActivation
+              ? 'Verify your email to activate your account.'
+              : '';
+    }
+}
+
 async function loadProfile() {
     try {
         const uid = doctorNumericUserId();
@@ -5472,6 +5507,22 @@ async function loadProfile() {
         const accountPhoneEl = document.getElementById('profile-account-phone');
         if (accountPhoneEl && currentUser && currentUser.phone) {
             accountPhoneEl.value = currentUser.phone;
+        }
+        try {
+            const accRes = await fetch(`/api/doctor/account/${uid}`);
+            if (accRes.ok) {
+                const acc = await accRes.json();
+                renderDoctorAccountMeta(acc);
+            } else if (currentUser) {
+                renderDoctorAccountMeta({
+                    createdAt: currentUser.created_at,
+                    activatedAt: currentUser.activated_at,
+                    lastLoginAt: currentUser.last_login_at || currentUser.login_at,
+                    pendingActivation: Number(currentUser.email_verified) === 0
+                });
+            }
+        } catch (_) {
+            /* account meta optional */
         }
         const res = await fetch(`/api/doctor/profile/${uid}`);
         const profile = await res.json();

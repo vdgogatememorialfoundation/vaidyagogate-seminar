@@ -59,6 +59,7 @@ const emailDeliveryPolicy = require('./lib/email-delivery-policy');
 const volunteerCertFlow = require('./lib/volunteer-cert-flow');
 const volunteerTicketFlow = require('./lib/volunteer-ticket-flow');
 const regPaymentStatus = require('./lib/registration-payment-status');
+const userAccountLifecycle = require('./lib/user-account-lifecycle');
 
 function volunteerTicketDeps() {
     return {
@@ -619,11 +620,15 @@ function ensureCriticalUserColumns(callback) {
                 ignoreDup(err3);
                 db.run(`ALTER TABLE users ADD COLUMN last_login_at TEXT`, (err4) => {
                     ignoreDup(err4);
-                    db.run(`ALTER TABLE users ADD COLUMN doctor_category TEXT DEFAULT 'regular'`, (err5) => {
-                        ignoreDup(err5);
-                        db.run(`ALTER TABLE users ADD COLUMN doctor_modules TEXT`, (err6) => {
-                            ignoreDup(err6);
-                            afterUsers();
+                    db.run(`ALTER TABLE users ADD COLUMN activated_at TEXT`, (err4b) => {
+                        ignoreDup(err4b);
+                        userAccountLifecycle.backfillAccountActivatedAt(db, () => {});
+                        db.run(`ALTER TABLE users ADD COLUMN doctor_category TEXT DEFAULT 'regular'`, (err5) => {
+                            ignoreDup(err5);
+                            db.run(`ALTER TABLE users ADD COLUMN doctor_modules TEXT`, (err6) => {
+                                ignoreDup(err6);
+                                afterUsers();
+                            });
                         });
                     });
                 });
@@ -644,7 +649,10 @@ function recordUserLogin(userId, cb) {
         }
         if (e) return cb && cb(e);
         const previousLoginAt = row && row.last_login_at ? String(row.last_login_at) : null;
-        db.run(`UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = ?`, [uid], (e2) => {
+        db.run(
+            `UPDATE users SET last_login_at = CURRENT_TIMESTAMP, activated_at = COALESCE(activated_at, CURRENT_TIMESTAMP) WHERE id = ?`,
+            [uid],
+            (e2) => {
             if (e2 && /does not exist|no such column/i.test(String(e2.message || ''))) {
                 return cb && cb(null, { previousLoginAt, loginAt: new Date().toISOString() });
             }
@@ -3339,6 +3347,9 @@ app.post('/api/auth/signup', (req, res) => {
                         action: 'auth.signup',
                         meta: { email: emailNorm, user_id_string: userIdStr }
                     });
+                    if (evFlag === 1) {
+                        userAccountLifecycle.stampAccountActivated(db, newUserId, () => {});
+                    }
                     res.json({
                         success: true,
                         userId: newUserId,
@@ -3449,7 +3460,10 @@ app.post('/api/auth/login', withAuxiliaryTables, (req, res) => {
                     }
                     if (Number(row.email_verified) === 1) return cb();
                     db.run(`UPDATE users SET email_verified = 1 WHERE id = ?`, [row.id], (uErr) => {
-                        if (!uErr) row.email_verified = 1;
+                        if (!uErr) {
+                            row.email_verified = 1;
+                            userAccountLifecycle.stampAccountActivated(db, row.id, () => {});
+                        }
                         cb(uErr);
                     });
                 }
@@ -3531,8 +3545,10 @@ app.get('/api/auth/verify-email', (req, res) => {
             if (!tok) return res.status(400).send('Invalid or expired verification link.');
             db.run(`UPDATE email_verify_tokens SET consumed = 1 WHERE id = ?`, [tok.id], () => {
                 db.run(`UPDATE users SET email_verified = 1 WHERE id = ?`, [tok.user_id], () => {
-                    const base = notifEngine.publicBaseUrl() || '';
-                    res.redirect(base + '/?emailVerified=1');
+                    userAccountLifecycle.stampAccountActivated(db, tok.user_id, () => {
+                        const base = notifEngine.publicBaseUrl() || '';
+                        res.redirect(base + '/?emailVerified=1');
+                    });
                 });
             });
         }
@@ -4822,6 +4838,32 @@ app.post('/api/doctor/profile', withMemoryAwareUpload('profilePhoto'), (req, res
             });
         }
         saveProfile(null);
+});
+
+// Doctor portal: account created / activated timestamps
+app.get('/api/doctor/account/:userId', (req, res) => {
+    const uid = parseInt(req.params.userId, 10);
+    if (!Number.isInteger(uid) || uid < 1) return res.status(400).json({ error: 'Invalid user' });
+    db.get(
+        `SELECT id, user_id_string, first_name, last_name, email, phone, role, user_role,
+                created_at, activated_at, last_login_at, IFNULL(email_verified,1) AS email_verified,
+                IFNULL(is_disabled,0) AS is_disabled, COALESCE(is_banned,0) AS is_banned
+         FROM users WHERE id = ?`,
+        [uid],
+        (err, row) => {
+            if (err) return res.status(500).json({ error: err.message });
+            if (!row) return res.status(404).json({ error: 'User not found' });
+            res.json({
+                userId: row.id,
+                userIdString: row.user_id_string,
+                createdAt: row.created_at,
+                activatedAt: row.activated_at,
+                lastLoginAt: row.last_login_at,
+                emailVerified: Number(row.email_verified) === 1,
+                pendingActivation: Number(row.email_verified) !== 1 && !row.activated_at
+            });
+        }
+    );
 });
 
 // Get doctor profile
@@ -7262,7 +7304,8 @@ app.get('/api/admin/users/:userId/detail', (req, res) => {
         `SELECT id, user_id_string, first_name, middle_name, last_name, email, phone, password, role, user_role,
                 doctor_category, doctor_modules,
                 is_disabled, IFNULL(is_banned,0) AS is_banned, ban_reason, banned_at,
-                IFNULL(is_demo,0) AS is_demo, created_at FROM users WHERE id = ?`,
+                IFNULL(is_demo,0) AS is_demo, created_at, activated_at, last_login_at,
+                IFNULL(email_verified,1) AS email_verified FROM users WHERE id = ?`,
         [uid],
         (e, user) => {
             if (e) return res.status(500).json({ error: e.message });
@@ -8629,6 +8672,7 @@ app.post('/api/admin/users/create', (req, res) => {
                                     });
                                 }
                                 const newId = saved.id || insertedId;
+                                userAccountLifecycle.stampAccountActivated(db, newId, () => {});
                                 notifEngine.notify(
                                     db,
                                     'ACCOUNT_CREATED',
@@ -8714,7 +8758,8 @@ app.get('/api/admin/users', (req, res) => {
         );
     };
     const fullCols = `id, user_id_string, first_name, middle_name, last_name, email, phone, role, user_role, doctor_category, doctor_modules, is_disabled,
-                IFNULL(is_banned,0) AS is_banned, ban_reason, IFNULL(is_demo,0) AS is_demo, admin_modules`;
+                IFNULL(is_banned,0) AS is_banned, ban_reason, IFNULL(is_demo,0) AS is_demo, admin_modules,
+                created_at, activated_at, last_login_at, IFNULL(email_verified,1) AS email_verified`;
     if (filterQ) {
         return adminUserLookup.searchAdminUsers(db, filterQ, (sErr, matched) => {
             if (sErr) return res.status(500).json({ error: sErr.message });

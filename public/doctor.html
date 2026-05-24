@@ -276,6 +276,12 @@
 
                 <div id="tab-profile" class="tab-pane hidden">
                     <h2 class="section-title">My profile</h2>
+                    <div class="card" style="margin-bottom:16px;padding:14px 18px;background:#f8fafc;border:1px solid #e2e8f0;">
+                        <h3 style="margin:0 0 10px;font-size:1rem;color:#0f766e;">Account</h3>
+                        <p style="margin:0 0 6px;font-size:0.9rem;"><strong>Created:</strong> <span id="profile-account-created">—</span></p>
+                        <p style="margin:0 0 6px;font-size:0.9rem;"><strong>Activated:</strong> <span id="profile-account-activated">—</span></p>
+                        <p style="margin:0;font-size:0.85rem;color:#64748b;" id="profile-account-activated-note"></p>
+                    </div>
                     <div class="card">
                         <form id="profile-form" onsubmit="return saveProfile(event)">
                             <div class="form-group"><label>Specialization</label><input type="text" id="profile-specialization"></div>
@@ -783,6 +789,6 @@
     <script src="/js/doctor-auth-ui.js"></script>
     <script src="/js/portal-upload.js?v=20260523"></script>
     <script src="/js/case-r2-upload.js?v=20260522c"></script>
-    <script src="/js/doctor.js?v=20260526"></script>
+    <script src="/js/doctor.js?v=20260527a"></script>
 </body>
 </html>

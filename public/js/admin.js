@@ -661,6 +661,24 @@ function openAdminCreateUserModal(kind) {
     modal.classList.remove('hidden');
 }
 
+function formatAdminAccountDateTime(iso) {
+    if (!iso) return '—';
+    if (window.PortalDateTime && window.PortalDateTime.format) {
+        return window.PortalDateTime.format(iso);
+    }
+    try {
+        return new Date(iso).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+    } catch (_) {
+        return String(iso);
+    }
+}
+
+function adminAccountActivationLabel(u) {
+    if (u && u.activated_at) return formatAdminAccountDateTime(u.activated_at);
+    if (u && Number(u.email_verified) === 0) return 'Pending verification';
+    return '—';
+}
+
 async function loadUsers() {
     try {
         const res = await fetch('/api/admin/users');
@@ -676,10 +694,10 @@ async function loadUsers() {
         if (!res.ok || !Array.isArray(users)) {
             const err = (users && users.error) || 'Could not load users';
             if (staffBody) {
-                staffBody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#b91c1c;">${escAdmin(err)}</td></tr>`;
+                staffBody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:#b91c1c;">${escAdmin(err)}</td></tr>`;
             }
             if (doctorsBody) {
-                doctorsBody.innerHTML = `<tr><td colspan="6" style="text-align:center;color:#b91c1c;">${escAdmin(err)}</td></tr>`;
+                doctorsBody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#b91c1c;">${escAdmin(err)}</td></tr>`;
             }
             return;
         }
@@ -710,7 +728,7 @@ async function loadUsers() {
         const staffBody = document.getElementById('staff-users-list');
         if (staffBody) {
             staffBody.innerHTML =
-                '<tr><td colspan="7" style="text-align:center;color:#b91c1c;">Could not load users. Hard refresh (Ctrl+F5) and try again.</td></tr>';
+                '<tr><td colspan="9" style="text-align:center;">Could not load users. Hard refresh (Ctrl+F5) and try again.</td></tr>';
         }
     }
 }
@@ -772,12 +790,12 @@ function renderStaffUsersTable(staffList) {
     }
     if (!total) {
         staffBody.innerHTML =
-            '<tr><td colspan="7" style="text-align:center;">No staff users yet. Use “+ Create staff user” and pick Judge / Co Admin / Scanner / Reviewer.</td></tr>';
+            '<tr><td colspan="9" style="text-align:center;">No staff users yet. Use “+ Create staff user” and pick Judge / Co Admin / Scanner / Reviewer.</td></tr>';
         return;
     }
     if (!rows.length) {
         staffBody.innerHTML =
-            '<tr><td colspan="7" style="text-align:center;">No staff users match this search. ' +
+            '<tr><td colspan="9" style="text-align:center;">No staff users match this search. ' +
             (total
                 ? `${total} staff account${total === 1 ? '' : 's'} exist — <button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.82rem;" onclick="adminClearStaffUsersSearch()">Clear search</button> to show all. Also check the <strong>Doctors</strong> tab if the account was saved as Doctor.</td></tr>`
                 : '</td></tr>');
@@ -800,6 +818,8 @@ function renderStaffUsersTable(staffList) {
                     <td>${escAdmin(u.first_name)} ${escAdmin(u.last_name)}</td>
                     <td>${escAdmin(u.email)}</td>
                     <td>${escAdmin(u.phone || '—')}</td>
+                    <td style="white-space:nowrap;font-size:0.82rem;">${formatAdminAccountDateTime(u.created_at)}</td>
+                    <td style="white-space:nowrap;font-size:0.82rem;">${adminAccountActivationLabel(u)}</td>
                     <td>
                         <select onchange="updateUserRole(${u.id}, this.value)" style="width:100%;padding:5px;border-radius:4px;border:1px solid #ccc;">
                             <option value="judge_user" ${userRole === 'judge_user' ? 'selected' : ''}>Judge</option>
@@ -2266,6 +2286,9 @@ function renderAdminUserDetailTab() {
                     <h4>Account (editable)</h4>
                     <p class="muted" style="font-size:0.85rem;">Portal login — admin OTP may be required to save doctor accounts only.</p>
                     <p><strong>User ID:</strong> ${escAdmin(u.user_id_string)}</p>
+                    <p><strong>Account created:</strong> ${formatAdminAccountDateTime(u.created_at)}</p>
+                    <p><strong>Account activated:</strong> ${adminAccountActivationLabel(u)}</p>
+                    ${u.last_login_at ? `<p><strong>Last login:</strong> ${formatAdminAccountDateTime(u.last_login_at)}</p>` : ''}
                     <div class="form-group"><label>First name</label><input type="text" id="admin-edit-first" value="${escAdmin(u.first_name)}" style="width:100%;padding:8px;"></div>
                     <div class="form-group"><label>Middle name</label><input type="text" id="admin-edit-middle" value="${escAdmin(u.middle_name || '')}" style="width:100%;padding:8px;"></div>
                     <div class="form-group"><label>Last name</label><input type="text" id="admin-edit-last" value="${escAdmin(u.last_name)}" style="width:100%;padding:8px;"></div>
@@ -4708,12 +4731,12 @@ function renderDoctorsUsersTable() {
     doctorsBody.innerHTML = '';
     if (!all.length) {
         doctorsBody.innerHTML =
-            '<tr><td colspan="6" style="text-align:center;">No doctors registered</td></tr>';
+            '<tr><td colspan="8" style="text-align:center;">No doctors registered</td></tr>';
         return;
     }
     if (!rows.length) {
         doctorsBody.innerHTML =
-            '<tr><td colspan="6" style="text-align:center;">No doctors match your search.</td></tr>';
+            '<tr><td colspan="8" style="text-align:center;">No doctors match your search.</td></tr>';
         return;
     }
     if (proxySelect) {
@@ -4731,6 +4754,8 @@ function renderDoctorsUsersTable() {
                     <td>${escAdmin(u.first_name)} ${escAdmin(u.last_name)}</td>
                     <td>${escAdmin(u.email)}</td>
                     <td>${escAdmin(u.phone || '—')}</td>
+                    <td style="white-space:nowrap;font-size:0.82rem;">${formatAdminAccountDateTime(u.created_at)}</td>
+                    <td style="white-space:nowrap;font-size:0.82rem;">${adminAccountActivationLabel(u)}</td>
                     <td>${adminUserStatusBadge(u)}</td>
                     <td>
                         <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-right:6px;" onclick="openAdminUserDetail(${u.id})">View</button>
