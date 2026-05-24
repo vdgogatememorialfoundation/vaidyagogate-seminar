@@ -661,6 +661,7 @@
                         <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="pa-req-login-otp" checked> Require login OTP on public site &amp; doctor portal (never on admin/judge/scanner apps)</label>
                         <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="pa-req-email-verify"> Require email verification before login</label>
                         <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="pa-req-admin-sensitive-otp"> Require admin OTP to create users / save behalf applications</label>
+                        <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="pa-req-behalf-applicant-otp" checked> Require applicant OTP (phone + email) when admin saves doctor application</label>
                             </div>
                     <p id="pa-effective-hint" style="font-size:0.82rem;color:#475569;margin:10px 0 8px;"></p>
                     <button type="button" class="btn-primary" style="background:#0369a1;" onclick="savePortalAuthAdminConfig()">Save portal auth policy</button>
@@ -1154,7 +1155,7 @@
 
             <div id="tab-volunteer-assignments" class="tab-pane hidden">
                 <h2 style="margin-bottom: 12px;">Volunteer assignments</h2>
-                <p style="color:#64748b;margin-bottom:18px;max-width:900px;">Same records doctors see under <strong>Volunteer</strong> in the doctor portal. Track registration progress, tickets, and issue free tickets (₹0) after they submit registration.</p>
+                <p style="color:#64748b;margin-bottom:18px;max-width:900px;">Track each volunteer’s registration, fill their application from admin, assign duties, and issue a free ticket (₹0) only after registration is submitted.</p>
                 <div class="card" style="margin-bottom:16px;">
                     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;align-items:flex-end;">
                         <div><label>Seminar</label><select id="vol-assign-seminar" style="width:100%;padding:8px;" onchange="loadAdminVolunteerAssignments()"></select></div>
@@ -1172,7 +1173,7 @@
                     <input type="search" id="vol-assign-search" placeholder="Seminar, name, portal ID, email, ticket, registration status…" oninput="renderAdminVolunteerAssignmentsTable()" style="width:100%;max-width:640px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;margin-top:6px;">
                     <p id="vol-assign-search-count" style="margin:6px 0 12px;font-size:0.82rem;color:#64748b;"></p>
                     <table class="data-table">
-                        <thead><tr><th>Seminar</th><th>Doctor</th><th>Assignment</th><th>Registration</th><th>Ticket (₹0)</th><th>Notes</th><th>Actions</th></tr></thead>
+                        <thead><tr><th>Seminar</th><th>Doctor</th><th>Assignment</th><th>Registration</th><th>Ticket (₹0)</th><th>Duties</th><th>Actions</th></tr></thead>
                         <tbody id="vol-assign-list"><tr><td colspan="7" style="text-align:center;">Loading…</td></tr></tbody>
                     </table>
                 </div>
@@ -1181,10 +1182,11 @@
             <div id="tab-volunteers" class="tab-pane hidden">
                 <h2 style="margin-bottom: 20px;">Volunteer management</h2>
                 <div class="card">
-                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
                         <div><label>Seminar</label><select id="vol-mgmt-seminar" style="width:100%;padding:8px;" onchange="loadAdminVolunteers()"></select></div>
                         <div><label>Doctor portal User ID</label><input type="text" id="vol-mgmt-user-id" placeholder="e.g. USR_TINBS1V70" style="width:100%;padding:8px;" autocomplete="off"></div>
-                        <div><label>Notes</label><input type="text" id="vol-mgmt-notes" style="width:100%;padding:8px;"></div>
+                        <div><label>Duties</label><input type="text" id="vol-mgmt-duties" placeholder="e.g. Registration desk" style="width:100%;padding:8px;"></div>
+                        <div><label>Admin notes</label><input type="text" id="vol-mgmt-notes" style="width:100%;padding:8px;"></div>
                     </div>
                     <button type="button" class="btn-primary" onclick="addAdminVolunteer()">Add volunteer</button>
                     <p style="font-size:0.85rem;color:#64748b;margin-top:12px;max-width:720px;">Assigns the doctor as a <strong>volunteer</strong> in the portal. They must complete seminar registration themselves. After registration is submitted, a <strong>free e-ticket (₹0)</strong>, dual certificates, and notifications are issued automatically — not before.</p>
@@ -2092,6 +2094,6 @@
     <script src="/js/portal-upload.js?v=20260522"></script>
     <script src="/js/user-roles.js?v=20260522f"></script>
     <script src="/js/admin-list-search.js?v=20260522a"></script>
-    <script src="/js/admin.js?v=20260528b"></script>
+    <script src="/js/admin.js?v=20260529a"></script>
 </body>
 </html>

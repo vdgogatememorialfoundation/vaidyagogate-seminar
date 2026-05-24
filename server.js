@@ -9586,27 +9586,31 @@ app.post('/api/admin/registrations/upsert', (req, res) => {
         if (!admResult || !admResult.ok) {
             return res.status(403).json({ error: (admResult && admResult.error) || 'Forbidden' });
         }
-        if (!applicantPhoneOtpToken || !applicantEmailOtpToken) {
-            return res.status(400).json({
-                error: 'Verify applicant phone and email OTP before saving this application.'
-            });
-        }
-        otpLib.validateProxyApplicantOtpTokens(
-            db,
-            sid,
-            { phoneToken: applicantPhoneOtpToken, emailToken: applicantEmailOtpToken },
-            (eApp, appOk) => {
-                if (eApp) return res.status(500).json({ error: eApp.message });
-                if (!appOk || !appOk.ok) {
-                    return res.status(400).json({
-                        error:
-                            (appOk && appOk.error) ||
-                            'Verify applicant phone and email OTP before saving this application.'
-                    });
-                }
-                runAdminRegistrationUpsertBody(req, res, tid, sid, aid, formData);
+        const needApplicantOtp = portalAuthPolicy.behalfApplicantOtpRequired();
+        if (needApplicantOtp) {
+            if (!applicantPhoneOtpToken || !applicantEmailOtpToken) {
+                return res.status(400).json({
+                    error: 'Verify applicant phone and email OTP before saving this application.'
+                });
             }
-        );
+            return otpLib.validateProxyApplicantOtpTokens(
+                db,
+                sid,
+                { phoneToken: applicantPhoneOtpToken, emailToken: applicantEmailOtpToken },
+                (eApp, appOk) => {
+                    if (eApp) return res.status(500).json({ error: eApp.message });
+                    if (!appOk || !appOk.ok) {
+                        return res.status(400).json({
+                            error:
+                                (appOk && appOk.error) ||
+                                'Verify applicant phone and email OTP before saving this application.'
+                        });
+                    }
+                    runAdminRegistrationUpsertBody(req, res, tid, sid, aid, formData);
+                }
+            );
+        }
+        runAdminRegistrationUpsertBody(req, res, tid, sid, aid, formData);
     });
 });
 

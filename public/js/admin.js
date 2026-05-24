@@ -5,6 +5,7 @@ let __adminBehalfSaveTimer = null;
 let __adminSensitivePhoneOtpToken = null;
 let __adminSensitiveEmailOtpToken = null;
 let __requireAdminSensitiveOtp = false;
+let __requireBehalfApplicantOtp = true;
 
 const ADMIN_REGISTRATION_STATUSES = [
     { value: 'submitted', label: 'Submitted' },
@@ -113,14 +114,17 @@ async function refreshAdminSensitiveOtpRequirement() {
     const adm = getStoredAdminUser();
     if (!adm || !adm.id) {
         __requireAdminSensitiveOtp = false;
+        __requireBehalfApplicantOtp = true;
         return;
     }
     try {
         const res = await fetch(`/api/admin/portal-auth-config?actingAdminId=${encodeURIComponent(adm.id)}`);
         const d = await res.json();
         __requireAdminSensitiveOtp = !!(d.success && d.config && d.config.requireAdminOtpForSensitive);
+        __requireBehalfApplicantOtp = !(d.success && d.config && d.config.requireBehalfApplicantOtp === false);
     } catch (_) {
         __requireAdminSensitiveOtp = false;
+        __requireBehalfApplicantOtp = true;
     }
     const wrapCreate = document.getElementById('newuser-admin-otp-wrap');
     const roleSel = document.getElementById('newuser-role');
@@ -130,6 +134,15 @@ async function refreshAdminSensitiveOtpRequirement() {
     const show = !!__requireAdminSensitiveOtp && !creatingStaff;
     if (wrapCreate) wrapCreate.style.display = show ? 'block' : 'none';
     if (!show) resetAdminSensitiveOtpTokens();
+    const behalfOtpWrap = document.getElementById('behalf-applicant-otp-wrap');
+    if (behalfOtpWrap) {
+        behalfOtpWrap.style.display = __requireBehalfApplicantOtp ? 'block' : 'none';
+        if (!__requireBehalfApplicantOtp) resetBehalfApplicantOtpTokens();
+    }
+    const saveSt = document.getElementById('behalf-save-status');
+    if (saveSt && !__requireBehalfApplicantOtp) {
+        saveSt.textContent = 'Applicant OTP is disabled — click Save application when ready.';
+    }
 }
 
 function resetBehalfApplicantOtpTokens() {
@@ -1454,6 +1467,36 @@ function adminBehalfNeedsAdvancedQual() {
     return q === 'PG' || q === 'Practicing Vaidya' || q === 'Practitioner';
 }
 
+function adminNormalizeQualOptions(options) {
+    const canon = {
+        'Practicing Vaidya': { value: 'Practicing Vaidya', label: 'Practicing Vaidya' },
+        Practitioner: { value: 'Practitioner', label: 'Practitioner' },
+        PG: { value: 'PG', label: 'PG' }
+    };
+    if (!Array.isArray(options) || !options.length) {
+        return Object.values(canon);
+    }
+    const out = [];
+    options.forEach((o) => {
+        if (!o) return;
+        const v = String(o.value != null ? o.value : o.label || '').trim();
+        if (!v || v.toLowerCase() === 'new') return;
+        if (canon[v]) out.push(canon[v]);
+        else if (v.length > 1) out.push({ value: v, label: String(o.label || v).trim() || v });
+    });
+    return out.length ? out : Object.values(canon);
+}
+
+function adminQualFromRegistrationFormData(raw) {
+    if (!raw) return '';
+    try {
+        const fd = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        return fd && fd.qual ? String(fd.qual).trim() : '';
+    } catch (_) {
+        return '';
+    }
+}
+
 function renderAdminBehalfFormFields() {
     const host = document.getElementById('behalf-form-fields');
     if (!host) return;
@@ -1490,6 +1533,10 @@ function renderAdminBehalfFormFields() {
     host.innerHTML = html;
     const qualEl = document.getElementById('behalf-f-qual');
     if (qualEl) qualEl.addEventListener('change', () => renderAdminBehalfFormFields());
+    ['pin', 'cpin'].forEach((pk) => {
+        const pel = document.getElementById('behalf-f-' + pk);
+        if (pel) pel.addEventListener('blur', () => adminPincodeAutofill('behalf-f-', pk));
+    });
     host.querySelectorAll('input,textarea,select').forEach((el) => {
         el.addEventListener('input', () => {
             syncBehalfJsonFromForm();
@@ -1541,6 +1588,12 @@ async function loadAdminBehalfFormConfig(seminarId) {
         const res = await fetch('/api/registration-form-config?seminarId=' + encodeURIComponent(seminarId));
         const data = await res.json();
         __behalfFormFields = (data.fields && data.fields.length) ? data.fields : ADMIN_BEHALF_FIELD_DEFAULTS;
+        __behalfFormFields = __behalfFormFields.map((f) => {
+            if (f && f.key === 'qual' && Array.isArray(f.options)) {
+                return { ...f, options: adminNormalizeQualOptions(f.options) };
+            }
+            return f;
+        });
     } catch (_) {
         __behalfFormFields = ADMIN_BEHALF_FIELD_DEFAULTS;
     }
@@ -1832,8 +1885,43 @@ async function behalfPollPayment() {
 
 function scheduleBehalfRegSave() {
     const st = document.getElementById('behalf-save-status');
-    if (st) st.textContent = 'Verify applicant OTP above, then click Save application.';
+    if (st) {
+        st.textContent = __requireBehalfApplicantOtp
+            ? 'Verify applicant OTP above, then click Save application.'
+            : 'Click Save application when the form is ready.';
+    }
 }
+
+async function openAdminBehalfForVolunteer(userId, seminarId) {
+    switchTab('tab-behalf-reg');
+    initAdminBehalfRegTab();
+    const ds = document.getElementById('behalf-doctor-select');
+    const ss = document.getElementById('behalf-seminar-select');
+    if (ds) ds.value = String(userId);
+    if (ss) ss.value = String(seminarId);
+    await loadAdminBehalfFormConfig(seminarId);
+    await onAdminBehalfDoctorOrSeminarChange();
+}
+window.openAdminBehalfForVolunteer = openAdminBehalfForVolunteer;
+
+async function editVolunteerDuties(assignId, currentDuties) {
+    const duties = prompt('Volunteer duties (e.g. Registration desk, Scanner hall)', currentDuties || '');
+    if (duties === null) return;
+    try {
+        const res = await fetch('/api/admin/volunteers/' + assignId, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ duties })
+        });
+        const data = await res.json();
+        if (data.success) refreshVolunteerAdminPanels();
+        else alert(data.error || 'Could not save duties');
+    } catch (e) {
+        console.error(e);
+        alert('Network error');
+    }
+}
+window.editVolunteerDuties = editVolunteerDuties;
 
 async function flushBehalfRegistrationSave(manual) {
     const st = document.getElementById('behalf-save-status');
@@ -1861,7 +1949,7 @@ async function flushBehalfRegistrationSave(manual) {
         if (st) st.textContent = 'Not logged in.';
         return;
     }
-    if (!__behalfApplicantPhoneOtpToken || !__behalfApplicantEmailOtpToken) {
+    if (__requireBehalfApplicantOtp && (!__behalfApplicantPhoneOtpToken || !__behalfApplicantEmailOtpToken)) {
         if (st) st.textContent = 'Verify applicant phone and email OTP before saving.';
         if (manual) return alert('Verify applicant phone and email OTP before saving.');
         return;
@@ -3022,7 +3110,7 @@ function renderAdminVolunteerAssignmentsTable() {
     adminSearchSetCount('vol-assign-search-count', q, rows.length, all.length, 'assignments');
     if (!all.length) {
         tbody.innerHTML =
-            '<tr><td colspan="7" style="text-align:center;">No volunteer assignments yet. Use <strong>Add volunteer</strong> or the Volunteers tab.</td></tr>';
+            '<tr><td colspan="7" style="text-align:center;">No volunteer assignments yet. Use <strong>Add volunteer</strong> or open <strong>Fill application</strong> for an assigned doctor.</td></tr>';
         return;
     }
     if (!rows.length) {
@@ -3033,31 +3121,46 @@ function renderAdminVolunteerAssignmentsTable() {
     tbody.innerHTML = '';
     rows.forEach((v) => {
         const name = [v.first_name, v.last_name].filter(Boolean).join(' ');
+        const qual = adminQualFromRegistrationFormData(v.registration_form_data);
         const regSt = String(v.registration_status || '').toLowerCase();
         const hasTicket = !!(v.volunteer_ticket_id_string && String(v.volunteer_ticket_id_string).trim());
         const assignId = v.assignment_id != null ? v.assignment_id : v.id;
         let actions = '';
+        actions +=
+            '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.8rem;margin-right:4px;" onclick="openAdminBehalfForVolunteer(' +
+            Number(v.user_id) +
+            ',' +
+            Number(v.seminar_id) +
+            ')">Fill application</button>';
         if (!hasTicket && regSt === 'submitted') {
-            actions =
-                '<span style="font-size:0.8rem;color:#059669;">Auto-issue pending</span>';
-        } else if (!hasTicket && String(v.status).toLowerCase() === 'pending') {
-            actions =
-                `<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.8rem;" onclick="approveAdminVolunteer(${assignId})">Issue ticket (₹0)</button>`;
+            actions +=
+                '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.8rem;margin-right:4px;" onclick="approveAdminVolunteer(' +
+                assignId +
+                ')">Issue ticket (₹0)</button>';
         } else if (!hasTicket) {
-            actions = '<span style="font-size:0.8rem;color:#64748b;">Waiting for registration</span>';
+            actions += '<span style="font-size:0.8rem;color:#64748b;">Waiting for registration</span>';
         } else {
-            actions = '<span style="font-size:0.8rem;color:#059669;">Ticket issued</span>';
+            actions += '<span style="font-size:0.8rem;color:#059669;">Ticket issued</span>';
         }
+        actions +=
+            '<button type="button" style="padding:4px 8px;font-size:0.8rem;margin-left:4px;" onclick="editVolunteerDuties(' +
+            assignId +
+            ',' +
+            JSON.stringify(String(v.duties || '')) +
+            ')">Duties</button>';
         const eventLine = v.event_date
             ? '<div class="muted" style="font-size:0.78rem;">' + escAdmin(String(v.event_date).slice(0, 10)) + '</div>'
             : '';
+        const qualLine = qual
+            ? '<div class="muted" style="font-size:0.78rem;">Qual: ' + escAdmin(qual) + '</div>'
+            : '<div class="muted" style="font-size:0.78rem;">Qual: —</div>';
         tbody.innerHTML += `<tr>
                 <td><strong>${escAdmin(v.seminar_title || '—')}</strong>${eventLine}</td>
                 <td>${escAdmin(name)}<div class="muted">${escAdmin(v.user_id_string || '')} · ${escAdmin(v.email || '')}</div></td>
                 <td>${escAdmin(v.status || '—')}</td>
-                <td>${escAdmin(v.registration_status || '—')}${v.application_no ? '<div class="muted">' + escAdmin(v.application_no) + '</div>' : ''}</td>
+                <td>${escAdmin(v.registration_status || '—')}${v.application_no ? '<div class="muted">' + escAdmin(v.application_no) + '</div>' : ''}${qualLine}</td>
                 <td><code>${escAdmin(v.volunteer_ticket_id_string || '—')}</code></td>
-                <td>${escAdmin(v.notes || '—')}</td>
+                <td>${escAdmin(v.duties || v.notes || '—')}</td>
                 <td>${actions}</td>
             </tr>`;
     });
@@ -3092,6 +3195,7 @@ async function addAdminVolunteer() {
     const sid = document.getElementById('vol-mgmt-seminar')?.value;
     const userIdString = String(document.getElementById('vol-mgmt-user-id')?.value || '').trim();
     const notes = document.getElementById('vol-mgmt-notes')?.value || '';
+    const duties = document.getElementById('vol-mgmt-duties')?.value || '';
     if (!sid || !userIdString) return alert('Seminar and doctor portal User ID required');
     try {
         const admin = getStoredAdminUser();
@@ -3102,6 +3206,7 @@ async function addAdminVolunteer() {
                 seminarId: parseInt(sid, 10),
                 userIdString,
                 notes,
+                duties,
                 setVolunteerRole: true,
                 actingAdminId: admin && admin.id
             })
@@ -10445,6 +10550,8 @@ async function loadPortalAuthAdminForm() {
         setChk('pa-req-login-otp', d.config.requireLoginOtp);
         setChk('pa-req-email-verify', d.config.requireEmailVerification);
         setChk('pa-req-admin-sensitive-otp', d.config.requireAdminOtpForSensitive);
+        setChk('pa-req-behalf-applicant-otp', d.config.requireBehalfApplicantOtp !== false);
+        __requireBehalfApplicantOtp = d.config.requireBehalfApplicantOtp !== false;
         window.__adminEnabledPages = d.config.adminEnabledPages || {};
         window.__websiteMenuPages = d.config.websiteMenuPages || {};
         renderAdminGlobalPagesCheckboxes();
@@ -10520,7 +10627,8 @@ async function savePortalAuthAdminConfig() {
         requireSignupOtp: gv('pa-req-signup-otp'),
         requireLoginOtp: gv('pa-req-login-otp'),
         requireEmailVerification: gv('pa-req-email-verify'),
-        requireAdminOtpForSensitive: gv('pa-req-admin-sensitive-otp')
+        requireAdminOtpForSensitive: gv('pa-req-admin-sensitive-otp'),
+        requireBehalfApplicantOtp: gv('pa-req-behalf-applicant-otp')
     };
     if (isSuperAdminUser()) {
         const adminEnabledPages = {};

@@ -746,6 +746,34 @@ function renderTrackerStepsHtml(timeline) {
     return html;
 }
 
+function doctorNormalizeQualOptions(options) {
+    const canon = {
+        'Practicing Vaidya': { value: 'Practicing Vaidya', label: 'Practicing Vaidya' },
+        Practitioner: { value: 'Practitioner', label: 'Practitioner' },
+        PG: { value: 'PG', label: 'PG' }
+    };
+    if (!Array.isArray(options) || !options.length) return Object.values(canon);
+    const out = [];
+    options.forEach((o) => {
+        if (!o) return;
+        const v = String(o.value != null ? o.value : o.label || '').trim();
+        if (!v || v.toLowerCase() === 'new') return;
+        if (canon[v]) out.push(canon[v]);
+        else if (v.length > 1) out.push({ value: v, label: String(o.label || v).trim() || v });
+    });
+    return out.length ? out : Object.values(canon);
+}
+
+function registrationQualFromApp(a) {
+    if (!a) return '';
+    try {
+        const fd = typeof a.form_data === 'string' ? JSON.parse(a.form_data) : a.form_data;
+        return fd && fd.qual ? String(fd.qual).trim() : '';
+    } catch (_) {
+        return '';
+    }
+}
+
 function renderSeminarApplicationTrackerCard(a) {
     const tl = a.timeline || {};
     const payAmt = Number(a.seminar_price) > 0 ? Number(a.seminar_price) : 1500;
@@ -805,6 +833,12 @@ function renderSeminarApplicationTrackerCard(a) {
           escapeHtml(String(a.portal_year)) +
           '</span>'
         : '';
+    const qual = registrationQualFromApp(a);
+    const qualBadge = qual
+        ? '<p style="font-size:0.88rem;color:#475569;margin:-8px 0 12px;"><strong>Qualification:</strong> ' +
+          escapeHtml(qual) +
+          '</p>'
+        : '';
     return (
         '<div class="card" style="margin-bottom:15px;border-top:4px solid #1a237e;">' +
         '<h4 style="color:#1a237e;margin-bottom:16px;"><i class="fas fa-calendar-check"></i> Seminar · ' +
@@ -812,6 +846,7 @@ function renderSeminarApplicationTrackerCard(a) {
         (a.seminar_title ? ' · ' + escapeHtml(a.seminar_title) : '') +
         yearBadge +
         '</h4>' +
+        qualBadge +
         revisionBlock +
         renderTrackerStepsHtml(tl) +
         payBtn +
@@ -1595,7 +1630,7 @@ async function loadRegistrationFormConfigAndApply(seminarIdOpt) {
     if (qualField && qualField.type === 'select' && Array.isArray(qualField.options) && qualEl) {
         const cur = qualEl.value;
         qualEl.innerHTML = '<option value="">Select</option>';
-        qualField.options.forEach((o) => {
+        doctorNormalizeQualOptions(qualField.options).forEach((o) => {
             const v = o.value != null ? o.value : o.label;
             const lab = o.label != null ? o.label : v;
             const opt = document.createElement('option');
@@ -2390,12 +2425,16 @@ async function loadDoctorVolunteerPanel() {
                 : '<p style="color:#64748b;">Free e-ticket is issued automatically after you submit seminar registration.</p>';
             const certNote =
                 '<p style="font-size:0.88rem;color:#64748b;margin-top:8px;">After your ticket is issued: Participation and Volunteer certificates appear in the Certificates tab. Venue QR scan updates both.</p>';
+            const dutiesLine = v.duties
+                ? '<p style="font-size:0.88rem;margin-top:6px;"><strong>Duties:</strong> ' + escapeHtml(v.duties) + '</p>'
+                : '';
             card.innerHTML =
                 '<h4 style="margin:0 0 8px;">' +
                 escapeHtml(v.title || 'Seminar') +
                 '</h4><p>Status: <strong>' +
                 escapeHtml(v.status) +
                 '</strong></p>' +
+                dutiesLine +
                 ticket +
                 cta +
                 certNote;
@@ -3152,7 +3191,12 @@ async function nextStep(step) {
         document.getElementById('prev-loc').innerText = `${document.getElementById('reg-city').value}, ${document.getElementById('reg-state').value}, ${document.getElementById('reg-pin').value}`;
         
         const qual = document.getElementById('reg-qual').value;
-        document.getElementById('prev-qual').innerText = qual;
+        const qualEl = document.getElementById('reg-qual');
+        const qualLabel =
+            qualEl && qualEl.selectedIndex > 0
+                ? qualEl.options[qualEl.selectedIndex].text
+                : qual;
+        document.getElementById('prev-qual').innerText = qualLabel;
         if(qual === 'PG' || qual === 'Practicing Vaidya' || qual === 'Practitioner') {
             document.getElementById('prev-ncism-box').classList.remove('hidden');
             document.getElementById('prev-ncism').innerText = document.getElementById('reg-ncism').value;
