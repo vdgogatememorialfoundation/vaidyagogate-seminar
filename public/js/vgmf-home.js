@@ -309,23 +309,53 @@
 
     function parseScheduleDate(value) {
         if (!value) return null;
-        const d = new Date(String(value).replace(' ', 'T'));
+        if (window.PortalDateTime && window.PortalDateTime.parse) {
+            return window.PortalDateTime.parse(value);
+        }
+        const s = String(value).trim();
+        if (!s) return null;
+        const d = new Date(/Z$|[+-]\d{2}/i.test(s) ? s : s.replace(' ', 'T') + (s.includes('+') ? '' : '+05:30'));
         return Number.isNaN(d.getTime()) ? null : d;
     }
 
     function formatScheduleWhen(startVal, endVal) {
+        if (window.PortalDateTime && window.PortalDateTime.format) {
+            const a = window.PortalDateTime.format(startVal);
+            const b = endVal ? window.PortalDateTime.format(endVal) : '';
+            if (!a) return 'Schedule to be announced';
+            return b ? `${a} – ${b}` : a;
+        }
         const start = parseScheduleDate(startVal);
         const end = parseScheduleDate(endVal);
         if (!start) return 'Schedule to be announced';
-        const datePart = start.toLocaleDateString(undefined, {
+        const tz = { timeZone: 'Asia/Kolkata' };
+        const datePart = start.toLocaleDateString('en-IN', {
             weekday: 'short',
             day: 'numeric',
             month: 'short',
-            year: 'numeric'
+            year: 'numeric',
+            ...tz
         });
-        const t1 = start.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-        const t2 = end ? end.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : '';
+        const t1 = start.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, ...tz });
+        const t2 = end ? end.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, ...tz }) : '';
         return t2 ? `${datePart} · ${t1} – ${t2}` : `${datePart} · ${t1}`;
+    }
+
+    function formatScheduleCell(iso, dateOnly) {
+        if (!iso) return '—';
+        if (window.PortalDateTime && window.PortalDateTime.format) {
+            if (dateOnly && window.PortalDateTime.formatEvent) {
+                return window.PortalDateTime.formatEvent(iso);
+            }
+            return window.PortalDateTime.format(iso);
+        }
+        const d = parseScheduleDate(iso);
+        if (!d) return '—';
+        const tz = { timeZone: 'Asia/Kolkata' };
+        if (dateOnly) {
+            return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', ...tz });
+        }
+        return d.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true, ...tz });
     }
 
     window.loadEventSchedulesPublic = async function loadEventSchedulesPublic() {
@@ -341,7 +371,7 @@
                 schedules.forEach((s) => {
                     const opt = document.createElement('option');
                     opt.value = String(s.id);
-                    const when = s.start_time ? new Date(s.start_time).toLocaleString() : '';
+                    const when = s.start_time ? formatScheduleCell(s.start_time, false) : '';
                     opt.textContent = (s.title || 'Session') + (when ? ` (${when})` : '');
                     dropdown.appendChild(opt);
                 });
@@ -359,10 +389,8 @@
                     const start = parseScheduleDate(s.start_time);
                     const tr = document.createElement('tr');
                     tr.innerHTML = '<td></td><td></td><td></td><td></td>';
-                    tr.cells[0].textContent = start ? start.toLocaleDateString() : '—';
-                    tr.cells[1].textContent = start
-                        ? start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                        : '—';
+                    tr.cells[0].textContent = formatScheduleCell(s.start_time, true);
+                    tr.cells[1].textContent = formatScheduleCell(s.start_time, false);
                     tr.cells[2].textContent = s.title || '—';
                     tr.cells[3].textContent = s.speaker_name || '—';
                     tbody.appendChild(tr);

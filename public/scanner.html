@@ -20,11 +20,11 @@
             <div class="auth-brand" data-site-logo data-logo-height="56px" aria-hidden="true"></div>
             <h2><i class="fas fa-qrcode"></i> Staff check-in</h2>
             <p class="auth-sub">Scanner account only — no public website access from this app.</p>
-            <form id="scanner-login-form">
+            <form id="scanner-login-form" autocomplete="off">
                 <label for="scanner-email">Email</label>
-                <input type="email" id="scanner-email" required autocomplete="email" inputmode="email">
+                <input type="email" id="scanner-email" name="scanner-portal-email" required autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="email">
                 <label for="scanner-password">Password</label>
-                <input type="password" id="scanner-password" required autocomplete="current-password">
+                <input type="password" id="scanner-password" name="scanner-portal-password" required autocomplete="new-password">
                 <div id="scanner-login-otp-panel" class="hidden scanner-otp-panel">
                     <p class="auth-sub">Verify OTP if your account requires it.</p>
                     <div class="otp-row">

@@ -10024,9 +10024,11 @@ app.post('/api/admin/event-schedules', (req, res) => {
     if (!title || !String(title).trim()) return res.status(400).json({ error: 'Title is required' });
     if (!startTime || !endTime) return res.status(400).json({ error: 'Start and end time are required' });
     const sid = parseEventScheduleSeminarId(seminarId);
-    if (seminarId != null && seminarId !== '' && sid === null) {
-        return res.status(400).json({ error: 'Invalid seminar selected' });
+    if (sid === null) {
+        return res.status(400).json({ error: 'Seminar is required for each schedule item' });
     }
+    const startStored = seminarDt.fromDatetimeLocalInput(startTime) || startTime;
+    const endStored = seminarDt.fromDatetimeLocalInput(endTime) || endTime;
     db.run(
         `INSERT INTO event_schedules (title, description, seminar_id, start_time, end_time, location, speaker_name, speaker_bio)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -10034,8 +10036,8 @@ app.post('/api/admin/event-schedules', (req, res) => {
             String(title).trim(),
             description || null,
             sid,
-            startTime,
-            endTime,
+            startStored,
+            endStored,
             location || null,
             speakerName || null,
             speakerBio || null
@@ -10054,9 +10056,11 @@ app.put('/api/admin/event-schedules/:id', (req, res) => {
     if (!title || !String(title).trim()) return res.status(400).json({ error: 'Title is required' });
     if (!startTime || !endTime) return res.status(400).json({ error: 'Start and end time are required' });
     const sid = parseEventScheduleSeminarId(seminarId);
-    if (seminarId != null && seminarId !== '' && sid === null) {
-        return res.status(400).json({ error: 'Invalid seminar selected' });
+    if (sid === null) {
+        return res.status(400).json({ error: 'Seminar is required for each schedule item' });
     }
+    const startStored = seminarDt.fromDatetimeLocalInput(startTime) || startTime;
+    const endStored = seminarDt.fromDatetimeLocalInput(endTime) || endTime;
     db.run(
         `UPDATE event_schedules SET title = ?, description = ?, seminar_id = ?, start_time = ?, end_time = ?,
          location = ?, speaker_name = ?, speaker_bio = ? WHERE id = ?`,
@@ -10064,8 +10068,8 @@ app.put('/api/admin/event-schedules/:id', (req, res) => {
             String(title).trim(),
             description || null,
             sid,
-            startTime,
-            endTime,
+            startStored,
+            endStored,
             location || null,
             speakerName || null,
             speakerBio || null,

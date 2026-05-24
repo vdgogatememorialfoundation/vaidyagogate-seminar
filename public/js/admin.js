@@ -5329,6 +5329,7 @@ function renderSeminarsTable() {
                     <td>${pastRow ? '<em>Past year</em>' : 'Current'}</td>
                     <td>
                         <button class="btn-success" style="padding: 5px 10px; font-size: 0.85rem;" onclick="manageSeminar(${s.id}, '${String(s.title).replace(/'/g, "\\'")}')">Manage</button>
+                        <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.85rem;background:#0d9488;margin-left:4px;" onclick="openEventScheduleModalForSeminar(${s.id}, '${String(s.title).replace(/'/g, "\\'")}')">Schedule</button>
                         <button class="btn-primary" style="padding: 5px 10px; font-size: 0.85rem;" onclick="editSeminar(${idx})">Edit</button>
                         <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.85rem;background:#7c3aed;margin-left:4px;" onclick="purgeAdminSeminarTestData(${s.id}, '${String(s.title).replace(/'/g, "\\'")}')">Purge test data</button>
                         <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.85rem;background:#b91c1c;margin-left:4px;" onclick="deleteAdminSeminar(${s.id}, '${String(s.title).replace(/'/g, "\\'")}')">Delete</button>
@@ -5432,13 +5433,17 @@ function renderEventSchedulesTable() {
     const tbody = document.getElementById('event-schedules-list');
     if (!tbody) return;
     const all = __eventSchedulesCache || [];
+    const seminarFilter = (document.getElementById('event-schedules-seminar-filter') || {}).value || '';
+    const seminarScoped = seminarFilter
+        ? all.filter((s) => String(s.seminar_id) === String(seminarFilter))
+        : all;
     const q = adminSearchQ('event-schedules-search');
-    const rows = adminSearchFilter(all, q, (s) =>
+    const rows = adminSearchFilter(seminarScoped, q, (s) =>
         [s.title, s.seminar_title, s.seminar_id, s.speaker_name, s.location, s.description]
             .join(' ')
             .toLowerCase()
     );
-    adminSearchSetCount('event-schedules-search-count', q, rows.length, all.length, 'schedules');
+    adminSearchSetCount('event-schedules-search-count', q, rows.length, seminarScoped.length, 'schedules');
     tbody.innerHTML = '';
     if (!all.length) {
         tbody.innerHTML =
@@ -5452,8 +5457,8 @@ function renderEventSchedulesTable() {
     }
     rows.forEach((s) => {
         const tr = document.createElement('tr');
-        const startTime = s.start_time ? new Date(s.start_time).toLocaleString() : '—';
-        const endTime = s.end_time ? new Date(s.end_time).toLocaleString() : '—';
+        const startTime = formatScheduleDisplay(s.start_time);
+        const endTime = formatScheduleDisplay(s.end_time);
         tr.innerHTML = `
                 <td><strong></strong></td>
                 <td></td>
@@ -8050,12 +8055,35 @@ function downloadParticipantsExcel() {
 // ==================== EVENT SCHEDULES ====================
 let __eventSchedulesCache = [];
 
-function toDatetimeLocalValue(raw) {
+function scheduleDatetimeLocalValue(raw) {
     if (!raw) return '';
+    if (window.PortalDateTime && window.PortalDateTime.toDatetimeLocal) {
+        return window.PortalDateTime.toDatetimeLocal(raw);
+    }
     const d = new Date(raw);
     if (Number.isNaN(d.getTime())) return String(raw).replace(' ', 'T').slice(0, 16);
     const pad = (n) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+function scheduleDatetimeFromLocal(localVal) {
+    if (!localVal) return localVal;
+    if (window.PortalDateTime && window.PortalDateTime.fromDatetimeLocal) {
+        return window.PortalDateTime.fromDatetimeLocal(localVal);
+    }
+    return localVal;
+}
+
+function formatScheduleDisplay(iso) {
+    if (!iso) return '—';
+    if (window.PortalDateTime && window.PortalDateTime.format) {
+        return window.PortalDateTime.format(iso);
+    }
+    try {
+        return new Date(iso).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+    } catch (_) {
+        return String(iso);
+    }
 }
 
 async function populateScheduleSeminarSelect(selectedId) {
@@ -8064,7 +8092,7 @@ async function populateScheduleSeminarSelect(selectedId) {
     try {
         const res = await fetch('/api/admin/seminars');
         const seminars = await res.json();
-        sel.innerHTML = '<option value="">— No seminar link —</option>';
+        sel.innerHTML = '<option value="">Select seminar…</option>';
         (seminars || []).forEach((s) => {
             const opt = document.createElement('option');
             opt.value = String(s.id);
@@ -8078,10 +8106,31 @@ async function populateScheduleSeminarSelect(selectedId) {
     }
 }
 
+async function populateEventSchedulesSeminarFilter() {
+    const sel = document.getElementById('event-schedules-seminar-filter');
+    if (!sel) return;
+    const prev = sel.value;
+    try {
+        const res = await fetch('/api/admin/seminars');
+        const seminars = await res.json();
+        sel.innerHTML = '<option value="">All seminars</option>';
+        (seminars || []).forEach((s) => {
+            const opt = document.createElement('option');
+            opt.value = String(s.id);
+            opt.textContent = s.title || `Seminar #${s.id}`;
+            sel.appendChild(opt);
+        });
+        if (prev) sel.value = prev;
+    } catch (e) {
+        console.error(e);
+    }
+}
+
 async function loadEventSchedules() {
     const tbody = document.getElementById('event-schedules-list');
     if (!tbody) return;
     try {
+        await populateEventSchedulesSeminarFilter();
         const res = await fetch('/api/event-schedules');
         const schedules = await res.json();
         if (!res.ok) {
@@ -8096,11 +8145,23 @@ async function loadEventSchedules() {
     }
 }
 
-async function openEventScheduleModal() {
+async function openEventScheduleModal(seminarIdOpt) {
     document.getElementById('schedule-id').value = '';
     document.getElementById('event-schedule-form').reset();
-    await populateScheduleSeminarSelect('');
+    await populateScheduleSeminarSelect(seminarIdOpt != null ? seminarIdOpt : '');
     document.getElementById('event-schedule-modal').classList.remove('hidden');
+}
+
+async function openEventScheduleModalForSeminar(seminarId, seminarTitle) {
+    switchTab('tab-event-schedules');
+    const filter = document.getElementById('event-schedules-seminar-filter');
+    if (filter) filter.value = String(seminarId);
+    renderEventSchedulesTable();
+    await openEventScheduleModal(seminarId);
+    if (seminarTitle) {
+        const titleEl = document.getElementById('schedule-title');
+        if (titleEl && !titleEl.value.trim()) titleEl.value = seminarTitle + ' — ';
+    }
 }
 
 async function editEventScheduleById(id) {
@@ -8113,8 +8174,8 @@ async function editEventScheduleById(id) {
     document.getElementById('schedule-title').value = s.title || '';
     document.getElementById('schedule-description').value = s.description || '';
     await populateScheduleSeminarSelect(s.seminar_id || '');
-    document.getElementById('schedule-start-time').value = toDatetimeLocalValue(s.start_time);
-    document.getElementById('schedule-end-time').value = toDatetimeLocalValue(s.end_time);
+    document.getElementById('schedule-start-time').value = scheduleDatetimeLocalValue(s.start_time);
+    document.getElementById('schedule-end-time').value = scheduleDatetimeLocalValue(s.end_time);
     document.getElementById('schedule-location').value = s.location || '';
     document.getElementById('schedule-speaker-name').value = s.speaker_name || '';
     document.getElementById('schedule-speaker-bio').value = s.speaker_bio || '';
@@ -8125,12 +8186,16 @@ async function saveEventSchedule(e) {
     e.preventDefault();
     const id = document.getElementById('schedule-id').value;
     const seminarRaw = document.getElementById('schedule-seminar').value;
+    if (!seminarRaw) {
+        alert('Please select the seminar / event this schedule belongs to.');
+        return;
+    }
     const data = {
         title: document.getElementById('schedule-title').value,
         description: document.getElementById('schedule-description').value,
-        seminarId: seminarRaw || null,
-        startTime: document.getElementById('schedule-start-time').value,
-        endTime: document.getElementById('schedule-end-time').value,
+        seminarId: seminarRaw,
+        startTime: scheduleDatetimeFromLocal(document.getElementById('schedule-start-time').value),
+        endTime: scheduleDatetimeFromLocal(document.getElementById('schedule-end-time').value),
         location: document.getElementById('schedule-location').value,
         speakerName: document.getElementById('schedule-speaker-name').value,
         speakerBio: document.getElementById('schedule-speaker-bio').value

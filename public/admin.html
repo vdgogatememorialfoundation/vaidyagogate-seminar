@@ -65,9 +65,9 @@
             <div data-site-logo data-logo-height="48px" style="margin-bottom:12px;"></div>
             <h2 style="color: #0d9488; margin-bottom: 8px; font-size: 1.35rem;">Admin portal login</h2>
             <p style="color: #64748b; font-size: 0.88rem; margin-bottom: 18px; text-align: left;">Staff and super administrators sign in here with email and password only (no login OTP).</p>
-            <form id="admin-login-form">
-                <input type="email" id="admin-email" placeholder="Admin email" required value="admin@vaidyagogate.org">
-                <input type="password" id="admin-password" placeholder="Password" style="margin-top: 12px;" required value="Admin@2026">
+            <form id="admin-login-form" autocomplete="off">
+                <input type="email" id="admin-email" name="admin-portal-email" placeholder="Admin email" required autocomplete="off" autocapitalize="off" spellcheck="false">
+                <input type="password" id="admin-password" name="admin-portal-password" placeholder="Password" style="margin-top: 12px;" required autocomplete="new-password">
                 <div id="admin_login_otp_panel" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid #e2e8f0;text-align:left;">
                     <p style="font-size:0.82rem;color:#64748b;margin-bottom:10px;">Verify with codes sent to the email and phone on this account.</p>
                     <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px;">
@@ -307,9 +307,17 @@
             <div id="tab-event-schedules" class="tab-pane hidden">
                 <h2 style="margin-bottom: 20px;">Event Schedules</h2>
                 <div class="card">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
                         <h3>All Event Schedules</h3>
                         <button class="btn-primary" onclick="openEventScheduleModal()">+ Create New Schedule</button>
+                    </div>
+                    <div style="margin-bottom:12px;display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;">
+                        <div>
+                            <label for="event-schedules-seminar-filter" style="font-weight:600;font-size:0.9rem;">Filter by seminar</label>
+                            <select id="event-schedules-seminar-filter" onchange="renderEventSchedulesTable()" style="display:block;margin-top:6px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;min-width:220px;">
+                                <option value="">All seminars</option>
+                            </select>
+                        </div>
                     </div>
                     <div style="margin-bottom:12px;">
                         <label for="event-schedules-search" style="font-weight:600;font-size:0.9rem;">Search schedules</label>
@@ -1994,7 +2002,7 @@
                 <input type="hidden" id="schedule-id">
                 <div><label>Title</label><input type="text" id="schedule-title" required></div>
                 <div><label>Description</label><textarea id="schedule-description" rows="2"></textarea></div>
-                <div><label>Link to seminar (optional)</label><select id="schedule-seminar" style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; width: 100%;"><option value="">Loading seminars…</option></select><p style="font-size:0.8rem;color:#64748b;margin-top:6px;">Seminars are loaded from Seminar Management.</p></div>
+                <div><label>Seminar / event</label><select id="schedule-seminar" required style="padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; width: 100%;"><option value="">Loading seminars…</option></select><p style="font-size:0.8rem;color:#64748b;margin-top:6px;">Pick the seminar this session belongs to. Use <strong>Schedule</strong> on Seminar Management to pre-fill this.</p></div>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                     <div><label>Start Time</label><input type="datetime-local" id="schedule-start-time" required></div>
                     <div><label>End Time</label><input type="datetime-local" id="schedule-end-time" required></div>
@@ -2083,6 +2091,6 @@
     <script src="/js/portal-upload.js?v=20260522"></script>
     <script src="/js/user-roles.js?v=20260522f"></script>
     <script src="/js/admin-list-search.js?v=20260522a"></script>
-    <script src="/js/admin.js?v=20260527b"></script>
+    <script src="/js/admin.js?v=20260528a"></script>
 </body>
 </html>

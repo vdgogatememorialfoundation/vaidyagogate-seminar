@@ -1087,6 +1087,14 @@ function registrationQualIsPg() {
     return q === 'PG';
 }
 
+const REGISTRATION_COLLEGE_KEYS = new Set(['cpin', 'college', 'ccity', 'cstate']);
+
+function registrationFieldStep(f) {
+    if (REGISTRATION_COLLEGE_KEYS.has(f.key)) return 4;
+    const s = f.step != null ? parseInt(f.step, 10) : 1;
+    return Number.isNaN(s) ? 1 : s;
+}
+
 /** Matches server DEFAULT_REGISTRATION_FORM_CONFIG when API fields are empty. */
 const DEFAULT_REGISTRATION_FALLBACK_FIELDS = [
     { key: 'fname', label: 'First name', type: 'text', step: 1, enabled: true, required: true },
@@ -1450,8 +1458,8 @@ function validateRegistrationAgainstConfigForSteps(upToStepInclusive) {
         for (const f of fields) {
             if (!f.enabled) continue;
             if (f.key === 'agree_terms') continue;
-            const fStep = f.step != null ? parseInt(f.step, 10) : 1;
-            if (Number.isNaN(fStep) || fStep !== sn) continue;
+            const fStep = registrationFieldStep(f);
+            if (fStep !== sn) continue;
             if (f.onlyWhenAdvancedQual && !adv) continue;
             if (f.onlyWhenPgCollege && !registrationQualIsPg()) continue;
             const fk = String(f.key || '');
@@ -1610,10 +1618,17 @@ async function loadRegistrationFormConfigAndApply(seminarIdOpt) {
             if (lab && f.label) lab.textContent = f.label + (f.required ? ' *' : '');
         }
         if (f.key !== 'certificate') {
-            el.required = !!(f.enabled && f.required && (!f.onlyWhenAdvancedQual || needsAdvancedQualDoctor()));
+            const pgOk = !f.onlyWhenPgCollege || registrationQualIsPg();
+            el.required = !!(
+                f.enabled &&
+                f.required &&
+                pgOk &&
+                (!f.onlyWhenAdvancedQual || needsAdvancedQualDoctor())
+            );
         }
     });
     refreshRegistrationRequiredAttributes();
+    toggleCollegeStep();
     await initRegistrationAddressUi();
 }
 
@@ -1677,6 +1692,10 @@ function refreshRegistrationRequiredAttributes() {
         const el = document.getElementById(REGISTRATION_FIELD_IDS[f.key]);
         if (!el || el.type === 'file') return;
         if (f.onlyWhenAdvancedQual && !adv) {
+            el.required = false;
+            return;
+        }
+        if (f.onlyWhenPgCollege && !registrationQualIsPg()) {
             el.required = false;
             return;
         }
@@ -3105,6 +3124,7 @@ async function nextStep(step) {
     
     // Show current step
     document.getElementById(`step-${step}`).classList.remove('hidden');
+    if (step === 4) toggleCollegeStep();
     
     // Update progress indicator
     for (let i = 0; i <= step; i++) {
@@ -3434,14 +3454,28 @@ function toggleRegBlock() {
 }
 
 function toggleCollegeStep() {
-    const step4 = document.getElementById('step-4');
-    if (!step4) return;
     const isPg = registrationQualIsPg();
-    step4.querySelectorAll('input').forEach((inp) => {
-        if (inp.id && inp.id.startsWith('reg-c')) inp.required = isPg;
-    });
+    const ind4 = document.getElementById('ind-step-4');
+    if (ind4) ind4.style.display = isPg ? '' : 'none';
     const hint = document.getElementById('step-4-pg-hint');
     if (hint) hint.style.display = isPg ? '' : 'none';
+    const fields = window.__registrationFormFields || [];
+    REGISTRATION_COLLEGE_KEYS.forEach((key) => {
+        const id = REGISTRATION_FIELD_IDS[key];
+        const el = document.getElementById(id);
+        if (!el) return;
+        const fg = el.closest('.form-group');
+        const cfg = fields.find((f) => f.key === key);
+        const enabled = !cfg || cfg.enabled !== false;
+        if (fg) {
+            if (isPg && enabled) fg.classList.remove('hidden');
+            else fg.classList.add('hidden');
+        }
+        if (el.tagName === 'SELECT' || el.tagName === 'INPUT') {
+            el.required = !!(isPg && enabled && cfg && cfg.required !== false);
+        }
+    });
+    refreshRegistrationRequiredAttributes();
 }
 
 function nextRegistrationStepAfterCollege() {
