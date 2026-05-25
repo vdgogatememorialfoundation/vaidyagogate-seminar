@@ -5426,13 +5426,17 @@ function renderSeminarsTable() {
             ? `<span style="color:green;font-weight:bold;">Yes (${s.checkin_date || 'Any'})</span>`
             : `<span style="color:red;">No</span>`;
         const activeStatus = s.is_active ? '' : '<span style="color:red; font-size: 0.8rem;">(Inactive)</span>';
+        const preregTag =
+            Number(s.preregistration_enabled) === 1
+                ? ' <span style="font-size:0.72rem;background:#ecfdf5;color:#047857;padding:2px 6px;border-radius:4px;">Pre-reg</span>'
+                : '';
         const yearTag = s.portal_year
             ? `<span style="font-size:0.75rem;color:#64748b;">${s.portal_year}</span>`
             : '';
         return `
                 <tr style="${pastRow ? 'opacity:0.85;background:#f8fafc;' : ''}">
                     <td>${s.id}</td>
-                    <td><strong>${s.title}</strong> ${activeStatus} ${yearTag}</td>
+                    <td><strong>${s.title}</strong> ${activeStatus}${preregTag} ${yearTag}</td>
                     <td>${s.event_date ? (window.PortalDateTime && window.PortalDateTime.formatEvent ? window.PortalDateTime.formatEvent(s.event_date) : window.PortalDateTime ? window.PortalDateTime.format(s.event_date) : new Date(s.event_date).toLocaleString()) : '—'}</td>
                     <td>₹${s.price || 0}</td>
                     <td>${checkinStatus}</td>
@@ -7763,6 +7767,14 @@ async function deleteAdminCaseSubmission(subId) {
 }
 let adminPortalYear = new Date().getFullYear();
 
+function syncSeminarPreregUi() {
+    const on = document.getElementById('seminar-prereg-enabled')?.checked === true;
+    const wrap = document.getElementById('seminar-prereg-fields');
+    if (!wrap) return;
+    wrap.style.opacity = on ? '1' : '0.55';
+    wrap.style.pointerEvents = on ? 'auto' : 'none';
+}
+
 function openCreateSeminarModal() {
     document.getElementById('admin-seminar-modal').classList.remove('hidden');
     document.getElementById('seminar-form').reset();
@@ -7778,6 +7790,9 @@ function openCreateSeminarModal() {
     if (py) py.value = adminPortalYear || new Date().getFullYear();
     if (typeof loadSeminarCancellationUi === 'function') loadSeminarCancellationUi('');
     if (typeof loadSeminarFormOverrideUi === 'function') loadSeminarFormOverrideUi('');
+    const preregCh = document.getElementById('seminar-prereg-enabled');
+    if (preregCh) preregCh.checked = false;
+    syncSeminarPreregUi();
 }
 
 async function loadAdminPortalYear() {
@@ -7858,6 +7873,13 @@ function editSeminar(index) {
               : '';
     document.getElementById('seminar-reg-start').value = formatDt(s.registration_start);
     document.getElementById('seminar-reg-end').value = formatDt(s.registration_end);
+    const preregCh = document.getElementById('seminar-prereg-enabled');
+    if (preregCh) preregCh.checked = Number(s.preregistration_enabled) === 1;
+    const preregStart = document.getElementById('seminar-prereg-start');
+    const preregEnd = document.getElementById('seminar-prereg-end');
+    if (preregStart) preregStart.value = formatDt(s.preregistration_start);
+    if (preregEnd) preregEnd.value = formatDt(s.preregistration_end);
+    syncSeminarPreregUi();
     document.getElementById('seminar-event-date').value = formatDt(s.event_date);
     const py = document.getElementById('seminar-portal-year');
     if (py) py.value = s.portal_year || adminPortalYear || new Date().getFullYear();
@@ -7934,6 +7956,21 @@ async function saveSeminar(e) {
         registration_end: window.PortalDateTime
             ? window.PortalDateTime.fromDatetimeLocal(document.getElementById('seminar-reg-end').value)
             : document.getElementById('seminar-reg-end').value,
+        preregistration_enabled: document.getElementById('seminar-prereg-enabled')?.checked === true,
+        preregistration_start: (() => {
+            const el = document.getElementById('seminar-prereg-start');
+            if (!el || !document.getElementById('seminar-prereg-enabled')?.checked) return null;
+            const v = el.value;
+            if (!v) return null;
+            return window.PortalDateTime ? window.PortalDateTime.fromDatetimeLocal(v) : v;
+        })(),
+        preregistration_end: (() => {
+            const el = document.getElementById('seminar-prereg-end');
+            if (!el || !document.getElementById('seminar-prereg-enabled')?.checked) return null;
+            const v = el.value;
+            if (!v) return null;
+            return window.PortalDateTime ? window.PortalDateTime.fromDatetimeLocal(v) : v;
+        })(),
         event_date: window.PortalDateTime
             ? window.PortalDateTime.fromDatetimeLocal(document.getElementById('seminar-event-date').value)
             : document.getElementById('seminar-event-date').value,

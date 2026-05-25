@@ -1000,6 +1000,12 @@ function ensurePortalSchema(next) {
                                             ignoreSchemaMigrationErr(h7d);
                                         db.run(`ALTER TABLE seminars ADD COLUMN show_seats_public INTEGER DEFAULT 1`, (h7s) => {
                                             ignoreSchemaMigrationErr(h7s);
+                                        db.run(`ALTER TABLE seminars ADD COLUMN preregistration_enabled INTEGER DEFAULT 0`, (h7pr) => {
+                                            ignoreSchemaMigrationErr(h7pr);
+                                        db.run(`ALTER TABLE seminars ADD COLUMN preregistration_start TEXT`, (h7prs) => {
+                                            ignoreSchemaMigrationErr(h7prs);
+                                        db.run(`ALTER TABLE seminars ADD COLUMN preregistration_end TEXT`, (h7pre) => {
+                                            ignoreSchemaMigrationErr(h7pre);
                                             ticketScanEvents.ensureTicketScanEventsTable(db, () => {});
                                         db.run(`ALTER TABLE tickets ADD COLUMN ticket_id_string TEXT`, (e2) => {
                                             ignoreSchemaMigrationErr(e2);
@@ -1103,6 +1109,9 @@ function ensurePortalSchema(next) {
                                                     });
                                                 });
                                             });
+                                        });
+                                        });
+                                        });
                                         });
                                         });
                                         });
@@ -1347,6 +1356,19 @@ function isSeminarRegistrationOpen(row) {
     const re = seminarDt.parseSeminarMs(row.registration_end);
     if (rs != null && now < rs) return false;
     if (re != null && now > re) return false;
+    return true;
+}
+
+/** Pre-registration window (admin-configured; doctor portal can use when enabled). */
+function isSeminarPreregistrationOpen(row) {
+    if (!row || Number(row.preregistration_enabled) !== 1) return false;
+    const now = Date.now();
+    const ps = seminarDt.parseSeminarMs(row.preregistration_start);
+    const pe = seminarDt.parseSeminarMs(row.preregistration_end);
+    if (ps != null && now < ps) return false;
+    if (pe != null && now > pe) return false;
+    const rs = seminarDt.parseSeminarMs(row.registration_start);
+    if (rs != null && now >= rs) return false;
     return true;
 }
 
@@ -6265,7 +6287,10 @@ app.post('/api/admin/seminars', (req, res) => {
         public_list_enabled,
         cert_scans_required,
         is_active,
-        show_seats_public
+        show_seats_public,
+        preregistration_enabled,
+        preregistration_start,
+        preregistration_end
     } = req.body;
     const certScansReq = certVerify.normalizeCertScansRequired(cert_scans_required);
     const rfj = registration_form_json != null && String(registration_form_json).trim() !== '' ? String(registration_form_json) : null;
@@ -6281,16 +6306,22 @@ app.post('/api/admin/seminars', (req, res) => {
     const activeFlag = is_active === false || is_active === 0 || is_active === '0' ? 0 : 1;
     const showSeats =
         show_seats_public === false || show_seats_public === 0 || show_seats_public === '0' ? 0 : 1;
+    const preregEnabled =
+        preregistration_enabled === true || preregistration_enabled === 1 || preregistration_enabled === '1'
+            ? 1
+            : 0;
     const regStart = seminarDt.normalizeSeminarDateTimeForStorage(registration_start);
     const regEnd = seminarDt.normalizeSeminarRegistrationEndForStorage(registration_end);
     const eventDt = seminarDt.normalizeSeminarDateTimeForStorage(event_date);
+    const preregStart = seminarDt.normalizeSeminarDateTimeForStorage(preregistration_start);
+    const preregEnd = seminarDt.normalizeSeminarRegistrationEndForStorage(preregistration_end);
     const bodyYear = req.body && req.body.portal_year != null ? parseInt(req.body.portal_year, 10) : null;
     portalTracking.getPortalYear(db, (ePy, defaultYear) => {
         const portalYear =
             Number.isInteger(bodyYear) && bodyYear > 2000 ? bodyYear : defaultYear;
         db.run(
-            `INSERT INTO seminars (title, description, registration_start, registration_end, event_date, capacity, price, checkin_enabled, checkin_date, location_url, terms_conditions, hero_image_path, flyer_path, gallery_paths, registration_form_json, cancellation_policy_json, whatsapp_group_url, otp_on_application, otp_on_step1, otp_on_submit, public_list_enabled, cert_scans_required, portal_year, is_active, show_seats_public) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO seminars (title, description, registration_start, registration_end, event_date, capacity, price, checkin_enabled, checkin_date, location_url, terms_conditions, hero_image_path, flyer_path, gallery_paths, registration_form_json, cancellation_policy_json, whatsapp_group_url, otp_on_application, otp_on_step1, otp_on_submit, public_list_enabled, cert_scans_required, portal_year, is_active, show_seats_public, preregistration_enabled, preregistration_start, preregistration_end) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 title,
                 description,
@@ -6316,7 +6347,10 @@ app.post('/api/admin/seminars', (req, res) => {
                 certScansReq,
                 portalYear,
                 activeFlag,
-                showSeats
+                showSeats,
+                preregEnabled,
+                preregStart,
+                preregEnd
             ],
             function (err) {
             if (err) return res.status(500).json({ error: err.message });
@@ -6355,7 +6389,10 @@ app.put('/api/admin/seminars/:id', (req, res) => {
         public_list_enabled,
         cert_scans_required,
         portal_year,
-        show_seats_public
+        show_seats_public,
+        preregistration_enabled,
+        preregistration_start,
+        preregistration_end
     } = req.body;
     const certScansReq = certVerify.normalizeCertScansRequired(cert_scans_required);
     const rfj = registration_form_json != null && String(registration_form_json).trim() !== '' ? String(registration_form_json) : null;
@@ -6370,15 +6407,21 @@ app.put('/api/admin/seminars/:id', (req, res) => {
     const pubList = public_list_enabled ? 1 : 0;
     const showSeats =
         show_seats_public === false || show_seats_public === 0 || show_seats_public === '0' ? 0 : 1;
+    const preregEnabled =
+        preregistration_enabled === true || preregistration_enabled === 1 || preregistration_enabled === '1'
+            ? 1
+            : 0;
     const py = portal_year != null ? parseInt(portal_year, 10) : null;
     const regStart = seminarDt.normalizeSeminarDateTimeForStorage(registration_start);
     const regEnd = seminarDt.normalizeSeminarRegistrationEndForStorage(registration_end);
     const eventDt = seminarDt.normalizeSeminarDateTimeForStorage(event_date);
+    const preregStart = seminarDt.normalizeSeminarDateTimeForStorage(preregistration_start);
+    const preregEnd = seminarDt.normalizeSeminarRegistrationEndForStorage(preregistration_end);
     portalTracking.getPortalYear(db, (ePy, defaultYear) => {
         if (ePy) return res.status(500).json({ error: ePy.message });
         const finalPortalYear = Number.isInteger(py) && py > 2000 ? py : defaultYear;
         db.run(
-            `UPDATE seminars SET title=?, description=?, registration_start=?, registration_end=?, event_date=?, capacity=?, price=?, checkin_enabled=?, checkin_date=?, is_active=?, location_url=?, terms_conditions=?, hero_image_path=?, flyer_path=?, gallery_paths=?, registration_form_json=?, cancellation_policy_json=?, whatsapp_group_url=?, otp_on_application=?, otp_on_step1=?, otp_on_submit=?, public_list_enabled=?, cert_scans_required=?, portal_year=?, show_seats_public=? WHERE id=?`,
+            `UPDATE seminars SET title=?, description=?, registration_start=?, registration_end=?, event_date=?, capacity=?, price=?, checkin_enabled=?, checkin_date=?, is_active=?, location_url=?, terms_conditions=?, hero_image_path=?, flyer_path=?, gallery_paths=?, registration_form_json=?, cancellation_policy_json=?, whatsapp_group_url=?, otp_on_application=?, otp_on_step1=?, otp_on_submit=?, public_list_enabled=?, cert_scans_required=?, portal_year=?, show_seats_public=?, preregistration_enabled=?, preregistration_start=?, preregistration_end=? WHERE id=?`,
             [
                 title,
                 description,
@@ -6405,6 +6448,9 @@ app.put('/api/admin/seminars/:id', (req, res) => {
                 certScansReq,
                 finalPortalYear,
                 showSeats,
+                preregEnabled,
+                preregStart,
+                preregEnd,
                 req.params.id
             ],
             function (err) {

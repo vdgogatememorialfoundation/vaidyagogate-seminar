@@ -87,7 +87,7 @@
         </div>
     </div>
 
-    <section id="congress-hero-root" class="congress-hero" aria-label="Featured">
+    <section id="congress-hero-root" class="congress-hero home-page-only" aria-label="Featured">
         <div id="congress-hero-slides"></div>
         <div class="congress-hero-arrows">
             <button type="button" class="prev" id="congress-hero-prev" aria-label="Previous"><i class="fas fa-chevron-left"></i></button>
@@ -98,16 +98,15 @@
         </div>
     </section>
 
-    <section class="vg-stats-strip" aria-label="Seminar highlights">
+    <section id="home-stats-strip" class="vg-stats-strip home-page-only" aria-label="Seminar highlights">
         <div class="vg-stats-grid" id="vg-stats-grid">
             <div class="vg-stat"><strong>…</strong><span>Loading</span></div>
         </div>
     </section>
 
-    <a href="#" class="cg-fab-register" id="cg-fab-register" data-portal-auth="signup" onclick="openRegisterModal(); return false;"><i class="fas fa-user-plus"></i> Register</a>
+    <a href="#" class="cg-fab-register home-page-only" id="cg-fab-register" data-portal-auth="signup" onclick="openRegisterModal(); return false;"><i class="fas fa-user-plus"></i> Register</a>
 
-    <div id="countdown-region"></div>
-    <div id="cert-verify-countdown-region" class="hidden" style="max-width:960px;margin:0 auto 16px;padding:0 16px;"></div>
+    <div id="countdown-region" class="home-page-only"></div>
 
     <main class="main-content" id="main-content">
         <div id="homeSection">
@@ -184,6 +183,7 @@
                         </div>
 
         <div id="verifySection" class="hidden" style="margin-top:0;padding-top:8px;">
+            <div id="cert-verify-countdown-region" class="hidden" style="max-width:960px;margin:0 auto 16px;padding:0 16px 20px;"></div>
             <div class="section-head">
                 <h2><i class="fas fa-shield-check verify-head-icon" aria-hidden="true"></i> Participant verification</h2>
                 <p>Official list of admitted delegates with confirmed payment</p>
@@ -1056,6 +1056,18 @@
             }
         }
 
+        function setHomePageChromeVisible(isHome) {
+            document.querySelectorAll('.home-page-only').forEach((el) => {
+                el.classList.toggle('hidden', !isHome);
+            });
+            const cd = document.getElementById('countdown-region');
+            if (cd && !isHome) {
+                cd.style.display = 'none';
+            } else if (cd && isHome && cd.innerHTML.trim()) {
+                cd.style.display = 'block';
+            }
+        }
+
         window.showSection = function showSection(section) {
             if (typeof window.closeMobileNav === 'function') window.closeMobileNav();
             if (typeof window.highlightCongressNav === 'function') window.highlightCongressNav(section);
@@ -1073,6 +1085,17 @@
             });
             const target = document.getElementById(map[section]);
             if (target) target.classList.remove('hidden');
+            setHomePageChromeVisible(section === 'home');
+            const certRegion = document.getElementById('cert-verify-countdown-region');
+            if (certRegion) {
+                if (section === 'verify') {
+                    loadCertVerifyCountdown();
+                } else {
+                    certRegion.classList.add('hidden');
+                    certRegion.innerHTML = '';
+                    if (certVerifyCountdownTimer) clearInterval(certVerifyCountdownTimer);
+                }
+            }
             window.scrollTo({ top: 0, behavior: 'smooth' });
             if (section === 'verify') loadVerifySeminars();
             if (section === 'schedule' && typeof loadEventSchedulesPublic === 'function') {
@@ -1798,7 +1821,6 @@
         if (typeof loadOpenSeminarsStrip === 'function') loadOpenSeminarsStrip();
         loadNotices();
         loadTimerAndSeminars();
-        loadCertVerifyCountdown();
         loadVerifySeminars();
     </script>
     <script src="/js/site-branding.js"></script>
