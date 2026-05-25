@@ -522,6 +522,9 @@ function switchTab(tabId) {
     if (tabId === 'tab-behalf-reg' || tabId === 'tab-site-cms') {
         refreshAdminSensitiveOtpRequirement();
     }
+    if (tabId === 'tab-site-cms' && typeof loadAdminSiteCms === 'function') {
+        loadAdminSiteCms();
+    }
     if (tabId === 'tab-staff-users' || tabId === 'tab-doctors') {
         loadUsers();
     }
@@ -9687,13 +9690,20 @@ function cmsAddSocialRow(prefill) {
     wrap.innerHTML = `
         <div><label style="font-size:0.8rem;">Platform</label><select class="cs-platform" style="width:100%"><option value="youtube">youtube</option><option value="facebook">facebook</option><option value="instagram">instagram</option><option value="twitter">twitter</option><option value="linkedin">linkedin</option><option value="whatsapp">whatsapp</option><option value="link">link</option></select></div>
         <div><label style="font-size:0.8rem;">Label</label><input class="cs-label" type="text" style="width:100%"></div>
-        <div><label style="font-size:0.8rem;">URL</label><input class="cs-url" type="url" style="width:100%"></div>
+        <div><label style="font-size:0.8rem;">URL</label><input class="cs-url" type="text" inputmode="url" placeholder="https://..." style="width:100%"></div>
         <div style="grid-column:1/-1;"><button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;background:#64748b;" onclick="this.closest('.cms-social-row').remove()">Remove</button></div>`;
     const plat = wrap.querySelector('.cs-platform');
     if (plat) plat.value = p.platform || 'link';
     wrap.querySelector('.cs-label').value = p.label || '';
     wrap.querySelector('.cs-url').value = p.url || '';
     root.appendChild(wrap);
+}
+
+function cmsNormalizeSocialUrl(raw) {
+    const u = String(raw || '').trim();
+    if (!u) return '';
+    if (/^https?:\/\//i.test(u)) return u;
+    return 'https://' + u.replace(/^\/+/, '');
 }
 
 function cmsCollectSocialFromDom() {
@@ -9703,7 +9713,7 @@ function cmsCollectSocialFromDom() {
         .map((row) => ({
             platform: (row.querySelector('.cs-platform') || {}).value || 'link',
             label: (row.querySelector('.cs-label') || {}).value || '',
-            url: (row.querySelector('.cs-url') || {}).value || ''
+            url: cmsNormalizeSocialUrl((row.querySelector('.cs-url') || {}).value)
         }))
         .filter((x) => x.url);
 }
@@ -10729,6 +10739,7 @@ async function saveAdminSiteCms() {
         return acc;
     }, []);
     const siteMenu = cmsCollectMenuFromDom();
+    const heroBundle = cmsCollectHeroFieldsFromForm();
     try {
         const cms = {
             tickerText: (document.getElementById('cms-ticker') || {}).value || '',
@@ -10745,7 +10756,14 @@ async function saveAdminSiteCms() {
             siteMenu,
             speakers: cmsCollectSpeakersFromDom(),
             seo: cmsCollectSeoFieldsFromForm(),
-            ...cmsCollectHeroFieldsFromForm()
+            topBar: heroBundle.topBar,
+            hero: heroBundle.hero,
+            heroStats: heroBundle.heroStats,
+            schedulePage: heroBundle.schedulePage,
+            contact: heroBundle.contact,
+            footer: heroBundle.footer,
+            featureCards: heroBundle.featureCards,
+            faq: heroBundle.faq
         };
         const res = await fetch('/api/admin/site-cms', {
             method: 'POST',
@@ -10758,6 +10776,7 @@ async function saveAdminSiteCms() {
                 msg.style.color = '#15803d';
                 msg.innerText = 'Website and portal content saved.';
             }
+            await loadAdminSiteCms();
         } else if (msg) {
             msg.style.color = '#b91c1c';
             msg.innerText = data.error || 'Save failed';

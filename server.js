@@ -3957,7 +3957,20 @@ app.post('/api/admin/site-cms', (req, res) => {
         }
         if (typeof incoming.tickerText === 'string') merged.tickerText = incoming.tickerText;
         if (typeof incoming.bannerImage === 'string') merged.bannerImage = incoming.bannerImage;
-        ['topBar', 'hero', 'contact', 'schedulePage', 'footer'].forEach((k) => {
+        if (incoming.footer && typeof incoming.footer === 'object') {
+            const f = incoming.footer;
+            merged.footer = {
+                tagline: f.tagline != null ? String(f.tagline) : '',
+                copyright: f.copyright != null ? String(f.copyright) : '',
+                exploreTitle: f.exploreTitle != null ? String(f.exploreTitle) : 'Explore',
+                doctorTitle: f.doctorTitle != null ? String(f.doctorTitle) : 'Doctor access',
+                contactTitle: f.contactTitle != null ? String(f.contactTitle) : 'Contact',
+                creditHtml: f.creditHtml != null ? String(f.creditHtml) : '',
+                exploreLinks: Array.isArray(f.exploreLinks) ? f.exploreLinks : [],
+                doctorLinks: Array.isArray(f.doctorLinks) ? f.doctorLinks : []
+            };
+        }
+        ['topBar', 'hero', 'contact', 'schedulePage'].forEach((k) => {
             if (incoming[k] && typeof incoming[k] === 'object') {
                 merged[k] = { ...(merged[k] || {}), ...incoming[k] };
             }

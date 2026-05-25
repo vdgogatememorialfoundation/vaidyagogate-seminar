@@ -189,8 +189,12 @@
             const contactH = document.getElementById('footer-contact-heading');
             if (contactH) contactH.textContent = foot.contactTitle;
         }
-        const creditEl = document.querySelector('.footer-credit');
-        if (creditEl && foot.creditHtml) creditEl.innerHTML = foot.creditHtml;
+        const creditEl = document.getElementById('footer-credit');
+        if (creditEl) {
+            creditEl.innerHTML =
+                foot.creditHtml ||
+                'Developed by <a href="https://capturevisualstudios.com" target="_blank" rel="noopener noreferrer">Capture Visual Studios</a>';
+        }
         const exploreUl = document.getElementById('footer-explore-links');
         if (exploreUl && Array.isArray(foot.exploreLinks) && foot.exploreLinks.length) {
             exploreUl.innerHTML = foot.exploreLinks
