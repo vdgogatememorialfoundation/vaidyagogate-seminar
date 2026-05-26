@@ -312,10 +312,21 @@ async function adminDeleteUserAccount(userId, displayName, portalId) {
     }
 }
 
+function mergeAdminEnabledPagesPolicy(stored) {
+    const pages = stored && typeof stored === 'object' ? { ...stored } : {};
+    const keys = Object.keys(pages);
+    const restrict = keys.length && keys.some((k) => pages[k] === true);
+    if (restrict && !('tab-book-sales' in pages)) {
+        pages['tab-book-sales'] = true;
+    }
+    return pages;
+}
+
 function adminCanAccessTab(tabId) {
     let checkId = tabId === 'tab-seminar-details' ? 'tab-seminars' : tabId;
     if (checkId === 'tab-users') checkId = 'tab-staff-users';
-    const globalPages = window.__adminEnabledPages || {};
+    if (isSuperAdminUser()) return true;
+    const globalPages = mergeAdminEnabledPagesPolicy(window.__adminEnabledPages || {});
     const globalKeys = Object.keys(globalPages);
     if (globalKeys.length) {
         const anyOn = globalKeys.some((k) => globalPages[k] === true);
@@ -10604,7 +10615,7 @@ async function loadPortalAuthAdminForm() {
         setChk('pa-req-admin-sensitive-otp', d.config.requireAdminOtpForSensitive);
         setChk('pa-req-behalf-applicant-otp', d.config.requireBehalfApplicantOtp !== false);
         __requireBehalfApplicantOtp = d.config.requireBehalfApplicantOtp !== false;
-        window.__adminEnabledPages = d.config.adminEnabledPages || {};
+        window.__adminEnabledPages = mergeAdminEnabledPagesPolicy(d.config.adminEnabledPages || {});
         window.__websiteMenuPages = d.config.websiteMenuPages || {};
         renderAdminGlobalPagesCheckboxes();
         renderWebsiteMenuPagesCheckboxes();
@@ -10623,7 +10634,7 @@ function renderAdminGlobalPagesCheckboxes() {
     const superUser = isSuperAdminUser();
     if (card) card.style.display = superUser ? '' : 'none';
     if (!superUser) return;
-    const pages = window.__adminEnabledPages || {};
+    const pages = mergeAdminEnabledPagesPolicy(window.__adminEnabledPages || {});
     const keys = Object.keys(pages);
     const restrict = keys.length && keys.some((k) => pages[k] === true);
     wrap.innerHTML = ADMIN_MODULE_TAB_DEFS.map(([id, title]) => {
