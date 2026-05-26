@@ -11982,6 +11982,9 @@ async function loadBsOrders(silent) {
     const filter = (document.getElementById('bs-orders-filter') || {}).value || '';
     const url = '/api/admin/book-sales/orders?limit=200' + (filter ? '&status=' + encodeURIComponent(filter) : '');
     try {
+        if (!silent) {
+            fetch('/api/admin/book-sales/poll-courier-tracks', { method: 'POST' }).catch(() => {});
+        }
         const r = await fetch(url);
         const orders = await r.json();
         renderBookSalesOrdersTable(Array.isArray(orders) ? orders : []);
@@ -11997,9 +12000,13 @@ const BS_STATUS_LABELS = {
     awaiting_confirmation: 'Awaiting confirmation',
     pending_payment: 'Pending payment',
     confirmed: 'Ready for pickup',
-    fulfilled: 'Fulfilled',
+    shipped: 'Shipped — in transit',
+    delivered: 'Delivered',
+    fulfilled: 'Fulfilled (pickup)',
     cancelled: 'Cancelled'
 };
+
+let _bsTrackPollTimer = null;
 
 function renderBookSalesOrdersTable(rows) {
     const root = document.getElementById('bs-orders-table');
@@ -12021,7 +12028,10 @@ function renderBookSalesOrdersTable(rows) {
             const statusLabel = BS_STATUS_LABELS[o.status] || o.status;
             let fulfillCell = '📦 Pickup';
             if (ftype === 'courier') {
-                if (o.courier_shipment_status === 'shipped' && o.courier_tracking_no) {
+                if (
+                    (o.status === 'shipped' || o.courier_shipment_status === 'shipped' || (o.status === 'fulfilled' && ftype === 'courier')) &&
+                    o.courier_tracking_no
+                ) {
                     fulfillCell =
                         '🚚 Shipped · ' +
                         e(o.courier_provider || 'Courier') +
@@ -12052,8 +12062,15 @@ function renderBookSalesOrdersTable(rows) {
                 }
                 actions += '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.81rem;background:#b91c1c;" onclick="cancelBookOrderAdmin(' + o.id + ')">Cancel</button>';
             }
-            if (o.status === 'fulfilled' && ftype === 'courier' && o.courier_tracking_no) {
-                actions += '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.81rem;background:#7c3aed;" onclick="promptUpdateTracking(' + o.id + ')">Update tracking</button>';
+            if ((o.status === 'shipped' || (o.status === 'fulfilled' && ftype === 'courier')) && o.courier_tracking_no) {
+                actions +=
+                    '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.81rem;background:#0ea5e9;" onclick="bsRefreshCourierTrack(' +
+                    o.id +
+                    ')">Refresh track</button> ';
+                actions +=
+                    '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.81rem;background:#15803d;" onclick="bsMarkCourierDelivered(' +
+                    o.id +
+                    ')">Mark delivered</button> ';
             }
             actions += '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.81rem;background:#475569;" onclick="bsViewOrderTracking(' + o.id + ')">Track</button>';
             return '<tr>' +
@@ -12449,40 +12466,140 @@ function bsRenderAdminTrackerHtml(timeline) {
     return html;
 }
 
+function bsRenderCourierLiveTrackHtml(o, data) {
+    const track = o.courierTrackLabel || o.courier_track_label || '';
+    const trackSt = o.courierTrackStatus || o.courier_track_status || '';
+    const url = data.courierTrackingUrl || o.courierTrackingUrl;
+    const events = data.courierTrackEvents || o.courierTrackEvents || [];
+    if (o.fulfillmentType !== 'courier' && o.fulfillment_type !== 'courier') return '';
+    let html =
+        '<div style="margin:12px 0;padding:12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;">' +
+        '<p style="margin:0;font-weight:700;color:#1e40af;">Live courier tracking</p>' +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
+        '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.8rem;background:#0ea5e9;" onclick="bsRefreshCourierTrack(' +
+        o.id +
+        ',true)">Refresh</button>';
+    if (o.status === 'shipped' || (o.status === 'fulfilled' && o.courier_tracking_no)) {
+        html +=
+            '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.8rem;background:#15803d;" onclick="bsMarkCourierDelivered(' +
+            o.id +
+            ',true)">Mark delivered</button>';
+    }
+    html += '</div></div>';
+    if (track || trackSt) {
+        html +=
+            '<p style="margin:0 0 6px;"><span style="background:#dbeafe;padding:2px 8px;border-radius:4px;font-weight:600;">' +
+            e(track || trackSt) +
+            '</span></p>';
+    }
+    if (url) {
+        html +=
+            '<p style="margin:0 0 8px;"><a href="' +
+            e(url) +
+            '" target="_blank" rel="noopener" style="color:#0d9488;font-weight:600;">Open on ' +
+            e(o.courierProvider || 'carrier') +
+            ' site ↗</a></p>';
+    }
+    if (events.length) {
+        html += '<ul style="margin:0;padding-left:18px;font-size:0.84rem;max-height:160px;overflow-y:auto;">';
+        events.forEach((ev) => {
+            html +=
+                '<li style="margin-bottom:4px;">' +
+                e(ev.description) +
+                (ev.at
+                    ? ' <span style="color:#64748b;">· ' +
+                      e(window.PortalDateTime && window.PortalDateTime.format ? window.PortalDateTime.format(ev.at) : ev.at) +
+                      '</span>'
+                    : '') +
+                '</li>';
+        });
+        html += '</ul>';
+    } else {
+        html += '<p style="margin:0;font-size:0.82rem;color:#64748b;">No scan events yet — click Refresh to pull from carrier.</p>';
+    }
+    html += '<p style="margin:8px 0 0;font-size:0.78rem;color:#64748b;">Auto-refreshes every 45s while this window is open.</p></div>';
+    return html;
+}
+
+async function bsRefreshCourierTrack(id, reloadModal) {
+    try {
+        const res = await fetch('/api/admin/book-sales/orders/' + id + '/refresh-courier-track', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Refresh failed');
+        loadBsOrders(true);
+        if (reloadModal) bsViewOrderTracking(id);
+    } catch (e) {
+        alert(e.message || 'Refresh failed');
+    }
+}
+
+async function bsMarkCourierDelivered(id, reloadModal) {
+    if (!confirm('Mark this shipment as delivered to the recipient?')) return;
+    const adm = getStoredAdminUser();
+    try {
+        const res = await fetch('/api/admin/book-sales/orders/' + id + '/mark-delivered', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: adm && adm.id })
+        });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Failed');
+        loadBsOrders(false);
+        if (reloadModal) bsViewOrderTracking(id);
+    } catch (e) {
+        alert(e.message || 'Failed');
+    }
+}
+
 async function bsViewOrderTracking(id) {
     const modal = document.getElementById('bs-tracking-modal');
     const body = document.getElementById('bs-tracking-body');
     if (!modal || !body) return;
+    if (_bsTrackPollTimer) {
+        clearInterval(_bsTrackPollTimer);
+        _bsTrackPollTimer = null;
+    }
     body.innerHTML = '<p style="color:#64748b;">Loading…</p>';
     modal.style.display = 'flex';
-    try {
-        const res = await fetch('/api/admin/book-sales/orders/' + id);
-        const data = await res.json();
-        if (!res.ok) {
-            body.innerHTML = '<p style="color:#b91c1c;">' + e(data.error || 'Failed') + '</p>';
-            return;
+    const render = async (doRefresh) => {
+        try {
+            if (doRefresh) {
+                await fetch('/api/admin/book-sales/orders/' + id + '/refresh-courier-track', { method: 'POST' }).catch(() => {});
+            }
+            const res = await fetch('/api/admin/book-sales/orders/' + id);
+            const data = await res.json();
+            if (!res.ok) {
+                body.innerHTML = '<p style="color:#b91c1c;">' + e(data.error || 'Failed') + '</p>';
+                return;
+            }
+            const o = data.order || {};
+            let html =
+                '<p style="margin:0 0 8px;"><strong>' + e(o.orderCode) + '</strong> · ' + e(BS_STATUS_LABELS[o.status] || o.status) + '</p>';
+            html += bsRenderCourierLiveTrackHtml(o, data);
+            html += bsRenderAdminTrackerHtml(data.timeline || o.timeline);
+            if (data.events && data.events.length) {
+                html += '<p style="margin:14px 0 6px;font-weight:600;font-size:0.88rem;">Activity log</p><ul style="margin:0;padding-left:18px;font-size:0.85rem;">';
+                data.events.forEach((ev) => {
+                    html +=
+                        '<li><strong>' +
+                        e(ev.title) +
+                        '</strong>' +
+                        (ev.at ? ' · ' + e(window.PortalDateTime && window.PortalDateTime.format ? window.PortalDateTime.format(ev.at) : ev.at) : '') +
+                        (ev.description ? '<br><span style="color:#64748b;">' + e(ev.description) + '</span>' : '') +
+                        '</li>';
+                });
+                html += '</ul>';
+            }
+            body.innerHTML = html;
+            if (o.fulfillmentType === 'courier' && o.status === 'shipped') {
+                _bsTrackPollTimer = setInterval(() => render(true), 45000);
+            }
+        } catch (err) {
+            body.innerHTML = '<p style="color:#b91c1c;">' + e(err.message) + '</p>';
         }
-        const o = data.order || {};
-        let html =
-            '<p style="margin:0 0 8px;"><strong>' + e(o.orderCode) + '</strong> · ' + e(BS_STATUS_LABELS[o.status] || o.status) + '</p>';
-        html += bsRenderAdminTrackerHtml(data.timeline || o.timeline);
-        if (data.events && data.events.length) {
-            html += '<p style="margin:14px 0 6px;font-weight:600;font-size:0.88rem;">Activity log</p><ul style="margin:0;padding-left:18px;font-size:0.85rem;">';
-            data.events.forEach((ev) => {
-                html +=
-                    '<li><strong>' +
-                    e(ev.title) +
-                    '</strong>' +
-                    (ev.at ? ' · ' + e(window.PortalDateTime && window.PortalDateTime.format ? window.PortalDateTime.format(ev.at) : ev.at) : '') +
-                    (ev.description ? '<br><span style="color:#64748b;">' + e(ev.description) + '</span>' : '') +
-                    '</li>';
-            });
-            html += '</ul>';
-        }
-        body.innerHTML = html;
-    } catch (err) {
-        body.innerHTML = '<p style="color:#b91c1c;">' + e(err.message) + '</p>';
-    }
+    };
+    render(true);
 }
 
 // Book POS
@@ -12690,7 +12807,7 @@ function renderBsPosOrdersTable(rows) {
                     o.qualification || ''
                 ].filter(Boolean);
                 const statusLabel = BS_STATUS_LABELS[o.status] || o.status;
-                const statusOpts = ['awaiting_confirmation', 'confirmed', 'fulfilled', 'cancelled']
+                const statusOpts = ['awaiting_confirmation', 'confirmed', 'shipped', 'delivered', 'fulfilled', 'cancelled']
                     .map(
                         (st) =>
                             '<option value="' +

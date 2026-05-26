@@ -1039,7 +1039,9 @@
                             <option value="">All statuses</option>
                             <option value="awaiting_confirmation">Awaiting confirmation</option>
                             <option value="confirmed">Ready for pickup</option>
-                            <option value="fulfilled">Fulfilled</option>
+                            <option value="shipped">Shipped (in transit)</option>
+                            <option value="delivered">Delivered</option>
+                            <option value="fulfilled">Fulfilled (pickup)</option>
                             <option value="cancelled">Cancelled</option>
                         </select>
                         <button type="button" class="btn-primary" style="padding:6px 14px;background:#0d9488;" onclick="loadBookSalesAdmin()">Refresh</button>
@@ -1096,7 +1098,7 @@
                     <div style="background:#fff;padding:24px;border-radius:12px;width:520px;max-width:96vw;max-height:90vh;overflow-y:auto;">
                         <h3 style="margin:0 0 14px;">Book order tracking</h3>
                         <div id="bs-tracking-body"><p style="color:#64748b;">Loading…</p></div>
-                        <button type="button" class="btn-primary" style="margin-top:14px;background:#64748b;" onclick="document.getElementById('bs-tracking-modal').style.display='none'">Close</button>
+                        <button type="button" class="btn-primary" style="margin-top:14px;background:#64748b;" onclick="if(_bsTrackPollTimer){clearInterval(_bsTrackPollTimer);_bsTrackPollTimer=null;}document.getElementById('bs-tracking-modal').style.display='none'">Close</button>
                     </div>
                 </div>
 

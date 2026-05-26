@@ -279,17 +279,23 @@
         awaiting_confirmation: 'Awaiting confirmation',
         pending_payment: 'Awaiting online payment',
         confirmed: 'Confirmed — show QR at book desk',
+        shipped: 'Shipped — in transit',
+        delivered: 'Delivered ✓',
         fulfilled: 'Collected ✓',
         cancelled: 'Cancelled'
     };
 
     function statusLabel(st, o) {
         if (o && o.fulfillmentType === 'courier') {
+            if (st === 'delivered') return 'Delivered by courier ✓';
+            if (st === 'shipped') {
+                return o.courierTrackLabel ? 'In transit — ' + o.courierTrackLabel : 'Shipped — in transit';
+            }
             if (st === 'confirmed' && o.courierShipmentStatus === 'ready_to_ship') {
                 return 'Courier — preparing shipment';
             }
             if (st === 'fulfilled' && o.courierTrackingNo) {
-                return 'Shipped by courier ✓';
+                return o.courierTrackLabel || 'Shipped — in transit';
             }
             if (st === 'confirmed') return 'Confirmed — courier delivery';
         }
@@ -362,13 +368,34 @@
         } else if (o.fulfillmentType === 'courier' && o.courierShipmentStatus === 'ready_to_ship' && o.status === 'confirmed') {
             extra =
                 '<p style="margin:8px 0 0;font-size:0.88rem;color:#0f766e;">Shipping address confirmed. AWB and tracking link will appear once staff dispatches your parcel.</p>';
-        } else if (o.fulfillmentType === 'courier' && o.courierTrackingNo && o.courierTrackingUrl) {
+        } else if (o.fulfillmentType === 'courier' && (o.status === 'shipped' || o.courierTrackingNo)) {
+            const live = o.courierTrackLabel
+                ? '<p style="margin:6px 0 0;font-size:0.88rem;color:#0f766e;font-weight:600;">' + esc(o.courierTrackLabel) + '</p>'
+                : '';
+            let evHtml = '';
+            (o.courierTrackEvents || []).slice(0, 8).forEach((ev) => {
+                evHtml +=
+                    '<li style="margin-bottom:4px;">' +
+                    esc(ev.description) +
+                    (ev.at ? ' <span style="color:#94a3b8;">· ' + esc(formatBookDt(ev.at)) + '</span>' : '') +
+                    '</li>';
+            });
             extra =
-                '<p style="margin:8px 0 0;"><a href="' +
-                esc(o.courierTrackingUrl) +
-                '" target="_blank" rel="noopener" style="font-size:0.88rem;color:#0d9488;font-weight:600;">Open courier tracking (AWB ' +
-                esc(o.courierTrackingNo) +
-                ') ↗</a></p>';
+                live +
+                (o.courierTrackingUrl
+                    ? '<p style="margin:8px 0 0;"><a href="' +
+                      esc(o.courierTrackingUrl) +
+                      '" target="_blank" rel="noopener" style="font-size:0.88rem;color:#0d9488;font-weight:600;">Open ' +
+                      esc(o.courierProvider || 'courier') +
+                      ' tracking (AWB ' +
+                      esc(o.courierTrackingNo) +
+                      ') ↗</a></p>'
+                    : '') +
+                (evHtml
+                    ? '<p style="margin:8px 0 4px;font-size:0.82rem;font-weight:600;">Shipment updates</p><ul style="margin:0;padding-left:18px;font-size:0.82rem;">' +
+                      evHtml +
+                      '</ul>'
+                    : '');
         }
         return '<div class="card" style="margin-bottom:12px;padding:14px;border:1px solid #e2e8f0;" data-book-order-id="' + o.id + '">' +
             '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">' +
@@ -384,7 +411,7 @@
 
     function orderTrackFingerprint(o) {
         const tl = o.timeline || {};
-        return [o.id, o.status, o.courierShipmentStatus, tl.currentLabel, o.courierTrackingNo, o.fulfilledAt, o.updatedAt].join('|');
+        return [o.id, o.status, o.courierShipmentStatus, o.courierTrackStatus, o.courierTrackLabel, tl.currentLabel, o.courierTrackingNo, o.fulfilledAt, o.updatedAt].join('|');
     }
 
     let _bookOrderPollTimer = null;
@@ -418,6 +445,13 @@
         const userId = uid();
         if (!root || !userId) return;
         try {
+            if (!silent) {
+                fetch('/api/doctor/book-orders/refresh-tracks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId })
+                }).catch(() => {});
+            }
             const res = await fetch('/api/doctor/book-orders?userId=' + encodeURIComponent(userId));
             const orders = await res.json();
             if (!Array.isArray(orders) || !orders.length) {
@@ -428,7 +462,9 @@
                 return;
             }
             const fp = orders.map(orderTrackFingerprint).join(';;');
-            const needsPoll = orders.some((o) => o.status !== 'fulfilled' && o.status !== 'cancelled');
+            const needsPoll = orders.some(
+                (o) => o.status !== 'delivered' && o.status !== 'fulfilled' && o.status !== 'cancelled'
+            );
             if (live) live.classList.toggle('hidden', !needsPoll);
             if (!silent || fp !== _lastBookOrdersFingerprint) {
                 root.innerHTML = orders.map(renderOrderCard).join('');
