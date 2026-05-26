@@ -49,7 +49,8 @@
         if (portal === 'judge') return isJudgeUser(user);
         if (portal === 'scanner') return isScannerUser(user);
         if (portal === 'staff') {
-            if (isScannerUser(user)) return false;
+            if (isScannerUser(user) || isJudgeUser(user)) return false;
+            if (isDoctorUser(user)) return false;
             return isBookStaffUser(user) || isAdminPortalUser(user);
         }
         return false;
@@ -146,7 +147,7 @@
         if (isAdminPortalUser(user)) return 'Use the admin portal: /admin.html';
         if (isJudgeUser(user)) return 'Use the judge portal: /judge.html';
         if (isScannerUser(user)) return 'Use the scanner portal: /scanner.html';
-        if (isBookStaffUser(user)) return 'Use the staff portal: /staff/login';
+        if (isBookStaffUser(user)) return 'Use the staff book portal: /staff/login';
         if (isDoctorUser(user)) return 'Use the doctor portal: /doctor.html';
         if (r === 'admin') return 'Use the admin portal: /admin.html';
         return 'This account cannot access this portal. Please sign in with the correct account.';

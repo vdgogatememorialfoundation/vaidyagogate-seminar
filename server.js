@@ -3536,6 +3536,24 @@ app.post('/api/auth/login', withAuxiliaryTables, (req, res) => {
                     return null;
                 }
 
+                if (loginPortal === 'staff' && !portalAuthPolicy.canUseStaffBookPortal(row)) {
+                    const ur = String(row.user_role || '').toLowerCase();
+                    if (ur === 'scanner_portal_user' || ur === 'scanner_dashboard_user') {
+                        return res.status(403).json({
+                            error: 'Scanner accounts must use the scanner portal at /scanner.html.'
+                        });
+                    }
+                    if (ur === 'judge_user' || ur === 'reviewer') {
+                        return res.status(403).json({
+                            error: 'Judge accounts must use the judge portal, not the staff book portal.'
+                        });
+                    }
+                    return res.status(403).json({
+                        error:
+                            'This account cannot use the staff book portal. Use Admin (co-admin) or ask for a Book sales staff role.'
+                    });
+                }
+
                 function sendUser() {
                     recordUserLogin(row.id, (eLogin, times) => {
                         if (!eLogin && times) {
@@ -7439,13 +7457,18 @@ app.get('/api/admin/users/:userId/detail', (req, res) => {
                                     `SELECT a.id, a.topic, a.status, a.marks, a.created_at FROM abstracts a WHERE a.user_id = ? ORDER BY a.created_at DESC`,
                                     [uid],
                                     (e5, abstracts) => {
-                                        if (e5) return res.status(500).json({ error: e5.message });
+                                        if (e5 && !/no such table|does not exist/i.test(e5.message)) {
+                                            return res.status(500).json({ error: e5.message });
+                                        }
 
                                         db.all(
                                             `SELECT * FROM support_tickets st WHERE st.user_id = ? ORDER BY st.created_at DESC LIMIT 20`,
                                             [uid],
                                             (e6, supportTickets) => {
-                                                if (e6) return res.status(500).json({ error: e6.message });
+                                                if (e6 && !/no such table|does not exist/i.test(e6.message)) {
+                                                    return res.status(500).json({ error: e6.message });
+                                                }
+                                                const tickets = supportTickets || [];
 
                                                 const finishDetail = (certificates, certErr, cancellationRequests) => {
                                                     if (certErr) {
@@ -7457,7 +7480,7 @@ app.get('/api/admin/users/:userId/detail', (req, res) => {
                                                         registrations: registrations || [],
                                                         orders: orders || [],
                                                         abstracts: abstracts || [],
-                                                        supportTickets: supportTickets || [],
+                                                        supportTickets: tickets,
                                                         certificates: certificates || [],
                                                         cancellationRequests: cancellationRequests || [],
                                                         certificatesError:

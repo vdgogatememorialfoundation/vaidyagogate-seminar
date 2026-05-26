@@ -2243,8 +2243,12 @@ async function openAdminUserDetail(userId) {
         modal.style.display = 'flex';
     }
     try {
-        const res = await fetch(`/api/admin/users/${userId}/detail`);
-        const data = await res.json();
+        const fetcher = window.fetchJson || (async (url) => {
+            const res = await fetch(url);
+            const data = await res.json();
+            return { res, data };
+        });
+        const { res, data } = await fetcher(`/api/admin/users/${userId}/detail`);
         if (!res.ok) {
             if (body) body.innerHTML = `<p style="color:#b91c1c;">${data.error || 'Failed to load'}</p>`;
             return;
@@ -2260,7 +2264,12 @@ async function openAdminUserDetail(userId) {
         switchAdminUserDetailTab('profile');
     } catch (e) {
         console.error(e);
-        if (body) body.innerHTML = '<p style="color:#b91c1c;">Network error</p>';
+        if (body) {
+            body.innerHTML =
+                '<p style="color:#b91c1c;">' +
+                (e.message || 'Network error') +
+                '</p><p style="font-size:0.85rem;color:#64748b;margin-top:8px;">If this persists, confirm the API at api.vaidyagogate.org is deployed.</p>';
+        }
     }
 }
 

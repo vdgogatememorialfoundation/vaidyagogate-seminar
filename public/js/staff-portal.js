@@ -28,6 +28,20 @@
         return Object.assign({ actingStaffId: actorId() }, extra || {});
     }
 
+    async function apiJson(url, opts) {
+        if (!window.fetchJson) throw new Error('fetch-json.js failed to load');
+        return window.fetchJson(url, opts);
+    }
+
+    function canUseStaffPortal(user) {
+        if (!user || !window.PortalAuth) return false;
+        const ur = String(user.user_role || '').toLowerCase();
+        if (ur === 'scanner_portal_user' || ur === 'scanner_dashboard_user') return false;
+        if (ur === 'judge_user' || ur === 'reviewer') return false;
+        if (window.PortalAuth.isDoctorUser && window.PortalAuth.isDoctorUser(user)) return false;
+        return window.PortalAuth.isBookStaffUser(user) || window.PortalAuth.isAdminPortalUser(user);
+    }
+
     function loadStoredUser() {
         try {
             const raw = localStorage.getItem(STORAGE_KEY);
@@ -50,8 +64,7 @@
     };
 
     async function refreshSession() {
-        const res = await fetch('/api/staff/book-sales/session', { headers: headers() });
-        const data = await res.json();
+        const { res, data } = await apiJson('/api/staff/book-sales/session', { headers: headers() });
         if (!res.ok) throw new Error(data.error || 'Session expired');
         staffModules = data.modules || staffModules;
         return data;
@@ -81,8 +94,7 @@
         const root = document.getElementById('staff-inventory-root');
         if (!root || !staffModules.inventory) return;
         try {
-            const res = await fetch('/api/staff/book-sales/inventory', { headers: headers() });
-            const data = await res.json();
+            const { res, data } = await apiJson('/api/staff/book-sales/inventory', { headers: headers() });
             if (!res.ok) {
                 root.innerHTML = '<p style="color:#b91c1c;">' + esc(data.error) + '</p>';
                 return;
@@ -135,12 +147,11 @@
             msg.textContent = 'Saving…';
         }
         try {
-            const res = await fetch('/api/staff/book-sales/inventory', {
+            const { res, data } = await apiJson('/api/staff/book-sales/inventory', {
                 method: 'POST',
                 headers: headers(),
                 body: JSON.stringify(body({ rows }))
             });
-            const data = await res.json();
             if (!res.ok) {
                 if (msg) {
                     msg.style.color = '#b91c1c';
@@ -166,11 +177,10 @@
         if (!root || !staffModules.orders) return;
         const st = (document.getElementById('staff-orders-filter') || {}).value || '';
         try {
-            const res = await fetch(
+            const { res, data: rows } = await apiJson(
                 '/api/staff/book-sales/orders?limit=150' + (st ? '&status=' + encodeURIComponent(st) : ''),
                 { headers: headers() }
             );
-            const rows = await res.json();
             if (!res.ok) {
                 root.innerHTML = '<p style="color:#b91c1c;">' + esc(rows.error) + '</p>';
                 return;
@@ -220,8 +230,7 @@
         modal.style.justifyContent = 'center';
         body.innerHTML = '<p>Loading…</p>';
         try {
-            const res = await fetch('/api/staff/book-sales/orders/' + id, { headers: headers() });
-            const data = await res.json();
+            const { res, data } = await apiJson('/api/staff/book-sales/orders/' + id, { headers: headers() });
             if (!res.ok) {
                 body.innerHTML = '<p style="color:#b91c1c;">' + esc(data.error) + '</p>';
                 return;
@@ -274,12 +283,11 @@
         const reason = prompt('Reason for cancellation:', 'Not available');
         if (!reason) return;
         try {
-            const res = await fetch('/api/staff/book-sales/orders/' + orderId + '/items/' + lineId + '/cancel', {
+            const { res, data } = await apiJson('/api/staff/book-sales/orders/' + orderId + '/items/' + lineId + '/cancel', {
                 method: 'POST',
                 headers: headers(),
                 body: JSON.stringify(body({ reason }))
             });
-            const data = await res.json();
             if (!res.ok) return alert(data.error || 'Failed');
             staffLoadOrders();
             staffViewOrder(orderId);
@@ -291,12 +299,11 @@
     window.staffConfirmOrder = async function (id) {
         if (!confirm('Confirm this order?')) return;
         try {
-            const res = await fetch('/api/staff/book-sales/orders/' + id + '/confirm', {
+            const { res, data } = await apiJson('/api/staff/book-sales/orders/' + id + '/confirm', {
                 method: 'POST',
                 headers: headers(),
                 body: JSON.stringify(body())
             });
-            const data = await res.json();
             if (!res.ok) return alert(data.error || 'Failed');
             staffLoadOrders();
             staffViewOrder(id);
@@ -333,13 +340,10 @@
     document.addEventListener('DOMContentLoaded', () => {
         const form = document.getElementById('staff-login-form');
         const u = loadStoredUser();
-        if (u && window.PortalAuth) {
-            const ur = String(u.user_role || '').toLowerCase();
-            if (ur === 'book_sales_staff' || window.PortalAuth.isAdminPortalUser(u)) {
-                staffUser = u;
-                bootApp().catch(() => staffLogout());
-                return;
-            }
+        if (u && canUseStaffPortal(u)) {
+            staffUser = u;
+            bootApp().catch(() => staffLogout());
+            return;
         }
         if (form) {
             form.addEventListener('submit', async (e) => {
@@ -349,12 +353,11 @@
                 const password = (document.getElementById('staff-login-password') || {}).value;
                 if (msg) msg.textContent = 'Signing in…';
                 try {
-                    const res = await fetch('/api/auth/login', {
+                    const { res, data } = await apiJson('/api/auth/login', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ email, password, portal: 'staff' })
                     });
-                    const data = await res.json();
                     if (!res.ok || !data.success) {
                         if (msg) {
                             msg.style.color = '#b91c1c';
@@ -371,7 +374,14 @@
                         }
                         return;
                     }
-                    if (ur !== 'book_sales_staff' && !(window.PortalAuth && window.PortalAuth.isAdminPortalUser(user))) {
+                    if (ur === 'judge_user' || ur === 'reviewer') {
+                        if (msg) {
+                            msg.style.color = '#b91c1c';
+                            msg.textContent = 'Judge accounts must use the judge portal at /judge.html.';
+                        }
+                        return;
+                    }
+                    if (!canUseStaffPortal(user)) {
                         if (msg) {
                             msg.style.color = '#b91c1c';
                             msg.textContent =

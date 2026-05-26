@@ -20,7 +20,8 @@ const files = [
     path.join('lib', 'book-tracking-journey.js'),
     path.join('lib', 'book-sales-auth.js'),
     path.join('lib', 'book-sales-inventory.js'),
-    path.join('lib', 'book-sales-notify.js')
+    path.join('lib', 'book-sales-notify.js'),
+    path.join('public', 'js', 'fetch-json.js')
 ];
 
 let failed = false;
