@@ -122,10 +122,34 @@
             langs.forEach((lang) => {
                 const k = cartKey(book.id, lang.id);
                 const q = bookCart[k] || 0;
-                const dis = orderingOpen ? '' : ' disabled';
-                html += `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:8px;background:#f8fafc;border-radius:8px;${orderingOpen ? '' : 'opacity:0.65;'}">
+                const stockMap = book.stock || {};
+                const rawStock = stockMap[lang.id];
+                const rem =
+                    rawStock === null || rawStock === undefined || rawStock === ''
+                        ? null
+                        : Math.max(0, parseInt(rawStock, 10) || 0);
+                const outOfStock = rem !== null && rem <= 0;
+                const maxQ = rem === null ? 99 : rem;
+                const dis = !orderingOpen || outOfStock ? ' disabled' : '';
+                let stockBadge = '';
+                if (rem === null) {
+                    stockBadge = '<span style="font-size:0.75rem;color:#64748b;">In stock</span>';
+                } else if (outOfStock) {
+                    stockBadge =
+                        '<span style="font-size:0.75rem;color:#b91c1c;font-weight:600;">Out of stock</span>';
+                } else if (rem <= 5) {
+                    stockBadge =
+                        '<span style="font-size:0.75rem;color:#b45309;font-weight:600;">Only ' +
+                        rem +
+                        ' left</span>';
+                } else {
+                    stockBadge =
+                        '<span style="font-size:0.75rem;color:#0d9488;">' + rem + ' available</span>';
+                }
+                html += `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:8px;background:#f8fafc;border-radius:8px;${orderingOpen && !outOfStock ? '' : 'opacity:0.65;'}">
                     <span style="min-width:90px;font-weight:600;">${esc(lang.label)}</span>
-                    <label style="font-size:0.85rem;">Qty <input type="number" min="0" max="99" value="${q}" data-book-qty data-book="${esc(book.id)}" data-lang="${esc(lang.id)}" style="width:64px;padding:6px;margin-left:4px;"${dis}></label>
+                    ${stockBadge}
+                    <label style="font-size:0.85rem;">Qty <input type="number" min="0" max="${maxQ}" value="${outOfStock ? 0 : q}" data-book-qty data-book="${esc(book.id)}" data-lang="${esc(lang.id)}" data-max-qty="${maxQ}" style="width:64px;padding:6px;margin-left:4px;"${dis}></label>
                 </div>`;
             });
             html += '</div></div>';
@@ -139,7 +163,12 @@
             inp.addEventListener('input', () => {
                 const b = inp.getAttribute('data-book');
                 const l = inp.getAttribute('data-lang');
-                const v = parseInt(inp.value, 10) || 0;
+                const maxQ = parseInt(inp.getAttribute('data-max-qty'), 10) || 99;
+                let v = parseInt(inp.value, 10) || 0;
+                if (v > maxQ) {
+                    v = maxQ;
+                    inp.value = String(v);
+                }
                 const key = cartKey(b, l);
                 if (v > 0) bookCart[key] = v;
                 else delete bookCart[key];
