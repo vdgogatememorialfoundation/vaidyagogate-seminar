@@ -638,11 +638,12 @@
                 <div id="tab-books" class="tab-pane hidden">
                     <h2 class="section-title">Books — Agnikarma &amp; Viddhakarma</h2>
                     <p style="color:#64748b;margin:-10px 0 16px;">Order Dr. R.B. Gogate books in English, Marathi, Hindi, or Kannada. Collect at the seminar book desk after payment.</p>
+                    <div id="books-window-banner" class="hidden" style="margin-bottom:14px;padding:12px 14px;border-radius:10px;font-size:0.9rem;"></div>
                     <div id="books-catalog"></div>
-                    <div class="card" style="margin:16px 0;padding:16px;">
+                    <div id="books-order-panel" class="card" style="margin:16px 0;padding:16px;">
                         <h3 style="margin:0 0 10px;font-size:1rem;color:#0f766e;">Payment</h3>
                         <div id="books-payment-options"></div>
-                        <button type="button" class="btn-primary" style="margin-top:14px;" onclick="placeDoctorBookOrder()">Place book order</button>
+                        <button type="button" id="books-place-order-btn" class="btn-primary" style="margin-top:14px;" onclick="placeDoctorBookOrder()">Place book order</button>
                         <p id="books-order-msg" style="margin-top:10px;font-weight:600;"></p>
                     </div>
                     <h3 style="margin:24px 0 10px;font-size:1.05rem;">My book orders</h3>

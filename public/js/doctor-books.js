@@ -22,6 +22,63 @@
         return bookId + '::' + language;
     }
 
+    function formatBookDt(iso) {
+        if (!iso) return '';
+        if (window.PortalDateTime && window.PortalDateTime.format) return window.PortalDateTime.format(iso);
+        try {
+            return new Date(iso).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' });
+        } catch (_) {
+            return String(iso);
+        }
+    }
+
+    function syncBookOrderWindowUi() {
+        const banner = document.getElementById('books-window-banner');
+        const panel = document.getElementById('books-order-panel');
+        const btn = document.getElementById('books-place-order-btn');
+        const open = !!(bookConfig && bookConfig.enabled && bookConfig.orderingOpen);
+        if (panel) panel.classList.toggle('hidden', !open);
+        if (btn) btn.disabled = !open;
+        if (!banner) return;
+        if (!bookConfig || !bookConfig.enabled) {
+            banner.classList.add('hidden');
+            return;
+        }
+        const win = bookConfig.orderWindow || {};
+        if (bookConfig.orderingOpen) {
+            banner.classList.remove('hidden');
+            banner.style.background = '#ecfdf5';
+            banner.style.border = '1px solid #a7f3d0';
+            banner.style.color = '#166534';
+            let text = win.message || 'Book ordering is open.';
+            if (bookConfig.orderStart || bookConfig.orderEnd) {
+                const parts = [];
+                if (bookConfig.orderStart) parts.push('From ' + formatBookDt(bookConfig.orderStart));
+                if (bookConfig.orderEnd) parts.push('until ' + formatBookDt(bookConfig.orderEnd));
+                if (parts.length) text += ' (' + parts.join(' ') + ' IST)';
+            }
+            banner.textContent = text;
+            return;
+        }
+        banner.classList.remove('hidden');
+        banner.style.background = '#fef9c3';
+        banner.style.border = '1px solid #fde047';
+        banner.style.color = '#854d0e';
+        if (win.phase === 'before') {
+            banner.textContent =
+                win.message ||
+                'Book ordering has not started yet.' +
+                    (bookConfig.orderStart ? ' Opens ' + formatBookDt(bookConfig.orderStart) + ' (IST).' : '');
+        } else if (win.phase === 'after') {
+            banner.textContent =
+                win.message ||
+                'Book ordering is closed.' +
+                    (bookConfig.orderEnd ? ' Closed ' + formatBookDt(bookConfig.orderEnd) + ' (IST).' : '');
+        } else {
+            banner.textContent = win.message || 'Book ordering is not available right now.';
+        }
+    }
+
     async function loadBookSalesConfig() {
         try {
             const res = await fetch('/api/public/book-sales/config', { cache: 'no-store' });
@@ -35,20 +92,27 @@
             const show = !!(bookConfig && bookConfig.enabled);
             nav.classList.toggle('hidden', !show);
         }
+        syncBookOrderWindowUi();
         return bookConfig;
     }
 
     function renderBookCatalog() {
         const root = document.getElementById('books-catalog');
         if (!root || !bookConfig || !bookConfig.enabled) return;
+        syncBookOrderWindowUi();
         const langs = bookConfig.languages || [];
         const books = bookConfig.books || [];
         if (!books.length) {
             root.innerHTML = '<p style="color:#64748b;">Book catalog is not configured yet. Contact the foundation office.</p>';
             return;
         }
+        const orderingOpen = !!bookConfig.orderingOpen;
         let html =
-            '<p style="color:#64748b;margin:0 0 16px;">Books by <strong>Dr. R.B. Gogate</strong>. Orders are collected on the portal; payment online or at the counter. Pick up at the seminar book desk — show your QR when staff scan.</p>';
+            '<p style="color:#64748b;margin:0 0 16px;">Books by <strong>Dr. R.B. Gogate</strong>. ' +
+            (orderingOpen
+                ? 'Choose language and quantity below; payment online or at the counter. Pick up at the seminar book desk.'
+                : 'You can view the catalog below; new orders are not accepted outside the registration window.') +
+            '</p>';
         html += '<div style="display:grid;gap:16px;">';
         books.forEach((book) => {
             html += `<div class="card" style="padding:16px;border:1px solid #e2e8f0;">
@@ -58,9 +122,10 @@
             langs.forEach((lang) => {
                 const k = cartKey(book.id, lang.id);
                 const q = bookCart[k] || 0;
-                html += `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:8px;background:#f8fafc;border-radius:8px;">
+                const dis = orderingOpen ? '' : ' disabled';
+                html += `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:8px;background:#f8fafc;border-radius:8px;${orderingOpen ? '' : 'opacity:0.65;'}">
                     <span style="min-width:90px;font-weight:600;">${esc(lang.label)}</span>
-                    <label style="font-size:0.85rem;">Qty <input type="number" min="0" max="99" value="${q}" data-book-qty data-book="${esc(book.id)}" data-lang="${esc(lang.id)}" style="width:64px;padding:6px;margin-left:4px;"></label>
+                    <label style="font-size:0.85rem;">Qty <input type="number" min="0" max="99" value="${q}" data-book-qty data-book="${esc(book.id)}" data-lang="${esc(lang.id)}" style="width:64px;padding:6px;margin-left:4px;"${dis}></label>
                 </div>`;
             });
             html += '</div></div>';
@@ -121,6 +186,10 @@
     async function placeBookOrder() {
         const userId = uid();
         if (!userId) return alert('Please sign in again.');
+        if (!bookConfig || !bookConfig.orderingOpen) {
+            const win = (bookConfig && bookConfig.orderWindow) || {};
+            return alert(win.message || 'Book ordering is not open at this time.');
+        }
         const items = collectCartItems();
         if (!items.length) return alert('Add quantity for at least one book and language.');
         const modeEl = document.querySelector('input[name="books-pay-mode"]:checked');
@@ -258,6 +327,27 @@
     }
 
     let _bookOrderPollTimer = null;
+    let _bookConfigPollTimer = null;
+
+    function startBookConfigPoll() {
+        if (_bookConfigPollTimer) return;
+        _bookConfigPollTimer = setInterval(async () => {
+            const tab = document.getElementById('tab-books');
+            if (!tab || tab.classList.contains('hidden')) return;
+            const prevOpen = bookConfig && bookConfig.orderingOpen;
+            await loadBookSalesConfig();
+            if (prevOpen !== (bookConfig && bookConfig.orderingOpen)) {
+                renderBookCatalog();
+            }
+        }, 30000);
+    }
+
+    function stopBookConfigPoll() {
+        if (_bookConfigPollTimer) {
+            clearInterval(_bookConfigPollTimer);
+            _bookConfigPollTimer = null;
+        }
+    }
 
     async function loadBookOrders() {
         const root = document.getElementById('books-orders-list');
@@ -295,8 +385,10 @@
         if (!bookConfig || !bookConfig.enabled) {
             const root = document.getElementById('books-catalog');
             if (root) root.innerHTML = '<p style="color:#64748b;">Book sales are not available on the portal right now.</p>';
+            syncBookOrderWindowUi();
             return;
         }
+        syncBookOrderWindowUi();
         if (typeof loadDoctorPaymentOptions === 'function') await loadDoctorPaymentOptions();
         const payBlock = document.getElementById('books-payment-options');
         if (payBlock) {
@@ -319,12 +411,14 @@
         }
         renderBookCatalog();
         loadBookOrders();
+        startBookConfigPoll();
     }
 
     window.initDoctorBooksTab = initBooksTab;
     window.placeDoctorBookOrder = placeBookOrder;
     window.loadDoctorBookSalesConfig = loadBookSalesConfig;
     window.stopDoctorBookOrderPoll = stopBookOrderPoll;
+    window.stopDoctorBookConfigPoll = stopBookConfigPoll;
 
     document.addEventListener('DOMContentLoaded', () => {
         loadBookSalesConfig();

@@ -11909,6 +11909,16 @@ function renderBsConfigForm(cfg) {
             ).join('');
         sel.innerHTML = opts || ('<option value="' + (cfg.seminarId || '') + '">' + (cfg.seminarId ? 'Seminar #' + cfg.seminarId : '— Any —') + '</option>');
     }
+    const bsStart = document.getElementById('bs-order-start');
+    const bsEnd = document.getElementById('bs-order-end');
+    const toLocal = (v) =>
+        window.PortalDateTime && window.PortalDateTime.toDatetimeLocal
+            ? window.PortalDateTime.toDatetimeLocal(v)
+            : v
+              ? String(v).slice(0, 16)
+              : '';
+    if (bsStart) bsStart.value = toLocal(cfg.orderStart);
+    if (bsEnd) bsEnd.value = toLocal(cfg.orderEnd);
     renderBsBooksRows(cfg.books || []);
 }
 
@@ -12021,6 +12031,12 @@ async function saveBookSalesAdminConfig() {
     const msg = document.getElementById('bs-config-msg');
     if (msg) { msg.style.color = '#0d9488'; msg.textContent = 'Saving…'; }
     const seminarVal = (document.getElementById('bs-seminar') || {}).value;
+    const fromLocal = (el) => {
+        if (!el || !el.value) return null;
+        return window.PortalDateTime && window.PortalDateTime.fromDatetimeLocal
+            ? window.PortalDateTime.fromDatetimeLocal(el.value)
+            : el.value;
+    };
     const config = {
         enabled: !!(document.getElementById('bs-enabled') || {}).checked,
         onlinePaymentEnabled: !!(document.getElementById('bs-online') || {}).checked,
@@ -12028,6 +12044,8 @@ async function saveBookSalesAdminConfig() {
         courierEnabled: !!(document.getElementById('bs-courier-enabled') || {}).checked,
         defaultCourierCharge: parseFloat((document.getElementById('bs-courier-charge') || {}).value) || 60,
         seminarId: seminarVal ? parseInt(seminarVal, 10) : null,
+        orderStart: fromLocal(document.getElementById('bs-order-start')),
+        orderEnd: fromLocal(document.getElementById('bs-order-end')),
         books: bsCollectBooksFromForm()
     };
     try {
