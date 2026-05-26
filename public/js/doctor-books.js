@@ -206,16 +206,58 @@
         }, 5000);
     }
 
-    function statusLabel(st) {
-        const m = {
-            awaiting_confirmation: 'Awaiting counter payment / confirmation',
-            pending_payment: 'Awaiting online payment',
-            confirmed: 'Ready for pickup — show QR at book desk',
-            fulfilled: 'Collected',
-            cancelled: 'Cancelled'
-        };
-        return m[st] || st;
+    const ST_LABEL = {
+        awaiting_confirmation: 'Awaiting confirmation',
+        pending_payment: 'Awaiting online payment',
+        confirmed: 'Confirmed — show QR at book desk',
+        fulfilled: 'Collected ✓',
+        cancelled: 'Cancelled'
+    };
+
+    function statusLabel(st) { return ST_LABEL[st] || st; }
+
+    function statusColor(st) {
+        if (st === 'confirmed') return '#0d9488';
+        if (st === 'fulfilled') return '#15803d';
+        if (st === 'cancelled') return '#b91c1c';
+        return '#64748b';
     }
+
+    function renderOrderCard(o) {
+        const lines = (o.items || [])
+            .map((it) => '<li>' + esc(it.bookTitle || it.bookId) + ' · ' + esc(it.languageLabel || it.language) + ' × ' + it.qty + '</li>')
+            .join('');
+        let extra = '';
+        if (o.status === 'confirmed' && o.qrCodeData) {
+            const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(o.qrCodeData);
+            extra = '<div style="margin-top:12px;text-align:center;">' +
+                '<img src="' + qrUrl + '" alt="Pickup QR" width="160" height="160" style="border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.1);">' +
+                '<p style="font-size:0.8rem;color:#64748b;margin:4px 0 0;">Code: ' + esc(o.orderCode) + ' · Show to book desk volunteer</p></div>';
+        } else if (o.fulfillmentType === 'courier' && o.courierTrackingNo) {
+            const providerLabels = { indian_post: 'Indian Post / Speed Post', dtdc: 'DTDC', bluedart: 'Blue Dart', delhivery: 'Delhivery', ecom_express: 'Ecom Express', other: 'Courier' };
+            const prov = providerLabels[o.courierProvider] || o.courierProvider || 'Courier';
+            extra = '<div style="margin-top:10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px;">' +
+                '<p style="margin:0;font-size:0.9rem;">🚚 <strong>Shipped by ' + esc(prov) + '</strong></p>' +
+                '<p style="margin:4px 0 0;font-size:0.88rem;">Tracking: <strong>' + esc(o.courierTrackingNo) + '</strong></p>' +
+                (o.courierCharge ? '<p style="margin:2px 0 0;font-size:0.82rem;color:#64748b;">Courier charge: ₹' + Number(o.courierCharge).toFixed(0) + '</p>' : '') +
+                (o.deliveryAddress ? '<p style="margin:2px 0 0;font-size:0.82rem;color:#64748b;">Address: ' + esc(o.deliveryAddress) + '</p>' : '') +
+                '<p style="margin:6px 0 0;font-size:0.82rem;color:#0d9488;">Track shipment on the carrier website using the tracking number above.</p>' +
+                '</div>';
+        } else if (o.fulfillmentType === 'courier') {
+            extra = '<div style="margin-top:8px;font-size:0.85rem;color:#854d0e;background:#fef9c3;padding:8px;border-radius:6px;">🚚 Being dispatched by courier — tracking details will appear here once updated.</div>';
+        }
+        return '<div class="card" style="margin-bottom:12px;padding:14px;border:1px solid #e2e8f0;" data-book-order-id="' + o.id + '">' +
+            '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">' +
+            '<strong>' + esc(o.orderCode) + '</strong>' +
+            '<span style="font-size:0.85rem;font-weight:600;color:' + statusColor(o.status) + ';">' + esc(statusLabel(o.status)) + '</span>' +
+            '</div>' +
+            '<ul style="margin:8px 0 4px;padding-left:18px;font-size:0.88rem;">' + lines + '</ul>' +
+            '<p style="margin:0;font-size:0.88rem;color:#64748b;">Total ₹' + Number(o.totalAmount || 0).toFixed(0) + ' · ' + esc(o.paymentMode) + '</p>' +
+            extra +
+            '</div>';
+    }
+
+    let _bookOrderPollTimer = null;
 
     async function loadBookOrders() {
         const root = document.getElementById('books-orders-list');
@@ -226,46 +268,26 @@
             const orders = await res.json();
             if (!Array.isArray(orders) || !orders.length) {
                 root.innerHTML = '<p style="color:#64748b;">No book orders yet.</p>';
+                stopBookOrderPoll();
                 return;
             }
-            root.innerHTML = orders
-                .map((o) => {
-                    const lines = (o.items || [])
-                        .map(
-                            (it) =>
-                                esc(it.bookId) +
-                                ' · ' +
-                                esc(it.languageLabel || it.language) +
-                                ' × ' +
-                                it.qty
-                        )
-                        .join('<br>');
-                    let qr = '';
-                    if (o.status === 'confirmed' && o.qrCodeData) {
-                        const qrUrl =
-                            'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' +
-                            encodeURIComponent(o.qrCodeData);
-                        qr =
-                            '<div style="margin-top:10px;"><img src="' +
-                            qrUrl +
-                            '" alt="Pickup QR" width="160" height="160"><p style="font-size:0.8rem;color:#64748b;">Code: ' +
-                            esc(o.orderCode) +
-                            '</p></div>';
-                    }
-                    return `<div class="card" style="margin-bottom:12px;padding:14px;border:1px solid #e2e8f0;">
-                        <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-                            <strong>${esc(o.orderCode)}</strong>
-                            <span style="font-size:0.85rem;color:#0f766e;">${esc(statusLabel(o.status))}</span>
-                        </div>
-                        <p style="margin:8px 0;font-size:0.88rem;">${lines}</p>
-                        <p style="margin:0;font-size:0.88rem;color:#64748b;">Total ₹${Number(o.totalAmount || 0).toFixed(2)} · ${esc(o.paymentMode)}</p>
-                        ${qr}
-                    </div>`;
-                })
-                .join('');
+            root.innerHTML = orders.map(renderOrderCard).join('');
+            // poll if any order is in-progress
+            const needsPoll = orders.some((o) => o.status !== 'fulfilled' && o.status !== 'cancelled');
+            if (needsPoll) startBookOrderPoll();
+            else stopBookOrderPoll();
         } catch (e) {
             root.innerHTML = '<p style="color:#b91c1c;">Could not load orders.</p>';
         }
+    }
+
+    function startBookOrderPoll() {
+        if (_bookOrderPollTimer) return;
+        _bookOrderPollTimer = setInterval(loadBookOrders, 8000);
+    }
+
+    function stopBookOrderPoll() {
+        if (_bookOrderPollTimer) { clearInterval(_bookOrderPollTimer); _bookOrderPollTimer = null; }
     }
 
     async function initBooksTab() {
@@ -302,6 +324,7 @@
     window.initDoctorBooksTab = initBooksTab;
     window.placeDoctorBookOrder = placeBookOrder;
     window.loadDoctorBookSalesConfig = loadBookSalesConfig;
+    window.stopDoctorBookOrderPoll = stopBookOrderPoll;
 
     document.addEventListener('DOMContentLoaded', () => {
         loadBookSalesConfig();

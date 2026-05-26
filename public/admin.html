@@ -967,37 +967,109 @@
             <!-- Book sales -->
             <div id="tab-book-sales" class="tab-pane hidden">
                 <h2 style="margin-bottom:12px;">Book sales — Agnikarma &amp; Viddhakarma</h2>
-                <p style="color:#64748b;margin-bottom:18px;max-width:900px;">Enable book ordering on the doctor portal. Doctors choose language (English, Marathi, Hindi, Kannada), pay online or at counter, and collect at the seminar using a pickup QR scanned in the <strong>VGMF Scanner</strong> app (Book pickup mode).</p>
-                <div class="card" style="padding:18px;margin-bottom:20px;border:1px solid #bbf7d0;background:#f0fdf4;">
-                    <h3 style="margin:0 0 12px;color:#166534;">Portal settings</h3>
-                    <label style="display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:12px;">
-                        <input type="checkbox" id="bs-enabled"> Enable book sales on doctor portal
-                    </label>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:520px;margin-bottom:12px;">
-                        <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="bs-online" checked> Online payment</label>
-                        <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="bs-counter" checked> Pay at counter</label>
-                    </div>
-                    <div style="margin-bottom:12px;">
-                        <label>Distribution seminar (optional)</label>
-                        <select id="bs-seminar" style="width:100%;max-width:360px;padding:8px;"><option value="">— Any / not linked —</option></select>
-                    </div>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
-                        <div>
-                            <label>Agnikarma price (₹)</label>
-                            <input type="number" id="bs-price-agnikarma" min="0" step="1" style="width:100%;padding:8px;">
+                <p style="color:#64748b;margin-bottom:14px;max-width:900px;">Configure books on the portal. Doctors order, pay online or at counter, and collect at the seminar. Scanner <strong>Book pickup</strong> mode marks delivery. For absent doctors, ship by courier.</p>
+
+                <!-- Subtabs -->
+                <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+                    <button type="button" class="btn-primary bs-subtab active" data-bs-tab="config" onclick="switchBsTab('config')" style="background:#0d9488;">Settings</button>
+                    <button type="button" class="btn-primary bs-subtab" data-bs-tab="orders" onclick="switchBsTab('orders')" style="background:#475569;">Orders</button>
+                    <button type="button" class="btn-primary bs-subtab" data-bs-tab="pos" onclick="switchBsTab('pos')" style="background:#7c3aed;">Book POS</button>
+                </div>
+
+                <!-- Settings panel -->
+                <div id="bs-panel-config">
+                    <div class="card" style="padding:18px;margin-bottom:14px;border:1px solid #bbf7d0;background:#f0fdf4;">
+                        <h3 style="margin:0 0 12px;color:#166534;">Portal &amp; payment settings</h3>
+                        <label style="display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:12px;">
+                            <input type="checkbox" id="bs-enabled"> Enable book sales on doctor portal
+                        </label>
+                        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;max-width:600px;margin-bottom:12px;">
+                            <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="bs-online" checked> Online payment</label>
+                            <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="bs-counter" checked> Pay at counter</label>
+                            <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="bs-courier-enabled" checked> Courier delivery</label>
                         </div>
-                        <div>
-                            <label>Viddhakarma price (₹)</label>
-                            <input type="number" id="bs-price-viddhakarma" min="0" step="1" style="width:100%;padding:8px;">
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:520px;margin-bottom:12px;">
+                            <div>
+                                <label>Default courier charge (₹)</label>
+                                <input type="number" id="bs-courier-charge" min="0" step="1" value="60" style="width:100%;padding:8px;">
+                            </div>
+                            <div>
+                                <label>Distribution seminar (optional)</label>
+                                <select id="bs-seminar" style="width:100%;padding:8px;"><option value="">— Any —</option></select>
+                            </div>
                         </div>
                     </div>
-                    <button type="button" class="btn-primary" style="margin-top:14px;background:#0d9488;" onclick="saveBookSalesAdminConfig()">Save book sales settings</button>
+                    <div class="card" style="padding:18px;margin-bottom:14px;">
+                        <h3 style="margin:0 0 12px;">Books</h3>
+                        <p style="font-size:0.85rem;color:#64748b;margin:0 0 10px;">Add, remove, or price books. Custom books beyond Agnikarma/Viddhakarma can be added below.</p>
+                        <div id="bs-books-rows"></div>
+                        <button type="button" class="btn-primary" style="margin-top:8px;padding:6px 14px;font-size:0.85rem;background:#0d9488;" onclick="bsAddBookRow()">+ Add book</button>
+                    </div>
+                    <button type="button" class="btn-primary" style="background:#0d9488;" onclick="saveBookSalesAdminConfig()">Save book sales settings</button>
                     <p id="bs-config-msg" style="margin-top:8px;font-weight:600;"></p>
                 </div>
-                <div class="card" style="padding:18px;">
-                    <h3 style="margin:0 0 10px;">Orders</h3>
-                    <p style="font-size:0.88rem;color:#64748b;margin:0 0 12px;">Confirm pay-at-counter orders to issue pickup QR. Fulfilled when staff scan at the book desk.</p>
+
+                <!-- Orders panel -->
+                <div id="bs-panel-orders" class="hidden">
+                    <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap;">
+                        <select id="bs-orders-filter" style="padding:6px 10px;" onchange="loadBookSalesAdmin()">
+                            <option value="">All statuses</option>
+                            <option value="awaiting_confirmation">Awaiting confirmation</option>
+                            <option value="confirmed">Ready for pickup</option>
+                            <option value="fulfilled">Fulfilled</option>
+                            <option value="cancelled">Cancelled</option>
+                        </select>
+                        <button type="button" class="btn-primary" style="padding:6px 14px;background:#0d9488;" onclick="loadBookSalesAdmin()">Refresh</button>
+                        <span id="bs-orders-autorefresh-badge" style="font-size:0.78rem;color:#0d9488;"></span>
+                    </div>
                     <div id="bs-orders-table"><p style="color:#64748b;">Loading…</p></div>
+                </div>
+
+                <!-- POS panel -->
+                <div id="bs-panel-pos" class="hidden">
+                    <div class="card" style="padding:18px;max-width:700px;">
+                        <h3 style="margin:0 0 12px;color:#7c3aed;">Book POS — Walk-in / desk sale</h3>
+                        <p style="font-size:0.88rem;color:#64748b;margin:0 0 12px;">Search doctor by phone/name or enter walk-in buyer details. Select books and place order immediately.</p>
+                        <div style="display:grid;grid-template-columns:1fr auto;gap:8px;margin-bottom:10px;max-width:480px;">
+                            <input type="text" id="bs-pos-search" placeholder="Search doctor by phone / name / email" style="padding:8px;" oninput="bsPosSearch()">
+                            <button type="button" class="btn-primary" style="padding:8px 12px;background:#7c3aed;" onclick="bsPosSearch()">Search</button>
+                        </div>
+                        <div id="bs-pos-search-results" style="margin-bottom:10px;"></div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;max-width:480px;">
+                            <div><label>Buyer name</label><input type="text" id="bs-pos-name" placeholder="Name" style="width:100%;padding:8px;"></div>
+                            <div><label>Buyer phone</label><input type="text" id="bs-pos-phone" placeholder="Phone" style="width:100%;padding:8px;"></div>
+                        </div>
+                        <div id="bs-pos-books" style="margin-bottom:12px;"></div>
+                        <div style="margin-bottom:12px;max-width:240px;">
+                            <label>Payment mode</label>
+                            <select id="bs-pos-pay-mode" style="width:100%;padding:8px;">
+                                <option value="cash">Cash</option>
+                                <option value="upi">UPI</option>
+                                <option value="card">Card</option>
+                            </select>
+                        </div>
+                        <button type="button" class="btn-primary" style="background:#7c3aed;" onclick="bsPosSave()">Place POS order</button>
+                        <p id="bs-pos-msg" style="margin-top:8px;font-weight:600;"></p>
+                    </div>
+                </div>
+
+                <!-- Courier dispatch modal -->
+                <div id="bs-courier-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.45);z-index:9999;align-items:center;justify-content:center;">
+                    <div style="background:#fff;padding:24px;border-radius:12px;width:480px;max-width:96vw;max-height:90vh;overflow-y:auto;">
+                        <h3 style="margin:0 0 14px;">Dispatch by courier</h3>
+                        <input type="hidden" id="bs-courier-order-id">
+                        <div style="display:grid;gap:10px;">
+                            <div><label>Courier provider</label><select id="bs-courier-provider" style="width:100%;padding:8px;"><option value="indian_post">Indian Post / Speed Post</option><option value="dtdc">DTDC</option><option value="bluedart">Blue Dart</option><option value="delhivery">Delhivery</option><option value="ecom_express">Ecom Express</option><option value="other">Other</option></select></div>
+                            <div><label>Tracking number *</label><input type="text" id="bs-courier-tracking" style="width:100%;padding:8px;" placeholder="e.g. EE123456789IN"></div>
+                            <div><label>Courier charge (₹)</label><input type="number" id="bs-courier-charge-disp" min="0" style="width:100%;padding:8px;"></div>
+                            <div><label>Delivery address *</label><textarea id="bs-courier-address" rows="3" style="width:100%;padding:8px;"></textarea></div>
+                        </div>
+                        <div style="margin-top:14px;display:flex;gap:10px;">
+                            <button type="button" class="btn-primary" onclick="bsDispatchCourier()" style="background:#0d9488;">Dispatch</button>
+                            <button type="button" class="btn-primary" onclick="document.getElementById('bs-courier-modal').style.display='none'" style="background:#64748b;">Cancel</button>
+                        </div>
+                        <p id="bs-courier-msg" style="margin-top:8px;font-weight:600;"></p>
+                    </div>
                 </div>
             </div>
 

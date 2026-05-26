@@ -11844,166 +11844,212 @@ async function marketingMoveBanner(btn, dir) {
     }
 }
 
+// ─── Book Sales Admin ───────────────────────────────────────────────────────
+let _bsCurrentConfig = null;
+let _bsOrdersAutoTimer = null;
+
+function switchBsTab(tab) {
+    ['config', 'orders', 'pos'].forEach((t) => {
+        const panel = document.getElementById('bs-panel-' + t);
+        if (panel) panel.classList.toggle('hidden', t !== tab);
+    });
+    document.querySelectorAll('.bs-subtab').forEach((el) => {
+        el.classList.toggle('active', el.getAttribute('data-bs-tab') === tab);
+    });
+    if (tab === 'orders') startBsOrdersAutoRefresh();
+    else stopBsOrdersAutoRefresh();
+    if (tab === 'pos') renderBsPosBooks();
+}
+
+function startBsOrdersAutoRefresh() {
+    stopBsOrdersAutoRefresh();
+    const badge = document.getElementById('bs-orders-autorefresh-badge');
+    if (badge) badge.textContent = 'Auto-refresh on';
+    _bsOrdersAutoTimer = setInterval(() => loadBsOrders(true), 12000);
+}
+
+function stopBsOrdersAutoRefresh() {
+    if (_bsOrdersAutoTimer) { clearInterval(_bsOrdersAutoTimer); _bsOrdersAutoTimer = null; }
+    const badge = document.getElementById('bs-orders-autorefresh-badge');
+    if (badge) badge.textContent = '';
+}
+
 async function loadBookSalesAdmin() {
     const msg = document.getElementById('bs-config-msg');
     if (msg) msg.textContent = '';
     if (!globalSeminars || !globalSeminars.length) {
-        try {
-            await loadSeminars();
-        } catch (_) {}
+        try { await loadSeminars(); } catch (_) {}
     }
     try {
-        const [cfgRes, ordRes] = await Promise.all([
-            fetch('/api/admin/book-sales/config'),
-            fetch('/api/admin/book-sales/orders?limit=150')
-        ]);
+        const cfgRes = await fetch('/api/admin/book-sales/config');
         const cfgData = await cfgRes.json();
-        const orders = await ordRes.json();
-        const cfg = (cfgData && cfgData.config) || {};
-        const setChk = (id, v) => {
-            const el = document.getElementById(id);
-            if (el) el.checked = !!v;
-        };
-        setChk('bs-enabled', cfg.enabled);
-        setChk('bs-online', cfg.onlinePaymentEnabled !== false);
-        setChk('bs-counter', cfg.payAtCounterEnabled !== false);
-        const ag = (cfg.books || []).find((b) => b.id === 'agnikarma');
-        const vi = (cfg.books || []).find((b) => b.id === 'viddhakarma');
-        const pa = document.getElementById('bs-price-agnikarma');
-        const pv = document.getElementById('bs-price-viddhakarma');
-        if (pa) pa.value = ag ? ag.price : 0;
-        if (pv) pv.value = vi ? vi.price : 0;
-        const sel = document.getElementById('bs-seminar');
-        if (sel && globalSeminars && globalSeminars.length) {
-            sel.innerHTML =
-                '<option value="">— Any / not linked —</option>' +
-                globalSeminars
-                    .map(
-                        (s) =>
-                            '<option value="' +
-                            s.id +
-                            '"' +
-                            (Number(cfg.seminarId) === Number(s.id) ? ' selected' : '') +
-                            '>' +
-                            String(s.title || '').replace(/</g, '&lt;') +
-                            '</option>'
-                    )
-                    .join('');
-        } else if (sel && cfg.seminarId) {
-            sel.innerHTML = '<option value="' + cfg.seminarId + '" selected>Seminar #' + cfg.seminarId + '</option>';
-        }
+        _bsCurrentConfig = (cfgData && cfgData.config) || {};
+        renderBsConfigForm(_bsCurrentConfig);
+        renderBsPosBooks();
+    } catch (e) {
+        console.error('[book-sales] load config', e);
+    }
+    await loadBsOrders(false);
+}
+
+function renderBsConfigForm(cfg) {
+    const setChk = (id, v) => { const el = document.getElementById(id); if (el) el.checked = !!v; };
+    setChk('bs-enabled', cfg.enabled);
+    setChk('bs-online', cfg.onlinePaymentEnabled !== false);
+    setChk('bs-counter', cfg.payAtCounterEnabled !== false);
+    setChk('bs-courier-enabled', cfg.courierEnabled !== false);
+    const cc = document.getElementById('bs-courier-charge');
+    if (cc) cc.value = cfg.defaultCourierCharge != null ? cfg.defaultCourierCharge : 60;
+    const sel = document.getElementById('bs-seminar');
+    if (sel) {
+        const opts = '<option value="">— Any —</option>' +
+            (globalSeminars || []).map((s) =>
+                '<option value="' + s.id + '"' + (Number(cfg.seminarId) === Number(s.id) ? ' selected' : '') + '>' +
+                String(s.title || '').replace(/</g, '&lt;') + '</option>'
+            ).join('');
+        sel.innerHTML = opts || ('<option value="' + (cfg.seminarId || '') + '">' + (cfg.seminarId ? 'Seminar #' + cfg.seminarId : '— Any —') + '</option>');
+    }
+    renderBsBooksRows(cfg.books || []);
+}
+
+function renderBsBooksRows(books) {
+    const root = document.getElementById('bs-books-rows');
+    if (!root) return;
+    root.innerHTML = books.map((b, i) =>
+        '<div style="display:grid;grid-template-columns:1fr 1.5fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px;" data-bs-book-row="' + i + '">' +
+        '<div><label style="font-size:0.8rem;">Book ID</label><input type="text" class="bs-book-id" value="' + e(b.id) + '" style="width:100%;padding:6px;" placeholder="e.g. agnikarma"></div>' +
+        '<div><label style="font-size:0.8rem;">Title</label><input type="text" class="bs-book-title" value="' + e(b.title) + '" style="width:100%;padding:6px;" placeholder="Book title"></div>' +
+        '<div><label style="font-size:0.8rem;">Author</label><input type="text" class="bs-book-author" value="' + e(b.author) + '" style="width:100%;padding:6px;"></div>' +
+        '<div><label style="font-size:0.8rem;">Price (₹)</label><input type="number" class="bs-book-price" value="' + (b.price || 0) + '" min="0" step="1" style="width:100%;padding:6px;"></div>' +
+        '<div style="padding-bottom:2px;"><label style="font-size:0.8rem;">Active</label><br><input type="checkbox" class="bs-book-active"' + (b.active !== false ? ' checked' : '') + '></div>' +
+        '</div>'
+    ).join('');
+}
+
+function e(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); }
+
+function bsAddBookRow() {
+    const root = document.getElementById('bs-books-rows');
+    if (!root) return;
+    const idx = root.querySelectorAll('[data-bs-book-row]').length;
+    const div = document.createElement('div');
+    div.setAttribute('data-bs-book-row', idx);
+    div.style.cssText = 'display:grid;grid-template-columns:1fr 1.5fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px;';
+    div.innerHTML =
+        '<div><label style="font-size:0.8rem;">Book ID</label><input type="text" class="bs-book-id" style="width:100%;padding:6px;" placeholder="custom_book"></div>' +
+        '<div><label style="font-size:0.8rem;">Title</label><input type="text" class="bs-book-title" style="width:100%;padding:6px;" placeholder="Book title"></div>' +
+        '<div><label style="font-size:0.8rem;">Author</label><input type="text" class="bs-book-author" value="Dr. R.B. Gogate" style="width:100%;padding:6px;"></div>' +
+        '<div><label style="font-size:0.8rem;">Price (₹)</label><input type="number" class="bs-book-price" value="0" min="0" step="1" style="width:100%;padding:6px;"></div>' +
+        '<div style="padding-bottom:2px;"><label style="font-size:0.8rem;">Active</label><br><input type="checkbox" class="bs-book-active" checked></div>';
+    root.appendChild(div);
+}
+
+function bsCollectBooksFromForm() {
+    return Array.from(document.querySelectorAll('[data-bs-book-row]')).map((row) => ({
+        id: (row.querySelector('.bs-book-id') || {}).value || '',
+        title: (row.querySelector('.bs-book-title') || {}).value || '',
+        author: (row.querySelector('.bs-book-author') || {}).value || 'Dr. R.B. Gogate',
+        price: parseFloat((row.querySelector('.bs-book-price') || {}).value) || 0,
+        active: (row.querySelector('.bs-book-active') || {}).checked !== false
+    })).filter((b) => b.id && b.title);
+}
+
+async function loadBsOrders(silent) {
+    const filter = (document.getElementById('bs-orders-filter') || {}).value || '';
+    const url = '/api/admin/book-sales/orders?limit=200' + (filter ? '&status=' + encodeURIComponent(filter) : '');
+    try {
+        const r = await fetch(url);
+        const orders = await r.json();
         renderBookSalesOrdersTable(Array.isArray(orders) ? orders : []);
     } catch (e) {
-        console.error(e);
-        const t = document.getElementById('bs-orders-table');
-        if (t) t.innerHTML = '<p style="color:#b91c1c;">Could not load book sales.</p>';
+        if (!silent) {
+            const t = document.getElementById('bs-orders-table');
+            if (t) t.innerHTML = '<p style="color:#b91c1c;">Could not load orders.</p>';
+        }
     }
 }
+
+const BS_STATUS_LABELS = {
+    awaiting_confirmation: 'Awaiting confirmation',
+    pending_payment: 'Pending payment',
+    confirmed: 'Ready for pickup',
+    fulfilled: 'Fulfilled',
+    cancelled: 'Cancelled'
+};
 
 function renderBookSalesOrdersTable(rows) {
     const root = document.getElementById('bs-orders-table');
     if (!root) return;
     if (!rows.length) {
-        root.innerHTML = '<p style="color:#64748b;">No book orders yet.</p>';
+        root.innerHTML = '<p style="color:#64748b;">No book orders.</p>';
         return;
     }
-    const stLabel = (s) =>
-        ({
-            awaiting_confirmation: 'Awaiting confirmation',
-            pending_payment: 'Pending payment',
-            confirmed: 'Ready for pickup',
-            fulfilled: 'Fulfilled',
-            cancelled: 'Cancelled'
-        })[s] || s;
     root.innerHTML =
-        '<table class="data-table"><thead><tr><th>Code</th><th>Doctor</th><th>Status</th><th>Total</th><th>Pay</th><th>Actions</th></tr></thead><tbody>' +
-        rows
-            .map((o) => {
-                const name = [o.first_name, o.last_name].filter(Boolean).join(' ') || o.email || '—';
-                let actions = '';
+        '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Code</th><th>Buyer</th><th>Status</th><th>Total</th><th>Pay mode</th><th>Fulfillment</th><th>Actions</th></tr></thead><tbody>' +
+        rows.map((o) => {
+            const name = [o.first_name, o.last_name].filter(Boolean).join(' ') || o.buyer_name || o.email || '—';
+            const phone = o.phone || o.buyer_phone || '';
+            const ftype = o.fulfillment_type || 'pickup';
+            const statusLabel = BS_STATUS_LABELS[o.status] || o.status;
+            let fulfillCell = ftype === 'courier' && o.courier_tracking_no
+                ? '🚚 ' + e(o.courier_provider || 'Courier') + '<br><small>' + e(o.courier_tracking_no) + '</small>'
+                : (ftype === 'courier' ? '🚚 Courier (no tracking)' : '📦 Pickup');
+            let actions = '';
+            if (o.status === 'awaiting_confirmation' || o.status === 'confirmed') {
                 if (o.status === 'awaiting_confirmation') {
-                    actions +=
-                        '<button type="button" class="btn-success" style="padding:4px 10px;font-size:0.82rem;" onclick="confirmBookOrderAdmin(' +
-                        o.id +
-                        ')">Confirm &amp; issue QR</button> ';
+                    actions += '<button type="button" class="btn-success" style="padding:4px 10px;font-size:0.81rem;" onclick="confirmBookOrderAdmin(' + o.id + ')">Confirm</button> ';
                 }
-                if (o.status !== 'fulfilled' && o.status !== 'cancelled') {
-                    actions +=
-                        '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.82rem;background:#b91c1c;" onclick="cancelBookOrderAdmin(' +
-                        o.id +
-                        ')">Cancel</button>';
-                }
-                return (
-                    '<tr><td><strong>' +
-                    String(o.order_code || '').replace(/</g, '&lt;') +
-                    '</strong></td><td>' +
-                    String(name).replace(/</g, '&lt;') +
-                    '<br><span style="font-size:0.78rem;color:#64748b;">' +
-                    String(o.user_id_string || o.email || '').replace(/</g, '&lt;') +
-                    '</span></td><td>' +
-                    stLabel(o.status) +
-                    '</td><td>₹' +
-                    Number(o.total_amount || 0).toFixed(2) +
-                    '</td><td>' +
-                    String(o.payment_mode || '').replace(/</g, '&lt;') +
-                    '</td><td>' +
-                    actions +
-                    '</td></tr>'
-                );
-            })
-            .join('') +
-        '</tbody></table>';
+                actions += '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.81rem;background:#0d9488;" onclick="openBsCourierModal(' + o.id + ')">Courier</button> ';
+                actions += '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.81rem;background:#b91c1c;" onclick="cancelBookOrderAdmin(' + o.id + ')">Cancel</button>';
+            }
+            if (o.status === 'fulfilled' && ftype === 'courier' && o.courier_tracking_no) {
+                actions += '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.81rem;background:#7c3aed;" onclick="promptUpdateTracking(' + o.id + ')">Update tracking</button>';
+            }
+            return '<tr>' +
+                '<td><strong>' + e(o.order_code) + '</strong></td>' +
+                '<td>' + e(name) + (phone ? '<br><small>' + e(phone) + '</small>' : '') + '</td>' +
+                '<td>' + statusLabel + '</td>' +
+                '<td>₹' + Number(o.total_amount || 0).toFixed(0) + '</td>' +
+                '<td>' + e(o.payment_mode || '') + '</td>' +
+                '<td>' + fulfillCell + '</td>' +
+                '<td style="white-space:nowrap;">' + actions + '</td></tr>';
+        }).join('') +
+        '</tbody></table></div>';
 }
 
 async function saveBookSalesAdminConfig() {
     const msg = document.getElementById('bs-config-msg');
-    const adm = getStoredAdminUser();
+    if (msg) { msg.style.color = '#0d9488'; msg.textContent = 'Saving…'; }
     const seminarVal = (document.getElementById('bs-seminar') || {}).value;
     const config = {
         enabled: !!(document.getElementById('bs-enabled') || {}).checked,
         onlinePaymentEnabled: !!(document.getElementById('bs-online') || {}).checked,
         payAtCounterEnabled: !!(document.getElementById('bs-counter') || {}).checked,
+        courierEnabled: !!(document.getElementById('bs-courier-enabled') || {}).checked,
+        defaultCourierCharge: parseFloat((document.getElementById('bs-courier-charge') || {}).value) || 60,
         seminarId: seminarVal ? parseInt(seminarVal, 10) : null,
-        books: [
-            {
-                id: 'agnikarma',
-                title: 'Agnikarma',
-                author: 'Dr. R.B. Gogate',
-                price: parseFloat((document.getElementById('bs-price-agnikarma') || {}).value) || 0,
-                active: true
-            },
-            {
-                id: 'viddhakarma',
-                title: 'Viddhakarma',
-                author: 'Dr. R.B. Gogate',
-                price: parseFloat((document.getElementById('bs-price-viddhakarma') || {}).value) || 0,
-                active: true
-            }
-        ]
+        books: bsCollectBooksFromForm()
     };
     try {
         const res = await fetch('/api/admin/book-sales/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ config, actingAdminId: adm && adm.id })
+            body: JSON.stringify(config)
         });
         const data = await res.json();
         if (msg) {
             msg.style.color = data.success ? '#15803d' : '#b91c1c';
-            msg.textContent = data.success ? 'Book sales settings saved.' : data.error || 'Save failed';
+            msg.textContent = data.success ? '✓ Book sales settings saved.' : (data.error || 'Save failed');
         }
-        if (data.success) loadBookSalesAdmin();
+        if (data.success) { _bsCurrentConfig = data.config; renderBsPosBooks(); }
     } catch (e) {
-        if (msg) {
-            msg.style.color = '#b91c1c';
-            msg.textContent = 'Network error';
-        }
+        if (msg) { msg.style.color = '#b91c1c'; msg.textContent = 'Network error: ' + e.message; }
     }
 }
 
 async function confirmBookOrderAdmin(id) {
     const adm = getStoredAdminUser();
-    if (!confirm('Confirm this order and issue pickup QR for the doctor?')) return;
+    if (!confirm('Confirm this book order and issue pickup QR?')) return;
     try {
         const res = await fetch('/api/admin/book-sales/orders/' + id + '/confirm', {
             method: 'POST',
@@ -12012,10 +12058,8 @@ async function confirmBookOrderAdmin(id) {
         });
         const data = await res.json();
         if (!res.ok) return alert(data.error || 'Confirm failed');
-        loadBookSalesAdmin();
-    } catch (e) {
-        alert(e.message || 'Confirm failed');
-    }
+        loadBsOrders(false);
+    } catch (e) { alert(e.message || 'Confirm failed'); }
 }
 
 async function cancelBookOrderAdmin(id) {
@@ -12024,10 +12068,143 @@ async function cancelBookOrderAdmin(id) {
         const res = await fetch('/api/admin/book-sales/orders/' + id + '/cancel', { method: 'POST' });
         const data = await res.json();
         if (!res.ok) return alert(data.error || 'Cancel failed');
-        loadBookSalesAdmin();
-    } catch (e) {
-        alert(e.message || 'Cancel failed');
-    }
+        loadBsOrders(false);
+    } catch (e) { alert(e.message || 'Cancel failed'); }
+}
+
+function openBsCourierModal(orderId) {
+    document.getElementById('bs-courier-order-id').value = orderId;
+    document.getElementById('bs-courier-tracking').value = '';
+    document.getElementById('bs-courier-address').value = '';
+    const cc = document.getElementById('bs-courier-charge-disp');
+    if (cc) cc.value = (_bsCurrentConfig && _bsCurrentConfig.defaultCourierCharge) || 60;
+    const msg = document.getElementById('bs-courier-msg');
+    if (msg) msg.textContent = '';
+    document.getElementById('bs-courier-modal').style.display = 'flex';
+}
+
+async function bsDispatchCourier() {
+    const msg = document.getElementById('bs-courier-msg');
+    const id = parseInt((document.getElementById('bs-courier-order-id') || {}).value, 10);
+    const trackingNo = (document.getElementById('bs-courier-tracking') || {}).value.trim();
+    const provider = (document.getElementById('bs-courier-provider') || {}).value;
+    const charge = parseFloat((document.getElementById('bs-courier-charge-disp') || {}).value) || 0;
+    const address = (document.getElementById('bs-courier-address') || {}).value.trim();
+    if (!trackingNo) { if (msg) { msg.style.color = '#b91c1c'; msg.textContent = 'Tracking number required'; } return; }
+    try {
+        const res = await fetch('/api/admin/book-sales/orders/' + id + '/dispatch-courier', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ courierProvider: provider, trackingNo, courierCharge: charge, deliveryAddress: address })
+        });
+        const data = await res.json();
+        if (!res.ok) { if (msg) { msg.style.color = '#b91c1c'; msg.textContent = data.error || 'Failed'; } return; }
+        document.getElementById('bs-courier-modal').style.display = 'none';
+        loadBsOrders(false);
+    } catch (e) { if (msg) { msg.style.color = '#b91c1c'; msg.textContent = e.message; } }
+}
+
+async function promptUpdateTracking(id) {
+    const newNo = prompt('Enter updated tracking number:');
+    if (!newNo) return;
+    await fetch('/api/admin/book-sales/orders/' + id + '/update-tracking', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trackingNo: newNo })
+    });
+    loadBsOrders(false);
+}
+
+// Book POS
+let _bsPosSearchTimer = null;
+
+function renderBsPosBooks() {
+    const root = document.getElementById('bs-pos-books');
+    if (!root) return;
+    const books = (_bsCurrentConfig && _bsCurrentConfig.books || []).filter((b) => b.active !== false);
+    if (!books.length) { root.innerHTML = '<p style="color:#b91c1c;">No active books configured. Save settings first.</p>'; return; }
+    root.innerHTML = '<p style="font-size:0.85rem;font-weight:600;margin:0 0 6px;">Select books:</p>' +
+        books.map((b, i) =>
+            '<div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px;" data-bs-pos-row>' +
+            '<div><label style="font-size:0.8rem;">' + e(b.title) + '</label>' +
+            '<select class="bs-pos-book-sel" style="width:100%;padding:6px;" data-book-id="' + e(b.id) + '">' +
+            '<option value="">— skip —</option>' +
+            ['english','marathi','hindi','kannada'].map((l) => '<option value="' + l + '">' + l.charAt(0).toUpperCase() + l.slice(1) + '</option>').join('') +
+            '</select></div>' +
+            '<div><label style="font-size:0.8rem;">Qty</label><input type="number" class="bs-pos-qty" value="1" min="1" max="99" style="width:100%;padding:6px;"></div>' +
+            '<div><label style="font-size:0.8rem;">Price</label><input type="number" class="bs-pos-price" value="' + (b.price || 0) + '" min="0" step="1" style="width:100%;padding:6px;"></div>' +
+            '</div>'
+        ).join('');
+}
+
+function bsPosSearch() {
+    clearTimeout(_bsPosSearchTimer);
+    _bsPosSearchTimer = setTimeout(async () => {
+        const q = (document.getElementById('bs-pos-search') || {}).value || '';
+        const root = document.getElementById('bs-pos-search-results');
+        if (!q.trim() || !root) return;
+        try {
+            const res = await fetch('/api/admin/book-sales/pos-search?q=' + encodeURIComponent(q));
+            const rows = await res.json();
+            if (!rows.length) { root.innerHTML = '<p style="font-size:0.85rem;color:#64748b;">No match</p>'; return; }
+            root.innerHTML = rows.map((r) =>
+                '<div style="padding:6px 10px;background:#f1f5f9;border-radius:6px;margin-bottom:4px;cursor:pointer;" onclick="bsPosSelectDoctor(' + JSON.stringify(r).replace(/"/g, '&quot;') + ')">' +
+                '<strong>' + e([r.first_name, r.last_name].filter(Boolean).join(' ') || r.email) + '</strong>' +
+                ' <small style="color:#64748b;">' + e(r.phone || r.user_id_string || '') + '</small></div>'
+            ).join('');
+        } catch (_) {}
+    }, 350);
+}
+
+function bsPosSelectDoctor(r) {
+    const n = document.getElementById('bs-pos-name');
+    const p = document.getElementById('bs-pos-phone');
+    if (n) n.value = [r.first_name, r.last_name].filter(Boolean).join(' ') || '';
+    if (p) p.value = r.phone || '';
+    const root = document.getElementById('bs-pos-search-results');
+    if (root) root.innerHTML = '<p style="font-size:0.82rem;color:#0d9488;">✓ Doctor selected: ' + e([r.first_name, r.last_name].filter(Boolean).join(' ')) + '</p>';
+}
+
+async function bsPosSave() {
+    const msg = document.getElementById('bs-pos-msg');
+    const adm = getStoredAdminUser();
+    const items = [];
+    document.querySelectorAll('[data-bs-pos-row]').forEach((row) => {
+        const langSel = row.querySelector('.bs-pos-book-sel');
+        const qtyEl = row.querySelector('.bs-pos-qty');
+        const priceEl = row.querySelector('.bs-pos-price');
+        if (!langSel || !langSel.value) return;
+        items.push({
+            bookId: langSel.getAttribute('data-book-id'),
+            language: langSel.value,
+            qty: parseInt((qtyEl || {}).value, 10) || 1,
+            unitPrice: parseFloat((priceEl || {}).value) || 0
+        });
+    });
+    if (!items.length) { if (msg) { msg.style.color = '#b91c1c'; msg.textContent = 'Select at least one book with language'; } return; }
+    // Patch item prices from form into books for server-side validation
+    // (server re-validates but client collects data)
+    const body = {
+        buyerName: (document.getElementById('bs-pos-name') || {}).value || '',
+        buyerPhone: (document.getElementById('bs-pos-phone') || {}).value || '',
+        paymentMode: (document.getElementById('bs-pos-pay-mode') || {}).value || 'cash',
+        items,
+        actingAdminId: adm && adm.id
+    };
+    if (!body.buyerName && !body.buyerPhone) { if (msg) { msg.style.color = '#b91c1c'; msg.textContent = 'Enter buyer name or phone'; } return; }
+    if (msg) { msg.style.color = '#0d9488'; msg.textContent = 'Placing…'; }
+    try {
+        const res = await fetch('/api/admin/book-sales/pos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (!res.ok) { if (msg) { msg.style.color = '#b91c1c'; msg.textContent = data.error || 'Failed'; } return; }
+        if (msg) { msg.style.color = '#15803d'; msg.textContent = '✓ Order placed: ' + (data.orderCode || ''); }
+        document.getElementById('bs-pos-name').value = '';
+        document.getElementById('bs-pos-phone').value = '';
+        loadBsOrders(false);
+    } catch (e) { if (msg) { msg.style.color = '#b91c1c'; msg.textContent = e.message; } }
 }
 
 async function saveAdminSitePopup() {

@@ -280,44 +280,60 @@
         }
     }
 
+    function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
+
     async function processBookFulfill(decodedText) {
         renderResult(false, '<i class="fas fa-spinner fa-spin"></i> Verifying book order…', 'warn');
         try {
-            const res = await fetch('/api/scanner/book-fulfill', {
+            const res = await fetch('/api/scanner/volunteer-book-fulfill', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    qrData: decodedText,
-                    scannerUserId: Number(user.id)
-                })
+                body: JSON.stringify({ qrData: decodedText, scannerUserId: Number(user.id) })
             });
             const result = await res.json();
+            const o = result.order || {};
+            const dr = result.doctor || {};
+            const drName = dr.first_name ? [dr.first_name, dr.last_name].filter(Boolean).join(' ') : (dr.name || o.buyerName || '');
+            const drPhone = dr.phone || o.buyerPhone || '';
+            const checkedInBadge = result.checkedIn
+                ? '<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:6px;font-size:0.82rem;font-weight:700;">✓ Checked in</span>'
+                : '<span style="background:#fef9c3;color:#854d0e;padding:2px 8px;border-radius:6px;font-size:0.82rem;font-weight:700;">⚠ Not checked in</span>';
+            const lines = (o.items || [])
+                .map((it) => '<li>' + esc(it.bookTitle || it.bookId) + ' · ' + esc(it.languageLabel || it.language) + ' × ' + it.qty + '</li>')
+                .join('');
+            const doctorBlock = drName
+                ? '<p style="margin:4px 0;"><strong>' + esc(drName) + '</strong>' + (drPhone ? ' <small>' + esc(drPhone) + '</small>' : '') + ' &nbsp;' + checkedInBadge + '</p>'
+                : checkedInBadge;
+
             if (result.success) {
                 playTone('success');
                 stats.ok++;
-                const o = result.order || {};
-                const lines = (o.items || [])
-                    .map((it) => it.bookId + ' · ' + (it.languageLabel || it.language) + ' × ' + it.qty)
-                    .join(', ');
-                renderResult(
-                    true,
-                    '<h3>Books collected</h3><p><strong>' +
-                        String(o.orderCode || '').replace(/</g, '&lt;') +
-                        '</strong></p><p>' +
-                        String(lines).replace(/</g, '&lt;') +
-                        '</p>',
+                renderResult(true,
+                    '<h3 style="color:#15803d;">✓ Books handed over</h3>' +
+                    doctorBlock +
+                    '<p><strong>Order:</strong> ' + esc(o.orderCode) + '</p>' +
+                    '<ul style="margin:4px 0 0;padding-left:18px;">' + lines + '</ul>',
                     'ok'
                 );
                 pushHistory((o.orderCode || 'Book') + ' fulfilled', true);
             } else if (result.outcome === 'duplicate') {
                 playTone('duplicate');
                 stats.dup++;
-                renderResult(false, '<h3>Already collected</h3><p>' + (result.message || '') + '</p>', 'dup');
+                renderResult(false,
+                    '<h3>Already collected</h3>' + doctorBlock +
+                    '<p>' + esc(result.message || '') + '</p>' +
+                    '<ul style="padding-left:18px;">' + lines + '</ul>',
+                    'dup'
+                );
                 pushHistory('Duplicate book pickup', false);
             } else {
                 playTone('error');
                 stats.err++;
-                renderResult(false, '<h3>Denied</h3><p>' + (result.message || result.error || 'Invalid') + '</p>', 'bad');
+                renderResult(false,
+                    '<h3>Denied</h3>' + doctorBlock +
+                    '<p>' + esc(result.message || result.error || 'Invalid') + '</p>',
+                    'bad'
+                );
                 pushHistory(result.message || 'Book denied', false);
             }
             updateStats();
