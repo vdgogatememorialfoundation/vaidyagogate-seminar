@@ -1050,29 +1050,44 @@
 
                 <!-- POS panel -->
                 <div id="bs-panel-pos" class="hidden">
-                    <div class="card" style="padding:18px;max-width:700px;">
-                        <h3 style="margin:0 0 12px;color:#7c3aed;">Book POS — Walk-in / desk sale</h3>
-                        <p style="font-size:0.88rem;color:#64748b;margin:0 0 12px;">Search doctor by phone/name or enter walk-in buyer details. Select books and place order immediately.</p>
-                        <div style="display:grid;grid-template-columns:1fr auto;gap:8px;margin-bottom:10px;max-width:480px;">
-                            <input type="text" id="bs-pos-search" placeholder="Search doctor by phone / name / email" style="padding:8px;" oninput="bsPosSearch()">
-                            <button type="button" class="btn-primary" style="padding:8px 12px;background:#7c3aed;" onclick="bsPosSearch()">Search</button>
+                    <div style="display:grid;grid-template-columns:minmax(320px,1fr) minmax(360px,1.2fr);gap:16px;align-items:start;">
+                        <div class="card" style="padding:18px;">
+                            <h3 style="margin:0 0 12px;color:#7c3aed;">Book POS — Walk-in / desk sale</h3>
+                            <p style="font-size:0.88rem;color:#64748b;margin:0 0 12px;">Search doctor by phone, email, user ID, or registration number. Full profile appears below. Walk-in buyers can use name/phone only.</p>
+                            <div style="display:grid;grid-template-columns:1fr auto;gap:8px;margin-bottom:10px;">
+                                <input type="text" id="bs-pos-search" placeholder="Phone / name / email / user ID / reg. no." style="padding:8px;" oninput="bsPosSearch()">
+                                <button type="button" class="btn-primary" style="padding:8px 12px;background:#7c3aed;" onclick="bsPosSearch()">Search</button>
+                            </div>
+                            <div id="bs-pos-search-results" style="margin-bottom:10px;"></div>
+                            <input type="hidden" id="bs-pos-user-id" value="">
+                            <div id="bs-pos-selected-user" style="display:none;margin-bottom:12px;padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;font-size:0.85rem;"></div>
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+                                <div><label>Buyer name</label><input type="text" id="bs-pos-name" placeholder="Name" style="width:100%;padding:8px;"></div>
+                                <div><label>Buyer phone</label><input type="text" id="bs-pos-phone" placeholder="Phone" style="width:100%;padding:8px;"></div>
+                            </div>
+                            <div id="bs-pos-books" style="margin-bottom:12px;"></div>
+                            <div style="margin-bottom:12px;max-width:240px;">
+                                <label>Payment mode</label>
+                                <select id="bs-pos-pay-mode" style="width:100%;padding:8px;">
+                                    <option value="cash">Cash</option>
+                                    <option value="upi">UPI</option>
+                                    <option value="card">Card</option>
+                                </select>
+                            </div>
+                            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                                <button type="button" class="btn-primary" style="background:#7c3aed;" onclick="bsPosSave()">Place POS order</button>
+                                <button type="button" class="btn-primary" style="background:#64748b;padding:8px 12px;" onclick="bsPosClearBuyer()">Clear buyer</button>
+                            </div>
+                            <p id="bs-pos-msg" style="margin-top:8px;font-weight:600;"></p>
                         </div>
-                        <div id="bs-pos-search-results" style="margin-bottom:10px;"></div>
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;max-width:480px;">
-                            <div><label>Buyer name</label><input type="text" id="bs-pos-name" placeholder="Name" style="width:100%;padding:8px;"></div>
-                            <div><label>Buyer phone</label><input type="text" id="bs-pos-phone" placeholder="Phone" style="width:100%;padding:8px;"></div>
+                        <div class="card" style="padding:18px;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+                                <h3 style="margin:0;color:#475569;">Recent book orders</h3>
+                                <button type="button" class="btn-primary" style="padding:6px 12px;background:#0d9488;font-size:0.85rem;" onclick="loadBsPosOrders()">Refresh</button>
+                            </div>
+                            <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px;">Update status here (confirm, mark collected, cancel) without leaving Book POS.</p>
+                            <div id="bs-pos-orders-table"><p style="color:#64748b;">Loading…</p></div>
                         </div>
-                        <div id="bs-pos-books" style="margin-bottom:12px;"></div>
-                        <div style="margin-bottom:12px;max-width:240px;">
-                            <label>Payment mode</label>
-                            <select id="bs-pos-pay-mode" style="width:100%;padding:8px;">
-                                <option value="cash">Cash</option>
-                                <option value="upi">UPI</option>
-                                <option value="card">Card</option>
-                            </select>
-                        </div>
-                        <button type="button" class="btn-primary" style="background:#7c3aed;" onclick="bsPosSave()">Place POS order</button>
-                        <p id="bs-pos-msg" style="margin-top:8px;font-weight:600;"></p>
                     </div>
                 </div>
 
@@ -1085,20 +1100,40 @@
                     </div>
                 </div>
 
-                <!-- Courier dispatch modal -->
+                <!-- Courier dispatch modal (2 steps: shipping details → confirm & ship) -->
                 <div id="bs-courier-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.45);z-index:9999;align-items:center;justify-content:center;">
-                    <div style="background:#fff;padding:24px;border-radius:12px;width:480px;max-width:96vw;max-height:90vh;overflow-y:auto;">
-                        <h3 style="margin:0 0 14px;">Dispatch by courier</h3>
+                    <div style="background:#fff;padding:24px;border-radius:12px;width:560px;max-width:96vw;max-height:90vh;overflow-y:auto;">
+                        <h3 style="margin:0 0 6px;">Courier delivery</h3>
+                        <p id="bs-courier-step-label" style="margin:0 0 14px;font-size:0.85rem;color:#64748b;">Step 1 of 2 — Enter shipping details</p>
                         <input type="hidden" id="bs-courier-order-id">
-                        <div style="display:grid;gap:10px;">
-                            <div><label>Courier provider</label><select id="bs-courier-provider" style="width:100%;padding:8px;"><option value="indian_post">Indian Post / Speed Post</option><option value="dtdc">DTDC</option><option value="bluedart">Blue Dart</option><option value="delhivery">Delhivery</option><option value="ecom_express">Ecom Express</option><option value="other">Other</option></select></div>
-                            <div><label>Tracking number *</label><input type="text" id="bs-courier-tracking" style="width:100%;padding:8px;" placeholder="e.g. EE123456789IN"></div>
-                            <div><label>Courier charge (₹)</label><input type="number" id="bs-courier-charge-disp" min="0" style="width:100%;padding:8px;"></div>
-                            <div><label>Delivery address *</label><textarea id="bs-courier-address" rows="3" style="width:100%;padding:8px;"></textarea></div>
+                        <input type="hidden" id="bs-courier-step" value="1">
+                        <div id="bs-courier-panel-details">
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                                <div style="grid-column:1/-1;"><label>Recipient name *</label><input type="text" id="bs-courier-recipient" style="width:100%;padding:8px;"></div>
+                                <div><label>Mobile *</label><input type="text" id="bs-courier-phone" style="width:100%;padding:8px;"></div>
+                                <div><label>PIN code *</label><input type="text" id="bs-courier-pincode" style="width:100%;padding:8px;" maxlength="6"></div>
+                                <div style="grid-column:1/-1;"><label>Address (house / street) *</label><textarea id="bs-courier-address-line" rows="2" style="width:100%;padding:8px;"></textarea></div>
+                                <div><label>City *</label><input type="text" id="bs-courier-city" style="width:100%;padding:8px;"></div>
+                                <div><label>State *</label><input type="text" id="bs-courier-state" style="width:100%;padding:8px;"></div>
+                                <div><label>Courier provider *</label><select id="bs-courier-provider" style="width:100%;padding:8px;"></select></div>
+                                <div><label>Courier charge (₹)</label><input type="number" id="bs-courier-charge-disp" min="0" style="width:100%;padding:8px;"></div>
+                                <div style="grid-column:1/-1;"><label>Notes (optional)</label><input type="text" id="bs-courier-notes" style="width:100%;padding:8px;" placeholder="e.g. fragile, call before delivery"></div>
+                            </div>
+                            <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;">
+                                <button type="button" class="btn-primary" onclick="bsSaveCourierDetails()" style="background:#0d9488;">Save shipping details</button>
+                                <button type="button" class="btn-primary" onclick="bsCloseCourierModal()" style="background:#64748b;">Cancel</button>
+                            </div>
                         </div>
-                        <div style="margin-top:14px;display:flex;gap:10px;">
-                            <button type="button" class="btn-primary" onclick="bsDispatchCourier()" style="background:#0d9488;">Dispatch</button>
-                            <button type="button" class="btn-primary" onclick="document.getElementById('bs-courier-modal').style.display='none'" style="background:#64748b;">Cancel</button>
+                        <div id="bs-courier-panel-ship" class="hidden">
+                            <div id="bs-courier-review" style="padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:0.85rem;margin-bottom:12px;"></div>
+                            <div style="display:grid;gap:10px;">
+                                <div><label>AWB / tracking number *</label><input type="text" id="bs-courier-tracking" style="width:100%;padding:8px;" placeholder="e.g. EE123456789IN" oninput="bsCourierPreviewTracking()"></div>
+                                <p id="bs-courier-track-preview" style="margin:0;font-size:0.82rem;"></p>
+                            </div>
+                            <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;">
+                                <button type="button" class="btn-primary" onclick="bsDispatchCourier()" style="background:#7c3aed;">Confirm &amp; ship</button>
+                                <button type="button" class="btn-primary" onclick="bsCourierGoToDetails()" style="background:#64748b;">← Edit details</button>
+                            </div>
                         </div>
                         <p id="bs-courier-msg" style="margin-top:8px;font-weight:600;"></p>
                     </div>

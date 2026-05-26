@@ -283,7 +283,18 @@
         cancelled: 'Cancelled'
     };
 
-    function statusLabel(st) { return ST_LABEL[st] || st; }
+    function statusLabel(st, o) {
+        if (o && o.fulfillmentType === 'courier') {
+            if (st === 'confirmed' && o.courierShipmentStatus === 'ready_to_ship') {
+                return 'Courier — preparing shipment';
+            }
+            if (st === 'fulfilled' && o.courierTrackingNo) {
+                return 'Shipped by courier ✓';
+            }
+            if (st === 'confirmed') return 'Confirmed — courier delivery';
+        }
+        return ST_LABEL[st] || st;
+    }
 
     function statusColor(st) {
         if (st === 'confirmed') return '#0d9488';
@@ -338,16 +349,19 @@
         const trackHtml =
             '<div style="margin-top:12px;padding-top:12px;border-top:1px solid #e2e8f0;">' +
             '<p style="margin:0 0 4px;font-size:0.82rem;font-weight:700;color:#0f766e;">Order tracking · ' +
-            esc(tl.currentLabel || statusLabel(o.status)) +
+            esc(tl.currentLabel || statusLabel(o.status, o)) +
             '</p>' +
             renderBookTrackerStepsHtml(tl) +
             '</div>';
         let extra = '';
-        if (o.status === 'confirmed' && o.qrCodeData) {
+        if (o.status === 'confirmed' && o.qrCodeData && o.fulfillmentType !== 'courier') {
             const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(o.qrCodeData);
             extra = '<div style="margin-top:12px;text-align:center;">' +
                 '<img src="' + qrUrl + '" alt="Pickup QR" width="160" height="160" style="border-radius:8px;box-shadow:0 2px 8px rgba(0,0,0,.1);">' +
                 '<p style="font-size:0.8rem;color:#64748b;margin:4px 0 0;">Code: ' + esc(o.orderCode) + ' · Show to book desk volunteer</p></div>';
+        } else if (o.fulfillmentType === 'courier' && o.courierShipmentStatus === 'ready_to_ship' && o.status === 'confirmed') {
+            extra =
+                '<p style="margin:8px 0 0;font-size:0.88rem;color:#0f766e;">Shipping address confirmed. AWB and tracking link will appear once staff dispatches your parcel.</p>';
         } else if (o.fulfillmentType === 'courier' && o.courierTrackingNo && o.courierTrackingUrl) {
             extra =
                 '<p style="margin:8px 0 0;"><a href="' +
@@ -359,7 +373,7 @@
         return '<div class="card" style="margin-bottom:12px;padding:14px;border:1px solid #e2e8f0;" data-book-order-id="' + o.id + '">' +
             '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">' +
             '<strong>' + esc(o.orderCode) + '</strong>' +
-            '<span style="font-size:0.85rem;font-weight:600;color:' + statusColor(o.status) + ';">' + esc(statusLabel(o.status)) + '</span>' +
+            '<span style="font-size:0.85rem;font-weight:600;color:' + statusColor(o.status) + ';">' + esc(statusLabel(o.status, o)) + '</span>' +
             '</div>' +
             '<ul style="margin:8px 0 4px;padding-left:18px;font-size:0.88rem;">' + lines + '</ul>' +
             '<p style="margin:0;font-size:0.88rem;color:#64748b;">Total ₹' + Number(o.totalAmount || 0).toFixed(0) + ' · ' + esc(o.paymentMode) + '</p>' +
@@ -370,7 +384,7 @@
 
     function orderTrackFingerprint(o) {
         const tl = o.timeline || {};
-        return [o.id, o.status, tl.currentLabel, o.courierTrackingNo, o.fulfilledAt, o.updatedAt].join('|');
+        return [o.id, o.status, o.courierShipmentStatus, tl.currentLabel, o.courierTrackingNo, o.fulfilledAt, o.updatedAt].join('|');
     }
 
     let _bookOrderPollTimer = null;
