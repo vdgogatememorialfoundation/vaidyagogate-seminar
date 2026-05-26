@@ -968,6 +968,55 @@
             <div id="tab-book-sales" class="tab-pane hidden">
                 <style>
                     #tab-book-sales .tracker-vertical { display:flex; flex-direction:column; margin:12px 0; padding-left:8px; }
+                    /* VGMF Vertical Tracker */
+                    .vtrk-header{padding:14px 16px;border-radius:12px 12px 0 0;background:linear-gradient(135deg,#0f766e 0%,#0d9488 100%);color:#fff}
+                    .vtrk-header.delivered{background:linear-gradient(135deg,#15803d,#16a34a)}
+                    .vtrk-header.cancelled{background:linear-gradient(135deg,#991b1b,#b91c1c)}
+                    .vtrk-header.live{background:linear-gradient(135deg,#0f766e,#0d9488 60%,#0284c7)}
+                    .vtrk-live{display:inline-flex;align-items:center;gap:5px;font-size:.67rem;font-weight:800;text-transform:uppercase;letter-spacing:.1em;background:rgba(255,255,255,.2);border-radius:999px;padding:2px 10px;margin-bottom:8px}
+                    .vtrk-dot{width:7px;height:7px;border-radius:50%;background:#fff;animation:vtrkP 1.4s ease-out infinite}
+                    @keyframes vtrkP{0%{box-shadow:0 0 0 0 rgba(255,255,255,.7)}70%{box-shadow:0 0 0 7px rgba(255,255,255,0)}100%{box-shadow:0 0 0 0 rgba(255,255,255,0)}}
+                    .vtrk-headline{font-size:1.2rem;font-weight:900;margin:0 0 3px}
+                    .vtrk-subheadline{font-size:.85rem;opacity:.88;margin:0 0 8px}
+                    .vtrk-awb-row{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px}
+                    .vtrk-awb-badge,.vtrk-provider-badge,.vtrk-agg-badge{font-size:.7rem;font-weight:700;background:rgba(255,255,255,.18);border-radius:5px;padding:2px 8px;display:inline-flex;align-items:center;gap:4px}
+                    .vtrk-progress-wrap{height:4px;background:rgba(255,255,255,.25);border-radius:999px;overflow:hidden}
+                    .vtrk-progress-bar{height:100%;background:#fff;border-radius:999px;transition:width .6s ease}
+                    .vtrk-steps{padding:6px 0 2px;background:#fff;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0}
+                    .vtrk-step{display:flex;min-height:48px}
+                    .vtrk-step-left{display:flex;flex-direction:column;align-items:center;width:48px;flex-shrink:0}
+                    .vtrk-step-circle{width:30px;height:30px;border-radius:50%;background:#e2e8f0;color:#94a3b8;display:flex;align-items:center;justify-content:center;font-size:.72rem;border:3px solid #f8fafc;z-index:1;flex-shrink:0}
+                    .vtrk-step.done .vtrk-step-circle{background:#10b981;color:#fff;border-color:#d1fae5}
+                    .vtrk-step.active .vtrk-step-circle{background:#0f766e;color:#fff;border-color:#ccfbf1;box-shadow:0 0 0 4px rgba(15,118,110,.12)}
+                    .vtrk-step-line{flex:1;width:3px;background:#e2e8f0;margin:2px 0;border-radius:999px}
+                    .vtrk-step.done .vtrk-step-line{background:#6ee7b7}
+                    .vtrk-step-body{flex:1;padding:5px 10px 12px 2px}
+                    .vtrk-step-title{font-weight:700;font-size:.88rem;color:#1e293b}
+                    .vtrk-step.upcoming .vtrk-step-title{color:#94a3b8;font-weight:600}
+                    .vtrk-step.done .vtrk-step-title{color:#059669}
+                    .vtrk-step.active .vtrk-step-title{color:#0f766e}
+                    .vtrk-step-sub{font-size:.75rem;color:#64748b;margin-top:1px}
+                    .vtrk-step.upcoming .vtrk-step-sub{color:#b0bec5;font-style:italic}
+                    .vtrk-step-when{display:flex;align-items:center;gap:4px;font-size:.7rem;color:#0f766e;font-weight:600;margin-top:3px}
+                    .vtrk-events{background:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;padding:10px 12px}
+                    .vtrk-events-title{font-size:.74rem;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;display:flex;align-items:center;gap:5px}
+                    .vtrk-events ul{list-style:none;margin:0;padding:0;max-height:220px;overflow-y:auto}
+                    .vtrk-events li{padding:7px 0;border-bottom:1px solid #e2e8f0;display:grid;grid-template-columns:1fr auto;gap:2px 8px}
+                    .vtrk-ev-desc{font-size:.8rem;color:#334155;font-weight:600}
+                    .vtrk-ev-loc{font-size:.72rem;color:#64748b;display:flex;align-items:center;gap:3px}
+                    .vtrk-ev-when{font-size:.7rem;color:#94a3b8;grid-row:1/3;align-self:center;white-space:nowrap}
+                    .htrk{margin:6px 0 0}
+                    .htrk-progress{height:3px;background:#e2e8f0;border-radius:999px;overflow:hidden;margin-bottom:6px}
+                    .htrk-progress-fill{height:100%;background:linear-gradient(90deg,#14b8a6,#0d9488);transition:width .5s ease}
+                    .htrk-steps{display:flex;justify-content:space-between;gap:2px}
+                    .htrk-step{flex:1;text-align:center;opacity:.35;min-width:36px}
+                    .htrk-step.done,.htrk-step.active{opacity:1}
+                    .htrk-icon{width:22px;height:22px;margin:0 auto 3px;border-radius:50%;background:#e2e8f0;color:#94a3b8;display:flex;align-items:center;justify-content:center;font-size:.6rem}
+                    .htrk-step.done .htrk-icon{background:#10b981;color:#fff}
+                    .htrk-step.active .htrk-icon{background:#0f766e;color:#fff}
+                    .htrk-label{font-size:.56rem;font-weight:700;color:#64748b;line-height:1.2}
+                    .htrk-step.active .htrk-label{color:#0f766e}
+                    .pkg-live-dot{width:7px;height:7px;border-radius:50%;background:#10b981;display:inline-block;animation:vtrkP 1.4s ease-out infinite}
                     #tab-book-sales .track-step { display:flex; gap:12px; margin-bottom:16px; }
                     #tab-book-sales .track-icon { width:32px; height:32px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; background:#e2e8f0; color:#64748b; font-size:0.75rem; }
                     #tab-book-sales .track-step.completed .track-icon { background:#10b981; color:#fff; }
@@ -1113,59 +1162,152 @@
                 </div>
 
                 <!-- Order tracking modal -->
-                <div id="bs-tracking-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.45);z-index:9998;align-items:center;justify-content:center;">
-                    <div style="background:#fff;padding:24px;border-radius:12px;width:520px;max-width:96vw;max-height:90vh;overflow-y:auto;">
-                        <h3 style="margin:0 0 14px;">Book order tracking</h3>
-                        <div id="bs-tracking-body"><p style="color:#64748b;">Loading…</p></div>
-                        <button type="button" class="btn-primary" style="margin-top:14px;background:#64748b;" onclick="if(_bsTrackPollTimer){clearInterval(_bsTrackPollTimer);_bsTrackPollTimer=null;}document.getElementById('bs-tracking-modal').style.display='none'">Close</button>
+                <div id="bs-tracking-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9998;align-items:center;justify-content:center;padding:16px;overflow-y:auto;">
+                    <div style="background:#fff;border-radius:16px;width:580px;max-width:100%;max-height:92vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.25);">
+                        <div style="padding:16px 20px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:#fff;z-index:1;border-radius:16px 16px 0 0;">
+                            <h3 style="margin:0;font-size:1rem;color:#0f172a;">Order tracking</h3>
+                            <button type="button" onclick="if(_bsTrackPollTimer){clearInterval(_bsTrackPollTimer);_bsTrackPollTimer=null;}document.getElementById('bs-tracking-modal').style.display='none'" style="background:none;border:none;cursor:pointer;color:#64748b;font-size:1.4rem;line-height:1;padding:0 4px;">×</button>
+                        </div>
+                        <div id="bs-tracking-body" style="padding:16px 20px;"><p style="color:#64748b;">Loading…</p></div>
                     </div>
                 </div>
 
-                <!-- Courier dispatch modal (2 steps: shipping details → confirm & ship) -->
-                <div id="bs-courier-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.45);z-index:9999;align-items:center;justify-content:center;">
-                    <div style="background:#fff;padding:24px;border-radius:12px;width:560px;max-width:96vw;max-height:90vh;overflow-y:auto;">
-                        <h3 style="margin:0 0 6px;">Courier delivery</h3>
-                        <p id="bs-courier-step-label" style="margin:0 0 14px;font-size:0.85rem;color:#64748b;">Step 1 of 2 — Enter shipping details</p>
+                <!-- Courier dispatch modal — 3-step flow -->
+                <div id="bs-courier-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;overflow-y:auto;padding:16px;">
+                    <div style="background:#fff;border-radius:16px;width:600px;max-width:100%;max-height:92vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.25);">
+                        <!-- Modal header -->
+                        <div style="padding:18px 20px 0;border-bottom:1px solid #e2e8f0;margin-bottom:0;position:sticky;top:0;background:#fff;z-index:1;border-radius:16px 16px 0 0;">
+                            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
+                                <div>
+                                    <h3 style="margin:0 0 2px;font-size:1.1rem;color:#0f172a;">Courier delivery</h3>
+                                    <p id="bs-courier-step-label" style="margin:0;font-size:0.82rem;color:#64748b;"></p>
+                                </div>
+                                <button type="button" onclick="bsCloseCourierModal()" style="background:none;border:none;cursor:pointer;color:#64748b;font-size:1.4rem;line-height:1;padding:0 4px;">×</button>
+                            </div>
+                            <!-- Step indicators -->
+                            <div style="display:flex;gap:0;margin-bottom:-1px;" id="bs-courier-step-tabs">
+                                <div class="bs-ctab active" data-step="1" style="flex:1;padding:8px 12px;text-align:center;border-bottom:3px solid #0d9488;cursor:default;">
+                                    <span style="font-size:0.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#0d9488;">1 · Address</span>
+                                </div>
+                                <div class="bs-ctab" data-step="2" style="flex:1;padding:8px 12px;text-align:center;border-bottom:3px solid transparent;cursor:default;">
+                                    <span style="font-size:0.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:#94a3b8;">2 · Ship / AWB</span>
+                                </div>
+                            </div>
+                        </div>
+
                         <input type="hidden" id="bs-courier-order-id">
                         <input type="hidden" id="bs-courier-step" value="1">
-                        <div id="bs-courier-panel-details">
-                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-                                <div style="grid-column:1/-1;"><label>Recipient name *</label><input type="text" id="bs-courier-recipient" style="width:100%;padding:8px;"></div>
-                                <div><label>Mobile *</label><input type="text" id="bs-courier-phone" style="width:100%;padding:8px;"></div>
-                                <div><label>PIN code *</label><input type="text" id="bs-courier-pincode" style="width:100%;padding:8px;" maxlength="6"></div>
-                                <div style="grid-column:1/-1;"><label>Address (house / street) *</label><textarea id="bs-courier-address-line" rows="2" style="width:100%;padding:8px;"></textarea></div>
-                                <div><label>City *</label><input type="text" id="bs-courier-city" style="width:100%;padding:8px;"></div>
-                                <div><label>State *</label><input type="text" id="bs-courier-state" style="width:100%;padding:8px;"></div>
-                                <div><label>Courier provider *</label><select id="bs-courier-provider" style="width:100%;padding:8px;"></select></div>
-                                <div><label>Courier charge (₹)</label><input type="number" id="bs-courier-charge-disp" min="0" style="width:100%;padding:8px;"></div>
-                                <div style="grid-column:1/-1;"><label>Notes (optional)</label><input type="text" id="bs-courier-notes" style="width:100%;padding:8px;" placeholder="e.g. fragile, call before delivery"></div>
+
+                        <!-- STEP 1: Address -->
+                        <div id="bs-courier-panel-details" style="padding:18px 20px;">
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                                <div style="grid-column:1/-1;">
+                                    <label style="display:block;font-size:0.8rem;font-weight:700;color:#374151;margin-bottom:4px;">Recipient name *</label>
+                                    <input type="text" id="bs-courier-recipient" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:0.9rem;" placeholder="Full name">
+                                </div>
+                                <div>
+                                    <label style="display:block;font-size:0.8rem;font-weight:700;color:#374151;margin-bottom:4px;">Mobile *</label>
+                                    <input type="text" id="bs-courier-phone" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:0.9rem;" placeholder="10-digit number" maxlength="10">
+                                </div>
+                                <div>
+                                    <label style="display:block;font-size:0.8rem;font-weight:700;color:#374151;margin-bottom:4px;">PIN code *</label>
+                                    <input type="text" id="bs-courier-pincode" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:0.9rem;" placeholder="6 digits" maxlength="6">
+                                </div>
+                                <div style="grid-column:1/-1;">
+                                    <label style="display:block;font-size:0.8rem;font-weight:700;color:#374151;margin-bottom:4px;">House / flat / street *</label>
+                                    <textarea id="bs-courier-address-line" rows="2" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:0.9rem;resize:vertical;" placeholder="House no., building name, street…"></textarea>
+                                </div>
+                                <div>
+                                    <label style="display:block;font-size:0.8rem;font-weight:700;color:#374151;margin-bottom:4px;">City *</label>
+                                    <input type="text" id="bs-courier-city" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:0.9rem;">
+                                </div>
+                                <div>
+                                    <label style="display:block;font-size:0.8rem;font-weight:700;color:#374151;margin-bottom:4px;">State *</label>
+                                    <input type="text" id="bs-courier-state" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:0.9rem;">
+                                </div>
+                                <div>
+                                    <label style="display:block;font-size:0.8rem;font-weight:700;color:#374151;margin-bottom:4px;">Courier provider *</label>
+                                    <select id="bs-courier-provider" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:0.9rem;"></select>
+                                </div>
+                                <div>
+                                    <label style="display:block;font-size:0.8rem;font-weight:700;color:#374151;margin-bottom:4px;">Shipping charge (₹)</label>
+                                    <input type="number" id="bs-courier-charge-disp" min="0" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:0.9rem;" placeholder="0">
+                                </div>
+                                <div style="grid-column:1/-1;">
+                                    <label style="display:block;font-size:0.8rem;font-weight:700;color:#374151;margin-bottom:4px;">Notes <span style="font-weight:400;color:#94a3b8;">(optional)</span></label>
+                                    <input type="text" id="bs-courier-notes" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:0.9rem;" placeholder="e.g. fragile, call before delivery">
+                                </div>
                             </div>
-                            <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;">
-                                <button type="button" class="btn-primary" onclick="bsSaveCourierDetails()" style="background:#0d9488;">Save shipping details</button>
+                            <div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap;padding-top:14px;border-top:1px solid #f1f5f9;">
+                                <button type="button" class="btn-primary" onclick="bsSaveCourierDetails()" style="background:#0d9488;flex:1;max-width:220px;">Save &amp; continue →</button>
                                 <button type="button" class="btn-primary" onclick="bsCloseCourierModal()" style="background:#64748b;">Cancel</button>
                             </div>
                         </div>
-                        <div id="bs-courier-panel-ship" class="hidden">
-                            <div id="bs-courier-review" style="padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:0.85rem;margin-bottom:12px;"></div>
-                            <div style="display:grid;gap:10px;">
-                                <div><label>Tracking source *</label>
-                                    <select id="bs-courier-integration" style="width:100%;padding:8px;">
-                                        <option value="auto">Auto (Shiprocket → Nimbuspost → carrier)</option>
-                                        <option value="shiprocket">Shiprocket AWB</option>
-                                        <option value="nimbuspost">Nimbuspost AWB</option>
-                                        <option value="direct">Direct carrier AWB only</option>
-                                    </select>
-                                    <p style="font-size:0.78rem;color:#64748b;margin:4px 0 0;">All scan updates appear in VGMF portal — not on external sites.</p>
+
+                        <!-- STEP 2: Ship -->
+                        <div id="bs-courier-panel-ship" class="hidden" style="padding:18px 20px;">
+                            <!-- Address review -->
+                            <div id="bs-courier-review" style="padding:12px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;font-size:0.84rem;margin-bottom:16px;"></div>
+
+                            <!-- Option A: Book directly via aggregator -->
+                            <div style="border:2px solid #6366f1;border-radius:12px;padding:16px;margin-bottom:16px;">
+                                <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                                    <span style="background:#6366f1;color:#fff;border-radius:6px;padding:2px 10px;font-size:0.72rem;font-weight:800;text-transform:uppercase;letter-spacing:.06em;">Recommended</span>
+                                    <span style="font-weight:800;color:#3730a3;font-size:0.92rem;">Book directly via aggregator</span>
                                 </div>
-                                <div><label>AWB / tracking number *</label><input type="text" id="bs-courier-tracking" style="width:100%;padding:8px;" placeholder="e.g. PP271657042IN" oninput="bsCourierPreviewTracking()"></div>
-                                <p id="bs-courier-track-preview" style="margin:0;font-size:0.82rem;"></p>
+                                <p style="font-size:0.78rem;color:#64748b;margin:0 0 12px;">AWB is created automatically. Doctors get real-time tracking in their portal immediately.</p>
+                                <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end;margin-bottom:10px;">
+                                    <div>
+                                        <label style="display:block;font-size:0.78rem;font-weight:700;color:#374151;margin-bottom:4px;">Parcel weight (kg)</label>
+                                        <input type="number" id="bs-courier-weight-kg" min="0.2" step="0.1" value="0.8" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:0.88rem;">
+                                    </div>
+                                    <div>
+                                        <label style="display:block;font-size:0.78rem;font-weight:700;color:#374151;margin-bottom:4px;">&nbsp;</label>
+                                    </div>
+                                </div>
+                                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                    <button type="button" id="bs-book-shiprocket" class="btn-primary" style="background:#6366f1;flex:1;" onclick="bsBookAggregator('shiprocket')">
+                                        <i class="fas fa-bolt" style="margin-right:5px;"></i>Book via Shiprocket
+                                    </button>
+                                    <button type="button" id="bs-book-nimbuspost" class="btn-primary" style="background:#7c3aed;flex:1;" onclick="bsBookAggregator('nimbuspost')">
+                                        <i class="fas fa-bolt" style="margin-right:5px;"></i>Book via Nimbuspost
+                                    </button>
+                                </div>
+                                <p id="bs-agg-no-config" style="display:none;margin:8px 0 0;font-size:0.78rem;color:#92400e;background:#fef9c3;padding:6px 10px;border-radius:6px;"><i class="fas fa-exclamation-triangle"></i> Configure Shiprocket / Nimbuspost API credentials in Book sales → Settings → Logistics API first.</p>
                             </div>
-                            <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;">
-                                <button type="button" class="btn-primary" onclick="bsDispatchCourier()" style="background:#7c3aed;">Confirm &amp; ship</button>
-                                <button type="button" class="btn-primary" onclick="bsCourierGoToDetails()" style="background:#64748b;">← Edit details</button>
+
+                            <!-- Option B: Manual AWB -->
+                            <div style="border:1px solid #e2e8f0;border-radius:12px;padding:14px;">
+                                <p style="font-weight:700;color:#475569;font-size:0.88rem;margin:0 0 10px;"><i class="fas fa-keyboard" style="margin-right:6px;color:#64748b;"></i>Or enter AWB manually</p>
+                                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                                    <div>
+                                        <label style="display:block;font-size:0.78rem;font-weight:700;color:#374151;margin-bottom:4px;">Tracking source</label>
+                                        <select id="bs-courier-integration" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:0.85rem;">
+                                            <option value="auto">Auto-detect (Shiprocket → Nimbuspost → carrier)</option>
+                                            <option value="shiprocket">Shiprocket AWB</option>
+                                            <option value="nimbuspost">Nimbuspost AWB</option>
+                                            <option value="direct">Direct carrier only</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label style="display:block;font-size:0.78rem;font-weight:700;color:#374151;margin-bottom:4px;">AWB / tracking number *</label>
+                                        <input type="text" id="bs-courier-tracking" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:0.88rem;" placeholder="e.g. PP271657042IN" oninput="bsCourierPreviewTracking()">
+                                    </div>
+                                </div>
+                                <p id="bs-courier-track-preview" style="margin:0 0 10px;font-size:0.8rem;"></p>
+                                <button type="button" class="btn-primary" onclick="bsDispatchCourier()" style="background:#0d9488;width:100%;">
+                                    <i class="fas fa-paper-plane" style="margin-right:6px;"></i>Confirm &amp; ship (manual AWB)
+                                </button>
+                            </div>
+
+                            <div style="margin-top:12px;display:flex;gap:8px;">
+                                <button type="button" class="btn-primary" onclick="bsCourierGoToDetails()" style="background:#e2e8f0;color:#475569;font-size:0.82rem;padding:8px 14px;">← Back to address</button>
                             </div>
                         </div>
-                        <p id="bs-courier-msg" style="margin-top:8px;font-weight:600;"></p>
+
+                        <div style="padding:0 20px 16px;">
+                            <p id="bs-courier-msg" style="margin:0;font-weight:600;font-size:0.88rem;"></p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -2312,6 +2454,7 @@
     <script src="/js/portal-upload.js?v=20260522"></script>
     <script src="/js/user-roles.js?v=20260522f"></script>
     <script src="/js/admin-list-search.js?v=20260522a"></script>
-    <script src="/js/admin.js?v=20260530c"></script>
+    <script src="/js/book-tracking-ui.js?v=20260530d"></script>
+    <script src="/js/admin.js?v=20260530d"></script>
 </body>
 </html>

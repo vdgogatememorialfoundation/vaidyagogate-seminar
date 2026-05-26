@@ -351,13 +351,21 @@
         const lines = (o.items || [])
             .map((it) => '<li>' + esc(it.bookTitle || it.bookId) + ' · ' + esc(it.languageLabel || it.language) + ' × ' + it.qty + '</li>')
             .join('');
-        const tl = o.timeline || {};
+        const journey = o.deliveryJourney;
+        // Compact stepper shown in card; click expands to full vertical timeline
+        const compactTrack = journey && window.BookTrackingUI
+            ? window.BookTrackingUI.renderHorizontalStepper(journey)
+            : '';
+        const fullTrackId = 'book-track-full-' + o.id;
         const trackHtml =
-            '<div style="margin-top:12px;padding-top:12px;border-top:1px solid #e2e8f0;">' +
-            '<p style="margin:0 0 4px;font-size:0.82rem;font-weight:700;color:#0f766e;">Order tracking · ' +
-            esc(tl.currentLabel || statusLabel(o.status, o)) +
-            '</p>' +
-            renderBookTrackerStepsHtml(tl) +
+            '<div style="margin-top:12px;padding-top:10px;border-top:1px solid #e2e8f0;">' +
+            compactTrack +
+            '<div id="' + fullTrackId + '" class="hidden" style="margin-top:10px;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;">' +
+            (journey && window.BookTrackingUI
+                ? window.BookTrackingUI.renderVerticalJourney(journey, o.courierTrackEvents || [], {})
+                : renderBookTrackerStepsHtml(o.timeline)) +
+            '</div>' +
+            '<button type="button" onclick="bookTrackToggle(' + o.id + ')" style="margin-top:8px;background:none;border:none;color:#0d9488;font-size:0.78rem;font-weight:700;cursor:pointer;padding:0;" id="book-track-toggle-' + o.id + '">▼ Show full tracking</button>' +
             '</div>';
         let extra = '';
         if (o.status === 'confirmed' && o.qrCodeData && o.fulfillmentType !== 'courier') {
@@ -369,33 +377,13 @@
             extra =
                 '<p style="margin:8px 0 0;font-size:0.88rem;color:#0f766e;">Shipping address confirmed. AWB and tracking link will appear once staff dispatches your parcel.</p>';
         } else if (o.fulfillmentType === 'courier' && (o.status === 'shipped' || o.courierTrackingNo)) {
-            const live = o.courierTrackLabel
-                ? '<p style="margin:6px 0 0;font-size:0.88rem;color:#0f766e;font-weight:600;">' + esc(o.courierTrackLabel) + '</p>'
-                : '';
-            let evHtml = '';
-            (o.courierTrackEvents || []).slice(0, 8).forEach((ev) => {
-                evHtml +=
-                    '<li style="margin-bottom:4px;">' +
-                    esc(ev.description) +
-                    (ev.at ? ' <span style="color:#94a3b8;">· ' + esc(formatBookDt(ev.at)) + '</span>' : '') +
-                    '</li>';
-            });
-            extra =
-                live +
-                (o.courierTrackingUrl
-                    ? '<p style="margin:8px 0 0;"><a href="' +
-                      esc(o.courierTrackingUrl) +
-                      '" target="_blank" rel="noopener" style="font-size:0.88rem;color:#0d9488;font-weight:600;">Open ' +
-                      esc(o.courierProvider || 'courier') +
-                      ' tracking (AWB ' +
-                      esc(o.courierTrackingNo) +
-                      ') ↗</a></p>'
-                    : '') +
-                (evHtml
-                    ? '<p style="margin:8px 0 4px;font-size:0.82rem;font-weight:600;">Shipment updates</p><ul style="margin:0;padding-left:18px;font-size:0.82rem;">' +
-                      evHtml +
-                      '</ul>'
-                    : '');
+            const journey = o.deliveryJourney;
+            if (!journey || !journey.isLive) {
+                const live = o.courierTrackLabel
+                    ? '<p style="margin:6px 0 0;font-size:0.88rem;color:#0f766e;font-weight:600;">' + esc(o.courierTrackLabel) + '</p>'
+                    : '';
+                extra = live;
+            }
         }
         return '<div class="card" style="margin-bottom:12px;padding:14px;border:1px solid #e2e8f0;" data-book-order-id="' + o.id + '">' +
             '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">' +
@@ -410,12 +398,25 @@
     }
 
     function orderTrackFingerprint(o) {
-        const tl = o.timeline || {};
-        return [o.id, o.status, o.courierShipmentStatus, o.courierTrackStatus, o.courierTrackLabel, tl.currentLabel, o.courierTrackingNo, o.fulfilledAt, o.updatedAt].join('|');
+        const j = o.deliveryJourney || {};
+        return [
+            o.id,
+            o.status,
+            o.courierShipmentStatus,
+            o.courierTrackStatus,
+            o.courierTrackLabel,
+            j.headline,
+            j.progressPercent,
+            o.courierTrackingNo,
+            (o.courierTrackEvents || []).length,
+            o.fulfilledAt,
+            o.updatedAt
+        ].join('|');
     }
 
     let _bookOrderPollTimer = null;
     let _bookConfigPollTimer = null;
+    let _bookPollIntervalMs = 12000;
 
     function startBookConfigPoll() {
         if (_bookConfigPollTimer) return;
@@ -445,7 +446,9 @@
         const userId = uid();
         if (!root || !userId) return;
         try {
-            if (!silent) {
+            const tab = document.getElementById('tab-books');
+            const tabVisible = tab && !tab.classList.contains('hidden');
+            if (tabVisible) {
                 fetch('/api/doctor/book-orders/refresh-tracks', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -465,7 +468,23 @@
             const needsPoll = orders.some(
                 (o) => o.status !== 'delivered' && o.status !== 'fulfilled' && o.status !== 'cancelled'
             );
-            if (live) live.classList.toggle('hidden', !needsPoll);
+            const needsFastPoll = orders.some(
+                (o) =>
+                    o.fulfillmentType === 'courier' &&
+                    (o.status === 'shipped' || (o.deliveryJourney && o.deliveryJourney.isLive))
+            );
+            const nextInterval = needsFastPoll ? 5000 : 12000;
+            if (nextInterval !== _bookPollIntervalMs) {
+                _bookPollIntervalMs = nextInterval;
+                stopBookOrderPoll();
+            }
+            if (live) {
+                live.classList.toggle('hidden', !needsPoll);
+                if (needsFastPoll) {
+                    live.innerHTML =
+                        '<span class="pkg-live-dot" style="display:inline-block;vertical-align:middle;margin-right:6px;"></span> Live delivery tracking — refreshing every 5 seconds';
+                }
+            }
             if (!silent || fp !== _lastBookOrdersFingerprint) {
                 root.innerHTML = orders.map(renderOrderCard).join('');
                 _lastBookOrdersFingerprint = fp;
@@ -479,7 +498,7 @@
 
     function startBookOrderPoll() {
         if (_bookOrderPollTimer) return;
-        _bookOrderPollTimer = setInterval(() => loadBookOrders(true), 8000);
+        _bookOrderPollTimer = setInterval(() => loadBookOrders(true), _bookPollIntervalMs);
     }
 
     function stopBookOrderPoll() {
@@ -519,6 +538,14 @@
         loadBookOrders();
         startBookConfigPoll();
     }
+
+    window.bookTrackToggle = function (orderId) {
+        const el = document.getElementById('book-track-full-' + orderId);
+        const btn = document.getElementById('book-track-toggle-' + orderId);
+        if (!el) return;
+        const hidden = el.classList.toggle('hidden');
+        if (btn) btn.textContent = hidden ? '▼ Show full tracking' : '▲ Hide tracking';
+    };
 
     window.initDoctorBooksTab = initBooksTab;
     window.placeDoctorBookOrder = placeBookOrder;

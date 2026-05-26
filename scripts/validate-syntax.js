@@ -16,7 +16,8 @@ const files = [
     path.join('lib', 'book-sales.js'),
     path.join('lib', 'book-courier-tracking.js'),
     path.join('lib', 'book-courier-tracker.js'),
-    path.join('lib', 'logistics-aggregators.js')
+    path.join('lib', 'logistics-aggregators.js'),
+    path.join('lib', 'book-tracking-journey.js')
 ];
 
 let failed = false;

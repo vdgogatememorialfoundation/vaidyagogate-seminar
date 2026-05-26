@@ -12232,11 +12232,18 @@ function bsCourierShowStep(step) {
     if (ship) ship.classList.toggle('hidden', s !== 2);
     if (hid) hid.value = String(s);
     if (lbl) {
-        lbl.textContent =
-            s === 1
-                ? 'Step 1 of 2 — Enter shipping details (recipient, address, courier)'
-                : 'Step 2 of 2 — Review details, enter AWB, confirm & ship';
+        lbl.textContent = s === 1
+            ? 'Step 1 — Shipping address & courier'
+            : 'Step 2 — Book shipment or enter AWB';
     }
+    // Tab indicators
+    document.querySelectorAll('.bs-ctab').forEach(function (tab) {
+        const ts = parseInt(tab.getAttribute('data-step'), 10);
+        const span = tab.querySelector('span');
+        const active = ts === s;
+        tab.style.borderBottom = active ? '3px solid #0d9488' : '3px solid transparent';
+        if (span) span.style.color = active ? '#0d9488' : '#94a3b8';
+    });
 }
 
 function bsCourierGoToDetails() {
@@ -12337,6 +12344,7 @@ async function openBsCourierModal(orderId, forceStep) {
         if (step === 2) {
             bsCourierRenderReview(o);
             bsCourierShowStep(2);
+            bsCourierSyncAggregatorButtons();
         } else {
             bsCourierShowStep(1);
         }
@@ -12381,6 +12389,7 @@ async function bsSaveCourierDetails() {
         _bsCourierOrderCache = data.order || _bsCourierOrderCache;
         bsCourierRenderReview(data.order || _bsCourierOrderCache);
         bsCourierShowStep(2);
+        bsCourierSyncAggregatorButtons();
         if (msg) {
             msg.style.color = '#15803d';
             msg.textContent = data.message || '✓ Shipping details saved. Enter AWB and confirm dispatch.';
@@ -12427,6 +12436,62 @@ async function bsCourierPreviewTracking() {
                 ' ↗</a>';
         }
     } catch (_) {}
+}
+
+async function bsCourierSyncAggregatorButtons() {
+    try {
+        const res = await fetch('/api/admin/book-sales/logistics-status');
+        const d = await res.json();
+        const noConfig = document.getElementById('bs-agg-no-config');
+        const neither = !d.shiprocket && !d.nimbuspost;
+        if (noConfig) noConfig.style.display = neither ? '' : 'none';
+        const sr = document.getElementById('bs-book-shiprocket');
+        const nb = document.getElementById('bs-book-nimbuspost');
+        if (sr) sr.style.opacity = d.shiprocket ? '1' : '0.4';
+        if (nb) nb.style.opacity = d.nimbuspost ? '1' : '0.4';
+        if (sr) sr.title = d.shiprocket ? '' : 'Shiprocket credentials not configured';
+        if (nb) nb.title = d.nimbuspost ? '' : 'Nimbuspost credentials not configured';
+    } catch (_) {}
+}
+
+async function bsBookAggregator(aggregator) {
+    const msg = document.getElementById('bs-courier-msg');
+    const adm = getStoredAdminUser();
+    const id = parseInt((document.getElementById('bs-courier-order-id') || {}).value, 10);
+    const weightKg = parseFloat((document.getElementById('bs-courier-weight-kg') || {}).value) || 0.8;
+    const label = aggregator === 'shiprocket' ? 'Shiprocket' : 'Nimbuspost';
+    if (!confirm('Book & ship via ' + label + '? This creates the shipment and AWB automatically.')) return;
+    if (msg) {
+        msg.style.color = '#6366f1';
+        msg.textContent = 'Booking via ' + label + '…';
+    }
+    try {
+        const res = await fetch('/api/admin/book-sales/orders/' + id + '/book-aggregator', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ aggregator, weightKg, actingAdminId: adm && adm.id })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            if (msg) {
+                msg.style.color = '#b91c1c';
+                msg.textContent = data.error || 'Booking failed';
+            }
+            return;
+        }
+        bsCloseCourierModal();
+        loadBsOrders(false);
+        loadBsPosOrders();
+        alert(
+            (data.message || 'Shipped via ' + label + '.') +
+                (data.booking && data.booking.awb ? '\n\nAWB: ' + data.booking.awb : '')
+        );
+    } catch (e) {
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = e.message || 'Booking failed';
+        }
+    }
 }
 
 async function bsDispatchCourier() {
@@ -12639,10 +12704,34 @@ async function bsViewOrderTracking(id) {
                 return;
             }
             const o = data.order || {};
-            let html =
-                '<p style="margin:0 0 8px;"><strong>' + e(o.orderCode) + '</strong> · ' + e(BS_STATUS_LABELS[o.status] || o.status) + '</p>';
-            html += bsRenderCourierLiveTrackHtml(o, data);
-            html += bsRenderAdminTrackerHtml(data.timeline || o.timeline);
+            const isCourier = o.fulfillmentType === 'courier' || o.fulfillment_type === 'courier';
+            const trackEvents = data.courierTrackEvents || o.courierTrackEvents || [];
+
+            let html = '';
+            // Order summary bar
+            html += '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:14px;">' +
+                '<div><strong style="font-size:1rem;">' + e(o.orderCode) + '</strong> · <span style="font-size:0.85rem;color:#64748b;">' + e(BS_STATUS_LABELS[o.status] || o.status) + '</span></div>';
+            if (isCourier && (o.status === 'shipped' || (o.deliveryJourney && o.deliveryJourney.isLive))) {
+                html += '<div style="display:flex;gap:6px;">' +
+                    '<button type="button" class="btn-primary" style="padding:5px 12px;font-size:0.8rem;background:#0ea5e9;" onclick="bsRefreshCourierTrack(' + o.id + ',true)"><i class="fas fa-sync-alt"></i> Refresh</button>' +
+                    '<button type="button" class="btn-primary" style="padding:5px 12px;font-size:0.8rem;background:#15803d;" onclick="bsMarkCourierDelivered(' + o.id + ',true)"><i class="fas fa-check-double"></i> Mark delivered</button>' +
+                    '</div>';
+            }
+            html += '</div>';
+
+            // New vertical tracker
+            if (o.deliveryJourney && window.BookTrackingUI) {
+                html += '<div style="border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;margin-bottom:14px;">';
+                html += window.BookTrackingUI.renderVerticalJourney(
+                    o.deliveryJourney,
+                    trackEvents,
+                    {}
+                );
+                html += '</div>';
+            } else {
+                html += bsRenderCourierLiveTrackHtml(o, data);
+                html += bsRenderAdminTrackerHtml(data.timeline || o.timeline);
+            }
             if (data.events && data.events.length) {
                 html += '<p style="margin:14px 0 6px;font-weight:600;font-size:0.88rem;">Activity log</p><ul style="margin:0;padding-left:18px;font-size:0.85rem;">';
                 data.events.forEach((ev) => {
@@ -12657,8 +12746,8 @@ async function bsViewOrderTracking(id) {
                 html += '</ul>';
             }
             body.innerHTML = html;
-            if (o.fulfillmentType === 'courier' && o.status === 'shipped') {
-                _bsTrackPollTimer = setInterval(() => render(true), 45000);
+            if (o.fulfillmentType === 'courier' && (o.status === 'shipped' || (o.deliveryJourney && o.deliveryJourney.isLive))) {
+                _bsTrackPollTimer = setInterval(() => render(true), 12000);
             }
         } catch (err) {
             body.innerHTML = '<p style="color:#b91c1c;">' + e(err.message) + '</p>';
