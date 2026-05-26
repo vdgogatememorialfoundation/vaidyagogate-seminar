@@ -321,9 +321,149 @@
 
     function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;'); }
 
-    async function processBookFulfill(decodedText) {
+    let pendingBookFulfillQr = null;
+
+    function bookScanDoctorBlock(result) {
+        const o = result.order || {};
+        const dr = result.doctor || {};
+        const drName = dr.first_name
+            ? [dr.first_name, dr.last_name].filter(Boolean).join(' ')
+            : dr.name || o.buyerName || '';
+        const drPhone = dr.phone || o.buyerPhone || '';
+        const checkedInBadge = result.checkedIn
+            ? '<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:6px;font-size:0.82rem;font-weight:700;">✓ Checked in</span>'
+            : '<span style="background:#fef9c3;color:#854d0e;padding:2px 8px;border-radius:6px;font-size:0.82rem;font-weight:700;">⚠ Not checked in</span>';
+        if (!drName) return checkedInBadge;
+        return (
+            '<p style="margin:4px 0;"><strong>' +
+            esc(drName) +
+            '</strong>' +
+            (drPhone ? ' <small>' + esc(drPhone) + '</small>' : '') +
+            ' &nbsp;' +
+            checkedInBadge +
+            '</p>'
+        );
+    }
+
+    function bookScanItemsHtml(o) {
+        return (o.items || [])
+            .map(
+                (it) =>
+                    '<li>' +
+                    esc(it.bookTitle || it.bookId) +
+                    ' · ' +
+                    esc(it.languageLabel || it.language) +
+                    ' × ' +
+                    it.qty +
+                    '</li>'
+            )
+            .join('');
+    }
+
+    function bookPickupQrHtml(result) {
+        const url = result.pickupQrImageUrl;
+        if (!url) {
+            if (result.paymentPending) {
+                return '<p style="margin:10px 0;color:#854d0e;font-weight:600;">Payment not confirmed yet — ask doctor to complete payment first.</p>';
+            }
+            return '';
+        }
+        return (
+            '<div style="text-align:center;margin:12px 0;padding:10px;background:#f8fafc;border-radius:10px;">' +
+            '<p style="margin:0 0 8px;font-size:0.85rem;color:#64748b;">Pickup QR (order confirmed)</p>' +
+            '<img src="' +
+            esc(url) +
+            '" alt="Pickup QR" width="200" height="200" style="border-radius:8px;">' +
+            '<p style="margin:6px 0 0;font-size:0.8rem;">Code: <strong>' +
+            esc((result.order && result.order.orderCode) || '') +
+            '</strong></p></div>'
+        );
+    }
+
+    window.scannerConfirmBookHandover = async function () {
+        if (!pendingBookFulfillQr || !user) return;
+        const qr = pendingBookFulfillQr;
+        pendingBookFulfillQr = null;
+        await processBookFulfill(qr, true);
+    };
+
+    async function processBookFulfill(decodedText, skipPreview) {
         renderResult(false, '<i class="fas fa-spinner fa-spin"></i> Verifying book order…', 'warn');
         try {
+            if (!skipPreview) {
+                const previewRes = await fetch('/api/scanner/volunteer-book-fulfill', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        qrData: decodedText,
+                        scannerUserId: Number(user.id),
+                        previewOnly: true
+                    })
+                });
+                const preview = await previewRes.json();
+                const o = preview.order || {};
+                const doctorBlock = bookScanDoctorBlock(preview);
+                const lines = bookScanItemsHtml(o);
+                const qrBlock = bookPickupQrHtml(preview);
+
+                if (preview.outcome === 'duplicate') {
+                    playTone('duplicate');
+                    stats.dup++;
+                    renderResult(
+                        false,
+                        '<h3>Already collected</h3>' +
+                            doctorBlock +
+                            '<p>' +
+                            esc(preview.message || '') +
+                            '</p><ul style="padding-left:18px;">' +
+                            lines +
+                            '</ul>',
+                        'dup'
+                    );
+                    pushHistory('Duplicate book pickup', false);
+                    updateStats();
+                    scheduleAutoResume();
+                    return;
+                }
+                if (preview.outcome !== 'ready') {
+                    playTone('error');
+                    stats.err++;
+                    renderResult(
+                        false,
+                        '<h3>Not ready for pickup</h3>' +
+                            doctorBlock +
+                            '<p>' +
+                            esc(preview.message || preview.error || 'Cannot hand over books yet') +
+                            '</p>' +
+                            qrBlock,
+                        'bad'
+                    );
+                    pushHistory(preview.message || 'Book not ready', false);
+                    updateStats();
+                    scheduleAutoResume();
+                    return;
+                }
+                pendingBookFulfillQr = decodedText;
+                playTone('success');
+                renderResult(
+                    true,
+                    '<h3>Book order — confirm handover</h3>' +
+                        doctorBlock +
+                        '<p><strong>Order:</strong> ' +
+                        esc(o.orderCode) +
+                        '</p><ul style="margin:4px 0;padding-left:18px;">' +
+                        lines +
+                        '</ul>' +
+                        qrBlock +
+                        '<button type="button" class="tool-btn primary" style="width:100%;margin-top:12px;padding:14px;font-size:1rem;" onclick="scannerConfirmBookHandover()">Mark as collected</button>',
+                    'ok'
+                );
+                pushHistory((o.orderCode || 'Book') + ' ready', true);
+                updateStats();
+                scanBusy = false;
+                return;
+            }
+
             const res = await fetch('/api/scanner/volunteer-book-fulfill', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -331,46 +471,51 @@
             });
             const result = await res.json();
             const o = result.order || {};
-            const dr = result.doctor || {};
-            const drName = dr.first_name ? [dr.first_name, dr.last_name].filter(Boolean).join(' ') : (dr.name || o.buyerName || '');
-            const drPhone = dr.phone || o.buyerPhone || '';
-            const checkedInBadge = result.checkedIn
-                ? '<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:6px;font-size:0.82rem;font-weight:700;">✓ Checked in</span>'
-                : '<span style="background:#fef9c3;color:#854d0e;padding:2px 8px;border-radius:6px;font-size:0.82rem;font-weight:700;">⚠ Not checked in</span>';
-            const lines = (o.items || [])
-                .map((it) => '<li>' + esc(it.bookTitle || it.bookId) + ' · ' + esc(it.languageLabel || it.language) + ' × ' + it.qty + '</li>')
-                .join('');
-            const doctorBlock = drName
-                ? '<p style="margin:4px 0;"><strong>' + esc(drName) + '</strong>' + (drPhone ? ' <small>' + esc(drPhone) + '</small>' : '') + ' &nbsp;' + checkedInBadge + '</p>'
-                : checkedInBadge;
+            const doctorBlock = bookScanDoctorBlock(result);
+            const lines = bookScanItemsHtml(o);
+            const qrBlock = bookPickupQrHtml(result);
 
             if (result.success) {
                 playTone('success');
                 stats.ok++;
-                renderResult(true,
+                renderResult(
+                    true,
                     '<h3 style="color:#15803d;">✓ Books handed over</h3>' +
-                    doctorBlock +
-                    '<p><strong>Order:</strong> ' + esc(o.orderCode) + '</p>' +
-                    '<ul style="margin:4px 0 0;padding-left:18px;">' + lines + '</ul>',
+                        doctorBlock +
+                        '<p><strong>Order:</strong> ' +
+                        esc(o.orderCode) +
+                        '</p><ul style="margin:4px 0 0;padding-left:18px;">' +
+                        lines +
+                        '</ul>' +
+                        qrBlock,
                     'ok'
                 );
                 pushHistory((o.orderCode || 'Book') + ' fulfilled', true);
             } else if (result.outcome === 'duplicate') {
                 playTone('duplicate');
                 stats.dup++;
-                renderResult(false,
-                    '<h3>Already collected</h3>' + doctorBlock +
-                    '<p>' + esc(result.message || '') + '</p>' +
-                    '<ul style="padding-left:18px;">' + lines + '</ul>',
+                renderResult(
+                    false,
+                    '<h3>Already collected</h3>' +
+                        doctorBlock +
+                        '<p>' +
+                        esc(result.message || '') +
+                        '</p><ul style="padding-left:18px;">' +
+                        lines +
+                        '</ul>',
                     'dup'
                 );
                 pushHistory('Duplicate book pickup', false);
             } else {
                 playTone('error');
                 stats.err++;
-                renderResult(false,
-                    '<h3>Denied</h3>' + doctorBlock +
-                    '<p>' + esc(result.message || result.error || 'Invalid') + '</p>',
+                renderResult(
+                    false,
+                    '<h3>Denied</h3>' +
+                        doctorBlock +
+                        '<p>' +
+                        esc(result.message || result.error || 'Invalid') +
+                        '</p>',
                     'bad'
                 );
                 pushHistory(result.message || 'Book denied', false);

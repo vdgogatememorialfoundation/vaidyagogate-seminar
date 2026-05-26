@@ -12281,7 +12281,17 @@ async function bsPosSave() {
         });
         const data = await res.json();
         if (!res.ok) { if (msg) { msg.style.color = '#b91c1c'; msg.textContent = data.error || 'Failed'; } return; }
-        if (msg) { msg.style.color = '#15803d'; msg.textContent = '✓ Order placed: ' + (data.orderCode || ''); }
+        if (msg) {
+            msg.style.color = '#15803d';
+            let html = '✓ Order placed: <strong>' + e(data.orderCode || '') + '</strong>';
+            if (data.pickupQrImageUrl) {
+                html +=
+                    '<div style="margin-top:12px;text-align:center;"><p style="font-size:0.85rem;color:#64748b;">Pickup QR for buyer</p>' +
+                    '<img src="' + e(data.pickupQrImageUrl) + '" alt="Pickup QR" width="180" height="180" style="border-radius:8px;">' +
+                    '<p style="font-size:0.8rem;margin-top:6px;">Show at book desk or print for collection.</p></div>';
+            }
+            msg.innerHTML = html;
+        }
         document.getElementById('bs-pos-name').value = '';
         document.getElementById('bs-pos-phone').value = '';
         loadBsOrders(false);

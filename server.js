@@ -226,6 +226,13 @@ function bootstrapApp(done) {
                 })
             );
         }
+        if (pgDb.ensureBookOrdersColumns) {
+            tasks.push(
+                pgDb.ensureBookOrdersColumns().catch((e) => {
+                    console.warn('[bootstrap] book_orders columns:', e.message);
+                })
+            );
+        }
         if (pgDb.ensureAuxiliaryTables) {
             tasks.push(
                 pgDb.ensureAuxiliaryTables().catch((e) => {
