@@ -9,7 +9,9 @@
     "vercel-build": "node scripts/validate-syntax.js && node scripts/build-pg-schema.js",
     "sync:scanner-mobile": "node scripts/sync-mobile-capacitor.js",
     "build:scanner-apk": "node scripts/build-scanner-apk.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "deploy": "wrangler deploy",
+    "preview": "wrangler dev"
   },
   "keywords": [],
   "author": "",
@@ -34,5 +36,8 @@
     "razorpay": "^2.9.2",
     "sqlite3": "^6.0.1",
     "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "wrangler": "^4.95.0"
   }
 }
