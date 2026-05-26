@@ -1,27 +1,79 @@
 {
   "version": 2,
-  "builds": [
-    { "src": "public/**", "use": "@vercel/static" },
-    { "src": "server.js", "use": "@vercel/node" }
-  ],
-  "routes": [
-    { "src": "/css/(.*)", "dest": "/public/css/$1" },
-    { "src": "/js/(.*)", "dest": "/public/js/$1" },
-    { "src": "/uploads/(.*)", "dest": "server.js" },
-    { "src": "/(.*\\.(png|jpg|jpeg|gif|webp|svg|ico|woff2?|webmanifest))", "dest": "/public/$1" },
-    { "src": "/(.*)", "dest": "server.js" }
-  ],
-  "crons": [
+  "buildCommand": "node scripts/prepare-static-deploy.js",
+  "installCommand": "npm install",
+  "outputDirectory": "public",
+  "framework": null,
+  "rewrites": [],
+  "redirects": [
     {
-      "path": "/api/cron/process-notifications",
-      "schedule": "0 9 * * *"
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "admin.vaidyagogate.org"
+        }
+      ],
+      "destination": "/admin.html",
+      "permanent": false
     },
     {
-      "path": "/api/cron/pending-registration-reminders",
-      "schedule": "0 10 * * *"
+      "source": "/index.html",
+      "has": [
+        {
+          "type": "host",
+          "value": "admin.vaidyagogate.org"
+        }
+      ],
+      "destination": "/admin.html",
+      "permanent": false
+    },
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "host",
+          "value": "judge.vaidyagogate.org"
+        }
+      ],
+      "destination": "/judge.html",
+      "permanent": false
+    },
+    {
+      "source": "/index.html",
+      "has": [
+        {
+          "type": "host",
+          "value": "judge.vaidyagogate.org"
+        }
+      ],
+      "destination": "/judge.html",
+      "permanent": false
+    },
+    {
+      "source": "/scanner",
+      "destination": "/scanner.html",
+      "permanent": false
     }
   ],
-  "env": {
-    "NODE_ENV": "production"
-  }
+  "headers": [
+    {
+      "source": "/api-config.json",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    },
+    {
+      "source": "/(.*\\.(html|js))",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    }
+  ]
 }
