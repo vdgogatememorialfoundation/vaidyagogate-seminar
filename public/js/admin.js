@@ -11898,7 +11898,7 @@ async function loadBookSalesAdmin() {
         const cfgRes = await fetch('/api/admin/book-sales/config');
         const cfgData = await cfgRes.json();
         _bsCurrentConfig = (cfgData && cfgData.config) || {};
-        renderBsConfigForm(_bsCurrentConfig);
+        renderBsConfigForm(_bsCurrentConfig, cfgData.logistics);
         renderBsPosBooks();
     } catch (e) {
         console.error('[book-sales] load config', e);
@@ -11906,7 +11906,44 @@ async function loadBookSalesAdmin() {
     await loadBsOrders(false);
 }
 
-function renderBsConfigForm(cfg) {
+function renderBsLogisticsForm(logistics) {
+    const lg = logistics || {};
+    const sr = lg.shiprocket || {};
+    const nb = lg.nimbuspost || {};
+    const set = (id, v) => {
+        const el = document.getElementById(id);
+        if (el) el.value = v != null ? String(v) : '';
+    };
+    const setChk = (id, v) => {
+        const el = document.getElementById(id);
+        if (el) el.checked = !!v;
+    };
+    setChk('bs-log-sr-enabled', sr.enabled);
+    set('bs-log-sr-email', sr.email);
+    set('bs-log-sr-pass', sr.password);
+    setChk('bs-log-nb-enabled', nb.enabled);
+    set('bs-log-nb-key', nb.apiKey);
+    set('bs-log-nb-secret', nb.apiSecret);
+    set('bs-log-nb-email', nb.email);
+}
+
+function bsCollectLogisticsFromForm() {
+    return {
+        shiprocket: {
+            enabled: !!(document.getElementById('bs-log-sr-enabled') || {}).checked,
+            email: (document.getElementById('bs-log-sr-email') || {}).value.trim(),
+            password: (document.getElementById('bs-log-sr-pass') || {}).value
+        },
+        nimbuspost: {
+            enabled: !!(document.getElementById('bs-log-nb-enabled') || {}).checked,
+            apiKey: (document.getElementById('bs-log-nb-key') || {}).value.trim(),
+            apiSecret: (document.getElementById('bs-log-nb-secret') || {}).value,
+            email: (document.getElementById('bs-log-nb-email') || {}).value.trim()
+        }
+    };
+}
+
+function renderBsConfigForm(cfg, logistics) {
     const setChk = (id, v) => { const el = document.getElementById(id); if (el) el.checked = !!v; };
     setChk('bs-enabled', cfg.enabled);
     setChk('bs-online', cfg.onlinePaymentEnabled !== false);
@@ -11934,6 +11971,7 @@ function renderBsConfigForm(cfg) {
     if (bsStart) bsStart.value = toLocal(cfg.orderStart);
     if (bsEnd) bsEnd.value = toLocal(cfg.orderEnd);
     renderBsBooksRows(cfg.books || []);
+    renderBsLogisticsForm(logistics);
 }
 
 function renderBsBooksRows(books) {
@@ -12114,7 +12152,7 @@ async function saveBookSalesAdminConfig() {
         const res = await fetch('/api/admin/book-sales/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(config)
+            body: JSON.stringify({ config, logistics: bsCollectLogisticsFromForm() })
         });
         const data = await res.json();
         if (msg) {
@@ -12222,6 +12260,10 @@ function bsCourierFillFromOrder(o) {
     const prov = document.getElementById('bs-courier-provider');
     if (prov && (o.courierProvider || o.courier_provider)) {
         prov.value = o.courierProvider || o.courier_provider;
+    }
+    const integ = document.getElementById('bs-courier-integration');
+    if (integ && (o.courierIntegration || o.courier_integration)) {
+        integ.value = o.courierIntegration || o.courier_integration;
     }
     const cc = document.getElementById('bs-courier-charge-disp');
     if (cc) {
@@ -12369,13 +12411,20 @@ async function bsCourierPreviewTracking() {
                 encodeURIComponent(trackingNo)
         );
         const data = await res.json();
-        if (data.url) {
+        if (data.portalOnly) {
             preview.innerHTML =
-                '<a href="' +
+                '<span style="color:#64748b;">AWB <strong>' +
+                e(trackingNo) +
+                '</strong> — live scans load in portal after dispatch. ' +
+                (data.note ? e(data.note) : '') +
+                '</span>';
+        } else if (data.url) {
+            preview.innerHTML =
+                '<span style="color:#64748b;">External: </span><a href="' +
                 e(data.url) +
-                '" target="_blank" rel="noopener" style="color:#0d9488;font-weight:600;">Preview ' +
+                '" target="_blank" rel="noopener" style="color:#0d9488;font-weight:600;">' +
                 e(data.providerLabel || 'courier') +
-                ' tracking ↗</a>';
+                ' ↗</a>';
         }
     } catch (_) {}
 }
@@ -12402,7 +12451,12 @@ async function bsDispatchCourier() {
         const res = await fetch('/api/admin/book-sales/orders/' + id + '/dispatch-courier', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ trackingNo, courierProvider: provider, actingAdminId: adm && adm.id })
+            body: JSON.stringify({
+                trackingNo,
+                courierProvider: provider,
+                courierIntegration: (document.getElementById('bs-courier-integration') || {}).value || 'auto',
+                actingAdminId: adm && adm.id
+            })
         });
         const data = await res.json();
         if (!res.ok) {
@@ -12456,7 +12510,7 @@ function bsRenderAdminTrackerHtml(timeline) {
                 ? '<p class="track-when" style="font-size:0.78rem;color:#0d9488;margin:4px 0 0;">' + e(fmt(step.at)) + '</p>'
                 : '';
         const link = step.trackingUrl
-            ? '<p style="margin:4px 0 0;"><a href="' + e(step.trackingUrl) + '" target="_blank" rel="noopener">Track courier ↗</a></p>'
+            ? '<p style="margin:4px 0 0;font-size:0.78rem;color:#64748b;">Carrier site (optional) ↗</p>'
             : '';
         html +=
             '<div class="track-step ' + cls + '"><div class="track-icon"><i class="fas ' + e(step.icon || 'fa-circle') + '"></i></div>' +
@@ -12471,11 +12525,14 @@ function bsRenderCourierLiveTrackHtml(o, data) {
     const trackSt = o.courierTrackStatus || o.courier_track_status || '';
     const url = data.courierTrackingUrl || o.courierTrackingUrl;
     const events = data.courierTrackEvents || o.courierTrackEvents || [];
+    const src = o.courierIntegration || o.courier_integration || data.track?.source || '';
     if (o.fulfillmentType !== 'courier' && o.fulfillment_type !== 'courier') return '';
     let html =
         '<div style="margin:12px 0;padding:12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:8px;">' +
-        '<p style="margin:0;font-weight:700;color:#1e40af;">Live courier tracking</p>' +
+        '<p style="margin:0;font-weight:700;color:#1e40af;">Live courier tracking' +
+        (src ? ' <span style="font-weight:400;font-size:0.78rem;color:#64748b;">(' + e(src) + ')</span>' : '') +
+        '</p>' +
         '<div style="display:flex;gap:6px;flex-wrap:wrap;">' +
         '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.8rem;background:#0ea5e9;" onclick="bsRefreshCourierTrack(' +
         o.id +
@@ -12493,16 +12550,24 @@ function bsRenderCourierLiveTrackHtml(o, data) {
             e(track || trackSt) +
             '</span></p>';
     }
+    html +=
+        '<p style="margin:0 0 6px;font-size:0.82rem;color:#475569;">AWB: <strong>' +
+        e(o.courierTrackingNo || o.courier_tracking_no || '') +
+        '</strong></p>';
     if (url) {
         html +=
             '<p style="margin:0 0 8px;"><a href="' +
             e(url) +
-            '" target="_blank" rel="noopener" style="color:#0d9488;font-weight:600;">Open on ' +
-            e(o.courierProvider || 'carrier') +
-            ' site ↗</a></p>';
+            '" target="_blank" rel="noopener" style="color:#0d9488;font-weight:600;">Optional: open carrier website ↗</a></p>';
+    } else if ((o.courierProvider || o.courier_provider) === 'indian_post') {
+        html +=
+            '<p style="margin:0 0 8px;font-size:0.8rem;color:#64748b;">India Post uses captcha on their site — all scan updates are listed below in this portal.</p>';
     }
     if (events.length) {
-        html += '<ul style="margin:0;padding-left:18px;font-size:0.84rem;max-height:160px;overflow-y:auto;">';
+        html +=
+            '<p style="margin:0 0 6px;font-weight:600;font-size:0.85rem;">Courier scan history (' +
+            events.length +
+            ')</p><ul style="margin:0;padding-left:18px;font-size:0.84rem;max-height:220px;overflow-y:auto;">';
         events.forEach((ev) => {
             html +=
                 '<li style="margin-bottom:4px;">' +

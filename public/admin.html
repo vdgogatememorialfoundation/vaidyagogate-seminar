@@ -1022,6 +1022,25 @@
                             </div>
                         </div>
                     </div>
+                    <div class="card" style="padding:18px;margin-bottom:14px;border:1px solid #dbeafe;background:#f8fafc;">
+                        <h3 style="margin:0 0 10px;color:#1e40af;">Logistics API (Shiprocket &amp; Nimbuspost)</h3>
+                        <p style="font-size:0.82rem;color:#64748b;margin:0 0 12px;">Live tracking in this portal uses these APIs first. Env vars <code>SHIPROCKET_API_EMAIL</code> / <code>NIMBUSPOST_API_KEY</code> also work on the server.</p>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:720px;">
+                            <div style="padding:10px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;">
+                                <label style="font-weight:600;">Shiprocket</label>
+                                <label style="display:flex;align-items:center;gap:6px;margin:8px 0;font-size:0.85rem;"><input type="checkbox" id="bs-log-sr-enabled"> Enable</label>
+                                <div><label style="font-size:0.8rem;">API email</label><input type="email" id="bs-log-sr-email" style="width:100%;padding:6px;"></div>
+                                <div style="margin-top:6px;"><label style="font-size:0.8rem;">API password</label><input type="password" id="bs-log-sr-pass" style="width:100%;padding:6px;"></div>
+                            </div>
+                            <div style="padding:10px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;">
+                                <label style="font-weight:600;">Nimbuspost</label>
+                                <label style="display:flex;align-items:center;gap:6px;margin:8px 0;font-size:0.85rem;"><input type="checkbox" id="bs-log-nb-enabled"> Enable</label>
+                                <div><label style="font-size:0.8rem;">API key</label><input type="text" id="bs-log-nb-key" style="width:100%;padding:6px;"></div>
+                                <div style="margin-top:6px;"><label style="font-size:0.8rem;">API secret</label><input type="password" id="bs-log-nb-secret" style="width:100%;padding:6px;"></div>
+                                <div style="margin-top:6px;"><label style="font-size:0.8rem;">Account email (optional)</label><input type="email" id="bs-log-nb-email" style="width:100%;padding:6px;"></div>
+                            </div>
+                        </div>
+                    </div>
                     <div class="card" style="padding:18px;margin-bottom:14px;">
                         <h3 style="margin:0 0 12px;">Books</h3>
                         <p style="font-size:0.85rem;color:#64748b;margin:0 0 10px;">Add, remove, or price books. Custom books beyond Agnikarma/Viddhakarma can be added below.</p>
@@ -1129,7 +1148,16 @@
                         <div id="bs-courier-panel-ship" class="hidden">
                             <div id="bs-courier-review" style="padding:12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:0.85rem;margin-bottom:12px;"></div>
                             <div style="display:grid;gap:10px;">
-                                <div><label>AWB / tracking number *</label><input type="text" id="bs-courier-tracking" style="width:100%;padding:8px;" placeholder="e.g. EE123456789IN" oninput="bsCourierPreviewTracking()"></div>
+                                <div><label>Tracking source *</label>
+                                    <select id="bs-courier-integration" style="width:100%;padding:8px;">
+                                        <option value="auto">Auto (Shiprocket → Nimbuspost → carrier)</option>
+                                        <option value="shiprocket">Shiprocket AWB</option>
+                                        <option value="nimbuspost">Nimbuspost AWB</option>
+                                        <option value="direct">Direct carrier AWB only</option>
+                                    </select>
+                                    <p style="font-size:0.78rem;color:#64748b;margin:4px 0 0;">All scan updates appear in VGMF portal — not on external sites.</p>
+                                </div>
+                                <div><label>AWB / tracking number *</label><input type="text" id="bs-courier-tracking" style="width:100%;padding:8px;" placeholder="e.g. PP271657042IN" oninput="bsCourierPreviewTracking()"></div>
                                 <p id="bs-courier-track-preview" style="margin:0;font-size:0.82rem;"></p>
                             </div>
                             <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;">
