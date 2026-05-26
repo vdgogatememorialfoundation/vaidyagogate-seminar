@@ -1,68 +1,107 @@
-# Static frontend on Vercel (no serverless CPU on page loads)
+# Vercel-only deployment (static frontend + API backend)
 
-This repo is **Express + static HTML** (not Next.js). For the registration surge, deploy **only `public/`** on Vercel and run **`server.js` on a separate host** (Railway, Render, Fly.io, VPS).
+Two **Vercel projects** from this **same GitHub repo**. Page loads use **zero Node CPU**; API runs only on the backend project.
 
-## 1. Vercel (static site)
+## Project A — Static frontend (seminar / admin / judge domains)
 
-Set **Environment variable** (Production):
+| Setting | Value |
+|---------|--------|
+| **Build Command** | `npm run vercel-build` (default) |
+| **Environment variable** | `VERCEL_DEPLOYMENT_TYPE` = `static` (optional; default) |
+| **`API_BACKEND_URL`** | `https://api.vaidyagogate.org` (your API project URL or custom domain) |
 
-| Variable | Example |
-|----------|---------|
-| `API_BACKEND_URL` | `https://api.seminar.vaidyagogate.org` |
+### Steps
 
-Build runs `node scripts/prepare-static-deploy.js`, which:
+1. Vercel → **Settings → Environment Variables** → add:
+   - `API_BACKEND_URL` = `https://api.vaidyagogate.org`  
+     (or your backend `*.vercel.app` URL until DNS is ready)
+2. **Redeploy** → enable **Clear Build Cache**.
+3. Build runs `prepare-static-deploy.js`, which:
+   - Sets `outputDirectory: public` (static only)
+   - Adds edge **rewrites**: `/api/*` and `/uploads/*` → `API_BACKEND_URL`
+   - Host redirects: `admin.*` → `admin.html`, `judge.*` → `judge.html`
 
-- Sets `outputDirectory` to `public`
-- **Removes** `server.js` from Vercel builds (no Fluid CPU on HTML/JS)
-- Adds **rewrites**: `/api/*` and `/uploads/*` → your backend URL
-- Host redirects: `admin.*` → `admin.html`, `judge.*` → `judge.html`
+Browsers keep `fetch('/api/...')` on the same host; Vercel edge proxies to the backend **without** running `server.js` on the frontend project.
 
-Push to GitHub; Vercel redeploys automatically.
+**Do not** set `API_BACKEND_URL` to the same host as the static site (e.g. `seminar.vaidyagogate.org`) — that causes broken routing. Use the **API subdomain** or a separate `*.vercel.app` backend URL.
 
-## 2. Backend (API + database)
+---
 
-On Railway/Render/VPS:
+## Project B — API backend (`server.js`)
 
-```bash
-npm start   # node server.js
+| Setting | Value |
+|---------|--------|
+| **Environment variable** | `VERCEL_DEPLOYMENT_TYPE` = `api` |
+| **Build Command** | `npm run vercel-build` (same script; router picks API config) |
+
+### Steps
+
+1. Create a **second Vercel project** linked to this repo.
+2. Add environment variable: **`VERCEL_DEPLOYMENT_TYPE`** = `api`
+3. Copy all backend secrets: `DATABASE_URL`, `PUBLIC_BASE_URL`, payment keys, SMTP, etc. (see `.env.example`)
+4. Set custom domain: `api.vaidyagogate.org` (recommended)
+5. Deploy
+
+Build copies `deploy/vercel-backend.json` → `vercel.json` with:
+
+```json
+"functions": {
+  "server.js": {
+    "maxDuration": 60,
+    "memory": 1024
+  }
+}
 ```
 
-Required env: `DATABASE_URL`, `PUBLIC_BASE_URL`, payment keys, SMTP, etc. (see `.env.example`).
+This is the **maximum execution window** on Hobby for serverless functions (60s). Heavy OTP/payment/DB work must finish within that limit or Vercel returns **504 Gateway Timeout**.
 
-**Crons** (notifications, reminders) must run on the **backend** host, not Vercel:
+**Crons** (notifications) run on this project only:
 
-- `GET /api/cron/process-notifications` (daily)
-- `GET /api/cron/pending-registration-reminders` (daily)
+- `GET /api/cron/process-notifications` — daily 09:00 UTC
+- `GET /api/cron/pending-registration-reminders` — daily 10:00 UTC
 
-Use your host’s cron or an external cron service hitting those URLs with your cron secret.
+---
 
-## 3. DNS
+## DNS summary
 
-| Host | Points to |
-|------|-----------|
-| `seminar.vaidyagogate.org` | Vercel (static) |
-| `admin.vaidyagogate.org` | Vercel (static) |
-| `judge.vaidyagogate.org` | Vercel (static) |
-| `api.seminar.vaidyagogate.org` (or same seminar host) | Backend server |
+| Host | Vercel project |
+|------|----------------|
+| `seminar.vaidyagogate.org` | Static (A) |
+| `admin.vaidyagogate.org` | Static (A) |
+| `judge.vaidyagogate.org` | Static (A) |
+| `api.vaidyagogate.org` | API (B) |
 
-If frontend and API share one domain, set `API_BACKEND_URL` to that same origin (e.g. `https://seminar.vaidyagogate.org`) only if the **API is still served from that host** via rewrite/proxy—not via Vercel Node.
+---
 
-## 4. What breaks on static-only Vercel
+## Traffic surge (20k+ users)
 
-| Feature | Where it runs |
-|---------|----------------|
-| Registration, OTP, payments | Backend `/api/*` |
-| File uploads | Backend `/uploads/*` or R2 |
-| Webhooks (Razorpay, WhatsApp, Mailparser) | Backend only |
-| Book sales courier polling | Backend only |
+| Layer | CPU on page load |
+|-------|------------------|
+| Static HTML/CSS/JS | **None** (CDN only) |
+| `/api/*` on frontend project | **Edge rewrite** (minimal) |
+| `server.js` on API project | Serverless CPU per API request |
 
-The browser already uses `fetch('/api/...')`; Vercel **rewrites** forward those to `API_BACKEND_URL` without running `server.js`.
+Tips:
 
-## 5. Local static preview
+- Ensure **Neon connection pooling** (`-pooler` in `DATABASE_URL`)
+- Keep `API_BACKEND_URL` pointing at the **API project**, not the static project
+- After env changes: **Redeploy both projects** with **Clear Build Cache**
+
+---
+
+## Local dev
 
 ```bash
+# Terminal 1 — API
+npm start
+
+# Terminal 2 — static preview
 API_BACKEND_URL=http://localhost:3000 node scripts/prepare-static-deploy.js
 npx serve public
 ```
 
-Backend must be running on port 3000 for API calls (or set `API_BACKEND_URL` to your staging API).
+---
+
+## Reference
+
+- [Vercel serverless function duration limits](https://vercel.com/docs/functions/runtimes#max-duration)

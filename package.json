@@ -6,8 +6,9 @@
   "scripts": {
     "start": "node server.js",
     "build:pg-schema": "node scripts/build-pg-schema.js",
-    "vercel-build": "node scripts/prepare-static-deploy.js",
+    "vercel-build": "node scripts/vercel-build-router.js",
     "build:static": "node scripts/prepare-static-deploy.js",
+    "build:api": "set VERCEL_DEPLOYMENT_TYPE=api&& node scripts/vercel-build-router.js",
     "vercel-build:full": "node scripts/validate-syntax.js && node scripts/build-pg-schema.js",
     "sync:scanner-mobile": "node scripts/sync-mobile-capacitor.js",
     "build:scanner-apk": "node scripts/build-scanner-apk.js",
