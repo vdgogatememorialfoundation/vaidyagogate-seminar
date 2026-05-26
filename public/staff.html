@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script src="/js/api-base.js?v=static1"></script>
+    
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Staff portal | VGMF Seminar</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #f1f5f9; color: #0f172a; }
+        .wrap { max-width: 1100px; margin: 0 auto; padding: 20px; }
+        .card { background: #fff; border-radius: 14px; padding: 20px; box-shadow: 0 4px 20px rgba(15,23,42,0.08); border: 1px solid #e2e8f0; }
+        h1 { margin: 0 0 6px; font-size: 1.35rem; color: #0f766e; }
+        .sub { color: #64748b; font-size: 0.9rem; margin: 0 0 16px; }
+        label { display: block; font-size: 0.8rem; font-weight: 700; margin-bottom: 4px; color: #475569; }
+        input, select { width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.95rem; }
+        .btn { display: inline-block; padding: 10px 18px; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 0.9rem; }
+        .btn-primary { background: #0f766e; color: #fff; }
+        .btn-muted { background: #64748b; color: #fff; }
+        .btn-danger { background: #b91c1c; color: #fff; }
+        .tabs { display: flex; gap: 8px; margin: 16px 0; flex-wrap: wrap; }
+        .tab { padding: 8px 14px; border-radius: 8px; border: 1px solid #e2e8f0; background: #fff; cursor: pointer; font-weight: 600; font-size: 0.85rem; }
+        .tab.active { background: #0f766e; color: #fff; border-color: #0f766e; }
+        .hidden { display: none !important; }
+        .data-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        .data-table th, .data-table td { padding: 10px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+        .data-table th { background: #f0fdfa; color: #115e59; font-size: 0.75rem; text-transform: uppercase; }
+        #auth-overlay { position: fixed; inset: 0; background: rgba(15,118,110,0.25); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 100; }
+    </style>
+</head>
+<body>
+    <div id="auth-overlay">
+        <div class="card" style="width:400px;max-width:100%;">
+            <h1>Staff sign in</h1>
+            <p class="sub">Book sales, inventory, and orders. Scanner volunteers use <a href="/scanner.html">scanner portal</a>.</p>
+            <form id="staff-login-form">
+                <div style="margin-bottom:12px;">
+                    <label>Email or portal user ID</label>
+                    <input type="text" id="staff-login-email" autocomplete="username" required>
+                </div>
+                <div style="margin-bottom:14px;">
+                    <label>Password</label>
+                    <input type="password" id="staff-login-password" autocomplete="current-password" required>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%;">Sign in</button>
+                <p id="staff-login-msg" style="margin-top:10px;font-weight:600;font-size:0.88rem;"></p>
+            </form>
+        </div>
+    </div>
+
+    <div id="app-shell" class="hidden">
+        <div class="wrap">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
+                <div>
+                    <h1>Staff — Book operations</h1>
+                    <p class="sub" id="staff-user-label"></p>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <a href="/admin.html" class="btn btn-muted" id="staff-link-admin" style="text-decoration:none;display:none;">Admin portal</a>
+                    <button type="button" class="btn btn-muted" onclick="staffLogout()">Sign out</button>
+                </div>
+            </div>
+
+            <div class="tabs" id="staff-tabs">
+                <button type="button" class="tab active" data-staff-tab="inventory" onclick="staffSwitchTab('inventory')">Stock inventory</button>
+                <button type="button" class="tab" data-staff-tab="orders" onclick="staffSwitchTab('orders')">Book orders</button>
+            </div>
+
+            <div id="staff-panel-inventory" class="card">
+                <p style="color:#64748b;font-size:0.88rem;margin:0 0 12px;">Update quantities on hand. Doctors cannot order more than available stock.</p>
+                <div id="staff-inventory-root"><p>Loading…</p></div>
+                <button type="button" class="btn btn-primary" style="margin-top:12px;" onclick="staffSaveInventory()">Save inventory</button>
+                <p id="staff-inventory-msg" style="margin-top:8px;font-weight:600;"></p>
+            </div>
+
+            <div id="staff-panel-orders" class="card hidden">
+                <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+                    <select id="staff-orders-filter" onchange="staffLoadOrders()" style="padding:8px;">
+                        <option value="">All statuses</option>
+                        <option value="awaiting_confirmation">Awaiting confirmation</option>
+                        <option value="confirmed">Confirmed</option>
+                        <option value="shipped">Shipped</option>
+                        <option value="delivered">Delivered</option>
+                        <option value="cancelled">Cancelled</option>
+                    </select>
+                    <button type="button" class="btn btn-primary" onclick="staffLoadOrders()">Refresh</button>
+                </div>
+                <div id="staff-orders-root"><p>Loading…</p></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="staff-order-modal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:50;padding:16px;">
+        <div class="card" style="width:560px;max-width:100%;max-height:90vh;overflow-y:auto;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                <h2 style="margin:0;font-size:1.1rem;">Order detail</h2>
+                <button type="button" class="btn btn-muted" style="padding:4px 10px;" onclick="staffCloseOrderModal()">×</button>
+            </div>
+            <div id="staff-order-modal-body"></div>
+        </div>
+    </div>
+
+    <script src="/js/portal-auth.js"></script>
+    <script src="/js/book-tracking-ui.js"></script>
+    <script src="/js/staff-portal.js"></script>
+</body>
+</html>

@@ -11858,19 +11858,9 @@ async function marketingMoveBanner(btn, dir) {
 // ─── Book Sales Admin ───────────────────────────────────────────────────────
 let _bsCurrentConfig = null;
 let _bsOrdersAutoTimer = null;
-let _bsOrdersCache = {};
-let _bsCartEditOrderId = null;
-let _bsCartLines = [];
-
-const BS_LANG_DEFS = [
-    { id: 'english', label: 'English' },
-    { id: 'marathi', label: 'Marathi' },
-    { id: 'hindi', label: 'Hindi' },
-    { id: 'kannada', label: 'Kannada' }
-];
 
 function switchBsTab(tab) {
-    ['config', 'orders', 'pos'].forEach((t) => {
+    ['config', 'orders', 'pos', 'inventory'].forEach((t) => {
         const panel = document.getElementById('bs-panel-' + t);
         if (panel) panel.classList.toggle('hidden', t !== tab);
     });
@@ -11882,6 +11872,154 @@ function switchBsTab(tab) {
     if (tab === 'pos') {
         renderBsPosBooks();
         loadBsPosOrders();
+    }
+    if (tab === 'inventory') loadBsInventory();
+}
+
+function bsActorHeaders() {
+    const adm = getStoredAdminUser();
+    const id = adm && adm.id;
+    return id
+        ? { 'Content-Type': 'application/json', 'X-Acting-User-Id': String(id) }
+        : { 'Content-Type': 'application/json' };
+}
+
+function bsActorBody(extra) {
+    const adm = getStoredAdminUser();
+    return Object.assign({ actingAdminId: adm && adm.id }, extra || {});
+}
+
+function bsFetch(url, opts) {
+    opts = opts || {};
+    const headers = Object.assign({}, bsActorHeaders(), opts.headers || {});
+    let body = opts.body;
+    if (body != null && typeof body === 'object' && !(body instanceof FormData)) {
+        body = JSON.stringify(Object.assign(bsActorBody(), body));
+    } else if (
+        body == null &&
+        opts.method &&
+        String(opts.method).toUpperCase() !== 'GET' &&
+        String(opts.method).toUpperCase() !== 'HEAD'
+    ) {
+        body = JSON.stringify(bsActorBody());
+    }
+    return fetch(url, Object.assign({}, opts, { headers, body }));
+}
+
+async function loadBsInventory() {
+    const root = document.getElementById('bs-inventory-table');
+    const msg = document.getElementById('bs-inventory-msg');
+    if (!root) return;
+    if (msg) msg.textContent = '';
+    try {
+        const res = await fetch('/api/admin/book-sales/inventory', { headers: bsActorHeaders() });
+        const data = await res.json();
+        if (!res.ok) {
+            root.innerHTML = '<p style="color:#b91c1c;">' + e(data.error || 'Failed') + '</p>';
+            return;
+        }
+        const books = data.books || [];
+        const langs = data.languages || [];
+        const invMap = {};
+        (data.inventory || []).forEach((r) => {
+            invMap[r.book_id + '::' + r.language] = r;
+        });
+        let html =
+            '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Book</th><th>Language</th><th>Qty on hand</th><th>Low stock alert</th></tr></thead><tbody>';
+        books.forEach((book) => {
+            langs.forEach((lang) => {
+                const k = book.id + '::' + lang.id;
+                const row = invMap[k] || {};
+                html +=
+                    '<tr><td>' +
+                    e(book.title) +
+                    '</td><td>' +
+                    e(lang.label) +
+                    '</td><td><input type="number" min="0" data-inv-book="' +
+                    e(book.id) +
+                    '" data-inv-lang="' +
+                    e(lang.id) +
+                    '" data-inv-field="qty" value="' +
+                    (row.qty_on_hand != null ? row.qty_on_hand : 0) +
+                    '" style="width:80px;padding:6px;"></td><td><input type="number" min="0" data-inv-book="' +
+                    e(book.id) +
+                    '" data-inv-lang="' +
+                    e(lang.id) +
+                    '" data-inv-field="threshold" value="' +
+                    (row.low_stock_threshold != null ? row.low_stock_threshold : 5) +
+                    '" style="width:80px;padding:6px;"></td></tr>';
+            });
+        });
+        html += '</tbody></table></div>';
+        root.innerHTML = html;
+    } catch (err) {
+        root.innerHTML = '<p style="color:#b91c1c;">' + e(err.message) + '</p>';
+    }
+}
+
+async function saveBsInventory() {
+    const msg = document.getElementById('bs-inventory-msg');
+    const rows = [];
+    document.querySelectorAll('[data-inv-book]').forEach((inp) => {
+        if (inp.getAttribute('data-inv-field') !== 'qty') return;
+        const bookId = inp.getAttribute('data-inv-book');
+        const language = inp.getAttribute('data-inv-lang');
+        const th = document.querySelector(
+            '[data-inv-book="' + bookId + '"][data-inv-lang="' + language + '"][data-inv-field="threshold"]'
+        );
+        rows.push({
+            bookId,
+            language,
+            qty_on_hand: parseInt(inp.value, 10) || 0,
+            low_stock_threshold: th ? parseInt(th.value, 10) || 5 : 5
+        });
+    });
+    if (msg) {
+        msg.style.color = '#0d9488';
+        msg.textContent = 'Saving…';
+    }
+    try {
+        const res = await fetch('/api/admin/book-sales/inventory', {
+            method: 'POST',
+            headers: bsActorHeaders(),
+            body: JSON.stringify(bsActorBody({ rows }))
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            if (msg) {
+                msg.style.color = '#b91c1c';
+                msg.textContent = data.error || 'Save failed';
+            }
+            return;
+        }
+        if (msg) {
+            msg.style.color = '#15803d';
+            msg.textContent = '✓ Inventory saved';
+        }
+        loadBsInventory();
+    } catch (err) {
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = err.message;
+        }
+    }
+}
+
+async function bsCancelOrderLine(orderId, lineId, bookTitle) {
+    const reason = prompt('Cancel "' + (bookTitle || 'item') + '" — reason (e.g. out of stock):', 'Not available');
+    if (!reason) return;
+    try {
+        const res = await fetch('/api/admin/book-sales/orders/' + orderId + '/items/' + lineId + '/cancel', {
+            method: 'POST',
+            headers: bsActorHeaders(),
+            body: JSON.stringify(bsActorBody({ reason }))
+        });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Cancel failed');
+        loadBsOrders(false);
+        bsViewOrderTracking(orderId);
+    } catch (err) {
+        alert(err.message);
     }
 }
 
@@ -11905,7 +12043,7 @@ async function loadBookSalesAdmin() {
         try { await loadSeminars(); } catch (_) {}
     }
     try {
-        const cfgRes = await fetch('/api/admin/book-sales/config');
+        const cfgRes = await bsFetch('/api/admin/book-sales/config');
         const cfgData = await cfgRes.json();
         _bsCurrentConfig = (cfgData && cfgData.config) || {};
         renderBsConfigForm(_bsCurrentConfig, cfgData.logistics);
@@ -11984,54 +12122,18 @@ function renderBsConfigForm(cfg, logistics) {
     renderBsLogisticsForm(logistics);
 }
 
-function bsStockFieldValue(stock, langId) {
-    const st = stock || {};
-    const v = st[langId];
-    if (v === null || v === undefined || v === '') return '';
-    return String(v);
-}
-
 function renderBsBooksRows(books) {
     const root = document.getElementById('bs-books-rows');
     if (!root) return;
-    root.innerHTML = books.map((b, i) => {
-        const stock = b.stock || {};
-        const stockInputs = BS_LANG_DEFS.map(
-            (l) =>
-                '<div style="min-width:72px;"><label style="font-size:0.72rem;">' +
-                e(l.label) +
-                '</label><input type="number" class="bs-book-stock" data-lang="' +
-                l.id +
-                '" value="' +
-                e(bsStockFieldValue(stock, l.id)) +
-                '" min="0" step="1" placeholder="∞" title="Blank = unlimited" style="width:100%;padding:5px;font-size:0.85rem;"></div>'
-        ).join('');
-        return (
-            '<div data-bs-book-row="' +
-            i +
-            '" style="margin-bottom:14px;padding:12px;border:1px solid #e2e8f0;border-radius:10px;background:#fafafa;">' +
-            '<div style="display:grid;grid-template-columns:1fr 1.5fr 1fr 1fr auto;gap:8px;align-items:end;">' +
-            '<div><label style="font-size:0.8rem;">Book ID</label><input type="text" class="bs-book-id" value="' +
-            e(b.id) +
-            '" style="width:100%;padding:6px;" placeholder="e.g. agnikarma"></div>' +
-            '<div><label style="font-size:0.8rem;">Title</label><input type="text" class="bs-book-title" value="' +
-            e(b.title) +
-            '" style="width:100%;padding:6px;" placeholder="Book title"></div>' +
-            '<div><label style="font-size:0.8rem;">Author</label><input type="text" class="bs-book-author" value="' +
-            e(b.author) +
-            '" style="width:100%;padding:6px;"></div>' +
-            '<div><label style="font-size:0.8rem;">Price (₹)</label><input type="number" class="bs-book-price" value="' +
-            (b.price || 0) +
-            '" min="0" step="1" style="width:100%;padding:6px;"></div>' +
-            '<div style="padding-bottom:2px;"><label style="font-size:0.8rem;">Active</label><br><input type="checkbox" class="bs-book-active"' +
-            (b.active !== false ? ' checked' : '') +
-            '></div></div>' +
-            '<div style="margin-top:10px;"><span style="font-size:0.78rem;font-weight:600;color:#64748b;">Stock per language</span>' +
-            '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;">' +
-            stockInputs +
-            '</div></div></div>'
-        );
-    }).join('');
+    root.innerHTML = books.map((b, i) =>
+        '<div style="display:grid;grid-template-columns:1fr 1.5fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px;" data-bs-book-row="' + i + '">' +
+        '<div><label style="font-size:0.8rem;">Book ID</label><input type="text" class="bs-book-id" value="' + e(b.id) + '" style="width:100%;padding:6px;" placeholder="e.g. agnikarma"></div>' +
+        '<div><label style="font-size:0.8rem;">Title</label><input type="text" class="bs-book-title" value="' + e(b.title) + '" style="width:100%;padding:6px;" placeholder="Book title"></div>' +
+        '<div><label style="font-size:0.8rem;">Author</label><input type="text" class="bs-book-author" value="' + e(b.author) + '" style="width:100%;padding:6px;"></div>' +
+        '<div><label style="font-size:0.8rem;">Price (₹)</label><input type="number" class="bs-book-price" value="' + (b.price || 0) + '" min="0" step="1" style="width:100%;padding:6px;"></div>' +
+        '<div style="padding-bottom:2px;"><label style="font-size:0.8rem;">Active</label><br><input type="checkbox" class="bs-book-active"' + (b.active !== false ? ' checked' : '') + '></div>' +
+        '</div>'
+    ).join('');
 }
 
 function e(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); }
@@ -12043,80 +12145,23 @@ function bsAddBookRow() {
     const div = document.createElement('div');
     div.setAttribute('data-bs-book-row', idx);
     div.style.cssText = 'display:grid;grid-template-columns:1fr 1.5fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px;';
-    div.style.cssText = 'margin-bottom:14px;padding:12px;border:1px solid #e2e8f0;border-radius:10px;background:#fafafa;';
-    const stockInputs = BS_LANG_DEFS.map(
-        (l) =>
-            '<div style="min-width:72px;"><label style="font-size:0.72rem;">' +
-            l.label +
-            '</label><input type="number" class="bs-book-stock" data-lang="' +
-            l.id +
-            '" min="0" step="1" placeholder="∞" title="Blank = unlimited" style="width:100%;padding:5px;font-size:0.85rem;"></div>'
-    ).join('');
     div.innerHTML =
-        '<div style="display:grid;grid-template-columns:1fr 1.5fr 1fr 1fr auto;gap:8px;align-items:end;">' +
         '<div><label style="font-size:0.8rem;">Book ID</label><input type="text" class="bs-book-id" style="width:100%;padding:6px;" placeholder="custom_book"></div>' +
         '<div><label style="font-size:0.8rem;">Title</label><input type="text" class="bs-book-title" style="width:100%;padding:6px;" placeholder="Book title"></div>' +
         '<div><label style="font-size:0.8rem;">Author</label><input type="text" class="bs-book-author" value="Dr. R.B. Gogate" style="width:100%;padding:6px;"></div>' +
         '<div><label style="font-size:0.8rem;">Price (₹)</label><input type="number" class="bs-book-price" value="0" min="0" step="1" style="width:100%;padding:6px;"></div>' +
-        '<div style="padding-bottom:2px;"><label style="font-size:0.8rem;">Active</label><br><input type="checkbox" class="bs-book-active" checked></div></div>' +
-        '<div style="margin-top:10px;"><span style="font-size:0.78rem;font-weight:600;color:#64748b;">Stock per language</span>' +
-        '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;">' +
-        stockInputs +
-        '</div></div>';
+        '<div style="padding-bottom:2px;"><label style="font-size:0.8rem;">Active</label><br><input type="checkbox" class="bs-book-active" checked></div>';
     root.appendChild(div);
 }
 
 function bsCollectBooksFromForm() {
-    return Array.from(document.querySelectorAll('[data-bs-book-row]')).map((row) => {
-        const stock = {};
-        BS_LANG_DEFS.forEach((l) => {
-            const inp = row.querySelector('.bs-book-stock[data-lang="' + l.id + '"]');
-            const raw = inp ? String(inp.value).trim() : '';
-            if (raw === '') stock[l.id] = null;
-            else {
-                const n = parseInt(raw, 10);
-                stock[l.id] = Number.isFinite(n) ? Math.max(0, n) : null;
-            }
-        });
-        return {
-            id: (row.querySelector('.bs-book-id') || {}).value || '',
-            title: (row.querySelector('.bs-book-title') || {}).value || '',
-            author: (row.querySelector('.bs-book-author') || {}).value || 'Dr. R.B. Gogate',
-            price: parseFloat((row.querySelector('.bs-book-price') || {}).value) || 0,
-            active: (row.querySelector('.bs-book-active') || {}).checked !== false,
-            stock
-        };
-    }).filter((b) => b.id && b.title);
-}
-
-function bsBookById(bookId) {
-    const books = (_bsCurrentConfig && _bsCurrentConfig.books) || [];
-    return books.find((b) => b.id === bookId) || null;
-}
-
-function bsStockRemaining(book, lang) {
-    if (!book || !book.stock) return null;
-    const v = book.stock[lang];
-    if (v === null || v === undefined || v === '') return null;
-    const n = parseInt(v, 10);
-    return Number.isFinite(n) ? Math.max(0, n) : null;
-}
-
-function bsFormatOrderItemsSummary(o) {
-    const items = o.items || [];
-    if (!items.length) return '<span style="color:#94a3b8;">—</span>';
-    return items
-        .map((it) => {
-            const title = it.bookTitle || it.book_id || it.bookId || 'Book';
-            const lang = it.languageLabel || it.language || '';
-            const note = it.lineNote ? ' <em style="color:#b45309;">(' + e(it.lineNote) + ')</em>' : '';
-            return e(title) + ' · ' + e(lang) + ' ×' + (it.qty || 0) + note;
-        })
-        .join('<br>');
-}
-
-function bsOrderItemsEditable(status) {
-    return status === 'awaiting_confirmation' || status === 'confirmed' || status === 'pending_payment';
+    return Array.from(document.querySelectorAll('[data-bs-book-row]')).map((row) => ({
+        id: (row.querySelector('.bs-book-id') || {}).value || '',
+        title: (row.querySelector('.bs-book-title') || {}).value || '',
+        author: (row.querySelector('.bs-book-author') || {}).value || 'Dr. R.B. Gogate',
+        price: parseFloat((row.querySelector('.bs-book-price') || {}).value) || 0,
+        active: (row.querySelector('.bs-book-active') || {}).checked !== false
+    })).filter((b) => b.id && b.title);
 }
 
 async function loadBsOrders(silent) {
@@ -12124,16 +12169,11 @@ async function loadBsOrders(silent) {
     const url = '/api/admin/book-sales/orders?limit=200' + (filter ? '&status=' + encodeURIComponent(filter) : '');
     try {
         if (!silent) {
-            fetch('/api/admin/book-sales/poll-courier-tracks', { method: 'POST' }).catch(() => {});
+            bsFetch('/api/admin/book-sales/poll-courier-tracks', { method: 'POST' }).catch(() => {});
         }
-        const r = await fetch(url);
+        const r = await bsFetch(url);
         const orders = await r.json();
-        const list = Array.isArray(orders) ? orders : [];
-        _bsOrdersCache = {};
-        list.forEach((o) => {
-            _bsOrdersCache[o.id] = o;
-        });
-        renderBookSalesOrdersTable(list);
+        renderBookSalesOrdersTable(Array.isArray(orders) ? orders : []);
     } catch (e) {
         if (!silent) {
             const t = document.getElementById('bs-orders-table');
@@ -12162,7 +12202,7 @@ function renderBookSalesOrdersTable(rows) {
         return;
     }
     root.innerHTML =
-        '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Code</th><th>Buyer</th><th>Order items</th><th>Status</th><th>Total</th><th>Pay mode</th><th>Fulfillment</th><th>Actions</th></tr></thead><tbody>' +
+        '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Code</th><th>Buyer</th><th>Status</th><th>Total</th><th>Pay mode</th><th>Fulfillment</th><th>Actions</th></tr></thead><tbody>' +
         rows.map((o) => {
             const name =
                 bsPosFullName(o) || o.buyer_name || o.email || '—';
@@ -12218,15 +12258,7 @@ function renderBookSalesOrdersTable(rows) {
                     o.id +
                     ')">Mark delivered</button> ';
             }
-            actions +=
-                '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.81rem;background:#0369a1;" onclick="bsOpenOrderCartModal(' +
-                o.id +
-                ')">' +
-                (bsOrderItemsEditable(o.status) ? 'View / edit' : 'View items') +
-                '</button> ';
             actions += '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.81rem;background:#475569;" onclick="bsViewOrderTracking(' + o.id + ')">Track</button>';
-            const itemsCell =
-                '<div style="font-size:0.82rem;max-width:280px;line-height:1.45;">' + bsFormatOrderItemsSummary(o) + '</div>';
             return '<tr>' +
                 '<td><strong>' + e(o.order_code) + '</strong></td>' +
                 '<td>' +
@@ -12234,7 +12266,6 @@ function renderBookSalesOrdersTable(rows) {
                 (phone ? '<br><small>' + e(phone) + '</small>' : '') +
                 (buyerExtra ? '<br><small style="color:#64748b;">' + e(buyerExtra) + '</small>' : '') +
                 '</td>' +
-                '<td>' + itemsCell + '</td>' +
                 '<td>' + statusLabel + '</td>' +
                 '<td>₹' + Number(o.total_amount || 0).toFixed(0) + '</td>' +
                 '<td>' + e(o.payment_mode || '') + '</td>' +
@@ -12266,10 +12297,9 @@ async function saveBookSalesAdminConfig() {
         books: bsCollectBooksFromForm()
     };
     try {
-        const res = await fetch('/api/admin/book-sales/config', {
+        const res = await bsFetch('/api/admin/book-sales/config', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ config, logistics: bsCollectLogisticsFromForm() })
+            body: { config, logistics: bsCollectLogisticsFromForm() }
         });
         const data = await res.json();
         if (msg) {
@@ -12288,8 +12318,8 @@ async function confirmBookOrderAdmin(id) {
     try {
         const res = await fetch('/api/admin/book-sales/orders/' + id + '/confirm', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ actingAdminId: adm && adm.id })
+            headers: bsActorHeaders(),
+            body: JSON.stringify(bsActorBody())
         });
         const data = await res.json();
         if (!res.ok) return alert(data.error || 'Confirm failed');
@@ -12300,291 +12330,15 @@ async function confirmBookOrderAdmin(id) {
 async function cancelBookOrderAdmin(id) {
     if (!confirm('Cancel this book order?')) return;
     try {
-        const res = await fetch('/api/admin/book-sales/orders/' + id + '/cancel', { method: 'POST' });
+        const res = await fetch('/api/admin/book-sales/orders/' + id + '/cancel', {
+            method: 'POST',
+            headers: bsActorHeaders(),
+            body: JSON.stringify(bsActorBody())
+        });
         const data = await res.json();
         if (!res.ok) return alert(data.error || 'Cancel failed');
         loadBsOrders(false);
     } catch (e) { alert(e.message || 'Cancel failed'); }
-}
-
-function bsCloseOrderCartModal() {
-    const m = document.getElementById('bs-order-cart-modal');
-    if (m) m.style.display = 'none';
-    _bsCartEditOrderId = null;
-    _bsCartLines = [];
-}
-
-function bsCartRecalcTotal() {
-    let total = 0;
-    _bsCartLines.forEach((line) => {
-        const book = bsBookById(line.bookId);
-        const unit = book ? Number(book.price) || 0 : Number(line.unitPrice) || 0;
-        line.unitPrice = unit;
-        line.lineTotal = Math.round(unit * line.qty * 100) / 100;
-        total += line.lineTotal;
-    });
-    const el = document.getElementById('bs-cart-total');
-    if (el) el.textContent = Math.round(total * 100) / 100;
-    return total;
-}
-
-function bsCartStockHint(bookId, lang) {
-    const book = bsBookById(bookId);
-    if (!book) return '';
-    const rem = bsStockRemaining(book, lang);
-    if (rem === null) return '<span style="color:#64748b;font-size:0.75rem;">Unlimited stock</span>';
-    if (rem === 0) return '<span style="color:#b91c1c;font-size:0.75rem;">Out of stock in settings</span>';
-    return '<span style="color:#0d9488;font-size:0.75rem;">' + rem + ' in inventory</span>';
-}
-
-function bsRenderOrderCartLines(editable) {
-    const root = document.getElementById('bs-cart-lines');
-    const addWrap = document.getElementById('bs-cart-add-wrap');
-    const saveBtn = document.getElementById('bs-cart-save-btn');
-    if (addWrap) addWrap.style.display = editable ? '' : 'none';
-    if (saveBtn) saveBtn.style.display = editable ? '' : 'none';
-    if (!root) return;
-    if (!_bsCartLines.length) {
-        root.innerHTML = '<p style="color:#64748b;margin:0;">No items on this order.</p>';
-        bsCartRecalcTotal();
-        return;
-    }
-    root.innerHTML = _bsCartLines
-        .map((line, idx) => {
-            const title = line.bookTitle || line.bookId;
-            const langLabel =
-                BS_LANG_DEFS.find((l) => l.id === line.language)?.label || line.language;
-            const noteVal = e(line.lineNote || '');
-            if (!editable) {
-                const note = line.lineNote
-                    ? '<p style="margin:4px 0 0;font-size:0.8rem;color:#b45309;">Note: ' + noteVal + '</p>'
-                    : '';
-                return (
-                    '<div style="padding:12px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;">' +
-                    '<strong>' +
-                    e(title) +
-                    '</strong> · ' +
-                    e(langLabel) +
-                    ' ×' +
-                    line.qty +
-                    ' · ₹' +
-                    Number(line.lineTotal || 0).toFixed(0) +
-                    note +
-                    '</div>'
-                );
-            }
-            return (
-                '<div style="padding:12px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;display:grid;gap:8px;">' +
-                '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">' +
-                '<div><strong style="color:#0f766e;">' +
-                e(title) +
-                '</strong><br><span style="font-size:0.85rem;color:#64748b;">' +
-                e(langLabel) +
-                ' · ₹' +
-                (Number(line.unitPrice) || 0).toFixed(0) +
-                ' each</span><br>' +
-                bsCartStockHint(line.bookId, line.language) +
-                '</div>' +
-                '<button type="button" onclick="bsCartRemoveLine(' +
-                idx +
-                ')" style="background:#fee2e2;border:none;color:#b91c1c;padding:4px 10px;border-radius:6px;cursor:pointer;font-size:0.8rem;">Remove</button></div>' +
-                '<div style="display:grid;grid-template-columns:100px 1fr;gap:8px;align-items:center;">' +
-                '<label style="font-size:0.85rem;">Qty <input type="number" min="1" max="99" value="' +
-                line.qty +
-                '" data-cart-qty="' +
-                idx +
-                '" style="width:64px;padding:6px;margin-left:4px;" onchange="bsCartSetQty(' +
-                idx +
-                ', this.value)"></label>' +
-                '<label style="font-size:0.85rem;">Line note <input type="text" value="' +
-                noteVal +
-                '" placeholder="e.g. Marathi unavailable — sending Hindi" data-cart-note="' +
-                idx +
-                '" style="width:100%;padding:6px;margin-left:4px;" onchange="bsCartSetNote(' +
-                idx +
-                ', this.value)"></label></div></div>'
-            );
-        })
-        .join('');
-    bsCartRecalcTotal();
-}
-
-function bsCartRemoveLine(idx) {
-    _bsCartLines.splice(idx, 1);
-    const o = _bsOrdersCache[_bsCartEditOrderId];
-    bsRenderOrderCartLines(o && bsOrderItemsEditable(o.status));
-}
-
-function bsCartSetQty(idx, val) {
-    const q = parseInt(val, 10);
-    if (_bsCartLines[idx]) _bsCartLines[idx].qty = Number.isInteger(q) && q > 0 ? Math.min(99, q) : 1;
-    const o = _bsOrdersCache[_bsCartEditOrderId];
-    bsRenderOrderCartLines(o && bsOrderItemsEditable(o.status));
-}
-
-function bsCartSetNote(idx, val) {
-    if (_bsCartLines[idx]) _bsCartLines[idx].lineNote = String(val || '').trim() || null;
-}
-
-function bsPopulateCartAddSelects() {
-    const bookSel = document.getElementById('bs-cart-add-book');
-    const langSel = document.getElementById('bs-cart-add-lang');
-    const books = ((_bsCurrentConfig && _bsCurrentConfig.books) || []).filter((b) => b.active !== false);
-    if (bookSel) {
-        bookSel.innerHTML = books
-            .map((b) => '<option value="' + e(b.id) + '">' + e(b.title) + '</option>')
-            .join('');
-    }
-    if (langSel) {
-        langSel.innerHTML = BS_LANG_DEFS.map((l) => '<option value="' + l.id + '">' + l.label + '</option>').join('');
-    }
-}
-
-function bsCartAddLine() {
-    const bookId = (document.getElementById('bs-cart-add-book') || {}).value;
-    const lang = (document.getElementById('bs-cart-add-lang') || {}).value;
-    const qty = parseInt((document.getElementById('bs-cart-add-qty') || {}).value, 10) || 1;
-    const book = bsBookById(bookId);
-    if (!book) return alert('Select a book.');
-    const existing = _bsCartLines.find((l) => l.bookId === bookId && l.language === lang);
-    if (existing) {
-        existing.qty = Math.min(99, existing.qty + qty);
-    } else {
-        _bsCartLines.push({
-            bookId,
-            language: lang,
-            bookTitle: book.title,
-            qty: Math.min(99, Math.max(1, qty)),
-            lineNote: null,
-            unitPrice: book.price
-        });
-    }
-    const o = _bsOrdersCache[_bsCartEditOrderId];
-    bsRenderOrderCartLines(o && bsOrderItemsEditable(o.status));
-}
-
-async function bsOpenOrderCartModal(orderId) {
-    let o = _bsOrdersCache[orderId];
-    if (!o || !o.items) {
-        try {
-            const res = await fetch('/api/admin/book-sales/orders/' + orderId);
-            const data = await res.json();
-            if (!res.ok) return alert((data && data.error) || 'Could not load order');
-            o = data.order || data;
-            if (o && o.orderCode && !o.order_code) {
-                o.order_code = o.orderCode;
-                o.total_amount = o.totalAmount;
-                o.status = o.status;
-            }
-            if (o && o.items) {
-                o.items = o.items.map((it) => {
-                    const bookId = it.bookId || it.book_id;
-                    const book = bsBookById(bookId);
-                    return {
-                        bookId,
-                        bookTitle: it.bookTitle || (book && book.title) || bookId,
-                        language: it.language,
-                        languageLabel: it.languageLabel,
-                        qty: it.qty,
-                        unitPrice: it.unitPrice,
-                        lineTotal: it.lineTotal,
-                        lineNote: it.lineNote
-                    };
-                });
-            }
-            _bsOrdersCache[orderId] = Object.assign({ id: orderId }, o);
-            o = _bsOrdersCache[orderId];
-        } catch (err) {
-            return alert(err.message || 'Load failed');
-        }
-    }
-    _bsCartEditOrderId = orderId;
-    _bsCartLines = (o.items || []).map((it) => ({
-        bookId: it.bookId || it.book_id,
-        bookTitle: it.bookTitle || it.book_id,
-        language: it.language,
-        qty: it.qty,
-        unitPrice: it.unitPrice || it.unit_price,
-        lineTotal: it.lineTotal || it.line_total,
-        lineNote: it.lineNote || it.line_note || null
-    }));
-    const editable = bsOrderItemsEditable(o.status);
-    const codeEl = document.getElementById('bs-cart-order-code');
-    const metaEl = document.getElementById('bs-cart-order-meta');
-    const noteEl = document.getElementById('bs-cart-admin-note');
-    const msgEl = document.getElementById('bs-cart-msg');
-    if (codeEl) codeEl.textContent = o.order_code || o.orderCode || '#' + orderId;
-    if (metaEl) {
-        const name = bsPosFullName(o) || o.buyer_name || o.email || '';
-        metaEl.textContent =
-            (name ? name + ' · ' : '') +
-            (BS_STATUS_LABELS[o.status] || o.status) +
-            (editable ? ' · You can change quantities or swap unavailable titles' : ' · Read-only (order already shipped or completed)');
-    }
-    if (noteEl) noteEl.value = o.notes || '';
-    if (msgEl) msgEl.textContent = '';
-    bsPopulateCartAddSelects();
-    bsRenderOrderCartLines(editable);
-    const m = document.getElementById('bs-order-cart-modal');
-    if (m) {
-        m.style.display = 'flex';
-    }
-}
-
-async function bsSaveOrderCart() {
-    if (!_bsCartEditOrderId) return;
-    if (!_bsCartLines.length) return alert('Order must have at least one line.');
-    const msgEl = document.getElementById('bs-cart-msg');
-    const saveBtn = document.getElementById('bs-cart-save-btn');
-    const adm = getStoredAdminUser();
-    if (msgEl) {
-        msgEl.style.color = '#0d9488';
-        msgEl.textContent = 'Saving…';
-    }
-    if (saveBtn) saveBtn.disabled = true;
-    try {
-        const items = _bsCartLines.map((l) => ({
-            bookId: l.bookId,
-            language: l.language,
-            qty: l.qty,
-            lineNote: l.lineNote || undefined
-        }));
-        const res = await fetch('/api/admin/book-sales/orders/' + _bsCartEditOrderId + '/items', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                items,
-                adminNote: (document.getElementById('bs-cart-admin-note') || {}).value.trim(),
-                actingAdminId: adm && adm.id
-            })
-        });
-        const data = await res.json();
-        if (!res.ok) {
-            if (msgEl) {
-                msgEl.style.color = '#b91c1c';
-                msgEl.textContent = data.error || 'Save failed';
-            }
-            return;
-        }
-        if (msgEl) {
-            msgEl.style.color = '#15803d';
-            msgEl.textContent = '✓ Order updated.';
-        }
-        try {
-            const cfgRes = await fetch('/api/admin/book-sales/config');
-            const cfgData = await cfgRes.json();
-            if (cfgData && cfgData.config) _bsCurrentConfig = cfgData.config;
-        } catch (_) {}
-        loadBsOrders(false);
-        setTimeout(bsCloseOrderCartModal, 600);
-    } catch (err) {
-        if (msgEl) {
-            msgEl.style.color = '#b91c1c';
-            msgEl.textContent = err.message || 'Save failed';
-        }
-    } finally {
-        if (saveBtn) saveBtn.disabled = false;
-    }
 }
 
 let _bsCourierProviders = null;
@@ -12711,7 +12465,7 @@ async function openBsCourierModal(orderId, forceStep) {
     document.getElementById('bs-courier-tracking').value = '';
     document.getElementById('bs-courier-track-preview').innerHTML = '';
     try {
-        const res = await fetch('/api/admin/book-sales/orders/' + orderId);
+        const res = await bsFetch('/api/admin/book-sales/orders/' + orderId);
         const data = await res.json();
         if (!res.ok) return alert(data.error || 'Could not load order');
         const o = data.order || {};
@@ -12770,10 +12524,9 @@ async function bsSaveCourierDetails() {
         msg.textContent = 'Saving…';
     }
     try {
-        const res = await fetch('/api/admin/book-sales/orders/' + id + '/courier-details', {
+        const res = await bsFetch('/api/admin/book-sales/orders/' + id + '/courier-details', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
+            body
         });
         const data = await res.json();
         if (!res.ok) {
@@ -12810,7 +12563,7 @@ async function bsCourierPreviewTracking() {
         return;
     }
     try {
-        const res = await fetch(
+        const res = await bsFetch(
             '/api/admin/book-sales/courier-tracking-url?provider=' +
                 encodeURIComponent(provider) +
                 '&trackingNo=' +
@@ -12837,7 +12590,7 @@ async function bsCourierPreviewTracking() {
 
 async function bsCourierSyncAggregatorButtons() {
     try {
-        const res = await fetch('/api/admin/book-sales/logistics-status');
+        const res = await bsFetch('/api/admin/book-sales/logistics-status');
         const d = await res.json();
         const noConfig = document.getElementById('bs-agg-no-config');
         const neither = !d.shiprocket && !d.nimbuspost;
@@ -12863,10 +12616,9 @@ async function bsBookAggregator(aggregator) {
         msg.textContent = 'Booking via ' + label + '…';
     }
     try {
-        const res = await fetch('/api/admin/book-sales/orders/' + id + '/book-aggregator', {
+        const res = await bsFetch('/api/admin/book-sales/orders/' + id + '/book-aggregator', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ aggregator, weightKg, actingAdminId: adm && adm.id })
+            body: { aggregator, weightKg }
         });
         const data = await res.json();
         if (!res.ok) {
@@ -12910,15 +12662,13 @@ async function bsDispatchCourier() {
         msg.textContent = 'Dispatching…';
     }
     try {
-        const res = await fetch('/api/admin/book-sales/orders/' + id + '/dispatch-courier', {
+        const res = await bsFetch('/api/admin/book-sales/orders/' + id + '/dispatch-courier', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
+            body: {
                 trackingNo,
                 courierProvider: provider,
-                courierIntegration: (document.getElementById('bs-courier-integration') || {}).value || 'auto',
-                actingAdminId: adm && adm.id
-            })
+                courierIntegration: (document.getElementById('bs-courier-integration') || {}).value || 'auto'
+            }
         });
         const data = await res.json();
         if (!res.ok) {
@@ -12949,9 +12699,9 @@ async function bsDispatchCourier() {
 async function promptUpdateTracking(id) {
     const newNo = prompt('Enter updated tracking number:');
     if (!newNo) return;
-    await fetch('/api/admin/book-sales/orders/' + id + '/update-tracking', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trackingNo: newNo })
+    await bsFetch('/api/admin/book-sales/orders/' + id + '/update-tracking', {
+        method: 'POST',
+        body: { trackingNo: newNo }
     });
     loadBsOrders(false);
 }
@@ -13051,7 +12801,7 @@ function bsRenderCourierLiveTrackHtml(o, data) {
 
 async function bsRefreshCourierTrack(id, reloadModal) {
     try {
-        const res = await fetch('/api/admin/book-sales/orders/' + id + '/refresh-courier-track', { method: 'POST' });
+        const res = await bsFetch('/api/admin/book-sales/orders/' + id + '/refresh-courier-track', { method: 'POST' });
         const data = await res.json();
         if (!res.ok) return alert(data.error || 'Refresh failed');
         loadBsOrders(true);
@@ -13065,11 +12815,7 @@ async function bsMarkCourierDelivered(id, reloadModal) {
     if (!confirm('Mark this shipment as delivered to the recipient?')) return;
     const adm = getStoredAdminUser();
     try {
-        const res = await fetch('/api/admin/book-sales/orders/' + id + '/mark-delivered', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ actingAdminId: adm && adm.id })
-        });
+        const res = await bsFetch('/api/admin/book-sales/orders/' + id + '/mark-delivered', { method: 'POST' });
         const data = await res.json();
         if (!res.ok) return alert(data.error || 'Failed');
         loadBsOrders(false);
@@ -13092,9 +12838,9 @@ async function bsViewOrderTracking(id) {
     const render = async (doRefresh) => {
         try {
             if (doRefresh) {
-                await fetch('/api/admin/book-sales/orders/' + id + '/refresh-courier-track', { method: 'POST' }).catch(() => {});
+                await bsFetch('/api/admin/book-sales/orders/' + id + '/refresh-courier-track', { method: 'POST' }).catch(() => {});
             }
-            const res = await fetch('/api/admin/book-sales/orders/' + id);
+            const res = await bsFetch('/api/admin/book-sales/orders/' + id);
             const data = await res.json();
             if (!res.ok) {
                 body.innerHTML = '<p style="color:#b91c1c;">' + e(data.error || 'Failed') + '</p>';
@@ -13105,6 +12851,41 @@ async function bsViewOrderTracking(id) {
             const trackEvents = data.courierTrackEvents || o.courierTrackEvents || [];
 
             let html = '';
+            const items = o.items || [];
+            if (items.length) {
+                html +=
+                    '<div style="margin-bottom:14px;padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;">' +
+                    '<p style="margin:0 0 8px;font-weight:700;font-size:0.88rem;">Ordered items</p>' +
+                    '<table class="data-table" style="font-size:0.85rem;"><thead><tr><th>Book</th><th>Lang</th><th>Qty</th><th>₹</th><th>Status</th><th></th></tr></thead><tbody>';
+                items.forEach((it) => {
+                    const cancelled = (it.lineStatus || 'active') === 'cancelled';
+                    html +=
+                        '<tr' +
+                        (cancelled ? ' style="opacity:0.55;"' : '') +
+                        '><td>' +
+                        e(it.bookTitle || it.bookId) +
+                        '</td><td>' +
+                        e(it.languageLabel || it.language) +
+                        '</td><td>' +
+                        it.qty +
+                        '</td><td>' +
+                        Number(it.lineTotal || 0).toFixed(0) +
+                        '</td><td>' +
+                        (cancelled ? '<span style="color:#b91c1c;">Cancelled</span>' : 'Active') +
+                        '</td><td>' +
+                        (!cancelled && o.status !== 'fulfilled' && o.status !== 'delivered'
+                            ? '<button type="button" class="btn-primary" style="padding:2px 8px;font-size:0.75rem;background:#b91c1c;" onclick="bsCancelOrderLine(' +
+                              o.id +
+                              ',' +
+                              it.id +
+                              ',\'' +
+                              e(it.bookTitle || it.bookId).replace(/'/g, '') +
+                              '\')">Cancel item</button>'
+                            : '') +
+                        '</td></tr>';
+                });
+                html += '</tbody></table><p style="margin:8px 0 0;font-size:0.82rem;color:#64748b;">Total ₹' + Number(o.totalAmount || 0).toFixed(0) + '</p></div>';
+            }
             // Order summary bar
             html += '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:14px;">' +
                 '<div><strong style="font-size:1rem;">' + e(o.orderCode) + '</strong> · <span style="font-size:0.85rem;color:#64748b;">' + e(BS_STATUS_LABELS[o.status] || o.status) + '</span></div>';
@@ -13223,33 +13004,18 @@ function renderBsPosBooks() {
     if (!root) return;
     const books = (_bsCurrentConfig && _bsCurrentConfig.books || []).filter((b) => b.active !== false);
     if (!books.length) { root.innerHTML = '<p style="color:#b91c1c;">No active books configured. Save settings first.</p>'; return; }
-    root.innerHTML = '<p style="font-size:0.85rem;font-weight:600;margin:0 0 6px;">Select books (language + qty):</p>' +
-        books.map((b) => {
-            const langOpts = BS_LANG_DEFS.map((l) => {
-                const rem = bsStockRemaining(b, l.id);
-                let label = l.label;
-                if (rem === 0) label += ' (out of stock)';
-                else if (rem !== null) label += ' (' + rem + ' left)';
-                const dis = rem === 0 ? ' disabled' : '';
-                return '<option value="' + l.id + '"' + dis + '>' + e(label) + '</option>';
-            }).join('');
-            return (
-                '<div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px;" data-bs-pos-row>' +
-                '<div><label style="font-size:0.8rem;">' +
-                e(b.title) +
-                '</label>' +
-                '<select class="bs-pos-book-sel" style="width:100%;padding:6px;" data-book-id="' +
-                e(b.id) +
-                '">' +
-                '<option value="">— skip —</option>' +
-                langOpts +
-                '</select></div>' +
-                '<div><label style="font-size:0.8rem;">Qty</label><input type="number" class="bs-pos-qty" value="1" min="1" max="99" style="width:100%;padding:6px;"></div>' +
-                '<div><label style="font-size:0.8rem;">Price</label><input type="number" class="bs-pos-price" value="' +
-                (b.price || 0) +
-                '" min="0" step="1" style="width:100%;padding:6px;"></div></div>'
-            );
-        }).join('');
+    root.innerHTML = '<p style="font-size:0.85rem;font-weight:600;margin:0 0 6px;">Select books:</p>' +
+        books.map((b, i) =>
+            '<div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px;" data-bs-pos-row>' +
+            '<div><label style="font-size:0.8rem;">' + e(b.title) + '</label>' +
+            '<select class="bs-pos-book-sel" style="width:100%;padding:6px;" data-book-id="' + e(b.id) + '">' +
+            '<option value="">— skip —</option>' +
+            ['english','marathi','hindi','kannada'].map((l) => '<option value="' + l + '">' + l.charAt(0).toUpperCase() + l.slice(1) + '</option>').join('') +
+            '</select></div>' +
+            '<div><label style="font-size:0.8rem;">Qty</label><input type="number" class="bs-pos-qty" value="1" min="1" max="99" style="width:100%;padding:6px;"></div>' +
+            '<div><label style="font-size:0.8rem;">Price</label><input type="number" class="bs-pos-price" value="' + (b.price || 0) + '" min="0" step="1" style="width:100%;padding:6px;"></div>' +
+            '</div>'
+        ).join('');
 }
 
 function bsPosSearch() {
@@ -13262,7 +13028,7 @@ function bsPosSearch() {
             return;
         }
         try {
-            const res = await fetch('/api/admin/book-sales/pos-search?q=' + encodeURIComponent(q));
+            const res = await bsFetch('/api/admin/book-sales/pos-search?q=' + encodeURIComponent(q));
             const rows = await res.json();
             _bsPosSearchCache = {};
             if (!rows.length) {
@@ -13345,7 +13111,7 @@ async function loadBsPosOrders() {
     const root = document.getElementById('bs-pos-orders-table');
     if (!root) return;
     try {
-        const r = await fetch('/api/admin/book-sales/orders?limit=40');
+        const r = await bsFetch('/api/admin/book-sales/orders?limit=40');
         const orders = await r.json();
         renderBsPosOrdersTable(Array.isArray(orders) ? orders : []);
     } catch (e) {
@@ -13361,7 +13127,7 @@ function renderBsPosOrdersTable(rows) {
         return;
     }
     root.innerHTML =
-        '<div style="overflow-x:auto;max-height:70vh;overflow-y:auto;"><table class="data-table" style="font-size:0.85rem;"><thead><tr><th>Code</th><th>Buyer</th><th>Items</th><th>Status</th><th>Total</th><th>Update</th></tr></thead><tbody>' +
+        '<div style="overflow-x:auto;max-height:70vh;overflow-y:auto;"><table class="data-table" style="font-size:0.85rem;"><thead><tr><th>Code</th><th>Buyer</th><th>Status</th><th>Total</th><th>Update</th></tr></thead><tbody>' +
         rows
             .map((o) => {
                 const name = bsPosFullName(o) || [o.first_name, o.last_name].filter(Boolean).join(' ') || o.buyer_name || '—';
@@ -13392,9 +13158,6 @@ function renderBsPosOrdersTable(rows) {
                     '</strong></td>' +
                     '<td style="max-width:200px;">' +
                     buyerLines.map((line, i) => (i === 0 ? '<strong>' + e(line) + '</strong>' : '<br><small>' + e(line) + '</small>')).join('') +
-                    '</td>' +
-                    '<td style="font-size:0.8rem;max-width:220px;">' +
-                    bsFormatOrderItemsSummary(o) +
                     '</td>' +
                     '<td>' +
                     statusLabel +
@@ -13429,10 +13192,9 @@ async function bsPosApplyOrderStatus(orderId) {
     const label = BS_STATUS_LABELS[status] || status;
     if (!confirm('Set order #' + orderId + ' to “' + label + '”?')) return;
     try {
-        const res = await fetch('/api/admin/book-sales/orders/' + orderId + '/status', {
+        const res = await bsFetch('/api/admin/book-sales/orders/' + orderId + '/status', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ status, actingAdminId: adm && adm.id })
+            body: { status }
         });
         const data = await res.json();
         if (!res.ok) return alert(data.error || data.message || 'Update failed');
@@ -13474,10 +13236,9 @@ async function bsPosSave() {
     if (!body.buyerName && !body.buyerPhone) { if (msg) { msg.style.color = '#b91c1c'; msg.textContent = 'Enter buyer name or phone'; } return; }
     if (msg) { msg.style.color = '#0d9488'; msg.textContent = 'Placing…'; }
     try {
-        const res = await fetch('/api/admin/book-sales/pos', {
+        const res = await bsFetch('/api/admin/book-sales/pos', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
+            body
         });
         const data = await res.json();
         if (!res.ok) { if (msg) { msg.style.color = '#b91c1c'; msg.textContent = data.error || 'Failed'; } return; }

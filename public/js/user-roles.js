@@ -8,6 +8,7 @@
         'scanner_portal_user',
         'scanner_dashboard_user',
         'reviewer',
+        'book_sales_staff',
         'admin'
     ]);
 
@@ -16,7 +17,8 @@
         'co_admin',
         'scanner_portal_user',
         'scanner_dashboard_user',
-        'reviewer'
+        'reviewer',
+        'book_sales_staff'
     ];
 
     function normalizeUserRole(userRole) {

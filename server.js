@@ -8767,6 +8767,19 @@ app.post('/api/admin/users/create', (req, res) => {
                                 }
                                 const newId = saved.id || insertedId;
                                 userAccountLifecycle.stampAccountActivated(db, newId, () => {});
+                                if (userRole === 'book_sales_staff') {
+                                    db.run(
+                                        `UPDATE users SET staff_modules = ? WHERE id = ?`,
+                                        [
+                                            JSON.stringify({
+                                                'book-inventory': true,
+                                                'book-orders': true
+                                            }),
+                                            newId
+                                        ],
+                                        () => {}
+                                    );
+                                }
                                 notifEngine.notify(
                                     db,
                                     'ACCOUNT_CREATED',

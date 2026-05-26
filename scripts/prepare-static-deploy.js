@@ -89,6 +89,8 @@ const redirects = [
         permanent: false
     },
     { source: '/scanner', destination: '/scanner.html', permanent: false },
+    { source: '/staff/login', destination: '/staff.html', permanent: false },
+    { source: '/staff', destination: '/staff.html', permanent: false },
     // Path-based portals on seminar host (no admin.* / judge.* subdomain required)
     { source: '/admin', destination: '/admin.html', permanent: false },
     { source: '/judge', destination: '/judge.html', permanent: false },
@@ -109,11 +111,7 @@ const vercelConfig = {
             headers: [{ key: 'Cache-Control', value: 'no-store' }]
         },
         {
-            source: '/:path*.html',
-            headers: [{ key: 'Cache-Control', value: 'public, max-age=0, must-revalidate' }]
-        },
-        {
-            source: '/:path*.js',
+            source: '/(.*\\.(html|js))',
             headers: [{ key: 'Cache-Control', value: 'public, max-age=0, must-revalidate' }]
         }
     ]

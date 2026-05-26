@@ -6,7 +6,8 @@
     const KEYS = {
         doctor: 'seminar_doctor_user',
         judge: 'seminar_judge_user',
-        scanner: 'seminar_scanner_user'
+        scanner: 'seminar_scanner_user',
+        staff: 'seminar_staff_user'
     };
 
     function normRole(user) {
@@ -32,6 +33,11 @@
         return ur === 'scanner_portal_user' || ur === 'scanner_dashboard_user';
     }
 
+    function isBookStaffUser(user) {
+        const { ur } = normRole(user);
+        return ur === 'book_sales_staff';
+    }
+
     function isAdminPortalUser(user) {
         const { ur, r } = normRole(user);
         return r === 'admin' || ur === 'co_admin';
@@ -42,6 +48,10 @@
         if (portal === 'doctor') return isDoctorUser(user);
         if (portal === 'judge') return isJudgeUser(user);
         if (portal === 'scanner') return isScannerUser(user);
+        if (portal === 'staff') {
+            if (isScannerUser(user)) return false;
+            return isBookStaffUser(user) || isAdminPortalUser(user);
+        }
         return false;
     }
 
@@ -117,7 +127,7 @@
 
     async function refreshLoginOtpPanel(panelEl, portal) {
         if (!panelEl) return;
-        if (portal === 'judge' || portal === 'scanner' || portal === 'admin') {
+        if (portal === 'judge' || portal === 'scanner' || portal === 'admin' || portal === 'staff') {
             panelEl.style.display = 'none';
             return;
         }
@@ -136,6 +146,7 @@
         if (isAdminPortalUser(user)) return 'Use the admin portal: /admin.html';
         if (isJudgeUser(user)) return 'Use the judge portal: /judge.html';
         if (isScannerUser(user)) return 'Use the scanner portal: /scanner.html';
+        if (isBookStaffUser(user)) return 'Use the staff portal: /staff/login';
         if (isDoctorUser(user)) return 'Use the doctor portal: /doctor.html';
         if (r === 'admin') return 'Use the admin portal: /admin.html';
         return 'This account cannot access this portal. Please sign in with the correct account.';
@@ -382,6 +393,7 @@
         isJudgeUser,
         isScannerUser,
         isAdminPortalUser,
+        isBookStaffUser,
         wrongPortalHint,
         refreshLoginOtpPanel,
         bindLoginForm,

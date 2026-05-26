@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
     <script src="/js/api-base.js?v=static1"></script>
@@ -1034,6 +1034,7 @@
                     <button type="button" class="btn-primary bs-subtab active" data-bs-tab="config" onclick="switchBsTab('config')" style="background:#0d9488;">Settings</button>
                     <button type="button" class="btn-primary bs-subtab" data-bs-tab="orders" onclick="switchBsTab('orders')" style="background:#475569;">Orders</button>
                     <button type="button" class="btn-primary bs-subtab" data-bs-tab="pos" onclick="switchBsTab('pos')" style="background:#7c3aed;">Book POS</button>
+                    <button type="button" class="btn-primary bs-subtab" data-bs-tab="inventory" onclick="switchBsTab('inventory')" style="background:#0369a1;">Stock inventory</button>
                 </div>
 
                 <!-- Settings panel -->
@@ -1093,13 +1094,24 @@
                         </div>
                     </div>
                     <div class="card" style="padding:18px;margin-bottom:14px;">
-                        <h3 style="margin:0 0 12px;">Books &amp; inventory</h3>
-                        <p style="font-size:0.85rem;color:#64748b;margin:0 0 10px;">Set price and stock per language. Leave stock blank for unlimited. Doctors see availability like a shop; admins can edit open orders when a title is unavailable.</p>
+                        <h3 style="margin:0 0 12px;">Books</h3>
+                        <p style="font-size:0.85rem;color:#64748b;margin:0 0 10px;">Add, remove, or price books. Custom books beyond Agnikarma/Viddhakarma can be added below.</p>
                         <div id="bs-books-rows"></div>
                         <button type="button" class="btn-primary" style="margin-top:8px;padding:6px 14px;font-size:0.85rem;background:#0d9488;" onclick="bsAddBookRow()">+ Add book</button>
                     </div>
                     <button type="button" class="btn-primary" style="background:#0d9488;" onclick="saveBookSalesAdminConfig()">Save book sales settings</button>
                     <p id="bs-config-msg" style="margin-top:8px;font-weight:600;"></p>
+                </div>
+
+                <!-- Inventory panel -->
+                <div id="bs-panel-inventory" class="hidden">
+                    <div class="card" style="padding:18px;">
+                        <h3 style="margin:0 0 8px;color:#0369a1;">Stock inventory</h3>
+                        <p style="font-size:0.85rem;color:#64748b;margin:0 0 12px;">Set quantity on hand per book and language. Orders check stock on place and confirm. Leave at 0 only if you do not track that SKU.</p>
+                        <div id="bs-inventory-table"><p style="color:#64748b;">Loading…</p></div>
+                        <button type="button" class="btn-primary" style="margin-top:12px;background:#0369a1;" onclick="saveBsInventory()">Save inventory</button>
+                        <p id="bs-inventory-msg" style="margin-top:8px;font-weight:600;"></p>
+                    </div>
                 </div>
 
                 <!-- Orders panel -->
@@ -1159,44 +1171,6 @@
                             </div>
                             <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px;">Update status here (confirm, mark collected, cancel) without leaving Book POS.</p>
                             <div id="bs-pos-orders-table"><p style="color:#64748b;">Loading…</p></div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Order cart / edit modal -->
-                <div id="bs-order-cart-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9997;align-items:center;justify-content:center;padding:16px;overflow-y:auto;">
-                    <div style="background:#fff;border-radius:16px;width:640px;max-width:100%;max-height:92vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.25);">
-                        <div style="padding:16px 20px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:#fff;z-index:1;border-radius:16px 16px 0 0;">
-                            <div>
-                                <h3 style="margin:0;font-size:1rem;color:#0f172a;">Order — <span id="bs-cart-order-code"></span></h3>
-                                <p id="bs-cart-order-meta" style="margin:4px 0 0;font-size:0.82rem;color:#64748b;"></p>
-                            </div>
-                            <button type="button" onclick="bsCloseOrderCartModal()" style="background:none;border:none;cursor:pointer;color:#64748b;font-size:1.4rem;line-height:1;padding:0 4px;">×</button>
-                        </div>
-                        <div style="padding:16px 20px;">
-                            <div id="bs-cart-lines" style="display:grid;gap:10px;margin-bottom:14px;"></div>
-                            <div id="bs-cart-add-wrap" style="padding:12px;background:#f8fafc;border:1px dashed #cbd5e1;border-radius:10px;margin-bottom:14px;">
-                                <p style="margin:0 0 8px;font-size:0.85rem;font-weight:600;color:#475569;">Add book to order</p>
-                                <div style="display:grid;grid-template-columns:1.2fr 1fr 80px auto;gap:8px;align-items:end;">
-                                    <div><label style="font-size:0.75rem;">Book</label><select id="bs-cart-add-book" style="width:100%;padding:6px;"></select></div>
-                                    <div><label style="font-size:0.75rem;">Language</label><select id="bs-cart-add-lang" style="width:100%;padding:6px;"></select></div>
-                                    <div><label style="font-size:0.75rem;">Qty</label><input type="number" id="bs-cart-add-qty" value="1" min="1" max="99" style="width:100%;padding:6px;"></div>
-                                    <button type="button" class="btn-primary" style="padding:8px 12px;background:#0d9488;" onclick="bsCartAddLine()">Add</button>
-                                </div>
-                            </div>
-                            <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;margin-bottom:12px;">
-                                <strong>Order total</strong>
-                                <strong style="font-size:1.1rem;color:#0f766e;">₹<span id="bs-cart-total">0</span></strong>
-                            </div>
-                            <div style="margin-bottom:12px;">
-                                <label style="font-size:0.85rem;font-weight:600;">Admin note <span style="font-weight:400;color:#94a3b8;">(optional — e.g. substituted title, partial ship)</span></label>
-                                <textarea id="bs-cart-admin-note" rows="2" style="width:100%;padding:8px;margin-top:4px;border:1px solid #e2e8f0;border-radius:8px;font-size:0.9rem;"></textarea>
-                            </div>
-                            <p id="bs-cart-msg" style="margin:0 0 10px;font-weight:600;"></p>
-                            <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                                <button type="button" class="btn-primary" id="bs-cart-save-btn" style="background:#0d9488;" onclick="bsSaveOrderCart()">Save order items</button>
-                                <button type="button" class="btn-primary" style="background:#64748b;" onclick="bsCloseOrderCartModal()">Close</button>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -2158,6 +2132,7 @@
                     <option value="co_admin">Co Administrator</option>
                     <option value="scanner_portal_user">Scanner Portal User</option>
                     <option value="scanner_dashboard_user">Live scanner dashboard</option>
+                    <option value="book_sales_staff">Book sales staff (inventory &amp; orders)</option>
                     <option value="reviewer">Reviewer</option>
                 </select>
                 <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;">

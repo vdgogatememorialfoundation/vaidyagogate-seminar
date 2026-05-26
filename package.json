@@ -8,13 +8,10 @@
     "build:pg-schema": "node scripts/build-pg-schema.js",
     "vercel-build": "node scripts/vercel-build-router.js",
     "build:static": "node scripts/prepare-static-deploy.js",
-    "build:api": "set VERCEL_DEPLOYMENT_TYPE=api&& node scripts/vercel-build-router.js",
     "vercel-build:full": "node scripts/validate-syntax.js && node scripts/build-pg-schema.js",
     "sync:scanner-mobile": "node scripts/sync-mobile-capacitor.js",
     "build:scanner-apk": "node scripts/build-scanner-apk.js",
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "deploy": "wrangler deploy",
-    "preview": "wrangler dev"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
@@ -39,8 +36,5 @@
     "razorpay": "^2.9.2",
     "sqlite3": "^6.0.1",
     "xlsx": "^0.18.5"
-  },
-  "devDependencies": {
-    "wrangler": "^4.95.0"
   }
 }
