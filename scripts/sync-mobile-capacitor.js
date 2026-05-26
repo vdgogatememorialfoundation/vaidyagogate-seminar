@@ -8,18 +8,13 @@ const { execSync } = require('child_process');
 
 const root = path.join(__dirname, '..');
 const SEMINAR = 'https://seminar.vaidyagogate.org';
-const ALLOW = [
-    SEMINAR,
-    'https://admin.vaidyagogate.org',
-    'https://judge.vaidyagogate.org',
-    'https://vaidyagogate-seminar.vercel.app'
-];
+const ALLOW = [SEMINAR];
 
 const APPS = [
     { dir: 'admin-mobile', url: `${SEMINAR}/admin.html`, title: 'VGMF Admin' },
     { dir: 'judge-mobile', url: `${SEMINAR}/judge.html`, title: 'VGMF Judge' },
     { dir: 'doctor-mobile', url: `${SEMINAR}/doctor.html?app=1`, title: 'VGMF Doctor' },
-    { dir: 'scanner-mobile', url: `${SEMINAR}/scanner.html`, title: 'VGMF Scanner' }
+    { dir: 'scanner-mobile', url: `${SEMINAR}/scanner.html?app=seminar`, title: 'VGMF Seminar Scanner' }
 ];
 
 function writeConfig(app) {
@@ -31,7 +26,7 @@ function writeConfig(app) {
               ? 'org.vaidyagogate.judge'
               : app.dir.includes('doctor')
                 ? 'org.vaidyagogate.doctor'
-                : 'org.vaidyagogate.scanner',
+                : 'org.vaidyagogate.seminar.scanner',
         appName: app.title,
         webDir: 'www',
         server: {

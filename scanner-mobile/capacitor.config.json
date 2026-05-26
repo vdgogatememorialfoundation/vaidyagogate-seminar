@@ -1,17 +1,14 @@
 {
-  "appId": "org.vaidyagogate.scanner",
-  "appName": "VGMF Scanner",
+  "appId": "org.vaidyagogate.seminar.scanner",
+  "appName": "VGMF Seminar Scanner",
   "webDir": "www",
   "server": {
-    "url": "https://seminar.vaidyagogate.org/scanner.html",
+    "url": "https://seminar.vaidyagogate.org/scanner.html?app=seminar",
     "hostname": "seminar.vaidyagogate.org",
     "cleartext": false,
     "androidScheme": "https",
     "allowNavigation": [
-      "https://seminar.vaidyagogate.org",
-      "https://admin.vaidyagogate.org",
-      "https://judge.vaidyagogate.org",
-      "https://vaidyagogate-seminar.vercel.app"
+      "https://seminar.vaidyagogate.org"
     ]
   },
   "android": {

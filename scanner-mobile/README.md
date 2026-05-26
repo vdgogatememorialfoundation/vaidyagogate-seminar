@@ -1,10 +1,17 @@
-# VGMF Scanner — Android APK
+# VGMF Seminar Scanner — Android APK
 
-This wraps your **live** scanner page in a native Android shell (Capacitor). The app loads:
+Native Android shell (Capacitor) for **seminar check-in and book pickup only**.  
+Loads the live scanner from:
 
-`https://YOUR-DOMAIN/scanner.html`
+`https://seminar.vaidyagogate.org/scanner.html?app=seminar`
 
-so you can update the scanner UI on the server without republishing the APK.
+This is **not** the autism/ABA portal APK. It uses package id `org.vaidyagogate.seminar.scanner` and blocks navigation to other hosts.
+
+## Features in the app
+
+- Seminar e-ticket check-in (QR scan)
+- Book pickup mode (Agnikarma / Viddhakarma orders)
+- Scanner staff login only (`scanner_portal_user` accounts from Admin → Staff users)
 
 ## Prerequisites
 
@@ -12,68 +19,58 @@ so you can update the scanner UI on the server without republishing the APK.
 - [Android Studio](https://developer.android.com/studio) with Android SDK
 - JDK 17
 
-## Setup (once)
+## Quick build (from repo root)
+
+```bash
+npm run build:scanner-apk
+```
+
+Output: `dist/VGMF-Seminar-Scanner-debug.apk`
+
+## Manual build
 
 ```bash
 cd scanner-mobile
 npm install
-```
-
-Edit `capacitor.config.json` and set `server.url` to your live URL, for example:
-
-```json
-"server": {
-  "url": "https://seminar.yourdomain.com/scanner.html",
-  "cleartext": false
-}
-```
-
-For local testing only:
-
-```json
-"url": "http://YOUR-PC-LAN-IP:3000/scanner.html",
-"cleartext": true
-```
-
-## Build debug APK (quick test)
-
-```bash
 npx cap sync android
 cd android
-./gradlew assembleDebug
+gradlew.bat assembleDebug
 ```
 
-APK output:
+APK: `scanner-mobile/android/app/build/outputs/apk/debug/app-debug.apk`
 
-`android/app/build/outputs/apk/debug/app-debug.apk`
-
-Copy to staff phones and install (enable “Install unknown apps”).
-
-## Build release APK (production)
+## Production release APK
 
 1. Create a keystore (once):
 
 ```bash
-keytool -genkey -v -keystore vgmf-scanner.keystore -alias vgmf -keyalg RSA -keysize 2048 -validity 10000
+keytool -genkey -v -keystore vgmf-seminar-scanner.keystore -alias seminar_scanner -keyalg RSA -keysize 2048 -validity 10000
 ```
 
-2. Add signing config in `android/app/build.gradle` (see [Capacitor Android docs](https://capacitorjs.com/docs/android)).
+2. Configure signing in `android/app/build.gradle` ([Capacitor docs](https://capacitorjs.com/docs/android)).
 
-3. Build:
+3. `cd android && gradlew.bat assembleRelease`
 
-```bash
-cd android
-./gradlew assembleRelease
+## Install on phones
+
+1. Copy the APK to the device.
+2. Enable “Install unknown apps” for your file manager.
+3. Open the APK and install.
+4. Sign in with a **scanner** staff account created in the seminar admin panel.
+
+## Updating the app
+
+Most UI/logic is loaded from the server. After deploying web changes, staff usually only need to refresh (pull to refresh in WebView) or reopen the app — **no new APK** unless you change `capacitor.config.json` or native permissions.
+
+If you change `server.url`, run `npx cap sync android` and rebuild the APK.
+
+## Local testing
+
+Point `capacitor.config.json` → `server.url` to your LAN server, e.g.:
+
+```json
+"url": "http://192.168.1.10:3000/scanner.html?app=seminar",
+"cleartext": true
 ```
 
-Release APK: `android/app/build/outputs/apk/release/app-release.apk`
-
-## Permissions
-
-The WebView needs **camera** for QR scanning. `AndroidManifest.xml` should include `CAMERA` (Capacitor adds this on sync).
-
-## Notes
-
-- Staff must use **scanner accounts** created in Admin → Staff users.
-- HTTPS is required on production (`cleartext: false`).
-- After changing `server.url`, run `npx cap sync android` and rebuild.
+Then `npx cap sync android` and rebuild.

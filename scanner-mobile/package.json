@@ -2,11 +2,12 @@
   "name": "scanner-mobile",
   "version": "1.0.0",
   "private": true,
-  "description": "Android wrapper for scanner-mobile",
+  "description": "VGMF Seminar Scanner — Android APK (seminar.vaidyagogate.org only)",
   "scripts": {
     "sync": "npx cap sync android",
     "open:android": "npx cap open android",
-    "build:debug": "npx cap sync android && cd android && gradlew.bat assembleDebug"
+    "build:debug": "npx cap sync android && cd android && gradlew.bat assembleDebug",
+    "build:apk": "node ../scripts/build-scanner-apk.js"
   },
   "dependencies": {
     "@capacitor/android": "^6.2.0",

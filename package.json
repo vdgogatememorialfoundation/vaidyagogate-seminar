@@ -7,6 +7,8 @@
     "start": "node server.js",
     "build:pg-schema": "node scripts/build-pg-schema.js",
     "vercel-build": "node scripts/validate-syntax.js && node scripts/build-pg-schema.js",
+    "sync:scanner-mobile": "node scripts/sync-mobile-capacitor.js",
+    "build:scanner-apk": "node scripts/build-scanner-apk.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

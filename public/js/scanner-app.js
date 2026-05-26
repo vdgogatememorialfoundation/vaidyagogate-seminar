@@ -1,16 +1,54 @@
 (function () {
+    const SEMINAR_SCANNER_HOST = 'seminar.vaidyagogate.org';
+    const BLOCKED_HOST_RE = /autism|autistic|aba\./i;
+
     const isNativeScannerShell =
         !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) ||
-        /VGMF Scanner|Capacitor/i.test(navigator.userAgent || '');
+        /VGMF Seminar Scanner|VGMF Scanner|Capacitor/i.test(navigator.userAgent || '') ||
+        new URLSearchParams(window.location.search).get('app') === 'seminar';
+
+    function isSeminarPortalHost(hostname) {
+        const h = String(hostname || '').toLowerCase();
+        if (!h || BLOCKED_HOST_RE.test(h)) return false;
+        if (h === SEMINAR_SCANNER_HOST) return true;
+        if (h.endsWith('.vaidyagogate.org') && h.startsWith('seminar')) return true;
+        return h === 'localhost' || h === '127.0.0.1';
+    }
 
     function isScannerPageUrl(url) {
         try {
             const u = new URL(url, window.location.href);
+            if (!isSeminarPortalHost(u.hostname)) return false;
             if (u.origin !== window.location.origin) return false;
             return /\/scanner\.html$/i.test(u.pathname) || u.pathname === '/scanner';
         } catch (_) {
             return false;
         }
+    }
+
+    function installSeminarPortalGuard() {
+        if (!isNativeScannerShell) return;
+        if (!isSeminarPortalHost(window.location.hostname)) {
+            document.body.innerHTML =
+                '<div style="padding:24px;font-family:sans-serif;max-width:420px;margin:40px auto;text-align:center;">' +
+                '<h2 style="color:#b91c1c;">Wrong portal</h2>' +
+                '<p>This APK is for <strong>VGMF seminar check-in</strong> only (seminar.vaidyagogate.org). It cannot open other VGMF portals.</p>' +
+                '</div>';
+            throw new Error('seminar_scanner_wrong_host');
+        }
+        const origFetch = window.fetch.bind(window);
+        window.fetch = function (input, init) {
+            let url = typeof input === 'string' ? input : input && input.url;
+            if (url && !url.startsWith('/')) {
+                try {
+                    const u = new URL(url, window.location.href);
+                    if (BLOCKED_HOST_RE.test(u.hostname) || !isSeminarPortalHost(u.hostname)) {
+                        return Promise.reject(new Error('Seminar scanner: blocked request to ' + u.hostname));
+                    }
+                } catch (_) {}
+            }
+            return origFetch(input, init);
+        };
     }
 
     function lockScannerNavigation() {
@@ -62,6 +100,7 @@
         });
     }
 
+    installSeminarPortalGuard();
     if (isNativeScannerShell) lockScannerNavigation();
     if (/scanner\.html$/i.test(window.location.pathname || '')) {
         document.body.classList.add('scanner-standalone-page');

@@ -12,9 +12,11 @@ public/uploads/*
 .vercel
 *-mobile/node_modules/
 *-mobile/android/
+scanner-mobile/android/local.properties
 *-mobile/package-lock.json
 VGMF-*-debug.apk
 VGMF-Scanner-debug.apk
+dist/
 
 .vercel
 
