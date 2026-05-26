@@ -9,12 +9,6 @@
     { "src": "/(.*\\.(png|jpg|jpeg|gif|webp|svg|ico|woff2?|webmanifest|html))", "dest": "/public/$1" },
     { "src": "/(.*)", "dest": "server.js" }
   ],
-  "functions": {
-    "server.js": {
-      "maxDuration": 60,
-      "memory": 1024
-    }
-  },
   "crons": [
     { "path": "/api/cron/process-notifications", "schedule": "0 9 * * *" },
     { "path": "/api/cron/pending-registration-reminders", "schedule": "0 10 * * *" }
