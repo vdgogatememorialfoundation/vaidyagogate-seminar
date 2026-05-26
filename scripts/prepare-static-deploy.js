@@ -88,7 +88,11 @@ const redirects = [
         destination: '/judge.html',
         permanent: false
     },
-    { source: '/scanner', destination: '/scanner.html', permanent: false }
+    { source: '/scanner', destination: '/scanner.html', permanent: false },
+    // Path-based portals on seminar host (no admin.* / judge.* subdomain required)
+    { source: '/admin', destination: '/admin.html', permanent: false },
+    { source: '/judge', destination: '/judge.html', permanent: false },
+    { source: '/doctor', destination: '/doctor.html', permanent: false }
 ];
 
 const vercelConfig = {

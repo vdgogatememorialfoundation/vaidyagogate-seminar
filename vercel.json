@@ -63,6 +63,21 @@
       "source": "/scanner",
       "destination": "/scanner.html",
       "permanent": false
+    },
+    {
+      "source": "/admin",
+      "destination": "/admin.html",
+      "permanent": false
+    },
+    {
+      "source": "/judge",
+      "destination": "/judge.html",
+      "permanent": false
+    },
+    {
+      "source": "/doctor",
+      "destination": "/doctor.html",
+      "permanent": false
     }
   ],
   "headers": [

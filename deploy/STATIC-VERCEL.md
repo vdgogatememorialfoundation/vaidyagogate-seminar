@@ -8,7 +8,9 @@ Two **Vercel projects** from this **same GitHub repo**. Page loads use **zero No
 |---------|--------|
 | **Build Command** | `npm run vercel-build` (default) |
 | **Environment variable** | `VERCEL_DEPLOYMENT_TYPE` = `static` (optional; default) |
-| **`API_BACKEND_URL`** | `https://api.vaidyagogate.org` (your API project URL or custom domain) |
+| **`API_BACKEND_URL`** | `https://api.vaidyagogate.org` — **not** `api.seminar.vaidyagogate.org` unless you deliberately created that DNS name |
+| **`PUBLIC_BASE_URL`** | `https://seminar.vaidyagogate.org` |
+| **`SEMINAR_HOST`** | `seminar.vaidyagogate.org` |
 
 ### Steps
 
@@ -19,11 +21,22 @@ Two **Vercel projects** from this **same GitHub repo**. Page loads use **zero No
 3. Build runs `prepare-static-deploy.js`, which:
    - Sets `outputDirectory: public` (static only)
    - Adds edge **rewrites**: `/api/*` and `/uploads/*` → `API_BACKEND_URL`
-   - Host redirects: `admin.*` → `admin.html`, `judge.*` → `judge.html`
+   - Path shortcuts: `/admin` → `admin.html`, `/judge` → `judge.html` (on any host)
+   - Optional legacy host redirects: `admin.vaidyagogate.org` → `admin.html` (only if that DNS exists)
 
-Browsers keep `fetch('/api/...')` on the same host; Vercel edge proxies to the backend **without** running `server.js` on the frontend project.
+### Which API URL?
 
-**Do not** set `API_BACKEND_URL` to the same host as the static site (e.g. `seminar.vaidyagogate.org`) — that causes broken routing. Use the **API subdomain** or a separate `*.vercel.app` backend URL.
+| URL | Use? |
+|-----|------|
+| **`https://api.vaidyagogate.org`** | **Yes** — this is what the repo expects for `API_BACKEND_URL` and Vercel rewrites. |
+| **`https://api.seminar.vaidyagogate.org`** | Only if **you** added that DNS CNAME to the **API** Vercel project. It is **not** the default in this repo. |
+| **`https://seminar.vaidyagogate.org`** | **No** for `API_BACKEND_URL` — that is the **website** (HTML). API calls go to `/api/...` on seminar, which Vercel **proxies** to `api.vaidyagogate.org`. |
+
+**Admin / doctor / judge** are **paths** on the seminar site, e.g. `https://seminar.vaidyagogate.org/admin` (or `/admin.html`). You do **not** need `admin.vaidyagogate.org`.
+
+Browsers keep `fetch('/api/...')` on `seminar.vaidyagogate.org`; Vercel edge proxies to the backend **without** running `server.js` on the frontend project.
+
+**Do not** set `API_BACKEND_URL` to `seminar.vaidyagogate.org` — that causes broken routing. Use the **API host** (`api.vaidyagogate.org`) or your backend `*.vercel.app` URL.
 
 ---
 
@@ -64,12 +77,12 @@ This is the **maximum execution window** on Hobby for serverless functions (60s)
 
 ## DNS summary
 
-| Host | Vercel project |
-|------|----------------|
-| `seminar.vaidyagogate.org` | Static (A) |
-| `admin.vaidyagogate.org` | Static (A) |
-| `judge.vaidyagogate.org` | Static (A) |
-| `api.vaidyagogate.org` | API (B) |
+| Host | Vercel project | Notes |
+|------|----------------|--------|
+| `seminar.vaidyagogate.org` | Static (A) | Public site + `/admin`, `/doctor`, `/judge`, `/scanner` |
+| `api.vaidyagogate.org` | API (B) | Node/`server.js` only — doctors/admins never open this in the browser |
+| `admin.vaidyagogate.org` | Static (A) | **Optional** legacy DNS; not required if you use `/admin` on seminar |
+| `judge.vaidyagogate.org` | Static (A) | **Optional** legacy DNS |
 
 ---
 
