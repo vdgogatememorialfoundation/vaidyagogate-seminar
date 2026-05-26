@@ -12015,6 +12015,7 @@ function renderBookSalesOrdersTable(rows) {
             if (o.status === 'fulfilled' && ftype === 'courier' && o.courier_tracking_no) {
                 actions += '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.81rem;background:#7c3aed;" onclick="promptUpdateTracking(' + o.id + ')">Update tracking</button>';
             }
+            actions += '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.81rem;background:#475569;" onclick="bsViewOrderTracking(' + o.id + ')">Track</button>';
             return '<tr>' +
                 '<td><strong>' + e(o.order_code) + '</strong></td>' +
                 '<td>' + e(name) + (phone ? '<br><small>' + e(phone) + '</small>' : '') + '</td>' +
@@ -12130,6 +12131,68 @@ async function promptUpdateTracking(id) {
         body: JSON.stringify({ trackingNo: newNo })
     });
     loadBsOrders(false);
+}
+
+function bsRenderAdminTrackerHtml(timeline) {
+    if (!timeline || !timeline.steps || !timeline.steps.length) return '<p style="color:#64748b;">No tracking data.</p>';
+    const fmt = (iso) =>
+        window.PortalDateTime && window.PortalDateTime.format
+            ? window.PortalDateTime.format(iso)
+            : iso
+              ? new Date(iso).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
+              : '';
+    let html = '<div class="tracker-vertical">';
+    timeline.steps.forEach((step) => {
+        const cls = step.state === 'completed' ? 'completed' : step.state === 'active' ? 'active' : 'upcoming';
+        const when =
+            step.at && (step.state === 'completed' || step.state === 'active')
+                ? '<p class="track-when" style="font-size:0.78rem;color:#0d9488;margin:4px 0 0;">' + e(fmt(step.at)) + '</p>'
+                : '';
+        const link = step.trackingUrl
+            ? '<p style="margin:4px 0 0;"><a href="' + e(step.trackingUrl) + '" target="_blank" rel="noopener">Track courier ↗</a></p>'
+            : '';
+        html +=
+            '<div class="track-step ' + cls + '"><div class="track-icon"><i class="fas ' + e(step.icon || 'fa-circle') + '"></i></div>' +
+            '<div class="track-content"><div class="track-title">' + e(step.title) + '</div><div class="track-desc">' + e(step.desc) + '</div>' + when + link + '</div></div>';
+    });
+    html += '</div>';
+    return html;
+}
+
+async function bsViewOrderTracking(id) {
+    const modal = document.getElementById('bs-tracking-modal');
+    const body = document.getElementById('bs-tracking-body');
+    if (!modal || !body) return;
+    body.innerHTML = '<p style="color:#64748b;">Loading…</p>';
+    modal.style.display = 'flex';
+    try {
+        const res = await fetch('/api/admin/book-sales/orders/' + id);
+        const data = await res.json();
+        if (!res.ok) {
+            body.innerHTML = '<p style="color:#b91c1c;">' + e(data.error || 'Failed') + '</p>';
+            return;
+        }
+        const o = data.order || {};
+        let html =
+            '<p style="margin:0 0 8px;"><strong>' + e(o.orderCode) + '</strong> · ' + e(BS_STATUS_LABELS[o.status] || o.status) + '</p>';
+        html += bsRenderAdminTrackerHtml(data.timeline || o.timeline);
+        if (data.events && data.events.length) {
+            html += '<p style="margin:14px 0 6px;font-weight:600;font-size:0.88rem;">Activity log</p><ul style="margin:0;padding-left:18px;font-size:0.85rem;">';
+            data.events.forEach((ev) => {
+                html +=
+                    '<li><strong>' +
+                    e(ev.title) +
+                    '</strong>' +
+                    (ev.at ? ' · ' + e(window.PortalDateTime && window.PortalDateTime.format ? window.PortalDateTime.format(ev.at) : ev.at) : '') +
+                    (ev.description ? '<br><span style="color:#64748b;">' + e(ev.description) + '</span>' : '') +
+                    '</li>';
+            });
+            html += '</ul>';
+        }
+        body.innerHTML = html;
+    } catch (err) {
+        body.innerHTML = '<p style="color:#b91c1c;">' + e(err.message) + '</p>';
+    }
 }
 
 // Book POS
