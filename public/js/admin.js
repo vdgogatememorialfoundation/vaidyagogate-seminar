@@ -525,6 +525,9 @@ function switchTab(tabId) {
     if (tabId === 'tab-site-cms' && typeof loadAdminSiteCms === 'function') {
         loadAdminSiteCms();
     }
+    if (tabId === 'tab-book-sales' && typeof loadBookSalesAdmin === 'function') {
+        loadBookSalesAdmin();
+    }
     if (tabId === 'tab-staff-users' || tabId === 'tab-doctors') {
         loadUsers();
     }
@@ -1088,6 +1091,7 @@ const ADMIN_MODULE_TAB_DEFS = [
     ['tab-behalf-reg', 'Doctor applications (admin workspace)'],
     ['tab-reg-form', 'Registration form fields'],
     ['tab-site-cms', 'Website & doctor updates'],
+    ['tab-book-sales', 'Book sales'],
     ['tab-admin-payments', 'Payments'],
     ['tab-certificates', 'Certificate management'],
     ['tab-volunteers', 'Volunteers'],
@@ -1120,6 +1124,7 @@ const DOCTOR_MODULE_TAB_DEFS = [
     ['tab-orders', 'Orders'],
     ['tab-receipts', 'Receipts'],
     ['tab-payments', 'Payments'],
+    ['tab-books', 'Book orders (Agnikarma / Viddhakarma)'],
     ['tab-ticket', 'Participant tickets'],
     ['tab-certificate', 'Certificates'],
     ['tab-reset-pwd', 'Change password']
@@ -11836,6 +11841,192 @@ async function marketingMoveBanner(btn, dir) {
         await loadAdminMarketing();
     } catch (e) {
         console.error(e);
+    }
+}
+
+async function loadBookSalesAdmin() {
+    const msg = document.getElementById('bs-config-msg');
+    if (msg) msg.textContent = '';
+    if (!globalSeminars || !globalSeminars.length) {
+        try {
+            await loadSeminars();
+        } catch (_) {}
+    }
+    try {
+        const [cfgRes, ordRes] = await Promise.all([
+            fetch('/api/admin/book-sales/config'),
+            fetch('/api/admin/book-sales/orders?limit=150')
+        ]);
+        const cfgData = await cfgRes.json();
+        const orders = await ordRes.json();
+        const cfg = (cfgData && cfgData.config) || {};
+        const setChk = (id, v) => {
+            const el = document.getElementById(id);
+            if (el) el.checked = !!v;
+        };
+        setChk('bs-enabled', cfg.enabled);
+        setChk('bs-online', cfg.onlinePaymentEnabled !== false);
+        setChk('bs-counter', cfg.payAtCounterEnabled !== false);
+        const ag = (cfg.books || []).find((b) => b.id === 'agnikarma');
+        const vi = (cfg.books || []).find((b) => b.id === 'viddhakarma');
+        const pa = document.getElementById('bs-price-agnikarma');
+        const pv = document.getElementById('bs-price-viddhakarma');
+        if (pa) pa.value = ag ? ag.price : 0;
+        if (pv) pv.value = vi ? vi.price : 0;
+        const sel = document.getElementById('bs-seminar');
+        if (sel && globalSeminars && globalSeminars.length) {
+            sel.innerHTML =
+                '<option value="">— Any / not linked —</option>' +
+                globalSeminars
+                    .map(
+                        (s) =>
+                            '<option value="' +
+                            s.id +
+                            '"' +
+                            (Number(cfg.seminarId) === Number(s.id) ? ' selected' : '') +
+                            '>' +
+                            String(s.title || '').replace(/</g, '&lt;') +
+                            '</option>'
+                    )
+                    .join('');
+        } else if (sel && cfg.seminarId) {
+            sel.innerHTML = '<option value="' + cfg.seminarId + '" selected>Seminar #' + cfg.seminarId + '</option>';
+        }
+        renderBookSalesOrdersTable(Array.isArray(orders) ? orders : []);
+    } catch (e) {
+        console.error(e);
+        const t = document.getElementById('bs-orders-table');
+        if (t) t.innerHTML = '<p style="color:#b91c1c;">Could not load book sales.</p>';
+    }
+}
+
+function renderBookSalesOrdersTable(rows) {
+    const root = document.getElementById('bs-orders-table');
+    if (!root) return;
+    if (!rows.length) {
+        root.innerHTML = '<p style="color:#64748b;">No book orders yet.</p>';
+        return;
+    }
+    const stLabel = (s) =>
+        ({
+            awaiting_confirmation: 'Awaiting confirmation',
+            pending_payment: 'Pending payment',
+            confirmed: 'Ready for pickup',
+            fulfilled: 'Fulfilled',
+            cancelled: 'Cancelled'
+        })[s] || s;
+    root.innerHTML =
+        '<table class="data-table"><thead><tr><th>Code</th><th>Doctor</th><th>Status</th><th>Total</th><th>Pay</th><th>Actions</th></tr></thead><tbody>' +
+        rows
+            .map((o) => {
+                const name = [o.first_name, o.last_name].filter(Boolean).join(' ') || o.email || '—';
+                let actions = '';
+                if (o.status === 'awaiting_confirmation') {
+                    actions +=
+                        '<button type="button" class="btn-success" style="padding:4px 10px;font-size:0.82rem;" onclick="confirmBookOrderAdmin(' +
+                        o.id +
+                        ')">Confirm &amp; issue QR</button> ';
+                }
+                if (o.status !== 'fulfilled' && o.status !== 'cancelled') {
+                    actions +=
+                        '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.82rem;background:#b91c1c;" onclick="cancelBookOrderAdmin(' +
+                        o.id +
+                        ')">Cancel</button>';
+                }
+                return (
+                    '<tr><td><strong>' +
+                    String(o.order_code || '').replace(/</g, '&lt;') +
+                    '</strong></td><td>' +
+                    String(name).replace(/</g, '&lt;') +
+                    '<br><span style="font-size:0.78rem;color:#64748b;">' +
+                    String(o.user_id_string || o.email || '').replace(/</g, '&lt;') +
+                    '</span></td><td>' +
+                    stLabel(o.status) +
+                    '</td><td>₹' +
+                    Number(o.total_amount || 0).toFixed(2) +
+                    '</td><td>' +
+                    String(o.payment_mode || '').replace(/</g, '&lt;') +
+                    '</td><td>' +
+                    actions +
+                    '</td></tr>'
+                );
+            })
+            .join('') +
+        '</tbody></table>';
+}
+
+async function saveBookSalesAdminConfig() {
+    const msg = document.getElementById('bs-config-msg');
+    const adm = getStoredAdminUser();
+    const seminarVal = (document.getElementById('bs-seminar') || {}).value;
+    const config = {
+        enabled: !!(document.getElementById('bs-enabled') || {}).checked,
+        onlinePaymentEnabled: !!(document.getElementById('bs-online') || {}).checked,
+        payAtCounterEnabled: !!(document.getElementById('bs-counter') || {}).checked,
+        seminarId: seminarVal ? parseInt(seminarVal, 10) : null,
+        books: [
+            {
+                id: 'agnikarma',
+                title: 'Agnikarma',
+                author: 'Dr. R.B. Gogate',
+                price: parseFloat((document.getElementById('bs-price-agnikarma') || {}).value) || 0,
+                active: true
+            },
+            {
+                id: 'viddhakarma',
+                title: 'Viddhakarma',
+                author: 'Dr. R.B. Gogate',
+                price: parseFloat((document.getElementById('bs-price-viddhakarma') || {}).value) || 0,
+                active: true
+            }
+        ]
+    };
+    try {
+        const res = await fetch('/api/admin/book-sales/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ config, actingAdminId: adm && adm.id })
+        });
+        const data = await res.json();
+        if (msg) {
+            msg.style.color = data.success ? '#15803d' : '#b91c1c';
+            msg.textContent = data.success ? 'Book sales settings saved.' : data.error || 'Save failed';
+        }
+        if (data.success) loadBookSalesAdmin();
+    } catch (e) {
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = 'Network error';
+        }
+    }
+}
+
+async function confirmBookOrderAdmin(id) {
+    const adm = getStoredAdminUser();
+    if (!confirm('Confirm this order and issue pickup QR for the doctor?')) return;
+    try {
+        const res = await fetch('/api/admin/book-sales/orders/' + id + '/confirm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: adm && adm.id })
+        });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Confirm failed');
+        loadBookSalesAdmin();
+    } catch (e) {
+        alert(e.message || 'Confirm failed');
+    }
+}
+
+async function cancelBookOrderAdmin(id) {
+    if (!confirm('Cancel this book order?')) return;
+    try {
+        const res = await fetch('/api/admin/book-sales/orders/' + id + '/cancel', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Cancel failed');
+        loadBookSalesAdmin();
+    } catch (e) {
+        alert(e.message || 'Cancel failed');
     }
 }
 

@@ -260,13 +260,92 @@
         }, AUTO_NEXT_MS);
     }
 
+    function scannerMode() {
+        const m = document.getElementById('scanner-mode-select');
+        return m && m.value === 'books' ? 'books' : 'ticket';
+    }
+
+    function syncScannerModeUi() {
+        const mode = scannerMode();
+        const semCard = document.getElementById('scanner-seminar-card');
+        const title = document.getElementById('scanner-page-title');
+        const hint = document.querySelector('.camera-hint');
+        if (semCard) semCard.classList.toggle('hidden', mode === 'books');
+        if (title) title.textContent = mode === 'books' ? 'Book pickup' : 'Scan tickets';
+        if (hint) hint.textContent = mode === 'books' ? 'Scan book order pickup QR' : 'Align QR inside the frame';
+        const manual = document.getElementById('manual-qr');
+        if (manual) {
+            manual.placeholder =
+                mode === 'books' ? 'Book order code (BK…)' : 'E-ticket ID or Application ID';
+        }
+    }
+
+    async function processBookFulfill(decodedText) {
+        renderResult(false, '<i class="fas fa-spinner fa-spin"></i> Verifying book order…', 'warn');
+        try {
+            const res = await fetch('/api/scanner/book-fulfill', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    qrData: decodedText,
+                    scannerUserId: Number(user.id)
+                })
+            });
+            const result = await res.json();
+            if (result.success) {
+                playTone('success');
+                stats.ok++;
+                const o = result.order || {};
+                const lines = (o.items || [])
+                    .map((it) => it.bookId + ' · ' + (it.languageLabel || it.language) + ' × ' + it.qty)
+                    .join(', ');
+                renderResult(
+                    true,
+                    '<h3>Books collected</h3><p><strong>' +
+                        String(o.orderCode || '').replace(/</g, '&lt;') +
+                        '</strong></p><p>' +
+                        String(lines).replace(/</g, '&lt;') +
+                        '</p>',
+                    'ok'
+                );
+                pushHistory((o.orderCode || 'Book') + ' fulfilled', true);
+            } else if (result.outcome === 'duplicate') {
+                playTone('duplicate');
+                stats.dup++;
+                renderResult(false, '<h3>Already collected</h3><p>' + (result.message || '') + '</p>', 'dup');
+                pushHistory('Duplicate book pickup', false);
+            } else {
+                playTone('error');
+                stats.err++;
+                renderResult(false, '<h3>Denied</h3><p>' + (result.message || result.error || 'Invalid') + '</p>', 'bad');
+                pushHistory(result.message || 'Book denied', false);
+            }
+            updateStats();
+            scheduleAutoResume();
+        } catch (e) {
+            playTone('error');
+            stats.err++;
+            renderResult(false, '<p>' + (e.message || 'Network error') + '</p>', 'bad');
+            scanBusy = false;
+        }
+    }
+
     async function processScan(decodedText) {
         const raw = String(decodedText || '').trim();
         if (!raw) return;
-        const scanKey = raw + '|' + (document.getElementById('scanner-seminar-select')?.value || '');
+        const mode = scannerMode();
+        const scanKey = raw + '|' + mode + '|' + (document.getElementById('scanner-seminar-select')?.value || '');
         const now = Date.now();
         if (scanBusy) return;
         if (scanKey === lastScanKey && now - lastScanAt < SCAN_DEBOUNCE_MS) return;
+
+        if (mode === 'books') {
+            scanBusy = true;
+            lastScanKey = scanKey;
+            lastScanAt = now;
+            await processBookFulfill(decodedText);
+            return;
+        }
 
         const sel = document.getElementById('scanner-seminar-select');
         const sid = sel && sel.value ? parseInt(sel.value, 10) : selectedSeminarId;
@@ -403,8 +482,11 @@
         if (typeof PortalAuth !== 'undefined' && PortalAuth.renderLoginTime) {
             PortalAuth.renderLoginTime('scanner-login-time', u);
         }
+        syncScannerModeUi();
         loadCheckinSeminars().then(() => startCam()).catch(console.error);
     }
+
+    document.getElementById('scanner-mode-select')?.addEventListener('change', syncScannerModeUi);
 
     PortalAuth.bindLoginForm({
         portal: 'scanner',

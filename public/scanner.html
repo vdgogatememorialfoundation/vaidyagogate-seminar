@@ -50,8 +50,8 @@
     <div id="scan-ui" class="scanner-shell hidden">
         <header class="scanner-top">
             <div class="scanner-top-main">
-                <p class="scanner-eyebrow">VGMF check-in</p>
-                <h1>Scan tickets</h1>
+                <p class="scanner-eyebrow">VGMF scanner</p>
+                <h1 id="scanner-page-title">Scan tickets</h1>
                 <p class="who" id="scanner-who"></p>
                 <p class="portal-login-time who hidden" id="scanner-login-time"></p>
             </div>
@@ -65,6 +65,14 @@
         </div>
 
         <div class="scan-card scan-card-highlight">
+            <label for="scanner-mode-select"><i class="fas fa-sliders-h"></i> Scanner mode</label>
+            <select id="scanner-mode-select">
+                <option value="ticket">Seminar check-in (e-ticket)</option>
+                <option value="books">Book pickup (Agnikarma / Viddhakarma)</option>
+            </select>
+        </div>
+
+        <div class="scan-card scan-card-highlight" id="scanner-seminar-card">
             <label for="scanner-seminar-select"><i class="fas fa-calendar-check"></i> Seminar for check-in</label>
             <select id="scanner-seminar-select"></select>
             <p id="scanner-seminar-hint" class="seminar-hint"></p>

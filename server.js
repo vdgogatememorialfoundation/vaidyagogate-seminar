@@ -81,6 +81,7 @@ const certVerify = require('./lib/certificate-verify');
 const docVerify = require('./lib/application-document-verify');
 const seminarPurge = require('./lib/seminar-purge');
 const supplementalPayments = require('./lib/supplemental-payments');
+const bookSales = require('./lib/book-sales');
 const { safeInternalUserRowId } = require('./lib/internal-user-id');
 const regCertVerify = require('./lib/registration-certificate-verify');
 const seminarAnalytics = require('./lib/seminar-analytics');
@@ -148,6 +149,11 @@ function mountPaymentsRoutes() {
         fileStore,
         parsePositiveUserId
     });
+    bookSales.registerBookSalesRoutes(app, db, {
+        listDoctorPaymentOptions,
+        parsePositiveUserId,
+        upsertGlobalSetting
+    });
 }
 
 function bootstrapApp(done) {
@@ -164,8 +170,10 @@ function bootstrapApp(done) {
 
     const runFullMigrations = () => {
         ensureCriticalUserColumns(() => {
-            console.log('[bootstrap] migrations complete');
-            if (done) done();
+            bookSales.ensureBookSalesSchema(db, () => {
+                console.log('[bootstrap] migrations complete');
+                if (done) done();
+            });
         });
     };
 

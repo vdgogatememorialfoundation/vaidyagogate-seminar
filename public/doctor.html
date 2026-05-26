@@ -217,6 +217,7 @@
                 <button type="button" class="menu-item" data-tab="tab-support"><i class="fas fa-ticket-alt"></i> Support tickets</button>
                 <button type="button" class="menu-item" data-tab="tab-orders"><i class="fas fa-receipt"></i> Orders</button>
                 <button type="button" class="menu-item" data-tab="tab-receipts"><i class="fas fa-file-invoice"></i> Receipts</button>
+                <button type="button" class="menu-item hidden" id="nav-books" data-tab="tab-books"><i class="fas fa-book"></i> Book orders</button>
                 <button type="button" class="menu-item" data-tab="tab-payments"><i class="fas fa-credit-card"></i> Payments</button>
                 <button type="button" class="menu-item" data-tab="tab-ticket"><i class="fas fa-qrcode"></i> Participant tickets</button>
                 <button type="button" class="menu-item" data-tab="tab-certificate"><i class="fas fa-award"></i> Certificates</button>
@@ -634,6 +635,20 @@
                     </div>
                 </div>
 
+                <div id="tab-books" class="tab-pane hidden">
+                    <h2 class="section-title">Books — Agnikarma &amp; Viddhakarma</h2>
+                    <p style="color:#64748b;margin:-10px 0 16px;">Order Dr. R.B. Gogate books in English, Marathi, Hindi, or Kannada. Collect at the seminar book desk after payment.</p>
+                    <div id="books-catalog"></div>
+                    <div class="card" style="margin:16px 0;padding:16px;">
+                        <h3 style="margin:0 0 10px;font-size:1rem;color:#0f766e;">Payment</h3>
+                        <div id="books-payment-options"></div>
+                        <button type="button" class="btn-primary" style="margin-top:14px;" onclick="placeDoctorBookOrder()">Place book order</button>
+                        <p id="books-order-msg" style="margin-top:10px;font-weight:600;"></p>
+                    </div>
+                    <h3 style="margin:24px 0 10px;font-size:1.05rem;">My book orders</h3>
+                    <div id="books-orders-list"></div>
+                </div>
+
                 <div id="tab-payments" class="tab-pane hidden">
                     <h2 class="section-title">Payments</h2>
                     <p style="color:#64748b;margin:-10px 0 16px;">Seminar registration fees are paid from <strong>Track seminar applications</strong>. Additional charges from the office appear below.</p>
@@ -789,6 +804,7 @@
     <script src="/js/doctor-auth-ui.js"></script>
     <script src="/js/portal-upload.js?v=20260523"></script>
     <script src="/js/case-r2-upload.js?v=20260522c"></script>
-    <script src="/js/doctor.js?v=20260529b"></script>
+    <script src="/js/doctor-books.js?v=20260530c"></script>
+    <script src="/js/doctor.js?v=20260530c"></script>
 </body>
 </html>

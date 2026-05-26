@@ -115,6 +115,7 @@
                 <a class="menu-item" data-admin-module="tab-reg-form" onclick="switchTab('tab-reg-form'); loadAdminRegistrationFormConfig();"><i class="fas fa-list-alt"></i> Registration Form Fields</a>
                 <a class="menu-item" data-admin-module="tab-site-cms" onclick="switchTab('tab-site-cms'); loadAdminSiteCms();"><i class="fas fa-globe"></i> Website &amp; doctor updates</a>
                 <a class="menu-item" data-admin-module="tab-admin-payments" onclick="switchTab('tab-admin-payments'); loadAdminPaymentsModule();"><i class="fas fa-file-invoice-dollar"></i> Payments</a>
+                <a class="menu-item" data-admin-module="tab-book-sales" onclick="switchTab('tab-book-sales'); loadBookSalesAdmin();"><i class="fas fa-book"></i> Book sales</a>
                 <a class="menu-item" data-admin-module="tab-certificates" onclick="switchTab('tab-certificates'); initAdminCertificatesTab();"><i class="fas fa-award"></i> Certificate Management</a>
                 <a class="menu-item" data-admin-module="tab-volunteers" onclick="switchTab('tab-volunteers'); initAdminVolunteersTab();"><i class="fas fa-hands-helping"></i> Volunteers</a>
                 <a class="menu-item" data-admin-module="tab-volunteer-assignments" onclick="switchTab('tab-volunteer-assignments'); initAdminVolunteerAssignmentsTab();"><i class="fas fa-clipboard-list"></i> Volunteer assignments</a>
@@ -960,6 +961,43 @@
                     </div>
                     <button type="button" class="btn-primary" style="margin-top:16px;" onclick="saveAdminSiteCms()">Save website &amp; portal content</button>
                     <p id="cms-save-msg" style="margin-top:10px;font-weight:600;"></p>
+                </div>
+            </div>
+
+            <!-- Book sales -->
+            <div id="tab-book-sales" class="tab-pane hidden">
+                <h2 style="margin-bottom:12px;">Book sales — Agnikarma &amp; Viddhakarma</h2>
+                <p style="color:#64748b;margin-bottom:18px;max-width:900px;">Enable book ordering on the doctor portal. Doctors choose language (English, Marathi, Hindi, Kannada), pay online or at counter, and collect at the seminar using a pickup QR scanned in the <strong>VGMF Scanner</strong> app (Book pickup mode).</p>
+                <div class="card" style="padding:18px;margin-bottom:20px;border:1px solid #bbf7d0;background:#f0fdf4;">
+                    <h3 style="margin:0 0 12px;color:#166534;">Portal settings</h3>
+                    <label style="display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:12px;">
+                        <input type="checkbox" id="bs-enabled"> Enable book sales on doctor portal
+                    </label>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:520px;margin-bottom:12px;">
+                        <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="bs-online" checked> Online payment</label>
+                        <label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="bs-counter" checked> Pay at counter</label>
+                    </div>
+                    <div style="margin-bottom:12px;">
+                        <label>Distribution seminar (optional)</label>
+                        <select id="bs-seminar" style="width:100%;max-width:360px;padding:8px;"><option value="">— Any / not linked —</option></select>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+                        <div>
+                            <label>Agnikarma price (₹)</label>
+                            <input type="number" id="bs-price-agnikarma" min="0" step="1" style="width:100%;padding:8px;">
+                        </div>
+                        <div>
+                            <label>Viddhakarma price (₹)</label>
+                            <input type="number" id="bs-price-viddhakarma" min="0" step="1" style="width:100%;padding:8px;">
+                        </div>
+                    </div>
+                    <button type="button" class="btn-primary" style="margin-top:14px;background:#0d9488;" onclick="saveBookSalesAdminConfig()">Save book sales settings</button>
+                    <p id="bs-config-msg" style="margin-top:8px;font-weight:600;"></p>
+                </div>
+                <div class="card" style="padding:18px;">
+                    <h3 style="margin:0 0 10px;">Orders</h3>
+                    <p style="font-size:0.88rem;color:#64748b;margin:0 0 12px;">Confirm pay-at-counter orders to issue pickup QR. Fulfilled when staff scan at the book desk.</p>
+                    <div id="bs-orders-table"><p style="color:#64748b;">Loading…</p></div>
                 </div>
             </div>
 
@@ -2105,6 +2143,6 @@
     <script src="/js/portal-upload.js?v=20260522"></script>
     <script src="/js/user-roles.js?v=20260522f"></script>
     <script src="/js/admin-list-search.js?v=20260522a"></script>
-    <script src="/js/admin.js?v=20260530b"></script>
+    <script src="/js/admin.js?v=20260530c"></script>
 </body>
 </html>

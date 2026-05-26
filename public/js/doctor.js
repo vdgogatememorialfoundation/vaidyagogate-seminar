@@ -2182,6 +2182,9 @@ function switchTab(tabId, menuEl) {
     if (tabId === 'tab-payments') {
         loadDoctorSupplementalPayments();
     }
+    if (tabId === 'tab-books' && typeof initDoctorBooksTab === 'function') {
+        initDoctorBooksTab();
+    }
     if (tabId === 'tab-ticket') {
         loadDoctorEventTickets();
     }

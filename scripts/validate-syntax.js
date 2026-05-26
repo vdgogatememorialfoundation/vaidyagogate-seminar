@@ -12,7 +12,8 @@ const files = [
     path.join('lib', 'routes-ext.js'),
     path.join('lib', 'certificate-verify.js'),
     path.join('lib', 'notification-engine.js'),
-    path.join('lib', 'db-pg.js')
+    path.join('lib', 'db-pg.js'),
+    path.join('lib', 'book-sales.js')
 ];
 
 let failed = false;
