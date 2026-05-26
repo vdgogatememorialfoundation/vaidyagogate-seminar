@@ -111,7 +111,11 @@ const vercelConfig = {
             headers: [{ key: 'Cache-Control', value: 'no-store' }]
         },
         {
-            source: '/(.*\\.(html|js))',
+            source: '/:path*.html',
+            headers: [{ key: 'Cache-Control', value: 'public, max-age=0, must-revalidate' }]
+        },
+        {
+            source: '/:path*.js',
             headers: [{ key: 'Cache-Control', value: 'public, max-age=0, must-revalidate' }]
         }
     ]
