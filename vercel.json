@@ -1,122 +1,25 @@
 {
   "version": 2,
-  "buildCommand": "node scripts/prepare-static-deploy.js",
+  "buildCommand": "node scripts/validate-syntax.js",
   "installCommand": "npm install",
-  "outputDirectory": "public",
-  "framework": null,
-  "rewrites": [
-    {
-      "source": "/api/:path*",
-      "destination": "https://api.vaidyagogate.org/api/:path*"
-    },
-    {
-      "source": "/uploads/:path*",
-      "destination": "https://api.vaidyagogate.org/uploads/:path*"
-    }
+  "builds": [{ "src": "server.js", "use": "@vercel/node" }],
+  "routes": [
+    { "src": "/css/(.*)", "dest": "/public/css/$1" },
+    { "src": "/js/(.*)", "dest": "/public/js/$1" },
+    { "src": "/(.*\\.(png|jpg|jpeg|gif|webp|svg|ico|woff2?|webmanifest|html))", "dest": "/public/$1" },
+    { "src": "/(.*)", "dest": "server.js" }
   ],
-  "redirects": [
-    {
-      "source": "/",
-      "has": [
-        {
-          "type": "host",
-          "value": "admin.vaidyagogate.org"
-        }
-      ],
-      "destination": "/admin.html",
-      "permanent": false
-    },
-    {
-      "source": "/index.html",
-      "has": [
-        {
-          "type": "host",
-          "value": "admin.vaidyagogate.org"
-        }
-      ],
-      "destination": "/admin.html",
-      "permanent": false
-    },
-    {
-      "source": "/",
-      "has": [
-        {
-          "type": "host",
-          "value": "judge.vaidyagogate.org"
-        }
-      ],
-      "destination": "/judge.html",
-      "permanent": false
-    },
-    {
-      "source": "/index.html",
-      "has": [
-        {
-          "type": "host",
-          "value": "judge.vaidyagogate.org"
-        }
-      ],
-      "destination": "/judge.html",
-      "permanent": false
-    },
-    {
-      "source": "/scanner",
-      "destination": "/scanner.html",
-      "permanent": false
-    },
-    {
-      "source": "/staff/login",
-      "destination": "/staff.html",
-      "permanent": false
-    },
-    {
-      "source": "/staff",
-      "destination": "/staff.html",
-      "permanent": false
-    },
-    {
-      "source": "/admin",
-      "destination": "/admin.html",
-      "permanent": false
-    },
-    {
-      "source": "/judge",
-      "destination": "/judge.html",
-      "permanent": false
-    },
-    {
-      "source": "/doctor",
-      "destination": "/doctor.html",
-      "permanent": false
+  "functions": {
+    "server.js": {
+      "maxDuration": 60,
+      "memory": 1024
     }
+  },
+  "crons": [
+    { "path": "/api/cron/process-notifications", "schedule": "0 9 * * *" },
+    { "path": "/api/cron/pending-registration-reminders", "schedule": "0 10 * * *" }
   ],
-  "headers": [
-    {
-      "source": "/api-config.json",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "no-store"
-        }
-      ]
-    },
-    {
-      "source": "/:path*.html",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=0, must-revalidate"
-        }
-      ]
-    },
-    {
-      "source": "/:path*.js",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, max-age=0, must-revalidate"
-        }
-      ]
-    }
-  ]
+  "env": {
+    "NODE_ENV": "production"
+  }
 }
