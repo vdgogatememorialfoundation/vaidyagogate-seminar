@@ -21,3 +21,8 @@ dist/
 .vercel
 
 .vercel
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
