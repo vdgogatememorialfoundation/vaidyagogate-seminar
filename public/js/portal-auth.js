@@ -34,13 +34,28 @@
     }
 
     function isBookStaffUser(user) {
-        const { ur } = normRole(user);
-        return ur === 'book_sales_staff';
+        if (!user) return false;
+        const { ur, r } = normRole(user);
+        if (ur === 'book_sales_staff' || ur === 'staff_user' || ur === 'co_admin') return true;
+        if (r === 'admin' && ur !== 'co_admin') return true;
+        try {
+            const raw = user && user.staff_modules;
+            const mods = typeof raw === 'string' ? JSON.parse(raw || '{}') : raw || {};
+            return Object.keys(mods).some((k) => mods[k] === true);
+        } catch (_) {
+            return false;
+        }
+    }
+
+    function isStaffPortalUser(user) {
+        if (!user) return false;
+        if (isJudgeUser(user) || isScannerUser(user) || isDoctorUser(user)) return false;
+        return isBookStaffUser(user) || isAdminPortalUser(user);
     }
 
     function isAdminPortalUser(user) {
         const { ur, r } = normRole(user);
-        return r === 'admin' || ur === 'co_admin';
+        return r === 'admin' || r === 'co_admin' || ur === 'admin' || ur === 'co_admin';
     }
 
     function allowedForPortal(user, portal) {
@@ -51,7 +66,7 @@
         if (portal === 'staff') {
             if (isScannerUser(user) || isJudgeUser(user)) return false;
             if (isDoctorUser(user)) return false;
-            return isBookStaffUser(user) || isAdminPortalUser(user);
+            return isStaffPortalUser(user);
         }
         return false;
     }
@@ -144,12 +159,12 @@
 
     function wrongPortalHint(user) {
         const { ur, r } = normRole(user);
-        if (isAdminPortalUser(user)) return 'Use the admin portal: /admin.html';
+        if (ur === 'co_admin') return 'Co-admins sign in at /staff/login (full CRM opens at /staff/crm).';
+        if (r === 'admin' && ur !== 'co_admin') return 'Use the admin portal: /admin.html';
         if (isJudgeUser(user)) return 'Use the judge portal: /judge.html';
         if (isScannerUser(user)) return 'Use the scanner portal: /scanner.html';
-        if (isBookStaffUser(user)) return 'Use the staff book portal: /staff/login';
+        if (isBookStaffUser(user)) return 'Use the staff portal: /staff/login';
         if (isDoctorUser(user)) return 'Use the doctor portal: /doctor.html';
-        if (r === 'admin') return 'Use the admin portal: /admin.html';
         return 'This account cannot access this portal. Please sign in with the correct account.';
     }
 
@@ -395,6 +410,7 @@
         isScannerUser,
         isAdminPortalUser,
         isBookStaffUser,
+        isStaffPortalUser,
         wrongPortalHint,
         refreshLoginOtpPanel,
         bindLoginForm,

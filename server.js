@@ -79,6 +79,7 @@ const certRender = require('./lib/certificate-render');
 const certTemplateCfg = require('./lib/certificate-template-config');
 const certVerify = require('./lib/certificate-verify');
 const docVerify = require('./lib/application-document-verify');
+const waitingList = require('./lib/waiting-list');
 const seminarPurge = require('./lib/seminar-purge');
 const supplementalPayments = require('./lib/supplemental-payments');
 const bookSales = require('./lib/book-sales');
@@ -125,6 +126,30 @@ function bootstrapTimeoutMs() {
     return 55000;
 }
 
+// Short-lived in-memory cache for expensive read-only public endpoints.
+const _responseCache = new Map();
+function cacheGet(key) {
+    const hit = _responseCache.get(key);
+    if (!hit) return null;
+    if (Date.now() > hit.expAt) {
+        _responseCache.delete(key);
+        return null;
+    }
+    return hit.value;
+}
+function cacheSet(key, value, ttlMs) {
+    _responseCache.set(key, { value, expAt: Date.now() + Math.max(1000, ttlMs || 1000) });
+}
+function cacheInvalidatePrefix(prefix) {
+    for (const k of _responseCache.keys()) {
+        if (k.startsWith(prefix)) _responseCache.delete(k);
+    }
+}
+function setEdgeCache(res, seconds) {
+    const s = Math.max(10, parseInt(seconds, 10) || 60);
+    res.setHeader('Cache-Control', `public, s-maxage=${s}, stale-while-revalidate=30`);
+}
+
 function paymentAmountForSeminar(row) {
     const p = row && row.price != null ? Number(row.price) : NaN;
     return Number.isFinite(p) && p > 0 ? p : 1500;
@@ -154,6 +179,7 @@ function mountPaymentsRoutes() {
         parsePositiveUserId,
         upsertGlobalSetting
     });
+    require('./lib/staff-portal-routes').registerStaffPortalRoutes(app, db, {});
 }
 
 function bootstrapApp(done) {
@@ -171,6 +197,7 @@ function bootstrapApp(done) {
     const runFullMigrations = () => {
         ensureCriticalUserColumns(() => {
             bookSales.ensureBookSalesSchema(db, () => {
+                require('./lib/staff-job-roles').ensureDefaultJobRolesSafe(db, () => {});
                 console.log('[bootstrap] migrations complete');
                 if (done) done();
             });
@@ -463,6 +490,27 @@ app.get('/scanner', (req, res) => {
 app.get('/scanner/', (req, res) => {
     res.redirect(302, '/scanner.html');
 });
+
+const staffPortalHtml = path.join(__dirname, 'public', 'staff.html');
+const adminPortalHtml = path.join(__dirname, 'public', 'admin.html');
+app.get(['/staff/login', '/staff'], (req, res) => {
+    res.sendFile(staffPortalHtml);
+});
+app.get(['/staff/crm', '/staff/crm/'], (req, res) => {
+    res.sendFile(adminPortalHtml);
+});
+
+const portalHtmlAliases = {
+    '/admin': 'admin.html',
+    '/doctor': 'doctor.html',
+    '/judge': 'judge.html'
+};
+for (const [from, file] of Object.entries(portalHtmlAliases)) {
+    app.get(from, (req, res) => {
+        res.redirect(302, '/' + file);
+    });
+}
+
 
 app.get('/certificate/view', (req, res) => {
     certRender.handleViewRequest(db, req, res);
@@ -1021,6 +1069,9 @@ function ensurePortalSchema(next) {
                                             ignoreSchemaMigrationErr(h7prs);
                                         db.run(`ALTER TABLE seminars ADD COLUMN preregistration_end TEXT`, (h7pre) => {
                                             ignoreSchemaMigrationErr(h7pre);
+                                        db.run(`ALTER TABLE seminars ADD COLUMN waiting_list_enabled INTEGER DEFAULT 0`, (h7wl) => {
+                                            ignoreSchemaMigrationErr(h7wl);
+                                        });
                                             ticketScanEvents.ensureTicketScanEventsTable(db, () => {});
                                         db.run(`ALTER TABLE tickets ADD COLUMN ticket_id_string TEXT`, (e2) => {
                                             ignoreSchemaMigrationErr(e2);
@@ -1565,6 +1616,178 @@ function sanitizeFormDataForStorage(formData) {
         if (/_otp$/i.test(k) || k === 'otp' || k === 'otp_code') delete out[k];
     });
     return out;
+}
+
+function identityWord(value) {
+    return String(value || '')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim()
+        .replace(/\s+/g, ' ');
+}
+
+function identityField(formData, userRow, keys) {
+    const src = formData && typeof formData === 'object' ? formData : {};
+    for (const k of keys || []) {
+        const v = src[k];
+        if (v != null && String(v).trim()) return String(v).trim();
+    }
+    for (const k of keys || []) {
+        const v = userRow && userRow[k];
+        if (v != null && String(v).trim()) return String(v).trim();
+    }
+    return '';
+}
+
+function extractDoctorIdentity(formData, userRow) {
+    const emailRaw = identityField(formData, userRow, ['email']);
+    const phoneRaw = identityField(formData, userRow, ['phone', 'mobile', 'contact_number', 'whatsapp']);
+    const fullName = identityWord(
+        [
+            identityField(formData, userRow, ['fname', 'first_name']),
+            identityField(formData, userRow, ['mname', 'middle_name']),
+            identityField(formData, userRow, ['lname', 'last_name'])
+        ]
+            .filter(Boolean)
+            .join(' ')
+    );
+    const registrationNo = identityWord(
+        identityField(formData, userRow, [
+            'registration_no',
+            'registrationNo',
+            'reg_no',
+            'regno',
+            'ncism',
+            'registration_cert_no'
+        ])
+    );
+    const qualification = identityWord(identityField(formData, userRow, ['qualification', 'qual', 'qualifications']));
+    const practitionerType = identityWord(
+        identityField(formData, userRow, ['practitioner_type', 'practitionerType'])
+    );
+    const specialization = identityWord(identityField(formData, userRow, ['specialization', 'speciality']));
+    const dob = identityWord(identityField(formData, userRow, ['dob', 'date_of_birth']));
+    const city = identityWord(identityField(formData, userRow, ['city']));
+    let email = '';
+    let phone = '';
+    const emailV = contactValidation.validateEmail(emailRaw);
+    if (emailV.valid) email = emailV.cleanedEmail;
+    const phoneV = contactValidation.validatePhone(phoneRaw);
+    if (phoneV.valid) phone = phoneV.cleanedPhone;
+    return { email, phone, fullName, registrationNo, qualification, practitionerType, specialization, dob, city };
+}
+
+function coreFormSignature(formData) {
+    const src = formData && typeof formData === 'object' ? formData : {};
+    const ignore = new Set([
+        'certificate_path',
+        'additional_documents',
+        'ncism_certificate_check',
+        'phone_otp',
+        'email_otp',
+        'fieldOtpTokens',
+        'phoneOtpToken',
+        'emailOtpToken'
+    ]);
+    const entries = Object.keys(src)
+        .filter((k) => !ignore.has(k) && !/_otp$/i.test(k))
+        .map((k) => [k, identityWord(src[k])])
+        .filter((x) => x[1]);
+    entries.sort((a, b) => a[0].localeCompare(b[0]));
+    return entries;
+}
+
+function detectDuplicateDoctorApplication(db, userId, formData, cb) {
+    db.get(
+        `SELECT id, first_name, last_name, email, phone, registration_cert_no, qualification, practitioner_type, user_id_string
+         FROM users WHERE id = ?`,
+        [userId],
+        (uErr, self) => {
+            if (uErr) return cb(uErr);
+            const incoming = extractDoctorIdentity(formData, self || {});
+            const incomingSig = coreFormSignature(formData || {});
+            db.all(
+                `SELECT r.id, r.application_no, r.user_id, r.form_data, r.status,
+                        u.user_id_string, u.email, u.phone, u.first_name, u.last_name, u.registration_cert_no, u.qualification, u.practitioner_type
+                 FROM registrations r
+                 JOIN users u ON u.id = r.user_id
+                 WHERE r.user_id != ? AND COALESCE(r.status, '') != 'cancelled'
+                 ORDER BY r.id DESC
+                 LIMIT 3000`,
+                [userId],
+                (err, rows) => {
+                    if (err) return cb(err);
+                    for (const row of rows || []) {
+                        let otherForm = {};
+                        try {
+                            otherForm = JSON.parse(row.form_data || '{}');
+                        } catch (_) {
+                            otherForm = {};
+                        }
+                        const other = extractDoctorIdentity(otherForm, row || {});
+                        if (incoming.phone && other.phone && incoming.phone === other.phone) {
+                            return cb(null, {
+                                reason: 'Duplicate mobile number already exists in another doctor profile.',
+                                confidence: 'high',
+                                matchedBy: 'phone',
+                                existingApplicationId: row.id,
+                                existingApplicationNo: row.application_no,
+                                existingUserId: row.user_id,
+                                existingPortalId: row.user_id_string
+                            });
+                        }
+                        if (incoming.email && other.email && incoming.email === other.email) {
+                            return cb(null, {
+                                reason: 'Duplicate email already exists in another doctor profile.',
+                                confidence: 'high',
+                                matchedBy: 'email',
+                                existingApplicationId: row.id,
+                                existingApplicationNo: row.application_no,
+                                existingUserId: row.user_id,
+                                existingPortalId: row.user_id_string
+                            });
+                        }
+                        const sameCoreSignature =
+                            incomingSig.length >= 5 &&
+                            incomingSig.length === coreFormSignature(otherForm).length &&
+                            incomingSig.every((p, i) => {
+                                const o = coreFormSignature(otherForm)[i];
+                                return o && o[0] === p[0] && o[1] === p[1];
+                            });
+                        if (sameCoreSignature) {
+                            return cb(null, {
+                                reason: 'Application details are identical to an existing doctor application.',
+                                confidence: 'high',
+                                matchedBy: 'full_form_signature',
+                                existingApplicationId: row.id,
+                                existingApplicationNo: row.application_no,
+                                existingUserId: row.user_id,
+                                existingPortalId: row.user_id_string
+                            });
+                        }
+                        let profileMatches = 0;
+                        const profileFields = ['fullName', 'registrationNo', 'qualification', 'practitionerType', 'specialization', 'dob', 'city'];
+                        profileFields.forEach((f) => {
+                            if (incoming[f] && other[f] && incoming[f] === other[f]) profileMatches++;
+                        });
+                        if (incoming.fullName && other.fullName && incoming.fullName === other.fullName && profileMatches >= 4) {
+                            return cb(null, {
+                                reason:
+                                    'A doctor with the same personal/application details already exists. This submission was auto-rejected as probable duplicate.',
+                                confidence: 'medium',
+                                matchedBy: 'profile_similarity',
+                                existingApplicationId: row.id,
+                                existingApplicationNo: row.application_no,
+                                existingUserId: row.user_id,
+                                existingPortalId: row.user_id_string
+                            });
+                        }
+                    }
+                    cb(null, null);
+                }
+            );
+        }
+    );
 }
 
 function enqueueApplicationSubmitted(db, meta, cb) {
@@ -3536,6 +3759,16 @@ app.post('/api/auth/login', withAuxiliaryTables, (req, res) => {
                     return null;
                 }
 
+                if (loginPortal === 'admin' && !isSuperAdminRow(row)) {
+                    const ur = String(row.user_role || '').toLowerCase();
+                    return res.status(403).json({
+                        error:
+                            ur === 'co_admin'
+                                ? 'Co-admin accounts sign in at /staff/login. Your modules open at /staff/crm after sign-in.'
+                                : 'Admin portal login is for the super administrator only. Staff accounts use /staff/login.'
+                    });
+                }
+
                 if (loginPortal === 'staff' && !portalAuthPolicy.canUseStaffBookPortal(row)) {
                     const ur = String(row.user_role || '').toLowerCase();
                     if (ur === 'scanner_portal_user' || ur === 'scanner_dashboard_user') {
@@ -3545,12 +3778,12 @@ app.post('/api/auth/login', withAuxiliaryTables, (req, res) => {
                     }
                     if (ur === 'judge_user' || ur === 'reviewer') {
                         return res.status(403).json({
-                            error: 'Judge accounts must use the judge portal, not the staff book portal.'
+                            error: 'Judge accounts must use the judge portal at /judge.html.'
                         });
                     }
                     return res.status(403).json({
                         error:
-                            'This account cannot use the staff book portal. Use Admin (co-admin) or ask for a Book sales staff role.'
+                            'This account has no staff portal access. Ask the super admin to assign a job role with staff portal modules.'
                     });
                 }
 
@@ -3648,6 +3881,7 @@ app.post('/api/auth/resend-verification', (req, res) => {
 app.get('/api/portal/year', (req, res) => {
     portalTracking.getPortalYear(db, (e, year) => {
         if (e) return res.status(500).json({ error: e.message });
+        setEdgeCache(res, 120);
         res.json({ portalYear: year });
     });
 });
@@ -3664,12 +3898,21 @@ app.put('/api/admin/portal/year', (req, res) => {
     const alignAllActive = !(req.body && req.body.alignAllActive === false);
     portalTracking.setPortalYear(db, upsertGlobalSetting, year, { alignAllActive }, (e) => {
         if (e) return res.status(400).json({ error: e.message });
+        cacheInvalidatePrefix('api:seminars:');
         res.json({ success: true, portalYear: parseInt(year, 10), alignedActiveSeminars: alignAllActive });
     });
 });
 
 // 3. Seminars: current year vs past years
 app.get('/api/seminars', (req, res) => {
+    const cacheKey = `api:seminars:${String((req.query && req.query.bucket) || 'current')}:${String(
+        (req.query && req.query.year) || ''
+    )}`;
+    const cached = cacheGet(cacheKey);
+    if (cached) {
+        setEdgeCache(res, 60);
+        return res.json(cached);
+    }
     const bucket = String((req.query && req.query.bucket) || 'current').toLowerCase();
     portalTracking.getPortalYear(db, (eY, portalYear) => {
         if (eY) return res.status(500).json({ error: eY.message });
@@ -3689,7 +3932,10 @@ app.get('/api/seminars', (req, res) => {
         }
         db.all(sql, params, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-            res.json({ portalYear: activeYear, bucket, seminars: rows || [] });
+            const payload = { portalYear: activeYear, bucket, seminars: rows || [] };
+            cacheSet(cacheKey, payload, 60000);
+            setEdgeCache(res, 60);
+            res.json(payload);
         });
     });
 });
@@ -3899,6 +4145,12 @@ function mergeScrollingAnnouncementsWithOpenSeminars(cms, cb) {
 }
 
 app.get('/api/public/announcements', (req, res) => {
+    const cacheKey = 'api:public:announcements';
+    const cached = cacheGet(cacheKey);
+    if (cached) {
+        setEdgeCache(res, 60);
+        return res.json(cached);
+    }
     loadPublicSiteCms((e, cms) => {
         if (e) return res.status(500).json({ error: e.message });
         mergeScrollingAnnouncementsWithOpenSeminars(cms, (e2, enriched) => {
@@ -3913,19 +4165,28 @@ app.get('/api/public/announcements', (req, res) => {
                     wix: portalUrls.getPortalUrls().wix
                 }
             };
-            res.setHeader('Cache-Control', 'public, max-age=120');
+            cacheSet(cacheKey, out, 60000);
+            setEdgeCache(res, 60);
             res.json(out);
         });
     });
 });
 
 app.get('/api/public/site-cms', (req, res) => {
+    const cacheKey = 'api:public:site-cms';
+    const cached = cacheGet(cacheKey);
+    if (cached) {
+        setEdgeCache(res, 60);
+        return res.json(cached);
+    }
     loadPublicSiteCms((e, cms) => {
         if (e) return res.status(500).json({ error: e.message });
         mergeScrollingAnnouncementsWithOpenSeminars(cms, (e2, enriched) => {
             if (e2) return res.status(500).json({ error: e2.message });
             enrichSiteCmsSpeakers(enriched, (e3, withSpeakers) => {
                 if (e3) return res.status(500).json({ error: e3.message });
+                cacheSet(cacheKey, withSpeakers, 60000);
+                setEdgeCache(res, 60);
                 res.json(withSpeakers);
             });
         });
@@ -4020,6 +4281,8 @@ app.post('/api/admin/site-cms', (req, res) => {
         const payload = JSON.stringify(normalized);
         upsertGlobalSetting('public_site_cms', payload, (err) => {
             if (err) return res.status(500).json({ error: err.message });
+            cacheInvalidatePrefix('api:public:site-cms');
+            cacheInvalidatePrefix('api:public:announcements');
             res.json({ success: true });
         });
     });
@@ -4357,7 +4620,8 @@ app.post('/api/applications/submit', withCertificateUpload, (req, res) => {
         emailOtpToken,
         submitPhoneOtpToken,
         submitEmailOtpToken,
-        fieldOtpTokens
+        fieldOtpTokens,
+        joinWaitlist
     } = req.body;
     userId = parsePositiveUserId(userId);
     if (!userId) {
@@ -4377,6 +4641,7 @@ app.post('/api/applications/submit', withCertificateUpload, (req, res) => {
         } catch (e) {}
     }
     const fieldOtpTokensObj = parseMaybeJson(fieldOtpTokens) || (fieldOtpTokens && typeof fieldOtpTokens === 'object' ? fieldOtpTokens : {});
+    const wantWaitlist = waitingList.parseJoinWaitlistFlag(joinWaitlist);
     
     // Check if user already registered for this event
     db.get(`SELECT id FROM registrations WHERE user_id = ? AND seminar_id = ?`, [userId, seminarId], (err, row) => {
@@ -4388,11 +4653,14 @@ app.post('/api/applications/submit', withCertificateUpload, (req, res) => {
         }
 
         db.get(
-            `SELECT registration_start, registration_end, otp_on_application, otp_on_step1, otp_on_submit, title FROM seminars WHERE id = ? AND is_active = 1`,
+            `SELECT registration_start, registration_end, otp_on_application, otp_on_step1, otp_on_submit, title, waiting_list_enabled, price
+             FROM seminars WHERE id = ? AND is_active = 1`,
             [seminarId],
             (err2, sem) => {
             if (err2) return res.status(500).json({ error: err2.message });
             if (!sem) return res.status(400).json({ error: 'Seminar not found or is not active.' });
+
+            let isWaitlistSubmit = false;
 
             const now = Date.now();
             const rs = seminarDt.parseSeminarMs(sem.registration_start);
@@ -4402,19 +4670,39 @@ app.post('/api/applications/submit', withCertificateUpload, (req, res) => {
                         error: 'Registration for this seminar has not opened yet. Please wait until the scheduled registration date.'
                     });
             }
+            if (wantWaitlist && re != null && !Number.isNaN(re) && now <= re) {
+                return res.status(400).json({
+                    error: 'Waiting list is only available after registration closes. Please use Register now.'
+                });
+            }
             if (re != null && !Number.isNaN(re) && now > re) {
                     return extModules.userHasRegistrationOverride(db, userId, seminarId, (ovErr, hasOverride) => {
                         if (ovErr) return res.status(500).json({ error: ovErr.message });
-                        if (!hasOverride) {
-                return res.status(400).json({ error: 'Registration for this seminar has closed.' });
+                        if (hasOverride) {
+                            continueApplicationSubmit(false);
+                            return;
                         }
-                        continueApplicationSubmit();
+                        if (wantWaitlist && waitingList.isWaitingListEnabled(sem)) {
+                            isWaitlistSubmit = true;
+                            continueApplicationSubmit(true);
+                            return;
+                        }
+                        if (wantWaitlist) {
+                            return res.status(400).json({ error: 'Waiting list is not open for this seminar.' });
+                        }
+                        return res.status(400).json({ error: 'Registration for this seminar has closed.' });
                     });
                 } else {
-                    continueApplicationSubmit();
+                    if (wantWaitlist) {
+                        return res.status(400).json({
+                            error: 'Waiting list is only available after registration closes.'
+                        });
+                    }
+                    continueApplicationSubmit(false);
             }
 
-                function continueApplicationSubmit() {
+                function continueApplicationSubmit(waitlistMode) {
+                    isWaitlistSubmit = !!waitlistMode;
             persistUploadedCertificate(req, (certErr, certPath) => {
                 if (certErr) return res.status(500).json({ error: certErr.message });
                 if (certPath) {
@@ -4462,6 +4750,9 @@ app.post('/api/applications/submit', withCertificateUpload, (req, res) => {
                     }
 
                     function insertRegistration() {
+                        if (isWaitlistSubmit) {
+                            return doInsertRegistration();
+                        }
                         seminarCapacity.assertSeminarHasCapacity(db, seminarId, (capErr, cap) => {
                             if (capErr) return res.status(500).json({ error: capErr.message });
                             if (!cap || !cap.ok) {
@@ -4478,20 +4769,59 @@ app.post('/api/applications/submit', withCertificateUpload, (req, res) => {
 
                     function doInsertRegistration() {
                         const applicationNo = generateId();
+                        const autoRejectDuplicateAndRespond = (dup) => {
+                            const stored = sanitizeFormDataForStorage(formData || {});
+                            const review = {
+                                decision: 'auto_rejected_duplicate',
+                                reason:
+                                    (dup && dup.reason) ||
+                                    'Potential duplicate doctor profile/application detected by identity checks.',
+                                duplicate_match: dup || null,
+                                flagged_at: new Date().toISOString(),
+                                admin_override_allowed: true
+                            };
+                            db.run(
+                                `INSERT INTO registrations (user_id, seminar_id, application_no, status, form_data, doc_review_json)
+                                 VALUES (?, ?, ?, 'rejected', ?, ?)`,
+                                [userId, seminarId, applicationNo, JSON.stringify(stored), JSON.stringify(review)],
+                                function (rejErr) {
+                                    if (rejErr) return res.status(500).json({ error: rejErr.message });
+                                    portalTracking.logRegistrationEvent(
+                                        db,
+                                        this.lastID,
+                                        'rejected',
+                                        'Auto-rejected duplicate profile',
+                                        review.reason,
+                                        () => {}
+                                    );
+                                    return res.status(409).json({
+                                        error:
+                                            'This application was auto-rejected as a possible duplicate profile. Admin can review and reopen if this is a different person.',
+                                        duplicateRejected: true,
+                                        applicationId: this.lastID,
+                                        applicationNo,
+                                        duplicateOf: dup || null
+                                    });
+                                }
+                            );
+                        };
                         const finishInsert = () => {
                         const stored = sanitizeFormDataForStorage(formData || {});
+                        const regStatus = isWaitlistSubmit ? 'waitlisted' : 'submitted';
                         db.run(
-                            `INSERT INTO registrations (user_id, seminar_id, application_no, status, form_data) VALUES (?, ?, ?, 'submitted', ?)`,
-                            [userId, seminarId, applicationNo, JSON.stringify(stored)],
+                            `INSERT INTO registrations (user_id, seminar_id, application_no, status, form_data) VALUES (?, ?, ?, ?, ?)`,
+                            [userId, seminarId, applicationNo, regStatus, JSON.stringify(stored)],
                 function (err3) {
                     if (err3) return res.status(500).json({ error: err3.message });
                                 const newId = this.lastID;
                                 portalTracking.logRegistrationEvent(
                                     db,
                                     newId,
-                                    'submitted',
-                                    'Application submitted',
-                                    'Registration received.',
+                                    regStatus,
+                                    isWaitlistSubmit ? 'Waitlisted' : 'Application submitted',
+                                    isWaitlistSubmit
+                                        ? 'Added to waiting list after registration closed. No payment required yet.'
+                                        : 'Registration received.',
                                     () => {}
                                 );
                                 const seminarTitle = sem.title || 'Seminar';
@@ -4500,11 +4830,24 @@ app.post('/api/applications/submit', withCertificateUpload, (req, res) => {
                                     [userId],
                                     (uerr, urow) => {
                                         const uname = urow ? `${urow.first_name || ''} ${urow.last_name || ''}`.trim() : '';
-                                        enqueueApplicationSubmitted(db, {
-                                            userId,
-                                            seminarId,
-                                            registrationId: newId
-                                        });
+                                        if (!isWaitlistSubmit) {
+                                            enqueueApplicationSubmitted(db, {
+                                                userId,
+                                                seminarId,
+                                                registrationId: newId
+                                            });
+                                        } else {
+                                            notifEngine.notify(db, 'WAITLIST_JOINED', {
+                                                userId,
+                                                seminarId,
+                                                registrationId: newId,
+                                                vars: {
+                                                    application_no: applicationNo,
+                                                    seminar_name: seminarTitle,
+                                                    full_name: uname
+                                                }
+                                            });
+                                        }
                                 activityLog.logFromRequest(db, req, {
                                     user_id: userId,
                                     seminar_id: seminarId,
@@ -4518,11 +4861,19 @@ app.post('/api/applications/submit', withCertificateUpload, (req, res) => {
                                         success: true,
                                         applicationId: newId,
                                         applicationNo,
+                                        waitlisted: isWaitlistSubmit,
                                         ...(extra || {})
                                     };
                                     res.json(payload);
                                 };
                                 const afterVolunteerTicket = () => {
+                                    if (isWaitlistSubmit) {
+                                        if (!otpTokensToConsume.length) return finishResponse();
+                                        return otpLib.consumeVerificationTokens(db, otpTokensToConsume, (cErr) => {
+                                            if (cErr) console.warn('[otp] consume after waitlist:', cErr.message);
+                                            finishResponse();
+                                        });
+                                    }
                                     volunteerTicketFlow.tryFulfillVolunteerAfterRegistration(
                                         db,
                                         volunteerTicketDeps(),
@@ -4561,12 +4912,20 @@ app.post('/api/applications/submit', withCertificateUpload, (req, res) => {
                                 (verr, check) => {
                                     if (verr) console.warn('[ncism-verify]', verr.message);
                                     if (check) formData.ncism_certificate_check = check;
-                                    finishInsert();
+                                    detectDuplicateDoctorApplication(db, userId, formData || {}, (dupErr, dup) => {
+                                        if (dupErr) return res.status(500).json({ error: dupErr.message });
+                                        if (dup) return autoRejectDuplicateAndRespond(dup);
+                                        finishInsert();
+                                    });
                                 }
                             );
                             return;
                         }
-                        finishInsert();
+                        detectDuplicateDoctorApplication(db, userId, formData || {}, (dupErr, dup) => {
+                            if (dupErr) return res.status(500).json({ error: dupErr.message });
+                            if (dup) return autoRejectDuplicateAndRespond(dup);
+                            finishInsert();
+                        });
                     }
 
                     if (otpStep1 || otpSubmit) {
@@ -4968,10 +5327,11 @@ function isPublicListEnabled(val) {
 
 function mapDoctorCertificateTrackingRows(rows) {
     return (rows || []).map((row) => {
-                const scansRequired = certVerify.normalizeCertScansRequired(row.cert_scans_required);
-                const scanCount = Number(row.scan_count) || 0;
+                const view = certVerify.doctorCertificateViewState(row);
+                const scansRequired = view.scansRequired;
+                const scanCount = view.scanCount;
                 const paid = String(row.order_status || '').toLowerCase() === 'success';
-                const checkinComplete = certVerify.ticketMeetsScanRequirement(scanCount, scansRequired);
+                const checkinComplete = view.checkinComplete;
                 let certStatus = 'not_applicable';
                 let certStatusLabel = '—';
                 if (!paid) {
@@ -4981,16 +5341,19 @@ function mapDoctorCertificateTrackingRows(rows) {
                     certStatus = 'awaiting_checkin';
                     certStatusLabel =
                         scansRequired === 2
-                            ? `Check-in ${scanCount}/${scansRequired} scans`
+                            ? `Scans ${scanCount}/${scansRequired} — entry & exit required`
                             : 'Awaiting venue check-in';
                 } else if (!Number(row.cert_enabled)) {
                     certStatus = Number(row.scan_verified) ? 'awaiting_approval' : 'checked_in';
                     certStatusLabel = Number(row.scan_verified)
-                        ? 'Checked in — awaiting certificate approval'
+                        ? 'Scans complete — awaiting certificate approval'
                         : 'Checked in at venue';
                 } else if (!row.template_path) {
                     certStatus = 'approved_pending_design';
                     certStatusLabel = 'Approved — certificate preparing';
+                } else if (view.phase === 'scheduled_release' && view.countdown) {
+                    certStatus = 'scheduled_release';
+                    certStatusLabel = 'Approved — releases on schedule';
                 } else {
                     certStatus = 'issued';
                     certStatusLabel = 'Certificate issued — download available';
@@ -5013,13 +5376,20 @@ function mapDoctorCertificateTrackingRows(rows) {
             templatePath: row.template_path,
             certStatus,
             certStatusLabel,
-            canDownload: !!Number(row.cert_enabled) && !!row.template_path
+            canViewCertificate: view.canViewCertificate,
+            certPhase: view.phase,
+            certHiddenReason: view.hiddenReason,
+            certCountdown: view.countdown,
+            canDownload: view.canViewCertificate
         };
     });
 }
 
 const DOCTOR_CERT_TRACKING_SQL = `SELECT r.id AS registration_id, r.application_no, r.status AS reg_status, r.seminar_id,
                 s.title AS seminar_title, COALESCE(s.cert_scans_required, 1) AS cert_scans_required,
+                s.event_date, COALESCE(s.certificate_verify_enabled, 0) AS certificate_verify_enabled,
+                COALESCE(s.certificate_verify_manual, 0) AS certificate_verify_manual,
+                s.certificate_verify_go_live_at,
                 o.status AS order_status,
                 t.id AS ticket_id, COALESCE(t.scan_count, 0) AS scan_count, COALESCE(t.is_scanned, 0) AS is_scanned,
                 t.scan_time, t.ticket_id_string,
@@ -5459,9 +5829,18 @@ app.post('/api/support/ticket/:trackingId/reply', (req, res) => {
 
 // Notices / Announcements
 app.get('/api/notices', (req, res) => {
+    const cacheKey = 'api:notices';
+    const cached = cacheGet(cacheKey);
+    if (cached) {
+        setEdgeCache(res, 60);
+        return res.json(cached);
+    }
     db.all(`SELECT * FROM notices ORDER BY created_at DESC`, [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(rows || []);
+        const out = rows || [];
+        cacheSet(cacheKey, out, 60000);
+        setEdgeCache(res, 60);
+        res.json(out);
     });
 });
 
@@ -6336,7 +6715,8 @@ app.post('/api/admin/seminars', (req, res) => {
         show_seats_public,
         preregistration_enabled,
         preregistration_start,
-        preregistration_end
+        preregistration_end,
+        waiting_list_enabled
     } = req.body;
     const certScansReq = certVerify.normalizeCertScansRequired(cert_scans_required);
     const rfj = registration_form_json != null && String(registration_form_json).trim() !== '' ? String(registration_form_json) : null;
@@ -6356,6 +6736,8 @@ app.post('/api/admin/seminars', (req, res) => {
         preregistration_enabled === true || preregistration_enabled === 1 || preregistration_enabled === '1'
             ? 1
             : 0;
+    const waitListEnabled =
+        waiting_list_enabled === true || waiting_list_enabled === 1 || waiting_list_enabled === '1' ? 1 : 0;
     const regStart = seminarDt.normalizeSeminarDateTimeForStorage(registration_start);
     const regEnd = seminarDt.normalizeSeminarRegistrationEndForStorage(registration_end);
     const eventDt = seminarDt.normalizeSeminarDateTimeForStorage(event_date);
@@ -6366,8 +6748,8 @@ app.post('/api/admin/seminars', (req, res) => {
         const portalYear =
             Number.isInteger(bodyYear) && bodyYear > 2000 ? bodyYear : defaultYear;
         db.run(
-            `INSERT INTO seminars (title, description, registration_start, registration_end, event_date, capacity, price, checkin_enabled, checkin_date, location_url, terms_conditions, hero_image_path, flyer_path, gallery_paths, registration_form_json, cancellation_policy_json, whatsapp_group_url, otp_on_application, otp_on_step1, otp_on_submit, public_list_enabled, cert_scans_required, portal_year, is_active, show_seats_public, preregistration_enabled, preregistration_start, preregistration_end) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO seminars (title, description, registration_start, registration_end, event_date, capacity, price, checkin_enabled, checkin_date, location_url, terms_conditions, hero_image_path, flyer_path, gallery_paths, registration_form_json, cancellation_policy_json, whatsapp_group_url, otp_on_application, otp_on_step1, otp_on_submit, public_list_enabled, cert_scans_required, portal_year, is_active, show_seats_public, preregistration_enabled, preregistration_start, preregistration_end, waiting_list_enabled) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 title,
                 description,
@@ -6396,12 +6778,15 @@ app.post('/api/admin/seminars', (req, res) => {
                 showSeats,
                 preregEnabled,
                 preregStart,
-                preregEnd
+                preregEnd,
+                waitListEnabled
             ],
             function (err) {
             if (err) return res.status(500).json({ error: err.message });
                 const newId = this.lastID;
                 announceSeminarRegistrationOnCreate(newId, () => {});
+                cacheInvalidatePrefix('api:seminars:');
+                cacheInvalidatePrefix('api:public:announcements');
                 res.json({ success: true, seminarId: newId });
             }
         );
@@ -6438,7 +6823,8 @@ app.put('/api/admin/seminars/:id', (req, res) => {
         show_seats_public,
         preregistration_enabled,
         preregistration_start,
-        preregistration_end
+        preregistration_end,
+        waiting_list_enabled
     } = req.body;
     const certScansReq = certVerify.normalizeCertScansRequired(cert_scans_required);
     const rfj = registration_form_json != null && String(registration_form_json).trim() !== '' ? String(registration_form_json) : null;
@@ -6457,6 +6843,8 @@ app.put('/api/admin/seminars/:id', (req, res) => {
         preregistration_enabled === true || preregistration_enabled === 1 || preregistration_enabled === '1'
             ? 1
             : 0;
+    const waitListEnabled =
+        waiting_list_enabled === true || waiting_list_enabled === 1 || waiting_list_enabled === '1' ? 1 : 0;
     const py = portal_year != null ? parseInt(portal_year, 10) : null;
     const regStart = seminarDt.normalizeSeminarDateTimeForStorage(registration_start);
     const regEnd = seminarDt.normalizeSeminarRegistrationEndForStorage(registration_end);
@@ -6467,7 +6855,7 @@ app.put('/api/admin/seminars/:id', (req, res) => {
         if (ePy) return res.status(500).json({ error: ePy.message });
         const finalPortalYear = Number.isInteger(py) && py > 2000 ? py : defaultYear;
         db.run(
-            `UPDATE seminars SET title=?, description=?, registration_start=?, registration_end=?, event_date=?, capacity=?, price=?, checkin_enabled=?, checkin_date=?, is_active=?, location_url=?, terms_conditions=?, hero_image_path=?, flyer_path=?, gallery_paths=?, registration_form_json=?, cancellation_policy_json=?, whatsapp_group_url=?, otp_on_application=?, otp_on_step1=?, otp_on_submit=?, public_list_enabled=?, cert_scans_required=?, portal_year=?, show_seats_public=?, preregistration_enabled=?, preregistration_start=?, preregistration_end=? WHERE id=?`,
+            `UPDATE seminars SET title=?, description=?, registration_start=?, registration_end=?, event_date=?, capacity=?, price=?, checkin_enabled=?, checkin_date=?, is_active=?, location_url=?, terms_conditions=?, hero_image_path=?, flyer_path=?, gallery_paths=?, registration_form_json=?, cancellation_policy_json=?, whatsapp_group_url=?, otp_on_application=?, otp_on_step1=?, otp_on_submit=?, public_list_enabled=?, cert_scans_required=?, portal_year=?, show_seats_public=?, preregistration_enabled=?, preregistration_start=?, preregistration_end=?, waiting_list_enabled=? WHERE id=?`,
             [
                 title,
                 description,
@@ -6497,10 +6885,13 @@ app.put('/api/admin/seminars/:id', (req, res) => {
                 preregEnabled,
                 preregStart,
                 preregEnd,
+                waitListEnabled,
                 req.params.id
             ],
             function (err) {
             if (err) return res.status(500).json({ error: err.message });
+                cacheInvalidatePrefix('api:seminars:');
+                cacheInvalidatePrefix('api:public:announcements');
                 if (!is_active) {
                     removeSeminarScrollingAnnouncement(parseInt(req.params.id, 10), () => {});
                 }
@@ -6574,6 +6965,8 @@ app.delete('/api/admin/seminars/:id', (req, res) => {
             db.run(`UPDATE seminars SET is_active = 0 WHERE id = ?`, [sid], function (e1) {
                 if (e1) return res.status(500).json({ error: e1.message });
                 if (!this.changes) return res.status(404).json({ error: 'Seminar not found' });
+                cacheInvalidatePrefix('api:seminars:');
+                cacheInvalidatePrefix('api:public:announcements');
                 res.json({
                     success: true,
                     deactivated: true,
@@ -6587,6 +6980,8 @@ app.delete('/api/admin/seminars/:id', (req, res) => {
             db.run(`DELETE FROM seminars WHERE id = ?`, [sid], function (eDel) {
                 if (eDel) return res.status(500).json({ error: eDel.message });
                 if (!this.changes) return res.status(404).json({ error: 'Seminar not found' });
+                cacheInvalidatePrefix('api:seminars:');
+                cacheInvalidatePrefix('api:public:announcements');
                 res.json({ success: true, deleted: true });
             });
         };
@@ -6710,6 +7105,7 @@ app.post('/api/admin/notices', withMemoryAwareUpload('pdf'), (req, res) => {
             [seminar_id || null, message, pdfPath],
             function (err) {
                 if (err) return res.status(500).json({ error: err.message });
+                cacheInvalidatePrefix('api:notices');
                 res.json({ success: true, noticeId: this.lastID });
             }
         );
@@ -6745,7 +7141,7 @@ app.get('/api/admin/seminars/:id/scans', (req, res) => {
 // Admin: Get applications for specific seminar
 app.get('/api/admin/seminars/:id/applications', (req, res) => {
     const query = `
-        SELECT a.id, a.application_no, a.status, a.form_data, a.created_at, u.first_name, u.last_name, u.user_id_string
+        SELECT a.id, a.application_no, a.status, a.form_data, a.doc_review_json, a.created_at, u.first_name, u.last_name, u.user_id_string
         FROM registrations a
         JOIN users u ON a.user_id = u.id
         WHERE a.seminar_id = ?
@@ -6760,7 +7156,7 @@ app.get('/api/admin/seminars/:id/applications', (req, res) => {
 // Admin: Get all applications
 app.get('/api/admin/applications', (req, res) => {
     db.all(`
-        SELECT a.id, a.application_no, a.status, a.form_data, a.created_at, u.first_name, u.last_name, u.user_id_string
+        SELECT a.id, a.application_no, a.status, a.form_data, a.doc_review_json, a.created_at, u.first_name, u.last_name, u.user_id_string
         FROM registrations a
         JOIN users u ON a.user_id = u.id
         ORDER BY a.created_at DESC
@@ -6772,6 +7168,7 @@ app.get('/api/admin/applications', (req, res) => {
 
 const ALLOWED_REGISTRATION_STATUSES = new Set([
     'submitted',
+    'waitlisted',
     'pending_approval',
     'revision_required',
     'documents_requested',
@@ -7100,6 +7497,7 @@ app.post('/api/admin/applications/status', (req, res) => {
                 if (!eN && regRow) {
                     let ev = 'APPLICATION_UNDER_REVIEW';
                     if (newSt === 'approved_pending_payment') ev = 'APPLICATION_APPROVED';
+                    else if (newSt === 'waitlisted') ev = null;
                     else if (newSt === 'rejected') ev = 'APPLICATION_REJECTED';
                     else if (newSt === 'revision_required') ev = 'APPLICATION_REVISION_REQUIRED';
                     else if (newSt === 'cancelled') ev = 'REGISTRATION_CANCELLED';
@@ -7122,7 +7520,14 @@ app.post('/api/admin/applications/status', (req, res) => {
                         });
         
         if (newSt === 'approved_pending_payment') {
-            getOrCreatePendingOrder(applicationId, 1500, () => {});
+            waitingList.offerRegistrationPayment(
+                db,
+                { getOrCreatePendingOrder, notifEngine, paymentAmountForSeminar },
+                applicationId,
+                (payErr) => {
+                    if (payErr) console.warn('[waitlist] offer payment:', payErr.message);
+                }
+            );
         }
         if (
             (newSt === 'e_ticket_issued' || newSt === 'completed') &&
@@ -7155,7 +7560,7 @@ app.post('/api/admin/applications/status', (req, res) => {
             success: true,
             message:
                 newSt === 'approved_pending_payment'
-                    ? 'Status updated. An order was created for payment.'
+                    ? 'Status updated. Payment link sent to the doctor.'
                     : 'Status updated successfully.'
         });
         });
@@ -8213,6 +8618,37 @@ app.post('/api/admin/feedback-form', (req, res) => {
     });
 });
 
+app.get('/api/admin/session', (req, res) => {
+    const aid = parseInt(req.query.actingAdminId, 10);
+    if (!Number.isInteger(aid) || aid < 1) {
+        return res.status(400).json({ error: 'actingAdminId query parameter is required' });
+    }
+    assertAdminPortalActor(aid, (e, adm) => {
+        if (e && e.message === 'BAD_ACTOR') return res.status(400).json({ error: 'actingAdminId is required' });
+        if (e && e.message === 'FORBIDDEN') return res.status(403).json({ error: 'Administrator access required' });
+        if (e) return res.status(500).json({ error: e.message });
+        if (!adm) return res.status(403).json({ error: 'Invalid administrator' });
+        db.get(
+            `SELECT id, user_id_string, first_name, middle_name, last_name, email, phone, role, user_role,
+                    admin_modules, staff_modules, IFNULL(email_verified,1) AS email_verified
+             FROM users WHERE id = ? AND IFNULL(is_disabled,0) = 0`,
+            [aid],
+            (e2, row) => {
+                if (e2) return res.status(500).json({ error: e2.message });
+                if (!row) return res.status(404).json({ error: 'User not found' });
+                const coAdminAccess = require('./lib/co-admin-access');
+                const allowedTabIds = coAdminAccess.coAdminAllowedTabIds(row);
+                res.json({
+                    user: row,
+                    isCoAdmin: String(row.user_role || '').toLowerCase() === 'co_admin',
+                    allowedTabIds,
+                    unrestricted: allowedTabIds == null
+                });
+            }
+        );
+    });
+});
+
 app.get('/api/admin/portal-auth-config', (req, res) => {
     const aid = parseInt(req.query.actingAdminId, 10);
     if (!Number.isInteger(aid) || aid < 1) {
@@ -8690,27 +9126,48 @@ app.post('/api/admin/users/create', (req, res) => {
         adminEmailOtpToken,
         isDemo,
         userIdString,
-        user_id_string
+        user_id_string,
+        jobRoleId
     } = req.body || {};
     const demoFlag =
         isDemo === true || isDemo === 1 || isDemo === '1' || isDemo === 'true' ? 1 : 0;
     const userRoles = require('./lib/user-roles');
+    const staffJobRolesLib = require('./lib/staff-job-roles');
     const createKind = String((req.body && req.body.createKind) || '')
         .trim()
         .toLowerCase();
     let userRole = userRoles.normalizeUserRole(role);
-    if (createKind === 'staff') {
-        if (!userRole || userRole === 'doctor') {
-            return res.status(400).json({
-                error: 'Select a staff role (Judge, Co Admin, Scanner, or Reviewer). Doctor accounts belong under Doctors → Create doctor.'
-            });
+    let jobRoleApply = null;
+
+    const startCreate = () => {
+        if (createKind === 'staff') {
+            if (!userRole || userRole === 'doctor') {
+                return res.status(400).json({
+                    error: 'Select a job role or staff account type. Doctor accounts belong under Doctors → Create doctor.'
+                });
+            }
+            if (!userRoles.ADMIN_CREATABLE_STAFF_ROLES.includes(userRole)) {
+                return res.status(400).json({ error: 'Invalid staff role selected.' });
+            }
+        } else if (!userRole) {
+            userRole = 'doctor';
         }
-        if (!userRoles.ADMIN_CREATABLE_STAFF_ROLES.includes(userRole)) {
-            return res.status(400).json({ error: 'Invalid staff role selected.' });
-        }
-    } else if (!userRole) {
-        userRole = 'doctor';
+        runCreateUserBody();
+    };
+
+    const jrId = parseInt(jobRoleId, 10);
+    if (Number.isInteger(jrId) && jrId > 0) {
+        return db.get(`SELECT * FROM user_roles WHERE id = ?`, [jrId], (eJr, jrRow) => {
+            if (eJr) return res.status(500).json({ error: eJr.message });
+            if (!jrRow) return res.status(400).json({ error: 'Selected job role was not found.' });
+            jobRoleApply = staffJobRolesLib.applyJobRoleToUserPayload(staffJobRolesLib.rowToJobRole(jrRow));
+            if (jobRoleApply.user_role) userRole = jobRoleApply.user_role;
+            startCreate();
+        });
     }
+    startCreate();
+
+    function runCreateUserBody() {
     const roleCol = userRoles.roleColumnForUserRole(userRole);
     const emailNorm = String(email || '')
         .trim()
@@ -8790,19 +9247,41 @@ app.post('/api/admin/users/create', (req, res) => {
                                 }
                                 const newId = saved.id || insertedId;
                                 userAccountLifecycle.stampAccountActivated(db, newId, () => {});
-                                if (userRole === 'book_sales_staff') {
-                                    db.run(
-                                        `UPDATE users SET staff_modules = ? WHERE id = ?`,
-                                        [
-                                            JSON.stringify({
-                                                'book-inventory': true,
-                                                'book-orders': true
-                                            }),
-                                            newId
-                                        ],
-                                        () => {}
-                                    );
-                                }
+                                const applyMods = () => {
+                                    if (jobRoleApply && (jobRoleApply.staff_modules || jobRoleApply.admin_modules)) {
+                                        const sets = [];
+                                        const vals = [];
+                                        if (jobRoleApply.staff_modules) {
+                                            sets.push('staff_modules = ?');
+                                            vals.push(jobRoleApply.staff_modules);
+                                        }
+                                        if (jobRoleApply.admin_modules) {
+                                            sets.push('admin_modules = ?');
+                                            vals.push(jobRoleApply.admin_modules);
+                                        }
+                                        if (sets.length) {
+                                            vals.push(newId);
+                                            db.run(
+                                                `UPDATE users SET ${sets.join(', ')} WHERE id = ?`,
+                                                vals,
+                                                () => {}
+                                            );
+                                        }
+                                    } else if (userRole === 'book_sales_staff') {
+                                        db.run(
+                                            `UPDATE users SET staff_modules = ? WHERE id = ?`,
+                                            [
+                                                JSON.stringify({
+                                                    'book-inventory': true,
+                                                    'book-orders': true
+                                                }),
+                                                newId
+                                            ],
+                                            () => {}
+                                        );
+                                    }
+                                };
+                                applyMods();
                                 notifEngine.notify(
                                     db,
                                     'ACCOUNT_CREATED',
@@ -8868,6 +9347,7 @@ app.post('/api/admin/users/create', (req, res) => {
     },
         { targetUserRole: userRole }
     );
+    }
 });
 
 // Admin: Get Users
@@ -8888,7 +9368,7 @@ app.get('/api/admin/users', (req, res) => {
         );
     };
     const fullCols = `id, user_id_string, first_name, middle_name, last_name, email, phone, role, user_role, doctor_category, doctor_modules, is_disabled,
-                IFNULL(is_banned,0) AS is_banned, ban_reason, IFNULL(is_demo,0) AS is_demo, admin_modules,
+                IFNULL(is_banned,0) AS is_banned, ban_reason, IFNULL(is_demo,0) AS is_demo, admin_modules, staff_modules,
                 created_at, activated_at, last_login_at, IFNULL(email_verified,1) AS email_verified`;
     if (filterQ) {
         return adminUserLookup.searchAdminUsers(db, filterQ, (sErr, matched) => {
@@ -8973,11 +9453,125 @@ app.post('/api/admin/users/:userId/doctor-access', (req, res) => {
     });
 });
 
-// Admin: Get user roles list
+// Admin: Get user roles list (legacy)
 app.get('/api/admin/user-roles', (req, res) => {
     db.all(`SELECT * FROM user_roles`, [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(rows || []);
+    });
+});
+
+const staffJobRoles = require('./lib/staff-job-roles');
+
+app.get('/api/admin/job-roles', (req, res) => {
+    const finish = (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        const mapped = (rows || [])
+            .map((r) => staffJobRoles.rowToJobRole(r))
+            .filter((r) => r && (String(r.role_name || '').startsWith('job_') || (r.permissions && r.permissions.version === staffJobRoles.PERM_VERSION)));
+        res.json(mapped);
+    };
+    staffJobRoles.ensureDefaultJobRolesSafe(db, (seedErr) => {
+        if (seedErr) return res.status(500).json({ error: seedErr.message });
+        db.all(`SELECT * FROM user_roles ORDER BY id ASC`, [], finish);
+    });
+});
+
+app.post('/api/admin/job-roles', (req, res) => {
+    const { role_name, description, portal, user_role, staff_modules, admin_modules, actingAdminId } =
+        req.body || {};
+    const actorId = parseInt(actingAdminId, 10);
+    if (!Number.isInteger(actorId)) return res.status(400).json({ error: 'actingAdminId required' });
+    db.get(`SELECT id, role, user_role FROM users WHERE id = ?`, [actorId], (e, actor) => {
+        if (e) return res.status(500).json({ error: e.message });
+        if (!isSuperAdminRow(actor)) {
+            return res.status(403).json({ error: 'Only the super administrator can manage job roles.' });
+        }
+        const name = String(role_name || '')
+            .trim()
+            .toLowerCase()
+            .replace(/\s+/g, '_');
+        if (!name) return res.status(400).json({ error: 'Role name is required.' });
+        const perm = {
+            version: staffJobRoles.PERM_VERSION,
+            portal: String(portal || 'staff').toLowerCase(),
+            user_role: String(user_role || 'staff_user').toLowerCase(),
+            staff_modules: staff_modules && typeof staff_modules === 'object' ? staff_modules : {},
+            admin_modules: admin_modules && typeof admin_modules === 'object' ? admin_modules : {}
+        };
+        db.run(
+            `INSERT INTO user_roles (role_name, description, permissions) VALUES (?, ?, ?)`,
+            [name, String(description || '').trim(), staffJobRoles.serializePermissions(perm)],
+            function (err2) {
+                if (err2) {
+                    if (/unique|duplicate/i.test(String(err2.message || ''))) {
+                        return res.status(409).json({ error: 'A job role with that name already exists.' });
+                    }
+                    return res.status(500).json({ error: err2.message });
+                }
+                res.json({ success: true, id: this.lastID });
+            }
+        );
+    });
+});
+
+app.put('/api/admin/job-roles/:roleId', (req, res) => {
+    const roleId = parseInt(req.params.roleId, 10);
+    const { description, portal, user_role, staff_modules, admin_modules, actingAdminId } = req.body || {};
+    const actorId = parseInt(actingAdminId, 10);
+    if (!Number.isInteger(roleId) || !Number.isInteger(actorId)) {
+        return res.status(400).json({ error: 'Invalid role or actingAdminId' });
+    }
+    db.get(`SELECT id, role, user_role FROM users WHERE id = ?`, [actorId], (e, actor) => {
+        if (e) return res.status(500).json({ error: e.message });
+        if (!isSuperAdminRow(actor)) {
+            return res.status(403).json({ error: 'Only the super administrator can manage job roles.' });
+        }
+        db.get(`SELECT * FROM user_roles WHERE id = ?`, [roleId], (e2, row) => {
+            if (e2) return res.status(500).json({ error: e2.message });
+            if (!row) return res.status(404).json({ error: 'Job role not found' });
+            const existing = staffJobRoles.parsePermissions(row.permissions) || {};
+            const perm = {
+                version: staffJobRoles.PERM_VERSION,
+                portal: portal != null ? String(portal).toLowerCase() : existing.portal || 'staff',
+                user_role: user_role != null ? String(user_role).toLowerCase() : existing.user_role || 'staff_user',
+                staff_modules:
+                    staff_modules && typeof staff_modules === 'object' ? staff_modules : existing.staff_modules || {},
+                admin_modules:
+                    admin_modules && typeof admin_modules === 'object' ? admin_modules : existing.admin_modules || {}
+            };
+            db.run(
+                `UPDATE user_roles SET description = ?, permissions = ? WHERE id = ?`,
+                [
+                    description != null ? String(description).trim() : row.description,
+                    staffJobRoles.serializePermissions(perm),
+                    roleId
+                ],
+                function (err3) {
+                    if (err3) return res.status(500).json({ error: err3.message });
+                    res.json({ success: true });
+                }
+            );
+        });
+    });
+});
+
+app.delete('/api/admin/job-roles/:roleId', (req, res) => {
+    const roleId = parseInt(req.params.roleId, 10);
+    const actorId = parseInt((req.body && req.body.actingAdminId) || (req.query && req.query.actingAdminId) || '', 10);
+    if (!Number.isInteger(roleId) || !Number.isInteger(actorId)) {
+        return res.status(400).json({ error: 'Invalid role or actingAdminId' });
+    }
+    db.get(`SELECT id, role, user_role FROM users WHERE id = ?`, [actorId], (e, actor) => {
+        if (e) return res.status(500).json({ error: e.message });
+        if (!isSuperAdminRow(actor)) {
+            return res.status(403).json({ error: 'Only the super administrator can manage job roles.' });
+        }
+        db.run(`DELETE FROM user_roles WHERE id = ?`, [roleId], function (err2) {
+            if (err2) return res.status(500).json({ error: err2.message });
+            if (!this.changes) return res.status(404).json({ error: 'Job role not found' });
+            res.json({ success: true });
+        });
     });
 });
 
@@ -9410,10 +10004,102 @@ app.post('/api/admin/users/:userId/modules', (req, res) => {
         if (!isSuperAdminRow(actor)) {
             return res.status(403).json({ error: 'Only the super administrator can configure co-admin modules.' });
         }
-        const payload = JSON.stringify(admin_modules && typeof admin_modules === 'object' ? admin_modules : {});
-        db.run(`UPDATE users SET admin_modules = ? WHERE id = ?`, [payload, targetId], function (err2) {
-            if (err2) return res.status(500).json({ error: err2.message });
-            res.json({ success: true });
+        const adminMods = admin_modules && typeof admin_modules === 'object' ? admin_modules : {};
+        const payload = JSON.stringify(adminMods);
+        const staffSync = require('./lib/staff-portal-sync').adminModulesToStaffModules(adminMods);
+        const staffPayload = JSON.stringify(staffSync);
+        db.run(
+            `UPDATE users SET admin_modules = ?, staff_modules = ? WHERE id = ?`,
+            [payload, staffPayload, targetId],
+            function (err2) {
+                if (err2) return res.status(500).json({ error: err2.message });
+                res.json({ success: true });
+            }
+        );
+    });
+});
+
+app.post('/api/admin/users/:userId/staff-modules', (req, res) => {
+    const targetId = parseInt(req.params.userId, 10);
+    const { staff_modules, actingAdminId } = req.body || {};
+    const actorId = parseInt(actingAdminId, 10);
+    if (!Number.isInteger(targetId) || !Number.isInteger(actorId)) {
+        return res.status(400).json({ error: 'actingAdminId and user path id are required' });
+    }
+    db.get(`SELECT id, role, user_role FROM users WHERE id = ?`, [actorId], (e, actor) => {
+        if (e) return res.status(500).json({ error: e.message });
+        if (!isSuperAdminRow(actor)) {
+            return res.status(403).json({ error: 'Only the super administrator can configure staff portal modules.' });
+        }
+        db.get(`SELECT id, user_role FROM users WHERE id = ?`, [targetId], (e2, target) => {
+            if (e2) return res.status(500).json({ error: e2.message });
+            if (!target) return res.status(404).json({ error: 'User not found' });
+            const ur = String(target.user_role || '').toLowerCase();
+            const staffPortalRoles = new Set(['co_admin', 'book_sales_staff', 'staff_user']);
+            if (!staffPortalRoles.has(ur)) {
+                return res.status(400).json({
+                    error: 'Staff portal modules apply to co-admin, staff user, and book sales staff accounts.'
+                });
+            }
+            if (ur === 'co_admin') {
+                return res.status(400).json({
+                    error: 'Co-admins are configured under Admin modules, not Portal access.'
+                });
+            }
+            const staffMods = staff_modules && typeof staff_modules === 'object' ? staff_modules : {};
+            const payload = JSON.stringify(staffMods);
+            db.run(`UPDATE users SET staff_modules = ? WHERE id = ?`, [payload, targetId], function (err3) {
+                if (err3) return res.status(500).json({ error: err3.message });
+                res.json({ success: true });
+            });
+        });
+    });
+});
+
+app.post('/api/admin/users/:userId/apply-job-role', (req, res) => {
+    const targetId = parseInt(req.params.userId, 10);
+    const jobRoleId = parseInt((req.body && req.body.jobRoleId) || '', 10);
+    const actorId = parseInt((req.body && req.body.actingAdminId) || '', 10);
+    if (!Number.isInteger(targetId) || !Number.isInteger(jobRoleId) || !Number.isInteger(actorId)) {
+        return res.status(400).json({ error: 'userId, jobRoleId, and actingAdminId are required' });
+    }
+    const userRoles = require('./lib/user-roles');
+    db.get(`SELECT id, role, user_role FROM users WHERE id = ?`, [actorId], (e, actor) => {
+        if (e) return res.status(500).json({ error: e.message });
+        if (!isSuperAdminRow(actor)) {
+            return res.status(403).json({ error: 'Only the super administrator can apply job roles.' });
+        }
+        db.get(`SELECT * FROM user_roles WHERE id = ?`, [jobRoleId], (e2, jrRow) => {
+            if (e2) return res.status(500).json({ error: e2.message });
+            if (!jrRow) return res.status(404).json({ error: 'Job role not found' });
+            db.get(`SELECT id, user_role FROM users WHERE id = ?`, [targetId], (e3, target) => {
+                if (e3) return res.status(500).json({ error: e3.message });
+                if (!target) return res.status(404).json({ error: 'User not found' });
+                const applied = staffJobRoles.applyJobRoleToUserPayload(staffJobRoles.rowToJobRole(jrRow));
+                const newRole = applied.user_role || target.user_role;
+                const roleCol = userRoles.roleColumnForUserRole(newRole);
+                const sets = ['user_role = ?', 'role = ?'];
+                const vals = [newRole, roleCol];
+                if (applied.staff_modules != null) {
+                    sets.push('staff_modules = ?');
+                    vals.push(applied.staff_modules);
+                }
+                if (applied.admin_modules != null) {
+                    sets.push('admin_modules = ?');
+                    vals.push(applied.admin_modules);
+                } else if (String(newRole).toLowerCase() !== 'co_admin') {
+                    sets.push('admin_modules = NULL');
+                }
+                vals.push(targetId);
+                db.run(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`, vals, function (err4) {
+                    if (err4) return res.status(500).json({ error: err4.message });
+                    res.json({
+                        success: true,
+                        user_role: newRole,
+                        message: 'Job role applied. User must sign in again at their portal.'
+                    });
+                });
+            });
         });
     });
 });
@@ -10523,32 +11209,41 @@ app.post('/api/admin/contact-inquiries/:id/send-email', async (req, res) => {
         db.get(`SELECT * FROM contact_inquiries WHERE id = ?`, [id], async (e2, row) => {
             if (e2) return res.status(500).json({ error: e2.message });
             if (!row) return res.status(404).json({ error: 'Inquiry not found' });
-            const replyIntro =
-                'Thank you for contacting the Vaidya Gogate Memorial Foundation.\n\nRegarding your message: "' +
-                String(row.subject || '').slice(0, 120) +
-                '"\n\n';
-            const fullBody = replyIntro + b;
-            const result = await adminComposeMail.sendSingleMail({
-                to: row.email,
-                name: row.name,
-                subject: sub,
-                body: fullBody,
-                replyTo: adm.email || undefined
-            });
-            if (!result.ok) {
-                return res.status(result.skipped ? 503 : 500).json({
-                    error: result.error || 'Send failed',
-                    hint: result.hint || null
-                });
-            }
-            const noteLine = '[Email sent ' + new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) + '] ' + sub;
-            const mergedNotes = row.admin_notes ? row.admin_notes + '\n' + noteLine : noteLine;
-            db.run(
-                `UPDATE contact_inquiries SET status = 'replied', admin_notes = ?, replied_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
-                [mergedNotes, id],
-                (e3) => {
-                    if (e3) return res.status(500).json({ error: e3.message });
-                    res.json({ success: true, message: 'Email sent to ' + row.email });
+            const staffDisplay = require('./lib/staff-display-name');
+            db.get(
+                `SELECT id, first_name, middle_name, last_name, email FROM users WHERE id = ?`,
+                [aid],
+                async (eStaff, staffRow) => {
+                    if (eStaff) return res.status(500).json({ error: eStaff.message });
+                    const replyIntro =
+                        'Thank you for contacting the Vaidya Gogate Memorial Foundation.\n\nRegarding your message: "' +
+                        String(row.subject || '').slice(0, 120) +
+                        '"\n\n';
+                    const fullBody = replyIntro + b;
+                    const result = await adminComposeMail.sendSingleMail({
+                        to: row.email,
+                        name: row.name,
+                        subject: sub,
+                        body: fullBody,
+                        replyTo: (staffRow && staffRow.email) || undefined,
+                        fromDisplay: staffDisplay.formatStaffFromDisplay(staffRow)
+                    });
+                    if (!result.ok) {
+                        return res.status(result.skipped ? 503 : 500).json({
+                            error: result.error || 'Send failed',
+                            hint: result.hint || null
+                        });
+                    }
+                    const noteLine = '[Email sent ' + new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) + '] ' + sub;
+                    const mergedNotes = row.admin_notes ? row.admin_notes + '\n' + noteLine : noteLine;
+                    db.run(
+                        `UPDATE contact_inquiries SET status = 'replied', admin_notes = ?, replied_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+                        [mergedNotes, id],
+                        (e3) => {
+                            if (e3) return res.status(500).json({ error: e3.message });
+                            res.json({ success: true, message: 'Email sent to ' + row.email });
+                        }
+                    );
                 }
             );
         });
@@ -10582,17 +11277,26 @@ app.post('/api/admin/email/send', (req, res) => {
         if (e && e.message === 'BAD_ACTOR') return res.status(400).json({ error: 'actingAdminId is required' });
         if (e && e.message === 'FORBIDDEN') return res.status(403).json({ error: 'Administrator access required' });
         if (e) return res.status(500).json({ error: e.message });
-        const result = await adminComposeMail.sendSingleMail({
-            to,
-            name,
-            subject,
-            body,
-            audience: 'single_email'
-        });
-        if (!result.ok) {
-            return res.status(result.skipped ? 503 : 500).json({ error: result.error || 'Send failed', hint: result.hint });
-        }
-        res.json({ success: true, message: 'Email sent.' });
+        const staffDisplay = require('./lib/staff-display-name');
+        db.get(
+            `SELECT id, first_name, middle_name, last_name, email FROM users WHERE id = ?`,
+            [aid],
+            async (eStaff, staffRow) => {
+                if (eStaff) return res.status(500).json({ error: eStaff.message });
+                const result = await adminComposeMail.sendSingleMail({
+                    to,
+                    name,
+                    subject,
+                    body,
+                    audience: 'single_email',
+                    fromDisplay: staffDisplay.formatStaffFromDisplay(staffRow)
+                });
+                if (!result.ok) {
+                    return res.status(result.skipped ? 503 : 500).json({ error: result.error || 'Send failed', hint: result.hint });
+                }
+                res.json({ success: true, message: 'Email sent.' });
+            }
+        );
     });
 });
 
@@ -10617,16 +11321,34 @@ app.post('/api/admin/email/bulk', (req, res) => {
                 if (!recipients.length) {
                     return res.json({ success: true, queued: 0, total: 0, message: 'No recipients with valid email.' });
                 }
-                adminComposeMail.sendBulkMail(db, { recipients, subject, body, useQueue: true }, (err2, out) => {
-                    if (err2) return res.status(500).json({ error: err2.message });
-                    res.json({
-                        success: true,
-                        queued: out.queued,
-                        failed: out.failed,
-                        total: out.total,
-                        message: 'Queued ' + out.queued + ' email(s). Delivery runs within about a minute.'
-                    });
-                });
+                const staffDisplay = require('./lib/staff-display-name');
+                db.get(
+                    `SELECT id, first_name, middle_name, last_name FROM users WHERE id = ?`,
+                    [aid],
+                    (eStaff, staffRow) => {
+                        if (eStaff) return res.status(500).json({ error: eStaff.message });
+                        adminComposeMail.sendBulkMail(
+                            db,
+                            {
+                                recipients,
+                                subject,
+                                body,
+                                useQueue: true,
+                                fromDisplay: staffDisplay.formatStaffFromDisplay(staffRow)
+                            },
+                            (err2, out) => {
+                                if (err2) return res.status(500).json({ error: err2.message });
+                                res.json({
+                                    success: true,
+                                    queued: out.queued,
+                                    failed: out.failed,
+                                    total: out.total,
+                                    message: 'Queued ' + out.queued + ' email(s). Delivery runs within about a minute.'
+                                });
+                            }
+                        );
+                    }
+                );
             }
         );
     });
@@ -10739,15 +11461,21 @@ const SUPPORT_TICKET_LIST_COLS = `st.id, st.user_id, st.category, st.subject, st
     st.ticket_id AS ticket_id_raw, st.tracking_id,
     COALESCE(NULLIF(TRIM(st.ticket_id), ''), NULLIF(TRIM(st.tracking_id), '')) AS ticket_id`;
 
+const staffDisplay = require('./lib/staff-display-name');
+
 function resolveSupportTicketByRef(ticketRef, cb) {
     const ref = String(ticketRef || '').trim();
     if (!ref) return cb(new Error('Ticket id required'));
     db.get(
         `SELECT st.id, st.ticket_id, st.tracking_id, st.user_id, st.category, st.subject, st.description,
                 st.priority, st.status, st.expected_response_at, st.created_at, st.updated_at, st.attachment_path,
-                u.first_name, u.last_name, u.email
+                st.assigned_to_admin,
+                u.first_name, u.last_name, u.email,
+                aa.first_name AS assigned_admin_first_name, aa.middle_name AS assigned_admin_middle_name,
+                aa.last_name AS assigned_admin_last_name
          FROM support_tickets st
          LEFT JOIN users u ON st.user_id = u.id
+         LEFT JOIN users aa ON aa.id = st.assigned_to_admin
          WHERE TRIM(COALESCE(st.ticket_id, '')) = TRIM(?)
             OR TRIM(COALESCE(st.tracking_id, '')) = TRIM(?)
             OR CAST(st.id AS TEXT) = TRIM(?)`,
@@ -10820,17 +11548,23 @@ function fetchTicketMessages(ticketRow, cb) {
             if (e2) return cb(e2);
             const all = [...(newMsgs || []), ...(legacyMsgs || [])];
             all.sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
-            if (!all.length && ticketRow.description) {
-                all.push({
+            const enriched = staffDisplay.enrichSupportMessages(all);
+            if (!enriched.length && ticketRow.description) {
+                enriched.push({
                     id: 'initial_description',
                     message: ticketRow.description,
                     created_at: ticketRow.created_at,
                     sender_type: 'user',
                     first_name: ticketRow.first_name || 'Doctor',
-                    last_name: ticketRow.last_name || ''
+                    last_name: ticketRow.last_name || '',
+                    sender_display_name: staffDisplay.formatSupportMessageSenderLabel({
+                        sender_type: 'user',
+                        first_name: ticketRow.first_name,
+                        last_name: ticketRow.last_name
+                    })
                 });
             }
-            cb(null, all);
+            cb(null, enriched);
         });
     });
 }
@@ -10842,7 +11576,16 @@ function getSupportTicketPayload(ticketRef, cb) {
         fetchTicketMessages(ticket, (e2, messages) => {
             if (e2) return cb(e2);
             const tid = canonicalTicketMessageId(ticket);
-            cb(null, Object.assign({}, ticket, { ticket_id: tid, messages: messages || [] }));
+            const assignedAdminName = staffDisplay.formatStaffPersonName({
+                first_name: ticket.assigned_admin_first_name,
+                middle_name: ticket.assigned_admin_middle_name,
+                last_name: ticket.assigned_admin_last_name
+            });
+            cb(null, Object.assign({}, ticket, {
+                ticket_id: tid,
+                messages: messages || [],
+                assigned_admin_name: assignedAdminName !== 'Support team' ? assignedAdminName : ''
+            }));
         });
     });
 }
@@ -11057,6 +11800,7 @@ app.post('/api/support-ticket/:ticketId/reply', (req, res) => {
                             canonical,
                             senderType,
                             msg,
+                            senderId,
                             (nErr) => {
                                 if (nErr) console.warn('[support-ticket] reply notify:', nErr.message);
                                 flushNotificationQueue();
@@ -11325,8 +12069,13 @@ app.post('/api/admin/e-tickets/send', (req, res) => {
 app.get('/api/admin/support-tickets', (req, res) => {
     const { status, category, priority } = req.query;
     let query = `SELECT ${SUPPORT_TICKET_LIST_COLS},
-                        u.first_name, u.last_name, u.email FROM support_tickets st 
-                 LEFT JOIN users u ON st.user_id = u.id WHERE 1=1`;
+                        u.first_name, u.last_name, u.email,
+                        aa.first_name AS assigned_admin_first_name, aa.middle_name AS assigned_admin_middle_name,
+                        aa.last_name AS assigned_admin_last_name
+                 FROM support_tickets st 
+                 LEFT JOIN users u ON st.user_id = u.id
+                 LEFT JOIN users aa ON aa.id = st.assigned_to_admin
+                 WHERE 1=1`;
     const params = [];
     
     if (status) {
@@ -11346,7 +12095,18 @@ app.get('/api/admin/support-tickets', (req, res) => {
     
     db.all(query, params, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(rows || []);
+        res.json(
+            (rows || []).map((r) => {
+                const assigned = staffDisplay.formatStaffPersonName({
+                    first_name: r.assigned_admin_first_name,
+                    middle_name: r.assigned_admin_middle_name,
+                    last_name: r.assigned_admin_last_name
+                });
+                return Object.assign({}, r, {
+                    assigned_admin_name: assigned !== 'Support team' ? assigned : ''
+                });
+            })
+        );
     });
 });
 
@@ -11372,6 +12132,7 @@ app.put('/api/admin/support-ticket/:ticketId/status', (req, res) => {
                     canonical,
                     oldStatus,
                     status,
+                    adminId,
                     (nErr) => {
                         if (nErr) console.warn('[support-ticket] status notify:', nErr.message);
                         flushNotificationQueue();

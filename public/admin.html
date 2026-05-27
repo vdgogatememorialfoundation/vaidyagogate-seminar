@@ -64,7 +64,7 @@
         <div style="background: white; padding: 36px; border-radius: 16px; width: 420px; max-width: 94vw; box-shadow: 0 24px 60px rgba(14,116,144,0.18); border: 1px solid #bae6fd;">
             <div data-site-logo data-logo-height="48px" style="margin-bottom:12px;"></div>
             <h2 style="color: #0d9488; margin-bottom: 8px; font-size: 1.35rem;">Admin portal login</h2>
-            <p style="color: #64748b; font-size: 0.88rem; margin-bottom: 18px; text-align: left;">Staff and super administrators sign in here with email and password only (no login OTP).</p>
+            <p style="color: #64748b; font-size: 0.88rem; margin-bottom: 18px; text-align: left;">Super administrator sign-in only. Co-admins and staff use <a href="/staff/login">/staff/login</a>.</p>
             <form id="admin-login-form" autocomplete="off">
                 <input type="email" id="admin-email" name="admin-portal-email" placeholder="Admin email" required autocomplete="off" autocapitalize="off" spellcheck="false">
                 <input type="password" id="admin-password" name="admin-portal-password" placeholder="Password" style="margin-top: 12px;" required autocomplete="new-password">
@@ -159,6 +159,16 @@
                     </div>
                     <div id="admin-user-lookup-matches" style="margin-top:8px;"></div>
                     <p id="admin-user-lookup-msg" style="margin:8px 0 0;font-size:0.85rem;color:#64748b;"></p>
+                </div>
+                <div class="card" id="staff-job-roles-card" style="margin-bottom:16px;">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:12px;">
+                        <div>
+                            <h3 style="margin:0;">Job roles</h3>
+                            <p style="margin:4px 0 0;font-size:0.82rem;color:#64748b;">Templates for staff portal access (applications, books, tickets, etc.). Judge and scanner roles use their own apps — not /staff/login.</p>
+                        </div>
+                        <button type="button" class="btn-primary" id="btn-new-job-role" style="display:none;" onclick="openJobRoleEditor()">+ New job role</button>
+                    </div>
+                    <div id="staff-job-roles-root"><p style="color:#64748b;">Loading job roles…</p></div>
                 </div>
                 <div class="card">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 15px;align-items:center;flex-wrap:wrap;gap:12px;">
@@ -431,7 +441,7 @@
 
             <div id="tab-email-compose" class="tab-pane hidden">
                 <h2 style="margin-bottom:8px;">Send email</h2>
-                <p style="color:#64748b;margin:-4px 0 16px;">Single message or bulk to doctors, seminar registrants, or any email list (max 500 per send).</p>
+                <p style="color:#64748b;margin:-4px 0 16px;">Single message or bulk to doctors, seminar registrants, or any email list (max 500 per send). Outgoing mail shows your name as <em>Your Name | Vaidya Gogate Memorial Foundation</em> (from the signed-in staff account).</p>
                 <div class="card" style="margin-bottom:16px;">
                     <h3 style="margin:0 0 12px;">Single email</h3>
                     <div style="max-width:720px;display:grid;gap:10px;">
@@ -1093,7 +1103,7 @@
                     </div>
                     <div class="card" style="padding:18px;margin-bottom:14px;">
                         <h3 style="margin:0 0 12px;">Books</h3>
-                        <p style="font-size:0.85rem;color:#64748b;margin:0 0 10px;">Add, remove, or price books. Custom books beyond Agnikarma/Viddhakarma can be added below.</p>
+                        <p style="font-size:0.85rem;color:#64748b;margin:0 0 10px;">Add, remove, or price books. Set stock per book and language under the <strong>Stock inventory</strong> tab.</p>
                         <div id="bs-books-rows"></div>
                         <button type="button" class="btn-primary" style="margin-top:8px;padding:6px 14px;font-size:0.85rem;background:#0d9488;" onclick="bsAddBookRow()">+ Add book</button>
                     </div>
@@ -1105,7 +1115,7 @@
                 <div id="bs-panel-inventory" class="hidden">
                     <div class="card" style="padding:18px;">
                         <h3 style="margin:0 0 8px;color:#0369a1;">Stock inventory</h3>
-                        <p style="font-size:0.85rem;color:#64748b;margin:0 0 12px;">Set quantity on hand per book and language. Orders check stock on place and confirm. Leave at 0 only if you do not track that SKU.</p>
+                        <p style="font-size:0.85rem;color:#64748b;margin:0 0 12px;">Set quantity on hand per book and language. Orders check stock when placed and confirmed. Use <strong>Orders → View</strong> to remove out-of-stock lines — the bill recalculates automatically.</p>
                         <div id="bs-inventory-table"><p style="color:#64748b;">Loading…</p></div>
                         <button type="button" class="btn-primary" style="margin-top:12px;background:#0369a1;" onclick="saveBsInventory()">Save inventory</button>
                         <p id="bs-inventory-msg" style="margin-top:8px;font-weight:600;"></p>
@@ -1128,6 +1138,7 @@
                         <span id="bs-orders-autorefresh-badge" style="font-size:0.78rem;color:#0d9488;"></span>
                     </div>
                     <div id="bs-orders-table"><p style="color:#64748b;">Loading…</p></div>
+                    <p style="font-size:0.82rem;color:#64748b;margin-top:8px;">Click <strong>View</strong> to see all items, cancel unavailable books, and check the updated bill.</p>
                 </div>
 
                 <!-- POS panel -->
@@ -1177,7 +1188,7 @@
                 <div id="bs-tracking-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9998;align-items:center;justify-content:center;padding:16px;overflow-y:auto;">
                     <div style="background:#fff;border-radius:16px;width:580px;max-width:100%;max-height:92vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.25);">
                         <div style="padding:16px 20px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:#fff;z-index:1;border-radius:16px 16px 0 0;">
-                            <h3 style="margin:0;font-size:1rem;color:#0f172a;">Order tracking</h3>
+                            <h3 style="margin:0;font-size:1rem;color:#0f172a;">Order details &amp; tracking</h3>
                             <button type="button" onclick="if(_bsTrackPollTimer){clearInterval(_bsTrackPollTimer);_bsTrackPollTimer=null;}document.getElementById('bs-tracking-modal').style.display='none'" style="background:none;border:none;cursor:pointer;color:#64748b;font-size:1.4rem;line-height:1;padding:0 4px;">×</button>
                         </div>
                         <div id="bs-tracking-body" style="padding:16px 20px;"><p style="color:#64748b;">Loading…</p></div>
@@ -1303,7 +1314,8 @@
                                     </div>
                                     <div>
                                         <label style="display:block;font-size:0.78rem;font-weight:700;color:#374151;margin-bottom:4px;">AWB / tracking number *</label>
-                                        <input type="text" id="bs-courier-tracking" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:0.88rem;" placeholder="e.g. PP271657042IN" oninput="bsCourierPreviewTracking()">
+                                        <input type="text" id="bs-courier-tracking" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:0.88rem;" placeholder="e.g. PP271657042IN" oninput="bsCourierPreviewTracking()" autocomplete="off">
+                                        <p style="font-size:0.72rem;color:#64748b;margin:6px 0 0;">Past carrier scans load automatically when you enter the AWB (even if the parcel moved before you saved it here).</p>
                                     </div>
                                 </div>
                                 <p id="bs-courier-track-preview" style="margin:0 0 10px;font-size:0.8rem;"></p>
@@ -2103,11 +2115,75 @@
         <div style="background: white; padding: 28px; border-radius: 16px; width: 520px; max-width: 94vw; max-height: 90vh; overflow-y: auto; position: relative; border: 1px solid #bae6fd;">
             <button type="button" onclick="document.getElementById('admin-modules-modal').classList.add('hidden')" style="position: absolute; top: 16px; right: 16px; background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
             <h2 style="color:#0c4a6e;margin-bottom:8px;">Co-admin modules</h2>
-            <p style="color:#64748b;font-size:0.88rem;margin-bottom:16px;">Tick the sections this co-admin may open. <strong>Leave every box unchecked and save</strong> to clear the map — they will then have access to all modules until you restrict again.</p>
+            <p style="color:#64748b;font-size:0.88rem;margin-bottom:16px;">Tick what this co-admin may use. Use the <strong>Staff portal</strong> section to control <code>/staff/login</code> tabs (only those items appear there). Use <strong>Admin portal only</strong> for extra CRM sidebar items. To grant everything, use <strong>Apply job role → Co-admin full</strong> or leave all unchecked only if the account has never been restricted.</p>
             <p style="font-size:0.82rem;color:#475569;margin-bottom:12px;">User: <strong id="admin-modules-user-label"></strong></p>
             <input type="hidden" id="admin-modules-target-user-id" value="">
             <div id="admin-modules-checkboxes" style="display:grid;gap:10px;"></div>
             <button type="button" class="btn-primary" style="margin-top:18px;width:100%;" onclick="saveAdminModulesForTarget()">Save module access</button>
+        </div>
+    </div>
+
+    <!-- Book sales staff portal modules (super admin only) -->
+    <div id="staff-modules-modal" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10001; display: flex; align-items: center; justify-content: center;">
+        <div style="background: white; padding: 28px; border-radius: 16px; width: 520px; max-width: 94vw; max-height: 90vh; overflow-y: auto; position: relative; border: 1px solid #d1fae5;">
+            <button type="button" onclick="document.getElementById('staff-modules-modal').classList.add('hidden')" style="position: absolute; top: 16px; right: 16px; background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+            <h2 style="color:#065f46;margin-bottom:8px;">Staff portal modules</h2>
+            <p style="color:#64748b;font-size:0.88rem;margin-bottom:16px;">For <strong>book sales staff</strong> and <strong>staff user</strong> accounts only. Co-admins are configured under <strong>Admin modules</strong>.</p>
+            <p style="font-size:0.82rem;color:#475569;margin-bottom:12px;">User: <strong id="staff-modules-user-label"></strong></p>
+            <input type="hidden" id="staff-modules-target-user-id" value="">
+            <div id="staff-modules-checkboxes" style="display:grid;gap:10px;"></div>
+            <button type="button" class="btn-primary" style="margin-top:18px;width:100%;" onclick="saveStaffModulesForTarget()">Save portal access</button>
+        </div>
+    </div>
+
+    <!-- Job role editor (super admin) -->
+    <div id="job-role-modal" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10001; display: flex; align-items: center; justify-content: center;">
+        <div style="background: white; padding: 28px; border-radius: 16px; width: 560px; max-width: 94vw; max-height: 90vh; overflow-y: auto; position: relative; border: 1px solid #c7d2fe;">
+            <button type="button" onclick="document.getElementById('job-role-modal').classList.add('hidden')" style="position: absolute; top: 16px; right: 16px; background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+            <h2 style="color:#3730a3;margin-bottom:8px;" id="job-role-modal-title">Job role</h2>
+            <input type="hidden" id="job-role-edit-id" value="">
+            <label style="display:block;font-size:0.8rem;font-weight:700;margin-bottom:4px;">Role key (no spaces)</label>
+            <input type="text" id="job-role-name" placeholder="e.g. applications_reviewer" style="width:100%;margin-bottom:10px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;">
+            <label style="display:block;font-size:0.8rem;font-weight:700;margin-bottom:4px;">Description</label>
+            <input type="text" id="job-role-description" placeholder="Shown when creating users" style="width:100%;margin-bottom:10px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;">
+            <label style="display:block;font-size:0.8rem;font-weight:700;margin-bottom:4px;">Login portal</label>
+            <select id="job-role-portal" style="width:100%;margin-bottom:10px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;" onchange="onJobRolePortalChange()">
+                <option value="staff">Staff portal (/staff/login)</option>
+                <option value="admin">Co-admin (admin + staff)</option>
+                <option value="judge">Judge portal (/judge.html)</option>
+                <option value="scanner">Scanner portal (/scanner.html)</option>
+            </select>
+            <label style="display:block;font-size:0.8rem;font-weight:700;margin-bottom:4px;">Account type (user_role)</label>
+            <select id="job-role-user-role" style="width:100%;margin-bottom:12px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;">
+                <option value="staff_user">Staff user (operations)</option>
+                <option value="book_sales_staff">Book sales staff</option>
+                <option value="co_admin">Co-admin</option>
+                <option value="judge_user">Judge</option>
+                <option value="scanner_portal_user">Scanner volunteer</option>
+                <option value="reviewer">Reviewer</option>
+            </select>
+            <div id="job-role-staff-modules-wrap">
+                <p style="font-size:0.85rem;color:#475569;margin:0 0 8px;font-weight:600;">Staff portal modules</p>
+                <div id="job-role-staff-modules" style="display:grid;gap:8px;margin-bottom:12px;"></div>
+            </div>
+            <div id="job-role-admin-modules-wrap" class="hidden">
+                <p style="font-size:0.85rem;color:#475569;margin:0 0 8px;font-weight:600;">Admin sidebar (co-admin only)</p>
+                <div id="job-role-admin-modules" style="display:grid;gap:8px;max-height:180px;overflow-y:auto;margin-bottom:12px;"></div>
+            </div>
+            <button type="button" class="btn-primary" style="width:100%;" onclick="saveJobRole()">Save job role</button>
+        </div>
+    </div>
+
+    <!-- Apply job role to existing user -->
+    <div id="apply-job-role-modal" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10001; display: flex; align-items: center; justify-content: center;">
+        <div style="background: white; padding: 28px; border-radius: 16px; width: 480px; max-width: 94vw; position: relative; border: 1px solid #c7d2fe;">
+            <button type="button" onclick="document.getElementById('apply-job-role-modal').classList.add('hidden')" style="position: absolute; top: 16px; right: 16px; background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+            <h2 style="color:#3730a3;margin-bottom:8px;">Apply job role</h2>
+            <p style="color:#64748b;font-size:0.88rem;margin-bottom:12px;">User: <strong id="apply-job-role-user-label"></strong></p>
+            <input type="hidden" id="apply-job-role-target-user-id" value="">
+            <label style="display:block;font-size:0.8rem;font-weight:700;margin-bottom:4px;">Job role template</label>
+            <select id="apply-job-role-select" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:16px;"></select>
+            <button type="button" class="btn-primary" style="width:100%;" onclick="applyJobRoleToUser()">Apply to user</button>
         </div>
     </div>
 
@@ -2123,14 +2199,18 @@
                 <input type="text" id="newuser-portal-id" placeholder="Portal User ID (optional, 10+ digits; auto-generated if blank)" inputmode="numeric" pattern="[0-9]*">
                 <input type="email" id="newuser-email" placeholder="Email Address" required>
                 <input type="tel" id="newuser-phone" placeholder="Phone Number" required>
+                <select id="newuser-job-role" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;margin-bottom:8px;" onchange="onNewUserJobRoleChange()">
+                    <option value="">-- Job role template (recommended) --</option>
+                </select>
                 <select id="newuser-role" required style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
-                    <option value="">-- Select User Role --</option>
+                    <option value="">-- Or pick account type manually --</option>
                     <option value="doctor">Doctor/Medical Professional</option>
+                    <option value="staff_user">Staff user (operations portal)</option>
                     <option value="judge_user">Judge User</option>
                     <option value="co_admin">Co Administrator</option>
                     <option value="scanner_portal_user">Scanner Portal User</option>
                     <option value="scanner_dashboard_user">Live scanner dashboard</option>
-                    <option value="book_sales_staff">Book sales staff (inventory &amp; orders)</option>
+                    <option value="book_sales_staff">Book sales staff</option>
                     <option value="reviewer">Reviewer</option>
                 </select>
                 <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;">
@@ -2154,8 +2234,9 @@
                 </p>
                 <p style="font-size: 0.85rem; color: #64748b; margin-top: 4px; background: #f0f4ff; padding: 10px; border-radius: 4px;">
                     Each role signs in at its own URL:
-                    <strong>Doctor</strong> &rarr; /doctor.html &middot; <strong>Judge/Reviewer</strong> &rarr; /judge.html &middot;
-                    <strong>Scanner</strong> &rarr; /scanner.html &middot; <strong>Co-admin</strong> &rarr; /admin.html
+                    <strong>Doctor</strong> &rarr; /doctor.html &middot; <strong>Staff / Co-admin operations</strong> &rarr; /staff/login
+                    &middot; <strong>Co-admin (full CRM)</strong> &rarr; /admin.html &middot;
+                    <strong>Judge/Reviewer</strong> &rarr; /judge.html &middot; <strong>Scanner</strong> &rarr; /scanner.html
                 </p>
                 <div id="newuser-admin-otp-wrap" style="display:none;padding:12px;border:1px solid #fed7aa;border-radius:8px;background:#fffbeb;margin-top:8px;">
                     <strong style="display:block;margin-bottom:8px;color:#9a3412;font-size:0.9rem;">Confirm it is you (email + WhatsApp)</strong>
@@ -2191,6 +2272,13 @@
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                     <div><label>Registration Start <span style="font-weight:normal;color:#64748b;">(IST)</span></label><input type="datetime-local" id="seminar-reg-start" required></div>
                     <div><label>Registration End <span style="font-weight:normal;color:#64748b;">(IST)</span></label><input type="datetime-local" id="seminar-reg-end" required></div>
+                </div>
+                <div style="background:#fffbeb;padding:14px;border:1px solid #fde68a;border-radius:10px;">
+                    <label style="display:flex;align-items:flex-start;gap:8px;font-weight:600;color:#92400e;">
+                        <input type="checkbox" id="seminar-waitlist-enabled">
+                        Enable waiting list after registration closes
+                    </label>
+                    <p style="font-size:0.82rem;color:#64748b;margin:8px 0 0 26px;">When registration ends, doctors can still apply without payment. You choose who gets a seat and payment link by email from Applications.</p>
                 </div>
                 <div style="background:#f0fdf4;padding:14px;border:1px solid #bbf7d0;border-radius:10px;">
                     <label style="display:flex;align-items:flex-start;gap:8px;font-weight:600;color:#166534;">
@@ -2468,7 +2556,7 @@
     <script src="/js/user-roles.js?v=20260522f"></script>
     <script src="/js/admin-list-search.js?v=20260522a"></script>
     <script src="/js/book-tracking-ui.js?v=20260530d"></script>
-    <script src="/js/fetch-json.js"></script>
-    <script src="/js/admin.js?v=20260530d"></script>
+    <script src="/js/fetch-json.js?v=20260527a"></script>
+    <script src="/js/admin.js?v=20260528c"></script>
 </body>
 </html>

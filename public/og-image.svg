@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="Vaidya Gogate Memorial Foundation">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0f766e"/>
+      <stop offset="100%" stop-color="#065f46"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  <circle cx="170" cy="140" r="72" fill="#99f6e4" opacity="0.18"/>
+  <circle cx="1070" cy="500" r="96" fill="#99f6e4" opacity="0.12"/>
+  <g fill="#ecfeff" font-family="Segoe UI, Arial, sans-serif">
+    <text x="96" y="250" font-size="62" font-weight="700">Vaidya Gogate Memorial Foundation</text>
+    <text x="96" y="320" font-size="42" font-weight="600">National Seminar Portal</text>
+    <text x="96" y="388" font-size="28" opacity="0.95">Registration • E-tickets • Certificate Verification</text>
+    <text x="96" y="500" font-size="24" opacity="0.9">seminar.vaidyagogate.org</text>
+  </g>
+</svg>

@@ -9,6 +9,7 @@ let __requireBehalfApplicantOtp = true;
 
 const ADMIN_REGISTRATION_STATUSES = [
     { value: 'submitted', label: 'Submitted' },
+    { value: 'waitlisted', label: 'Waitlisted (no payment)' },
     { value: 'pending_approval', label: 'Under admin review' },
     { value: 'revision_required', label: 'Documents need re-upload' },
     { value: 'approved_pending_payment', label: 'Approved — payment due' },
@@ -33,6 +34,45 @@ function getStoredAdminUser() {
         return JSON.parse(localStorage.getItem('admin_user') || '{}');
     } catch (_) {
         return {};
+    }
+}
+
+function isStaffCrmRoute() {
+    return /\/staff\/crm\/?$/i.test(window.location.pathname || '');
+}
+
+function isSuperAdminAccount(user) {
+    const u = user || getStoredAdminUser();
+    return String(u.role || '').toLowerCase() === 'admin' && String(u.user_role || '').toLowerCase() !== 'co_admin';
+}
+
+function readStaffPortalUser() {
+    try {
+        const raw = localStorage.getItem('seminar_staff_user');
+        return raw ? JSON.parse(raw) : null;
+    } catch (_) {
+        return null;
+    }
+}
+
+function tryBootstrapStaffCrmAuth() {
+    if (!isStaffCrmRoute()) return false;
+    const staffUser = readStaffPortalUser();
+    if (!staffUser || String(staffUser.user_role || '').toLowerCase() !== 'co_admin') {
+        return false;
+    }
+    localStorage.setItem('admin_auth', 'true');
+    localStorage.setItem('admin_user', JSON.stringify(staffUser));
+    return true;
+}
+
+function applyStaffCrmChrome() {
+    if (!isStaffCrmRoute()) return;
+    document.title = document.title.replace('Super Admin CMS', 'Staff portal CRM');
+    const loginHint = document.querySelector('#auth-overlay p');
+    if (loginHint) {
+        loginHint.textContent =
+            'Co-admin session required. Sign in at /staff/login first, then open /staff/crm.';
     }
 }
 
@@ -322,28 +362,44 @@ function mergeAdminEnabledPagesPolicy(stored) {
     return pages;
 }
 
+function globalAdminTabAllowed(tabId) {
+    const globalPages = mergeAdminEnabledPagesPolicy(window.__adminEnabledPages || {});
+    const globalKeys = Object.keys(globalPages);
+    if (!globalKeys.length) return true;
+    const anyOn = globalKeys.some((k) => globalPages[k] === true);
+    if (!anyOn) return true;
+    return globalPages[tabId] === true;
+}
+
+function coAdminModulesState(user) {
+    if (!user) return { unset: true, mods: {} };
+    const raw = user.admin_modules;
+    if (raw == null || (typeof raw === 'string' && !String(raw).trim())) {
+        return { unset: true, mods: {} };
+    }
+    try {
+        const o = typeof raw === 'object' && !Array.isArray(raw) ? raw : JSON.parse(raw);
+        return { unset: false, mods: o && typeof o === 'object' ? o : {} };
+    } catch (_) {
+        return { unset: true, mods: {} };
+    }
+}
+
+function parseCoAdminModulesObject(user) {
+    return coAdminModulesState(user).mods;
+}
+
 function adminCanAccessTab(tabId) {
     let checkId = tabId === 'tab-seminar-details' ? 'tab-seminars' : tabId;
     if (checkId === 'tab-users') checkId = 'tab-staff-users';
     if (isSuperAdminUser()) return true;
-    const globalPages = mergeAdminEnabledPagesPolicy(window.__adminEnabledPages || {});
-    const globalKeys = Object.keys(globalPages);
-    if (globalKeys.length) {
-        const anyOn = globalKeys.some((k) => globalPages[k] === true);
-        if (anyOn && globalPages[checkId] !== true) return false;
-    }
     const u = getStoredAdminUser();
-    if (String(u.user_role || '').toLowerCase() !== 'co_admin') return true;
-    let raw = {};
-    try {
-        if (u.admin_modules && String(u.admin_modules).trim()) raw = JSON.parse(u.admin_modules);
-    } catch (_) {
-        raw = {};
-    }
-    if (!raw || typeof raw !== 'object') return true;
-    const keys = Object.keys(raw);
-    if (keys.length === 0) return true;
-    return raw[checkId] === true;
+    const isCo = String(u && u.user_role || '').toLowerCase() === 'co_admin';
+    if (!isCo) return globalAdminTabAllowed(checkId);
+    const { unset, mods } = coAdminModulesState(u);
+    if (unset) return globalAdminTabAllowed(checkId);
+    if (!Object.keys(mods).length) return false;
+    return mods[checkId] === true;
 }
 
 function applyCoAdminSidebarVisibility() {
@@ -361,11 +417,27 @@ async function refreshAdminLoginOtpPanel() {
     panel.style.display = 'none';
 }
 
-window.onload = () => {
+window.onload = async () => {
+    applyStaffCrmChrome();
     refreshAdminLoginOtpPanel();
+    if (!localStorage.getItem('admin_auth')) {
+        if (tryBootstrapStaffCrmAuth()) {
+            /* co-admin bridged from /staff/login session */
+        } else if (isStaffCrmRoute()) {
+            window.location.replace('/staff/login');
+            return;
+        } else if (!isStaffCrmRoute()) {
+            const staffUser = readStaffPortalUser();
+            if (staffUser && String(staffUser.user_role || '').toLowerCase() === 'co_admin') {
+                window.location.replace('/staff/crm');
+                return;
+            }
+        }
+    }
     if (localStorage.getItem('admin_auth')) {
         document.getElementById('auth-overlay').classList.add('hidden');
         document.getElementById('dashboard-main').classList.remove('hidden');
+        await refreshCoAdminSessionFromServer();
         loadAllData();
         loadPortalAuthAdminForm()
             .then(() => applyCoAdminSidebarVisibility())
@@ -494,8 +566,17 @@ document.getElementById('admin-login-form').addEventListener('submit', async (e)
         }
         const role = String(data.user.role || '').toLowerCase();
         const userRole = String(data.user.user_role || '').toLowerCase();
+        if (userRole === 'co_admin') {
+            alert('Co-admin accounts sign in at /staff/login (not here). You will be redirected.');
+            window.location.href = '/staff/login';
+            return;
+        }
         if (role !== 'admin' && userRole !== 'co_admin') {
             alert('This account does not have admin portal access.');
+            return;
+        }
+        if (!isSuperAdminAccount(data.user)) {
+            alert('Admin portal login is for the super administrator only. Staff accounts use /staff/login.');
             return;
         }
         localStorage.setItem('admin_auth', 'true');
@@ -504,8 +585,11 @@ document.getElementById('admin-login-form').addEventListener('submit', async (e)
         __adminLoginEmailOtpToken = null;
         document.getElementById('auth-overlay').classList.add('hidden');
         document.getElementById('dashboard-main').classList.remove('hidden');
+        await refreshCoAdminSessionFromServer();
         loadAllData();
-        applyCoAdminSidebarVisibility();
+        loadPortalAuthAdminForm()
+            .then(() => applyCoAdminSidebarVisibility())
+            .catch(() => applyCoAdminSidebarVisibility());
     } catch (err) {
         console.error(err);
         alert('Could not reach the server. Make sure it is running (e.g. node server.js).');
@@ -515,6 +599,11 @@ document.getElementById('admin-login-form').addEventListener('submit', async (e)
 document.getElementById('btn-logout').addEventListener('click', () => {
     localStorage.removeItem('admin_auth');
     localStorage.removeItem('admin_user');
+    if (isStaffCrmRoute()) {
+        localStorage.removeItem('seminar_staff_user');
+        window.location.href = '/staff/login';
+        return;
+    }
     location.reload();
 });
 
@@ -541,6 +630,7 @@ function switchTab(tabId) {
     }
     if (tabId === 'tab-staff-users' || tabId === 'tab-doctors') {
         loadUsers();
+        if (tabId === 'tab-staff-users') loadJobRoles();
     }
 }
 
@@ -679,7 +769,7 @@ function openAdminCreateUserModal(kind) {
                 opt.hidden = isDoc || isEmpty;
             }
         });
-        roleSel.value = kind === 'doctor' ? 'doctor' : 'judge_user';
+        roleSel.value = kind === 'doctor' ? 'doctor' : '';
         roleSel.required = true;
         if (!roleSel.__otpRoleBound) {
             roleSel.__otpRoleBound = true;
@@ -688,6 +778,7 @@ function openAdminCreateUserModal(kind) {
     }
     const title = modal.querySelector('h2');
     if (title) title.textContent = kind === 'doctor' ? 'Register new doctor' : 'Register new staff user';
+    populateNewUserJobRoles(kind);
     modal.classList.remove('hidden');
 }
 
@@ -707,6 +798,34 @@ function adminAccountActivationLabel(u) {
     if (u && u.activated_at) return formatAdminAccountDateTime(u.activated_at);
     if (u && Number(u.email_verified) === 0) return 'Pending verification';
     return '—';
+}
+
+function refreshCoAdminModulesFromServer(users) {
+    const u = getStoredAdminUser();
+    if (!u || String(u.user_role || '').toLowerCase() !== 'co_admin') return;
+    const fresh = (users || []).find((row) => Number(row.id) === Number(u.id));
+    if (!fresh) return;
+    const next = Object.assign({}, u, {
+        admin_modules: fresh.admin_modules,
+        staff_modules: fresh.staff_modules
+    });
+    localStorage.setItem('admin_user', JSON.stringify(next));
+    applyCoAdminSidebarVisibility();
+}
+
+async function refreshCoAdminSessionFromServer() {
+    const u = getStoredAdminUser();
+    if (!u || !u.id || String(u.user_role || '').toLowerCase() !== 'co_admin') return;
+    try {
+        const res = await fetch(`/api/admin/session?actingAdminId=${encodeURIComponent(u.id)}`);
+        const data = await res.json();
+        if (!res.ok || !data.user) return;
+        const next = Object.assign({}, u, data.user);
+        localStorage.setItem('admin_user', JSON.stringify(next));
+        applyCoAdminSidebarVisibility();
+    } catch (_) {
+        /* keep cached session */
+    }
 }
 
 async function loadUsers() {
@@ -753,6 +872,8 @@ async function loadUsers() {
         if (window.__highlightAdminUserId) {
             window.__highlightAdminUserId = null;
         }
+        refreshCoAdminModulesFromServer(users);
+        await refreshCoAdminSessionFromServer();
     } catch (err) {
         console.error(err);
         const staffBody = document.getElementById('staff-users-list');
@@ -838,10 +959,20 @@ function renderStaffUsersTable(staffList) {
                 ? ' style="background:#ecfdf5;"'
                 : '';
         const userRole = adminStaffUserRoleValue(u);
+        const staffPortalRoles = ['co_admin', 'book_sales_staff', 'staff_user'];
         const modulesBtn =
             isSuperAdminUser() && String(userRole).toLowerCase() === 'co_admin'
-                ? `<button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-left:6px;background:#0d9488;" onclick="openAdminModulesModal(${u.id})">Modules</button>`
+                ? `<button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-left:6px;background:#0d9488;" onclick="openAdminModulesModal(${u.id})">Admin modules</button>`
                 : '';
+        const staffModsBtn =
+            isSuperAdminUser() &&
+            staffPortalRoles.includes(String(userRole).toLowerCase()) &&
+            String(userRole).toLowerCase() !== 'co_admin'
+                ? `<button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-left:6px;background:#0369a1;" onclick="openStaffModulesModal(${u.id})">Portal access</button>`
+                : '';
+        const applyJobBtn = isSuperAdminUser()
+            ? `<button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-left:6px;background:#4338ca;" onclick="openApplyJobRoleModal(${u.id})">Apply job role</button>`
+            : '';
         staffBody.innerHTML += `
                 <tr${hi}>
                     <td><strong>${u.user_id_string}</strong></td>
@@ -857,13 +988,15 @@ function renderStaffUsersTable(staffList) {
                             <option value="scanner_portal_user" ${userRole === 'scanner_portal_user' ? 'selected' : ''}>Scanner (volunteer)</option>
                             <option value="scanner_dashboard_user" ${userRole === 'scanner_dashboard_user' ? 'selected' : ''}>Live scanner dashboard</option>
                             <option value="reviewer" ${userRole === 'reviewer' ? 'selected' : ''}>Reviewer</option>
+                            <option value="book_sales_staff" ${userRole === 'book_sales_staff' ? 'selected' : ''}>Book sales staff</option>
+                            <option value="staff_user" ${userRole === 'staff_user' ? 'selected' : ''}>Staff user</option>
                             <option value="doctor" ${userRole === 'doctor' ? 'selected' : ''}>Doctor (doctor portal)</option>
                         </select>
                     </td>
                     <td>${adminUserStatusBadge(u)}</td>
                     <td>
                         <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-right:6px;" onclick="openAdminUserDetail(${u.id})">View</button>
-                        ${adminUserToggleBtn(u)}${modulesBtn}
+                        ${adminUserToggleBtn(u)}${modulesBtn}${staffModsBtn}${applyJobBtn}
                         ${
                             adminCanDeleteUsers()
                                 ? `<button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-left:6px;background:#b91c1c;" onclick="adminDeleteUserAccount(${u.id}, '${String((u.first_name || '') + ' ' + (u.last_name || '')).trim().replace(/'/g, "\\'")}', '${String(u.user_id_string || '').replace(/'/g, "\\'")}')">Delete</button>`
@@ -1122,6 +1255,18 @@ const ADMIN_MODULE_TAB_DEFS = [
     ['tab-settings', 'Global settings']
 ];
 
+const CO_ADMIN_STAFF_PORTAL_TAB_DEFS = [
+    ['tab-book-sales', 'Book sales → Staff: inventory & orders'],
+    ['tab-applications', 'Review applications → Staff: Applications'],
+    ['tab-support-tickets', 'Support tickets → Staff: Support tickets'],
+    ['tab-admin-payments', 'Payments → Staff: Payments & orders'],
+    ['tab-etickets', 'E-tickets → Staff: E-tickets lookup']
+];
+
+const CO_ADMIN_STAFF_PORTAL_TAB_IDS = new Set(CO_ADMIN_STAFF_PORTAL_TAB_DEFS.map(([id]) => id));
+
+const CO_ADMIN_ADMIN_ONLY_TAB_DEFS = ADMIN_MODULE_TAB_DEFS.filter(([id]) => !CO_ADMIN_STAFF_PORTAL_TAB_IDS.has(id));
+
 const DOCTOR_MODULE_TAB_DEFS = [
     ['tab-dashboard', 'Dashboard'],
     ['tab-profile', 'My profile'],
@@ -1142,9 +1287,9 @@ const DOCTOR_MODULE_TAB_DEFS = [
 ];
 
 function parseAdminModulesObject(str) {
-    if (str == null || !String(str).trim()) return {};
+    if (str == null || (typeof str === 'string' && !String(str).trim())) return {};
     try {
-        const o = JSON.parse(str);
+        const o = typeof str === 'object' && !Array.isArray(str) ? str : JSON.parse(str);
         return o && typeof o === 'object' ? o : {};
     } catch (_) {
         return {};
@@ -1402,13 +1547,23 @@ function openAdminModulesModal(userId) {
     if (!wrap || !label || !hid) return;
     hid.value = String(userId);
     label.textContent = `${u.first_name || ''} ${u.last_name || ''} (${u.email || ''})`;
-    wrap.innerHTML = ADMIN_MODULE_TAB_DEFS.map(
-        ([id, title]) =>
-            `<label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:0.9rem;">
+    wrap.innerHTML =
+        '<p style="font-size:0.82rem;font-weight:700;color:#0f766e;margin:0 0 8px;">Staff portal (/staff/login)</p>' +
+        CO_ADMIN_STAFF_PORTAL_TAB_DEFS.map(
+            ([id, title]) =>
+                `<label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:0.9rem;">
                 <input type="checkbox" data-mod-tab="${id}" ${mods[id] === true ? 'checked' : ''}>
                 <span>${title}</span>
             </label>`
-    ).join('');
+        ).join('') +
+        '<p style="font-size:0.82rem;font-weight:700;color:#475569;margin:16px 0 8px;">Admin portal only (not on /staff/login)</p>' +
+        CO_ADMIN_ADMIN_ONLY_TAB_DEFS.map(
+            ([id, title]) =>
+                `<label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:0.9rem;">
+                <input type="checkbox" data-mod-tab="${id}" ${mods[id] === true ? 'checked' : ''}>
+                <span>${title}</span>
+            </label>`
+        ).join('');
     const modal = document.getElementById('admin-modules-modal');
     modal.classList.remove('hidden');
 }
@@ -1431,11 +1586,364 @@ async function saveAdminModulesForTarget() {
         const data = await res.json();
         if (!res.ok || !data.success) return alert(data.error || 'Could not save modules.');
         document.getElementById('admin-modules-modal').classList.add('hidden');
-        alert('Module access updated. The co-admin must log in again to pick up changes in this browser session, or refresh if they are logged in as that user elsewhere.');
+        alert('Co-admin access saved. User must sign out and sign in again at /staff/login to see updated modules.');
         loadUsers();
     } catch (e) {
         console.error(e);
         alert('Network error saving modules.');
+    }
+}
+
+const STAFF_PORTAL_MODULE_DEFS = [
+    ['book-inventory', 'Stock inventory'],
+    ['book-orders', 'Book orders'],
+    ['applications', 'Review applications'],
+    ['support-tickets', 'Support tickets'],
+    ['etickets', 'E-tickets lookup'],
+    ['payments', 'Payments & seminar orders']
+];
+
+function parseStaffModulesObject(str) {
+    if (str == null || !String(str).trim()) return {};
+    try {
+        const o = JSON.parse(str);
+        return o && typeof o === 'object' ? o : {};
+    } catch (_) {
+        return {};
+    }
+}
+
+function openStaffModulesModal(userId) {
+    if (!isSuperAdminUser()) {
+        alert('Only the super administrator can configure staff portal access.');
+        return;
+    }
+    const u = window.__adminUsersById[userId];
+    if (!u) return alert('User not found. Refresh the user list.');
+    const ur = String(u.user_role || '').toLowerCase();
+    if (ur === 'co_admin') {
+        return openAdminModulesModal(userId);
+    }
+    if (!['book_sales_staff', 'staff_user'].includes(ur)) {
+        return alert('Portal access applies to staff portal users only. Co-admins use Admin modules.');
+    }
+    const mods = parseStaffModulesObject(u.staff_modules);
+    const wrap = document.getElementById('staff-modules-checkboxes');
+    const label = document.getElementById('staff-modules-user-label');
+    const hid = document.getElementById('staff-modules-target-user-id');
+    if (!wrap || !label || !hid) return;
+    hid.value = String(userId);
+    label.textContent = `${u.first_name || ''} ${u.last_name || ''} (${u.email || ''})`;
+    wrap.innerHTML = STAFF_PORTAL_MODULE_DEFS.map(
+        ([id, title]) =>
+            `<label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:0.9rem;">
+                <input type="checkbox" data-staff-mod="${id}" ${mods[id] === true ? 'checked' : ''}>
+                <span>${title}</span>
+            </label>`
+    ).join('');
+    document.getElementById('staff-modules-modal').classList.remove('hidden');
+}
+
+async function saveStaffModulesForTarget() {
+    if (!isSuperAdminUser()) return alert('Only the super administrator can save staff portal modules.');
+    const targetId = parseInt(document.getElementById('staff-modules-target-user-id').value, 10);
+    const actor = getStoredAdminUser();
+    const staff_modules = {};
+    document.querySelectorAll('#staff-modules-checkboxes input[data-staff-mod]').forEach((inp) => {
+        const id = inp.getAttribute('data-staff-mod');
+        if (id && inp.checked) staff_modules[id] = true;
+    });
+    try {
+        const res = await fetch(`/api/admin/users/${targetId}/staff-modules`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ staff_modules, actingAdminId: actor.id })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) return alert(data.error || 'Could not save staff modules.');
+        document.getElementById('staff-modules-modal').classList.add('hidden');
+        alert('Portal access updated. User must sign in again at /staff/login.');
+        loadUsers();
+    } catch (e) {
+        console.error(e);
+        alert('Network error saving portal access.');
+    }
+}
+
+window.__jobRolesById = window.__jobRolesById || {};
+
+async function loadJobRoles() {
+    const root = document.getElementById('staff-job-roles-root');
+    const card = document.getElementById('staff-job-roles-card');
+    const newBtn = document.getElementById('btn-new-job-role');
+    if (!root) return;
+    if (!isSuperAdminUser()) {
+        if (card) card.style.display = 'none';
+        if (newBtn) newBtn.style.display = 'none';
+        return;
+    }
+    if (card) card.style.display = '';
+    if (newBtn) newBtn.style.display = '';
+    root.innerHTML = '<p style="color:#64748b;">Loading job roles…</p>';
+    try {
+        const res = await fetch('/api/admin/job-roles');
+        let rows;
+        try {
+            rows = await res.json();
+        } catch (_) {
+            root.innerHTML = '<p style="color:#b91c1c;">Could not read job roles from server.</p>';
+            return;
+        }
+        if (!res.ok) {
+            root.innerHTML = '<p style="color:#b91c1c;">' + escAdmin((rows && rows.error) || 'Failed to load') + '</p>';
+            return;
+        }
+        const list = Array.isArray(rows) ? rows : [];
+        window.__jobRolesById = {};
+        list.forEach((r) => {
+            window.__jobRolesById[r.id] = r;
+        });
+        if (!list.length) {
+            root.innerHTML = '<p style="color:#64748b;">No job roles yet. Create one to use when adding staff users.</p>';
+            return;
+        }
+        let html =
+            '<table class="data-table"><thead><tr><th>Role</th><th>Portal</th><th>Account type</th><th>Modules</th><th></th></tr></thead><tbody>';
+        list.forEach((r) => {
+            const mods = Object.keys(r.staff_modules || {}).filter((k) => r.staff_modules[k]);
+            html +=
+                '<tr><td><strong>' +
+                escAdmin(r.description || r.role_name) +
+                '</strong><br><small>' +
+                escAdmin(r.role_name) +
+                '</small></td><td>' +
+                escAdmin(r.portal) +
+                '</td><td>' +
+                escAdmin(r.user_role) +
+                '</td><td style="font-size:0.8rem;">' +
+                escAdmin(mods.join(', ') || '—') +
+                '</td><td><button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.78rem;" onclick="openJobRoleEditor(' +
+                r.id +
+                ')">Edit</button></td></tr>';
+        });
+        html += '</tbody></table>';
+        root.innerHTML = html;
+        populateNewUserJobRoles(window.__adminCreateUserKind === 'doctor' ? 'doctor' : 'staff');
+    } catch (e) {
+        root.innerHTML = '<p style="color:#b91c1c;">' + escAdmin(e.message) + '</p>';
+    }
+}
+
+function populateNewUserJobRoles(kind) {
+    const sel = document.getElementById('newuser-job-role');
+    const roleSel = document.getElementById('newuser-role');
+    if (!sel) return;
+    const roles = Object.values(window.__jobRolesById || {});
+    const filtered =
+        kind === 'staff'
+            ? roles.filter((r) => r.portal === 'staff' || r.portal === 'admin' || r.portal === 'judge' || r.portal === 'scanner')
+            : [];
+    sel.innerHTML =
+        '<option value="">-- Job role template (recommended) --</option>' +
+        filtered
+            .map(
+                (r) =>
+                    '<option value="' +
+                    r.id +
+                    '">' +
+                    escAdmin(r.description || r.role_name) +
+                    ' (' +
+                    escAdmin(r.portal) +
+                    ')</option>'
+            )
+            .join('');
+    sel.style.display = kind === 'staff' ? '' : 'none';
+    if (roleSel) roleSel.disabled = false;
+}
+
+function onNewUserJobRoleChange() {
+    const sel = document.getElementById('newuser-job-role');
+    const roleSel = document.getElementById('newuser-role');
+    if (!sel || !roleSel) return;
+    const jr = window.__jobRolesById[parseInt(sel.value, 10)];
+    if (jr && jr.user_role) {
+        roleSel.value = jr.user_role;
+        roleSel.disabled = true;
+    } else {
+        roleSel.disabled = false;
+    }
+}
+
+function renderJobRoleModuleChecks(wrapId, mods, attr) {
+    const wrap = document.getElementById(wrapId);
+    if (!wrap) return;
+    wrap.innerHTML = STAFF_PORTAL_MODULE_DEFS.map(
+        ([id, title]) =>
+            `<label style="display:flex;align-items:center;gap:8px;font-size:0.88rem;cursor:pointer;">
+                <input type="checkbox" data-${attr}="${id}" ${mods && mods[id] === true ? 'checked' : ''}>
+                <span>${title}</span>
+            </label>`
+    ).join('');
+}
+
+function onJobRolePortalChange() {
+    const portal = (document.getElementById('job-role-portal') || {}).value || 'staff';
+    const staffWrap = document.getElementById('job-role-staff-modules-wrap');
+    const adminWrap = document.getElementById('job-role-admin-modules-wrap');
+    const roleSel = document.getElementById('job-role-user-role');
+    if (staffWrap) staffWrap.style.display = portal === 'judge' || portal === 'scanner' ? 'none' : '';
+    if (adminWrap) adminWrap.classList.toggle('hidden', portal !== 'admin');
+    if (roleSel) {
+        if (portal === 'judge') roleSel.value = 'judge_user';
+        else if (portal === 'scanner') roleSel.value = 'scanner_portal_user';
+        else if (portal === 'admin') roleSel.value = 'co_admin';
+        else if (roleSel.value === 'co_admin' || roleSel.value === 'judge_user' || roleSel.value === 'scanner_portal_user') {
+            roleSel.value = 'staff_user';
+        }
+    }
+}
+
+function openJobRoleEditor(roleId) {
+    if (!isSuperAdminUser()) return alert('Only the super administrator can manage job roles.');
+    const modal = document.getElementById('job-role-modal');
+    const idEl = document.getElementById('job-role-edit-id');
+    const nameEl = document.getElementById('job-role-name');
+    const descEl = document.getElementById('job-role-description');
+    const portalEl = document.getElementById('job-role-portal');
+    const userRoleEl = document.getElementById('job-role-user-role');
+    if (!modal) return;
+    renderJobRoleModuleChecks('job-role-staff-modules', {}, 'job-staff-mod');
+    const adminWrap = document.getElementById('job-role-admin-modules');
+    if (adminWrap) {
+        adminWrap.innerHTML = ADMIN_MODULE_TAB_DEFS.map(
+            ([id, title]) =>
+                `<label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;cursor:pointer;">
+                    <input type="checkbox" data-job-admin-mod="${id}">
+                    <span>${title}</span>
+                </label>`
+        ).join('');
+    }
+    if (roleId) {
+        const r = window.__jobRolesById[roleId];
+        if (!r) return alert('Job role not found.');
+        idEl.value = String(roleId);
+        nameEl.value = r.role_name || '';
+        nameEl.disabled = true;
+        descEl.value = r.description || '';
+        portalEl.value = r.portal || 'staff';
+        userRoleEl.value = r.user_role || 'staff_user';
+        renderJobRoleModuleChecks('job-role-staff-modules', r.staff_modules || {}, 'job-staff-mod');
+        document.querySelectorAll('#job-role-admin-modules input[data-job-admin-mod]').forEach((inp) => {
+            const k = inp.getAttribute('data-job-admin-mod');
+            inp.checked = !!(r.admin_modules && r.admin_modules[k]);
+        });
+        document.getElementById('job-role-modal-title').textContent = 'Edit job role';
+    } else {
+        idEl.value = '';
+        nameEl.value = '';
+        nameEl.disabled = false;
+        descEl.value = '';
+        portalEl.value = 'staff';
+        userRoleEl.value = 'staff_user';
+        document.getElementById('job-role-modal-title').textContent = 'New job role';
+    }
+    onJobRolePortalChange();
+    modal.classList.remove('hidden');
+}
+
+async function saveJobRole() {
+    if (!isSuperAdminUser()) return alert('Only the super administrator can save job roles.');
+    const adm = getStoredAdminUser();
+    const id = parseInt(document.getElementById('job-role-edit-id').value, 10);
+    const role_name = document.getElementById('job-role-name').value.trim();
+    const description = document.getElementById('job-role-description').value.trim();
+    const portal = document.getElementById('job-role-portal').value;
+    const user_role = document.getElementById('job-role-user-role').value;
+    const staff_modules = {};
+    document.querySelectorAll('#job-role-staff-modules input[data-job-staff-mod]').forEach((inp) => {
+        const k = inp.getAttribute('data-job-staff-mod');
+        if (k && inp.checked) staff_modules[k] = true;
+    });
+    const admin_modules = {};
+    document.querySelectorAll('#job-role-admin-modules input[data-job-admin-mod]').forEach((inp) => {
+        const k = inp.getAttribute('data-job-admin-mod');
+        if (k && inp.checked) admin_modules[k] = true;
+    });
+    const body = { description, portal, user_role, staff_modules, admin_modules, actingAdminId: adm.id };
+    if (!Number.isInteger(id)) body.role_name = role_name;
+    if (!Number.isInteger(id) && !role_name) return alert('Role key is required.');
+    try {
+        const url = Number.isInteger(id) ? '/api/admin/job-roles/' + id : '/api/admin/job-roles';
+        const res = await fetch(url, {
+            method: Number.isInteger(id) ? 'PUT' : 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) return alert(data.error || 'Could not save job role.');
+        document.getElementById('job-role-modal').classList.add('hidden');
+        loadJobRoles();
+    } catch (e) {
+        alert(e.message || 'Network error');
+    }
+}
+
+function openApplyJobRoleModal(userId) {
+    if (!isSuperAdminUser()) return alert('Only the super administrator can apply job roles.');
+    const u = window.__adminUsersById[userId];
+    if (!u) return alert('User not found. Refresh the user list.');
+    const openModal = () => {
+        const roles = Object.values(window.__jobRolesById || {});
+        if (!roles.length) {
+            return alert('No job roles defined yet. Create one under Job roles first (super admin).');
+        }
+        document.getElementById('apply-job-role-target-user-id').value = String(userId);
+        document.getElementById('apply-job-role-user-label').textContent =
+            `${u.first_name || ''} ${u.last_name || ''} (${u.email || u.user_id_string || ''})`.trim();
+        const sel = document.getElementById('apply-job-role-select');
+        sel.innerHTML = roles
+            .map(
+                (r) =>
+                    '<option value="' +
+                    r.id +
+                    '">' +
+                    escAdmin(r.description || r.role_name) +
+                    ' — ' +
+                    escAdmin(r.portal) +
+                    '</option>'
+            )
+            .join('');
+        document.getElementById('apply-job-role-modal').classList.remove('hidden');
+    };
+    if (!Object.keys(window.__jobRolesById || {}).length) {
+        loadJobRoles().then(openModal);
+        return;
+    }
+    openModal();
+}
+
+async function applyJobRoleToUser() {
+    if (!isSuperAdminUser()) return alert('Only the super administrator can apply job roles.');
+    const targetId = parseInt(document.getElementById('apply-job-role-target-user-id').value, 10);
+    const jobRoleId = parseInt((document.getElementById('apply-job-role-select') || {}).value, 10);
+    const adm = getStoredAdminUser();
+    if (!Number.isInteger(targetId) || !Number.isInteger(jobRoleId)) {
+        return alert('Select a job role.');
+    }
+    if (!confirm('Apply this job role to the user? Their portal access and account type will be updated.')) return;
+    try {
+        const res = await fetch('/api/admin/users/' + targetId + '/apply-job-role', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jobRoleId, actingAdminId: adm.id })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) return alert(data.error || 'Could not apply job role.');
+        document.getElementById('apply-job-role-modal').classList.add('hidden');
+        alert(data.message || 'Job role applied.');
+        loadUsers();
+    } catch (e) {
+        alert(e.message || 'Network error');
     }
 }
 
@@ -2067,8 +2575,10 @@ async function adminCreateUser() {
         alert('Please fill all required fields');
         return;
     }
-    if (!userRole) {
-        alert('Select a role for this account.');
+    const jobRoleSel = document.getElementById('newuser-job-role');
+    const jobRoleId = jobRoleSel ? parseInt(jobRoleSel.value, 10) : NaN;
+    if (createKind === 'staff' && !Number.isInteger(jobRoleId) && !userRole) {
+        alert('Select a job role template or account type.');
         return;
     }
     if (createKind === 'staff' && userRole === 'doctor') {
@@ -2124,6 +2634,7 @@ async function adminCreateUser() {
     if (useCustom) data.password = customPass.trim();
     const demoChk = document.getElementById('newuser-is-demo');
     if (demoChk && demoChk.checked && adminDemoAccountsEnabled()) data.isDemo = true;
+    if (Number.isInteger(jobRoleId)) data.jobRoleId = jobRoleId;
 
     try {
         const res = await fetch('/api/admin/users/create', {
@@ -4727,6 +5238,17 @@ async function loadAdminUserActivityPanel(userId, bodyEl) {
 
 let globalAdminApps = [];
 
+function parseAppDuplicateReview(app) {
+    let review = null;
+    try {
+        review = app && app.doc_review_json ? JSON.parse(app.doc_review_json) : null;
+    } catch (_) {
+        review = null;
+    }
+    if (!review || review.decision !== 'auto_rejected_duplicate') return null;
+    return review;
+}
+
 async function loadApplications() {
     try {
         const res = await fetch('/api/admin/applications');
@@ -4754,7 +5276,8 @@ function adminApplicationSearchBlob(a) {
         formData.fname,
         formData.lname,
         formData.email,
-        formData.phone
+        formData.phone,
+        (parseAppDuplicateReview(a) && parseAppDuplicateReview(a).reason) || ''
     ]
         .join(' ')
         .toLowerCase();
@@ -4797,6 +5320,10 @@ function renderApplicationsTable() {
         const candidateName = formData.fname
             ? `${formData.fname} ${formData.lname || ''}`
             : `${a.first_name || ''} ${a.last_name || ''}`;
+        const dupReview = parseAppDuplicateReview(a);
+        const dupBadge = dupReview
+            ? `<div style="margin-top:6px;"><span style="background:#fee2e2;color:#991b1b;padding:3px 8px;border-radius:999px;font-size:0.72rem;">Auto duplicate rejected</span></div>`
+            : '';
 
         tbody.innerHTML += `
                 <tr>
@@ -4805,7 +5332,7 @@ function renderApplicationsTable() {
                         <div style="margin-top: 5px;"><img src="/api/qrcode/${a.application_no}" style="width: 40px; height: 40px;"></div>
                     </td>
                     <td>${a.user_id_string}</td>
-                    <td>${candidateName}${fileLink}</td>
+                    <td>${candidateName}${fileLink}${dupBadge}</td>
                     <td>
                         <select onchange="updateAppStatus(${a.id}, this.value)" style="width: auto; min-width: 200px;">
                             ${adminRegistrationStatusOptionsHtml(a.status)}
@@ -6047,7 +6574,8 @@ function viewFullApplication(index) {
           '" target="_blank" rel="noopener">View certificate document</a></p>'
         : '<p class="muted">No certificate file on record.</p>';
     const st = String(a.status || '').toLowerCase();
-    const canVerify = st === 'submitted' || st === 'pending_approval';
+    const dupReview = parseAppDuplicateReview(a);
+    const canVerify = st === 'submitted' || st === 'pending_approval' || st === 'waitlisted';
     const docChecks = needsDocs
         ? `<label style="display:block;margin:6px 0;"><input type="checkbox" id="admin-verify-info"> Applicant details are correct</label>
         <label style="display:block;margin:6px 0;"><input type="checkbox" id="admin-verify-ncism"> NCISM / registration number is correct</label>
@@ -6074,13 +6602,35 @@ function viewFullApplication(index) {
         <button type="button" class="btn-primary" style="background:#b91c1c;" onclick="adminVerifySeminarApplication(${a.id},'reject_application')">Reject entire application</button>
         </div>
         <p class="muted" style="font-size:0.85rem;margin-top:8px;">Reject documents: doctor re-uploads certificate/NCISM. Request additional: doctor uploads extra verification files on the same application.</p>`
-        : '<p class="muted" style="margin-top:12px;">Verification actions appear when status is Submitted or Under review.</p>';
+        : st === 'waitlisted'
+          ? `<hr style="margin:14px 0;">
+        <h4 style="margin:0 0 8px;">Waiting list</h4>
+        <p class="muted" style="font-size:0.85rem;">This applicant joined after registration closed. No payment yet. Offer a seat to send the payment link by email and show payment in their dashboard.</p>
+        <button type="button" class="btn-primary" style="background:#15803d;margin-top:8px;" onclick="adminPromoteFromWaitlist(${a.id})">Offer seat — send payment link</button>`
+          : '<p class="muted" style="margin-top:12px;">Verification actions appear when status is Submitted, Waitlisted, or Under review.</p>';
 
     const content = document.getElementById('admin-view-content');
     content.innerHTML = `
         <p><strong>App No:</strong> ${escAdmin(a.application_no)}</p>
         <p><strong>Status:</strong> ${escAdmin(String(a.status || '').toUpperCase())}</p>
         <p><strong>Portal ID:</strong> ${escAdmin(a.user_id_string || '')}</p>
+        ${
+            dupReview
+                ? `<div style="margin:10px 0;padding:10px 12px;border:1px solid #fecaca;background:#fef2f2;border-radius:8px;">
+            <p style="margin:0 0 6px;font-weight:700;color:#991b1b;">Auto duplicate rejection</p>
+            <p style="margin:0 0 6px;font-size:0.86rem;color:#7f1d1d;">${escAdmin(dupReview.reason || 'Potential duplicate profile detected.')}</p>
+            <p style="margin:0;font-size:0.82rem;color:#7f1d1d;">
+                Matched by: ${escAdmin((dupReview.duplicate_match && dupReview.duplicate_match.matchedBy) || 'identity checks')}
+                ${
+                    dupReview.duplicate_match && dupReview.duplicate_match.existingApplicationNo
+                        ? ' · Existing app: ' + escAdmin(dupReview.duplicate_match.existingApplicationNo)
+                        : ''
+                }
+            </p>
+            <p style="margin:6px 0 0;font-size:0.8rem;color:#7f1d1d;">If this is genuinely a different person, admin can change status from dropdown and continue review.</p>
+        </div>`
+                : ''
+        }
         <hr style="margin:10px 0;">
         ${formatAdminApplicationDetailsHtml(formData, certLink)}
         ${needsDocs ? formatNcismCertificateCheckHtml(Object.assign({}, formData.ncism_certificate_check || {}, { _appId: a.id })) : ''}
@@ -6138,6 +6688,17 @@ async function adminVerifySeminarApplication(appId, decision) {
         console.error(err);
         alert('Network error');
     }
+}
+
+async function adminPromoteFromWaitlist(appId) {
+    if (
+        !confirm(
+            'Offer a seat to this waitlisted applicant? They will receive a payment link by email and can pay from their doctor portal dashboard.'
+        )
+    ) {
+        return;
+    }
+    await updateAppStatus(appId, 'approved_pending_payment');
 }
 
 async function updateAppStatus(appId, status) {
@@ -7908,6 +8469,8 @@ function editSeminar(index) {
     if (preregStart) preregStart.value = formatDt(s.preregistration_start);
     if (preregEnd) preregEnd.value = formatDt(s.preregistration_end);
     syncSeminarPreregUi();
+    const waitlistCh = document.getElementById('seminar-waitlist-enabled');
+    if (waitlistCh) waitlistCh.checked = Number(s.waiting_list_enabled) === 1;
     document.getElementById('seminar-event-date').value = formatDt(s.event_date);
     const py = document.getElementById('seminar-portal-year');
     if (py) py.value = s.portal_year || adminPortalYear || new Date().getFullYear();
@@ -7999,6 +8562,7 @@ async function saveSeminar(e) {
             if (!v) return null;
             return window.PortalDateTime ? window.PortalDateTime.fromDatetimeLocal(v) : v;
         })(),
+        waiting_list_enabled: document.getElementById('seminar-waitlist-enabled')?.checked === true,
         event_date: window.PortalDateTime
             ? window.PortalDateTime.fromDatetimeLocal(document.getElementById('seminar-event-date').value)
             : document.getElementById('seminar-event-date').value,
@@ -8904,6 +9468,11 @@ async function viewSupportTicket(ticketId) {
                           ' IST</p>'
                         : ''
                 }
+                ${
+                    ticket.assigned_admin_name
+                        ? '<p><strong>Assigned to:</strong> ' + escAdmin(ticket.assigned_admin_name) + '</p>'
+                        : ''
+                }
                 <p><strong>Description:</strong> ${ticket.description}</p>
             </div>
         `;
@@ -8911,11 +9480,17 @@ async function viewSupportTicket(ticketId) {
         document.getElementById('ticket-info').innerHTML = infoHtml;
         
         const messagesHtml = (Array.isArray(ticket.messages) ? ticket.messages : []).map(m => {
-            const isAdmin = String(m.sender_type || '').toLowerCase() === 'admin';
-            const who = isAdmin ? 'Admin' : escAdmin([m.first_name, m.last_name].filter(Boolean).join(' ') || 'Doctor');
+            const st = String(m.sender_type || '').toLowerCase();
+            const isStaff = st === 'admin' || st === 'staff';
+            const who = escAdmin(
+                m.sender_display_name ||
+                    (isStaff
+                        ? 'Support team'
+                        : [m.first_name, m.last_name].filter(Boolean).join(' ') || 'Doctor')
+            );
             return `
-            <div style="margin-bottom: 10px; padding: 10px; background: ${isAdmin ? '#e0e7ff' : '#f0fdf4'}; border-radius: 4px;">
-                <strong>${isAdmin ? '🔵 Admin' : '👤 ' + who}:</strong> ${escAdmin(m.message || '')}
+            <div style="margin-bottom: 10px; padding: 10px; background: ${isStaff ? '#e0e7ff' : '#f0fdf4'}; border-radius: 4px;">
+                <strong>${isStaff ? '🔵 ' + who : '👤 ' + who}:</strong> ${escAdmin(m.message || '')}
                 <br><small style="color: #64748b;">${m.created_at ? new Date(m.created_at).toLocaleString() : ''}</small>
             </div>`;
         }).join('');
@@ -9002,6 +9577,7 @@ function loadAllData() {
         });
     loadAdminPortalYear();
     loadUsers();
+    loadJobRoles();
     loadApplications();
     loadSettings();
     loadSeminars();
@@ -9009,7 +9585,7 @@ function loadAllData() {
     loadFeedbackSeminars();
     loadSupportTickets();
     startAdminAutoRefresh();
-    applyCoAdminSidebarVisibility();
+    refreshCoAdminSessionFromServer().then(() => applyCoAdminSidebarVisibility());
 }
 
 function downloadParticipantsPdf() {
@@ -11915,6 +12491,44 @@ function bsFetch(url, opts) {
     return fetch(url, Object.assign({}, opts, { headers, body }));
 }
 
+function bsRenderOrderBilling(o) {
+    const subtotal = Number(o.booksSubtotal != null ? o.booksSubtotal : 0);
+    const courier = Number(o.courierCharge != null ? o.courierCharge : o.courier_charge || 0);
+    const cancelled = Number(o.cancelledSubtotal != null ? o.cancelledSubtotal : 0);
+    const total = Number(o.billingTotal != null ? o.billingTotal : o.totalAmount || o.total_amount || 0);
+    let html =
+        '<div style="margin-top:10px;padding:10px 12px;background:#fff;border:1px dashed #cbd5e1;border-radius:8px;font-size:0.85rem;">' +
+        '<p style="margin:0 0 6px;font-weight:700;">Bill summary</p>' +
+        '<div style="display:flex;justify-content:space-between;gap:12px;"><span>Books subtotal</span><span>₹' +
+        subtotal.toFixed(0) +
+        '</span></div>';
+    if (courier > 0) {
+        html +=
+            '<div style="display:flex;justify-content:space-between;gap:12px;color:#64748b;"><span>Courier charge</span><span>₹' +
+            courier.toFixed(0) +
+            '</span></div>';
+    }
+    if (cancelled > 0) {
+        html +=
+            '<div style="display:flex;justify-content:space-between;gap:12px;color:#b91c1c;"><span>Cancelled items (not billed)</span><span>−₹' +
+            cancelled.toFixed(0) +
+            '</span></div>';
+    }
+    html +=
+        '<div style="display:flex;justify-content:space-between;gap:12px;margin-top:6px;padding-top:6px;border-top:1px solid #e2e8f0;font-weight:800;"><span>Total due</span><span>₹' +
+        total.toFixed(0) +
+        '</span></div>';
+    if (o.paymentMode || o.payment_mode) {
+        html +=
+            '<p style="margin:8px 0 0;font-size:0.8rem;color:#64748b;">Payment: ' +
+            e(o.paymentMode || o.payment_mode) +
+            (o.paymentStatus || o.payment_status ? ' · ' + e(o.paymentStatus || o.payment_status) : '') +
+            '</p>';
+    }
+    html += '</div>';
+    return html;
+}
+
 async function loadBsInventory() {
     const root = document.getElementById('bs-inventory-table');
     const msg = document.getElementById('bs-inventory-msg');
@@ -11934,11 +12548,15 @@ async function loadBsInventory() {
             invMap[r.book_id + '::' + r.language] = r;
         });
         let html =
-            '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Book</th><th>Language</th><th>Qty on hand</th><th>Low stock alert</th></tr></thead><tbody>';
+            '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Book</th><th>Language</th><th>Qty on hand</th><th>Available</th><th>Low stock alert</th></tr></thead><tbody>';
+        const bookTotals = {};
         books.forEach((book) => {
             langs.forEach((lang) => {
                 const k = book.id + '::' + lang.id;
                 const row = invMap[k] || {};
+                const onHand = row.qty_on_hand != null ? row.qty_on_hand : 0;
+                const available = Math.max(0, onHand - (row.qty_reserved || 0));
+                bookTotals[book.id] = (bookTotals[book.id] || 0) + onHand;
                 html +=
                     '<tr><td>' +
                     e(book.title) +
@@ -11949,8 +12567,12 @@ async function loadBsInventory() {
                     '" data-inv-lang="' +
                     e(lang.id) +
                     '" data-inv-field="qty" value="' +
-                    (row.qty_on_hand != null ? row.qty_on_hand : 0) +
-                    '" style="width:80px;padding:6px;"></td><td><input type="number" min="0" data-inv-book="' +
+                    onHand +
+                    '" style="width:80px;padding:6px;"></td><td style="font-weight:600;' +
+                    (available <= (row.low_stock_threshold != null ? row.low_stock_threshold : 5) ? 'color:#b45309;' : '') +
+                    '">' +
+                    available +
+                    '</td><td><input type="number" min="0" data-inv-book="' +
                     e(book.id) +
                     '" data-inv-lang="' +
                     e(lang.id) +
@@ -11960,6 +12582,18 @@ async function loadBsInventory() {
             });
         });
         html += '</tbody></table></div>';
+        const totalBooks = Object.keys(bookTotals).length;
+        if (totalBooks) {
+            html +=
+                '<p style="margin:10px 0 0;font-size:0.82rem;color:#64748b;">Total stock: ' +
+                Object.keys(bookTotals)
+                    .map((id) => {
+                        const book = books.find((b) => b.id === id);
+                        return e((book && book.title) || id) + ' (' + bookTotals[id] + ')';
+                    })
+                    .join(' · ') +
+                '</p>';
+        }
         root.innerHTML = html;
     } catch (err) {
         root.innerHTML = '<p style="color:#b91c1c;">' + e(err.message) + '</p>';
@@ -12025,6 +12659,10 @@ async function bsCancelOrderLine(orderId, lineId, bookTitle) {
         });
         const data = await res.json();
         if (!res.ok) return alert(data.error || 'Cancel failed');
+        const newTotal = data.order && (data.order.billingTotal != null ? data.order.billingTotal : data.order.totalAmount);
+        if (newTotal != null) {
+            alert('Item cancelled. Updated bill: ₹' + Number(newTotal).toFixed(0));
+        }
         loadBsOrders(false);
         bsViewOrderTracking(orderId);
     } catch (err) {
@@ -12211,7 +12849,7 @@ function renderBookSalesOrdersTable(rows) {
         return;
     }
     root.innerHTML =
-        '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Code</th><th>Buyer</th><th>Status</th><th>Total</th><th>Pay mode</th><th>Fulfillment</th><th>Actions</th></tr></thead><tbody>' +
+        '<div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>Code</th><th>Buyer</th><th>Items ordered</th><th>Status</th><th>Total</th><th>Pay mode</th><th>Fulfillment</th><th>Actions</th></tr></thead><tbody>' +
         rows.map((o) => {
             const name =
                 bsPosFullName(o) || o.buyer_name || o.email || '—';
@@ -12267,7 +12905,8 @@ function renderBookSalesOrdersTable(rows) {
                     o.id +
                     ')">Mark delivered</button> ';
             }
-            actions += '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.81rem;background:#475569;" onclick="bsViewOrderTracking(' + o.id + ')">Track</button>';
+            actions += '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.81rem;background:#0369a1;" onclick="bsViewOrderTracking(' + o.id + ')">View</button>';
+            const itemsSummary = o.items_summary || '—';
             return '<tr>' +
                 '<td><strong>' + e(o.order_code) + '</strong></td>' +
                 '<td>' +
@@ -12275,6 +12914,7 @@ function renderBookSalesOrdersTable(rows) {
                 (phone ? '<br><small>' + e(phone) + '</small>' : '') +
                 (buyerExtra ? '<br><small style="color:#64748b;">' + e(buyerExtra) + '</small>' : '') +
                 '</td>' +
+                '<td style="max-width:220px;font-size:0.82rem;">' + e(itemsSummary) + '</td>' +
                 '<td>' + statusLabel + '</td>' +
                 '<td>₹' + Number(o.total_amount || 0).toFixed(0) + '</td>' +
                 '<td>' + e(o.payment_mode || '') + '</td>' +
@@ -12563,38 +13203,97 @@ async function bsSaveCourierDetails() {
     }
 }
 
+let _bsCourierPreviewTimer = null;
+
+function bsRenderCourierPreviewEvents(data, trackingNo) {
+    const preview = document.getElementById('bs-courier-track-preview');
+    if (!preview) return;
+    const track = data && data.track;
+    const events = (data && data.events) || (track && track.events) || [];
+    const statusLbl = track && (track.statusLabel || track.status) ? String(track.statusLabel || track.status) : '';
+    let html = '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 12px;">';
+    html +=
+        '<p style="margin:0 0 6px;font-size:0.82rem;color:#166534;font-weight:700;"><i class="fas fa-satellite-dish"></i> Live from carrier</p>';
+    if (statusLbl) {
+        html += '<p style="margin:0 0 8px;font-size:0.88rem;color:#14532d;">' + e(statusLbl) + '</p>';
+    }
+    if (events.length) {
+        html +=
+            '<p style="margin:0 0 4px;font-size:0.78rem;color:#047857;">' +
+            events.length +
+            ' scan' +
+            (events.length === 1 ? '' : 's') +
+            ' found (including history before this entry)</p>' +
+            '<ul style="margin:6px 0 0;padding-left:18px;font-size:0.8rem;max-height:140px;overflow-y:auto;color:#334155;">';
+        events.slice(0, 12).forEach((ev) => {
+            html +=
+                '<li style="margin-bottom:3px;">' +
+                e(ev.description || ev.location || 'Update') +
+                (ev.at
+                    ? ' <span style="color:#64748b;">· ' +
+                      e(
+                          window.PortalDateTime && window.PortalDateTime.format
+                              ? window.PortalDateTime.format(ev.at)
+                              : ev.at
+                      ) +
+                      '</span>'
+                    : '') +
+                '</li>';
+        });
+        if (events.length > 12) {
+            html += '<li style="color:#64748b;">… and ' + (events.length - 12) + ' more</li>';
+        }
+        html += '</ul>';
+    } else {
+        html +=
+            '<p style="margin:0;font-size:0.82rem;color:#64748b;">No carrier scans returned yet — try again after the parcel is scanned, or confirm the AWB and provider.</p>';
+    }
+    if (data.courierTrackingUrl) {
+        html +=
+            '<p style="margin:8px 0 0;font-size:0.78rem;"><a href="' +
+            e(data.courierTrackingUrl) +
+            '" target="_blank" rel="noopener" style="color:#0d9488;font-weight:600;">Open carrier site ↗</a></p>';
+    }
+    html += '</div>';
+    preview.innerHTML = html;
+}
+
 async function bsCourierPreviewTracking() {
     const preview = document.getElementById('bs-courier-track-preview');
     const trackingNo = (document.getElementById('bs-courier-tracking') || {}).value.trim();
     const provider = (document.getElementById('bs-courier-provider') || {}).value;
-    if (!preview || !trackingNo) {
-        if (preview) preview.innerHTML = '';
+    const orderId = parseInt((document.getElementById('bs-courier-order-id') || {}).value, 10);
+    if (!preview) return;
+    if (!trackingNo) {
+        preview.innerHTML = '';
         return;
     }
-    try {
-        const res = await bsFetch(
-            '/api/admin/book-sales/courier-tracking-url?provider=' +
-                encodeURIComponent(provider) +
-                '&trackingNo=' +
-                encodeURIComponent(trackingNo)
-        );
-        const data = await res.json();
-        if (data.portalOnly) {
+    if (_bsCourierPreviewTimer) clearTimeout(_bsCourierPreviewTimer);
+    preview.innerHTML =
+        '<span style="color:#64748b;font-size:0.82rem;"><i class="fas fa-spinner fa-spin"></i> Fetching scans from carrier…</span>';
+    _bsCourierPreviewTimer = setTimeout(async () => {
+        try {
+            const res = await bsFetch('/api/admin/book-sales/preview-courier-track', {
+                method: 'POST',
+                body: {
+                    trackingNo,
+                    courierProvider: provider,
+                    courierIntegration: (document.getElementById('bs-courier-integration') || {}).value || 'auto',
+                    bookOrderId: Number.isInteger(orderId) && orderId > 0 ? orderId : null
+                }
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                preview.innerHTML =
+                    '<span style="color:#b91c1c;font-size:0.82rem;">' + e(data.error || 'Could not fetch carrier status') + '</span>';
+                return;
+            }
+            bsRenderCourierPreviewEvents(data, trackingNo);
+        } catch (err) {
             preview.innerHTML =
-                '<span style="color:#64748b;">AWB <strong>' +
-                e(trackingNo) +
-                '</strong> — live scans load in portal after dispatch. ' +
-                (data.note ? e(data.note) : '') +
-                '</span>';
-        } else if (data.url) {
-            preview.innerHTML =
-                '<span style="color:#64748b;">External: </span><a href="' +
-                e(data.url) +
-                '" target="_blank" rel="noopener" style="color:#0d9488;font-weight:600;">' +
-                e(data.providerLabel || 'courier') +
-                ' ↗</a>';
+                '<span style="color:#b91c1c;font-size:0.82rem;">' + e(err.message || 'Network error') + '</span>';
         }
-    } catch (_) {}
+    }, 650);
 }
 
 async function bsCourierSyncAggregatorButtons() {
@@ -12690,13 +13389,15 @@ async function bsDispatchCourier() {
         bsCloseCourierModal();
         loadBsOrders(false);
         loadBsPosOrders();
-        if (data.courierTrackingUrl) {
-            alert(
-                (data.message || 'Shipped.') +
-                    '\n\nTrack: ' +
-                    data.courierTrackingUrl
-            );
-        }
+        const evCount =
+            (data.liveTrack && data.liveTrack.events && data.liveTrack.events.length) ||
+            (data.order && data.order.courierTrackEvents && data.order.courierTrackEvents.length) ||
+            0;
+        alert(
+            (data.message || 'Shipped.') +
+                (evCount ? '\n\n' + evCount + ' carrier scan(s) loaded (including history before dispatch).' : '') +
+                (data.courierTrackingUrl ? '\n\nTrack: ' + data.courierTrackingUrl : '')
+        );
     } catch (e) {
         if (msg) {
             msg.style.color = '#b91c1c';
@@ -12865,9 +13566,14 @@ async function bsViewOrderTracking(id) {
                 html +=
                     '<div style="margin-bottom:14px;padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;">' +
                     '<p style="margin:0 0 8px;font-weight:700;font-size:0.88rem;">Ordered items</p>' +
-                    '<table class="data-table" style="font-size:0.85rem;"><thead><tr><th>Book</th><th>Lang</th><th>Qty</th><th>₹</th><th>Status</th><th></th></tr></thead><tbody>';
+                    '<table class="data-table" style="font-size:0.85rem;"><thead><tr><th>Book</th><th>Lang</th><th>Qty</th><th>Unit</th><th>Line ₹</th><th>Status</th><th></th></tr></thead><tbody>';
                 items.forEach((it) => {
                     const cancelled = (it.lineStatus || 'active') === 'cancelled';
+                    const canCancel =
+                        !cancelled &&
+                        o.status !== 'fulfilled' &&
+                        o.status !== 'delivered' &&
+                        o.status !== 'cancelled';
                     html +=
                         '<tr' +
                         (cancelled ? ' style="opacity:0.55;"' : '') +
@@ -12877,23 +13583,30 @@ async function bsViewOrderTracking(id) {
                         e(it.languageLabel || it.language) +
                         '</td><td>' +
                         it.qty +
+                        '</td><td>₹' +
+                        Number(it.unitPrice || 0).toFixed(0) +
                         '</td><td>' +
                         Number(it.lineTotal || 0).toFixed(0) +
                         '</td><td>' +
-                        (cancelled ? '<span style="color:#b91c1c;">Cancelled</span>' : 'Active') +
+                        (cancelled
+                            ? '<span style="color:#b91c1c;">Cancelled</span>' +
+                              (it.cancelReason ? '<br><small>' + e(it.cancelReason) + '</small>' : '')
+                            : 'Active') +
                         '</td><td>' +
-                        (!cancelled && o.status !== 'fulfilled' && o.status !== 'delivered'
+                        (canCancel
                             ? '<button type="button" class="btn-primary" style="padding:2px 8px;font-size:0.75rem;background:#b91c1c;" onclick="bsCancelOrderLine(' +
                               o.id +
                               ',' +
                               it.id +
                               ',\'' +
                               e(it.bookTitle || it.bookId).replace(/'/g, '') +
-                              '\')">Cancel item</button>'
+                              '\')">Remove</button>'
                             : '') +
                         '</td></tr>';
                 });
-                html += '</tbody></table><p style="margin:8px 0 0;font-size:0.82rem;color:#64748b;">Total ₹' + Number(o.totalAmount || 0).toFixed(0) + '</p></div>';
+                html += '</tbody></table>';
+                html += bsRenderOrderBilling(o);
+                html += '</div>';
             }
             // Order summary bar
             html += '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:14px;">' +
@@ -12991,6 +13704,7 @@ function bsPosUserSummaryHtml(u, profile) {
 
 function bsPosClearBuyer() {
     _bsPosSelectedUserId = null;
+    _bsPosSearchCache = {};
     const hid = document.getElementById('bs-pos-user-id');
     if (hid) hid.value = '';
     const card = document.getElementById('bs-pos-selected-user');
@@ -13004,7 +13718,10 @@ function bsPosClearBuyer() {
     if (p) p.value = '';
     const root = document.getElementById('bs-pos-search-results');
     if (root) root.innerHTML = '';
+    const q = document.getElementById('bs-pos-search');
+    if (q) q.value = '';
 }
+window.bsPosClearBuyer = bsPosClearBuyer;
 
 let _bsPosSelectedUserId = null;
 

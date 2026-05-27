@@ -32,7 +32,7 @@
     <div id="auth-overlay">
         <div class="card" style="width:400px;max-width:100%;">
             <h1>Staff sign in</h1>
-            <p class="sub">Book sales, inventory, and orders. Scanner volunteers use <a href="/scanner.html">scanner portal</a>.</p>
+            <p class="sub">Sign in with your staff account. Co-admins get the full CRM after sign-in; operations staff see assigned modules only.</p>
             <form id="staff-login-form">
                 <div style="margin-bottom:12px;">
                     <label>Email or portal user ID</label>
@@ -52,28 +52,25 @@
         <div class="wrap">
             <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
                 <div>
-                    <h1>Staff — Book operations</h1>
+                    <h1 id="staff-page-title">Staff portal</h1>
                     <p class="sub" id="staff-user-label"></p>
+                    <p class="sub" id="staff-page-hint" style="margin-top:4px;font-size:0.82rem;"></p>
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                    <a href="/admin.html" class="btn btn-muted" id="staff-link-admin" style="text-decoration:none;display:none;">Admin portal</a>
                     <button type="button" class="btn btn-muted" onclick="staffLogout()">Sign out</button>
                 </div>
             </div>
 
-            <div class="tabs" id="staff-tabs">
-                <button type="button" class="tab active" data-staff-tab="inventory" onclick="staffSwitchTab('inventory')">Stock inventory</button>
-                <button type="button" class="tab" data-staff-tab="orders" onclick="staffSwitchTab('orders')">Book orders</button>
-            </div>
+            <div class="tabs" id="staff-tabs"></div>
 
-            <div id="staff-panel-inventory" class="card">
+            <div id="staff-panel-inventory" class="card hidden">
                 <p style="color:#64748b;font-size:0.88rem;margin:0 0 12px;">Update quantities on hand. Doctors cannot order more than available stock.</p>
                 <div id="staff-inventory-root"><p>Loading…</p></div>
                 <button type="button" class="btn btn-primary" style="margin-top:12px;" onclick="staffSaveInventory()">Save inventory</button>
                 <p id="staff-inventory-msg" style="margin-top:8px;font-weight:600;"></p>
             </div>
 
-            <div id="staff-panel-orders" class="card hidden">
+            <div id="staff-panel-book-orders" class="card hidden">
                 <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
                     <select id="staff-orders-filter" onchange="staffLoadOrders()" style="padding:8px;">
                         <option value="">All statuses</option>
@@ -86,6 +83,33 @@
                     <button type="button" class="btn btn-primary" onclick="staffLoadOrders()">Refresh</button>
                 </div>
                 <div id="staff-orders-root"><p>Loading…</p></div>
+            </div>
+
+            <div id="staff-panel-applications" class="card hidden">
+                <p style="color:#64748b;font-size:0.88rem;margin:0 0 12px;">Review seminar registrations. For full document review use the admin portal.</p>
+                <button type="button" class="btn btn-primary" style="margin-bottom:12px;" onclick="staffLoadApplications()">Refresh</button>
+                <div id="staff-applications-root"><p>Loading…</p></div>
+            </div>
+
+            <div id="staff-panel-support-tickets" class="card hidden">
+                <p style="color:#64748b;font-size:0.88rem;margin:0 0 12px;">View and update support ticket status.</p>
+                <button type="button" class="btn btn-primary" style="margin-bottom:12px;" onclick="staffLoadSupportTickets()">Refresh</button>
+                <div id="staff-tickets-root"><p>Loading…</p></div>
+            </div>
+
+            <div id="staff-panel-payments" class="card hidden">
+                <p style="color:#64748b;font-size:0.88rem;margin:0 0 12px;">Seminar payment orders (read-only list).</p>
+                <button type="button" class="btn btn-primary" style="margin-bottom:12px;" onclick="staffLoadSeminarOrders()">Refresh</button>
+                <div id="staff-payments-root"><p>Loading…</p></div>
+            </div>
+
+            <div id="staff-panel-etickets" class="card hidden">
+                <p style="color:#64748b;font-size:0.88rem;margin:0 0 12px;">Look up e-tickets by application no., email, phone, or ticket ID.</p>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+                    <input type="search" id="staff-eticket-q" placeholder="Search…" style="flex:1;min-width:200px;">
+                    <button type="button" class="btn btn-primary" onclick="staffSearchEtickets()">Search</button>
+                </div>
+                <div id="staff-etickets-root"><p style="color:#64748b;">Enter a search term above.</p></div>
             </div>
         </div>
     </div>
@@ -100,9 +124,9 @@
         </div>
     </div>
 
-    <script src="/js/fetch-json.js"></script>
-    <script src="/js/portal-auth.js"></script>
-    <script src="/js/book-tracking-ui.js"></script>
-    <script src="/js/staff-portal.js"></script>
+    <script src="/js/fetch-json.js?v=20260527a"></script>
+    <script src="/js/portal-auth.js?v=20260527b"></script>
+    <script src="/js/book-tracking-ui.js?v=20260530d"></script>
+    <script src="/js/staff-portal.js?v=20260528c"></script>
 </body>
 </html>

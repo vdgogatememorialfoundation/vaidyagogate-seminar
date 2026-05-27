@@ -122,9 +122,21 @@
             langs.forEach((lang) => {
                 const k = cartKey(book.id, lang.id);
                 const q = bookCart[k] || 0;
+                const avail =
+                    bookConfig &&
+                    bookConfig.stock &&
+                    bookConfig.stock[book.id] &&
+                    Number.isFinite(Number(bookConfig.stock[book.id][lang.id]))
+                        ? Math.max(0, Number(bookConfig.stock[book.id][lang.id]))
+                        : null;
                 const dis = orderingOpen ? '' : ' disabled';
                 html += `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:8px;background:#f8fafc;border-radius:8px;${orderingOpen ? '' : 'opacity:0.65;'}">
                     <span style="min-width:90px;font-weight:600;">${esc(lang.label)}</span>
+                    ${
+                        avail != null
+                            ? `<span style="font-size:0.78rem;color:${avail <= 3 ? '#b45309' : '#64748b'};">Available: <strong>${avail}</strong></span>`
+                            : ''
+                    }
                     <label style="font-size:0.85rem;">Qty <input type="number" min="0" max="99" value="${q}" data-book-qty data-book="${esc(book.id)}" data-lang="${esc(lang.id)}" style="width:64px;padding:6px;margin-left:4px;"${dis}></label>
                 </div>`;
             });
@@ -279,7 +291,9 @@
         awaiting_confirmation: 'Awaiting confirmation',
         pending_payment: 'Awaiting online payment',
         confirmed: 'Confirmed — show QR at book desk',
+        ready_to_ship: 'Packed and ready to ship',
         shipped: 'Shipped — in transit',
+        out_for_delivery: 'Out for delivery',
         delivered: 'Delivered ✓',
         fulfilled: 'Collected ✓',
         cancelled: 'Cancelled'
@@ -304,9 +318,29 @@
 
     function statusColor(st) {
         if (st === 'confirmed') return '#0d9488';
+        if (st === 'shipped' || st === 'out_for_delivery') return '#0369a1';
         if (st === 'fulfilled') return '#15803d';
         if (st === 'cancelled') return '#b91c1c';
         return '#64748b';
+    }
+
+    function renderBilling(o) {
+        const books = Number(o.booksSubtotal != null ? o.booksSubtotal : o.totalAmount || 0);
+        const courier = Number(o.courierCharge != null ? o.courierCharge : 0);
+        const cancelled = Number(o.cancelledSubtotal != null ? o.cancelledSubtotal : 0);
+        const total = Number(o.billingTotal != null ? o.billingTotal : o.totalAmount || 0);
+        return (
+            '<div style="margin-top:10px;padding:10px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;font-size:0.84rem;">' +
+            '<div style="display:flex;justify-content:space-between;"><span>Books subtotal</span><strong>₹' + books.toFixed(0) + '</strong></div>' +
+            (courier > 0
+                ? '<div style="display:flex;justify-content:space-between;color:#64748b;"><span>Courier charge</span><span>₹' + courier.toFixed(0) + '</span></div>'
+                : '') +
+            (cancelled > 0
+                ? '<div style="display:flex;justify-content:space-between;color:#b91c1c;"><span>Cancelled items</span><span>-₹' + cancelled.toFixed(0) + '</span></div>'
+                : '') +
+            '<div style="display:flex;justify-content:space-between;margin-top:6px;padding-top:6px;border-top:1px solid #cbd5e1;"><span>Total</span><strong>₹' + total.toFixed(0) + '</strong></div>' +
+            '</div>'
+        );
     }
 
     function renderBookTrackerStepsHtml(timeline) {
@@ -349,7 +383,23 @@
 
     function renderOrderCard(o) {
         const lines = (o.items || [])
-            .map((it) => '<li>' + esc(it.bookTitle || it.bookId) + ' · ' + esc(it.languageLabel || it.language) + ' × ' + it.qty + '</li>')
+            .map((it) => {
+                const cancelled = (it.lineStatus || 'active') === 'cancelled';
+                return (
+                    '<li style="' +
+                    (cancelled ? 'opacity:.65;' : '') +
+                    '">' +
+                    esc(it.bookTitle || it.bookId) +
+                    ' · ' +
+                    esc(it.languageLabel || it.language) +
+                    ' × ' +
+                    it.qty +
+                    ' · ₹' +
+                    Number(it.lineTotal || 0).toFixed(0) +
+                    (cancelled ? ' <span style="color:#b91c1c;">(cancelled)</span>' : '') +
+                    '</li>'
+                );
+            })
             .join('');
         const journey = o.deliveryJourney;
         // Compact stepper shown in card; click expands to full vertical timeline
@@ -385,13 +435,28 @@
                 extra = live;
             }
         }
+        const detailMeta =
+            '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;">' +
+            '<span style="font-size:0.76rem;padding:4px 8px;border-radius:999px;background:#f1f5f9;color:#334155;">' +
+            esc(o.fulfillmentType === 'courier' ? 'Courier delivery' : 'Counter pickup') +
+            '</span>' +
+            '<span style="font-size:0.76rem;padding:4px 8px;border-radius:999px;background:#f1f5f9;color:#334155;">Payment: ' +
+            esc(o.paymentMode || '—') +
+            '</span>' +
+            (o.courierTrackLabel
+                ? '<span style="font-size:0.76rem;padding:4px 8px;border-radius:999px;background:#ecfeff;color:#0e7490;">' +
+                  esc(o.courierTrackLabel) +
+                  '</span>'
+                : '') +
+            '</div>';
         return '<div class="card" style="margin-bottom:12px;padding:14px;border:1px solid #e2e8f0;" data-book-order-id="' + o.id + '">' +
             '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">' +
             '<strong>' + esc(o.orderCode) + '</strong>' +
             '<span style="font-size:0.85rem;font-weight:600;color:' + statusColor(o.status) + ';">' + esc(statusLabel(o.status, o)) + '</span>' +
             '</div>' +
             '<ul style="margin:8px 0 4px;padding-left:18px;font-size:0.88rem;">' + lines + '</ul>' +
-            '<p style="margin:0;font-size:0.88rem;color:#64748b;">Total ₹' + Number(o.totalAmount || 0).toFixed(0) + ' · ' + esc(o.paymentMode) + '</p>' +
+            detailMeta +
+            renderBilling(o) +
             extra +
             trackHtml +
             '</div>';
@@ -409,14 +474,35 @@
             j.progressPercent,
             o.courierTrackingNo,
             (o.courierTrackEvents || []).length,
-            o.fulfilledAt,
-            o.updatedAt
+            o.fulfilledAt
         ].join('|');
     }
 
+    const _openBookTrackIds = new Set();
+    const OPEN_TRACK_KEY = 'doctor_book_open_track_ids';
+
+    function loadOpenTrackState() {
+        try {
+            const raw = sessionStorage.getItem(OPEN_TRACK_KEY);
+            if (!raw) return;
+            const arr = JSON.parse(raw);
+            if (!Array.isArray(arr)) return;
+            _openBookTrackIds.clear();
+            arr.forEach((x) => {
+                if (x != null && String(x).trim()) _openBookTrackIds.add(String(x));
+            });
+        } catch (_) {}
+    }
+
+    function saveOpenTrackState() {
+        try {
+            sessionStorage.setItem(OPEN_TRACK_KEY, JSON.stringify(Array.from(_openBookTrackIds)));
+        } catch (_) {}
+    }
     let _bookOrderPollTimer = null;
     let _bookConfigPollTimer = null;
-    let _bookPollIntervalMs = 12000;
+    let _bookPollIntervalMs = 15000;
+    let _bookRefreshTracksTick = 0;
 
     function startBookConfigPoll() {
         if (_bookConfigPollTimer) return;
@@ -449,6 +535,9 @@
             const tab = document.getElementById('tab-books');
             const tabVisible = tab && !tab.classList.contains('hidden');
             if (tabVisible) {
+                _bookRefreshTracksTick++;
+            }
+            if (tabVisible && _bookRefreshTracksTick % 3 === 1) {
                 fetch('/api/doctor/book-orders/refresh-tracks', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -473,7 +562,7 @@
                     o.fulfillmentType === 'courier' &&
                     (o.status === 'shipped' || (o.deliveryJourney && o.deliveryJourney.isLive))
             );
-            const nextInterval = needsFastPoll ? 5000 : 12000;
+            const nextInterval = needsFastPoll ? 10000 : 15000;
             if (nextInterval !== _bookPollIntervalMs) {
                 _bookPollIntervalMs = nextInterval;
                 stopBookOrderPoll();
@@ -482,11 +571,30 @@
                 live.classList.toggle('hidden', !needsPoll);
                 if (needsFastPoll) {
                     live.innerHTML =
-                        '<span class="pkg-live-dot" style="display:inline-block;vertical-align:middle;margin-right:6px;"></span> Live delivery tracking — refreshing every 5 seconds';
+                        '<span class="pkg-live-dot" style="display:inline-block;vertical-align:middle;margin-right:6px;"></span> Live delivery tracking — refreshing every 10 seconds';
                 }
             }
-            if (!silent || fp !== _lastBookOrdersFingerprint) {
+            if (silent && _openBookTrackIds.size > 0) {
+                // Never re-render cards while any tracking panel is manually expanded.
+                // This guarantees the panel stays open during auto-poll.
+                _lastBookOrdersFingerprint = fp;
+                if (needsPoll) startBookOrderPoll();
+                else stopBookOrderPoll();
+                return;
+            }
+            const keepExpandedStable = silent && _openBookTrackIds.size > 0 && fp !== _lastBookOrdersFingerprint;
+            if (!silent || (!keepExpandedStable && fp !== _lastBookOrdersFingerprint)) {
                 root.innerHTML = orders.map(renderOrderCard).join('');
+                _openBookTrackIds.forEach((orderId) => {
+                    const el = document.getElementById('book-track-full-' + orderId);
+                    const btn = document.getElementById('book-track-toggle-' + orderId);
+                    if (el) el.classList.remove('hidden');
+                    if (btn) btn.textContent = '▲ Hide tracking';
+                });
+                _lastBookOrdersFingerprint = fp;
+            } else if (keepExpandedStable) {
+                // Keep open tracking panels exactly as-is while poll refreshes in background.
+                // This avoids visible collapse/flicker in doctor portal.
                 _lastBookOrdersFingerprint = fp;
             }
             if (needsPoll) startBookOrderPoll();
@@ -544,6 +652,10 @@
         const btn = document.getElementById('book-track-toggle-' + orderId);
         if (!el) return;
         const hidden = el.classList.toggle('hidden');
+        const key = String(orderId);
+        if (hidden) _openBookTrackIds.delete(key);
+        else _openBookTrackIds.add(key);
+        saveOpenTrackState();
         if (btn) btn.textContent = hidden ? '▼ Show full tracking' : '▲ Hide tracking';
     };
 
@@ -554,6 +666,7 @@
     window.stopDoctorBookConfigPoll = stopBookConfigPoll;
 
     document.addEventListener('DOMContentLoaded', () => {
+        loadOpenTrackState();
         loadBookSalesConfig();
     });
 })();

@@ -511,7 +511,8 @@ async function loadPortalFlags() {
     } catch (_) {}
 }
 
-const DOCTOR_TRACK_POLL_MS = 4000;
+const DOCTOR_TRACK_POLL_MS = 7000;
+const SUPPORT_CHAT_POLL_MS = 8000;
 let seminarTrackPollTimer = null;
 let caseTrackPollTimer = null;
 let _lastSeminarTrackFingerprint = '';
@@ -779,6 +780,13 @@ function renderSeminarApplicationTrackerCard(a) {
     const payAmt = Number(a.seminar_price) > 0 ? Number(a.seminar_price) : 1500;
     const st = String(a.status || '').toLowerCase();
     const isPaid = st === 'completed' || st === 'checked_in';
+    let waitlistBlock = '';
+    if (st === 'waitlisted') {
+        waitlistBlock =
+            '<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px;margin-bottom:12px;">' +
+            '<p style="margin:0;font-weight:600;color:#92400e;"><i class="fas fa-clock"></i> On waiting list</p>' +
+            '<p style="margin:8px 0 0;font-size:0.9rem;color:#78350f;">No payment required yet. If a seat is offered, you will receive a payment link by email and can pay from this dashboard.</p></div>';
+    }
     let revisionBlock = '';
     if (st === 'revision_required' || st === 'documents_requested') {
         let reason = '';
@@ -847,6 +855,7 @@ function renderSeminarApplicationTrackerCard(a) {
         yearBadge +
         '</h4>' +
         qualBadge +
+        waitlistBlock +
         revisionBlock +
         renderTrackerStepsHtml(tl) +
         payBtn +
@@ -1801,6 +1810,9 @@ function effectiveRegistrationWindowState(seminar) {
     if (w.state === 'closed' && seminar && hasRegistrationOverrideForSeminar(seminar.id)) {
         return { state: 'open', viaOverride: true };
     }
+    if (w.state === 'closed' && seminar && Number(seminar.waiting_list_enabled) === 1) {
+        return { state: 'waitlist' };
+    }
     return w;
 }
 
@@ -1833,6 +1845,18 @@ function startSeminarGridCountdownTimer() {
         let anyUpcoming = false;
         activeSeminars.forEach((s) => {
             const w = registrationWindowState(s);
+            const parseMs =
+                window.PortalDateTime && window.PortalDateTime.parseMs
+                    ? (v) => window.PortalDateTime.parseMs(v)
+                    : (v) => (v ? new Date(v).getTime() : null);
+            const re = parseMs(s.registration_end);
+            if (re != null && !Number.isNaN(re) && Date.now() >= re && w.state === 'closed') {
+                const prevClosed = s.__regClosedSeen;
+                if (!prevClosed) {
+                    s.__regClosedSeen = true;
+                    needReload = true;
+                }
+            }
             if (w.state === 'upcoming') {
                 anyUpcoming = true;
                 const el = document.getElementById(`seminar-reg-countdown-${s.id}`);
@@ -1854,7 +1878,11 @@ function startSeminarGridCountdownTimer() {
             loadSeminarsGrid();
             return;
         }
-        if (!anyUpcoming) {
+        const anyOpenOrWaitlist = activeSeminars.some((s) => {
+            const ew = effectiveRegistrationWindowState(s);
+            return ew.state === 'open' || ew.state === 'waitlist' || registrationWindowState(s).state === 'upcoming';
+        });
+        if (!anyUpcoming && !anyOpenOrWaitlist) {
             clearSeminarGridCountdownTimer();
         }
     };
@@ -1895,6 +1923,14 @@ function renderSeminarGridCard(s, readOnlyPast, alreadyRegistered) {
         actionBlock =
             '<p style="font-size:0.85rem;color:#b45309;"><i class="fas fa-lock"></i> Registration closed.</p>' +
             '<button type="button" disabled class="btn-primary" style="width:100%;opacity:0.55;margin-top:8px;">Registration closed</button>';
+    } else if (win.state === 'waitlist') {
+        actionBlock =
+            '<div style="background:#fffbeb;border-radius:10px;padding:14px;margin-bottom:12px;border:1px solid #fde68a;">' +
+            '<p style="font-size:0.8rem;color:#92400e;font-weight:600;"><i class="fas fa-list-ol"></i> Waiting list open</p>' +
+            '<p style="font-size:0.85rem;color:#78350f;margin:6px 0 0;">Registration has closed. Join the waitlist — no payment now. If selected, you will receive a payment link by email.</p></div>' +
+            '<button type="button" class="btn-primary" onclick="startRegistration(' +
+            s.id +
+            ', { waitlist: true })" style="width:100%;background:#b45309;border:none;">Join waiting list</button>';
     } else {
         const overrideNote = win.viaOverride
             ? '<p style="font-size:0.85rem;color:#0f766e;margin-bottom:10px;"><i class="fas fa-user-check"></i> You have admin approval to register for this seminar after the public window closed.</p>'
@@ -1989,13 +2025,15 @@ async function loadSeminarsGrid() {
         }
 
         let hasUpcoming = false;
+        let hasOpenReg = false;
         activeSeminars.forEach((s) => {
             const win = registrationWindowState(s);
             if (win.state === 'upcoming') hasUpcoming = true;
+            if (effectiveRegistrationWindowState(s).state === 'open') hasOpenReg = true;
             const alreadyRegistered = registeredSeminarIds.has(Number(s.id));
             container.insertAdjacentHTML('beforeend', renderSeminarGridCard(s, false, alreadyRegistered));
         });
-        if (hasUpcoming) {
+        if (hasUpcoming || hasOpenReg) {
             startSeminarGridCountdownTimer();
         }
     } catch (err) {
@@ -2032,6 +2070,7 @@ function proceedFromSeminarTnc() {
 async function startRegistration(seminarId, opts) {
     opts = opts || {};
     const volunteerBypass = !!opts.volunteerBypass;
+    const waitlistMode = !!opts.waitlist;
     const s = activeSeminars.find((x) => Number(x.id) === Number(seminarId));
     const seminarTitle = s && s.title ? s.title : 'Seminar';
     const regSet = window.__userRegisteredSeminarIds;
@@ -2040,15 +2079,23 @@ async function startRegistration(seminarId, opts) {
         switchTab('tab-applications');
         return;
     }
-    if (!volunteerBypass && s && effectiveRegistrationWindowState(s).state !== 'open') {
+    const win = s ? effectiveRegistrationWindowState(s) : { state: 'closed' };
+    if (!volunteerBypass && !waitlistMode && s && win.state !== 'open') {
         if (registrationWindowState(s).state === 'upcoming') {
             alert('Registration has not opened yet for this seminar. Please wait until the countdown reaches zero.');
+        } else if (win.state === 'waitlist') {
+            alert('Registration has closed. Use Join waiting list if it is enabled for this seminar.');
         } else {
             alert('Registration for this seminar has closed.');
         }
         return;
     }
+    if (waitlistMode && s && win.state !== 'waitlist') {
+        alert('Waiting list is not open for this seminar.');
+        return;
+    }
     activeSeminarIdForReg = seminarId;
+    window.__registrationJoinWaitlist = waitlistMode;
     const termsRaw = s && s.terms_conditions && String(s.terms_conditions).trim();
     window.__seminarTermsText = termsRaw || '';
     window.__seminarCancellationSummary = s ? summaryCancellationPolicy(s.cancellation_policy_json) : '';
@@ -2059,7 +2106,9 @@ async function startRegistration(seminarId, opts) {
     window.__regSubmitEmailOtpToken = null;
     resetRegistrationSubmitOtpState();
     window.__draftApplicationNo = null;
-    document.getElementById('registration-seminar-name').innerText = `Registering for: ${seminarTitle}`;
+    document.getElementById('registration-seminar-name').innerText = waitlistMode
+        ? `Waiting list — ${seminarTitle}`
+        : `Registering for: ${seminarTitle}`;
     document.getElementById('seminars-grid-container').classList.add('hidden');
     document.getElementById('seminars-title').classList.add('hidden');
     document.getElementById('multi-step-form').classList.remove('hidden');
@@ -2112,6 +2161,7 @@ async function startRegistrationVolunteerFlow(seminarId) {
 
 function cancelRegistration() {
     activeSeminarIdForReg = null;
+    window.__registrationJoinWaitlist = false;
     window.__draftApplicationNo = null;
     window.__fieldOtpTokens = {};
     window.__regPhoneOtpToken = null;
@@ -2165,6 +2215,7 @@ function switchTab(tabId, menuEl) {
     }
     if (tabId !== 'tab-certificate') {
         stopCertTrackingPoll();
+        stopDoctorCertCountdownTimer();
     }
     if (tabId === 'tab-feedback') {
         loadDashboardFeedbackForm();
@@ -3085,6 +3136,129 @@ function doctorCertificateLockedBlock(message) {
     );
 }
 
+function formatCertCountdownParts(targetMs) {
+    const diff = Math.max(0, targetMs - Date.now());
+    if (diff <= 0) return null;
+    const sec = Math.floor(diff / 1000) % 60;
+    const min = Math.floor(diff / 60000) % 60;
+    const hr = Math.floor(diff / 3600000) % 24;
+    const day = Math.floor(diff / 86400000);
+    return { day, hr, min, sec, diff };
+}
+
+function renderDoctorCertCountdownHtml(countdown, elementId) {
+    if (!countdown || !countdown.opensAt) return '';
+    const targetMs = new Date(countdown.opensAt).getTime();
+    const parts = formatCertCountdownParts(targetMs);
+    const label = escapeHtml(countdown.label || 'Certificate available in');
+    if (!parts) {
+        return (
+            '<div style="text-align:center;padding:20px;background:#ecfdf5;border-radius:10px;border:1px solid #a7f3d0;margin-top:12px;">' +
+            '<p style="margin:0;font-weight:600;color:#047857;">Unlocking now… refresh in a moment.</p></div>'
+        );
+    }
+    const idAttr = elementId ? ' id="' + escapeHtml(elementId) + '"' : '';
+    return (
+        '<div style="text-align:center;padding:20px;background:#fffbeb;border-radius:10px;border:1px solid #fde68a;margin-top:12px;">' +
+        '<p style="margin:0 0 12px;font-size:0.82rem;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:0.04em;">' +
+        label +
+        '</p>' +
+        '<div' +
+        idAttr +
+        ' style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap;font-variant-numeric:tabular-nums;">' +
+        (parts.day
+            ? '<div style="min-width:52px;padding:8px 10px;background:#fff;border-radius:8px;border:1px solid #fcd34d;"><strong style="display:block;font-size:1.2rem;color:#78350f;">' +
+              parts.day +
+              '</strong><span style="font-size:0.72rem;color:#92400e;">days</span></div>'
+            : '') +
+        '<div style="min-width:52px;padding:8px 10px;background:#fff;border-radius:8px;border:1px solid #fcd34d;"><strong style="display:block;font-size:1.2rem;color:#78350f;">' +
+        parts.hr +
+        '</strong><span style="font-size:0.72rem;color:#92400e;">hrs</span></div>' +
+        '<div style="min-width:52px;padding:8px 10px;background:#fff;border-radius:8px;border:1px solid #fcd34d;"><strong style="display:block;font-size:1.2rem;color:#78350f;">' +
+        parts.min +
+        '</strong><span style="font-size:0.72rem;color:#92400e;">min</span></div>' +
+        '<div style="min-width:52px;padding:8px 10px;background:#fff;border-radius:8px;border:1px solid #fcd34d;"><strong style="display:block;font-size:1.2rem;color:#78350f;">' +
+        parts.sec +
+        '</strong><span style="font-size:0.72rem;color:#92400e;">sec</span></div>' +
+        '</div></div>'
+    );
+}
+
+function renderDoctorCertWaitingBlock(track) {
+    const t = track || {};
+    const reason = t.certHiddenReason || 'Your certificate is not available yet.';
+    let html =
+        '<div style="padding:8px 0;">' +
+        '<p style="margin:0 0 10px;font-size:0.9rem;color:#64748b;line-height:1.5;">' +
+        escapeHtml(reason) +
+        '</p>';
+    if (t.scansRequired === 2 && t.paid && !t.checkinComplete) {
+        html +=
+            '<p style="margin:0 0 10px;font-size:0.85rem;font-weight:600;color:#b45309;"><i class="fas fa-qrcode"></i> Scans: ' +
+            escapeHtml(String(t.scanCount || 0)) +
+            ' / 2 (entry + exit)</p>';
+    }
+    if (t.certCountdown) {
+        html += renderDoctorCertCountdownHtml(t.certCountdown, 'doctor-cert-cd-' + (t.seminarId || t.certId || 'x'));
+    } else if (t.certPhase === 'awaiting_scans' || t.certPhase === 'awaiting_approval') {
+        html +=
+            '<p style="margin:0;font-size:0.82rem;color:#94a3b8;"><i class="fas fa-hourglass-half"></i> Status updates automatically on this page.</p>';
+    }
+    html += '</div>';
+    return html;
+}
+
+let doctorCertCountdownTimer = null;
+
+function tickDoctorCertCountdowns() {
+    let needReload = false;
+    document.querySelectorAll('[id^="doctor-cert-cd-"]').forEach((el) => {
+        const sid = el.id.replace('doctor-cert-cd-', '');
+        const track = (window.__doctorCertTrackingRows || []).find(
+            (r) => String(r.seminarId) === sid || String(r.certId) === sid
+        );
+        if (!track || !track.certCountdown) return;
+        const targetMs = new Date(track.certCountdown.opensAt).getTime();
+        const parts = formatCertCountdownParts(targetMs);
+        if (!parts) {
+            needReload = true;
+            return;
+        }
+        el.innerHTML =
+            (parts.day
+                ? '<div style="min-width:52px;padding:8px 10px;background:#fff;border-radius:8px;border:1px solid #fcd34d;"><strong style="display:block;font-size:1.2rem;color:#78350f;">' +
+                  parts.day +
+                  '</strong><span style="font-size:0.72rem;color:#92400e;">days</span></div>'
+                : '') +
+            '<div style="min-width:52px;padding:8px 10px;background:#fff;border-radius:8px;border:1px solid #fcd34d;"><strong style="display:block;font-size:1.2rem;color:#78350f;">' +
+            parts.hr +
+            '</strong><span style="font-size:0.72rem;color:#92400e;">hrs</span></div>' +
+            '<div style="min-width:52px;padding:8px 10px;background:#fff;border-radius:8px;border:1px solid #fcd34d;"><strong style="display:block;font-size:1.2rem;color:#78350f;">' +
+            parts.min +
+            '</strong><span style="font-size:0.72rem;color:#92400e;">min</span></div>' +
+            '<div style="min-width:52px;padding:8px 10px;background:#fff;border-radius:8px;border:1px solid #fcd34d;"><strong style="display:block;font-size:1.2rem;color:#78350f;">' +
+            parts.sec +
+            '</strong><span style="font-size:0.72rem;color:#92400e;">sec</span></div>';
+    });
+    if (needReload) {
+        loadDoctorCertificates();
+        loadDoctorCertificateTracking(true);
+    }
+}
+
+function startDoctorCertCountdownTimer() {
+    if (doctorCertCountdownTimer) clearInterval(doctorCertCountdownTimer);
+    tickDoctorCertCountdowns();
+    doctorCertCountdownTimer = setInterval(tickDoctorCertCountdowns, 1000);
+}
+
+function stopDoctorCertCountdownTimer() {
+    if (doctorCertCountdownTimer) {
+        clearInterval(doctorCertCountdownTimer);
+        doctorCertCountdownTimer = null;
+    }
+}
+
 function doctorCertificatePendingTemplateBlock() {
     return (
         '<div style="text-align:center;padding:24px;background:#fffbeb;border-radius:8px;border:1px solid #e8d48a;">' +
@@ -3105,40 +3279,65 @@ async function loadDoctorCertificates() {
             wrap.innerHTML = '<p style="color:#b91c1c;">Please sign out and sign in again.</p>';
             return;
         }
-        const [res, vres] = await Promise.all([
+        const [res, vres, trackRes] = await Promise.all([
             fetch('/api/doctor/certificates/' + uid),
-            fetch('/api/doctor/volunteer-certificates/' + uid)
+            fetch('/api/doctor/volunteer-certificates/' + uid),
+            fetch('/api/doctor/certificate-tracking/' + uid, { cache: 'no-store' })
         ]);
         const rows = await res.json().catch(() => []);
         const vrows = await vres.json().catch(() => []);
+        const trackingRows = await trackRes.json().catch(() => []);
+        window.__doctorCertTrackingRows = Array.isArray(trackingRows) ? trackingRows : [];
+        const trackBySeminar = new Map();
+        const trackByCertId = new Map();
+        window.__doctorCertTrackingRows.forEach((tr) => {
+            if (tr.seminarId != null) trackBySeminar.set(Number(tr.seminarId), tr);
+            if (tr.certId != null) trackByCertId.set(Number(tr.certId), tr);
+        });
         const all = [...(Array.isArray(rows) ? rows : []), ...(Array.isArray(vrows) ? vrows.map((v) => ({ ...v, _volunteer: true })) : [])];
-        if (!all.length) {
+        const paidTracking = window.__doctorCertTrackingRows.filter((tr) => tr.paid);
+        if (!all.length && !paidTracking.length) {
             wrap.innerHTML = doctorCertificateLockedBlock();
+            stopDoctorCertCountdownTimer();
             return;
         }
         wrap.innerHTML = '';
-        all.forEach((c) => {
+        const renderedSeminars = new Set();
+        const renderWaitingCard = (title, track) => {
             const card = document.createElement('div');
             card.className = 'card';
             card.style.marginBottom = '16px';
-            const title = escapeHtml((c.seminar_title || 'Seminar') + (c._volunteer ? ' (Volunteer)' : ''));
+            card.innerHTML =
+                '<h4 style="margin:0 0 12px;color:#92400e;">' +
+                escapeHtml(title) +
+                '</h4>' +
+                renderDoctorCertWaitingBlock(track);
+            wrap.appendChild(card);
+        };
+        all.forEach((c) => {
+            const track =
+                trackByCertId.get(Number(c.id)) ||
+                trackBySeminar.get(Number(c.seminar_id)) ||
+                null;
+            const title = (c.seminar_title || 'Seminar') + (c._volunteer ? ' (Volunteer)' : '');
+            renderedSeminars.add(Number(c.seminar_id));
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.style.marginBottom = '16px';
+            const canView = track ? !!track.canViewCertificate : false;
+            if (!canView) {
+                renderWaitingCard(
+                    title,
+                    track || { certHiddenReason: 'Your certificate is not available yet. Complete venue scans and wait for foundation approval.' }
+                );
+                return;
+            }
+            const titleEsc = escapeHtml(title);
             const name = escapeHtml(c.display_name || '');
-            if (!c.enabled) {
-                card.innerHTML = `<h4 style="margin:0 0 12px;">${title}</h4>${doctorCertificateLockedBlock(
-                    'Your certificate is not available yet. It will appear here after check-in when issued.'
-                )}`;
-                wrap.appendChild(card);
-                return;
-            }
-            if (!c.template_path) {
-                card.innerHTML = `<h4 style="margin:0 0 12px;">${title}</h4>${doctorCertificatePendingTemplateBlock()}`;
-                wrap.appendChild(card);
-                return;
-            }
             const viewUrl = certificateViewUrl(c, !!c._volunteer);
             if (isBuiltinCertificateTemplate(c.template_path)) {
                 card.innerHTML =
-                    `<h4 style="margin:0 0 8px;color:#92400e;">${title}</h4>` +
+                    `<h4 style="margin:0 0 8px;color:#92400e;">${titleEsc}</h4>` +
                     `<p style="font-size:0.88rem;color:#78716c;margin-bottom:10px;">${name}</p>` +
                     `<div style="border:2px solid #e8d48a;border-radius:10px;overflow:hidden;"><iframe src="${viewUrl}" style="width:100%;min-height:420px;border:0;"></iframe></div>` +
                     `<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">` +
@@ -3150,7 +3349,7 @@ async function loadDoctorCertificates() {
             }
             const isImage = !c.mime_type || String(c.mime_type).startsWith('image/');
             if (isImage) {
-                card.innerHTML = `<h4 style="margin:0 0 8px;">${title}</h4>
+                card.innerHTML = `<h4 style="margin:0 0 8px;">${titleEsc}</h4>
                     <p style="font-size:0.88rem;color:#64748b;margin-bottom:8px;">${name}</p>
                     <div style="position:relative;max-width:720px;margin:0 auto;">
                         <img src="${c.template_path}" alt="Certificate" style="width:100%;border-radius:8px;border:1px solid #e2e8f0;">
@@ -3158,12 +3357,19 @@ async function loadDoctorCertificates() {
                     </div>
                     <button type="button" class="btn-primary" style="margin-top:12px;" onclick="window.print()">Print / Save as PDF</button>`;
             } else {
-                card.innerHTML = `<h4 style="margin:0 0 8px;">${title}</h4>
+                card.innerHTML = `<h4 style="margin:0 0 8px;">${titleEsc}</h4>
                     <p style="margin-bottom:12px;">${name}</p>
                     <a href="${c.template_path}" target="_blank" class="btn-primary" style="display:inline-block;padding:8px 14px;text-decoration:none;">Download certificate</a>`;
             }
             wrap.appendChild(card);
         });
+        paidTracking.forEach((tr) => {
+            if (renderedSeminars.has(Number(tr.seminarId))) return;
+            renderWaitingCard(tr.seminarTitle || 'Seminar', tr);
+        });
+        const hasCountdown = window.__doctorCertTrackingRows.some((tr) => tr.certCountdown && !tr.canViewCertificate);
+        if (hasCountdown) startDoctorCertCountdownTimer();
+        else stopDoctorCertCountdownTimer();
     } catch (e) {
         console.error(e);
         wrap.innerHTML = '<p style="color:#b91c1c;">Could not load certificates.</p>';
@@ -3785,6 +3991,9 @@ async function submitApplication() {
         payload.append('submitEmailOtpToken', window.__regSubmitEmailOtpToken || '');
     }
     payload.append('fieldOtpTokens', JSON.stringify(window.__fieldOtpTokens || {}));
+    if (window.__registrationJoinWaitlist) {
+        payload.append('joinWaitlist', '1');
+    }
     
     const certFile = document.getElementById('reg-cert-file').files[0];
     if (certFile) {
@@ -3814,7 +4023,11 @@ async function submitApplication() {
                 window.__regCertServerUploaded = true;
                 updateRegCertUploadUi({ uploaded: true });
             }
-            alert(`Application submitted successfully. Your application number is ${result.applicationNo}. You can track status under View Applications.`);
+            alert(
+                result.waitlisted
+                    ? `You are on the waiting list. Application number ${result.applicationNo}. No payment is needed now — we will email you if a seat opens. Track status under View Applications.`
+                    : `Application submitted successfully. Your application number is ${result.applicationNo}. You can track status under View Applications.`
+            );
             cancelRegistration();
             loadApplications();
         } else {
@@ -4838,6 +5051,7 @@ async function loadDoctorCertificateTracking(quiet) {
             wrap.innerHTML =
                 '<p style="color:#64748b;text-align:center;">No seminar registrations yet. Register and complete payment to track certificate status here.</p>';
         } else {
+            window.__doctorCertTrackingRows = rows;
             let html =
                 '<table class="data-table" style="font-size:0.88rem;"><thead><tr><th>Seminar</th><th>Application No.</th><th>Scans</th><th>Status</th></tr></thead><tbody>';
             rows.forEach((r) => {
@@ -4846,6 +5060,11 @@ async function loadDoctorCertificateTracking(quiet) {
                 if (r.certStatus === 'issued') statusColor = '#15803d';
                 else if (r.certStatus === 'awaiting_checkin') statusColor = '#b45309';
                 else if (r.certStatus === 'awaiting_approval') statusColor = '#7c3aed';
+                else if (r.certStatus === 'scheduled_release') statusColor = '#0369a1';
+                const countdownHint =
+                    r.certCountdown && !r.canViewCertificate
+                        ? ' <span style="font-size:0.75rem;color:#92400e;">(scheduled release)</span>'
+                        : '';
                 html +=
                     '<tr><td>' +
                     escapeHtml(r.seminarTitle || '—') +
@@ -4853,11 +5072,13 @@ async function loadDoctorCertificateTracking(quiet) {
                     escapeHtml(r.applicationNo || '—') +
                     '</code></td><td>' +
                     escapeHtml(scanLbl) +
+                    (r.scansRequired === 2 ? ' <span style="font-size:0.72rem;color:#64748b;">entry+exit</span>' : '') +
                     '</td><td style="font-weight:600;color:' +
                     statusColor +
                     ';">' +
                     escapeHtml(r.certStatusLabel || '—') +
-                    (r.canDownload && r.certId
+                    countdownHint +
+                    (r.canViewCertificate && r.certId
                         ? ' <button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.78rem;margin-left:6px;" onclick="openDoctorCertificateDownload(' +
                           Number(r.certId) +
                           ',' +
@@ -4868,6 +5089,7 @@ async function loadDoctorCertificateTracking(quiet) {
             });
             html += '</tbody></table>';
             wrap.innerHTML = html;
+            if (rows.some((r) => r.certCountdown && !r.canViewCertificate)) startDoctorCertCountdownTimer();
         }
         if (live) {
             live.textContent = 'Updated ' + new Date().toLocaleTimeString();
@@ -5386,7 +5608,7 @@ function startSupportChatPoll() {
     stopSupportChatPoll();
     supportChatPollTimer = setInterval(() => {
         if (currentTicketId) loadChatMessages(true);
-    }, 5000);
+    }, SUPPORT_CHAT_POLL_MS);
 }
 
 function stopSupportChatPoll() {
@@ -5455,14 +5677,15 @@ async function loadChatMessages(silent) {
         box.innerHTML = '';
         messages.forEach((m) => {
             const st = String(m.sender_type || '').toLowerCase();
-            const isDoc = st !== 'admin';
+            const isDoc = st !== 'admin' && st !== 'staff';
+            const staffName = m.sender_display_name || 'Support team';
             const viaEmail =
                 m.source === 'email'
                     ? ' <span style="font-size:0.72rem;background:#e0f2fe;color:#0369a1;padding:2px 6px;border-radius:4px;">Email</span>'
                     : '';
             box.innerHTML += `
                 <div style="align-self: ${isDoc ? 'flex-end' : 'flex-start'}; background: ${isDoc ? '#0f766e' : 'white'}; color: ${isDoc ? 'white' : '#334155'}; border: 1px solid ${isDoc ? '#0f766e' : '#cbd5e1'}; padding: 10px 15px; border-radius: 8px; max-width: 80%;">
-                    <p style="font-size: 0.8rem; margin-bottom: 5px; color: ${isDoc ? '#ccfbf1' : '#64748b'};"><strong>${isDoc ? 'You' : 'Admin'}</strong>${viaEmail} — ${new Date(m.created_at).toLocaleString()}</p>
+                    <p style="font-size: 0.8rem; margin-bottom: 5px; color: ${isDoc ? '#ccfbf1' : '#64748b'};"><strong>${isDoc ? 'You' : staffName}</strong>${viaEmail} — ${new Date(m.created_at).toLocaleString()}</p>
                     <p>${(m.message || '').replace(/</g, '&lt;')}</p>
                 </div>`;
         });
