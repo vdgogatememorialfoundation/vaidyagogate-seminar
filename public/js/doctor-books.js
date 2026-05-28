@@ -769,6 +769,9 @@
         const journey = o.deliveryJourney;
         if (journey && window.BookTrackingUI) {
             fullTrack.innerHTML = window.BookTrackingUI.renderDoctorFullTracking(journey, o, o.courierTrackEvents || []);
+            if (window.BookTrackingUI.animateProgressFill) {
+                window.BookTrackingUI.animateProgressFill(fullTrack);
+            }
             const ul = fullTrack.querySelector('.pkg-scan-timeline');
             if (ul) ul.scrollTop = ul.scrollHeight;
         }
@@ -873,6 +876,7 @@
             const needsFastPoll = orders.some(
                 (o) =>
                     o.fulfillmentType === 'courier' &&
+                    o.status !== 'cancelled' &&
                     (o.status === 'shipped' || (o.deliveryJourney && o.deliveryJourney.isLive))
             );
             if (tabVisible && (needsFastPoll ? _bookRefreshTracksTick % 2 === 1 : _bookRefreshTracksTick % 3 === 1)) {

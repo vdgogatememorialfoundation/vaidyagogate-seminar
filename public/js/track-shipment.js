@@ -30,8 +30,15 @@
             root.innerHTML = window.BookTrackingUI.renderPackageTracker(o.deliveryJourney, o.courierTrackEvents || [], {
                 destination: o.destination
             });
+            if (window.BookTrackingUI.animateProgressFill) {
+                window.BookTrackingUI.animateProgressFill(root);
+            }
         }
-        const live = o.deliveryJourney && o.deliveryJourney.isLive;
+        const live =
+            o.deliveryJourney &&
+            o.deliveryJourney.isLive &&
+            !o.isCancelled &&
+            !o.shipmentCancelled;
         if (poll) poll.classList.toggle('hidden', !live);
         const ul = root.querySelector('.pkg-scan-timeline');
         if (ul) ul.scrollTop = ul.scrollHeight;
@@ -47,7 +54,13 @@
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Could not track shipment');
         renderResult(data);
-        if (data.order && data.order.deliveryJourney && data.order.deliveryJourney.isLive) {
+        if (
+            data.order &&
+            data.order.deliveryJourney &&
+            data.order.deliveryJourney.isLive &&
+            !data.order.isCancelled &&
+            !data.order.shipmentCancelled
+        ) {
             startPoll(payload);
         } else {
             stopPoll();

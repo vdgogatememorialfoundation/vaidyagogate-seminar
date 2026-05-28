@@ -1,8 +1,17 @@
 /**
- * VGMF Book Tracking UI — doctor portal journey (original) + shipment updates + public package tracker.
+ * VGMF Book Tracking UI — 4-stage shipment rail + staged updates + doctor/public views.
  */
 (function (global) {
     'use strict';
+
+    const STAGE_ORDER = ['ordered', 'shipped', 'out_for_delivery', 'delivered'];
+    const STAGE_LABEL = {
+        ordered: 'Ordered',
+        shipped: 'Shipped',
+        out_for_delivery: 'Out for Delivery',
+        delivered: 'Delivered',
+        cancelled: 'Cancelled'
+    };
 
     function esc(s) {
         return String(s || '')
@@ -52,9 +61,140 @@
         });
     }
 
-    /* ----- Original vertical journey (doctor / admin order card) ----- */
+    function hasFourStageMilestones(journey) {
+        return !!(journey && journey.milestones && journey.milestones.length === 4);
+    }
+
+    function renderStageRail(journey) {
+        if (!hasFourStageMilestones(journey)) return '';
+        const pct = Math.min(100, Math.max(0, journey.progressPercent || 0));
+        const live = journey.isLive && !journey.shipmentCancelled;
+        const cancelled = journey.shipmentCancelled || journey.headline === 'Shipment cancelled';
+
+        let html =
+            '<div class="pkg-stage-rail' +
+            (cancelled ? ' cancelled' : '') +
+            (live ? ' live' : '') +
+            '">' +
+            '<div class="pkg-stage-track"><div class="pkg-stage-fill" style="width:' +
+            pct +
+            '%" data-pkg-progress="' +
+            pct +
+            '"></div></div><div class="pkg-milestones">';
+
+        journey.milestones.forEach(function (ms) {
+            const cls =
+                ms.state === 'completed'
+                    ? 'pkg-ms done'
+                    : ms.state === 'active'
+                      ? 'pkg-ms active'
+                      : ms.state === 'cancelled'
+                        ? 'pkg-ms cancelled'
+                        : 'pkg-ms';
+            const icon =
+                ms.state === 'completed'
+                    ? '<i class="fas fa-check"></i>'
+                    : ms.state === 'cancelled'
+                      ? '<i class="fas fa-ban"></i>'
+                      : '<i class="fas ' + esc(ms.icon || 'fa-circle') + '"></i>';
+            html +=
+                '<div class="' +
+                cls +
+                '" data-stage="' +
+                esc(ms.key) +
+                '"><div class="pkg-ms-icon">' +
+                icon +
+                '</div><div class="pkg-ms-label">' +
+                esc(ms.title) +
+                '</div></div>';
+        });
+        html += '</div>';
+
+        if (journey.scheduleHint) {
+            html += '<p class="pkg-stage-schedule"><i class="fas fa-calendar-check"></i> ' + esc(journey.scheduleHint) + '</p>';
+        }
+        html += '</div>';
+        return html;
+    }
+
+    function timelineFromJourney(journey, events) {
+        if (journey && journey.updateTimeline && journey.updateTimeline.length) {
+            return journey.updateTimeline.slice();
+        }
+        const rows = [];
+        sortEventsChrono(events).forEach(function (ev) {
+            rows.push({
+                at: ev.at,
+                title: ev.description || 'Update',
+                subtitle: formatPlace(ev) || ev.location || '',
+                stage: 'shipped',
+                source: 'courier'
+            });
+        });
+        return rows;
+    }
+
+    function renderStagedUpdates(journey, events, opts) {
+        opts = opts || {};
+        const timeline = sortEventsChrono(timelineFromJourney(journey, events));
+        if (!timeline.length) {
+            return (
+                '<div class="pkg-scan-empty">' +
+                (opts.emptyMessage || 'Updates will appear here as your parcel moves.') +
+                '</div>'
+            );
+        }
+
+        const groups = { ordered: [], shipped: [], out_for_delivery: [], delivered: [], cancelled: [] };
+        timeline.forEach(function (row) {
+            const key = groups[row.stage] ? row.stage : 'shipped';
+            groups[key].push(row);
+        });
+
+        let html = '<div class="pkg-staged-updates">';
+        const stages = journey && journey.shipmentCancelled ? STAGE_ORDER.concat(['cancelled']) : STAGE_ORDER;
+
+        stages.forEach(function (stageKey) {
+            const items = stageKey === 'cancelled' ? groups.cancelled : groups[stageKey];
+            if (!items || !items.length) return;
+            const stageTitle = STAGE_LABEL[stageKey] || stageKey;
+            html += '<section class="pkg-stage-block" data-stage-block="' + esc(stageKey) + '">';
+            html += '<h3 class="pkg-stage-block-title">' + esc(stageTitle) + '</h3>';
+            html += '<ol class="pkg-scan-timeline">';
+            items.forEach(function (row, idx) {
+                const isLatest = idx === items.length - 1 && journey && journey.isLive && !journey.shipmentCancelled;
+                const cls = isLatest ? 'pkg-scan-item current' : 'pkg-scan-item done';
+                html +=
+                    '<li class="' +
+                    cls +
+                    '"><span class="pkg-scan-dot" aria-hidden="true"></span><div class="pkg-scan-card">' +
+                    '<p class="pkg-scan-status">' +
+                    esc(row.title) +
+                    '</p>';
+                if (row.at) {
+                    html += '<p class="pkg-scan-datetime"><i class="fas fa-clock"></i> ' + esc(fmtWhen(row.at)) + '</p>';
+                }
+                if (row.subtitle) {
+                    html += '<p class="pkg-scan-place"><i class="fas fa-map-marker-alt"></i> ' + esc(row.subtitle) + '</p>';
+                }
+                if (row.facility) {
+                    html +=
+                        '<span class="pkg-scan-facility"><i class="fas fa-warehouse"></i> ' + esc(row.facility) + '</span>';
+                }
+                html += '</div></li>';
+            });
+            html += '</ol></section>';
+        });
+        html += '</div>';
+        return html;
+    }
+
+    /* ----- Vertical journey (pickup / legacy) ----- */
     function renderVerticalJourney(journey, events, opts) {
         if (!journey || !journey.steps || !journey.steps.length) return '';
+        if (hasFourStageMilestones(journey)) {
+            return renderShipmentStageTracker(journey, events, opts);
+        }
         opts = opts || {};
         const isCourier = journey.integration !== 'pickup';
         const evList = Array.isArray(events) ? events : [];
@@ -68,7 +208,7 @@
         const statusClass =
             journey.headline === 'Delivered'
                 ? 'vtrk-header delivered'
-                : journey.headline === 'Cancelled'
+                : journey.headline === 'Shipment cancelled' || journey.shipmentCancelled
                   ? 'vtrk-header cancelled'
                   : journey.isLive
                     ? 'vtrk-header live'
@@ -95,12 +235,6 @@
             if (journey.providerLabel) {
                 headerHtml += '<span class="vtrk-provider-badge"><i class="fas fa-truck"></i> ' + esc(journey.providerLabel) + '</span>';
             }
-            if (isCourier && (journey.integration === 'shiprocket' || journey.integration === 'nimbuspost')) {
-                headerHtml +=
-                    '<span class="vtrk-agg-badge"><i class="fas fa-bolt"></i> ' +
-                    (journey.integration === 'shiprocket' ? 'Shiprocket' : 'Nimbuspost') +
-                    '</span>';
-            }
             headerHtml += '</div>';
         }
 
@@ -125,15 +259,11 @@
             stepsHtml +=
                 '<div class="' +
                 cls +
-                '">' +
-                '<div class="vtrk-step-left">' +
-                '<div class="vtrk-step-circle">' +
+                '"><div class="vtrk-step-left"><div class="vtrk-step-circle">' +
                 iconHtml +
                 '</div>' +
                 (isLast ? '' : '<div class="vtrk-step-line"></div>') +
-                '</div>' +
-                '<div class="vtrk-step-body">' +
-                '<div class="vtrk-step-title">' +
+                '</div><div class="vtrk-step-body"><div class="vtrk-step-title">' +
                 esc(step.title) +
                 '</div>' +
                 subtitleHtml +
@@ -154,8 +284,7 @@
                 eventsHtml +=
                     '<li class="' +
                     (isLatest ? 'vtrk-ev-latest' : '') +
-                    '">' +
-                    '<span class="vtrk-ev-desc">' +
+                    '"><span class="vtrk-ev-desc">' +
                     esc(ev.description) +
                     '</span>' +
                     (ev.location ? '<span class="vtrk-ev-loc"><i class="fas fa-map-pin"></i> ' + esc(ev.location) + '</span>' : '') +
@@ -168,38 +297,25 @@
         return headerHtml + stepsHtml + eventsHtml;
     }
 
-    /* ----- Detailed shipment updates (Flipkart-style), shown when AWB booked ----- */
     function renderScanTimeline(events, opts) {
         opts = opts || {};
         const chrono = sortEventsChrono(events);
         if (!chrono.length) {
-            return (
-                '<div class="pkg-scan-empty">' +
-                (opts.emptyMessage || 'Courier scans will appear after pickup.') +
-                '</div>'
-            );
+            return '<div class="pkg-scan-empty">' + (opts.emptyMessage || 'Courier scans will appear after pickup.') + '</div>';
         }
         let html = '<ol class="pkg-scan-timeline">';
         chrono.forEach(function (ev, idx) {
             const isLatest = idx === chrono.length - 1;
             const cls = isLatest && opts.highlightLatest !== false ? 'pkg-scan-item current' : 'pkg-scan-item done';
             const place = formatPlace(ev);
-            const facility = String(ev.facility || '').trim();
-            const status = String(ev.description || 'Update').trim();
             html +=
                 '<li class="' +
                 cls +
-                '">' +
-                '<span class="pkg-scan-dot" aria-hidden="true"></span>' +
-                '<div class="pkg-scan-card">' +
-                '<p class="pkg-scan-status">' +
-                esc(status) +
+                '"><span class="pkg-scan-dot"></span><div class="pkg-scan-card"><p class="pkg-scan-status">' +
+                esc(String(ev.description || 'Update').trim()) +
                 '</p>' +
                 (ev.at ? '<p class="pkg-scan-datetime"><i class="fas fa-clock"></i> ' + esc(fmtWhen(ev.at)) + '</p>' : '') +
                 (place ? '<p class="pkg-scan-place"><i class="fas fa-map-marker-alt"></i> ' + esc(place) + '</p>' : '') +
-                (facility && facility !== place
-                    ? '<span class="pkg-scan-facility"><i class="fas fa-warehouse"></i> ' + esc(facility) + '</span>'
-                    : '') +
                 '</div></li>';
         });
         html += '</ol>';
@@ -212,7 +328,7 @@
         if (!evList.length && !opts.showWhenEmpty) return '';
         return (
             '<div class="pkg-shipment-block" style="margin-top:12px;border-top:1px solid #e2e8f0;padding-top:12px;">' +
-            '<p class="pkg-shipment-title"><i class="fas fa-route"></i> Shipment updates</p>' +
+            '<p class="pkg-shipment-title"><i class="fas fa-route"></i> All updates</p>' +
             renderScanTimeline(evList, opts) +
             '</div>'
         );
@@ -229,33 +345,22 @@
         );
     }
 
-    function renderDoctorFullTracking(journey, order, events) {
-        const o = order || {};
-        const evList = Array.isArray(events) ? events : o.courierTrackEvents || [];
-        let html = renderVerticalJourney(journey, [], { embedCourierEvents: false });
-        if (orderHasBookedShipment(o)) {
-            html += renderShipmentUpdates(evList, {
-                highlightLatest: journey && journey.isLive,
-                showWhenEmpty: true,
-                emptyMessage: 'Waiting for first courier scan…'
-            });
-        }
-        return html;
-    }
-
-    /* ----- Public order tracker page (full package UI) ----- */
-    function renderPackageTracker(journey, events, opts) {
+    function renderShipmentStageTracker(journey, events, opts) {
         if (!journey) return '';
         opts = opts || {};
+        const cancelled = journey.shipmentCancelled || journey.headline === 'Shipment cancelled';
         const heroCls =
             journey.headline === 'Delivered'
                 ? 'pkg-track-hero delivered'
-                : journey.headline === 'Cancelled'
+                : cancelled
                   ? 'pkg-track-hero cancelled'
                   : 'pkg-track-hero';
+
         let html = '<div class="pkg-track"><div class="' + heroCls + '">';
-        if (journey.isLive) {
+        if (journey.isLive && !cancelled) {
             html += '<div class="pkg-track-live"><span class="pkg-track-live-dot"></span>Live tracking</div>';
+        } else if (cancelled) {
+            html += '<div class="pkg-track-live" style="background:rgba(0,0,0,0.15);"><i class="fas fa-ban"></i> Shipment cancelled</div>';
         }
         html +=
             '<div class="pkg-track-headline">' +
@@ -271,12 +376,38 @@
             html += '<span class="pkg-track-badge"><i class="fas fa-location-dot"></i> To ' + esc(opts.destination) + '</span>';
         }
         html += '</div></div><div class="pkg-track-body">';
-        html += renderShipmentUpdates(events || [], {
-            highlightLatest: journey.isLive,
-            showWhenEmpty: orderHasBookedShipment({ courierTrackingNo: journey.awb })
+        html += renderStageRail(journey);
+        html +=
+            '<div class="pkg-shipment-block"><p class="pkg-shipment-title"><i class="fas fa-list-check"></i> All updates</p>';
+        html += renderStagedUpdates(journey, events, {
+            highlightLatest: journey.isLive && !cancelled,
+            emptyMessage: cancelled
+                ? 'No courier movement after cancellation.'
+                : 'Waiting for courier scans…'
         });
-        html += '</div></div>';
+        html += '</div></div></div>';
         return html;
+    }
+
+    function renderDoctorFullTracking(journey, order, events) {
+        const o = order || {};
+        const evList = Array.isArray(events) ? events : o.courierTrackEvents || [];
+        if (hasFourStageMilestones(journey)) {
+            return renderShipmentStageTracker(journey, evList, {});
+        }
+        let html = renderVerticalJourney(journey, [], { embedCourierEvents: false });
+        if (orderHasBookedShipment(o)) {
+            html += renderShipmentUpdates(evList, {
+                highlightLatest: journey && journey.isLive,
+                showWhenEmpty: true,
+                emptyMessage: 'Waiting for first courier scan…'
+            });
+        }
+        return html;
+    }
+
+    function renderPackageTracker(journey, events, opts) {
+        return renderShipmentStageTracker(journey, events, opts || {});
     }
 
     function renderAmazonPackageTracker(journey, events, opts) {
@@ -284,6 +415,7 @@
     }
 
     function renderHorizontalStepper(journey) {
+        if (hasFourStageMilestones(journey)) return renderStageRail(journey);
         if (!journey || !journey.steps || !journey.steps.length) return '';
         const progressPct = Math.min(100, Math.max(0, journey.progressPercent || 0));
         let html = '<div class="htrk"><div class="htrk-progress"><div class="htrk-progress-fill" style="width:' + progressPct + '%"></div></div><div class="htrk-steps">';
@@ -302,16 +434,31 @@
         return html + '</div></div>';
     }
 
+    function animateProgressFill(root) {
+        if (!root) return;
+        const fill = root.querySelector('.pkg-stage-fill');
+        if (!fill) return;
+        const target = parseInt(fill.getAttribute('data-pkg-progress') || '0', 10) || 0;
+        fill.style.width = '0%';
+        requestAnimationFrame(function () {
+            fill.style.width = Math.min(100, target) + '%';
+        });
+    }
+
     global.BookTrackingUI = {
         esc,
         fmtWhen,
         renderVerticalJourney,
+        renderStageRail,
+        renderStagedUpdates,
+        renderShipmentStageTracker,
         renderShipmentUpdates,
         renderDoctorFullTracking,
         renderScanTimeline,
         renderPackageTracker,
         renderAmazonPackageTracker,
         renderHorizontalStepper,
-        orderHasBookedShipment
+        orderHasBookedShipment,
+        animateProgressFill
     };
 })(typeof window !== 'undefined' ? window : global);

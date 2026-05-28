@@ -56,12 +56,56 @@
     padding: 0 0 16px;
     box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
 }
+.pkg-stage-rail {
+    padding: 18px 16px 12px;
+    border-bottom: 1px solid #f1f5f9;
+    position: relative;
+}
+.pkg-stage-rail.live .pkg-stage-fill {
+    background: linear-gradient(90deg, #10b981, #0f766e, #0284c7);
+    background-size: 200% 100%;
+    animation: pkg-line-flow 2.2s linear infinite;
+}
+@keyframes pkg-line-flow {
+    0% { background-position: 100% 0; }
+    100% { background-position: -100% 0; }
+}
+.pkg-stage-track {
+    position: absolute;
+    left: 12%;
+    right: 12%;
+    top: 34px;
+    height: 4px;
+    background: #e2e8f0;
+    border-radius: 999px;
+    z-index: 0;
+}
+.pkg-stage-fill {
+    height: 100%;
+    width: 0;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #10b981, #0f766e);
+    transition: width 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.pkg-stage-rail.cancelled .pkg-stage-fill {
+    background: linear-gradient(90deg, #f87171, #b91c1c);
+    animation: none;
+}
+.pkg-stage-schedule {
+    margin: 12px 0 0;
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: #475569;
+    text-align: center;
+}
+.pkg-stage-rail.cancelled .pkg-stage-schedule { color: #b91c1c; }
 .pkg-milestones {
     display: flex;
     justify-content: space-between;
-    padding: 16px 12px 8px;
+    padding: 0 4px 4px;
     gap: 4px;
-    border-bottom: 1px solid #f1f5f9;
+    position: relative;
+    z-index: 1;
 }
 .pkg-ms {
     flex: 1;
@@ -89,6 +133,23 @@
 .pkg-ms-label { font-size: 0.62rem; font-weight: 700; color: #94a3b8; line-height: 1.2; }
 .pkg-ms.done .pkg-ms-label { color: #059669; }
 .pkg-ms.active .pkg-ms-label { color: #0f766e; }
+.pkg-ms.cancelled .pkg-ms-icon {
+    background: #fecaca;
+    color: #b91c1c;
+    box-shadow: 0 0 0 4px rgba(185, 28, 28, 0.12);
+}
+.pkg-ms.cancelled .pkg-ms-label { color: #b91c1c; font-weight: 800; }
+.pkg-staged-updates { padding: 0 4px; }
+.pkg-stage-block { margin-bottom: 16px; }
+.pkg-stage-block-title {
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: #0f766e;
+    margin: 0 0 8px 4px;
+}
+.pkg-stage-block[data-stage-block='cancelled'] .pkg-stage-block-title { color: #b91c1c; }
 .pkg-shipment-block { padding: 14px 16px 0; }
 .pkg-shipment-title {
     font-size: 0.78rem;
