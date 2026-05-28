@@ -2703,7 +2703,7 @@ async function adminCreateUser() {
                         'Warning: The server could not confirm this account in the database.\n\n' +
                             'Portal ID: ' +
                             (result.user_id_string || '—') +
-                            '\n\nPlease create the user again. If this repeats, check Vercel Production → DATABASE_URL (Neon).'
+                            '\n\nPlease create the user again. If this repeats, check Render → DATABASE_URL (Neon).'
                     );
                 } else {
                     alert(
@@ -4706,6 +4706,7 @@ async function loadAdminSeminarAnalytics() {
 async function initAdminReportsTab() {
     await fillAdminSeminarSelect('report-seminar', false);
     await fillAdminSeminarSelect('reg-ov-seminar', false);
+    initRegOverrideUntilPicker();
     await loadAdminRegistrationOverrides();
 }
 
@@ -4716,23 +4717,116 @@ function downloadAdminReport(type, format) {
     window.location.href = `/api/admin/reports/${sid}/${type}?format=${encodeURIComponent(fmt)}`;
 }
 
+function readRegOverrideUntilInput() {
+    const raw = String(document.getElementById('reg-ov-until')?.value || '').trim();
+    if (!raw) return '';
+    if (window.PortalDateTime && window.PortalDateTime.fromDatetimeLocal) {
+        return window.PortalDateTime.fromDatetimeLocal(raw);
+    }
+    return raw;
+}
+
+function updateRegOverrideUntilPreview() {
+    const el = document.getElementById('reg-ov-until-preview');
+    if (!el) return;
+    const raw = String(document.getElementById('reg-ov-until')?.value || '').trim();
+    if (!raw) {
+        el.textContent = '';
+        return;
+    }
+    const stored =
+        window.PortalDateTime && window.PortalDateTime.fromDatetimeLocal
+            ? window.PortalDateTime.fromDatetimeLocal(raw)
+            : raw;
+    const label =
+        window.PortalDateTime && window.PortalDateTime.format
+            ? window.PortalDateTime.format(stored)
+            : stored;
+    el.textContent = label ? 'Deadline saved as: ' + label + ' (IST)' : '';
+}
+
+function initRegOverrideUntilPicker() {
+    const el = document.getElementById('reg-ov-until');
+    if (!el || el.type !== 'datetime-local') return;
+    const nowLocal =
+        window.PortalDateTime && window.PortalDateTime.toDatetimeLocal
+            ? window.PortalDateTime.toDatetimeLocal(new Date().toISOString())
+            : '';
+    if (nowLocal) el.min = nowLocal;
+    if (!el.value) {
+        const later = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        el.value =
+            window.PortalDateTime && window.PortalDateTime.toDatetimeLocal
+                ? window.PortalDateTime.toDatetimeLocal(later.toISOString())
+                : '';
+    }
+    if (!el.__regOvPreviewBound) {
+        el.__regOvPreviewBound = true;
+        el.addEventListener('input', updateRegOverrideUntilPreview);
+        el.addEventListener('change', updateRegOverrideUntilPreview);
+    }
+    updateRegOverrideUntilPreview();
+}
+
 async function saveAdminRegistrationOverride() {
     const userIdString = String(document.getElementById('reg-ov-user-id')?.value || '').trim();
     const sid = parseInt(document.getElementById('reg-ov-seminar')?.value, 10);
+    const registerUntil = readRegOverrideUntilInput();
     const note = document.getElementById('reg-ov-note')?.value || '';
     const admin = getStoredAdminUser();
     if (!userIdString || !sid) return alert('Portal User ID and seminar required');
+    if (!registerUntil) {
+        return alert('Choose a register-by date and time using the calendar picker (IST).');
+    }
+    const untilPreview =
+        window.PortalDateTime && window.PortalDateTime.format
+            ? window.PortalDateTime.format(registerUntil)
+            : registerUntil;
+    if (
+        untilPreview &&
+        !confirm(
+            'Doctor must complete registration by:\n\n' +
+                untilPreview +
+                '\n\n(India time — IST). If this is not the time you intended, cancel and pick again. 3:25 PM is 15:25 in the 24-hour picker, not 03:25.'
+        )
+    ) {
+        return;
+    }
     try {
         const res = await fetch('/api/admin/registration-overrides', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userIdString, seminarId: sid, enabled: true, note, adminUserId: admin?.id })
+            body: JSON.stringify({
+                userIdString,
+                seminarId: sid,
+                enabled: true,
+                registerUntil,
+                register_until: registerUntil,
+                note,
+                adminUserId: admin?.id
+            })
         });
         const data = await res.json();
         if (data.success) {
             loadAdminRegistrationOverrides();
-            alert('Override saved — doctor can register while seminar is closed.');
-        } else alert(data.error || 'Failed');
+            const untilShown =
+                data.registerUntil && window.PortalDateTime && window.PortalDateTime.format
+                    ? window.PortalDateTime.format(data.registerUntil)
+                    : registerUntil;
+            alert(
+                'Override saved — doctor can register after the public deadline until ' +
+                    (untilShown || 'the deadline you set') +
+                    '.'
+            );
+        } else {
+            const msg = data.error || 'Failed';
+            if (/register-by deadline is required/i.test(msg)) {
+                alert(
+                    msg +
+                        '\n\nIf you already filled the deadline, hard-refresh this page (Ctrl+F5) to load the latest admin panel and try again.'
+                );
+            } else alert(msg);
+        }
     } catch (e) {
         console.error(e);
     }
@@ -4745,16 +4839,36 @@ async function loadAdminRegistrationOverrides() {
         const res = await fetch('/api/admin/registration-overrides');
         const rows = await res.json();
         if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;">No overrides</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;">No overrides</td></tr>';
             return;
         }
         tbody.innerHTML = '';
+        const now = Date.now();
+        const isOpen =
+            window.PortalDateTime && window.PortalDateTime.isRegistrationOverrideOpenNow
+                ? (v) => window.PortalDateTime.isRegistrationOverrideOpenNow(v, now)
+                : (v) => {
+                      const ms = v ? new Date(v).getTime() : null;
+                      return ms == null || now <= ms;
+                  };
         rows.forEach((r) => {
             const name = [r.first_name, r.last_name].filter(Boolean).join(' ');
+            let status = r.enabled ? 'Active' : 'Disabled';
+            if (r.enabled && r.register_until && !isOpen(r.register_until)) {
+                status = 'Expired';
+            } else if (r.enabled && !r.register_until) {
+                status = 'Active (no deadline set)';
+            }
+            const untilLabel = r.register_until
+                ? window.PortalDateTime && window.PortalDateTime.format
+                    ? window.PortalDateTime.format(r.register_until)
+                    : String(r.register_until)
+                : '—';
             tbody.innerHTML += `<tr>
                 <td>${escAdmin(name)} (${escAdmin(r.user_id_string)})</td>
                 <td>${escAdmin(r.seminar_title)}</td>
-                <td>${r.enabled ? 'Yes' : 'No'}</td>
+                <td>${escAdmin(untilLabel)}</td>
+                <td>${escAdmin(status)}</td>
                 <td>${escAdmin(r.note || '—')}</td>
             </tr>`;
         });
@@ -12716,6 +12830,26 @@ function renderBsLogisticsForm(logistics) {
     setChk('bs-log-sr-enabled', sr.enabled);
     set('bs-log-sr-email', sr.email);
     set('bs-log-sr-pass', sr.password);
+    set('bs-log-sr-pickup-pin', sr.pickupPincode || '');
+    set('bs-log-sr-pickup-location', sr.pickupLocation || '');
+    set('bs-log-sr-pickup-location-id', sr.pickupLocationId != null ? sr.pickupLocationId : '');
+    _bsLogisticsPickupLocationId = sr.pickupLocationId != null ? sr.pickupLocationId : null;
+    if (sr.enabled) {
+        bsRefreshShiprocketPickupLocations('bs-log-sr-pickup-select').then(() => {
+            const sel = document.getElementById('bs-log-sr-pickup-select');
+            if (!sel) return;
+            if (sr.pickupLocationId != null) sel.value = String(sr.pickupLocationId);
+            else if (sr.pickupLocation) {
+                for (let i = 0; i < sel.options.length; i++) {
+                    if (sel.options[i].getAttribute('data-location') === sr.pickupLocation) {
+                        sel.selectedIndex = i;
+                        break;
+                    }
+                }
+            }
+            bsApplyPickupSelectToHidden('bs-log-sr-pickup-select');
+        });
+    }
     setChk('bs-log-nb-enabled', nb.enabled);
     set('bs-log-nb-key', nb.apiKey);
     set('bs-log-nb-secret', nb.apiSecret);
@@ -12727,7 +12861,14 @@ function bsCollectLogisticsFromForm() {
         shiprocket: {
             enabled: !!(document.getElementById('bs-log-sr-enabled') || {}).checked,
             email: (document.getElementById('bs-log-sr-email') || {}).value.trim(),
-            password: (document.getElementById('bs-log-sr-pass') || {}).value
+            password: (document.getElementById('bs-log-sr-pass') || {}).value,
+            pickupPincode: (document.getElementById('bs-log-sr-pickup-pin') || {}).value.trim(),
+            pickupLocation: (document.getElementById('bs-log-sr-pickup-location') || {}).value.trim(),
+            pickupLocationId: (() => {
+                const v = (document.getElementById('bs-log-sr-pickup-location-id') || {}).value;
+                const n = parseInt(v, 10);
+                return Number.isInteger(n) && n > 0 ? n : null;
+            })()
         },
         nimbuspost: {
             enabled: !!(document.getElementById('bs-log-nb-enabled') || {}).checked,
@@ -12876,6 +13017,22 @@ function renderBookSalesOrdersTable(rows) {
                 } else {
                     fulfillCell = '🚚 Courier';
                 }
+                const pw = o.parcel_weight_kg != null ? o.parcel_weight_kg : o.parcelWeightKg;
+                const pl = o.parcel_length_cm != null ? o.parcel_length_cm : o.parcelLengthCm;
+                const pb = o.parcel_breadth_cm != null ? o.parcel_breadth_cm : o.parcelBreadthCm;
+                const ph = o.parcel_height_cm != null ? o.parcel_height_cm : o.parcelHeightCm;
+                if (pw != null || pl != null) {
+                    fulfillCell +=
+                        '<br><small style="color:#64748b;">' +
+                        Number(pw || 0.8) +
+                        ' kg · ' +
+                        Number(pl || 25) +
+                        '×' +
+                        Number(pb || 20) +
+                        '×' +
+                        Number(ph || 5) +
+                        ' cm</small>';
+                }
             }
             let actions = '';
             if (o.status === 'awaiting_confirmation' || o.status === 'confirmed') {
@@ -12900,6 +13057,12 @@ function renderBookSalesOrdersTable(rows) {
                     '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.81rem;background:#0ea5e9;" onclick="bsRefreshCourierTrack(' +
                     o.id +
                     ')">Refresh track</button> ';
+                if (o.courier_aggregator_shipment_id && (o.courier_integration === 'shiprocket' || o.courier_integration === 'nimbuspost')) {
+                    actions +=
+                        '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.81rem;background:#7c3aed;" onclick="bsPrintShippingLabel(' +
+                        o.id +
+                        ')">Print label</button> ';
+                }
                 actions +=
                     '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.81rem;background:#15803d;" onclick="bsMarkCourierDelivered(' +
                     o.id +
@@ -12963,8 +13126,38 @@ async function saveBookSalesAdminConfig() {
 
 async function confirmBookOrderAdmin(id) {
     const adm = getStoredAdminUser();
-    if (!confirm('Confirm this book order and issue pickup QR?')) return;
     try {
+        const od = await bsFetch('/api/admin/book-sales/orders/' + id);
+        const ordData = await od.json();
+        if (!od.ok) return alert(ordData.error || 'Could not load order');
+        const o = ordData.order || {};
+        if ((o.fulfillmentType || o.fulfillment_type) === 'courier') {
+            const ready = (o.courierShipmentStatus || o.courier_shipment_status) === 'ready_to_ship';
+            const charge = Number(o.courierCharge != null ? o.courierCharge : o.courier_charge || 0);
+            if (!ready) {
+                if (
+                    confirm(
+                        'This is a courier order. Save shipping details (address, courier charge, parcel size) first.\n\nOpen courier setup now?'
+                    )
+                ) {
+                    openBsCourierModal(id, 1);
+                }
+                return;
+            }
+            const hasCourierPick = !!(o.shiprocketCourierId || o.shiprocket_courier_id);
+            const confirmMsg = hasCourierPick
+                ? 'Confirm courier order and auto-book shipment via Shiprocket?\n\nCustomer already chose courier at checkout.\nShipping charge: ₹' +
+                  charge.toFixed(0) +
+                  '\n(You can still dispatch manually if auto-booking fails.)'
+                : 'Confirm courier order and auto-book shipment via Shiprocket?\n\nShipping charge: ₹' +
+                  charge.toFixed(0) +
+                  '\n(You can still dispatch manually if auto-booking fails.)';
+            if (!confirm(confirmMsg)) {
+                return;
+            }
+        } else if (!confirm('Confirm this book order and issue pickup QR?')) {
+            return;
+        }
         const res = await fetch('/api/admin/book-sales/orders/' + id + '/confirm', {
             method: 'POST',
             headers: bsActorHeaders(),
@@ -12972,6 +13165,16 @@ async function confirmBookOrderAdmin(id) {
         });
         const data = await res.json();
         if (!res.ok) return alert(data.error || 'Confirm failed');
+        if (data.autoShipmentError) {
+            alert(
+                'Order confirmed, but auto-shipment booking failed:\n' +
+                    data.autoShipmentError +
+                    '\n\nOpen Courier → Ship now to complete dispatch.'
+            );
+        } else if (data.autoShipment && data.autoShipment.awb) {
+            const label = data.autoShipment.labelUrl ? '\nLabel: ' + data.autoShipment.labelUrl : '';
+            alert('Order confirmed and shipped automatically.\nAWB: ' + data.autoShipment.awb + label);
+        }
         loadBsOrders(false);
     } catch (e) { alert(e.message || 'Confirm failed'); }
 }
@@ -12986,12 +13189,168 @@ async function cancelBookOrderAdmin(id) {
         });
         const data = await res.json();
         if (!res.ok) return alert(data.error || 'Cancel failed');
+        if (data.aggregatorCancel && data.aggregatorCancel.ok === false && !data.aggregatorCancel.skipped) {
+            alert(
+                'Order cancelled in the portal, but the courier aggregator may still show an active shipment:\n' +
+                    (data.aggregatorCancel.error || 'Cancel API failed') +
+                    '\n\nCancel manually in Shiprocket if needed.'
+            );
+        }
         loadBsOrders(false);
     } catch (e) { alert(e.message || 'Cancel failed'); }
 }
 
 let _bsCourierProviders = null;
 let _bsCourierOrderCache = null;
+let _bsSelectedShiprocketCourier = null;
+let _bsShiprocketRatesCache = [];
+let _bsCourierPincodeTimer = null;
+let _bsShiprocketPickupPin = '';
+let _bsShiprocketPickupLocations = [];
+
+function bsPickupOptionLabel(loc) {
+    const pin = loc.pincode ? 'PIN ' + loc.pincode : '';
+    const addr = [loc.addressLine, loc.city, loc.state].filter(Boolean).join(', ');
+    return (loc.name || loc.pickupLocation || 'Pickup') + (pin ? ' · ' + pin : '') + (addr ? ' — ' + addr : '');
+}
+
+function bsApplyPickupSelectToHidden(selectId) {
+    const sel = document.getElementById(selectId);
+    if (!sel || sel.selectedIndex < 0) return null;
+    const opt = sel.options[sel.selectedIndex];
+    if (!opt || !opt.value) return null;
+    const pin = String(opt.getAttribute('data-pin') || '').replace(/\D/g, '').slice(0, 6);
+    const locName = opt.getAttribute('data-location') || opt.textContent || '';
+    const locId = opt.getAttribute('data-id') || '';
+    _bsShiprocketPickupPin = pin;
+    if (selectId === 'bs-courier-pickup-select') {
+        /* courier modal only */
+    } else if (selectId === 'bs-log-sr-pickup-select') {
+        const pinEl = document.getElementById('bs-log-sr-pickup-pin');
+        const locEl = document.getElementById('bs-log-sr-pickup-location');
+        const idEl = document.getElementById('bs-log-sr-pickup-location-id');
+        if (pinEl) pinEl.value = pin;
+        if (locEl) locEl.value = locName;
+        if (idEl) idEl.value = locId;
+    }
+    return { pincode: pin, pickupLocation: locName, pickupLocationId: locId ? parseInt(locId, 10) : null };
+}
+
+function bsOnCourierPickupChange() {
+    _bsShiprocketPickupPin = '';
+    bsApplyPickupSelectToHidden('bs-courier-pickup-select');
+    const box = document.getElementById('bs-shiprocket-rates');
+    if (box) box.innerHTML = '';
+}
+
+async function bsRefreshShiprocketPickupLocations(selectId, forCourierModal) {
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
+    sel.innerHTML = '<option value="">Loading pickup addresses…</option>';
+    try {
+        const res = await bsFetch('/api/admin/book-sales/shiprocket/pickup-locations?refresh=1');
+        const data = await res.json();
+        if (!res.ok) {
+            sel.innerHTML = '<option value="">Could not load — check Shiprocket credentials</option>';
+            return;
+        }
+        _bsShiprocketPickupLocations = data.locations || [];
+        if (!_bsShiprocketPickupLocations.length) {
+            sel.innerHTML = '<option value="">No pickup addresses in Shiprocket account</option>';
+            return;
+        }
+        let html = '<option value="">— Select pickup warehouse —</option>';
+        _bsShiprocketPickupLocations.forEach((loc, idx) => {
+            const id = loc.id != null ? String(loc.id) : 'i' + idx;
+            html +=
+                '<option value="' +
+                e(id) +
+                '" data-pin="' +
+                e(loc.pincode || '') +
+                '" data-location="' +
+                e(loc.pickupLocation || loc.name || '') +
+                '" data-id="' +
+                e(loc.id != null ? loc.id : '') +
+                '">' +
+                e(bsPickupOptionLabel(loc)) +
+                (loc.isPrimary ? ' (default)' : '') +
+                '</option>';
+        });
+        sel.innerHTML = html;
+        let pickId =
+            forCourierModal && _bsLogisticsPickupLocationId != null
+                ? String(_bsLogisticsPickupLocationId)
+                : data.defaultPickupLocationId != null
+                  ? String(data.defaultPickupLocationId)
+                  : '';
+        if (!pickId && data.defaultPickupLocation) {
+            const match = _bsShiprocketPickupLocations.find(
+                (l) => l.pickupLocation === data.defaultPickupLocation || l.name === data.defaultPickupLocation
+            );
+            if (match && match.id != null) pickId = String(match.id);
+        }
+        if (pickId) sel.value = pickId;
+        else if (_bsShiprocketPickupLocations.length === 1) sel.selectedIndex = 1;
+        bsApplyPickupSelectToHidden(selectId);
+    } catch (err) {
+        sel.innerHTML = '<option value="">Error loading pickup addresses</option>';
+    }
+}
+
+let _bsLogisticsPickupLocationId = null;
+
+function bsCourierStreetLine(deliveryAddress, city, state, pincode) {
+    let line = String(deliveryAddress || '').trim();
+    if (!line) return '';
+    const pin = String(pincode || '').replace(/\D/g, '').slice(0, 6);
+    const cityS = String(city || '').trim();
+    const stateS = String(state || '').trim();
+    if (pin) {
+        line = line.replace(new RegExp(',?\\s*PIN\\s*' + pin + '\\b', 'gi'), '');
+        line = line.replace(new RegExp('\\b' + pin + '\\b\\s*,?', 'g'), '');
+    }
+    if (stateS) line = line.replace(new RegExp(',?\\s*' + stateS.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*,?', 'gi'), ', ');
+    if (cityS) {
+        const esc = cityS.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        line = line.replace(new RegExp(',?\\s*' + esc + '\\s*,?', 'gi'), ', ');
+    }
+    return line.replace(/,\s*,/g, ',').replace(/^[\s,]+|[\s,]+$/g, '').trim();
+}
+
+function bsCourierFormatSummary(o) {
+    const line = bsCourierStreetLine(
+        o.deliveryAddress || o.delivery_address,
+        o.shippingCity || o.shipping_city,
+        o.shippingState || o.shipping_state,
+        o.shippingPincode || o.shipping_pincode
+    );
+    const city = String(o.shippingCity || o.shipping_city || '').trim();
+    const state = String(o.shippingState || o.shipping_state || '').trim();
+    const pin = String(o.shippingPincode || o.shipping_pincode || '')
+        .replace(/\D/g, '')
+        .slice(0, 6);
+    const parts = [line, city, state, pin ? 'PIN ' + pin : ''].filter(Boolean);
+    return parts.join(', ');
+}
+
+async function bsEnsureShiprocketPickupPin() {
+    const applied = bsApplyPickupSelectToHidden('bs-courier-pickup-select');
+    if (applied && applied.pincode.length === 6) return applied.pincode;
+    const sel = document.getElementById('bs-courier-pickup-select');
+    if (sel && !sel.options.length) {
+        await bsRefreshShiprocketPickupLocations('bs-courier-pickup-select', true);
+        const again = bsApplyPickupSelectToHidden('bs-courier-pickup-select');
+        if (again && again.pincode.length === 6) return again.pincode;
+    }
+    if (_bsShiprocketPickupPin.length === 6) return _bsShiprocketPickupPin;
+    try {
+        const res = await bsFetch('/api/admin/book-sales/logistics-status');
+        const d = await res.json();
+        return String(d.shiprocketPickupPincode || '').replace(/\D/g, '').slice(0, 6);
+    } catch (_) {
+        return '';
+    }
+}
 
 async function ensureBsCourierProviders() {
     if (_bsCourierProviders) return _bsCourierProviders;
@@ -13052,6 +13411,169 @@ function bsCourierGoToDetails() {
     if (msg) msg.textContent = '';
 }
 
+function bsCourierCollectDims() {
+    return {
+        weightKg: parseFloat((document.getElementById('bs-courier-weight-kg-step1') || {}).value) || 0.8,
+        lengthCm: parseInt((document.getElementById('bs-courier-length') || {}).value, 10) || 25,
+        breadthCm: parseInt((document.getElementById('bs-courier-breadth') || {}).value, 10) || 20,
+        heightCm: parseInt((document.getElementById('bs-courier-height') || {}).value, 10) || 5
+    };
+}
+
+function bsCourierDimsChanged() {
+    const box = document.getElementById('bs-shiprocket-rates');
+    if (box) box.innerHTML = '';
+    _bsSelectedShiprocketCourier = null;
+    _bsShiprocketRatesCache = [];
+}
+
+function bsCourierPincodeLookup() {
+    const hint = document.getElementById('bs-courier-pin-hint');
+    const pin = String((document.getElementById('bs-courier-pincode') || {}).value || '').replace(/\D/g, '');
+    if (pin.length !== 6) {
+        if (hint) hint.textContent = '';
+        return;
+    }
+    if (_bsCourierPincodeTimer) clearTimeout(_bsCourierPincodeTimer);
+    if (hint) hint.textContent = 'Looking up city & state…';
+    _bsCourierPincodeTimer = setTimeout(async () => {
+        try {
+            const r = await fetch('/api/public/pincode-lookup?pin=' + encodeURIComponent(pin));
+            const data = await r.json();
+            if (!data || !data.ok) {
+                if (hint) hint.textContent = 'PIN not found in directory — enter city/state manually.';
+                return;
+            }
+            const cityEl = document.getElementById('bs-courier-city');
+            const stateEl = document.getElementById('bs-courier-state');
+            if (cityEl && (data.cities || []).length) cityEl.value = data.cities[0];
+            if (stateEl && (data.states || []).length) stateEl.value = data.states[0];
+            if (hint) hint.textContent = 'City & state filled from PIN.';
+            bsCourierDimsChanged();
+        } catch (_) {
+            if (hint) hint.textContent = '';
+        }
+    }, 400);
+}
+
+async function bsFetchShiprocketRates() {
+    const box = document.getElementById('bs-shiprocket-rates');
+    if (!box) return;
+    const pin = String((document.getElementById('bs-courier-pincode') || {}).value || '').replace(/\D/g, '');
+    if (pin.length !== 6) {
+        box.innerHTML = '<p style="color:#b91c1c;">Enter a valid 6-digit delivery PIN in step 1 first.</p>';
+        return;
+    }
+    const pickupPin = await bsEnsureShiprocketPickupPin();
+    if (pickupPin.length !== 6) {
+        box.innerHTML =
+            '<p style="color:#b91c1c;">Warehouse pickup PIN is required. Enter it below or set it in Book sales → Settings → Logistics API, then click Get rates again.</p>';
+        return;
+    }
+    const dims = bsCourierCollectDims();
+    box.innerHTML = '<p style="color:#64748b;"><i class="fas fa-spinner fa-spin"></i> Fetching Shiprocket courier rates…</p>';
+    try {
+        const pickupMeta = bsApplyPickupSelectToHidden('bs-courier-pickup-select') || {};
+        const res = await bsFetch('/api/admin/book-sales/shiprocket/serviceability', {
+            method: 'POST',
+            body: {
+                deliveryPostcode: pin,
+                pickupPostcode: pickupPin,
+                pickupLocation: pickupMeta.pickupLocation,
+                pickupLocationId: pickupMeta.pickupLocationId,
+                weightKg: dims.weightKg,
+                length: dims.lengthCm,
+                breadth: dims.breadthCm,
+                height: dims.heightCm,
+                cod: 0
+            }
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            box.innerHTML = '<p style="color:#b91c1c;">' + e(data.error || 'Could not fetch rates') + '</p>';
+            return;
+        }
+        if (data.pickupPostcode) _bsShiprocketPickupPin = String(data.pickupPostcode).replace(/\D/g, '').slice(0, 6);
+        if (data.city) {
+            const cityEl = document.getElementById('bs-courier-city');
+            if (cityEl && !String(cityEl.value || '').trim()) cityEl.value = data.city;
+        }
+        if (data.state) {
+            const stateEl = document.getElementById('bs-courier-state');
+            if (stateEl && !String(stateEl.value || '').trim()) stateEl.value = data.state;
+        }
+        _bsShiprocketRatesCache = data.couriers || [];
+        if (!data.serviceable || !_bsShiprocketRatesCache.length) {
+            box.innerHTML = '<p style="color:#b45309;">Not serviceable on Shiprocket for this PIN / weight.</p>';
+            return;
+        }
+        let html =
+            '<div style="border:1px solid #c7d2fe;border-radius:8px;overflow:hidden;background:#fff;">' +
+            '<p style="margin:0;padding:8px 10px;background:#eef2ff;font-weight:700;color:#3730a3;">Choose courier (rates incl. in shipping charge)</p>' +
+            '<table style="width:100%;border-collapse:collapse;font-size:0.8rem;"><thead><tr style="background:#f8fafc;text-align:left;">' +
+            '<th style="padding:6px 8px;">Courier</th><th style="padding:6px 8px;">Rate</th><th style="padding:6px 8px;">Rating</th><th style="padding:6px 8px;">Pickup</th><th style="padding:6px 8px;">Delivery ETA</th><th></th></tr></thead><tbody>';
+        _bsShiprocketRatesCache.forEach((c, idx) => {
+            const pickupLbl = c.pickupDate || '—';
+            const pickupHint =
+                c.pickupDateSource === 'estimated'
+                    ? '<br><span style="color:#94a3b8;font-size:0.68rem;">' +
+                      (c.cutoffTime ? 'Before ' + e(c.cutoffTime) + ' IST → same day' : 'Est. if booked before 2 PM IST') +
+                      '</span>'
+                    : c.cutoffTime
+                      ? '<br><span style="color:#94a3b8;font-size:0.68rem;">Cutoff ' + e(c.cutoffTime) + '</span>'
+                      : '';
+            html +=
+                '<tr style="border-top:1px solid #e2e8f0;">' +
+                '<td style="padding:6px 8px;">' +
+                e(c.courierName) +
+                '</td>' +
+                '<td style="padding:6px 8px;">₹' +
+                (c.rate != null ? Number(c.rate).toFixed(0) : '—') +
+                '</td>' +
+                '<td style="padding:6px 8px;">' +
+                (c.rating != null ? '★ ' + Number(c.rating).toFixed(1) : '—') +
+                '</td>' +
+                '<td style="padding:6px 8px;">' +
+                e(pickupLbl) +
+                pickupHint +
+                '</td>' +
+                '<td style="padding:6px 8px;">' +
+                e(c.etd || c.deliveryDate || '—') +
+                '</td>' +
+                '<td style="padding:6px 8px;"><button type="button" class="btn-primary" style="font-size:0.72rem;padding:4px 8px;background:#0d9488;" onclick="bsApplyShiprocketRate(' +
+                idx +
+                ')">Use</button></td></tr>';
+        });
+        html += '</tbody></table></div>';
+        box.innerHTML = html;
+    } catch (err) {
+        box.innerHTML = '<p style="color:#b91c1c;">' + e(err.message || 'Network error') + '</p>';
+    }
+}
+
+function bsApplyShiprocketRate(idx) {
+    const c = _bsShiprocketRatesCache[idx];
+    if (!c) return;
+    _bsSelectedShiprocketCourier = c;
+    const chargeEl = document.getElementById('bs-courier-charge-disp');
+    if (chargeEl && c.rate != null) chargeEl.value = String(Math.ceil(Number(c.rate)));
+    const prov = document.getElementById('bs-courier-provider');
+    if (prov) prov.value = 'other';
+    const box = document.getElementById('bs-shiprocket-rates');
+    if (box) {
+        box.insertAdjacentHTML(
+            'afterbegin',
+            '<p style="margin:0 0 8px;padding:8px 10px;background:#ecfdf5;border:1px solid #bbf7d0;border-radius:6px;color:#166534;">Selected <strong>' +
+                e(c.courierName) +
+                '</strong> · ₹' +
+                (c.rate != null ? Number(c.rate).toFixed(0) : '0') +
+                ' added to shipping charge.' +
+                (c.pickupDate ? ' Pickup ~' + c.pickupDate + '.' : '') +
+                ' Save step 1 if you changed charge.</p>'
+        );
+    }
+}
+
 function bsCourierFillFromOrder(o) {
     const set = (id, v) => {
         const el = document.getElementById(id);
@@ -13062,7 +13584,15 @@ function bsCourierFillFromOrder(o) {
     set('bs-courier-pincode', o.shippingPincode || o.shipping_pincode || '');
     set('bs-courier-city', o.shippingCity || o.shipping_city || '');
     set('bs-courier-state', o.shippingState || o.shipping_state || '');
-    set('bs-courier-address-line', o.deliveryAddress || o.delivery_address || '');
+    set(
+        'bs-courier-address-line',
+        bsCourierStreetLine(
+            o.deliveryAddress || o.delivery_address,
+            o.shippingCity || o.shipping_city,
+            o.shippingState || o.shipping_state,
+            o.shippingPincode || o.shipping_pincode
+        ) || o.deliveryAddress || o.delivery_address || ''
+    );
     set('bs-courier-notes', o.notes || '');
     const prov = document.getElementById('bs-courier-provider');
     if (prov && (o.courierProvider || o.courier_provider)) {
@@ -13081,6 +13611,16 @@ function bsCourierFillFromOrder(o) {
                   ? o.courier_charge
                   : (_bsCurrentConfig && _bsCurrentConfig.defaultCourierCharge) || 60;
     }
+    const w = o.parcelWeightKg != null ? o.parcelWeightKg : o.parcel_weight_kg;
+    const l = o.parcelLengthCm != null ? o.parcelLengthCm : o.parcel_length_cm;
+    const b = o.parcelBreadthCm != null ? o.parcelBreadthCm : o.parcel_breadth_cm;
+    const h = o.parcelHeightCm != null ? o.parcelHeightCm : o.parcel_height_cm;
+    if (w != null) set('bs-courier-weight-kg-step1', w);
+    if (l != null) set('bs-courier-length', l);
+    if (b != null) set('bs-courier-breadth', b);
+    if (h != null) set('bs-courier-height', h);
+    _bsSelectedShiprocketCourier = null;
+    _bsShiprocketRatesCache = [];
 }
 
 function bsCourierRenderReview(o) {
@@ -13097,13 +13637,22 @@ function bsCourierRenderReview(o) {
         e(o.shippingPhone || o.shipping_phone || '') +
         '</p>' +
         '<p style="margin:0 0 4px;">' +
-        e(o.deliveryAddress || o.delivery_address || '') +
+        e(bsCourierFormatSummary(o)) +
         '</p>' +
-        '<p style="margin:0;">Courier: <strong>' +
+        '<p style="margin:0 0 4px;">Courier: <strong>' +
         e(provLabel) +
         '</strong> · Charge ₹' +
         Number(o.courierCharge || o.courier_charge || 0).toFixed(0) +
-        '</p>';
+        '</p>' +
+        '<p style="margin:0;font-size:0.8rem;color:#64748b;">Parcel: ' +
+        Number(o.parcelWeightKg || o.parcel_weight_kg || 0.8) +
+        ' kg · ' +
+        Number(o.parcelLengthCm || o.parcel_length_cm || 25) +
+        '×' +
+        Number(o.parcelBreadthCm || o.parcel_breadth_cm || 20) +
+        '×' +
+        Number(o.parcelHeightCm || o.parcel_height_cm || 5) +
+        ' cm</p>';
 }
 
 async function openBsCourierModal(orderId, forceStep) {
@@ -13145,6 +13694,9 @@ async function openBsCourierModal(orderId, forceStep) {
             bsCourierRenderReview(o);
             bsCourierShowStep(2);
             bsCourierSyncAggregatorButtons();
+            bsRefreshShiprocketPickupLocations('bs-courier-pickup-select', true).then(() =>
+                setTimeout(() => bsFetchShiprocketRates(), 300)
+            );
         } else {
             bsCourierShowStep(1);
         }
@@ -13166,7 +13718,12 @@ async function bsSaveCourierDetails() {
         addressLine: (document.getElementById('bs-courier-address-line') || {}).value.trim(),
         courierProvider: (document.getElementById('bs-courier-provider') || {}).value,
         courierCharge: parseFloat((document.getElementById('bs-courier-charge-disp') || {}).value) || 0,
-        notes: (document.getElementById('bs-courier-notes') || {}).value.trim()
+        notes: (document.getElementById('bs-courier-notes') || {}).value.trim(),
+        ...bsCourierCollectDims(),
+        shiprocketCourierId:
+            _bsSelectedShiprocketCourier && _bsSelectedShiprocketCourier.courierId
+                ? _bsSelectedShiprocketCourier.courierId
+                : null
     };
     if (msg) {
         msg.style.color = '#0d9488';
@@ -13189,6 +13746,7 @@ async function bsSaveCourierDetails() {
         bsCourierRenderReview(data.order || _bsCourierOrderCache);
         bsCourierShowStep(2);
         bsCourierSyncAggregatorButtons();
+        setTimeout(() => bsFetchShiprocketRates(), 300);
         if (msg) {
             msg.style.color = '#15803d';
             msg.textContent = data.message || '✓ Shipping details saved. Enter AWB and confirm dispatch.';
@@ -13316,7 +13874,8 @@ async function bsBookAggregator(aggregator) {
     const msg = document.getElementById('bs-courier-msg');
     const adm = getStoredAdminUser();
     const id = parseInt((document.getElementById('bs-courier-order-id') || {}).value, 10);
-    const weightKg = parseFloat((document.getElementById('bs-courier-weight-kg') || {}).value) || 0.8;
+    const dims = bsCourierCollectDims();
+    const pickupMeta = bsApplyPickupSelectToHidden('bs-courier-pickup-select') || {};
     const label = aggregator === 'shiprocket' ? 'Shiprocket' : 'Nimbuspost';
     if (!confirm('Book & ship via ' + label + '? This creates the shipment and AWB automatically.')) return;
     if (msg) {
@@ -13326,7 +13885,18 @@ async function bsBookAggregator(aggregator) {
     try {
         const res = await bsFetch('/api/admin/book-sales/orders/' + id + '/book-aggregator', {
             method: 'POST',
-            body: { aggregator, weightKg }
+            body: {
+                aggregator,
+                weightKg: dims.weightKg,
+                lengthCm: dims.lengthCm,
+                breadthCm: dims.breadthCm,
+                heightCm: dims.heightCm,
+                courierId: _bsSelectedShiprocketCourier && _bsSelectedShiprocketCourier.courierId,
+                shiprocketCourierId: _bsSelectedShiprocketCourier && _bsSelectedShiprocketCourier.courierId,
+                pickupPostcode: pickupMeta.pincode,
+                pickupLocation: pickupMeta.pickupLocation,
+                pickupLocationId: pickupMeta.pickupLocationId
+            }
         });
         const data = await res.json();
         if (!res.ok) {
@@ -13341,13 +13911,29 @@ async function bsBookAggregator(aggregator) {
         loadBsPosOrders();
         alert(
             (data.message || 'Shipped via ' + label + '.') +
-                (data.booking && data.booking.awb ? '\n\nAWB: ' + data.booking.awb : '')
+                (data.booking && data.booking.awb ? '\n\nAWB: ' + data.booking.awb : '') +
+                (data.booking && data.booking.labelUrl ? '\nLabel: ' + data.booking.labelUrl : '')
         );
+        if (data.booking && data.booking.labelUrl) {
+            try { window.open(data.booking.labelUrl, '_blank', 'noopener'); } catch (_) {}
+        }
     } catch (e) {
         if (msg) {
             msg.style.color = '#b91c1c';
             msg.textContent = e.message || 'Booking failed';
         }
+    }
+}
+
+async function bsPrintShippingLabel(id) {
+    try {
+        const res = await bsFetch('/api/admin/book-sales/orders/' + id + '/print-label', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Could not generate label');
+        if (!data.labelUrl) return alert('Label URL not available from courier aggregator.');
+        window.open(data.labelUrl, '_blank', 'noopener');
+    } catch (e) {
+        alert(e.message || 'Could not generate label');
     }
 }
 
@@ -13622,11 +14208,7 @@ async function bsViewOrderTracking(id) {
             // New vertical tracker
             if (o.deliveryJourney && window.BookTrackingUI) {
                 html += '<div style="border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;margin-bottom:14px;">';
-                html += window.BookTrackingUI.renderVerticalJourney(
-                    o.deliveryJourney,
-                    trackEvents,
-                    {}
-                );
+                html += window.BookTrackingUI.renderDoctorFullTracking(o.deliveryJourney, o, trackEvents);
                 html += '</div>';
             } else {
                 html += bsRenderCourierLiveTrackHtml(o, data);

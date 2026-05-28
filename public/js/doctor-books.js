@@ -5,6 +5,8 @@
     let bookConfig = null;
     let bookCart = {};
     let bookPollTimer = null;
+    let bookSelectedCourier = null;
+    let bookShiprocketRates = [];
 
     function uid() {
         if (typeof doctorNumericUserId === 'function') return doctorNumericUserId();
@@ -110,7 +112,7 @@
         let html =
             '<p style="color:#64748b;margin:0 0 16px;">Books by <strong>Dr. R.B. Gogate</strong>. ' +
             (orderingOpen
-                ? 'Choose language and quantity below; payment online or at the counter. Pick up at the seminar book desk.'
+                ? 'Choose language and quantity below. Pick up at the seminar book desk, or select courier delivery with live shipping rates.'
                 : 'You can view the catalog below; new orders are not accepted outside the registration window.') +
             '</p>';
         html += '<div style="display:grid;gap:16px;">';
@@ -144,7 +146,9 @@
         });
         html += '</div>';
         html += `<div style="margin-top:16px;padding:14px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;">
-            <strong>Cart total: ₹<span id="books-cart-total">0.00</span></strong>
+            <div style="font-size:0.88rem;color:#475569;">Books subtotal: ₹<span id="books-cart-books-subtotal">0.00</span></div>
+            <div id="books-cart-courier-line" class="hidden" style="font-size:0.88rem;color:#475569;margin-top:4px;">Courier shipping: ₹<span id="books-cart-courier-amt">0.00</span></div>
+            <strong style="display:block;margin-top:8px;">Order total: ₹<span id="books-cart-total">0.00</span></strong>
         </div>`;
         root.innerHTML = html;
         root.querySelectorAll('[data-book-qty]').forEach((inp) => {
@@ -172,19 +176,282 @@
         return items;
     }
 
+    function booksFulfillmentType() {
+        const el = document.querySelector('input[name="books-fulfillment"]:checked');
+        return el && el.value === 'courier' ? 'courier' : 'pickup';
+    }
+
+    function booksCourierChargeSelected() {
+        if (booksFulfillmentType() !== 'courier' || !bookSelectedCourier) return 0;
+        return Math.max(0, Number(bookSelectedCourier.rate) || 0);
+    }
+
     function updateCartTotal() {
-        let total = 0;
-        if (!bookConfig || !bookConfig.books) return;
+        let booksTotal = 0;
+        if (!bookConfig || !bookConfig.books) return 0;
         const priceMap = {};
         bookConfig.books.forEach((b) => {
             priceMap[b.id] = Number(b.price) || 0;
         });
         collectCartItems().forEach((it) => {
-            total += (priceMap[it.bookId] || 0) * it.qty;
+            booksTotal += (priceMap[it.bookId] || 0) * it.qty;
         });
+        const courier = booksCourierChargeSelected();
+        const grand = booksTotal + courier;
         const el = document.getElementById('books-cart-total');
-        if (el) el.textContent = total.toFixed(2);
-        return total;
+        if (el) el.textContent = grand.toFixed(2);
+        const sub = document.getElementById('books-cart-books-subtotal');
+        if (sub) sub.textContent = booksTotal.toFixed(2);
+        const cr = document.getElementById('books-cart-courier-line');
+        const crAmt = document.getElementById('books-cart-courier-amt');
+        if (cr) cr.classList.toggle('hidden', courier <= 0);
+        if (crAmt) crAmt.textContent = courier.toFixed(2);
+        return grand;
+    }
+
+    function renderBooksFulfillmentPanel() {
+        const panel = document.getElementById('books-fulfillment-panel');
+        if (!panel || !bookConfig || !bookConfig.enabled) return;
+        const orderingOpen = !!bookConfig.orderingOpen;
+        const courierOn = !!bookConfig.courierEnabled;
+        if (!orderingOpen || !courierOn) {
+            panel.classList.add('hidden');
+            panel.innerHTML = '';
+            bookSelectedCourier = null;
+            return;
+        }
+        panel.classList.remove('hidden');
+        const w = bookConfig.defaultParcelWeightKg || 0.5;
+        const l = bookConfig.defaultParcelLengthCm || 22;
+        const b = bookConfig.defaultParcelBreadthCm || 15;
+        const h = bookConfig.defaultParcelHeightCm || 5;
+        const ratesHint = bookConfig.shiprocketRatesEnabled
+            ? 'Live Shiprocket rates — choose one before placing the order.'
+            : 'Courier rates are not configured; contact the office for courier delivery.';
+        panel.innerHTML =
+            '<div class="card" style="margin:16px 0;padding:16px;border:1px solid #e2e8f0;">' +
+            '<h3 style="margin:0 0 12px;font-size:1rem;color:#0f766e;">Delivery</h3>' +
+            '<label style="margin-right:18px;"><input type="radio" name="books-fulfillment" value="pickup" checked> Pick up at seminar book desk</label>' +
+            '<label><input type="radio" name="books-fulfillment" value="courier"> Courier to my address</label>' +
+            '<div id="books-courier-form" class="hidden" style="margin-top:16px;padding-top:14px;border-top:1px solid #e2e8f0;">' +
+            '<p style="font-size:0.85rem;color:#64748b;margin:0 0 12px;">Enter shipping details, parcel size, then fetch rates and select a courier. After the office confirms your order, shipment is booked automatically.</p>' +
+            '<div style="display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));">' +
+            '<label>Recipient name<input type="text" id="books-ship-name" style="width:100%;padding:8px;margin-top:4px;" autocomplete="name"></label>' +
+            '<label>Mobile<input type="tel" id="books-ship-phone" style="width:100%;padding:8px;margin-top:4px;" maxlength="15" autocomplete="tel"></label>' +
+            '<label>PIN code<input type="text" id="books-ship-pin" style="width:100%;padding:8px;margin-top:4px;" maxlength="6" inputmode="numeric" placeholder="6-digit PIN"></label>' +
+            '<label>City<input type="text" id="books-ship-city" style="width:100%;padding:8px;margin-top:4px;"></label>' +
+            '<label>State<input type="text" id="books-ship-state" style="width:100%;padding:8px;margin-top:4px;"></label>' +
+            '</div>' +
+            '<label style="display:block;margin-top:10px;">Street / area / landmark<textarea id="books-ship-address" rows="2" style="width:100%;padding:8px;margin-top:4px;"></textarea></label>' +
+            '<div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:12px;align-items:flex-end;">' +
+            '<label>Weight (kg)<input type="number" id="books-ship-weight" min="0.1" step="0.1" value="' +
+            w +
+            '" style="width:80px;padding:8px;margin-left:4px;"></label>' +
+            '<label>L (cm)<input type="number" id="books-ship-l" min="1" value="' +
+            l +
+            '" style="width:64px;padding:8px;margin-left:4px;"></label>' +
+            '<label>B (cm)<input type="number" id="books-ship-b" min="1" value="' +
+            b +
+            '" style="width:64px;padding:8px;margin-left:4px;"></label>' +
+            '<label>H (cm)<input type="number" id="books-ship-h" min="1" value="' +
+            h +
+            '" style="width:64px;padding:8px;margin-left:4px;"></label>' +
+            '<button type="button" id="books-fetch-rates-btn" class="btn-secondary"' +
+            (bookConfig.shiprocketRatesEnabled ? '' : ' disabled') +
+            '>Get courier rates</button>' +
+            '</div>' +
+            '<p id="books-rates-msg" style="font-size:0.85rem;margin:10px 0 0;color:#64748b;">' +
+            esc(ratesHint) +
+            '</p>' +
+            '<div id="books-rates-table-wrap" class="hidden" style="overflow-x:auto;margin-top:8px;"></div>' +
+            '<p id="books-selected-courier" class="hidden" style="margin-top:10px;padding:10px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;font-size:0.9rem;"></p>' +
+            '</div></div>';
+        panel.querySelectorAll('input[name="books-fulfillment"]').forEach((inp) => {
+            inp.addEventListener('change', () => {
+                const cf = document.getElementById('books-courier-form');
+                if (cf) cf.classList.toggle('hidden', booksFulfillmentType() !== 'courier');
+                if (booksFulfillmentType() !== 'courier') {
+                    bookSelectedCourier = null;
+                    bookShiprocketRates = [];
+                }
+                updateCartTotal();
+            });
+        });
+        const pinInp = document.getElementById('books-ship-pin');
+        if (pinInp) {
+            pinInp.addEventListener('input', () => {
+                const pin = String(pinInp.value || '')
+                    .replace(/\D/g, '')
+                    .slice(0, 6);
+                if (pinInp.value !== pin) pinInp.value = pin;
+                if (pin.length === 6) booksLookupPin(pin);
+            });
+        }
+        const ratesBtn = document.getElementById('books-fetch-rates-btn');
+        if (ratesBtn) ratesBtn.addEventListener('click', () => fetchBookCourierRates());
+    }
+
+    async function booksLookupPin(pin) {
+        const city = document.getElementById('books-ship-city');
+        const state = document.getElementById('books-ship-state');
+        try {
+            const r = await fetch('/api/public/pincode-lookup?pin=' + encodeURIComponent(pin));
+            const data = await r.json();
+            if (!r.ok || !data) return;
+            if (city && data.city && !city.value.trim()) city.value = data.city;
+            if (state && data.state && !state.value.trim()) state.value = data.state;
+        } catch (_) {}
+    }
+
+    function booksParcelParams() {
+        return {
+            weightKg: parseFloat((document.getElementById('books-ship-weight') || {}).value) || 0.5,
+            lengthCm: parseFloat((document.getElementById('books-ship-l') || {}).value) || 22,
+            breadthCm: parseFloat((document.getElementById('books-ship-b') || {}).value) || 15,
+            heightCm: parseFloat((document.getElementById('books-ship-h') || {}).value) || 5
+        };
+    }
+
+    function collectCourierCheckoutFields() {
+        const pin = String((document.getElementById('books-ship-pin') || {}).value || '')
+            .replace(/\D/g, '')
+            .slice(0, 6);
+        const parcel = booksParcelParams();
+        const base = {
+            fulfillmentType: 'courier',
+            shippingRecipientName: String((document.getElementById('books-ship-name') || {}).value || '').trim(),
+            shippingPhone: String((document.getElementById('books-ship-phone') || {}).value || '').trim(),
+            addressLine: String((document.getElementById('books-ship-address') || {}).value || '').trim(),
+            city: String((document.getElementById('books-ship-city') || {}).value || '').trim(),
+            state: String((document.getElementById('books-ship-state') || {}).value || '').trim(),
+            pincode: pin,
+            weightKg: parcel.weightKg,
+            lengthCm: parcel.lengthCm,
+            breadthCm: parcel.breadthCm,
+            heightCm: parcel.heightCm
+        };
+        if (bookSelectedCourier) {
+            base.shiprocketCourierId = bookSelectedCourier.courierId;
+            base.courierProvider = bookSelectedCourier.provider || 'shiprocket';
+            base.courierName = bookSelectedCourier.name;
+            base.courierCharge = bookSelectedCourier.rate;
+        }
+        return base;
+    }
+
+    function validateCourierCheckout() {
+        const f = collectCourierCheckoutFields();
+        if (!f.shippingRecipientName) return 'Enter recipient name for courier delivery.';
+        if (!f.shippingPhone || f.shippingPhone.replace(/\D/g, '').length < 10) {
+            return 'Enter a valid 10-digit mobile number.';
+        }
+        if (f.pincode.length !== 6) return 'Enter a valid 6-digit delivery PIN code.';
+        if (!f.addressLine) return 'Enter street address for courier delivery.';
+        if (!f.city) return 'Enter city.';
+        if (!f.state) return 'Enter state.';
+        if (!bookSelectedCourier || !f.shiprocketCourierId) {
+            return 'Fetch courier rates and select one option before placing the order.';
+        }
+        return null;
+    }
+
+    async function fetchBookCourierRates() {
+        const msg = document.getElementById('books-rates-msg');
+        const wrap = document.getElementById('books-rates-table-wrap');
+        const pin = String((document.getElementById('books-ship-pin') || {}).value || '')
+            .replace(/\D/g, '')
+            .slice(0, 6);
+        if (pin.length !== 6) {
+            if (msg) msg.textContent = 'Enter a valid 6-digit PIN code.';
+            return;
+        }
+        const parcel = booksParcelParams();
+        if (msg) msg.textContent = 'Fetching live courier rates…';
+        bookSelectedCourier = null;
+        updateCartTotal();
+        try {
+            const res = await fetch('/api/doctor/book-orders/shiprocket/serviceability', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    pincode: pin,
+                    weightKg: parcel.weightKg,
+                    lengthCm: parcel.lengthCm,
+                    breadthCm: parcel.breadthCm,
+                    heightCm: parcel.heightCm
+                })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Could not fetch rates');
+            bookShiprocketRates = data.couriers || data.rates || [];
+            if (!bookShiprocketRates.length) {
+                if (msg) msg.textContent = 'No courier options for this PIN and parcel size. Try different dimensions or contact the office.';
+                if (wrap) {
+                    wrap.classList.add('hidden');
+                    wrap.innerHTML = '';
+                }
+                return;
+            }
+            if (msg) msg.textContent = 'Select one courier — shipping charge is added to your order total.';
+            renderBookRatesTable(bookShiprocketRates);
+        } catch (e) {
+            if (msg) msg.textContent = e.message || 'Rates unavailable';
+            if (wrap) wrap.classList.add('hidden');
+        }
+    }
+
+    function renderBookRatesTable(rates) {
+        const wrap = document.getElementById('books-rates-table-wrap');
+        if (!wrap) return;
+        wrap.classList.remove('hidden');
+        let html =
+            '<table class="data-table" style="font-size:0.85rem;"><thead><tr><th></th><th>Courier</th><th>Rate</th><th>ETA</th><th>Pickup</th></tr></thead><tbody>';
+        rates.forEach((c, idx) => {
+            const id = c.courierId != null ? c.courierId : c.courier_company_id;
+            const name = c.courierName || c.company_name || 'Courier';
+            const rate = Math.max(0, Number(c.rate) || Number(c.freight_charge) || 0);
+            const eta = c.etd || c.estimatedDelivery || c.deliveryDate || '—';
+            const pickup = c.pickupDate || c.pickup_date || '—';
+            html +=
+                '<tr><td><input type="radio" name="books-courier-pick" value="' +
+                idx +
+                '"></td><td>' +
+                esc(name) +
+                '</td><td>₹' +
+                rate.toFixed(0) +
+                '</td><td>' +
+                esc(eta) +
+                '</td><td>' +
+                esc(pickup) +
+                '</td></tr>';
+        });
+        html += '</tbody></table>';
+        wrap.innerHTML = html;
+        wrap.querySelectorAll('input[name="books-courier-pick"]').forEach((inp) => {
+            inp.addEventListener('change', () => {
+                const i = parseInt(inp.value, 10);
+                const c = bookShiprocketRates[i];
+                if (!c) return;
+                const rate = Math.max(0, Number(c.rate) || Number(c.freight_charge) || 0);
+                bookSelectedCourier = {
+                    courierId: c.courierId != null ? c.courierId : c.courier_company_id,
+                    name: c.courierName || c.company_name || 'Courier',
+                    rate,
+                    provider: 'shiprocket'
+                };
+                const sel = document.getElementById('books-selected-courier');
+                if (sel) {
+                    sel.classList.remove('hidden');
+                    sel.innerHTML =
+                        '<strong>Selected:</strong> ' +
+                        esc(bookSelectedCourier.name) +
+                        ' · ₹' +
+                        rate.toFixed(0) +
+                        ' shipping';
+                }
+                updateCartTotal();
+            });
+        });
     }
 
     function paymentOptionsHtml() {
@@ -204,19 +471,28 @@
         }
         const items = collectCartItems();
         if (!items.length) return alert('Add quantity for at least one book and language.');
+        const fulfillmentType = booksFulfillmentType();
+        if (fulfillmentType === 'courier') {
+            const courierErr = validateCourierCheckout();
+            if (courierErr) return alert(courierErr);
+        }
         const modeEl = document.querySelector('input[name="books-pay-mode"]:checked');
         const paymentMode = modeEl && modeEl.value === 'online' ? 'online' : 'counter';
         const msg = document.getElementById('books-order-msg');
         if (msg) msg.textContent = 'Placing order…';
+        const payload = { userId, items, paymentMode, fulfillmentType };
+        if (fulfillmentType === 'courier') Object.assign(payload, collectCourierCheckoutFields());
         try {
             const res = await fetch('/api/doctor/book-orders', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ userId, items, paymentMode })
+                body: JSON.stringify(payload)
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Could not place order');
             bookCart = {};
+            bookSelectedCourier = null;
+            bookShiprocketRates = [];
             if (paymentMode === 'online' && data.needsPayment) {
                 const methodId = (document.getElementById('books-pay-method') || {}).value || 'mock';
                 const payRes = await fetch('/api/payments/process-book-order', {
@@ -233,7 +509,11 @@
                 if (payData.paid) {
                     if (msg) {
                         msg.style.color = '#15803d';
-                        msg.textContent = payData.message || 'Paid. Your pickup QR is ready below.';
+                        msg.textContent =
+                            payData.message ||
+                            (fulfillmentType === 'courier'
+                                ? 'Paid. After the office confirms, your courier shipment will be booked automatically.'
+                                : 'Paid. Your pickup QR is ready below.');
                     }
                 } else if (payData.paymentType === 'dqr' && payData.qrImageUrl) {
                     if (msg) {
@@ -412,7 +692,7 @@
             compactTrack +
             '<div id="' + fullTrackId + '" class="hidden" style="margin-top:10px;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;">' +
             (journey && window.BookTrackingUI
-                ? window.BookTrackingUI.renderVerticalJourney(journey, o.courierTrackEvents || [], {})
+                ? window.BookTrackingUI.renderDoctorFullTracking(journey, o, o.courierTrackEvents || [])
                 : renderBookTrackerStepsHtml(o.timeline)) +
             '</div>' +
             '<button type="button" onclick="bookTrackToggle(' + o.id + ')" style="margin-top:8px;background:none;border:none;color:#0d9488;font-size:0.78rem;font-weight:700;cursor:pointer;padding:0;" id="book-track-toggle-' + o.id + '">▼ Show full tracking</button>' +
@@ -427,12 +707,27 @@
             extra =
                 '<p style="margin:8px 0 0;font-size:0.88rem;color:#0f766e;">Shipping address confirmed. AWB and tracking link will appear once staff dispatches your parcel.</p>';
         } else if (o.fulfillmentType === 'courier' && (o.status === 'shipped' || o.courierTrackingNo)) {
-            const journey = o.deliveryJourney;
-            if (!journey || !journey.isLive) {
-                const live = o.courierTrackLabel
-                    ? '<p style="margin:6px 0 0;font-size:0.88rem;color:#0f766e;font-weight:600;">' + esc(o.courierTrackLabel) + '</p>'
-                    : '';
-                extra = live;
+            const j = o.deliveryJourney;
+            if (j && j.headline) {
+                extra =
+                    '<p style="margin:8px 0 0;font-size:0.92rem;color:#0369a1;font-weight:700;">' +
+                    esc(j.headline) +
+                    (j.subheadline ? ' — ' + esc(j.subheadline) : '') +
+                    '</p>';
+            } else if (o.courierTrackLabel) {
+                extra =
+                    '<p style="margin:6px 0 0;font-size:0.88rem;color:#0f766e;font-weight:600;">' + esc(o.courierTrackLabel) + '</p>';
+            }
+            if (o.courierTrackingNo && o.orderCode) {
+                const pub =
+                    '/track-shipment?order=' +
+                    encodeURIComponent(o.orderCode) +
+                    '&awb=' +
+                    encodeURIComponent(o.courierTrackingNo);
+                extra +=
+                    '<p style="margin:8px 0 0;"><a href="' +
+                    pub +
+                    '" target="_blank" rel="noopener" style="font-size:0.82rem;color:#0f766e;font-weight:700;">Open order tracker ↗</a></p>';
             }
         }
         const detailMeta =
@@ -452,7 +747,7 @@
         return '<div class="card" style="margin-bottom:12px;padding:14px;border:1px solid #e2e8f0;" data-book-order-id="' + o.id + '">' +
             '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">' +
             '<strong>' + esc(o.orderCode) + '</strong>' +
-            '<span style="font-size:0.85rem;font-weight:600;color:' + statusColor(o.status) + ';">' + esc(statusLabel(o.status, o)) + '</span>' +
+            '<span data-book-status-label style="font-size:0.85rem;font-weight:600;color:' + statusColor(o.status) + ';">' + esc(statusLabel(o.status, o)) + '</span>' +
             '</div>' +
             '<ul style="margin:8px 0 4px;padding-left:18px;font-size:0.88rem;">' + lines + '</ul>' +
             detailMeta +
@@ -460,6 +755,32 @@
             extra +
             trackHtml +
             '</div>';
+    }
+
+    function patchBookOrderCardTracking(o) {
+        const card = document.querySelector('[data-book-order-id="' + o.id + '"]');
+        const fullTrack = document.getElementById('book-track-full-' + o.id);
+        if (!card || !fullTrack) return false;
+        const statusEl = card.querySelector('[data-book-status-label]');
+        if (statusEl) {
+            statusEl.textContent = statusLabel(o.status, o);
+            statusEl.style.color = statusColor(o.status);
+        }
+        const journey = o.deliveryJourney;
+        if (journey && window.BookTrackingUI) {
+            fullTrack.innerHTML = window.BookTrackingUI.renderDoctorFullTracking(journey, o, o.courierTrackEvents || []);
+            const ul = fullTrack.querySelector('.pkg-scan-timeline');
+            if (ul) ul.scrollTop = ul.scrollHeight;
+        }
+        const compact = card.querySelector('.htrk');
+        if (journey && window.BookTrackingUI && compact && compact.parentElement) {
+            const wrap = compact.parentElement;
+            const tmp = document.createElement('div');
+            tmp.innerHTML = window.BookTrackingUI.renderHorizontalStepper(journey);
+            const newH = tmp.firstChild;
+            if (newH) wrap.replaceChild(newH, compact);
+        }
+        return true;
     }
 
     function orderTrackFingerprint(o) {
@@ -513,6 +834,7 @@
             await loadBookSalesConfig();
             if (prevOpen !== (bookConfig && bookConfig.orderingOpen)) {
                 renderBookCatalog();
+                renderBooksFulfillmentPanel();
             }
         }, 30000);
     }
@@ -534,16 +856,7 @@
         try {
             const tab = document.getElementById('tab-books');
             const tabVisible = tab && !tab.classList.contains('hidden');
-            if (tabVisible) {
-                _bookRefreshTracksTick++;
-            }
-            if (tabVisible && _bookRefreshTracksTick % 3 === 1) {
-                fetch('/api/doctor/book-orders/refresh-tracks', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ userId })
-                }).catch(() => {});
-            }
+            if (tabVisible) _bookRefreshTracksTick++;
             const res = await fetch('/api/doctor/book-orders?userId=' + encodeURIComponent(userId));
             const orders = await res.json();
             if (!Array.isArray(orders) || !orders.length) {
@@ -562,7 +875,14 @@
                     o.fulfillmentType === 'courier' &&
                     (o.status === 'shipped' || (o.deliveryJourney && o.deliveryJourney.isLive))
             );
-            const nextInterval = needsFastPoll ? 10000 : 15000;
+            if (tabVisible && (needsFastPoll ? _bookRefreshTracksTick % 2 === 1 : _bookRefreshTracksTick % 3 === 1)) {
+                fetch('/api/doctor/book-orders/refresh-tracks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ userId })
+                }).catch(() => {});
+            }
+            const nextInterval = needsFastPoll ? 5000 : 15000;
             if (nextInterval !== _bookPollIntervalMs) {
                 _bookPollIntervalMs = nextInterval;
                 stopBookOrderPoll();
@@ -571,12 +891,13 @@
                 live.classList.toggle('hidden', !needsPoll);
                 if (needsFastPoll) {
                     live.innerHTML =
-                        '<span class="pkg-live-dot" style="display:inline-block;vertical-align:middle;margin-right:6px;"></span> Live delivery tracking — refreshing every 10 seconds';
+                        '<span class="pkg-live-dot" style="display:inline-block;vertical-align:middle;margin-right:6px;"></span> Live delivery tracking — updates every 5 seconds';
                 }
             }
-            if (silent && _openBookTrackIds.size > 0) {
-                // Never re-render cards while any tracking panel is manually expanded.
-                // This guarantees the panel stays open during auto-poll.
+            if (silent && _openBookTrackIds.size > 0 && fp !== _lastBookOrdersFingerprint) {
+                orders.forEach((o) => {
+                    if (_openBookTrackIds.has(String(o.id))) patchBookOrderCardTracking(o);
+                });
                 _lastBookOrdersFingerprint = fp;
                 if (needsPoll) startBookOrderPoll();
                 else stopBookOrderPoll();
@@ -584,6 +905,16 @@
             }
             const keepExpandedStable = silent && _openBookTrackIds.size > 0 && fp !== _lastBookOrdersFingerprint;
             if (!silent || (!keepExpandedStable && fp !== _lastBookOrdersFingerprint)) {
+                orders.forEach((o) => {
+                    if (
+                        o.fulfillmentType === 'courier' &&
+                        (o.status === 'shipped' || o.courierTrackingNo) &&
+                        o.status !== 'cancelled' &&
+                        o.status !== 'delivered'
+                    ) {
+                        _openBookTrackIds.add(String(o.id));
+                    }
+                });
                 root.innerHTML = orders.map(renderOrderCard).join('');
                 _openBookTrackIds.forEach((orderId) => {
                     const el = document.getElementById('book-track-full-' + orderId);
@@ -643,6 +974,7 @@
                     : '');
         }
         renderBookCatalog();
+        renderBooksFulfillmentPanel();
         loadBookOrders();
         startBookConfigPoll();
     }

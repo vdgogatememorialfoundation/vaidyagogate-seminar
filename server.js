@@ -83,7 +83,7 @@ const waitingList = require('./lib/waiting-list');
 const seminarPurge = require('./lib/seminar-purge');
 const supplementalPayments = require('./lib/supplemental-payments');
 const bookSales = require('./lib/book-sales');
-const { safeInternalUserRowId } = require('./lib/internal-user-id');
+const { safeInternalUserRowId, resolveInternalUserId } = require('./lib/internal-user-id');
 const regCertVerify = require('./lib/registration-certificate-verify');
 const seminarAnalytics = require('./lib/seminar-analytics');
 const { filterConfirmedRows } = require('./lib/confirmed-participants');
@@ -113,6 +113,11 @@ app.set('trust proxy', 1);
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+// Force privileged portal APIs to bypass any edge/browser caching.
+app.use(['/api/admin', '/api/staff'], (req, res, next) => {
+    res.setHeader('Cache-Control', 'private, no-cache, no-store, must-revalidate');
+    next();
+});
 
 let appReadyPromise = null;
 let appReadyFailed = null;
@@ -120,15 +125,18 @@ let appReadyResolved = false;
 let deferredBootstrapStarted = false;
 
 function bootstrapTimeoutMs() {
-    if (!process.env.VERCEL) return 120000;
-    const cap = Number(process.env.VERCEL_MAX_DURATION_MS);
-    if (Number.isFinite(cap) && cap > 0) return Math.max(8000, cap - 3000);
-    return 55000;
+    return 120000;
 }
 
 // Short-lived in-memory cache for expensive read-only public endpoints.
 const _responseCache = new Map();
+function isAllowedPublicCacheKey(key) {
+    const s = String(key || '');
+    return s.startsWith('api:public:') || s.startsWith('api:seminars:') || s === 'api:notices';
+}
 function cacheGet(key) {
+    // Public-edge cache keys only.
+    if (!isAllowedPublicCacheKey(key)) return null;
     const hit = _responseCache.get(key);
     if (!hit) return null;
     if (Date.now() > hit.expAt) {
@@ -138,6 +146,7 @@ function cacheGet(key) {
     return hit.value;
 }
 function cacheSet(key, value, ttlMs) {
+    if (!isAllowedPublicCacheKey(key)) return;
     _responseCache.set(key, { value, expAt: Date.now() + Math.max(1000, ttlMs || 1000) });
 }
 function cacheInvalidatePrefix(prefix) {
@@ -210,25 +219,6 @@ function bootstrapApp(done) {
         setImmediate(() => runFullMigrations());
         finish();
     };
-
-    // Vercel: never block requests on the long SQLite-style migration chain (60s function cap).
-    if (process.env.VERCEL) {
-        if (pgDb && pgDb.ensureAuxiliaryTables) {
-            return pgDb
-                .ensureAuxiliaryTables()
-                .then((stillMissing) => {
-                    if (stillMissing && stillMissing.length) {
-                        console.warn('[bootstrap] auxiliary tables still missing:', stillMissing.join(', '));
-                    }
-                    scheduleDeferredMigrations();
-                })
-                .catch((e) => {
-                    console.warn('[bootstrap] auxiliary tables:', e.message);
-                    scheduleDeferredMigrations();
-                });
-        }
-        return scheduleDeferredMigrations();
-    }
 
     if (!pgDb) {
         return runFullMigrations();
@@ -310,7 +300,7 @@ function bootstrapFailureResponse(res, err) {
                 : 'Database unavailable.',
         code,
         hint: publicDatabaseHint(code),
-        detail: process.env.VERCEL_ENV === 'production' ? undefined : msg
+        detail: process.env.NODE_ENV === 'production' ? undefined : msg
     });
 }
 
@@ -325,13 +315,6 @@ function startAppBootstrap() {
                 clearTimeout(timer);
                 return reject(err);
             }
-            if (process.env.VERCEL) {
-                clearTimeout(timer);
-                appReadyResolved = true;
-                resolve();
-                bootstrapApp();
-                return;
-            }
             bootstrapApp(() => {
                 clearTimeout(timer);
                 appReadyResolved = true;
@@ -343,13 +326,12 @@ function startAppBootstrap() {
 
 function ensureAppReady(req, res, next) {
     if (!isPostgresConfigured()) {
-        if (process.env.VERCEL) return databaseConfigResponse(res);
         return next();
     }
     const urlCheck = validateDatabaseUrl();
     if (!urlCheck.ok) return databaseConfigResponse(res);
 
-    const failCooldownMs = process.env.VERCEL ? 8000 : 15000;
+    const failCooldownMs = 15000;
     if (appReadyFailed && Date.now() - appReadyFailed.at < failCooldownMs) {
         return bootstrapFailureResponse(res, new Error(appReadyFailed.message));
     }
@@ -378,11 +360,12 @@ app.get('/api/health', (req, res) => {
         ok: false,
         time: new Date().toISOString(),
         runtime: {
-            vercel: !!process.env.VERCEL,
+            platform: require('./lib/hosting').platformLabel(),
+            render: require('./lib/hosting').isRender(),
             node: process.version
         },
         database: {
-            mode: isPostgresConfigured() ? 'postgresql' : process.env.VERCEL ? 'unset' : 'sqlite',
+            mode: isPostgresConfigured() ? 'postgresql' : 'sqlite',
             configured: isPostgresConfigured(),
             valid: urlCheck.ok
         },
@@ -484,6 +467,19 @@ app.use(siteKillSwitch.createSiteKillSwitchMiddleware(db));
 
 app.use(subdomainPortalMiddleware);
 
+app.get(['/track-shipment', '/track-shipment/'], (req, res) => {
+    const q = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+    res.redirect(302, '/track-shipment.html' + q);
+});
+app.get(['/order-tracker', '/order-tracker/', '/order-tracker.html'], (req, res) => {
+    const q = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+    res.redirect(302, '/track-shipment.html' + q);
+});
+app.get(['/track-book', '/track-book/', '/track-book.html'], (req, res) => {
+    const q = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
+    res.redirect(302, '/track-shipment.html' + q);
+});
+
 app.get('/scanner', (req, res) => {
     res.redirect(302, '/scanner.html');
 });
@@ -518,7 +514,7 @@ app.get('/certificate/view', (req, res) => {
 
 app.use(
     express.static('public', {
-        maxAge: process.env.VERCEL ? '86400000' : 0,
+        maxAge: process.env.NODE_ENV === 'production' ? '86400000' : 0,
         etag: true
     })
 );
@@ -568,7 +564,7 @@ const storage = multer.diskStorage({
         cb(null, Date.now() + '-' + Math.round(Math.random() * 1E9) + path.extname(file.originalname))
     }
 });
-const UPLOAD_MAX_BYTES = 4 * 1024 * 1024; // match Vercel ~4.5 MB request body limit
+const UPLOAD_MAX_BYTES = 4 * 1024 * 1024; // legacy cap when not using R2
 const upload = multer({ storage: storage, limits: { fileSize: UPLOAD_MAX_BYTES } });
 const memoryUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: UPLOAD_MAX_BYTES } });
 
@@ -582,7 +578,7 @@ function uploadErrorMessage(err) {
 }
 
 function withCertificateUpload(req, res, next) {
-    (process.env.VERCEL ? memoryUpload : upload).single('certificate')(req, res, (err) => {
+    upload.single('certificate')(req, res, (err) => {
         if (err) {
             return res.status(400).json({ error: uploadErrorMessage(err) });
         }
@@ -1584,7 +1580,7 @@ function persistUploadedCertificate(req, cb) {
 }
 
 function withApplicationDocUpload(req, res, next) {
-    (process.env.VERCEL ? memoryUpload : upload).fields([
+    upload.fields([
         { name: 'certificate', maxCount: 1 },
         { name: 'additionalDoc', maxCount: 1 }
     ])(req, res, (err) => {
@@ -4621,19 +4617,41 @@ app.post('/api/applications/submit', withCertificateUpload, (req, res) => {
         submitPhoneOtpToken,
         submitEmailOtpToken,
         fieldOtpTokens,
-        joinWaitlist
+        joinWaitlist,
+        userIdString,
+        portalUserId
     } = req.body;
-    userId = parsePositiveUserId(userId);
-    if (!userId) {
-        return res.status(400).json({
-            error: 'Invalid user session. Sign out of the doctor portal, sign in again with your email, then resubmit.'
-        });
-    }
     seminarId = parseInt(seminarId, 10);
     if (!Number.isInteger(seminarId) || seminarId < 1) {
         return res.status(400).json({ error: 'Invalid seminar.' });
     }
-    
+
+    const portalHint = String(userIdString || portalUserId || '').trim();
+    const numericUserId = parsePositiveUserId(userId);
+    const beginApplicationSubmit = (uid) => {
+        if (!uid) {
+            return res.status(400).json({
+                error: 'Invalid user session. Sign out of the doctor portal, sign in again with your email, then resubmit.'
+            });
+        }
+        userId = uid;
+        runApplicationSubmit();
+    };
+    if (portalHint) {
+        resolveInternalUserId(db, userId, portalHint, (eResolve, uid) => {
+            if (eResolve) return res.status(500).json({ error: eResolve.message });
+            beginApplicationSubmit(uid || numericUserId);
+        });
+    } else if (numericUserId) {
+        beginApplicationSubmit(numericUserId);
+    } else {
+        resolveInternalUserId(db, userId, userId, (eResolve, uid) => {
+            if (eResolve) return res.status(500).json({ error: eResolve.message });
+            beginApplicationSubmit(uid);
+        });
+    }
+
+    function runApplicationSubmit() {
     // formData might be passed as string if using FormData API
     if (typeof formData === 'string') {
         try {
@@ -4676,21 +4694,42 @@ app.post('/api/applications/submit', withCertificateUpload, (req, res) => {
                 });
             }
             if (re != null && !Number.isNaN(re) && now > re) {
-                    return extModules.userHasRegistrationOverride(db, userId, seminarId, (ovErr, hasOverride) => {
+                    return extModules.userHasActiveRegistrationOverride(db, userId, seminarId, (ovErr, hasOverride) => {
                         if (ovErr) return res.status(500).json({ error: ovErr.message });
                         if (hasOverride) {
                             continueApplicationSubmit(false);
                             return;
                         }
-                        if (wantWaitlist && waitingList.isWaitingListEnabled(sem)) {
-                            isWaitlistSubmit = true;
-                            continueApplicationSubmit(true);
-                            return;
-                        }
-                        if (wantWaitlist) {
-                            return res.status(400).json({ error: 'Waiting list is not open for this seminar.' });
-                        }
-                        return res.status(400).json({ error: 'Registration for this seminar has closed.' });
+                        return extModules.fetchRegistrationOverrideRow(db, userId, seminarId, (rowErr, ovRow) => {
+                            if (rowErr) return res.status(500).json({ error: rowErr.message });
+                            if (ovRow && ovRow.register_until) {
+                                const untilLabel = seminarDt.formatSeminarDateTime(ovRow.register_until, {
+                                    dateStyle: 'medium',
+                                    timeStyle: 'short'
+                                });
+                                return res.status(400).json({
+                                    error: `Your extended registration window closed${
+                                        untilLabel ? ' on ' + untilLabel : ''
+                                    }. You can no longer register for this seminar.`
+                                });
+                            }
+                            return extModules.userHasRegistrationOverride(db, userId, seminarId, (volErr, hasVol) => {
+                                if (volErr) return res.status(500).json({ error: volErr.message });
+                                if (hasVol) {
+                                    continueApplicationSubmit(false);
+                                    return;
+                                }
+                                if (wantWaitlist && waitingList.isWaitingListEnabled(sem)) {
+                                    isWaitlistSubmit = true;
+                                    continueApplicationSubmit(true);
+                                    return;
+                                }
+                                if (wantWaitlist) {
+                                    return res.status(400).json({ error: 'Waiting list is not open for this seminar.' });
+                                }
+                                return res.status(400).json({ error: 'Registration for this seminar has closed.' });
+                            });
+                        });
                     });
                 } else {
                     if (wantWaitlist) {
@@ -5016,6 +5055,7 @@ app.post('/api/applications/submit', withCertificateUpload, (req, res) => {
             }
         );
     });
+    }
 });
 
 // 5b. Get Applications for User
@@ -7496,9 +7536,14 @@ app.post('/api/admin/applications/status', (req, res) => {
             db.get(`SELECT user_id, seminar_id FROM registrations WHERE id = ?`, [applicationId], (eN, regRow) => {
                 if (!eN && regRow) {
                     let ev = 'APPLICATION_UNDER_REVIEW';
-                    if (newSt === 'approved_pending_payment') ev = 'APPLICATION_APPROVED';
-                    else if (newSt === 'waitlisted') ev = null;
-                    else if (newSt === 'rejected') ev = 'APPLICATION_REJECTED';
+                    if (newSt === 'approved_pending_payment') {
+                        ev =
+                            prevStatus === 'waitlisted' ? 'WAITLIST_CONFIRMED' : 'APPLICATION_APPROVED';
+                    } else if (newSt === 'waitlisted' && prevStatus !== 'waitlisted') {
+                        ev = 'WAITLIST_JOINED';
+                    } else if (newSt === 'waitlisted') {
+                        ev = null;
+                    } else if (newSt === 'rejected') ev = 'APPLICATION_REJECTED';
                     else if (newSt === 'revision_required') ev = 'APPLICATION_REVISION_REQUIRED';
                     else if (newSt === 'cancelled') ev = 'REGISTRATION_CANCELLED';
                     else if (
@@ -9242,7 +9287,7 @@ app.post('/api/admin/users/create', (req, res) => {
                                 if (!saved || !saved.id) {
                                     return res.status(500).json({
                                         error:
-                                            'Account was not saved to the database. Wait a few seconds and try again, or check Vercel DATABASE_URL for Production.'
+                                            'Account was not saved to the database. Wait a few seconds and try again, or check DATABASE_URL on Render.'
                                     });
                                 }
                                 const newId = saved.id || insertedId;
@@ -12323,16 +12368,8 @@ function startBackgroundWorkers() {
             });
         });
     });
-    if (jobsModule && typeof jobsModule.startWorkers === 'function' && !process.env.VERCEL) {
+    if (jobsModule && typeof jobsModule.startWorkers === 'function' && process.env.DISABLE_BACKGROUND_JOBS !== '1') {
         jobsModule.startWorkers(db);
-    } else if (process.env.VERCEL) {
-        setInterval(() => {
-            try {
-                notifEngine.processQueueOnce(db);
-            } catch (e) {
-                console.warn('[notifications] queue tick', e.message);
-            }
-        }, 8000);
     }
 }
 
@@ -12404,7 +12441,7 @@ app.use((err, req, res, next) => {
 
 module.exports = app;
 
-if (!process.env.VERCEL) {
+if (require.main === module) {
     db.connect((err) => {
         if (err) {
             console.error('[db] connect failed:', err.message);

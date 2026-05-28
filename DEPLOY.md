@@ -1,6 +1,8 @@
-# Deploy VGMF Seminar System (live server)
+# Deploy VGMF Seminar System
 
-**Wix + subdomains:** Main site stays on Wix (`www.vaidyagogate.org`). Seminar app uses `seminar`, `admin`, and `judge` subdomains on a VPS. Full DNS steps: **[deploy/WIX-DNS.md](deploy/WIX-DNS.md)**. Nginx sample: **[deploy/nginx-vaidyagogate.conf](deploy/nginx-vaidyagogate.conf)**.
+**Production (recommended):** **[deploy/DEPLOY-RENDER.md](deploy/DEPLOY-RENDER.md)** — Render Web Service + Neon PostgreSQL.
+
+**VPS alternative:** Main site on Wix; seminar app on your own server. DNS: **[deploy/WIX-DNS.md](deploy/WIX-DNS.md)**. Nginx: **[deploy/nginx-vaidyagogate.conf](deploy/nginx-vaidyagogate.conf)**.
 
 | Subdomain | Role |
 |-----------|------|

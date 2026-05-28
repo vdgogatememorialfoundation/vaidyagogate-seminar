@@ -1,4 +1,4 @@
--- Auto-generated from SQLite schema — Neon / Vercel
+-- Auto-generated from SQLite schema — Neon / Render
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 CREATE TABLE IF NOT EXISTS users (
@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS users (
         registration_cert_path TEXT,
         registration_cert_no TEXT,
         created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-    , is_disabled INTEGER DEFAULT 0, user_role TEXT DEFAULT 'doctor', admin_modules TEXT, doctor_category TEXT DEFAULT 'regular', doctor_modules TEXT, is_demo INTEGER DEFAULT 0, last_login_at TIMESTAMPTZ, email_verified INTEGER DEFAULT 1);
+    , is_disabled INTEGER DEFAULT 0, user_role TEXT DEFAULT 'doctor', admin_modules TEXT, is_demo INTEGER DEFAULT 0);
 CREATE TABLE IF NOT EXISTS seminars (
         id SERIAL PRIMARY KEY,
         title TEXT NOT NULL,
@@ -48,11 +48,7 @@ CREATE TABLE IF NOT EXISTS registrations (
         application_no TEXT UNIQUE,
         status TEXT DEFAULT 'pending_approval',
         rejection_reason TEXT,
-        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-        form_data TEXT,
-        registration_source TEXT DEFAULT 'doctor',
-        admin_editor_user_id INTEGER,
+        created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, form_data TEXT, registration_source TEXT DEFAULT 'doctor', admin_editor_user_id INTEGER,
         FOREIGN KEY (seminar_id) REFERENCES seminars(id)
     );
 CREATE TABLE IF NOT EXISTS orders (
@@ -238,14 +234,6 @@ CREATE TABLE IF NOT EXISTS otp_verification_tokens (
             consumed INTEGER DEFAULT 0,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
-CREATE TABLE IF NOT EXISTS email_verify_tokens (
-            id SERIAL PRIMARY KEY,
-            user_id INTEGER NOT NULL,
-            token_hash TEXT NOT NULL,
-            expires_at TEXT NOT NULL,
-            consumed INTEGER DEFAULT 0,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
-        );
 CREATE TABLE IF NOT EXISTS notification_queue (
             id SERIAL PRIMARY KEY,
             channel TEXT NOT NULL,
@@ -333,7 +321,6 @@ CREATE TABLE IF NOT EXISTS volunteer_certificates (
                                 template_id INTEGER,
                                 enabled INTEGER DEFAULT 0,
                                 scan_verified INTEGER DEFAULT 0,
-                                scan_time TIMESTAMPTZ,
                                 updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
                                 UNIQUE(user_id, seminar_id)
                             );
@@ -387,7 +374,7 @@ CREATE TABLE IF NOT EXISTS case_programs (
                 registration_end TIMESTAMPTZ,
                 is_active INTEGER DEFAULT 1,
                 created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-            , form_config_json TEXT, max_presentations_per_user INTEGER DEFAULT 2, max_total_submissions INTEGER, max_files_per_submission INTEGER DEFAULT 5, max_file_size_mb INTEGER DEFAULT 50, enabled_categories TEXT, instructions TEXT, portal_year INTEGER, judge_criteria_json TEXT);
+            , form_config_json TEXT, max_presentations_per_user INTEGER DEFAULT 2, max_total_submissions INTEGER, max_files_per_submission INTEGER DEFAULT 5, max_file_size_mb INTEGER DEFAULT 50, enabled_categories TEXT, instructions TEXT, portal_year INTEGER);
 CREATE TABLE IF NOT EXISTS registration_status_log (
                 id SERIAL PRIMARY KEY,
                 registration_id INTEGER NOT NULL,

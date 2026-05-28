@@ -129,6 +129,9 @@
         .vtrk-ev-desc { font-size: 0.82rem; color: #334155; font-weight: 600; }
         .vtrk-ev-loc { font-size: 0.74rem; color: #64748b; grid-column: 1; display: flex; align-items: center; gap: 4px; }
         .vtrk-ev-when { font-size: 0.72rem; color: #94a3b8; grid-row: 1 / 3; align-self: center; white-space: nowrap; }
+        .vtrk-ev-latest { background: #ecfdf5; border-radius: 8px; padding: 8px 6px !important; margin: 2px 0; border-bottom-color: #a7f3d0 !important; animation: vtrk-ev-in 0.45s ease-out; }
+        .vtrk-ev-latest .vtrk-ev-desc { color: #0f766e; }
+        @keyframes vtrk-ev-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
         /* Horizontal compact stepper */
         .htrk { margin: 10px 0 0; }
         .htrk-progress { height: 4px; background: #e2e8f0; border-radius: 999px; overflow: hidden; margin-bottom: 8px; }
@@ -691,9 +694,10 @@
 
                 <div id="tab-books" class="tab-pane hidden">
                     <h2 class="section-title">Books — Agnikarma &amp; Viddhakarma</h2>
-                    <p style="color:#64748b;margin:-10px 0 16px;">Order Dr. R.B. Gogate books in English, Marathi, Hindi, or Kannada. Collect at the seminar book desk after payment.</p>
+                    <p style="color:#64748b;margin:-10px 0 16px;">Order Dr. R.B. Gogate books in English, Marathi, Hindi, or Kannada. Collect at the seminar book desk, or choose courier delivery with live shipping rates.</p>
                     <div id="books-window-banner" class="hidden" style="margin-bottom:14px;padding:12px 14px;border-radius:10px;font-size:0.9rem;"></div>
                     <div id="books-catalog"></div>
+                    <div id="books-fulfillment-panel" class="hidden"></div>
                     <div id="books-order-panel" class="card" style="margin:16px 0;padding:16px;">
                         <h3 style="margin:0 0 10px;font-size:1rem;color:#0f766e;">Payment</h3>
                         <div id="books-payment-options"></div>
@@ -701,6 +705,7 @@
                         <p id="books-order-msg" style="margin-top:10px;font-weight:600;"></p>
                     </div>
                     <h3 style="margin:24px 0 6px;font-size:1.05rem;">My book orders</h3>
+                    <p style="margin:0 0 10px;font-size:0.85rem;color:#64748b;">Courier parcels: <a href="/track-shipment" target="_blank" rel="noopener" style="color:#0f766e;font-weight:700;">Track shipment ↗</a> (order code + AWB or mobile last 4 digits).</p>
                     <p id="books-track-live" class="hidden" style="font-size:0.82rem;color:#0f766e;font-weight:700;margin:0 0 10px;"><span class="pkg-live-dot" style="display:inline-block;vertical-align:middle;margin-right:6px;"></span> Live delivery tracking — updates every few seconds</p>
                     <div id="books-orders-list"></div>
                 </div>
@@ -850,7 +855,7 @@
     <script src="/js/portal-content-protection.js"></script>
     <script src="/js/portal-theme.js"></script>
     <script src="/js/site-seo.js?v=20260522a"></script>
-    <script src="/js/portal-datetime.js"></script>
+    <script src="/js/portal-datetime.js?v=20260528ovdeadline"></script>
     <script src="/js/site-branding.js"></script>
     <script src="/js/otp-ui.js"></script>
     <script src="/js/http-json.js"></script>
@@ -860,8 +865,9 @@
     <script src="/js/doctor-auth-ui.js"></script>
     <script src="/js/portal-upload.js?v=20260523"></script>
     <script src="/js/case-r2-upload.js?v=20260522c"></script>
-    <script src="/js/book-tracking-ui.js?v=20260530d"></script>
-    <script src="/js/doctor-books.js?v=20260530d"></script>
-    <script src="/js/doctor.js?v=20260528b"></script>
+    <link rel="stylesheet" href="/css/book-track.css?v=20260528ot">
+    <script src="/js/book-tracking-ui.js?v=20260528ot"></script>
+    <script src="/js/doctor-books.js?v=20260528livetrack"></script>
+    <script src="/js/doctor.js?v=20260528regov7"></script>
 </body>
 </html>

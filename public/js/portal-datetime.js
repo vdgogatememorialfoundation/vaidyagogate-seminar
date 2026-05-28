@@ -137,11 +137,28 @@
         return d && !Number.isNaN(d.getTime()) ? d.getTime() : null;
     }
 
+    /** Match server: 03:24 means open through 03:24:59 IST. */
+    function registrationOverrideDeadlineMs(stored) {
+        if (!stored) return null;
+        const local = toDatetimeLocal(stored);
+        if (!local) return parseMs(stored);
+        return parseMs(local + ':59' + IST_OFFSET);
+    }
+
+    function isRegistrationOverrideOpenNow(stored, nowMs) {
+        const untilMs = registrationOverrideDeadlineMs(stored);
+        if (untilMs == null) return true;
+        const now = nowMs != null ? nowMs : Date.now();
+        return now <= untilMs + 2000;
+    }
+
     global.PortalDateTime = {
         TZ: PORTAL_DISPLAY_TZ,
         IST_OFFSET,
         parse: parsePortalDateTime,
         parseMs,
+        registrationOverrideDeadlineMs,
+        isRegistrationOverrideOpenNow,
         fromDatetimeLocal,
         toDatetimeLocal,
         format: formatPortalDateTime,

@@ -3,7 +3,7 @@ let currentRegistrationId = null;
 let __doctorAllowedTabs = null;
 window.__portalFlags = window.__portalFlags || {};
 
-/** Fallback when R2 is off (Vercel body limit). */
+/** Fallback when R2 is off (smaller server upload limit). */
 const UPLOAD_HOST_CAP_MB = 4;
 let __caseUploadConfig = null;
 
@@ -445,11 +445,14 @@ async function prepareUploadFileOrAlert(file) {
     return prep.file;
 }
 
+const DOCTOR_INTERNAL_ID_MAX = 2147483647;
+
 function doctorNumericUserId() {
     if (!currentUser) return null;
     const raw = currentUser.id != null ? currentUser.id : currentUser.user_id;
     const n = parseInt(raw, 10);
-    if (Number.isInteger(n) && n > 0) return n;
+    if (Number.isInteger(n) && n > 0 && n <= DOCTOR_INTERNAL_ID_MAX) return n;
+    if (window.__doctorResolvedInternalId) return window.__doctorResolvedInternalId;
     return null;
 }
 
@@ -1013,6 +1016,7 @@ function initDoctorMobileNav() {
 
 function bootDoctorDashboard(user) {
     currentUser = user;
+    window.__doctorResolvedInternalId = doctorNumericUserId();
     applyDoctorModuleAccessFromUser(currentUser);
     fetch('/api/public/portal-urls')
         .then((r) => r.json())
@@ -1800,15 +1804,52 @@ function registrationWindowState(seminar) {
 }
 
 function hasRegistrationOverrideForSeminar(seminarId) {
-    const set = window.__registrationOverrideSeminarIds;
-    return !!(set && set.has(Number(seminarId)));
+    const map = window.__registrationOverrideBySeminar;
+    return !!(map && map[Number(seminarId)]);
+}
+
+function getOverrideRegisterUntilMs(seminarId) {
+    const map = window.__registrationOverrideBySeminar;
+    const entry = map && map[Number(seminarId)];
+    if (!entry || !entry.registerUntil) return null;
+    if (window.PortalDateTime && window.PortalDateTime.registrationOverrideDeadlineMs) {
+        const ms = window.PortalDateTime.registrationOverrideDeadlineMs(entry.registerUntil);
+        return ms != null && !Number.isNaN(ms) ? ms : null;
+    }
+    const ms = entry.registerUntil ? new Date(entry.registerUntil).getTime() : null;
+    return ms != null && !Number.isNaN(ms) ? ms : null;
+}
+
+function isOverrideRegistrationActive(seminarId) {
+    const map = window.__registrationOverrideBySeminar;
+    const entry = map && map[Number(seminarId)];
+    if (!entry) return false;
+    if (window.PortalDateTime && window.PortalDateTime.isRegistrationOverrideOpenNow) {
+        return window.PortalDateTime.isRegistrationOverrideOpenNow(entry.registerUntil);
+    }
+    const untilMs = getOverrideRegisterUntilMs(seminarId);
+    if (untilMs == null) return entry.isActive !== false;
+    return Date.now() <= untilMs + 2000;
 }
 
 /** Honors per-user admin override when public registration has closed. */
 function effectiveRegistrationWindowState(seminar) {
     const w = registrationWindowState(seminar);
+    const map = window.__registrationOverrideBySeminar;
+    const ovEntry = seminar && map ? map[Number(seminar.id)] : null;
+    if (w.state === 'closed' && seminar && ovEntry) {
+        const untilMs = getOverrideRegisterUntilMs(seminar.id);
+        if (!isOverrideRegistrationActive(seminar.id)) {
+            return { state: 'closed', overrideExpired: true, registerUntil: untilMs };
+        }
+        return { state: 'open', viaOverride: true, registerUntil: untilMs };
+    }
     if (w.state === 'closed' && seminar && hasRegistrationOverrideForSeminar(seminar.id)) {
-        return { state: 'open', viaOverride: true };
+        const untilMs = getOverrideRegisterUntilMs(seminar.id);
+        if (!isOverrideRegistrationActive(seminar.id)) {
+            return { state: 'closed', overrideExpired: true, registerUntil: untilMs };
+        }
+        return { state: 'open', viaOverride: true, registerUntil: untilMs };
     }
     if (w.state === 'closed' && seminar && Number(seminar.waiting_list_enabled) === 1) {
         return { state: 'waitlist' };
@@ -1845,6 +1886,14 @@ function startSeminarGridCountdownTimer() {
         let anyUpcoming = false;
         activeSeminars.forEach((s) => {
             const w = registrationWindowState(s);
+            const ew = effectiveRegistrationWindowState(s);
+            if (ew.viaOverride && ew.registerUntil != null) {
+                const elOv = document.getElementById(`seminar-override-countdown-${s.id}`);
+                if (elOv) {
+                    elOv.textContent = formatCountdownTo(ew.registerUntil);
+                    if (Date.now() > ew.registerUntil) needReload = true;
+                }
+            }
             const parseMs =
                 window.PortalDateTime && window.PortalDateTime.parseMs
                     ? (v) => window.PortalDateTime.parseMs(v)
@@ -1878,9 +1927,25 @@ function startSeminarGridCountdownTimer() {
             loadSeminarsGrid();
             return;
         }
+        if (activeSeminars.some((s) => hasRegistrationOverrideForSeminar(s.id))) {
+            refreshRegistrationOverrides().then(() => {
+                activeSeminars.forEach((s) => {
+                    const ew = effectiveRegistrationWindowState(s);
+                    if (ew.viaOverride && ew.registerUntil != null) {
+                        const elOv = document.getElementById(`seminar-override-countdown-${s.id}`);
+                        if (elOv) elOv.textContent = formatCountdownTo(ew.registerUntil);
+                    }
+                });
+            });
+        }
         const anyOpenOrWaitlist = activeSeminars.some((s) => {
             const ew = effectiveRegistrationWindowState(s);
-            return ew.state === 'open' || ew.state === 'waitlist' || registrationWindowState(s).state === 'upcoming';
+            return (
+                ew.state === 'open' ||
+                ew.state === 'waitlist' ||
+                registrationWindowState(s).state === 'upcoming' ||
+                (ew.viaOverride && ew.registerUntil != null)
+            );
         });
         if (!anyUpcoming && !anyOpenOrWaitlist) {
             clearSeminarGridCountdownTimer();
@@ -1920,8 +1985,11 @@ function renderSeminarGridCard(s, readOnlyPast, alreadyRegistered) {
             '</p></div>' +
             '<button type="button" disabled class="btn-primary" style="width:100%;opacity:0.55;">Registration not open yet</button>';
     } else if (win.state === 'closed') {
+        const expiredMsg = win.overrideExpired
+            ? '<p style="font-size:0.85rem;color:#b91c1c;"><i class="fas fa-clock"></i> Your extended registration window has ended. You can no longer register for this seminar.</p>'
+            : '<p style="font-size:0.85rem;color:#b45309;"><i class="fas fa-lock"></i> Registration closed.</p>';
         actionBlock =
-            '<p style="font-size:0.85rem;color:#b45309;"><i class="fas fa-lock"></i> Registration closed.</p>' +
+            expiredMsg +
             '<button type="button" disabled class="btn-primary" style="width:100%;opacity:0.55;margin-top:8px;">Registration closed</button>';
     } else if (win.state === 'waitlist') {
         actionBlock =
@@ -1932,15 +2000,41 @@ function renderSeminarGridCard(s, readOnlyPast, alreadyRegistered) {
             s.id +
             ', { waitlist: true })" style="width:100%;background:#b45309;border:none;">Join waiting list</button>';
     } else {
+        const overrideUntilLabel =
+            win.registerUntil != null
+                ? formatTrackDateTime(
+                      window.__registrationOverrideBySeminar &&
+                          window.__registrationOverrideBySeminar[Number(s.id)]
+                          ? window.__registrationOverrideBySeminar[Number(s.id)].registerUntil
+                          : null
+                  )
+                : '';
         const overrideNote = win.viaOverride
-            ? '<p style="font-size:0.85rem;color:#0f766e;margin-bottom:10px;"><i class="fas fa-user-check"></i> You have admin approval to register for this seminar after the public window closed.</p>'
+            ? '<p style="font-size:0.85rem;color:#0f766e;margin-bottom:10px;"><i class="fas fa-user-check"></i> You have admin approval to register after the public deadline.' +
+              (s.__lateOverrideOnly
+                  ? ' This seminar is shown here only for your extended registration window.'
+                  : '') +
+              (overrideUntilLabel
+                  ? ' You must complete registration by <strong>' +
+                    escapeHtml(overrideUntilLabel) +
+                    '</strong> or you cannot attend.</p>'
+                  : ' Complete registration before your personal deadline or you cannot attend.</p>')
             : '';
+        const overrideCountdown =
+            win.viaOverride && win.registerUntil != null
+                ? '<p id="seminar-override-countdown-' +
+                  s.id +
+                  '" style="font-size:1rem;font-weight:700;color:#b45309;margin-bottom:10px;">' +
+                  formatCountdownTo(win.registerUntil) +
+                  '</p>'
+                : '';
         actionBlock =
             overrideNote +
+            overrideCountdown +
             (regEndLabel && !win.viaOverride
                 ? '<p style="font-size:0.8rem;color:#64748b;margin-bottom:10px;">Closes ' + escapeHtml(regEndLabel) + '</p>'
                 : win.viaOverride
-                  ? '<p style="font-size:0.8rem;color:#64748b;margin-bottom:10px;">Public registration closed — your account is exempt.</p>'
+                  ? '<p style="font-size:0.8rem;color:#64748b;margin-bottom:10px;">Public registration is closed for everyone else.</p>'
                   : '') +
             '<button type="button" class="btn-primary" onclick="startRegistration(' +
             s.id +
@@ -1969,6 +2063,63 @@ function renderSeminarGridCard(s, readOnlyPast, alreadyRegistered) {
         actionBlock +
         '</div></div>'
     );
+}
+
+function applyRegistrationOverridesPayload(ovData) {
+    if (!ovData) return;
+    if (ovData.resolvedUserId != null) {
+        const resolved = parseInt(ovData.resolvedUserId, 10);
+        if (Number.isInteger(resolved) && resolved > 0 && resolved <= DOCTOR_INTERNAL_ID_MAX) {
+            window.__doctorResolvedInternalId = resolved;
+        }
+    }
+    window.__registrationOverrideSeminarIds = new Set();
+    window.__registrationOverrideBySeminar = {};
+    (ovData.overrides || []).forEach((o) => {
+        const n = Number(o.seminarId);
+        if (n > 0) {
+            window.__registrationOverrideBySeminar[n] = {
+                registerUntil: o.registerUntil || null,
+                isActive: o.isActive !== false
+            };
+            if (isOverrideRegistrationActive(n)) window.__registrationOverrideSeminarIds.add(n);
+        }
+    });
+    (ovData.volunteerSeminarIds || []).forEach((id) => {
+        const n = Number(id);
+        if (n > 0) window.__registrationOverrideSeminarIds.add(n);
+    });
+    (ovData.seminarIds || []).forEach((id) => {
+        const n = Number(id);
+        if (n > 0) window.__registrationOverrideSeminarIds.add(n);
+    });
+    (ovData.seminars || []).forEach((s) => {
+        if (!s || s.id == null) return;
+        const n = Number(s.id);
+        if (!Number.isFinite(n) || n <= 0) return;
+        if (!activeSeminars.some((x) => Number(x.id) === n)) {
+            activeSeminars.push({ ...s, __lateOverrideOnly: true });
+        }
+    });
+}
+
+async function refreshRegistrationOverrides() {
+    const uid = doctorNumericUserId();
+    if (!uid) return;
+    try {
+        const portalId = currentUser && currentUser.user_id_string ? currentUser.user_id_string : '';
+        const ovUrl =
+            '/api/doctor/registration-overrides/' +
+            encodeURIComponent(uid) +
+            (portalId ? '?userIdString=' + encodeURIComponent(portalId) : '');
+        const ovRes = await fetch(ovUrl, { cache: 'no-store' });
+        if (ovRes.ok) {
+            const ovData = await ovRes.json();
+            applyRegistrationOverridesPayload(ovData);
+        }
+    } catch (ovErr) {
+        console.warn('Could not load registration overrides', ovErr);
+    }
 }
 
 async function loadSeminarsGrid() {
@@ -2000,22 +2151,8 @@ async function loadSeminarsGrid() {
         }
         window.__userRegisteredSeminarIds = registeredSeminarIds;
         window.__registrationOverrideSeminarIds = new Set();
-        if (uid) {
-            try {
-                const ovRes = await fetch('/api/doctor/registration-overrides/' + encodeURIComponent(uid), {
-                    cache: 'no-store'
-                });
-                if (ovRes.ok) {
-                    const ovData = await ovRes.json();
-                    (ovData.seminarIds || []).forEach((id) => {
-                        const n = Number(id);
-                        if (n > 0) window.__registrationOverrideSeminarIds.add(n);
-                    });
-                }
-            } catch (ovErr) {
-                console.warn('Could not load registration overrides', ovErr);
-            }
-        }
+        window.__registrationOverrideBySeminar = {};
+        await refreshRegistrationOverrides();
         container.innerHTML = '';
         
         if (!activeSeminars.length) {
@@ -2069,20 +2206,31 @@ function proceedFromSeminarTnc() {
 
 async function startRegistration(seminarId, opts) {
     opts = opts || {};
+    await refreshRegistrationOverrides();
     const volunteerBypass = !!opts.volunteerBypass;
     const waitlistMode = !!opts.waitlist;
-    const s = activeSeminars.find((x) => Number(x.id) === Number(seminarId));
+    const sid = Number(seminarId);
+    const s = activeSeminars.find((x) => Number(x.id) === sid);
     const seminarTitle = s && s.title ? s.title : 'Seminar';
     const regSet = window.__userRegisteredSeminarIds;
-    if (regSet && regSet.has(Number(seminarId))) {
+    if (regSet && regSet.has(sid)) {
         alert('You have already registered for this seminar. Track your application under Track seminar applications.');
         switchTab('tab-applications');
         return;
     }
-    const win = s ? effectiveRegistrationWindowState(s) : { state: 'closed' };
-    if (!volunteerBypass && !waitlistMode && s && win.state !== 'open') {
+    const overrideActive = isOverrideRegistrationActive(sid);
+    const win = s
+        ? effectiveRegistrationWindowState(s)
+        : overrideActive
+          ? { state: 'open', viaOverride: true }
+          : { state: 'closed' };
+    if (!volunteerBypass && !waitlistMode && !overrideActive && s && win.state !== 'open') {
         if (registrationWindowState(s).state === 'upcoming') {
             alert('Registration has not opened yet for this seminar. Please wait until the countdown reaches zero.');
+        } else if (win.overrideExpired) {
+            alert(
+                'Your extended registration window has ended. You can no longer register for this seminar and will not be able to attend unless admin extends your deadline.'
+            );
         } else if (win.state === 'waitlist') {
             alert('Registration has closed. Use Join waiting list if it is enabled for this seminar.');
         } else {
@@ -3918,6 +4066,20 @@ async function verifyNcism() {
 }
 
 async function submitApplication() {
+    await refreshRegistrationOverrides();
+    const sidCheck = parseInt(activeSeminarIdForReg, 10);
+    if (Number.isInteger(sidCheck) && sidCheck > 0 && !isOverrideRegistrationActive(sidCheck)) {
+        const sCheck = activeSeminars.find((x) => Number(x.id) === sidCheck);
+        const winCheck = sCheck ? effectiveRegistrationWindowState(sCheck) : { state: 'closed' };
+        if (winCheck.state !== 'open') {
+            if (winCheck.overrideExpired) {
+                return alert(
+                    'Your extended registration window has ended. Ask admin to extend your register-by deadline, then try again.'
+                );
+            }
+            return alert('Registration for this seminar has closed.');
+        }
+    }
     if(!document.getElementById('tnc').checked) {
         alert("Please accept the Terms and Conditions.");
         return;
@@ -3980,6 +4142,9 @@ async function submitApplication() {
 
     const payload = new FormData();
     payload.append('userId', String(uid));
+    if (currentUser && currentUser.user_id_string) {
+        payload.append('userIdString', String(currentUser.user_id_string));
+    }
     payload.append('seminarId', String(sid));
     payload.append('formData', JSON.stringify(formDataObj));
     if (window.__otpOnStep1) {

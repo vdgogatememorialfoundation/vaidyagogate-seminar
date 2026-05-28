@@ -1,6 +1,6 @@
 /**
- * Optional API base URL for static frontend (Vercel static) + external Node backend.
- * - Empty apiBase: browser uses same-origin /api/... (Vercel rewrite to backend recommended).
+ * Optional API base URL when static frontend calls a separate API host.
+ * - Empty apiBase: browser uses same-origin /api/...
  * - Set meta name="api-base" or /api-config.json apiBase for cross-origin API host.
  */
 (function (global) {

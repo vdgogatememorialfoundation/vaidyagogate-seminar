@@ -713,7 +713,7 @@
                         <div><label style="font-size:0.82rem;font-weight:700;">Min gap (ms)</label><input type="number" id="ed-min-gap" min="500" max="60000" value="2500" style="width:100%;padding:8px;"></div>
                         <div><label style="font-size:0.82rem;font-weight:700;">Defer on rate limit (min)</label><input type="number" id="ed-defer-min" min="5" max="240" value="45" style="width:100%;padding:8px;"></div>
                     </div>
-                    <p style="font-size:0.8rem;color:#64748b;margin:10px 0 0;">Schedule Vercel cron <code>GET /api/cron/process-notifications</code> with <code>CRON_SECRET</code> to drain the queue overnight.</p>
+                    <p style="font-size:0.8rem;color:#64748b;margin:10px 0 0;">Schedule a Render cron (or external scheduler) for <code>GET /api/cron/process-notifications</code> with <code>Authorization: Bearer CRON_SECRET</code>.</p>
                     <button type="button" class="btn-primary" style="margin-top:10px;background:#c2410c;" onclick="saveNotificationDeliveryConfig()">Save email delivery policy</button>
                     <p id="ed-save-msg" style="margin-top:8px;font-weight:600;font-size:0.9rem;"></p>
                 </div>
@@ -769,7 +769,7 @@
                 </div>
                 <div class="card" style="margin-bottom:18px;border:1px solid #fecaca;background:#fef2f2;">
                     <h3 style="margin:0 0 10px;color:#b91c1c;font-size:1.05rem;">Pending registration reminders</h3>
-                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:10px;">Email/WhatsApp nudges for doctors who have not completed documents (uses notification template <code>REGISTRATION_PENDING_REMINDER</code>). Runs daily on server cron (10:00 UTC on Vercel).</p>
+                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:10px;">Email/WhatsApp nudges for doctors who have not completed documents (uses notification template <code>REGISTRATION_PENDING_REMINDER</code>). Use Render cron or <code>/api/cron/pending-registration-reminders</code>.</p>
                     <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;margin-bottom:8px;"><input type="checkbox" id="pr-enabled"> Enable automatic reminders</label>
                     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;max-width:640px;">
                         <div><label style="font-size:0.82rem;">Every N days</label><input type="number" id="pr-interval-days" min="1" max="30" value="3" style="width:100%;padding:8px;"></div>
@@ -1035,6 +1035,7 @@
                     #tab-book-sales .track-desc { font-size:0.82rem; color:#64748b; }
                 </style>
                 <h2 style="margin-bottom:12px;">Book sales — Agnikarma &amp; Viddhakarma</h2>
+                <p style="margin:-6px 0 14px;font-size:0.88rem;color:#64748b;">Public shipment tracker: <a href="/track-shipment" target="_blank" rel="noopener" style="color:#0f766e;font-weight:700;">track-shipment ↗</a> (order code + AWB or mobile last 4 digits).</p>
                 <p style="color:#64748b;margin-bottom:14px;max-width:900px;">Configure books on the portal. Doctors order, pay online or at counter, and collect at the seminar. Scanner <strong>Book pickup</strong> mode marks delivery. For absent doctors, ship by courier.</p>
 
                 <!-- Subtabs -->
@@ -1091,6 +1092,14 @@
                                 <label style="display:flex;align-items:center;gap:6px;margin:8px 0;font-size:0.85rem;"><input type="checkbox" id="bs-log-sr-enabled"> Enable</label>
                                 <div><label style="font-size:0.8rem;">API email</label><input type="email" id="bs-log-sr-email" style="width:100%;padding:6px;"></div>
                                 <div style="margin-top:6px;"><label style="font-size:0.8rem;">API password</label><input type="password" id="bs-log-sr-pass" style="width:100%;padding:6px;"></div>
+                                <div style="margin-top:8px;">
+                                    <label style="font-size:0.8rem;">Pickup address (Shiprocket)</label>
+                                    <select id="bs-log-sr-pickup-select" style="width:100%;padding:6px;margin-top:4px;font-size:0.85rem;"></select>
+                                    <button type="button" class="btn-primary" style="margin-top:6px;padding:4px 10px;font-size:0.78rem;background:#6366f1;" onclick="bsRefreshShiprocketPickupLocations('bs-log-sr-pickup-select')">Reload from Shiprocket</button>
+                                    <input type="hidden" id="bs-log-sr-pickup-pin">
+                                    <input type="hidden" id="bs-log-sr-pickup-location">
+                                    <input type="hidden" id="bs-log-sr-pickup-location-id">
+                                </div>
                             </div>
                             <div style="padding:10px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;">
                                 <label style="font-weight:600;">Nimbuspost</label>
@@ -1234,7 +1243,8 @@
                                 </div>
                                 <div>
                                     <label style="display:block;font-size:0.8rem;font-weight:700;color:#374151;margin-bottom:4px;">PIN code *</label>
-                                    <input type="text" id="bs-courier-pincode" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:0.9rem;" placeholder="6 digits" maxlength="6">
+                                    <input type="text" id="bs-courier-pincode" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:0.9rem;" placeholder="6 digits" maxlength="6" oninput="bsCourierPincodeLookup()">
+                                    <p id="bs-courier-pin-hint" style="font-size:0.72rem;color:#64748b;margin:4px 0 0;"></p>
                                 </div>
                                 <div style="grid-column:1/-1;">
                                     <label style="display:block;font-size:0.8rem;font-weight:700;color:#374151;margin-bottom:4px;">House / flat / street *</label>
@@ -1261,6 +1271,24 @@
                                     <input type="text" id="bs-courier-notes" style="width:100%;padding:9px 12px;border:1px solid #e2e8f0;border-radius:8px;font-size:0.9rem;" placeholder="e.g. fragile, call before delivery">
                                 </div>
                             </div>
+                            <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:12px;">
+                                <div>
+                                    <label style="display:block;font-size:0.78rem;font-weight:700;color:#374151;margin-bottom:4px;">Weight (kg)</label>
+                                    <input type="number" id="bs-courier-weight-kg-step1" min="0.2" step="0.1" value="0.8" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:0.88rem;" oninput="bsCourierDimsChanged()">
+                                </div>
+                                <div>
+                                    <label style="display:block;font-size:0.78rem;font-weight:700;color:#374151;margin-bottom:4px;">Length (cm)</label>
+                                    <input type="number" id="bs-courier-length" min="1" step="1" value="25" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:0.88rem;" oninput="bsCourierDimsChanged()">
+                                </div>
+                                <div>
+                                    <label style="display:block;font-size:0.78rem;font-weight:700;color:#374151;margin-bottom:4px;">Breadth (cm)</label>
+                                    <input type="number" id="bs-courier-breadth" min="1" step="1" value="20" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:0.88rem;" oninput="bsCourierDimsChanged()">
+                                </div>
+                                <div>
+                                    <label style="display:block;font-size:0.78rem;font-weight:700;color:#374151;margin-bottom:4px;">Height (cm)</label>
+                                    <input type="number" id="bs-courier-height" min="1" step="1" value="5" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:0.88rem;" oninput="bsCourierDimsChanged()">
+                                </div>
+                            </div>
                             <div style="margin-top:18px;display:flex;gap:10px;flex-wrap:wrap;padding-top:14px;border-top:1px solid #f1f5f9;">
                                 <button type="button" class="btn-primary" onclick="bsSaveCourierDetails()" style="background:#0d9488;flex:1;max-width:220px;">Save &amp; continue →</button>
                                 <button type="button" class="btn-primary" onclick="bsCloseCourierModal()" style="background:#64748b;">Cancel</button>
@@ -1279,15 +1307,17 @@
                                     <span style="font-weight:800;color:#3730a3;font-size:0.92rem;">Book directly via aggregator</span>
                                 </div>
                                 <p style="font-size:0.78rem;color:#64748b;margin:0 0 12px;">AWB is created automatically. Doctors get real-time tracking in their portal immediately.</p>
-                                <div style="display:grid;grid-template-columns:1fr auto;gap:10px;align-items:end;margin-bottom:10px;">
-                                    <div>
-                                        <label style="display:block;font-size:0.78rem;font-weight:700;color:#374151;margin-bottom:4px;">Parcel weight (kg)</label>
-                                        <input type="number" id="bs-courier-weight-kg" min="0.2" step="0.1" value="0.8" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:0.88rem;">
-                                    </div>
-                                    <div>
-                                        <label style="display:block;font-size:0.78rem;font-weight:700;color:#374151;margin-bottom:4px;">&nbsp;</label>
-                                    </div>
+                                <p style="font-size:0.78rem;color:#64748b;margin:0 0 8px;">Parcel size uses weight &amp; L×B×H from step 1. Fetch live Shiprocket courier rates below, then book.</p>
+                                <div style="margin-bottom:10px;">
+                                    <label style="display:block;font-size:0.75rem;font-weight:700;color:#374151;margin-bottom:4px;">Pickup address (from Shiprocket)</label>
+                                    <select id="bs-courier-pickup-select" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:0.88rem;" onchange="bsOnCourierPickupChange()"></select>
+                                    <button type="button" class="btn-primary" style="margin-top:6px;padding:6px 10px;font-size:0.78rem;background:#6366f1;" onclick="bsRefreshShiprocketPickupLocations('bs-courier-pickup-select', true)">Reload pickup addresses</button>
+                                    <p style="margin:4px 0 0;font-size:0.72rem;color:#64748b;">Uses pickup locations from your Shiprocket dashboard. Select warehouse, then fetch rates.</p>
                                 </div>
+                                <div style="margin-bottom:8px;">
+                                    <button type="button" class="btn-primary" style="background:#0d9488;font-size:0.82rem;padding:8px 12px;" onclick="bsFetchShiprocketRates()"><i class="fas fa-search"></i> Get Shiprocket rates</button>
+                                </div>
+                                <div id="bs-shiprocket-rates" style="margin-bottom:12px;font-size:0.82rem;"></div>
                                 <div style="display:flex;gap:8px;flex-wrap:wrap;">
                                     <button type="button" id="bs-book-shiprocket" class="btn-primary" style="background:#6366f1;flex:1;" onclick="bsBookAggregator('shiprocket')">
                                         <i class="fas fa-bolt" style="margin-right:5px;"></i>Book via Shiprocket
@@ -1594,7 +1624,7 @@
                         <div><label>Total presentation slots</label><input type="number" id="case-prog-max-total" min="1" placeholder="Unlimited if empty" style="width:100%;padding:8px;"></div>
                         <div style="grid-column:1/-1;"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="case-prog-show-seats" checked> Show seat/slot count to doctors on case registration</label></div>
                         <div><label>Max files per submission</label><input type="number" id="case-prog-max-files" min="1" max="10" value="5" style="width:100%;padding:8px;"></div>
-                        <div><label>Max file size (MB each)</label><input type="number" id="case-prog-max-mb" min="1" max="250" value="100" style="width:100%;padding:8px;"><p style="font-size:0.78rem;color:#64748b;margin:4px 0 0;">Default <strong>100 MB</strong>, max <strong>250 MB</strong> per file when Cloudflare R2 is configured. Without R2, server uploads stay at ~4 MB on Vercel.</p></div>
+                        <div><label>Max file size (MB each)</label><input type="number" id="case-prog-max-mb" min="1" max="250" value="100" style="width:100%;padding:8px;"><p style="font-size:0.78rem;color:#64748b;margin:4px 0 0;">Default <strong>100 MB</strong>, max <strong>250 MB</strong> per file when Cloudflare R2 is configured. Without R2, use smaller files or enable R2 on Render.</p></div>
                         <div style="grid-column:1/-1;">
                             <label>Enabled categories</label>
                             <label style="display:inline-flex;align-items:center;gap:6px;margin-right:16px;font-weight:500;"><input type="checkbox" id="case-cat-agnikarma" checked> Agnikarma</label>
@@ -1703,16 +1733,17 @@
                 </div>
                 <div class="card" style="margin-top:16px;">
                     <h3>Per-user registration override</h3>
-                    <p style="color:#64748b;font-size:0.88rem;">Allow one doctor to register when the seminar is closed.</p>
-                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin:12px 0;">
+                    <p style="color:#64748b;font-size:0.88rem;">Allow one doctor to register after the public deadline. Set a personal <strong>register-by</strong> date and time — if they miss it, they cannot register or attend.</p>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin:12px 0;">
                         <div><label>Doctor portal User ID</label><input type="text" id="reg-ov-user-id" placeholder="e.g. USR_TINBS1V70" style="width:100%;padding:8px;" autocomplete="off"></div>
                         <div><label>Seminar</label><select id="reg-ov-seminar" style="width:100%;padding:8px;"></select></div>
-                        <div><label>Note</label><input type="text" id="reg-ov-note" style="width:100%;padding:8px;"></div>
+                        <div><label>Must register by (date &amp; time, IST)</label><input type="datetime-local" id="reg-ov-until" style="width:100%;padding:8px;" autocomplete="off"><p id="reg-ov-until-preview" style="font-size:0.8rem;color:#0f766e;font-weight:600;margin:6px 0 0;"></p><p style="font-size:0.72rem;color:#64748b;margin:4px 0 0;">24-hour clock: <strong>3:25 PM = 15:25</strong>, not 03:25. Deadline is India time (IST).</p></div>
+                        <div><label>Note</label><input type="text" id="reg-ov-note" style="width:100%;padding:8px;" placeholder="e.g. Winner — complete by Friday"></div>
                     </div>
                     <button type="button" class="btn-primary" onclick="saveAdminRegistrationOverride()">Save override</button>
                     <table class="data-table" style="margin-top:16px;">
-                        <thead><tr><th>Doctor</th><th>Seminar</th><th>Enabled</th><th>Note</th></tr></thead>
-                        <tbody id="reg-ov-list"><tr><td colspan="4" style="text-align:center;">—</td></tr></tbody>
+                        <thead><tr><th>Doctor</th><th>Seminar</th><th>Register by</th><th>Status</th><th>Note</th></tr></thead>
+                        <tbody id="reg-ov-list"><tr><td colspan="5" style="text-align:center;">—</td></tr></tbody>
                     </table>
                 </div>
             </div>
@@ -2544,7 +2575,7 @@
         </div>
     </div>
 
-    <script src="/js/portal-datetime.js"></script>
+    <script src="/js/portal-datetime.js?v=20260528ovdeadline"></script>
     <script src="/js/site-branding.js"></script>
     <script src="/js/credentials.js"></script>
     <script src="/js/name-validation.js"></script>
@@ -2555,8 +2586,9 @@
     <script src="/js/portal-upload.js?v=20260522"></script>
     <script src="/js/user-roles.js?v=20260522f"></script>
     <script src="/js/admin-list-search.js?v=20260522a"></script>
-    <script src="/js/book-tracking-ui.js?v=20260530d"></script>
+    <link rel="stylesheet" href="/css/book-track.css?v=20260528ot">
+    <script src="/js/book-tracking-ui.js?v=20260528ot"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
-    <script src="/js/admin.js?v=20260528c"></script>
+    <script src="/js/admin.js?v=20260528pkg"></script>
 </body>
 </html>

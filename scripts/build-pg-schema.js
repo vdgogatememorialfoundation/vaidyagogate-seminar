@@ -46,7 +46,7 @@ function convertCreate(sql) {
 }
 
 const out = [
-    '-- Auto-generated from SQLite schema — Neon / Vercel',
+    '-- Auto-generated from SQLite schema — Neon / Render',
     'CREATE EXTENSION IF NOT EXISTS "pgcrypto";',
     '',
     ...blocks.map(convertCreate).filter(Boolean),

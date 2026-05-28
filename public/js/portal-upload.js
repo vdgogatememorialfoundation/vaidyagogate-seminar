@@ -1,5 +1,5 @@
 /**
- * Safe uploads for Vercel (~4.5 MB request limit): compress images client-side,
+ * Safe uploads when R2 is off: compress images client-side,
  * one file per request, clear guidance for large PDFs/PPTs.
  */
 (function (global) {

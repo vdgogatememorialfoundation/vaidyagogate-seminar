@@ -1,5 +1,5 @@
 /**
- * Fail CI / vercel-build if critical server modules have a syntax error.
+ * Fail CI / npm run build if critical server modules have a syntax error.
  */
 const path = require('path');
 const { execSync } = require('child_process');

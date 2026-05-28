@@ -1,0 +1,233 @@
+/* Amazon / Flipkart style book shipment tracking */
+.pkg-track {
+    font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    color: #1e293b;
+    max-width: 720px;
+    margin: 0 auto;
+}
+.pkg-track-hero {
+    background: linear-gradient(135deg, #0f766e 0%, #0284c7 100%);
+    color: #fff;
+    border-radius: 16px 16px 0 0;
+    padding: 20px 20px 16px;
+}
+.pkg-track-hero.delivered { background: linear-gradient(135deg, #15803d, #16a34a); }
+.pkg-track-hero.cancelled { background: linear-gradient(135deg, #991b1b, #b91c1c); }
+.pkg-track-live {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.68rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 999px;
+    padding: 3px 10px;
+    margin-bottom: 10px;
+}
+.pkg-track-live-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #fff;
+    animation: pkg-pulse 1.4s ease-out infinite;
+}
+@keyframes pkg-pulse {
+    0% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0.7); }
+    70% { box-shadow: 0 0 0 8px rgba(255, 255, 255, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(255, 255, 255, 0); }
+}
+.pkg-track-headline { font-size: 1.45rem; font-weight: 900; margin: 0 0 4px; letter-spacing: -0.02em; }
+.pkg-track-sub { font-size: 0.9rem; opacity: 0.9; margin: 0 0 12px; }
+.pkg-track-meta { display: flex; flex-wrap: wrap; gap: 8px; }
+.pkg-track-badge {
+    font-size: 0.72rem;
+    font-weight: 700;
+    background: rgba(255, 255, 255, 0.18);
+    border-radius: 6px;
+    padding: 4px 10px;
+}
+.pkg-track-body {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-top: none;
+    border-radius: 0 0 16px 16px;
+    padding: 0 0 16px;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+}
+.pkg-milestones {
+    display: flex;
+    justify-content: space-between;
+    padding: 16px 12px 8px;
+    gap: 4px;
+    border-bottom: 1px solid #f1f5f9;
+}
+.pkg-ms {
+    flex: 1;
+    text-align: center;
+    min-width: 0;
+}
+.pkg-ms-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    margin: 0 auto 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    background: #e2e8f0;
+    color: #94a3b8;
+}
+.pkg-ms.done .pkg-ms-icon { background: #10b981; color: #fff; }
+.pkg-ms.active .pkg-ms-icon {
+    background: #0f766e;
+    color: #fff;
+    box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.15);
+}
+.pkg-ms-label { font-size: 0.62rem; font-weight: 700; color: #94a3b8; line-height: 1.2; }
+.pkg-ms.done .pkg-ms-label { color: #059669; }
+.pkg-ms.active .pkg-ms-label { color: #0f766e; }
+.pkg-shipment-block { padding: 14px 16px 0; }
+.pkg-shipment-title {
+    font-size: 0.78rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #64748b;
+    margin: 0 0 10px;
+}
+.pkg-scan-timeline {
+    list-style: none;
+    margin: 0;
+    padding: 0 0 0 8px;
+    position: relative;
+}
+.pkg-scan-timeline::before {
+    content: '';
+    position: absolute;
+    left: 15px;
+    top: 8px;
+    bottom: 8px;
+    width: 3px;
+    background: linear-gradient(180deg, #10b981 0%, #0f766e 70%, #e2e8f0 100%);
+    border-radius: 999px;
+}
+.pkg-scan-item {
+    position: relative;
+    padding: 0 0 20px 36px;
+}
+.pkg-scan-item:last-child { padding-bottom: 4px; }
+.pkg-scan-dot {
+    position: absolute;
+    left: 6px;
+    top: 4px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #fff;
+    border: 3px solid #10b981;
+    z-index: 1;
+}
+.pkg-scan-item.upcoming .pkg-scan-dot { border-color: #cbd5e1; background: #f8fafc; }
+.pkg-scan-item.current .pkg-scan-dot {
+    border-color: #0f766e;
+    background: #0f766e;
+    box-shadow: 0 0 0 4px rgba(15, 118, 110, 0.2);
+    animation: pkg-pulse 1.4s ease-out infinite;
+}
+.pkg-scan-item.current .pkg-scan-dot::after {
+    content: '';
+    position: absolute;
+    inset: 5px;
+    background: #fff;
+    border-radius: 50%;
+}
+.pkg-scan-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 10px 12px;
+}
+.pkg-scan-item.current .pkg-scan-card {
+    background: #ecfdf5;
+    border-color: #a7f3d0;
+    animation: pkg-ev-in 0.4s ease-out;
+}
+@keyframes pkg-ev-in {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.pkg-scan-status { font-size: 0.92rem; font-weight: 800; color: #0f172a; margin: 0 0 4px; }
+.pkg-scan-item.current .pkg-scan-status { color: #0f766e; }
+.pkg-scan-datetime {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #0369a1;
+    margin: 0 0 6px;
+}
+.pkg-scan-place {
+    font-size: 0.8rem;
+    color: #475569;
+    margin: 0;
+    line-height: 1.4;
+}
+.pkg-scan-facility {
+    display: inline-block;
+    margin-top: 6px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #0f766e;
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    border-radius: 6px;
+    padding: 2px 8px;
+}
+.pkg-scan-empty {
+    padding: 20px 16px;
+    text-align: center;
+    color: #64748b;
+    font-size: 0.88rem;
+}
+.pkg-track-page {
+    min-height: 100vh;
+    background: linear-gradient(180deg, #f0fdfa 0%, #f8fafc 40%, #fff 100%);
+    padding: 24px 16px 48px;
+}
+.pkg-track-search {
+    max-width: 480px;
+    margin: 0 auto 24px;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 20px;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+}
+.pkg-track-search h1 { margin: 0 0 6px; font-size: 1.35rem; color: #0f766e; }
+.pkg-track-search p { margin: 0 0 16px; font-size: 0.88rem; color: #64748b; }
+.pkg-track-search label { display: block; font-size: 0.82rem; font-weight: 600; margin: 10px 0 4px; color: #334155; }
+.pkg-track-search input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-size: 1rem;
+    box-sizing: border-box;
+}
+.pkg-track-search button {
+    width: 100%;
+    margin-top: 16px;
+    padding: 12px;
+    background: #0f766e;
+    color: #fff;
+    border: none;
+    border-radius: 10px;
+    font-size: 1rem;
+    font-weight: 700;
+    cursor: pointer;
+}
+.pkg-track-search button:hover { background: #0d9488; }
+.pkg-track-err { color: #b91c1c; font-size: 0.88rem; margin-top: 10px; font-weight: 600; }
+.pkg-track-brand { text-align: center; margin-bottom: 20px; }
+.pkg-track-brand a { color: #0f766e; font-weight: 800; text-decoration: none; font-size: 1.1rem; }
