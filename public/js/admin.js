@@ -3705,8 +3705,27 @@ function renderAdminVolunteerAssignmentsTable() {
     });
 }
 
+let volDoctorSearchTimer = null;
+
+function scheduleVolunteerDoctorLookup() {
+    clearTimeout(volDoctorSearchTimer);
+    volDoctorSearchTimer = setTimeout(function () {
+        const q = String(document.getElementById('vol-mgmt-user-id')?.value || '').trim();
+        if (q.length < 2) {
+            clearVolunteerUserPreview();
+            return;
+        }
+        lookupVolunteerUserPreview(true);
+    }, 450);
+}
+
 async function initAdminVolunteersTab() {
     await fillAdminSeminarSelect('vol-mgmt-seminar', false);
+    const inp = document.getElementById('vol-mgmt-user-id');
+    if (inp && !inp.dataset.volSearchBound) {
+        inp.dataset.volSearchBound = '1';
+        inp.addEventListener('input', scheduleVolunteerDoctorLookup);
+    }
     await loadAdminVolunteers();
 }
 
@@ -3915,15 +3934,30 @@ async function selectVolunteerDoctor(userId, userIdString) {
     }
 }
 
-async function lookupVolunteerUserPreview() {
+async function lookupVolunteerUserPreview(silent) {
     const sid = document.getElementById('vol-mgmt-seminar')?.value;
     const q = String(document.getElementById('vol-mgmt-user-id')?.value || '').trim();
     const panel = document.getElementById('vol-mgmt-user-preview');
     const hid = document.getElementById('vol-mgmt-selected-user-id');
     if (hid) hid.value = '';
     if (!panel) return;
-    if (!sid) return alert('Select a seminar first.');
-    if (q.length < 2) return alert('Enter at least 2 characters (name, phone, email, portal ID, or application no).');
+    if (!sid) {
+        if (silent) return;
+        panel.classList.remove('hidden');
+        panel.innerHTML =
+            '<p style="color:#b45309;font-weight:600;margin:0;">Select a seminar above first, then search by name, phone, or email.</p>';
+        return;
+    }
+    if (q.length < 2) {
+        if (silent) {
+            clearVolunteerUserPreview();
+            return;
+        }
+        panel.classList.remove('hidden');
+        panel.innerHTML =
+            '<p class="muted" style="margin:0;">Type at least 2 characters (name, phone, email, portal ID, or application no).</p>';
+        return;
+    }
     panel.classList.remove('hidden');
     panel.innerHTML = '<p class="muted" style="margin:0;">Searching…</p>';
     try {

@@ -1587,7 +1587,7 @@
                 <div class="card">
                     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:12px;">
                         <div><label>Seminar</label><select id="vol-mgmt-seminar" style="width:100%;padding:8px;" onchange="loadAdminVolunteers(); clearVolunteerUserPreview();"></select></div>
-                        <div style="grid-column:span 2;"><label>Search doctor</label><div style="display:flex;gap:8px;"><input type="text" id="vol-mgmt-user-id" placeholder="Name, phone, email, portal ID (USR_…), or application no" style="flex:1;padding:8px;" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();lookupVolunteerUserPreview();}"><button type="button" class="btn-primary" style="padding:8px 12px;white-space:nowrap;" onclick="lookupVolunteerUserPreview()">Search</button></div><input type="hidden" id="vol-mgmt-selected-user-id" value=""></div>
+                        <div style="grid-column:span 2;"><label>Search doctor to assign</label><div style="display:flex;gap:8px;"><input type="text" id="vol-mgmt-user-id" placeholder="Name, phone, email, portal ID (USR_…), or application no — results appear as you type" style="flex:1;padding:8px;" autocomplete="off" onkeydown="if(event.key==='Enter'){event.preventDefault();lookupVolunteerUserPreview();}"><button type="button" class="btn-primary" style="padding:8px 12px;white-space:nowrap;" onclick="lookupVolunteerUserPreview()">Search</button></div><input type="hidden" id="vol-mgmt-selected-user-id" value=""></div>
                         <div><label>Duties / task assignment</label><input type="text" id="vol-mgmt-duties" placeholder="e.g. Registration desk" style="width:100%;padding:8px;"></div>
                         <div><label>Admin notes</label><input type="text" id="vol-mgmt-notes" style="width:100%;padding:8px;"></div>
                     </div>
@@ -1598,8 +1598,8 @@
                 </div>
                 <div class="card" style="margin-top:16px;">
                     <div style="margin-bottom:12px;">
-                        <label for="volunteers-search" style="font-weight:600;font-size:0.9rem;">Search volunteers</label>
-                        <input type="search" id="volunteers-search" placeholder="Portal ID, name, email, ticket, or status…" oninput="renderAdminVolunteersTable()" style="width:100%;max-width:560px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;margin-top:6px;">
+                        <label for="volunteers-search" style="font-weight:600;font-size:0.9rem;">Filter assigned volunteers (list below only)</label>
+                        <input type="search" id="volunteers-search" placeholder="Filter already-assigned volunteers by name, email, ticket…" oninput="renderAdminVolunteersTable()" style="width:100%;max-width:560px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;margin-top:6px;">
                         <p id="volunteers-search-count" style="margin:6px 0 0;font-size:0.82rem;color:#64748b;"></p>
                     </div>
                     <table class="data-table">
@@ -2591,6 +2591,6 @@
     <link rel="stylesheet" href="/css/book-track.css?v=20260529stg">
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
-    <script src="/js/admin.js?v=20260530vol"></script>
+    <script src="/js/admin.js?v=20260530vol2"></script>
 </body>
 </html>
