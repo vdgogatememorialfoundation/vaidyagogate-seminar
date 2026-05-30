@@ -3779,15 +3779,19 @@ function clearVolunteerUserPreview() {
 
 function renderVolunteerSearchMatches(matches) {
     let html =
-        '<p style="margin:0 0 10px;font-weight:700;color:#334155;">Multiple matches — select one:</p><div style="display:flex;flex-direction:column;gap:8px;">';
+        '<p style="margin:0 0 10px;font-weight:700;color:#334155;">' +
+        matches.length +
+        ' match' +
+        (matches.length === 1 ? '' : 'es') +
+        ' — select one:</p><div style="display:flex;flex-direction:column;gap:8px;">';
     matches.forEach(function (m) {
         const name = [m.first_name, m.middle_name, m.last_name].filter(Boolean).join(' ');
         html +=
-            '<button type="button" class="btn-primary" style="text-align:left;background:#fff;color:#0f172a;border:1px solid #cbd5e1;padding:10px 12px;" onclick="selectVolunteerDoctor(' +
+            '<button type="button" class="vol-search-pick btn-primary" data-vol-uid="' +
             Number(m.id) +
-            ',' +
-            JSON.stringify(String(m.user_id_string || '')) +
-            ')">' +
+            '" data-vol-us="' +
+            escAdmin(String(m.user_id_string || '')) +
+            '" style="text-align:left;background:#fff;color:#0f172a;border:1px solid #cbd5e1;padding:10px 12px;cursor:pointer;">' +
             '<strong>' +
             escAdmin(name || 'Doctor') +
             '</strong><br><span style="font-size:0.82rem;color:#64748b;">' +
@@ -3802,6 +3806,17 @@ function renderVolunteerSearchMatches(matches) {
     });
     html += '</div>';
     return html;
+}
+
+function bindVolunteerSearchPickHandlers(panel) {
+    if (!panel) return;
+    panel.querySelectorAll('.vol-search-pick').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            const uid = parseInt(btn.getAttribute('data-vol-uid') || '', 10);
+            const us = btn.getAttribute('data-vol-us') || '';
+            if (uid > 0) selectVolunteerDoctor(uid, us);
+        });
+    });
 }
 
 function renderVolunteerUserPreviewPanel(data) {
@@ -3916,11 +3931,20 @@ async function lookupVolunteerUserPreview() {
         );
         const data = await res.json();
         if (!res.ok) {
-            panel.innerHTML = '<p style="color:#b91c1c;font-weight:600;">' + escAdmin(data.error || 'Not found') + '</p>';
+            panel.innerHTML =
+                '<p style="color:#b91c1c;font-weight:600;margin:0;">' +
+                escAdmin(data.error || 'No doctor found') +
+                '</p><p class="muted" style="margin:8px 0 0;font-size:0.85rem;">Try portal ID (USR_…), email, mobile, application number, or name from their registration form.</p>';
             return;
         }
         if (data.multiple && data.matches && data.matches.length) {
             panel.innerHTML = renderVolunteerSearchMatches(data.matches);
+            bindVolunteerSearchPickHandlers(panel);
+            return;
+        }
+        if (data.matches && data.matches.length > 1) {
+            panel.innerHTML = renderVolunteerSearchMatches(data.matches);
+            bindVolunteerSearchPickHandlers(panel);
             return;
         }
         if (data.user && data.user.id) {
