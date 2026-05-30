@@ -480,18 +480,26 @@ function parseDoctorModulesMap(raw) {
     }
 }
 
+function volunteerDoctorModuleDefaults() {
+    return {
+        'tab-dashboard': true,
+        'tab-profile': true,
+        'tab-seminars': true,
+        'tab-applications': true,
+        'tab-abstract': true,
+        'tab-case-track': true,
+        'tab-volunteer': true,
+        'tab-ticket': true,
+        'tab-certificate': true,
+        'tab-reset-pwd': true
+    };
+}
+
 function applyDoctorModuleAccessFromUser(user) {
     const category = String((user && user.doctor_category) || 'regular').toLowerCase();
     let mods = parseDoctorModulesMap(user && user.doctor_modules);
-    if (!mods && category === 'volunteer') {
-        mods = {
-            'tab-dashboard': true,
-            'tab-profile': true,
-            'tab-volunteer': true,
-            'tab-ticket': true,
-            'tab-certificate': true,
-            'tab-reset-pwd': true
-        };
+    if (category === 'volunteer') {
+        mods = { ...volunteerDoctorModuleDefaults(), ...(mods || {}) };
     }
     __doctorAllowedTabs = mods && Object.keys(mods).length ? new Set(Object.keys(mods).filter((k) => !!mods[k])) : null;
     document.querySelectorAll('.menu-item[data-tab]').forEach((el) => {

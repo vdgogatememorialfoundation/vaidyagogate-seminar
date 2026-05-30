@@ -1267,10 +1267,35 @@ const CO_ADMIN_STAFF_PORTAL_TAB_IDS = new Set(CO_ADMIN_STAFF_PORTAL_TAB_DEFS.map
 
 const CO_ADMIN_ADMIN_ONLY_TAB_DEFS = ADMIN_MODULE_TAB_DEFS.filter(([id]) => !CO_ADMIN_STAFF_PORTAL_TAB_IDS.has(id));
 
+const DEFAULT_VOLUNTEER_DOCTOR_MODULES = {
+    'tab-dashboard': true,
+    'tab-profile': true,
+    'tab-seminars': true,
+    'tab-applications': true,
+    'tab-abstract': true,
+    'tab-case-track': true,
+    'tab-volunteer': true,
+    'tab-ticket': true,
+    'tab-certificate': true,
+    'tab-reset-pwd': true
+};
+
+function applyVolunteerDoctorModuleCheckboxes() {
+    document.querySelectorAll('#admin-edit-doc-modules input[data-doc-mod]').forEach((inp) => {
+        const id = inp.getAttribute('data-doc-mod');
+        if (id) inp.checked = !!DEFAULT_VOLUNTEER_DOCTOR_MODULES[id];
+    });
+}
+
+function onAdminDoctorCategoryChange() {
+    const catEl = document.getElementById('admin-edit-doc-category');
+    if (catEl && catEl.value === 'volunteer') applyVolunteerDoctorModuleCheckboxes();
+}
+
 const DOCTOR_MODULE_TAB_DEFS = [
     ['tab-dashboard', 'Dashboard'],
     ['tab-profile', 'My profile'],
-    ['tab-seminars', 'Available seminars'],
+    ['tab-seminars', 'Available seminars (registration form)'],
     ['tab-applications', 'Track seminar applications'],
     ['tab-abstract', 'Case presentation'],
     ['tab-case-track', 'Track case applications'],
@@ -2955,17 +2980,21 @@ function renderAdminUserDetailTab() {
                             ? `<div style="margin:10px 0;padding:10px;border:1px solid #dbeafe;border-radius:8px;background:#f8fbff;">
                     <p style="margin:0 0 8px;"><strong>Doctor access control</strong></p>
                     <div class="form-group"><label>Category</label>
-                        <select id="admin-edit-doc-category" style="width:100%;padding:8px;">
+                        <select id="admin-edit-doc-category" style="width:100%;padding:8px;" onchange="onAdminDoctorCategoryChange()">
                             <option value="regular" ${String(u.doctor_category || 'regular').toLowerCase() === 'volunteer' ? '' : 'selected'}>Regular doctor</option>
                             <option value="volunteer" ${String(u.doctor_category || '').toLowerCase() === 'volunteer' ? 'selected' : ''}>Volunteer doctor</option>
                         </select>
                     </div>
-                    <p style="font-size:0.82rem;color:#475569;margin:6px 0 8px;">For volunteers, keep only Volunteer/essential modules enabled.</p>
+                    <p style="font-size:0.82rem;color:#475569;margin:6px 0 8px;">Volunteer default: seminar registration form, case presentation, volunteer tab, tickets &amp; certificates. Tick/untick to customize.</p>
                     <div id="admin-edit-doc-modules" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
                         ${DOCTOR_MODULE_TAB_DEFS.map(
                             ([id, title]) =>
                                 `<label style="display:flex;align-items:center;gap:6px;font-size:0.85rem;"><input type="checkbox" data-doc-mod="${id}" ${
-                                    parseDoctorModulesObject(u.doctor_modules)[id] ? 'checked' : ''
+                                    (String(u.doctor_category || '').toLowerCase() === 'volunteer'
+                                        ? { ...DEFAULT_VOLUNTEER_DOCTOR_MODULES, ...parseDoctorModulesObject(u.doctor_modules) }
+                                        : parseDoctorModulesObject(u.doctor_modules))[id]
+                                        ? 'checked'
+                                        : ''
                                 }> ${title}</label>`
                         ).join('')}
                     </div>

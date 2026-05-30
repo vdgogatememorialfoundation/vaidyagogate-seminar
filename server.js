@@ -9519,16 +9519,7 @@ app.post('/api/admin/users/:userId/doctor-access', (req, res) => {
     const modulesObj = sanitizeDoctorModulesInput(req.body && req.body.doctor_modules);
     const hasModules = Object.keys(modulesObj).length > 0;
     const categoryPreset =
-        doctor_category === 'volunteer'
-            ? {
-                  'tab-dashboard': true,
-                  'tab-profile': true,
-                  'tab-volunteer': true,
-                  'tab-ticket': true,
-                  'tab-certificate': true,
-                  'tab-reset-pwd': true
-              }
-            : null;
+        doctor_category === 'volunteer' ? { ...volunteerTicketFlow.DEFAULT_VOLUNTEER_DOCTOR_MODULES } : null;
     const finalModules = hasModules ? modulesObj : categoryPreset;
     const modulesJson = finalModules ? JSON.stringify(finalModules) : null;
     db.get(`SELECT id, role, user_role FROM users WHERE id = ?`, [uid], (e0, row0) => {
