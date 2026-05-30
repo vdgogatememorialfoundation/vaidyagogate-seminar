@@ -3732,25 +3732,29 @@ async function loadAdminVolunteers() {
 
 async function addAdminVolunteer() {
     const sid = document.getElementById('vol-mgmt-seminar')?.value;
+    const selectedUid = document.getElementById('vol-mgmt-selected-user-id')?.value;
     const userIdString = String(document.getElementById('vol-mgmt-user-id')?.value || '').trim();
     const notes = document.getElementById('vol-mgmt-notes')?.value || '';
     const duties = document.getElementById('vol-mgmt-duties')?.value || '';
     const asVolunteer = document.getElementById('vol-mgmt-as-volunteer')?.checked !== false;
-    if (!sid || !userIdString) return alert('Seminar and doctor portal User ID required');
+    if (!sid) return alert('Select a seminar first.');
+    if (!selectedUid && !userIdString) return alert('Search and select a doctor first.');
     if (!asVolunteer && !confirm('Assign without converting to volunteer role?')) return;
     try {
         const admin = getStoredAdminUser();
+        const body = {
+            seminarId: parseInt(sid, 10),
+            notes,
+            duties,
+            setVolunteerRole: asVolunteer,
+            actingAdminId: admin && admin.id
+        };
+        if (selectedUid) body.userId = parseInt(selectedUid, 10);
+        else body.userIdString = userIdString;
         const res = await fetch('/api/admin/volunteers', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                seminarId: parseInt(sid, 10),
-                userIdString,
-                notes,
-                duties,
-                setVolunteerRole: asVolunteer,
-                actingAdminId: admin && admin.id
-            })
+            body: JSON.stringify(body)
         });
         const data = await res.json();
         if (data.success) {
@@ -3766,91 +3770,168 @@ async function addAdminVolunteer() {
 
 function clearVolunteerUserPreview() {
     const el = document.getElementById('vol-mgmt-user-preview');
+    const hid = document.getElementById('vol-mgmt-selected-user-id');
+    if (hid) hid.value = '';
     if (!el) return;
     el.classList.add('hidden');
     el.innerHTML = '';
 }
 
-async function lookupVolunteerUserPreview() {
+function renderVolunteerSearchMatches(matches) {
+    let html =
+        '<p style="margin:0 0 10px;font-weight:700;color:#334155;">Multiple matches — select one:</p><div style="display:flex;flex-direction:column;gap:8px;">';
+    matches.forEach(function (m) {
+        const name = [m.first_name, m.middle_name, m.last_name].filter(Boolean).join(' ');
+        html +=
+            '<button type="button" class="btn-primary" style="text-align:left;background:#fff;color:#0f172a;border:1px solid #cbd5e1;padding:10px 12px;" onclick="selectVolunteerDoctor(' +
+            Number(m.id) +
+            ',' +
+            JSON.stringify(String(m.user_id_string || '')) +
+            ')">' +
+            '<strong>' +
+            escAdmin(name || 'Doctor') +
+            '</strong><br><span style="font-size:0.82rem;color:#64748b;">' +
+            escAdmin(m.user_id_string || '') +
+            ' · ' +
+            escAdmin(m.email || '') +
+            ' · ' +
+            escAdmin(m.phone || '') +
+            (m.application_no ? ' · App ' + escAdmin(m.application_no) : '') +
+            (m.registration_status ? ' · ' + escAdmin(m.registration_status) : '') +
+            '</span></button>';
+    });
+    html += '</div>';
+    return html;
+}
+
+function renderVolunteerUserPreviewPanel(data) {
+    const u = data.user || {};
+    const reg = data.registration;
+    const vol = data.volunteerAssignment;
+    let html =
+        '<h4 style="margin:0 0 10px;color:#0f766e;"><i class="fas fa-user-check"></i> ' +
+        escAdmin(u.name || 'Doctor') +
+        '</h4>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;font-size:0.88rem;">' +
+        '<div><strong>Portal ID</strong><br>' +
+        escAdmin(u.userIdString || '') +
+        '</div>' +
+        '<div><strong>Email / phone</strong><br>' +
+        escAdmin(u.email || '') +
+        ' · ' +
+        escAdmin(u.phone || '') +
+        '</div>' +
+        '<div><strong>Category</strong><br>' +
+        escAdmin(u.doctorCategory || 'regular') +
+        '</div>' +
+        '<div><strong>Location</strong><br>' +
+        escAdmin([u.city, u.state, u.pincode].filter(Boolean).join(', ') || '—') +
+        '</div></div>';
+    if (reg) {
+        html +=
+            '<hr style="margin:12px 0;border:none;border-top:1px solid #e2e8f0;">' +
+            '<p style="margin:0 0 6px;font-weight:700;">Seminar application</p>' +
+            '<div style="font-size:0.88rem;">' +
+            '<span style="background:#ecfdf5;color:#047857;padding:2px 8px;border-radius:999px;font-weight:700;">' +
+            escAdmin(reg.status || '—') +
+            '</span>' +
+            (reg.applicationNo ? ' · App ' + escAdmin(reg.applicationNo) : '') +
+            (reg.qual ? ' · ' + escAdmin(reg.qual) : '') +
+            '</div>' +
+            '<p style="margin:8px 0 0;font-size:0.85rem;color:#475569;">' +
+            escAdmin([reg.fname, reg.lname].filter(Boolean).join(' ')) +
+            ' · ' +
+            escAdmin(reg.email || u.email || '') +
+            '</p>';
+        if (reg.registrationComplete) {
+            html +=
+                '<p style="margin:8px 0 0;color:#059669;font-weight:700;"><i class="fas fa-check-circle"></i> Application complete — will convert to volunteer and issue ₹0 ticket on assign.</p>';
+        } else {
+            html +=
+                '<p style="margin:8px 0 0;color:#b45309;"><i class="fas fa-hourglass-half"></i> Registration incomplete — assign volunteer role; ticket after they submit application.</p>';
+        }
+    } else {
+        html +=
+            '<hr style="margin:12px 0;"><p style="color:#64748b;font-size:0.88rem;">No application for this seminar yet. Volunteer override allows them to register after the public window.</p>';
+    }
+    if (vol) {
+        html +=
+            '<p style="margin:10px 0 0;font-size:0.85rem;color:#0369a1;">Already assigned · ' +
+            escAdmin(vol.status || '') +
+            (vol.ticketId ? ' · Ticket ' + escAdmin(vol.ticketId) : '') +
+            (vol.duties ? ' · ' + escAdmin(vol.duties) : '') +
+            '</p>';
+    }
+    return html;
+}
+
+async function selectVolunteerDoctor(userId, userIdString) {
     const sid = document.getElementById('vol-mgmt-seminar')?.value;
-    const userIdString = String(document.getElementById('vol-mgmt-user-id')?.value || '').trim();
     const panel = document.getElementById('vol-mgmt-user-preview');
-    if (!panel) return;
-    if (!sid) return alert('Select a seminar first.');
-    if (!userIdString) return alert('Enter doctor portal User ID.');
-    panel.classList.remove('hidden');
-    panel.innerHTML = '<p class="muted">Looking up user…</p>';
+    const hid = document.getElementById('vol-mgmt-selected-user-id');
+    if (hid) hid.value = String(userId);
+    const input = document.getElementById('vol-mgmt-user-id');
+    if (input && userIdString) input.value = userIdString;
+    if (!panel || !sid) return;
+    panel.innerHTML = '<p class="muted">Loading details…</p>';
     try {
         const res = await fetch(
             '/api/admin/volunteers/user-preview?seminarId=' +
                 encodeURIComponent(sid) +
-                '&userIdString=' +
-                encodeURIComponent(userIdString)
+                '&userId=' +
+                encodeURIComponent(userId)
+        );
+        const data = await res.json();
+        if (!res.ok) {
+            panel.innerHTML = '<p style="color:#b91c1c;">' + escAdmin(data.error || 'Failed') + '</p>';
+            return;
+        }
+        panel.innerHTML = renderVolunteerUserPreviewPanel(data);
+        const dutiesEl = document.getElementById('vol-mgmt-duties');
+        const vol = data.volunteerAssignment;
+        if (dutiesEl && vol && vol.duties && !dutiesEl.value) dutiesEl.value = vol.duties;
+    } catch (e) {
+        console.error(e);
+        panel.innerHTML = '<p style="color:#b91c1c;">Network error</p>';
+    }
+}
+
+async function lookupVolunteerUserPreview() {
+    const sid = document.getElementById('vol-mgmt-seminar')?.value;
+    const q = String(document.getElementById('vol-mgmt-user-id')?.value || '').trim();
+    const panel = document.getElementById('vol-mgmt-user-preview');
+    const hid = document.getElementById('vol-mgmt-selected-user-id');
+    if (hid) hid.value = '';
+    if (!panel) return;
+    if (!sid) return alert('Select a seminar first.');
+    if (q.length < 2) return alert('Enter at least 2 characters (name, phone, email, portal ID, or application no).');
+    panel.classList.remove('hidden');
+    panel.innerHTML = '<p class="muted">Searching…</p>';
+    try {
+        const res = await fetch(
+            '/api/admin/volunteers/user-preview?seminarId=' +
+                encodeURIComponent(sid) +
+                '&q=' +
+                encodeURIComponent(q)
         );
         const data = await res.json();
         if (!res.ok) {
             panel.innerHTML = '<p style="color:#b91c1c;font-weight:600;">' + escAdmin(data.error || 'Not found') + '</p>';
             return;
         }
-        const u = data.user || {};
-        const reg = data.registration;
-        const vol = data.volunteerAssignment;
-        let html =
-            '<h4 style="margin:0 0 10px;color:#0f766e;"><i class="fas fa-user-check"></i> ' +
-            escAdmin(u.name || 'Doctor') +
-            '</h4>' +
-            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;font-size:0.88rem;">' +
-            '<div><strong>Portal ID</strong><br>' +
-            escAdmin(u.userIdString || '') +
-            '</div>' +
-            '<div><strong>Email / phone</strong><br>' +
-            escAdmin(u.email || '') +
-            ' · ' +
-            escAdmin(u.phone || '') +
-            '</div>' +
-            '<div><strong>Category</strong><br>' +
-            escAdmin(u.doctorCategory || 'regular') +
-            '</div>' +
-            '<div><strong>Location</strong><br>' +
-            escAdmin([u.city, u.state, u.pincode].filter(Boolean).join(', ') || '—') +
-            '</div></div>';
-        if (reg) {
-            html +=
-                '<hr style="margin:12px 0;border:none;border-top:1px solid #e2e8f0;">' +
-                '<p style="margin:0 0 6px;font-weight:700;">Seminar application</p>' +
-                '<div style="font-size:0.88rem;">' +
-                '<span style="background:#ecfdf5;color:#047857;padding:2px 8px;border-radius:999px;font-weight:700;">' +
-                escAdmin(reg.status || '—') +
-                '</span>' +
-                (reg.applicationNo ? ' · App ' + escAdmin(reg.applicationNo) : '') +
-                (reg.qual ? ' · ' + escAdmin(reg.qual) : '') +
-                '</div>' +
-                '<p style="margin:8px 0 0;font-size:0.85rem;color:#475569;">' +
-                escAdmin([reg.fname, reg.lname].filter(Boolean).join(' ')) +
-                ' · ' +
-                escAdmin(reg.email || u.email || '') +
-                '</p>';
-            if (reg.registrationComplete) {
-                html +=
-                    '<p style="margin:8px 0 0;color:#059669;font-weight:700;"><i class="fas fa-check-circle"></i> Application complete — will convert to volunteer and issue ₹0 ticket on assign.</p>';
-            } else {
-                html +=
-                    '<p style="margin:8px 0 0;color:#b45309;"><i class="fas fa-hourglass-half"></i> Registration incomplete — assign volunteer role; ticket after they submit application.</p>';
+        if (data.multiple && data.matches && data.matches.length) {
+            panel.innerHTML = renderVolunteerSearchMatches(data.matches);
+            return;
+        }
+        if (data.user && data.user.id) {
+            if (hid) hid.value = String(data.user.id);
+            if (data.user.userIdString) {
+                document.getElementById('vol-mgmt-user-id').value = data.user.userIdString;
             }
-        } else {
-            html +=
-                '<hr style="margin:12px 0;"><p style="color:#64748b;font-size:0.88rem;">No application for this seminar yet. Volunteer override allows them to register after the public window.</p>';
         }
-        if (vol) {
-            html +=
-                '<p style="margin:10px 0 0;font-size:0.85rem;color:#0369a1;">Already assigned · ' +
-                escAdmin(vol.status || '') +
-                (vol.ticketId ? ' · Ticket ' + escAdmin(vol.ticketId) : '') +
-                (vol.duties ? ' · ' + escAdmin(vol.duties) : '') +
-                '</p>';
-        }
-        panel.innerHTML = html;
+        panel.innerHTML = renderVolunteerUserPreviewPanel(data);
         const dutiesEl = document.getElementById('vol-mgmt-duties');
+        const vol = data.volunteerAssignment;
         if (dutiesEl && vol && vol.duties && !dutiesEl.value) dutiesEl.value = vol.duties;
     } catch (e) {
         console.error(e);
