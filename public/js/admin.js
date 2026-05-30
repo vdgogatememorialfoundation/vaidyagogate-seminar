@@ -3888,7 +3888,8 @@ async function selectVolunteerDoctor(userId, userIdString) {
     const input = document.getElementById('vol-mgmt-user-id');
     if (input && userIdString) input.value = userIdString;
     if (!panel || !sid) return;
-    panel.innerHTML = '<p class="muted">Loading details…</p>';
+    panel.classList.remove('hidden');
+    panel.innerHTML = '<p class="muted" style="margin:0;">Loading details…</p>';
     try {
         const res = await fetch(
             '/api/admin/volunteers/user-preview?seminarId=' +
@@ -3896,9 +3897,12 @@ async function selectVolunteerDoctor(userId, userIdString) {
                 '&userId=' +
                 encodeURIComponent(userId)
         );
-        const data = await res.json();
+        const data = await res.json().catch(function () {
+            return {};
+        });
         if (!res.ok) {
-            panel.innerHTML = '<p style="color:#b91c1c;">' + escAdmin(data.error || 'Failed') + '</p>';
+            panel.innerHTML =
+                '<p style="color:#b91c1c;margin:0;">' + escAdmin(data.error || 'Could not load doctor details') + '</p>';
             return;
         }
         panel.innerHTML = renderVolunteerUserPreviewPanel(data);
@@ -3907,7 +3911,7 @@ async function selectVolunteerDoctor(userId, userIdString) {
         if (dutiesEl && vol && vol.duties && !dutiesEl.value) dutiesEl.value = vol.duties;
     } catch (e) {
         console.error(e);
-        panel.innerHTML = '<p style="color:#b91c1c;">Network error</p>';
+        panel.innerHTML = '<p style="color:#b91c1c;margin:0;">Network error</p>';
     }
 }
 
@@ -3921,45 +3925,38 @@ async function lookupVolunteerUserPreview() {
     if (!sid) return alert('Select a seminar first.');
     if (q.length < 2) return alert('Enter at least 2 characters (name, phone, email, portal ID, or application no).');
     panel.classList.remove('hidden');
-    panel.innerHTML = '<p class="muted">Searching…</p>';
+    panel.innerHTML = '<p class="muted" style="margin:0;">Searching…</p>';
     try {
         const res = await fetch(
-            '/api/admin/volunteers/user-preview?seminarId=' +
-                encodeURIComponent(sid) +
-                '&q=' +
-                encodeURIComponent(q)
+            '/api/admin/volunteers/search?seminarId=' + encodeURIComponent(sid) + '&q=' + encodeURIComponent(q)
         );
-        const data = await res.json();
+        const data = await res.json().catch(function () {
+            return {};
+        });
         if (!res.ok) {
             panel.innerHTML =
                 '<p style="color:#b91c1c;font-weight:600;margin:0;">' +
-                escAdmin(data.error || 'No doctor found') +
+                escAdmin(data.error || 'Search failed') +
                 '</p><p class="muted" style="margin:8px 0 0;font-size:0.85rem;">Try portal ID (USR_…), email, mobile, application number, or name from their registration form.</p>';
             return;
         }
-        if (data.multiple && data.matches && data.matches.length) {
-            panel.innerHTML = renderVolunteerSearchMatches(data.matches);
-            bindVolunteerSearchPickHandlers(panel);
+        const matches = Array.isArray(data.matches) ? data.matches : [];
+        if (!matches.length) {
+            panel.innerHTML =
+                '<p style="color:#b91c1c;font-weight:600;margin:0;">No doctor found for “' +
+                escAdmin(q) +
+                '”.</p><p class="muted" style="margin:8px 0 0;font-size:0.85rem;">Check seminar selection and try email, mobile, application no, or portal User ID.</p>';
             return;
         }
-        if (data.matches && data.matches.length > 1) {
-            panel.innerHTML = renderVolunteerSearchMatches(data.matches);
-            bindVolunteerSearchPickHandlers(panel);
+        if (matches.length === 1) {
+            await selectVolunteerDoctor(matches[0].id, matches[0].user_id_string || '');
             return;
         }
-        if (data.user && data.user.id) {
-            if (hid) hid.value = String(data.user.id);
-            if (data.user.userIdString) {
-                document.getElementById('vol-mgmt-user-id').value = data.user.userIdString;
-            }
-        }
-        panel.innerHTML = renderVolunteerUserPreviewPanel(data);
-        const dutiesEl = document.getElementById('vol-mgmt-duties');
-        const vol = data.volunteerAssignment;
-        if (dutiesEl && vol && vol.duties && !dutiesEl.value) dutiesEl.value = vol.duties;
+        panel.innerHTML = renderVolunteerSearchMatches(matches);
+        bindVolunteerSearchPickHandlers(panel);
     } catch (e) {
         console.error(e);
-        panel.innerHTML = '<p style="color:#b91c1c;">Network error</p>';
+        panel.innerHTML = '<p style="color:#b91c1c;margin:0;">Network error — please try again.</p>';
     }
 }
 
