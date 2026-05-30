@@ -3735,7 +3735,9 @@ async function addAdminVolunteer() {
     const userIdString = String(document.getElementById('vol-mgmt-user-id')?.value || '').trim();
     const notes = document.getElementById('vol-mgmt-notes')?.value || '';
     const duties = document.getElementById('vol-mgmt-duties')?.value || '';
+    const asVolunteer = document.getElementById('vol-mgmt-as-volunteer')?.checked !== false;
     if (!sid || !userIdString) return alert('Seminar and doctor portal User ID required');
+    if (!asVolunteer && !confirm('Assign without converting to volunteer role?')) return;
     try {
         const admin = getStoredAdminUser();
         const res = await fetch('/api/admin/volunteers', {
@@ -3746,22 +3748,188 @@ async function addAdminVolunteer() {
                 userIdString,
                 notes,
                 duties,
-                setVolunteerRole: true,
+                setVolunteerRole: asVolunteer,
                 actingAdminId: admin && admin.id
             })
         });
         const data = await res.json();
         if (data.success) {
             document.getElementById('vol-mgmt-user-id').value = '';
-            alert(
-                data.message ||
-                    'Volunteer assigned. They must complete registration in the doctor portal; free ticket (₹0) and messages are sent only after that.'
-            );
+            clearVolunteerUserPreview();
+            alert(data.message || 'Volunteer assigned.');
             refreshVolunteerAdminPanels();
         } else alert(data.error || 'Failed');
     } catch (e) {
         console.error(e);
     }
+}
+
+function clearVolunteerUserPreview() {
+    const el = document.getElementById('vol-mgmt-user-preview');
+    if (!el) return;
+    el.classList.add('hidden');
+    el.innerHTML = '';
+}
+
+async function lookupVolunteerUserPreview() {
+    const sid = document.getElementById('vol-mgmt-seminar')?.value;
+    const userIdString = String(document.getElementById('vol-mgmt-user-id')?.value || '').trim();
+    const panel = document.getElementById('vol-mgmt-user-preview');
+    if (!panel) return;
+    if (!sid) return alert('Select a seminar first.');
+    if (!userIdString) return alert('Enter doctor portal User ID.');
+    panel.classList.remove('hidden');
+    panel.innerHTML = '<p class="muted">Looking up user…</p>';
+    try {
+        const res = await fetch(
+            '/api/admin/volunteers/user-preview?seminarId=' +
+                encodeURIComponent(sid) +
+                '&userIdString=' +
+                encodeURIComponent(userIdString)
+        );
+        const data = await res.json();
+        if (!res.ok) {
+            panel.innerHTML = '<p style="color:#b91c1c;font-weight:600;">' + escAdmin(data.error || 'Not found') + '</p>';
+            return;
+        }
+        const u = data.user || {};
+        const reg = data.registration;
+        const vol = data.volunteerAssignment;
+        let html =
+            '<h4 style="margin:0 0 10px;color:#0f766e;"><i class="fas fa-user-check"></i> ' +
+            escAdmin(u.name || 'Doctor') +
+            '</h4>' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;font-size:0.88rem;">' +
+            '<div><strong>Portal ID</strong><br>' +
+            escAdmin(u.userIdString || '') +
+            '</div>' +
+            '<div><strong>Email / phone</strong><br>' +
+            escAdmin(u.email || '') +
+            ' · ' +
+            escAdmin(u.phone || '') +
+            '</div>' +
+            '<div><strong>Category</strong><br>' +
+            escAdmin(u.doctorCategory || 'regular') +
+            '</div>' +
+            '<div><strong>Location</strong><br>' +
+            escAdmin([u.city, u.state, u.pincode].filter(Boolean).join(', ') || '—') +
+            '</div></div>';
+        if (reg) {
+            html +=
+                '<hr style="margin:12px 0;border:none;border-top:1px solid #e2e8f0;">' +
+                '<p style="margin:0 0 6px;font-weight:700;">Seminar application</p>' +
+                '<div style="font-size:0.88rem;">' +
+                '<span style="background:#ecfdf5;color:#047857;padding:2px 8px;border-radius:999px;font-weight:700;">' +
+                escAdmin(reg.status || '—') +
+                '</span>' +
+                (reg.applicationNo ? ' · App ' + escAdmin(reg.applicationNo) : '') +
+                (reg.qual ? ' · ' + escAdmin(reg.qual) : '') +
+                '</div>' +
+                '<p style="margin:8px 0 0;font-size:0.85rem;color:#475569;">' +
+                escAdmin([reg.fname, reg.lname].filter(Boolean).join(' ')) +
+                ' · ' +
+                escAdmin(reg.email || u.email || '') +
+                '</p>';
+            if (reg.registrationComplete) {
+                html +=
+                    '<p style="margin:8px 0 0;color:#059669;font-weight:700;"><i class="fas fa-check-circle"></i> Application complete — will convert to volunteer and issue ₹0 ticket on assign.</p>';
+            } else {
+                html +=
+                    '<p style="margin:8px 0 0;color:#b45309;"><i class="fas fa-hourglass-half"></i> Registration incomplete — assign volunteer role; ticket after they submit application.</p>';
+            }
+        } else {
+            html +=
+                '<hr style="margin:12px 0;"><p style="color:#64748b;font-size:0.88rem;">No application for this seminar yet. Volunteer override allows them to register after the public window.</p>';
+        }
+        if (vol) {
+            html +=
+                '<p style="margin:10px 0 0;font-size:0.85rem;color:#0369a1;">Already assigned · ' +
+                escAdmin(vol.status || '') +
+                (vol.ticketId ? ' · Ticket ' + escAdmin(vol.ticketId) : '') +
+                (vol.duties ? ' · ' + escAdmin(vol.duties) : '') +
+                '</p>';
+        }
+        panel.innerHTML = html;
+        const dutiesEl = document.getElementById('vol-mgmt-duties');
+        if (dutiesEl && vol && vol.duties && !dutiesEl.value) dutiesEl.value = vol.duties;
+    } catch (e) {
+        console.error(e);
+        panel.innerHTML = '<p style="color:#b91c1c;">Network error</p>';
+    }
+}
+
+function adminSeminarFeeAmount(app) {
+    const p = app && app.seminar_price != null ? Number(app.seminar_price) : NaN;
+    return Number.isFinite(p) && p > 0 ? p : 1500;
+}
+
+function adminRenderApproveFeeBlockHtml(app) {
+    const fee = adminSeminarFeeAmount(app);
+    return (
+        '<div id="admin-approve-fee-block" style="margin:12px 0;padding:12px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;">' +
+        '<h4 style="margin:0 0 8px;">Fee on approval</h4>' +
+        '<label style="display:block;margin:6px 0;font-weight:600;"><input type="radio" name="admin-fee-type" value="regular" checked onchange="adminToggleApproveFeeAmount()"> Regular participant — seminar fee (₹' +
+        fee +
+        ')</label>' +
+        '<div id="admin-fee-regular-row" style="margin:4px 0 10px 22px;">' +
+        '<label style="font-size:0.85rem;">Fee amount (₹)</label>' +
+        '<input type="number" id="admin-approve-fee-amount" min="0" step="1" value="' +
+        fee +
+        '" style="width:120px;padding:6px 8px;margin-left:8px;">' +
+        '</div>' +
+        '<label style="display:block;margin:6px 0;font-weight:600;color:#0f766e;"><input type="radio" name="admin-fee-type" value="volunteer" onchange="adminToggleApproveFeeAmount()"> Volunteer — ₹0 (free ticket + dual certificates)</label>' +
+        '<p class="muted" style="font-size:0.82rem;margin:8px 0 0;">Volunteer approval assigns them in the volunteer module and skips payment.</p>' +
+        '</div>'
+    );
+}
+
+function adminToggleApproveFeeAmount() {
+    const volunteer = document.querySelector('input[name="admin-fee-type"]:checked')?.value === 'volunteer';
+    const row = document.getElementById('admin-fee-regular-row');
+    if (row) row.style.display = volunteer ? 'none' : 'block';
+}
+
+function adminReadApproveFeeOptions() {
+    const volunteer = document.querySelector('input[name="admin-fee-type"]:checked')?.value === 'volunteer';
+    if (volunteer) return { feeType: 'volunteer', feeAmount: 0 };
+    const raw = parseFloat(document.getElementById('admin-approve-fee-amount')?.value || '');
+    return {
+        feeType: 'regular',
+        feeAmount: Number.isFinite(raw) && raw >= 0 ? raw : null
+    };
+}
+
+function adminPromptFeeChoice(app, title, onConfirm) {
+    const fee = adminSeminarFeeAmount(app);
+    const overlay = document.createElement('div');
+    overlay.id = 'admin-fee-prompt-overlay';
+    overlay.style.cssText =
+        'position:fixed;inset:0;background:rgba(15,23,42,0.45);z-index:10050;display:flex;align-items:center;justify-content:center;padding:16px;';
+    overlay.innerHTML =
+        '<div class="card" style="max-width:460px;width:100%;padding:20px;background:#fff;border-radius:12px;">' +
+        '<h3 style="margin:0 0 8px;">' +
+        escAdmin(title || 'Choose fee type') +
+        '</h3>' +
+        '<p class="muted" style="font-size:0.88rem;margin:0 0 12px;">App ' +
+        escAdmin(app.application_no || '') +
+        ' · ' +
+        escAdmin(app.seminar_title || 'Seminar') +
+        '</p>' +
+        adminRenderApproveFeeBlockHtml(app) +
+        '<div style="display:flex;gap:8px;margin-top:14px;justify-content:flex-end;">' +
+        '<button type="button" class="btn-primary" style="background:#64748b;" id="admin-fee-prompt-cancel">Cancel</button>' +
+        '<button type="button" class="btn-primary" id="admin-fee-prompt-ok">Continue</button>' +
+        '</div></div>';
+    document.body.appendChild(overlay);
+    overlay.querySelector('#admin-fee-prompt-cancel').onclick = function () {
+        overlay.remove();
+        onConfirm(null);
+    };
+    overlay.querySelector('#admin-fee-prompt-ok').onclick = function () {
+        const opts = adminReadApproveFeeOptions();
+        overlay.remove();
+        onConfirm(opts);
+    };
 }
 
 async function approveAdminVolunteer(volId) {
@@ -5448,7 +5616,7 @@ function renderApplicationsTable() {
                     <td>${a.user_id_string}</td>
                     <td>${candidateName}${fileLink}${dupBadge}</td>
                     <td>
-                        <select onchange="updateAppStatus(${a.id}, this.value)" style="width: auto; min-width: 200px;">
+                        <select onchange="onApplicationStatusChange(${a.id}, this, ${index})" style="width: auto; min-width: 200px;">
                             ${adminRegistrationStatusOptionsHtml(a.status)}
                         </select>
                     </td>
@@ -6699,6 +6867,7 @@ function viewFullApplication(index) {
         ? `<hr style="margin:14px 0;">
         <h4 style="margin:0 0 8px;">Verify application</h4>
         ${docChecks}
+        ${adminRenderApproveFeeBlockHtml(a)}
         <div class="form-group" style="margin-top:10px;"><label>Reason (required for rejections / document requests)</label>
         <textarea id="admin-verify-reason" rows="3" style="width:100%;" placeholder="e.g. NCISM number does not match certificate"></textarea>
         <div class="form-group" style="margin-top:8px;"><label>Additional documents needed (comma-separated)</label>
@@ -6719,14 +6888,16 @@ function viewFullApplication(index) {
         : st === 'waitlisted'
           ? `<hr style="margin:14px 0;">
         <h4 style="margin:0 0 8px;">Waiting list</h4>
-        <p class="muted" style="font-size:0.85rem;">This applicant joined after registration closed. No payment yet. Offer a seat to send the payment link by email and show payment in their dashboard.</p>
-        <button type="button" class="btn-primary" style="background:#15803d;margin-top:8px;" onclick="adminPromoteFromWaitlist(${a.id})">Offer seat — send payment link</button>`
+        <p class="muted" style="font-size:0.85rem;">This applicant joined after registration closed. No payment yet. Offer a seat with regular seminar fee or as volunteer (₹0).</p>
+        ${adminRenderApproveFeeBlockHtml(a)}
+        <button type="button" class="btn-primary" style="background:#15803d;margin-top:8px;" onclick="adminPromoteFromWaitlist(${a.id})">Offer seat</button>`
           : '<p class="muted" style="margin-top:12px;">Verification actions appear when status is Submitted, Waitlisted, or Under review.</p>';
 
     const content = document.getElementById('admin-view-content');
     content.innerHTML = `
         <p><strong>App No:</strong> ${escAdmin(a.application_no)}</p>
         <p><strong>Status:</strong> ${escAdmin(String(a.status || '').toUpperCase())}</p>
+        <p><strong>Seminar:</strong> ${escAdmin(a.seminar_title || '—')}${a.seminar_price != null ? ' · Fee ₹' + escAdmin(String(adminSeminarFeeAmount(a))) : ''}</p>
         <p><strong>Portal ID:</strong> ${escAdmin(a.user_id_string || '')}</p>
         ${
             dupReview
@@ -6774,6 +6945,7 @@ async function adminVerifySeminarApplication(appId, decision) {
     const infoOk = !!document.getElementById('admin-verify-info')?.checked;
     const ncismOk = !!document.getElementById('admin-verify-ncism')?.checked;
     const certificateOk = !!document.getElementById('admin-verify-cert')?.checked;
+    const feeOpts = decision === 'approve' ? adminReadApproveFeeOptions() : { feeType: 'regular', feeAmount: null };
     if (decision !== 'approve' && !reason) {
         return alert('Please enter a reason so the doctor knows what to fix.');
     }
@@ -6781,17 +6953,31 @@ async function adminVerifySeminarApplication(appId, decision) {
         return alert('Check that applicant details are correct before approving.');
     }
     const labels = {
-        approve: 'Approve this application?',
+        approve:
+            feeOpts.feeType === 'volunteer'
+                ? 'Approve as volunteer (₹0)? They will be assigned in the volunteer module.'
+                : 'Approve with seminar fee ₹' + (feeOpts.feeAmount != null ? feeOpts.feeAmount : '?') + '?',
         reject_documents: 'Request document re-upload on the same application number?',
         request_documents: 'Ask the doctor to upload additional verification documents?',
         reject_application: 'Reject this entire application?'
     };
     if (!confirm(labels[decision] || 'Continue?')) return;
     try {
+        const admin = getStoredAdminUser();
         const res = await fetch('/api/admin/applications/' + appId + '/document-verify', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ decision, reason, infoOk, ncismOk, certificateOk, requestedDocs })
+            body: JSON.stringify({
+                decision,
+                reason,
+                infoOk,
+                ncismOk,
+                certificateOk,
+                requestedDocs,
+                feeType: feeOpts.feeType,
+                feeAmount: feeOpts.feeAmount,
+                actingAdminId: admin && admin.id
+            })
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) return alert(data.error || 'Verification failed');
@@ -6805,22 +6991,57 @@ async function adminVerifySeminarApplication(appId, decision) {
 }
 
 async function adminPromoteFromWaitlist(appId) {
-    if (
-        !confirm(
-            'Offer a seat to this waitlisted applicant? They will receive a payment link by email and can pay from their doctor portal dashboard.'
-        )
-    ) {
-        return;
-    }
-    await updateAppStatus(appId, 'approved_pending_payment');
+    const app = (globalAdminApps || []).find((x) => Number(x.id) === Number(appId));
+    if (!app) return alert('Application not found in list — refresh and try again.');
+    adminPromptFeeChoice(app, 'Offer seat from waiting list', async function (feeOpts) {
+        if (!feeOpts) return;
+        if (feeOpts.feeType === 'volunteer') {
+            await updateAppStatus(appId, 'approved_pending_payment', feeOpts);
+            return;
+        }
+        if (
+            !confirm(
+                'Offer a seat with fee ₹' +
+                    (feeOpts.feeAmount != null ? feeOpts.feeAmount : adminSeminarFeeAmount(app)) +
+                    '? Payment link will be sent by email.'
+            )
+        ) {
+            return;
+        }
+        await updateAppStatus(appId, 'approved_pending_payment', feeOpts);
+    });
 }
 
-async function updateAppStatus(appId, status) {
+function onApplicationStatusChange(appId, selectEl, appIndex) {
+    const status = selectEl.value;
+    const app = globalAdminApps[appIndex];
+    const prev = String((app && app.status) || '').toLowerCase();
+    if (status === prev) return;
+    if (status === 'approved_pending_payment') {
+        selectEl.value = prev || app.status;
+        adminPromptFeeChoice(app, 'Approve — choose fee type', function (feeOpts) {
+            if (!feeOpts) return;
+            updateAppStatus(appId, 'approved_pending_payment', feeOpts);
+        });
+        return;
+    }
+    updateAppStatus(appId, status);
+}
+
+async function updateAppStatus(appId, status, feeOpts) {
+    feeOpts = feeOpts || {};
     try {
+        const admin = getStoredAdminUser();
         const res = await fetch('/api/admin/applications/status', {
             method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ applicationId: appId, status })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                applicationId: appId,
+                status,
+                feeType: feeOpts.feeType || 'regular',
+                feeAmount: feeOpts.feeAmount,
+                actingAdminId: admin && admin.id
+            })
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {

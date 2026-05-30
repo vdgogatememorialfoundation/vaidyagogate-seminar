@@ -7196,9 +7196,12 @@ app.get('/api/admin/seminars/:id/applications', (req, res) => {
 // Admin: Get all applications
 app.get('/api/admin/applications', (req, res) => {
     db.all(`
-        SELECT a.id, a.application_no, a.status, a.form_data, a.doc_review_json, a.created_at, u.first_name, u.last_name, u.user_id_string
+        SELECT a.id, a.application_no, a.status, a.form_data, a.doc_review_json, a.created_at, a.seminar_id,
+               u.first_name, u.last_name, u.user_id_string, u.id AS user_id,
+               s.title AS seminar_title, s.price AS seminar_price
         FROM registrations a
         JOIN users u ON a.user_id = u.id
+        LEFT JOIN seminars s ON s.id = a.seminar_id
         ORDER BY a.created_at DESC
     `, [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -7357,7 +7360,7 @@ app.post('/api/admin/applications/:applicationId/document-verify', (req, res) =>
         db,
         req.params.applicationId,
         req.body || {},
-        { portalTracking, notifEngine, getOrCreatePendingOrder },
+        { portalTracking, notifEngine, getOrCreatePendingOrder, volunteerTicketFlow, volunteerTicketDeps: volunteerTicketDeps() },
         (err, result) => {
             if (err) return res.status(500).json({ error: err.message });
             if (!result || !result.ok) return res.status(400).json({ error: (result && result.error) || 'Verify failed' });
@@ -7499,10 +7502,57 @@ app.post('/api/applications/:applicationId/resubmit-documents', withApplicationD
 
 // Admin: Update Application Status
 app.post('/api/admin/applications/status', (req, res) => {
-    const { applicationId, status } = req.body;
+    const { applicationId, status, feeType, feeAmount, actingAdminId } = req.body || {};
     const newSt = String(status || '').toLowerCase();
+    const feeTypeNorm = String(feeType || 'regular').toLowerCase();
+    const feeAmountNum = feeAmount != null ? Number(feeAmount) : NaN;
+    const adminId = actingAdminId != null ? parseInt(actingAdminId, 10) : null;
     if (!ALLOWED_REGISTRATION_STATUSES.has(newSt)) {
         return res.status(400).json({ error: 'Invalid application status.' });
+    }
+    if (newSt === 'approved_pending_payment' && feeTypeNorm === 'volunteer') {
+        return db.get(
+            `SELECT r.*, s.title AS seminar_title, s.price AS seminar_price FROM registrations r
+             LEFT JOIN seminars s ON s.id = r.seminar_id WHERE r.id = ?`,
+            [applicationId],
+            (eReg, row) => {
+                if (eReg) return res.status(500).json({ error: eReg.message });
+                if (!row) return res.status(404).json({ error: 'Application not found' });
+                const review = {
+                    fee_type: 'volunteer',
+                    fee_amount: 0,
+                    decision: 'approve',
+                    reviewed_at: new Date().toISOString()
+                };
+                db.run(
+                    `UPDATE registrations SET doc_review_json = ? WHERE id = ?`,
+                    [JSON.stringify(review), applicationId],
+                    (eUp) => {
+                        if (eUp) return res.status(500).json({ error: eUp.message });
+                        volunteerTicketFlow.assignVolunteerFromAdmin(
+                            db,
+                            {
+                                seminarId: row.seminar_id,
+                                userId: row.user_id,
+                                notes: 'Approved as volunteer from admin status (₹0)',
+                                adminUserId: adminId,
+                                setVolunteerRole: true,
+                                tryAutoTicket: true,
+                                volunteerTicketDeps: volunteerTicketDeps()
+                            },
+                            (vErr, vResult) => {
+                                if (vErr) return res.status(500).json({ error: vErr.message });
+                                const msg =
+                                    vResult && vResult.ticketIssued
+                                        ? 'Approved as volunteer (₹0). Free e-ticket issued.'
+                                        : 'Approved as volunteer (₹0). Free ticket will issue when registration is complete.';
+                                return res.json({ success: true, message: msg, feeType: 'volunteer' });
+                            }
+                        );
+                    }
+                );
+            }
+        );
     }
     db.get(`SELECT status FROM registrations WHERE id = ?`, [applicationId], (e0, prevRow) => {
         if (e0) return res.status(500).json({ error: e0.message });
@@ -7565,13 +7615,16 @@ app.post('/api/admin/applications/status', (req, res) => {
                         });
         
         if (newSt === 'approved_pending_payment') {
+            const customAmt =
+                Number.isFinite(feeAmountNum) && feeAmountNum >= 0 ? feeAmountNum : null;
             waitingList.offerRegistrationPayment(
                 db,
                 { getOrCreatePendingOrder, notifEngine, paymentAmountForSeminar },
                 applicationId,
                 (payErr) => {
                     if (payErr) console.warn('[waitlist] offer payment:', payErr.message);
-                }
+                },
+                customAmt
             );
         }
         if (
