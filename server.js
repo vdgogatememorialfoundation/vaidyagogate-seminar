@@ -461,6 +461,8 @@ function requestNeedsBootstrap(req) {
     if (p === '/api/health') return false;
     if (p.startsWith('/api/branding/logo')) return false;
     if (p === '/scanner' || p === '/scanner/') return false;
+    if (p === '/venue-gate' || p === '/venue-gate/') return false;
+    if (p === '/venue-entry' || p === '/venue-entry/') return false;
     if (/\.(html?|css|js|ico|png|jpe?g|gif|webp|svg|woff2?|json|webmanifest|txt|map)$/i.test(p)) return false;
     if (p.startsWith('/css/') || p.startsWith('/js/') || p.startsWith('/uploads/')) return false;
     if (p.startsWith('/api/')) return true;
@@ -500,6 +502,8 @@ app.get(['/venue-gate', '/venue-gate/'], (req, res) => {
 
 const staffPortalHtml = path.join(__dirname, 'public', 'staff.html');
 const adminPortalHtml = path.join(__dirname, 'public', 'admin.html');
+const venueGateHtml = path.join(__dirname, 'public', 'venue-gate.html');
+const venueEntryHtml = path.join(__dirname, 'public', 'venue-entry.html');
 app.get(['/staff/login', '/staff'], (req, res) => {
     res.sendFile(staffPortalHtml);
 });
@@ -507,6 +511,16 @@ app.get(['/staff/crm', '/staff/crm/'], (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     res.setHeader('Pragma', 'no-cache');
     res.sendFile(adminPortalHtml);
+});
+app.get('/venue-gate.html', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.sendFile(venueGateHtml);
+});
+app.get('/venue-entry.html', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.sendFile(venueEntryHtml);
 });
 
 const portalHtmlAliases = {
