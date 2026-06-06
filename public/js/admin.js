@@ -7468,16 +7468,67 @@ function isIntegrationSecretMask(v) {
     return s === INTEGRATION_SECRET_MASK || /^[\*•·]+$/.test(s);
 }
 
+function readIntegrationSecretFromFields(ids) {
+    for (let i = 0; i < ids.length; i++) {
+        const el = document.getElementById(ids[i]);
+        const v = el ? String(el.value || '').trim() : '';
+        if (v && !isIntegrationSecretMask(v)) return v;
+    }
+    return '';
+}
+
 function readIntegrationZohoPassNew() {
-    const el = document.getElementById('int-zoho-pass-new');
-    const v = el ? String(el.value || '').trim() : '';
-    return v && !isIntegrationSecretMask(v) ? v : '';
+    return readIntegrationSecretFromFields(['int-zoho-pass-new', 'int-zoho-pass']);
 }
 
 function readIntegrationWaTokenNew() {
-    const el = document.getElementById('int-wa-token-new');
-    const v = el ? String(el.value || '').trim() : '';
-    return v && !isIntegrationSecretMask(v) ? v : '';
+    return readIntegrationSecretFromFields(['int-wa-token-new', 'int-wa-token']);
+}
+
+/** Upgrade cached old admin HTML (int-zoho-pass) to badge + int-zoho-pass-new layout. */
+function ensureIntegrationPasswordUi() {
+    const legacyPass = document.getElementById('int-zoho-pass');
+    if (legacyPass && !document.getElementById('int-zoho-pass-new')) {
+        const wrap = legacyPass.closest('div') || legacyPass.parentElement;
+        if (wrap) {
+            const badge = document.createElement('div');
+            badge.id = 'int-zoho-pass-saved-badge';
+            badge.style.cssText =
+                'margin:6px 0 8px;padding:8px 12px;border-radius:8px;background:#fff7ed;border:1px solid #fed7aa;font-size:0.88rem;font-weight:600;color:#b45309;';
+            badge.textContent = 'Not saved on server yet';
+            wrap.insertBefore(badge, legacyPass);
+            if (!document.getElementById('int-zoho-pass-hint')) {
+                const hint = document.createElement('p');
+                hint.id = 'int-zoho-pass-hint';
+                hint.style.cssText = 'font-size:0.78rem;color:#64748b;margin:6px 0 0;line-height:1.45;';
+                wrap.appendChild(hint);
+            }
+        }
+        legacyPass.id = 'int-zoho-pass-new';
+        legacyPass.placeholder = 'Paste Zoho app-specific password here, then Save';
+        legacyPass.setAttribute('autocomplete', 'off');
+    }
+    const legacyWa = document.getElementById('int-wa-token');
+    if (legacyWa && !document.getElementById('int-wa-token-new')) {
+        const wrap = legacyWa.closest('div') || legacyWa.parentElement;
+        if (wrap) {
+            const badge = document.createElement('div');
+            badge.id = 'int-wa-token-saved-badge';
+            badge.style.cssText =
+                'margin:6px 0 8px;padding:8px 12px;border-radius:8px;background:#f8fafc;border:1px solid #e2e8f0;font-size:0.88rem;font-weight:600;color:#64748b;';
+            badge.textContent = 'WhatsApp token not saved yet';
+            wrap.insertBefore(badge, legacyWa);
+            if (!document.getElementById('int-wa-token-hint')) {
+                const hint = document.createElement('p');
+                hint.id = 'int-wa-token-hint';
+                hint.style.cssText = 'font-size:0.78rem;color:#64748b;margin:6px 0 0;line-height:1.45;';
+                wrap.appendChild(hint);
+            }
+        }
+        legacyWa.id = 'int-wa-token-new';
+        legacyWa.placeholder = 'Paste permanent System User token here, then Save';
+        legacyWa.setAttribute('autocomplete', 'off');
+    }
 }
 
 function renderIntegrationSecretStatus(s) {
@@ -7555,6 +7606,7 @@ function applySavedIntegrationSecrets(data) {
 }
 
 async function loadIntegrationSettings() {
+    ensureIntegrationPasswordUi();
     try {
         const res = await fetch('/api/admin/integrations');
         const s = await res.json();
@@ -7630,6 +7682,7 @@ async function loadIntegrationSettings() {
 }
 
 async function saveIntegrationSettings() {
+    ensureIntegrationPasswordUi();
     const seminarHost = (document.getElementById('int-seminar-host') || {}).value.trim();
     let publicUrl = (document.getElementById('int-public-base-url') || {}).value.trim();
     if (!publicUrl && seminarHost) publicUrl = 'https://' + seminarHost.replace(/^https?:\/\//, '');
@@ -7711,6 +7764,7 @@ function integrationFormSmtpPayload() {
 }
 
 async function testIntegrationEmail() {
+    ensureIntegrationPasswordUi();
     const to = (document.getElementById('int-test-email') || {}).value.trim();
     if (!to) return alert('Enter test email address');
     const smtp = integrationFormSmtpPayload();

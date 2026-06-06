@@ -495,6 +495,8 @@ app.get(['/staff/login', '/staff'], (req, res) => {
     res.sendFile(staffPortalHtml);
 });
 app.get(['/staff/crm', '/staff/crm/'], (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
     res.sendFile(adminPortalHtml);
 });
 
@@ -517,7 +519,13 @@ app.get('/certificate/view', (req, res) => {
 app.use(
     express.static('public', {
         maxAge: process.env.NODE_ENV === 'production' ? '86400000' : 0,
-        etag: true
+        etag: true,
+        setHeaders(res, filePath) {
+            if (/\.html$/i.test(filePath)) {
+                res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+                res.setHeader('Pragma', 'no-cache');
+            }
+        }
     })
 );
 
