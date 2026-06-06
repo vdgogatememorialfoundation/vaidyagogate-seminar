@@ -2578,15 +2578,26 @@ function withIntegrationSettingsLoaded(req, res, next) {
     });
 }
 
+let auxiliaryTablesReady = false;
+let auxiliaryTablesPromise = null;
+
 function withAuxiliaryTables(req, res, next) {
+    if (auxiliaryTablesReady) return next();
     if (pgDb && typeof pgDb.ensureAuxiliaryTables === 'function') {
-        return pgDb
-            .ensureAuxiliaryTables()
-            .then(() => next())
-            .catch((e) => {
-                console.warn('[aux-tables]', e.message);
-                next();
-            });
+        if (!auxiliaryTablesPromise) {
+            auxiliaryTablesPromise = pgDb
+                .ensureAuxiliaryTables()
+                .then(() => {
+                    auxiliaryTablesReady = true;
+                })
+                .catch((e) => {
+                    console.warn('[aux-tables]', e.message);
+                })
+                .finally(() => {
+                    auxiliaryTablesPromise = null;
+                });
+        }
+        return auxiliaryTablesPromise.then(() => next());
     }
     next();
 }
@@ -2623,7 +2634,13 @@ function formatCheckInTimeForNotify(at) {
 }
 
 function integrationSettingsJson(data) {
-    const masked = integrationSettings.maskSecretsForClient(data);
+    const raw = data || {};
+    const masked = integrationSettings.maskSecretsForClient(raw);
+    masked.zoho_pass_saved = !!(raw.zoho_pass && String(raw.zoho_pass).trim());
+    masked.whatsapp_token_saved = !!(raw.whatsapp_token && String(raw.whatsapp_token).trim());
+    masked.whatsapp_verify_token_saved = !!(
+        raw.whatsapp_verify_token && String(raw.whatsapp_verify_token).trim()
+    );
     masked.email_configured = integrationSettings.isEmailConfiguredFromSettings();
     masked.email_status = integrationSettings.getEmailConfigStatus();
     masked.whatsapp_configured = integrationSettings.isWhatsAppConfiguredFromSettings();
@@ -2792,26 +2809,7 @@ app.post('/api/admin/integrations/test-email', withIntegrationSettingsLoaded, as
     const to = String((req.body && req.body.to) || '').trim();
     if (!to) return res.status(400).json({ error: 'to email required' });
     const overrides = smtpOverridesFromBody(req.body);
-    const { verifySmtpConnection, sendEmail } = require('./lib/email-service');
-    const verify = await verifySmtpConnection(overrides || undefined);
-    if (!verify.ok) {
-        const errText = [verify.error, verify.hint].filter(Boolean).join(' ');
-        notifEngine.logNotification(db, {
-            event_key: 'INTEGRATION_TEST_EMAIL',
-            channel: 'email',
-            destination: to,
-            status: 'failed',
-            subject: 'VGMF test email',
-            body_preview: 'SMTP verify failed',
-            error: errText
-        });
-        return res.status(503).json({
-            error: verify.error || 'SMTP login failed',
-            hint: verify.hint,
-            skipped: verify.skipped,
-            logged: true
-        });
-    }
+    const { sendEmail } = require('./lib/email-service');
     const subject = 'VGMF test email';
     const html = '<p>SMTP test from seminar admin integrations panel.</p>';
     const r = await sendEmail(to, subject, html, {
@@ -2829,7 +2827,15 @@ app.post('/api/admin/integrations/test-email', withIntegrationSettingsLoaded, as
         body_preview: 'SMTP integration test',
         error: logError
     });
-    if (r.ok) return res.json({ success: true, logged: true, from: verify.from });
+    if (r.ok) {
+        const cfg = integrationSettings.getMailConfig(overrides || undefined);
+        return res.json({
+            success: true,
+            logged: true,
+            from: cfg && cfg.from,
+            user: cfg && cfg.auth && cfg.auth.user
+        });
+    }
     res.status(503).json({
         error: r.error || 'Send failed',
         hint: r.hint,
@@ -4480,6 +4486,19 @@ function parsePositiveUserId(raw) {
     return safeInternalUserRowId(raw);
 }
 
+function resolveDoctorApiUserId(req, res, cb) {
+    const portalHint = String(
+        (req.query && (req.query.userIdString || req.query.portalId)) ||
+            req.params.userId ||
+            ''
+    ).trim();
+    resolveInternalUserId(db, req.params.userId, portalHint, (e, uid) => {
+        if (e) return res.status(500).json({ error: e.message });
+        if (!uid) return res.status(400).json({ error: 'Invalid user' });
+        cb(uid);
+    });
+}
+
 /** Link registrations saved without user_id (bad session) to the signed-in account by email in form_data. */
 function healOrphanRegistrationsForUser(uid, cb) {
     db.get(`SELECT email FROM users WHERE id = ?`, [uid], (e, user) => {
@@ -5455,10 +5474,12 @@ function queryDoctorCertificateTracking(uid, res, sql, retried) {
 
 // Doctor certificate tracking (live check-in + approval status per seminar) — Certificates tab only
 app.get('/api/doctor/certificate-tracking/:userId', withAuxiliaryTables, (req, res) => {
-    const uid = parseInt(req.params.userId, 10);
-    if (!Number.isInteger(uid) || uid < 1) return res.status(400).json({ error: 'Invalid user' });
-    certVerify.ensureCertificateVerifySchema(db, () => {}, () => {
-        queryDoctorCertificateTracking(uid, res, DOCTOR_CERT_TRACKING_SQL, false);
+    resolveDoctorApiUserId(req, res, (uid) => {
+        const runQuery = () => queryDoctorCertificateTracking(uid, res, DOCTOR_CERT_TRACKING_SQL, false);
+        if (process.env.DATABASE_URL) {
+            return runQuery();
+        }
+        certVerify.ensureCertificateVerifySchema(db, () => {}, runQuery);
     });
 });
 
@@ -8610,21 +8631,21 @@ app.post('/api/public/certificate-verify/confirm', (req, res) => {
 
 // Doctor: certificate eligibility for logged-in user
 app.get('/api/doctor/certificates/:userId', (req, res) => {
-    const uid = parseInt(req.params.userId, 10);
-    if (!Number.isInteger(uid) || uid < 1) return res.status(400).json({ error: 'Invalid user id' });
-    db.all(
-        `SELECT uc.*, s.title AS seminar_title, ct.file_path AS template_path, ct.mime_type
-         FROM user_certificates uc
-         LEFT JOIN seminars s ON s.id = uc.seminar_id
-         LEFT JOIN certificate_templates ct ON ct.id = uc.template_id
-         WHERE uc.user_id = ?
-         ORDER BY uc.seminar_id DESC`,
-        [uid],
-        (err, rows) => {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json(rows || []);
-        }
-    );
+    resolveDoctorApiUserId(req, res, (uid) => {
+        db.all(
+            `SELECT uc.*, s.title AS seminar_title, ct.file_path AS template_path, ct.mime_type
+             FROM user_certificates uc
+             LEFT JOIN seminars s ON s.id = uc.seminar_id
+             LEFT JOIN certificate_templates ct ON ct.id = uc.template_id
+             WHERE uc.user_id = ?
+             ORDER BY uc.seminar_id DESC`,
+            [uid],
+            (err, rows) => {
+                if (err) return res.status(500).json({ error: err.message });
+                res.json(rows || []);
+            }
+        );
+    });
 });
 
 function assertAdminPortalActor(adminId, cb) {

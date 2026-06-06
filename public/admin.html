@@ -2083,7 +2083,8 @@
                         <div><label>Host</label><input type="text" id="int-zoho-host" placeholder="smtp.zoho.in" style="width:100%"></div>
                         <div><label>Port</label><input type="number" id="int-zoho-port" placeholder="465" style="width:100%"></div>
                         <div><label>User</label><input type="email" id="int-zoho-user" placeholder="care@vaidyagogate.org" style="width:100%"></div>
-                        <div><label>App password</label><input type="password" id="int-zoho-pass" placeholder="Zoho app password" style="width:100%" autocomplete="new-password"></div>
+                        <div><label>App password</label><input type="password" id="int-zoho-pass" placeholder="Zoho app password" data-empty-placeholder="Zoho app password" style="width:100%" autocomplete="new-password">
+                        <p id="int-zoho-pass-hint" style="font-size:0.78rem;color:#64748b;margin:4px 0 0;"></p></div>
                         <div><label>From</label><input type="email" id="int-zoho-from" placeholder="care@vaidyagogate.org" style="width:100%"></div>
                         <div style="display:flex;gap:8px;align-items:flex-end;"><input type="email" id="int-test-email" placeholder="Test to" style="flex:1"><button type="button" class="btn-primary" style="background:#64748b;padding:8px 12px;" onclick="testIntegrationEmail()">Test email</button></div>
                         <div style="grid-column:1/-1;"><h4 style="margin:8px 0;color:#0c4a6e;">Meta WhatsApp Business</h4>
@@ -2091,7 +2092,8 @@
                         Access token = permanent System User token (not App Secret). Phone number ID from API Setup.<br>
                         <strong>Required for “WhatsApp configured”:</strong> save <em>Access token</em> + <em>Phone number ID</em> below (re-paste token if you only changed other fields).<br>
                         <strong><a href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started" target="_blank" rel="noopener">Cloud API setup</a></p></div>
-                        <div style="grid-column:1/-1;"><label>Access token (System User)</label><input type="password" id="int-wa-token" placeholder="Permanent token — not App Secret" style="width:100%"></div>
+                        <div style="grid-column:1/-1;"><label>Access token (System User)</label><input type="password" id="int-wa-token" placeholder="Permanent token — not App Secret" data-empty-placeholder="Permanent token — not App Secret" style="width:100%">
+                        <p id="int-wa-token-hint" style="font-size:0.78rem;color:#64748b;margin:4px 0 0;"></p></div>
                         <div><label>Phone number ID</label><input type="text" id="int-wa-phone-id" placeholder="1066436679893640" style="width:100%"></div>
                         <div><label>WhatsApp Business Account ID (WABA)</label><input type="text" id="int-wa-waba-id" placeholder="From Meta ? WhatsApp Manager ? Account overview" style="width:100%"></div>
                         <div style="grid-column:1/-1;"><button type="button" class="btn-secondary btn-sm" onclick="checkWhatsAppTemplateOnMeta()">Check template on Meta</button>

@@ -132,7 +132,10 @@
     }
 
     function setUser(portal, user) {
-        if (user && user.id != null) user.id = Number(user.id);
+        if (user && user.id != null) {
+            const n = Number(user.id);
+            if (Number.isInteger(n) && n > 0 && n <= 2147483647) user.id = n;
+        }
         if (user && !user.login_at) user.login_at = user.last_login_at || new Date().toISOString();
         localStorage.setItem(KEYS[portal], JSON.stringify(user));
     }

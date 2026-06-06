@@ -456,6 +456,45 @@ function doctorNumericUserId() {
     return null;
 }
 
+function doctorUserIdQuerySuffix() {
+    const portal = currentUser && currentUser.user_id_string ? String(currentUser.user_id_string).trim() : '';
+    return portal ? '?userIdString=' + encodeURIComponent(portal) : '';
+}
+
+let _ensureDoctorInternalIdPromise = null;
+
+async function ensureDoctorInternalUserId() {
+    const existing = doctorNumericUserId();
+    if (existing) return existing;
+    if (!currentUser) return null;
+    if (_ensureDoctorInternalIdPromise) return _ensureDoctorInternalIdPromise;
+    const portal = String((currentUser.user_id_string || currentUser.id || '').trim());
+    if (!portal) return null;
+    _ensureDoctorInternalIdPromise = (async () => {
+        try {
+            const url =
+                '/api/doctor/registration-overrides/' +
+                encodeURIComponent(portal) +
+                '?userIdString=' +
+                encodeURIComponent(portal);
+            const res = await fetch(url, { cache: 'no-store' });
+            if (!res.ok) return null;
+            const data = await res.json();
+            applyRegistrationOverridesPayload(data);
+            if (data.resolvedUserId) {
+                currentUser.id = data.resolvedUserId;
+                if (typeof PortalAuth !== 'undefined') PortalAuth.setUser('doctor', currentUser);
+            }
+            return doctorNumericUserId();
+        } catch (_) {
+            return null;
+        } finally {
+            _ensureDoctorInternalIdPromise = null;
+        }
+    })();
+    return _ensureDoctorInternalIdPromise;
+}
+
 function requireDoctorUserId() {
     const uid = doctorNumericUserId();
     if (!uid) {
@@ -1152,6 +1191,9 @@ function bootDoctorDashboard(user) {
     currentUser = user;
     window.__doctorResolvedInternalId = doctorNumericUserId();
     applyDoctorModuleAccessFromUser(currentUser);
+    ensureDoctorInternalUserId().then((resolved) => {
+        if (resolved) window.__doctorResolvedInternalId = resolved;
+    });
     fetch('/api/public/portal-urls')
         .then((r) => r.json())
         .then((u) => {
@@ -2238,13 +2280,16 @@ function applyRegistrationOverridesPayload(ovData) {
 }
 
 async function refreshRegistrationOverrides() {
-    const uid = doctorNumericUserId();
-    if (!uid) return;
+    if (!currentUser) return;
     try {
-        const portalId = currentUser && currentUser.user_id_string ? currentUser.user_id_string : '';
+        let uid = doctorNumericUserId();
+        if (!uid) uid = await ensureDoctorInternalUserId();
+        const portalId = currentUser.user_id_string ? String(currentUser.user_id_string).trim() : '';
+        const pathId = uid || portalId || (currentUser.id != null ? String(currentUser.id) : '');
+        if (!pathId) return;
         const ovUrl =
             '/api/doctor/registration-overrides/' +
-            encodeURIComponent(uid) +
+            encodeURIComponent(pathId) +
             (portalId ? '?userIdString=' + encodeURIComponent(portalId) : '');
         const ovRes = await fetch(ovUrl, { cache: 'no-store' });
         if (ovRes.ok) {
@@ -2534,8 +2579,7 @@ function switchTab(tabId, menuEl) {
         loadDoctorEventTickets();
     }
     if (tabId === 'tab-certificate') {
-        loadDoctorCertificateTracking();
-        loadDoctorCertificates();
+        loadDoctorCertificateModule();
         startCertTrackingPoll();
     }
     if (tabId === 'tab-volunteer') {
@@ -3574,33 +3618,38 @@ function doctorCertificatePendingTemplateBlock() {
     );
 }
 
+async function loadDoctorCertificateModule() {
+    await loadDoctorCertificateTracking();
+    await loadDoctorCertificates();
+}
+
 async function loadDoctorCertificates() {
     const wrap = document.getElementById('doctor-certificates-wrap');
     if (!wrap || !currentUser) return;
     wrap.innerHTML = '<p style="color:#64748b;text-align:center;">Loading…</p>';
     try {
-        const uid = doctorNumericUserId();
+        const uid = await ensureDoctorInternalUserId();
         if (!uid) {
             wrap.innerHTML = '<p style="color:#b91c1c;">Please sign out and sign in again.</p>';
             return;
         }
-        const [res, vres, trackRes] = await Promise.all([
-            fetch('/api/doctor/certificates/' + uid),
-            fetch('/api/doctor/volunteer-certificates/' + uid),
-            fetch('/api/doctor/certificate-tracking/' + uid, { cache: 'no-store' })
+        const idQ = doctorUserIdQuerySuffix();
+        const [res, vres] = await Promise.all([
+            fetch('/api/doctor/certificates/' + uid + idQ),
+            fetch('/api/doctor/volunteer-certificates/' + uid + idQ)
         ]);
         const rows = await res.json().catch(() => []);
         const vrows = await vres.json().catch(() => []);
-        const trackingRows = await trackRes.json().catch(() => []);
-        window.__doctorCertTrackingRows = Array.isArray(trackingRows) ? trackingRows : [];
+        const trackingRows = Array.isArray(window.__doctorCertTrackingRows) ? window.__doctorCertTrackingRows : [];
+        window.__doctorCertTrackingRows = trackingRows;
         const trackBySeminar = new Map();
         const trackByCertId = new Map();
-        window.__doctorCertTrackingRows.forEach((tr) => {
+        trackingRows.forEach((tr) => {
             if (tr.seminarId != null) trackBySeminar.set(Number(tr.seminarId), tr);
             if (tr.certId != null) trackByCertId.set(Number(tr.certId), tr);
         });
         const all = [...(Array.isArray(rows) ? rows : []), ...(Array.isArray(vrows) ? vrows.map((v) => ({ ...v, _volunteer: true })) : [])];
-        const paidTracking = window.__doctorCertTrackingRows.filter((tr) => tr.paid);
+        const paidTracking = trackingRows.filter((tr) => tr.paid);
         if (!all.length && !paidTracking.length) {
             wrap.innerHTML = doctorCertificateLockedBlock();
             stopDoctorCertCountdownTimer();
@@ -5419,13 +5468,15 @@ async function loadDoctorCertificateTracking(quiet) {
         live.style.color = '#64748b';
     }
     try {
-        const uid = doctorNumericUserId();
+        const uid = await ensureDoctorInternalUserId();
         if (!uid) {
             wrap.innerHTML =
                 '<p style="color:#b91c1c;text-align:center;">Session invalid. Please sign out and sign in again.</p>';
             return;
         }
-        const res = await fetch('/api/doctor/certificate-tracking/' + uid, { cache: 'no-store' });
+        const res = await fetch('/api/doctor/certificate-tracking/' + uid + doctorUserIdQuerySuffix(), {
+            cache: 'no-store'
+        });
         let rows = [];
         let parseFailed = false;
         if (window.HttpJson) {
