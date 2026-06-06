@@ -4,6 +4,7 @@ let __adminLoginEmailOtpToken = null;
 let __adminBehalfSaveTimer = null;
 let __adminSensitivePhoneOtpToken = null;
 let __adminSensitiveEmailOtpToken = null;
+let currentCaseMarkingDeadline = null;
 let __requireAdminSensitiveOtp = false;
 let __requireBehalfApplicantOtp = true;
 
@@ -4636,6 +4637,7 @@ async function openAdminCaseDetail(subId) {
             window.__caseCriteriaDefs = scoresPayload.criteria;
         }
         const sub = data.submission;
+        currentCaseMarkingDeadline = sub.marking_deadline || null;
         let caseFormJsonText = sub.form_data || '{}';
         try {
             const parsedFd =
@@ -4717,8 +4719,8 @@ async function openAdminCaseDetail(subId) {
             </div>
             <div style="margin:12px 0;">
             <label><strong>Judge marking deadline (IST)</strong></label>
-            <input type="datetime-local" id="case-marking-deadline" style="width:100%;max-width:320px;padding:8px;margin-top:6px;">
-            <p class="muted" style="font-size:0.82rem;margin:6px 0;">Judges can submit marks until this date/time. After that, scoring is blocked. Required when assigning judges.</p>
+            <input type="datetime-local" id="case-marking-deadline" style="width:100%;max-width:320px;padding:8px;margin-top:6px;" required>
+            <p class="muted" style="font-size:0.82rem;margin:6px 0;">Judges can submit marks until this date/time (IST). After that, scoring is blocked. Required when assigning judges — use <strong>Save deadline only</strong> first if needed.</p>
             ${sub.marking_deadline ? `<p style="font-size:0.85rem;color:#4338ca;margin:4px 0;">Saved deadline: <strong>${escAdmin(window.PortalDateTime && window.PortalDateTime.format ? window.PortalDateTime.format(sub.marking_deadline, { withTime: true }) : sub.marking_deadline)}</strong></p>` : ''}
             <button type="button" class="btn-secondary btn-sm" style="margin-top:6px;" onclick="saveCaseMarkingDeadline(${sub.id})">Save deadline only</button>
             </div>
@@ -4777,6 +4779,8 @@ async function openAdminCaseDetail(subId) {
         const mdEl = document.getElementById('case-marking-deadline');
         if (mdEl && sub.marking_deadline && window.PortalDateTime && window.PortalDateTime.toDatetimeLocal) {
             mdEl.value = window.PortalDateTime.toDatetimeLocal(sub.marking_deadline);
+        } else if (mdEl && !sub.marking_deadline) {
+            mdEl.value = '';
         }
     } catch (e) {
         console.error(e);
@@ -4851,29 +4855,44 @@ async function adminTransferSupportTicket() {
 function readCaseMarkingDeadlineForApi() {
     const el = document.getElementById('case-marking-deadline');
     const raw = el && el.value ? String(el.value).trim() : '';
-    if (!raw) return null;
-    if (window.PortalDateTime && window.PortalDateTime.fromDatetimeLocal) {
-        return window.PortalDateTime.fromDatetimeLocal(raw);
+    if (raw) {
+        if (window.PortalDateTime && window.PortalDateTime.fromDatetimeLocal) {
+            return window.PortalDateTime.fromDatetimeLocal(raw);
+        }
+        return raw;
     }
-    return raw;
+    if (currentCaseMarkingDeadline) return currentCaseMarkingDeadline;
+    return null;
 }
 
 async function saveCaseMarkingDeadline(subId) {
     const markingDeadline = readCaseMarkingDeadlineForApi();
-    if (!markingDeadline) return alert('Set judge marking deadline (date and time, IST).');
+    if (!markingDeadline) {
+        return alert(
+            'Pick a judge marking deadline (date and time, IST) in the field above, then click Save deadline only — or Assign judges (deadline is required).'
+        );
+    }
     try {
         const res = await fetch('/api/admin/case/submissions/' + subId + '/marking-deadline', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ markingDeadline })
         });
-        const data = await res.json();
-        if (!res.ok) return alert(data.error || 'Save failed');
+        let data = {};
+        try {
+            data = await res.json();
+        } catch (_) {
+            data = {};
+        }
+        if (!res.ok) {
+            return alert(data.error || 'Save failed (HTTP ' + res.status + '). Ensure the deadline is in the future (IST).');
+        }
+        currentCaseMarkingDeadline = data.markingDeadline || markingDeadline;
         alert('Marking deadline saved: ' + (data.markingDeadlineDisplay || markingDeadline));
         openAdminCaseDetail(subId);
     } catch (e) {
         console.error(e);
-        alert('Network error');
+        alert('Network error — could not save marking deadline.');
     }
 }
 

@@ -2512,6 +2512,7 @@ let extendedRoutesMounted = false;
 function mountExtendedRoutes() {
     if (extendedRoutesMounted) return;
     extendedRoutesMounted = true;
+    caseJudgeMarkingReminders.ensureSchema(db, () => {});
     casePresentation.registerCasePresentationRoutes(app, {
         db,
         upload: caseUpload,
