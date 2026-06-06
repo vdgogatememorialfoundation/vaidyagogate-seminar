@@ -2775,18 +2775,34 @@ app.post('/api/admin/integrations/whatsapp-event-templates', withIntegrationSett
 
 app.post('/api/admin/integrations', withIntegrationSettingsLoaded, (req, res) => {
     const body = req.body || {};
+    const passwordUpdateAttempted =
+        body.zoho_pass != null &&
+        String(body.zoho_pass).trim() &&
+        !integrationSettings.isMaskedSecretValue(body.zoho_pass);
     integrationSettings.saveToDb(db, body, (err, merged) => {
         if (err) return res.status(500).json({ error: err.message });
         if (body.public_base_url) {
             upsertGlobalSetting('domain', String(body.public_base_url).replace(/^https?:\/\//, ''), () => {});
         }
+        const emailConfigured = integrationSettings.isEmailConfiguredFromSettings();
+        const emailStatus = integrationSettings.getEmailConfigStatus();
+        let smtpWarning = null;
+        if (!emailConfigured && (body.zoho_host || body.zoho_user)) {
+            smtpWarning =
+                passwordUpdateAttempted && !(merged && merged.zoho_pass)
+                    ? 'App password could not be saved — paste it again and click Save.'
+                    : 'Paste your Zoho app-specific password and click Save API keys & messaging.';
+        }
         notifEngine.syncOtpNotificationDefaults(db, body, () => {
             res.json({
                 success: true,
                 settings: integrationSettingsJson(merged),
-                email_configured: integrationSettings.isEmailConfiguredFromSettings(),
-                email_status: integrationSettings.getEmailConfigStatus(),
-                whatsapp_configured: integrationSettings.isWhatsAppConfiguredFromSettings()
+                email_configured: emailConfigured,
+                email_status: emailStatus,
+                whatsapp_configured: integrationSettings.isWhatsAppConfiguredFromSettings(),
+                password_saved: !!(merged && merged.zoho_pass && String(merged.zoho_pass).trim()),
+                password_update_attempted: !!passwordUpdateAttempted,
+                smtp_warning: smtpWarning
             });
         });
     });
@@ -2809,6 +2825,13 @@ app.post('/api/admin/integrations/test-email', withIntegrationSettingsLoaded, as
     const to = String((req.body && req.body.to) || '').trim();
     if (!to) return res.status(400).json({ error: 'to email required' });
     const overrides = smtpOverridesFromBody(req.body);
+    if (!integrationSettings.isEmailConfiguredFromSettings()) {
+        return res.status(400).json({
+            error: 'SMTP password is not saved on the server yet.',
+            hint:
+                'Paste your Zoho app-specific password, click Save API keys & messaging, wait for the green saved badge, then Test email again.'
+        });
+    }
     const { sendEmail } = require('./lib/email-service');
     const subject = 'VGMF test email';
     const html = '<p>SMTP test from seminar admin integrations panel.</p>';

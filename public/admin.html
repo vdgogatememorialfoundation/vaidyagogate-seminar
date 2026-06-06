@@ -2083,8 +2083,12 @@
                         <div><label>Host</label><input type="text" id="int-zoho-host" placeholder="smtp.zoho.in" style="width:100%"></div>
                         <div><label>Port</label><input type="number" id="int-zoho-port" placeholder="465" style="width:100%"></div>
                         <div><label>User</label><input type="email" id="int-zoho-user" placeholder="care@vaidyagogate.org" style="width:100%"></div>
-                        <div><label>App password</label><input type="password" id="int-zoho-pass" placeholder="Zoho app password" data-empty-placeholder="Zoho app password" style="width:100%" autocomplete="new-password">
-                        <p id="int-zoho-pass-hint" style="font-size:0.78rem;color:#64748b;margin:4px 0 0;"></p></div>
+                        <div style="grid-column:1/-1;">
+                            <label>App password (Zoho)</label>
+                            <div id="int-zoho-pass-saved-badge" style="margin:6px 0 8px;padding:8px 12px;border-radius:8px;background:#fff7ed;border:1px solid #fed7aa;font-size:0.88rem;font-weight:600;color:#b45309;">Not saved on server yet</div>
+                            <input type="password" id="int-zoho-pass-new" placeholder="Paste Zoho app-specific password here, then Save" style="width:100%;" autocomplete="off" spellcheck="false">
+                            <p id="int-zoho-pass-hint" style="font-size:0.78rem;color:#64748b;margin:6px 0 0;line-height:1.45;">Use an app-specific password from Zoho Mail → Security → App Passwords (not your normal login password).</p>
+                        </div>
                         <div><label>From</label><input type="email" id="int-zoho-from" placeholder="care@vaidyagogate.org" style="width:100%"></div>
                         <div style="display:flex;gap:8px;align-items:flex-end;"><input type="email" id="int-test-email" placeholder="Test to" style="flex:1"><button type="button" class="btn-primary" style="background:#64748b;padding:8px 12px;" onclick="testIntegrationEmail()">Test email</button></div>
                         <div style="grid-column:1/-1;"><h4 style="margin:8px 0;color:#0c4a6e;">Meta WhatsApp Business</h4>
@@ -2092,8 +2096,12 @@
                         Access token = permanent System User token (not App Secret). Phone number ID from API Setup.<br>
                         <strong>Required for “WhatsApp configured”:</strong> save <em>Access token</em> + <em>Phone number ID</em> below (re-paste token if you only changed other fields).<br>
                         <strong><a href="https://developers.facebook.com/docs/whatsapp/cloud-api/get-started" target="_blank" rel="noopener">Cloud API setup</a></p></div>
-                        <div style="grid-column:1/-1;"><label>Access token (System User)</label><input type="password" id="int-wa-token" placeholder="Permanent token — not App Secret" data-empty-placeholder="Permanent token — not App Secret" style="width:100%">
-                        <p id="int-wa-token-hint" style="font-size:0.78rem;color:#64748b;margin:4px 0 0;"></p></div>
+                        <div style="grid-column:1/-1;">
+                            <label>Access token (System User)</label>
+                            <div id="int-wa-token-saved-badge" style="margin:6px 0 8px;padding:8px 12px;border-radius:8px;background:#f8fafc;border:1px solid #e2e8f0;font-size:0.88rem;font-weight:600;color:#64748b;">WhatsApp token not saved yet</div>
+                            <input type="password" id="int-wa-token-new" placeholder="Paste permanent System User token here, then Save" style="width:100%;" autocomplete="off" spellcheck="false">
+                            <p id="int-wa-token-hint" style="font-size:0.78rem;color:#64748b;margin:6px 0 0;line-height:1.45;"></p>
+                        </div>
                         <div><label>Phone number ID</label><input type="text" id="int-wa-phone-id" placeholder="1066436679893640" style="width:100%"></div>
                         <div><label>WhatsApp Business Account ID (WABA)</label><input type="text" id="int-wa-waba-id" placeholder="From Meta ? WhatsApp Manager ? Account overview" style="width:100%"></div>
                         <div style="grid-column:1/-1;"><button type="button" class="btn-secondary btn-sm" onclick="checkWhatsAppTemplateOnMeta()">Check template on Meta</button>
@@ -2626,6 +2634,6 @@
     <link rel="stylesheet" href="/css/book-track.css?v=20260529stg">
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
-    <script src="/js/admin.js?v=20260528mail"></script>
+    <script src="/js/admin.js?v=20260528smtp2"></script>
 </body>
 </html>

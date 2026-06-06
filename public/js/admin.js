@@ -7468,59 +7468,89 @@ function isIntegrationSecretMask(v) {
     return s === INTEGRATION_SECRET_MASK || /^[\*•·]+$/.test(s);
 }
 
-function applyIntegrationSecretField(el, saved, emptyPlaceholder) {
-    if (!el) return;
-    if (saved) {
-        el.value = INTEGRATION_SECRET_MASK;
-        el.placeholder = 'Saved — leave as ******** to keep, or paste a new value to replace';
-        el.dataset.saved = '1';
-    } else {
-        if (isIntegrationSecretMask(el.value)) el.value = '';
-        el.placeholder = emptyPlaceholder || el.getAttribute('data-empty-placeholder') || '';
-        delete el.dataset.saved;
-    }
+function readIntegrationZohoPassNew() {
+    const el = document.getElementById('int-zoho-pass-new');
+    const v = el ? String(el.value || '').trim() : '';
+    return v && !isIntegrationSecretMask(v) ? v : '';
 }
 
-function updateIntegrationSecretHints(s) {
+function readIntegrationWaTokenNew() {
+    const el = document.getElementById('int-wa-token-new');
+    const v = el ? String(el.value || '').trim() : '';
+    return v && !isIntegrationSecretMask(v) ? v : '';
+}
+
+function renderIntegrationSecretStatus(s) {
+    const settings = s || {};
+    const emailSaved = !!(settings.email_configured || settings.zoho_pass_saved);
+    const waSaved = !!(settings.whatsapp_configured || settings.whatsapp_token_saved);
+    window.__integrationZohoPassSaved = emailSaved;
+    window.__integrationWaTokenSaved = waSaved;
+
+    const passBadge = document.getElementById('int-zoho-pass-saved-badge');
+    if (passBadge) {
+        if (emailSaved) {
+            passBadge.textContent = '✓ App password saved on server';
+            passBadge.style.background = '#ecfdf5';
+            passBadge.style.borderColor = '#a7f3d0';
+            passBadge.style.color = '#15803d';
+        } else {
+            passBadge.textContent = '⚠ App password not saved on server yet';
+            passBadge.style.background = '#fff7ed';
+            passBadge.style.borderColor = '#fed7aa';
+            passBadge.style.color = '#b45309';
+        }
+    }
+    const passNew = document.getElementById('int-zoho-pass-new');
+    if (passNew) {
+        passNew.placeholder = emailSaved
+            ? 'Leave empty to keep saved password — paste here only to replace it'
+            : 'Paste Zoho app-specific password here, then Save API keys & messaging';
+    }
     const passHint = document.getElementById('int-zoho-pass-hint');
     if (passHint) {
-        passHint.textContent =
-            s && (s.zoho_pass_saved || s.email_configured)
-                ? 'App password is saved on the server. Leave ******** unchanged unless you want to replace it.'
-                : 'Enter your Zoho app-specific password, then click Save API keys & messaging.';
-        passHint.style.color = s && (s.zoho_pass_saved || s.email_configured) ? '#15803d' : '#64748b';
+        passHint.textContent = emailSaved
+            ? 'Saved password stays on the server. You do not need to re-enter it to test email.'
+            : 'Use an app-specific password from Zoho Mail → Security → App Passwords (not your normal login password).';
+        passHint.style.color = emailSaved ? '#15803d' : '#64748b';
+    }
+
+    const waBadge = document.getElementById('int-wa-token-saved-badge');
+    if (waBadge) {
+        if (waSaved) {
+            waBadge.textContent = '✓ WhatsApp access token saved on server';
+            waBadge.style.background = '#ecfdf5';
+            waBadge.style.borderColor = '#a7f3d0';
+            waBadge.style.color = '#15803d';
+        } else {
+            waBadge.textContent = 'WhatsApp access token not saved yet';
+            waBadge.style.background = '#f8fafc';
+            waBadge.style.borderColor = '#e2e8f0';
+            waBadge.style.color = '#64748b';
+        }
+    }
+    const waNew = document.getElementById('int-wa-token-new');
+    if (waNew) {
+        waNew.placeholder = waSaved
+            ? 'Leave empty to keep saved token — paste here only to replace it'
+            : 'Paste permanent System User token here, then Save API keys & messaging';
     }
     const waHint = document.getElementById('int-wa-token-hint');
     if (waHint) {
-        waHint.textContent =
-            s && (s.whatsapp_token_saved || s.whatsapp_configured)
-                ? 'Access token is saved. Leave ******** unchanged unless replacing it.'
-                : 'Paste your permanent System User token, then save.';
-        waHint.style.color = s && (s.whatsapp_token_saved || s.whatsapp_configured) ? '#15803d' : '#64748b';
+        waHint.textContent = waSaved
+            ? 'Saved token stays on the server until you paste a replacement and save.'
+            : 'Paste your permanent System User token from Meta, then save.';
+        waHint.style.color = waSaved ? '#15803d' : '#64748b';
     }
 }
 
 function applySavedIntegrationSecrets(data) {
     const settings = (data && data.settings) || data || {};
-    const emailSaved = !!(data && data.email_configured) || !!settings.zoho_pass_saved;
-    const waSaved = !!(data && data.whatsapp_configured) || !!settings.whatsapp_token_saved;
-    const verifySaved = !!settings.whatsapp_verify_token_saved || !!settings.whatsapp_verify_token;
-    applyIntegrationSecretField(document.getElementById('int-zoho-pass'), emailSaved, 'Zoho app password');
-    applyIntegrationSecretField(
-        document.getElementById('int-wa-token'),
-        waSaved,
-        'Permanent token — not App Secret'
-    );
-    applyIntegrationSecretField(
-        document.getElementById('int-wa-verify'),
-        verifySaved,
-        'e.g. vgmf_whatsapp_verify_2026 — must match Meta exactly'
-    );
-    updateIntegrationSecretHints({
-        email_configured: emailSaved,
-        zoho_pass_saved: emailSaved,
-        whatsapp_configured: waSaved,
-        whatsapp_token_saved: waSaved
+    renderIntegrationSecretStatus({
+        email_configured: !!(data && data.email_configured) || !!settings.zoho_pass_saved,
+        zoho_pass_saved: !!settings.zoho_pass_saved || !!(data && data.email_configured),
+        whatsapp_configured: !!(data && data.whatsapp_configured) || !!settings.whatsapp_token_saved,
+        whatsapp_token_saved: !!settings.whatsapp_token_saved || !!(data && data.whatsapp_configured)
     });
 }
 
@@ -7603,6 +7633,17 @@ async function saveIntegrationSettings() {
     const seminarHost = (document.getElementById('int-seminar-host') || {}).value.trim();
     let publicUrl = (document.getElementById('int-public-base-url') || {}).value.trim();
     if (!publicUrl && seminarHost) publicUrl = 'https://' + seminarHost.replace(/^https?:\/\//, '');
+    const newZohoPass = readIntegrationZohoPassNew();
+    const newWaToken = readIntegrationWaTokenNew();
+    const zohoHost = (document.getElementById('int-zoho-host') || {}).value.trim();
+    const zohoUser = (document.getElementById('int-zoho-user') || {}).value.trim();
+    if ((zohoHost || zohoUser) && !window.__integrationZohoPassSaved && !newZohoPass) {
+        setAdminSettingsSaveMsg(
+            'Enter your Zoho app-specific password in the field above, then click Save again.',
+            true
+        );
+        return;
+    }
     const body = {
         public_base_url: publicUrl,
         wix_site_url: (document.getElementById('int-wix-url') || {}).value.trim(),
@@ -7610,12 +7651,10 @@ async function saveIntegrationSettings() {
         admin_host: (document.getElementById('int-admin-host') || {}).value.trim(),
         judge_host: (document.getElementById('int-judge-host') || {}).value.trim(),
         admin_contact_email: (document.getElementById('int-admin-contact') || {}).value.trim(),
-        zoho_host: (document.getElementById('int-zoho-host') || {}).value.trim(),
+        zoho_host: zohoHost,
         zoho_port: (document.getElementById('int-zoho-port') || {}).value.trim(),
-        zoho_user: (document.getElementById('int-zoho-user') || {}).value.trim(),
-        zoho_pass: (document.getElementById('int-zoho-pass') || {}).value,
+        zoho_user: zohoUser,
         zoho_from: (document.getElementById('int-zoho-from') || {}).value.trim(),
-        whatsapp_token: (document.getElementById('int-wa-token') || {}).value,
         whatsapp_phone_number_id: (document.getElementById('int-wa-phone-id') || {}).value.trim(),
         whatsapp_business_account_id: (document.getElementById('int-wa-waba-id') || {}).value.trim(),
         whatsapp_verify_token: (document.getElementById('int-wa-verify') || {}).value,
@@ -7623,6 +7662,8 @@ async function saveIntegrationSettings() {
         whatsapp_otp_template_name: (document.getElementById('int-wa-otp-template') || {}).value.trim(),
         otp_email_subject: (document.getElementById('int-otp-email-subject') || {}).value.trim()
     };
+    if (newZohoPass) body.zoho_pass = newZohoPass;
+    if (newWaToken) body.whatsapp_token = newWaToken;
     try {
         const res = await fetch('/api/admin/integrations', {
             method: 'POST',
@@ -7634,15 +7675,20 @@ async function saveIntegrationSettings() {
             setAdminSettingsSaveMsg(data.error || 'Save failed', true);
             return;
         }
+        const passNewEl = document.getElementById('int-zoho-pass-new');
+        if (passNewEl) passNewEl.value = '';
+        const waNewEl = document.getElementById('int-wa-token-new');
+        if (waNewEl) waNewEl.value = '';
         applySavedIntegrationSecrets(data);
         await loadIntegrationSettings();
         const st = data.email_status;
         const emailHint =
             data.email_configured
-                ? 'Email is configured (SMTP password saved).'
-                : st && Array.isArray(st.missing) && st.missing.length
-                  ? 'Email still missing: ' + st.missing.join(', ') + '. Enter SMTP password and save again.'
-                  : 'Email is not configured — enter Zoho host, user, and password, then save.';
+                ? 'Email is configured (app password saved on server).'
+                : data.smtp_warning ||
+                  (st && Array.isArray(st.missing) && st.missing.length
+                      ? 'Email still missing: ' + st.missing.join(', ') + '. Paste app password and save again.'
+                      : 'Email is not configured — paste Zoho app password and save.');
         const wst = data.settings && data.settings.whatsapp_status;
         const waHint = data.whatsapp_configured
             ? 'WhatsApp is configured.'
@@ -7656,16 +7702,12 @@ async function saveIntegrationSettings() {
 }
 
 function integrationFormSmtpPayload() {
-    const passEl = document.getElementById('int-zoho-pass');
-    const pass = passEl ? passEl.value : '';
-    const body = {
+    return {
         zoho_host: (document.getElementById('int-zoho-host') || {}).value.trim(),
         zoho_port: (document.getElementById('int-zoho-port') || {}).value.trim(),
         zoho_user: (document.getElementById('int-zoho-user') || {}).value.trim(),
         zoho_from: (document.getElementById('int-zoho-from') || {}).value.trim()
     };
-    if (pass && pass.trim() && !isIntegrationSecretMask(pass)) body.zoho_pass = pass.trim();
-    return body;
 }
 
 async function testIntegrationEmail() {
@@ -7675,14 +7717,17 @@ async function testIntegrationEmail() {
     if (!smtp.zoho_host || !smtp.zoho_user) {
         return alert('Fill Zoho Host and User (full mailbox e.g. care@vaidyagogate.org), then try again.');
     }
-    const passEl = document.getElementById('int-zoho-pass');
-    if (passEl && passEl.value.trim() && !isIntegrationSecretMask(passEl.value)) {
+    const pendingPass = readIntegrationZohoPassNew();
+    if (pendingPass) {
         const saveFirst = confirm(
-            'Save the new app password before testing? (Recommended — click OK to save, then test.)'
+            'Save the app password before testing? Click OK to save, then the test will run.'
         );
-        if (saveFirst) {
-            await saveIntegrationSettings();
-        }
+        if (saveFirst) await saveIntegrationSettings();
+    }
+    if (!window.__integrationZohoPassSaved) {
+        return alert(
+            'SMTP password is not saved yet.\n\n1. Paste your Zoho app-specific password\n2. Click Save API keys & messaging\n3. Wait for the green “App password saved on server” badge\n4. Then click Test email'
+        );
     }
     const res = await fetch('/api/admin/integrations/test-email', {
         method: 'POST',
