@@ -4028,12 +4028,15 @@ app.get('/api/public/participants/:seminarId', (req, res) => {
             }
             db.all(
                 `SELECT r.application_no, r.status, r.form_data, r.doc_review_json,
-                        u.first_name, u.middle_name, u.last_name, u.user_id_string,
-                        o.status AS payment_status, o.payment_date
+                        u.first_name, u.middle_name, u.last_name, u.user_id_string, u.phone,
+                        o.status AS payment_status, o.payment_date,
+                        t.ticket_id_string
                  FROM registrations r
                  JOIN users u ON r.user_id = u.id
-                 INNER JOIN orders o ON o.registration_id = r.id AND o.status = 'success'
+                 INNER JOIN orders o ON o.registration_id = r.id AND lower(trim(o.status)) = 'success'
+                 LEFT JOIN tickets t ON t.order_id = o.id
                  WHERE r.seminar_id = ?
+                   AND r.status NOT IN ('cancelled','rejected','submitted','waitlisted','pending_approval','revision_required')
                  ORDER BY r.application_no ASC`,
                 [sid],
                 (e2, rows) => {
@@ -4044,18 +4047,29 @@ app.get('/api/public/participants/:seminarId', (req, res) => {
                             order_status: r.payment_status
                         }))
                     );
-                    let list = confirmed.map((r) => {
+                    const seenApps = new Set();
+                    let list = confirmed
+                        .filter((r) => {
+                            const key = String(r.application_no || '');
+                            if (!key || seenApps.has(key)) return false;
+                            seenApps.add(key);
+                            return true;
+                        })
+                        .map((r) => {
                         let fd = {};
                         try {
                             fd = JSON.parse(r.form_data || '{}');
                         } catch (_) {}
+                        const nameFromUser = [r.first_name, r.middle_name, r.last_name].filter(Boolean).join(' ').trim();
+                        const nameFromForm = [fd.fname, fd.mname, fd.lname].filter(Boolean).join(' ').trim();
                         return {
                             applicationNo: r.application_no,
-                            name: [r.first_name, r.middle_name, r.last_name].filter(Boolean).join(' '),
+                            name: nameFromUser || nameFromForm,
                             city: fd.city || '',
                             state: fd.state || '',
+                            phone: fd.phone || r.phone || '',
                             status: r.status,
-                            paid: r.payment_status === 'success',
+                            paid: String(r.payment_status || '').toLowerCase() === 'success',
                             userIdString: r.user_id_string
                         };
                     });
@@ -4064,7 +4078,10 @@ app.get('/api/public/participants/:seminarId', (req, res) => {
                             (p) =>
                                 String(p.applicationNo || '').toLowerCase().includes(q) ||
                                 String(p.name || '').toLowerCase().includes(q) ||
-                                String(p.userIdString || '').toLowerCase().includes(q)
+                                String(p.userIdString || '').toLowerCase().includes(q) ||
+                                String(p.city || '').toLowerCase().includes(q) ||
+                                String(p.state || '').toLowerCase().includes(q) ||
+                                String(p.phone || '').toLowerCase().includes(q)
                         );
                     }
                     res.json({ seminarTitle: sem.title, participants: list });
