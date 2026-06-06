@@ -673,26 +673,32 @@ function ensureCriticalUserColumns(callback) {
                 ignoreDup(ban2);
                 db.run(`ALTER TABLE users ADD COLUMN banned_at TEXT`, (ban3) => {
                     ignoreDup(ban3);
-        db.run(`ALTER TABLE users ADD COLUMN user_role TEXT`, (err2) => {
-            ignoreDup(err2);
-            db.run(`ALTER TABLE users ADD COLUMN admin_modules TEXT`, (err3) => {
-                ignoreDup(err3);
-                db.run(`ALTER TABLE users ADD COLUMN last_login_at TEXT`, (err4) => {
-                    ignoreDup(err4);
-                    db.run(`ALTER TABLE users ADD COLUMN activated_at TEXT`, (err4b) => {
-                        ignoreDup(err4b);
-                        userAccountLifecycle.backfillAccountActivatedAt(db, () => {});
-                        db.run(`ALTER TABLE users ADD COLUMN doctor_category TEXT DEFAULT 'regular'`, (err5) => {
-                            ignoreDup(err5);
-                            db.run(`ALTER TABLE users ADD COLUMN doctor_modules TEXT`, (err6) => {
-                                ignoreDup(err6);
-                                afterUsers();
+                    db.run(`ALTER TABLE users ADD COLUMN user_role TEXT`, (err2) => {
+                        ignoreDup(err2);
+                        db.run(`ALTER TABLE users ADD COLUMN admin_modules TEXT`, (err3) => {
+                            ignoreDup(err3);
+                            db.run(`ALTER TABLE users ADD COLUMN staff_modules TEXT`, (err3b) => {
+                                ignoreDup(err3b);
+                                db.run(`ALTER TABLE users ADD COLUMN last_login_at TEXT`, (err4) => {
+                                    ignoreDup(err4);
+                                    db.run(`ALTER TABLE users ADD COLUMN activated_at TEXT`, (err4b) => {
+                                        ignoreDup(err4b);
+                                        userAccountLifecycle.backfillAccountActivatedAt(db, () => {});
+                                        db.run(
+                                            `ALTER TABLE users ADD COLUMN doctor_category TEXT DEFAULT 'regular'`,
+                                            (err5) => {
+                                                ignoreDup(err5);
+                                                db.run(`ALTER TABLE users ADD COLUMN doctor_modules TEXT`, (err6) => {
+                                                    ignoreDup(err6);
+                                                    afterUsers();
+                                                });
+                                            }
+                                        );
+                                    });
+                                });
                             });
                         });
                     });
-                });
-            });
-        });
                 });
             });
         });

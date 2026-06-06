@@ -2215,13 +2215,14 @@ function proceedFromSeminarTnc() {
 async function startRegistration(seminarId, opts) {
     opts = opts || {};
     await refreshRegistrationOverrides();
-    const volunteerBypass = !!opts.volunteerBypass;
+    const editMode = !!opts.editMode;
+    const volunteerBypass = !!opts.volunteerBypass || editMode;
     const waitlistMode = !!opts.waitlist;
     const sid = Number(seminarId);
     const s = activeSeminars.find((x) => Number(x.id) === sid);
     const seminarTitle = s && s.title ? s.title : 'Seminar';
     const regSet = window.__userRegisteredSeminarIds;
-    if (regSet && regSet.has(sid)) {
+    if (regSet && regSet.has(sid) && !editMode) {
         alert('You have already registered for this seminar. Track your application under Track seminar applications.');
         switchTab('tab-applications');
         return;
@@ -2298,6 +2299,16 @@ async function startRegistration(seminarId, opts) {
     if (emailEl && currentUser && currentUser.email) emailEl.value = currentUser.email;
     if (phoneEl && currentUser && currentUser.phone) phoneEl.value = currentUser.phone;
 
+    if (opts.prefillFormData) {
+        await applyRegistrationFormData(opts.prefillFormData);
+        if (editMode) {
+            const tnc = document.getElementById('tnc');
+            if (tnc) tnc.checked = true;
+            nextStep(1);
+            return;
+        }
+    }
+
     nextStep(hasTerms || window.__seminarCancellationSummary ? 0 : 1);
 }
 
@@ -2317,6 +2328,7 @@ async function startRegistrationVolunteerFlow(seminarId) {
 
 function cancelRegistration() {
     activeSeminarIdForReg = null;
+    window.editingApplicationId = null;
     window.__registrationJoinWaitlist = false;
     window.__draftApplicationNo = null;
     window.__fieldOtpTokens = {};
@@ -2633,9 +2645,11 @@ async function initDoctorVolunteerNav() {
     if (!currentUser) return;
     try {
         const res = await fetch('/api/doctor/volunteer-assignments/' + currentUser.id);
-        const rows = await res.json();
+        const rows = await res.json().catch(function () {
+            return [];
+        });
         const nav = document.getElementById('nav-volunteer');
-        if (nav && Array.isArray(rows) && rows.length) {
+        if (nav && res.ok && Array.isArray(rows) && rows.length) {
             nav.classList.remove('hidden');
         }
     } catch (e) {
@@ -2649,8 +2663,17 @@ async function loadDoctorVolunteerPanel() {
     panel.innerHTML = '<p style="color:#64748b;">Loading…</p>';
     try {
         const res = await fetch('/api/doctor/volunteer-assignments/' + currentUser.id);
-        const rows = await res.json();
-        if (!rows.length) {
+        const rows = await res.json().catch(function () {
+            return {};
+        });
+        if (!res.ok) {
+            panel.innerHTML =
+                '<p style="color:#b91c1c;">' +
+                escapeHtml((rows && rows.error) || 'Could not load volunteer assignments.') +
+                '</p>';
+            return;
+        }
+        if (!Array.isArray(rows) || !rows.length) {
             panel.innerHTML = '<p>No volunteer assignments.</p>';
             return;
         }
@@ -4075,8 +4098,9 @@ async function verifyNcism() {
 
 async function submitApplication() {
     await refreshRegistrationOverrides();
+    const isEdit = !!window.editingApplicationId;
     const sidCheck = parseInt(activeSeminarIdForReg, 10);
-    if (Number.isInteger(sidCheck) && sidCheck > 0 && !isOverrideRegistrationActive(sidCheck)) {
+    if (!isEdit && Number.isInteger(sidCheck) && sidCheck > 0 && !isOverrideRegistrationActive(sidCheck)) {
         const sCheck = activeSeminars.find((x) => Number(x.id) === sidCheck);
         const winCheck = sCheck ? effectiveRegistrationWindowState(sCheck) : { state: 'closed' };
         if (winCheck.state !== 'open') {
@@ -4176,6 +4200,42 @@ async function submitApplication() {
     }
 
     try {
+        if (isEdit) {
+            const editPayload = new FormData();
+            editPayload.append('formData', JSON.stringify(formDataObj));
+            if (window.__otpOnStep1) {
+                editPayload.append('phoneOtpToken', window.__regPhoneOtpToken || '');
+                editPayload.append('emailOtpToken', window.__regEmailOtpToken || '');
+            }
+            editPayload.append('fieldOtpTokens', JSON.stringify(window.__fieldOtpTokens || {}));
+            if (certFile) editPayload.append('certificate', certReady);
+            const editRes = await fetch('/api/applications/' + encodeURIComponent(window.editingApplicationId), {
+                method: 'PUT',
+                body: editPayload
+            });
+            let editResult = {};
+            try {
+                editResult = await editRes.json();
+            } catch (parseErr) {
+                console.error(parseErr);
+                return alert(
+                    editRes.ok
+                        ? 'Application may have been updated, but the server response was invalid. Check Track seminar applications.'
+                        : 'Update failed (HTTP ' + editRes.status + '). Please try again.'
+                );
+            }
+            if (editResult.success) {
+                alert('Application updated successfully.');
+                window.editingApplicationId = null;
+                cancelRegistration();
+                loadApplications();
+            } else {
+                const msg = editResult.error || 'Update failed (HTTP ' + editRes.status + ').';
+                alert(/^Missing required field:/i.test(msg) ? formatRegValidationError(msg) : msg);
+            }
+            return;
+        }
+
         const res = await fetch('/api/applications/submit', {
             method: 'POST',
             body: payload
@@ -6193,35 +6253,95 @@ async function saveProfile(event) {
     return false;
 }
 
-// Application Edit Functionality
+// Application edit — opens the live registration form with saved data
+async function applyRegistrationFormData(formData) {
+    if (!formData || typeof formData !== 'object') return;
+    await initRegistrationAddressUi();
+    Object.keys(REGISTRATION_FIELD_IDS).forEach(function (key) {
+        if (key === 'certificate') return;
+        const el = document.getElementById(REGISTRATION_FIELD_IDS[key]);
+        if (!el || formData[key] == null || formData[key] === '') return;
+        el.value = String(formData[key]);
+    });
+    const qualEl = document.getElementById('reg-qual');
+    if (qualEl && formData.qual) {
+        qualEl.value = formData.qual;
+        if (typeof toggleRegBlock === 'function') toggleRegBlock();
+        if (typeof toggleCollegeStep === 'function') toggleCollegeStep();
+    }
+    const pin = String(formData.pin || '').replace(/\D/g, '');
+    if (pin.length === 6) {
+        const pinEl = document.getElementById('reg-pin');
+        if (pinEl) pinEl.value = pin;
+        await autofillAddress();
+        if (formData.city) {
+            const cityEl = document.getElementById('reg-city');
+            if (cityEl) {
+                fillRegSelectOptions(cityEl, [formData.city], formData.city);
+                cityEl.value = formData.city;
+            }
+        }
+        if (formData.state) {
+            const stateEl = document.getElementById('reg-state');
+            if (stateEl) {
+                fillRegSelectOptions(stateEl, [formData.state], formData.state);
+                stateEl.value = formData.state;
+            }
+        }
+    }
+    const cpin = String(formData.cpin || '').replace(/\D/g, '');
+    if (cpin.length === 6 && registrationQualIsPg()) {
+        const cpinEl = document.getElementById('reg-cpin');
+        if (cpinEl) cpinEl.value = cpin;
+        await autofillCollegeAddress();
+        if (formData.ccity) {
+            const ccityEl = document.getElementById('reg-ccity');
+            if (ccityEl) {
+                fillRegSelectOptions(ccityEl, [formData.ccity], formData.ccity);
+                ccityEl.value = formData.ccity;
+            }
+        }
+        if (formData.cstate) {
+            const cstateEl = document.getElementById('reg-cstate');
+            if (cstateEl) {
+                fillRegSelectOptions(cstateEl, [formData.cstate], formData.cstate);
+                cstateEl.value = formData.cstate;
+            }
+        }
+    }
+    if (formData.certificate_path) {
+        window.__regCertServerUploaded = true;
+        updateRegCertUploadUi({ uploaded: true });
+    }
+}
+
 async function editApplication(index) {
     const app = userApplications[index];
+    if (!app || !app.id) return alert('Application not found.');
     let formData = {};
     try {
         formData = JSON.parse(app.form_data || '{}');
-    } catch(e) {}
-    
-    // Show edit form with pre-filled data
-    alert('Edit Application Feature: ' + app.application_no + '\nForm data will be pre-filled in a modal for editing.');
-    
-    // For now, reload the form with the application data
-    document.getElementById('fname').value = formData.fname || '';
-    document.getElementById('lname').value = formData.lname || '';
-    document.getElementById('email').value = formData.email || '';
-    document.getElementById('phone').value = formData.phone || '';
-    document.getElementById('address').value = formData.address || '';
-    document.getElementById('city').value = formData.city || '';
-    document.getElementById('state').value = formData.state || '';
-    document.getElementById('pin').value = formData.pin || '';
-    document.getElementById('qual').value = formData.qual || '';
-    document.getElementById('ncism').value = formData.ncism || '';
-    document.getElementById('college').value = formData.college || '';
-    document.getElementById('ccity').value = formData.ccity || '';
-    
-    // Store the application ID for update
-    window.editingApplicationId = userApplications[index].id || null;
-    
+    } catch (_) {}
+    if (!activeSeminars.some((x) => Number(x.id) === Number(app.seminar_id))) {
+        await loadSeminarsGrid();
+    }
+    window.editingApplicationId = app.id;
+    window.__draftApplicationNo = app.application_no || null;
     switchTab('tab-seminars');
+    await startRegistration(app.seminar_id, {
+        editMode: true,
+        volunteerBypass: true,
+        prefillFormData: formData
+    });
+    const nameEl = document.getElementById('registration-seminar-name');
+    if (nameEl) {
+        nameEl.innerText =
+            'Edit application — ' +
+            (app.seminar_title || 'Seminar') +
+            ' (' +
+            (app.application_no || '') +
+            ')';
+    }
 }
 
 function seminarResubmitNeedsCertificate(qual) {
@@ -6395,52 +6515,6 @@ async function submitSeminarDocumentResubmit() {
     }
 }
 window.submitSeminarDocumentResubmit = submitSeminarDocumentResubmit;
-
-async function updateApplication() {
-    if(!window.editingApplicationId) {
-        alert('Application ID not found');
-        return;
-    }
-    
-    const formData = {
-        fname: document.getElementById('fname').value,
-        lname: document.getElementById('lname').value,
-        email: document.getElementById('email').value,
-        phone: document.getElementById('phone').value,
-        address: document.getElementById('address').value,
-        city: document.getElementById('city').value,
-        state: document.getElementById('state').value,
-        pin: document.getElementById('pin').value,
-        qual: document.getElementById('qual').value,
-        ncism: document.getElementById('ncism').value,
-        college: document.getElementById('college').value,
-        ccity: document.getElementById('ccity').value
-    };
-    
-    try {
-        const res = await fetch(`/api/applications/${window.editingApplicationId}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                formData,
-                phoneOtpToken: window.__regPhoneOtpToken || '',
-                emailOtpToken: window.__regEmailOtpToken || '',
-                fieldOtpTokens: window.__fieldOtpTokens || {}
-            })
-        });
-        const result = await res.json();
-        if(result.success) {
-            alert('✅ Application updated successfully!');
-            window.editingApplicationId = null;
-            loadApplications();
-        } else {
-            alert('Error: ' + result.error);
-        }
-    } catch(err) {
-        console.error('Error updating application:', err);
-        alert('Error updating application');
-    }
-}
 
 function initDoctorUploadHints() {
     const PU = window.PortalUpload;
