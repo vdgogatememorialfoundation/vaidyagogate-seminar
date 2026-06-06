@@ -2481,6 +2481,7 @@ function fulfillRegistrationPayment(registrationId, userId, amount, gatewayName,
 const casePresentation = require('./lib/case-presentation');
 const judgeContact = require('./lib/judge-participant-contact');
 const pendingRegReminders = require('./lib/pending-registration-reminders');
+const caseJudgeMarkingReminders = require('./lib/case-judge-marking-reminders');
 const portalThemeMod = require('./lib/portal-theme');
 
 let extendedRoutesMounted = false;
@@ -12457,12 +12458,12 @@ function startBackgroundWorkers() {
         });
         db.get(`SELECT value FROM global_settings WHERE key = ?`, ['notification_templates_sync_v'], (eSync, row) => {
             if (eSync) return;
-            if (row && row.value === '20260528email') return;
+            if (row && row.value === '20260528judgecase') return;
             notifEngine.syncDefaultNotificationTemplates(db, (syncErr) => {
                 if (syncErr) console.warn('[notifications] template sync failed:', syncErr.message);
                 else {
-                    upsertGlobalSetting('notification_templates_sync_v', '20260528email', () => {
-                        console.log('[notifications] email templates synced (welcome + OTP variants)');
+                    upsertGlobalSetting('notification_templates_sync_v', '20260528judgecase', () => {
+                        console.log('[notifications] email templates synced (judge case marking)');
                     });
                 }
             });
@@ -12531,6 +12532,55 @@ app.get('/api/cron/pending-registration-reminders', (req, res) => {
         return appReadyPromise.then(run).catch((e) => res.status(503).json({ error: e.message }));
     }
     run();
+});
+
+app.get('/api/cron/case-judge-marking-reminders', (req, res) => {
+    if (!authorizeCron(req, res)) return;
+    const run = () => {
+        caseJudgeMarkingReminders.runCaseJudgeMarkingReminders(db, (err, result) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ ok: true, ...(result || {}) });
+        });
+    };
+    if (appReadyResolved) return run();
+    if (appReadyPromise) {
+        return appReadyPromise.then(run).catch((e) => res.status(503).json({ error: e.message }));
+    }
+    run();
+});
+
+app.get('/api/admin/case-judge-marking-reminder-config', (req, res) => {
+    const aid = parseInt(req.query.actingAdminId, 10);
+    if (!Number.isInteger(aid) || aid < 1) {
+        return res.status(400).json({ error: 'actingAdminId query parameter is required' });
+    }
+    assertAdminPortalActor(aid, (e, adm) => {
+        if (e && e.message === 'BAD_ACTOR') return res.status(400).json({ error: 'actingAdminId is required' });
+        if (e && e.message === 'FORBIDDEN') return res.status(403).json({ error: 'Administrator access required' });
+        if (e) return res.status(500).json({ error: e.message });
+        if (!adm) return res.status(403).json({ error: 'Invalid administrator' });
+        caseJudgeMarkingReminders.loadConfig(db, (err, config) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ success: true, config });
+        });
+    });
+});
+
+app.post('/api/admin/case-judge-marking-reminder-config', (req, res) => {
+    const { actingAdminId, config } = req.body || {};
+    const aid = parseInt(actingAdminId, 10);
+    if (!Number.isInteger(aid) || aid < 1) return res.status(400).json({ error: 'actingAdminId is required' });
+    if (!config || typeof config !== 'object') return res.status(400).json({ error: 'config object required' });
+    assertAdminPortalActor(aid, (e, adm) => {
+        if (e && e.message === 'BAD_ACTOR') return res.status(400).json({ error: 'actingAdminId is required' });
+        if (e && e.message === 'FORBIDDEN') return res.status(403).json({ error: 'Administrator access required' });
+        if (e) return res.status(500).json({ error: e.message });
+        if (!adm) return res.status(403).json({ error: 'Invalid administrator' });
+        caseJudgeMarkingReminders.saveConfig(db, config, (err, norm) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ success: true, config: norm });
+        });
+    });
 });
 
 app.use((err, req, res, next) => {

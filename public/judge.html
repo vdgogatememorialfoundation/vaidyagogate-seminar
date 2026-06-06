@@ -121,12 +121,13 @@
                                 <th>Category</th>
                                 <th>Topic</th>
                                 <th>Status</th>
+                                <th>Deadline</th>
                                 <th>Your score</th>
                                 <th></th>
                             </tr>
                         </thead>
                         <tbody id="case-tbody">
-                            <tr><td colspan="7" class="empty">Loading assignments…</td></tr>
+                            <tr><td colspan="8" class="empty">Loading assignments…</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -145,6 +146,7 @@
             </div>
             <div class="jp-modal-body">
                 <div id="case-score-locked" class="jp-locked hidden"><i class="fas fa-lock"></i> Scores submitted and locked — cannot be changed.</div>
+                <div id="case-score-deadline-closed" class="jp-locked hidden"><i class="fas fa-hourglass-end"></i> Marking deadline has passed — scoring is closed.</div>
                 <div id="case-participant-panel" class="participant-panel hidden"></div>
                 <div class="jp-toolbar">
                     <button type="button" class="btn" id="case-contact-participant-btn"><i class="fas fa-comments"></i> Messages</button>
@@ -329,23 +331,29 @@
                 if (!caseBody) return;
                 const rows = filteredCaseRows();
                 if (!rows.length) {
-                    caseBody.innerHTML = '<tr><td colspan="7" class="empty">No cases match this filter.</td></tr>';
+                    caseBody.innerHTML = '<tr><td colspan="8" class="empty">No cases match this filter.</td></tr>';
                     return;
                 }
                 caseBody.innerHTML = '';
                 rows.forEach((c) => {
                     const name = [c.first_name, c.last_name].filter(Boolean).join(' ') || '—';
                     const locked = !!c.my_score_locked;
+                    const markingClosed = !!(c.marking_closed || c.markingClosed);
                     const scoreTxt = c.my_total_score != null ? String(c.my_total_score) : '—';
                     const statusLabel =
                         locked && String(c.status || '').toLowerCase() === 'judging'
                             ? 'Judged (you)'
                             : locked
                               ? 'Scored'
-                              : String(c.status || '—');
+                              : markingClosed
+                                ? 'Closed'
+                                : String(c.status || '—');
                     const scoreBadge = locked
                         ? '<span class="jp-badge jp-badge--done">Judged · ' + escapeHtml(scoreTxt) + '</span>'
-                        : '<span class="jp-badge jp-badge--pending">Pending</span>';
+                        : markingClosed
+                          ? '<span class="jp-badge" style="background:#fee2e2;color:#b91c1c;">Deadline passed</span>'
+                          : '<span class="jp-badge jp-badge--pending">Pending</span>';
+                    const deadlineTxt = c.marking_deadline_display || '—';
                     const tr = document.createElement('tr');
                     tr.innerHTML =
                         '<td><code>' + escapeHtml(String(c.application_no || c.id)) + '</code></td>' +
@@ -353,9 +361,10 @@
                         '<td>' + escapeHtml(c.category || '—') + '</td>' +
                         '<td>' + escapeHtml(c.title || '—') + '</td>' +
                         '<td><span class="jp-badge jp-badge--status">' + escapeHtml(statusLabel) + '</span></td>' +
+                        '<td>' + escapeHtml(deadlineTxt) + '</td>' +
                         '<td>' + scoreBadge + '</td>' +
                         '<td><button type="button" class="btn jp-btn-action" onclick="openCaseScore(' + c.id + ')">' +
-                        (locked ? 'View' : 'Score') +
+                        (locked ? 'View' : markingClosed ? 'View' : 'Score') +
                         '</button></td>';
                     caseBody.appendChild(tr);
                 });
@@ -364,11 +373,11 @@
             async function loadCaseAssignments() {
                 const caseBody = document.getElementById('case-tbody');
                 if (!caseBody || !user) return;
-                caseBody.innerHTML = '<tr><td colspan="7" class="empty">Loading assignments…</td></tr>';
+                caseBody.innerHTML = '<tr><td colspan="8" class="empty">Loading assignments…</td></tr>';
                 try {
                     const jid = judgeNumericUserId();
                     if (!jid) {
-                        caseBody.innerHTML = '<tr><td colspan="7" class="empty">Please sign in again.</td></tr>';
+                        caseBody.innerHTML = '<tr><td colspan="8" class="empty">Please sign in again.</td></tr>';
                         return;
                     }
                     const res = await fetch(
@@ -381,7 +390,7 @@
                     if (!Array.isArray(rows) || !rows.length) {
                         caseRowsCache = [];
                         updateJudgeStats([]);
-                        caseBody.innerHTML = '<tr><td colspan="7" class="empty">No case assignments yet.</td></tr>';
+                        caseBody.innerHTML = '<tr><td colspan="8" class="empty">No case assignments yet.</td></tr>';
                         return;
                     }
                     caseRowsCache = rows;
@@ -389,7 +398,7 @@
                     renderCaseTable();
                 } catch (e) {
                     console.error(e);
-                    caseBody.innerHTML = '<tr><td colspan="7" class="empty">Could not load cases. Try Refresh.</td></tr>';
+                    caseBody.innerHTML = '<tr><td colspan="8" class="empty">Could not load cases. Try Refresh.</td></tr>';
                 }
             }
 
@@ -436,6 +445,8 @@
                     }
                     const sub = data.submission || {};
                     const locked = !!(data.myScore && data.myScore.is_locked);
+                    const markingClosed = !!(data.markingClosed || data.marking_closed);
+                    const deadlineDisplay = data.markingDeadlineDisplay || data.marking_deadline_display || '';
                     const defs = data.criteria || caseCriteriaDefs;
                     const totalMax =
                         data.totalMax != null
@@ -457,7 +468,8 @@
                         ' · ' +
                         (sub.category || '') +
                         ' · ' +
-                        [sub.first_name, sub.last_name].filter(Boolean).join(' ');
+                        [sub.first_name, sub.last_name].filter(Boolean).join(' ') +
+                        (deadlineDisplay ? ' · Deadline (IST): ' + deadlineDisplay : '');
                     activeParticipant = data.participant || null;
                     const partEl = document.getElementById('case-participant-panel');
                     if (partEl && activeParticipant) {
@@ -478,6 +490,8 @@
                         fromLbl.textContent = jn + ' | Vaidya Gogate Memorial Foundation';
                     }
                     document.getElementById('case-score-locked').classList.toggle('hidden', !locked);
+                    document.getElementById('case-score-deadline-closed').classList.toggle('hidden', !markingClosed || locked);
+                    const readOnly = locked || markingClosed;
                     const filesEl = document.getElementById('case-score-files');
                     const files = data.files || [];
                     filesEl.innerHTML = '';
@@ -532,7 +546,7 @@
                             '<tr><td>' + escapeHtml(def.label) + '</td><td>' + def.maxMarks + '</td><td>' +
                             '<input type="number" min="0" max="' + def.maxMarks + '" class="case-crit-input jp-crit-input" data-key="' +
                             escapeHtml(def.key) + '" data-max="' + def.maxMarks + '" value="' + escapeHtml(String(val)) + '"' +
-                            (locked ? ' disabled' : '') + '></td></tr>';
+                            (readOnly ? ' disabled' : '') + '></td></tr>';
                     });
                     html += '</tbody></table>';
                     document.getElementById('case-score-criteria').innerHTML = html;
@@ -540,10 +554,14 @@
                         inp.addEventListener('input', updateCaseScoreTotal);
                     });
                     document.getElementById('case-score-remarks').value = (data.myScore && data.myScore.remarks) || '';
-                    document.getElementById('case-score-remarks').disabled = locked;
+                    document.getElementById('case-score-remarks').disabled = readOnly;
                     const submitBtn = document.getElementById('case-score-submit');
-                    submitBtn.disabled = locked;
-                    submitBtn.textContent = locked ? 'Scores locked' : 'Submit marks (locks scores)';
+                    submitBtn.disabled = readOnly;
+                    submitBtn.textContent = locked
+                        ? 'Scores locked'
+                        : markingClosed
+                          ? 'Marking closed'
+                          : 'Submit marks (locks scores)';
                     updateCaseScoreTotal();
                 } catch (e) {
                     console.error(e);

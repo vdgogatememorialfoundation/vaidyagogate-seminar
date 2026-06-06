@@ -785,6 +785,22 @@
                     <button type="button" class="btn-primary" style="margin-top:12px;background:#b91c1c;" onclick="savePendingReminderAdminConfig()">Save reminder settings</button>
                     <p id="pr-save-msg" style="margin-top:8px;font-weight:600;font-size:0.9rem;"></p>
                 </div>
+                <div class="card" style="margin-bottom:18px;border:1px solid #ddd6fe;background:#f5f3ff;">
+                    <h3 style="margin:0 0 10px;color:#5b21b6;font-size:1.05rem;">Judge case marking reminders</h3>
+                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:10px;">Email judges who have not locked marks before the case <strong>marking deadline</strong>. Uses templates <code>CASE_JUDGE_ASSIGNED</code> (on assign) and <code>CASE_JUDGE_MARKING_REMINDER</code>. Cron: <code>/api/cron/case-judge-marking-reminders</code> (daily 9:00 IST by default).</p>
+                    <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;margin-bottom:8px;"><input type="checkbox" id="cjmr-enabled"> Enable automatic judge marking reminders</label>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;max-width:720px;">
+                        <div><label style="font-size:0.82rem;">Every N days</label><input type="number" id="cjmr-interval-days" min="1" max="14" value="2" style="width:100%;padding:8px;"></div>
+                        <div><label style="font-size:0.82rem;">Max reminders per judge/case</label><input type="number" id="cjmr-max-reminders" min="1" max="30" value="12" style="width:100%;padding:8px;"></div>
+                        <div><label style="font-size:0.82rem;">Urgent if within (hours)</label><input type="number" id="cjmr-urgent-hours" min="1" max="72" value="24" style="width:100%;padding:8px;"></div>
+                    </div>
+                    <div style="margin-top:10px;display:flex;gap:14px;font-size:0.9rem;">
+                        <label><input type="checkbox" id="cjmr-ch-email" checked> Email</label>
+                        <label><input type="checkbox" id="cjmr-ch-wa"> WhatsApp</label>
+                    </div>
+                    <button type="button" class="btn-primary" style="margin-top:12px;background:#5b21b6;" onclick="saveCaseJudgeMarkingReminderAdminConfig()">Save judge reminder settings</button>
+                    <p id="cjmr-save-msg" style="margin-top:8px;font-weight:600;font-size:0.9rem;"></p>
+                </div>
                 <div class="card" style="margin-bottom:18px;border:1px solid #c7d2fe;background:#eef2ff;">
                     <h3 style="margin:0 0 10px;color:#4338ca;font-size:1.05rem;">Judge → participant emails (monitoring)</h3>
                     <p style="color:#64748b;font-size:0.88rem;margin-bottom:10px;">When judges contact participants, emails are sent from the organisation address with sender name <em>Judge Name | Vaidya Gogate Memorial Foundation</em>. A copy goes to the admin contact email if configured.</p>

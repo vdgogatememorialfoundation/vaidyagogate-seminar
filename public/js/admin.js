@@ -4711,6 +4711,13 @@ async function openAdminCaseDetail(subId) {
                 <button type="button" class="btn-primary" style="background:#b91c1c;" onclick="markCasePlagiarism(${sub.id})">Duplicate / zero marks</button>
                 <button type="button" class="btn-primary" style="background:#15803d;" onclick="selectCaseWinner(${sub.id})">Mark winner</button>
             </div>
+            <div style="margin:12px 0;">
+            <label><strong>Judge marking deadline (IST)</strong></label>
+            <input type="datetime-local" id="case-marking-deadline" style="width:100%;max-width:320px;padding:8px;margin-top:6px;">
+            <p class="muted" style="font-size:0.82rem;margin:6px 0;">Judges can submit marks until this date/time. After that, scoring is blocked. Required when assigning judges.</p>
+            ${sub.marking_deadline ? `<p style="font-size:0.85rem;color:#4338ca;margin:4px 0;">Saved deadline: <strong>${escAdmin(window.PortalDateTime && window.PortalDateTime.format ? window.PortalDateTime.format(sub.marking_deadline, { withTime: true }) : sub.marking_deadline)}</strong></p>` : ''}
+            <button type="button" class="btn-secondary btn-sm" style="margin-top:6px;" onclick="saveCaseMarkingDeadline(${sub.id})">Save deadline only</button>
+            </div>
             <div style="margin:12px 0;"><label>Assign reviewers</label>${assignedHtml}<div id="case-judge-checkboxes">${judgeOpts}</div>
             <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px;">
             <button type="button" class="btn-primary" onclick="assignCaseJudgesFromCheckboxes(${sub.id})">Assign selected</button>
@@ -4763,6 +4770,10 @@ async function openAdminCaseDetail(subId) {
         }
         box.innerHTML = html;
         box.dataset.subId = String(subId);
+        const mdEl = document.getElementById('case-marking-deadline');
+        if (mdEl && sub.marking_deadline && window.PortalDateTime && window.PortalDateTime.toDatetimeLocal) {
+            mdEl.value = window.PortalDateTime.toDatetimeLocal(sub.marking_deadline);
+        }
     } catch (e) {
         console.error(e);
         box.innerHTML = 'Error loading detail';
@@ -4833,14 +4844,45 @@ async function adminTransferSupportTicket() {
     }
 }
 
+function readCaseMarkingDeadlineForApi() {
+    const el = document.getElementById('case-marking-deadline');
+    const raw = el && el.value ? String(el.value).trim() : '';
+    if (!raw) return null;
+    if (window.PortalDateTime && window.PortalDateTime.fromDatetimeLocal) {
+        return window.PortalDateTime.fromDatetimeLocal(raw);
+    }
+    return raw;
+}
+
+async function saveCaseMarkingDeadline(subId) {
+    const markingDeadline = readCaseMarkingDeadlineForApi();
+    if (!markingDeadline) return alert('Set judge marking deadline (date and time, IST).');
+    try {
+        const res = await fetch('/api/admin/case/submissions/' + subId + '/marking-deadline', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ markingDeadline })
+        });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Save failed');
+        alert('Marking deadline saved: ' + (data.markingDeadlineDisplay || markingDeadline));
+        openAdminCaseDetail(subId);
+    } catch (e) {
+        console.error(e);
+        alert('Network error');
+    }
+}
+
 async function assignCaseJudgeByPortalId(subId) {
     const uidStr = document.getElementById('case-judge-id-string')?.value?.trim();
     if (!uidStr) return alert('Enter judge portal ID (12-digit number)');
+    const markingDeadline = readCaseMarkingDeadlineForApi();
+    if (!markingDeadline) return alert('Set judge marking deadline before assigning judges.');
     try {
         const res = await fetch('/api/admin/case/submissions/' + subId + '/assign-judges', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ judgeUserIdString: uidStr })
+            body: JSON.stringify({ judgeUserIdString: uidStr, markingDeadline })
         });
         const data = await res.json();
         if (data.success) {
@@ -4857,11 +4899,13 @@ async function assignCaseJudgesFromCheckboxes(subId) {
     const judgeIds = [];
     document.querySelectorAll('.case-judge-cb:checked').forEach((cb) => judgeIds.push(parseInt(cb.value, 10)));
     if (!judgeIds.length) return alert('Select at least one reviewer');
+    const markingDeadline = readCaseMarkingDeadlineForApi();
+    if (!markingDeadline) return alert('Set judge marking deadline before assigning judges.');
     try {
         const res = await fetch(`/api/admin/case/submissions/${subId}/assign-judges`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ judgeIds })
+            body: JSON.stringify({ judgeIds, markingDeadline })
         });
         const data = await res.json();
         if (data.success) alert('Reviewers assigned');
@@ -4960,11 +5004,13 @@ async function assignCaseJudges(subId) {
         .map((x) => parseInt(x.trim(), 10))
         .filter((x) => x > 0);
     if (!judgeIds.length) return alert('Enter judge user IDs');
+    const markingDeadline = readCaseMarkingDeadlineForApi();
+    if (!markingDeadline) return alert('Set judge marking deadline before assigning judges.');
     try {
         const res = await fetch(`/api/admin/case/submissions/${subId}/assign-judges`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ judgeIds })
+            body: JSON.stringify({ judgeIds, markingDeadline })
         });
         const data = await res.json();
         if (data.success) alert('Judges assigned');
@@ -11967,6 +12013,68 @@ async function savePendingReminderAdminConfig() {
     }
 }
 
+async function loadCaseJudgeMarkingReminderAdminForm() {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return;
+    try {
+        const res = await fetch(
+            `/api/admin/case-judge-marking-reminder-config?actingAdminId=${encodeURIComponent(adm.id)}`
+        );
+        const d = await res.json();
+        if (!d.success || !d.config) return;
+        const c = d.config;
+        const en = document.getElementById('cjmr-enabled');
+        if (en) en.checked = !!c.enabled;
+        const id = document.getElementById('cjmr-interval-days');
+        if (id) id.value = c.intervalDays || 2;
+        const mx = document.getElementById('cjmr-max-reminders');
+        if (mx) mx.value = c.maxReminders || 12;
+        const uh = document.getElementById('cjmr-urgent-hours');
+        if (uh) uh.value = c.urgentHoursBeforeDeadline || 24;
+        const ch = c.channels || {};
+        const ce = document.getElementById('cjmr-ch-email');
+        if (ce) ce.checked = ch.email !== false;
+        const cw = document.getElementById('cjmr-ch-wa');
+        if (cw) cw.checked = !!ch.whatsapp;
+    } catch (_) {}
+}
+
+async function saveCaseJudgeMarkingReminderAdminConfig() {
+    const adm = getStoredAdminUser();
+    const msg = document.getElementById('cjmr-save-msg');
+    if (!adm || !adm.id) return;
+    const config = {
+        enabled: !!(document.getElementById('cjmr-enabled') || {}).checked,
+        intervalDays: parseInt((document.getElementById('cjmr-interval-days') || {}).value, 10) || 2,
+        maxReminders: parseInt((document.getElementById('cjmr-max-reminders') || {}).value, 10) || 12,
+        urgentHoursBeforeDeadline:
+            parseInt((document.getElementById('cjmr-urgent-hours') || {}).value, 10) || 24,
+        channels: {
+            email: !!(document.getElementById('cjmr-ch-email') || {}).checked,
+            whatsapp: !!(document.getElementById('cjmr-ch-wa') || {}).checked
+        }
+    };
+    try {
+        const res = await fetch('/api/admin/case-judge-marking-reminder-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: adm.id, config })
+        });
+        const data = await res.json();
+        if (msg) {
+            msg.style.color = data.success ? '#15803d' : '#b91c1c';
+            msg.textContent = data.success
+                ? 'Judge marking reminder settings saved.'
+                : data.error || 'Save failed.';
+        }
+    } catch (e) {
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = 'Network error.';
+        }
+    }
+}
+
 async function loadJudgeCommunicationsAdmin() {
     const adm = getStoredAdminUser();
     const tbody = document.getElementById('judge-comm-tbody');
@@ -12114,6 +12222,7 @@ async function loadAdminSiteCms() {
     loadSupportTicketSlaAdminForm().catch(console.error);
     loadPortalThemesAdminForm().catch(console.error);
     loadPendingReminderAdminForm().catch(console.error);
+    loadCaseJudgeMarkingReminderAdminForm().catch(console.error);
     loadJudgeCommunicationsAdmin().catch(console.error);
     populateVenueBroadcastSeminars().catch(console.error);
     try {
