@@ -1153,6 +1153,9 @@ img { max-width: 100%; height: auto; display: block; }
 .verify-table th,
 .verify-table td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; }
 .verify-table th { background: var(--surface-2); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.verify-footnote { font-size: 0.82rem; color: var(--ink-muted, #64748b); margin: 8px 0 0; }
+.verify-volunteer-name { font-style: italic; color: var(--ink-muted, #475569); }
+.verify-pay-vol { color: #0d9488; font-weight: 600; }
 .verify-count { font-weight: 600; color: var(--brand); margin-bottom: 8px; }
 .verify-msg-error { color: #b91c1c; font-weight: 600; }
 .verify-msg-muted { color: var(--muted); }

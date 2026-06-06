@@ -974,10 +974,21 @@
             return '<i class="fas fa-circle verify-ico verify-ico-muted" title="Status"></i>';
         }
 
-        function verifyPaymentCell(paid) {
+        function verifyPaymentCell(paid, isVolunteer) {
+            if (isVolunteer) {
+                return '<span class="verify-pay verify-pay-vol"><i class="fas fa-hands-helping" aria-hidden="true"></i> Volunteer</span>';
+            }
             return paid
                 ? '<span class="verify-pay verify-pay-yes"><i class="fas fa-check-circle" aria-hidden="true"></i> Paid</span>'
                 : '<span class="verify-pay verify-pay-no"><i class="fas fa-minus-circle" aria-hidden="true"></i> —</span>';
+        }
+
+        function verifyDisplayName(r) {
+            if (r.isVolunteer) {
+                const n = String(r.name || r.displayName || '').replace(/^\*|\*$/g, '').trim();
+                return '<span class="verify-volunteer-name" title="Volunteer">*' + escHtml(n) + '*</span>';
+            }
+            return escHtml(r.displayName || r.name || '');
         }
 
         function setVerifyUiActive(active) {
@@ -1041,7 +1052,7 @@
                     rows.length +
                     ' result(s) — ' +
                     escHtml(data.seminarTitle || '') +
-                    '</p><table class="verify-table"><thead><tr><th></th><th>Application</th><th>Name</th><th>City</th><th>Status</th><th>Payment</th></tr></thead><tbody>' +
+                    '</p><p class="verify-footnote">Names shown as <strong>*name*</strong> are seminar volunteers.</p><table class="verify-table"><thead><tr><th></th><th>Application</th><th>Name</th><th>City</th><th>Status</th><th>Payment</th></tr></thead><tbody>' +
                     rows
                         .map(
                             (r) =>
@@ -1050,13 +1061,13 @@
                                 '</td><td>' +
                                 escHtml(r.applicationNo) +
                                 '</td><td>' +
-                                escHtml(r.name) +
+                                verifyDisplayName(r) +
                                 '</td><td>' +
                                 escHtml(r.city) +
                                 '</td><td>' +
                                 escHtml(verifyStatusLabel(r.status)) +
                                 '</td><td>' +
-                                verifyPaymentCell(r.paid) +
+                                verifyPaymentCell(r.paid, r.isVolunteer) +
                                 '</td></tr>'
                         )
                         .join('') +

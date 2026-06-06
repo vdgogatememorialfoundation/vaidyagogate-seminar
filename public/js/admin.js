@@ -5100,14 +5100,16 @@ async function loadAdminVerifyDelegateList() {
                 pub +
                 ' Listed: ' +
                 (st.listed || 0) +
-                ' · Paid missing: ' +
+                ' (paid ' +
+                (st.paidListed || 0) +
+                ', volunteers * ' +
+                (st.volunteersListed || 0) +
+                ') · Paid missing: ' +
                 (st.missingPaid || 0) +
-                ' · Volunteers excluded: ' +
-                (st.volunteersExcluded || 0) +
                 '.';
         }
         if (!data.listed || !data.listed.length) {
-            listedEl.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#64748b;">No paid delegates on the public list yet.</td></tr>';
+            listedEl.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#64748b;">No delegates on the public list yet.</td></tr>';
         } else {
             listedEl.innerHTML = data.listed
                 .map((p) => {
@@ -5115,7 +5117,10 @@ async function loadAdminVerifyDelegateList() {
                         p.source === 'manual'
                             ? '<span style="color:#15803d;font-weight:600;">Manual</span>'
                             : '<span style="color:#334155;">Auto</span>';
-                    const amt = p.amount != null ? '₹' + p.amount : '—';
+                    const amt = p.isVolunteer ? 'Volunteer' : p.amount != null ? '₹' + p.amount : '—';
+                    const nameCell = p.isVolunteer
+                        ? '<span style="font-style:italic;color:#0d9488;">*' + escAdmin(p.name) + '*</span>'
+                        : escAdmin(p.displayName || p.name);
                     const actions =
                         p.source === 'manual'
                             ? '<button type="button" class="btn-secondary btn-sm" onclick="adminRemoveVerifyDelegate(' +
@@ -5128,7 +5133,7 @@ async function loadAdminVerifyDelegateList() {
                               ')">Hide</button>';
                     return (
                         '<tr><td>' +
-                        escAdmin(p.name) +
+                        nameCell +
                         '</td><td>' +
                         escAdmin(p.applicationNo) +
                         '</td><td>' +
