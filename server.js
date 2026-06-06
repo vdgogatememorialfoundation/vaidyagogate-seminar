@@ -3328,14 +3328,12 @@ app.post('/api/otp/send', withIntegrationSettingsLoaded, withAuxiliaryTables, (r
         const code = otpLib.generateOtpDigits();
         otpLib.saveOtp(db, { channel, destination: dest, purpose, meta }, code, (serr) => {
             if (serr) return res.status(500).json({ error: serr.message });
-            const purposeKey =
-                purpose === 'signup' ? 'OTP_VERIFICATION' : purpose === 'registration' ? 'OTP_VERIFICATION' : 'OTP_VERIFICATION';
             notifEngine.sendOtpMessages({
                 email: channel === 'email' ? dest : null,
                 phone: channel === 'phone' ? dest : null,
                 code,
                 db,
-                eventKey: purposeKey
+                purpose
             }).then((results) => {
                 const sent = channel === 'phone' ? results.whatsapp : results.email;
                 const debug = process.env.OTP_RETURN_CODE === '1' || process.env.NODE_ENV === 'development';
@@ -3468,7 +3466,8 @@ function queuePortalEmailVerification(db, userId, cb) {
                                 'EMAIL_VERIFICATION',
                                 {
                                     userId,
-                                    vars: { verify_link }
+                                    vars: { verify_link },
+                                    immediate: true
                                 },
                                 () => cb && cb(null, { queued: true })
                             );
@@ -3610,7 +3609,8 @@ app.post('/api/auth/signup', (req, res) => {
                             userId: newUserId,
                             vars: {
                                 temporary_password: String(password || '')
-                            }
+                            },
+                            immediate: true
                         },
                         () => {
                             flushNotificationQueue();
@@ -5663,7 +5663,8 @@ app.post('/api/auth/forgot-password', withAuxiliaryTables, (req, res) => {
                         encodeURIComponent(token);
                     notifEngine.notify(db, 'FORGOT_PASSWORD', {
                         userId: user.id,
-                        vars: { forgot_password_link: link }
+                        vars: { forgot_password_link: link },
+                        immediate: true
                     });
                     respond();
                 }
@@ -8047,7 +8048,8 @@ app.post('/api/admin/users/:userId/password', (req, res) => {
             'ACCOUNT_CREATED',
             {
                 userId: uid,
-                vars: { temporary_password: newPass }
+                vars: { temporary_password: newPass },
+                immediate: true
             },
             () => {
                 flushNotificationQueue();
@@ -8436,7 +8438,7 @@ function sendCertificateVerifyOtpChannel(channel, destination, meta, cb) {
                     phone: channel === 'phone' ? destination : null,
                     code,
                     db,
-                    eventKey: 'OTP_VERIFICATION'
+                    purpose: 'certificate_verify'
                 })
                 .then((results) => {
                     const sent = channel === 'phone' ? results.whatsapp : results.email;
@@ -9113,7 +9115,7 @@ app.post('/api/admin/otp/send', withIntegrationSettingsLoaded, (req, res) => {
                             phone: channel === 'phone' ? dest : null,
                             code,
                             db,
-                            eventKey: 'OTP_VERIFICATION'
+                            purpose: 'admin_confirm'
                         })
                         .then((results) => {
                             const sent = channel === 'phone' ? results.whatsapp : results.email;
@@ -9367,7 +9369,8 @@ app.post('/api/admin/users/create', (req, res) => {
                                     'ACCOUNT_CREATED',
                                     {
                                         userId: newId,
-                                        vars: { temporary_password: finalPassword }
+                                        vars: { temporary_password: finalPassword },
+                                        immediate: true
                                     },
                                     () => {
                                         flushNotificationQueue();
@@ -10201,7 +10204,7 @@ app.post('/api/admin/proxy-otp/send', withIntegrationSettingsLoaded, (req, res) 
                     phone: channel === 'phone' ? dest : null,
                     code,
                     db,
-                    eventKey: 'OTP_VERIFICATION'
+                    purpose: 'proxy_applicant'
                 }).then((results) => {
                     const sent = channel === 'phone' ? results.whatsapp : results.email;
                     const debug = process.env.OTP_RETURN_CODE === '1' || process.env.NODE_ENV === 'development';
@@ -12383,12 +12386,12 @@ function startBackgroundWorkers() {
         });
         db.get(`SELECT value FROM global_settings WHERE key = ?`, ['notification_templates_sync_v'], (eSync, row) => {
             if (eSync) return;
-            if (row && row.value === '20260517') return;
+            if (row && row.value === '20260528email') return;
             notifEngine.syncDefaultNotificationTemplates(db, (syncErr) => {
                 if (syncErr) console.warn('[notifications] template sync failed:', syncErr.message);
                 else {
-                    upsertGlobalSetting('notification_templates_sync_v', '20260517', () => {
-                        console.log('[notifications] VGMF 2026 default templates synced');
+                    upsertGlobalSetting('notification_templates_sync_v', '20260528email', () => {
+                        console.log('[notifications] email templates synced (welcome + OTP variants)');
                     });
                 }
             });
