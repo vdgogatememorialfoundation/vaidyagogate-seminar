@@ -786,6 +786,131 @@ function registrationQualFromApp(a) {
     }
 }
 
+function renderRefundTrackingStepsHtml(steps) {
+    if (!steps || !steps.length) return '';
+    let html = '<div class="tracker-vertical" style="margin-top:10px;">';
+    steps.forEach(function (step) {
+        const cls =
+            step.state === 'completed'
+                ? 'completed'
+                : step.state === 'active'
+                  ? 'active'
+                  : step.state === 'cancelled'
+                    ? 'cancelled'
+                    : 'upcoming';
+        const when =
+            step.at && (step.state === 'completed' || step.state === 'active')
+                ? '<p class="track-when" style="font-size:0.78rem;color:#0f766e;margin:4px 0 0;font-weight:600;">' +
+                  escapeHtml(formatTrackDateTime(step.at)) +
+                  '</p>'
+                : '';
+        html +=
+            '<div class="track-step ' +
+            cls +
+            '"><div class="track-icon"><i class="fas fa-circle"></i></div><div class="track-content"><div class="track-title">' +
+            escapeHtml(step.title || '') +
+            '</div><div class="track-desc">' +
+            escapeHtml(step.desc || '') +
+            '</div>' +
+            when +
+            '</div></div>';
+    });
+    html += '</div>';
+    return html;
+}
+
+function renderRefundEligibilityHtml(eligibility) {
+    if (!eligibility) return '';
+    const tone = eligibility.applicable ? '#047857' : '#92400e';
+    const bg = eligibility.applicable ? '#ecfdf5' : '#fffbeb';
+    const border = eligibility.applicable ? '#a7f3d0' : '#fde68a';
+    let html =
+        '<div style="background:' +
+        bg +
+        ';border:1px solid ' +
+        border +
+        ';border-radius:8px;padding:12px;margin:10px 0;line-height:1.5;">' +
+        '<p style="margin:0 0 6px;font-weight:700;color:' +
+        tone +
+        ';">Refund eligibility (IST · ' +
+        escapeHtml(eligibility.evaluatedAtIst || 'now') +
+        ')</p>';
+    if (eligibility.daysUntilLabel) {
+        html += '<p style="margin:0 0 6px;font-size:0.85rem;color:#475569;">' + escapeHtml(eligibility.daysUntilLabel) + '</p>';
+    }
+    if (!eligibility.cancellationAllowed) {
+        html +=
+            '<p style="margin:0;font-size:0.88rem;color:#b91c1c;">' +
+            escapeHtml(eligibility.cancellationReason || 'Cancellation is not available.') +
+            '</p></div>';
+        return html;
+    }
+    html +=
+        '<p style="margin:0 0 8px;font-size:0.9rem;">If approved now: <strong>' +
+        (eligibility.eligiblePercent || 0) +
+        '%</strong> — <strong>₹' +
+        (eligibility.eligibleAmount || 0) +
+        '</strong>' +
+        (eligibility.orderAmount > 0 ? ' of ₹' + eligibility.orderAmount : '') +
+        '</p>';
+    if (eligibility.insideNoRefundWindow && eligibility.noRefundWithinDays != null) {
+        html +=
+            '<p style="margin:0 0 8px;font-size:0.85rem;color:#b45309;">Inside no-refund window (' +
+            eligibility.noRefundWithinDays +
+            ' days before event).</p>';
+    }
+    if (eligibility.tiers && eligibility.tiers.length) {
+        html += '<ul style="margin:0;padding-left:18px;font-size:0.84rem;color:#475569;">';
+        eligibility.tiers.forEach(function (t) {
+            html +=
+                '<li style="margin:4px 0;' +
+                (t.active ? 'font-weight:700;color:#047857;' : '') +
+                '">' +
+                escapeHtml(t.label) +
+                (t.active ? ' ✓ applies now' : '') +
+                '</li>';
+        });
+        html += '</ul>';
+    }
+    html += '</div>';
+    return html;
+}
+
+function renderCancellationRefundBlock(a) {
+    const tr = a && a.cancellationTracking;
+    if (!tr) return '';
+    const tone =
+        tr.refundStatusTone === 'success'
+            ? '#047857'
+            : tr.refundStatusTone === 'error'
+              ? '#b91c1c'
+              : tr.refundStatusTone === 'pending'
+                ? '#b45309'
+                : '#475569';
+    let html =
+        '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:12px;">' +
+        '<p style="margin:0 0 8px;font-weight:700;color:#334155;"><i class="fas fa-undo-alt"></i> Cancellation &amp; refund tracking</p>' +
+        '<p style="margin:0 0 8px;font-size:0.88rem;">Request status: <strong>' +
+        escapeHtml(String(tr.status || '').toUpperCase()) +
+        '</strong>';
+    if (tr.refundAmount > 0) {
+        html += ' · Eligible refund: <strong>₹' + escapeHtml(String(tr.refundAmount)) + '</strong> (' + escapeHtml(String(tr.refundPercent || 0)) + '%)';
+    }
+    html += '</p>';
+    html +=
+        '<p style="margin:0 0 8px;font-size:0.85rem;color:' +
+        tone +
+        ';"><strong>Refund:</strong> ' +
+        escapeHtml(tr.refundStatusLabel || '') +
+        (tr.providerRefundId ? ' · Ref: ' + escapeHtml(tr.providerRefundId) : '') +
+        '</p>';
+    if (tr.trackingSteps && tr.trackingSteps.length) {
+        html += renderRefundTrackingStepsHtml(tr.trackingSteps);
+    }
+    html += '</div>';
+    return html;
+}
+
 function renderSeminarApplicationTrackerCard(a) {
     const tl = a.timeline || {};
     const payAmt = Number(a.seminar_price) > 0 ? Number(a.seminar_price) : 1500;
@@ -868,6 +993,7 @@ function renderSeminarApplicationTrackerCard(a) {
         qualBadge +
         waitlistBlock +
         revisionBlock +
+        renderCancellationRefundBlock(a) +
         renderTrackerStepsHtml(tl) +
         payBtn +
         waBlock +
@@ -4468,7 +4594,8 @@ async function loadDoctorCancellationRequests() {
         const rows = await res.json();
         __doctorCancelRequestsByReg = {};
         (Array.isArray(rows) ? rows : []).forEach((r) => {
-            __doctorCancelRequestsByReg[r.registration_id] = r;
+            const regId = r.registrationId != null ? r.registrationId : r.registration_id;
+            if (regId) __doctorCancelRequestsByReg[regId] = r;
         });
     } catch (e) {
         console.warn('[cancel-req]', e);
@@ -4479,13 +4606,23 @@ function doctorCancelRequestStatus(registrationId) {
     const r = __doctorCancelRequestsByReg[registrationId];
     if (!r) return '';
     const st = String(r.status || '').toLowerCase();
-    if (st === 'pending') return 'Cancellation pending review';
-    if (st === 'approved') return 'Cancellation approved';
+    if (st === 'pending') {
+        const amt = r.refundAmount != null ? r.refundAmount : r.refund_amount;
+        return amt > 0
+            ? 'Cancellation pending · refund preview ₹' + amt + ' (IST)'
+            : 'Cancellation pending review';
+    }
+    if (st === 'approved') {
+        const label = r.refundStatusLabel || r.refund_status || '';
+        return label && label !== 'No refund applicable'
+            ? 'Cancelled · ' + label
+            : 'Cancellation approved';
+    }
     if (st === 'rejected') return 'Cancellation request rejected';
     return '';
 }
 
-function openCancelRequestModal(applicationId) {
+async function openCancelRequestModal(applicationId) {
     if (!currentUser || !currentUser.id) return;
     const app = (userApplications || []).find((a) => Number(a.id) === Number(applicationId));
     if (!app) return;
@@ -4502,14 +4639,39 @@ function openCancelRequestModal(applicationId) {
     __cancelRequestAppId = applicationId;
     const label = document.getElementById('cancel-request-app-label');
     const pol = document.getElementById('cancel-request-policy');
+    const preview = document.getElementById('cancel-request-refund-preview');
     const reason = document.getElementById('cancel-request-reason');
     if (label) label.textContent = 'Application ' + (app.application_no || '') + ' — ' + (app.seminar_title || app.title || '');
     if (pol) pol.textContent = summaryCancellationPolicy(app.cancellation_policy_json) || 'Refund eligibility is calculated in IST when admin reviews your request.';
+    if (preview) preview.innerHTML = '<p class="muted" style="margin:0;font-size:0.85rem;">Calculating refund eligibility…</p>';
     if (reason) reason.value = '';
     const m = document.getElementById('cancel-request-modal');
     if (m) {
         m.classList.remove('hidden');
         m.style.display = 'flex';
+    }
+    try {
+        const res = await fetch(
+            '/api/doctor/cancellation-preview?userId=' +
+                encodeURIComponent(currentUser.id) +
+                '&registrationId=' +
+                encodeURIComponent(applicationId)
+        );
+        const data = await res.json().catch(function () {
+            return {};
+        });
+        if (preview) {
+            if (res.ok && data.eligibility) {
+                preview.innerHTML = renderRefundEligibilityHtml(data.eligibility);
+            } else {
+                preview.innerHTML =
+                    '<p style="color:#b91c1c;margin:0;font-size:0.85rem;">' +
+                    escapeHtml(data.error || 'Could not load refund preview.') +
+                    '</p>';
+            }
+        }
+    } catch (e) {
+        if (preview) preview.innerHTML = '<p style="color:#b91c1c;margin:0;font-size:0.85rem;">Network error loading refund preview.</p>';
     }
 }
 
@@ -4545,6 +4707,7 @@ async function submitCancellationRequest() {
         let msg = data.message || 'Request submitted.';
         if (prev && prev.amount != null) {
             msg += '\n\nPolicy preview (IST): ' + (prev.percent || 0) + '% — ₹' + prev.amount + '. ' + (prev.reason || '');
+            msg += '\n\nTrack refund status under Track seminar applications after admin approval.';
         }
         alert(msg);
         closeCancelRequestModal();

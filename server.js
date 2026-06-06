@@ -36,6 +36,7 @@ const refundLib = require('./lib/refunds');
 const branding = require('./lib/branding');
 const extModules = require('./lib/extended-modules');
 const portalTracking = require('./lib/portal-tracking');
+const refundTracking = require('./lib/refund-tracking');
 const seminarDt = require('./lib/seminar-datetime');
 const cancelPolicy = require('./lib/cancellation-policy');
 const siteMarketing = require('./lib/site-marketing');
@@ -4594,9 +4595,15 @@ function respondApplicationsList(uid, yearFilter, res) {
                     console.error('[applications] timeline attach failed:', e2.message);
                     enriched = (list || []).map((r) => ({ ...r, timeline: { steps: [], status: r.status } }));
                 }
-                portalTracking.getPortalYear(db, (e3, portalYear) => {
-                    if (e3) return res.status(500).json({ error: e3.message });
-                    res.json({ portalYear, applications: enriched || [] });
+                refundTracking.attachCancellationRefundToApplications(db, enriched || [], (eCr, withCancel) => {
+                    if (eCr) {
+                        console.warn('[applications] cancellation tracking attach failed:', eCr.message);
+                        withCancel = enriched || [];
+                    }
+                    portalTracking.getPortalYear(db, (e3, portalYear) => {
+                        if (e3) return res.status(500).json({ error: e3.message });
+                        res.json({ portalYear, applications: withCancel || [] });
+                    });
                 });
             });
         };

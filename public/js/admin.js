@@ -5600,9 +5600,9 @@ function renderAdminUserCancellationTab(bodyEl, userId) {
     const rows = (__adminUserDetailCache && __adminUserDetailCache.cancellationRequests) || [];
     let html =
         '<p style="color:#64748b;font-size:0.88rem;margin-bottom:12px;">Cancellation requests submitted by this doctor (IST refund policy applied on approve).</p>';
-    html += '<table class="data-table"><thead><tr><th>Requested</th><th>App</th><th>Seminar</th><th>Reason</th><th>Policy refund</th><th>Status</th><th></th></tr></thead><tbody>';
+    html += '<table class="data-table"><thead><tr><th>Requested</th><th>App</th><th>Seminar</th><th>Reason</th><th>Policy refund</th><th>Status</th><th>Refund</th><th></th></tr></thead><tbody>';
     if (!rows.length) {
-        html += '<tr><td colspan="7">No cancellation requests</td></tr>';
+        html += '<tr><td colspan="8">No cancellation requests</td></tr>';
     } else {
         rows.forEach((r) => {
             const when = r.requested_at
@@ -6346,12 +6346,12 @@ function renderAdminCancellationRequestsTable() {
     adminSearchSetCount('cancellation-requests-search-count', q, rows.length, all.length, 'requests');
     tbody.innerHTML = '';
     if (!all.length) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#94a3b8;">No requests.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#94a3b8;">No requests.</td></tr>';
         return;
     }
     if (!rows.length) {
         tbody.innerHTML =
-            '<tr><td colspan="8" style="text-align:center;color:#94a3b8;">No requests match your search.</td></tr>';
+            '<tr><td colspan="9" style="text-align:center;color:#94a3b8;">No requests match your search.</td></tr>';
         return;
     }
     rows.forEach((r) => {
@@ -6360,6 +6360,12 @@ function renderAdminCancellationRequestsTable() {
             ? new Date(r.requested_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
             : '—';
         const pol = '₹' + (r.refund_amount || 0) + ' (' + (r.refund_percent || 0) + '%)';
+        const refundTrack =
+            '<div style="font-size:0.82rem;line-height:1.45;">' +
+            escAdmin(r.refundStatusLabel || r.refund_status || '—') +
+            (r.provider_refund_id ? '<br><span class="muted">Ref: ' + escAdmin(r.provider_refund_id) + '</span>' : '') +
+            (r.order_refund_status ? '<br><span class="muted">Order: ' + escAdmin(r.order_refund_status) + '</span>' : '') +
+            '</div>';
         let actions = '—';
         if (r.status === 'pending') {
             actions =
@@ -6385,6 +6391,8 @@ function renderAdminCancellationRequestsTable() {
             escAdmin(pol) +
             '</td><td>' +
             escAdmin(r.status) +
+            '</td><td>' +
+            refundTrack +
             '</td><td>' +
             actions +
             '</td></tr>';

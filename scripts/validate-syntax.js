@@ -10,6 +10,8 @@ const files = [
     path.join('lib', 'extended-schema-pg.js'),
     path.join('lib', 'extended-modules.js'),
     path.join('lib', 'routes-ext.js'),
+    path.join('lib', 'routes-payments.js'),
+    path.join('lib', 'refund-tracking.js'),
     path.join('lib', 'certificate-verify.js'),
     path.join('lib', 'notification-engine.js'),
     path.join('lib', 'db-pg.js'),
