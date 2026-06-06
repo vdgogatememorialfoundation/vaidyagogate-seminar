@@ -7,6 +7,7 @@
         doctor: 'seminar_doctor_user',
         judge: 'seminar_judge_user',
         scanner: 'seminar_scanner_user',
+        venue_gate: 'seminar_venue_gate_user',
         staff: 'seminar_staff_user'
     };
 
@@ -31,6 +32,11 @@
     function isScannerUser(user) {
         const { ur } = normRole(user);
         return ur === 'scanner_portal_user' || ur === 'scanner_dashboard_user';
+    }
+
+    function isVenueGateUser(user) {
+        const { ur, r } = normRole(user);
+        return ur === 'venue_gate_user' || ur === 'scanner_portal_user' || r === 'admin';
     }
 
     function isBookStaffUser(user) {
@@ -63,6 +69,7 @@
         if (portal === 'doctor') return isDoctorUser(user);
         if (portal === 'judge') return isJudgeUser(user);
         if (portal === 'scanner') return isScannerUser(user);
+        if (portal === 'venue_gate') return isVenueGateUser(user);
         if (portal === 'staff') {
             if (isScannerUser(user) || isJudgeUser(user)) return false;
             if (isDoctorUser(user)) return false;
@@ -146,7 +153,7 @@
 
     async function refreshLoginOtpPanel(panelEl, portal) {
         if (!panelEl) return;
-        if (portal === 'judge' || portal === 'scanner' || portal === 'admin' || portal === 'staff') {
+        if (portal === 'judge' || portal === 'scanner' || portal === 'venue_gate' || portal === 'admin' || portal === 'staff') {
             panelEl.style.display = 'none';
             return;
         }
@@ -166,6 +173,9 @@
         if (r === 'admin' && ur !== 'co_admin') return 'Use the admin portal: /admin.html';
         if (isJudgeUser(user)) return 'Use the judge portal: /judge.html';
         if (isScannerUser(user)) return 'Use the scanner portal: /scanner.html';
+        if (isVenueGateUser(user) && normRole(user).ur === 'venue_gate_user') {
+            return 'Use the venue gate portal: /venue-gate.html';
+        }
         if (isBookStaffUser(user)) return 'Use the staff portal: /staff/login';
         if (isDoctorUser(user)) return 'Use the doctor portal: /doctor.html';
         return 'This account cannot access this portal. Please sign in with the correct account.';
@@ -411,6 +421,7 @@
         isDoctorUser,
         isJudgeUser,
         isScannerUser,
+        isVenueGateUser,
         isAdminPortalUser,
         isBookStaffUser,
         isStaffPortalUser,

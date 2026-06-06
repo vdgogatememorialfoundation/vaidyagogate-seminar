@@ -427,6 +427,44 @@ body.scanner-body.has-logo-theme {
     padding: 10px !important;
 }
 
+.id-capture-panel {
+    margin-top: 14px;
+    padding: 12px;
+    border: 1px dashed var(--scan-line);
+    border-radius: 12px;
+    background: #f8fafc;
+}
+.id-capture-title {
+    font-weight: 700;
+    font-size: 0.92rem;
+    color: var(--scan-accent);
+    margin-bottom: 6px;
+}
+.id-capture-hint {
+    font-size: 0.78rem;
+    color: var(--scan-muted);
+    line-height: 1.45;
+    margin-bottom: 10px;
+}
+.id-capture-video {
+    width: 100%;
+    max-height: 220px;
+    border-radius: 10px;
+    background: #0f172a;
+    object-fit: cover;
+}
+.id-capture-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+.id-capture-status {
+    font-size: 0.78rem;
+    color: var(--scan-muted);
+    margin-top: 8px;
+    min-height: 1.2em;
+}
 .hidden { display: none !important; }
 
 .scanner-native-shell a[href]:not([href^="#"]):not([href*="scanner.html"]) {

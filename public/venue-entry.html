@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#0f766e">
+    <title>VGMF Venue Pass</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/scanner-portal.css">
+    <style>
+        :root { --scan-accent: #0f766e; --scan-accent-soft: #14b8a6; }
+        .venue-card { background: var(--scan-panel); border: 1px solid var(--scan-line); border-radius: 14px; padding: 14px; }
+        .venue-card h3 { font-size: 1rem; color: var(--scan-accent); margin-bottom: 8px; }
+        .pass-qr { display: block; margin: 12px auto; max-width: 280px; width: 100%; border-radius: 12px; border: 1px solid var(--scan-line); }
+        .reg-list { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+        .reg-item { border: 1px solid var(--scan-line); border-radius: 12px; padding: 12px; background: #fff; }
+        .selfie-preview { width: 120px; height: 120px; border-radius: 50%; object-fit: cover; border: 3px solid #14b8a6; display: block; margin: 0 auto 12px; }
+        #enroll-video { width: 100%; max-height: 260px; border-radius: 12px; background: #0f172a; object-fit: cover; }
+    </style>
+</head>
+<body class="scanner-body">
+    <div id="auth-overlay" class="auth-overlay-scanner">
+        <div class="auth-card-scanner">
+            <div class="auth-brand" data-site-logo data-logo-height="56px" aria-hidden="true"></div>
+            <h2><i class="fas fa-id-card"></i> Venue pass</h2>
+            <p class="auth-sub">Doctor portal — enroll once, show your DigiYatra-style pass at the venue gate.</p>
+            <form id="venue-login-form" autocomplete="off">
+                <label for="venue-email">Email</label>
+                <input type="email" id="venue-email" required autocomplete="username">
+                <label for="venue-password">Password</label>
+                <input type="password" id="venue-password" required autocomplete="current-password">
+                <div id="venue-login-otp-panel" class="hidden scanner-otp-panel">
+                    <div class="otp-row">
+                        <button type="button" class="tool-btn" id="venue-send-otp-email">Email OTP</button>
+                        <input type="text" id="venue-email-otp" placeholder="Code" maxlength="8">
+                        <button type="button" class="tool-btn" id="venue-verify-otp-email">OK</button>
+                    </div>
+                </div>
+                <p id="venue-login-err" class="login-err hidden"></p>
+                <button type="submit" class="tool-btn primary auth-submit">Sign in</button>
+            </form>
+            <p class="auth-foot"><a href="/doctor.html">Back to doctor portal</a></p>
+        </div>
+    </div>
+
+    <div id="venue-ui" class="scanner-shell hidden">
+        <header class="scanner-top">
+            <div class="scanner-top-main">
+                <p class="scanner-eyebrow">DigiYatra-style pass</p>
+                <h1>Venue entry</h1>
+                <p class="who" id="venue-who"></p>
+            </div>
+            <button type="button" class="tool-btn scanner-logout" id="venue-logout" title="Logout"><i class="fas fa-sign-out-alt"></i></button>
+        </header>
+
+        <div id="venue-enroll-card" class="venue-card hidden">
+            <h3><i class="fas fa-camera"></i> Enroll your selfie</h3>
+            <p class="auth-sub">One-time enrollment. Gate staff will match this photo when you enter.</p>
+            <video id="enroll-video" playsinline muted autoplay></video>
+            <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;">
+                <button type="button" class="tool-btn primary" id="btn-enroll-capture">Capture selfie</button>
+                <input type="file" id="enroll-file" accept="image/*" capture="user" class="hidden">
+                <button type="button" class="tool-btn" id="btn-enroll-file">Upload photo</button>
+            </div>
+            <p id="enroll-status" class="id-capture-status"></p>
+        </div>
+
+        <div id="venue-enrolled-card" class="venue-card hidden">
+            <img id="venue-selfie" class="selfie-preview" alt="Your enrolled selfie">
+            <p style="text-align:center;font-size:0.85rem;color:var(--scan-muted);">Enrolled · show pass QR below at the gate</p>
+            <button type="button" class="tool-btn" id="btn-re-enroll" style="width:100%;margin-top:8px;">Update selfie</button>
+        </div>
+
+        <div class="venue-card">
+            <h3><i class="fas fa-qrcode"></i> Your venue passes</h3>
+            <p class="auth-sub">Paid registrations only. Select a seminar to display your pass QR.</p>
+            <div id="venue-reg-list" class="reg-list"></div>
+        </div>
+
+        <div id="venue-pass-panel" class="venue-card hidden">
+            <h3 id="venue-pass-title">Pass QR</h3>
+            <img id="venue-pass-qr" class="pass-qr" alt="Venue pass QR">
+            <p id="venue-pass-meta" style="font-size:0.82rem;color:var(--scan-muted);text-align:center;"></p>
+        </div>
+    </div>
+
+    <script src="/js/portal-content-protection.js"></script>
+    <script src="/js/site-branding.js"></script>
+    <script src="/js/portal-auth.js"></script>
+    <script src="/js/venue-entry.js"></script>
+</body>
+</html>

@@ -713,6 +713,7 @@ function isDoctorAccount(u) {
         'co_admin',
         'judge_user',
         'scanner_portal_user',
+        'venue_gate_user',
         'scanner_dashboard_user',
         'reviewer',
         'admin'
@@ -895,6 +896,7 @@ function adminStaffUserRoleValue(u) {
         'judge_user',
         'co_admin',
         'scanner_portal_user',
+        'venue_gate_user',
         'scanner_dashboard_user',
         'reviewer'
     ];
@@ -986,6 +988,7 @@ function renderStaffUsersTable(staffList) {
                             <option value="judge_user" ${userRole === 'judge_user' ? 'selected' : ''}>Judge</option>
                             <option value="co_admin" ${userRole === 'co_admin' ? 'selected' : ''}>Co Admin</option>
                             <option value="scanner_portal_user" ${userRole === 'scanner_portal_user' ? 'selected' : ''}>Scanner (volunteer)</option>
+                            <option value="venue_gate_user" ${userRole === 'venue_gate_user' ? 'selected' : ''}>Venue gate (DigiYatra)</option>
                             <option value="scanner_dashboard_user" ${userRole === 'scanner_dashboard_user' ? 'selected' : ''}>Live scanner dashboard</option>
                             <option value="reviewer" ${userRole === 'reviewer' ? 'selected' : ''}>Reviewer</option>
                             <option value="book_sales_staff" ${userRole === 'book_sales_staff' ? 'selected' : ''}>Book sales staff</option>
@@ -2549,7 +2552,7 @@ function initAdminBehalfRegTab() {
     Object.values(window.__adminUsersById || {}).forEach((u) => {
         const ur = String(u.user_role || '').toLowerCase();
         const r = String(u.role || '').toLowerCase();
-        if (ur === 'co_admin' || ur === 'judge_user' || ur === 'scanner_portal_user' || ur === 'reviewer') return;
+        if (ur === 'co_admin' || ur === 'judge_user' || ur === 'scanner_portal_user' || ur === 'venue_gate_user' || ur === 'reviewer') return;
         if (r === 'admin' && ur !== 'doctor') return;
         ds.innerHTML += `<option value="${u.id}">${u.first_name} ${u.last_name} (${u.user_id_string})</option>`;
     });
@@ -2964,6 +2967,7 @@ function renderAdminUserDetailTab() {
                             <option value="judge_user">Judge</option>
                             <option value="co_admin">Co Admin</option>
                             <option value="scanner_portal_user">Scanner (volunteer)</option>
+                            <option value="venue_gate_user">Venue gate (DigiYatra)</option>
                             <option value="scanner_dashboard_user">Live scanner dashboard</option>
                             <option value="reviewer">Reviewer</option>
                         </select>

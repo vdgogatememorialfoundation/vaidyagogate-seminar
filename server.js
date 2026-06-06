@@ -52,6 +52,8 @@ const adminPaymentFlow = require('./lib/admin-payment-flow');
 const { registerPaymentsRoutes } = require('./lib/routes-payments');
 const seminarCapacity = require('./lib/seminar-capacity');
 const ticketScanEvents = require('./lib/ticket-scan-events');
+const scannerIdCapture = require('./lib/scanner-id-capture');
+const venueEntry = require('./lib/venue-entry');
 const feedbackFormConfig = require('./lib/feedback-form-config');
 const { registerLiveScannerRoutes } = require('./lib/routes-live-scanner');
 const { registerPosRoutes } = require('./lib/pos-onspot');
@@ -488,6 +490,12 @@ app.get('/scanner', (req, res) => {
 });
 app.get('/scanner/', (req, res) => {
     res.redirect(302, '/scanner.html');
+});
+app.get(['/venue-entry', '/venue-entry/'], (req, res) => {
+    res.redirect(302, '/venue-entry.html');
+});
+app.get(['/venue-gate', '/venue-gate/'], (req, res) => {
+    res.redirect(302, '/venue-gate.html');
 });
 
 const staffPortalHtml = path.join(__dirname, 'public', 'staff.html');
@@ -1091,7 +1099,9 @@ function ensurePortalSchema(next) {
                                         db.run(`ALTER TABLE seminars ADD COLUMN waiting_list_enabled INTEGER DEFAULT 0`, (h7wl) => {
                                             ignoreSchemaMigrationErr(h7wl);
                                         });
-                                            ticketScanEvents.ensureTicketScanEventsTable(db, () => {});
+                                            ticketScanEvents.ensureTicketScanEventsTable(db, () => {
+                                                venueEntry.ensureSchema(db, () => {});
+                                            });
                                         db.run(`ALTER TABLE tickets ADD COLUMN ticket_id_string TEXT`, (e2) => {
                                             ignoreSchemaMigrationErr(e2);
                                             db.run(`ALTER TABLE tickets ADD COLUMN is_valid INTEGER DEFAULT 1`, (e2b) => {
@@ -2179,9 +2189,9 @@ function markRegistrationETicketIssued(registrationId, cb) {
     regPaymentStatus.markRegistrationETicketIssued(db, registrationId, cb);
 }
 
-function recordScanEventForDashboard(seminarId, staffId, payload) {
+function recordScanEventForDashboard(seminarId, staffId, payload, cb) {
     const sid = parseInt(seminarId, 10);
-    if (!Number.isInteger(sid) || sid < 1) return;
+    if (!Number.isInteger(sid) || sid < 1) return cb && cb(null, null);
     ticketScanEvents.recordTicketScanEvent(
         db,
         {
@@ -2195,7 +2205,7 @@ function recordScanEventForDashboard(seminarId, staffId, payload) {
             outcome: payload.outcome || 'failed',
             message: payload.message || null
         },
-        () => {}
+        cb || (() => {})
     );
 }
 
@@ -2517,7 +2527,18 @@ function mountExtendedRoutes() {
     } catch (routeErr) {
         console.error('[routes] routes-ext failed (case APIs still active):', routeErr.message);
     }
-    console.log('[routes] Extended APIs mounted (case programs, branding, volunteers, reports)');
+    scannerIdCapture.registerScannerIdCaptureRoutes(app, {
+        db,
+        uploadsDir,
+        withMemoryAwareUpload
+    });
+    venueEntry.registerVenueEntryRoutes(app, {
+        db,
+        uploadsDir,
+        withMemoryAwareUpload,
+        buildDisplayNameFromFormData
+    });
+    console.log('[routes] Extended APIs mounted (case programs, branding, volunteers, reports, venue entry)');
 }
 try {
     mountExtendedRoutes();
@@ -3831,11 +3852,26 @@ app.post('/api/auth/login', withAuxiliaryTables, (req, res) => {
                     });
                 }
 
+                if (loginPortal === 'venue_gate') {
+                    const ur = String(row.user_role || '').toLowerCase();
+                    const r = String(row.role || '').toLowerCase();
+                    if (ur !== 'venue_gate_user' && ur !== 'scanner_portal_user' && r !== 'admin') {
+                        return res.status(403).json({
+                            error: 'Venue gate accounts sign in at /venue-gate.html (or scanner staff may use the same gate portal).'
+                        });
+                    }
+                }
+
                 if (loginPortal === 'staff' && !portalAuthPolicy.canUseStaffBookPortal(row)) {
                     const ur = String(row.user_role || '').toLowerCase();
                     if (ur === 'scanner_portal_user' || ur === 'scanner_dashboard_user') {
                         return res.status(403).json({
                             error: 'Scanner accounts must use the scanner portal at /scanner.html.'
+                        });
+                    }
+                    if (ur === 'venue_gate_user') {
+                        return res.status(403).json({
+                            error: 'Venue gate accounts must use /venue-gate.html.'
                         });
                     }
                     if (ur === 'judge_user' || ur === 'reviewer') {
@@ -6682,31 +6718,43 @@ app.post('/api/scanner/mark', (req, res) => {
                                     }
                                 );
                                 function sendScanSuccess() {
-                                recordScanEventForDashboard(selectedSeminarId, staffId, {
-                                    ticket_db_id: row.ticket_id,
-                                    ticket_id_string: row.ticket_id_string,
-                                    application_no: row.application_no,
-                                    doctor_user_id: row.doctor_user_id,
-                                    doctor_name: doctorName,
-                                    outcome: 'success',
-                                    message: scanMsg
-                                });
-                                res.json({
-                                    success: true,
-                                    sound: 'success',
-                                    message: scanMsg,
-                                    scanCount: newScanCount,
-                                    scansRequired,
-                                    certificateEligible: certEligibleNow,
-                                    doctor: doctorPayloadFromScanRow(row, {
-                                        name: doctorName,
-                                        ticketId: row.ticket_id_string,
-                                        registrationType: 'checked_in',
-                                        paymentStatus: row.payment_status === 'success' ? 'PAID' : 'UNPAID',
-                                        checkedInAt: atIso
-                                    }),
-                                    scannedByStaffId: staffId
-                                });
+                                    recordScanEventForDashboard(
+                                        selectedSeminarId,
+                                        staffId,
+                                        {
+                                            ticket_db_id: row.ticket_id,
+                                            ticket_id_string: row.ticket_id_string,
+                                            application_no: row.application_no,
+                                            doctor_user_id: row.doctor_user_id,
+                                            doctor_name: doctorName,
+                                            outcome: 'success',
+                                            message: scanMsg
+                                        },
+                                        (_evErr, scanEventId) => {
+                                            res.json({
+                                                success: true,
+                                                sound: 'success',
+                                                message: scanMsg,
+                                                scanCount: newScanCount,
+                                                scansRequired,
+                                                certificateEligible: certEligibleNow,
+                                                scanEventId: scanEventId || null,
+                                                ticketDbId: row.ticket_id,
+                                                registrationId: regId || null,
+                                                doctorUserId: row.doctor_user_id,
+                                                doctor: doctorPayloadFromScanRow(row, {
+                                                    name: doctorName,
+                                                    ticketId: row.ticket_id_string,
+                                                    registrationType: 'checked_in',
+                                                    paymentStatus:
+                                                        row.payment_status === 'success' ? 'PAID' : 'UNPAID',
+                                                    checkedInAt: atIso
+                                                }),
+                                                scannedByStaffId: staffId,
+                                                needsIdCapture: true
+                                            });
+                                        }
+                                    );
                                 }
                             });
                         };

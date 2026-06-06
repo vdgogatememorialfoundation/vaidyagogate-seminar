@@ -299,6 +299,142 @@
         }, AUTO_NEXT_MS);
     }
 
+    let pendingIdCapture = null;
+    let idCaptureStream = null;
+
+    function stopIdCaptureCam() {
+        if (idCaptureStream) {
+            idCaptureStream.getTracks().forEach((t) => t.stop());
+            idCaptureStream = null;
+        }
+        const vid = document.getElementById('id-capture-video');
+        if (vid) vid.srcObject = null;
+    }
+
+    function finishIdCaptureStep() {
+        stopIdCaptureCam();
+        pendingIdCapture = null;
+        scheduleAutoResume();
+    }
+
+    async function startIdCaptureCam() {
+        stopIdCaptureCam();
+        const vid = document.getElementById('id-capture-video');
+        if (!vid || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return false;
+        try {
+            idCaptureStream = await navigator.mediaDevices.getUserMedia({
+                video: { facingMode: 'environment' },
+                audio: false
+            });
+            vid.srcObject = idCaptureStream;
+            await vid.play();
+            return true;
+        } catch (e) {
+            console.warn('[scanner] ID camera:', e.message);
+            return false;
+        }
+    }
+
+    async function beginIdCaptureFlow(result) {
+        const d = result.doctor || {};
+        pendingIdCapture = {
+            scanEventId: result.scanEventId,
+            ticketDbId: result.ticketDbId,
+            registrationId: result.registrationId,
+            doctorUserId: result.doctorUserId || d.userId,
+            seminarId: parseInt(document.getElementById('scanner-seminar-select')?.value, 10),
+            ticketIdString: d.ticketId
+        };
+        scanBusy = true;
+        const scanNote =
+            result.scanCount != null && result.scansRequired != null
+                ? '<p style="margin-top:8px;font-size:0.85rem;">Scans: <strong>' +
+                  result.scanCount +
+                  '/' +
+                  result.scansRequired +
+                  '</strong></p>'
+                : '';
+        renderResult(
+            true,
+            '<div class="scan-result-top">' +
+                profilePhotoHtml(d) +
+                '<div class="scan-result-body"><strong><i class="fas fa-check-circle"></i> ' +
+                (result.message || 'Checked in').replace(/</g, '&lt;') +
+                '</strong>' +
+                metaHtml(d) +
+                '</div></div>' +
+                scanNote +
+                '<div class="id-capture-panel">' +
+                '<p class="id-capture-title"><i class="fas fa-id-card"></i> Capture identity proof</p>' +
+                '<p class="id-capture-hint">Take a clear photo of the visitor\'s ID (Aadhaar, driving licence, etc.) so staff can verify who attended.</p>' +
+                '<video id="id-capture-video" class="id-capture-video" playsinline muted autoplay></video>' +
+                '<input type="file" id="id-capture-file" accept="image/*" capture="environment" class="hidden">' +
+                '<div class="id-capture-actions">' +
+                '<button type="button" class="tool-btn primary" id="btn-id-capture">Take photo</button>' +
+                '<button type="button" class="tool-btn" id="btn-id-file">Upload photo</button>' +
+                '<button type="button" class="tool-btn" id="btn-id-skip">Skip</button>' +
+                '</div>' +
+                '<p id="id-capture-status" class="id-capture-status"></p>' +
+                '</div>',
+            'ok'
+        );
+        document.getElementById('btn-id-capture')?.addEventListener('click', () => window.scannerCaptureIdProof());
+        document.getElementById('btn-id-file')?.addEventListener('click', () => document.getElementById('id-capture-file')?.click());
+        document.getElementById('btn-id-skip')?.addEventListener('click', () => finishIdCaptureStep());
+        document.getElementById('id-capture-file')?.addEventListener('change', (ev) => {
+            const file = ev.target.files && ev.target.files[0];
+            if (file) window.scannerUploadIdProofFile(file);
+        });
+        await startIdCaptureCam();
+    }
+
+    async function uploadIdProofBlob(blob) {
+        if (!pendingIdCapture || !user) return finishIdCaptureStep();
+        const statusEl = document.getElementById('id-capture-status');
+        if (statusEl) statusEl.textContent = 'Uploading…';
+        const fd = new FormData();
+        fd.append('idPhoto', blob, 'id-proof.jpg');
+        fd.append('scannerUserId', String(user.id));
+        fd.append('seminarId', String(pendingIdCapture.seminarId || ''));
+        if (pendingIdCapture.scanEventId) fd.append('scanEventId', String(pendingIdCapture.scanEventId));
+        if (pendingIdCapture.ticketDbId) fd.append('ticketDbId', String(pendingIdCapture.ticketDbId));
+        if (pendingIdCapture.registrationId) fd.append('registrationId', String(pendingIdCapture.registrationId));
+        if (pendingIdCapture.doctorUserId) fd.append('doctorUserId', String(pendingIdCapture.doctorUserId));
+        if (pendingIdCapture.ticketIdString) fd.append('ticketIdString', pendingIdCapture.ticketIdString);
+        try {
+            const res = await fetch('/api/scanner/id-capture', { method: 'POST', body: fd });
+            const data = await res.json();
+            if (res.ok && data.success) {
+                if (statusEl) statusEl.textContent = 'ID photo saved.';
+            } else if (statusEl) {
+                statusEl.textContent = data.error || 'Upload failed — skipped.';
+            }
+        } catch (e) {
+            if (statusEl) statusEl.textContent = 'Network error — skipped.';
+        }
+        setTimeout(finishIdCaptureStep, 800);
+    }
+
+    window.scannerCaptureIdProof = async function () {
+        const vid = document.getElementById('id-capture-video');
+        if (!vid || !vid.videoWidth) {
+            alert('Camera not ready. Use Upload photo or Skip.');
+            return;
+        }
+        const canvas = document.createElement('canvas');
+        canvas.width = vid.videoWidth;
+        canvas.height = vid.videoHeight;
+        canvas.getContext('2d').drawImage(vid, 0, 0);
+        canvas.toBlob((blob) => {
+            if (blob) uploadIdProofBlob(blob);
+            else finishIdCaptureStep();
+        }, 'image/jpeg', 0.88);
+    };
+
+    window.scannerUploadIdProofFile = function (file) {
+        uploadIdProofBlob(file);
+    };
+
     function scannerMode() {
         const m = document.getElementById('scanner-mode-select');
         return m && m.value === 'books' ? 'books' : 'ticket';
@@ -595,29 +731,8 @@
             if (result.success) {
                 playTone('success');
                 stats.ok++;
-                const scanNote =
-                    result.scanCount != null && result.scansRequired != null
-                        ? '<p style="margin-top:8px;font-size:0.85rem;">Scans: <strong>' +
-                          result.scanCount +
-                          '/' +
-                          result.scansRequired +
-                          '</strong></p>'
-                        : '';
-                renderResult(
-                    true,
-                    '<div class="scan-result-top">' +
-                        profilePhotoHtml(d) +
-                        '<div class="scan-result-body"><strong><i class="fas fa-check-circle"></i> ' +
-                        (result.message || 'Checked in').replace(/</g, '&lt;') +
-                        '</strong>' +
-                        metaHtml(d) +
-                        '</div></div>' +
-                        scanNote +
-                        '<p style="margin-top:10px;font-size:0.85rem;opacity:0.85;">Next scan in a moment…</p>',
-                    'ok'
-                );
                 pushHistory((d.name || 'Guest') + ' · ' + (d.ticketId || d.applicationNo || ''), true);
-                scheduleAutoResume();
+                beginIdCaptureFlow(result);
             } else {
                 const err =
                     result.error ||

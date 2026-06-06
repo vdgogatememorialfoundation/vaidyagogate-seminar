@@ -7,6 +7,7 @@
         'judge_user',
         'scanner_portal_user',
         'scanner_dashboard_user',
+        'venue_gate_user',
         'reviewer',
         'book_sales_staff',
         'staff_user',
@@ -18,6 +19,7 @@
         'co_admin',
         'scanner_portal_user',
         'scanner_dashboard_user',
+        'venue_gate_user',
         'reviewer',
         'book_sales_staff',
         'staff_user'
