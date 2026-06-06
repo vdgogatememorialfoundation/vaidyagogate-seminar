@@ -5036,11 +5036,19 @@ async function loadAdminSeminarAnalytics() {
     }
 }
 
+let __adminVerifyDelegateCache = { listed: [], missingPaid: [] };
+
 async function initAdminReportsTab() {
     await fillAdminSeminarSelect('report-seminar', false);
     await fillAdminSeminarSelect('reg-ov-seminar', false);
     initRegOverrideUntilPicker();
     await loadAdminRegistrationOverrides();
+    const rs = document.getElementById('report-seminar');
+    if (rs && !rs.__verifyDelegateBound) {
+        rs.__verifyDelegateBound = true;
+        rs.addEventListener('change', () => loadAdminVerifyDelegateList());
+    }
+    await loadAdminVerifyDelegateList();
 }
 
 function downloadAdminReport(type, format) {
@@ -5048,6 +5056,224 @@ function downloadAdminReport(type, format) {
     if (!sid) return alert('Select a seminar');
     const fmt = format || 'xlsx';
     window.location.href = `/api/admin/reports/${sid}/${type}?format=${encodeURIComponent(fmt)}`;
+}
+
+function verifyDelegateReasonLabel(reason) {
+    if (reason === 'excluded_by_admin') return 'Hidden by admin';
+    if (reason === 'not_auto_eligible') return 'Not auto-eligible (e.g. docs / status)';
+    return reason || '—';
+}
+
+async function loadAdminVerifyDelegateList() {
+    const sid = document.getElementById('report-seminar')?.value;
+    const statsEl = document.getElementById('verify-delegate-stats');
+    const listedEl = document.getElementById('verify-delegate-listed');
+    const missingEl = document.getElementById('verify-delegate-missing');
+    if (!listedEl || !missingEl) return;
+    if (!sid) {
+        if (statsEl) statsEl.textContent = 'Select a seminar above, then refresh.';
+        listedEl.innerHTML = '<tr><td colspan="8" style="text-align:center;">—</td></tr>';
+        missingEl.innerHTML = '<tr><td colspan="7" style="text-align:center;">—</td></tr>';
+        return;
+    }
+    const q = String(document.getElementById('verify-delegate-search')?.value || '').trim();
+    if (statsEl) statsEl.textContent = 'Loading…';
+    try {
+        const url =
+            '/api/admin/seminars/' +
+            encodeURIComponent(sid) +
+            '/verify-delegate-list' +
+            (q ? '?q=' + encodeURIComponent(q) : '');
+        const res = await fetch(url);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Could not load verify list');
+        __adminVerifyDelegateCache = {
+            listed: data.listed || [],
+            missingPaid: data.missingPaid || []
+        };
+        const st = data.stats || {};
+        const pub = data.publicListEnabled
+            ? 'Public verify page is ON for this seminar.'
+            : 'Public verify page is OFF — enable under Seminar edit when ready.';
+        if (statsEl) {
+            statsEl.textContent =
+                pub +
+                ' Listed: ' +
+                (st.listed || 0) +
+                ' · Paid missing: ' +
+                (st.missingPaid || 0) +
+                ' · Volunteers excluded: ' +
+                (st.volunteersExcluded || 0) +
+                '.';
+        }
+        if (!data.listed || !data.listed.length) {
+            listedEl.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#64748b;">No paid delegates on the public list yet.</td></tr>';
+        } else {
+            listedEl.innerHTML = data.listed
+                .map((p) => {
+                    const src =
+                        p.source === 'manual'
+                            ? '<span style="color:#15803d;font-weight:600;">Manual</span>'
+                            : '<span style="color:#334155;">Auto</span>';
+                    const amt = p.amount != null ? '₹' + p.amount : '—';
+                    const actions =
+                        p.source === 'manual'
+                            ? '<button type="button" class="btn-secondary btn-sm" onclick="adminRemoveVerifyDelegate(' +
+                              p.registrationId +
+                              ')">Remove manual</button> <button type="button" class="btn-secondary btn-sm" onclick="adminExcludeVerifyDelegate(' +
+                              p.registrationId +
+                              ')">Hide</button>'
+                            : '<button type="button" class="btn-secondary btn-sm" onclick="adminExcludeVerifyDelegate(' +
+                              p.registrationId +
+                              ')">Hide</button>';
+                    return (
+                        '<tr><td>' +
+                        escAdmin(p.name) +
+                        '</td><td>' +
+                        escAdmin(p.applicationNo) +
+                        '</td><td>' +
+                        escAdmin(p.userIdString) +
+                        '</td><td>' +
+                        escAdmin(p.city) +
+                        '</td><td>' +
+                        escAdmin(amt) +
+                        '</td><td>' +
+                        escAdmin(p.status) +
+                        '</td><td>' +
+                        src +
+                        '</td><td style="white-space:nowrap;">' +
+                        actions +
+                        '</td></tr>'
+                    );
+                })
+                .join('');
+        }
+        if (!data.missingPaid || !data.missingPaid.length) {
+            missingEl.innerHTML =
+                '<tr><td colspan="7" style="text-align:center;color:#64748b;">No paid participants missing from the list.</td></tr>';
+        } else {
+            missingEl.innerHTML = data.missingPaid
+                .map((p) => {
+                    const amt = p.amount != null ? '₹' + p.amount : '—';
+                    return (
+                        '<tr><td>' +
+                        escAdmin(p.name) +
+                        '</td><td>' +
+                        escAdmin(p.applicationNo) +
+                        '</td><td>' +
+                        escAdmin(p.userIdString) +
+                        '</td><td>' +
+                        escAdmin(amt) +
+                        '</td><td>' +
+                        escAdmin(p.status) +
+                        '</td><td>' +
+                        escAdmin(verifyDelegateReasonLabel(p.reason)) +
+                        '</td><td><button type="button" class="btn-primary btn-sm" style="background:#15803d;" onclick="adminIncludeVerifyDelegate(' +
+                        p.registrationId +
+                        ')">Add to list</button></td></tr>'
+                    );
+                })
+                .join('');
+        }
+    } catch (e) {
+        if (statsEl) statsEl.textContent = e.message || 'Load failed';
+        listedEl.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#b91c1c;">Error loading list</td></tr>';
+        missingEl.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#b91c1c;">—</td></tr>';
+    }
+}
+
+async function adminIncludeVerifyDelegate(registrationId) {
+    const sid = document.getElementById('report-seminar')?.value;
+    if (!sid || !registrationId) return;
+    try {
+        const res = await fetch('/api/admin/seminars/' + encodeURIComponent(sid) + '/verify-delegate-list/include', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ registrationId })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Could not add');
+        await loadAdminVerifyDelegateList();
+    } catch (e) {
+        alert(e.message || 'Could not add to list');
+    }
+}
+
+async function adminIncludeVerifyDelegateManual() {
+    const sid = document.getElementById('report-seminar')?.value;
+    const applicationNo = String(document.getElementById('verify-delegate-add-app')?.value || '').trim();
+    const userIdString = String(document.getElementById('verify-delegate-add-user')?.value || '').trim();
+    const statusEl = document.getElementById('verify-delegate-add-status');
+    if (!sid) return alert('Select a seminar above');
+    if (!applicationNo && !userIdString) return alert('Enter application no. or portal User ID');
+    if (statusEl) statusEl.textContent = 'Adding…';
+    try {
+        const res = await fetch('/api/admin/seminars/' + encodeURIComponent(sid) + '/verify-delegate-list/include', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ applicationNo: applicationNo || undefined, userIdString: userIdString || undefined })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Could not add');
+        if (statusEl) statusEl.style.color = '#15803d';
+        if (statusEl) statusEl.textContent = data.message || 'Added to verify list.';
+        await loadAdminVerifyDelegateList();
+    } catch (e) {
+        if (statusEl) statusEl.style.color = '#b91c1c';
+        if (statusEl) statusEl.textContent = e.message || 'Could not add';
+    }
+}
+
+async function adminRemoveVerifyDelegate(registrationId) {
+    const sid = document.getElementById('report-seminar')?.value;
+    if (!sid || !registrationId) return;
+    if (!confirm('Remove manual include? They will drop off the public list unless auto-eligible.')) return;
+    try {
+        const res = await fetch('/api/admin/seminars/' + encodeURIComponent(sid) + '/verify-delegate-list/remove', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ registrationId })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Could not remove');
+        await loadAdminVerifyDelegateList();
+    } catch (e) {
+        alert(e.message || 'Could not remove');
+    }
+}
+
+async function adminExcludeVerifyDelegate(registrationId) {
+    const sid = document.getElementById('report-seminar')?.value;
+    if (!sid || !registrationId) return;
+    if (!confirm('Hide this name from the public verify list?')) return;
+    try {
+        const res = await fetch('/api/admin/seminars/' + encodeURIComponent(sid) + '/verify-delegate-list/exclude', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ registrationId })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Could not hide');
+        await loadAdminVerifyDelegateList();
+    } catch (e) {
+        alert(e.message || 'Could not hide');
+    }
+}
+
+function exportAdminVerifyDelegateCsv() {
+    const rows = __adminVerifyDelegateCache.listed || [];
+    if (!rows.length) return alert('No listed delegates to export');
+    const keys = ['name', 'applicationNo', 'userIdString', 'city', 'state', 'phone', 'amount', 'status', 'source'];
+    const lines = [keys.join(',')];
+    rows.forEach((r) => {
+        lines.push(keys.map((k) => '"' + String(r[k] != null ? r[k] : '').replace(/"/g, '""') + '"').join(','));
+    });
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'verify-delegate-list.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
 }
 
 function readRegOverrideUntilInput() {
@@ -5628,6 +5854,8 @@ function renderAdminUserCancellationTab(bodyEl, userId) {
                 escAdmin(r.refund_percent || 0) +
                 '%)</td><td>' +
                 escAdmin(r.status) +
+                '</td><td>' +
+                escAdmin(r.refundStatusLabel || r.refund_status || '—') +
                 '</td><td>' +
                 act +
                 '</td></tr>';

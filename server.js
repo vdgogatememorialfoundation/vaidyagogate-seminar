@@ -88,6 +88,7 @@ const { safeInternalUserRowId, resolveInternalUserId } = require('./lib/internal
 const regCertVerify = require('./lib/registration-certificate-verify');
 const seminarAnalytics = require('./lib/seminar-analytics');
 const { filterConfirmedRows } = require('./lib/confirmed-participants');
+const publicParticipantList = require('./lib/public-participant-list');
 const adminLiveEdit = require('./lib/admin-live-edit');
 const adminComposeMail = require('./lib/admin-compose-mail');
 const systemHealth = require('./lib/system-health');
@@ -630,6 +631,10 @@ function ensureCriticalUserColumns(callback) {
             ignoreDup(r1);
             db.run(`ALTER TABLE registrations ADD COLUMN admin_editor_user_id INTEGER`, (r2) => {
                 ignoreDup(r2);
+                db.run(`ALTER TABLE registrations ADD COLUMN public_list_include INTEGER DEFAULT 0`, (r2a) => {
+                    ignoreDup(r2a);
+                    db.run(`ALTER TABLE registrations ADD COLUMN public_list_exclude INTEGER DEFAULT 0`, (r2a2) => {
+                        ignoreDup(r2a2);
                 db.run(`ALTER TABLE registrations ADD COLUMN updated_at DATETIME`, (r2b) => {
                     ignoreDup(r2b);
                     db.run(
@@ -639,6 +644,8 @@ function ensureCriticalUserColumns(callback) {
                             next();
                         }
                     );
+                });
+                    });
                 });
             });
         });
@@ -4026,67 +4033,12 @@ app.get('/api/public/participants/:seminarId', (req, res) => {
             if (!sem || !isPublicListEnabled(sem.public_list_enabled)) {
                 return res.status(403).json({ error: 'Participant list is not published for this seminar yet.' });
             }
-            db.all(
-                `SELECT r.application_no, r.status, r.form_data, r.doc_review_json,
-                        u.first_name, u.middle_name, u.last_name, u.user_id_string, u.phone,
-                        o.status AS payment_status, o.payment_date,
-                        t.ticket_id_string
-                 FROM registrations r
-                 JOIN users u ON r.user_id = u.id
-                 INNER JOIN orders o ON o.registration_id = r.id AND lower(trim(o.status)) = 'success'
-                 LEFT JOIN tickets t ON t.order_id = o.id
-                 WHERE r.seminar_id = ?
-                   AND r.status NOT IN ('cancelled','rejected','submitted','waitlisted','pending_approval','revision_required')
-                 ORDER BY r.application_no ASC`,
-                [sid],
-                (e2, rows) => {
+            db.all(publicParticipantList.VERIFY_DELEGATE_LIST_SQL, [sid], (e2, rows) => {
                     if (e2) return res.status(500).json({ error: e2.message });
-                    const confirmed = filterConfirmedRows(
-                        (rows || []).map((r) => ({
-                            ...r,
-                            order_status: r.payment_status
-                        }))
-                    );
-                    const seenApps = new Set();
-                    let list = confirmed
-                        .filter((r) => {
-                            const key = String(r.application_no || '');
-                            if (!key || seenApps.has(key)) return false;
-                            seenApps.add(key);
-                            return true;
-                        })
-                        .map((r) => {
-                        let fd = {};
-                        try {
-                            fd = JSON.parse(r.form_data || '{}');
-                        } catch (_) {}
-                        const nameFromUser = [r.first_name, r.middle_name, r.last_name].filter(Boolean).join(' ').trim();
-                        const nameFromForm = [fd.fname, fd.mname, fd.lname].filter(Boolean).join(' ').trim();
-                        return {
-                            applicationNo: r.application_no,
-                            name: nameFromUser || nameFromForm,
-                            city: fd.city || '',
-                            state: fd.state || '',
-                            phone: fd.phone || r.phone || '',
-                            status: r.status,
-                            paid: String(r.payment_status || '').toLowerCase() === 'success',
-                            userIdString: r.user_id_string
-                        };
-                    });
-                    if (q) {
-                        list = list.filter(
-                            (p) =>
-                                String(p.applicationNo || '').toLowerCase().includes(q) ||
-                                String(p.name || '').toLowerCase().includes(q) ||
-                                String(p.userIdString || '').toLowerCase().includes(q) ||
-                                String(p.city || '').toLowerCase().includes(q) ||
-                                String(p.state || '').toLowerCase().includes(q) ||
-                                String(p.phone || '').toLowerCase().includes(q)
-                        );
-                    }
+                    let list = publicParticipantList.buildPublicParticipantList(rows);
+                    list = publicParticipantList.filterParticipantsByQuery(list, q);
                     res.json({ seminarTitle: sem.title, participants: list });
-                }
-            );
+                });
         }
     );
 });

@@ -1748,6 +1748,39 @@
                         <tbody id="reg-ov-list"><tr><td colspan="5" style="text-align:center;">—</td></tr></tbody>
                     </table>
                 </div>
+                <div class="card" style="margin-top:16px;">
+                    <h3>Verify delegate list (website)</h3>
+                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:10px;">Review who appears on the public <strong>Verify delegates</strong> page for the seminar selected above. Only <strong>paid</strong> participants are listed — volunteers (₹0 waiver) are excluded. Add anyone who paid but is missing from the auto list.</p>
+                    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:12px;">
+                        <div style="min-width:220px;flex:1;">
+                            <label>Search name / application / portal ID / phone</label>
+                            <input type="text" id="verify-delegate-search" placeholder="e.g. Shriram, APP_…, USR_…" style="width:100%;padding:8px;" oninput="loadAdminVerifyDelegateList()">
+                        </div>
+                        <button type="button" class="btn-primary" onclick="loadAdminVerifyDelegateList()"><i class="fas fa-sync"></i> Refresh list</button>
+                        <button type="button" class="btn-primary" style="background:#334155;" onclick="exportAdminVerifyDelegateCsv()"><i class="fas fa-file-csv"></i> Export CSV</button>
+                    </div>
+                    <p id="verify-delegate-stats" style="font-size:0.88rem;color:#334155;margin-bottom:12px;">Select a seminar above, then refresh.</p>
+                    <h4 style="margin:16px 0 8px;color:#1a237e;">Published on website</h4>
+                    <table class="data-table">
+                        <thead><tr><th>Name</th><th>Application</th><th>Portal ID</th><th>City</th><th>Amount</th><th>Status</th><th>Source</th><th></th></tr></thead>
+                        <tbody id="verify-delegate-listed"><tr><td colspan="8" style="text-align:center;">—</td></tr></tbody>
+                    </table>
+                    <h4 style="margin:20px 0 8px;color:#b45309;">Paid but missing from list</h4>
+                    <p style="font-size:0.82rem;color:#64748b;margin-bottom:8px;">These doctors have successful payment (not volunteers) but are not auto-eligible — e.g. PG doc review pending. Click <strong>Add to list</strong> to publish their name.</p>
+                    <table class="data-table">
+                        <thead><tr><th>Name</th><th>Application</th><th>Portal ID</th><th>Amount</th><th>Status</th><th>Reason</th><th></th></tr></thead>
+                        <tbody id="verify-delegate-missing"><tr><td colspan="7" style="text-align:center;">—</td></tr></tbody>
+                    </table>
+                    <div style="margin-top:16px;padding-top:12px;border-top:1px solid #e2e8f0;">
+                        <h4 style="margin:0 0 8px;">Manual add by application or portal ID</h4>
+                        <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;">
+                            <div><label>Application no.</label><input type="text" id="verify-delegate-add-app" placeholder="APP_…" style="width:180px;padding:8px;"></div>
+                            <div><label>Portal User ID</label><input type="text" id="verify-delegate-add-user" placeholder="USR_… or numeric ID" style="width:180px;padding:8px;"></div>
+                            <button type="button" class="btn-primary" style="background:#15803d;" onclick="adminIncludeVerifyDelegateManual()">Add to verify list</button>
+                        </div>
+                        <p id="verify-delegate-add-status" style="margin-top:8px;font-size:0.85rem;font-weight:600;"></p>
+                    </div>
+                </div>
             </div>
 
             <!-- User & doctor activity -->
@@ -2420,7 +2453,7 @@
                         <div><label>Enable Check-in Scanning?</label><select id="seminar-checkin-enabled"><option value="0">No (Disabled)</option><option value="1">Yes (Enabled)</option></select></div>
                         <div><label>Check-in Allowed Date</label><input type="date" id="seminar-checkin-date"></div>
                         <div><label>Scans required for certificate</label><select id="seminar-cert-scans-required"><option value="1">1 scan (entry only)</option><option value="2">2 scans (entry + exit)</option></select><p style="font-size:0.78rem;color:#64748b;margin-top:4px;">Doctors need this many ticket scans before a certificate can be enabled.</p></div>
-                        <div><label>Publish participant list on website?</label><select id="seminar-public-list-enabled"><option value="0">No — Verify page hidden</option><option value="1">Yes — show paid &amp; admitted delegates</option></select><p style="font-size:0.78rem;color:#64748b;margin-top:4px;">Enable only after verification and payments are complete.</p></div>
+                        <div><label>Publish participant list on website?</label><select id="seminar-public-list-enabled"><option value="0">No — Verify page hidden</option><option value="1">Yes — show paid delegates (volunteers excluded)</option></select><p style="font-size:0.78rem;color:#64748b;margin-top:4px;">Enable only after verification and payments are complete. Manage names under Reports → Verify delegate list.</p></div>
                     </div>
                 </div>
                 <button type="submit" class="btn-primary">Save Seminar</button>
@@ -2591,6 +2624,6 @@
     <link rel="stylesheet" href="/css/book-track.css?v=20260529stg">
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
-    <script src="/js/admin.js?v=20260530refund"></script>
+    <script src="/js/admin.js?v=20260528verify"></script>
 </body>
 </html>
