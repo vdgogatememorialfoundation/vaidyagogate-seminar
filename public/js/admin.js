@@ -7481,6 +7481,10 @@ function readIntegrationZohoPassNew() {
     return readIntegrationSecretFromFields(['int-zoho-pass-new', 'int-zoho-pass']);
 }
 
+function readIntegrationEmailApiKeyNew() {
+    return readIntegrationSecretFromFields(['int-email-api-key-new', 'int-email-api-key']);
+}
+
 function readIntegrationWaTokenNew() {
     return readIntegrationSecretFromFields(['int-wa-token-new', 'int-wa-token']);
 }
@@ -7533,20 +7537,20 @@ function ensureIntegrationPasswordUi() {
 
 function renderIntegrationSecretStatus(s) {
     const settings = s || {};
-    const emailSaved = !!(settings.email_configured || settings.zoho_pass_saved);
     const waSaved = !!(settings.whatsapp_configured || settings.whatsapp_token_saved);
-    window.__integrationZohoPassSaved = emailSaved;
+    window.__integrationZohoPassSaved = !!settings.zoho_pass_saved;
+    window.__integrationEmailApiSaved = !!settings.email_api_key_saved;
     window.__integrationWaTokenSaved = waSaved;
 
     const passBadge = document.getElementById('int-zoho-pass-saved-badge');
     if (passBadge) {
-        if (emailSaved) {
+        if (settings.zoho_pass_saved) {
             passBadge.textContent = '✓ App password saved on server';
             passBadge.style.background = '#ecfdf5';
             passBadge.style.borderColor = '#a7f3d0';
             passBadge.style.color = '#15803d';
         } else {
-            passBadge.textContent = '⚠ App password not saved on server yet';
+            passBadge.textContent = '⚠ App password not saved (optional if using HTTPS API)';
             passBadge.style.background = '#fff7ed';
             passBadge.style.borderColor = '#fed7aa';
             passBadge.style.color = '#b45309';
@@ -7554,16 +7558,41 @@ function renderIntegrationSecretStatus(s) {
     }
     const passNew = document.getElementById('int-zoho-pass-new');
     if (passNew) {
-        passNew.placeholder = emailSaved
+        passNew.placeholder = settings.zoho_pass_saved
             ? 'Leave empty to keep saved password — paste here only to replace it'
             : 'Paste Zoho app-specific password here, then Save API keys & messaging';
     }
     const passHint = document.getElementById('int-zoho-pass-hint');
     if (passHint) {
-        passHint.textContent = emailSaved
-            ? 'Saved password stays on the server. You do not need to re-enter it to test email.'
-            : 'Use an app-specific password from Zoho Mail → Security → App Passwords (not your normal login password).';
-        passHint.style.color = emailSaved ? '#15803d' : '#64748b';
+        passHint.textContent = settings.zoho_pass_saved
+            ? 'Saved password stays on the server until you paste a replacement and save.'
+            : 'Optional on Render — use HTTPS email API above instead. For local/paid hosting, use Zoho app password.';
+        passHint.style.color = settings.zoho_pass_saved ? '#15803d' : '#64748b';
+    }
+
+    const apiBadge = document.getElementById('int-email-api-key-saved-badge');
+    if (apiBadge) {
+        if (settings.email_api_key_saved) {
+            apiBadge.textContent = '✓ Email API key saved on server';
+            apiBadge.style.background = '#ecfdf5';
+            apiBadge.style.borderColor = '#a7f3d0';
+            apiBadge.style.color = '#15803d';
+        } else {
+            apiBadge.textContent = '⚠ Email API key not saved yet (required on Render free tier)';
+            apiBadge.style.background = '#fff7ed';
+            apiBadge.style.borderColor = '#fed7aa';
+            apiBadge.style.color = '#b45309';
+        }
+    }
+    const apiNew = document.getElementById('int-email-api-key-new');
+    if (apiNew) {
+        apiNew.placeholder = settings.email_api_key_saved
+            ? 'Leave empty to keep saved API key — paste here only to replace it'
+            : 'Paste Brevo / Resend / ZeptoMail API key here, then Save';
+    }
+    const apiHint = document.getElementById('int-email-api-key-hint');
+    if (apiHint) {
+        apiHint.style.color = settings.email_api_key_saved ? '#15803d' : '#64748b';
     }
 
     const waBadge = document.getElementById('int-wa-token-saved-badge');
@@ -7598,8 +7627,10 @@ function renderIntegrationSecretStatus(s) {
 function applySavedIntegrationSecrets(data) {
     const settings = (data && data.settings) || data || {};
     renderIntegrationSecretStatus({
-        email_configured: !!(data && data.email_configured) || !!settings.zoho_pass_saved,
-        zoho_pass_saved: !!settings.zoho_pass_saved || !!(data && data.email_configured),
+        email_configured: !!(data && data.email_configured) || !!settings.zoho_pass_saved || !!settings.email_api_key_saved,
+        zoho_pass_saved: !!settings.zoho_pass_saved,
+        email_api_key_saved: !!settings.email_api_key_saved,
+        email_api_provider: settings.email_api_provider || '',
         whatsapp_configured: !!(data && data.whatsapp_configured) || !!settings.whatsapp_token_saved,
         whatsapp_token_saved: !!settings.whatsapp_token_saved || !!(data && data.whatsapp_configured)
     });
@@ -7624,6 +7655,7 @@ async function loadIntegrationSettings() {
         set('int-zoho-port', s.zoho_port);
         set('int-zoho-user', s.zoho_user);
         set('int-zoho-from', s.zoho_from);
+        set('int-email-api-provider', s.email_api_provider || '');
         applySavedIntegrationSecrets(s);
         set('int-wa-phone-id', s.whatsapp_phone_number_id);
         set('int-wa-waba-id', s.whatsapp_business_account_id);
@@ -7645,6 +7677,11 @@ async function loadIntegrationSettings() {
         if (line) {
             let emailLine = s.email_configured ? 'Email: configured.' : 'Email: not configured.';
             const st = s.email_status;
+            if (st && st.via === 'http' && st.provider) {
+                emailLine = 'Email: configured via ' + st.provider + ' HTTPS API.';
+            } else if (st && st.via === 'smtp') {
+                emailLine = 'Email: configured via SMTP.';
+            }
             if (!s.email_configured && st && Array.isArray(st.missing) && st.missing.length) {
                 emailLine += ' Missing: ' + st.missing.join(', ') + '.';
             }
@@ -7687,14 +7724,26 @@ async function saveIntegrationSettings() {
     let publicUrl = (document.getElementById('int-public-base-url') || {}).value.trim();
     if (!publicUrl && seminarHost) publicUrl = 'https://' + seminarHost.replace(/^https?:\/\//, '');
     const newZohoPass = readIntegrationZohoPassNew();
+    const newEmailApiKey = readIntegrationEmailApiKeyNew();
     const newWaToken = readIntegrationWaTokenNew();
     const zohoHost = (document.getElementById('int-zoho-host') || {}).value.trim();
     const zohoUser = (document.getElementById('int-zoho-user') || {}).value.trim();
-    if ((zohoHost || zohoUser) && !window.__integrationZohoPassSaved && !newZohoPass) {
+    const emailApiProvider = (document.getElementById('int-email-api-provider') || {}).value.trim();
+    const zohoFrom = (document.getElementById('int-zoho-from') || {}).value.trim();
+    const usingHttpApi = !!emailApiProvider;
+    if ((zohoHost || zohoUser) && !window.__integrationZohoPassSaved && !newZohoPass && !usingHttpApi) {
         setAdminSettingsSaveMsg(
-            'Enter your Zoho app-specific password in the field above, then click Save again.',
+            'Enter your Zoho app-specific password in the field above, or choose an HTTPS email API provider.',
             true
         );
+        return;
+    }
+    if (usingHttpApi && !window.__integrationEmailApiSaved && !newEmailApiKey) {
+        setAdminSettingsSaveMsg('Choose an email API provider and paste its API key, then Save again.', true);
+        return;
+    }
+    if (usingHttpApi && !zohoFrom && !zohoUser) {
+        setAdminSettingsSaveMsg('Set From (or User) to care@vaidyagogate.org for the email API sender address.', true);
         return;
     }
     const body = {
@@ -7707,7 +7756,8 @@ async function saveIntegrationSettings() {
         zoho_host: zohoHost,
         zoho_port: (document.getElementById('int-zoho-port') || {}).value.trim(),
         zoho_user: zohoUser,
-        zoho_from: (document.getElementById('int-zoho-from') || {}).value.trim(),
+        zoho_from: zohoFrom,
+        email_api_provider: emailApiProvider,
         whatsapp_phone_number_id: (document.getElementById('int-wa-phone-id') || {}).value.trim(),
         whatsapp_business_account_id: (document.getElementById('int-wa-waba-id') || {}).value.trim(),
         whatsapp_verify_token: (document.getElementById('int-wa-verify') || {}).value,
@@ -7716,6 +7766,7 @@ async function saveIntegrationSettings() {
         otp_email_subject: (document.getElementById('int-otp-email-subject') || {}).value.trim()
     };
     if (newZohoPass) body.zoho_pass = newZohoPass;
+    if (newEmailApiKey) body.email_api_key = newEmailApiKey;
     if (newWaToken) body.whatsapp_token = newWaToken;
     try {
         const res = await fetch('/api/admin/integrations', {
@@ -7730,6 +7781,8 @@ async function saveIntegrationSettings() {
         }
         const passNewEl = document.getElementById('int-zoho-pass-new');
         if (passNewEl) passNewEl.value = '';
+        const apiNewEl = document.getElementById('int-email-api-key-new');
+        if (apiNewEl) apiNewEl.value = '';
         const waNewEl = document.getElementById('int-wa-token-new');
         if (waNewEl) waNewEl.value = '';
         applySavedIntegrationSecrets(data);
@@ -7737,7 +7790,9 @@ async function saveIntegrationSettings() {
         const st = data.email_status;
         const emailHint =
             data.email_configured
-                ? 'Email is configured (app password saved on server).'
+                ? st && st.via === 'http'
+                    ? 'Email configured via HTTPS API (' + (st.provider || 'provider') + ').'
+                    : 'Email is configured (app password saved on server).'
                 : data.smtp_warning ||
                   (st && Array.isArray(st.missing) && st.missing.length
                       ? 'Email still missing: ' + st.missing.join(', ') + '. Paste app password and save again.'
@@ -7759,7 +7814,8 @@ function integrationFormSmtpPayload() {
         zoho_host: (document.getElementById('int-zoho-host') || {}).value.trim(),
         zoho_port: (document.getElementById('int-zoho-port') || {}).value.trim(),
         zoho_user: (document.getElementById('int-zoho-user') || {}).value.trim(),
-        zoho_from: (document.getElementById('int-zoho-from') || {}).value.trim()
+        zoho_from: (document.getElementById('int-zoho-from') || {}).value.trim(),
+        email_api_provider: (document.getElementById('int-email-api-provider') || {}).value.trim()
     };
 }
 
@@ -7768,19 +7824,29 @@ async function testIntegrationEmail() {
     const to = (document.getElementById('int-test-email') || {}).value.trim();
     if (!to) return alert('Enter test email address');
     const smtp = integrationFormSmtpPayload();
-    if (!smtp.zoho_host || !smtp.zoho_user) {
-        return alert('Fill Zoho Host and User (full mailbox e.g. care@vaidyagogate.org), then try again.');
+    const usingHttp = !!smtp.email_api_provider;
+    if (!usingHttp && (!smtp.zoho_host || !smtp.zoho_user)) {
+        return alert('Fill Zoho Host and User, or choose an HTTPS email API provider above.');
+    }
+    if (usingHttp && !smtp.zoho_from && !smtp.zoho_user) {
+        return alert('Set From (or User) to care@vaidyagogate.org for the email API sender.');
     }
     const pendingPass = readIntegrationZohoPassNew();
-    if (pendingPass) {
+    const pendingApiKey = readIntegrationEmailApiKeyNew();
+    if (pendingPass || pendingApiKey) {
         const saveFirst = confirm(
-            'Save the app password before testing? Click OK to save, then the test will run.'
+            'Save the email settings before testing? Click OK to save, then the test will run.'
         );
         if (saveFirst) await saveIntegrationSettings();
     }
-    if (!window.__integrationZohoPassSaved) {
+    if (!usingHttp && !window.__integrationZohoPassSaved) {
         return alert(
-            'SMTP password is not saved yet.\n\n1. Paste your Zoho app-specific password\n2. Click Save API keys & messaging\n3. Wait for the green “App password saved on server” badge\n4. Then click Test email'
+            'SMTP password is not saved yet.\n\n1. Paste your Zoho app-specific password\n2. Click Save API keys & messaging\n3. Wait for the green badge\n4. Then click Test email\n\nOn Render free hosting, use HTTPS email API instead (Brevo / Resend / ZeptoMail).'
+        );
+    }
+    if (usingHttp && !window.__integrationEmailApiSaved) {
+        return alert(
+            'Email API key is not saved yet.\n\n1. Choose provider (Brevo recommended)\n2. Paste API key\n3. Set From = care@vaidyagogate.org\n4. Save, then Test email'
         );
     }
     const res = await fetch('/api/admin/integrations/test-email', {

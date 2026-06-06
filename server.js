@@ -57,6 +57,7 @@ const { registerLiveScannerRoutes } = require('./lib/routes-live-scanner');
 const { registerPosRoutes } = require('./lib/pos-onspot');
 const siteSeoMod = require('./lib/site-seo');
 const emailDeliveryPolicy = require('./lib/email-delivery-policy');
+const httpTransport = require('./lib/email-http-transport');
 const volunteerCertFlow = require('./lib/volunteer-cert-flow');
 const volunteerTicketFlow = require('./lib/volunteer-ticket-flow');
 const regPaymentStatus = require('./lib/registration-payment-status');
@@ -2061,6 +2062,7 @@ function runNotifyTicketIssued(userId, registrationId, ticketId, opts) {
                                             pdfUrl +
                                             '</a></p>',
                                         text: 'E-ticket: ' + pdfUrl,
+                                        attachments: attach,
                                         event_key: 'TICKET_ISSUED',
                                         immediate: drainImmediate
                                     },
@@ -2645,6 +2647,8 @@ function integrationSettingsJson(data) {
     const raw = data || {};
     const masked = integrationSettings.maskSecretsForClient(raw);
     masked.zoho_pass_saved = !!(raw.zoho_pass && String(raw.zoho_pass).trim());
+    masked.email_api_key_saved = !!(raw.email_api_key && String(raw.email_api_key).trim());
+    masked.email_api_provider = raw.email_api_provider || '';
     masked.whatsapp_token_saved = !!(raw.whatsapp_token && String(raw.whatsapp_token).trim());
     masked.whatsapp_verify_token_saved = !!(
         raw.whatsapp_verify_token && String(raw.whatsapp_verify_token).trim()
@@ -2826,6 +2830,12 @@ function smtpOverridesFromBody(body) {
     if (b.zoho_pass != null && String(b.zoho_pass).trim() && !integrationSettings.isMaskedSecretValue(b.zoho_pass)) {
         o.zoho_pass = String(b.zoho_pass).trim();
     }
+    if (b.email_api_provider != null && String(b.email_api_provider).trim()) {
+        o.email_api_provider = String(b.email_api_provider).trim().toLowerCase();
+    }
+    if (b.email_api_key != null && String(b.email_api_key).trim() && !integrationSettings.isMaskedSecretValue(b.email_api_key)) {
+        o.email_api_key = String(b.email_api_key).trim();
+    }
     return Object.keys(o).length ? o : null;
 }
 
@@ -2835,9 +2845,10 @@ app.post('/api/admin/integrations/test-email', withIntegrationSettingsLoaded, as
     const overrides = smtpOverridesFromBody(req.body);
     if (!integrationSettings.isEmailConfiguredFromSettings()) {
         return res.status(400).json({
-            error: 'SMTP password is not saved on the server yet.',
+            error: 'Email is not configured yet.',
             hint:
-                'Paste your Zoho app-specific password, click Save API keys & messaging, wait for the green saved badge, then Test email again.'
+                'On Render free hosting, SMTP is blocked. Set HTTPS email API (Brevo / Resend / ZeptoMail) under Admin → Integrations, ' +
+                'or paste Zoho app password for paid hosting / local use. Save, then Test email again.'
         });
     }
     const { sendEmail } = require('./lib/email-service');
@@ -2860,11 +2871,14 @@ app.post('/api/admin/integrations/test-email', withIntegrationSettingsLoaded, as
     });
     if (r.ok) {
         const cfg = integrationSettings.getMailConfig(overrides || undefined);
+        const httpCfg = httpTransport.getHttpEmailConfig(overrides || undefined);
         return res.json({
             success: true,
             logged: true,
-            from: cfg && cfg.from,
-            user: cfg && cfg.auth && cfg.auth.user
+            transport: r.transport || (httpCfg ? 'http' : 'smtp'),
+            provider: r.provider || (httpCfg && httpCfg.provider),
+            from: (httpCfg && httpCfg.from) || (cfg && cfg.from),
+            user: (cfg && cfg.auth && cfg.auth.user) || (httpCfg && httpCfg.from)
         });
     }
     res.status(503).json({
