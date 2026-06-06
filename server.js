@@ -11294,7 +11294,7 @@ app.post('/api/admin/contact-inquiries/:id/send-email', async (req, res) => {
                         String(row.subject || '').slice(0, 120) +
                         '"\n\n';
                     const fullBody = replyIntro + b;
-                    const result = await adminComposeMail.sendSingleMail({
+                    const result = await adminComposeMail.sendSingleMailReliable(db, {
                         to: row.email,
                         name: row.name,
                         subject: sub,
@@ -11308,14 +11308,20 @@ app.post('/api/admin/contact-inquiries/:id/send-email', async (req, res) => {
                             hint: result.hint || null
                         });
                     }
-                    const noteLine = '[Email sent ' + new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) + '] ' + sub;
+                    const noteLine =
+                        '[Email ' +
+                        (result.queued ? 'queued' : 'sent') +
+                        ' ' +
+                        new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) +
+                        '] ' +
+                        sub;
                     const mergedNotes = row.admin_notes ? row.admin_notes + '\n' + noteLine : noteLine;
                     db.run(
                         `UPDATE contact_inquiries SET status = 'replied', admin_notes = ?, replied_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
                         [mergedNotes, id],
                         (e3) => {
                             if (e3) return res.status(500).json({ error: e3.message });
-                            res.json({ success: true, message: 'Email sent to ' + row.email });
+                            res.json({ success: true, message: result.message || 'Email sent to ' + row.email, queued: !!result.queued });
                         }
                     );
                 }
@@ -11357,18 +11363,17 @@ app.post('/api/admin/email/send', (req, res) => {
             [aid],
             async (eStaff, staffRow) => {
                 if (eStaff) return res.status(500).json({ error: eStaff.message });
-                const result = await adminComposeMail.sendSingleMail({
+                const result = await adminComposeMail.sendSingleMailReliable(db, {
                     to,
                     name,
                     subject,
                     body,
-                    audience: 'single_email',
                     fromDisplay: staffDisplay.formatStaffFromDisplay(staffRow)
                 });
                 if (!result.ok) {
                     return res.status(result.skipped ? 503 : 500).json({ error: result.error || 'Send failed', hint: result.hint });
                 }
-                res.json({ success: true, message: 'Email sent.' });
+                res.json({ success: true, message: result.message || 'Email sent.', queued: !!result.queued });
             }
         );
     });

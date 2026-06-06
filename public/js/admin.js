@@ -9929,7 +9929,7 @@ async function sendAdminSingleEmail() {
     const subject = document.getElementById('mail-single-subject')?.value || '';
     const body = document.getElementById('mail-single-body')?.value || '';
     const msgEl = document.getElementById('mail-single-msg');
-    if (msgEl) msgEl.textContent = 'Sending…';
+    if (msgEl) msgEl.textContent = 'Queueing…';
     try {
         const res = await fetch('/api/admin/email/send', {
             method: 'POST',
@@ -9940,7 +9940,11 @@ async function sendAdminSingleEmail() {
         if (!res.ok) throw new Error(data.error || data.hint || 'Send failed');
         if (msgEl) {
             msgEl.style.color = '#15803d';
-            msgEl.textContent = data.message || 'Sent.';
+            msgEl.textContent =
+                data.message ||
+                (data.queued
+                    ? 'Email queued — delivery usually within a minute. Check Notifications → Delivery logs.'
+                    : 'Sent.');
         }
     } catch (e) {
         if (msgEl) {
