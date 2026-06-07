@@ -733,6 +733,16 @@
                     errEl.classList.add('hidden');
                     document.getElementById('case-contact-message').value = '';
                     await loadContactThread();
+                    if (data.emailSent) {
+                        alert(data.message || 'Message sent by email.');
+                    } else if (data.emailError) {
+                        alert(
+                            (data.message || 'Message saved in portal.') +
+                                '\n\nEmail was not delivered. Ask admin to check Integrations → email settings and Notifications → Logs.'
+                        );
+                    } else {
+                        alert(data.message || 'Message saved in portal.');
+                    }
                 } catch (e) {
                     errEl.textContent = 'Network error';
                     errEl.classList.remove('hidden');
