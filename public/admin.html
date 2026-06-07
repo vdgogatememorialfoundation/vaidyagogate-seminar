@@ -192,6 +192,11 @@
             <!-- Doctors -->
             <div id="tab-doctors" class="tab-pane hidden">
                 <h2 style="margin-bottom: 20px;">Doctors</h2>
+                <div class="card" style="margin-bottom:16px;border:1px solid #99f6e4;background:#f0fdfa;">
+                    <h3 style="margin:0 0 8px;color:#0f766e;font-size:1rem;">Doctor portal dashboard</h3>
+                    <p style="color:#64748b;font-size:0.88rem;margin:0 0 10px;">Control which sidebar modules all doctors see (global), or customize per doctor via <strong>View → Doctor access control</strong>.</p>
+                    <button type="button" class="btn-primary" style="background:#0f766e;" onclick="switchTab('tab-site-cms'); loadAdminSiteCms(); setTimeout(function(){ var el=document.getElementById('doctor-portal-modules-policy-card'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); }, 300);">Configure global doctor modules</button>
+                </div>
                 <div class="card">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 15px;align-items:center;">
                         <div>
@@ -714,6 +719,15 @@
                     <p style="font-size:0.82rem;color:#64748b;margin:10px 0 0;">Leave all checked to show every page. Uncheck to hide a section from the admin sidebar.</p>
                 </div>
                 
+                <div class="card" style="margin-bottom:18px;border:1px solid #99f6e4;background:#f0fdfa;" id="doctor-portal-modules-policy-card">
+                    <h3 style="margin:0 0 10px;color:#0f766e;font-size:1.05rem;">Doctor portal dashboard modules (global)</h3>
+                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:12px;">Choose which sidebar sections appear for <strong>all doctors</strong> by default. Per-doctor overrides are set under <strong>Doctors → View → Doctor access control</strong>. Save with <strong>Save portal auth policy</strong> below.</p>
+                    <p style="font-size:0.82rem;color:#475569;margin-bottom:8px;font-weight:600;">Regular doctors</p>
+                    <div id="doctor-portal-modules-regular" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px;max-height:220px;overflow-y:auto;padding:8px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;margin-bottom:14px;"></div>
+                    <p style="font-size:0.82rem;color:#475569;margin-bottom:8px;font-weight:600;">Volunteer doctors</p>
+                    <div id="doctor-portal-modules-volunteer" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px;max-height:220px;overflow-y:auto;padding:8px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;"></div>
+                    <p style="font-size:0.82rem;color:#64748b;margin:10px 0 0;">Leave all checked to show every module. Uncheck to hide a section from the doctor sidebar.</p>
+                </div>
                 <div class="card" style="margin-bottom:18px;border:1px solid #fde68a;background:#fffbeb;">
                     <h3 style="margin:0 0 10px;color:#92400e;font-size:1.05rem;">Account alerts (designated staff)</h3>
                     <p style="color:#64748b;font-size:0.88rem;margin-bottom:10px;">When someone creates a portal account (public signup or admin CRM), full user details are emailed and sent on WhatsApp to these contacts (one per line).</p>

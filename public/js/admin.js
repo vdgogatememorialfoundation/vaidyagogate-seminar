@@ -1168,14 +1168,15 @@ async function adminMoveUserToDoctorPortal(userId) {
     loadUsers();
 }
 
-async function saveDoctorAccess(userId, doctorCategory, doctorModules) {
+async function saveDoctorAccess(userId, doctorCategory, doctorModules, useGlobalModules) {
     try {
         const res = await fetch(`/api/admin/users/${userId}/doctor-access`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 doctor_category: doctorCategory,
-                doctor_modules: doctorModules || {}
+                doctor_modules: doctorModules || {},
+                useGlobalModules: useGlobalModules === true
             })
         });
         const data = await res.json().catch(() => ({}));
@@ -1190,28 +1191,128 @@ async function saveDoctorAccessFromList(userId) {
     const sel = document.getElementById('doctor-cat-' + userId);
     if (!sel) return;
     const category = sel.value === 'volunteer' ? 'volunteer' : 'regular';
-    const r = await saveDoctorAccess(userId, category, {});
+    const r = await saveDoctorAccess(userId, category, {}, true);
     if (!r.ok) return alert(r.error);
     await loadUsers();
-    alert('Doctor access updated.');
+    alert('Doctor category updated (portal modules unchanged — use View for custom modules).');
+}
+
+function adminUserHasCustomDoctorModules(user) {
+    const raw = user && user.doctor_modules;
+    if (raw == null || raw === '') return false;
+    try {
+        const o = typeof raw === 'object' ? raw : JSON.parse(String(raw));
+        return !!(o && typeof o === 'object' && Object.keys(o).length);
+    } catch (_) {
+        return false;
+    }
+}
+
+function resolveDoctorAllowedTabsAdmin(category, userModulesRaw) {
+    const regular = window.__doctorPortalModulesGlobalRegular || {};
+    const volunteer = window.__doctorPortalModulesGlobalVolunteer || {};
+    const cat = String(category || 'regular').toLowerCase() === 'volunteer' ? 'volunteer' : 'regular';
+    const globalMap = cat === 'volunteer' ? volunteer : regular;
+    const keys = Object.keys(globalMap || {});
+    let allowed = null;
+    if (keys.length && keys.some((k) => globalMap[k] === true)) {
+        allowed = new Set(keys.filter((k) => globalMap[k] === true));
+    }
+    let userMap = null;
+    try {
+        userMap =
+            userModulesRaw == null || userModulesRaw === ''
+                ? null
+                : typeof userModulesRaw === 'object'
+                  ? userModulesRaw
+                  : JSON.parse(String(userModulesRaw));
+    } catch (_) {
+        userMap = null;
+    }
+    if (!userMap || !Object.keys(userMap).length) return allowed;
+    const hasExplicitOff = Object.keys(userMap).some((k) => userMap[k] === false);
+    if (!hasExplicitOff) {
+        const uk = Object.keys(userMap);
+        if (!uk.length || !uk.some((k) => userMap[k] === true)) return allowed;
+        return new Set(uk.filter((k) => userMap[k] === true));
+    }
+    const out = new Set();
+    DOCTOR_MODULE_TAB_DEFS.forEach(([tabId]) => {
+        if (userMap[tabId] === true) {
+            out.add(tabId);
+            return;
+        }
+        if (userMap[tabId] === false) return;
+        if (allowed === null || allowed.has(tabId)) out.add(tabId);
+    });
+    return out.size ? out : new Set();
+}
+
+function effectiveDoctorModulesForUser(u) {
+    const allowed = resolveDoctorAllowedTabsAdmin(u && u.doctor_category, u && u.doctor_modules);
+    const out = {};
+    DOCTOR_MODULE_TAB_DEFS.forEach(([id]) => {
+        out[id] = !allowed || allowed.has(id);
+    });
+    return out;
+}
+
+async function ensureAdminDoctorPortalModulesGlobalLoaded() {
+    if (window.__doctorPortalModulesGlobalRegular != null) return;
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return;
+    try {
+        const res = await fetch(`/api/admin/portal-auth-config?actingAdminId=${encodeURIComponent(adm.id)}`);
+        const d = await res.json();
+        if (d.success && d.config) {
+            window.__doctorPortalModulesGlobalRegular = d.config.doctorPortalModulesRegular || {};
+            window.__doctorPortalModulesGlobalVolunteer = d.config.doctorPortalModulesVolunteer || {};
+        }
+    } catch (_) {}
 }
 
 async function saveDoctorAccessFromDetail(userId) {
     const catEl = document.getElementById('admin-edit-doc-category');
     const category = catEl && catEl.value === 'volunteer' ? 'volunteer' : 'regular';
+    const useGlobal = !!(document.getElementById('admin-edit-doc-use-global') || {}).checked;
     const modules = {};
-    document.querySelectorAll('#admin-edit-doc-modules input[data-doc-mod]').forEach((inp) => {
-        const id = inp.getAttribute('data-doc-mod');
-        if (id && inp.checked) modules[id] = true;
-    });
-    const r = await saveDoctorAccess(userId, category, modules);
+    if (!useGlobal) {
+        document.querySelectorAll('#admin-edit-doc-modules input[data-doc-mod]').forEach((inp) => {
+            const id = inp.getAttribute('data-doc-mod');
+            if (id) modules[id] = inp.checked;
+        });
+    }
+    const r = await saveDoctorAccess(userId, category, modules, useGlobal);
     if (!r.ok) return alert(r.error);
     if (__adminUserDetailCache && __adminUserDetailCache.user && Number(__adminUserDetailCache.user.id) === Number(userId)) {
         __adminUserDetailCache.user.doctor_category = category;
-        __adminUserDetailCache.user.doctor_modules = JSON.stringify(r.data.doctor_modules || modules || {});
+        __adminUserDetailCache.user.doctor_modules = useGlobal ? null : JSON.stringify(r.data.doctor_modules || modules || {});
     }
     await loadUsers();
-    alert('Doctor access saved.');
+    alert('Doctor portal access saved.');
+}
+
+function onAdminDoctorUseGlobalModulesChange() {
+    const useGlobal = !!(document.getElementById('admin-edit-doc-use-global') || {}).checked;
+    const wrap = document.getElementById('admin-edit-doc-modules');
+    if (wrap) wrap.style.opacity = useGlobal ? '0.55' : '1';
+    document.querySelectorAll('#admin-edit-doc-modules input[data-doc-mod]').forEach((inp) => {
+        inp.disabled = useGlobal;
+    });
+}
+
+function onAdminDoctorCategoryChange() {
+    const catEl = document.getElementById('admin-edit-doc-category');
+    const useGlobalEl = document.getElementById('admin-edit-doc-use-global');
+    if (!catEl || (useGlobalEl && useGlobalEl.checked)) return;
+    const effective = effectiveDoctorModulesForUser({
+        doctor_category: catEl.value,
+        doctor_modules: null
+    });
+    document.querySelectorAll('#admin-edit-doc-modules input[data-doc-mod]').forEach((inp) => {
+        const id = inp.getAttribute('data-doc-mod');
+        if (id) inp.checked = !!effective[id];
+    });
 }
 
 const WEBSITE_MENU_PAGE_DEFS = [
@@ -1284,15 +1385,7 @@ const DEFAULT_VOLUNTEER_DOCTOR_MODULES = {
 };
 
 function applyVolunteerDoctorModuleCheckboxes() {
-    document.querySelectorAll('#admin-edit-doc-modules input[data-doc-mod]').forEach((inp) => {
-        const id = inp.getAttribute('data-doc-mod');
-        if (id) inp.checked = !!DEFAULT_VOLUNTEER_DOCTOR_MODULES[id];
-    });
-}
-
-function onAdminDoctorCategoryChange() {
-    const catEl = document.getElementById('admin-edit-doc-category');
-    if (catEl && catEl.value === 'volunteer') applyVolunteerDoctorModuleCheckboxes();
+    onAdminDoctorCategoryChange();
 }
 
 const DOCTOR_MODULE_TAB_DEFS = [
@@ -2794,6 +2887,7 @@ async function openAdminUserDetail(userId) {
         }
         __adminUserDetailCache = data;
         __adminUserDetailTab = 'profile';
+        await ensureAdminDoctorPortalModulesGlobalLoaded();
         const u = data.user;
         document.getElementById('admin-user-detail-title').textContent =
             `${u.first_name || ''} ${u.last_name || ''}`.trim() || 'User details';
@@ -2980,29 +3074,42 @@ function renderAdminUserDetailTab() {
                     }
                     ${
                         String(u.user_role || u.role || '').toLowerCase() === 'doctor'
-                            ? `<div style="margin:10px 0;padding:10px;border:1px solid #dbeafe;border-radius:8px;background:#f8fbff;">
-                    <p style="margin:0 0 8px;"><strong>Doctor access control</strong></p>
+                            ? (() => {
+                                  const useGlobalModules = !adminUserHasCustomDoctorModules(u);
+                                  const customMods = parseDoctorModulesObject(u.doctor_modules);
+                                  const effectiveMods = effectiveDoctorModulesForUser(
+                                      useGlobalModules ? { ...u, doctor_modules: null } : u
+                                  );
+                                  const moduleChecks = DOCTOR_MODULE_TAB_DEFS.map(([id, title]) => {
+                                      let checked = false;
+                                      if (useGlobalModules) checked = !!effectiveMods[id];
+                                      else if (Object.prototype.hasOwnProperty.call(customMods, id))
+                                          checked = !!customMods[id];
+                                      else checked = !!effectiveMods[id];
+                                      return (
+                                          '<label style="display:flex;align-items:center;gap:6px;font-size:0.85rem;"><input type="checkbox" data-doc-mod="' +
+                                          id +
+                                          '" ' +
+                                          (checked ? 'checked' : '') +
+                                          '> ' +
+                                          title +
+                                          '</label>'
+                                      );
+                                  }).join('');
+                                  return `<div style="margin:10px 0;padding:10px;border:1px solid #dbeafe;border-radius:8px;background:#f8fbff;">
+                    <p style="margin:0 0 8px;"><strong>Doctor portal dashboard modules</strong></p>
                     <div class="form-group"><label>Category</label>
                         <select id="admin-edit-doc-category" style="width:100%;padding:8px;" onchange="onAdminDoctorCategoryChange()">
                             <option value="regular" ${String(u.doctor_category || 'regular').toLowerCase() === 'volunteer' ? '' : 'selected'}>Regular doctor</option>
                             <option value="volunteer" ${String(u.doctor_category || '').toLowerCase() === 'volunteer' ? 'selected' : ''}>Volunteer doctor</option>
                         </select>
                     </div>
-                    <p style="font-size:0.82rem;color:#475569;margin:6px 0 8px;">Volunteer default: seminar registration form, case presentation, volunteer tab, tickets &amp; certificates. Tick/untick to customize.</p>
-                    <div id="admin-edit-doc-modules" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-                        ${DOCTOR_MODULE_TAB_DEFS.map(
-                            ([id, title]) =>
-                                `<label style="display:flex;align-items:center;gap:6px;font-size:0.85rem;"><input type="checkbox" data-doc-mod="${id}" ${
-                                    (String(u.doctor_category || '').toLowerCase() === 'volunteer'
-                                        ? { ...DEFAULT_VOLUNTEER_DOCTOR_MODULES, ...parseDoctorModulesObject(u.doctor_modules) }
-                                        : parseDoctorModulesObject(u.doctor_modules))[id]
-                                        ? 'checked'
-                                        : ''
-                                }> ${title}</label>`
-                        ).join('')}
-                    </div>
-                    <button type="button" class="btn-primary" style="margin-top:10px;background:#0f766e;" onclick="saveDoctorAccessFromDetail(${u.id})">Save doctor access</button>
-                    </div>`
+                    <label style="display:flex;align-items:center;gap:8px;font-size:0.88rem;margin:8px 0;"><input type="checkbox" id="admin-edit-doc-use-global" ${useGlobalModules ? 'checked' : ''} onchange="onAdminDoctorUseGlobalModulesChange()"> Use global portal modules (Website &amp; doctor updates)</label>
+                    <p style="font-size:0.82rem;color:#475569;margin:6px 0 8px;">Uncheck above to customize this doctor only. Global defaults are under <strong>Website &amp; doctor updates → Doctor portal dashboard modules</strong>.</p>
+                    <div id="admin-edit-doc-modules" style="display:grid;grid-template-columns:1fr 1fr;gap:6px;${useGlobalModules ? 'opacity:0.55;' : ''}">${moduleChecks}</div>
+                    <button type="button" class="btn-primary" style="margin-top:10px;background:#0f766e;" onclick="saveDoctorAccessFromDetail(${u.id})">Save doctor portal access</button>
+                    </div>`;
+                              })()
                             : ''
                     }
                     <p><strong>Status:</strong> ${Number(u.is_banned) === 1 ? 'Banned' : u.is_disabled ? 'Disabled' : 'Active'}</p>
@@ -3038,6 +3145,7 @@ function renderAdminUserDetailTab() {
             <h4>Support tickets</h4>
             <p style="font-size:0.88rem;">${(d.supportTickets || []).map((t) => `#${t.id} ${escAdmin(t.subject)}`).join('<br>') || 'None'}</p>
         `;
+        if (document.getElementById('admin-edit-doc-use-global')) onAdminDoctorUseGlobalModulesChange();
         return;
     }
 
@@ -12964,8 +13072,11 @@ async function loadPortalAuthAdminForm() {
         __requireBehalfApplicantOtp = d.config.requireBehalfApplicantOtp !== false;
         window.__adminEnabledPages = mergeAdminEnabledPagesPolicy(d.config.adminEnabledPages || {});
         window.__websiteMenuPages = d.config.websiteMenuPages || {};
+        window.__doctorPortalModulesGlobalRegular = d.config.doctorPortalModulesRegular || {};
+        window.__doctorPortalModulesGlobalVolunteer = d.config.doctorPortalModulesVolunteer || {};
         renderAdminGlobalPagesCheckboxes();
         renderWebsiteMenuPagesCheckboxes();
+        renderDoctorPortalModulesCheckboxes();
         if (eff) {
             eff.textContent = `Effective signup OTP: ${d.signupOtpEffective ? 'on' : 'off'} · Effective login OTP: ${d.loginOtpEffective ? 'on' : 'off'} (environment variables can still override).`;
         }
@@ -12998,6 +13109,36 @@ function renderAdminGlobalPagesCheckboxes() {
             '</span></label>'
         );
     }).join('');
+}
+
+function renderDoctorPortalModulesCheckboxes() {
+    const regWrap = document.getElementById('doctor-portal-modules-regular');
+    const volWrap = document.getElementById('doctor-portal-modules-volunteer');
+    const card = document.getElementById('doctor-portal-modules-policy-card');
+    if (!regWrap || !volWrap) return;
+    const regular = window.__doctorPortalModulesGlobalRegular || {};
+    const volunteer = window.__doctorPortalModulesGlobalVolunteer || {};
+    const renderGroup = (wrap, pages) => {
+        const keys = Object.keys(pages || {});
+        const restrict = keys.length && keys.some((k) => pages[k] === true);
+        wrap.innerHTML = DOCTOR_MODULE_TAB_DEFS.map(([id, title]) => {
+            const checked = !restrict || pages[id] === true;
+            return (
+                '<label style="display:flex;align-items:center;gap:8px;font-size:0.88rem;cursor:pointer;">' +
+                '<input type="checkbox" data-doctor-global-mod="' +
+                id +
+                '" ' +
+                (checked ? 'checked' : '') +
+                '>' +
+                '<span>' +
+                title +
+                '</span></label>'
+            );
+        }).join('');
+    };
+    renderGroup(regWrap, regular);
+    renderGroup(volWrap, volunteer);
+    if (card) card.style.display = '';
 }
 
 function renderWebsiteMenuPagesCheckboxes() {
@@ -13040,6 +13181,18 @@ async function savePortalAuthAdminConfig() {
         requireAdminOtpForSensitive: gv('pa-req-admin-sensitive-otp'),
         requireBehalfApplicantOtp: gv('pa-req-behalf-applicant-otp')
     };
+    const doctorPortalModulesRegular = {};
+    document.querySelectorAll('#doctor-portal-modules-regular input[data-doctor-global-mod]').forEach((inp) => {
+        const id = inp.getAttribute('data-doctor-global-mod');
+        if (id && inp.checked) doctorPortalModulesRegular[id] = true;
+    });
+    config.doctorPortalModulesRegular = doctorPortalModulesRegular;
+    const doctorPortalModulesVolunteer = {};
+    document.querySelectorAll('#doctor-portal-modules-volunteer input[data-doctor-global-mod]').forEach((inp) => {
+        const id = inp.getAttribute('data-doctor-global-mod');
+        if (id && inp.checked) doctorPortalModulesVolunteer[id] = true;
+    });
+    config.doctorPortalModulesVolunteer = doctorPortalModulesVolunteer;
     if (isSuperAdminUser()) {
         const adminEnabledPages = {};
         document.querySelectorAll('#admin-global-pages-checkboxes input[data-global-admin-tab]').forEach((inp) => {

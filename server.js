@@ -18,6 +18,7 @@ const portalUrls = require('./lib/portal-urls');
 const { subdomainPortalMiddleware } = require('./lib/subdomain-portal');
 const otpLib = require('./lib/otp');
 const portalAuthPolicy = require('./lib/portal-auth-policy');
+const doctorPortalModules = require('./lib/doctor-portal-modules');
 const pincodeLookup = require('./lib/pincode-lookup');
 const countriesList = require('./lib/countries');
 const designatedNotify = require('./lib/designated-notify');
@@ -9247,14 +9248,17 @@ app.post('/api/admin/portal-auth-config', (req, res) => {
         const isSuper =
             String(adm.role || '').toLowerCase() === 'admin' &&
             String(adm.user_role || '').toLowerCase() !== 'co_admin';
-        if (!isSuper) {
-            delete merged.adminEnabledPages;
-            delete merged.websiteMenuPages;
-        }
-        upsertGlobalSetting(portalAuthPolicy.KEY, JSON.stringify(merged), (err) => {
-            if (err) return res.status(500).json({ error: err.message });
-            portalAuthPolicy.loadPortalAuthConfig(db, () => {
-                res.json({ success: true, config: portalAuthPolicy.getPortalAuthConfig() });
+        portalAuthPolicy.loadPortalAuthConfig(db, () => {
+            const existing = portalAuthPolicy.getPortalAuthConfig();
+            if (!isSuper) {
+                merged.adminEnabledPages = existing.adminEnabledPages;
+                merged.websiteMenuPages = existing.websiteMenuPages;
+            }
+            upsertGlobalSetting(portalAuthPolicy.KEY, JSON.stringify(merged), (err) => {
+                if (err) return res.status(500).json({ error: err.message });
+                portalAuthPolicy.loadPortalAuthConfig(db, () => {
+                    res.json({ success: true, config: portalAuthPolicy.getPortalAuthConfig() });
+                });
             });
         });
     });
@@ -9763,12 +9767,10 @@ app.post('/api/admin/users/:userId/doctor-access', (req, res) => {
     const uid = parseInt(req.params.userId, 10);
     if (!Number.isInteger(uid) || uid < 1) return res.status(400).json({ error: 'Invalid user id' });
     const doctor_category = sanitizeDoctorCategory(req.body && req.body.doctor_category);
+    const useGlobalModules = !!(req.body && req.body.useGlobalModules);
     const modulesObj = sanitizeDoctorModulesInput(req.body && req.body.doctor_modules);
-    const hasModules = Object.keys(modulesObj).length > 0;
-    const categoryPreset =
-        doctor_category === 'volunteer' ? { ...volunteerTicketFlow.DEFAULT_VOLUNTEER_DOCTOR_MODULES } : null;
-    const finalModules = hasModules ? modulesObj : categoryPreset;
-    const modulesJson = finalModules ? JSON.stringify(finalModules) : null;
+    const hasModules = !useGlobalModules && Object.keys(modulesObj).length > 0;
+    const modulesJson = hasModules ? JSON.stringify(modulesObj) : null;
     db.get(`SELECT id, role, user_role FROM users WHERE id = ?`, [uid], (e0, row0) => {
         if (e0) return res.status(500).json({ error: e0.message });
         if (!row0) return res.status(404).json({ error: 'User not found' });
@@ -9782,7 +9784,8 @@ app.post('/api/admin/users/:userId/doctor-access', (req, res) => {
                 res.json({
                     success: true,
                     doctor_category,
-                    doctor_modules: finalModules || null
+                    doctor_modules: hasModules ? modulesObj : null,
+                    useGlobalModules: !hasModules
                 });
             }
         );
@@ -11000,6 +11003,17 @@ app.get('/api/public/portal-flags', (req, res) => {
             });
         }
     );
+});
+
+app.get('/api/public/doctor-portal-modules', (req, res) => {
+    portalAuthPolicy.loadPortalAuthConfig(db, () => {
+        const c = portalAuthPolicy.getPortalAuthConfig();
+        res.json({
+            regular: c.doctorPortalModulesRegular || {},
+            volunteer: c.doctorPortalModulesVolunteer || {},
+            tabDefs: doctorPortalModules.TAB_DEFS
+        });
+    });
 });
 
 // Admin: Update Global Settings

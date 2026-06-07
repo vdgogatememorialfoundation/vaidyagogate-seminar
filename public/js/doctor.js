@@ -554,6 +554,62 @@ function parseDoctorModulesMap(raw) {
     }
 }
 
+function modulesMapToAllowedSetClient(modulesMap) {
+    const m = modulesMap && typeof modulesMap === 'object' ? modulesMap : {};
+    const keys = Object.keys(m);
+    if (!keys.length) return null;
+    if (!keys.some((k) => m[k] === true)) return null;
+    return new Set(keys.filter((k) => m[k] === true));
+}
+
+function resolveDoctorAllowedTabsClient(category, globalRegular, globalVolunteer, userModulesRaw) {
+    const cat = String(category || 'regular').toLowerCase() === 'volunteer' ? 'volunteer' : 'regular';
+    const globalMap = cat === 'volunteer' ? globalVolunteer || {} : globalRegular || {};
+    let allowed = modulesMapToAllowedSetClient(globalMap);
+    const userMap = parseDoctorModulesMap(userModulesRaw);
+    if (!userMap || !Object.keys(userMap).length) return allowed;
+    const hasExplicitOff = Object.keys(userMap).some((k) => userMap[k] === false);
+    if (!hasExplicitOff) return modulesMapToAllowedSetClient(userMap);
+    const out = new Set();
+    const tabIds = [
+        'tab-dashboard',
+        'tab-profile',
+        'tab-seminars',
+        'tab-applications',
+        'tab-abstract',
+        'tab-case-track',
+        'tab-volunteer',
+        'tab-feedback',
+        'tab-support',
+        'tab-orders',
+        'tab-receipts',
+        'tab-payments',
+        'tab-books',
+        'tab-ticket',
+        'tab-certificate',
+        'tab-reset-pwd'
+    ];
+    tabIds.forEach((tabId) => {
+        if (userMap[tabId] === true) {
+            out.add(tabId);
+            return;
+        }
+        if (userMap[tabId] === false) return;
+        if (allowed === null || allowed.has(tabId)) out.add(tabId);
+    });
+    return out.size ? out : new Set();
+}
+
+async function loadDoctorPortalModulesGlobal() {
+    if (window.__doctorPortalModulesGlobal) return window.__doctorPortalModulesGlobal;
+    try {
+        const res = await fetch('/api/public/doctor-portal-modules', { cache: 'no-store' });
+        const data = await res.json();
+        if (res.ok) window.__doctorPortalModulesGlobal = data;
+    } catch (_) {}
+    return window.__doctorPortalModulesGlobal || { regular: {}, volunteer: {} };
+}
+
 function volunteerDoctorModuleDefaults() {
     return {
         'tab-dashboard': true,
@@ -569,13 +625,15 @@ function volunteerDoctorModuleDefaults() {
     };
 }
 
-function applyDoctorModuleAccessFromUser(user) {
-    const category = String((user && user.doctor_category) || 'regular').toLowerCase();
-    let mods = parseDoctorModulesMap(user && user.doctor_modules);
-    if (category === 'volunteer') {
-        mods = { ...volunteerDoctorModuleDefaults(), ...(mods || {}) };
-    }
-    __doctorAllowedTabs = mods && Object.keys(mods).length ? new Set(Object.keys(mods).filter((k) => !!mods[k])) : null;
+async function applyDoctorModuleAccessFromUser(user) {
+    const globalCfg = await loadDoctorPortalModulesGlobal();
+    const allowed = resolveDoctorAllowedTabsClient(
+        user && user.doctor_category,
+        globalCfg.regular,
+        globalCfg.volunteer,
+        user && user.doctor_modules
+    );
+    __doctorAllowedTabs = allowed;
     document.querySelectorAll('.menu-item[data-tab]').forEach((el) => {
         const tab = el.getAttribute('data-tab');
         if (!tab) return;
@@ -1225,41 +1283,42 @@ function initDoctorMobileNav() {
 function bootDoctorDashboard(user) {
     currentUser = user;
     window.__doctorResolvedInternalId = doctorNumericUserId();
-    applyDoctorModuleAccessFromUser(currentUser);
-    ensureDoctorInternalUserId().then((resolved) => {
-        if (resolved) window.__doctorResolvedInternalId = resolved;
-    });
-    fetch('/api/public/portal-urls')
-        .then((r) => r.json())
-        .then((u) => {
-            window.__doctorProductionSite = !!(u && u.production);
-            window.__allowDemoAccounts = u && u.allowDemoAccounts !== false;
-        })
-        .catch(() => {});
+    applyDoctorModuleAccessFromUser(currentUser).then(() => {
+        ensureDoctorInternalUserId().then((resolved) => {
+            if (resolved) window.__doctorResolvedInternalId = resolved;
+        });
+        fetch('/api/public/portal-urls')
+            .then((r) => r.json())
+            .then((u) => {
+                window.__doctorProductionSite = !!(u && u.production);
+                window.__allowDemoAccounts = u && u.allowDemoAccounts !== false;
+            })
+            .catch(() => {});
         document.getElementById('auth-overlay').classList.add('hidden');
         document.getElementById('dashboard-main').classList.remove('hidden');
-    initDoctorMobileNav();
+        initDoctorMobileNav();
         document.getElementById('header-name').innerText = `Hi, Dr. ${currentUser.first_name || ''} ${currentUser.last_name || ''}`;
-    document.getElementById('header-id').innerText =
-        `ID: ${currentUser.user_id_string || '---'}` +
-        (window.__allowDemoAccounts !== false && Number(currentUser.is_demo) === 1 ? ' · Dummy' : '');
-    if (typeof PortalAuth !== 'undefined' && PortalAuth.renderLoginTime) {
-        PortalAuth.renderLoginTime('header-login-time', currentUser);
-    }
+        document.getElementById('header-id').innerText =
+            `ID: ${currentUser.user_id_string || '---'}` +
+            (window.__allowDemoAccounts !== false && Number(currentUser.is_demo) === 1 ? ' · Dummy' : '');
+        if (typeof PortalAuth !== 'undefined' && PortalAuth.renderLoginTime) {
+            PortalAuth.renderLoginTime('header-login-time', currentUser);
+        }
         loadProfile();
-    loadDoctorPaymentOptions().then(() => {
-        loadDoctorPortalYear().then(() => {
-            if (!__doctorAllowedTabs || __doctorAllowedTabs.has('tab-seminars')) loadSeminarsGrid();
-            if (!__doctorAllowedTabs || __doctorAllowedTabs.has('tab-applications')) loadApplications();
+        loadDoctorPaymentOptions().then(() => {
+            loadDoctorPortalYear().then(() => {
+                if (!__doctorAllowedTabs || __doctorAllowedTabs.has('tab-seminars')) loadSeminarsGrid();
+                if (!__doctorAllowedTabs || __doctorAllowedTabs.has('tab-applications')) loadApplications();
+            });
         });
+        loadDoctorDashboardStats();
+        loadPortalFlags();
+        loadRegistrationFormConfigAndApply();
+        loadDoctorPortalUpdatesFromCms();
+        loadSiteBranding();
+        initDoctorVolunteerNav();
+        handleEasebuzzPaymentReturnQuery();
     });
-    loadDoctorDashboardStats();
-    loadPortalFlags();
-    loadRegistrationFormConfigAndApply();
-    loadDoctorPortalUpdatesFromCms();
-    loadSiteBranding();
-    initDoctorVolunteerNav();
-    handleEasebuzzPaymentReturnQuery();
 }
 
 function handleEasebuzzPaymentReturnQuery() {
