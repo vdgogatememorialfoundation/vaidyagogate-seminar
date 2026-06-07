@@ -601,13 +601,54 @@ function resolveDoctorAllowedTabsClient(category, globalRegular, globalVolunteer
 }
 
 async function loadDoctorPortalModulesGlobal() {
-    if (window.__doctorPortalModulesGlobal) return window.__doctorPortalModulesGlobal;
     try {
         const res = await fetch('/api/public/doctor-portal-modules', { cache: 'no-store' });
         const data = await res.json();
-        if (res.ok) window.__doctorPortalModulesGlobal = data;
+        if (res.ok) {
+            window.__doctorPortalModulesGlobal = data;
+            return data;
+        }
     } catch (_) {}
     return window.__doctorPortalModulesGlobal || { regular: {}, volunteer: {} };
+}
+
+async function refreshDoctorPortalAccess() {
+    if (!currentUser) return false;
+    let uid = doctorNumericUserId();
+    if (!uid) uid = await ensureDoctorInternalUserId();
+    if (!uid) return false;
+    try {
+        const res = await fetch('/api/doctor/portal-access/' + encodeURIComponent(String(uid)), {
+            cache: 'no-store'
+        });
+        const data = await res.json();
+        if (!res.ok) return false;
+        delete window.__doctorPortalModulesGlobal;
+        currentUser.doctor_category = data.doctor_category || 'regular';
+        currentUser.doctor_modules = data.doctor_modules ?? null;
+        if (typeof PortalAuth !== 'undefined') PortalAuth.setUser('doctor', currentUser);
+        return true;
+    } catch (_) {
+        return false;
+    }
+}
+
+let _doctorPortalAccessRefreshTimer = null;
+
+function initDoctorPortalAccessRefreshOnVisible() {
+    if (window.__doctorPortalAccessVisibilityBound) return;
+    window.__doctorPortalAccessVisibilityBound = true;
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState !== 'visible' || !currentUser) return;
+        clearTimeout(_doctorPortalAccessRefreshTimer);
+        _doctorPortalAccessRefreshTimer = setTimeout(() => {
+            refreshDoctorPortalAccess()
+                .catch(() => {})
+                .then(() => applyDoctorModuleAccessFromUser(currentUser))
+                .then(() => initDoctorVolunteerNav())
+                .then(() => applyDoctorModuleAccessFromUser(currentUser));
+        }, 2000);
+    });
 }
 
 function volunteerDoctorModuleDefaults() {
@@ -1283,7 +1324,11 @@ function initDoctorMobileNav() {
 function bootDoctorDashboard(user) {
     currentUser = user;
     window.__doctorResolvedInternalId = doctorNumericUserId();
-    applyDoctorModuleAccessFromUser(currentUser).then(() => {
+    initDoctorPortalAccessRefreshOnVisible();
+    refreshDoctorPortalAccess()
+        .catch(() => {})
+        .then(() => applyDoctorModuleAccessFromUser(currentUser))
+        .then(() => {
         ensureDoctorInternalUserId().then((resolved) => {
             if (resolved) window.__doctorResolvedInternalId = resolved;
         });
@@ -1316,7 +1361,9 @@ function bootDoctorDashboard(user) {
         loadRegistrationFormConfigAndApply();
         loadDoctorPortalUpdatesFromCms();
         loadSiteBranding();
-        initDoctorVolunteerNav();
+        initDoctorVolunteerNav()
+            .then(() => applyDoctorModuleAccessFromUser(currentUser))
+            .catch(() => {});
         handleEasebuzzPaymentReturnQuery();
     });
 }
@@ -2964,14 +3011,22 @@ async function startCaseApplication(programId) {
 
 async function initDoctorVolunteerNav() {
     if (!currentUser) return;
+    const nav = document.getElementById('nav-volunteer');
+    if (!nav) return;
+    const moduleAllowed = !__doctorAllowedTabs || __doctorAllowedTabs.has('tab-volunteer');
+    if (!moduleAllowed) {
+        nav.classList.add('hidden');
+        return;
+    }
     try {
         const res = await fetch('/api/doctor/volunteer-assignments/' + currentUser.id);
         const rows = await res.json().catch(function () {
             return [];
         });
-        const nav = document.getElementById('nav-volunteer');
-        if (nav && res.ok && Array.isArray(rows) && rows.length) {
+        if (res.ok && Array.isArray(rows) && rows.length) {
             nav.classList.remove('hidden');
+        } else {
+            nav.classList.add('hidden');
         }
     } catch (e) {
         console.error(e);
