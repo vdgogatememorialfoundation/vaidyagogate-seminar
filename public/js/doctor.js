@@ -610,22 +610,36 @@ function allowedTabsArrayToSet(allowedTabs) {
     return new Set(allowedTabs);
 }
 
+function doctorTabModuleEnabled(tabId) {
+    return !__doctorAllowedTabs || __doctorAllowedTabs.has(tabId);
+}
+
 function applyDoctorAllowedTabsToDom(allowed) {
     __doctorAllowedTabs = allowed;
     document.querySelectorAll('.menu-item[data-tab]').forEach((el) => {
         const tab = el.getAttribute('data-tab');
         if (!tab) return;
-        const enabled = !__doctorAllowedTabs || __doctorAllowedTabs.has(tab);
+        let enabled = doctorTabModuleEnabled(tab);
+        if (tab === 'tab-volunteer' && enabled) {
+            enabled = !!window.__doctorHasVolunteerAssignments;
+        }
         el.classList.toggle('hidden', !enabled);
+    });
+    document.querySelectorAll('[data-doctor-tab]').forEach((el) => {
+        const tab = el.getAttribute('data-doctor-tab');
+        if (!tab) return;
+        el.classList.toggle('hidden', !doctorTabModuleEnabled(tab));
     });
     document.querySelectorAll('.tab-pane[id^="tab-"]').forEach((pane) => {
         const tabId = pane.id;
-        const enabled = !__doctorAllowedTabs || __doctorAllowedTabs.has(tabId);
+        const enabled = doctorTabModuleEnabled(tabId);
         if (!enabled) pane.classList.add('hidden');
     });
-    if (__doctorAllowedTabs && !__doctorAllowedTabs.has('tab-volunteer')) {
-        const nav = document.getElementById('nav-volunteer');
-        if (nav) nav.classList.add('hidden');
+    const slider = document.getElementById('doctor-seminar-slider');
+    if (slider) {
+        const showSlider = doctorTabModuleEnabled('tab-seminars') && slider.children.length > 0;
+        slider.classList.toggle('hidden', !showSlider);
+        slider.setAttribute('aria-hidden', showSlider ? 'false' : 'true');
     }
 }
 
@@ -2364,6 +2378,7 @@ async function loadDoctorSeminarSlider() {
         } catch (_) {}
         const slides = buildDoctorSliderSlides(seminars, marketingBanners, cmsSlides);
         renderDoctorSeminarSlider(slides, autoSlideMs);
+        applyDoctorAllowedTabsToDom(__doctorAllowedTabs);
     } catch (e) {
         console.warn('Doctor seminar slider', e);
     }
@@ -3280,11 +3295,9 @@ async function startCaseApplication(programId) {
 
 async function initDoctorVolunteerNav() {
     if (!currentUser) return;
-    const nav = document.getElementById('nav-volunteer');
-    if (!nav) return;
-    const moduleAllowed = !__doctorAllowedTabs || __doctorAllowedTabs.has('tab-volunteer');
-    if (!moduleAllowed) {
-        nav.classList.add('hidden');
+    window.__doctorHasVolunteerAssignments = false;
+    if (!doctorTabModuleEnabled('tab-volunteer')) {
+        applyDoctorAllowedTabsToDom(__doctorAllowedTabs);
         return;
     }
     try {
@@ -3292,14 +3305,12 @@ async function initDoctorVolunteerNav() {
         const rows = await res.json().catch(function () {
             return [];
         });
-        if (res.ok && Array.isArray(rows) && rows.length) {
-            nav.classList.remove('hidden');
-        } else {
-            nav.classList.add('hidden');
-        }
+        window.__doctorHasVolunteerAssignments = !!(res.ok && Array.isArray(rows) && rows.length);
     } catch (e) {
         console.error(e);
+        window.__doctorHasVolunteerAssignments = false;
     }
+    applyDoctorAllowedTabsToDom(__doctorAllowedTabs);
 }
 
 async function loadDoctorVolunteerPanel() {

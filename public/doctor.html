@@ -447,10 +447,10 @@
                     <div class="card">
                         <h3 style="color:#0f766e;margin-bottom:10px;"><i class="fas fa-bolt"></i> Quick links</h3>
                         <div style="display:flex;flex-wrap:wrap;gap:10px;">
-                            <button type="button" class="btn-primary" onclick="switchTab('tab-seminars')">Register for seminar</button>
-                            <button type="button" class="btn-primary" style="background:#7c3aed;" onclick="switchTab('tab-orders')">Orders</button>
-                            <button type="button" class="btn-primary" style="background:#c9a227;" onclick="switchTab('tab-certificate')">My certificates</button>
-                            <button type="button" class="btn-primary" style="background:#64748b;" onclick="switchTab('tab-reset-pwd')">Change password</button>
+                            <button type="button" class="btn-primary" data-doctor-tab="tab-seminars" onclick="switchTab('tab-seminars')">Register for seminar</button>
+                            <button type="button" class="btn-primary" style="background:#7c3aed;" data-doctor-tab="tab-orders" onclick="switchTab('tab-orders')">Orders</button>
+                            <button type="button" class="btn-primary" style="background:#c9a227;" data-doctor-tab="tab-certificate" onclick="switchTab('tab-certificate')">My certificates</button>
+                            <button type="button" class="btn-primary" style="background:#64748b;" data-doctor-tab="tab-reset-pwd" onclick="switchTab('tab-reset-pwd')">Change password</button>
                         </div>
                     </div>
                 </div>
@@ -986,6 +986,6 @@
     <link rel="stylesheet" href="/css/book-track.css?v=20260529stg">
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/doctor-books.js?v=20260528livetrack"></script>
-    <script src="/js/doctor.js?v=20260607slider"></script>
+    <script src="/js/doctor.js?v=20260607deploy2"></script>
 </body>
 </html>

@@ -64,7 +64,47 @@
         }).join('');
     }
 
-    function buildHeroSlides(cms) {
+    function formatSeminarHeroDate(value) {
+        if (!value) return '';
+        if (window.PortalDateTime && window.PortalDateTime.formatEvent) {
+            return window.PortalDateTime.formatEvent(value) || '';
+        }
+        return String(value);
+    }
+
+    function seminarHeroImagePath(seminar) {
+        if (!seminar) return '';
+        if (seminar.hero_image_path) return mediaUrl(seminar.hero_image_path);
+        if (seminar.flyer_path) return mediaUrl(seminar.flyer_path);
+        try {
+            const gallery = seminar.gallery_paths ? JSON.parse(seminar.gallery_paths) : [];
+            if (Array.isArray(gallery) && gallery.length) return mediaUrl(gallery[0]);
+        } catch (_) {}
+        return '';
+    }
+
+    function buildSeminarHeroSlides(seminars, cms) {
+        const list = Array.isArray(seminars) ? seminars.filter((s) => s && Number(s.is_active) !== 0) : [];
+        if (!list.length) return [];
+        return list.map((s) => {
+            const when = formatSeminarHeroDate(s.event_date);
+            const desc = s.description ? String(s.description).trim().slice(0, 140) : '';
+            return {
+                image: seminarHeroImagePath(s),
+                title: s.title || (cms && cms.hero && cms.hero.title) || 'National Seminar',
+                subtitle: when || desc || (cms && cms.hero && cms.hero.subtitle) || '',
+                cta: 'Register now',
+                link: '#register',
+                cta2: (cms && cms.hero && cms.hero.ctaSecondary) || 'View programme',
+                link2: '#schedule'
+            };
+        });
+    }
+
+    function buildHeroSlides(cms, seminars) {
+        const seminarSlides = buildSeminarHeroSlides(seminars, cms);
+        if (seminarSlides.length) return seminarSlides;
+
         const slides = [];
         const fromCms = Array.isArray(cms.slides) ? cms.slides : [];
         fromCms.forEach((sl) => {
@@ -102,6 +142,17 @@
             });
         }
         return slides;
+    }
+
+    async function loadHeroSeminars() {
+        try {
+            const res = await fetch('/api/seminars?bucket=current', { cache: 'no-store' });
+            const data = await res.json();
+            window.__heroSeminars = (data && data.seminars) || [];
+        } catch (_) {
+            window.__heroSeminars = [];
+        }
+        return window.__heroSeminars;
     }
 
     function showHeroSlide(i) {
@@ -146,7 +197,7 @@
         const root = document.getElementById('congress-hero-slides');
         const dots = document.getElementById('congress-hero-dots');
         if (!root) return;
-        heroSlides = buildHeroSlides(cms || {});
+        heroSlides = buildHeroSlides(cms || {}, window.__heroSeminars || []);
         root.innerHTML = heroSlides
             .map((sl, i) => {
                 const bg = sl.image
@@ -589,7 +640,8 @@
                 .replace(/^,\s*/, '')
                 .replace(/,\s+and\b/gi, ' and');
         }
-        renderCongressHero(cms);
+        window.__siteCms = cms || {};
+        loadHeroSeminars().then(() => renderCongressHero(window.__siteCms));
         renderCongressTicker(cms.scrollingAnnouncements || []);
         renderCongressPastSeminars(cms);
         renderCongressVideos(cms);
@@ -614,11 +666,13 @@
             const root = document.getElementById('congress-hero-slides');
             if (root && root.children.length) return;
             try {
+                await loadHeroSeminars();
                 const res = await fetch('/api/public/site-cms', { cache: 'no-store' });
                 const cms = await res.json();
                 if (typeof window.applySiteCms === 'function') window.applySiteCms(cms);
             } catch (e) {
                 console.error('[congress] CMS bootstrap failed', e);
+                await loadHeroSeminars();
                 renderCongressHero({});
             }
         })();
