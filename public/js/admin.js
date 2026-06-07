@@ -989,7 +989,6 @@ function renderStaffUsersTable(staffList) {
                             <option value="judge_user" ${userRole === 'judge_user' ? 'selected' : ''}>Judge</option>
                             <option value="co_admin" ${userRole === 'co_admin' ? 'selected' : ''}>Co Admin</option>
                             <option value="scanner_portal_user" ${userRole === 'scanner_portal_user' ? 'selected' : ''}>Scanner (volunteer)</option>
-                            <option value="venue_gate_user" ${userRole === 'venue_gate_user' ? 'selected' : ''}>Venue gate (DigiYatra)</option>
                             <option value="scanner_dashboard_user" ${userRole === 'scanner_dashboard_user' ? 'selected' : ''}>Live scanner dashboard</option>
                             <option value="reviewer" ${userRole === 'reviewer' ? 'selected' : ''}>Reviewer</option>
                             <option value="book_sales_staff" ${userRole === 'book_sales_staff' ? 'selected' : ''}>Book sales staff</option>
@@ -2968,7 +2967,6 @@ function renderAdminUserDetailTab() {
                             <option value="judge_user">Judge</option>
                             <option value="co_admin">Co Admin</option>
                             <option value="scanner_portal_user">Scanner (volunteer)</option>
-                            <option value="venue_gate_user">Venue gate (DigiYatra)</option>
                             <option value="scanner_dashboard_user">Live scanner dashboard</option>
                             <option value="reviewer">Reviewer</option>
                         </select>
@@ -5766,7 +5764,17 @@ function renderAdminEticketDetail(row) {
         '<br><strong>Scanned:</strong> ' +
         (row.isScanned ? 'Yes' + (row.scanTime ? ' (' + escAdmin(row.scanTime) + ')' : '') : 'No') +
         (row.scanCount > 0 ? ' · scans: ' + row.scanCount : '') +
-        '</p>';
+        (row.ticketExpired
+            ? '<br><strong style="color:#b91c1c;">Expired</strong> — seminar date passed (scanner blocked). Use Applications → Check in for manual override.'
+            : '') +
+        '</p>' +
+        (row.ticketExpired && row.registrationId
+            ? '<p><button type="button" class="btn-primary" style="background:#0f766e;padding:6px 10px;font-size:0.85rem;" onclick="adminManualCheckinRegistration(' +
+              row.registrationId +
+              ", '" +
+              String(row.applicationNo || '').replace(/'/g, "\\'") +
+              '\')">Check in manually</button></p>'
+            : '');
     if (preview) {
         if (row.ticketPreviewUrl) {
             preview.href = row.ticketPreviewUrl;
@@ -7689,6 +7697,16 @@ function ensureEmailProviderPanels() {
             '<p id="int-email-key-hint-' +
             p +
             '" style="font-size:0.78rem;color:#64748b;margin:6px 0 0;"></p>';
+        if (p === 'zeptomail') {
+            block.innerHTML +=
+                '<label style="font-weight:600;margin-top:12px;display:block;">ZeptoMail API region</label>' +
+                '<select id="int-zeptomail-api-region" style="width:100%;">' +
+                '<option value="in">India — api.zeptomail.in (Zoho India accounts)</option>' +
+                '<option value="com">Global — api.zeptomail.com</option>' +
+                '<option value="eu">Europe — api.zeptomail.eu</option>' +
+                '</select>' +
+                '<p style="font-size:0.78rem;color:#64748b;margin:6px 0 0;line-height:1.45;">Wrong region shows "Invalid Send Mail token". Match the region where you created the Mail Agent (check your ZeptoMail login URL).</p>';
+        }
         store.appendChild(block);
     });
 }
@@ -7997,6 +8015,7 @@ async function loadIntegrationSettings() {
         set('int-zoho-from', s.zoho_from);
         set('int-email-api-provider', s.email_api_provider || 'zeptomail');
         set('int-email-api-fallback-provider', s.email_api_fallback_provider || 'sender');
+        set('int-zeptomail-api-region', s.zeptomail_api_region || 'in');
         setIntegrationCheckbox('int-email-primary-enabled', s.email_primary_enabled !== false);
         setIntegrationCheckbox('int-email-fallback-enabled', s.email_fallback_enabled === true || s.email_fallback_enabled === 1 || s.email_fallback_enabled === '1');
         setIntegrationCheckbox('int-email-smtp-standby-enabled', s.email_smtp_standby_enabled === true || s.email_smtp_standby_enabled === 1 || s.email_smtp_standby_enabled === '1');
@@ -8122,6 +8141,16 @@ async function saveIntegrationSettings() {
         );
         return;
     }
+    if (emailApiProvider === 'zeptomail') {
+        const zeptoTok = pendingProviderKeys.zeptomail || newEmailApiKey;
+        if (zeptoTok && /^eyJ[A-Za-z0-9_-]+\./.test(String(zeptoTok).trim())) {
+            setAdminSettingsSaveMsg(
+                'That looks like a Sender.net JWT, not a ZeptoMail token. In ZeptoMail open Mail Agent → SMTP/API → copy Send Mail Token.',
+                true
+            );
+            return;
+        }
+    }
     const body = {
         public_base_url: publicUrl,
         wix_site_url: (document.getElementById('int-wix-url') || {}).value.trim(),
@@ -8139,6 +8168,7 @@ async function saveIntegrationSettings() {
         email_fallback_enabled: fallbackEnabled,
         email_smtp_standby_enabled: smtpStandbyEnabled,
         email_provider_keys: pendingProviderKeys,
+        zeptomail_api_region: (document.getElementById('int-zeptomail-api-region') || {}).value || 'in',
         whatsapp_phone_number_id: (document.getElementById('int-wa-phone-id') || {}).value.trim(),
         whatsapp_business_account_id: (document.getElementById('int-wa-waba-id') || {}).value.trim(),
         whatsapp_verify_token: (document.getElementById('int-wa-verify') || {}).value,
@@ -8210,7 +8240,8 @@ function integrationFormSmtpPayload() {
         email_primary_enabled: primaryEnabled,
         email_fallback_enabled: fallbackEnabled,
         email_smtp_standby_enabled: (document.getElementById('int-email-smtp-standby-enabled') || {}).checked !== false,
-        email_provider_keys: collectEmailProviderKeys()
+        email_provider_keys: collectEmailProviderKeys(),
+        zeptomail_api_region: (document.getElementById('int-zeptomail-api-region') || {}).value || 'in'
     };
     const pendingKey = readIntegrationEmailApiKeyNew();
     const pendingFallback = readIntegrationEmailApiFallbackKeyNew();

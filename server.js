@@ -54,7 +54,6 @@ const { registerPaymentsRoutes } = require('./lib/routes-payments');
 const seminarCapacity = require('./lib/seminar-capacity');
 const ticketScanEvents = require('./lib/ticket-scan-events');
 const scannerIdCapture = require('./lib/scanner-id-capture');
-const venueEntry = require('./lib/venue-entry');
 const feedbackFormConfig = require('./lib/feedback-form-config');
 const { registerLiveScannerRoutes } = require('./lib/routes-live-scanner');
 const { registerPosRoutes } = require('./lib/pos-onspot');
@@ -101,6 +100,7 @@ const {
     isCheckinDateToday,
     isCheckinOpenForSeminar,
     isSeminarEnded,
+    isTicketExpiredForSeminar,
     localDateYmd,
     normalizeCheckinDateYmd,
     normalizeCheckinDateForStorage
@@ -462,8 +462,6 @@ function requestNeedsBootstrap(req) {
     if (p === '/api/health') return false;
     if (p.startsWith('/api/branding/logo')) return false;
     if (p === '/scanner' || p === '/scanner/') return false;
-    if (p === '/venue-gate' || p === '/venue-gate/') return false;
-    if (p === '/venue-entry' || p === '/venue-entry/') return false;
     if (/\.(html?|css|js|ico|png|jpe?g|gif|webp|svg|woff2?|json|webmanifest|txt|map)$/i.test(p)) return false;
     if (p.startsWith('/css/') || p.startsWith('/js/') || p.startsWith('/uploads/')) return false;
     if (p.startsWith('/api/')) return true;
@@ -494,17 +492,9 @@ app.get('/scanner', (req, res) => {
 app.get('/scanner/', (req, res) => {
     res.redirect(302, '/scanner.html');
 });
-app.get(['/venue-entry', '/venue-entry/'], (req, res) => {
-    res.redirect(302, '/venue-entry.html');
-});
-app.get(['/venue-gate', '/venue-gate/'], (req, res) => {
-    res.redirect(302, '/venue-gate.html');
-});
 
 const staffPortalHtml = path.join(__dirname, 'public', 'staff.html');
 const adminPortalHtml = path.join(__dirname, 'public', 'admin.html');
-const venueGateHtml = path.join(__dirname, 'public', 'venue-gate.html');
-const venueEntryHtml = path.join(__dirname, 'public', 'venue-entry.html');
 app.get(['/staff/login', '/staff'], (req, res) => {
     res.sendFile(staffPortalHtml);
 });
@@ -512,16 +502,6 @@ app.get(['/staff/crm', '/staff/crm/'], (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     res.setHeader('Pragma', 'no-cache');
     res.sendFile(adminPortalHtml);
-});
-app.get('/venue-gate.html', (req, res) => {
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    res.setHeader('Pragma', 'no-cache');
-    res.sendFile(venueGateHtml);
-});
-app.get('/venue-entry.html', (req, res) => {
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    res.setHeader('Pragma', 'no-cache');
-    res.sendFile(venueEntryHtml);
 });
 
 const portalHtmlAliases = {
@@ -1115,7 +1095,7 @@ function ensurePortalSchema(next) {
                                             ignoreSchemaMigrationErr(h7wl);
                                         });
                                             ticketScanEvents.ensureTicketScanEventsTable(db, () => {
-                                                venueEntry.ensureSchema(db, () => {});
+                                                scannerIdCapture.ensureSchema(db, () => {});
                                             });
                                         db.run(`ALTER TABLE tickets ADD COLUMN ticket_id_string TEXT`, (e2) => {
                                             ignoreSchemaMigrationErr(e2);
@@ -2549,14 +2529,7 @@ function mountExtendedRoutes() {
         uploadsDir,
         withMemoryAwareUpload
     });
-    venueEntry.registerVenueEntryRoutes(app, {
-        db,
-        uploadsDir,
-        withMemoryAwareUpload,
-        buildDisplayNameFromFormData,
-        syncCertificateEligibilityForTicket
-    });
-    console.log('[routes] Extended APIs mounted (case programs, branding, volunteers, reports, venue entry)');
+    console.log('[routes] Extended APIs mounted (case programs, branding, volunteers, reports)');
 }
 try {
     mountExtendedRoutes();
@@ -2703,6 +2676,7 @@ function integrationSettingsJson(data) {
         raw.email_smtp_standby_enabled,
         false
     );
+    masked.zeptomail_api_region = raw.zeptomail_api_region || process.env.ZEPTOMAIL_API_REGION || 'in';
     masked.whatsapp_token_saved = !!(raw.whatsapp_token && String(raw.whatsapp_token).trim());
     masked.whatsapp_verify_token_saved = !!(
         raw.whatsapp_verify_token && String(raw.whatsapp_verify_token).trim()
@@ -2865,6 +2839,15 @@ app.post('/api/admin/integrations', withIntegrationSettingsLoaded, (req, res) =>
             body.email_api_fallback_key = ex.email_api_key;
         }
         const emailProv = require('./lib/email-provider-settings');
+        const incomingZepto =
+            (body.email_provider_keys && body.email_provider_keys.zeptomail) ||
+            (nextProvider === 'zeptomail' && body.email_api_key);
+        if (incomingZepto && !integrationSettings.isMaskedSecretValue(incomingZepto)) {
+            const zeptoCheck = emailProv.validateZeptoMailToken(incomingZepto);
+            if (zeptoCheck.wrong) {
+                return res.status(400).json({ error: zeptoCheck.reason });
+            }
+        }
         const mergedKeys = emailProv.mergeProviderKeys(ex, body);
         const payload = {
             ...body,
@@ -2945,6 +2928,9 @@ function smtpOverridesFromBody(body) {
     ) {
         o.email_api_fallback_key = String(b.email_api_fallback_key).trim();
     }
+    if (b.zeptomail_api_region != null && String(b.zeptomail_api_region).trim()) {
+        o.zeptomail_api_region = String(b.zeptomail_api_region).trim().toLowerCase();
+    }
     return Object.keys(o).length ? o : null;
 }
 
@@ -2981,20 +2967,27 @@ app.post('/api/admin/integrations/test-email', withIntegrationSettingsLoaded, as
     if (r.ok) {
         const cfg = integrationSettings.getMailConfig(overrides || undefined);
         const httpCfg = httpTransport.getHttpEmailConfig(overrides || undefined);
+        const rt = integrationSettings.getRuntimeIntegrations();
+        const emailProv = require('./lib/email-provider-settings');
+        const zeptoKey = httpCfg && httpCfg.provider === 'zeptomail' ? httpCfg.key : '';
         return res.json({
             success: true,
             logged: true,
             transport: r.transport || (httpCfg ? 'http' : 'smtp'),
             provider: r.provider || (httpCfg && httpCfg.provider),
             from: (httpCfg && httpCfg.from) || (cfg && cfg.from),
-            user: (cfg && cfg.auth && cfg.auth.user) || (httpCfg && httpCfg.from)
+            user: (cfg && cfg.auth && cfg.auth.user) || (httpCfg && httpCfg.from),
+            zepto_api_url: r.zeptoApiUrl || httpTransport.getZeptoMailApiUrl(rt),
+            zepto_api_region: rt.zeptomail_api_region || process.env.ZEPTOMAIL_API_REGION || 'in',
+            zepto_token_hint: zeptoKey ? '…' + emailProv.normalizeZeptoMailToken(zeptoKey).slice(-6) : null
         });
     }
     res.status(503).json({
         error: r.error || 'Send failed',
         hint: r.hint,
         skipped: r.skipped,
-        logged: true
+        logged: true,
+        zepto_api_url: r.zeptoApiUrl
     });
 });
 
@@ -3939,16 +3932,6 @@ app.post('/api/auth/login', withAuxiliaryTables, (req, res) => {
                     });
                 }
 
-                if (loginPortal === 'venue_gate') {
-                    const ur = String(row.user_role || '').toLowerCase();
-                    const r = String(row.role || '').toLowerCase();
-                    if (ur !== 'venue_gate_user' && ur !== 'scanner_portal_user' && r !== 'admin') {
-                        return res.status(403).json({
-                            error: 'Venue gate accounts sign in at /venue-gate.html (or scanner staff may use the same gate portal).'
-                        });
-                    }
-                }
-
                 if (loginPortal === 'staff' && !portalAuthPolicy.canUseStaffBookPortal(row)) {
                     const ur = String(row.user_role || '').toLowerCase();
                     if (ur === 'scanner_portal_user' || ur === 'scanner_dashboard_user') {
@@ -3958,7 +3941,8 @@ app.post('/api/auth/login', withAuxiliaryTables, (req, res) => {
                     }
                     if (ur === 'venue_gate_user') {
                         return res.status(403).json({
-                            error: 'Venue gate accounts must use /venue-gate.html.'
+                            error:
+                                'Venue gate (DigiYatra) was removed. Ask the super admin to assign Scanner volunteer and use /scanner.html.'
                         });
                     }
                     if (ur === 'judge_user' || ur === 'reviewer') {
@@ -5741,7 +5725,7 @@ app.get('/api/doctor/event-tickets/:userId', (req, res) => {
     db.all(
         `SELECT t.id as ticket_row_id, t.ticket_id_string, t.qr_code_data, t.is_scanned, t.scan_time, IFNULL(t.is_valid, 1) AS is_valid,
                 o.order_id_string, o.amount, o.status as order_status, o.payment_date,
-                r.application_no, r.status as registration_status, s.title as seminar_title, s.id as seminar_id
+                r.application_no, r.status as registration_status, s.title as seminar_title, s.id as seminar_id, s.event_date
          FROM tickets t
          JOIN orders o ON t.order_id = o.id
          JOIN registrations r ON o.registration_id = r.id
@@ -5751,7 +5735,15 @@ app.get('/api/doctor/event-tickets/:userId', (req, res) => {
         [uid],
         (err, rows) => {
             if (err) return res.status(500).json({ error: err.message });
-            res.json(rows || []);
+            const out = (rows || []).map((row) => ({
+                ...row,
+                seminar_ended: isSeminarEnded(row.event_date),
+                ticket_expired:
+                    isTicketExpiredForSeminar(row.event_date) &&
+                    !row.is_scanned &&
+                    Number(row.scan_count || 0) < 1
+            }));
+            res.json(out);
         }
     );
 });
@@ -6277,7 +6269,11 @@ function ticketLookupInvalid(row) {
     if (!row) return false;
     if (Number(row.is_valid) === 0 || row.is_valid === false) return true;
     const regSt = String(row.registration_status || '').toLowerCase();
-    return regSt === 'cancelled' || regSt === 'rejected';
+    if (regSt === 'cancelled' || regSt === 'rejected') return true;
+    if (isTicketExpiredForSeminar(row.event_date) && !row.is_scanned && Number(row.scan_count || 0) < 1) {
+        return true;
+    }
+    return false;
 }
 
 function doctorAccountBlockForScan(row) {
@@ -6453,6 +6449,7 @@ function scannerVerifyJsonFromRow(row, extras) {
             registrationStatus: row.registration_status,
             isScanned: !!row.is_scanned,
             invalid: ticketLookupInvalid(row),
+            expired: isTicketExpiredForSeminar(row.event_date) && !row.is_scanned,
             checkinEnabled: !!row.checkin_enabled,
             checkinDate: row.checkin_date
         },
@@ -6656,6 +6653,22 @@ app.post('/api/scanner/mark', (req, res) => {
                     return res.status(403).json({
                         success: false,
                         error: 'Ticket is no longer valid (cancelled registration).',
+                        doctor: doctorPayloadFromScanRow(row)
+                    });
+                }
+                if (isTicketExpiredForSeminar(row.event_date)) {
+                    logScanDashboard(
+                        selectedSeminarId,
+                        staffId,
+                        'expired',
+                        'Seminar date has passed',
+                        row
+                    );
+                    return res.status(403).json({
+                        success: false,
+                        error: 'Ticket expired — seminar date has passed. Use Admin → Applications → Check in for manual override.',
+                        sound: 'error',
+                        expired: true,
                         doctor: doctorPayloadFromScanRow(row)
                     });
                 }
@@ -12144,7 +12157,7 @@ app.post('/api/support-ticket/:ticketId/reply', (req, res) => {
 const ADMIN_ETICKET_LOOKUP_SQL = `
         SELECT r.id AS registration_id, r.application_no, r.status AS registration_status,
                u.id AS user_id, u.first_name, u.last_name, u.email, u.phone,
-               s.id AS seminar_id, s.title AS seminar_title, s.price AS seminar_price,
+               s.id AS seminar_id, s.title AS seminar_title, s.event_date, s.price AS seminar_price,
                o.id AS order_db_id, o.order_id_string, o.status AS payment_status, o.payment_date,
                t.id AS ticket_row_id, t.ticket_id_string, t.is_scanned, IFNULL(t.scan_count, 0) AS scan_count,
                t.scan_time, IFNULL(t.is_valid, 1) AS is_valid, t.qr_code_data
@@ -12208,6 +12221,11 @@ app.get('/api/admin/e-tickets/lookup', (req, res) => {
                 scanCount: Number(row.scan_count) || 0,
                 scanTime: row.scan_time,
                 isValid: row.is_valid !== 0 && row.is_valid !== false,
+                eventDate: row.event_date,
+                ticketExpired:
+                    isTicketExpiredForSeminar(row.event_date) &&
+                    !Number(row.is_scanned) &&
+                    Number(row.scan_count || 0) < 1,
                 hasTicket: !!row.ticket_id_string,
                 ticketPreviewUrl:
                     row.ticket_id_string && row.user_id
@@ -12634,6 +12652,14 @@ function startBackgroundWorkers() {
             else if (mOut && mOut.migrated) {
                 console.log('[integrations] Email locked to ZeptoMail HTTPS only (fallback + SMTP relay disabled).');
             }
+            integrationSettings.migrateSanitizeZeptoTokenIfNeeded(db, (sErr, sOut) => {
+                if (sErr) console.warn('[integrations] Zepto token sanitize failed:', sErr.message);
+                else if (sOut && sOut.clearedInvalidZeptoToken) {
+                    console.warn(
+                        '[integrations] Cleared invalid ZeptoMail token (was likely Sender JWT). Re-save Send Mail token in Admin.'
+                    );
+                }
+            });
         });
         db.get(`SELECT value FROM global_settings WHERE key = ?`, [portalAuthPolicy.KEY], (ePk, rowPk) => {
             if (!ePk && !rowPk) {

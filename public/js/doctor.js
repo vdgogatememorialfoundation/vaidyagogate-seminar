@@ -5800,7 +5800,9 @@ async function loadDoctorEventTickets() {
         let html = '<div style="display:flex;flex-direction:column;gap:20px;">';
         rows.forEach((t) => {
             const regSt = String(t.registration_status || '').toLowerCase();
-            const invalid = regSt === 'cancelled' || regSt === 'rejected' || t.is_valid === 0;
+            const expired = !!t.ticket_expired;
+            const invalid =
+                regSt === 'cancelled' || regSt === 'rejected' || t.is_valid === 0 || expired;
             const qrPayload = ticketQrScanPayload(t);
             const showQr = !invalid && !t.is_scanned && qrPayload;
             const qr = showQr ? ticketQrImageUrl(t) : '';
@@ -5808,7 +5810,13 @@ async function loadDoctorEventTickets() {
                 ? `Checked in · ${t.scan_time ? formatScanDateTime(t.scan_time) : 'venue'}`
                 : 'Not scanned yet — show this QR at entry';
             const statusLine = invalid
-                ? `<p style="margin:8px 0 0;font-size:0.9rem;color:#b91c1c;font-weight:600;">Invalid — registration ${regSt === 'cancelled' ? 'cancelled' : regSt === 'rejected' ? 'rejected' : 'no longer active'}. Do not use this QR for entry.</p>`
+                ? `<p style="margin:8px 0 0;font-size:0.9rem;color:#b91c1c;font-weight:600;">${
+                      expired
+                          ? 'Expired — seminar date has passed. Contact admin if you attended but were not scanned.'
+                          : 'Invalid — registration ' +
+                            (regSt === 'cancelled' ? 'cancelled' : regSt === 'rejected' ? 'rejected' : 'no longer active') +
+                            '. Do not use this QR for entry.'
+                  }</p>`
                 : `<p style="margin:8px 0 0;font-size:0.85rem;color:#64748b;">${escapeHtml(scanned)}</p>`;
             html += `<div style="border:1px solid ${invalid ? '#fecaca' : '#e2e8f0'};border-radius:12px;padding:16px;display:grid;grid-template-columns:128px 1fr;gap:16px;align-items:start;${invalid ? 'opacity:0.85;background:#fef2f2;' : ''}">
                 <div>${qr ? `<img src="${qr}" alt="QR code" style="width:128px;height:128px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;">` : (t.is_scanned ? '<span style="color:#059669;font-size:0.85rem;font-weight:700;"><i class="fas fa-check-circle"></i> QR used at entry</span>' : '<span style="color:#94a3b8;font-size:0.85rem;">QR unavailable</span>')}</div>
