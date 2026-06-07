@@ -2519,7 +2519,8 @@ function mountExtendedRoutes() {
         upload: caseUpload,
         generateId,
         fileStore,
-        uploadsDir
+        uploadsDir,
+        notifEngine
     });
     try {
         require('./lib/routes-ext')(app, {
@@ -2567,7 +2568,8 @@ try {
         upload: caseUpload,
         generateId,
         fileStore,
-        uploadsDir
+        uploadsDir,
+        notifEngine
     });
     } catch (caseErr) {
         console.error('[routes] case presentation routes failed:', caseErr.message);
