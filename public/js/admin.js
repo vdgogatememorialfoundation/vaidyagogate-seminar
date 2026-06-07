@@ -4264,9 +4264,43 @@ async function loadCaseProgramDefaultFields() {
         if (instrEl && data.instructions && !String(instrEl.value || '').trim()) {
             instrEl.value = data.instructions;
         }
+        const titleEl = document.getElementById('case-prog-title');
+        if (titleEl && data.defaultTitle && !String(titleEl.value || '').trim()) {
+            titleEl.value = data.defaultTitle;
+        }
+        const endEl = document.getElementById('case-prog-end');
+        if (endEl && data.defaultRegistrationEnd && !String(endEl.value || '').trim()) {
+            endEl.value =
+                window.PortalDateTime && window.PortalDateTime.toDatetimeLocal
+                    ? window.PortalDateTime.toDatetimeLocal(data.defaultRegistrationEnd)
+                    : String(data.defaultRegistrationEnd).slice(0, 16);
+        }
     } catch (e) {
         console.error(e);
         renderCaseProgramFieldsEditor([]);
+    }
+}
+
+async function applyDefaultCaseProgramRules() {
+    try {
+        const res = await fetch('/api/admin/case/default-form-config');
+        const data = await res.json();
+        if (!res.ok) return alert((data && data.error) || 'Could not load default rules');
+        const instrEl = document.getElementById('case-prog-instructions');
+        if (instrEl && data.instructions) instrEl.value = data.instructions;
+        const titleEl = document.getElementById('case-prog-title');
+        if (titleEl && data.defaultTitle) titleEl.value = data.defaultTitle;
+        const endEl = document.getElementById('case-prog-end');
+        if (endEl && data.defaultRegistrationEnd) {
+            endEl.value =
+                window.PortalDateTime && window.PortalDateTime.toDatetimeLocal
+                    ? window.PortalDateTime.toDatetimeLocal(data.defaultRegistrationEnd)
+                    : String(data.defaultRegistrationEnd).slice(0, 16);
+        }
+        setCaseProgMsg('Default 2026 rules loaded — save the program to publish.', true);
+    } catch (e) {
+        console.error(e);
+        alert('Could not load default rules');
     }
 }
 
