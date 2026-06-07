@@ -5505,6 +5505,7 @@ async function loadDoctorCertificateTracking(quiet) {
                 const scanLbl = (r.scanCount || 0) + ' / ' + (r.scansRequired || 1);
                 let statusColor = '#64748b';
                 if (r.certStatus === 'issued') statusColor = '#15803d';
+                else if (r.certStatus === 'not_attended') statusColor = '#991b1b';
                 else if (r.certStatus === 'awaiting_checkin') statusColor = '#b45309';
                 else if (r.certStatus === 'awaiting_approval') statusColor = '#7c3aed';
                 else if (r.certStatus === 'scheduled_release') statusColor = '#0369a1';

@@ -36,6 +36,7 @@ const refundLib = require('./lib/refunds');
 const branding = require('./lib/branding');
 const extModules = require('./lib/extended-modules');
 const portalTracking = require('./lib/portal-tracking');
+const adminManualCheckin = require('./lib/admin-manual-checkin');
 const refundTracking = require('./lib/refund-tracking');
 const seminarDt = require('./lib/seminar-datetime');
 const cancelPolicy = require('./lib/cancellation-policy');
@@ -2551,7 +2552,8 @@ function mountExtendedRoutes() {
         db,
         uploadsDir,
         withMemoryAwareUpload,
-        buildDisplayNameFromFormData
+        buildDisplayNameFromFormData,
+        syncCertificateEligibilityForTicket
     });
     console.log('[routes] Extended APIs mounted (case programs, branding, volunteers, reports, venue entry)');
 }
@@ -5475,6 +5477,9 @@ function mapDoctorCertificateTrackingRows(rows) {
                 if (!paid) {
                     certStatus = 'awaiting_payment';
                     certStatusLabel = 'Awaiting payment';
+                } else if (view.phase === 'not_attended') {
+                    certStatus = 'not_attended';
+                    certStatusLabel = 'Not attended — no venue check-in';
                 } else if (!checkinComplete) {
                     certStatus = 'awaiting_checkin';
                     certStatusLabel =
@@ -7614,6 +7619,29 @@ app.post('/api/applications/:applicationId/resubmit-documents', withApplicationD
 });
 
 // Admin: Update Application Status
+app.post('/api/admin/registrations/:id/manual-checkin', (req, res) => {
+    const rid = parseInt(req.params.id, 10);
+    const adminId =
+        req.body && req.body.actingAdminId != null ? parseInt(req.body.actingAdminId, 10) : null;
+    if (!Number.isInteger(rid) || rid < 1) {
+        return res.status(400).json({ error: 'Invalid registration id' });
+    }
+    adminManualCheckin.performManualCheckin(
+        db,
+        { syncCertificateEligibilityForTicket, portalTracking },
+        rid,
+        adminId,
+        (err, result) => {
+            if (err) return res.status(400).json({ error: err.message });
+            res.json({
+                success: true,
+                message: 'Manual check-in complete. Ticket marked scanned and certificate eligibility updated.',
+                ...result
+            });
+        }
+    );
+});
+
 app.post('/api/admin/applications/status', (req, res) => {
     const { applicationId, status, feeType, feeAmount, actingAdminId } = req.body || {};
     const newSt = String(status || '').toLowerCase();
@@ -7671,6 +7699,24 @@ app.post('/api/admin/applications/status', (req, res) => {
         if (e0) return res.status(500).json({ error: e0.message });
         const prevStatus = String((prevRow && prevRow.status) || '').toLowerCase();
         const fromRejectedOrCancelled = prevStatus === 'rejected' || prevStatus === 'cancelled';
+
+        if (newSt === 'checked_in') {
+            return adminManualCheckin.performManualCheckin(
+                db,
+                { syncCertificateEligibilityForTicket, portalTracking },
+                applicationId,
+                adminId,
+                (mcErr, mcResult) => {
+                    if (mcErr) return res.status(400).json({ error: mcErr.message });
+                    return res.json({
+                        success: true,
+                        message:
+                            'Checked in manually. E-ticket scan recorded and certificate eligibility updated.',
+                        manualCheckin: mcResult
+                    });
+                }
+            );
+        }
 
     db.run(`UPDATE registrations SET status = ? WHERE id = ?`, [status, applicationId], function(err) {
         if (err) return res.status(500).json({ error: err.message });

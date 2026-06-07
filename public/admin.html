@@ -2094,24 +2094,25 @@
                         <div><label>Admin host (DNS)</label><input type="text" id="int-admin-host" placeholder="admin.vaidyagogate.org" style="width:100%"></div>
                         <div><label>Judge host (DNS)</label><input type="text" id="int-judge-host" placeholder="judge.vaidyagogate.org" style="width:100%"></div>
                         <div><label>Admin contact email</label><input type="email" id="int-admin-contact" placeholder="info@vaidyagogate.org" style="width:100%"></div>
-                        <div style="grid-column:1/-1;"><h4 style="margin:8px 0;color:#0c4a6e;">HTTPS email API (required on Render free tier)</h4>
-                        <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px;line-height:1.5;">Render blocks SMTP ports 465/587 on free plans — that causes <strong>Connection timeout</strong> in the delivery log. Use Brevo (free), Resend, or Zoho ZeptoMail over HTTPS instead. Keep <em>From</em> as care@vaidyagogate.org (verify domain in the provider dashboard).</p></div>
+                        <div style="grid-column:1/-1;"><h4 style="margin:8px 0;color:#0c4a6e;">HTTPS email API — primary (Sender.net recommended)</h4>
+                        <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px;line-height:1.5;">Works on Render free tier (port 443). Choose <strong>Sender.net</strong> and paste your API token. Keep Zoho SMTP below as <strong>standby</strong> — if Sender.net fails, mail sends via Zoho automatically. Verify <em>From</em> domain in Sender.net (e.g. care@vaidyagogate.org).</p></div>
                         <div><label>Email API provider</label>
                             <select id="int-email-api-provider" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;">
                                 <option value="">SMTP only (local dev / paid Render)</option>
+                                <option value="sender">Sender.net (recommended)</option>
                                 <option value="brevo">Brevo (Sendinblue) — free tier</option>
                                 <option value="resend">Resend</option>
                                 <option value="zeptomail">Zoho ZeptoMail</option>
                             </select>
                         </div>
                         <div style="grid-column:1/-1;">
-                            <label>Email API key</label>
+                            <label>Email API key / token</label>
                             <div id="int-email-api-key-saved-badge" style="margin:6px 0 8px;padding:8px 12px;border-radius:8px;background:#fff7ed;border:1px solid #fed7aa;font-size:0.88rem;font-weight:600;color:#b45309;">Not saved on server yet</div>
-                            <input type="password" id="int-email-api-key-new" placeholder="Paste Brevo / Resend / ZeptoMail API key, then Save" style="width:100%;" autocomplete="off" spellcheck="false">
-                            <p id="int-email-api-key-hint" style="font-size:0.78rem;color:#64748b;margin:6px 0 0;line-height:1.45;">Brevo: Settings → SMTP &amp; API → API keys. Resend: API Keys. ZeptoMail: Mail Agents → Send Mail Token.</p>
+                            <input type="password" id="int-email-api-key-new" placeholder="Paste Sender.net / Brevo / Resend API key, then Save" style="width:100%;" autocomplete="off" spellcheck="false">
+                            <p id="int-email-api-key-hint" style="font-size:0.78rem;color:#64748b;margin:6px 0 0;line-height:1.45;">Sender.net: Settings → API access tokens. Also set Zoho app password below for automatic standby.</p>
                         </div>
-                        <div style="grid-column:1/-1;"><h4 style="margin:8px 0;color:#0c4a6e;">Zoho SMTP (optional — paid Render or local only)</h4>
-                        <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px;line-height:1.5;">Host smtp.zoho.in or smtppro.zoho.in, port 465. User and From = care@vaidyagogate.org. Password = Zoho App-Specific Password. Does <em>not</em> work on Render free tier.</p></div>
+                        <div style="grid-column:1/-1;"><h4 style="margin:8px 0;color:#0c4a6e;">Zoho SMTP — standby (optional)</h4>
+                        <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px;line-height:1.5;">Used when HTTPS API fails or for local dev. Host smtp.zoho.in, port 465. User and From = care@vaidyagogate.org. App-Specific Password from Zoho Mail → Security. Does <em>not</em> work on Render free tier alone.</p></div>
                         <div><label>Host</label><input type="text" id="int-zoho-host" placeholder="smtp.zoho.in" style="width:100%"></div>
                         <div><label>Port</label><input type="number" id="int-zoho-port" placeholder="465" style="width:100%"></div>
                         <div><label>User</label><input type="email" id="int-zoho-user" placeholder="care@vaidyagogate.org" style="width:100%"></div>

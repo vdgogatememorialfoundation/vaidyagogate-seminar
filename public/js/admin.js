@@ -4260,7 +4260,12 @@ async function loadCaseProgramDefaultFields() {
     try {
         const res = await fetch('/api/admin/case/default-form-config');
         const data = await res.json();
-        renderCaseProgramFieldsEditor(data.fields || []);
+        const fields = data.fields || (data.formConfig && data.formConfig.fields) || [];
+        renderCaseProgramFieldsEditor(fields);
+        const instrEl = document.getElementById('case-prog-instructions');
+        if (instrEl && data.instructions && !String(instrEl.value || '').trim()) {
+            instrEl.value = data.instructions;
+        }
     } catch (e) {
         console.error(e);
         renderCaseProgramFieldsEditor([]);
@@ -4281,9 +4286,9 @@ function resetAdminCaseProgramForm() {
     const mp = document.getElementById('case-prog-max-per-user');
     if (mp) mp.value = '2';
     const mf = document.getElementById('case-prog-max-files');
-    if (mf) mf.value = '5';
+    if (mf) mf.value = '2';
     const mm = document.getElementById('case-prog-max-mb');
-    if (mm) mm.value = '100';
+    if (mm) mm.value = '50';
     const ag = document.getElementById('case-cat-agnikarma');
     const vi = document.getElementById('case-cat-viddhakarma');
     if (ag) ag.checked = true;
@@ -4633,6 +4638,17 @@ async function openAdminCaseDetail(subId) {
         const data = await res.json();
         const scoresPayload = scoresRes.ok ? await scoresRes.json() : [];
         const scores = Array.isArray(scoresPayload) ? scoresPayload : scoresPayload.scores || [];
+        if (!res.ok) {
+            box.innerHTML =
+                '<p style="color:#b91c1c;">' +
+                escAdmin((data && data.error) || 'Could not load case submission (HTTP ' + res.status + ').') +
+                '</p>';
+            return;
+        }
+        if (!data.submission) {
+            box.innerHTML = '<p style="color:#b91c1c;">Case submission not found.</p>';
+            return;
+        }
         if (scoresPayload.criteria && scoresPayload.criteria.length) {
             window.__caseCriteriaDefs = scoresPayload.criteria;
         }
@@ -4648,6 +4664,7 @@ async function openAdminCaseDetail(subId) {
         }
         const files = data.files || [];
         const assigned = data.assignedJudges || [];
+        const judgeIdOf = (j) => j.judge_user_id != null ? j.judge_user_id : j.id;
         let judgeOpts = (__adminReviewers || [])
             .map(
                 (j) =>
@@ -4679,10 +4696,10 @@ async function openAdminCaseDetail(subId) {
                           ')</span>' +
                           '<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">' +
                           '<select class="case-transfer-judge-select" data-from-judge="' +
-                          j.id +
+                          judgeIdOf(j) +
                           '" style="flex:1;min-width:180px;padding:6px 8px;"><option value="">Transfer to…</option>' +
                           (__adminReviewers || [])
-                              .filter((x) => x.id !== j.id)
+                              .filter((x) => x.id !== judgeIdOf(j))
                               .map(
                                   (x) =>
                                       '<option value="' +
@@ -4698,7 +4715,7 @@ async function openAdminCaseDetail(subId) {
                           '<button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;background:#b45309;" onclick="adminTransferCaseJudge(' +
                           sub.id +
                           ',' +
-                          j.id +
+                          judgeIdOf(j) +
                           ')">Transfer</button></div></div>'
                   )
                   .join('') +
@@ -4756,8 +4773,30 @@ async function openAdminCaseDetail(subId) {
                 <button type="button" class="btn-primary" style="background:#b91c1c;" onclick="adminVerifyCaseSubmission(${sub.id},'reject_application')">Reject application</button>
                 </div>`;
         }
-        if (Array.isArray(scores) && scores.length) {
-            const critDefs = window.__caseCriteriaDefs || [];
+        const critDefs = window.__caseCriteriaDefs || scoresPayload.criteria || [];
+        if (critDefs.length) window.__caseCriteriaDefs = critDefs;
+        const scoreByJudge = {};
+        scores.forEach((sc) => {
+            if (sc.judge_user_id != null) scoreByJudge[sc.judge_user_id] = sc;
+        });
+        const judgeScoreRows = [];
+        assigned.forEach((j) => {
+            const jid = judgeIdOf(j);
+            judgeScoreRows.push(
+                scoreByJudge[jid] || {
+                    judge_user_id: jid,
+                    first_name: j.first_name,
+                    last_name: j.last_name,
+                    user_id_string: j.user_id_string,
+                    total_score: null,
+                    is_locked: 0
+                }
+            );
+        });
+        scores.forEach((sc) => {
+            if (!judgeScoreRows.some((r) => r.judge_user_id === sc.judge_user_id)) judgeScoreRows.push(sc);
+        });
+        if (judgeScoreRows.length) {
             const scoreMax =
                 scoresPayload.totalMax != null
                     ? scoresPayload.totalMax
@@ -4766,13 +4805,22 @@ async function openAdminCaseDetail(subId) {
                 '<h4 style="margin-top:16px;">Judge scores (criteria + total)</h4><table class="data-table"><thead><tr><th>Judge</th><th>Criteria breakdown</th><th>Total / ' +
                 escAdmin(String(scoreMax)) +
                 '</th><th>Locked</th></tr></thead><tbody>';
-            scores.forEach((sc) => {
+            judgeScoreRows.forEach((sc) => {
                 const jname = [sc.first_name, sc.last_name].filter(Boolean).join(' ') || sc.user_id_string;
+                const pending = sc.total_score == null && !sc.criteria_json;
                 html +=
-                    `<tr><td>${escAdmin(jname)}</td><td style="font-size:0.85rem;">${formatCaseCriteriaBreakdown(sc, critDefs)}</td><td><strong>${escAdmin(sc.total_score != null ? String(sc.total_score) : '—')}</strong></td><td>${sc.is_locked ? 'Yes' : 'No'}</td></tr>`;
+                    '<tr><td>' +
+                    escAdmin(jname) +
+                    '</td><td style="font-size:0.85rem;">' +
+                    (pending ? '<span class="muted">Awaiting marks</span>' : formatCaseCriteriaBreakdown(sc, critDefs)) +
+                    '</td><td><strong>' +
+                    escAdmin(sc.total_score != null ? String(sc.total_score) : '—') +
+                    '</strong></td><td>' +
+                    (pending ? '—' : sc.is_locked ? 'Yes' : 'No') +
+                    '</td></tr>';
             });
             html += '</tbody></table>';
-            loadAdminCaseResults().catch(() => {});
+            if (scores.length) loadAdminCaseResults().catch(() => {});
         }
         box.innerHTML = html;
         box.dataset.subId = String(subId);
@@ -6089,6 +6137,7 @@ function renderApplicationsTable() {
                     </td>
                     <td>
                         <button class="btn-primary" onclick="viewFullApplication(${index})">View</button>
+                        <button type="button" class="btn-primary" style="margin-left:6px;background:#0f766e;padding:4px 8px;font-size:0.8rem;" onclick="adminManualCheckinRegistration(${a.id}, '${String(a.application_no || '').replace(/'/g, "\\'")}')" title="Mark venue check-in without scanner">Check in</button>
                         <button type="button" class="btn-primary" style="margin-left:6px;background:#b91c1c;padding:4px 8px;font-size:0.8rem;" onclick="deleteAdminRegistration(${a.id}, '${String(a.application_no || '').replace(/'/g, "\\'")}')">Delete</button>
                     </td>
                 </tr>
@@ -7503,6 +7552,28 @@ function onApplicationStatusChange(appId, selectEl, appIndex) {
     updateAppStatus(appId, status);
 }
 
+async function adminManualCheckinRegistration(regId, appNo) {
+    const label = appNo ? 'application ' + appNo : 'registration #' + regId;
+    if (!confirm('Mark ' + label + ' as checked in at venue (without scanner)?\n\nThis records the e-ticket scan and enables certificate eligibility.')) {
+        return;
+    }
+    try {
+        const admin = getStoredAdminUser();
+        const res = await fetch('/api/admin/registrations/' + regId + '/manual-checkin', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: admin && admin.id })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return alert(data.error || 'Manual check-in failed');
+        alert(data.message || 'Checked in successfully.');
+        loadApplications();
+    } catch (e) {
+        console.error(e);
+        alert('Network error');
+    }
+}
+
 async function updateAppStatus(appId, status, feeOpts) {
     feeOpts = feeOpts || {};
     try {
@@ -7747,7 +7818,11 @@ async function loadIntegrationSettings() {
             let emailLine = s.email_configured ? 'Email: configured.' : 'Email: not configured.';
             const st = s.email_status;
             if (st && st.via === 'http' && st.provider) {
-                emailLine = 'Email: configured via ' + st.provider + ' HTTPS API.';
+                emailLine = 'Email: primary ' + st.provider + ' HTTPS API';
+                if (s.zoho_pass_saved || (st.standbySmtp && st.standbySmtp.configured)) {
+                    emailLine += ' + Zoho SMTP standby';
+                }
+                emailLine += '.';
             } else if (st && st.via === 'smtp') {
                 emailLine = 'Email: configured via SMTP.';
             }
