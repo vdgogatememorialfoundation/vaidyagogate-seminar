@@ -7742,7 +7742,7 @@ function renderIntegrationSecretStatus(s) {
     const fbBadge = document.getElementById('int-email-api-fallback-key-saved-badge');
     if (fbBadge) {
         if (settings.email_api_fallback_key_saved) {
-            fbBadge.textContent = '✓ Fallback API token saved on server';
+            fbBadge.textContent = '✓ Fallback API token saved on server (Sender.net)';
             fbBadge.style.background = '#ecfdf5';
             fbBadge.style.borderColor = '#a7f3d0';
             fbBadge.style.color = '#15803d';
@@ -7795,11 +7795,21 @@ function renderIntegrationSecretStatus(s) {
 
 function applySavedIntegrationSecrets(data) {
     const settings = (data && data.settings) || data || {};
+    const emailStatus = (data && data.email_status) || settings.email_status || {};
+    const fallbackSaved =
+        !!settings.email_api_fallback_key_saved ||
+        !!(data && data.email_api_fallback_key_saved) ||
+        !!emailStatus.fallbackConfigured;
+    window.__integrationEmailFallbackSaved = fallbackSaved;
     renderIntegrationSecretStatus({
-        email_configured: !!(data && data.email_configured) || !!settings.zoho_pass_saved || !!settings.email_api_key_saved,
+        email_configured:
+            !!(data && data.email_configured) ||
+            !!settings.email_configured ||
+            !!settings.zoho_pass_saved ||
+            !!settings.email_api_key_saved,
         zoho_pass_saved: !!settings.zoho_pass_saved,
         email_api_key_saved: !!settings.email_api_key_saved,
-        email_api_fallback_key_saved: !!settings.email_api_fallback_key_saved,
+        email_api_fallback_key_saved: fallbackSaved,
         email_api_provider: settings.email_api_provider || '',
         email_api_fallback_provider: settings.email_api_fallback_provider || 'sender',
         whatsapp_configured: !!(data && data.whatsapp_configured) || !!settings.whatsapp_token_saved,

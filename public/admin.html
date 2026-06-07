@@ -2143,7 +2143,7 @@
                                 <input type="email" id="int-test-email" placeholder="e.g. your.name@gmail.com" style="flex:1;min-width:280px;padding:12px 14px;font-size:1rem;border:1px solid #cbd5e1;border-radius:8px;">
                                 <button type="button" class="btn-primary" style="background:#64748b;padding:12px 20px;font-size:1rem;white-space:nowrap;" onclick="testIntegrationEmail()">Send test email</button>
                             </div>
-                            <p style="font-size:0.78rem;color:#64748b;margin:6px 0 0;">Save the app password first (green badge), then send a test.</p>
+                            <p id="int-test-email-hint" style="font-size:0.78rem;color:#64748b;margin:6px 0 0;">Save ZeptoMail + Sender.net tokens (green badges), then send a test. Uses ZeptoMail first; Sender.net if quota hit.</p>
                         </div>
                         <div style="grid-column:1/-1;"><h4 style="margin:8px 0;color:#0c4a6e;">Meta WhatsApp Business</h4>
                         <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px;line-height:1.5;">Webhook: <code id="int-wa-webhook-url">https://your-domain/api/webhooks/whatsapp</code><br>
@@ -2690,6 +2690,6 @@
     <link rel="stylesheet" href="/css/book-track.css?v=20260529stg">
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
-    <script src="/js/admin.js?v=20260606deadline"></script>
+    <script src="/js/admin.js?v=20260607emailchain"></script>
 </body>
 </html>
