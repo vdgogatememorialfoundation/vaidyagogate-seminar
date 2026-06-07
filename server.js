@@ -12637,12 +12637,12 @@ function startBackgroundWorkers() {
         });
         db.get(`SELECT value FROM global_settings WHERE key = ?`, ['notification_templates_sync_v'], (eSync, row) => {
             if (eSync) return;
-            if (row && row.value === '20260528judgecase') return;
+            if (row && row.value === '20260528zeptoonly') return;
             notifEngine.syncDefaultNotificationTemplates(db, (syncErr) => {
                 if (syncErr) console.warn('[notifications] template sync failed:', syncErr.message);
                 else {
-                    upsertGlobalSetting('notification_templates_sync_v', '20260528judgecase', () => {
-                        console.log('[notifications] email templates synced (judge case marking)');
+                    upsertGlobalSetting('notification_templates_sync_v', '20260528zeptoonly', () => {
+                        console.log('[notifications] email templates synced (ZeptoMail-only routing)');
                     });
                 }
             });
