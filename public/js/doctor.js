@@ -600,9 +600,40 @@ function resolveDoctorAllowedTabsClient(category, globalRegular, globalVolunteer
     return out.size ? out : new Set();
 }
 
+function doctorPortalFetchBust() {
+    return '_=' + Date.now();
+}
+
+function allowedTabsArrayToSet(allowedTabs) {
+    if (allowedTabs == null) return null;
+    if (!Array.isArray(allowedTabs)) return null;
+    return new Set(allowedTabs);
+}
+
+function applyDoctorAllowedTabsToDom(allowed) {
+    __doctorAllowedTabs = allowed;
+    document.querySelectorAll('.menu-item[data-tab]').forEach((el) => {
+        const tab = el.getAttribute('data-tab');
+        if (!tab) return;
+        const enabled = !__doctorAllowedTabs || __doctorAllowedTabs.has(tab);
+        el.classList.toggle('hidden', !enabled);
+    });
+    document.querySelectorAll('.tab-pane[id^="tab-"]').forEach((pane) => {
+        const tabId = pane.id;
+        const enabled = !__doctorAllowedTabs || __doctorAllowedTabs.has(tabId);
+        if (!enabled) pane.classList.add('hidden');
+    });
+    if (__doctorAllowedTabs && !__doctorAllowedTabs.has('tab-volunteer')) {
+        const nav = document.getElementById('nav-volunteer');
+        if (nav) nav.classList.add('hidden');
+    }
+}
+
 async function loadDoctorPortalModulesGlobal() {
     try {
-        const res = await fetch('/api/public/doctor-portal-modules', { cache: 'no-store' });
+        const res = await fetch('/api/public/doctor-portal-modules?' + doctorPortalFetchBust(), {
+            cache: 'no-store'
+        });
         const data = await res.json();
         if (res.ok) {
             window.__doctorPortalModulesGlobal = data;
@@ -618,12 +649,21 @@ async function refreshDoctorPortalAccess() {
     if (!uid) uid = await ensureDoctorInternalUserId();
     if (!uid) return false;
     try {
-        const res = await fetch('/api/doctor/portal-access/' + encodeURIComponent(String(uid)), {
-            cache: 'no-store'
-        });
+        const res = await fetch(
+            '/api/doctor/portal-access/' + encodeURIComponent(String(uid)) + '?' + doctorPortalFetchBust(),
+            { cache: 'no-store' }
+        );
         const data = await res.json();
-        if (!res.ok) return false;
-        delete window.__doctorPortalModulesGlobal;
+        if (!res.ok) {
+            delete window.__doctorPortalAllowedTabs;
+            return false;
+        }
+        window.__doctorPortalAllowedTabs = data.allowedTabs ?? null;
+        window.__doctorPortalUseGlobalModules = data.useGlobalModules !== false;
+        window.__doctorPortalModulesGlobal = {
+            regular: data.globalRegular || {},
+            volunteer: data.globalVolunteer || {}
+        };
         currentUser.doctor_category = data.doctor_category || 'regular';
         currentUser.doctor_modules = data.doctor_modules ?? null;
         if (typeof PortalAuth !== 'undefined') PortalAuth.setUser('doctor', currentUser);
@@ -667,6 +707,10 @@ function volunteerDoctorModuleDefaults() {
 }
 
 async function applyDoctorModuleAccessFromUser(user) {
+    if (window.__doctorPortalAllowedTabs !== undefined) {
+        applyDoctorAllowedTabsToDom(allowedTabsArrayToSet(window.__doctorPortalAllowedTabs));
+        return;
+    }
     const globalCfg = await loadDoctorPortalModulesGlobal();
     const allowed = resolveDoctorAllowedTabsClient(
         user && user.doctor_category,
@@ -674,17 +718,7 @@ async function applyDoctorModuleAccessFromUser(user) {
         globalCfg.volunteer,
         user && user.doctor_modules
     );
-    __doctorAllowedTabs = allowed;
-    document.querySelectorAll('.menu-item[data-tab]').forEach((el) => {
-        const tab = el.getAttribute('data-tab');
-        if (!tab) return;
-        const enabled = !__doctorAllowedTabs || __doctorAllowedTabs.has(tab);
-        el.classList.toggle('hidden', !enabled);
-    });
-    if (__doctorAllowedTabs && !__doctorAllowedTabs.has('tab-volunteer')) {
-        const nav = document.getElementById('nav-volunteer');
-        if (nav) nav.classList.add('hidden');
-    }
+    applyDoctorAllowedTabsToDom(allowed);
 }
 
 async function loadPortalFlags() {
@@ -1321,51 +1355,45 @@ function initDoctorMobileNav() {
     });
 }
 
-function bootDoctorDashboard(user) {
+async function bootDoctorDashboard(user) {
     currentUser = user;
     window.__doctorResolvedInternalId = doctorNumericUserId();
     initDoctorPortalAccessRefreshOnVisible();
-    refreshDoctorPortalAccess()
-        .catch(() => {})
-        .then(() => applyDoctorModuleAccessFromUser(currentUser))
-        .then(() => {
-        ensureDoctorInternalUserId().then((resolved) => {
-            if (resolved) window.__doctorResolvedInternalId = resolved;
+    const resolved = await ensureDoctorInternalUserId();
+    if (resolved) window.__doctorResolvedInternalId = resolved;
+    await refreshDoctorPortalAccess().catch(() => {});
+    await applyDoctorModuleAccessFromUser(currentUser);
+    try {
+        const u = await fetch('/api/public/portal-urls').then((r) => r.json());
+        window.__doctorProductionSite = !!(u && u.production);
+        window.__allowDemoAccounts = u && u.allowDemoAccounts !== false;
+    } catch (_) {}
+    document.getElementById('auth-overlay').classList.add('hidden');
+    document.getElementById('dashboard-main').classList.remove('hidden');
+    initDoctorMobileNav();
+    document.getElementById('header-name').innerText = `Hi, Dr. ${currentUser.first_name || ''} ${currentUser.last_name || ''}`;
+    document.getElementById('header-id').innerText =
+        `ID: ${currentUser.user_id_string || '---'}` +
+        (window.__allowDemoAccounts !== false && Number(currentUser.is_demo) === 1 ? ' · Dummy' : '');
+    if (typeof PortalAuth !== 'undefined' && PortalAuth.renderLoginTime) {
+        PortalAuth.renderLoginTime('header-login-time', currentUser);
+    }
+    loadProfile();
+    loadDoctorPaymentOptions().then(() => {
+        loadDoctorPortalYear().then(() => {
+            if (!__doctorAllowedTabs || __doctorAllowedTabs.has('tab-seminars')) loadSeminarsGrid();
+            if (!__doctorAllowedTabs || __doctorAllowedTabs.has('tab-applications')) loadApplications();
         });
-        fetch('/api/public/portal-urls')
-            .then((r) => r.json())
-            .then((u) => {
-                window.__doctorProductionSite = !!(u && u.production);
-                window.__allowDemoAccounts = u && u.allowDemoAccounts !== false;
-            })
-            .catch(() => {});
-        document.getElementById('auth-overlay').classList.add('hidden');
-        document.getElementById('dashboard-main').classList.remove('hidden');
-        initDoctorMobileNav();
-        document.getElementById('header-name').innerText = `Hi, Dr. ${currentUser.first_name || ''} ${currentUser.last_name || ''}`;
-        document.getElementById('header-id').innerText =
-            `ID: ${currentUser.user_id_string || '---'}` +
-            (window.__allowDemoAccounts !== false && Number(currentUser.is_demo) === 1 ? ' · Dummy' : '');
-        if (typeof PortalAuth !== 'undefined' && PortalAuth.renderLoginTime) {
-            PortalAuth.renderLoginTime('header-login-time', currentUser);
-        }
-        loadProfile();
-        loadDoctorPaymentOptions().then(() => {
-            loadDoctorPortalYear().then(() => {
-                if (!__doctorAllowedTabs || __doctorAllowedTabs.has('tab-seminars')) loadSeminarsGrid();
-                if (!__doctorAllowedTabs || __doctorAllowedTabs.has('tab-applications')) loadApplications();
-            });
-        });
-        loadDoctorDashboardStats();
-        loadPortalFlags();
-        loadRegistrationFormConfigAndApply();
-        loadDoctorPortalUpdatesFromCms();
-        loadSiteBranding();
-        initDoctorVolunteerNav()
-            .then(() => applyDoctorModuleAccessFromUser(currentUser))
-            .catch(() => {});
-        handleEasebuzzPaymentReturnQuery();
     });
+    loadDoctorDashboardStats();
+    loadPortalFlags();
+    loadRegistrationFormConfigAndApply();
+    loadDoctorPortalUpdatesFromCms();
+    loadSiteBranding();
+    initDoctorVolunteerNav()
+        .then(() => applyDoctorModuleAccessFromUser(currentUser))
+        .catch(() => {});
+    handleEasebuzzPaymentReturnQuery();
 }
 
 function handleEasebuzzPaymentReturnQuery() {

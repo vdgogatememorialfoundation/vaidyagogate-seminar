@@ -5513,6 +5513,8 @@ app.get('/api/doctor/portal-access/:userId', (req, res) => {
                     doctor_modules,
                     useGlobalModules,
                     allowedTabs: allowedSet ? Array.from(allowedSet) : null,
+                    globalRegular,
+                    globalVolunteer,
                     tabDefs: doctorPortalModules.TAB_DEFS
                 });
             });

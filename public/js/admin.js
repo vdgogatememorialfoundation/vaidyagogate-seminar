@@ -13248,8 +13248,14 @@ async function savePortalAuthAdminConfig() {
     const adm = getStoredAdminUser();
     const msg = document.getElementById('pa-save-msg');
     if (!adm || !adm.id) return;
+    let base = {};
+    try {
+        const loadRes = await fetch(`/api/admin/portal-auth-config?actingAdminId=${encodeURIComponent(adm.id)}`);
+        const loadData = await loadRes.json();
+        if (loadData.success && loadData.config) base = loadData.config;
+    } catch (_) {}
     const gv = (id) => !!(document.getElementById(id) || {}).checked;
-    const config = {
+    const config = Object.assign({}, base, {
         showSignup: gv('pa-show-signup'),
         showLogin: gv('pa-show-login'),
         requireSignupOtp: gv('pa-req-signup-otp'),
@@ -13257,19 +13263,23 @@ async function savePortalAuthAdminConfig() {
         requireEmailVerification: gv('pa-req-email-verify'),
         requireAdminOtpForSensitive: gv('pa-req-admin-sensitive-otp'),
         requireBehalfApplicantOtp: gv('pa-req-behalf-applicant-otp')
-    };
+    });
     const doctorPortalModulesRegular = {};
     document.querySelectorAll('#doctor-portal-modules-regular input[data-doctor-global-mod]').forEach((inp) => {
         const id = inp.getAttribute('data-doctor-global-mod');
         if (id && inp.checked) doctorPortalModulesRegular[id] = true;
     });
-    config.doctorPortalModulesRegular = doctorPortalModulesRegular;
+    if (document.querySelectorAll('#doctor-portal-modules-regular input[data-doctor-global-mod]').length) {
+        config.doctorPortalModulesRegular = doctorPortalModulesRegular;
+    }
     const doctorPortalModulesVolunteer = {};
     document.querySelectorAll('#doctor-portal-modules-volunteer input[data-doctor-global-mod]').forEach((inp) => {
         const id = inp.getAttribute('data-doctor-global-mod');
         if (id && inp.checked) doctorPortalModulesVolunteer[id] = true;
     });
-    config.doctorPortalModulesVolunteer = doctorPortalModulesVolunteer;
+    if (document.querySelectorAll('#doctor-portal-modules-volunteer input[data-doctor-global-mod]').length) {
+        config.doctorPortalModulesVolunteer = doctorPortalModulesVolunteer;
+    }
     if (isSuperAdminUser()) {
         const adminEnabledPages = {};
         document.querySelectorAll('#admin-global-pages-checkboxes input[data-global-admin-tab]').forEach((inp) => {
