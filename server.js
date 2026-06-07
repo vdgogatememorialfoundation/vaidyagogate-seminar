@@ -856,7 +856,7 @@ const DEFAULT_PUBLIC_SITE_CMS = {
     hero: {
         eyebrow: 'National CME Congress',
         title: 'National Seminar 2026',
-        subtitle: 'Advancements in Ayurveda & Integrative Medicine',
+        subtitle: '',
         venue: 'Convention Centre, Pune',
         image: '',
         ctaPrimary: 'Register now',
@@ -5480,7 +5480,53 @@ app.post('/api/doctor/profile', withMemoryAwareUpload('profilePhoto'), (req, res
         saveProfile(null);
 });
 
+function respondDoctorPortalAccess(res, row) {
+    const ur = String(row.user_role || row.role || '').toLowerCase();
+    if (ur !== 'doctor') return res.status(400).json({ error: 'Not a doctor account' });
+    portalAuthPolicy.loadPortalAuthConfig(db, (ePol) => {
+        if (ePol) return res.status(500).json({ error: ePol.message });
+        const c = portalAuthPolicy.getPortalAuthConfig();
+        const globalRegular = c.doctorPortalModulesRegular || {};
+        const globalVolunteer = c.doctorPortalModulesVolunteer || {};
+        const allowedSet = doctorPortalModules.resolveDoctorAllowedTabs(
+            row.doctor_category,
+            globalRegular,
+            globalVolunteer,
+            row.doctor_modules
+        );
+        const useGlobalModules = !doctorPortalModules.userHasCustomModules(row.doctor_modules);
+        const parsed = doctorPortalModules.parseModulesJson(row.doctor_modules);
+        const doctor_modules =
+            parsed && Object.keys(parsed).length ? doctorPortalModules.sanitizeModulesInput(parsed) : null;
+        res.json({
+            userId: row.id,
+            doctor_category: doctorPortalModules.normalizeDoctorCategory(row.doctor_category),
+            doctor_modules,
+            useGlobalModules,
+            allowedTabs: allowedSet ? Array.from(allowedSet) : null,
+            globalRegular,
+            globalVolunteer,
+            tabDefs: doctorPortalModules.TAB_DEFS
+        });
+    });
+}
+
 // Doctor portal: fresh category + module access (no client cache)
+app.get('/api/doctor/portal-access/by-portal-id/:userIdString', (req, res) => {
+    const portalId = String(req.params.userIdString || '').trim();
+    if (!portalId) return res.status(400).json({ error: 'Portal user ID required' });
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    db.get(
+        `SELECT id, role, user_role, doctor_category, doctor_modules FROM users WHERE user_id_string = ?`,
+        [portalId],
+        (err, row) => {
+            if (err) return res.status(500).json({ error: err.message });
+            if (!row) return res.status(404).json({ error: 'User not found' });
+            respondDoctorPortalAccess(res, row);
+        }
+    );
+});
+
 app.get('/api/doctor/portal-access/:userId', (req, res) => {
     const uid = parseInt(req.params.userId, 10);
     if (!Number.isInteger(uid) || uid < 1) return res.status(400).json({ error: 'Invalid user' });
@@ -5491,33 +5537,7 @@ app.get('/api/doctor/portal-access/:userId', (req, res) => {
         (err, row) => {
             if (err) return res.status(500).json({ error: err.message });
             if (!row) return res.status(404).json({ error: 'User not found' });
-            const ur = String(row.user_role || row.role || '').toLowerCase();
-            if (ur !== 'doctor') return res.status(400).json({ error: 'Not a doctor account' });
-            portalAuthPolicy.loadPortalAuthConfig(db, (ePol) => {
-                if (ePol) return res.status(500).json({ error: ePol.message });
-                const c = portalAuthPolicy.getPortalAuthConfig();
-                const globalRegular = c.doctorPortalModulesRegular || {};
-                const globalVolunteer = c.doctorPortalModulesVolunteer || {};
-                const allowedSet = doctorPortalModules.resolveDoctorAllowedTabs(
-                    row.doctor_category,
-                    globalRegular,
-                    globalVolunteer,
-                    row.doctor_modules
-                );
-                const useGlobalModules = !doctorPortalModules.userHasCustomModules(row.doctor_modules);
-                const parsed = doctorPortalModules.parseModulesJson(row.doctor_modules);
-                const doctor_modules =
-                    parsed && Object.keys(parsed).length ? doctorPortalModules.sanitizeModulesInput(parsed) : null;
-                res.json({
-                    doctor_category: doctorPortalModules.normalizeDoctorCategory(row.doctor_category),
-                    doctor_modules,
-                    useGlobalModules,
-                    allowedTabs: allowedSet ? Array.from(allowedSet) : null,
-                    globalRegular,
-                    globalVolunteer,
-                    tabDefs: doctorPortalModules.TAB_DEFS
-                });
-            });
+            respondDoctorPortalAccess(res, row);
         }
     );
 });

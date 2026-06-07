@@ -13048,6 +13048,7 @@ async function loadAdminSiteCms() {
         cmsFillFeatureRows(cms.featureCards || []);
         cmsFillFaqRows(cms.faq || []);
         await loadAdminMarketing();
+        await loadAdminHeroSeminarPreview();
         await loadPortalAuthAdminForm();
     } catch (e) {
         console.error(e);
@@ -14306,6 +14307,47 @@ function marketingRenderBannerRows(rows) {
             <button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;margin-left:6px;" onclick="marketingSaveBannerRow(this)">Save banner</button></div>`;
         root.appendChild(wrap);
     });
+}
+
+async function loadAdminHeroSeminarPreview() {
+    const el = document.getElementById('hero-slider-seminar-preview');
+    if (!el) return;
+    try {
+        const res = await fetch('/api/seminars?bucket=current', { cache: 'no-store' });
+        const data = await res.json();
+        const seminars = (data && data.seminars) || [];
+        const active = seminars.filter((s) => s && Number(s.is_active) !== 0);
+        if (!active.length) {
+            el.innerHTML =
+                '<strong>No active seminars</strong> for the current portal year. Create one under Seminar Management — it will appear in the homepage hero automatically (upload a Hero image for a photo background).';
+            return;
+        }
+        const lines = active.map((s) => {
+            const img = s.hero_image_path || s.flyer_path || '';
+            const imgNote = img
+                ? '<span style="color:#15803d;">✓ image</span>'
+                : '<span style="color:#b45309;">no hero image yet</span>';
+            const when = s.event_date ? String(s.event_date).slice(0, 10) : 'date TBA';
+            return (
+                '<li style="margin:4px 0;"><strong>' +
+                escapeHtml(s.title || 'Seminar') +
+                '</strong> · ' +
+                escapeHtml(when) +
+                ' · ' +
+                imgNote +
+                '</li>'
+            );
+        });
+        el.innerHTML =
+            '<strong>Live seminar slides on homepage (' +
+            active.length +
+            '):</strong><ul style="margin:8px 0 0 18px;padding:0;">' +
+            lines.join('') +
+            '</ul>';
+    } catch (e) {
+        el.textContent = 'Could not load seminar preview.';
+        console.error(e);
+    }
 }
 
 async function loadAdminMarketing() {

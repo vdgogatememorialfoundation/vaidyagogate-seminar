@@ -83,47 +83,75 @@
         return '';
     }
 
-    function buildSeminarHeroSlides(seminars, cms) {
+    function buildMarketingBannerSlides(banners) {
+        return (Array.isArray(banners) ? banners : [])
+            .filter((b) => b && b.imagePath)
+            .map((b) => ({
+                image: mediaUrl(b.imagePath),
+                title: b.title || 'National Seminar',
+                subtitle: b.subtitle || b.description || '',
+                eyebrow: 'Featured event',
+                cta: b.ctaText || 'Register now',
+                link: b.ctaUrl || '#register',
+                cta2: '',
+                link2: ''
+            }));
+    }
+
+    function buildSeminarHeroSlides(seminars) {
         const list = Array.isArray(seminars) ? seminars.filter((s) => s && Number(s.is_active) !== 0) : [];
         if (!list.length) return [];
         return list.map((s) => {
             const when = formatSeminarHeroDate(s.event_date);
+            const venue = s.venue ? String(s.venue).trim() : '';
+            const meta = [when, venue].filter(Boolean);
             const desc = s.description ? String(s.description).trim().slice(0, 140) : '';
+            const year = s.portal_year || (s.event_date ? String(s.event_date).slice(0, 4) : '');
             return {
                 image: seminarHeroImagePath(s),
-                title: s.title || (cms && cms.hero && cms.hero.title) || 'National Seminar',
-                subtitle: when || desc || (cms && cms.hero && cms.hero.subtitle) || '',
+                title: s.title || 'National Seminar',
+                subtitle: meta.join(' · ') || desc || 'Register for this live seminar',
+                eyebrow: year ? 'Live seminar · ' + year : 'Live seminar',
                 cta: 'Register now',
                 link: '#register',
-                cta2: (cms && cms.hero && cms.hero.ctaSecondary) || 'View programme',
+                cta2: 'View programme',
                 link2: '#schedule'
             };
         });
     }
 
-    function buildHeroSlides(cms, seminars) {
-        const seminarSlides = buildSeminarHeroSlides(seminars, cms);
-        if (seminarSlides.length) return seminarSlides;
-
+    function buildHeroSlides(cms, seminars, marketingBanners) {
         const slides = [];
-        const fromCms = Array.isArray(cms.slides) ? cms.slides : [];
+        const seen = new Set();
+        function pushSlide(sl) {
+            if (!sl || !sl.title) return;
+            const key = String(sl.image || '') + '|' + String(sl.title);
+            if (seen.has(key)) return;
+            seen.add(key);
+            slides.push(sl);
+        }
+        buildSeminarHeroSlides(seminars).forEach(pushSlide);
+        buildMarketingBannerSlides(marketingBanners).forEach(pushSlide);
+        const fromCms = Array.isArray(cms && cms.slides) ? cms.slides : [];
         fromCms.forEach((sl) => {
             if (!sl || (!sl.image && !sl.title)) return;
-            slides.push({
+            pushSlide({
                 image: mediaUrl(sl.image),
-                title: sl.title || (cms.hero && cms.hero.title) || 'National Seminar',
-                subtitle: sl.subtitle || (cms.hero && cms.hero.subtitle) || '',
+                title: sl.title || 'National Seminar',
+                subtitle: sl.subtitle || '',
+                eyebrow: 'Featured',
                 cta: sl.cta || (cms.hero && cms.hero.ctaPrimary) || 'Register now',
                 link: sl.link || '#register',
                 cta2: sl.cta2 || '',
                 link2: sl.link2 || ''
             });
         });
-        if (!slides.length && cms.hero) {
-            slides.push({
+        if (!slides.length && cms && cms.hero && (cms.hero.image || cms.hero.title)) {
+            pushSlide({
                 image: mediaUrl(cms.hero.image),
-                title: cms.hero.title || 'National Seminar',
-                subtitle: cms.hero.subtitle || '',
+                title: cms.hero.title || 'VGMF National Seminar',
+                subtitle: cms.hero.venue || cms.hero.subtitle || '',
+                eyebrow: cms.hero.eyebrow || 'National Seminar Portal',
                 cta: cms.hero.ctaPrimary || 'Register now',
                 link: '#register',
                 cta2: cms.hero.ctaSecondary || 'View programme',
@@ -131,14 +159,15 @@
             });
         }
         if (!slides.length) {
-            slides.push({
+            pushSlide({
                 image: '',
                 title: 'VGMF National Seminar',
-                subtitle: 'Ayurveda · Education · Excellence',
+                subtitle: 'Register for upcoming live seminars',
+                eyebrow: 'National Seminar Portal',
                 cta: 'Register now',
                 link: '#register',
                 cta2: 'Programme',
-                link2: '#'
+                link2: '#schedule'
             });
         }
         return slides;
@@ -153,6 +182,20 @@
             window.__heroSeminars = [];
         }
         return window.__heroSeminars;
+    }
+
+    async function loadHeroMarketing() {
+        try {
+            const res = await fetch('/api/public/marketing', { cache: 'no-store' });
+            const data = await res.json();
+            window.__heroMarketingBanners = (data && data.banners) || [];
+            if (data && data.carousel && data.carousel.autoSlideMs) {
+                window.__heroCarouselMs = data.carousel.autoSlideMs;
+            }
+        } catch (_) {
+            window.__heroMarketingBanners = [];
+        }
+        return window.__heroMarketingBanners;
     }
 
     function showHeroSlide(i) {
@@ -197,7 +240,11 @@
         const root = document.getElementById('congress-hero-slides');
         const dots = document.getElementById('congress-hero-dots');
         if (!root) return;
-        heroSlides = buildHeroSlides(cms || {}, window.__heroSeminars || []);
+        heroSlides = buildHeroSlides(
+            cms || {},
+            window.__heroSeminars || [],
+            window.__heroMarketingBanners || []
+        );
         root.innerHTML = heroSlides
             .map((sl, i) => {
                 const bg = sl.image
@@ -218,7 +265,7 @@
                     '<div class="congress-hero-overlay"></div>' +
                     '<div class="congress-hero-content">' +
                     '<span class="congress-hero-eyebrow"><i class="fas fa-certificate"></i> ' +
-                    esc((cms && cms.hero && cms.hero.eyebrow) || 'National CME Congress') +
+                    esc(sl.eyebrow || 'Live seminar') +
                     '</span>' +
                     '<h2>' +
                     esc(sl.title) +
@@ -641,7 +688,7 @@
                 .replace(/,\s+and\b/gi, ' and');
         }
         window.__siteCms = cms || {};
-        loadHeroSeminars().then(() => renderCongressHero(window.__siteCms));
+        Promise.all([loadHeroSeminars(), loadHeroMarketing()]).then(() => renderCongressHero(window.__siteCms));
         renderCongressTicker(cms.scrollingAnnouncements || []);
         renderCongressPastSeminars(cms);
         renderCongressVideos(cms);
@@ -666,13 +713,13 @@
             const root = document.getElementById('congress-hero-slides');
             if (root && root.children.length) return;
             try {
-                await loadHeroSeminars();
+                await Promise.all([loadHeroSeminars(), loadHeroMarketing()]);
                 const res = await fetch('/api/public/site-cms', { cache: 'no-store' });
                 const cms = await res.json();
                 if (typeof window.applySiteCms === 'function') window.applySiteCms(cms);
             } catch (e) {
                 console.error('[congress] CMS bootstrap failed', e);
-                await loadHeroSeminars();
+                await Promise.all([loadHeroSeminars(), loadHeroMarketing()]);
                 renderCongressHero({});
             }
         })();

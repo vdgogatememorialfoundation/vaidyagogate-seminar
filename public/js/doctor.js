@@ -484,11 +484,13 @@ const DOCTOR_INTERNAL_ID_MAX = 2147483647;
 
 function doctorNumericUserId() {
     if (!currentUser) return null;
+    if (window.__doctorResolvedInternalId) return window.__doctorResolvedInternalId;
+    const portalStr = String(currentUser.user_id_string || '').trim();
     const raw = currentUser.id != null ? currentUser.id : currentUser.user_id;
     const n = parseInt(raw, 10);
-    if (Number.isInteger(n) && n > 0 && n <= DOCTOR_INTERNAL_ID_MAX) return n;
-    if (window.__doctorResolvedInternalId) return window.__doctorResolvedInternalId;
-    return null;
+    if (!Number.isInteger(n) || n <= 0 || n > DOCTOR_INTERNAL_ID_MAX) return null;
+    if (portalStr && String(n) === portalStr && portalStr.length >= 10) return null;
+    return n;
 }
 
 function doctorUserIdQuerySuffix() {
@@ -562,10 +564,21 @@ function modulesMapToAllowedSetClient(modulesMap) {
     return new Set(keys.filter((k) => m[k] === true));
 }
 
+function isLegacyVolunteerDefaultModulesClient(userModulesRaw) {
+    const userMap = parseDoctorModulesMap(userModulesRaw);
+    if (!userMap) return false;
+    const defaults = volunteerDoctorModuleDefaults();
+    const defaultKeys = Object.keys(defaults);
+    const enabledKeys = defaultKeys.filter((k) => userMap[k] === true);
+    if (enabledKeys.length !== defaultKeys.length) return false;
+    return !Object.keys(userMap).some((k) => userMap[k] === true && !defaults[k]);
+}
+
 function resolveDoctorAllowedTabsClient(category, globalRegular, globalVolunteer, userModulesRaw) {
     const cat = String(category || 'regular').toLowerCase() === 'volunteer' ? 'volunteer' : 'regular';
     const globalMap = cat === 'volunteer' ? globalVolunteer || {} : globalRegular || {};
     let allowed = modulesMapToAllowedSetClient(globalMap);
+    if (isLegacyVolunteerDefaultModulesClient(userModulesRaw)) return allowed;
     const userMap = parseDoctorModulesMap(userModulesRaw);
     if (!userMap || !Object.keys(userMap).length) return allowed;
     const hasExplicitOff = Object.keys(userMap).some((k) => userMap[k] === false);
@@ -624,16 +637,21 @@ function applyDoctorAllowedTabsToDom(allowed) {
             enabled = !!window.__doctorHasVolunteerAssignments;
         }
         el.classList.toggle('hidden', !enabled);
+        el.style.display = enabled ? '' : 'none';
+        el.setAttribute('aria-hidden', enabled ? 'false' : 'true');
     });
     document.querySelectorAll('[data-doctor-tab]').forEach((el) => {
         const tab = el.getAttribute('data-doctor-tab');
         if (!tab) return;
-        el.classList.toggle('hidden', !doctorTabModuleEnabled(tab));
+        const enabled = doctorTabModuleEnabled(tab);
+        el.classList.toggle('hidden', !enabled);
+        el.style.display = enabled ? '' : 'none';
+        el.setAttribute('aria-hidden', enabled ? 'false' : 'true');
     });
     document.querySelectorAll('.tab-pane[id^="tab-"]').forEach((pane) => {
         const tabId = pane.id;
         const enabled = doctorTabModuleEnabled(tabId);
-        if (!enabled) pane.classList.add('hidden');
+        pane.classList.toggle('hidden', !enabled);
     });
     const slider = document.getElementById('doctor-seminar-slider');
     if (slider) {
@@ -659,17 +677,23 @@ async function loadDoctorPortalModulesGlobal() {
 
 async function refreshDoctorPortalAccess() {
     if (!currentUser) return false;
-    let uid = doctorNumericUserId();
-    if (!uid) uid = await ensureDoctorInternalUserId();
-    if (!uid) return false;
+    const portalId = String(currentUser.user_id_string || '').trim();
+    let accessUrl = null;
+    if (portalId) {
+        accessUrl =
+            '/api/doctor/portal-access/by-portal-id/' + encodeURIComponent(portalId) + '?' + doctorPortalFetchBust();
+    } else {
+        let uid = doctorNumericUserId();
+        if (!uid) uid = await ensureDoctorInternalUserId();
+        if (!uid) return false;
+        accessUrl = '/api/doctor/portal-access/' + encodeURIComponent(String(uid)) + '?' + doctorPortalFetchBust();
+    }
     try {
-        const res = await fetch(
-            '/api/doctor/portal-access/' + encodeURIComponent(String(uid)) + '?' + doctorPortalFetchBust(),
-            { cache: 'no-store' }
-        );
+        const res = await fetch(accessUrl, { cache: 'no-store' });
         const data = await res.json();
         if (!res.ok) {
             delete window.__doctorPortalAllowedTabs;
+            delete window.__doctorPortalUseGlobalModules;
             return false;
         }
         window.__doctorPortalAllowedTabs = data.allowedTabs ?? null;
@@ -678,13 +702,28 @@ async function refreshDoctorPortalAccess() {
             regular: data.globalRegular || {},
             volunteer: data.globalVolunteer || {}
         };
+        if (data.userId != null) {
+            currentUser.id = data.userId;
+            window.__doctorResolvedInternalId = data.userId;
+        }
         currentUser.doctor_category = data.doctor_category || 'regular';
         currentUser.doctor_modules = data.doctor_modules ?? null;
         if (typeof PortalAuth !== 'undefined') PortalAuth.setUser('doctor', currentUser);
         return true;
     } catch (_) {
+        delete window.__doctorPortalAllowedTabs;
+        delete window.__doctorPortalUseGlobalModules;
         return false;
     }
+}
+
+function scheduleDoctorModuleReapply() {
+    if (!currentUser) return;
+    [250, 1500, 4000].forEach((ms) => {
+        setTimeout(() => {
+            if (currentUser) applyDoctorModuleAccessFromUser(currentUser).catch(() => {});
+        }, ms);
+    });
 }
 
 let _doctorPortalAccessRefreshTimer = null;
@@ -730,7 +769,7 @@ async function applyDoctorModuleAccessFromUser(user) {
         user && user.doctor_category,
         globalCfg.regular,
         globalCfg.volunteer,
-        user && user.doctor_modules
+        null
     );
     applyDoctorAllowedTabsToDom(allowed);
 }
@@ -1408,6 +1447,7 @@ async function bootDoctorDashboard(user) {
     initDoctorVolunteerNav()
         .then(() => applyDoctorModuleAccessFromUser(currentUser))
         .catch(() => {});
+    scheduleDoctorModuleReapply();
     handleEasebuzzPaymentReturnQuery();
 }
 
