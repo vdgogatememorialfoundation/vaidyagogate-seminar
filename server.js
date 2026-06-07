@@ -2698,10 +2698,10 @@ function integrationSettingsJson(data) {
     masked.email_provider_keys = emailProv.maskProviderKeysForClient(raw.email_provider_keys);
     masked.email_provider_keys_saved = emailProv.providerKeysSavedFlags(raw.email_provider_keys);
     masked.email_primary_enabled = integrationSettings.flagEnabled(raw.email_primary_enabled, true);
-    masked.email_fallback_enabled = integrationSettings.flagEnabled(raw.email_fallback_enabled, true);
+    masked.email_fallback_enabled = integrationSettings.flagEnabled(raw.email_fallback_enabled, false);
     masked.email_smtp_standby_enabled = integrationSettings.flagEnabled(
         raw.email_smtp_standby_enabled,
-        true
+        false
     );
     masked.whatsapp_token_saved = !!(raw.whatsapp_token && String(raw.whatsapp_token).trim());
     masked.whatsapp_verify_token_saved = !!(
@@ -12629,6 +12629,12 @@ function startBackgroundWorkers() {
     }
     integrationSettings.loadFromDb(db, (eInt) => {
         if (eInt) console.warn('[integrations] load failed:', eInt.message);
+        integrationSettings.migrateZeptoMailOnlyIfNeeded(db, (mErr, mOut) => {
+            if (mErr) console.warn('[integrations] ZeptoMail-only migration failed:', mErr.message);
+            else if (mOut && mOut.migrated) {
+                console.log('[integrations] Email locked to ZeptoMail HTTPS only (fallback + SMTP relay disabled).');
+            }
+        });
         db.get(`SELECT value FROM global_settings WHERE key = ?`, [portalAuthPolicy.KEY], (ePk, rowPk) => {
             if (!ePk && !rowPk) {
                 upsertGlobalSetting(portalAuthPolicy.KEY, JSON.stringify(portalAuthPolicy.DEFAULTS), () => {});

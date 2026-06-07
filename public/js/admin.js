@@ -7998,8 +7998,8 @@ async function loadIntegrationSettings() {
         set('int-email-api-provider', s.email_api_provider || 'zeptomail');
         set('int-email-api-fallback-provider', s.email_api_fallback_provider || 'sender');
         setIntegrationCheckbox('int-email-primary-enabled', s.email_primary_enabled !== false);
-        setIntegrationCheckbox('int-email-fallback-enabled', s.email_fallback_enabled !== false);
-        setIntegrationCheckbox('int-email-smtp-standby-enabled', s.email_smtp_standby_enabled !== false);
+        setIntegrationCheckbox('int-email-fallback-enabled', s.email_fallback_enabled === true || s.email_fallback_enabled === 1 || s.email_fallback_enabled === '1');
+        setIntegrationCheckbox('int-email-smtp-standby-enabled', s.email_smtp_standby_enabled === true || s.email_smtp_standby_enabled === 1 || s.email_smtp_standby_enabled === '1');
         applySavedIntegrationSecrets(s);
         syncEmailIntegrationPanels();
         set('int-wa-phone-id', s.whatsapp_phone_number_id);

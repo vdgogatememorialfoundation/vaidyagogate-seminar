@@ -2117,7 +2117,7 @@
 
                         <div style="padding:14px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;margin-bottom:12px;">
                             <label style="display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:10px;">
-                                <input type="checkbox" id="int-email-fallback-enabled" checked onchange="syncEmailIntegrationPanels()"> Enable fallback HTTPS (when primary quota / limit hit)
+                                <input type="checkbox" id="int-email-fallback-enabled" onchange="syncEmailIntegrationPanels()"> Enable fallback HTTPS (when primary quota / limit hit)
                             </label>
                             <label style="font-weight:600;">Fallback provider</label>
                             <select id="int-email-api-fallback-provider" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;margin:6px 0 10px;" onchange="syncEmailIntegrationPanels()">
@@ -2141,7 +2141,7 @@
 
                         <div style="padding:14px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;margin-bottom:12px;">
                             <label style="display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:10px;">
-                                <input type="checkbox" id="int-email-smtp-standby-enabled" checked onchange="syncEmailIntegrationPanels()"> Enable Zoho SMTP standby (last resort)
+                                <input type="checkbox" id="int-email-smtp-standby-enabled" onchange="syncEmailIntegrationPanels()"> Enable Zoho SMTP standby (last resort)
                             </label>
                             <p style="font-size:0.78rem;color:#64748b;margin:0 0 10px;">Only used if both HTTPS providers fail. Blocked on Render free tier alone.</p>
                             <div id="email-smtp-standby-panel">
@@ -2713,6 +2713,6 @@
     <link rel="stylesheet" href="/css/book-track.css?v=20260529stg">
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
-    <script src="/js/admin.js?v=20260607emailpanels"></script>
+    <script src="/js/admin.js?v=20260607zeptoonly"></script>
 </body>
 </html>
