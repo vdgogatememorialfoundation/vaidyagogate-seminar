@@ -7625,6 +7625,10 @@ function readIntegrationEmailApiKeyNew() {
     return readIntegrationSecretFromFields(['int-email-api-key-new', 'int-email-api-key']);
 }
 
+function readIntegrationEmailApiFallbackKeyNew() {
+    return readIntegrationSecretFromFields(['int-email-api-fallback-key-new', 'int-email-api-fallback-key']);
+}
+
 function readIntegrationWaTokenNew() {
     return readIntegrationSecretFromFields(['int-wa-token-new', 'int-wa-token']);
 }
@@ -7735,6 +7739,31 @@ function renderIntegrationSecretStatus(s) {
         apiHint.style.color = settings.email_api_key_saved ? '#15803d' : '#64748b';
     }
 
+    const fbBadge = document.getElementById('int-email-api-fallback-key-saved-badge');
+    if (fbBadge) {
+        if (settings.email_api_fallback_key_saved) {
+            fbBadge.textContent = '✓ Fallback API token saved on server';
+            fbBadge.style.background = '#ecfdf5';
+            fbBadge.style.borderColor = '#a7f3d0';
+            fbBadge.style.color = '#15803d';
+        } else {
+            fbBadge.textContent = '⚠ Fallback token not saved (Sender.net recommended)';
+            fbBadge.style.background = '#fff7ed';
+            fbBadge.style.borderColor = '#fed7aa';
+            fbBadge.style.color = '#b45309';
+        }
+    }
+    const fbNew = document.getElementById('int-email-api-fallback-key-new');
+    if (fbNew) {
+        fbNew.placeholder = settings.email_api_fallback_key_saved
+            ? 'Leave empty to keep saved fallback token — paste here only to replace'
+            : 'Paste Sender.net API token for automatic fallback when ZeptoMail limit is hit';
+    }
+    const fbHint = document.getElementById('int-email-api-fallback-key-hint');
+    if (fbHint) {
+        fbHint.style.color = settings.email_api_fallback_key_saved ? '#15803d' : '#64748b';
+    }
+
     const waBadge = document.getElementById('int-wa-token-saved-badge');
     if (waBadge) {
         if (waSaved) {
@@ -7770,7 +7799,9 @@ function applySavedIntegrationSecrets(data) {
         email_configured: !!(data && data.email_configured) || !!settings.zoho_pass_saved || !!settings.email_api_key_saved,
         zoho_pass_saved: !!settings.zoho_pass_saved,
         email_api_key_saved: !!settings.email_api_key_saved,
+        email_api_fallback_key_saved: !!settings.email_api_fallback_key_saved,
         email_api_provider: settings.email_api_provider || '',
+        email_api_fallback_provider: settings.email_api_fallback_provider || 'sender',
         whatsapp_configured: !!(data && data.whatsapp_configured) || !!settings.whatsapp_token_saved,
         whatsapp_token_saved: !!settings.whatsapp_token_saved || !!(data && data.whatsapp_configured)
     });
@@ -7795,7 +7826,8 @@ async function loadIntegrationSettings() {
         set('int-zoho-port', s.zoho_port);
         set('int-zoho-user', s.zoho_user);
         set('int-zoho-from', s.zoho_from);
-        set('int-email-api-provider', s.email_api_provider || '');
+        set('int-email-api-provider', s.email_api_provider || 'zeptomail');
+        set('int-email-api-fallback-provider', s.email_api_fallback_provider || 'sender');
         applySavedIntegrationSecrets(s);
         set('int-wa-phone-id', s.whatsapp_phone_number_id);
         set('int-wa-waba-id', s.whatsapp_business_account_id);
@@ -7818,9 +7850,12 @@ async function loadIntegrationSettings() {
             let emailLine = s.email_configured ? 'Email: configured.' : 'Email: not configured.';
             const st = s.email_status;
             if (st && st.via === 'http' && st.provider) {
-                emailLine = 'Email: primary ' + st.provider + ' HTTPS API';
-                if (s.zoho_pass_saved || (st.standbySmtp && st.standbySmtp.configured)) {
-                    emailLine += ' + Zoho SMTP standby';
+                emailLine = 'Email: primary ' + st.provider + ' HTTPS';
+                if (st.fallbackConfigured && st.fallbackProvider) {
+                    emailLine += ' → fallback ' + st.fallbackProvider;
+                }
+                if (st.standbySmtp && st.standbySmtp.configured) {
+                    emailLine += ' → Zoho SMTP';
                 }
                 emailLine += '.';
             } else if (st && st.via === 'smtp') {
@@ -7869,10 +7904,12 @@ async function saveIntegrationSettings() {
     if (!publicUrl && seminarHost) publicUrl = 'https://' + seminarHost.replace(/^https?:\/\//, '');
     const newZohoPass = readIntegrationZohoPassNew();
     const newEmailApiKey = readIntegrationEmailApiKeyNew();
+    const newEmailFallbackKey = readIntegrationEmailApiFallbackKeyNew();
     const newWaToken = readIntegrationWaTokenNew();
     const zohoHost = (document.getElementById('int-zoho-host') || {}).value.trim();
     const zohoUser = (document.getElementById('int-zoho-user') || {}).value.trim();
-    const emailApiProvider = (document.getElementById('int-email-api-provider') || {}).value.trim();
+    const emailApiProvider = (document.getElementById('int-email-api-provider') || {}).value.trim() || 'zeptomail';
+    const emailApiFallbackProvider = (document.getElementById('int-email-api-fallback-provider') || {}).value.trim();
     const zohoFrom = (document.getElementById('int-zoho-from') || {}).value.trim();
     const usingHttpApi = !!emailApiProvider;
     if ((zohoHost || zohoUser) && !window.__integrationZohoPassSaved && !newZohoPass && !usingHttpApi) {
@@ -7883,11 +7920,14 @@ async function saveIntegrationSettings() {
         return;
     }
     if (usingHttpApi && !window.__integrationEmailApiSaved && !newEmailApiKey) {
-        setAdminSettingsSaveMsg('Choose an email API provider and paste its API key, then Save again.', true);
+        setAdminSettingsSaveMsg('Paste your ZeptoMail Send Mail token (primary), then Save again.', true);
         return;
     }
     if (usingHttpApi && !zohoFrom && !zohoUser) {
-        setAdminSettingsSaveMsg('Set From (or User) to care@vaidyagogate.org for the email API sender address.', true);
+        setAdminSettingsSaveMsg(
+            'Set From to noreply@seminar.vaidyagogate.org (verified in ZeptoMail).',
+            true
+        );
         return;
     }
     const body = {
@@ -7902,6 +7942,7 @@ async function saveIntegrationSettings() {
         zoho_user: zohoUser,
         zoho_from: zohoFrom,
         email_api_provider: emailApiProvider,
+        email_api_fallback_provider: emailApiFallbackProvider || 'sender',
         whatsapp_phone_number_id: (document.getElementById('int-wa-phone-id') || {}).value.trim(),
         whatsapp_business_account_id: (document.getElementById('int-wa-waba-id') || {}).value.trim(),
         whatsapp_verify_token: (document.getElementById('int-wa-verify') || {}).value,
@@ -7911,6 +7952,7 @@ async function saveIntegrationSettings() {
     };
     if (newZohoPass) body.zoho_pass = newZohoPass;
     if (newEmailApiKey) body.email_api_key = newEmailApiKey;
+    if (newEmailFallbackKey) body.email_api_fallback_key = newEmailFallbackKey;
     if (newWaToken) body.whatsapp_token = newWaToken;
     try {
         const res = await fetch('/api/admin/integrations', {
@@ -7927,6 +7969,8 @@ async function saveIntegrationSettings() {
         if (passNewEl) passNewEl.value = '';
         const apiNewEl = document.getElementById('int-email-api-key-new');
         if (apiNewEl) apiNewEl.value = '';
+        const apiFbEl = document.getElementById('int-email-api-fallback-key-new');
+        if (apiFbEl) apiFbEl.value = '';
         const waNewEl = document.getElementById('int-wa-token-new');
         if (waNewEl) waNewEl.value = '';
         applySavedIntegrationSecrets(data);
@@ -7954,13 +7998,21 @@ async function saveIntegrationSettings() {
 }
 
 function integrationFormSmtpPayload() {
-    return {
+    const payload = {
         zoho_host: (document.getElementById('int-zoho-host') || {}).value.trim(),
         zoho_port: (document.getElementById('int-zoho-port') || {}).value.trim(),
         zoho_user: (document.getElementById('int-zoho-user') || {}).value.trim(),
         zoho_from: (document.getElementById('int-zoho-from') || {}).value.trim(),
-        email_api_provider: (document.getElementById('int-email-api-provider') || {}).value.trim()
+        email_api_provider: (document.getElementById('int-email-api-provider') || {}).value.trim() || 'zeptomail',
+        email_api_fallback_provider: (document.getElementById('int-email-api-fallback-provider') || {}).value.trim()
     };
+    const pendingKey = readIntegrationEmailApiKeyNew();
+    const pendingFallback = readIntegrationEmailApiFallbackKeyNew();
+    const pendingPass = readIntegrationZohoPassNew();
+    if (pendingKey) payload.email_api_key = pendingKey;
+    if (pendingFallback) payload.email_api_fallback_key = pendingFallback;
+    if (pendingPass) payload.zoho_pass = pendingPass;
+    return payload;
 }
 
 async function testIntegrationEmail() {
@@ -7973,11 +8025,12 @@ async function testIntegrationEmail() {
         return alert('Fill Zoho Host and User, or choose an HTTPS email API provider above.');
     }
     if (usingHttp && !smtp.zoho_from && !smtp.zoho_user) {
-        return alert('Set From (or User) to care@vaidyagogate.org for the email API sender.');
+        return alert('Set From to noreply@seminar.vaidyagogate.org (verified in ZeptoMail).');
     }
     const pendingPass = readIntegrationZohoPassNew();
     const pendingApiKey = readIntegrationEmailApiKeyNew();
-    if (pendingPass || pendingApiKey) {
+    const pendingFallback = readIntegrationEmailApiFallbackKeyNew();
+    if (pendingPass || pendingApiKey || pendingFallback) {
         const saveFirst = confirm(
             'Save the email settings before testing? Click OK to save, then the test will run.'
         );

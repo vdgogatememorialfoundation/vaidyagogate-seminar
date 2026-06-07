@@ -2688,6 +2688,10 @@ function integrationSettingsJson(data) {
     masked.zoho_pass_saved = !!(raw.zoho_pass && String(raw.zoho_pass).trim());
     masked.email_api_key_saved = !!(raw.email_api_key && String(raw.email_api_key).trim());
     masked.email_api_provider = raw.email_api_provider || '';
+    masked.email_api_fallback_key_saved = !!(
+        raw.email_api_fallback_key && String(raw.email_api_fallback_key).trim()
+    );
+    masked.email_api_fallback_provider = raw.email_api_fallback_provider || 'sender';
     masked.whatsapp_token_saved = !!(raw.whatsapp_token && String(raw.whatsapp_token).trim());
     masked.whatsapp_verify_token_saved = !!(
         raw.whatsapp_verify_token && String(raw.whatsapp_verify_token).trim()
@@ -2830,7 +2834,26 @@ app.post('/api/admin/integrations', withIntegrationSettingsLoaded, (req, res) =>
         body.zoho_pass != null &&
         String(body.zoho_pass).trim() &&
         !integrationSettings.isMaskedSecretValue(body.zoho_pass);
-    integrationSettings.saveToDb(db, body, (err, merged) => {
+    integrationSettings.loadFromDb(db, (loadErr, existing) => {
+        if (loadErr) return res.status(500).json({ error: loadErr.message });
+        const ex = existing || {};
+        const nextProvider = String(body.email_api_provider || ex.email_api_provider || '').toLowerCase();
+        const nextFallback = String(
+            body.email_api_fallback_provider || ex.email_api_fallback_provider || 'sender'
+        ).toLowerCase();
+        if (
+            nextProvider === 'zeptomail' &&
+            nextFallback === 'sender' &&
+            !body.email_api_fallback_key &&
+            !integrationSettings.isMaskedSecretValue(body.email_api_fallback_key) &&
+            ex.email_api_provider === 'sender' &&
+            ex.email_api_key &&
+            !ex.email_api_fallback_key
+        ) {
+            body.email_api_fallback_provider = 'sender';
+            body.email_api_fallback_key = ex.email_api_key;
+        }
+        integrationSettings.saveToDb(db, body, (err, merged) => {
         if (err) return res.status(500).json({ error: err.message });
         if (body.public_base_url) {
             upsertGlobalSetting('domain', String(body.public_base_url).replace(/^https?:\/\//, ''), () => {});
@@ -2856,6 +2879,7 @@ app.post('/api/admin/integrations', withIntegrationSettingsLoaded, (req, res) =>
                 smtp_warning: smtpWarning
             });
         });
+        });
     });
 });
 
@@ -2874,6 +2898,16 @@ function smtpOverridesFromBody(body) {
     }
     if (b.email_api_key != null && String(b.email_api_key).trim() && !integrationSettings.isMaskedSecretValue(b.email_api_key)) {
         o.email_api_key = String(b.email_api_key).trim();
+    }
+    if (b.email_api_fallback_provider != null && String(b.email_api_fallback_provider).trim()) {
+        o.email_api_fallback_provider = String(b.email_api_fallback_provider).trim().toLowerCase();
+    }
+    if (
+        b.email_api_fallback_key != null &&
+        String(b.email_api_fallback_key).trim() &&
+        !integrationSettings.isMaskedSecretValue(b.email_api_fallback_key)
+    ) {
+        o.email_api_fallback_key = String(b.email_api_fallback_key).trim();
     }
     return Object.keys(o).length ? o : null;
 }
@@ -12710,7 +12744,7 @@ if (require.main === module) {
             app.listen(PORT, () => {
                 console.log(`Server is running on http://localhost:${PORT}`);
                 console.log('[routes] Case presentation APIs: /api/admin/case/programs, /api/case/programs');
+            });
         });
-});
     });
 }
