@@ -4121,6 +4121,65 @@ async function approveAdminVolunteer(volId) {
 
 let __adminReviewers = [];
 let __caseProgFieldRows = [];
+const CASE_PROG_CORE_FIELD_KEYS = new Set([
+    'fname',
+    'mname',
+    'lname',
+    'email',
+    'phone',
+    'whatsapp',
+    'category',
+    'topic',
+    'files'
+]);
+const CASE_PROG_FIELD_TYPES = ['text', 'textarea', 'email', 'number'];
+
+function caseProgFieldTypeOptions(selected) {
+    return CASE_PROG_FIELD_TYPES.map(
+        (t) => '<option value="' + t + '"' + (t === selected ? ' selected' : '') + '>' + t + '</option>'
+    ).join('');
+}
+
+function collectCaseProgramFieldsFromDom() {
+    const rows = __caseProgFieldRows || [];
+    return rows.map((r, idx) => {
+        const keyEl = document.getElementById('case-field-key-' + idx);
+        const key = keyEl ? String(keyEl.value || '').trim() : r.key;
+        return {
+            key: key || r.key,
+            label: ((document.getElementById('case-field-label-' + idx) || {}).value || key || r.key).trim(),
+            type: (document.getElementById('case-field-type-' + idx) || {}).value || r.type || 'text',
+            enabled: !!(document.getElementById('case-field-en-' + idx) || {}).checked,
+            required: !!(document.getElementById('case-field-req-' + idx) || {}).checked
+        };
+    });
+}
+
+function addAdminCaseFieldRow() {
+    const current = collectCaseProgramFieldsFromDom();
+    if (current.length >= 30) return alert('Maximum 30 fields.');
+    current.push({
+        key: 'custom_' + Date.now(),
+        label: 'Custom field',
+        type: 'text',
+        enabled: true,
+        required: false
+    });
+    renderCaseProgramFieldsEditor(current);
+}
+
+function removeAdminCaseFieldRow(idx) {
+    const current = collectCaseProgramFieldsFromDom();
+    if (idx < 0 || idx >= current.length) return;
+    current.splice(idx, 1);
+    renderCaseProgramFieldsEditor(current);
+}
+
+function clearAllAdminCaseFields() {
+    if (!confirm('Remove all application form fields? Save the program to apply.')) return;
+    renderCaseProgramFieldsEditor([]);
+    setCaseProgMsg('All fields cleared — save the program to apply.', true);
+}
 
 function setCaseProgMsg(text, ok) {
     const el = document.getElementById('case-prog-msg');
@@ -4208,35 +4267,19 @@ function collectCaseProgramJudgeCriteria() {
 let __caseProgCriteriaRows = [];
 
 function collectCaseProgramFormConfig() {
-    const rows = __caseProgFieldRows || [];
-    if (!rows.length) {
-        return {
-            version: 1,
-            fields: [
-                { key: 'fname', label: 'First name', type: 'text', enabled: true, required: true },
-                { key: 'mname', label: 'Middle name', type: 'text', enabled: true, required: false },
-                { key: 'lname', label: 'Last name', type: 'text', enabled: true, required: true },
-                { key: 'email', label: 'Email', type: 'email', enabled: true, required: true },
-                { key: 'phone', label: 'Phone', type: 'text', enabled: true, required: true },
-                { key: 'whatsapp', label: 'WhatsApp no.', type: 'text', enabled: true, required: true },
-                { key: 'category', label: 'Category', type: 'select', enabled: true, required: true },
-                { key: 'topic', label: 'Case topic', type: 'text', enabled: true, required: true },
-                { key: 'files', label: 'Upload', type: 'file', enabled: true, required: true }
-            ]
-        };
+    const fields = collectCaseProgramFieldsFromDom();
+    if (!fields.length) {
+        return { version: 2, fields: [] };
     }
     return {
-        version: 1,
-        fields: rows.map((r, idx) => {
-            const enabled = !!(document.getElementById('case-field-en-' + idx) || {}).checked;
-            return {
-                key: r.key,
-                label: (document.getElementById('case-field-label-' + idx) || {}).value || r.key,
-                type: r.type || 'text',
-                enabled,
-                required: enabled && !!(document.getElementById('case-field-req-' + idx) || {}).checked
-            };
-        })
+        version: 2,
+        fields: fields.map((f) => ({
+            key: f.key,
+            label: f.label || f.key,
+            type: f.type || 'text',
+            enabled: f.enabled,
+            required: f.enabled && f.required
+        }))
     };
 }
 
@@ -4247,10 +4290,42 @@ function renderCaseProgramFieldsEditor(fields) {
     __caseProgFieldRows = list.map((f) => ({ key: f.key, type: f.type || 'text' }));
     tbody.innerHTML = '';
     list.forEach((f, idx) => {
-        tbody.innerHTML += '<tr><td><code>' + String(f.key || '').replace(/</g, '&lt;') + '</code></td>' +
-            '<td><input type="text" id="case-field-label-' + idx + '" value="' + String(f.label || '').replace(/"/g, '&quot;') + '" style="margin:0;width:100%;"></td>' +
-            '<td><input type="checkbox" id="case-field-en-' + idx + '" ' + (f.enabled !== false ? 'checked' : '') + '></td>' +
-            '<td><input type="checkbox" id="case-field-req-' + idx + '" ' + (f.required !== false && f.enabled !== false ? 'checked' : '') + '></td></tr>';
+        const isCore = CASE_PROG_CORE_FIELD_KEYS.has(f.key);
+        const type = f.type || (f.key === 'files' ? 'file' : f.key === 'category' ? 'select' : 'text');
+        const keyCell = isCore
+            ? '<code>' + String(f.key || '').replace(/</g, '&lt;') + '</code>'
+            : '<input type="text" id="case-field-key-' +
+              idx +
+              '" value="' +
+              String(f.key || '').replace(/"/g, '&quot;') +
+              '" style="margin:0;width:120px;" placeholder="field_key">';
+        const typeCell = isCore
+            ? '<code>' + String(type).replace(/</g, '&lt;') + '</code>'
+            : '<select id="case-field-type-' + idx + '" style="margin:0;">' + caseProgFieldTypeOptions(type) + '</select>';
+        const removeBtn =
+            '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;background:#64748b;" onclick="removeAdminCaseFieldRow(' +
+            idx +
+            ')">Remove</button>';
+        tbody.innerHTML +=
+            '<tr><td>' +
+            keyCell +
+            '</td><td><input type="text" id="case-field-label-' +
+            idx +
+            '" value="' +
+            String(f.label || '').replace(/"/g, '&quot;') +
+            '" style="margin:0;width:100%;"></td><td>' +
+            typeCell +
+            '</td><td><input type="checkbox" id="case-field-en-' +
+            idx +
+            '" ' +
+            (f.enabled !== false ? 'checked' : '') +
+            '></td><td><input type="checkbox" id="case-field-req-' +
+            idx +
+            '" ' +
+            (f.required !== false && f.enabled !== false ? 'checked' : '') +
+            '></td><td>' +
+            removeBtn +
+            '</td></tr>';
     });
 }
 
@@ -4589,6 +4664,19 @@ async function saveAdminCaseProgram() {
     if (document.getElementById('case-cat-agnikarma') && document.getElementById('case-cat-agnikarma').checked) enabledCategories.push('agnikarma');
     if (document.getElementById('case-cat-viddhakarma') && document.getElementById('case-cat-viddhakarma').checked) enabledCategories.push('viddhakarma');
     if (!enabledCategories.length) return alert('Select at least one category');
+    const formFields = collectCaseProgramFieldsFromDom();
+    const seenKeys = new Set();
+    for (let i = 0; i < formFields.length; i++) {
+        const fk = String(formFields[i].key || '').trim();
+        if (!fk) return alert('Every field needs a key (row ' + (i + 1) + ').');
+        if (!/^[a-z][a-z0-9_]{0,48}$/i.test(fk)) {
+            return alert('Invalid field key "' + fk + '". Use letters, numbers, and underscores only.');
+        }
+        const norm = fk.toLowerCase();
+        if (seenKeys.has(norm)) return alert('Duplicate field key: ' + fk);
+        seenKeys.add(norm);
+        formFields[i].key = norm;
+    }
     const editId = document.getElementById('case-prog-edit-id') && document.getElementById('case-prog-edit-id').value.trim();
     const payload = {
         title: title,
@@ -4608,7 +4696,13 @@ async function saveAdminCaseProgram() {
         maxFileSizeMb: (document.getElementById('case-prog-max-mb') || {}).value || 100,
         enabledCategories: enabledCategories,
         isActive: document.getElementById('case-prog-active') ? document.getElementById('case-prog-active').checked !== false : true,
-        formConfig: collectCaseProgramFormConfig(),
+        formConfig: { version: 2, fields: formFields.map((f) => ({
+            key: f.key,
+            label: f.label || f.key,
+            type: f.type || 'text',
+            enabled: f.enabled,
+            required: f.enabled && f.required
+        })) },
         judgeCriteria: collectCaseProgramJudgeCriteria()
     };
     const crit = payload.judgeCriteria;
