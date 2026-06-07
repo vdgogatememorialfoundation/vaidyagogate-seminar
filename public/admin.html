@@ -2094,56 +2094,79 @@
                         <div><label>Admin host (DNS)</label><input type="text" id="int-admin-host" placeholder="admin.vaidyagogate.org" style="width:100%"></div>
                         <div><label>Judge host (DNS)</label><input type="text" id="int-judge-host" placeholder="judge.vaidyagogate.org" style="width:100%"></div>
                         <div><label>Admin contact email</label><input type="email" id="int-admin-contact" placeholder="info@vaidyagogate.org" style="width:100%"></div>
-                        <div style="grid-column:1/-1;"><h4 style="margin:8px 0;color:#0c4a6e;">Email delivery chain (HTTPS on Render)</h4>
-                        <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px;line-height:1.5;"><strong>1. ZeptoMail</strong> (default primary) → <strong>2. Sender.net</strong> (auto when Zepto quota/limit hit) → <strong>3. Zoho SMTP</strong> (last standby). Verify domain <code>seminar.vaidyagogate.org</code> in ZeptoMail. From address: <code>noreply@seminar.vaidyagogate.org</code>.</p></div>
-                        <div><label>Primary email API</label>
-                            <select id="int-email-api-provider" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;">
-                                <option value="">SMTP only (local dev / paid Render)</option>
-                                <option value="zeptomail">Zoho ZeptoMail (default primary)</option>
+                        <div style="grid-column:1/-1;" id="email-delivery-section">
+                        <h4 style="margin:8px 0;color:#0c4a6e;">Email delivery</h4>
+                        <p style="font-size:0.82rem;color:#64748b;margin:0 0 14px;line-height:1.55;">Pick a provider from each dropdown — only that provider&apos;s settings appear below. Tokens are saved separately per provider (switching dropdown does not erase other credentials).</p>
+
+                        <div style="padding:14px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;margin-bottom:12px;">
+                            <label style="display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:10px;">
+                                <input type="checkbox" id="int-email-primary-enabled" checked onchange="syncEmailIntegrationPanels()"> Enable primary HTTPS email
+                            </label>
+                            <label style="font-weight:600;">Primary provider</label>
+                            <select id="int-email-api-provider" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;margin:6px 0 10px;" onchange="syncEmailIntegrationPanels()">
+                                <option value="zeptomail">Zoho ZeptoMail</option>
                                 <option value="sender">Sender.net</option>
                                 <option value="brevo">Brevo (Sendinblue)</option>
                                 <option value="resend">Resend</option>
                             </select>
+                            <div id="email-primary-panel-zeptomail" class="email-provider-panel" data-provider="zeptomail"></div>
+                            <div id="email-primary-panel-sender" class="email-provider-panel hidden" data-provider="sender"></div>
+                            <div id="email-primary-panel-brevo" class="email-provider-panel hidden" data-provider="brevo"></div>
+                            <div id="email-primary-panel-resend" class="email-provider-panel hidden" data-provider="resend"></div>
                         </div>
-                        <div style="grid-column:1/-1;">
-                            <label>Primary API token (ZeptoMail Send Mail token)</label>
-                            <div id="int-email-api-key-saved-badge" style="margin:6px 0 8px;padding:8px 12px;border-radius:8px;background:#fff7ed;border:1px solid #fed7aa;font-size:0.88rem;font-weight:600;color:#b45309;">Not saved on server yet</div>
-                            <input type="password" id="int-email-api-key-new" placeholder="ZeptoMail → Mail Agents → Send Mail Token" style="width:100%;" autocomplete="off" spellcheck="false">
-                            <p id="int-email-api-key-hint" style="font-size:0.78rem;color:#64748b;margin:6px 0 0;line-height:1.45;">ZeptoMail HTTPS API token (not your Zoho mailbox password). SMTP relay: smtp.zeptomail.in port 587, user <code>emailapikey</code>.</p>
-                        </div>
-                        <div><label>Fallback email API (on Zepto limit)</label>
-                            <select id="int-email-api-fallback-provider" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;">
-                                <option value="sender">Sender.net (recommended fallback)</option>
-                                <option value="">None</option>
+
+                        <div style="padding:14px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;margin-bottom:12px;">
+                            <label style="display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:10px;">
+                                <input type="checkbox" id="int-email-fallback-enabled" checked onchange="syncEmailIntegrationPanels()"> Enable fallback HTTPS (when primary quota / limit hit)
+                            </label>
+                            <label style="font-weight:600;">Fallback provider</label>
+                            <select id="int-email-api-fallback-provider" style="width:100%;padding:10px;border:1px solid #cbd5e1;border-radius:8px;margin:6px 0 10px;" onchange="syncEmailIntegrationPanels()">
+                                <option value="sender">Sender.net</option>
+                                <option value="zeptomail">Zoho ZeptoMail</option>
                                 <option value="brevo">Brevo</option>
                                 <option value="resend">Resend</option>
+                                <option value="">None — disable fallback</option>
                             </select>
+                            <div id="email-fallback-panel-zeptomail" class="email-fallback-panel hidden" data-provider="zeptomail"></div>
+                            <div id="email-fallback-panel-sender" class="email-fallback-panel" data-provider="sender"></div>
+                            <div id="email-fallback-panel-brevo" class="email-fallback-panel hidden" data-provider="brevo"></div>
+                            <div id="email-fallback-panel-resend" class="email-fallback-panel hidden" data-provider="resend"></div>
                         </div>
-                        <div style="grid-column:1/-1;">
-                            <label>Fallback API token (Sender.net)</label>
-                            <div id="int-email-api-fallback-key-saved-badge" style="margin:6px 0 8px;padding:8px 12px;border-radius:8px;background:#fff7ed;border:1px solid #fed7aa;font-size:0.88rem;font-weight:600;color:#b45309;">Fallback token not saved yet</div>
-                            <input type="password" id="int-email-api-fallback-key-new" placeholder="Sender.net → Settings → API access tokens" style="width:100%;" autocomplete="off" spellcheck="false">
-                            <p id="int-email-api-fallback-key-hint" style="font-size:0.78rem;color:#64748b;margin:6px 0 0;line-height:1.45;">Used automatically when ZeptoMail quota or rate limit is reached.</p>
+
+                        <div style="margin-bottom:12px;">
+                            <label style="font-weight:600;">From address (verified sender)</label>
+                            <input type="email" id="int-zoho-from" placeholder="noreply@seminar.vaidyagogate.org" style="width:100%;margin-top:6px;">
+                            <p style="font-size:0.78rem;color:#64748b;margin:6px 0 0;">Must match your verified domain in ZeptoMail / Sender.net (e.g. seminar.vaidyagogate.org).</p>
                         </div>
-                        <div style="grid-column:1/-1;"><h4 style="margin:8px 0;color:#0c4a6e;">Zoho SMTP — last standby (optional)</h4>
-                        <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px;line-height:1.5;">Used only if both HTTPS providers fail. Host smtp.zoho.in, port 465. Does <em>not</em> work on Render free tier alone.</p></div>
-                        <div><label>Host</label><input type="text" id="int-zoho-host" placeholder="smtp.zoho.in" style="width:100%"></div>
-                        <div><label>Port</label><input type="number" id="int-zoho-port" placeholder="465" style="width:100%"></div>
-                        <div><label>User</label><input type="email" id="int-zoho-user" placeholder="care@vaidyagogate.org" style="width:100%"></div>
-                        <div style="grid-column:1/-1;">
-                            <label>App password (Zoho)</label>
-                            <div id="int-zoho-pass-saved-badge" style="margin:6px 0 8px;padding:8px 12px;border-radius:8px;background:#fff7ed;border:1px solid #fed7aa;font-size:0.88rem;font-weight:600;color:#b45309;">Not saved on server yet</div>
-                            <input type="password" id="int-zoho-pass-new" placeholder="Paste Zoho app-specific password here, then Save" style="width:100%;" autocomplete="off" spellcheck="false">
-                            <p id="int-zoho-pass-hint" style="font-size:0.78rem;color:#64748b;margin:6px 0 0;line-height:1.45;">Use an app-specific password from Zoho Mail → Security → App Passwords (not your normal login password).</p>
+
+                        <div style="padding:14px;border:1px solid #e2e8f0;border-radius:10px;background:#fff;margin-bottom:12px;">
+                            <label style="display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:10px;">
+                                <input type="checkbox" id="int-email-smtp-standby-enabled" checked onchange="syncEmailIntegrationPanels()"> Enable Zoho SMTP standby (last resort)
+                            </label>
+                            <p style="font-size:0.78rem;color:#64748b;margin:0 0 10px;">Only used if both HTTPS providers fail. Blocked on Render free tier alone.</p>
+                            <div id="email-smtp-standby-panel">
+                                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                                    <div><label>Host</label><input type="text" id="int-zoho-host" placeholder="smtp.zoho.in" style="width:100%"></div>
+                                    <div><label>Port</label><input type="number" id="int-zoho-port" placeholder="465" style="width:100%"></div>
+                                    <div style="grid-column:1/-1;"><label>User</label><input type="email" id="int-zoho-user" placeholder="care@vaidyagogate.org" style="width:100%"></div>
+                                </div>
+                                <div style="margin-top:10px;">
+                                    <label>App password (Zoho Mail)</label>
+                                    <div id="int-zoho-pass-saved-badge" style="margin:6px 0 8px;padding:8px 12px;border-radius:8px;background:#fff7ed;border:1px solid #fed7aa;font-size:0.88rem;font-weight:600;color:#b45309;">Not saved on server yet</div>
+                                    <input type="password" id="int-zoho-pass-new" placeholder="Zoho Mail → Security → App Passwords" style="width:100%;" autocomplete="off" spellcheck="false">
+                                    <p id="int-zoho-pass-hint" style="font-size:0.78rem;color:#64748b;margin:6px 0 0;"></p>
+                                </div>
+                            </div>
                         </div>
-                        <div><label>From (verified sender)</label><input type="email" id="int-zoho-from" placeholder="noreply@seminar.vaidyagogate.org" style="width:100%"></div>
-                        <div style="grid-column:1/-1;margin-top:4px;">
+
+                        <div style="margin-top:4px;">
                             <label style="display:block;margin-bottom:6px;font-weight:600;">Test email to</label>
                             <div style="display:flex;gap:10px;align-items:stretch;flex-wrap:wrap;">
                                 <input type="email" id="int-test-email" placeholder="e.g. your.name@gmail.com" style="flex:1;min-width:280px;padding:12px 14px;font-size:1rem;border:1px solid #cbd5e1;border-radius:8px;">
                                 <button type="button" class="btn-primary" style="background:#64748b;padding:12px 20px;font-size:1rem;white-space:nowrap;" onclick="testIntegrationEmail()">Send test email</button>
                             </div>
-                            <p id="int-test-email-hint" style="font-size:0.78rem;color:#64748b;margin:6px 0 0;">Save ZeptoMail + Sender.net tokens (green badges), then send a test. Uses ZeptoMail first; Sender.net if quota hit.</p>
+                            <p id="int-test-email-hint" style="font-size:0.78rem;color:#64748b;margin:6px 0 0;">Save settings first. Test uses your enabled chain: primary → fallback → SMTP standby.</p>
+                        </div>
                         </div>
                         <div style="grid-column:1/-1;"><h4 style="margin:8px 0;color:#0c4a6e;">Meta WhatsApp Business</h4>
                         <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px;line-height:1.5;">Webhook: <code id="int-wa-webhook-url">https://your-domain/api/webhooks/whatsapp</code><br>
@@ -2690,6 +2713,6 @@
     <link rel="stylesheet" href="/css/book-track.css?v=20260529stg">
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
-    <script src="/js/admin.js?v=20260607emailchain"></script>
+    <script src="/js/admin.js?v=20260607emailpanels"></script>
 </body>
 </html>

@@ -2684,6 +2684,7 @@ function formatCheckInTimeForNotify(at) {
 
 function integrationSettingsJson(data) {
     const raw = data || {};
+    const emailProv = require('./lib/email-provider-settings');
     const masked = integrationSettings.maskSecretsForClient(raw);
     masked.zoho_pass_saved = !!(raw.zoho_pass && String(raw.zoho_pass).trim());
     masked.email_api_key_saved = !!(raw.email_api_key && String(raw.email_api_key).trim());
@@ -2692,6 +2693,14 @@ function integrationSettingsJson(data) {
         raw.email_api_fallback_key && String(raw.email_api_fallback_key).trim()
     );
     masked.email_api_fallback_provider = raw.email_api_fallback_provider || 'sender';
+    masked.email_provider_keys = emailProv.maskProviderKeysForClient(raw.email_provider_keys);
+    masked.email_provider_keys_saved = emailProv.providerKeysSavedFlags(raw.email_provider_keys);
+    masked.email_primary_enabled = integrationSettings.flagEnabled(raw.email_primary_enabled, true);
+    masked.email_fallback_enabled = integrationSettings.flagEnabled(raw.email_fallback_enabled, true);
+    masked.email_smtp_standby_enabled = integrationSettings.flagEnabled(
+        raw.email_smtp_standby_enabled,
+        true
+    );
     masked.whatsapp_token_saved = !!(raw.whatsapp_token && String(raw.whatsapp_token).trim());
     masked.whatsapp_verify_token_saved = !!(
         raw.whatsapp_verify_token && String(raw.whatsapp_verify_token).trim()
@@ -2853,7 +2862,32 @@ app.post('/api/admin/integrations', withIntegrationSettingsLoaded, (req, res) =>
             body.email_api_fallback_provider = 'sender';
             body.email_api_fallback_key = ex.email_api_key;
         }
-        integrationSettings.saveToDb(db, body, (err, merged) => {
+        const emailProv = require('./lib/email-provider-settings');
+        const mergedKeys = emailProv.mergeProviderKeys(ex, body);
+        const payload = {
+            ...body,
+            email_provider_keys: mergedKeys,
+            email_primary_enabled:
+                body.email_primary_enabled === false ||
+                body.email_primary_enabled === 0 ||
+                body.email_primary_enabled === '0'
+                    ? 0
+                    : 1,
+            email_fallback_enabled:
+                body.email_fallback_enabled === false ||
+                body.email_fallback_enabled === 0 ||
+                body.email_fallback_enabled === '0'
+                    ? 0
+                    : 1,
+            email_smtp_standby_enabled:
+                body.email_smtp_standby_enabled === false ||
+                body.email_smtp_standby_enabled === 0 ||
+                body.email_smtp_standby_enabled === '0'
+                    ? 0
+                    : 1
+        };
+        const synced = emailProv.syncActiveEmailCredentials({ ...ex, ...payload });
+        integrationSettings.saveToDb(db, synced, (err, merged) => {
         if (err) return res.status(500).json({ error: err.message });
         if (body.public_base_url) {
             upsertGlobalSetting('domain', String(body.public_base_url).replace(/^https?:\/\//, ''), () => {});

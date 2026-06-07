@@ -7621,12 +7621,209 @@ function readIntegrationZohoPassNew() {
     return readIntegrationSecretFromFields(['int-zoho-pass-new', 'int-zoho-pass']);
 }
 
+const EMAIL_HTTP_PROVIDERS = ['zeptomail', 'sender', 'brevo', 'resend'];
+
+const EMAIL_PROVIDER_DOCS = {
+    zeptomail: {
+        label: 'Zoho ZeptoMail',
+        tokenLabel: 'Send Mail token',
+        placeholder: 'ZeptoMail → Mail Agents → Send Mail Token',
+        docs:
+            'API: POST https://api.zeptomail.in/v1.1/email · Auth header Zoho-enczapikey TOKEN. ' +
+            'Verify domain seminar.vaidyagogate.org in ZeptoMail. SMTP relay: smtp.zeptomail.in port 587, user emailapikey.'
+    },
+    sender: {
+        label: 'Sender.net',
+        tokenLabel: 'API access token',
+        placeholder: 'Sender.net → Settings → API access tokens',
+        docs: 'API: POST https://api.sender.net/v2/message/send · Authorization: Bearer TOKEN.'
+    },
+    brevo: {
+        label: 'Brevo (Sendinblue)',
+        tokenLabel: 'API key',
+        placeholder: 'Brevo → SMTP & API → API keys',
+        docs: 'API: POST https://api.brevo.com/v3/smtp/email · Header: api-key.'
+    },
+    resend: {
+        label: 'Resend',
+        tokenLabel: 'API key',
+        placeholder: 'Resend → API Keys',
+        docs: 'API: POST https://api.resend.com/emails · Authorization: Bearer TOKEN.'
+    }
+};
+
+function ensureEmailProviderPanels() {
+    const section = document.getElementById('email-delivery-section');
+    if (!section) return;
+    let store = document.getElementById('email-provider-keys-store');
+    if (!store) {
+        store = document.createElement('div');
+        store.id = 'email-provider-keys-store';
+        store.style.display = 'none';
+        section.insertBefore(store, section.children[1] || null);
+    }
+    EMAIL_HTTP_PROVIDERS.forEach((p) => {
+        const docs = EMAIL_PROVIDER_DOCS[p];
+        if (!docs || document.getElementById('email-key-block-' + p)) return;
+        const block = document.createElement('div');
+        block.id = 'email-key-block-' + p;
+        block.className = 'email-key-block';
+        block.dataset.provider = p;
+        block.innerHTML =
+            '<p style="font-size:0.78rem;color:#64748b;margin:0 0 10px;line-height:1.5;">' +
+            docs.docs +
+            '</p>' +
+            '<label style="font-weight:600;">' +
+            docs.label +
+            ' — ' +
+            docs.tokenLabel +
+            '</label>' +
+            '<div id="int-email-key-badge-' +
+            p +
+            '" style="margin:6px 0 8px;padding:8px 12px;border-radius:8px;background:#fff7ed;border:1px solid #fed7aa;font-size:0.88rem;font-weight:600;color:#b45309;">Not saved on server yet</div>' +
+            '<input type="password" id="int-email-key-' +
+            p +
+            '" placeholder="' +
+            docs.placeholder +
+            '" style="width:100%;" autocomplete="off" spellcheck="false">' +
+            '<p id="int-email-key-hint-' +
+            p +
+            '" style="font-size:0.78rem;color:#64748b;margin:6px 0 0;"></p>';
+        store.appendChild(block);
+    });
+}
+
+function mountEmailKeyBlock(provider, panelEl) {
+    const block = document.getElementById('email-key-block-' + provider);
+    const store = document.getElementById('email-provider-keys-store');
+    if (!block || !panelEl || !store) return;
+    if (block.parentElement !== panelEl) panelEl.appendChild(block);
+}
+
+function returnEmailKeyBlocksToStore() {
+    const store = document.getElementById('email-provider-keys-store');
+    if (!store) return;
+    EMAIL_HTTP_PROVIDERS.forEach((p) => {
+        const block = document.getElementById('email-key-block-' + p);
+        if (block && block.parentElement !== store) store.appendChild(block);
+    });
+}
+
+function syncEmailIntegrationPanels() {
+    ensureEmailProviderPanels();
+    returnEmailKeyBlocksToStore();
+
+    const primaryOn = (document.getElementById('int-email-primary-enabled') || {}).checked !== false;
+    const fallbackOn = (document.getElementById('int-email-fallback-enabled') || {}).checked !== false;
+    const smtpOn = (document.getElementById('int-email-smtp-standby-enabled') || {}).checked !== false;
+    const primaryProv = (document.getElementById('int-email-api-provider') || {}).value || 'zeptomail';
+    const fallbackProv = (document.getElementById('int-email-api-fallback-provider') || {}).value || '';
+
+    const primarySelect = document.getElementById('int-email-api-provider');
+    if (primarySelect) primarySelect.disabled = !primaryOn;
+
+    EMAIL_HTTP_PROVIDERS.forEach((p) => {
+        const panel = document.getElementById('email-primary-panel-' + p);
+        if (!panel) return;
+        const show = primaryOn && p === primaryProv;
+        panel.classList.toggle('hidden', !show);
+        if (show) mountEmailKeyBlock(p, panel);
+    });
+
+    const fbSelect = document.getElementById('int-email-api-fallback-provider');
+    if (fbSelect) fbSelect.disabled = !fallbackOn;
+
+    EMAIL_HTTP_PROVIDERS.forEach((p) => {
+        const panel = document.getElementById('email-fallback-panel-' + p);
+        if (!panel) return;
+        panel.querySelectorAll('.email-same-key-note').forEach((n) => n.remove());
+        const show = fallbackOn && fallbackProv && p === fallbackProv;
+        panel.classList.toggle('hidden', !show);
+        if (!show) return;
+        if (primaryOn && primaryProv === fallbackProv) {
+            const note = document.createElement('p');
+            note.className = 'email-same-key-note';
+            note.style.cssText = 'font-size:0.78rem;color:#64748b;margin:0 0 8px;line-height:1.45;';
+            note.textContent =
+                'Same provider as primary — edit the token in the primary section above (one saved token per provider).';
+            panel.appendChild(note);
+            mountEmailKeyBlock(p, document.getElementById('email-primary-panel-' + p) || panel);
+        } else {
+            mountEmailKeyBlock(p, panel);
+        }
+    });
+
+    const smtpPanel = document.getElementById('email-smtp-standby-panel');
+    if (smtpPanel) smtpPanel.style.display = smtpOn ? '' : 'none';
+}
+
+function collectEmailProviderKeys() {
+    const out = {};
+    EMAIL_HTTP_PROVIDERS.forEach((p) => {
+        const el = document.getElementById('int-email-key-' + p);
+        const v = el ? String(el.value || '').trim() : '';
+        if (v && !isIntegrationSecretMask(v)) out[p] = v;
+    });
+    return out;
+}
+
+function readEmailProviderKey(provider) {
+    const el = document.getElementById('int-email-key-' + (provider || ''));
+    const v = el ? String(el.value || '').trim() : '';
+    if (v && !isIntegrationSecretMask(v)) return v;
+    return '';
+}
+
 function readIntegrationEmailApiKeyNew() {
-    return readIntegrationSecretFromFields(['int-email-api-key-new', 'int-email-api-key']);
+    const prov = (document.getElementById('int-email-api-provider') || {}).value || 'zeptomail';
+    return readEmailProviderKey(prov) || readIntegrationSecretFromFields(['int-email-api-key-new', 'int-email-api-key']);
 }
 
 function readIntegrationEmailApiFallbackKeyNew() {
-    return readIntegrationSecretFromFields(['int-email-api-fallback-key-new', 'int-email-api-fallback-key']);
+    const prov = (document.getElementById('int-email-api-fallback-provider') || {}).value || '';
+    if (!prov) return readIntegrationSecretFromFields(['int-email-api-fallback-key-new', 'int-email-api-fallback-key']);
+    return readEmailProviderKey(prov) || readIntegrationSecretFromFields(['int-email-api-fallback-key-new', 'int-email-api-fallback-key']);
+}
+
+function renderEmailProviderKeyBadges(settings) {
+    const saved = (settings && settings.email_provider_keys_saved) || window.__emailProviderKeysSaved || {};
+    window.__emailProviderKeysSaved = saved;
+    EMAIL_HTTP_PROVIDERS.forEach((p) => {
+        const badge = document.getElementById('int-email-key-badge-' + p);
+        const input = document.getElementById('int-email-key-' + p);
+        const hint = document.getElementById('int-email-key-hint-' + p);
+        const docs = EMAIL_PROVIDER_DOCS[p] || {};
+        const isSaved = !!saved[p];
+        if (badge) {
+            if (isSaved) {
+                badge.textContent = '✓ ' + (docs.label || p) + ' token saved on server';
+                badge.style.background = '#ecfdf5';
+                badge.style.borderColor = '#a7f3d0';
+                badge.style.color = '#15803d';
+            } else {
+                badge.textContent = '⚠ ' + (docs.label || p) + ' token not saved yet';
+                badge.style.background = '#fff7ed';
+                badge.style.borderColor = '#fed7aa';
+                badge.style.color = '#b45309';
+            }
+        }
+        if (input) {
+            input.placeholder = isSaved
+                ? 'Leave empty to keep saved token — paste here only to replace'
+                : docs.placeholder || 'Paste API token, then Save';
+        }
+        if (hint) {
+            hint.textContent = isSaved
+                ? 'Saved token stays on the server until you paste a replacement and save.'
+                : docs.docs || '';
+            hint.style.color = isSaved ? '#15803d' : '#64748b';
+        }
+    });
+}
+
+function setIntegrationCheckbox(id, on) {
+    const el = document.getElementById(id);
+    if (el) el.checked = on !== false && on !== 0 && on !== '0';
 }
 
 function readIntegrationWaTokenNew() {
@@ -7685,6 +7882,7 @@ function renderIntegrationSecretStatus(s) {
     window.__integrationZohoPassSaved = !!settings.zoho_pass_saved;
     window.__integrationEmailApiSaved = !!settings.email_api_key_saved;
     window.__integrationWaTokenSaved = waSaved;
+    renderEmailProviderKeyBadges(settings);
 
     const passBadge = document.getElementById('int-zoho-pass-saved-badge');
     if (passBadge) {
@@ -7712,56 +7910,6 @@ function renderIntegrationSecretStatus(s) {
             ? 'Saved password stays on the server until you paste a replacement and save.'
             : 'Optional on Render — use HTTPS email API above instead. For local/paid hosting, use Zoho app password.';
         passHint.style.color = settings.zoho_pass_saved ? '#15803d' : '#64748b';
-    }
-
-    const apiBadge = document.getElementById('int-email-api-key-saved-badge');
-    if (apiBadge) {
-        if (settings.email_api_key_saved) {
-            apiBadge.textContent = '✓ Email API key saved on server';
-            apiBadge.style.background = '#ecfdf5';
-            apiBadge.style.borderColor = '#a7f3d0';
-            apiBadge.style.color = '#15803d';
-        } else {
-            apiBadge.textContent = '⚠ Email API key not saved yet (required on Render free tier)';
-            apiBadge.style.background = '#fff7ed';
-            apiBadge.style.borderColor = '#fed7aa';
-            apiBadge.style.color = '#b45309';
-        }
-    }
-    const apiNew = document.getElementById('int-email-api-key-new');
-    if (apiNew) {
-        apiNew.placeholder = settings.email_api_key_saved
-            ? 'Leave empty to keep saved API key — paste here only to replace it'
-            : 'Paste Brevo / Resend / ZeptoMail API key here, then Save';
-    }
-    const apiHint = document.getElementById('int-email-api-key-hint');
-    if (apiHint) {
-        apiHint.style.color = settings.email_api_key_saved ? '#15803d' : '#64748b';
-    }
-
-    const fbBadge = document.getElementById('int-email-api-fallback-key-saved-badge');
-    if (fbBadge) {
-        if (settings.email_api_fallback_key_saved) {
-            fbBadge.textContent = '✓ Fallback API token saved on server (Sender.net)';
-            fbBadge.style.background = '#ecfdf5';
-            fbBadge.style.borderColor = '#a7f3d0';
-            fbBadge.style.color = '#15803d';
-        } else {
-            fbBadge.textContent = '⚠ Fallback token not saved (Sender.net recommended)';
-            fbBadge.style.background = '#fff7ed';
-            fbBadge.style.borderColor = '#fed7aa';
-            fbBadge.style.color = '#b45309';
-        }
-    }
-    const fbNew = document.getElementById('int-email-api-fallback-key-new');
-    if (fbNew) {
-        fbNew.placeholder = settings.email_api_fallback_key_saved
-            ? 'Leave empty to keep saved fallback token — paste here only to replace'
-            : 'Paste Sender.net API token for automatic fallback when ZeptoMail limit is hit';
-    }
-    const fbHint = document.getElementById('int-email-api-fallback-key-hint');
-    if (fbHint) {
-        fbHint.style.color = settings.email_api_fallback_key_saved ? '#15803d' : '#64748b';
     }
 
     const waBadge = document.getElementById('int-wa-token-saved-badge');
@@ -7796,22 +7944,32 @@ function renderIntegrationSecretStatus(s) {
 function applySavedIntegrationSecrets(data) {
     const settings = (data && data.settings) || data || {};
     const emailStatus = (data && data.email_status) || settings.email_status || {};
+    const keysSaved = settings.email_provider_keys_saved || {};
+    const primaryProv = settings.email_api_provider || 'zeptomail';
+    const fallbackProv = settings.email_api_fallback_provider || 'sender';
+    const primarySaved = !!settings.email_api_key_saved || !!keysSaved[primaryProv];
     const fallbackSaved =
         !!settings.email_api_fallback_key_saved ||
         !!(data && data.email_api_fallback_key_saved) ||
-        !!emailStatus.fallbackConfigured;
+        !!emailStatus.fallbackConfigured ||
+        !!(fallbackProv && keysSaved[fallbackProv]);
+    window.__integrationEmailApiSaved = primarySaved;
     window.__integrationEmailFallbackSaved = fallbackSaved;
     renderIntegrationSecretStatus({
         email_configured:
             !!(data && data.email_configured) ||
             !!settings.email_configured ||
             !!settings.zoho_pass_saved ||
-            !!settings.email_api_key_saved,
+            primarySaved,
         zoho_pass_saved: !!settings.zoho_pass_saved,
-        email_api_key_saved: !!settings.email_api_key_saved,
+        email_api_key_saved: primarySaved,
         email_api_fallback_key_saved: fallbackSaved,
-        email_api_provider: settings.email_api_provider || '',
-        email_api_fallback_provider: settings.email_api_fallback_provider || 'sender',
+        email_api_provider: primaryProv,
+        email_api_fallback_provider: fallbackProv,
+        email_provider_keys_saved: keysSaved,
+        email_primary_enabled: settings.email_primary_enabled,
+        email_fallback_enabled: settings.email_fallback_enabled,
+        email_smtp_standby_enabled: settings.email_smtp_standby_enabled,
         whatsapp_configured: !!(data && data.whatsapp_configured) || !!settings.whatsapp_token_saved,
         whatsapp_token_saved: !!settings.whatsapp_token_saved || !!(data && data.whatsapp_configured)
     });
@@ -7819,6 +7977,7 @@ function applySavedIntegrationSecrets(data) {
 
 async function loadIntegrationSettings() {
     ensureIntegrationPasswordUi();
+    ensureEmailProviderPanels();
     try {
         const res = await fetch('/api/admin/integrations');
         const s = await res.json();
@@ -7838,7 +7997,11 @@ async function loadIntegrationSettings() {
         set('int-zoho-from', s.zoho_from);
         set('int-email-api-provider', s.email_api_provider || 'zeptomail');
         set('int-email-api-fallback-provider', s.email_api_fallback_provider || 'sender');
+        setIntegrationCheckbox('int-email-primary-enabled', s.email_primary_enabled !== false);
+        setIntegrationCheckbox('int-email-fallback-enabled', s.email_fallback_enabled !== false);
+        setIntegrationCheckbox('int-email-smtp-standby-enabled', s.email_smtp_standby_enabled !== false);
         applySavedIntegrationSecrets(s);
+        syncEmailIntegrationPanels();
         set('int-wa-phone-id', s.whatsapp_phone_number_id);
         set('int-wa-waba-id', s.whatsapp_business_account_id);
         set('int-wa-lang', s.whatsapp_template_lang || 'en');
@@ -7909,33 +8072,52 @@ async function loadIntegrationSettings() {
 
 async function saveIntegrationSettings() {
     ensureIntegrationPasswordUi();
+    ensureEmailProviderPanels();
+    syncEmailIntegrationPanels();
     const seminarHost = (document.getElementById('int-seminar-host') || {}).value.trim();
     let publicUrl = (document.getElementById('int-public-base-url') || {}).value.trim();
     if (!publicUrl && seminarHost) publicUrl = 'https://' + seminarHost.replace(/^https?:\/\//, '');
     const newZohoPass = readIntegrationZohoPassNew();
-    const newEmailApiKey = readIntegrationEmailApiKeyNew();
-    const newEmailFallbackKey = readIntegrationEmailApiFallbackKeyNew();
+    const pendingProviderKeys = collectEmailProviderKeys();
     const newWaToken = readIntegrationWaTokenNew();
     const zohoHost = (document.getElementById('int-zoho-host') || {}).value.trim();
     const zohoUser = (document.getElementById('int-zoho-user') || {}).value.trim();
+    const primaryEnabled = (document.getElementById('int-email-primary-enabled') || {}).checked !== false;
+    const fallbackEnabled = (document.getElementById('int-email-fallback-enabled') || {}).checked !== false;
+    const smtpStandbyEnabled = (document.getElementById('int-email-smtp-standby-enabled') || {}).checked !== false;
     const emailApiProvider = (document.getElementById('int-email-api-provider') || {}).value.trim() || 'zeptomail';
     const emailApiFallbackProvider = (document.getElementById('int-email-api-fallback-provider') || {}).value.trim();
     const zohoFrom = (document.getElementById('int-zoho-from') || {}).value.trim();
-    const usingHttpApi = !!emailApiProvider;
-    if ((zohoHost || zohoUser) && !window.__integrationZohoPassSaved && !newZohoPass && !usingHttpApi) {
+    const keysSaved = window.__emailProviderKeysSaved || {};
+    const newEmailApiKey = primaryEnabled ? readIntegrationEmailApiKeyNew() : '';
+    const newEmailFallbackKey =
+        fallbackEnabled && emailApiFallbackProvider ? readIntegrationEmailApiFallbackKeyNew() : '';
+    const usingHttpApi = primaryEnabled && !!emailApiProvider;
+    if ((zohoHost || zohoUser) && smtpStandbyEnabled && !window.__integrationZohoPassSaved && !newZohoPass && !usingHttpApi) {
         setAdminSettingsSaveMsg(
-            'Enter your Zoho app-specific password in the field above, or choose an HTTPS email API provider.',
+            'Enter your Zoho app-specific password in the SMTP standby section, or enable HTTPS email above.',
             true
         );
         return;
     }
-    if (usingHttpApi && !window.__integrationEmailApiSaved && !newEmailApiKey) {
-        setAdminSettingsSaveMsg('Paste your ZeptoMail Send Mail token (primary), then Save again.', true);
+    if (usingHttpApi && !keysSaved[emailApiProvider] && !pendingProviderKeys[emailApiProvider]) {
+        const label = (EMAIL_PROVIDER_DOCS[emailApiProvider] || {}).label || emailApiProvider;
+        setAdminSettingsSaveMsg('Paste the ' + label + ' token for primary, then Save again.', true);
+        return;
+    }
+    if (
+        fallbackEnabled &&
+        emailApiFallbackProvider &&
+        !keysSaved[emailApiFallbackProvider] &&
+        !pendingProviderKeys[emailApiFallbackProvider]
+    ) {
+        const label = (EMAIL_PROVIDER_DOCS[emailApiFallbackProvider] || {}).label || emailApiFallbackProvider;
+        setAdminSettingsSaveMsg('Paste the ' + label + ' token for fallback, then Save again.', true);
         return;
     }
     if (usingHttpApi && !zohoFrom && !zohoUser) {
         setAdminSettingsSaveMsg(
-            'Set From to noreply@seminar.vaidyagogate.org (verified in ZeptoMail).',
+            'Set From to noreply@seminar.vaidyagogate.org (verified in ZeptoMail / Sender.net).',
             true
         );
         return;
@@ -7951,8 +8133,12 @@ async function saveIntegrationSettings() {
         zoho_port: (document.getElementById('int-zoho-port') || {}).value.trim(),
         zoho_user: zohoUser,
         zoho_from: zohoFrom,
-        email_api_provider: emailApiProvider,
-        email_api_fallback_provider: emailApiFallbackProvider || 'sender',
+        email_api_provider: primaryEnabled ? emailApiProvider : '',
+        email_api_fallback_provider: fallbackEnabled ? emailApiFallbackProvider || '' : '',
+        email_primary_enabled: primaryEnabled,
+        email_fallback_enabled: fallbackEnabled,
+        email_smtp_standby_enabled: smtpStandbyEnabled,
+        email_provider_keys: pendingProviderKeys,
         whatsapp_phone_number_id: (document.getElementById('int-wa-phone-id') || {}).value.trim(),
         whatsapp_business_account_id: (document.getElementById('int-wa-waba-id') || {}).value.trim(),
         whatsapp_verify_token: (document.getElementById('int-wa-verify') || {}).value,
@@ -7977,10 +8163,10 @@ async function saveIntegrationSettings() {
         }
         const passNewEl = document.getElementById('int-zoho-pass-new');
         if (passNewEl) passNewEl.value = '';
-        const apiNewEl = document.getElementById('int-email-api-key-new');
-        if (apiNewEl) apiNewEl.value = '';
-        const apiFbEl = document.getElementById('int-email-api-fallback-key-new');
-        if (apiFbEl) apiFbEl.value = '';
+        EMAIL_HTTP_PROVIDERS.forEach((p) => {
+            const el = document.getElementById('int-email-key-' + p);
+            if (el) el.value = '';
+        });
         const waNewEl = document.getElementById('int-wa-token-new');
         if (waNewEl) waNewEl.value = '';
         applySavedIntegrationSecrets(data);
@@ -8008,13 +8194,23 @@ async function saveIntegrationSettings() {
 }
 
 function integrationFormSmtpPayload() {
+    const primaryEnabled = (document.getElementById('int-email-primary-enabled') || {}).checked !== false;
+    const fallbackEnabled = (document.getElementById('int-email-fallback-enabled') || {}).checked !== false;
     const payload = {
         zoho_host: (document.getElementById('int-zoho-host') || {}).value.trim(),
         zoho_port: (document.getElementById('int-zoho-port') || {}).value.trim(),
         zoho_user: (document.getElementById('int-zoho-user') || {}).value.trim(),
         zoho_from: (document.getElementById('int-zoho-from') || {}).value.trim(),
-        email_api_provider: (document.getElementById('int-email-api-provider') || {}).value.trim() || 'zeptomail',
-        email_api_fallback_provider: (document.getElementById('int-email-api-fallback-provider') || {}).value.trim()
+        email_api_provider: primaryEnabled
+            ? (document.getElementById('int-email-api-provider') || {}).value.trim() || 'zeptomail'
+            : '',
+        email_api_fallback_provider: fallbackEnabled
+            ? (document.getElementById('int-email-api-fallback-provider') || {}).value.trim()
+            : '',
+        email_primary_enabled: primaryEnabled,
+        email_fallback_enabled: fallbackEnabled,
+        email_smtp_standby_enabled: (document.getElementById('int-email-smtp-standby-enabled') || {}).checked !== false,
+        email_provider_keys: collectEmailProviderKeys()
     };
     const pendingKey = readIntegrationEmailApiKeyNew();
     const pendingFallback = readIntegrationEmailApiFallbackKeyNew();
@@ -8027,33 +8223,40 @@ function integrationFormSmtpPayload() {
 
 async function testIntegrationEmail() {
     ensureIntegrationPasswordUi();
+    ensureEmailProviderPanels();
+    syncEmailIntegrationPanels();
     const to = (document.getElementById('int-test-email') || {}).value.trim();
     if (!to) return alert('Enter test email address');
     const smtp = integrationFormSmtpPayload();
     const usingHttp = !!smtp.email_api_provider;
-    if (!usingHttp && (!smtp.zoho_host || !smtp.zoho_user)) {
-        return alert('Fill Zoho Host and User, or choose an HTTPS email API provider above.');
+    const smtpStandby = smtp.email_smtp_standby_enabled !== false;
+    if (!usingHttp && smtpStandby && (!smtp.zoho_host || !smtp.zoho_user)) {
+        return alert('Fill Zoho Host and User in SMTP standby, or enable HTTPS email above.');
     }
     if (usingHttp && !smtp.zoho_from && !smtp.zoho_user) {
-        return alert('Set From to noreply@seminar.vaidyagogate.org (verified in ZeptoMail).');
+        return alert('Set From to noreply@seminar.vaidyagogate.org (verified sender).');
     }
     const pendingPass = readIntegrationZohoPassNew();
-    const pendingApiKey = readIntegrationEmailApiKeyNew();
-    const pendingFallback = readIntegrationEmailApiFallbackKeyNew();
-    if (pendingPass || pendingApiKey || pendingFallback) {
+    const pendingKeys = collectEmailProviderKeys();
+    const hasPendingKeys = Object.keys(pendingKeys).length > 0;
+    if (pendingPass || hasPendingKeys) {
         const saveFirst = confirm(
             'Save the email settings before testing? Click OK to save, then the test will run.'
         );
         if (saveFirst) await saveIntegrationSettings();
     }
-    if (!usingHttp && !window.__integrationZohoPassSaved) {
+    if (!usingHttp && smtpStandby && !window.__integrationZohoPassSaved) {
         return alert(
-            'SMTP password is not saved yet.\n\n1. Paste your Zoho app-specific password\n2. Click Save API keys & messaging\n3. Wait for the green badge\n4. Then click Test email\n\nOn Render free hosting, use HTTPS email API instead (Brevo / Resend / ZeptoMail).'
+            'SMTP password is not saved yet.\n\n1. Paste your Zoho app-specific password\n2. Click Save API keys & messaging\n3. Wait for the green badge\n4. Then click Test email\n\nOn Render free hosting, use HTTPS email instead.'
         );
     }
     if (usingHttp && !window.__integrationEmailApiSaved) {
+        const prov = smtp.email_api_provider || 'zeptomail';
+        const label = (EMAIL_PROVIDER_DOCS[prov] || {}).label || prov;
         return alert(
-            'Email API key is not saved yet.\n\n1. Choose provider (Brevo recommended)\n2. Paste API key\n3. Set From = care@vaidyagogate.org\n4. Save, then Test email'
+            'Primary email token is not saved yet.\n\n1. Choose ' +
+                label +
+                '\n2. Paste token\n3. Set From address\n4. Save, then Test email'
         );
     }
     const res = await fetch('/api/admin/integrations/test-email', {
