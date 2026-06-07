@@ -626,6 +626,9 @@ function switchTab(tabId) {
     if (tabId === 'tab-site-cms' && typeof loadAdminSiteCms === 'function') {
         loadAdminSiteCms();
     }
+    if (tabId === 'tab-case-mgmt' && typeof initAdminCaseMgmtTab === 'function') {
+        initAdminCaseMgmtTab();
+    }
     if (tabId === 'tab-book-sales' && typeof loadBookSalesAdmin === 'function') {
         loadBookSalesAdmin();
     }
@@ -1197,6 +1200,25 @@ async function saveDoctorAccessFromList(userId) {
     alert('Doctor category updated (portal modules unchanged — use View for custom modules).');
 }
 
+const DOCTOR_MODULE_TAB_DEFS = [
+    ['tab-dashboard', 'Dashboard'],
+    ['tab-profile', 'My profile'],
+    ['tab-seminars', 'Available seminars (registration form)'],
+    ['tab-applications', 'Track seminar applications'],
+    ['tab-abstract', 'Case presentation'],
+    ['tab-case-track', 'Track case applications'],
+    ['tab-volunteer', 'Volunteer'],
+    ['tab-feedback', 'Seminar feedback'],
+    ['tab-support', 'Support tickets'],
+    ['tab-orders', 'Orders'],
+    ['tab-receipts', 'Receipts'],
+    ['tab-payments', 'Payments'],
+    ['tab-books', 'Book orders (Agnikarma / Viddhakarma)'],
+    ['tab-ticket', 'Participant tickets'],
+    ['tab-certificate', 'Certificates'],
+    ['tab-reset-pwd', 'Change password']
+];
+
 function adminUserHasCustomDoctorModules(user) {
     const raw = user && user.doctor_modules;
     if (raw == null || raw === '') return false;
@@ -1387,25 +1409,6 @@ const DEFAULT_VOLUNTEER_DOCTOR_MODULES = {
 function applyVolunteerDoctorModuleCheckboxes() {
     onAdminDoctorCategoryChange();
 }
-
-const DOCTOR_MODULE_TAB_DEFS = [
-    ['tab-dashboard', 'Dashboard'],
-    ['tab-profile', 'My profile'],
-    ['tab-seminars', 'Available seminars (registration form)'],
-    ['tab-applications', 'Track seminar applications'],
-    ['tab-abstract', 'Case presentation'],
-    ['tab-case-track', 'Track case applications'],
-    ['tab-volunteer', 'Volunteer'],
-    ['tab-feedback', 'Seminar feedback'],
-    ['tab-support', 'Support tickets'],
-    ['tab-orders', 'Orders'],
-    ['tab-receipts', 'Receipts'],
-    ['tab-payments', 'Payments'],
-    ['tab-books', 'Book orders (Agnikarma / Viddhakarma)'],
-    ['tab-ticket', 'Participant tickets'],
-    ['tab-certificate', 'Certificates'],
-    ['tab-reset-pwd', 'Change password']
-];
 
 function parseAdminModulesObject(str) {
     if (str == null || (typeof str === 'string' && !String(str).trim())) return {};
@@ -4274,7 +4277,9 @@ function addAdminCaseFieldRow() {
         required: false
     });
     renderCaseProgramFieldsEditor(current);
+    setCaseProgMsg('Field added — click Save program to apply.', true);
 }
+window.addAdminCaseFieldRow = addAdminCaseFieldRow;
 
 function removeAdminCaseFieldRow(idx) {
     const current = collectCaseProgramFieldsFromDom();
@@ -4288,6 +4293,8 @@ function clearAllAdminCaseFields() {
     renderCaseProgramFieldsEditor([]);
     setCaseProgMsg('All fields cleared — save the program to apply.', true);
 }
+window.removeAdminCaseFieldRow = removeAdminCaseFieldRow;
+window.clearAllAdminCaseFields = clearAllAdminCaseFields;
 
 function setCaseProgMsg(text, ok) {
     const el = document.getElementById('case-prog-msg');
@@ -13050,40 +13057,101 @@ async function loadAdminSiteCms() {
 async function loadPortalAuthAdminForm() {
     const adm = getStoredAdminUser();
     const eff = document.getElementById('pa-effective-hint');
-    if (!adm || !adm.id) {
-        if (eff) eff.textContent = '';
-        return;
+    if (adm && adm.id) {
+        try {
+            const res = await fetch(`/api/admin/portal-auth-config?actingAdminId=${encodeURIComponent(adm.id)}`);
+            const d = await res.json();
+            if (d.success && d.config) {
+                const setChk = (id, val) => {
+                    const el = document.getElementById(id);
+                    if (el) el.checked = !!val;
+                };
+                setChk('pa-show-signup', d.config.showSignup);
+                setChk('pa-show-login', d.config.showLogin);
+                setChk('pa-req-signup-otp', d.config.requireSignupOtp);
+                setChk('pa-req-login-otp', d.config.requireLoginOtp);
+                setChk('pa-req-email-verify', d.config.requireEmailVerification);
+                setChk('pa-req-admin-sensitive-otp', d.config.requireAdminOtpForSensitive);
+                setChk('pa-req-behalf-applicant-otp', d.config.requireBehalfApplicantOtp !== false);
+                __requireBehalfApplicantOtp = d.config.requireBehalfApplicantOtp !== false;
+                window.__adminEnabledPages = mergeAdminEnabledPagesPolicy(d.config.adminEnabledPages || {});
+                window.__websiteMenuPages = d.config.websiteMenuPages || {};
+                window.__doctorPortalModulesGlobalRegular = d.config.doctorPortalModulesRegular || {};
+                window.__doctorPortalModulesGlobalVolunteer = d.config.doctorPortalModulesVolunteer || {};
+                if (eff) {
+                    eff.textContent = `Effective signup OTP: ${d.signupOtpEffective ? 'on' : 'off'} · Effective login OTP: ${d.loginOtpEffective ? 'on' : 'off'} (environment variables can still override).`;
+                }
+            } else if (eff) {
+                eff.textContent = '';
+            }
+        } catch (_) {
+            if (eff) eff.textContent = '';
+        }
+    } else if (eff) {
+        eff.textContent = '';
+    }
+    renderDoctorPortalModulesCheckboxes();
+    renderAdminGlobalPagesCheckboxes();
+    renderWebsiteMenuPagesCheckboxes();
+}
+
+async function saveDoctorPortalModulesAdminConfig() {
+    const adm = getStoredAdminUser();
+    const msg = document.getElementById('doctor-portal-modules-save-msg');
+    if (!adm || !adm.id) return alert('Sign in as admin first.');
+    let base = {};
+    try {
+        const loadRes = await fetch(`/api/admin/portal-auth-config?actingAdminId=${encodeURIComponent(adm.id)}`);
+        const loadData = await loadRes.json();
+        if (loadData.success && loadData.config) base = loadData.config;
+    } catch (_) {}
+    const doctorPortalModulesRegular = {};
+    document.querySelectorAll('#doctor-portal-modules-regular input[data-doctor-global-mod]').forEach((inp) => {
+        const id = inp.getAttribute('data-doctor-global-mod');
+        if (id && inp.checked) doctorPortalModulesRegular[id] = true;
+    });
+    const doctorPortalModulesVolunteer = {};
+    document.querySelectorAll('#doctor-portal-modules-volunteer input[data-doctor-global-mod]').forEach((inp) => {
+        const id = inp.getAttribute('data-doctor-global-mod');
+        if (id && inp.checked) doctorPortalModulesVolunteer[id] = true;
+    });
+    const config = Object.assign({}, base, {
+        doctorPortalModulesRegular,
+        doctorPortalModulesVolunteer
+    });
+    if (msg) {
+        msg.style.color = '#475569';
+        msg.textContent = 'Saving…';
     }
     try {
-        const res = await fetch(`/api/admin/portal-auth-config?actingAdminId=${encodeURIComponent(adm.id)}`);
-        const d = await res.json();
-        if (!d.success || !d.config) return;
-        const setChk = (id, val) => {
-            const el = document.getElementById(id);
-            if (el) el.checked = !!val;
-        };
-        setChk('pa-show-signup', d.config.showSignup);
-        setChk('pa-show-login', d.config.showLogin);
-        setChk('pa-req-signup-otp', d.config.requireSignupOtp);
-        setChk('pa-req-login-otp', d.config.requireLoginOtp);
-        setChk('pa-req-email-verify', d.config.requireEmailVerification);
-        setChk('pa-req-admin-sensitive-otp', d.config.requireAdminOtpForSensitive);
-        setChk('pa-req-behalf-applicant-otp', d.config.requireBehalfApplicantOtp !== false);
-        __requireBehalfApplicantOtp = d.config.requireBehalfApplicantOtp !== false;
-        window.__adminEnabledPages = mergeAdminEnabledPagesPolicy(d.config.adminEnabledPages || {});
-        window.__websiteMenuPages = d.config.websiteMenuPages || {};
-        window.__doctorPortalModulesGlobalRegular = d.config.doctorPortalModulesRegular || {};
-        window.__doctorPortalModulesGlobalVolunteer = d.config.doctorPortalModulesVolunteer || {};
-        renderAdminGlobalPagesCheckboxes();
-        renderWebsiteMenuPagesCheckboxes();
+        const res = await fetch('/api/admin/portal-auth-config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: adm.id, config })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            if (msg) {
+                msg.style.color = '#b91c1c';
+                msg.textContent = (data && data.error) || 'Save failed.';
+            }
+            return;
+        }
+        window.__doctorPortalModulesGlobalRegular = doctorPortalModulesRegular;
+        window.__doctorPortalModulesGlobalVolunteer = doctorPortalModulesVolunteer;
         renderDoctorPortalModulesCheckboxes();
-        if (eff) {
-            eff.textContent = `Effective signup OTP: ${d.signupOtpEffective ? 'on' : 'off'} · Effective login OTP: ${d.loginOtpEffective ? 'on' : 'off'} (environment variables can still override).`;
+        if (msg) {
+            msg.style.color = '#15803d';
+            msg.textContent = 'Doctor portal modules saved.';
         }
     } catch (_) {
-        if (eff) eff.textContent = '';
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = 'Network error.';
+        }
     }
 }
+window.saveDoctorPortalModulesAdminConfig = saveDoctorPortalModulesAdminConfig;
 
 function renderAdminGlobalPagesCheckboxes() {
     const wrap = document.getElementById('admin-global-pages-checkboxes');
@@ -13116,30 +13184,39 @@ function renderDoctorPortalModulesCheckboxes() {
     const volWrap = document.getElementById('doctor-portal-modules-volunteer');
     const card = document.getElementById('doctor-portal-modules-policy-card');
     if (!regWrap || !volWrap) return;
+    const defs = Array.isArray(DOCTOR_MODULE_TAB_DEFS) ? DOCTOR_MODULE_TAB_DEFS : [];
+    if (!defs.length) {
+        regWrap.innerHTML = '<p style="color:#b91c1c;font-size:0.85rem;margin:0;">Could not load module list. Hard-refresh the admin page (Ctrl+F5).</p>';
+        volWrap.innerHTML = '';
+        return;
+    }
     const regular = window.__doctorPortalModulesGlobalRegular || {};
     const volunteer = window.__doctorPortalModulesGlobalVolunteer || {};
     const renderGroup = (wrap, pages) => {
         const keys = Object.keys(pages || {});
         const restrict = keys.length && keys.some((k) => pages[k] === true);
-        wrap.innerHTML = DOCTOR_MODULE_TAB_DEFS.map(([id, title]) => {
-            const checked = !restrict || pages[id] === true;
-            return (
-                '<label style="display:flex;align-items:center;gap:8px;font-size:0.88rem;cursor:pointer;">' +
-                '<input type="checkbox" data-doctor-global-mod="' +
-                id +
-                '" ' +
-                (checked ? 'checked' : '') +
-                '>' +
-                '<span>' +
-                title +
-                '</span></label>'
-            );
-        }).join('');
+        wrap.innerHTML = defs
+            .map(([id, title]) => {
+                const checked = !restrict || pages[id] === true;
+                return (
+                    '<label style="display:flex;align-items:center;gap:8px;font-size:0.88rem;cursor:pointer;">' +
+                    '<input type="checkbox" data-doctor-global-mod="' +
+                    id +
+                    '" ' +
+                    (checked ? 'checked' : '') +
+                    '>' +
+                    '<span>' +
+                    title +
+                    '</span></label>'
+                );
+            })
+            .join('');
     };
     renderGroup(regWrap, regular);
     renderGroup(volWrap, volunteer);
     if (card) card.style.display = '';
 }
+window.renderDoctorPortalModulesCheckboxes = renderDoctorPortalModulesCheckboxes;
 
 function renderWebsiteMenuPagesCheckboxes() {
     const wrap = document.getElementById('website-menu-pages-checkboxes');
