@@ -94,6 +94,7 @@ const { filterConfirmedRows } = require('./lib/confirmed-participants');
 const publicParticipantList = require('./lib/public-participant-list');
 const adminLiveEdit = require('./lib/admin-live-edit');
 const adminComposeMail = require('./lib/admin-compose-mail');
+const adminMailThreads = require('./lib/admin-mail-threads');
 const systemHealth = require('./lib/system-health');
 const systemHealthAi = require('./lib/system-health-ai');
 const {
@@ -1095,7 +1096,9 @@ function ensurePortalSchema(next) {
                                             ignoreSchemaMigrationErr(h7wl);
                                         });
                                             ticketScanEvents.ensureTicketScanEventsTable(db, () => {
-                                                scannerIdCapture.ensureSchema(db, () => {});
+                                                scannerIdCapture.ensureSchema(db, () => {
+                                                    adminMailThreads.ensureSchema(db, () => {});
+                                                });
                                             });
                                         db.run(`ALTER TABLE tickets ADD COLUMN ticket_id_string TEXT`, (e2) => {
                                             ignoreSchemaMigrationErr(e2);
@@ -11609,7 +11612,7 @@ app.get('/api/admin/email/recipient-count', (req, res) => {
 });
 
 app.post('/api/admin/email/send', (req, res) => {
-    const { actingAdminId, to, name, subject, body } = req.body || {};
+    const { actingAdminId, to, name, subject, body, trackThread } = req.body || {};
     const aid = parseInt(actingAdminId, 10);
     if (!Number.isInteger(aid) || aid < 1) return res.status(400).json({ error: 'actingAdminId is required' });
     assertAdminPortalActor(aid, async (e) => {
@@ -11622,12 +11625,35 @@ app.post('/api/admin/email/send', (req, res) => {
             [aid],
             async (eStaff, staffRow) => {
                 if (eStaff) return res.status(500).json({ error: eStaff.message });
+                const fromDisplay = staffDisplay.formatStaffFromDisplay(staffRow);
+                const useThread = trackThread !== false && trackThread !== 0 && trackThread !== '0';
+                if (useThread) {
+                    adminMailThreads.sendOutbound(
+                        db,
+                        { to, name, subject, body, fromDisplay, createdBy: aid },
+                        (err, out) => {
+                            if (err) return res.status(400).json({ error: err.message });
+                            setImmediate(() => {
+                                notifEngine.drainNotificationQueue(db, 6).catch(() => {});
+                            });
+                            res.json({
+                                success: true,
+                                message:
+                                    'Email queued with reply tracking. Participant replies appear under Conversations below.',
+                                queued: true,
+                                threadId: out.threadId,
+                                refToken: out.refToken
+                            });
+                        }
+                    );
+                    return;
+                }
                 const result = await adminComposeMail.sendSingleMailReliable(db, {
                     to,
                     name,
                     subject,
                     body,
-                    fromDisplay: staffDisplay.formatStaffFromDisplay(staffRow)
+                    fromDisplay
                 });
                 if (!result.ok) {
                     return res.status(result.skipped ? 503 : 500).json({ error: result.error || 'Send failed', hint: result.hint });
@@ -11638,8 +11664,70 @@ app.post('/api/admin/email/send', (req, res) => {
     });
 });
 
+app.get('/api/admin/mail/inbound-status', (req, res) => {
+    res.json(adminMailThreads.inboundStatus());
+});
+
+app.get('/api/admin/mail/threads', (req, res) => {
+    const aid = parseInt(req.query.actingAdminId, 10);
+    if (!Number.isInteger(aid) || aid < 1) return res.status(400).json({ error: 'actingAdminId is required' });
+    assertAdminPortalActor(aid, (e) => {
+        if (e && e.message === 'FORBIDDEN') return res.status(403).json({ error: 'Administrator access required' });
+        if (e) return res.status(500).json({ error: e.message });
+        adminMailThreads.listThreads(db, { q: req.query.q, limit: req.query.limit }, (err, rows) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ success: true, threads: rows || [] });
+        });
+    });
+});
+
+app.get('/api/admin/mail/threads/:id', (req, res) => {
+    const aid = parseInt(req.query.actingAdminId, 10);
+    const tid = parseInt(req.params.id, 10);
+    if (!Number.isInteger(aid) || aid < 1) return res.status(400).json({ error: 'actingAdminId is required' });
+    assertAdminPortalActor(aid, (e) => {
+        if (e && e.message === 'FORBIDDEN') return res.status(403).json({ error: 'Administrator access required' });
+        if (e) return res.status(500).json({ error: e.message });
+        adminMailThreads.getThread(db, tid, (err, data) => {
+            if (err) return res.status(err.message === 'Thread not found' ? 404 : 500).json({ error: err.message });
+            res.json({ success: true, ...data });
+        });
+    });
+});
+
+app.post('/api/admin/mail/threads/:id/reply', (req, res) => {
+    const aid = parseInt(req.body && req.body.actingAdminId, 10);
+    const tid = parseInt(req.params.id, 10);
+    const body = req.body && req.body.body;
+    if (!Number.isInteger(aid) || aid < 1) return res.status(400).json({ error: 'actingAdminId is required' });
+    assertAdminPortalActor(aid, (e) => {
+        if (e && e.message === 'FORBIDDEN') return res.status(403).json({ error: 'Administrator access required' });
+        if (e) return res.status(500).json({ error: e.message });
+        const staffDisplay = require('./lib/staff-display-name');
+        db.get(`SELECT id, first_name, middle_name, last_name FROM users WHERE id = ?`, [aid], (eStaff, staffRow) => {
+            if (eStaff) return res.status(500).json({ error: eStaff.message });
+            adminMailThreads.sendThreadReply(
+                db,
+                {
+                    threadId: tid,
+                    body,
+                    authorUserId: aid,
+                    fromDisplay: staffDisplay.formatStaffFromDisplay(staffRow)
+                },
+                (err, out) => {
+                    if (err) return res.status(400).json({ error: err.message });
+                    setImmediate(() => {
+                        notifEngine.drainNotificationQueue(db, 6).catch(() => {});
+                    });
+                    res.json({ success: true, message: 'Reply queued.', ...out });
+                }
+            );
+        });
+    });
+});
+
 app.post('/api/admin/email/bulk', (req, res) => {
-    const { actingAdminId, audience, seminarId, userIds, emails, subject, body } = req.body || {};
+    const { actingAdminId, audience, seminarId, userIds, emails, subject, body, trackThread } = req.body || {};
     const aid = parseInt(actingAdminId, 10);
     if (!Number.isInteger(aid) || aid < 1) return res.status(400).json({ error: 'actingAdminId is required' });
     assertAdminPortalActor(aid, (e) => {
@@ -11665,6 +11753,36 @@ app.post('/api/admin/email/bulk', (req, res) => {
                     [aid],
                     (eStaff, staffRow) => {
                         if (eStaff) return res.status(500).json({ error: eStaff.message });
+                        const fromDisplay = staffDisplay.formatStaffFromDisplay(staffRow);
+                        const useThread = trackThread !== false && trackThread !== 0 && trackThread !== '0';
+                        const sid = seminarId != null ? parseInt(seminarId, 10) : null;
+                        if (useThread) {
+                            adminMailThreads.sendBulkWithThreads(
+                                db,
+                                {
+                                    recipients,
+                                    subject,
+                                    body,
+                                    fromDisplay,
+                                    createdBy: aid,
+                                    seminarId: Number.isInteger(sid) ? sid : null
+                                },
+                                (err2, out) => {
+                                    if (err2) return res.status(500).json({ error: err2.message });
+                                    res.json({
+                                        success: true,
+                                        threads: out.threads,
+                                        failed: out.failed,
+                                        total: out.total,
+                                        message:
+                                            'Queued ' +
+                                            out.threads +
+                                            ' conversation(s). Each recipient can reply by email; replies appear under Conversations.'
+                                    });
+                                }
+                            );
+                            return;
+                        }
                         adminComposeMail.sendBulkMail(
                             db,
                             {

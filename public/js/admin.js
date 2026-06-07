@@ -10553,6 +10553,152 @@ async function sendContactInquiryEmail() {
 async function initAdminEmailComposeTab() {
     await fillAdminSeminarSelect('mail-bulk-seminar', false);
     onMailBulkAudienceChange();
+    loadAdminMailInboundStatus();
+    loadAdminMailThreads();
+}
+
+async function loadAdminMailInboundStatus() {
+    const st = document.getElementById('mail-inbound-status');
+    const wh = document.getElementById('mail-inbound-webhook-url');
+    if (wh) {
+        const base = (window.__publicBaseUrl || 'https://seminar.vaidyagogate.org').replace(/\/$/, '');
+        wh.textContent = base + '/api/webhooks/mailparser';
+    }
+    try {
+        const res = await fetch('/api/admin/mail/inbound-status');
+        const data = await res.json();
+        if (st) {
+            st.style.color = data.configured ? '#15803d' : '#b45309';
+            st.textContent = data.configured ? '✓ ' + data.hint : '⚠ ' + (data.hint || 'Not configured');
+        }
+    } catch (_) {
+        if (st) st.textContent = 'Could not load inbound status.';
+    }
+}
+
+let __adminMailThreadId = null;
+
+async function loadAdminMailThreads() {
+    const admin = getStoredAdminUser();
+    const listEl = document.getElementById('mail-thread-list');
+    if (!admin?.id || !listEl) return;
+    const q = String((document.getElementById('mail-thread-search') || {}).value || '').trim();
+    listEl.innerHTML = '<p style="padding:12px;color:#64748b;">Loading…</p>';
+    try {
+        let url = '/api/admin/mail/threads?actingAdminId=' + encodeURIComponent(admin.id);
+        if (q) url += '&q=' + encodeURIComponent(q);
+        const res = await fetch(url);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed');
+        const rows = data.threads || [];
+        if (!rows.length) {
+            listEl.innerHTML = '<p style="padding:12px;color:#64748b;">No conversations yet. Send email with reply tracking enabled.</p>';
+            return;
+        }
+        listEl.innerHTML = rows
+            .map((t) => {
+                const active = __adminMailThreadId === t.id ? 'background:#ecfdf5;border-color:#6ee7b7;' : '';
+                const who = escAdmin(t.participant_name || t.participant_email || '—');
+                const prev = escAdmin(String(t.last_preview || '').slice(0, 80));
+                return (
+                    '<button type="button" onclick="openAdminMailThread(' +
+                    t.id +
+                    ')" style="display:block;width:100%;text-align:left;padding:10px 12px;border:none;border-bottom:1px solid #e2e8f0;cursor:pointer;' +
+                    active +
+                    '">' +
+                    '<strong style="font-size:0.88rem;">' +
+                    who +
+                    '</strong><br><span style="font-size:0.78rem;color:#64748b;">' +
+                    escAdmin(t.subject) +
+                    '</span><br><span style="font-size:0.76rem;color:#94a3b8;">' +
+                    prev +
+                    '</span></button>'
+                );
+            })
+            .join('');
+        if (__adminMailThreadId) openAdminMailThread(__adminMailThreadId);
+    } catch (e) {
+        listEl.innerHTML = '<p style="padding:12px;color:#b91c1c;">' + escAdmin(e.message || 'Error') + '</p>';
+    }
+}
+
+async function openAdminMailThread(threadId) {
+    const admin = getStoredAdminUser();
+    const panel = document.getElementById('mail-thread-detail');
+    if (!admin?.id || !panel) return;
+    __adminMailThreadId = threadId;
+    panel.innerHTML = '<p style="color:#64748b;">Loading…</p>';
+    try {
+        const res = await fetch(
+            '/api/admin/mail/threads/' + threadId + '?actingAdminId=' + encodeURIComponent(admin.id)
+        );
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed');
+        const t = data.thread || {};
+        const msgs = data.messages || [];
+        let html =
+            '<p><strong>' +
+            escAdmin(t.participant_name || t.participant_email) +
+            '</strong> · <code>' +
+            escAdmin(t.participant_email) +
+            '</code><br><strong>Subject:</strong> ' +
+            escAdmin(t.subject) +
+            '</p><div style="max-height:260px;overflow-y:auto;margin:12px 0;padding:8px;background:#f8fafc;border-radius:8px;">';
+        if (!msgs.length) html += '<p class="muted">No messages yet.</p>';
+        else {
+            msgs.forEach((m) => {
+                const mine = m.direction === 'admin';
+                const tag = m.source === 'email' ? ' <span style="font-size:0.72rem;color:#0369a1;">(email)</span>' : '';
+                html +=
+                    '<div style="margin:8px 0;padding:8px 10px;border-radius:8px;' +
+                    (mine ? 'background:#ecfdf5;margin-left:12%;' : 'background:#fff;border:1px solid #e2e8f0;margin-right:12%;') +
+                    '"><div style="font-size:0.72rem;color:#64748b;margin-bottom:4px;">' +
+                    (mine ? 'Admin' : 'Participant') +
+                    tag +
+                    '</div>' +
+                    escAdmin(m.body).replace(/\n/g, '<br>') +
+                    '</div>';
+            });
+        }
+        html +=
+            '</div><label>Reply</label><textarea id="mail-thread-reply-body" rows="4" style="width:100%;padding:8px;margin:8px 0;"></textarea>' +
+            '<button type="button" class="btn-primary" onclick="sendAdminMailThreadReply(' +
+            threadId +
+            ')">Send reply</button>' +
+            '<p id="mail-thread-reply-msg" style="font-size:0.85rem;margin-top:8px;"></p>';
+        panel.innerHTML = html;
+        loadAdminMailThreads();
+    } catch (e) {
+        panel.innerHTML = '<p style="color:#b91c1c;">' + escAdmin(e.message || 'Error') + '</p>';
+    }
+}
+
+async function sendAdminMailThreadReply(threadId) {
+    const admin = getStoredAdminUser();
+    const body = String((document.getElementById('mail-thread-reply-body') || {}).value || '').trim();
+    const msgEl = document.getElementById('mail-thread-reply-msg');
+    if (!admin?.id) return alert('Admin session required');
+    if (!body) return alert('Enter a reply message.');
+    if (msgEl) msgEl.textContent = 'Sending…';
+    try {
+        const res = await fetch('/api/admin/mail/threads/' + threadId + '/reply', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: admin.id, body })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Send failed');
+        if (msgEl) {
+            msgEl.style.color = '#15803d';
+            msgEl.textContent = data.message || 'Reply queued.';
+        }
+        openAdminMailThread(threadId);
+    } catch (e) {
+        if (msgEl) {
+            msgEl.style.color = '#b91c1c';
+            msgEl.textContent = e.message || 'Failed';
+        }
+    }
 }
 
 function onMailBulkAudienceChange() {
@@ -10602,7 +10748,13 @@ async function sendAdminSingleEmail() {
         const res = await fetch('/api/admin/email/send', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ actingAdminId: admin.id, to, subject, body })
+            body: JSON.stringify({
+                actingAdminId: admin.id,
+                to,
+                subject,
+                body,
+                trackThread: (document.getElementById('mail-single-track-thread') || {}).checked !== false
+            })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || data.hint || 'Send failed');
@@ -10613,6 +10765,10 @@ async function sendAdminSingleEmail() {
                 (data.queued
                     ? 'Email queued — delivery usually within a minute. Check Notifications → Delivery logs.'
                     : 'Sent.');
+        }
+        if (data.threadId) {
+            __adminMailThreadId = data.threadId;
+            loadAdminMailThreads();
         }
     } catch (e) {
         if (msgEl) {
@@ -10644,7 +10800,8 @@ async function sendAdminBulkEmail() {
                 seminarId: seminarId ? parseInt(seminarId, 10) : null,
                 emails: emailsRaw.split(/[,\s;]+/).filter(Boolean),
                 subject,
-                body
+                body,
+                trackThread: (document.getElementById('mail-bulk-track-thread') || {}).checked !== false
             })
         });
         const data = await res.json();
@@ -10653,6 +10810,7 @@ async function sendAdminBulkEmail() {
             msgEl.style.color = '#15803d';
             msgEl.textContent = data.message || 'Queued.';
         }
+        loadAdminMailThreads();
     } catch (e) {
         if (msgEl) {
             msgEl.style.color = '#b91c1c';

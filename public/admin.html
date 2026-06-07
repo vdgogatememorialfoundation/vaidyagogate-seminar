@@ -440,14 +440,37 @@
             </div>
 
             <div id="tab-email-compose" class="tab-pane hidden">
-                <h2 style="margin-bottom:8px;">Send email</h2>
-                <p style="color:#64748b;margin:-4px 0 16px;">Single message or bulk to doctors, seminar registrants, or any email list (max 500 per send). Outgoing mail shows your name as <em>Your Name | Vaidya Gogate Memorial Foundation</em> (from the signed-in staff account).</p>
+                <h2 style="margin-bottom:8px;">Send email &amp; conversations</h2>
+                <p style="color:#64748b;margin:-4px 0 16px;">Outbound mail uses ZeptoMail. With <strong>Track email replies</strong> on, each send opens a conversation thread — participants can reply by email and you reply here. Case judges use the Judge portal (same inbound setup). For ~10k users use bulk send (500 per batch); inbound via Mailparser.io free tier + webhook.</p>
+                <div class="card" style="margin-bottom:16px;border-color:#bae6fd;background:#f0f9ff;">
+                    <h3 style="margin:0 0 8px;color:#0369a1;"><i class="fas fa-inbox"></i> Inbound email (free replies)</h3>
+                    <p id="mail-inbound-status" style="margin:0 0 8px;font-size:0.88rem;color:#475569;">Checking…</p>
+                    <ol style="margin:0;padding-left:20px;font-size:0.85rem;color:#475569;line-height:1.55;">
+                        <li>Create a free inbox at <a href="https://mailparser.io" target="_blank" rel="noopener">mailparser.io</a></li>
+                        <li>Webhook URL: <code id="mail-inbound-webhook-url">…</code> · Header <code>x-inbound-mail-secret</code></li>
+                        <li>On Render set <code>MAILPARSER_INBOUND_EMAIL</code> (inbox address) and <code>INBOUND_MAIL_WEBHOOK_SECRET</code></li>
+                    </ol>
+                </div>
+                <div class="card" style="margin-bottom:16px;">
+                    <h3 style="margin:0 0 12px;">Conversations</h3>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+                        <input type="search" id="mail-thread-search" placeholder="Search email, name, subject…" style="flex:1;min-width:200px;padding:8px;" oninput="loadAdminMailThreads()">
+                        <button type="button" class="btn-primary" style="background:#64748b;" onclick="loadAdminMailThreads()"><i class="fas fa-sync"></i> Refresh</button>
+                    </div>
+                    <div style="display:grid;grid-template-columns:minmax(220px,1fr) minmax(280px,2fr);gap:12px;align-items:start;">
+                        <div id="mail-thread-list" style="max-height:420px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;background:#fff;"></div>
+                        <div id="mail-thread-detail" style="min-height:200px;border:1px solid #e2e8f0;border-radius:8px;padding:12px;background:#fff;">
+                            <p style="color:#94a3b8;margin:0;">Select a conversation to view messages and reply.</p>
+                        </div>
+                    </div>
+                </div>
                 <div class="card" style="margin-bottom:16px;">
                     <h3 style="margin:0 0 12px;">Single email</h3>
                     <div style="max-width:720px;display:grid;gap:10px;">
                         <div><label>To (email)</label><input type="email" id="mail-single-to" style="width:100%;padding:8px;" placeholder="anyone@example.com"></div>
                         <div><label>Subject</label><input type="text" id="mail-single-subject" style="width:100%;padding:8px;"></div>
                         <div><label>Message</label><textarea id="mail-single-body" rows="5" style="width:100%;padding:8px;"></textarea></div>
+                        <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="mail-single-track-thread" checked> Track email replies (recommended)</label>
                     </div>
                     <p id="mail-single-msg" style="margin:8px 0;font-size:0.88rem;"></p>
                     <button type="button" class="btn-primary" onclick="sendAdminSingleEmail()">Send single email</button>
@@ -467,6 +490,7 @@
                         <div id="mail-bulk-emails-wrap" class="hidden" style="grid-column:1/-1;"><label>Emails</label><textarea id="mail-bulk-emails" rows="3" style="width:100%;padding:8px;"></textarea></div>
                         <div style="grid-column:1/-1;"><label>Subject</label><input type="text" id="mail-bulk-subject" style="width:100%;padding:8px;"></div>
                         <div style="grid-column:1/-1;"><label>Message</label><textarea id="mail-bulk-body" rows="6" style="width:100%;padding:8px;"></textarea></div>
+                        <label style="grid-column:1/-1;display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="mail-bulk-track-thread" checked> Track replies — one conversation per recipient (recommended for seminars)</label>
                     </div>
                     <p id="mail-bulk-count" style="margin:10px 0;font-size:0.9rem;color:#475569;"></p>
                     <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -2711,6 +2735,6 @@
     <link rel="stylesheet" href="/css/book-track.css?v=20260529stg">
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
-    <script src="/js/admin.js?v=20260607zeptofix"></script>
+    <script src="/js/admin.js?v=20260608mailthreads"></script>
 </body>
 </html>
