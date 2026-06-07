@@ -167,6 +167,127 @@
         /* Off-screen — source for PDF only; must not stack on the iframe */
         #prev-qrcode { position: absolute; left: -9999px; width: 128px; height: 128px; opacity: 0; pointer-events: none; }
         #seminar-track-live, #case-track-live { font-size: 0.82rem; color: #0f766e; font-weight: 700; margin-bottom: 10px; }
+
+        /* Doctor portal seminar / event hero slider */
+        .doctor-seminar-slider {
+            margin: 18px 28px 0;
+            border-radius: 16px;
+            overflow: hidden;
+            min-height: clamp(180px, 28vw, 260px);
+            position: relative;
+            box-shadow: 0 10px 40px rgba(15, 118, 110, 0.12);
+            border: 1px solid #99f6e4;
+            background: #0f766e;
+        }
+        .doctor-seminar-slider.hidden { display: none !important; }
+        .dp-carousel { position: relative; height: 100%; min-height: inherit; }
+        .dp-track { position: relative; height: 100%; min-height: inherit; }
+        .dp-slide {
+            position: absolute;
+            inset: 0;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.75s ease;
+        }
+        .dp-slide.is-active { opacity: 1; pointer-events: auto; z-index: 1; }
+        .dp-bg {
+            position: absolute;
+            inset: 0;
+            background-size: cover;
+            background-position: center;
+            transform: scale(1.03);
+            transition: transform 7s ease;
+        }
+        .dp-slide.is-active .dp-bg { transform: scale(1); }
+        .dp-overlay {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(105deg, rgba(15, 118, 110, 0.9) 0%, rgba(17, 94, 89, 0.72) 55%, rgba(251, 191, 36, 0.18) 100%);
+        }
+        .dp-content {
+            position: relative;
+            z-index: 2;
+            padding: clamp(28px, 5vw, 44px) clamp(20px, 4vw, 36px);
+            color: #f0fdfa;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            min-height: inherit;
+            max-width: 720px;
+        }
+        .dp-title {
+            font-size: clamp(1.25rem, 2.8vw, 1.85rem);
+            font-weight: 800;
+            line-height: 1.15;
+            margin-bottom: 8px;
+            letter-spacing: -0.02em;
+        }
+        .dp-sub {
+            font-size: 0.95rem;
+            opacity: 0.92;
+            margin-bottom: 14px;
+            font-weight: 600;
+        }
+        .dp-cta {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            width: fit-content;
+            background: #fbbf24;
+            color: #134e4a;
+            border: none;
+            padding: 9px 18px;
+            border-radius: 10px;
+            font-weight: 800;
+            font-size: 0.85rem;
+            cursor: pointer;
+            box-shadow: 0 4px 14px rgba(251, 191, 36, 0.35);
+        }
+        .dp-cta:hover { filter: brightness(1.05); }
+        .dp-nav {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            z-index: 5;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            background: rgba(255, 255, 255, 0.14);
+            color: #fff;
+            cursor: pointer;
+            backdrop-filter: blur(6px);
+            transition: background 0.2s, transform 0.2s;
+        }
+        .dp-nav:hover { background: rgba(255, 255, 255, 0.24); transform: translateY(-50%) scale(1.05); }
+        .dp-prev { left: 12px; }
+        .dp-next { right: 12px; }
+        .dp-dots {
+            position: absolute;
+            bottom: 14px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 5;
+            display: flex;
+            gap: 8px;
+        }
+        .dp-dot {
+            width: 9px;
+            height: 9px;
+            border-radius: 999px;
+            border: none;
+            background: rgba(255, 255, 255, 0.4);
+            cursor: pointer;
+            transition: width 0.25s, background 0.25s;
+            padding: 0;
+        }
+        .dp-dot.is-active { width: 26px; background: #fbbf24; }
+        @media (max-width: 768px) {
+            .doctor-seminar-slider { margin: 14px 14px 0; min-height: 170px; }
+            .dp-nav { width: 34px; height: 34px; }
+            .dp-prev { left: 8px; }
+            .dp-next { right: 8px; }
+        }
     </style>
 </head>
 <body class="portal-bright" data-portal-theme="doctor">
@@ -306,6 +427,8 @@
                     <li style="color:#94a3b8;">Loading…</li>
                 </ul>
             </div>
+
+            <div id="doctor-seminar-slider" class="doctor-seminar-slider hidden" aria-hidden="true" role="region" aria-label="Seminars and events"></div>
 
             <div class="content-area">
 
@@ -863,6 +986,6 @@
     <link rel="stylesheet" href="/css/book-track.css?v=20260529stg">
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/doctor-books.js?v=20260528livetrack"></script>
-    <script src="/js/doctor.js?v=20260607allowedtabs"></script>
+    <script src="/js/doctor.js?v=20260607slider"></script>
 </body>
 </html>

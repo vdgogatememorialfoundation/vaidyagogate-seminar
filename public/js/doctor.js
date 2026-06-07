@@ -1381,6 +1381,7 @@ async function bootDoctorDashboard(user) {
     loadProfile();
     loadDoctorPaymentOptions().then(() => {
         loadDoctorPortalYear().then(() => {
+            loadDoctorSeminarSlider();
             if (!__doctorAllowedTabs || __doctorAllowedTabs.has('tab-seminars')) loadSeminarsGrid();
             if (!__doctorAllowedTabs || __doctorAllowedTabs.has('tab-applications')) loadApplications();
         });
@@ -2128,6 +2129,245 @@ async function loadDoctorPortalUpdatesFromCms() {
 
 let activeSeminars = [];
 let seminarGridCountdownTimer = null;
+let doctorSliderTimer = null;
+let doctorSliderIndex = 0;
+
+function doctorSeminarImageUrl(path) {
+    if (!path) return '';
+    const p = String(path).trim();
+    if (!p) return '';
+    if (p.startsWith('http') || p.startsWith('/')) return p;
+    return '/uploads/' + p;
+}
+
+function seminarSlideImage(s) {
+    if (!s) return '';
+    const hero = doctorSeminarImageUrl(s.hero_image_path);
+    if (hero) return hero;
+    const flyer = doctorSeminarImageUrl(s.flyer_path);
+    if (flyer) return flyer;
+    try {
+        const g = s.gallery_paths ? JSON.parse(s.gallery_paths) : [];
+        if (Array.isArray(g) && g.length) return doctorSeminarImageUrl(g[0]);
+    } catch (_) {}
+    return '';
+}
+
+function buildDoctorSliderSlides(seminars, marketingBanners, cmsSlides) {
+    const slides = [];
+    const seen = new Set();
+    const push = (slide) => {
+        if (!slide || !slide.src || seen.has(slide.src)) return;
+        seen.add(slide.src);
+        slides.push(slide);
+    };
+    (seminars || []).forEach((s) => {
+        const src = seminarSlideImage(s);
+        if (!src) return;
+        push({
+            src,
+            title: s.title || 'National Seminar',
+            subtitle: s.event_date ? formatEventDate(s.event_date) : '',
+            seminarId: s.id
+        });
+    });
+    if (!slides.length) {
+        (marketingBanners || []).forEach((b) => {
+            if (!b || !b.imagePath) return;
+            push({
+                src: doctorSeminarImageUrl(b.imagePath),
+                title: b.title || '',
+                subtitle: b.subtitle || ''
+            });
+        });
+    }
+    if (!slides.length) {
+        (cmsSlides || []).forEach((sl) => {
+            if (!sl) return;
+            const src = doctorSeminarImageUrl(sl.src || sl.imagePath || sl.image);
+            if (!src) return;
+            push({
+                src,
+                title: sl.caption || sl.title || '',
+                subtitle: ''
+            });
+        });
+    }
+    return slides;
+}
+
+function clearDoctorSliderTimer() {
+    if (doctorSliderTimer) {
+        clearInterval(doctorSliderTimer);
+        doctorSliderTimer = null;
+    }
+}
+
+function renderDoctorSeminarSlider(slides, autoSlideMs) {
+    const wrap = document.getElementById('doctor-seminar-slider');
+    if (!wrap) return;
+    clearDoctorSliderTimer();
+    const list = (slides || []).filter((s) => s && s.src);
+    if (!list.length) {
+        wrap.classList.add('hidden');
+        wrap.setAttribute('aria-hidden', 'true');
+        wrap.innerHTML = '';
+        return;
+    }
+    wrap.classList.remove('hidden');
+    wrap.setAttribute('aria-hidden', 'false');
+    doctorSliderIndex = 0;
+    const ms = Math.max(3000, parseInt(autoSlideMs, 10) || 5500);
+    const esc = (s) =>
+        String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/"/g, '&quot;');
+    const slideHtml = list
+        .map((b, i) => {
+            const src = esc(b.src);
+            const title = b.title ? '<h3 class="dp-title">' + esc(b.title) + '</h3>' : '';
+            const sub = b.subtitle ? '<p class="dp-sub">' + esc(b.subtitle) + '</p>' : '';
+            const cta = b.seminarId
+                ? '<button type="button" class="dp-cta" data-goto-seminar="1"><i class="fas fa-calendar-check"></i> View seminars</button>'
+                : '';
+            return (
+                '<div class="dp-slide' +
+                (i === 0 ? ' is-active' : '') +
+                '" data-idx="' +
+                i +
+                '">' +
+                '<div class="dp-bg" style="background-image:url(\'' +
+                src +
+                '\')"></div>' +
+                '<div class="dp-overlay"></div>' +
+                '<div class="dp-content">' +
+                title +
+                sub +
+                cta +
+                '</div></div>'
+            );
+        })
+        .join('');
+    const dots =
+        list.length > 1
+            ? '<div class="dp-dots">' +
+              list
+                  .map(function (_, i) {
+                      return (
+                          '<button type="button" class="dp-dot' +
+                          (i === 0 ? ' is-active' : '') +
+                          '" data-go="' +
+                          i +
+                          '" aria-label="Slide ' +
+                          (i + 1) +
+                          '"></button>'
+                      );
+                  })
+                  .join('') +
+              '</div>'
+            : '';
+    const nav =
+        list.length > 1
+            ? '<button type="button" class="dp-nav dp-prev" aria-label="Previous slide"><i class="fas fa-chevron-left"></i></button>' +
+              '<button type="button" class="dp-nav dp-next" aria-label="Next slide"><i class="fas fa-chevron-right"></i></button>'
+            : '';
+    wrap.innerHTML =
+        '<div class="dp-carousel" role="group" aria-roledescription="carousel">' +
+        '<div class="dp-track">' +
+        slideHtml +
+        '</div>' +
+        nav +
+        dots +
+        '</div>';
+    const slideEls = wrap.querySelectorAll('.dp-slide');
+    const dotEls = wrap.querySelectorAll('.dp-dot');
+    function goTo(idx) {
+        doctorSliderIndex = (idx + list.length) % list.length;
+        slideEls.forEach(function (el, i) {
+            el.classList.toggle('is-active', i === doctorSliderIndex);
+        });
+        dotEls.forEach(function (el, i) {
+            el.classList.toggle('is-active', i === doctorSliderIndex);
+        });
+    }
+    function next() {
+        goTo(doctorSliderIndex + 1);
+    }
+    function prev() {
+        goTo(doctorSliderIndex - 1);
+    }
+    function restartTimer() {
+        clearDoctorSliderTimer();
+        if (list.length > 1) doctorSliderTimer = setInterval(next, ms);
+    }
+    const nextBtn = wrap.querySelector('.dp-next');
+    const prevBtn = wrap.querySelector('.dp-prev');
+    if (nextBtn) {
+        nextBtn.addEventListener('click', function () {
+            next();
+            restartTimer();
+        });
+    }
+    if (prevBtn) {
+        prevBtn.addEventListener('click', function () {
+            prev();
+            restartTimer();
+        });
+    }
+    dotEls.forEach(function (d) {
+        d.addEventListener('click', function () {
+            goTo(parseInt(d.getAttribute('data-go'), 10));
+            restartTimer();
+        });
+    });
+    wrap.querySelectorAll('[data-goto-seminar]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            if (typeof switchTab === 'function') switchTab('tab-seminars');
+        });
+    });
+    restartTimer();
+}
+
+async function loadDoctorSeminarSlider() {
+    try {
+        let seminars = activeSeminars;
+        let autoSlideMs = 5500;
+        if (!seminars || !seminars.length) {
+            const res = await fetch('/api/seminars?bucket=current', { cache: 'no-store' });
+            if (res.ok) {
+                const payload = await res.json();
+                seminars = payload.seminars || [];
+                if (payload.portalYear != null) {
+                    doctorPortalYear = payload.portalYear;
+                    const lbl = document.getElementById('doctor-portal-year-label');
+                    if (lbl) lbl.textContent = String(doctorPortalYear);
+                }
+            }
+        }
+        let marketingBanners = [];
+        let cmsSlides = [];
+        try {
+            const [mRes, cRes] = await Promise.all([
+                fetch('/api/public/marketing', { cache: 'no-store' }),
+                fetch('/api/public/site-cms', { cache: 'no-store' })
+            ]);
+            if (mRes.ok) {
+                const m = await mRes.json();
+                marketingBanners = m.banners || [];
+                autoSlideMs = (m.carousel && m.carousel.autoSlideMs) || autoSlideMs;
+            }
+            if (cRes.ok) {
+                const cms = await cRes.json();
+                cmsSlides = cms.slides || [];
+            }
+        } catch (_) {}
+        const slides = buildDoctorSliderSlides(seminars, marketingBanners, cmsSlides);
+        renderDoctorSeminarSlider(slides, autoSlideMs);
+    } catch (e) {
+        console.warn('Doctor seminar slider', e);
+    }
+}
 
 function registrationWindowState(seminar) {
     const now = Date.now();
@@ -2521,6 +2761,7 @@ async function loadSeminarsGrid() {
         if (hasUpcoming || hasOpenReg) {
             startSeminarGridCountdownTimer();
         }
+        loadDoctorSeminarSlider();
     } catch (err) {
         console.error(err);
         container.innerHTML =
