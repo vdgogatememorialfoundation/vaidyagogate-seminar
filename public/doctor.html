@@ -687,26 +687,8 @@
                         <button type="button" class="btn-primary" style="background:#64748b;margin-bottom:14px;" onclick="cancelCaseApplication()"><i class="fas fa-arrow-left"></i> Back to programs</button>
                         <h3 id="case-form-program-title" style="margin:0 0 12px;color:#0f766e;"></h3>
                         <p id="case-prefill-note" class="hidden" style="color:#0f766e;font-size:0.88rem;margin-bottom:12px;font-weight:600;"></p>
-                        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;">
-                            <div class="form-group"><label>First name *</label><input type="text" id="case-fname"></div>
-                            <div class="form-group"><label>Middle name</label><input type="text" id="case-mname"></div>
-                            <div class="form-group"><label>Last name *</label><input type="text" id="case-lname"></div>
-                        </div>
-                        <div class="form-group"><label>Email *</label><input type="email" id="case-email"></div>
-                        <div class="form-group"><label>Phone *</label><input type="text" id="case-phone" inputmode="tel" maxlength="15"></div>
-                        <div class="form-group"><label>WhatsApp *</label><input type="text" id="case-whatsapp" inputmode="tel" maxlength="15"></div>
-                        <div class="form-group">
-                            <label>Category *</label>
-                            <select id="case-category">
-                                <option value="">Select</option>
-                                <option value="agnikarma">Agnikarma</option>
-                                <option value="viddhakarma">Viddhakarma</option>
-                            </select>
-                        </div>
-                        <div class="form-group"><label>Case topic *</label><input type="text" id="case-topic"></div>
-                        <div id="case-custom-fields"></div>
+                        <div id="case-form-fields"></div>
                         <div id="case-step-form">
-                        <div class="form-group"><label>Upload files (max 5) *</label><input type="file" id="case-files" multiple accept=".pdf,.ppt,.pptx,.zip,.docx,video/*,image/*"><p id="case-files-hint" style="font-size:0.8rem;color:#64748b;margin:6px 0 0;">PDF, PPT, PPTX, ZIP, DOCX, images, or video. Max 100-250 MB per file when cloud storage is on.</p><p id="case-upload-progress" style="display:none;font-size:0.85rem;color:#0f766e;font-weight:600;margin-top:8px;"></p><p id="case-files-success" class="hidden" style="font-size:0.85rem;color:#059669;font-weight:600;margin-top:8px;"><i class="fas fa-check-circle"></i> <span id="case-files-success-text"></span></p></div>
                         <button type="button" class="btn-primary" onclick="goToCasePreview()">Next: Preview application</button>
                         </div>
                         <div id="case-step-preview" class="hidden" style="margin-top:16px;">

@@ -4243,7 +4243,20 @@ const CASE_PROG_CORE_FIELD_KEYS = new Set([
     'topic',
     'files'
 ]);
-const CASE_PROG_FIELD_TYPES = ['text', 'textarea', 'email', 'number'];
+const CASE_PROG_FIELD_TYPES = [
+    'text',
+    'textarea',
+    'email',
+    'tel',
+    'number',
+    'date',
+    'select',
+    'checkbox',
+    'boolean',
+    'file',
+    'terms'
+];
+const CASE_PROG_FIXED_TYPE_KEYS = { files: 'file', category: 'select' };
 
 function caseProgFieldTypeOptions(selected) {
     return CASE_PROG_FIELD_TYPES.map(
@@ -4251,20 +4264,66 @@ function caseProgFieldTypeOptions(selected) {
     ).join('');
 }
 
+function parseCaseFieldOptionsText(raw) {
+    const lines = String(raw || '')
+        .split(/\r?\n/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+    return lines.map((line) => {
+        const parts = line.split('|').map((s) => s.trim());
+        if (parts.length >= 2) return { value: parts[0], label: parts[1] };
+        return { value: line, label: line };
+    });
+}
+
+function formatCaseFieldOptionsText(options) {
+    return (Array.isArray(options) ? options : [])
+        .map((o) => {
+            const v = o.value != null ? o.value : o.label;
+            const l = o.label != null ? o.label : v;
+            return v === l ? String(v) : v + ' | ' + l;
+        })
+        .join('\n');
+}
+
 function collectCaseProgramFieldsFromDom() {
     const rows = __caseProgFieldRows || [];
     return rows.map((r, idx) => {
         const keyEl = document.getElementById('case-field-key-' + idx);
         const key = keyEl ? String(keyEl.value || '').trim() : r.key;
-        return {
+        const fixedType = CASE_PROG_FIXED_TYPE_KEYS[key];
+        const type = fixedType
+            ? fixedType
+            : (document.getElementById('case-field-type-' + idx) || {}).value || r.type || 'text';
+        const row = {
             key: key || r.key,
             label: ((document.getElementById('case-field-label-' + idx) || {}).value || key || r.key).trim(),
-            type: (document.getElementById('case-field-type-' + idx) || {}).value || r.type || 'text',
+            type,
             enabled: !!(document.getElementById('case-field-en-' + idx) || {}).checked,
             required: !!(document.getElementById('case-field-req-' + idx) || {}).checked
         };
+        if (type === 'select') {
+            const ot = document.getElementById('case-field-opts-' + idx);
+            row.options = parseCaseFieldOptionsText(ot && ot.value);
+        }
+        if (type === 'terms') {
+            const tt = document.getElementById('case-field-terms-' + idx);
+            row.termsText = tt ? String(tt.value || '').trim() : '';
+        }
+        return row;
     });
 }
+
+function caseProgMoveFieldRow(fromIdx, toIdx) {
+    if (fromIdx == null || toIdx == null || fromIdx === toIdx) return;
+    const current = collectCaseProgramFieldsFromDom();
+    if (fromIdx < 0 || fromIdx >= current.length || toIdx < 0 || toIdx >= current.length) return;
+    const moved = current.splice(fromIdx, 1)[0];
+    current.splice(toIdx, 0, moved);
+    renderCaseProgramFieldsEditor(current);
+    setCaseProgMsg('Field order updated — save the program to apply.', true);
+}
+window.caseProgMoveFieldRow = caseProgMoveFieldRow;
 
 function addAdminCaseFieldRow() {
     const current = collectCaseProgramFieldsFromDom();
@@ -4388,13 +4447,22 @@ function collectCaseProgramFormConfig() {
     }
     return {
         version: 2,
-        fields: fields.map((f) => ({
-            key: f.key,
-            label: f.label || f.key,
-            type: f.type || 'text',
-            enabled: f.enabled,
-            required: f.enabled && f.required
-        }))
+        fields: fields.map((f) => {
+            const row = {
+                key: f.key,
+                label: f.label || f.key,
+                type: f.type || 'text',
+                enabled: f.enabled,
+                required: f.enabled && f.required
+            };
+            if (f.type === 'select' && Array.isArray(f.options) && f.options.length) {
+                row.options = f.options;
+            }
+            if (f.type === 'terms' && f.termsText) {
+                row.termsText = f.termsText;
+            }
+            return row;
+        })
     };
 }
 
@@ -4402,11 +4470,15 @@ function renderCaseProgramFieldsEditor(fields) {
     const tbody = document.getElementById('case-prog-fields-tbody');
     if (!tbody) return;
     const list = fields && fields.length ? fields : [];
-    __caseProgFieldRows = list.map((f) => ({ key: f.key, type: f.type || 'text' }));
+    __caseProgFieldRows = list.map((f) => ({
+        key: f.key,
+        type: f.type || (f.key === 'files' ? 'file' : f.key === 'category' ? 'select' : 'text')
+    }));
     tbody.innerHTML = '';
     list.forEach((f, idx) => {
         const isCore = CASE_PROG_CORE_FIELD_KEYS.has(f.key);
-        const type = f.type || (f.key === 'files' ? 'file' : f.key === 'category' ? 'select' : 'text');
+        const fixedType = CASE_PROG_FIXED_TYPE_KEYS[f.key];
+        const type = fixedType || f.type || (f.key === 'files' ? 'file' : f.key === 'category' ? 'select' : 'text');
         const keyCell = isCore
             ? '<code>' + String(f.key || '').replace(/</g, '&lt;') + '</code>'
             : '<input type="text" id="case-field-key-' +
@@ -4414,15 +4486,29 @@ function renderCaseProgramFieldsEditor(fields) {
               '" value="' +
               String(f.key || '').replace(/"/g, '&quot;') +
               '" style="margin:0;width:120px;" placeholder="field_key">';
-        const typeCell = isCore
+        const typeCell = fixedType
             ? '<code>' + String(type).replace(/</g, '&lt;') + '</code>'
-            : '<select id="case-field-type-' + idx + '" style="margin:0;">' + caseProgFieldTypeOptions(type) + '</select>';
+            : '<select id="case-field-type-' +
+              idx +
+              '" style="margin:0;" onchange="caseProgFieldTypeChanged(' +
+              idx +
+              ')">' +
+              caseProgFieldTypeOptions(type) +
+              '</select>';
+        const dragCell =
+            '<span class="case-field-drag" draggable="true" title="Drag to reorder" style="cursor:grab;color:#64748b;font-size:1.1rem;user-select:none;" data-idx="' +
+            idx +
+            '">⋮⋮</span>';
         const removeBtn =
             '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;background:#64748b;" onclick="removeAdminCaseFieldRow(' +
             idx +
             ')">Remove</button>';
-        tbody.innerHTML +=
-            '<tr><td>' +
+        const tr = document.createElement('tr');
+        tr.dataset.caseFieldIdx = String(idx);
+        tr.innerHTML =
+            '<td style="text-align:center;">' +
+            dragCell +
+            '</td><td>' +
             keyCell +
             '</td><td><input type="text" id="case-field-label-' +
             idx +
@@ -4440,7 +4526,76 @@ function renderCaseProgramFieldsEditor(fields) {
             (f.required !== false && f.enabled !== false ? 'checked' : '') +
             '></td><td>' +
             removeBtn +
-            '</td></tr>';
+            '</td>';
+        tbody.appendChild(tr);
+        if (type === 'select') {
+            const extra = document.createElement('tr');
+            extra.className = 'case-field-extra-row';
+            extra.innerHTML =
+                '<td></td><td colspan="6"><label style="font-size:0.78rem;color:#64748b;">Select options (one per line, optional <code>value | label</code>)</label>' +
+                '<textarea id="case-field-opts-' +
+                idx +
+                '" rows="2" style="width:100%;margin-top:4px;font-size:0.82rem;">' +
+                String(formatCaseFieldOptionsText(f.options)).replace(/</g, '&lt;') +
+                '</textarea></td>';
+            tbody.appendChild(extra);
+        }
+        if (type === 'terms') {
+            const extra = document.createElement('tr');
+            extra.className = 'case-field-extra-row';
+            extra.innerHTML =
+                '<td></td><td colspan="6"><label style="font-size:0.78rem;color:#64748b;">Terms / undertaking text (shown above the checkbox)</label>' +
+                '<textarea id="case-field-terms-' +
+                idx +
+                '" rows="3" style="width:100%;margin-top:4px;font-size:0.82rem;">' +
+                String(f.termsText || f.label || '').replace(/</g, '&lt;') +
+                '</textarea></td>';
+            tbody.appendChild(extra);
+        }
+    });
+    bindCaseProgramFieldDragDrop();
+}
+
+function caseProgFieldTypeChanged(idx) {
+    const current = collectCaseProgramFieldsFromDom();
+    renderCaseProgramFieldsEditor(current);
+    if (current[idx]) {
+        const typeEl = document.getElementById('case-field-type-' + idx);
+        if (typeEl) typeEl.value = current[idx].type;
+    }
+}
+window.caseProgFieldTypeChanged = caseProgFieldTypeChanged;
+
+function bindCaseProgramFieldDragDrop() {
+    const tbody = document.getElementById('case-prog-fields-tbody');
+    if (!tbody) return;
+    let dragFrom = null;
+    tbody.querySelectorAll('.case-field-drag').forEach((handle) => {
+        handle.addEventListener('dragstart', function (e) {
+            dragFrom = parseInt(handle.getAttribute('data-idx'), 10);
+            if (e.dataTransfer) {
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', String(dragFrom));
+            }
+        });
+        handle.addEventListener('dragend', function () {
+            dragFrom = null;
+        });
+    });
+    tbody.querySelectorAll('tr[data-case-field-idx]').forEach((tr) => {
+        tr.addEventListener('dragover', function (e) {
+            e.preventDefault();
+            if (e.dataTransfer) e.dataTransfer.dropEffect = 'move';
+        });
+        tr.addEventListener('drop', function (e) {
+            e.preventDefault();
+            const toIdx = parseInt(tr.getAttribute('data-case-field-idx'), 10);
+            const from =
+                dragFrom != null
+                    ? dragFrom
+                    : parseInt((e.dataTransfer && e.dataTransfer.getData('text/plain')) || '', 10);
+            if (!Number.isNaN(from) && !Number.isNaN(toIdx)) caseProgMoveFieldRow(from, toIdx);
+        });
     });
 }
 

@@ -132,36 +132,44 @@ window.__caseStagedUploadIds = null;
 window.__caseStagedFileMeta = [];
 
 function getCaseFormSnapshot() {
-    const snap = {
-        fname: (document.getElementById('case-fname') || {}).value || '',
-        mname: (document.getElementById('case-mname') || {}).value || '',
-        lname: (document.getElementById('case-lname') || {}).value || '',
-        email: (document.getElementById('case-email') || {}).value || '',
-        phone: (document.getElementById('case-phone') || {}).value || '',
-        whatsapp: (document.getElementById('case-whatsapp') || {}).value || '',
-        category: (document.getElementById('case-category') || {}).value || '',
-        topic: (document.getElementById('case-topic') || {}).value || ''
-    };
-    getCaseCustomFormFields(activeCaseProgram).forEach((f) => {
-        const el = document.getElementById('case-custom-' + f.key);
-        snap[f.key] = el ? String(el.value || '').trim() : '';
+    const snap = {};
+    getCaseEnabledFormFields(activeCaseProgram).forEach((f) => {
+        if (f.key === 'files') return;
+        const el = document.getElementById(caseFieldElId(f.key));
+        if (!el) return;
+        const t = String(f.type || 'text').toLowerCase();
+        if (el.type === 'checkbox' || t === 'checkbox' || t === 'boolean' || t === 'terms') {
+            snap[f.key] = el.checked ? '1' : '';
+        } else if (el.type === 'file') {
+            snap[f.key] = el.files && el.files[0] ? el.files[0].name : '';
+        } else {
+            snap[f.key] = String(el.value || '').trim();
+        }
     });
     return snap;
 }
 
-function getCaseSelectedFileMeta() {
-    const inp = document.getElementById('case-files');
-    const list = [];
-    if (inp && inp.files) {
-        for (let i = 0; i < inp.files.length; i++) {
-            const f = inp.files[i];
-            list.push({
-                name: f.name,
-                size: f.size,
-                uploaded: !!(window.__caseStagedUploadIds && window.__caseStagedUploadIds.length)
-            });
-        }
+function getCaseAllUploadFiles() {
+    const out = [];
+    const main = document.getElementById('case-files');
+    if (main && main.files) {
+        for (let i = 0; i < main.files.length; i++) out.push(main.files[i]);
     }
+    document.querySelectorAll('.case-extra-file-input').forEach((inp) => {
+        if (inp.files && inp.files[0]) out.push(inp.files[0]);
+    });
+    return out;
+}
+
+function getCaseSelectedFileMeta() {
+    const list = [];
+    getCaseAllUploadFiles().forEach((f) => {
+        list.push({
+            name: f.name,
+            size: f.size,
+            uploaded: !!(window.__caseStagedUploadIds && window.__caseStagedUploadIds.length)
+        });
+    });
     if (window.__caseStagedFileMeta && window.__caseStagedFileMeta.length) {
         return window.__caseStagedFileMeta.map((m) => ({
             name: m.name,
@@ -218,14 +226,22 @@ function renderCasePreviewSummary() {
         '<div class="preview-row"><span class="lbl">Case topic</span><span class="val">' +
         escapeHtmlDoctor(f.topic) +
         '</span></div>';
-    getCaseCustomFormFields(activeCaseProgram).forEach((field) => {
+    getCaseEnabledFormFields(activeCaseProgram).forEach((field) => {
+        if (field.key === 'files') return;
         const val = f[field.key];
         if (val == null || String(val).trim() === '') return;
+        const t = String(field.type || 'text').toLowerCase();
+        const display =
+            t === 'checkbox' || t === 'boolean' || t === 'terms'
+                ? val === '1'
+                    ? 'Yes'
+                    : 'No'
+                : String(val);
         html +=
             '<div class="preview-row"><span class="lbl">' +
             escapeHtmlDoctor(field.label || field.key) +
             '</span><span class="val">' +
-            escapeHtmlDoctor(String(val)) +
+            escapeHtmlDoctor(display) +
             '</span></div>';
     });
     box.innerHTML = html + filesHtml;
@@ -295,10 +311,18 @@ function generateCasePreviewPdf() {
     drawSection('Presentation');
     drawTableRow('Category', f.category);
     drawTableRow('Case topic', f.topic);
-    getCaseCustomFormFields(activeCaseProgram).forEach((field) => {
+    getCaseEnabledFormFields(activeCaseProgram).forEach((field) => {
+        if (field.key === 'files') return;
         const val = f[field.key];
         if (val == null || String(val).trim() === '') return;
-        drawTableRow(field.label || field.key, val);
+        const t = String(field.type || 'text').toLowerCase();
+        const display =
+            t === 'checkbox' || t === 'boolean' || t === 'terms'
+                ? val === '1'
+                    ? 'Yes'
+                    : 'No'
+                : val;
+        drawTableRow(field.label || field.key, display);
     });
     drawSection('Documents submitted');
     if (!files.length) {
@@ -356,39 +380,55 @@ async function validateCaseFormBeforePreviewOrSubmit() {
         if (!wv.valid) return alert(wv.message), null;
         form.whatsapp = wv.cleanedPhone;
     }
-    for (const field of getCaseCustomFormFields(activeCaseProgram)) {
-        if (field.required === false) continue;
+    for (const field of getCaseEnabledFormFields(activeCaseProgram)) {
+        if (field.key === 'files') continue;
+        const t = String(field.type || 'text').toLowerCase();
         const val = form[field.key];
+        if (t === 'checkbox' || t === 'boolean' || t === 'terms') {
+            if (field.required !== false && val !== '1') {
+                return alert('Please confirm: ' + (field.label || field.key)), null;
+            }
+            continue;
+        }
+        if (t === 'file') {
+            const el = document.getElementById(caseFieldElId(field.key));
+            if (field.required !== false && !(el && el.files && el.files.length)) {
+                return alert('Please upload: ' + (field.label || field.key)), null;
+            }
+            continue;
+        }
+        if (field.required === false) continue;
         if (val == null || String(val).trim() === '') {
             return alert('Please complete: ' + (field.label || field.key)), null;
         }
-        if (field.type === 'email' && typeof validateEmailClient === 'function') {
+        if (t === 'email' && typeof validateEmailClient === 'function') {
             const ev = validateEmailClient(val, field.label || field.key);
             if (!ev.valid) return alert(ev.message), null;
             form[field.key] = ev.cleanedEmail;
         }
+        if (t === 'tel' && typeof validatePhoneClient === 'function') {
+            const pv = validatePhoneClient(val, field.label || field.key);
+            if (!pv.valid) return alert(pv.message), null;
+            form[field.key] = pv.cleanedPhone;
+        }
     }
-    const fileInput = document.getElementById('case-files');
+    const allFiles = getCaseAllUploadFiles();
     const maxFiles = (activeCaseProgram && activeCaseProgram.maxFilesPerSubmission) || 5;
     const filesField = (activeCaseProgram && activeCaseProgram.formConfig && activeCaseProgram.formConfig.fields || []).find(
         (f) => f.key === 'files' && f.enabled !== false
     );
     const filesRequired = !!(filesField && filesField.required !== false);
-    if (
-        filesRequired &&
-        !fileInput?.files?.length &&
-        !(window.__caseStagedUploadIds && window.__caseStagedUploadIds.length)
-    ) {
+    if (filesRequired && !allFiles.length && !(window.__caseStagedUploadIds && window.__caseStagedUploadIds.length)) {
         return alert('Select at least one file'), null;
     }
-    if (fileInput?.files?.length > maxFiles) return alert('Maximum ' + maxFiles + ' files'), null;
-    return { uid, form, fileInput };
+    if (allFiles.length > maxFiles) return alert('Maximum ' + maxFiles + ' files'), null;
+    return { uid, form, allFiles };
 }
 
 async function goToCasePreview() {
     const validated = await validateCaseFormBeforePreviewOrSubmit();
     if (!validated) return;
-    const { uid, fileInput } = validated;
+    const { uid, allFiles } = validated;
     const uploadCfg = await ensureCaseUploadConfig(activeCaseProgramId);
     const maxMb = effectiveCaseMaxMb(activeCaseProgram, uploadCfg);
     const progressEl = document.getElementById('case-upload-progress');
@@ -402,9 +442,9 @@ async function goToCasePreview() {
     window.__caseStagedUploadIds = null;
     window.__caseStagedFileMeta = [];
 
-    if (fileInput?.files?.length) {
-        for (let i = 0; i < fileInput.files.length; i++) {
-            const raw = fileInput.files[i];
+    if (allFiles && allFiles.length) {
+        for (let i = 0; i < allFiles.length; i++) {
+            const raw = allFiles[i];
             if (raw.size > maxMb * 1024 * 1024) {
                 return alert('Each file must be under ' + maxMb + ' MB ("' + raw.name + '").');
             }
@@ -413,14 +453,16 @@ async function goToCasePreview() {
         if (useR2) {
             try {
                 setProgress('Uploading documents... 0%');
-                window.__caseStagedUploadIds = await CaseR2Upload.uploadFiles(fileInput.files, {
+                const dt = new DataTransfer();
+                allFiles.forEach((f) => dt.items.add(f));
+                window.__caseStagedUploadIds = await CaseR2Upload.uploadFiles(dt.files, {
                     userId: uid,
                     caseProgramId: activeCaseProgramId,
                     onFileProgress: (idx, total, name, pct) => {
                         setProgress('Uploading ' + (idx + 1) + '/' + total + ': ' + name + ' - ' + pct + '%');
                     }
                 });
-                window.__caseStagedFileMeta = Array.from(fileInput.files).map((f) => ({
+                window.__caseStagedFileMeta = allFiles.map((f) => ({
                     name: f.name,
                     size: f.size
                 }));
@@ -434,7 +476,7 @@ async function goToCasePreview() {
             }
             setProgress('');
         } else {
-            window.__caseStagedFileMeta = Array.from(fileInput.files).map((f) => ({
+            window.__caseStagedFileMeta = allFiles.map((f) => ({
                 name: f.name,
                 size: f.size,
                 uploaded: false
@@ -3080,58 +3122,31 @@ let activeCaseProgramId = null;
 let activeCasePrograms = [];
 let activeCaseProgram = null;
 
-const CASE_FIELD_IDS = {
-    fname: 'case-fname',
-    mname: 'case-mname',
-    lname: 'case-lname',
-    email: 'case-email',
-    phone: 'case-phone',
-    whatsapp: 'case-whatsapp',
-    category: 'case-category',
-    topic: 'case-topic',
-    files: 'case-files'
-};
-const CASE_BUILTIN_FIELD_KEYS = new Set(Object.keys(CASE_FIELD_IDS));
+const CASE_BUILTIN_FIELD_KEYS = new Set([
+    'fname',
+    'mname',
+    'lname',
+    'email',
+    'phone',
+    'whatsapp',
+    'category',
+    'topic',
+    'files',
+    'agree_terms'
+]);
+
+function caseFieldElId(key) {
+    return 'case-field-' + key;
+}
+
+function getCaseEnabledFormFields(program) {
+    return ((program && program.formConfig && program.formConfig.fields) || []).filter(
+        (f) => f && f.key && f.enabled !== false
+    );
+}
 
 function getCaseCustomFormFields(program) {
-    const fields = (program && program.formConfig && program.formConfig.fields) || [];
-    return fields.filter((f) => f && f.key && !CASE_BUILTIN_FIELD_KEYS.has(f.key) && f.enabled !== false);
-}
-
-function renderCaseCustomFields(program) {
-    const box = document.getElementById('case-custom-fields');
-    if (!box) return;
-    box.innerHTML = '';
-    getCaseCustomFormFields(program).forEach((f) => {
-        const fg = document.createElement('div');
-        fg.className = 'form-group';
-        fg.dataset.caseFieldKey = f.key;
-        const lab = document.createElement('label');
-        lab.textContent = (f.label || f.key) + (f.required !== false ? ' *' : '');
-        fg.appendChild(lab);
-        let input;
-        if (f.type === 'textarea') {
-            input = document.createElement('textarea');
-            input.rows = 3;
-            input.style.width = '100%';
-        } else {
-            input = document.createElement('input');
-            input.type = f.type === 'number' ? 'number' : f.type === 'email' ? 'email' : 'text';
-        }
-        input.id = 'case-custom-' + f.key;
-        input.className = 'case-custom-input';
-        if (f.required !== false) input.required = true;
-        fg.appendChild(input);
-        box.appendChild(fg);
-    });
-}
-
-function applyCaseCustomFieldValues(values) {
-    const src = values || {};
-    Object.keys(src).forEach((key) => {
-        const el = document.getElementById('case-custom-' + key);
-        if (el) el.value = src[key] == null ? '' : String(src[key]);
-    });
+    return getCaseEnabledFormFields(program).filter((f) => !CASE_BUILTIN_FIELD_KEYS.has(f.key));
 }
 
 function caseFormFieldActive(program, key) {
@@ -3140,76 +3155,242 @@ function caseFormFieldActive(program, key) {
     return !!(f && f.enabled !== false);
 }
 
-function applyCaseFormConfigFromProgram(program) {
-    const fields = (program && program.formConfig && program.formConfig.fields) || [];
-    const byKey = {};
+function caseFieldDisplayLabel(f) {
+    return (f.label || f.key) + (f.required !== false ? ' *' : '');
+}
+
+function renderCaseNameRow(host, fields, program) {
+    const grid = document.createElement('div');
+    grid.style.cssText = 'display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:0;';
     fields.forEach((f) => {
-        byKey[f.key] = f;
+        const fg = document.createElement('div');
+        fg.className = 'form-group';
+        fg.dataset.caseKey = f.key;
+        const lab = document.createElement('label');
+        lab.textContent = caseFieldDisplayLabel(f);
+        lab.setAttribute('for', caseFieldElId(f.key));
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.id = caseFieldElId(f.key);
+        input.className = 'case-form-input';
+        if (f.required !== false) input.required = true;
+        fg.appendChild(lab);
+        fg.appendChild(input);
+        grid.appendChild(fg);
     });
-    Object.keys(CASE_FIELD_IDS).forEach((key) => {
-        const elId = CASE_FIELD_IDS[key];
-        const el = document.getElementById(elId);
-        const fg = el && el.closest('.form-group');
-        const cfg = byKey[key];
-        if (!fg) return;
-        if (!cfg || cfg.enabled === false) {
-            fg.classList.add('hidden');
-            if (el) el.required = false;
-            return;
-        }
-        fg.classList.remove('hidden');
-        const lab = fg.querySelector('label');
-        if (lab && cfg.label) lab.textContent = cfg.label + (cfg.required !== false ? ' *' : '');
-        if (el && key !== 'files') el.required = cfg.required !== false;
-    });
-    renderCaseCustomFields(program);
-    const catSel = document.getElementById('case-category');
-    if (catSel && program && program.enabledCategories && caseFormFieldActive(program, 'category')) {
-        const cur = catSel.value;
-        catSel.innerHTML = '<option value="">Select</option>';
-        program.enabledCategories.forEach((c) => {
-            const opt = document.createElement('option');
-            opt.value = c;
-            opt.textContent = c === 'agnikarma' ? 'Agnikarma' : c === 'viddhakarma' ? 'Viddhakarma' : c;
-            catSel.appendChild(opt);
-        });
-        if (cur) catSel.value = cur;
-    }
-    const fileFg = document.getElementById('case-files') && document.getElementById('case-files').closest('.form-group');
-    if (fileFg && program) {
-        if (!caseFormFieldActive(program, 'files')) {
-            fileFg.classList.add('hidden');
-            const fileInput = document.getElementById('case-files');
-            if (fileInput) fileInput.required = false;
-            return;
-        }
-        fileFg.classList.remove('hidden');
-        const maxF = program.maxFilesPerSubmission || 5;
-        ensureCaseUploadConfig(program.id).then((cfg) => {
-            const maxMb = effectiveCaseMaxMb(program, cfg);
-            const lab = fileFg.querySelector('label');
-            if (lab) {
+    host.appendChild(grid);
+}
+
+function renderCaseFormField(host, f, program) {
+    const type = String(f.type || 'text').toLowerCase();
+    const fg = document.createElement('div');
+    fg.className = 'form-group';
+    fg.dataset.caseKey = f.key;
+
+    if (f.key === 'files' || (type === 'file' && f.key === 'files')) {
+        const lab = document.createElement('label');
+        lab.setAttribute('for', 'case-files');
+        lab.textContent = caseFieldDisplayLabel(f);
+        fg.appendChild(lab);
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.id = 'case-files';
+        input.multiple = true;
+        input.accept = '.pdf,.ppt,.pptx,.zip,.docx,video/*,image/*';
+        if (f.required !== false) input.required = true;
+        fg.appendChild(input);
+        const hint = document.createElement('p');
+        hint.id = 'case-files-hint';
+        hint.style.cssText = 'font-size:0.8rem;color:#64748b;margin:6px 0 0;';
+        hint.textContent = 'PDF, PPT, PPTX, ZIP, DOCX, images, or video.';
+        fg.appendChild(hint);
+        const progress = document.createElement('p');
+        progress.id = 'case-upload-progress';
+        progress.style.cssText = 'display:none;font-size:0.85rem;color:#0f766e;font-weight:600;margin-top:8px;';
+        fg.appendChild(progress);
+        const ok = document.createElement('p');
+        ok.id = 'case-files-success';
+        ok.className = 'hidden';
+        ok.style.cssText = 'font-size:0.85rem;color:#059669;font-weight:600;margin-top:8px;';
+        ok.innerHTML = '<i class="fas fa-check-circle"></i> <span id="case-files-success-text"></span>';
+        fg.appendChild(ok);
+        host.appendChild(fg);
+        if (program && program.id) {
+            const maxF = program.maxFilesPerSubmission || 5;
+            ensureCaseUploadConfig(program.id).then((cfg) => {
+                const maxMb = effectiveCaseMaxMb(program, cfg);
                 lab.textContent =
-                    'Upload (max ' +
+                    (f.label || 'Upload files') +
+                    ' (max ' +
                     maxF +
                     ' files, ' +
                     maxMb +
                     ' MB each)' +
                     (cfg && cfg.r2Enabled ? ' — secure cloud storage' : '') +
-                    ' *';
-            }
-            const hint = document.getElementById('case-files-hint');
-            if (hint && cfg && cfg.r2Enabled) {
-                hint.textContent =
-                    'Large PDF/PPT/video supported (up to ' +
-                    maxMb +
-                    ' MB each). Upload shows progress; use Wi‑Fi for big files.';
-            }
-        });
+                    (f.required !== false ? ' *' : '');
+                if (cfg && cfg.r2Enabled) {
+                    hint.textContent =
+                        'Large PDF/PPT/video supported (up to ' +
+                        maxMb +
+                        ' MB each). Upload shows progress; use Wi‑Fi for big files.';
+                }
+            });
+        }
+        return;
     }
+
+    if (type === 'terms') {
+        if (f.termsText) {
+            const termsBox = document.createElement('div');
+            termsBox.style.cssText =
+                'font-size:0.88rem;color:#475569;line-height:1.5;margin-bottom:10px;padding:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;white-space:pre-wrap;';
+            termsBox.textContent = f.termsText;
+            fg.appendChild(termsBox);
+        }
+        const wrap = document.createElement('label');
+        wrap.style.cssText = 'display:flex;align-items:flex-start;gap:8px;font-weight:600;';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.id = caseFieldElId(f.key);
+        cb.className = 'case-form-input';
+        if (f.required !== false) cb.required = true;
+        wrap.appendChild(cb);
+        const span = document.createElement('span');
+        span.textContent = f.label || 'I accept the terms';
+        wrap.appendChild(span);
+        fg.appendChild(wrap);
+        host.appendChild(fg);
+        return;
+    }
+
+    if (type === 'checkbox' || type === 'boolean') {
+        const wrap = document.createElement('label');
+        wrap.style.cssText = 'display:flex;align-items:center;gap:8px;font-weight:600;';
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.id = caseFieldElId(f.key);
+        cb.className = 'case-form-input';
+        if (f.required !== false) cb.required = true;
+        wrap.appendChild(cb);
+        wrap.appendChild(document.createTextNode(f.label || f.key));
+        fg.appendChild(wrap);
+        host.appendChild(fg);
+        return;
+    }
+
+    if (type === 'file') {
+        const lab = document.createElement('label');
+        lab.setAttribute('for', caseFieldElId(f.key));
+        lab.textContent = caseFieldDisplayLabel(f);
+        fg.appendChild(lab);
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.id = caseFieldElId(f.key);
+        input.className = 'case-form-input case-extra-file-input';
+        input.accept = '.pdf,.ppt,.pptx,.zip,.docx,video/*,image/*';
+        if (f.required !== false) input.required = true;
+        fg.appendChild(input);
+        host.appendChild(fg);
+        return;
+    }
+
+    const lab = document.createElement('label');
+    lab.setAttribute('for', caseFieldElId(f.key));
+    lab.textContent = caseFieldDisplayLabel(f);
+    fg.appendChild(lab);
+
+    let input;
+    if (type === 'textarea') {
+        input = document.createElement('textarea');
+        input.rows = 3;
+        input.style.width = '100%';
+    } else if (type === 'select' || f.key === 'category') {
+        input = document.createElement('select');
+        input.innerHTML = '<option value="">Select</option>';
+        const opts =
+            f.key === 'category' && program && program.enabledCategories
+                ? program.enabledCategories.map((c) => ({
+                      value: c,
+                      label:
+                          c === 'agnikarma'
+                              ? 'Agnikarma'
+                              : c === 'viddhakarma'
+                                ? 'Viddhakarma'
+                                : c === 'both'
+                                  ? 'Both (Agnikarma & Viddhakarma)'
+                                  : c
+                  }))
+                : Array.isArray(f.options)
+                  ? f.options
+                  : [];
+        opts.forEach((o) => {
+            const opt = document.createElement('option');
+            opt.value = o.value != null ? o.value : o.label;
+            opt.textContent = o.label != null ? o.label : opt.value;
+            input.appendChild(opt);
+        });
+    } else {
+        input = document.createElement('input');
+        input.type =
+            type === 'email'
+                ? 'email'
+                : type === 'tel'
+                  ? 'tel'
+                  : type === 'number'
+                    ? 'number'
+                    : type === 'date'
+                      ? 'date'
+                      : 'text';
+        if (type === 'tel') {
+            input.inputMode = 'tel';
+            input.maxLength = 15;
+        }
+    }
+    input.id = caseFieldElId(f.key);
+    input.className = 'case-form-input';
+    if (f.required !== false && type !== 'select' && f.key !== 'category') input.required = true;
+    fg.appendChild(input);
+    host.appendChild(fg);
+}
+
+function renderCaseFormFields(program) {
+    const host = document.getElementById('case-form-fields');
+    if (!host) return;
+    host.innerHTML = '';
+    const fields = getCaseEnabledFormFields(program);
+    let i = 0;
+    while (i < fields.length) {
+        const f = fields[i];
+        if (
+            f.key === 'fname' &&
+            i + 2 < fields.length &&
+            fields[i + 1].key === 'mname' &&
+            fields[i + 2].key === 'lname'
+        ) {
+            renderCaseNameRow(host, [f, fields[i + 1], fields[i + 2]], program);
+            i += 3;
+            continue;
+        }
+        renderCaseFormField(host, f, program);
+        i += 1;
+    }
+}
+
+function applyCaseFormFieldValues(values) {
+    const src = values || {};
+    Object.keys(src).forEach((key) => {
+        const el = document.getElementById(caseFieldElId(key));
+        if (!el) return;
+        if (el.type === 'checkbox') el.checked = !!src[key] && src[key] !== '0';
+        else if (el.type !== 'file') el.value = src[key] == null ? '' : String(src[key]);
+    });
+}
+
+function applyCaseFormConfigFromProgram(program) {
+    renderCaseFormFields(program);
     const note = document.getElementById('case-program-limits-note');
     if (note && program) {
-        let parts = [];
+        const parts = [];
         if (program.instructions) parts.push(program.instructions);
         if (program.maxPresentationsPerUser)
             parts.push('Up to ' + program.maxPresentationsPerUser + ' presentation(s) per doctor in this program.');
@@ -3320,13 +3501,7 @@ async function startCaseApplication(programId) {
         const uid = doctorNumericUserId();
         const res = await fetch('/api/case/prefill/' + uid + q);
         const pre = await res.json();
-        document.getElementById('case-fname').value = pre.fname || '';
-        document.getElementById('case-mname').value = pre.mname || '';
-        document.getElementById('case-lname').value = pre.lname || '';
-        document.getElementById('case-email').value = pre.email || '';
-        document.getElementById('case-phone').value = pre.phone || '';
-        document.getElementById('case-whatsapp').value = pre.whatsapp || pre.phone || '';
-        applyCaseCustomFieldValues(pre);
+        applyCaseFormFieldValues(pre);
         if (pre.fromRegistration) {
             const note = document.getElementById('case-prefill-note');
             if (!note) {
@@ -3422,56 +3597,19 @@ async function loadDoctorVolunteerPanel() {
 }
 
 async function submitCasePresentation() {
-    const uid = doctorNumericUserId();
-    if (!uid) return alert('Please sign in again to the doctor portal, then submit your application.');
-    if (!activeCaseProgramId) return alert('Select a program first');
-    const form = getCaseFormSnapshot();
-    if (
-        (caseFormFieldActive(activeCaseProgram, 'fname') || caseFormFieldActive(activeCaseProgram, 'lname')) &&
-        typeof validateRegistrationNamesClient === 'function'
-    ) {
-        const ne = validateRegistrationNamesClient(form);
-        if (ne) return alert(ne);
-    }
-    if (caseFormFieldActive(activeCaseProgram, 'email') && typeof validateEmailClient === 'function' && String(form.email || '').trim()) {
-        const ev = validateEmailClient(form.email, 'Email');
-        if (!ev.valid) return alert(ev.message);
-        form.email = ev.cleanedEmail;
-    }
-    if (caseFormFieldActive(activeCaseProgram, 'phone') && typeof validatePhoneClient === 'function' && String(form.phone || '').trim()) {
-        const pv = validatePhoneClient(form.phone, 'Phone');
-        if (!pv.valid) return alert(pv.message);
-        form.phone = pv.cleanedPhone;
-    }
-    if (caseFormFieldActive(activeCaseProgram, 'whatsapp') && typeof validatePhoneClient === 'function' && String(form.whatsapp || '').trim()) {
-        const wv = validatePhoneClient(form.whatsapp, 'WhatsApp');
-        if (!wv.valid) return alert(wv.message);
-        form.whatsapp = wv.cleanedPhone;
-    }
-    for (const field of getCaseCustomFormFields(activeCaseProgram)) {
-        if (field.required === false) continue;
-        const val = form[field.key];
-        if (val == null || String(val).trim() === '') {
-            return alert('Please complete: ' + (field.label || field.key));
-        }
-    }
+    const validated = await validateCaseFormBeforePreviewOrSubmit();
+    if (!validated) return;
+    const uid = validated.uid;
+    const form = validated.form;
+    const allFiles = validated.allFiles || [];
     if (!form.category && activeCaseProgram && activeCaseProgram.enabledCategories && activeCaseProgram.enabledCategories.length) {
         form.category = activeCaseProgram.enabledCategories[0];
     }
     if (!form.topic) form.topic = 'Case presentation';
-    const fileInput = document.getElementById('case-files');
     const maxFiles = (activeCaseProgram && activeCaseProgram.maxFilesPerSubmission) || 5;
     const uploadCfg = await ensureCaseUploadConfig(activeCaseProgramId);
     const maxMb = effectiveCaseMaxMb(activeCaseProgram, uploadCfg);
-    const useR2 = uploadCfg && CaseR2Upload.isEnabled(uploadCfg) && fileInput?.files?.length;
-    const filesField = (activeCaseProgram && activeCaseProgram.formConfig && activeCaseProgram.formConfig.fields || []).find(
-        (f) => f.key === 'files' && f.enabled !== false
-    );
-    const filesRequired = !!(filesField && filesField.required !== false);
-    if (filesRequired && !fileInput?.files?.length && !(window.__caseStagedUploadIds && window.__caseStagedUploadIds.length)) {
-        return alert('Select at least one file');
-    }
-    if (fileInput?.files?.length > maxFiles) return alert('Maximum ' + maxFiles + ' files');
+    const useR2 = uploadCfg && CaseR2Upload.isEnabled(uploadCfg) && allFiles.length;
 
     const progressEl = document.getElementById('case-upload-progress');
     const setProgress = (msg) => {
@@ -3485,9 +3623,9 @@ async function submitCasePresentation() {
         window.__caseStagedUploadIds && window.__caseStagedUploadIds.length
             ? window.__caseStagedUploadIds.slice()
             : [];
-    if (!uploadedFileIds.length && fileInput?.files?.length) {
-        for (let i = 0; i < fileInput.files.length; i++) {
-            const raw = fileInput.files[i];
+    if (!uploadedFileIds.length && allFiles.length) {
+        for (let i = 0; i < allFiles.length; i++) {
+            const raw = allFiles[i];
             if (raw.size > maxMb * 1024 * 1024) {
                 return alert(
                     'Each file must be under ' +
@@ -3503,7 +3641,9 @@ async function submitCasePresentation() {
         if (useR2) {
             try {
                 setProgress('Uploading files to secure storage… 0%');
-                uploadedFileIds = await CaseR2Upload.uploadFiles(fileInput.files, {
+                const dt = new DataTransfer();
+                allFiles.forEach((f) => dt.items.add(f));
+                uploadedFileIds = await CaseR2Upload.uploadFiles(dt.files, {
                     userId: uid,
                     caseProgramId: activeCaseProgramId,
                     onFileProgress: (idx, total, name, pct) => {
@@ -3533,8 +3673,8 @@ async function submitCasePresentation() {
             setProgress('');
         } else {
             const preparedFiles = [];
-            for (let i = 0; i < fileInput.files.length; i++) {
-                const ready = await prepareUploadFileOrAlert(fileInput.files[i]);
+            for (let i = 0; i < allFiles.length; i++) {
+                const ready = await prepareUploadFileOrAlert(allFiles[i]);
                 if (!ready) return;
                 preparedFiles.push(ready);
             }
