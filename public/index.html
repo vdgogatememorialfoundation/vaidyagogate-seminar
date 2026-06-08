@@ -467,7 +467,7 @@
     <script src="/js/portal-website-menu.js?v=20260608menu3"></script>
     <script src="/js/portal-content-protection.js"></script>
     <script src="/js/portal-scrolling-announcements.js"></script>
-    <script src="/js/vgmf-home.js?v=20260608menu2"></script>
+    <script src="/js/vgmf-home.js?v=20260608menu4"></script>
     <script src="/js/portal-theme.js"></script>
     <script src="/js/vgmf-congress.js?v=20260608menu3"></script>
     <script src="/js/vgmf-home-stats.js?v=20260607stats2"></script>
@@ -511,8 +511,13 @@
                 const tabSignup = document.getElementById('auth-tab-signup');
                 if (tabLogin) tabLogin.style.display = window.__portalAuth.showLogin !== false ? '' : 'none';
                 if (tabSignup) tabSignup.style.display = window.__portalAuth.showSignup !== false ? '' : 'none';
-                if (window.__siteCms && typeof applySiteMenu === 'function') {
-                    applySiteMenu(window.__siteCms);
+                if (window.__siteCms) {
+                    if (typeof applySiteMenu === 'function') applySiteMenu(window.__siteCms);
+                    if (typeof window.applySiteFooterExplore === 'function') {
+                        window.applySiteFooterExplore(window.__siteCms);
+                    } else {
+                        applyWebsiteMenuVisibility();
+                    }
                 } else {
                     applyWebsiteMenuVisibility();
                 }

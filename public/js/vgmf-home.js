@@ -162,6 +162,39 @@
             .join('');
     }
 
+    window.applySiteFooterExplore = function applySiteFooterExplore(cms) {
+        const exploreUl = document.getElementById('footer-explore-links');
+        if (!exploreUl || !cms) return;
+        const menuPages =
+            (window.__portalAuth && window.__portalAuth.websiteMenuPages) || {};
+        const exploreLinks =
+            window.PortalWebsiteMenu &&
+            typeof window.PortalWebsiteMenu.buildFooterExploreLinks === 'function'
+                ? window.PortalWebsiteMenu.buildFooterExploreLinks(menuPages, cms.siteMenu)
+                : [];
+        if (!exploreLinks.length) {
+            exploreUl.innerHTML = '';
+        } else {
+            exploreUl.innerHTML = exploreLinks
+                .map(function (l) {
+                    const section = l.section || 'home';
+                    return (
+                        '<li><a href="#" data-menu-key="' +
+                        escHtml(section) +
+                        '" onclick="showSection(\'' +
+                        escHtml(section) +
+                        '\'); return false;">' +
+                        escHtml(l.label || section) +
+                        '</a></li>'
+                    );
+                })
+                .join('');
+        }
+        if (typeof window.applyWebsiteMenuVisibility === 'function') {
+            window.applyWebsiteMenuVisibility();
+        }
+    };
+
     window.applySiteCms = function applySiteCms(cms) {
         if (!cms) return;
         window.__homeCms = cms;
@@ -196,37 +229,7 @@
                 'Developed by <a href="https://capturevisualstudios.com" target="_blank" rel="noopener noreferrer">Capture Visual Studios</a>';
         }
         const exploreUl = document.getElementById('footer-explore-links');
-        const menuPages =
-            (window.__portalAuth && window.__portalAuth.websiteMenuPages) || {};
-        const exploreLinks =
-            window.PortalWebsiteMenu && typeof window.PortalWebsiteMenu.buildFooterExploreLinks === 'function'
-                ? window.PortalWebsiteMenu.buildFooterExploreLinks(menuPages, cms.siteMenu)
-                : Array.isArray(foot.exploreLinks)
-                  ? foot.exploreLinks
-                  : [];
-        if (exploreUl) {
-            if (!exploreLinks.length) {
-                exploreUl.innerHTML = '';
-            } else {
-                exploreUl.innerHTML = exploreLinks
-                .map(function (l) {
-                    const section = l.section || 'home';
-                    return (
-                        '<li><a href="#" data-menu-key="' +
-                        escHtml(section) +
-                        '" onclick="showSection(\'' +
-                        escHtml(section) +
-                        '\'); return false;">' +
-                        escHtml(l.label || section) +
-                        '</a></li>'
-                    );
-                })
-                .join('');
-            }
-        }
-        if (typeof window.applyWebsiteMenuVisibility === 'function') {
-            window.applyWebsiteMenuVisibility();
-        }
+        window.applySiteFooterExplore(cms);
         const doctorUl = document.getElementById('footer-doctor-links');
         if (doctorUl && Array.isArray(foot.doctorLinks) && foot.doctorLinks.length) {
             doctorUl.innerHTML = foot.doctorLinks

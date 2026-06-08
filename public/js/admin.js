@@ -12340,8 +12340,21 @@ function cmsAddFaqRow(prefill) {
     root.appendChild(wrap);
 }
 
+function cmsWebsiteMenuPagesFromAdminDom() {
+    const wrap = document.getElementById('website-menu-pages-checkboxes');
+    if (!wrap) return window.__websiteMenuPages || {};
+    const inputs = wrap.querySelectorAll('input[data-website-menu-key]');
+    if (!inputs.length) return window.__websiteMenuPages || {};
+    const pages = {};
+    inputs.forEach(function (inp) {
+        const id = inp.getAttribute('data-website-menu-key');
+        if (id && inp.checked) pages[id] = true;
+    });
+    return pages;
+}
+
 function cmsEnabledWebsiteMenuSections() {
-    const pages = window.__websiteMenuPages || {};
+    const pages = cmsWebsiteMenuPagesFromAdminDom();
     if (window.PortalWebsiteMenu && typeof window.PortalWebsiteMenu.orderedEnabledSections === 'function') {
         return window.PortalWebsiteMenu.orderedEnabledSections(pages, [], WEBSITE_MENU_PAGE_DEFS);
     }
@@ -12353,14 +12366,15 @@ function cmsEnabledWebsiteMenuSections() {
 function syncAdminFooterExplorePreview() {
     const preview = document.getElementById('cms-footer-explore-preview');
     if (!preview) return;
-    const pages = window.__websiteMenuPages || {};
+    const pages = cmsWebsiteMenuPagesFromAdminDom();
     const siteMenu = cmsCollectMenuFromDom();
     const links =
         window.PortalWebsiteMenu && typeof window.PortalWebsiteMenu.buildFooterExploreLinks === 'function'
             ? window.PortalWebsiteMenu.buildFooterExploreLinks(pages, siteMenu)
             : [];
     if (!links.length) {
-        preview.innerHTML = '<li style="list-style:none;color:#64748b;">All pages shown (no restrictions saved yet).</li>';
+        preview.innerHTML =
+            '<li style="list-style:none;color:#64748b;">No pages selected. Enable items under <strong>Website menu pages</strong> and save portal auth policy.</li>';
         return;
     }
     preview.innerHTML = links
@@ -12413,7 +12427,7 @@ function cmsAddFooterDoctorRow(prefill) {
 }
 
 function cmsCollectFooterExploreLinks() {
-    const pages = window.__websiteMenuPages || {};
+    const pages = cmsWebsiteMenuPagesFromAdminDom();
     const siteMenu = cmsCollectMenuFromDom();
     if (window.PortalWebsiteMenu && typeof window.PortalWebsiteMenu.buildFooterExploreLinks === 'function') {
         return window.PortalWebsiteMenu.buildFooterExploreLinks(pages, siteMenu);
