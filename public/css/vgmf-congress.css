@@ -186,6 +186,16 @@
     border-radius: 10px;
     transition: color 0.2s, background 0.2s;
 }
+#cg-nav-menu-links a[hidden],
+#cg-nav-menu-links a.menu-page-hidden {
+    display: none !important;
+}
+footer li[hidden],
+footer a[hidden],
+footer li.menu-page-hidden,
+footer a.menu-page-hidden {
+    display: none !important;
+}
 .cg-nav a:hover,
 .cg-nav a.active {
     color: #0d9488;

@@ -89,10 +89,48 @@
         });
     }
 
+    function buildSiteMenuNavItems(pages, siteMenu) {
+        const defs = WEBSITE_MENU_PAGE_DEFS;
+        const sections = orderedEnabledSections(pages, siteMenu, defs);
+        const cmsBySection = {};
+        (Array.isArray(siteMenu) ? siteMenu : []).forEach(function (it) {
+            if (it && String(it.section || '').trim()) {
+                cmsBySection[String(it.section).trim()] = it;
+            }
+        });
+        return sections.map(function (section) {
+            const cmsItem = cmsBySection[section];
+            const label =
+                cmsItem && String(cmsItem.label || '').trim()
+                    ? String(cmsItem.label).trim()
+                    : labelForSection(section, siteMenu, defs);
+            if (section === 'certificate') {
+                return {
+                    kind: 'href',
+                    href: (cmsItem && cmsItem.href) || '/verify-certificate.html',
+                    label: label,
+                    menuKey: 'certificate'
+                };
+            }
+            const href = cmsItem && String(cmsItem.href || '').trim();
+            if (href && (href.startsWith('/') || href.startsWith('http'))) {
+                return {
+                    kind: 'href',
+                    href: href,
+                    label: label,
+                    menuKey: href.indexOf('verify-certificate') !== -1 ? 'certificate' : section,
+                    external: href.startsWith('http')
+                };
+            }
+            return { kind: 'section', section: section, label: label, menuKey: section };
+        });
+    }
+
     window.PortalWebsiteMenu = {
         defs: WEBSITE_MENU_PAGE_DEFS,
         pageEnabled: websiteMenuPageEnabled,
         buildFooterExploreLinks: buildFooterExploreLinks,
+        buildSiteMenuNavItems: buildSiteMenuNavItems,
         filterSiteMenuItems: filterSiteMenuItems,
         orderedEnabledSections: orderedEnabledSections,
         labelForSection: labelForSection

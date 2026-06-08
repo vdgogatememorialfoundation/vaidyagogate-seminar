@@ -23,8 +23,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="/css/vgmf-site.css">
-    <link rel="stylesheet" href="/css/vgmf-congress.css?v=20260608load1">
-    <link rel="stylesheet" href="/css/vgmf-responsive.css?v=20260520d">
+    <link rel="stylesheet" href="/css/vgmf-congress.css?v=20260608menu3">
+    <link rel="stylesheet" href="/css/vgmf-responsive.css?v=20260608menu3">
     <link rel="stylesheet" href="/css/gallery-lightbox.css">
     <script src="/js/site-seo.js?v=20260522a"></script>
     <script src="/js/portal-datetime.js"></script>
@@ -464,12 +464,12 @@
         </div>
     </div>
 
-    <script src="/js/portal-website-menu.js?v=20260608menu2"></script>
+    <script src="/js/portal-website-menu.js?v=20260608menu3"></script>
     <script src="/js/portal-content-protection.js"></script>
     <script src="/js/portal-scrolling-announcements.js"></script>
     <script src="/js/vgmf-home.js?v=20260608menu2"></script>
     <script src="/js/portal-theme.js"></script>
-    <script src="/js/vgmf-congress.js?v=20260608load1"></script>
+    <script src="/js/vgmf-congress.js?v=20260608menu3"></script>
     <script src="/js/vgmf-home-stats.js?v=20260607stats2"></script>
     <script src="/js/vgmf-marketing.js?v=20260607popup2"></script>
     <script src="/js/otp-ui.js"></script>
@@ -511,7 +511,11 @@
                 const tabSignup = document.getElementById('auth-tab-signup');
                 if (tabLogin) tabLogin.style.display = window.__portalAuth.showLogin !== false ? '' : 'none';
                 if (tabSignup) tabSignup.style.display = window.__portalAuth.showSignup !== false ? '' : 'none';
-                applyWebsiteMenuVisibility();
+                if (window.__siteCms && typeof applySiteMenu === 'function') {
+                    applySiteMenu(window.__siteCms);
+                } else {
+                    applyWebsiteMenuVisibility();
+                }
             } catch (_) {}
         }
 
@@ -525,13 +529,24 @@
                 .forEach((a) => {
                     const key = a.getAttribute('data-menu-key') || a.getAttribute('data-nav-section');
                     if (!key) return;
-                    a.style.display = isShown(key) ? '' : 'none';
+                    const show = isShown(key);
+                    a.hidden = !show;
+                    a.classList.toggle('menu-page-hidden', !show);
+                    a.style.removeProperty('display');
                 });
             document.querySelectorAll('footer a[data-menu-key]').forEach((a) => {
                 const key = a.getAttribute('data-menu-key');
                 if (!key) return;
                 const li = a.closest('li');
-                if (li) li.style.display = isShown(key) ? '' : 'none';
+                const show = isShown(key);
+                if (li) {
+                    li.hidden = !show;
+                    li.classList.toggle('menu-page-hidden', !show);
+                    li.style.removeProperty('display');
+                }
+                a.hidden = !show;
+                a.classList.toggle('menu-page-hidden', !show);
+                a.style.removeProperty('display');
             });
             const exploreCol = document.getElementById('footer-explore-links');
             if (exploreCol) {
@@ -1864,25 +1879,27 @@
         });
 
         showSection('home');
-        Promise.all([
-            loadPublicCmsAndApply(),
-            refreshPortalAuthUi().then(function () {
-                loadNotices();
+        refreshPortalAuthUi()
+            .then(function () {
+                return loadPublicCmsAndApply();
             })
-        ]).then(function () {
-            const params = new URLSearchParams(window.location.search);
-            if (params.get('emailVerified') === '1') {
-                alert('Your email address has been verified. You can sign in now.');
-                window.history.replaceState({}, '', window.location.pathname);
-            }
-            if (params.get('register') === '1' || params.get('signup') === '1') {
-                openRegisterModal();
-                window.history.replaceState({}, '', window.location.pathname);
-            } else if (params.get('login') === '1') {
-                openAuthModal('login');
-                window.history.replaceState({}, '', window.location.pathname);
-            }
-        });
+            .then(function () {
+                return loadNotices();
+            })
+            .then(function () {
+                const params = new URLSearchParams(window.location.search);
+                if (params.get('emailVerified') === '1') {
+                    alert('Your email address has been verified. You can sign in now.');
+                    window.history.replaceState({}, '', window.location.pathname);
+                }
+                if (params.get('register') === '1' || params.get('signup') === '1') {
+                    openRegisterModal();
+                    window.history.replaceState({}, '', window.location.pathname);
+                } else if (params.get('login') === '1') {
+                    openAuthModal('login');
+                    window.history.replaceState({}, '', window.location.pathname);
+                }
+            });
         if (typeof applyPortalUrls === 'function') applyPortalUrls();
         if (typeof loadOpenSeminarsStrip === 'function') loadOpenSeminarsStrip();
         loadTimerAndSeminars();

@@ -567,6 +567,40 @@
         if (!host || !cms) return;
         const menuPages =
             (window.__portalAuth && window.__portalAuth.websiteMenuPages) || {};
+        if (window.PortalWebsiteMenu && typeof window.PortalWebsiteMenu.buildSiteMenuNavItems === 'function') {
+            const navItems = window.PortalWebsiteMenu.buildSiteMenuNavItems(menuPages, cms.siteMenu);
+            host.innerHTML = navItems
+                .map(function (item) {
+                    if (item.kind === 'href') {
+                        const ext = item.external ? ' target="_blank" rel="noopener noreferrer"' : '';
+                        return (
+                            '<a href="' +
+                            esc(item.href) +
+                            '" data-menu-key="' +
+                            esc(item.menuKey) +
+                            '"' +
+                            ext +
+                            '>' +
+                            esc(item.label) +
+                            '</a>'
+                        );
+                    }
+                    return (
+                        '<a href="#" data-nav-section="' +
+                        esc(item.section) +
+                        '" data-menu-key="' +
+                        esc(item.menuKey) +
+                        '">' +
+                        esc(item.label) +
+                        '</a>'
+                    );
+                })
+                .join('');
+            if (typeof window.applyWebsiteMenuVisibility === 'function') {
+                window.applyWebsiteMenuVisibility();
+            }
+            return;
+        }
         let items = Array.isArray(cms.siteMenu) ? cms.siteMenu.filter((i) => i && i.visible !== false) : [];
         if (window.PortalWebsiteMenu && typeof window.PortalWebsiteMenu.filterSiteMenuItems === 'function') {
             items = window.PortalWebsiteMenu.filterSiteMenuItems(menuPages, items);
