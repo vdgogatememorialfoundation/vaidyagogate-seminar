@@ -4555,7 +4555,7 @@ function renderCaseProgramFieldsEditor(fields) {
               '</span>'
             : '<select id="case-field-type-' +
               idx +
-              '" style="margin:0;" onchange="caseProgFieldTypeChanged(' +
+              '" style="margin:0;min-width:140px;" onchange="caseProgFieldTypeChanged(' +
               idx +
               ')">' +
               caseProgFieldTypeOptions(type) +
