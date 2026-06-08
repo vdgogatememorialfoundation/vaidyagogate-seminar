@@ -208,7 +208,28 @@ function bootstrapApp(done) {
     persistScrollingAnnouncementsSanitizeIfNeeded(() => {});
 
     const finish = () => {
-        if (done) done();
+        db.get(`SELECT value FROM global_settings WHERE key = 'doctor_modules_global_v3'`, [], (mErr, mRow) => {
+            if (mErr) {
+                console.warn('[doctor-modules] migration check:', mErr.message);
+                if (done) done();
+                return;
+            }
+            if (mRow && mRow.value) {
+                if (done) done();
+                return;
+            }
+            db.run(
+                `UPDATE users SET doctor_modules = NULL WHERE LOWER(TRIM(COALESCE(user_role, ''))) = 'doctor'`,
+                [],
+                (uErr) => {
+                    if (uErr) console.warn('[doctor-modules] one-time clear:', uErr.message);
+                    else console.log('[doctor-modules] cleared per-user overrides (one-time migration v3)');
+                    upsertGlobalSetting('doctor_modules_global_v3', String(Date.now()), () => {
+                        if (done) done();
+                    });
+                }
+            );
+        });
     };
 
     const runFullMigrations = () => {
@@ -5488,13 +5509,14 @@ function respondDoctorPortalAccess(res, row) {
         const c = portalAuthPolicy.getPortalAuthConfig();
         const globalRegular = c.doctorPortalModulesRegular || {};
         const globalVolunteer = c.doctorPortalModulesVolunteer || {};
+        const useGlobalModules = !doctorPortalModules.userHasCustomModules(row.doctor_modules);
+        const modulesForResolve = useGlobalModules ? null : row.doctor_modules;
         const allowedSet = doctorPortalModules.resolveDoctorAllowedTabs(
             row.doctor_category,
             globalRegular,
             globalVolunteer,
-            row.doctor_modules
+            modulesForResolve
         );
-        const useGlobalModules = !doctorPortalModules.userHasCustomModules(row.doctor_modules);
         const parsed = doctorPortalModules.parseModulesJson(row.doctor_modules);
         const doctor_modules =
             parsed && Object.keys(parsed).length ? doctorPortalModules.sanitizeModulesInput(parsed) : null;
@@ -5503,7 +5525,7 @@ function respondDoctorPortalAccess(res, row) {
             doctor_category: doctorPortalModules.normalizeDoctorCategory(row.doctor_category),
             doctor_modules,
             useGlobalModules,
-            allowedTabs: allowedSet ? Array.from(allowedSet) : null,
+            allowedTabs: doctorPortalModules.allowedSetToTabArray(allowedSet),
             globalRegular,
             globalVolunteer,
             tabDefs: doctorPortalModules.TAB_DEFS
@@ -9333,8 +9355,7 @@ app.post('/api/admin/portal-auth-config', (req, res) => {
             if (req.body && req.body.resetAllDoctorModuleOverrides) {
                 db.run(
                     `UPDATE users SET doctor_modules = NULL
-                     WHERE LOWER(COALESCE(user_role, role, '')) = 'doctor'
-                        OR (LOWER(COALESCE(role, '')) = 'user' AND LOWER(COALESCE(user_role, 'doctor')) = 'doctor')`,
+                     WHERE LOWER(TRIM(COALESCE(user_role, ''))) = 'doctor'`,
                     [],
                     (clrErr) => {
                         if (clrErr) return res.status(500).json({ error: clrErr.message });

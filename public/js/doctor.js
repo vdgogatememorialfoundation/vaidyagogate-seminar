@@ -700,7 +700,7 @@ async function refreshDoctorPortalAccess() {
             delete window.__doctorPortalUseGlobalModules;
             return false;
         }
-        window.__doctorPortalAllowedTabs = data.allowedTabs ?? null;
+        window.__doctorPortalAllowedTabs = Array.isArray(data.allowedTabs) ? data.allowedTabs : null;
         window.__doctorPortalUseGlobalModules = data.useGlobalModules !== false;
         window.__doctorPortalModulesGlobal = {
             regular: data.globalRegular || {},
@@ -764,13 +764,13 @@ function volunteerDoctorModuleDefaults() {
 }
 
 async function applyDoctorModuleAccessFromUser(user) {
-    if (window.__doctorPortalAllowedTabs !== undefined) {
-        applyDoctorAllowedTabsToDom(allowedTabsArrayToSet(window.__doctorPortalAllowedTabs));
+    if (Array.isArray(window.__doctorPortalAllowedTabs)) {
+        applyDoctorAllowedTabsToDom(new Set(window.__doctorPortalAllowedTabs));
         return;
     }
     const refreshed = await refreshDoctorPortalAccess().catch(() => false);
-    if (refreshed && window.__doctorPortalAllowedTabs !== undefined) {
-        applyDoctorAllowedTabsToDom(allowedTabsArrayToSet(window.__doctorPortalAllowedTabs));
+    if (refreshed && Array.isArray(window.__doctorPortalAllowedTabs)) {
+        applyDoctorAllowedTabsToDom(new Set(window.__doctorPortalAllowedTabs));
         return;
     }
     const globalCfg = await loadDoctorPortalModulesGlobal();
