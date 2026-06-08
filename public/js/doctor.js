@@ -532,24 +532,21 @@ async function goToCasePreview() {
         }
     }
 
-    document.getElementById('case-step-form').classList.add('hidden');
-    document.getElementById('case-step-preview').classList.remove('hidden');
+    showCaseApplicationStep('preview');
     renderCasePreviewSummary();
     generateCasePreviewPdf();
 }
 
 function backFromCasePreview() {
-    document.getElementById('case-step-preview').classList.add('hidden');
-    document.getElementById('case-step-form').classList.remove('hidden');
+    showCaseApplicationStep('form');
 }
 
 function cancelCaseApplication() {
     window.__caseStagedUploadIds = null;
     window.__caseStagedFileMeta = [];
-    const stepForm = document.getElementById('case-step-form');
-    const stepPrev = document.getElementById('case-step-preview');
-    if (stepForm) stepForm.classList.remove('hidden');
-    if (stepPrev) stepPrev.classList.add('hidden');
+    showCaseApplicationStep('instructions');
+    const cb = document.getElementById('case-field-agree_terms');
+    if (cb) cb.checked = false;
     activeCaseProgramId = null;
     activeCaseProgram = null;
     loadCaseProgramsGrid();
@@ -3197,6 +3194,135 @@ function getCaseEnabledFormFields(program) {
     );
 }
 
+function getCaseTermsField(program) {
+    return getCaseEnabledFormFields(program).find(function (f) {
+        return f.key === 'agree_terms' || normalizeCaseFieldType(f.type) === 'terms';
+    });
+}
+
+function caseApplicationHasInstructions(program) {
+    return !!String((program && program.instructions) || '').trim();
+}
+
+function caseApplicationHasTnc(program) {
+    return !!getCaseTermsField(program);
+}
+
+function populateCaseInstructionsStep(program) {
+    const body = document.getElementById('case-instructions-body');
+    if (!body) return;
+    body.textContent = String((program && program.instructions) || '').trim();
+}
+
+function populateCaseTncStep(program) {
+    const tf = getCaseTermsField(program);
+    const body = document.getElementById('case-tnc-body');
+    const label = document.getElementById('case-tnc-accept-label');
+    const cb = document.getElementById('case-field-agree_terms');
+    if (body) {
+        const text = tf && tf.termsText ? String(tf.termsText).trim() : '';
+        body.textContent = text || 'Terms and conditions for this case presentation program.';
+    }
+    if (label) label.textContent = (tf && tf.label) || 'I accept the terms and conditions';
+    if (cb) {
+        cb.checked = false;
+        cb.required = !!(tf && tf.required !== false);
+    }
+}
+
+function updateCaseWizardStepLabel(step) {
+    const el = document.getElementById('case-wizard-step-label');
+    if (!el || !activeCaseProgram) return;
+    const hasInstr = caseApplicationHasInstructions(activeCaseProgram);
+    const hasTnc = caseApplicationHasTnc(activeCaseProgram);
+    const total = (hasInstr ? 1 : 0) + (hasTnc ? 1 : 0) + 1;
+    let n = 1;
+    if (step === 'instructions') {
+        el.textContent = total > 1 ? 'Step ' + n + ' of ' + total + ' — Instructions' : 'Instructions';
+        return;
+    }
+    if (hasInstr) n += 1;
+    if (step === 'tnc') {
+        el.textContent = 'Step ' + n + ' of ' + total + ' — Terms & conditions';
+        return;
+    }
+    if (hasTnc) n += 1;
+    if (step === 'form') {
+        el.textContent = total > 1 ? 'Step ' + n + ' of ' + total + ' — Application form' : 'Application form';
+        return;
+    }
+    if (step === 'preview') {
+        el.textContent = 'Preview & submit';
+        return;
+    }
+    el.textContent = '';
+}
+
+function showCaseApplicationStep(step) {
+    const instr = document.getElementById('case-step-instructions');
+    const tnc = document.getElementById('case-step-tnc');
+    const formWrap = document.getElementById('case-form-step-wrap');
+    const preview = document.getElementById('case-step-preview');
+    if (instr) instr.classList.toggle('hidden', step !== 'instructions');
+    if (tnc) tnc.classList.toggle('hidden', step !== 'tnc');
+    if (formWrap) formWrap.classList.toggle('hidden', step !== 'form');
+    if (preview) preview.classList.toggle('hidden', step !== 'preview');
+    const stepForm = document.getElementById('case-step-form');
+    if (stepForm) stepForm.classList.toggle('hidden', step === 'preview');
+    updateCaseWizardStepLabel(step);
+}
+
+function enterCaseApplicationWizard() {
+    populateCaseInstructionsStep(activeCaseProgram);
+    populateCaseTncStep(activeCaseProgram);
+    if (caseApplicationHasInstructions(activeCaseProgram)) {
+        showCaseApplicationStep('instructions');
+    } else if (caseApplicationHasTnc(activeCaseProgram)) {
+        showCaseApplicationStep('tnc');
+    } else {
+        showCaseApplicationStep('form');
+    }
+}
+
+function continueCaseFromInstructions() {
+    if (caseApplicationHasTnc(activeCaseProgram)) {
+        showCaseApplicationStep('tnc');
+    } else {
+        showCaseApplicationStep('form');
+    }
+}
+window.continueCaseFromInstructions = continueCaseFromInstructions;
+
+function continueCaseFromTnc() {
+    const tf = getCaseTermsField(activeCaseProgram);
+    const cb = document.getElementById('case-field-agree_terms');
+    if (tf && tf.required !== false && !(cb && cb.checked)) {
+        return alert('Please accept the terms and conditions to continue.');
+    }
+    showCaseApplicationStep('form');
+}
+window.continueCaseFromTnc = continueCaseFromTnc;
+
+function backFromCaseTncStep() {
+    if (caseApplicationHasInstructions(activeCaseProgram)) {
+        showCaseApplicationStep('instructions');
+    } else {
+        cancelCaseApplication();
+    }
+}
+window.backFromCaseTncStep = backFromCaseTncStep;
+
+function backFromCaseFormStep() {
+    if (caseApplicationHasTnc(activeCaseProgram)) {
+        showCaseApplicationStep('tnc');
+    } else if (caseApplicationHasInstructions(activeCaseProgram)) {
+        showCaseApplicationStep('instructions');
+    } else {
+        cancelCaseApplication();
+    }
+}
+window.backFromCaseFormStep = backFromCaseFormStep;
+
 function getCaseCustomFormFields(program) {
     return getCaseEnabledFormFields(program).filter((f) => !CASE_BUILTIN_FIELD_KEYS.has(f.key));
 }
@@ -3471,7 +3597,9 @@ function renderCaseFormFields(program) {
     const host = document.getElementById('case-form-fields');
     if (!host) return;
     host.innerHTML = '';
-    const fields = getCaseEnabledFormFields(program);
+    const fields = getCaseEnabledFormFields(program).filter(function (f) {
+        return f.key !== 'agree_terms' && normalizeCaseFieldType(f.type) !== 'terms';
+    });
     let i = 0;
     while (i < fields.length) {
         const f = fields[i];
@@ -3516,7 +3644,6 @@ function applyCaseFormConfigFromProgram(program) {
     const note = document.getElementById('case-program-limits-note');
     if (note && program) {
         const parts = [];
-        if (program.instructions) parts.push(program.instructions);
         if (program.maxPresentationsPerUser)
             parts.push('Up to ' + program.maxPresentationsPerUser + ' presentation(s) per doctor in this program.');
         if (program.showSeatsPublic !== false && program.slotsRemaining != null)
@@ -3597,10 +3724,6 @@ async function startCaseApplication(programId) {
     activeCaseProgramId = programId;
     window.__caseStagedUploadIds = null;
     window.__caseStagedFileMeta = [];
-    const stepForm = document.getElementById('case-step-form');
-    const stepPrev = document.getElementById('case-step-preview');
-    if (stepForm) stepForm.classList.remove('hidden');
-    if (stepPrev) stepPrev.classList.add('hidden');
     const prog = activeCasePrograms.find((p) => Number(p.id) === Number(programId));
     activeCaseProgram = prog || null;
     const grid = document.getElementById('case-programs-grid');
@@ -3609,6 +3732,11 @@ async function startCaseApplication(programId) {
     if (form) form.classList.remove('hidden');
     const titleEl = document.getElementById('case-form-program-title');
     if (titleEl && prog) titleEl.textContent = prog.title;
+    const prefillNote = document.getElementById('case-prefill-note');
+    if (prefillNote) {
+        prefillNote.classList.add('hidden');
+        prefillNote.textContent = '';
+    }
     try {
         const detailRes = await fetch('/api/case/programs/' + programId);
         if (detailRes.ok) {
@@ -3617,6 +3745,7 @@ async function startCaseApplication(programId) {
         } else if (prog) {
             applyCaseFormConfigFromProgram(prog);
         }
+        enterCaseApplicationWizard();
         const q =
             activeCaseProgram && activeCaseProgram.seminar_id
                 ? `?seminarId=${activeCaseProgram.seminar_id}`
@@ -3627,18 +3756,13 @@ async function startCaseApplication(programId) {
         const res = await fetch('/api/case/prefill/' + uid + q);
         const pre = await res.json();
         applyCaseFormFieldValues(pre);
-        if (pre.fromRegistration) {
-            const note = document.getElementById('case-prefill-note');
-            if (!note) {
-                const p = document.createElement('p');
-                p.id = 'case-prefill-note';
-                p.style.cssText = 'color:#15803d;font-size:0.88rem;margin-bottom:10px;';
-                p.textContent = 'Details loaded from your seminar registration.';
-                form.insertBefore(p, form.querySelector('.form-group'));
-            }
+        if (pre.fromRegistration && prefillNote) {
+            prefillNote.textContent = 'Details loaded from your seminar registration.';
+            prefillNote.classList.remove('hidden');
         }
     } catch (e) {
         console.error(e);
+        enterCaseApplicationWizard();
     }
 }
 

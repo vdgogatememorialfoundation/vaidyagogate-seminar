@@ -1708,7 +1708,7 @@
                         <div><label>Linked seminar</label><select id="case-prog-seminar" style="width:100%;padding:8px;"><option value="">— None —</option></select></div>
                         <div style="grid-column:1/-1;"><label>Description</label><textarea id="case-prog-desc" rows="2" style="width:100%;padding:8px;"></textarea></div>
                         <div style="grid-column:1/-1;">
-                            <label>Instructions (shown to doctors)</label>
+                            <label>Instructions (shown to doctors before they accept terms)</label>
                             <button type="button" class="btn-secondary" style="margin-left:8px;font-size:0.82rem;padding:4px 10px;" onclick="applyDefaultCaseProgramRules()">Load default 2026 rules</button>
                             <textarea id="case-prog-instructions" rows="12" style="width:100%;padding:8px;font-size:0.88rem;line-height:1.45;margin-top:6px;"></textarea>
                         </div>
@@ -1727,7 +1727,7 @@
                         <div><label><input type="checkbox" id="case-prog-active" checked> Program active</label></div>
                     </div>
                     <h4 style="margin:16px 0 8px;">Application form fields</h4>
-                    <p style="color:#64748b;font-size:0.85rem;margin:-4px 0 8px;">Drag rows to reorder. Types include dropdown, multi-option, file upload, rating, checkbox, and terms acceptance. Save the program after changes.</p>
+                    <p style="color:#64748b;font-size:0.85rem;margin:-4px 0 8px;">Drag rows to reorder. Doctors see <strong>Instructions</strong> first (if set above), then <strong>Terms</strong> text from the <code>agree_terms</code> row, then the application form. Types include dropdown, multi-option, file upload, rating, checkbox, and terms acceptance.</p>
                     <button type="button" class="btn-secondary" style="font-size:0.82rem;padding:4px 10px;margin-bottom:8px;" onclick="applyDefaultCaseApplicationForm()">Load default application form</button>
                     <table class="data-table" style="margin-bottom:8px;">
                         <thead><tr><th style="width:36px;"></th><th>Field key</th><th>Label</th><th style="min-width:148px;">Type</th><th>Enabled</th><th>Required</th><th></th></tr></thead>

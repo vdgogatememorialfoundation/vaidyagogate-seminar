@@ -686,11 +686,39 @@
                     <div class="card hidden" id="case-application-form">
                         <button type="button" class="btn-primary" style="background:#64748b;margin-bottom:14px;" onclick="cancelCaseApplication()"><i class="fas fa-arrow-left"></i> Back to programs</button>
                         <h3 id="case-form-program-title" style="margin:0 0 12px;color:#0f766e;"></h3>
-                        <p id="case-prefill-note" class="hidden" style="color:#0f766e;font-size:0.88rem;margin-bottom:12px;font-weight:600;"></p>
-                        <div id="case-form-fields"></div>
-                        <div id="case-step-form">
-                        <button type="button" class="btn-primary" onclick="goToCasePreview()">Next: Preview application</button>
+                        <p id="case-wizard-step-label" style="font-size:0.82rem;color:#64748b;margin:-6px 0 14px;font-weight:600;"></p>
+
+                        <div id="case-step-instructions" class="hidden" style="margin-bottom:16px;">
+                            <h4 style="color:#0f766e;margin:0 0 10px;">Instructions</h4>
+                            <div id="case-instructions-body" style="font-size:0.9rem;color:#334155;line-height:1.55;white-space:pre-wrap;padding:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;max-height:min(62vh,520px);overflow-y:auto;"></div>
+                            <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;">
+                                <button type="button" class="btn-primary" style="background:#64748b;" onclick="cancelCaseApplication()">Back</button>
+                                <button type="button" class="btn-primary" onclick="continueCaseFromInstructions()">I have read the instructions — Continue</button>
+                            </div>
                         </div>
+
+                        <div id="case-step-tnc" class="hidden" style="margin-bottom:16px;">
+                            <h4 style="color:#0f766e;margin:0 0 10px;">Terms &amp; conditions</h4>
+                            <div id="case-tnc-body" style="font-size:0.9rem;color:#334155;line-height:1.55;white-space:pre-wrap;padding:14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;max-height:min(52vh,440px);overflow-y:auto;margin-bottom:14px;"></div>
+                            <label style="display:flex;align-items:flex-start;gap:10px;font-weight:600;margin-bottom:14px;cursor:pointer;">
+                                <input type="checkbox" id="case-field-agree_terms" class="case-form-input" style="width:auto;margin-top:4px;">
+                                <span id="case-tnc-accept-label">I accept the terms and conditions</span>
+                            </label>
+                            <div style="display:flex;flex-wrap:wrap;gap:10px;">
+                                <button type="button" class="btn-primary" style="background:#64748b;" onclick="backFromCaseTncStep()">Back</button>
+                                <button type="button" class="btn-primary" onclick="continueCaseFromTnc()">Accept and continue to application</button>
+                            </div>
+                        </div>
+
+                        <div id="case-form-step-wrap" class="hidden">
+                            <p id="case-prefill-note" class="hidden" style="color:#0f766e;font-size:0.88rem;margin-bottom:12px;font-weight:600;"></p>
+                            <div id="case-form-fields"></div>
+                            <div id="case-step-form" style="margin-top:16px;display:flex;flex-wrap:wrap;gap:10px;">
+                                <button type="button" class="btn-primary" style="background:#64748b;" onclick="backFromCaseFormStep()">Back</button>
+                                <button type="button" class="btn-primary" onclick="goToCasePreview()">Next: Preview application</button>
+                            </div>
+                        </div>
+
                         <div id="case-step-preview" class="hidden" style="margin-top:16px;">
                             <h4 style="color:#0f766e;margin-bottom:12px;">Preview &amp; submit</h4>
                             <div class="preview-shell" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
@@ -969,6 +997,6 @@
     <link rel="stylesheet" href="/css/book-track.css?v=20260529stg">
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/doctor-books.js?v=20260528livetrack"></script>
-    <script src="/js/doctor.js?v=20260608case1"></script>
+    <script src="/js/doctor.js?v=20260608case2"></script>
 </body>
 </html>
