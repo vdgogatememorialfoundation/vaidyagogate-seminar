@@ -2279,6 +2279,7 @@ async function loadDoctorPortalUpdatesFromCms() {
 
 let activeSeminars = [];
 let seminarGridCountdownTimer = null;
+let caseGridCountdownTimer = null;
 let doctorSliderTimer = null;
 let doctorSliderIndex = 0;
 
@@ -2606,6 +2607,43 @@ function formatCountdownTo(targetMs) {
     parts.push(`${min}m`);
     parts.push(`${sec}s`);
     return parts.join(' ');
+}
+
+function clearCaseGridCountdownTimer() {
+    if (caseGridCountdownTimer) {
+        clearInterval(caseGridCountdownTimer);
+        caseGridCountdownTimer = null;
+    }
+}
+
+function startCaseGridCountdownTimer() {
+    clearCaseGridCountdownTimer();
+    const tick = () => {
+        let needReload = false;
+        let anyUpcoming = false;
+        activeCasePrograms.forEach((p) => {
+            const w = registrationWindowState(p);
+            if (w.state === 'upcoming') {
+                anyUpcoming = true;
+                const el = document.getElementById('case-reg-countdown-' + p.id);
+                if (el && w.opensAt != null) {
+                    el.textContent = formatCountdownTo(w.opensAt);
+                }
+                if (w.opensAt != null && Date.now() >= w.opensAt) {
+                    needReload = true;
+                }
+            }
+        });
+        if (needReload) {
+            loadCaseProgramsGrid();
+            return;
+        }
+        if (!anyUpcoming) {
+            clearCaseGridCountdownTimer();
+        }
+    };
+    tick();
+    caseGridCountdownTimer = setInterval(tick, 1000);
 }
 
 function clearSeminarGridCountdownTimer() {
@@ -3116,6 +3154,9 @@ function switchTab(tabId, menuEl) {
     if (tabId !== 'tab-certificate') {
         stopCertTrackingPoll();
         stopDoctorCertCountdownTimer();
+    }
+    if (tabId !== 'tab-abstract') {
+        clearCaseGridCountdownTimer();
     }
     if (tabId === 'tab-feedback') {
         loadDashboardFeedbackForm();
@@ -3657,6 +3698,7 @@ async function loadCaseProgramsGrid() {
     const grid = document.getElementById('case-programs-grid');
     const form = document.getElementById('case-application-form');
     if (!grid || !currentUser) return;
+    clearCaseGridCountdownTimer();
     grid.classList.remove('hidden');
     if (form) form.classList.add('hidden');
     grid.innerHTML = '<p style="color:#64748b;">Loading programs…</p>';
@@ -3680,11 +3722,15 @@ async function loadCaseProgramsGrid() {
             return;
         }
         grid.innerHTML = '';
+        let hasUpcoming = false;
         activeCasePrograms.forEach((p) => {
             const card = document.createElement('div');
             card.className = 'card';
             card.style.padding = '16px';
-            const win = p.windowState || 'open';
+            const w = registrationWindowState(p);
+            const win = w.state;
+            if (win === 'upcoming') hasUpcoming = true;
+            const regStartLabel = p.registration_start ? formatTrackDateTime(p.registration_start) : '';
             const regLine =
                 p.registration_start || p.registration_end
                     ? `<p style="font-size:0.8rem;color:#64748b;margin-top:6px;">Applications: ${escapeHtml(
@@ -3696,8 +3742,17 @@ async function loadCaseProgramsGrid() {
                 btn = `<button type="button" class="btn-primary" style="margin-top:10px;" onclick="startCaseApplication(${p.id})">Apply now</button>`;
             } else if (win === 'upcoming') {
                 btn =
-                    '<p style="color:#b45309;margin-top:10px;font-size:0.88rem;">Applications not open yet</p>' +
-                    '<button type="button" class="btn-primary" style="margin-top:8px;opacity:0.55;" disabled>Not open</button>';
+                    '<div style="background:#eef2ff;border-radius:10px;padding:14px;margin-top:10px;border:1px solid #c7d2fe;">' +
+                    '<p style="font-size:0.8rem;color:#4338ca;font-weight:600;margin:0;"><i class="fas fa-hourglass-half"></i> Applications open in</p>' +
+                    (regStartLabel
+                        ? '<p style="font-size:0.88rem;color:#312e81;margin:6px 0 0;">' + escapeHtml(regStartLabel) + '</p>'
+                        : '') +
+                    '<p id="case-reg-countdown-' +
+                    p.id +
+                    '" style="font-size:1.15rem;font-weight:700;color:#1a237e;margin:8px 0 0;">' +
+                    (w.opensAt != null ? formatCountdownTo(w.opensAt) : '—') +
+                    '</p></div>' +
+                    '<button type="button" class="btn-primary" style="margin-top:8px;opacity:0.55;" disabled>Apply now</button>';
             } else {
                 btn = '<p style="color:#94a3b8;margin-top:10px;font-size:0.88rem;">Applications closed for this program</p>';
             }
@@ -3709,11 +3764,12 @@ async function loadCaseProgramsGrid() {
                 <p style="font-size:0.85rem;color:#64748b;margin:0;">${escapeHtml(p.description || '')}</p>
                 ${p.seminar_title ? `<p style="font-size:0.82rem;margin-top:6px;">Linked seminar: ${escapeHtml(p.seminar_title)}</p>` : ''}
                 ${regLine}
-                <p style="font-size:0.78rem;margin-top:6px;color:${win === 'open' ? '#059669' : '#64748b'};">Status: ${escapeHtml(win === 'open' ? 'Open for applications' : win === 'upcoming' ? 'Opening soon' : 'Closed')}</p>
+                <p style="font-size:0.78rem;margin-top:6px;color:${win === 'open' ? '#059669' : win === 'upcoming' ? '#4338ca' : '#64748b'};">Status: ${escapeHtml(win === 'open' ? 'Open for applications' : win === 'upcoming' ? 'Opening soon — see countdown' : 'Closed')}</p>
                 ${slots}
                 ${btn}`;
             grid.appendChild(card);
         });
+        if (hasUpcoming) startCaseGridCountdownTimer();
     } catch (e) {
         console.error(e);
         grid.innerHTML = '<p style="color:#b91c1c;">Could not load programs.</p>';
@@ -3721,6 +3777,11 @@ async function loadCaseProgramsGrid() {
 }
 
 async function startCaseApplication(programId) {
+    const progEarly = activeCasePrograms.find((p) => Number(p.id) === Number(programId));
+    if (progEarly && registrationWindowState(progEarly).state === 'upcoming') {
+        alert('Applications are not open yet. Please wait until the countdown reaches zero.');
+        return;
+    }
     activeCaseProgramId = programId;
     window.__caseStagedUploadIds = null;
     window.__caseStagedFileMeta = [];
