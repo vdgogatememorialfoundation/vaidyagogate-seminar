@@ -25,7 +25,9 @@
             const key =
                 x.autoFromSeminarId != null
                     ? 'seminar:' + Number(x.autoFromSeminarId)
-                    : 'manual:' + String(x.title || '').trim() + '|' + String(x.body || '').trim().slice(0, 80);
+                    : x.autoFromCaseProgramId != null
+                      ? 'case:' + Number(x.autoFromCaseProgramId)
+                      : 'manual:' + String(x.title || '').trim() + '|' + String(x.body || '').trim().slice(0, 80);
             if (seen.has(key)) return;
             seen.add(key);
             out.push(x);

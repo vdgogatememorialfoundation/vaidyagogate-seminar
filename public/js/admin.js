@@ -12408,6 +12408,7 @@ function cmsApplyHeroFieldsToForm(cms) {
     const sched = cms.schedulePage || {};
     const foot = cms.footer || {};
     const stats = Array.isArray(cms.heroStats) ? cms.heroStats : [];
+    const foundedStat = stats.find((s) => s && /founded/i.test(String(s.label || '')));
     const set = (id, v) => {
         const el = document.getElementById(id);
         if (el) el.value = v != null ? String(v) : '';
@@ -12426,8 +12427,8 @@ function cmsApplyHeroFieldsToForm(cms) {
     set('cms-stat1-lbl', stats[0] && stats[0].label);
     set('cms-stat2-val', stats[1] && stats[1].value);
     set('cms-stat2-lbl', stats[1] && stats[1].label);
-    set('cms-stat3-val', stats[2] && stats[2].value);
-    set('cms-stat3-lbl', stats[2] && stats[2].label);
+    set('cms-founded-year', (foundedStat && foundedStat.value) || cms.foundedYear || '1972');
+    set('cms-founded-label', (foundedStat && foundedStat.label) || 'Founded');
     set('cms-stat4-val', stats[3] && stats[3].value);
     set('cms-stat4-lbl', stats[3] && stats[3].label);
     set('cms-schedule-title', sched.title);
@@ -12465,9 +12466,10 @@ function cmsCollectHeroFieldsFromForm() {
         heroStats: [
             { value: gv('cms-stat1-val'), label: gv('cms-stat1-lbl') },
             { value: gv('cms-stat2-val'), label: gv('cms-stat2-lbl') },
-            { value: gv('cms-stat3-val'), label: gv('cms-stat3-lbl') },
+            { value: gv('cms-founded-year'), label: gv('cms-founded-label') || 'Founded' },
             { value: gv('cms-stat4-val'), label: gv('cms-stat4-lbl') }
         ].filter((s) => s.value || s.label),
+        foundedYear: gv('cms-founded-year'),
         schedulePage: {
             title: gv('cms-schedule-title'),
             subtitle: gv('cms-schedule-subtitle')
@@ -13025,7 +13027,7 @@ async function loadAdminSiteCms() {
     loadJudgeCommunicationsAdmin().catch(console.error);
     populateVenueBroadcastSeminars().catch(console.error);
     try {
-        const res = await fetch('/api/admin/site-cms');
+        const res = await fetch('/api/public/site-cms');
         const cms = await res.json();
         __siteCmsEditing = cms;
         tickerEl.value = cms.tickerText || '';
@@ -13034,11 +13036,7 @@ async function loadAdminSiteCms() {
         const sl = document.getElementById('cms-slides');
         if (sl) sl.value = JSON.stringify(cms.slides || [], null, 2);
         cmsFillReviewRows(cms.reviews || []);
-        cmsFillScrollingRows(
-            (cms.scrollingAnnouncements || []).filter(
-                (a) => a && a.autoFromSeminarId == null && a.autoFromCaseProgramId == null
-            )
-        );
+        cmsFillScrollingRows(cms.scrollingAnnouncements || []);
         cmsFillPublicNoticeRows(cms.publicNotices || []);
         cmsFillDoctorRows(cms.doctorUpdates || []);
         cmsFillAboutRows(cms.aboutSections || []);
@@ -13370,6 +13368,7 @@ async function saveAdminSiteCms() {
             topBar: heroBundle.topBar,
             hero: heroBundle.hero,
             heroStats: heroBundle.heroStats,
+            foundedYear: heroBundle.foundedYear,
             schedulePage: heroBundle.schedulePage,
             contact: heroBundle.contact,
             footer: heroBundle.footer,
@@ -14378,35 +14377,31 @@ async function loadAdminHeroSeminarPreview() {
         const data = await res.json();
         const seminars = (data && data.seminars) || [];
         const active = seminars.filter((s) => s && Number(s.is_active) !== 0);
-        const open = active.filter((s) => {
-            const now = Date.now();
-            const parseMs = (v) => {
-                if (!v) return null;
-                const d = new Date(String(v).replace(' ', 'T') + '+05:30');
-                const t = d.getTime();
-                return Number.isNaN(t) ? null : t;
-            };
-            const rs = parseMs(s.registration_start);
-            const re = parseMs(s.registration_end);
-            if (rs != null && now < rs) return false;
-            if (re != null && now > re) return false;
-            return true;
-        });
-        if (!open.length) {
+        if (!active.length) {
             el.innerHTML =
-                '<strong>No seminar registration open right now.</strong> Hero slider shows your uploaded images with headline text from <em>Homepage hero &amp; top bar</em>. The Register button uses your primary button label when registration opens.';
+                '<strong>No active seminars</strong> for the current portal year. Create one under Seminar Management — it will appear in the homepage hero automatically (upload a Hero image for a photo background).';
             return;
         }
-        const lines = open.map(
-            (s) =>
+        const lines = active.map((s) => {
+            const img = s.hero_image_path || s.flyer_path || '';
+            const imgNote = img
+                ? '<span style="color:#15803d;">✓ image</span>'
+                : '<span style="color:#b45309;">no hero image yet</span>';
+            const when = s.event_date ? String(s.event_date).slice(0, 10) : 'date TBA';
+            return (
                 '<li style="margin:4px 0;"><strong>' +
                 escapeHtml(s.title || 'Seminar') +
-                '</strong> — Register now button will be active on hero slides</li>'
-        );
+                '</strong> · ' +
+                escapeHtml(when) +
+                ' · ' +
+                imgNote +
+                '</li>'
+            );
+        });
         el.innerHTML =
-            '<strong>' +
-            open.length +
-            ' seminar(s) with open registration:</strong><ul style="margin:8px 0 0 18px;padding:0;">' +
+            '<strong>Live seminar slides on homepage (' +
+            active.length +
+            '):</strong><ul style="margin:8px 0 0 18px;padding:0;">' +
             lines.join('') +
             '</ul>';
     } catch (e) {
