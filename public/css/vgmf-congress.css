@@ -467,7 +467,7 @@ footer a.menu-page-hidden {
     opacity: 0;
     transition: opacity 0.35s ease;
 }
-.congress-hero-banner-stage:has(.congress-hero-banner-img.is-ready) .congress-hero-banner-glow {
+.congress-hero-banner-stage.is-ready .congress-hero-banner-glow {
     opacity: 1;
 }
 .congress-hero-banner-frame {
@@ -507,7 +507,7 @@ footer a.menu-page-hidden {
 .congress-hero-banner-img.is-ready {
     opacity: 1;
 }
-.congress-hero-banner-frame:has(.congress-hero-banner-img:not(.is-ready)) {
+.congress-hero-banner-frame.is-pending {
     min-width: min(240px, 72vw);
     min-height: min(120px, 18vh);
 }

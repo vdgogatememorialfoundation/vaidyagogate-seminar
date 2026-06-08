@@ -395,8 +395,13 @@
         imgs.forEach(function (img) {
             if (img.dataset.capBound === '1') return;
             img.dataset.capBound = '1';
+            const frame = img.closest('.congress-hero-banner-frame');
+            const stage = img.closest('.congress-hero-banner-stage');
+            if (frame) frame.classList.add('is-pending');
             function markReady() {
                 img.classList.add('is-ready');
+                if (frame) frame.classList.remove('is-pending');
+                if (stage) stage.classList.add('is-ready');
             }
             function apply() {
                 if (img.naturalWidth && img.naturalHeight) {
