@@ -134,12 +134,8 @@
             seen.add(key);
             slides.push(sl);
         }
-        const seminarSlides = buildSeminarHeroSlides(seminars);
-        if (seminarSlides.length) {
-            seminarSlides.forEach(pushSlide);
-        } else {
-            buildMarketingBannerSlides(marketingBanners).forEach(pushSlide);
-        }
+        buildSeminarHeroSlides(seminars).forEach(pushSlide);
+        buildMarketingBannerSlides(marketingBanners).forEach(pushSlide);
         const fromCms = Array.isArray(cms && cms.slides) ? cms.slides : [];
         fromCms.forEach((sl) => {
             if (!sl || (!sl.image && !sl.title)) return;

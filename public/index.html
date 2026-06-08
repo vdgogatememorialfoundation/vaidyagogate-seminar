@@ -428,7 +428,12 @@
         <div class="sap-backdrop"></div>
         <div class="sap-panel" role="dialog" aria-labelledby="sap-heading">
             <button type="button" class="sap-close" aria-label="Close">&times;</button>
-            <img id="sap-image" alt="" class="hidden">
+            <div class="sap-image-wrap" id="sap-image-wrap">
+                <button type="button" class="sap-slide-prev hidden" aria-label="Previous slide">&lsaquo;</button>
+                <img id="sap-image" alt="">
+                <button type="button" class="sap-slide-next hidden" aria-label="Next slide">&rsaquo;</button>
+                <div class="sap-slide-dots hidden" id="sap-slide-dots"></div>
+            </div>
             <div class="sap-body-wrap">
                 <h3 id="sap-heading">Announcement</h3>
                 <p id="sap-body"></p>
@@ -441,9 +446,9 @@
     <script src="/js/portal-scrolling-announcements.js"></script>
     <script src="/js/vgmf-home.js"></script>
     <script src="/js/portal-theme.js"></script>
-    <script src="/js/vgmf-congress.js?v=20260607hero4"></script>
+    <script src="/js/vgmf-congress.js?v=20260607hero5"></script>
     <script src="/js/vgmf-home-stats.js"></script>
-    <script src="/js/vgmf-marketing.js"></script>
+    <script src="/js/vgmf-marketing.js?v=20260607popup2"></script>
     <script src="/js/otp-ui.js"></script>
     <script src="/js/http-json.js"></script>
     <script>

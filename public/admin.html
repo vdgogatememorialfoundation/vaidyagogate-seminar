@@ -971,12 +971,14 @@
 
                     <div style="margin-top:22px;padding-top:16px;border-top:1px solid #e2e8f0;" id="main-homepage-hero-slider-card">
                         <label style="font-weight:700;">Main homepage hero slider</label>
-                        <p style="color:#64748b;font-size:0.88rem;margin:6px 0 10px;">The large green hero on the public homepage rotates through <strong>live active seminars</strong> (from Seminar Management — upload a <em>Hero image</em> per seminar) plus any manual slides you add below. Old static “Advancements in Ayurveda” text is no longer used — each slide shows the seminar title, date, and venue.</p>
+                        <p style="color:#64748b;font-size:0.88rem;margin:6px 0 10px;">The large green hero on the public homepage rotates through <strong>live active seminars</strong> (from Seminar Management — upload a <em>Hero image</em> per seminar) plus any manual slides you add below. When you upload several images, they slide automatically after the seminar slides.</p>
                         <div id="hero-slider-seminar-preview" style="margin-bottom:14px;padding:12px 14px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;font-size:0.88rem;color:#065f46;">Loading live seminar slides…</div>
-                        <p style="color:#64748b;font-size:0.85rem;margin:0 0 10px;">Upload an image, then click <strong>Save banner</strong> on that row (or <strong>Save popup &amp; carousel</strong> to save all rows). If no active seminar has a hero image, these uploaded slides appear on the public homepage.</p>
+                        <p style="color:#64748b;font-size:0.85rem;margin:0 0 10px;">Upload one or many images — use <strong>Upload multiple slider images</strong> for a batch, or upload per row. Click <strong>Save banner</strong> on a row or <strong>Save popup &amp; carousel</strong> to save all rows.</p>
                         <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:12px;">
                             <div><label style="font-size:0.8rem;">Auto-slide (ms)</label><input type="number" id="mkt-carousel-ms" style="width:140px;" value="5500" min="3000" step="500"></div>
                             <button type="button" class="btn-primary" style="background:#0d9488;" onclick="marketingAddBannerRow()">+ Add slider image</button>
+                            <input type="file" id="mkt-banner-batch-file" accept="image/*" multiple style="max-width:220px;">
+                            <button type="button" class="btn-primary" style="background:#4338ca;" onclick="marketingBatchUploadBanners()">Upload multiple slider images</button>
                             <button type="button" class="btn-primary" style="background:#64748b;" onclick="switchTab('tab-seminars'); return false;">Open Seminar Management</button>
                             <button type="button" class="btn-primary" onclick="saveAdminSitePopup()">Save popup &amp; carousel</button>
                         </div>
@@ -985,17 +987,22 @@
                     </div>
                     <div style="margin-top:22px;padding-top:16px;border-top:1px solid #e2e8f0;">
                         <label style="font-weight:700;">Homepage popup / lightbox</label>
+                        <p style="color:#64748b;font-size:0.88rem;margin:6px 0 10px;">Upload one or many images — the full image is shown (not cropped). Multiple images slide left/right in the popup. Shared heading, body, and button apply to all slides.</p>
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px;">
                             <div><label style="font-size:0.8rem;">Enabled</label><select id="mkt-popup-enabled" style="width:100%;"><option value="0">Off</option><option value="1">On</option></select></div>
                             <div><label style="font-size:0.8rem;">Show mode</label><select id="mkt-popup-mode" style="width:100%;"><option value="once_session">Once per session</option><option value="every_visit">Every visit</option></select></div>
                             <div><label style="font-size:0.8rem;">Delay (seconds)</label><input type="number" id="mkt-popup-delay" style="width:100%;" value="0" min="0"></div>
-                            <div><label style="font-size:0.8rem;">Image path</label><input type="text" id="mkt-popup-image" style="width:100%;"></div>
+                            <input type="hidden" id="mkt-popup-image" value="">
                             <div style="grid-column:1/-1;"><label style="font-size:0.8rem;">Heading</label><input type="text" id="mkt-popup-heading" style="width:100%;"></div>
                             <div style="grid-column:1/-1;"><label style="font-size:0.8rem;">Body</label><textarea id="mkt-popup-body" rows="3" style="width:100%;"></textarea></div>
                             <div><label style="font-size:0.8rem;">CTA text</label><input type="text" id="mkt-popup-cta-text" style="width:100%;"></div>
                             <div><label style="font-size:0.8rem;">CTA URL</label><input type="text" id="mkt-popup-cta-url" style="width:100%;"></div>
                         </div>
-                        <div style="margin-top:10px;"><input type="file" id="mkt-popup-file"><button type="button" class="btn-primary" style="margin-left:8px;background:#64748b;" onclick="marketingUploadPopupImage()">Upload popup image</button></div>
+                        <div id="mkt-popup-images-list" style="margin-top:12px;"></div>
+                        <div style="margin-top:10px;">
+                            <input type="file" id="mkt-popup-file" accept="image/*" multiple>
+                            <button type="button" class="btn-primary" style="margin-left:8px;background:#64748b;" onclick="marketingUploadPopupImages()">Upload popup images</button>
+                        </div>
                     </div>
                     <div style="margin-top:18px;"><label>Legacy slides JSON (fallback if no DB banners)</label><textarea id="cms-slides" rows="4" placeholder='[{"src":"/uploads/a.jpg","caption":"","link":""}]'></textarea></div>
                     <div style="margin-top:22px;padding-top:16px;border-top:1px solid #e2e8f0;">
@@ -1670,6 +1677,16 @@
 
             <div id="tab-case-mgmt" class="tab-pane hidden">
                 <h2 style="margin-bottom: 20px;">Case presentation management</h2>
+                <div class="card" style="margin-bottom:16px;background:#eff6ff;border:1px solid #bfdbfe;">
+                    <h3 style="margin-top:0;color:#1e40af;">How to run a case presentation program</h3>
+                    <ol style="margin:8px 0 0 18px;color:#334155;line-height:1.6;font-size:0.92rem;">
+                        <li><strong>Step 1 — Program &amp; form:</strong> Set dates, categories, and application form fields below, then click <strong>Save program</strong>.</li>
+                        <li><strong>Step 2 — Judge criteria:</strong> Add scoring criteria and max marks (you can refine these later before judging opens).</li>
+                        <li><strong>Step 3 — Applications:</strong> Doctors apply from the portal; submissions appear in the table below.</li>
+                        <li><strong>Step 4 — Judge allotment:</strong> Open a submission → set marking deadline → tick judges → <strong>Assign selected judges</strong>.</li>
+                        <li><strong>Step 5 — Results:</strong> View scores, transfer judges if needed, mark winner, and export marksheets.</li>
+                    </ol>
+                </div>
                 <div class="card" style="margin-bottom:16px;">
                     <h3 id="case-prog-form-heading">Case program</h3>
                     <p style="color:#64748b;font-size:0.88rem;margin-bottom:12px;">Set application window, presentation limits, enabled categories, and form fields.</p>
@@ -2761,6 +2778,6 @@
     <link rel="stylesheet" href="/css/book-track.css?v=20260529stg">
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
-    <script src="/js/admin.js?v=20260609doctorcase"></script>
+    <script src="/js/admin.js?v=20260607marketing2"></script>
 </body>
 </html>

@@ -14253,6 +14253,60 @@ async function openAdminOrderReceipt(orderDbId) {
 }
 
 let __marketingBanners = [];
+let __marketingPopupImages = [];
+
+function marketingPopupPreviewUrl(path) {
+    if (!path) return '';
+    const p = String(path).trim();
+    if (p.startsWith('http') || p.startsWith('/')) return p;
+    return '/uploads/' + p;
+}
+
+function marketingCollectPopupImagesFromDom() {
+    const root = document.getElementById('mkt-popup-images-list');
+    if (!root) return __marketingPopupImages.slice();
+    return Array.from(root.querySelectorAll('.mkt-popup-img-row'))
+        .map((row) => ({
+            imagePath: ((row.querySelector('.mpi-path') || {}).value || '').trim()
+        }))
+        .filter((i) => i.imagePath);
+}
+
+function marketingRenderPopupImages(images) {
+    const root = document.getElementById('mkt-popup-images-list');
+    if (!root) return;
+    __marketingPopupImages = Array.isArray(images) ? images.filter((i) => i && i.imagePath) : [];
+    if (!__marketingPopupImages.length) {
+        root.innerHTML = '<p class="muted" style="font-size:0.85rem;margin:0;">No popup images yet — upload one or many below.</p>';
+        return;
+    }
+    root.innerHTML = __marketingPopupImages
+        .map((img, idx) => {
+            const src = marketingPopupPreviewUrl(img.imagePath);
+            return (
+                '<div class="mkt-popup-img-row" style="display:flex;gap:10px;align-items:center;margin-bottom:8px;padding:8px;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc;">' +
+                (src
+                    ? '<img src="' +
+                      escAdmin(src) +
+                      '" alt="" style="width:96px;height:72px;object-fit:contain;background:#fff;border:1px solid #e2e8f0;border-radius:6px;">'
+                    : '') +
+                '<input class="mpi-path" style="flex:1;padding:6px 8px;" value="' +
+                escAdmin(img.imagePath || '') +
+                '">' +
+                '<button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.78rem;background:#b91c1c;" onclick="marketingRemovePopupImage(' +
+                idx +
+                ')">Remove</button>' +
+                '</div>'
+            );
+        })
+        .join('');
+}
+
+function marketingRemovePopupImage(idx) {
+    const list = marketingCollectPopupImagesFromDom();
+    list.splice(idx, 1);
+    marketingRenderPopupImages(list);
+}
 
 function marketingSetMsg(text, ok) {
     const el = document.getElementById('mkt-banner-msg');
@@ -14303,7 +14357,7 @@ function marketingRenderBannerRows(rows) {
                 <div><label style="font-size:0.75rem;">Sort</label><input class="mb-sort" type="number" style="width:100%" value="${b.sortOrder != null ? b.sortOrder : idx}"></div>
                 <div><label style="font-size:0.75rem;">Enabled</label><select class="mb-enabled" style="width:100%"><option value="1" ${b.enabled !== 0 ? 'selected' : ''}>Yes</option><option value="0" ${b.enabled === 0 ? 'selected' : ''}>No</option></select></div>
             </div>
-            <div style="margin-top:8px;"><input type="file" class="mb-file"><button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;margin-left:8px;background:#0d9488;" onclick="marketingUploadBannerImage(this)">Upload image</button>
+            <div style="margin-top:8px;"><input type="file" class="mb-file" accept="image/*" multiple><button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;margin-left:8px;background:#0d9488;" onclick="marketingUploadBannerImage(this)">Upload image(s)</button>
             <button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;margin-left:6px;" onclick="marketingSaveBannerRow(this)">Save banner</button></div>`;
         root.appendChild(wrap);
     });
@@ -14372,7 +14426,14 @@ async function loadAdminMarketing() {
         set('mkt-popup-enabled', popup.enabled ? '1' : '0');
         set('mkt-popup-mode', popup.showMode || 'once_session');
         set('mkt-popup-delay', popup.delaySeconds || 0);
-        set('mkt-popup-image', popup.imagePath || '');
+        const popupImages =
+            Array.isArray(popup.images) && popup.images.length
+                ? popup.images
+                : popup.imagePath
+                  ? [{ imagePath: popup.imagePath }]
+                  : [];
+        set('mkt-popup-image', popupImages[0] ? popupImages[0].imagePath : popup.imagePath || '');
+        marketingRenderPopupImages(popupImages);
         set('mkt-popup-heading', popup.heading || '');
         set('mkt-popup-body', popup.body || '');
         set('mkt-popup-cta-text', popup.ctaText || '');
@@ -14430,21 +14491,79 @@ async function marketingSaveAllBanners(showMsg) {
 async function marketingUploadBannerImage(btn) {
     const row = btn.closest('.mkt-banner-row');
     const fileInp = row && row.querySelector('.mb-file');
-    const path = await uploadAdminAssetFromInput(fileInp);
+    const paths = await uploadAdminAssetFromInput(fileInp, { multiple: true });
     if (fileInp) fileInp.value = '';
-    if (path && row) {
-        const imgEl = row.querySelector('.mb-img');
-        if (imgEl) imgEl.value = path;
-        await marketingSaveBannerRow(btn, true);
+    if (!paths || !paths.length) return;
+    const imgEl = row && row.querySelector('.mb-img');
+    if (imgEl) imgEl.value = paths[0];
+    await marketingSaveBannerRow(btn, true);
+    if (paths.length > 1) {
+        const start = __marketingBanners.length;
+        const extraRows = paths.slice(1).map((path, i) => ({
+            title: (row.querySelector('.mb-title') || {}).value || '',
+            subtitle: (row.querySelector('.mb-sub') || {}).value || '',
+            description: (row.querySelector('.mb-desc') || {}).value || '',
+            imagePath: path,
+            ctaText: (row.querySelector('.mb-cta-t') || {}).value || '',
+            ctaUrl: (row.querySelector('.mb-cta-u') || {}).value || '',
+            sortOrder: start + i,
+            enabled: (row.querySelector('.mb-enabled') || {}).value === '1' ? 1 : 0
+        }));
+        marketingRenderBannerRows(__marketingBanners.concat(extraRows));
+        await marketingSaveAllBanners(true);
+        marketingSetMsg('Uploaded and saved ' + paths.length + ' banner image(s).', true);
     }
 }
 
+async function marketingUploadPopupImages() {
+    const fileInp = document.getElementById('mkt-popup-file');
+    const paths = await uploadAdminAssetFromInput(fileInp, {
+        multiple: true,
+        progressLabel: 'Upload popup images'
+    });
+    if (fileInp) fileInp.value = '';
+    if (!paths || !paths.length) return;
+    const merged = marketingCollectPopupImagesFromDom().concat(
+        paths.map((path) => ({ imagePath: path }))
+    );
+    marketingRenderPopupImages(merged);
+    marketingSetMsg(
+        'Uploaded ' + paths.length + ' popup image(s). Click Save popup & carousel to publish.',
+        true
+    );
+}
+
+async function marketingBatchUploadBanners() {
+    const fileInp = document.getElementById('mkt-banner-batch-file');
+    const paths = await uploadAdminAssetFromInput(fileInp, {
+        multiple: true,
+        progressLabel: 'Upload slider images'
+    });
+    if (fileInp) fileInp.value = '';
+    if (!paths || !paths.length) return;
+    const start = __marketingBanners.length;
+    const newRows = paths.map((path, i) => ({
+        title: '',
+        subtitle: '',
+        description: '',
+        imagePath: path,
+        ctaText: '',
+        ctaUrl: '',
+        sortOrder: start + i,
+        enabled: 1
+    }));
+    marketingRenderBannerRows(__marketingBanners.concat(newRows));
+    const ok = await marketingSaveAllBanners(true);
+    marketingSetMsg(
+        ok
+            ? 'Uploaded and saved ' + paths.length + ' slider image(s). They appear on the homepage hero carousel.'
+            : 'Upload finished but some banner rows could not be saved.',
+        !!ok
+    );
+}
+
 async function marketingUploadPopupImage() {
-    const path = await uploadAdminAssetFromInput(document.getElementById('mkt-popup-file'));
-    if (path) {
-        const el = document.getElementById('mkt-popup-image');
-        if (el) el.value = path;
-    }
+    await marketingUploadPopupImages();
 }
 
 async function marketingSaveBannerRow(btn, skipReload) {
@@ -16537,11 +16656,13 @@ async function bsPosSave() {
 async function saveAdminSitePopup() {
     const savedBanners = await marketingSaveAllBanners(true);
     if (!savedBanners) return;
+    const popupImages = marketingCollectPopupImagesFromDom();
     const popup = {
         enabled: (document.getElementById('mkt-popup-enabled') || {}).value === '1',
         showMode: (document.getElementById('mkt-popup-mode') || {}).value || 'once_session',
         delaySeconds: parseInt((document.getElementById('mkt-popup-delay') || {}).value, 10) || 0,
-        imagePath: (document.getElementById('mkt-popup-image') || {}).value || '',
+        images: popupImages,
+        imagePath: popupImages[0] ? popupImages[0].imagePath : '',
         heading: (document.getElementById('mkt-popup-heading') || {}).value || '',
         body: (document.getElementById('mkt-popup-body') || {}).value || '',
         ctaText: (document.getElementById('mkt-popup-cta-text') || {}).value || '',

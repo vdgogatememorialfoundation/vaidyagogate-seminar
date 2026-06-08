@@ -18,6 +18,8 @@
 
     let carouselTimer = null;
     let carouselIndex = 0;
+    let popupSlideTimer = null;
+    let popupSlideIndex = 0;
 
     function renderCarousel(banners, autoSlideMs) {
         const wrap = document.getElementById('marketing-hero');
@@ -105,7 +107,6 @@
             dots +
             '</div>';
 
-
         const slideEls = wrap.querySelectorAll('.mh-slide');
         const dotEls = wrap.querySelectorAll('.mh-dot');
 
@@ -154,32 +155,40 @@
         restartTimer();
     }
 
-    function showPopup(popup) {
+    function popupImagesFromConfig(popup) {
+        if (!popup) return [];
+        if (Array.isArray(popup.images) && popup.images.length) {
+            return popup.images.filter(function (i) {
+                return i && i.imagePath;
+            });
+        }
+        if (popup.imagePath) return [{ imagePath: popup.imagePath }];
+        return [];
+    }
+
+    function showPopup(popup, carouselMs) {
         if (!popup || !popup.enabled) return;
         var modal = document.getElementById('site-announce-popup');
         if (!modal) return;
+
+        var images = popupImagesFromConfig(popup);
+        if (!images.length && !popup.heading && !popup.body) return;
 
         var mode = popup.showMode || 'once_session';
         var key = 'vgmf_popup_seen';
         if (mode === 'once_session' && sessionStorage.getItem(key) === '1') return;
 
-        var img = imgUrl(popup.imagePath);
         var body = document.getElementById('sap-body');
         var imgEl = document.getElementById('sap-image');
         var titleEl = document.getElementById('sap-heading');
         var ctaEl = document.getElementById('sap-cta');
+        var prevBtn = modal.querySelector('.sap-slide-prev');
+        var nextBtn = modal.querySelector('.sap-slide-next');
+        var dotsRoot = document.getElementById('sap-slide-dots');
+        var imageWrap = document.getElementById('sap-image-wrap');
 
         if (titleEl) titleEl.textContent = popup.heading || 'Announcement';
         if (body) body.textContent = popup.body || '';
-        if (imgEl) {
-            if (img) {
-                imgEl.src = img;
-                imgEl.classList.remove('hidden');
-            } else {
-                imgEl.removeAttribute('src');
-                imgEl.classList.add('hidden');
-            }
-        }
         if (ctaEl) {
             if (popup.ctaText && popup.ctaUrl) {
                 ctaEl.href = popup.ctaUrl;
@@ -190,23 +199,109 @@
             }
         }
 
+        popupSlideIndex = 0;
+        if (popupSlideTimer) clearInterval(popupSlideTimer);
+
+        function renderPopupSlide(idx) {
+            if (!images.length || !imgEl) return;
+            popupSlideIndex = (idx + images.length) % images.length;
+            var slide = images[popupSlideIndex];
+            imgEl.src = imgUrl(slide.imagePath);
+            imgEl.classList.remove('hidden');
+            if (dotsRoot) {
+                dotsRoot.querySelectorAll('.sap-dot').forEach(function (d, i) {
+                    d.classList.toggle('is-active', i === popupSlideIndex);
+                });
+            }
+        }
+
+        if (imgEl) {
+            if (images.length) {
+                renderPopupSlide(0);
+                if (imageWrap) imageWrap.classList.remove('hidden');
+            } else {
+                imgEl.removeAttribute('src');
+                imgEl.classList.add('hidden');
+                if (imageWrap) imageWrap.classList.add('hidden');
+            }
+        }
+
+        var showNav = images.length > 1;
+        if (prevBtn) prevBtn.classList.toggle('hidden', !showNav);
+        if (nextBtn) nextBtn.classList.toggle('hidden', !showNav);
+
+        if (dotsRoot) {
+            if (showNav) {
+                dotsRoot.innerHTML = images
+                    .map(function (_, i) {
+                        return (
+                            '<button type="button" class="sap-dot' +
+                            (i === 0 ? ' is-active' : '') +
+                            '" data-go="' +
+                            i +
+                            '" aria-label="Image ' +
+                            (i + 1) +
+                            '"></button>'
+                        );
+                    })
+                    .join('');
+                dotsRoot.classList.remove('hidden');
+                dotsRoot.querySelectorAll('.sap-dot').forEach(function (d) {
+                    d.addEventListener('click', function () {
+                        renderPopupSlide(parseInt(d.getAttribute('data-go'), 10));
+                        restartPopupTimer();
+                    });
+                });
+            } else {
+                dotsRoot.innerHTML = '';
+                dotsRoot.classList.add('hidden');
+            }
+        }
+
+        function restartPopupTimer() {
+            if (popupSlideTimer) clearInterval(popupSlideTimer);
+            if (images.length > 1) {
+                var ms = Math.max(
+                    3000,
+                    parseInt(popup.autoSlideMs, 10) || parseInt(carouselMs, 10) || 5500
+                );
+                popupSlideTimer = setInterval(function () {
+                    renderPopupSlide(popupSlideIndex + 1);
+                }, ms);
+            }
+        }
+
+        if (prevBtn) {
+            prevBtn.onclick = function () {
+                renderPopupSlide(popupSlideIndex - 1);
+                restartPopupTimer();
+            };
+        }
+        if (nextBtn) {
+            nextBtn.onclick = function () {
+                renderPopupSlide(popupSlideIndex + 1);
+                restartPopupTimer();
+            };
+        }
+        restartPopupTimer();
+
         function open() {
             modal.classList.add('is-open');
             modal.setAttribute('aria-hidden', 'false');
             if (mode === 'once_session') sessionStorage.setItem(key, '1');
         }
 
-        setTimeout(open, Math.max(0, parseInt(popup.delaySeconds, 10) || 0) * 1000);
-
-        modal.querySelector('.sap-close')?.addEventListener('click', function () {
+        function closePopup() {
             modal.classList.remove('is-open');
             modal.setAttribute('aria-hidden', 'true');
-        });
+            if (popupSlideTimer) clearInterval(popupSlideTimer);
+        }
+
+        setTimeout(open, Math.max(0, parseInt(popup.delaySeconds, 10) || 0) * 1000);
+
+        modal.querySelector('.sap-close')?.addEventListener('click', closePopup);
         modal.querySelector('.sap-backdrop')?.addEventListener('click', function (e) {
-            if (e.target.classList.contains('sap-backdrop')) {
-                modal.classList.remove('is-open');
-                modal.setAttribute('aria-hidden', 'true');
-            }
+            if (e.target.classList.contains('sap-backdrop')) closePopup();
         });
     }
 
@@ -216,7 +311,7 @@
             var data = await res.json();
             if (!res.ok) return;
             renderCarousel(data.banners || [], (data.carousel || {}).autoSlideMs);
-            showPopup(data.popup || {});
+            showPopup(data.popup || {}, (data.carousel || {}).autoSlideMs);
         } catch (e) {
             console.warn('[marketing]', e);
         }
