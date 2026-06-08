@@ -84,27 +84,71 @@
     }
 
     function buildMarketingBannerSlides(banners, cms) {
-        const hero = (cms && cms.hero) || {};
         return (Array.isArray(banners) ? banners : [])
             .filter((b) => b && (b.imagePath || b.imagepath || b.image_path))
             .map((b) => {
                 const imagePath = b.imagePath || b.imagepath || b.image_path;
-                return {
-                image: mediaUrl(imagePath),
-                title: (b.title && String(b.title).trim()) || hero.title || 'National Seminar',
-                subtitle:
+                const title = (b.title && String(b.title).trim()) || '';
+                const subtitle =
                     (b.subtitle && String(b.subtitle).trim()) ||
                     (b.description && String(b.description).trim()) ||
-                    hero.subtitle ||
-                    hero.venue ||
-                    '',
-                eyebrow: hero.eyebrow || 'National Seminar',
-                cta: (b.ctaText && String(b.ctaText).trim()) || hero.ctaPrimary || 'Register now',
-                link: (b.ctaUrl && String(b.ctaUrl).trim()) || '#register',
-                cta2: hero.ctaSecondary || 'View programme',
-                link2: '#schedule'
-            };
+                    '';
+                const cta = (b.ctaText && String(b.ctaText).trim()) || '';
+                return {
+                    image: mediaUrl(imagePath),
+                    title,
+                    subtitle,
+                    eyebrow: '',
+                    cta,
+                    link: (b.ctaUrl && String(b.ctaUrl).trim()) || '#register',
+                    cta2: '',
+                    link2: '',
+                    imageOnly: true
+                };
             });
+    }
+
+    function bannerSlideHasCopy(sl) {
+        return !!(sl && (sl.title || sl.subtitle || sl.eyebrow || sl.cta));
+    }
+
+    function renderBannerHeroSlide(sl, i) {
+        const primary = heroPrimaryCtaAttrs(sl);
+        const cta2 =
+            sl.cta2 && sl.link2
+                ? `<a href="${esc(sl.link2)}" class="cg-btn-ghost" onclick="${sl.link2 === '#' ? "showSection('schedule');return false;" : ''}">${esc(sl.cta2)}</a>`
+                : '';
+        const copyBlock = bannerSlideHasCopy(sl)
+            ? '<div class="congress-hero-content congress-hero-content--banner-copy">' +
+              (sl.eyebrow
+                  ? '<span class="congress-hero-eyebrow">' + esc(sl.eyebrow) + '</span>'
+                  : '') +
+              (sl.title ? '<h2>' + esc(sl.title) + '</h2>' : '') +
+              (sl.subtitle ? '<p class="lead">' + esc(sl.subtitle) + '</p>' : '') +
+              (sl.cta
+                  ? '<div class="congress-hero-actions">' +
+                    '<a href="' +
+                    primary.href +
+                    '" class="cg-btn-primary"' +
+                    primary.onclick +
+                    '>' +
+                    esc(sl.cta) +
+                    ' <i class="fas fa-arrow-right"></i></a>' +
+                    cta2 +
+                    '</div>'
+                  : '') +
+              '</div>'
+            : '';
+        return (
+            '<div class="congress-hero-slide congress-hero-slide--banner' +
+            (i === 0 ? ' is-active' : '') +
+            '">' +
+            '<div class="congress-hero-bg congress-hero-bg--white" style="background-image:url(\'' +
+            esc(sl.image) +
+            '\')"></div>' +
+            copyBlock +
+            '</div>'
+        );
     }
 
     function buildSeminarHeroSlides(seminars) {
@@ -254,10 +298,16 @@
     window.renderCongressHero = function renderCongressHero(cms) {
         const root = document.getElementById('congress-hero-slides');
         const dots = document.getElementById('congress-hero-dots');
+        const heroRoot = document.getElementById('congress-hero-root');
         if (!root) return;
         heroSlides = buildHeroSlides(cms || {}, window.__heroMarketingBanners || []);
+        const bannerMode = heroSlides.some((sl) => sl.imageOnly && sl.image);
+        if (heroRoot) {
+            heroRoot.classList.toggle('congress-hero--banner-mode', bannerMode);
+        }
         root.innerHTML = heroSlides
             .map((sl, i) => {
+                if (sl.imageOnly && sl.image) return renderBannerHeroSlide(sl, i);
                 const bg = sl.image
                     ? `style="background-image:url('${esc(sl.image)}')"`
                     : 'style="background:linear-gradient(135deg,#0f766e,#134e4a)"';

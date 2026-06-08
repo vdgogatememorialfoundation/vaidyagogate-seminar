@@ -4293,54 +4293,37 @@ function buildCaseRegistrationAnnouncement(row) {
 
 function mergeScrollingAnnouncementsWithOpenSeminars(cms, cb) {
     db.all(
-        `SELECT id, title, event_date, registration_start, registration_end, is_active
-         FROM seminars WHERE is_active = 1
-         ORDER BY COALESCE(registration_start, event_date) DESC`,
+        `SELECT id, title, registration_start, registration_end, is_active
+         FROM case_programs WHERE IFNULL(is_active, 1) = 1
+         ORDER BY COALESCE(registration_start, created_at) DESC`,
         [],
-        (err, rows) => {
-            if (err) return cb(err);
-            db.all(
-                `SELECT id, title, registration_start, registration_end, is_active
-                 FROM case_programs WHERE IFNULL(is_active, 1) = 1
-                 ORDER BY COALESCE(registration_start, created_at) DESC`,
-                [],
-                (errCase, caseRows) => {
-                    if (errCase) return cb(errCase);
-                    const base = sanitizeScrollingAnnouncements(cms.scrollingAnnouncements || []);
-                    const bySeminarId = new Map();
-                    const byCaseId = new Map();
-                    base.forEach((a) => {
-                        if (a && a.autoFromSeminarId != null) bySeminarId.set(Number(a.autoFromSeminarId), a);
-                        if (a && a.autoFromCaseProgramId != null) byCaseId.set(Number(a.autoFromCaseProgramId), a);
-                    });
-                    (rows || []).forEach((row) => {
-                        if (!Number(row.is_active) || !isSeminarRegistrationOpen(row)) return;
-                        const rowTitle = String(row.title || '');
-                        if (/test seminar/i.test(rowTitle) || /introduction to ayurveda/i.test(rowTitle)) return;
-                        const sid = Number(row.id);
-                        if (!bySeminarId.has(sid)) bySeminarId.set(sid, buildSeminarRegistrationAnnouncement(row));
-                        else {
-                            const built = buildSeminarRegistrationAnnouncement(row);
-                            bySeminarId.set(sid, { ...bySeminarId.get(sid), ...built, title: built.title, body: built.body });
-                        }
-                    });
-                    (caseRows || []).forEach((row) => {
-                        if (!Number(row.is_active) || !isCaseRegistrationOpen(row)) return;
-                        const cid = Number(row.id);
-                        if (!byCaseId.has(cid)) byCaseId.set(cid, buildCaseRegistrationAnnouncement(row));
-                        else {
-                            const built = buildCaseRegistrationAnnouncement(row);
-                            byCaseId.set(cid, { ...byCaseId.get(cid), ...built, title: built.title, body: built.body });
-                        }
-                    });
-                    const manual = base.filter(
-                        (a) => !a || (a.autoFromSeminarId == null && a.autoFromCaseProgramId == null)
-                    );
-                    const auto = [...Array.from(bySeminarId.values()), ...Array.from(byCaseId.values())];
-                    cms.scrollingAnnouncements = [...auto, ...manual].slice(0, 40);
-                    cb(null, cms);
-                }
+        (errCase, caseRows) => {
+            if (errCase) return cb(errCase);
+            const base = sanitizeScrollingAnnouncements(cms.scrollingAnnouncements || []).filter(
+                (a) => !a || a.autoFromSeminarId == null
             );
+            const byCaseId = new Map();
+            base.forEach((a) => {
+                if (a && a.autoFromCaseProgramId != null) byCaseId.set(Number(a.autoFromCaseProgramId), a);
+            });
+            (caseRows || []).forEach((row) => {
+                if (!Number(row.is_active) || !isCaseRegistrationOpen(row)) return;
+                const cid = Number(row.id);
+                if (!byCaseId.has(cid)) byCaseId.set(cid, buildCaseRegistrationAnnouncement(row));
+                else {
+                    const built = buildCaseRegistrationAnnouncement(row);
+                    byCaseId.set(cid, { ...byCaseId.get(cid), ...built, title: built.title, body: built.body });
+                }
+            });
+            const manual = base.filter(
+                (a) =>
+                    !a ||
+                    (a.autoFromCaseProgramId == null &&
+                        !/registration open\s*[—-]/i.test(String(a.title || '')))
+            );
+            const auto = Array.from(byCaseId.values());
+            cms.scrollingAnnouncements = [...auto, ...manual].slice(0, 40);
+            cb(null, cms);
         }
     );
 }

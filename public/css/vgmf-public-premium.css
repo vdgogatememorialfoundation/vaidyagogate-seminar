@@ -42,8 +42,27 @@ body.vgmf-redesign {
     margin-bottom: 24px;
 }
 
-.vgmf-redesign .congress-hero-slide .congress-hero-bg {
+.vgmf-redesign .congress-hero-slide:not(.congress-hero-slide--banner) .congress-hero-bg {
     background-image: var(--vp-hero-grad);
+}
+
+.vgmf-redesign .congress-hero-slide--banner .congress-hero-bg {
+    background-color: #fff;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+}
+
+.vgmf-redesign .congress-hero-slide--banner .congress-hero-overlay {
+    display: none !important;
+}
+
+.vgmf-redesign .congress-hero--banner-mode {
+    background: #fff;
+}
+
+.vgmf-redesign .congress-hero--banner-mode .congress-hero-overlay {
+    display: none !important;
 }
 
 .vgmf-redesign .congress-hero-overlay {

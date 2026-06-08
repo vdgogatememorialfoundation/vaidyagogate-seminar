@@ -419,6 +419,47 @@
 .congress-hero-arrows .prev { left: 20px; }
 .congress-hero-arrows .next { right: 20px; }
 
+/* Uploaded banner slides — white canvas, full image visible, no seminar overlay */
+.congress-hero.congress-hero--banner-mode {
+    background: #fff;
+    min-height: clamp(280px, 48vh, 560px);
+}
+.congress-hero-slide--banner .congress-hero-bg--white {
+    background-color: #fff;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-position: center;
+    transform: none;
+    transition: opacity 0.9s var(--cg-ease);
+}
+.congress-hero-slide--banner.is-active .congress-hero-bg--white {
+    transform: none;
+}
+.congress-hero-slide--banner .congress-hero-overlay {
+    display: none !important;
+}
+.congress-hero-content--banner-copy {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 2;
+    padding: 20px 24px 28px;
+    background: linear-gradient(to top, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0));
+    color: var(--cg-ink, #0f172a);
+}
+.congress-hero-content--banner-copy .congress-hero-eyebrow {
+    color: var(--cg-green, #0f766e);
+}
+.congress-hero-content--banner-copy h2 {
+    color: var(--cg-ink, #0f172a);
+    font-size: clamp(1.35rem, 3vw, 2rem);
+}
+.congress-hero-content--banner-copy .lead {
+    color: var(--cg-muted, #64748b);
+    opacity: 1;
+}
+
 /* Quick access */
 .cg-quick {
     max-width: 1280px;
