@@ -46,18 +46,11 @@ body.vgmf-redesign {
     background-image: var(--vp-hero-grad);
 }
 
-.vgmf-redesign .congress-hero-slide--banner .congress-hero-bg {
-    background-color: #fff;
-    background-size: contain;
-    background-repeat: no-repeat;
-    background-position: center;
-}
-
-.vgmf-redesign .congress-hero-slide--banner .congress-hero-overlay {
-    display: none !important;
-}
-
 .vgmf-redesign .congress-hero--banner-mode {
+    background: linear-gradient(165deg, #f8fafc 0%, #ffffff 42%, #ecfdf5 100%);
+}
+
+.vgmf-redesign .congress-hero-slide--banner .congress-hero-banner-frame {
     background: #fff;
 }
 

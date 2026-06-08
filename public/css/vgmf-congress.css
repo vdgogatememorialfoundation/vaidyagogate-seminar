@@ -419,33 +419,131 @@
 .congress-hero-arrows .prev { left: 20px; }
 .congress-hero-arrows .next { right: 20px; }
 
-/* Uploaded banner slides — white canvas, full image visible, no seminar overlay */
+/* Uploaded banner slides — framed posters, capped size (no upscaling blur) */
 .congress-hero.congress-hero--banner-mode {
+    background: linear-gradient(165deg, #f8fafc 0%, #ffffff 42%, #ecfdf5 100%);
+    min-height: clamp(240px, 36vh, 460px);
+    border-bottom: 1px solid rgba(15, 118, 110, 0.08);
+}
+.congress-hero-slide--banner {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: center;
+}
+.congress-hero-banner-stage {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1 1 auto;
+    padding: clamp(16px, 3vw, 28px) clamp(12px, 4vw, 32px) clamp(12px, 2vw, 20px);
+    min-height: clamp(200px, 32vh, 360px);
+}
+.congress-hero-banner-glow {
+    position: absolute;
+    inset: 8% 12%;
+    border-radius: 28px;
+    background: radial-gradient(ellipse at center, rgba(20, 184, 166, 0.12), transparent 70%);
+    pointer-events: none;
+}
+.congress-hero-banner-frame {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    max-width: min(760px, 88vw);
+    width: 100%;
+    padding: clamp(10px, 2vw, 16px);
     background: #fff;
-    min-height: clamp(280px, 48vh, 560px);
+    border-radius: 18px;
+    box-shadow:
+        0 16px 40px rgba(15, 23, 42, 0.08),
+        0 2px 8px rgba(15, 118, 110, 0.06);
+    border: 1px solid rgba(148, 163, 184, 0.22);
 }
-.congress-hero-slide--banner .congress-hero-bg--white {
-    background-color: #fff;
-    background-size: contain;
-    background-repeat: no-repeat;
-    background-position: center;
-    transform: none;
-    transition: opacity 0.9s var(--cg-ease);
+.congress-hero-banner-img {
+    display: block;
+    width: auto;
+    height: auto;
+    max-width: min(720px, 82vw);
+    max-height: min(300px, 34vh);
+    object-fit: contain;
+    object-position: center;
+    border-radius: 10px;
 }
-.congress-hero-slide--banner.is-active .congress-hero-bg--white {
-    transform: none;
+.congress-hero-slide--frame-a .congress-hero-banner-frame {
+    border-color: rgba(15, 118, 110, 0.28);
+    box-shadow:
+        0 18px 44px rgba(13, 148, 136, 0.14),
+        inset 0 0 0 1px rgba(255, 255, 255, 0.9);
+}
+.congress-hero-slide--frame-a .congress-hero-banner-glow {
+    background: radial-gradient(ellipse at center, rgba(13, 148, 136, 0.16), transparent 72%);
+}
+.congress-hero-slide--frame-b .congress-hero-banner-frame {
+    border-radius: 22px;
+    border: 2px solid rgba(251, 191, 36, 0.35);
+    background: linear-gradient(180deg, #fff 0%, #fffbeb 100%);
+    box-shadow: 0 14px 36px rgba(180, 83, 9, 0.1);
+}
+.congress-hero-slide--frame-b .congress-hero-banner-frame::before,
+.congress-hero-slide--frame-b .congress-hero-banner-frame::after {
+    content: '';
+    position: absolute;
+    width: 28px;
+    height: 28px;
+    border: 2px solid rgba(217, 119, 6, 0.45);
+    pointer-events: none;
+}
+.congress-hero-slide--frame-b .congress-hero-banner-frame::before {
+    top: 10px;
+    left: 10px;
+    border-right: none;
+    border-bottom: none;
+    border-radius: 8px 0 0 0;
+}
+.congress-hero-slide--frame-b .congress-hero-banner-frame::after {
+    bottom: 10px;
+    right: 10px;
+    border-left: none;
+    border-top: none;
+    border-radius: 0 0 8px 0;
+}
+.congress-hero-slide--frame-c .congress-hero-banner-frame {
+    border-radius: 14px;
+    border: 1px solid rgba(99, 102, 241, 0.22);
+    background: #fff;
+    box-shadow:
+        0 0 0 6px rgba(224, 231, 255, 0.55),
+        0 12px 32px rgba(79, 70, 229, 0.1);
+}
+.congress-hero-slide--frame-c .congress-hero-banner-glow {
+    background: radial-gradient(ellipse at center, rgba(129, 140, 248, 0.14), transparent 70%);
+}
+.congress-hero--banner-mode .congress-hero-arrows button {
+    background: rgba(255, 255, 255, 0.92);
+    color: var(--cg-green, #0f766e);
+    border: 1px solid rgba(15, 118, 110, 0.15);
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.1);
+}
+.congress-hero--banner-mode .congress-hero-dots button {
+    background: rgba(15, 118, 110, 0.22);
+}
+.congress-hero--banner-mode .congress-hero-dots button.is-active {
+    background: var(--cg-green, #0f766e);
 }
 .congress-hero-slide--banner .congress-hero-overlay {
     display: none !important;
 }
 .congress-hero-content--banner-copy {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
+    position: relative;
     z-index: 2;
-    padding: 20px 24px 28px;
-    background: linear-gradient(to top, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0));
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 0 24px 20px;
+    text-align: center;
     color: var(--cg-ink, #0f172a);
 }
 .congress-hero-content--banner-copy .congress-hero-eyebrow {
@@ -453,11 +551,36 @@
 }
 .congress-hero-content--banner-copy h2 {
     color: var(--cg-ink, #0f172a);
-    font-size: clamp(1.35rem, 3vw, 2rem);
+    font-size: clamp(1.2rem, 2.5vw, 1.65rem);
+    margin-bottom: 8px;
 }
 .congress-hero-content--banner-copy .lead {
     color: var(--cg-muted, #64748b);
     opacity: 1;
+    font-size: 0.95rem;
+    margin-bottom: 12px;
+}
+.congress-hero-content--banner-copy .congress-hero-actions {
+    justify-content: center;
+}
+
+@media (max-width: 640px) {
+    .congress-hero.congress-hero--banner-mode {
+        min-height: clamp(200px, 34vh, 340px);
+    }
+    .congress-hero-banner-stage {
+        min-height: clamp(170px, 28vh, 280px);
+        padding: 12px 10px 8px;
+    }
+    .congress-hero-banner-img {
+        max-width: min(92vw, 420px);
+        max-height: min(220px, 28vh);
+    }
+    .congress-hero-banner-frame {
+        max-width: 94vw;
+        padding: 8px;
+        border-radius: 14px;
+    }
 }
 
 /* Quick access */

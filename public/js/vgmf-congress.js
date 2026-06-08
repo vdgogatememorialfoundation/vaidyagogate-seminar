@@ -112,6 +112,12 @@
         return !!(sl && (sl.title || sl.subtitle || sl.eyebrow || sl.cta));
     }
 
+    function bannerFrameClass(i) {
+        return ['congress-hero-slide--frame-a', 'congress-hero-slide--frame-b', 'congress-hero-slide--frame-c'][
+            i % 3
+        ];
+    }
+
     function renderBannerHeroSlide(sl, i) {
         const primary = heroPrimaryCtaAttrs(sl);
         const cta2 =
@@ -140,12 +146,17 @@
               '</div>'
             : '';
         return (
-            '<div class="congress-hero-slide congress-hero-slide--banner' +
+            '<div class="congress-hero-slide congress-hero-slide--banner ' +
+            bannerFrameClass(i) +
             (i === 0 ? ' is-active' : '') +
             '">' +
-            '<div class="congress-hero-bg congress-hero-bg--white" style="background-image:url(\'' +
+            '<div class="congress-hero-banner-stage" aria-hidden="true">' +
+            '<div class="congress-hero-banner-glow"></div>' +
+            '<div class="congress-hero-banner-frame">' +
+            '<img class="congress-hero-banner-img" src="' +
             esc(sl.image) +
-            '\')"></div>' +
+            '" alt="" loading="eager" decoding="async">' +
+            '</div></div>' +
             copyBlock +
             '</div>'
         );
@@ -368,7 +379,23 @@
             });
         }
         startHeroAutoplay();
+        capBannerHeroImages();
     };
+
+    function capBannerHeroImages() {
+        const imgs = document.querySelectorAll('.congress-hero-banner-img');
+        imgs.forEach(function (img) {
+            function apply() {
+                if (!img.naturalWidth || !img.naturalHeight) return;
+                var maxW = Math.min(img.naturalWidth, 720);
+                var maxH = Math.min(img.naturalHeight, 300);
+                img.style.maxWidth = maxW + 'px';
+                img.style.maxHeight = maxH + 'px';
+            }
+            if (img.complete) apply();
+            else img.addEventListener('load', apply, { once: true });
+        });
+    }
 
     function filterAnnouncements(items) {
         const now = Date.now();
