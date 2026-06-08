@@ -476,15 +476,11 @@ footer a.menu-page-hidden {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: min(760px, 88vw);
+    width: fit-content;
     max-width: min(760px, 88vw);
     margin: 0 auto;
     padding: clamp(10px, 2vw, 16px);
     background-color: #fff;
-    background-image: var(--banner-url);
-    background-size: contain;
-    background-position: center;
-    background-repeat: no-repeat;
     border-radius: 18px;
     box-shadow:
         0 16px 40px rgba(15, 23, 42, 0.08),
@@ -507,12 +503,11 @@ footer a.menu-page-hidden {
     opacity: 1;
     visibility: visible;
 }
-.congress-hero-banner-frame.is-missing-image::after {
-    content: 'Banner image unavailable — re-upload in Admin';
+.congress-hero-banner-missing {
+    display: none;
     position: absolute;
     inset: 0;
     z-index: 2;
-    display: flex;
     align-items: center;
     justify-content: center;
     padding: 16px;
@@ -523,6 +518,12 @@ footer a.menu-page-hidden {
     background: rgba(255, 255, 255, 0.92);
     border-radius: inherit;
     pointer-events: none;
+}
+.congress-hero-banner-frame.is-missing-image .congress-hero-banner-missing {
+    display: flex;
+}
+.congress-hero-banner-frame.is-missing-image .congress-hero-banner-img {
+    visibility: hidden;
 }
 .congress-hero-banner-img.is-loading {
     opacity: 0.35;
@@ -547,7 +548,6 @@ footer a.menu-page-hidden {
     border-radius: 22px;
     border: 2px solid rgba(251, 191, 36, 0.35);
     background-color: #fffbeb;
-    background-image: var(--banner-url);
     box-shadow: 0 14px 36px rgba(180, 83, 9, 0.1);
 }
 .congress-hero-slide--frame-b .congress-hero-banner-frame::before,
@@ -577,7 +577,6 @@ footer a.menu-page-hidden {
     border-radius: 14px;
     border: 1px solid rgba(99, 102, 241, 0.22);
     background-color: #fff;
-    background-image: var(--banner-url);
     box-shadow:
         0 0 0 6px rgba(224, 231, 255, 0.55),
         0 12px 32px rgba(79, 70, 229, 0.1);
@@ -642,21 +641,18 @@ footer a.menu-page-hidden {
         padding: 12px 10px 8px;
     }
     .congress-hero-banner-frame {
-        width: min(94vw, 420px);
         max-width: 94vw;
-        min-height: min(180px, 28vh);
-        aspect-ratio: 16 / 9;
         padding: 8px;
         border-radius: 14px;
     }
     .congress-hero-banner-frame.is-pending {
         min-width: min(240px, 72vw);
-        min-height: min(160px, 24vh);
+        min-height: min(120px, 18vh);
     }
     .congress-hero-banner-img {
         display: block;
-        width: 100% !important;
-        max-width: 100% !important;
+        width: auto !important;
+        max-width: min(92vw, 420px) !important;
         height: auto !important;
         max-height: min(220px, 32vh) !important;
         min-width: 0 !important;

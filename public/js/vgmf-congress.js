@@ -155,14 +155,13 @@
             '<div class="congress-hero-banner-glow"></div>' +
             '<div class="congress-hero-banner-frame" data-banner-src="' +
             imgUrl +
-            '" style="--banner-url:url(\'' +
-            imgUrl +
-            '\')">' +
+            '">' +
             '<img class="congress-hero-banner-img" src="' +
             imgUrl +
             '" alt="" loading="eager" decoding="async"' +
             (i === 0 ? ' fetchpriority="high"' : '') +
             '>' +
+            '<span class="congress-hero-banner-missing" aria-hidden="true">Banner image unavailable — re-upload in Admin</span>' +
             '</div></div>' +
             copyBlock +
             '</div>'
@@ -405,16 +404,7 @@
                 if (frame) frame.classList.remove('is-pending');
                 if (stage) stage.classList.add('is-ready');
             }
-            function syncFrameBackground() {
-                if (!frame) return;
-                const url = img.currentSrc || img.src || frame.getAttribute('data-banner-src') || '';
-                if (url) frame.style.setProperty('--banner-url', 'url("' + url + '")');
-                if (img.naturalWidth && img.naturalHeight) {
-                    frame.style.aspectRatio = img.naturalWidth + ' / ' + img.naturalHeight;
-                }
-            }
             function apply() {
-                syncFrameBackground();
                 if (frame) frame.classList.remove('is-missing-image');
                 markReady();
             }
