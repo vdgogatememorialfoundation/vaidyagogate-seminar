@@ -11,7 +11,7 @@ let __requireBehalfApplicantOtp = true;
 const ADMIN_REGISTRATION_STATUSES = [
     { value: 'submitted', label: 'Submitted' },
     { value: 'waitlisted', label: 'Waitlisted (no payment)' },
-    { value: 'pending_approval', label: 'Under admin review' },
+    { value: 'pending_approval', label: 'Application review' },
     { value: 'revision_required', label: 'Documents need re-upload' },
     { value: 'approved_pending_payment', label: 'Approved — payment due' },
     { value: 'completed', label: 'Payment completed' },
@@ -367,7 +367,7 @@ function globalAdminTabAllowed(tabId) {
     const globalPages = mergeAdminEnabledPagesPolicy(window.__adminEnabledPages || {});
     const globalKeys = Object.keys(globalPages);
     if (!globalKeys.length) return true;
-    const anyOn = globalKeys.some((k) => globalPages[k] === true);
+        const anyOn = globalKeys.some((k) => globalPages[k] === true);
     if (!anyOn) return true;
     return globalPages[tabId] === true;
 }
@@ -966,8 +966,8 @@ function renderStaffUsersTable(staffList) {
                 : '';
         const userRole = adminStaffUserRoleValue(u);
         const staffPortalRoles = ['co_admin', 'book_sales_staff', 'staff_user'];
-        const modulesBtn =
-            isSuperAdminUser() && String(userRole).toLowerCase() === 'co_admin'
+                const modulesBtn =
+                    isSuperAdminUser() && String(userRole).toLowerCase() === 'co_admin'
                 ? `<button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-left:6px;background:#0d9488;" onclick="openAdminModulesModal(${u.id})">Admin modules</button>`
                 : '';
         const staffModsBtn =
@@ -978,8 +978,8 @@ function renderStaffUsersTable(staffList) {
                 : '';
         const applyJobBtn = isSuperAdminUser()
             ? `<button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-left:6px;background:#4338ca;" onclick="openApplyJobRoleModal(${u.id})">Apply job role</button>`
-            : '';
-        staffBody.innerHTML += `
+                        : '';
+                staffBody.innerHTML += `
                 <tr${hi}>
                     <td><strong>${u.user_id_string}</strong></td>
                     <td>${escAdmin(u.first_name)} ${escAdmin(u.last_name)}</td>
@@ -1010,8 +1010,8 @@ function renderStaffUsersTable(staffList) {
                         }
                     </td>
                 </tr>`;
-    });
-}
+            });
+        }
 
 function adminFilterStaffUsersList() {
     renderStaffUsersTable(window.__adminStaffUsers || []);
@@ -1299,10 +1299,10 @@ async function saveDoctorAccessFromDetail(userId) {
     const useGlobal = !!(document.getElementById('admin-edit-doc-use-global') || {}).checked;
     const modules = {};
     if (!useGlobal) {
-        document.querySelectorAll('#admin-edit-doc-modules input[data-doc-mod]').forEach((inp) => {
-            const id = inp.getAttribute('data-doc-mod');
+    document.querySelectorAll('#admin-edit-doc-modules input[data-doc-mod]').forEach((inp) => {
+        const id = inp.getAttribute('data-doc-mod');
             if (id) modules[id] = inp.checked;
-        });
+    });
     }
     const r = await saveDoctorAccess(userId, category, modules, useGlobal);
     if (!r.ok) return alert(r.error);
@@ -1682,12 +1682,12 @@ function openAdminModulesModal(userId) {
         ).join('') +
         '<p style="font-size:0.82rem;font-weight:700;color:#475569;margin:16px 0 8px;">Admin portal only (not on /staff/login)</p>' +
         CO_ADMIN_ADMIN_ONLY_TAB_DEFS.map(
-            ([id, title]) =>
-                `<label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:0.9rem;">
+        ([id, title]) =>
+            `<label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:0.9rem;">
                 <input type="checkbox" data-mod-tab="${id}" ${mods[id] === true ? 'checked' : ''}>
                 <span>${title}</span>
             </label>`
-        ).join('');
+    ).join('');
     const modal = document.getElementById('admin-modules-modal');
     modal.classList.remove('hidden');
 }
@@ -2694,7 +2694,7 @@ async function adminCreateUser() {
     const phone = document.getElementById('newuser-phone').value.trim();
     const userRole = String((document.getElementById('newuser-role') || {}).value || '').trim();
     const createKind = window.__adminCreateUserKind === 'doctor' ? 'doctor' : 'staff';
-
+    
     if (!firstName || !lastName || !email || !phone) {
         alert('Please fill all required fields');
         return;
@@ -2841,7 +2841,7 @@ async function adminCreateUser() {
                 );
                 switchTab(staffAccount ? 'tab-staff-users' : 'tab-doctors');
                 window.__highlightAdminUserId = result.userId;
-                loadUsers();
+            loadUsers();
             }
         } else {
             alert('Error: ' + result.error);
@@ -2880,7 +2880,7 @@ async function openAdminUserDetail(userId) {
     try {
         const fetcher = window.fetchJson || (async (url) => {
             const res = await fetch(url);
-            const data = await res.json();
+        const data = await res.json();
             return { res, data };
         });
         const { res, data } = await fetcher(`/api/admin/users/${userId}/detail`);
@@ -3795,19 +3795,19 @@ function renderAdminVolunteerAssignmentsTable() {
             '<tr><td colspan="7" style="text-align:center;">No volunteer assignments yet. Use <strong>Add volunteer</strong> or open <strong>Fill application</strong> for an assigned doctor.</td></tr>';
         return;
     }
-    if (!rows.length) {
+        if (!rows.length) {
         tbody.innerHTML =
             '<tr><td colspan="7" style="text-align:center;">No assignments match your search.</td></tr>';
-        return;
-    }
-    tbody.innerHTML = '';
-    rows.forEach((v) => {
-        const name = [v.first_name, v.last_name].filter(Boolean).join(' ');
+            return;
+        }
+        tbody.innerHTML = '';
+        rows.forEach((v) => {
+            const name = [v.first_name, v.last_name].filter(Boolean).join(' ');
         const qual = adminQualFromRegistrationFormData(v.registration_form_data);
         const regSt = String(v.registration_status || '').toLowerCase();
         const hasTicket = !!(v.volunteer_ticket_id_string && String(v.volunteer_ticket_id_string).trim());
         const assignId = v.assignment_id != null ? v.assignment_id : v.id;
-        let actions = '';
+            let actions = '';
         actions +=
             '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.8rem;margin-right:4px;" onclick="openAdminBehalfForVolunteer(' +
             Number(v.user_id) +
@@ -3836,7 +3836,7 @@ function renderAdminVolunteerAssignmentsTable() {
         const qualLine = qual
             ? '<div class="muted" style="font-size:0.78rem;">Qual: ' + escAdmin(qual) + '</div>'
             : '<div class="muted" style="font-size:0.78rem;">Qual: —</div>';
-        tbody.innerHTML += `<tr>
+            tbody.innerHTML += `<tr>
                 <td><strong>${escAdmin(v.seminar_title || '—')}</strong>${eventLine}</td>
                 <td>${escAdmin(name)}<div class="muted">${escAdmin(v.user_id_string || '')} · ${escAdmin(v.email || '')}</div></td>
                 <td>${escAdmin(v.status || '—')}</td>
@@ -3845,7 +3845,7 @@ function renderAdminVolunteerAssignmentsTable() {
                 <td>${escAdmin(v.duties || v.notes || '—')}</td>
                 <td>${actions}</td>
             </tr>`;
-    });
+        });
 }
 
 let volDoctorSearchTimer = null;
@@ -5159,6 +5159,85 @@ async function loadAdminCaseSubmissions() {
     }
 }
 
+function adminCaseFormFieldLabels() {
+    return {
+        fname: 'First name',
+        mname: 'Middle name',
+        lname: 'Last name',
+        dob: 'Date of birth',
+        email: 'Email',
+        phone: 'Phone',
+        whatsapp: 'WhatsApp',
+        category: 'Category',
+        qual: 'Qualification',
+        upload_cv: 'Upload your CV',
+        upload_video: 'Upload your video',
+        agree_terms: 'Terms accepted',
+        topic: 'Case topic / title'
+    };
+}
+
+function formatAdminCaseFormValue(key, val) {
+    if (val == null || String(val).trim() === '') return '—';
+    if (key === 'agree_terms' || val === '1' || val === '0') return val === '1' ? 'Yes' : 'No';
+    return String(val);
+}
+
+function renderAdminCaseFormDetailsHtml(formData) {
+    let fd = {};
+    try {
+        fd = typeof formData === 'string' ? JSON.parse(formData) : formData || {};
+    } catch (_) {
+        return '<p class="muted">Could not parse application data.</p>';
+    }
+    const labels = adminCaseFormFieldLabels();
+    const order = [
+        'fname',
+        'mname',
+        'lname',
+        'dob',
+        'email',
+        'phone',
+        'whatsapp',
+        'category',
+        'qual',
+        'upload_cv',
+        'upload_video',
+        'agree_terms',
+        'topic'
+    ];
+    const seen = new Set();
+    let rows = '';
+    order.forEach((key) => {
+        if (!(key in fd)) return;
+        seen.add(key);
+        rows +=
+            '<tr><td style="font-weight:600;width:38%;">' +
+            escAdmin(labels[key] || key) +
+            '</td><td>' +
+            escAdmin(formatAdminCaseFormValue(key, fd[key])) +
+            '</td></tr>';
+    });
+    Object.keys(fd).forEach((key) => {
+        if (seen.has(key)) return;
+        rows +=
+            '<tr><td style="font-weight:600;width:38%;">' +
+            escAdmin(labels[key] || key.replace(/_/g, ' ')) +
+            '</td><td>' +
+            escAdmin(formatAdminCaseFormValue(key, fd[key])) +
+            '</td></tr>';
+    });
+    if (!rows) return '<p class="muted">No form fields saved.</p>';
+    return (
+        '<table class="data-table" style="margin:8px 0;font-size:0.88rem;"><tbody>' +
+        rows +
+        '</tbody></table>' +
+        '<textarea id="admin-case-form-json" class="hidden" style="display:none;">' +
+        escAdmin(JSON.stringify(fd, null, 2)) +
+        '</textarea>'
+    );
+}
+
 async function openAdminCaseDetail(subId) {
     const box = document.getElementById('case-mgmt-detail');
     if (!box) return;
@@ -5256,17 +5335,20 @@ async function openAdminCaseDetail(subId) {
                   .join('') +
               '</div>'
             : '';
+        box.dataset.subId = String(sub.id);
         let html = `<h3>Application <code>${escAdmin(sub.application_no || sub.id)}</code></h3>
             <p class="muted">${escAdmin(sub.first_name)} ${escAdmin(sub.last_name)} · ${escAdmin(sub.category)} · ${escAdmin(sub.status)}</p>
             <p><strong>Topic:</strong> ${escAdmin(sub.title)}</p>
             <hr style="margin:14px 0;">
-            <h4>Edit case submission (live)</h4>
+            <h4>Application details</h4>
+            ${renderAdminCaseFormDetailsHtml(sub.form_data || caseFormJsonText)}
+            <hr style="margin:14px 0;">
+            <h4>Edit case submission</h4>
             <div class="form-group"><label>Topic / title</label><input type="text" id="admin-case-edit-title" value="${escAdmin(sub.title || '')}" style="width:100%;padding:8px;"></div>
             <div class="form-group"><label>Category</label><input type="text" id="admin-case-edit-category" value="${escAdmin(sub.category || '')}" style="width:100%;padding:8px;"></div>
-            <div class="form-group"><label>Form data (JSON)</label><textarea id="admin-case-form-json" rows="8" style="width:100%;font-family:monospace;font-size:0.85rem;">${escAdmin(caseFormJsonText)}</textarea></div>
             <button type="button" class="btn-primary" onclick="adminSaveCaseSubmissionEdit(${sub.id})">Save case changes</button>
             <div style="margin:12px 0;display:flex;gap:8px;flex-wrap:wrap;">
-                <button type="button" class="btn-primary" style="background:#b91c1c;" onclick="markCasePlagiarism(${sub.id})">Duplicate / zero marks</button>
+                <button type="button" class="btn-primary" style="background:#b91c1c;" onclick="markCasePlagiarism(${sub.id})">Disqualify / duplicate (zero marks)</button>
                 <button type="button" class="btn-primary" style="background:#15803d;" onclick="selectCaseWinner(${sub.id})">Mark winner</button>
             </div>
             <div style="margin:12px 0;">
@@ -6601,7 +6683,7 @@ async function loadApplications() {
 }
 
 function adminApplicationSearchBlob(a) {
-    let formData = {};
+            let formData = {};
     try {
         formData = JSON.parse(a.form_data || '{}');
     } catch (_) {}
@@ -6656,9 +6738,9 @@ function renderApplicationsTable() {
         try {
             formData = JSON.parse(a.form_data || '{}');
         } catch (_) {}
-        const fileLink = formData.certificate_path
-            ? `<br><a href="${escAdmin(publicFileHref(formData.certificate_path))}" target="_blank" style="color:blue;font-size:0.8rem;">📄 View Certificate</a>`
-            : '';
+            const fileLink = formData.certificate_path
+                ? `<br><a href="${escAdmin(publicFileHref(formData.certificate_path))}" target="_blank" style="color:blue;font-size:0.8rem;">📄 View Certificate</a>`
+                : '';
         const candidateName = formData.fname
             ? `${formData.fname} ${formData.lname || ''}`
             : `${a.first_name || ''} ${a.last_name || ''}`;
@@ -6667,7 +6749,7 @@ function renderApplicationsTable() {
             ? `<div style="margin-top:6px;"><span style="background:#fee2e2;color:#991b1b;padding:3px 8px;border-radius:999px;font-size:0.72rem;">Auto duplicate rejected</span></div>`
             : '';
 
-        tbody.innerHTML += `
+            tbody.innerHTML += `
                 <tr>
                     <td>
                         <strong>${a.application_no}</strong>
@@ -6687,7 +6769,7 @@ function renderApplicationsTable() {
                     </td>
                 </tr>
             `;
-    });
+        });
 }
 
 function adminFilterApplicationsList() {
@@ -7044,11 +7126,15 @@ function renderAdminCaseProgramsList() {
             cap +
             '</span></div><span><button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.8rem;background:#64748b;" onclick="editAdminCaseProgram(' +
             p.id +
-            ')">Edit</button> <button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.8rem;background:#b91c1c;" onclick="deleteAdminCaseProgram(' +
+            ')">Edit</button> <button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.8rem;background:#64748b;" onclick="deleteAdminCaseProgram(' +
             p.id +
             ', \'' +
             String(p.title || '').replace(/'/g, "\\'") +
-            '\')">Delete</button></span></div>';
+            '\', false)">Deactivate</button> <button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.8rem;background:#b91c1c;" onclick="deleteAdminCaseProgram(' +
+            p.id +
+            ', \'' +
+            String(p.title || '').replace(/'/g, "\\'") +
+            '\', true)">Permanent delete</button></span></div>';
     });
 }
 
@@ -9198,7 +9284,7 @@ async function savePaymentGatewaysSettings() {
     const cfAppId = document.getElementById('pg-cashfree-app-id').value.trim();
     const cfSecret = document.getElementById('pg-cashfree-secret-key').value.trim();
     const cfLiveOn = document.getElementById('pg-cashfree-live-enabled')?.checked;
-    const gateways = [
+        const gateways = [
         {
             name: 'razorpay',
             is_active: document.getElementById('pg-razorpay-active').checked,
@@ -10270,11 +10356,20 @@ async function deleteAdminRegistration(appId, appNo) {
     }
 }
 
-async function deleteAdminCaseProgram(programId, title) {
-    if (!confirm('Delete case program "' + title + '"?\nShift+confirm = permanent delete including submissions.')) return;
-    const permanent = window.event && window.event.shiftKey ? '1' : '0';
+async function deleteAdminCaseProgram(programId, title, permanent) {
+    const isPermanent = permanent === true || permanent === '1' || permanent === 1;
+    const msg = isPermanent
+        ? 'PERMANENTLY delete case program "' +
+          title +
+          '" and ALL its submissions?\n\nThis cannot be undone.'
+        : 'Deactivate program "' +
+          title +
+          '"?\n\nDoctors will no longer see it. Submissions are kept.\n\nTo delete everything, use Permanent delete instead.';
+    if (!confirm(msg)) return;
     try {
-        const res = await fetch('/api/admin/case/programs/' + programId + '?permanent=' + permanent, { method: 'DELETE' });
+        const res = await fetch('/api/admin/case/programs/' + programId + '?permanent=' + (isPermanent ? '1' : '0'), {
+            method: 'DELETE'
+        });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) return alert(data.error || 'Delete failed');
         alert(data.message || 'Done.');
@@ -12216,8 +12311,8 @@ function cmsAddMenuRow(prefill) {
         return !s.value || enabledSections.indexOf(s.value) !== -1;
     })
         .map(
-            (s) =>
-                `<option value="${s.value.replace(/"/g, '&quot;')}">${s.label}</option>`
+        (s) =>
+            `<option value="${s.value.replace(/"/g, '&quot;')}">${s.label}</option>`
         )
         .join('');
     wrap.innerHTML = `
@@ -13402,35 +13497,35 @@ async function loadPortalAuthAdminForm() {
     const adm = getStoredAdminUser();
     const eff = document.getElementById('pa-effective-hint');
     if (adm && adm.id) {
-        try {
-            const res = await fetch(`/api/admin/portal-auth-config?actingAdminId=${encodeURIComponent(adm.id)}`);
-            const d = await res.json();
+    try {
+        const res = await fetch(`/api/admin/portal-auth-config?actingAdminId=${encodeURIComponent(adm.id)}`);
+        const d = await res.json();
             if (d.success && d.config) {
-                const setChk = (id, val) => {
-                    const el = document.getElementById(id);
-                    if (el) el.checked = !!val;
-                };
-                setChk('pa-show-signup', d.config.showSignup);
-                setChk('pa-show-login', d.config.showLogin);
-                setChk('pa-req-signup-otp', d.config.requireSignupOtp);
-                setChk('pa-req-login-otp', d.config.requireLoginOtp);
-                setChk('pa-req-email-verify', d.config.requireEmailVerification);
-                setChk('pa-req-admin-sensitive-otp', d.config.requireAdminOtpForSensitive);
+        const setChk = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.checked = !!val;
+        };
+        setChk('pa-show-signup', d.config.showSignup);
+        setChk('pa-show-login', d.config.showLogin);
+        setChk('pa-req-signup-otp', d.config.requireSignupOtp);
+        setChk('pa-req-login-otp', d.config.requireLoginOtp);
+        setChk('pa-req-email-verify', d.config.requireEmailVerification);
+        setChk('pa-req-admin-sensitive-otp', d.config.requireAdminOtpForSensitive);
                 setChk('pa-req-behalf-applicant-otp', d.config.requireBehalfApplicantOtp !== false);
                 __requireBehalfApplicantOtp = d.config.requireBehalfApplicantOtp !== false;
                 window.__adminEnabledPages = mergeAdminEnabledPagesPolicy(d.config.adminEnabledPages || {});
-                window.__websiteMenuPages = d.config.websiteMenuPages || {};
+        window.__websiteMenuPages = d.config.websiteMenuPages || {};
                 window.__doctorPortalModulesGlobalRegular = d.config.doctorPortalModulesRegular || {};
                 window.__doctorPortalModulesGlobalVolunteer = d.config.doctorPortalModulesVolunteer || {};
-                if (eff) {
-                    eff.textContent = `Effective signup OTP: ${d.signupOtpEffective ? 'on' : 'off'} · Effective login OTP: ${d.loginOtpEffective ? 'on' : 'off'} (environment variables can still override).`;
+        if (eff) {
+            eff.textContent = `Effective signup OTP: ${d.signupOtpEffective ? 'on' : 'off'} · Effective login OTP: ${d.loginOtpEffective ? 'on' : 'off'} (environment variables can still override).`;
                 }
             } else if (eff) {
                 eff.textContent = '';
-            }
-        } catch (_) {
-            if (eff) eff.textContent = '';
         }
+    } catch (_) {
+        if (eff) eff.textContent = '';
+    }
     } else if (eff) {
         eff.textContent = '';
     }

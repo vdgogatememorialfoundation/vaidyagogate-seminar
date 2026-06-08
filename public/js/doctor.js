@@ -315,7 +315,7 @@ function generateCasePreviewPdf() {
     const PU = window.PortalUpload;
     const fmt = PU && PU.formatBytes ? PU.formatBytes.bind(PU) : (n) => String(n);
 
-    let y = pdfCongressHeader(doc, 'Case presentation - draft preview');
+    let y = pdfVgmfCaseHeader(doc, 'Case presentation — draft preview', getCasePreviewApplicationNo());
     const drawSection = (title) => {
         y = pdfCongressSectionTitle(doc, y + 4, title, accent, ink);
     };
@@ -535,6 +535,7 @@ async function goToCasePreview() {
     }
 
     showCaseApplicationStep('preview');
+    await preloadSiteLogoForPdf();
     renderCasePreviewSummary();
     generateCasePreviewPdf();
 }
@@ -1541,7 +1542,7 @@ async function bootDoctorDashboard(user) {
     loadPortalFlags();
     loadRegistrationFormConfigAndApply();
     loadDoctorPortalUpdatesFromCms();
-    loadSiteBranding();
+    loadSiteBranding().then(() => preloadSiteLogoForPdf());
     initDoctorVolunteerNav()
         .then(() => applyDoctorModuleAccessFromUser(currentUser))
         .catch(() => {});
@@ -4415,7 +4416,13 @@ function downloadCaseApplicationPdf() {
     const accent = [15, 118, 110];
     const ink = [15, 23, 42];
     const muted = [71, 85, 105];
-    let y = pdfCongressHeader(doc, 'Case presentation application');
+    let fd = {};
+    try {
+        fd = c.form_data ? (typeof c.form_data === 'string' ? JSON.parse(c.form_data) : c.form_data) : {};
+    } catch (_) {
+        fd = {};
+    }
+    let y = pdfVgmfCaseHeader(doc, 'Case presentation application', c.application_no || c.id);
     const row = (label, val) => {
         doc.setFontSize(9.5);
         doc.setFont('helvetica', 'bold');
@@ -4430,17 +4437,29 @@ function downloadCaseApplicationPdf() {
         doc.line(14, y, 196, y);
     };
     y = pdfCongressSectionTitle(doc, y + 4, 'Application', accent, ink);
-    row('Application ID', c.application_no || c.id);
+    row('Application no.', c.application_no || c.id);
     row('Programme', c.program_title);
+    row('Full name', [fd.fname, fd.mname, fd.lname].filter(Boolean).join(' ') || [c.first_name, c.last_name].filter(Boolean).join(' '));
+    row('Email', fd.email || c.email);
+    row('Phone', fd.phone || c.phone);
+    row('WhatsApp', fd.whatsapp);
     row('Category', c.category);
-    row('Topic / title', c.title);
     row('Status', caseApplicationStatusLabel(c.status));
+    const skipKeys = new Set(['fname', 'mname', 'lname', 'email', 'phone', 'whatsapp', 'category', 'topic', 'agree_terms']);
+    Object.keys(fd).forEach((key) => {
+        if (skipKeys.has(key)) return;
+        const val = fd[key];
+        if (val == null || String(val).trim() === '') return;
+        const label = key.replace(/_/g, ' ').replace(/\b\w/g, (ch) => ch.toUpperCase());
+        const display = key === 'agree_terms' || val === '1' ? (val === '1' ? 'Yes' : 'No') : val;
+        row(label, display);
+    });
     row('Files uploaded', c.file_count || 0);
     y += 8;
-    doc.setFontSize(10);
-    doc.setTextColor(180, 83, 9);
-    doc.setFont('helvetica', 'bold');
-    doc.text('VGMF Case Presentation · ' + new Date().toLocaleDateString(), 105, y, { align: 'center' });
+    doc.setFontSize(9);
+    doc.setTextColor(100, 116, 139);
+    doc.setFont('helvetica', 'normal');
+    doc.text(COMPUTER_GENERATED_NOTICE, 105, y, { align: 'center', maxWidth: 170 });
     const blob = doc.output('blob');
     if (currentCasePdfBlobUrl) URL.revokeObjectURL(currentCasePdfBlobUrl);
     currentCasePdfBlobUrl = URL.createObjectURL(blob);
@@ -4819,6 +4838,60 @@ async function nextStep(step) {
 let currentPdfBlobUrl = null;
 let currentCasePdfBlobUrl = null;
 
+function pdfVgmfCaseHeader(doc, subtitle, applicationNo) {
+    doc.setFillColor(13, 92, 77);
+    doc.rect(0, 0, 210, 50, 'F');
+    doc.setFillColor(184, 134, 11);
+    doc.rect(0, 48, 210, 2, 'F');
+    const hasLogo = !!window.__siteLogoPdfDataUrl;
+    if (hasLogo) {
+        try {
+            doc.addImage(window.__siteLogoPdfDataUrl, 'PNG', 14, 9, 26, 26);
+        } catch (_) {}
+    }
+    doc.setFontSize(14);
+    doc.setTextColor(255, 255, 255);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Vaidya Gogate Memorial Foundation', hasLogo ? 46 : 105, 18, { align: hasLogo ? 'left' : 'center' });
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.text(subtitle || 'Case presentation application', hasLogo ? 46 : 105, 28, { align: hasLogo ? 'left' : 'center' });
+    if (applicationNo) {
+        doc.setFontSize(9);
+        doc.setTextColor(236, 253, 245);
+        doc.text('Application no. ' + String(applicationNo), 196, 44, { align: 'right' });
+    }
+    return 56;
+}
+
+function preloadSiteLogoForPdf() {
+    if (window.__siteLogoPdfDataUrl) return Promise.resolve();
+    const path = window.__siteLogoPath || siteLogoPath;
+    if (!path) return Promise.resolve();
+    return new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = function () {
+            try {
+                const c = document.createElement('canvas');
+                c.width = img.naturalWidth || img.width;
+                c.height = img.naturalHeight || img.height;
+                c.getContext('2d').drawImage(img, 0, 0);
+                window.__siteLogoPdfDataUrl = c.toDataURL('image/png');
+            } catch (_) {}
+            resolve();
+        };
+        img.onerror = () => resolve();
+        img.src = path;
+    });
+}
+
+function getCasePreviewApplicationNo() {
+    if (window.__draftCaseApplicationNo) return window.__draftCaseApplicationNo;
+    window.__draftCaseApplicationNo = generateClientApplicationNo();
+    return window.__draftCaseApplicationNo;
+}
+
 function pdfCongressHeader(doc, subtitle) {
     doc.setFillColor(13, 92, 77);
     doc.rect(0, 0, 210, 42, 'F');
@@ -4830,10 +4903,7 @@ function pdfCongressHeader(doc, subtitle) {
     doc.text('Vaidya Gogate Memorial Foundation', 105, 17, { align: 'center' });
     doc.setFontSize(10);
     doc.setFont('helvetica', 'normal');
-    doc.text(subtitle || 'National Seminar Portal', 105, 28, { align: 'center' });
-    doc.setFontSize(8);
-    doc.setTextColor(236, 253, 245);
-    doc.text('National Seminar · Ayurveda Congress', 105, 35, { align: 'center' });
+    doc.text(subtitle || 'Seminar registration', 105, 28, { align: 'center' });
     return 50;
 }
 
