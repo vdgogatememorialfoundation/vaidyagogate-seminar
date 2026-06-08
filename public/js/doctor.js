@@ -3,8 +3,10 @@ let currentRegistrationId = null;
 let __doctorAllowedTabs = null;
 window.__portalFlags = window.__portalFlags || {};
 
-/** Fallback when R2 is off (smaller server upload limit). */
+/** Registration / CMS uploads without R2. */
 const UPLOAD_HOST_CAP_MB = 4;
+/** Case presentation (CV, video) when R2 is not used. */
+const CASE_UPLOAD_HOST_CAP_MB = 50;
 let __caseUploadConfig = null;
 
 async function ensureCaseUploadConfig(programId) {
@@ -29,8 +31,8 @@ function effectiveCaseMaxMb(program, config) {
     if (config && config.r2Enabled) {
         return config.effectiveMaxMb || config.defaultMaxMb || 100;
     }
-    const requested = (program && program.maxFileSizeMb) || 50;
-    return Math.min(requested, UPLOAD_HOST_CAP_MB);
+    const requested = (program && program.maxFileSizeMb) || CASE_UPLOAD_HOST_CAP_MB;
+    return Math.min(requested, CASE_UPLOAD_HOST_CAP_MB);
 }
 
 function setInlineUploadSuccess(el, textEl, message, show) {
@@ -3566,9 +3568,9 @@ function renderCaseFormField(host, f, program) {
         hint.style.cssText = 'font-size:0.8rem;color:#64748b;margin:6px 0 0;';
         hint.textContent =
             f.key === 'upload_cv'
-                ? 'PDF, DOC, DOCX, or image.'
+                ? 'PDF, DOC, DOCX, or image (max ' + CASE_UPLOAD_HOST_CAP_MB + ' MB).'
                 : f.key === 'upload_video'
-                  ? 'Video file (MP4, MOV, etc.).'
+                  ? 'Video file — MP4, MOV, etc. (max ' + CASE_UPLOAD_HOST_CAP_MB + ' MB).'
                   : 'PDF, documents, images, or video as allowed.';
         fg.appendChild(hint);
         host.appendChild(fg);
@@ -7770,7 +7772,7 @@ function initDoctorUploadHints() {
             if (!files.length) {
                 caseHint.textContent =
                     'Each file max ' +
-                    UPLOAD_HOST_CAP_MB +
+                    CASE_UPLOAD_HOST_CAP_MB +
                     ' MB on cloud hosting. Compress PDF/PPT; photos from iPhone are resized automatically.';
                 caseHint.style.color = '#64748b';
                 return;

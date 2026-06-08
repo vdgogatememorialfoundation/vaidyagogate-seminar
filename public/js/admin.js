@@ -4824,7 +4824,7 @@ async function editAdminCaseProgram(id) {
         const caseSeatsEl = document.getElementById('case-prog-show-seats');
         if (caseSeatsEl) caseSeatsEl.checked = p.showSeatsPublic !== false && p.show_seats_public !== 0;
         document.getElementById('case-prog-max-files').value = String(p.maxFilesPerSubmission != null ? p.maxFilesPerSubmission : p.max_files_per_submission != null ? p.max_files_per_submission : 2);
-        document.getElementById('case-prog-max-mb').value = String(p.maxFileSizeMb != null ? p.maxFileSizeMb : p.max_file_size_mb != null ? p.max_file_size_mb : 100);
+        document.getElementById('case-prog-max-mb').value = String(p.maxFileSizeMb != null ? p.maxFileSizeMb : p.max_file_size_mb != null ? p.max_file_size_mb : 50);
         const cats = p.enabledCategories || [];
         document.getElementById('case-cat-agnikarma').checked = cats.indexOf('agnikarma') !== -1;
         document.getElementById('case-cat-viddhakarma').checked = cats.indexOf('viddhakarma') !== -1;
@@ -5108,7 +5108,7 @@ async function saveAdminCaseProgram() {
         maxTotalSubmissions: (document.getElementById('case-prog-max-total') || {}).value || null,
         showSeatsPublic: document.getElementById('case-prog-show-seats')?.checked === true,
         maxFilesPerSubmission: (document.getElementById('case-prog-max-files') || {}).value || 5,
-        maxFileSizeMb: (document.getElementById('case-prog-max-mb') || {}).value || 100,
+        maxFileSizeMb: (document.getElementById('case-prog-max-mb') || {}).value || 50,
         enabledCategories: enabledCategories,
         isActive: document.getElementById('case-prog-active') ? document.getElementById('case-prog-active').checked !== false : true,
         formConfig: { version: 2, fields: formConfigFields },

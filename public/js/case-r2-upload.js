@@ -57,7 +57,7 @@
     }
 
     async function uploadViaServer(file, init, userId, onProgress) {
-        const proxyMaxMb = (cachedConfig && cachedConfig.serverProxyMaxMb) || 4;
+        const proxyMaxMb = (cachedConfig && cachedConfig.serverProxyMaxMb) || 50;
         if (file.size > proxyMaxMb * 1024 * 1024) {
             throw new Error(
                 'Direct upload blocked (browser/R2). File is over ' +

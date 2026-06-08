@@ -1718,7 +1718,7 @@
                         <div><label>Total presentation slots</label><input type="number" id="case-prog-max-total" min="1" placeholder="Unlimited if empty" style="width:100%;padding:8px;"></div>
                         <div style="grid-column:1/-1;"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="case-prog-show-seats" checked> Show seat/slot count to doctors on case registration</label></div>
                         <div><label>Max files per submission</label><input type="number" id="case-prog-max-files" min="1" max="10" value="2" style="width:100%;padding:8px;"></div>
-                        <div><label>Max file size (MB each)</label><input type="number" id="case-prog-max-mb" min="1" max="250" value="100" style="width:100%;padding:8px;"><p style="font-size:0.78rem;color:#64748b;margin:4px 0 0;">Default <strong>100 MB</strong>, max <strong>250 MB</strong> per file when Cloudflare R2 is configured. Without R2, use smaller files or enable R2 on Render.</p></div>
+                        <div><label>Max file size (MB each)</label><input type="number" id="case-prog-max-mb" min="1" max="250" value="50" style="width:100%;padding:8px;"><p style="font-size:0.78rem;color:#64748b;margin:4px 0 0;">Default <strong>50 MB</strong> per file (matches competition rules). Up to <strong>250 MB</strong> when Cloudflare R2 is configured.</p></div>
                         <div style="grid-column:1/-1;">
                             <label>Enabled categories</label>
                             <label style="display:inline-flex;align-items:center;gap:6px;margin-right:16px;font-weight:500;"><input type="checkbox" id="case-cat-agnikarma" checked> Agnikarma</label>

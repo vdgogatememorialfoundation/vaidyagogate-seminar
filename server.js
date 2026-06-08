@@ -604,6 +604,16 @@ const storage = multer.diskStorage({
 const UPLOAD_MAX_BYTES = 4 * 1024 * 1024; // legacy cap when not using R2
 const upload = multer({ storage: storage, limits: { fileSize: UPLOAD_MAX_BYTES } });
 const memoryUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: UPLOAD_MAX_BYTES } });
+const uploadLimits = require('./lib/upload-limits');
+const CASE_PRESENTATION_UPLOAD_MAX_BYTES = uploadLimits.getCaseHostMaxBytes();
+const casePresentationDiskUpload = multer({
+    storage: storage,
+    limits: { fileSize: CASE_PRESENTATION_UPLOAD_MAX_BYTES }
+});
+const casePresentationMemoryUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: CASE_PRESENTATION_UPLOAD_MAX_BYTES }
+});
 
 function uploadErrorMessage(err) {
     if (!err) return 'Upload failed';
@@ -638,6 +648,10 @@ function withMemoryAwareUpload(field) {
 }
 const siteCmsHelpers = require('./lib/site-cms-helpers');
 const caseUpload = fileStore.createUploadHandler(upload, memoryUpload);
+const casePresentationUpload = fileStore.createUploadHandler(
+    casePresentationDiskUpload,
+    casePresentationMemoryUpload
+);
 
 app.get('/uploads/api/assets/:key', fileStore.serveAssetHandler(db));
 app.get('/uploads/:filename', fileStore.serveUploadHandler(db, uploadsDir));
@@ -2523,7 +2537,7 @@ function mountExtendedRoutes() {
     caseJudgeMarkingReminders.ensureSchema(db, () => {});
     casePresentation.registerCasePresentationRoutes(app, {
         db,
-        upload: caseUpload,
+        upload: casePresentationUpload,
         generateId,
         fileStore,
         uploadsDir,
@@ -2565,7 +2579,7 @@ try {
     try {
         casePresentation.registerCasePresentationRoutes(app, {
         db,
-        upload: caseUpload,
+        upload: casePresentationUpload,
         generateId,
         fileStore,
         uploadsDir,
