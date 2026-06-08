@@ -4068,10 +4068,10 @@ function caseApplicationStatusLabel(st) {
     if (s === 'revision_required') return 'Re-upload documents required';
     if (s === 'documents_requested') return 'Additional documents requested';
     if (s === 'priority_invited') return 'Complete application (priority)';
-    if (s === 'judging') return 'Judges scoring';
-    if (s === 'judged') return 'Judged — awaiting final result';
-    if (s === 'under_review') return 'Admin reviewing files';
-    if (s === 'approved_for_judging') return 'Ready for judges';
+    if (s === 'judging') return 'Judging in progress';
+    if (s === 'judged') return 'Final review in progress';
+    if (s === 'under_review') return 'Under review';
+    if (s === 'approved_for_judging') return 'Approved for judging';
     if (s === 'selected') return 'Selected / winner';
     if (s === 'disqualified') return 'Disqualified';
     if (s === 'cancelled') return 'Cancelled';
@@ -4083,7 +4083,7 @@ function caseTrackFingerprint(rows) {
         .map((r) => {
             const tl = r.timeline || {};
             const stepSig = (tl.steps || []).map((s) => s.key + ':' + s.state + ':' + (s.at || '')).join(',');
-            return [r.id, r.status, r.judge_count, r.locked_score_count, stepSig].join(':');
+            return [r.id, r.status, stepSig].join(':');
         })
         .join('|');
 }
@@ -4168,8 +4168,6 @@ function viewCaseApplication(index) {
     if (!c) return;
     const contentDiv = document.getElementById('view-case-content');
     if (!contentDiv) return;
-    const judges = Number(c.judge_count) || 0;
-    const locked = Number(c.locked_score_count) || 0;
     contentDiv.innerHTML =
         '<p><strong>Application ID:</strong> ' +
         escapeHtml(c.application_no || String(c.id)) +
@@ -4188,11 +4186,6 @@ function viewCaseApplication(index) {
         '</strong></p>' +
         '<p><strong>Files uploaded:</strong> ' +
         (c.file_count || 0) +
-        '</p>' +
-        '<p><strong>Judges assigned:</strong> ' +
-        judges +
-        ' · <strong>Scores submitted:</strong> ' +
-        locked +
         '</p>' +
         '<hr style="margin:16px 0;border:0;border-top:1px solid #cbd5e1;">' +
         '<h4 style="color:#4338ca;margin-bottom:8px;"><i class="fas fa-comments"></i> Messages from judges</h4>' +
