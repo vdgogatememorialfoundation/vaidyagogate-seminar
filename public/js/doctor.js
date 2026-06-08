@@ -6635,13 +6635,23 @@ function closeChat() {
 async function loadChatMessages(silent) {
         const box = document.getElementById('chat-messages');
     if (!box) return;
-    if (!silent) box.innerHTML = '<p style="color:#64748b;text-align:center;">Loading messages…</p>';
     if (!currentTicketId) {
         box.innerHTML = '<p style="color:#b91c1c;text-align:center;">No ticket selected.</p>';
         return;
     }
+    if (!silent) {
+        box.innerHTML =
+            '<p class="support-chat-loading" style="color:#64748b;text-align:center;margin:auto;">Loading messages…</p>';
+    }
+    const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    const timeoutId = controller
+        ? window.setTimeout(function () {
+              controller.abort();
+          }, 12000)
+        : null;
     try {
-        const res = await fetch('/api/support-ticket/' + encodeURIComponent(currentTicketId));
+        const fetchOpts = controller ? { signal: controller.signal } : {};
+        const res = await fetch('/api/support-ticket/' + encodeURIComponent(currentTicketId), fetchOpts);
         const ticket = await res.json();
         if (!res.ok) {
             box.innerHTML =
@@ -6687,9 +6697,16 @@ async function loadChatMessages(silent) {
         });
     } catch (err) {
         console.error(err);
-        box.innerHTML = '<p style="color:#b91c1c;text-align:center;">Network error loading messages.</p>';
-    }
+        if (silent) return;
+        const timedOut = err && err.name === 'AbortError';
+        box.innerHTML =
+            '<p style="color:#b91c1c;text-align:center;">' +
+            (timedOut ? 'Loading is taking longer than usual. Please try again.' : 'Network error loading messages.') +
+            '</p>';
+    } finally {
+        if (timeoutId) clearTimeout(timeoutId);
         box.scrollTop = box.scrollHeight;
+    }
 }
 
 async function sendReply() {

@@ -291,6 +291,11 @@ section.hero.hero--dimmed { display: none; }
     visibility: hidden;
     pointer-events: none;
 }
+#site-preloader.done {
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+}
 
 .preloader-ring {
     width: 48px;

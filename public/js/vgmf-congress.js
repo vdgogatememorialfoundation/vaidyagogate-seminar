@@ -155,7 +155,11 @@
             '<div class="congress-hero-banner-frame">' +
             '<img class="congress-hero-banner-img" src="' +
             esc(sl.image) +
-            '" alt="" loading="eager" decoding="async">' +
+            '" alt="" loading="' +
+            (i === 0 ? 'eager' : 'lazy') +
+            '" decoding="async"' +
+            (i === 0 ? ' fetchpriority="high"' : '') +
+            '>' +
             '</div></div>' +
             copyBlock +
             '</div>'
@@ -380,21 +384,46 @@
         }
         startHeroAutoplay();
         capBannerHeroImages();
+        preloadFirstHeroBanner();
+        if (typeof window.dismissSitePreloader === 'function') window.dismissSitePreloader();
     };
 
     function capBannerHeroImages() {
         const imgs = document.querySelectorAll('.congress-hero-banner-img');
         imgs.forEach(function (img) {
+            function markReady() {
+                img.classList.add('is-ready');
+            }
             function apply() {
                 if (!img.naturalWidth || !img.naturalHeight) return;
                 var maxW = Math.min(img.naturalWidth, 720);
                 var maxH = Math.min(img.naturalHeight, 300);
                 img.style.maxWidth = maxW + 'px';
                 img.style.maxHeight = maxH + 'px';
+                markReady();
             }
-            if (img.complete) apply();
-            else img.addEventListener('load', apply, { once: true });
+            if (img.complete && img.naturalWidth) apply();
+            else {
+                img.addEventListener('load', apply, { once: true });
+                img.addEventListener('error', markReady, { once: true });
+            }
         });
+    }
+
+    function preloadFirstHeroBanner() {
+        const first = heroSlides.find(function (sl) {
+            return sl && sl.imageOnly && sl.image;
+        });
+        if (!first || !first.image) return;
+        var link = document.querySelector('link[data-hero-preload="1"]');
+        if (!link) {
+            link = document.createElement('link');
+            link.rel = 'preload';
+            link.as = 'image';
+            link.setAttribute('data-hero-preload', '1');
+            document.head.appendChild(link);
+        }
+        link.href = first.image;
     }
 
     function filterAnnouncements(items) {
@@ -793,23 +822,6 @@
         bindMobileNav();
         bindHeaderScroll();
         bindSpeakerModal();
-        const pre = document.getElementById('site-preloader');
-        if (pre) {
-            setTimeout(() => pre.classList.add('done'), 400);
-        }
-        (async () => {
-            const root = document.getElementById('congress-hero-slides');
-            if (root && root.children.length) return;
-            try {
-                await loadHeroMarketing();
-                const res = await fetch('/api/public/site-cms', { cache: 'no-store' });
-                const cms = await res.json();
-                if (typeof window.applySiteCms === 'function') window.applySiteCms(cms);
-            } catch (e) {
-                console.error('[congress] CMS bootstrap failed', e);
-                await loadHeroMarketing();
-                renderCongressHero({});
-            }
-        })();
+        if (typeof window.dismissSitePreloader === 'function') window.dismissSitePreloader();
     });
 })();

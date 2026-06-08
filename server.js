@@ -2631,6 +2631,7 @@ function withIntegrationSettingsLoaded(req, res, next) {
 
 let auxiliaryTablesReady = false;
 let auxiliaryTablesPromise = null;
+let supportTicketSchemaPromise = null;
 
 function withAuxiliaryTables(req, res, next) {
     if (auxiliaryTablesReady) return next();
@@ -2654,17 +2655,26 @@ function withAuxiliaryTables(req, res, next) {
 }
 
 function withSupportTickets(req, res, next) {
-    const run = () => ensureSupportTicketSchema(db, ignoreSchemaMigrationErr, next);
-    if (pgDb && typeof pgDb.ensureAuxiliaryTables === 'function') {
-        return pgDb
-            .ensureAuxiliaryTables()
-            .then(run)
-            .catch((e) => {
-                console.warn('[support-tickets-schema]', e.message);
+    if (!supportTicketSchemaPromise) {
+        supportTicketSchemaPromise = new Promise((resolve) => {
+            const run = () => ensureSupportTicketSchema(db, ignoreSchemaMigrationErr, resolve);
+            if (pgDb && typeof pgDb.ensureAuxiliaryTables === 'function') {
+                pgDb
+                    .ensureAuxiliaryTables()
+                    .then(run)
+                    .catch((e) => {
+                        console.warn('[support-tickets-schema]', e.message);
+                        run();
+                    });
+            } else {
                 run();
-            });
+            }
+        });
     }
-    run();
+    supportTicketSchemaPromise.then(() => next()).catch((e) => {
+        console.warn('[support-tickets]', e.message);
+        next();
+    });
 }
 
 function formatCheckInTimeForNotify(at) {

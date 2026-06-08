@@ -23,7 +23,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="/css/vgmf-site.css">
-    <link rel="stylesheet" href="/css/vgmf-congress.css?v=20260608hero2">
+    <link rel="stylesheet" href="/css/vgmf-congress.css?v=20260608load1">
     <link rel="stylesheet" href="/css/vgmf-responsive.css?v=20260520d">
     <link rel="stylesheet" href="/css/gallery-lightbox.css">
     <script src="/js/site-seo.js?v=20260522a"></script>
@@ -33,6 +33,28 @@
 <body class="congress-site" data-portal-theme="public">
     <a href="#main-content" class="vg-skip-link">Skip to main content</a>
     <div id="site-preloader" aria-hidden="true"><div class="preloader-ring"></div><p style="color:var(--muted);font-weight:600;">Loading seminar portal…</p></div>
+    <script>
+        window.dismissSitePreloader = function dismissSitePreloader() {
+            var pre = document.getElementById('site-preloader');
+            if (!pre || pre.dataset.dismissed === '1') return;
+            pre.dataset.dismissed = '1';
+            pre.classList.add('done', 'is-done');
+            window.setTimeout(function () {
+                pre.classList.add('is-gone');
+            }, 450);
+        };
+        (function () {
+            function run() {
+                window.dismissSitePreloader();
+            }
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', run, { once: true });
+            } else {
+                run();
+            }
+            window.setTimeout(run, 1500);
+        })();
+    </script>
 
     <div class="cg-shell" id="cg-site-top">
     <div class="cg-utility" aria-label="Contact and account">
@@ -446,7 +468,7 @@
     <script src="/js/portal-scrolling-announcements.js"></script>
     <script src="/js/vgmf-home.js?v=20260608menu1"></script>
     <script src="/js/portal-theme.js"></script>
-    <script src="/js/vgmf-congress.js?v=20260607hero10"></script>
+    <script src="/js/vgmf-congress.js?v=20260608load1"></script>
     <script src="/js/vgmf-home-stats.js?v=20260607stats2"></script>
     <script src="/js/vgmf-marketing.js?v=20260607popup2"></script>
     <script src="/js/otp-ui.js"></script>
@@ -1826,7 +1848,7 @@
         }
 
         window.addEventListener('load', () => {
-            document.getElementById('site-preloader')?.classList.add('done');
+            if (typeof window.dismissSitePreloader === 'function') window.dismissSitePreloader();
         });
 
         showSection('home');

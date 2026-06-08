@@ -53,10 +53,14 @@
     gap: 16px;
     transition: opacity 0.4s var(--cg-ease), visibility 0.4s;
 }
-#site-preloader.done {
+#site-preloader.done,
+#site-preloader.is-done {
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
+}
+#site-preloader.is-gone {
+    display: none !important;
 }
 .preloader-ring {
     width: 48px;
@@ -450,6 +454,11 @@
     border-radius: 28px;
     background: radial-gradient(ellipse at center, rgba(20, 184, 166, 0.12), transparent 70%);
     pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+}
+.congress-hero-banner-stage:has(.congress-hero-banner-img.is-ready) .congress-hero-banner-glow {
+    opacity: 1;
 }
 .congress-hero-banner-frame {
     position: relative;
@@ -474,11 +483,20 @@
     height: auto;
     max-width: min(720px, 82vw);
     max-height: min(300px, 34vh);
-    margin: 0;
+    margin: 0 auto;
     flex-shrink: 0;
     object-fit: contain;
     object-position: center;
     border-radius: 10px;
+    opacity: 0;
+    transition: opacity 0.35s ease;
+}
+.congress-hero-banner-img.is-ready {
+    opacity: 1;
+}
+.congress-hero-banner-frame:has(.congress-hero-banner-img:not(.is-ready)) {
+    min-width: min(240px, 72vw);
+    min-height: min(120px, 18vh);
 }
 .congress-hero-slide--frame-a .congress-hero-banner-frame {
     border-color: rgba(15, 118, 110, 0.28);
