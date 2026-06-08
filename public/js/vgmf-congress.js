@@ -101,23 +101,27 @@
     function buildSeminarHeroSlides(seminars) {
         const list = Array.isArray(seminars) ? seminars.filter((s) => s && Number(s.is_active) !== 0) : [];
         if (!list.length) return [];
-        return list.map((s) => {
-            const when = formatSeminarHeroDate(s.event_date);
-            const venue = s.venue ? String(s.venue).trim() : '';
-            const meta = [when, venue].filter(Boolean);
-            const desc = s.description ? String(s.description).trim().slice(0, 140) : '';
-            const year = s.portal_year || (s.event_date ? String(s.event_date).slice(0, 4) : '');
-            return {
-                image: seminarHeroImagePath(s),
-                title: s.title || 'National Seminar',
-                subtitle: meta.join(' · ') || desc || 'Register for this live seminar',
-                eyebrow: year ? 'Live seminar · ' + year : 'Live seminar',
-                cta: 'Register now',
-                link: '#register',
-                cta2: 'View programme',
-                link2: '#schedule'
-            };
-        });
+        return list
+            .map((s) => {
+                const image = seminarHeroImagePath(s);
+                if (!image) return null;
+                const when = formatSeminarHeroDate(s.event_date);
+                const venue = s.venue ? String(s.venue).trim() : '';
+                const meta = [when, venue].filter(Boolean);
+                const desc = s.description ? String(s.description).trim().slice(0, 140) : '';
+                const year = s.portal_year || (s.event_date ? String(s.event_date).slice(0, 4) : '');
+                return {
+                    image,
+                    title: s.title || 'National Seminar',
+                    subtitle: meta.join(' · ') || desc || 'Register for this live seminar',
+                    eyebrow: year ? 'Live seminar · ' + year : 'Live seminar',
+                    cta: 'Register now',
+                    link: '#register',
+                    cta2: 'View programme',
+                    link2: '#schedule'
+                };
+            })
+            .filter(Boolean);
     }
 
     function buildHeroSlides(cms, seminars, marketingBanners) {
@@ -130,8 +134,12 @@
             seen.add(key);
             slides.push(sl);
         }
-        buildSeminarHeroSlides(seminars).forEach(pushSlide);
-        buildMarketingBannerSlides(marketingBanners).forEach(pushSlide);
+        const seminarSlides = buildSeminarHeroSlides(seminars);
+        if (seminarSlides.length) {
+            seminarSlides.forEach(pushSlide);
+        } else {
+            buildMarketingBannerSlides(marketingBanners).forEach(pushSlide);
+        }
         const fromCms = Array.isArray(cms && cms.slides) ? cms.slides : [];
         fromCms.forEach((sl) => {
             if (!sl || (!sl.image && !sl.title)) return;

@@ -13128,7 +13128,7 @@ async function saveDoctorPortalModulesAdminConfig() {
         const res = await fetch('/api/admin/portal-auth-config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ actingAdminId: adm.id, config })
+            body: JSON.stringify({ actingAdminId: adm.id, config, resetAllDoctorModuleOverrides: true })
         });
         const data = await res.json();
         if (!res.ok || !data.success) {
@@ -13143,7 +13143,7 @@ async function saveDoctorPortalModulesAdminConfig() {
         renderDoctorPortalModulesCheckboxes();
         if (msg) {
             msg.style.color = '#15803d';
-            msg.textContent = 'Doctor portal modules saved.';
+            msg.textContent = 'Doctor portal modules saved. All doctors now use these global settings (per-user overrides cleared).';
         }
     } catch (_) {
         if (msg) {
@@ -14400,11 +14400,43 @@ function marketingAddBannerRow() {
     );
 }
 
+async function marketingSaveAllBanners(showMsg) {
+    const root = document.getElementById('mkt-banner-rows');
+    if (!root) return true;
+    const rows = Array.from(root.querySelectorAll('.mkt-banner-row'));
+    if (!rows.length) return true;
+    for (const row of rows) {
+        const payload = marketingReadRow(row);
+        if (!payload || !payload.imagePath) continue;
+        const isNew = !payload.id;
+        const res = await fetch(
+            isNew ? '/api/admin/homepage-banners' : '/api/admin/homepage-banners/' + payload.id,
+            {
+                method: isNew ? 'POST' : 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            }
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            if (showMsg) marketingSetMsg(data.error || 'Banner save failed', false);
+            return false;
+        }
+    }
+    await loadAdminMarketing();
+    return true;
+}
+
 async function marketingUploadBannerImage(btn) {
     const row = btn.closest('.mkt-banner-row');
     const fileInp = row && row.querySelector('.mb-file');
     const path = await uploadAdminAssetFromInput(fileInp);
-    if (path && row) (row.querySelector('.mb-img') || {}).value = path;
+    if (fileInp) fileInp.value = '';
+    if (path && row) {
+        const imgEl = row.querySelector('.mb-img');
+        if (imgEl) imgEl.value = path;
+        await marketingSaveBannerRow(btn, true);
+    }
 }
 
 async function marketingUploadPopupImage() {
@@ -14415,10 +14447,10 @@ async function marketingUploadPopupImage() {
     }
 }
 
-async function marketingSaveBannerRow(btn) {
+async function marketingSaveBannerRow(btn, skipReload) {
     const row = btn.closest('.mkt-banner-row');
     const payload = marketingReadRow(row);
-    if (!payload || !payload.imagePath) return marketingSetMsg('Image path is required for each banner.', false);
+    if (!payload || !payload.imagePath) return marketingSetMsg('Upload an image first, then save the banner.', false);
     try {
         const isNew = !payload.id;
         const res = await fetch(
@@ -14431,8 +14463,13 @@ async function marketingSaveBannerRow(btn) {
         );
         const data = await res.json();
         if (!res.ok) return marketingSetMsg(data.error || 'Save failed', false);
+        if (data.imagePath && row) {
+            const imgEl = row.querySelector('.mb-img');
+            if (imgEl) imgEl.value = data.imagePath;
+        }
         marketingSetMsg('Banner saved.', true);
-        await loadAdminMarketing();
+        if (!skipReload) await loadAdminMarketing();
+        else if (data.id && row) row.dataset.id = String(data.id);
     } catch (e) {
         marketingSetMsg(e.message || 'Save failed', false);
     }
@@ -16498,6 +16535,8 @@ async function bsPosSave() {
 }
 
 async function saveAdminSitePopup() {
+    const savedBanners = await marketingSaveAllBanners(true);
+    if (!savedBanners) return;
     const popup = {
         enabled: (document.getElementById('mkt-popup-enabled') || {}).value === '1',
         showMode: (document.getElementById('mkt-popup-mode') || {}).value || 'once_session',
@@ -16518,7 +16557,7 @@ async function saveAdminSitePopup() {
             body: JSON.stringify({ popup, carousel })
         });
         const data = await res.json();
-        marketingSetMsg(res.ok && data.success ? 'Popup & carousel settings saved.' : data.error || 'Save failed', !!(res.ok && data.success));
+        marketingSetMsg(res.ok && data.success ? 'Slider banners, popup & carousel settings saved.' : data.error || 'Save failed', !!(res.ok && data.success));
     } catch (e) {
         marketingSetMsg(e.message || 'Save failed', false);
     }

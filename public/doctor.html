@@ -26,6 +26,7 @@
         body { font-family: 'Inter', system-ui, sans-serif; background: linear-gradient(180deg, #f0fdfa 0%, #ecfeff 35%, var(--doctor-bg) 100%); color: var(--doctor-text); }
         
         .hidden { display: none !important; }
+        .menu-item[hidden], [data-doctor-tab][hidden] { display: none !important; visibility: hidden !important; pointer-events: none !important; }
         .dashboard-container { display: flex; min-height: 100vh; }
         
         .sidebar { width: 288px; background: linear-gradient(185deg, var(--doctor-primary-dark) 0%, var(--doctor-sidebar) 55%, #134e4a 100%); box-shadow: 8px 0 32px rgba(15, 118, 110, 0.18); display: flex; flex-direction: column; z-index: 10; color: #ccfbf1; }
@@ -986,6 +987,6 @@
     <link rel="stylesheet" href="/css/book-track.css?v=20260529stg">
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/doctor-books.js?v=20260528livetrack"></script>
-    <script src="/js/doctor.js?v=20260607modules3"></script>
+    <script src="/js/doctor.js?v=20260607modules4"></script>
 </body>
 </html>

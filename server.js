@@ -9316,12 +9316,34 @@ app.post('/api/admin/portal-auth-config', (req, res) => {
                 merged.adminEnabledPages = existing.adminEnabledPages;
                 merged.websiteMenuPages = existing.websiteMenuPages;
             }
-            upsertGlobalSetting(portalAuthPolicy.KEY, JSON.stringify(merged), (err) => {
-                if (err) return res.status(500).json({ error: err.message });
-                portalAuthPolicy.loadPortalAuthConfig(db, () => {
-                    res.json({ success: true, config: portalAuthPolicy.getPortalAuthConfig() });
+            if (!Object.prototype.hasOwnProperty.call(config, 'doctorPortalModulesRegular')) {
+                merged.doctorPortalModulesRegular = existing.doctorPortalModulesRegular || {};
+            }
+            if (!Object.prototype.hasOwnProperty.call(config, 'doctorPortalModulesVolunteer')) {
+                merged.doctorPortalModulesVolunteer = existing.doctorPortalModulesVolunteer || {};
+            }
+            const finishSave = () => {
+                upsertGlobalSetting(portalAuthPolicy.KEY, JSON.stringify(merged), (err) => {
+                    if (err) return res.status(500).json({ error: err.message });
+                    portalAuthPolicy.loadPortalAuthConfig(db, () => {
+                        res.json({ success: true, config: portalAuthPolicy.getPortalAuthConfig() });
+                    });
                 });
-            });
+            };
+            if (req.body && req.body.resetAllDoctorModuleOverrides) {
+                db.run(
+                    `UPDATE users SET doctor_modules = NULL
+                     WHERE LOWER(COALESCE(user_role, role, '')) = 'doctor'
+                        OR (LOWER(COALESCE(role, '')) = 'user' AND LOWER(COALESCE(user_role, 'doctor')) = 'doctor')`,
+                    [],
+                    (clrErr) => {
+                        if (clrErr) return res.status(500).json({ error: clrErr.message });
+                        finishSave();
+                    }
+                );
+                return;
+            }
+            finishSave();
         });
     });
 });

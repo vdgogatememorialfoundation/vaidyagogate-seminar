@@ -638,6 +638,8 @@ function applyDoctorAllowedTabsToDom(allowed) {
         }
         el.classList.toggle('hidden', !enabled);
         el.style.display = enabled ? '' : 'none';
+        if (enabled) el.removeAttribute('hidden');
+        else el.setAttribute('hidden', 'hidden');
         el.setAttribute('aria-hidden', enabled ? 'false' : 'true');
     });
     document.querySelectorAll('[data-doctor-tab]').forEach((el) => {
@@ -646,6 +648,8 @@ function applyDoctorAllowedTabsToDom(allowed) {
         const enabled = doctorTabModuleEnabled(tab);
         el.classList.toggle('hidden', !enabled);
         el.style.display = enabled ? '' : 'none';
+        if (enabled) el.removeAttribute('hidden');
+        else el.setAttribute('hidden', 'hidden');
         el.setAttribute('aria-hidden', enabled ? 'false' : 'true');
     });
     document.querySelectorAll('.tab-pane[id^="tab-"]').forEach((pane) => {
@@ -761,6 +765,11 @@ function volunteerDoctorModuleDefaults() {
 
 async function applyDoctorModuleAccessFromUser(user) {
     if (window.__doctorPortalAllowedTabs !== undefined) {
+        applyDoctorAllowedTabsToDom(allowedTabsArrayToSet(window.__doctorPortalAllowedTabs));
+        return;
+    }
+    const refreshed = await refreshDoctorPortalAccess().catch(() => false);
+    if (refreshed && window.__doctorPortalAllowedTabs !== undefined) {
         applyDoctorAllowedTabsToDom(allowedTabsArrayToSet(window.__doctorPortalAllowedTabs));
         return;
     }
