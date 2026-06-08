@@ -1717,7 +1717,7 @@
                         <div><label>Max presentations per doctor</label><input type="number" id="case-prog-max-per-user" min="1" max="10" value="2" style="width:100%;padding:8px;"></div>
                         <div><label>Total presentation slots</label><input type="number" id="case-prog-max-total" min="1" placeholder="Unlimited if empty" style="width:100%;padding:8px;"></div>
                         <div style="grid-column:1/-1;"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="case-prog-show-seats" checked> Show seat/slot count to doctors on case registration</label></div>
-                        <div><label>Max files per submission</label><input type="number" id="case-prog-max-files" min="1" max="10" value="5" style="width:100%;padding:8px;"></div>
+                        <div><label>Max files per submission</label><input type="number" id="case-prog-max-files" min="1" max="10" value="2" style="width:100%;padding:8px;"></div>
                         <div><label>Max file size (MB each)</label><input type="number" id="case-prog-max-mb" min="1" max="250" value="100" style="width:100%;padding:8px;"><p style="font-size:0.78rem;color:#64748b;margin:4px 0 0;">Default <strong>100 MB</strong>, max <strong>250 MB</strong> per file when Cloudflare R2 is configured. Without R2, use smaller files or enable R2 on Render.</p></div>
                         <div style="grid-column:1/-1;">
                             <label>Enabled categories</label>
@@ -1727,7 +1727,8 @@
                         <div><label><input type="checkbox" id="case-prog-active" checked> Program active</label></div>
                     </div>
                     <h4 style="margin:16px 0 8px;">Application form fields</h4>
-                    <p style="color:#64748b;font-size:0.85rem;margin:-4px 0 8px;">Drag rows to reorder. Types include file upload, checkbox, and terms acceptance. Save the program after changes.</p>
+                    <p style="color:#64748b;font-size:0.85rem;margin:-4px 0 8px;">Drag rows to reorder. Types include dropdown, multi-option, file upload, rating, checkbox, and terms acceptance. Save the program after changes.</p>
+                    <button type="button" class="btn-secondary" style="font-size:0.82rem;padding:4px 10px;margin-bottom:8px;" onclick="applyDefaultCaseApplicationForm()">Load default application form</button>
                     <table class="data-table" style="margin-bottom:8px;">
                         <thead><tr><th style="width:36px;"></th><th>Field key</th><th>Label</th><th>Type</th><th>Enabled</th><th>Required</th><th></th></tr></thead>
                         <tbody id="case-prog-fields-tbody"><tr><td colspan="7">Loading…</td></tr></tbody>

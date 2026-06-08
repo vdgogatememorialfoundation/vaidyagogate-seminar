@@ -4236,10 +4236,15 @@ const CASE_PROG_CORE_FIELD_KEYS = new Set([
     'fname',
     'mname',
     'lname',
+    'dob',
     'email',
     'phone',
     'whatsapp',
     'category',
+    'qual',
+    'upload_cv',
+    'upload_video',
+    'agree_terms',
     'topic',
     'files'
 ]);
@@ -4251,17 +4256,56 @@ const CASE_PROG_FIELD_TYPES = [
     'number',
     'date',
     'select',
+    'multiselect',
     'checkbox',
     'boolean',
     'file',
+    'rating',
     'terms'
 ];
-const CASE_PROG_FIXED_TYPE_KEYS = { files: 'file', category: 'select' };
+const CASE_PROG_FIELD_TYPE_LABELS = {
+    text: 'Text',
+    textarea: 'Text area',
+    email: 'Email',
+    tel: 'Phone',
+    number: 'Number',
+    date: 'Date',
+    select: 'Dropdown',
+    multiselect: 'Multi-option',
+    checkbox: 'Checkbox',
+    boolean: 'Yes / No',
+    file: 'File upload',
+    rating: 'Rating',
+    terms: 'Terms acceptance'
+};
+const CASE_PROG_FIXED_TYPE_KEYS = {
+    files: 'file',
+    upload_cv: 'file',
+    upload_video: 'file',
+    category: 'select',
+    qual: 'select',
+    agree_terms: 'terms'
+};
+
+function caseProgFieldTypeLabel(type) {
+    const t = normalizeAdminCaseFieldType(type);
+    return CASE_PROG_FIELD_TYPE_LABELS[t] || t;
+}
+
+function normalizeAdminCaseFieldType(type) {
+    const t = String(type || 'text').toLowerCase();
+    if (t === 'dropdown') return 'select';
+    if (t === 'fileupload') return 'file';
+    if (t === 'multioption') return 'multiselect';
+    return t;
+}
 
 function caseProgFieldTypeOptions(selected) {
-    return CASE_PROG_FIELD_TYPES.map(
-        (t) => '<option value="' + t + '"' + (t === selected ? ' selected' : '') + '>' + t + '</option>'
-    ).join('');
+    const sel = normalizeAdminCaseFieldType(selected);
+    return CASE_PROG_FIELD_TYPES.map(function (t) {
+        const label = CASE_PROG_FIELD_TYPE_LABELS[t] || t;
+        return '<option value="' + t + '"' + (t === sel ? ' selected' : '') + '>' + label + '</option>';
+    }).join('');
 }
 
 function parseCaseFieldOptionsText(raw) {
@@ -4292,9 +4336,11 @@ function collectCaseProgramFieldsFromDom() {
         const keyEl = document.getElementById('case-field-key-' + idx);
         const key = keyEl ? String(keyEl.value || '').trim() : r.key;
         const fixedType = CASE_PROG_FIXED_TYPE_KEYS[key];
-        const type = fixedType
-            ? fixedType
-            : (document.getElementById('case-field-type-' + idx) || {}).value || r.type || 'text';
+        const type = normalizeAdminCaseFieldType(
+            fixedType
+                ? fixedType
+                : (document.getElementById('case-field-type-' + idx) || {}).value || r.type || 'text'
+        );
         const row = {
             key: key || r.key,
             label: ((document.getElementById('case-field-label-' + idx) || {}).value || key || r.key).trim(),
@@ -4302,13 +4348,22 @@ function collectCaseProgramFieldsFromDom() {
             enabled: !!(document.getElementById('case-field-en-' + idx) || {}).checked,
             required: !!(document.getElementById('case-field-req-' + idx) || {}).checked
         };
-        if (type === 'select') {
+        if (type === 'select' || type === 'multiselect') {
             const ot = document.getElementById('case-field-opts-' + idx);
             row.options = parseCaseFieldOptionsText(ot && ot.value);
         }
         if (type === 'terms') {
             const tt = document.getElementById('case-field-terms-' + idx);
             row.termsText = tt ? String(tt.value || '').trim() : '';
+        }
+        if (type === 'rating') {
+            const rm = document.getElementById('case-field-rating-max-' + idx);
+            row.max = Math.max(1, Math.min(10, parseInt(rm && rm.value, 10) || 5));
+        }
+        if (type === 'file') {
+            const ac = document.getElementById('case-field-accept-' + idx);
+            const acceptVal = ac ? String(ac.value || '').trim().toLowerCase() : '';
+            if (acceptVal) row.accept = acceptVal;
         }
         return row;
     });
@@ -4455,11 +4510,17 @@ function collectCaseProgramFormConfig() {
                 enabled: f.enabled,
                 required: f.enabled && f.required
             };
-            if (f.type === 'select' && Array.isArray(f.options) && f.options.length) {
+            if ((f.type === 'select' || f.type === 'multiselect') && Array.isArray(f.options) && f.options.length) {
                 row.options = f.options;
             }
             if (f.type === 'terms' && f.termsText) {
                 row.termsText = f.termsText;
+            }
+            if (f.type === 'rating' && f.max != null) {
+                row.max = Math.max(1, Math.min(10, parseInt(f.max, 10) || 5));
+            }
+            if (f.type === 'file' && f.accept) {
+                row.accept = String(f.accept).trim();
             }
             return row;
         })
@@ -4478,7 +4539,9 @@ function renderCaseProgramFieldsEditor(fields) {
     list.forEach((f, idx) => {
         const isCore = CASE_PROG_CORE_FIELD_KEYS.has(f.key);
         const fixedType = CASE_PROG_FIXED_TYPE_KEYS[f.key];
-        const type = fixedType || f.type || (f.key === 'files' ? 'file' : f.key === 'category' ? 'select' : 'text');
+        const type = normalizeAdminCaseFieldType(
+            fixedType || f.type || (f.key === 'files' || f.key === 'upload_cv' || f.key === 'upload_video' ? 'file' : f.key === 'category' || f.key === 'qual' ? 'select' : 'text')
+        );
         const keyCell = isCore
             ? '<code>' + String(f.key || '').replace(/</g, '&lt;') + '</code>'
             : '<input type="text" id="case-field-key-' +
@@ -4487,7 +4550,9 @@ function renderCaseProgramFieldsEditor(fields) {
               String(f.key || '').replace(/"/g, '&quot;') +
               '" style="margin:0;width:120px;" placeholder="field_key">';
         const typeCell = fixedType
-            ? '<code>' + String(type).replace(/</g, '&lt;') + '</code>'
+            ? '<span style="font-size:0.85rem;color:#475569;font-weight:600;">' +
+              String(caseProgFieldTypeLabel(type)).replace(/</g, '&lt;') +
+              '</span>'
             : '<select id="case-field-type-' +
               idx +
               '" style="margin:0;" onchange="caseProgFieldTypeChanged(' +
@@ -4528,16 +4593,48 @@ function renderCaseProgramFieldsEditor(fields) {
             removeBtn +
             '</td>';
         tbody.appendChild(tr);
-        if (type === 'select') {
+        if (type === 'select' || type === 'multiselect') {
             const extra = document.createElement('tr');
             extra.className = 'case-field-extra-row';
             extra.innerHTML =
-                '<td></td><td colspan="6"><label style="font-size:0.78rem;color:#64748b;">Select options (one per line, optional <code>value | label</code>)</label>' +
+                '<td></td><td colspan="6"><label style="font-size:0.78rem;color:#64748b;">' +
+                (type === 'multiselect' ? 'Multi-option' : 'Dropdown') +
+                ' choices (one per line, optional <code>value | label</code>)</label>' +
                 '<textarea id="case-field-opts-' +
                 idx +
                 '" rows="2" style="width:100%;margin-top:4px;font-size:0.82rem;">' +
                 String(formatCaseFieldOptionsText(f.options)).replace(/</g, '&lt;') +
                 '</textarea></td>';
+            tbody.appendChild(extra);
+        }
+        if (type === 'rating') {
+            const extra = document.createElement('tr');
+            extra.className = 'case-field-extra-row';
+            extra.innerHTML =
+                '<td></td><td colspan="6"><label style="font-size:0.78rem;color:#64748b;">Max rating (1–10)</label>' +
+                '<input type="number" id="case-field-rating-max-' +
+                idx +
+                '" min="1" max="10" value="' +
+                String(f.max != null ? f.max : 5) +
+                '" style="width:80px;margin-top:4px;padding:6px;"></td>';
+            tbody.appendChild(extra);
+        }
+        if (type === 'file') {
+            const extra = document.createElement('tr');
+            extra.className = 'case-field-extra-row';
+            const acceptHint =
+                f.key === 'upload_cv'
+                    ? 'cv'
+                    : f.key === 'upload_video'
+                      ? 'video'
+                      : f.accept || '';
+            extra.innerHTML =
+                '<td></td><td colspan="6"><label style="font-size:0.78rem;color:#64748b;">Accepted files hint (<code>cv</code>, <code>video</code>, or MIME/extensions)</label>' +
+                '<input type="text" id="case-field-accept-' +
+                idx +
+                '" value="' +
+                String(acceptHint).replace(/"/g, '&quot;') +
+                '" placeholder="e.g. cv or video or .pdf,video/*" style="width:100%;margin-top:4px;padding:6px;font-size:0.82rem;"></td>';
             tbody.appendChild(extra);
         }
         if (type === 'terms') {
@@ -4605,6 +4702,8 @@ async function loadCaseProgramDefaultFields() {
         const data = await res.json();
         const fields = data.fields || (data.formConfig && data.formConfig.fields) || [];
         renderCaseProgramFieldsEditor(fields);
+        const mf = document.getElementById('case-prog-max-files');
+        if (mf && !String(mf.value || '').trim()) mf.value = '2';
         const instrEl = document.getElementById('case-prog-instructions');
         if (instrEl && data.instructions && !String(instrEl.value || '').trim()) {
             instrEl.value = data.instructions;
@@ -4625,6 +4724,30 @@ async function loadCaseProgramDefaultFields() {
         renderCaseProgramFieldsEditor([]);
     }
 }
+
+async function applyDefaultCaseApplicationForm() {
+    if (
+        !confirm(
+            'Replace all application form fields with the default Case Presentation form (name, DOB, contact, category, qualification, CV, video, terms)? Save the program after loading.'
+        )
+    ) {
+        return;
+    }
+    try {
+        const res = await fetch('/api/admin/case/default-form-config');
+        const data = await res.json();
+        if (!res.ok) return alert((data && data.error) || 'Could not load default form');
+        const fields = data.fields || (data.formConfig && data.formConfig.fields) || [];
+        renderCaseProgramFieldsEditor(fields);
+        const mf = document.getElementById('case-prog-max-files');
+        if (mf) mf.value = '2';
+        setCaseProgMsg('Default application form loaded — edit terms text on agree_terms, then save.', true);
+    } catch (e) {
+        console.error(e);
+        alert('Could not load default application form');
+    }
+}
+window.applyDefaultCaseApplicationForm = applyDefaultCaseApplicationForm;
 
 async function applyDefaultCaseProgramRules() {
     try {
@@ -4700,7 +4823,7 @@ async function editAdminCaseProgram(id) {
         document.getElementById('case-prog-max-total').value = p.maxTotalSubmissions != null ? String(p.maxTotalSubmissions) : p.max_total_submissions != null ? String(p.max_total_submissions) : '';
         const caseSeatsEl = document.getElementById('case-prog-show-seats');
         if (caseSeatsEl) caseSeatsEl.checked = p.showSeatsPublic !== false && p.show_seats_public !== 0;
-        document.getElementById('case-prog-max-files').value = String(p.maxFilesPerSubmission != null ? p.maxFilesPerSubmission : p.max_files_per_submission != null ? p.max_files_per_submission : 5);
+        document.getElementById('case-prog-max-files').value = String(p.maxFilesPerSubmission != null ? p.maxFilesPerSubmission : p.max_files_per_submission != null ? p.max_files_per_submission : 2);
         document.getElementById('case-prog-max-mb').value = String(p.maxFileSizeMb != null ? p.maxFileSizeMb : p.max_file_size_mb != null ? p.max_file_size_mb : 100);
         const cats = p.enabledCategories || [];
         document.getElementById('case-cat-agnikarma').checked = cats.indexOf('agnikarma') !== -1;
@@ -4948,6 +5071,28 @@ async function saveAdminCaseProgram() {
         formFields[i].key = norm;
     }
     const editId = document.getElementById('case-prog-edit-id') && document.getElementById('case-prog-edit-id').value.trim();
+    const formConfigFields = formFields.map(function (f) {
+        const row = {
+            key: f.key,
+            label: f.label || f.key,
+            type: f.type || 'text',
+            enabled: f.enabled,
+            required: f.enabled && f.required
+        };
+        if ((f.type === 'select' || f.type === 'multiselect') && Array.isArray(f.options) && f.options.length) {
+            row.options = f.options;
+        }
+        if (f.type === 'terms' && f.termsText) {
+            row.termsText = f.termsText;
+        }
+        if (f.type === 'rating' && f.max != null) {
+            row.max = Math.max(1, Math.min(10, parseInt(f.max, 10) || 5));
+        }
+        if (f.type === 'file' && f.accept) {
+            row.accept = String(f.accept).trim();
+        }
+        return row;
+    });
     const payload = {
         title: title,
         description: (document.getElementById('case-prog-desc') || {}).value || '',
@@ -4966,13 +5111,7 @@ async function saveAdminCaseProgram() {
         maxFileSizeMb: (document.getElementById('case-prog-max-mb') || {}).value || 100,
         enabledCategories: enabledCategories,
         isActive: document.getElementById('case-prog-active') ? document.getElementById('case-prog-active').checked !== false : true,
-        formConfig: { version: 2, fields: formFields.map((f) => ({
-            key: f.key,
-            label: f.label || f.key,
-            type: f.type || 'text',
-            enabled: f.enabled,
-            required: f.enabled && f.required
-        })) },
+        formConfig: { version: 2, fields: formConfigFields },
         judgeCriteria: collectCaseProgramJudgeCriteria()
     };
     const crit = payload.judgeCriteria;

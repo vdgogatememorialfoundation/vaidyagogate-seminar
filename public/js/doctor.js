@@ -131,13 +131,46 @@ function refreshRegistrationPreviewPdfIfVisible() {
 window.__caseStagedUploadIds = null;
 window.__caseStagedFileMeta = [];
 
+function normalizeCaseFieldType(type) {
+    const t = String(type || 'text').toLowerCase();
+    if (t === 'dropdown') return 'select';
+    if (t === 'fileupload') return 'file';
+    if (t === 'multioption') return 'multiselect';
+    return t;
+}
+
+function caseFileAcceptAttr(f) {
+    const a = String((f && f.accept) || '').toLowerCase();
+    if (a === 'cv') return '.pdf,.doc,.docx,image/*';
+    if (a === 'video') return 'video/*,.mp4,.mov,.avi,.webm,.mkv';
+    if (f && f.key === 'upload_cv') return '.pdf,.doc,.docx,image/*';
+    if (f && f.key === 'upload_video') return 'video/*,.mp4,.mov,.avi,.webm,.mkv';
+    return '.pdf,.ppt,.pptx,.zip,.docx,video/*,image/*';
+}
+
+function caseRequiredFileFieldCount(program) {
+    return getCaseEnabledFormFields(program).filter(function (f) {
+        const t = normalizeCaseFieldType(f.type);
+        return (t === 'file' || f.key === 'files') && f.required !== false;
+    }).length;
+}
+
 function getCaseFormSnapshot() {
     const snap = {};
     getCaseEnabledFormFields(activeCaseProgram).forEach((f) => {
         if (f.key === 'files') return;
+        const t = normalizeCaseFieldType(f.type);
+        if (t === 'multiselect') {
+            const group = document.getElementById(caseFieldElId(f.key));
+            if (group) {
+                const checked = [];
+                group.querySelectorAll('input.case-ms-opt:checked').forEach((cb) => checked.push(cb.value));
+                snap[f.key] = checked.join(', ');
+            }
+            return;
+        }
         const el = document.getElementById(caseFieldElId(f.key));
         if (!el) return;
-        const t = String(f.type || 'text').toLowerCase();
         if (el.type === 'checkbox' || t === 'checkbox' || t === 'boolean' || t === 'terms') {
             snap[f.key] = el.checked ? '1' : '';
         } else if (el.type === 'file') {
@@ -222,15 +255,13 @@ function renderCasePreviewSummary() {
         '</span></div>' +
         '<div class="preview-row"><span class="lbl">Category</span><span class="val">' +
         escapeHtmlDoctor(f.category) +
-        '</span></div>' +
-        '<div class="preview-row"><span class="lbl">Case topic</span><span class="val">' +
-        escapeHtmlDoctor(f.topic) +
         '</span></div>';
+    const previewSkipKeys = new Set(['fname', 'mname', 'lname', 'email', 'phone', 'whatsapp', 'category', 'files']);
     getCaseEnabledFormFields(activeCaseProgram).forEach((field) => {
-        if (field.key === 'files') return;
+        if (field.key === 'files' || previewSkipKeys.has(field.key)) return;
         const val = f[field.key];
         if (val == null || String(val).trim() === '') return;
-        const t = String(field.type || 'text').toLowerCase();
+        const t = normalizeCaseFieldType(field.type);
         const display =
             t === 'checkbox' || t === 'boolean' || t === 'terms'
                 ? val === '1'
@@ -310,12 +341,12 @@ function generateCasePreviewPdf() {
     drawTableRow('WhatsApp', f.whatsapp);
     drawSection('Presentation');
     drawTableRow('Category', f.category);
-    drawTableRow('Case topic', f.topic);
+    const pdfSkipKeys = new Set(['fname', 'mname', 'lname', 'email', 'phone', 'whatsapp', 'category', 'files']);
     getCaseEnabledFormFields(activeCaseProgram).forEach((field) => {
-        if (field.key === 'files') return;
+        if (field.key === 'files' || pdfSkipKeys.has(field.key)) return;
         const val = f[field.key];
         if (val == null || String(val).trim() === '') return;
-        const t = String(field.type || 'text').toLowerCase();
+        const t = normalizeCaseFieldType(field.type);
         const display =
             t === 'checkbox' || t === 'boolean' || t === 'terms'
                 ? val === '1'
@@ -382,8 +413,20 @@ async function validateCaseFormBeforePreviewOrSubmit() {
     }
     for (const field of getCaseEnabledFormFields(activeCaseProgram)) {
         if (field.key === 'files') continue;
-        const t = String(field.type || 'text').toLowerCase();
+        const t = normalizeCaseFieldType(field.type);
         const val = form[field.key];
+        if (t === 'multiselect') {
+            if (field.required !== false && (val == null || String(val).trim() === '')) {
+                return alert('Please select at least one option: ' + (field.label || field.key)), null;
+            }
+            continue;
+        }
+        if (t === 'rating') {
+            if (field.required !== false && (val == null || String(val).trim() === '')) {
+                return alert('Please rate: ' + (field.label || field.key)), null;
+            }
+            continue;
+        }
         if (t === 'checkbox' || t === 'boolean' || t === 'terms') {
             if (field.required !== false && val !== '1') {
                 return alert('Please confirm: ' + (field.label || field.key)), null;
@@ -414,12 +457,17 @@ async function validateCaseFormBeforePreviewOrSubmit() {
     }
     const allFiles = getCaseAllUploadFiles();
     const maxFiles = (activeCaseProgram && activeCaseProgram.maxFilesPerSubmission) || 5;
-    const filesField = (activeCaseProgram && activeCaseProgram.formConfig && activeCaseProgram.formConfig.fields || []).find(
-        (f) => f.key === 'files' && f.enabled !== false
-    );
-    const filesRequired = !!(filesField && filesField.required !== false);
-    if (filesRequired && !allFiles.length && !(window.__caseStagedUploadIds && window.__caseStagedUploadIds.length)) {
-        return alert('Select at least one file'), null;
+    const requiredFileCount = caseRequiredFileFieldCount(activeCaseProgram);
+    const stagedCount = window.__caseStagedUploadIds && window.__caseStagedUploadIds.length ? window.__caseStagedUploadIds.length : 0;
+    if (requiredFileCount > 0 && allFiles.length + stagedCount < requiredFileCount) {
+        return (
+            alert(
+                'Upload all required files (' +
+                    requiredFileCount +
+                    ' required — e.g. CV and presentation video).'
+            ),
+            null
+        );
     }
     if (allFiles.length > maxFiles) return alert('Maximum ' + maxFiles + ' files'), null;
     return { uid, form, allFiles };
@@ -3126,10 +3174,14 @@ const CASE_BUILTIN_FIELD_KEYS = new Set([
     'fname',
     'mname',
     'lname',
+    'dob',
     'email',
     'phone',
     'whatsapp',
     'category',
+    'qual',
+    'upload_cv',
+    'upload_video',
     'topic',
     'files',
     'agree_terms'
@@ -3182,7 +3234,7 @@ function renderCaseNameRow(host, fields, program) {
 }
 
 function renderCaseFormField(host, f, program) {
-    const type = String(f.type || 'text').toLowerCase();
+    const type = normalizeCaseFieldType(f.type);
     const fg = document.createElement('div');
     fg.className = 'form-group';
     fg.dataset.caseKey = f.key;
@@ -3278,6 +3330,59 @@ function renderCaseFormField(host, f, program) {
         return;
     }
 
+    if (type === 'multiselect') {
+        const lab = document.createElement('label');
+        lab.textContent = caseFieldDisplayLabel(f);
+        fg.appendChild(lab);
+        const group = document.createElement('div');
+        group.id = caseFieldElId(f.key);
+        group.className = 'case-multiselect-group';
+        group.style.cssText = 'display:flex;flex-direction:column;gap:8px;margin-top:6px;';
+        const opts = Array.isArray(f.options) ? f.options : [];
+        if (!opts.length) {
+            const hint = document.createElement('p');
+            hint.style.cssText = 'font-size:0.82rem;color:#94a3b8;margin:0;';
+            hint.textContent = 'No options configured.';
+            group.appendChild(hint);
+        }
+        opts.forEach((o) => {
+            const wrap = document.createElement('label');
+            wrap.style.cssText = 'display:flex;align-items:center;gap:8px;font-weight:500;';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.className = 'case-ms-opt';
+            cb.value = o.value != null ? String(o.value) : String(o.label || '');
+            wrap.appendChild(cb);
+            wrap.appendChild(document.createTextNode(o.label != null ? o.label : cb.value));
+            group.appendChild(wrap);
+        });
+        fg.appendChild(group);
+        host.appendChild(fg);
+        return;
+    }
+
+    if (type === 'rating') {
+        const lab = document.createElement('label');
+        lab.setAttribute('for', caseFieldElId(f.key));
+        lab.textContent = caseFieldDisplayLabel(f);
+        fg.appendChild(lab);
+        const input = document.createElement('select');
+        input.id = caseFieldElId(f.key);
+        input.className = 'case-form-input';
+        const max = Math.max(1, Math.min(10, parseInt(f.max, 10) || 5));
+        input.innerHTML = '<option value="">Select rating</option>';
+        for (let i = 1; i <= max; i++) {
+            const opt = document.createElement('option');
+            opt.value = String(i);
+            opt.textContent = i + ' / ' + max;
+            input.appendChild(opt);
+        }
+        if (f.required !== false) input.required = true;
+        fg.appendChild(input);
+        host.appendChild(fg);
+        return;
+    }
+
     if (type === 'file') {
         const lab = document.createElement('label');
         lab.setAttribute('for', caseFieldElId(f.key));
@@ -3287,9 +3392,18 @@ function renderCaseFormField(host, f, program) {
         input.type = 'file';
         input.id = caseFieldElId(f.key);
         input.className = 'case-form-input case-extra-file-input';
-        input.accept = '.pdf,.ppt,.pptx,.zip,.docx,video/*,image/*';
+        input.accept = caseFileAcceptAttr(f);
         if (f.required !== false) input.required = true;
         fg.appendChild(input);
+        const hint = document.createElement('p');
+        hint.style.cssText = 'font-size:0.8rem;color:#64748b;margin:6px 0 0;';
+        hint.textContent =
+            f.key === 'upload_cv'
+                ? 'PDF, DOC, DOCX, or image.'
+                : f.key === 'upload_video'
+                  ? 'Video file (MP4, MOV, etc.).'
+                  : 'PDF, documents, images, or video as allowed.';
+        fg.appendChild(hint);
         host.appendChild(fg);
         return;
     }
@@ -3304,7 +3418,7 @@ function renderCaseFormField(host, f, program) {
         input = document.createElement('textarea');
         input.rows = 3;
         input.style.width = '100%';
-    } else if (type === 'select' || f.key === 'category') {
+    } else if (type === 'select' || f.key === 'category' || f.key === 'qual') {
         input = document.createElement('select');
         input.innerHTML = '<option value="">Select</option>';
         const opts =
@@ -3379,6 +3493,17 @@ function renderCaseFormFields(program) {
 function applyCaseFormFieldValues(values) {
     const src = values || {};
     Object.keys(src).forEach((key) => {
+        const group = document.getElementById(caseFieldElId(key));
+        if (group && group.classList && group.classList.contains('case-multiselect-group')) {
+            const vals = String(src[key] || '')
+                .split(',')
+                .map((s) => s.trim())
+                .filter(Boolean);
+            group.querySelectorAll('input.case-ms-opt').forEach((cb) => {
+                cb.checked = vals.indexOf(cb.value) !== -1;
+            });
+            return;
+        }
         const el = document.getElementById(caseFieldElId(key));
         if (!el) return;
         if (el.type === 'checkbox') el.checked = !!src[key] && src[key] !== '0';
