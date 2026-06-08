@@ -138,6 +138,17 @@
 .vgmf-redesign .congress-hero--banner-mode {
     background: linear-gradient(165deg, #f8fafc 0%, #ffffff 42%, #ecfdf5 100%);
 }
+.vgmf-redesign .congress-hero.congress-hero--banner-mode {
+    min-height: clamp(240px, 36vh, 460px);
+}
+.vgmf-redesign .congress-hero-slide--banner .congress-hero-banner-stage {
+    place-items: center;
+}
+.vgmf-redesign .congress-hero-slide--banner .congress-hero-banner-frame {
+    width: fit-content;
+    margin-left: auto;
+    margin-right: auto;
+}
 .vgmf-redesign .congress-hero-content h2 {
     font-size: clamp(1.75rem, 5vw, 3rem);
     line-height: 1.15;
