@@ -873,14 +873,14 @@
                             </div>
                     <div style="margin-top:22px;padding-top:16px;border-top:1px solid #e2e8f0;">
                         <label style="font-weight:700;">Homepage hero &amp; top bar</label>
-                        <p style="color:#64748b;font-size:0.88rem;margin:6px 0 10px;">Controls the main headline, stats, and contact strip on the public site.</p>
+                        <p style="color:#64748b;font-size:0.88rem;margin:6px 0 10px;">Controls the top contact bar, headline text on uploaded hero slider images, stats, and buttons. Edit the <strong>headline / year</strong> here — it is <em>not</em> taken from Seminar Management photos.</p>
                         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
                             <div><label style="font-size:0.8rem;">Hero badge (e.g. National CME Congress)</label><input type="text" id="cms-hero-eyebrow" style="width:100%" placeholder="National CME Congress"></div>
                             <div></div>
-                            <div><label style="font-size:0.8rem;">Headline</label><input type="text" id="cms-hero-title" style="width:100%"></div>
+                            <div><label style="font-size:0.8rem;">Headline (year + title on slider)</label><input type="text" id="cms-hero-title" style="width:100%" placeholder="National Seminar 2026"></div>
                             <div><label style="font-size:0.8rem;">Subtitle</label><input type="text" id="cms-hero-subtitle" style="width:100%"></div>
                             <div><label style="font-size:0.8rem;">Venue line</label><input type="text" id="cms-hero-venue" style="width:100%" placeholder="e.g. Convention Centre, Pune"></div>
-                            <div><label style="font-size:0.8rem;">Hero image URL</label><input type="text" id="cms-hero-image" style="width:100%" placeholder="/uploads/hero.jpg"></div>
+                            <div><label style="font-size:0.8rem;">Hero image URL (fallback if no slider uploads)</label><input type="text" id="cms-hero-image" style="width:100%" placeholder="/uploads/hero.jpg"></div>
                             <div><label style="font-size:0.8rem;">Primary button</label><input type="text" id="cms-hero-cta1" style="width:100%"></div>
                             <div><label style="font-size:0.8rem;">Secondary button</label><input type="text" id="cms-hero-cta2" style="width:100%"></div>
                         </div>
@@ -901,7 +901,7 @@
                         <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:12px;">
                             <div><label style="font-size:0.8rem;">Top bar email</label><input type="text" id="cms-top-email" style="width:100%"></div>
                             <div><label style="font-size:0.8rem;">Top bar phone</label><input type="text" id="cms-top-phone" style="width:100%"></div>
-                            <div><label style="font-size:0.8rem;">Top bar date line</label><input type="text" id="cms-top-date" style="width:100%"></div>
+                            <div><label style="font-size:0.8rem;">Top bar year / event line</label><input type="text" id="cms-top-date" style="width:100%" placeholder="National Seminar 2026"></div>
                     </div>
                 </div>
                     <div style="margin-top:22px;padding-top:16px;border-top:1px solid #e2e8f0;">
@@ -954,7 +954,7 @@
 
                     <div style="margin-top:22px;padding-top:16px;border-top:1px solid #e2e8f0;">
                         <label style="font-weight:700;">Homepage sliding announcements</label>
-                        <p style="color:#64748b;font-size:0.88rem;margin:6px 0 10px;">Cards that scroll horizontally on the public homepage. A short auto card is added when you <strong>create</strong> a seminar and registration is already open.</p>
+                        <p style="color:#64748b;font-size:0.88rem;margin:6px 0 10px;">Cards in the scrolling ticker below the menu. Add your own notices here. <strong>Active case presentation programs</strong> with open registration appear automatically (like seminar notices used to). Seminar auto-cards are no longer injected.</p>
                         <div id="cms-scrolling-announce-rows"></div>
                         <button type="button" class="btn-primary" style="margin-top:8px;padding:8px 14px;font-size:0.9rem;background:#0d9488;" onclick="cmsAddScrollingRow()">+ Add announcement card</button>
                     </div>
@@ -975,8 +975,8 @@
 
                     <div style="margin-top:22px;padding-top:16px;border-top:1px solid #e2e8f0;" id="main-homepage-hero-slider-card">
                         <label style="font-weight:700;">Main homepage hero slider</label>
-                        <p style="color:#64748b;font-size:0.88rem;margin:6px 0 10px;">The large green hero on the public homepage rotates through <strong>live active seminars</strong> (from Seminar Management — upload a <em>Hero image</em> per seminar) plus any manual slides you add below. When you upload several images, they slide automatically after the seminar slides.</p>
-                        <div id="hero-slider-seminar-preview" style="margin-bottom:14px;padding:12px 14px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;font-size:0.88rem;color:#065f46;">Loading live seminar slides…</div>
+                        <p style="color:#64748b;font-size:0.88rem;margin:6px 0 10px;">Upload your own hero images below — <strong>seminar photos are not auto-added</strong>. Text on each slide comes from <strong>Homepage hero &amp; top bar</strong> (headline, venue, buttons). When a seminar has open registration, the primary button opens registration automatically.</p>
+                        <div id="hero-slider-seminar-preview" style="margin-bottom:14px;padding:12px 14px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:10px;font-size:0.88rem;color:#065f46;">Loading registration status…</div>
                         <p style="color:#64748b;font-size:0.85rem;margin:0 0 10px;">Upload one or many images — use <strong>Upload multiple slider images</strong> for a batch, or upload per row. Click <strong>Save banner</strong> on a row or <strong>Save popup &amp; carousel</strong> to save all rows.</p>
                         <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end;margin-bottom:12px;">
                             <div><label style="font-size:0.8rem;">Auto-slide (ms)</label><input type="number" id="mkt-carousel-ms" style="width:140px;" value="5500" min="3000" step="500"></div>
@@ -2782,6 +2782,6 @@
     <link rel="stylesheet" href="/css/book-track.css?v=20260529stg">
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
-    <script src="/js/admin.js?v=20260607marketing2"></script>
+    <script src="/js/admin.js?v=20260607hero6"></script>
 </body>
 </html>

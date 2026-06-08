@@ -13025,7 +13025,7 @@ async function loadAdminSiteCms() {
     loadJudgeCommunicationsAdmin().catch(console.error);
     populateVenueBroadcastSeminars().catch(console.error);
     try {
-        const res = await fetch('/api/public/site-cms');
+        const res = await fetch('/api/admin/site-cms');
         const cms = await res.json();
         __siteCmsEditing = cms;
         tickerEl.value = cms.tickerText || '';
@@ -13034,7 +13034,11 @@ async function loadAdminSiteCms() {
         const sl = document.getElementById('cms-slides');
         if (sl) sl.value = JSON.stringify(cms.slides || [], null, 2);
         cmsFillReviewRows(cms.reviews || []);
-        cmsFillScrollingRows(cms.scrollingAnnouncements || []);
+        cmsFillScrollingRows(
+            (cms.scrollingAnnouncements || []).filter(
+                (a) => a && a.autoFromSeminarId == null && a.autoFromCaseProgramId == null
+            )
+        );
         cmsFillPublicNoticeRows(cms.publicNotices || []);
         cmsFillDoctorRows(cms.doctorUpdates || []);
         cmsFillAboutRows(cms.aboutSections || []);
@@ -14374,31 +14378,35 @@ async function loadAdminHeroSeminarPreview() {
         const data = await res.json();
         const seminars = (data && data.seminars) || [];
         const active = seminars.filter((s) => s && Number(s.is_active) !== 0);
-        if (!active.length) {
+        const open = active.filter((s) => {
+            const now = Date.now();
+            const parseMs = (v) => {
+                if (!v) return null;
+                const d = new Date(String(v).replace(' ', 'T') + '+05:30');
+                const t = d.getTime();
+                return Number.isNaN(t) ? null : t;
+            };
+            const rs = parseMs(s.registration_start);
+            const re = parseMs(s.registration_end);
+            if (rs != null && now < rs) return false;
+            if (re != null && now > re) return false;
+            return true;
+        });
+        if (!open.length) {
             el.innerHTML =
-                '<strong>No active seminars</strong> for the current portal year. Create one under Seminar Management — it will appear in the homepage hero automatically (upload a Hero image for a photo background).';
+                '<strong>No seminar registration open right now.</strong> Hero slider shows your uploaded images with headline text from <em>Homepage hero &amp; top bar</em>. The Register button uses your primary button label when registration opens.';
             return;
         }
-        const lines = active.map((s) => {
-            const img = s.hero_image_path || s.flyer_path || '';
-            const imgNote = img
-                ? '<span style="color:#15803d;">✓ image</span>'
-                : '<span style="color:#b45309;">no hero image yet</span>';
-            const when = s.event_date ? String(s.event_date).slice(0, 10) : 'date TBA';
-            return (
+        const lines = open.map(
+            (s) =>
                 '<li style="margin:4px 0;"><strong>' +
                 escapeHtml(s.title || 'Seminar') +
-                '</strong> · ' +
-                escapeHtml(when) +
-                ' · ' +
-                imgNote +
-                '</li>'
-            );
-        });
+                '</strong> — Register now button will be active on hero slides</li>'
+        );
         el.innerHTML =
-            '<strong>Live seminar slides on homepage (' +
-            active.length +
-            '):</strong><ul style="margin:8px 0 0 18px;padding:0;">' +
+            '<strong>' +
+            open.length +
+            ' seminar(s) with open registration:</strong><ul style="margin:8px 0 0 18px;padding:0;">' +
             lines.join('') +
             '</ul>';
     } catch (e) {

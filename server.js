@@ -4269,33 +4269,49 @@ function enrichSiteCmsSpeakers(cms, cb) {
     );
 }
 
-function mergeScrollingAnnouncementsWithOpenSeminars(cms, cb) {
+function isCaseProgramRegistrationOpen(program) {
+    if (!program || Number(program.is_active) === 0) return false;
+    const now = Date.now();
+    const rs = seminarDt.parseSeminarMs(program.registration_start);
+    const re = seminarDt.parseSeminarMs(program.registration_end);
+    if (rs != null && !Number.isNaN(rs) && now < rs) return false;
+    if (re != null && !Number.isNaN(re) && now > re) return false;
+    return true;
+}
+
+function buildCaseRegistrationAnnouncement(program) {
+    const title = program.title || 'Case presentation';
+    return {
+        title: `Case presentation open — ${title}`,
+        body: 'Submit your case application from the doctor portal.',
+        date: new Date().toISOString().slice(0, 10),
+        autoFromCaseProgramId: program.id,
+        link: '/doctor.html#tab-case',
+        priority: 6
+    };
+}
+
+/** Public homepage ticker: manual CMS cards + live case programs (no auto seminar cards). */
+function mergeScrollingAnnouncementsForPublic(cms, cb) {
     db.all(
-        `SELECT id, title, event_date, registration_start, registration_end, is_active
-         FROM seminars WHERE is_active = 1
-         ORDER BY COALESCE(registration_start, event_date) DESC`,
+        `SELECT id, title, registration_start, registration_end, is_active
+         FROM case_programs
+         WHERE IFNULL(is_active, 1) = 1
+         ORDER BY COALESCE(registration_start, created_at) DESC`,
         [],
-        (err, rows) => {
+        (err, programs) => {
             if (err) return cb(err);
             const base = sanitizeScrollingAnnouncements(cms.scrollingAnnouncements || []);
-            const bySeminarId = new Map();
-            base.forEach((a) => {
-                if (a && a.autoFromSeminarId != null) bySeminarId.set(Number(a.autoFromSeminarId), a);
+            const manual = base.filter(
+                (a) => a && a.autoFromSeminarId == null && a.autoFromCaseProgramId == null
+            );
+            const byCaseId = new Map();
+            (programs || []).forEach((row) => {
+                if (!isCaseProgramRegistrationOpen(row)) return;
+                const pid = Number(row.id);
+                byCaseId.set(pid, buildCaseRegistrationAnnouncement(row));
             });
-            (rows || []).forEach((row) => {
-                if (!Number(row.is_active) || !isSeminarRegistrationOpen(row)) return;
-                const rowTitle = String(row.title || '');
-                if (/test seminar/i.test(rowTitle) || /introduction to ayurveda/i.test(rowTitle)) return;
-                const sid = Number(row.id);
-                if (!bySeminarId.has(sid)) bySeminarId.set(sid, buildSeminarRegistrationAnnouncement(row));
-                else {
-                    const built = buildSeminarRegistrationAnnouncement(row);
-                    bySeminarId.set(sid, { ...bySeminarId.get(sid), ...built, title: built.title, body: built.body });
-                }
-            });
-            const manual = base.filter((a) => !a || a.autoFromSeminarId == null);
-            const auto = Array.from(bySeminarId.values());
-            cms.scrollingAnnouncements = [...auto, ...manual].slice(0, 40);
+            cms.scrollingAnnouncements = [...Array.from(byCaseId.values()), ...manual].slice(0, 40);
             cb(null, cms);
         }
     );
@@ -4310,7 +4326,7 @@ app.get('/api/public/announcements', (req, res) => {
     }
     loadPublicSiteCms((e, cms) => {
         if (e) return res.status(500).json({ error: e.message });
-        mergeScrollingAnnouncementsWithOpenSeminars(cms, (e2, enriched) => {
+        mergeScrollingAnnouncementsForPublic(cms, (e2, enriched) => {
             if (e2) return res.status(500).json({ error: e2.message });
             const out = {
                 updatedAt: new Date().toISOString(),
@@ -4338,7 +4354,7 @@ app.get('/api/public/site-cms', (req, res) => {
     }
     loadPublicSiteCms((e, cms) => {
         if (e) return res.status(500).json({ error: e.message });
-        mergeScrollingAnnouncementsWithOpenSeminars(cms, (e2, enriched) => {
+        mergeScrollingAnnouncementsForPublic(cms, (e2, enriched) => {
             if (e2) return res.status(500).json({ error: e2.message });
             enrichSiteCmsSpeakers(enriched, (e3, withSpeakers) => {
                 if (e3) return res.status(500).json({ error: e3.message });
@@ -4347,6 +4363,13 @@ app.get('/api/public/site-cms', (req, res) => {
                 res.json(withSpeakers);
             });
         });
+    });
+});
+
+app.get('/api/admin/site-cms', (req, res) => {
+    loadPublicSiteCms((e, cms) => {
+        if (e) return res.status(500).json({ error: e.message });
+        res.json(cms);
     });
 });
 
@@ -4433,7 +4456,9 @@ app.post('/api/admin/site-cms', (req, res) => {
         if (incoming.seo && typeof incoming.seo === 'object') {
             merged.seo = siteSeoMod.normalizeSeo({ ...(merged.seo || {}), ...incoming.seo });
         }
-        merged.scrollingAnnouncements = sanitizeScrollingAnnouncements(merged.scrollingAnnouncements);
+        merged.scrollingAnnouncements = sanitizeScrollingAnnouncements(merged.scrollingAnnouncements).filter(
+            (a) => a && a.autoFromSeminarId == null && a.autoFromCaseProgramId == null
+        );
         const normalized = siteCmsHelpers.normalizeSiteCms(merged);
         const payload = JSON.stringify(normalized);
         upsertGlobalSetting('public_site_cms', payload, (err) => {

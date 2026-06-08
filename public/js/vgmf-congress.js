@@ -83,19 +83,48 @@
         return '';
     }
 
-    function buildMarketingBannerSlides(banners) {
+    function seminarRegistrationOpen(seminar) {
+        if (!seminar || Number(seminar.is_active) === 0) return false;
+        const now = Date.now();
+        const parseMs = (v) => {
+            if (!v) return null;
+            const s = String(v).trim();
+            const d = new Date(/Z$|[+-]\d{2}/i.test(s) ? s : s.replace(' ', 'T') + (s.includes('+') ? '' : '+05:30'));
+            const t = d.getTime();
+            return Number.isNaN(t) ? null : t;
+        };
+        const rs = parseMs(seminar.registration_start);
+        const re = parseMs(seminar.registration_end);
+        if (rs != null && now < rs) return false;
+        if (re != null && now > re) return false;
+        return true;
+    }
+
+    function hasOpenRegistrationSeminar(seminars) {
+        return (Array.isArray(seminars) ? seminars : []).some((s) => seminarRegistrationOpen(s));
+    }
+
+    function buildMarketingBannerSlides(banners, cms, seminars) {
+        const hero = (cms && cms.hero) || {};
+        const openReg = hasOpenRegistrationSeminar(seminars);
         return (Array.isArray(banners) ? banners : [])
             .filter((b) => b && b.imagePath)
-            .map((b) => ({
-                image: mediaUrl(b.imagePath),
-                title: b.title || 'National Seminar',
-                subtitle: b.subtitle || b.description || '',
-                eyebrow: 'Featured event',
-                cta: b.ctaText || 'Register now',
-                link: b.ctaUrl || '#register',
-                cta2: '',
-                link2: ''
-            }));
+            .map((b) => {
+                const rowTitle = String(b.title || '').trim();
+                const rowSub = String(b.subtitle || b.description || '').trim();
+                const rowCta = String(b.ctaText || '').trim();
+                const rowLink = String(b.ctaUrl || '').trim();
+                return {
+                    image: mediaUrl(b.imagePath),
+                    title: rowTitle || hero.title || 'National Seminar',
+                    subtitle: rowSub || hero.venue || hero.subtitle || '',
+                    eyebrow: hero.eyebrow || 'National Seminar',
+                    cta: rowCta || hero.ctaPrimary || (openReg ? 'Register now' : 'Learn more'),
+                    link: rowLink || (openReg ? '#register' : '#'),
+                    cta2: hero.ctaSecondary || 'View schedule',
+                    link2: '#schedule'
+                };
+            });
     }
 
     function buildSeminarHeroSlides(seminars) {
@@ -127,15 +156,17 @@
     function buildHeroSlides(cms, seminars, marketingBanners) {
         const slides = [];
         const seen = new Set();
+        const hero = (cms && cms.hero) || {};
+        const openReg = hasOpenRegistrationSeminar(seminars);
         function pushSlide(sl) {
-            if (!sl || !sl.title) return;
-            const key = String(sl.image || '') + '|' + String(sl.title);
+            if (!sl || (!sl.image && !sl.title)) return;
+            const title = String(sl.title || hero.title || 'National Seminar').trim() || 'National Seminar';
+            const key = String(sl.image || '') + '|' + title;
             if (seen.has(key)) return;
             seen.add(key);
-            slides.push(sl);
+            slides.push({ ...sl, title });
         }
-        buildSeminarHeroSlides(seminars).forEach(pushSlide);
-        buildMarketingBannerSlides(marketingBanners).forEach(pushSlide);
+        buildMarketingBannerSlides(marketingBanners, cms, seminars).forEach(pushSlide);
         const fromCms = Array.isArray(cms && cms.slides) ? cms.slides : [];
         fromCms.forEach((sl) => {
             if (!sl || (!sl.image && !sl.title)) return;
@@ -156,21 +187,21 @@
                 title: cms.hero.title || 'VGMF National Seminar',
                 subtitle: cms.hero.venue || cms.hero.subtitle || '',
                 eyebrow: cms.hero.eyebrow || 'National Seminar Portal',
-                cta: cms.hero.ctaPrimary || 'Register now',
-                link: '#register',
-                cta2: cms.hero.ctaSecondary || 'View programme',
+                cta: cms.hero.ctaPrimary || (openReg ? 'Register now' : 'Learn more'),
+                link: openReg ? '#register' : '#',
+                cta2: cms.hero.ctaSecondary || 'View schedule',
                 link2: '#schedule'
             });
         }
         if (!slides.length) {
             pushSlide({
                 image: '',
-                title: 'VGMF National Seminar',
-                subtitle: 'Register for upcoming live seminars',
-                eyebrow: 'National Seminar Portal',
-                cta: 'Register now',
-                link: '#register',
-                cta2: 'Programme',
+                title: hero.title || 'VGMF National Seminar',
+                subtitle: hero.venue || hero.subtitle || 'Register for upcoming live seminars',
+                eyebrow: hero.eyebrow || 'National Seminar Portal',
+                cta: hero.ctaPrimary || (openReg ? 'Register now' : 'Learn more'),
+                link: openReg ? '#register' : '#',
+                cta2: hero.ctaSecondary || 'View schedule',
                 link2: '#schedule'
             });
         }
@@ -240,15 +271,13 @@
         return { href: esc(link || '#'), onclick: '' };
     }
 
-    window.renderCongressHero = function renderCongressHero(cms) {
+    window.renderCongressHero = function renderCongressHero(cms, seminarsOverride) {
         const root = document.getElementById('congress-hero-slides');
         const dots = document.getElementById('congress-hero-dots');
         if (!root) return;
-        heroSlides = buildHeroSlides(
-            cms || {},
-            window.__heroSeminars || [],
-            window.__heroMarketingBanners || []
-        );
+        const seminars =
+            seminarsOverride != null ? seminarsOverride : window.__heroSeminars || [];
+        heroSlides = buildHeroSlides(cms || {}, seminars, window.__heroMarketingBanners || []);
         root.innerHTML = heroSlides
             .map((sl, i) => {
                 const bg = sl.image
@@ -692,7 +721,9 @@
                 .replace(/,\s+and\b/gi, ' and');
         }
         window.__siteCms = cms || {};
-        Promise.all([loadHeroSeminars(), loadHeroMarketing()]).then(() => renderCongressHero(window.__siteCms));
+        Promise.all([loadHeroSeminars(), loadHeroMarketing()]).then(() =>
+            renderCongressHero(window.__siteCms, window.__heroSeminars || [])
+        );
         renderCongressTicker(cms.scrollingAnnouncements || []);
         renderCongressPastSeminars(cms);
         renderCongressVideos(cms);
