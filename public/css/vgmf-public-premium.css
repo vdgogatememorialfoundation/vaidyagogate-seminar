@@ -50,8 +50,14 @@ body.vgmf-redesign {
     background: linear-gradient(165deg, #f8fafc 0%, #ffffff 42%, #ecfdf5 100%);
 }
 
+.vgmf-redesign .congress-hero-slide--banner .congress-hero-banner-stage {
+    place-items: center;
+}
+
 .vgmf-redesign .congress-hero-slide--banner .congress-hero-banner-frame {
     background: #fff;
+    margin-left: auto;
+    margin-right: auto;
 }
 
 .vgmf-redesign .congress-hero--banner-mode .congress-hero-overlay {
