@@ -13327,6 +13327,15 @@ async function savePortalAuthAdminConfig() {
 async function saveAdminSiteCms() {
     const msg = document.getElementById('cms-save-msg');
     if (msg) msg.innerText = '';
+    const bannersOk = await marketingSaveAllBanners(false);
+    if (!bannersOk) {
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.innerText =
+                'Homepage slider images could not be saved. Upload an image, wait for “Banner saved”, then try again.';
+        }
+        return;
+    }
     let slides;
     try {
         slides = cmsParseJsonArray((document.getElementById('cms-slides') || {}).value, 'Homepage slides');
@@ -14321,6 +14330,25 @@ function marketingSetMsg(text, ok) {
     el.textContent = text || '';
 }
 
+function marketingNormalizeBannerRow(b) {
+    if (!b || typeof b !== 'object') return b;
+    return {
+        id: b.id,
+        title: b.title || '',
+        subtitle: b.subtitle || '',
+        description: b.description || '',
+        imagePath: String(b.imagePath || b.imagepath || b.image_path || '').trim(),
+        ctaText: b.ctaText || b.ctatext || b.cta_text || '',
+        ctaUrl: b.ctaUrl || b.ctaurl || b.cta_url || '',
+        sortOrder: b.sortOrder != null ? b.sortOrder : b.sort_order != null ? b.sort_order : 0,
+        enabled: b.enabled != null ? b.enabled : 1
+    };
+}
+
+function marketingBannerPreviewUrl(path) {
+    return marketingPopupPreviewUrl(path);
+}
+
 function marketingReadRow(row) {
     if (!row) return null;
     return {
@@ -14358,6 +14386,13 @@ function marketingRenderBannerRows(rows) {
                 <div><label style="font-size:0.75rem;">Subtitle</label><input class="mb-sub" style="width:100%" value="${(b.subtitle || '').replace(/"/g, '&quot;')}"></div>
                 <div style="grid-column:1/-1;"><label style="font-size:0.75rem;">Description</label><textarea class="mb-desc" rows="2" style="width:100%">${b.description || ''}</textarea></div>
                 <div style="grid-column:1/-1;"><label style="font-size:0.75rem;">Image path</label><input class="mb-img" style="width:100%" value="${(b.imagePath || '').replace(/"/g, '&quot;')}"></div>
+                ${
+                    b.imagePath
+                        ? '<div style="grid-column:1/-1;"><img class="mb-preview" src="' +
+                          escAdmin(marketingBannerPreviewUrl(b.imagePath)) +
+                          '" alt="" style="max-width:220px;max-height:120px;object-fit:contain;border:1px solid #e2e8f0;border-radius:8px;background:#fff;"></div>'
+                        : ''
+                }
                 <div><label style="font-size:0.75rem;">CTA text</label><input class="mb-cta-t" style="width:100%" value="${(b.ctaText || '').replace(/"/g, '&quot;')}"></div>
                 <div><label style="font-size:0.75rem;">CTA URL</label><input class="mb-cta-u" style="width:100%" value="${(b.ctaUrl || '').replace(/"/g, '&quot;')}"></div>
                 <div><label style="font-size:0.75rem;">Sort</label><input class="mb-sort" type="number" style="width:100%" value="${b.sortOrder != null ? b.sortOrder : idx}"></div>
@@ -14420,7 +14455,13 @@ async function loadAdminMarketing() {
         ]);
         const banners = await bRes.json();
         const meta = await pRes.json();
-        marketingRenderBannerRows(Array.isArray(banners) ? banners : []);
+        if (!bRes.ok) {
+            marketingSetMsg((banners && banners.error) || 'Could not load homepage banners.', false);
+            return;
+        }
+        marketingRenderBannerRows(
+            (Array.isArray(banners) ? banners : []).map(marketingNormalizeBannerRow)
+        );
         const popup = (meta && meta.popup) || {};
         const carousel = (meta && meta.carousel) || {};
         const ms = document.getElementById('mkt-carousel-ms');
@@ -14472,9 +14513,11 @@ async function marketingSaveAllBanners(showMsg) {
     if (!root) return true;
     const rows = Array.from(root.querySelectorAll('.mkt-banner-row'));
     if (!rows.length) return true;
+    let savedAny = false;
     for (const row of rows) {
         const payload = marketingReadRow(row);
-        if (!payload || !payload.imagePath) continue;
+        if (!payload) continue;
+        if (!payload.imagePath && !payload.id) continue;
         const isNew = !payload.id;
         const res = await fetch(
             isNew ? '/api/admin/homepage-banners' : '/api/admin/homepage-banners/' + payload.id,
@@ -14489,8 +14532,14 @@ async function marketingSaveAllBanners(showMsg) {
             if (showMsg) marketingSetMsg(data.error || 'Banner save failed', false);
             return false;
         }
+        savedAny = true;
+        if (data.id && row) row.dataset.id = String(data.id);
+        if (data.imagePath && row) {
+            const imgEl = row.querySelector('.mb-img');
+            if (imgEl) imgEl.value = data.imagePath;
+        }
     }
-    await loadAdminMarketing();
+    if (savedAny) await loadAdminMarketing();
     return true;
 }
 
@@ -14502,7 +14551,7 @@ async function marketingUploadBannerImage(btn) {
     if (!paths || !paths.length) return;
     const imgEl = row && row.querySelector('.mb-img');
     if (imgEl) imgEl.value = paths[0];
-    await marketingSaveBannerRow(btn, true);
+    await marketingSaveBannerRow(btn, false);
     if (paths.length > 1) {
         const start = __marketingBanners.length;
         const extraRows = paths.slice(1).map((path, i) => ({
@@ -16685,6 +16734,7 @@ async function saveAdminSitePopup() {
         });
         const data = await res.json();
         marketingSetMsg(res.ok && data.success ? 'Slider banners, popup & carousel settings saved.' : data.error || 'Save failed', !!(res.ok && data.success));
+        if (res.ok && data.success) await loadAdminMarketing();
     } catch (e) {
         marketingSetMsg(e.message || 'Save failed', false);
     }

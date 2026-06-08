@@ -86,9 +86,11 @@
     function buildMarketingBannerSlides(banners, cms) {
         const hero = (cms && cms.hero) || {};
         return (Array.isArray(banners) ? banners : [])
-            .filter((b) => b && b.imagePath)
-            .map((b) => ({
-                image: mediaUrl(b.imagePath),
+            .filter((b) => b && (b.imagePath || b.imagepath || b.image_path))
+            .map((b) => {
+                const imagePath = b.imagePath || b.imagepath || b.image_path;
+                return {
+                image: mediaUrl(imagePath),
                 title: (b.title && String(b.title).trim()) || hero.title || 'National Seminar',
                 subtitle:
                     (b.subtitle && String(b.subtitle).trim()) ||
@@ -101,7 +103,8 @@
                 link: (b.ctaUrl && String(b.ctaUrl).trim()) || '#register',
                 cta2: hero.ctaSecondary || 'View programme',
                 link2: '#schedule'
-            }));
+            };
+            });
     }
 
     function buildSeminarHeroSlides(seminars) {
