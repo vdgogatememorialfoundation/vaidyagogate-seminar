@@ -7432,12 +7432,17 @@ app.get('/api/admin/seminars/:id/stats', (req, res) => {
         approved_apps: 0,
         pending_payments: 0,
         completed_payments: 0,
-        total_revenue: 0
+        total_revenue: 0,
+        total_apps: 0,
+        by_status: {}
     };
 
     db.all(`SELECT status FROM registrations WHERE seminar_id = ?`, [seminarId], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
+        stats.total_apps = (rows || []).length;
         rows.forEach(r => {
+            const st = String(r.status || 'unknown').toLowerCase();
+            stats.by_status[st] = (stats.by_status[st] || 0) + 1;
             if (r.status === 'pending_approval' || r.status === 'submitted' || r.status === 'revision_required') {
                 stats.pending_apps++;
             }

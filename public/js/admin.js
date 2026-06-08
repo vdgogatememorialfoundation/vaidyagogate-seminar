@@ -30,6 +30,177 @@ function adminRegistrationStatusOptionsHtml(current) {
     }).join('');
 }
 
+const ADMIN_CASE_STATUSES = [
+    { value: 'submitted', label: 'Submitted' },
+    { value: 'under_review', label: 'Under review' },
+    { value: 'priority_invited', label: 'Priority invited' },
+    { value: 'documents_requested', label: 'Documents requested' },
+    { value: 'revision_required', label: 'Re-upload required' },
+    { value: 'approved_for_judging', label: 'Approved for judging' },
+    { value: 'judging', label: 'Judging' },
+    { value: 'judged', label: 'Final review' },
+    { value: 'selected', label: 'Selected' },
+    { value: 'disqualified', label: 'Disqualified' },
+    { value: 'rejected', label: 'Rejected' },
+    { value: 'cancelled', label: 'Cancelled' }
+];
+
+let __adminAppStatusFilter = '';
+let __adminCaseStatusFilter = '';
+let __adminSeminarDetailStatusFilter = '';
+
+function adminCountByStatus(items, statusKey) {
+    const counts = {};
+    const list = Array.isArray(items) ? items : [];
+    list.forEach((item) => {
+        const st = String((typeof statusKey === 'function' ? statusKey(item) : item[statusKey]) || 'unknown')
+            .trim()
+            .toLowerCase();
+        counts[st] = (counts[st] || 0) + 1;
+    });
+    return { total: list.length, counts };
+}
+
+function adminStatusLabel(value, statusList) {
+    const st = String(value || '').toLowerCase();
+    const found = (statusList || []).find((s) => s.value === st);
+    return found ? found.label : st.replace(/_/g, ' ');
+}
+
+function adminRenderStatusFilterBar(opts) {
+    const host = document.getElementById(opts.hostId);
+    if (!host) return;
+    const statuses = opts.statuses || [];
+    const counts = opts.counts || {};
+    const total = opts.total != null ? opts.total : 0;
+    const active = String(opts.activeFilter || '');
+    const fn = opts.onClickFn || '';
+    let html =
+        '<p style="margin:0 0 8px;font-size:0.82rem;color:#64748b;">Filter by status · <strong>' +
+        total +
+        '</strong> total application' +
+        (total === 1 ? '' : 's') +
+        '</p><div style="display:flex;flex-wrap:wrap;gap:8px;">';
+    html += adminStatusFilterChip('All', total, !active, fn, '');
+    statuses.forEach((s) => {
+        const n = counts[s.value] || 0;
+        if (n > 0 || active === s.value) {
+            html += adminStatusFilterChip(s.label, n, active === s.value, fn, s.value);
+        }
+    });
+    Object.keys(counts).forEach((key) => {
+        if (statuses.some((s) => s.value === key)) return;
+        const n = counts[key] || 0;
+        if (!n && active !== key) return;
+        html += adminStatusFilterChip(adminStatusLabel(key, statuses), n, active === key, fn, key);
+    });
+    html += '</div>';
+    host.innerHTML = html;
+}
+
+function adminStatusFilterChip(label, count, active, fnName, value) {
+    const bg = active ? '#4338ca' : '#f8fafc';
+    const color = active ? '#fff' : '#334155';
+    const border = active ? '#4338ca' : '#cbd5e1';
+    const safeVal = String(value || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    return (
+        '<button type="button" onclick="' +
+        fnName +
+        "('" +
+        safeVal +
+        '\')" style="border:1px solid ' +
+        border +
+        ';background:' +
+        bg +
+        ';color:' +
+        color +
+        ';padding:6px 12px;border-radius:999px;font-size:0.82rem;cursor:pointer;font-weight:600;">' +
+        escAdmin(label) +
+        ' <span style="opacity:0.85;">(' +
+        count +
+        ')</span></button>'
+    );
+}
+
+function adminSetApplicationStatusFilter(value) {
+    __adminAppStatusFilter = String(value || '');
+    renderApplicationsTable();
+}
+window.adminSetApplicationStatusFilter = adminSetApplicationStatusFilter;
+
+function adminSetCaseStatusFilter(value) {
+    __adminCaseStatusFilter = String(value || '');
+    renderAdminCaseSubmissionsTable();
+}
+window.adminSetCaseStatusFilter = adminSetCaseStatusFilter;
+
+function adminSetSeminarDetailStatusFilter(value) {
+    __adminSeminarDetailStatusFilter = String(value || '');
+    renderSeminarDetailApplicationsTable();
+}
+window.adminSetSeminarDetailStatusFilter = adminSetSeminarDetailStatusFilter;
+
+function adminApplySeminarStatsToDashboard(stats) {
+    if (!stats) return;
+    const totalEl = document.getElementById('stat-total-apps');
+    if (totalEl) totalEl.innerText = stats.total_apps != null ? stats.total_apps : 0;
+    const pendingEl = document.getElementById('stat-pending-apps');
+    if (pendingEl) pendingEl.innerText = stats.pending_apps || 0;
+    const approvedEl = document.getElementById('stat-approved-apps');
+    if (approvedEl) approvedEl.innerText = stats.approved_apps || 0;
+    const payEl = document.getElementById('stat-pending-payments');
+    if (payEl) payEl.innerText = stats.pending_payments || 0;
+    const revEl = document.getElementById('stat-revenue');
+    if (revEl) revEl.innerText = '₹' + (stats.total_revenue || 0);
+    adminRenderStatusFilterBar({
+        hostId: 'seminar-detail-status-bar',
+        statuses: ADMIN_REGISTRATION_STATUSES,
+        counts: stats.by_status || {},
+        total: stats.total_apps || 0,
+        activeFilter: __adminSeminarDetailStatusFilter,
+        onClickFn: 'adminSetSeminarDetailStatusFilter'
+    });
+}
+
+function renderSeminarDetailApplicationsTable() {
+    const tbody = document.getElementById('detail-applications-list');
+    if (!tbody) return;
+    const apps = Array.isArray(currentSeminarApps) ? currentSeminarApps : [];
+    const statusFilter = String(__adminSeminarDetailStatusFilter || '').toLowerCase();
+    const filtered = statusFilter
+        ? apps.filter((a) => String(a.status || '').toLowerCase() === statusFilter)
+        : apps;
+    tbody.innerHTML = '';
+    if (!apps.length) {
+        tbody.innerHTML =
+            '<tr><td colspan="4" style="text-align: center;">No applications for this seminar.</td></tr>';
+        return;
+    }
+    if (!filtered.length) {
+        tbody.innerHTML =
+            '<tr><td colspan="4" style="text-align: center;">No applications match this status filter.</td></tr>';
+        return;
+    }
+    filtered.forEach((a) => {
+        let formData = {};
+        try {
+            formData = JSON.parse(a.form_data || '{}');
+        } catch (_) {}
+        const candidateName = formData.fname
+            ? `${formData.fname} ${formData.lname || ''}`
+            : `${a.first_name || ''} ${a.last_name || ''}`;
+        const st = String(a.status || '').toLowerCase();
+        tbody.innerHTML +=
+            '<tr><td><strong>' +
+            escAdmin(a.application_no) +
+            '</strong></td><td>' +
+            escAdmin(candidateName) +
+            '</td><td>' +
+            escAdmin(adminStatusLabel(st, ADMIN_REGISTRATION_STATUSES)) +
+            '</td><td><button class="btn-primary" style="padding: 5px 10px; font-size: 0.8rem;" onclick="switchTab(\'tab-applications\')">Go to Main Review</button></td></tr>';
+    });
+}
+
 function getStoredAdminUser() {
     try {
         return JSON.parse(localStorage.getItem('admin_user') || '{}');
@@ -656,10 +827,7 @@ async function refreshSeminarDashboard() {
     try {
         const res = await fetch('/api/admin/seminars/' + currentManageSeminarId + '/stats');
         const stats = await res.json();
-        document.getElementById('stat-pending-apps').innerText = stats.pending_apps || 0;
-        document.getElementById('stat-approved-apps').innerText = stats.approved_apps || 0;
-        document.getElementById('stat-pending-payments').innerText = stats.pending_payments || 0;
-        document.getElementById('stat-revenue').innerText = '₹' + (stats.total_revenue || 0);
+        adminApplySeminarStatsToDashboard(stats);
         const seatsEl = document.getElementById('stat-seats');
         if (seatsEl) {
             if (stats.unlimited_seats) seatsEl.textContent = (stats.filled || 0) + ' / ∞';
@@ -674,27 +842,7 @@ async function refreshSeminarDashboard() {
     try {
         const res = await fetch('/api/admin/seminars/' + currentManageSeminarId + '/applications');
         currentSeminarApps = await res.json();
-        const tbody = document.getElementById('detail-applications-list');
-        tbody.innerHTML = '';
-        if (currentSeminarApps.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">No applications for this seminar.</td></tr>';
-            return;
-        }
-
-        currentSeminarApps.forEach((a) => {
-            let formData = {};
-            try { formData = JSON.parse(a.form_data || '{}'); } catch(e) {}
-            const candidateName = formData.fname ? `${formData.fname} ${formData.lname || ''}` : `${a.first_name || ''} ${a.last_name || ''}`;
-
-            tbody.innerHTML += `
-                <tr>
-                    <td><strong>${a.application_no}</strong></td>
-                    <td>${candidateName}</td>
-                    <td>${a.status.toUpperCase()}</td>
-                    <td><button class="btn-primary" style="padding: 5px 10px; font-size: 0.8rem;" onclick="switchTab('tab-applications')">Go to Main Review</button></td>
-                </tr>
-            `;
-        });
+        renderSeminarDetailApplicationsTable();
     } catch (err) {
         console.error(err);
     }
@@ -6714,12 +6862,28 @@ function renderApplicationsTable() {
         .trim()
         .toLowerCase();
     const apps = globalAdminApps || [];
-    const filtered = q ? apps.filter((a) => adminApplicationSearchBlob(a).includes(q)) : apps;
+    const statusFilter = String(__adminAppStatusFilter || '').toLowerCase();
+    const statusFiltered = statusFilter
+        ? apps.filter((a) => String(a.status || '').toLowerCase() === statusFilter)
+        : apps;
+    const filtered = q
+        ? statusFiltered.filter((a) => adminApplicationSearchBlob(a).includes(q))
+        : statusFiltered;
+    const summary = adminCountByStatus(apps, 'status');
+    adminRenderStatusFilterBar({
+        hostId: 'applications-status-bar',
+        statuses: ADMIN_REGISTRATION_STATUSES,
+        counts: summary.counts,
+        total: summary.total,
+        activeFilter: __adminAppStatusFilter,
+        onClickFn: 'adminSetApplicationStatusFilter'
+    });
     const countEl = document.getElementById('applications-search-count');
     if (countEl) {
-        countEl.textContent = q
-            ? `${filtered.length} of ${apps.length} application${apps.length === 1 ? '' : 's'}`
-            : `${apps.length} application${apps.length === 1 ? '' : 's'}`;
+        const base = statusFilter
+            ? `${filtered.length} of ${statusFiltered.length} in this status`
+            : `${filtered.length} of ${apps.length} application${apps.length === 1 ? '' : 's'}`;
+        countEl.textContent = q ? base + ' (search filtered)' : base;
     }
     tbody.innerHTML = '';
     if (!apps.length) {
@@ -6729,7 +6893,7 @@ function renderApplicationsTable() {
     }
     if (!filtered.length) {
         tbody.innerHTML =
-            '<tr><td colspan="5" style="text-align:center;">No applications match your search.</td></tr>';
+            '<tr><td colspan="5" style="text-align:center;">No applications match your filters.</td></tr>';
         return;
     }
     filtered.forEach((a) => {
@@ -7052,13 +7216,26 @@ function renderAdminCaseSubmissionsTable() {
     if (!tbody) return;
     const all = __adminCaseSubmissionsCache || [];
     const q = adminSearchQ('case-submissions-search');
-    const rows = adminSearchFilter(all, q, (s) => {
+    const statusFilter = String(__adminCaseStatusFilter || '').toLowerCase();
+    const statusFiltered = statusFilter
+        ? all.filter((s) => String(s.status || '').toLowerCase() === statusFilter)
+        : all;
+    const rows = adminSearchFilter(statusFiltered, q, (s) => {
         const name = [s.first_name, s.last_name].filter(Boolean).join(' ');
         return [s.application_no, s.id, name, s.user_id_string, s.category, s.title, s.status]
             .join(' ')
             .toLowerCase();
     });
-    adminSearchSetCount('case-submissions-search-count', q, rows.length, all.length, 'submissions');
+    const summary = adminCountByStatus(all, 'status');
+    adminRenderStatusFilterBar({
+        hostId: 'case-submissions-status-bar',
+        statuses: ADMIN_CASE_STATUSES,
+        counts: summary.counts,
+        total: summary.total,
+        activeFilter: __adminCaseStatusFilter,
+        onClickFn: 'adminSetCaseStatusFilter'
+    });
+    adminSearchSetCount('case-submissions-search-count', q, rows.length, statusFiltered.length, 'submissions');
     if (!all.length) {
         tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No submissions</td></tr>';
         return;
@@ -7076,7 +7253,7 @@ function renderAdminCaseSubmissionsTable() {
                 <td>${escAdmin(name)}<div class="muted">${escAdmin(s.user_id_string)}</div></td>
                 <td>${escAdmin(s.category || '—')}</td>
                 <td>${escAdmin(s.title)}</td>
-                <td>${escAdmin(s.status)}</td>
+                <td>${escAdmin(adminStatusLabel(s.status, ADMIN_CASE_STATUSES))}</td>
                 <td>${s.file_count || 0}</td>
                 <td>
                     <button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.8rem;" onclick="openAdminCaseDetail(${s.id})">Review</button>
@@ -10682,6 +10859,7 @@ async function manageSeminar(id, title) {
         return;
     }
     currentManageSeminarId = id;
+    __adminSeminarDetailStatusFilter = '';
     document.getElementById('detail-seminar-title').innerText = 'Dashboard: ' + title;
     
     // Switch tabs
@@ -10692,10 +10870,7 @@ async function manageSeminar(id, title) {
     try {
         const res = await fetch('/api/admin/seminars/' + id + '/stats');
         const stats = await res.json();
-        document.getElementById('stat-pending-apps').innerText = stats.pending_apps || 0;
-        document.getElementById('stat-approved-apps').innerText = stats.approved_apps || 0;
-        document.getElementById('stat-pending-payments').innerText = stats.pending_payments || 0;
-        document.getElementById('stat-revenue').innerText = '₹' + (stats.total_revenue || 0);
+        adminApplySeminarStatsToDashboard(stats);
         const semRow = (globalSeminars || []).find((s) => Number(s.id) === Number(id));
         const showSeats =
             !semRow || semRow.show_seats_public == null || Number(semRow.show_seats_public) !== 0;
@@ -10715,27 +10890,7 @@ async function manageSeminar(id, title) {
     try {
         const res = await fetch('/api/admin/seminars/' + id + '/applications');
         currentSeminarApps = await res.json();
-        const tbody = document.getElementById('detail-applications-list');
-        tbody.innerHTML = '';
-        if(currentSeminarApps.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">No applications for this seminar.</td></tr>';
-            return;
-        }
-
-        currentSeminarApps.forEach((a) => {
-            let formData = {};
-            try { formData = JSON.parse(a.form_data || '{}'); } catch(e){}
-            const candidateName = formData.fname ? `${formData.fname} ${formData.lname || ''}` : `${a.first_name || ''} ${a.last_name || ''}`;
-
-            tbody.innerHTML += `
-                <tr>
-                    <td><strong>${a.application_no}</strong></td>
-                    <td>${candidateName}</td>
-                    <td>${a.status.toUpperCase()}</td>
-                    <td><button class="btn-primary" style="padding: 5px 10px; font-size: 0.8rem;" onclick="switchTab('tab-applications')">Go to Main Review</button></td>
-                </tr>
-            `;
-        });
+        renderSeminarDetailApplicationsTable();
     } catch (err) { console.error(err); }
 
     // Start Live Scans Polling
