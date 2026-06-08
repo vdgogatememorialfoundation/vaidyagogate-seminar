@@ -23,7 +23,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="/css/vgmf-site.css">
-    <link rel="stylesheet" href="/css/vgmf-congress.css?v=20260608hero1">
+    <link rel="stylesheet" href="/css/vgmf-congress.css?v=20260608hero2">
     <link rel="stylesheet" href="/css/vgmf-responsive.css?v=20260520d">
     <link rel="stylesheet" href="/css/gallery-lightbox.css">
     <script src="/js/site-seo.js?v=20260522a"></script>
@@ -444,7 +444,7 @@
 
     <script src="/js/portal-content-protection.js"></script>
     <script src="/js/portal-scrolling-announcements.js"></script>
-    <script src="/js/vgmf-home.js"></script>
+    <script src="/js/vgmf-home.js?v=20260608menu1"></script>
     <script src="/js/portal-theme.js"></script>
     <script src="/js/vgmf-congress.js?v=20260607hero10"></script>
     <script src="/js/vgmf-home-stats.js?v=20260607stats2"></script>
@@ -522,6 +522,7 @@
                 }
             }
         }
+        window.applyWebsiteMenuVisibility = applyWebsiteMenuVisibility;
 
         function setOtpPanelVisible(panel, visible) {
             if (!panel) return;
@@ -1589,6 +1590,7 @@
                 const cms = await res.json();
                 if (typeof applySiteCms === 'function') applySiteCms(cms);
                 if (typeof renderAboutGallerySocial === 'function') renderAboutGallerySocial(cms);
+                if (typeof applyWebsiteMenuVisibility === 'function') applyWebsiteMenuVisibility();
             } catch (e) {
                 console.error(e);
             }

@@ -210,6 +210,9 @@
                 )
                 .join('');
         }
+        if (typeof window.applyWebsiteMenuVisibility === 'function') {
+            window.applyWebsiteMenuVisibility();
+        }
         const doctorUl = document.getElementById('footer-doctor-links');
         if (doctorUl && Array.isArray(foot.doctorLinks) && foot.doctorLinks.length) {
             doctorUl.innerHTML = foot.doctorLinks
