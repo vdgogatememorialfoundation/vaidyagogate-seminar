@@ -66,6 +66,10 @@ svg {
     height: auto;
 }
 
+.congress-hero-banner-img {
+    max-width: none;
+}
+
 .cg-shell {
     position: sticky;
     top: 0;

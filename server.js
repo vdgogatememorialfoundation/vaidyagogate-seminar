@@ -4585,7 +4585,13 @@ function persistOneUploadAsset(file, cb) {
     fileStore.persistToGlobalAsset(db, upsertGlobalSetting, file, 'upload_asset_', (err, assetPath) => {
         if (err) return cb(err);
         if (assetPath) return cb(null, assetPath);
-        if (file.filename) return cb(null, '/uploads/' + file.filename);
+        if (file.filename) {
+            const uploadPath = '/uploads/' + file.filename;
+            return fileStore.mirrorUploadPathToBlobStore(db, file, uploadPath, (mErr, path) => {
+                if (mErr) return cb(mErr);
+                cb(null, path);
+            });
+        }
         cb(new Error('Upload could not be saved'));
     });
 }

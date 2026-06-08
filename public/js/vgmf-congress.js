@@ -145,6 +145,7 @@
                   : '') +
               '</div>'
             : '';
+        const imgUrl = esc(sl.image);
         return (
             '<div class="congress-hero-slide congress-hero-slide--banner ' +
             bannerFrameClass(i) +
@@ -152,9 +153,13 @@
             '">' +
             '<div class="congress-hero-banner-stage" aria-hidden="true">' +
             '<div class="congress-hero-banner-glow"></div>' +
-            '<div class="congress-hero-banner-frame">' +
+            '<div class="congress-hero-banner-frame" data-banner-src="' +
+            imgUrl +
+            '" style="--banner-url:url(\'' +
+            imgUrl +
+            '\')">' +
             '<img class="congress-hero-banner-img" src="' +
-            esc(sl.image) +
+            imgUrl +
             '" alt="" loading="eager" decoding="async"' +
             (i === 0 ? ' fetchpriority="high"' : '') +
             '>' +
@@ -388,9 +393,6 @@
     };
 
     function capBannerHeroImages() {
-        const isMobile = window.matchMedia('(max-width: 640px)').matches;
-        const capW = isMobile ? 420 : 720;
-        const capH = isMobile ? 220 : 300;
         const imgs = document.querySelectorAll('.congress-hero-banner-img');
         imgs.forEach(function (img) {
             if (img.dataset.capBound === '1') return;
@@ -403,17 +405,35 @@
                 if (frame) frame.classList.remove('is-pending');
                 if (stage) stage.classList.add('is-ready');
             }
-            function apply() {
+            function syncFrameBackground() {
+                if (!frame) return;
+                const url = img.currentSrc || img.src || frame.getAttribute('data-banner-src') || '';
+                if (url) frame.style.setProperty('--banner-url', 'url("' + url + '")');
                 if (img.naturalWidth && img.naturalHeight) {
-                    img.style.maxWidth = Math.min(img.naturalWidth, capW) + 'px';
-                    img.style.maxHeight = Math.min(img.naturalHeight, capH) + 'px';
+                    frame.style.aspectRatio = img.naturalWidth + ' / ' + img.naturalHeight;
                 }
+            }
+            function apply() {
+                syncFrameBackground();
+                if (frame) frame.classList.remove('is-missing-image');
                 markReady();
             }
-            if (img.complete) apply();
-            else {
+            if (img.complete) {
+                if (img.naturalWidth) apply();
+                else {
+                    if (frame) frame.classList.add('is-missing-image');
+                    markReady();
+                }
+            } else {
                 img.addEventListener('load', apply, { once: true });
-                img.addEventListener('error', markReady, { once: true });
+                img.addEventListener(
+                    'error',
+                    function () {
+                        if (frame) frame.classList.add('is-missing-image');
+                        markReady();
+                    },
+                    { once: true }
+                );
             }
             window.setTimeout(function () {
                 if (!img.classList.contains('is-ready')) apply();
