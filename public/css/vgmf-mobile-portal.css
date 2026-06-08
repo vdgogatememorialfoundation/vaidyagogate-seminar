@@ -359,11 +359,14 @@
         text-align: left;
     }
 
-    /* Shorter mobile hero */
+    /* Shorter mobile hero — keep room for framed banner images */
     .congress-hero {
-        min-height: 48vh !important;
-        max-height: 360px !important;
+        min-height: clamp(220px, 42vh, 400px) !important;
+        max-height: none !important;
         border-radius: 0 0 18px 18px !important;
+    }
+    .congress-hero.congress-hero--banner-mode {
+        min-height: clamp(220px, 40vh, 380px) !important;
     }
 
     .congress-hero-content {

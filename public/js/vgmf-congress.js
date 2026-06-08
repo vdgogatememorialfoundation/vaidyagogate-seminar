@@ -155,9 +155,7 @@
             '<div class="congress-hero-banner-frame">' +
             '<img class="congress-hero-banner-img" src="' +
             esc(sl.image) +
-            '" alt="" loading="' +
-            (i === 0 ? 'eager' : 'lazy') +
-            '" decoding="async"' +
+            '" alt="" loading="eager" decoding="async"' +
             (i === 0 ? ' fetchpriority="high"' : '') +
             '>' +
             '</div></div>' +
@@ -285,6 +283,7 @@
                 btn.classList.toggle('is-active', idx === heroIndex);
             });
         }
+        capBannerHeroImages();
     }
 
     function startHeroAutoplay() {
@@ -384,46 +383,51 @@
         }
         startHeroAutoplay();
         capBannerHeroImages();
-        preloadFirstHeroBanner();
+        preloadHeroBanners();
         if (typeof window.dismissSitePreloader === 'function') window.dismissSitePreloader();
     };
 
     function capBannerHeroImages() {
+        const isMobile = window.matchMedia('(max-width: 640px)').matches;
+        const capW = isMobile ? 420 : 720;
+        const capH = isMobile ? 220 : 300;
         const imgs = document.querySelectorAll('.congress-hero-banner-img');
         imgs.forEach(function (img) {
+            if (img.dataset.capBound === '1') return;
+            img.dataset.capBound = '1';
             function markReady() {
                 img.classList.add('is-ready');
             }
             function apply() {
-                if (!img.naturalWidth || !img.naturalHeight) return;
-                var maxW = Math.min(img.naturalWidth, 720);
-                var maxH = Math.min(img.naturalHeight, 300);
-                img.style.maxWidth = maxW + 'px';
-                img.style.maxHeight = maxH + 'px';
+                if (img.naturalWidth && img.naturalHeight) {
+                    img.style.maxWidth = Math.min(img.naturalWidth, capW) + 'px';
+                    img.style.maxHeight = Math.min(img.naturalHeight, capH) + 'px';
+                }
                 markReady();
             }
-            if (img.complete && img.naturalWidth) apply();
+            if (img.complete) apply();
             else {
                 img.addEventListener('load', apply, { once: true });
                 img.addEventListener('error', markReady, { once: true });
             }
+            window.setTimeout(function () {
+                if (!img.classList.contains('is-ready')) apply();
+            }, 2500);
         });
     }
 
-    function preloadFirstHeroBanner() {
-        const first = heroSlides.find(function (sl) {
-            return sl && sl.imageOnly && sl.image;
-        });
-        if (!first || !first.image) return;
-        var link = document.querySelector('link[data-hero-preload="1"]');
-        if (!link) {
-            link = document.createElement('link');
+    function preloadHeroBanners() {
+        const seen = {};
+        heroSlides.forEach(function (sl, i) {
+            if (!sl || !sl.image || seen[sl.image]) return;
+            seen[sl.image] = true;
+            const link = document.createElement('link');
             link.rel = 'preload';
             link.as = 'image';
-            link.setAttribute('data-hero-preload', '1');
+            link.href = sl.image;
+            if (i === 0) link.setAttribute('fetchpriority', 'high');
             document.head.appendChild(link);
-        }
-        link.href = first.image;
+        });
     }
 
     function filterAnnouncements(items) {

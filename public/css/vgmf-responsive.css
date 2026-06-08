@@ -212,6 +212,15 @@ svg {
         min-height: min(48vh, 360px);
     }
 
+    .congress-hero.congress-hero--banner-mode {
+        min-height: clamp(220px, 40vh, 380px);
+    }
+
+    .congress-hero--banner-mode .congress-hero-banner-img {
+        opacity: 1 !important;
+        visibility: visible !important;
+    }
+
     .vg-stats-strip {
         margin-top: 8px;
         padding: 0 12px;
