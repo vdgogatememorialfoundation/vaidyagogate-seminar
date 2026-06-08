@@ -11917,10 +11917,15 @@ function cmsAddMenuRow(prefill) {
     wrap.className = 'cms-menu-row';
     wrap.style.cssText =
         'margin-bottom:10px;padding:12px;border:1px solid #e2e8f0;border-radius:10px;background:#fafafa;display:grid;grid-template-columns:1.2fr 1fr 1fr 80px 70px;gap:8px;align-items:end;';
-    const sectionOpts = CMS_MENU_SECTIONS.map(
-        (s) =>
-            `<option value="${s.value.replace(/"/g, '&quot;')}">${s.label}</option>`
-    ).join('');
+    const enabledSections = cmsEnabledWebsiteMenuSections();
+    const sectionOpts = CMS_MENU_SECTIONS.filter(function (s) {
+        return !s.value || enabledSections.indexOf(s.value) !== -1;
+    })
+        .map(
+            (s) =>
+                `<option value="${s.value.replace(/"/g, '&quot;')}">${s.label}</option>`
+        )
+        .join('');
     wrap.innerHTML = `
         <div><label style="font-size:0.78rem;">Label</label><input class="cm-label" type="text" style="width:100%" placeholder="Gallery"></div>
         <div><label style="font-size:0.78rem;">Section</label><select class="cm-section" style="width:100%">${sectionOpts}</select></div>
@@ -12335,18 +12340,44 @@ function cmsAddFaqRow(prefill) {
     root.appendChild(wrap);
 }
 
+function cmsEnabledWebsiteMenuSections() {
+    const pages = window.__websiteMenuPages || {};
+    if (window.PortalWebsiteMenu && typeof window.PortalWebsiteMenu.orderedEnabledSections === 'function') {
+        return window.PortalWebsiteMenu.orderedEnabledSections(pages, [], WEBSITE_MENU_PAGE_DEFS);
+    }
+    return WEBSITE_MENU_PAGE_DEFS.map(function (pair) {
+        return pair[0];
+    });
+}
+
+function syncAdminFooterExplorePreview() {
+    const preview = document.getElementById('cms-footer-explore-preview');
+    if (!preview) return;
+    const pages = window.__websiteMenuPages || {};
+    const siteMenu = cmsCollectMenuFromDom();
+    const links =
+        window.PortalWebsiteMenu && typeof window.PortalWebsiteMenu.buildFooterExploreLinks === 'function'
+            ? window.PortalWebsiteMenu.buildFooterExploreLinks(pages, siteMenu)
+            : [];
+    if (!links.length) {
+        preview.innerHTML = '<li style="list-style:none;color:#64748b;">All pages shown (no restrictions saved yet).</li>';
+        return;
+    }
+    preview.innerHTML = links
+        .map(function (l) {
+            return '<li>' + (l.label || l.section) + ' <span style="color:#94a3b8;">(' + l.section + ')</span></li>';
+        })
+        .join('');
+}
+
 function cmsFillFooterLinkRows(foot) {
-    const exploreWrap = document.getElementById('cms-footer-explore-rows');
     const doctorWrap = document.getElementById('cms-footer-doctor-rows');
-    if (!exploreWrap || !doctorWrap) return;
-    const explore = (foot && foot.exploreLinks) || [];
+    if (!doctorWrap) return;
     const doctor = (foot && foot.doctorLinks) || [];
-    exploreWrap.innerHTML = '';
     doctorWrap.innerHTML = '';
-    explore.forEach((l) => cmsAddFooterExploreRow(l));
     doctor.forEach((l) => cmsAddFooterDoctorRow(l));
-    if (!explore.length) cmsAddFooterExploreRow();
     if (!doctor.length) cmsAddFooterDoctorRow();
+    syncAdminFooterExplorePreview();
 }
 
 function cmsAddFooterExploreRow(prefill) {
@@ -12382,13 +12413,12 @@ function cmsAddFooterDoctorRow(prefill) {
 }
 
 function cmsCollectFooterExploreLinks() {
-    const rows = document.querySelectorAll('#cms-footer-explore-rows .cms-footer-link-row');
-    return Array.from(rows)
-        .map((row) => ({
-            label: (row.querySelector('.cms-fexpl-label') || {}).value || '',
-            section: (row.querySelector('.cms-fexpl-section') || {}).value || ''
-        }))
-        .filter((l) => l.label.trim());
+    const pages = window.__websiteMenuPages || {};
+    const siteMenu = cmsCollectMenuFromDom();
+    if (window.PortalWebsiteMenu && typeof window.PortalWebsiteMenu.buildFooterExploreLinks === 'function') {
+        return window.PortalWebsiteMenu.buildFooterExploreLinks(pages, siteMenu);
+    }
+    return [];
 }
 
 function cmsCollectFooterDoctorLinks() {
@@ -13242,12 +13272,13 @@ function renderWebsiteMenuPagesCheckboxes() {
             id +
             '" ' +
             (checked ? 'checked' : '') +
-            '>' +
+            ' onchange="syncAdminFooterExplorePreview()">' +
             '<span>' +
             title +
             '</span></label>'
         );
     }).join('');
+    syncAdminFooterExplorePreview();
 }
 
 async function savePortalAuthAdminConfig() {
@@ -13313,6 +13344,7 @@ async function savePortalAuthAdminConfig() {
         }
         if (data.success) {
             await loadPortalAuthAdminForm();
+            syncAdminFooterExplorePreview();
             await refreshAdminSensitiveOtpRequirement();
             applyCoAdminSidebarVisibility();
         }

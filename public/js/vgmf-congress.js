@@ -565,7 +565,12 @@
     window.applySiteMenu = function applySiteMenu(cms) {
         const host = document.getElementById('cg-nav-menu-links');
         if (!host || !cms) return;
-        const items = Array.isArray(cms.siteMenu) ? cms.siteMenu.filter((i) => i && i.visible !== false) : [];
+        const menuPages =
+            (window.__portalAuth && window.__portalAuth.websiteMenuPages) || {};
+        let items = Array.isArray(cms.siteMenu) ? cms.siteMenu.filter((i) => i && i.visible !== false) : [];
+        if (window.PortalWebsiteMenu && typeof window.PortalWebsiteMenu.filterSiteMenuItems === 'function') {
+            items = window.PortalWebsiteMenu.filterSiteMenuItems(menuPages, items);
+        }
         if (!items.length) return;
         items.sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
         host.innerHTML = items
@@ -575,11 +580,15 @@
                 const section = String(item.section || '').trim();
                 if (href && (href.startsWith('/') || href.startsWith('http'))) {
                     const ext = href.startsWith('http') ? ' target="_blank" rel="noopener noreferrer"' : '';
-                    return '<a href="' + esc(href) + '"' + ext + '>' + label + '</a>';
+                    const menuKey =
+                        href.indexOf('verify-certificate') !== -1 ? ' data-menu-key="certificate"' : '';
+                    return '<a href="' + esc(href) + '"' + ext + menuKey + '>' + label + '</a>';
                 }
                 if (section) {
                     return (
                         '<a href="#" data-nav-section="' +
+                        esc(section) +
+                        '" data-menu-key="' +
                         esc(section) +
                         '">' +
                         label +
@@ -589,6 +598,9 @@
                 return '';
             })
             .join('');
+        if (typeof window.applyWebsiteMenuVisibility === 'function') {
+            window.applyWebsiteMenuVisibility();
+        }
     };
 
     window.renderCongressPastSeminars = function renderCongressPastSeminars(cms) {
@@ -805,7 +817,9 @@
                 .replace(/,\s+and\b/gi, ' and');
         }
         window.__siteCms = cms || {};
-        loadHeroMarketing().then(() => renderCongressHero(window.__siteCms));
+        Promise.all([loadHeroMarketing()]).then(function () {
+            renderCongressHero(window.__siteCms);
+        });
         renderCongressTicker(cms.scrollingAnnouncements || []);
         renderCongressPastSeminars(cms);
         renderCongressVideos(cms);

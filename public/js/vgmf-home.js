@@ -196,19 +196,33 @@
                 'Developed by <a href="https://capturevisualstudios.com" target="_blank" rel="noopener noreferrer">Capture Visual Studios</a>';
         }
         const exploreUl = document.getElementById('footer-explore-links');
-        if (exploreUl && Array.isArray(foot.exploreLinks) && foot.exploreLinks.length) {
-            exploreUl.innerHTML = foot.exploreLinks
-                .map(
-                    (l) =>
+        const menuPages =
+            (window.__portalAuth && window.__portalAuth.websiteMenuPages) || {};
+        const exploreLinks =
+            window.PortalWebsiteMenu && typeof window.PortalWebsiteMenu.buildFooterExploreLinks === 'function'
+                ? window.PortalWebsiteMenu.buildFooterExploreLinks(menuPages, cms.siteMenu)
+                : Array.isArray(foot.exploreLinks)
+                  ? foot.exploreLinks
+                  : [];
+        if (exploreUl) {
+            if (!exploreLinks.length) {
+                exploreUl.innerHTML = '';
+            } else {
+                exploreUl.innerHTML = exploreLinks
+                .map(function (l) {
+                    const section = l.section || 'home';
+                    return (
                         '<li><a href="#" data-menu-key="' +
-                        escHtml(l.section || 'home') +
+                        escHtml(section) +
                         '" onclick="showSection(\'' +
-                        escHtml(l.section || 'home') +
+                        escHtml(section) +
                         '\'); return false;">' +
-                        escHtml(l.label) +
+                        escHtml(l.label || section) +
                         '</a></li>'
-                )
+                    );
+                })
                 .join('');
+            }
         }
         if (typeof window.applyWebsiteMenuVisibility === 'function') {
             window.applyWebsiteMenuVisibility();

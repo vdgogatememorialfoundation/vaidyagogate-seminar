@@ -97,13 +97,13 @@
         <nav class="cg-nav" id="cg-nav" aria-label="Site menu" aria-hidden="true">
             <button type="button" class="cg-nav-close" id="cg-nav-close" aria-label="Close menu"><i class="fas fa-times"></i></button>
             <span id="cg-nav-menu-links">
-                <a href="#" data-nav-section="home" class="active">Home</a>
-                <a href="#" data-nav-section="about">Foundation</a>
-                <a href="#" data-nav-section="schedule">Agenda</a>
-                <a href="#" data-nav-section="gallery">Gallery</a>
-                <a href="#" id="nav-verify" data-nav-section="verify">Delegates</a>
+                <a href="#" data-nav-section="home" data-menu-key="home" class="active">Home</a>
+                <a href="#" data-nav-section="about" data-menu-key="about">Foundation</a>
+                <a href="#" data-nav-section="schedule" data-menu-key="schedule">Agenda</a>
+                <a href="#" data-nav-section="gallery" data-menu-key="gallery">Gallery</a>
+                <a href="#" id="nav-verify" data-nav-section="verify" data-menu-key="verify">Delegates</a>
                 <a href="/verify-certificate.html" data-menu-key="certificate">Certificate</a>
-                <a href="#" data-nav-section="contact">Contact</a>
+                <a href="#" data-nav-section="contact" data-menu-key="contact">Contact</a>
             </span>
         </nav>
     </div>
@@ -464,9 +464,10 @@
         </div>
     </div>
 
+    <script src="/js/portal-website-menu.js?v=20260608menu2"></script>
     <script src="/js/portal-content-protection.js"></script>
     <script src="/js/portal-scrolling-announcements.js"></script>
-    <script src="/js/vgmf-home.js?v=20260608menu1"></script>
+    <script src="/js/vgmf-home.js?v=20260608menu2"></script>
     <script src="/js/portal-theme.js"></script>
     <script src="/js/vgmf-congress.js?v=20260608load1"></script>
     <script src="/js/vgmf-home-stats.js?v=20260607stats2"></script>
@@ -532,6 +533,16 @@
                 const li = a.closest('li');
                 if (li) li.style.display = isShown(key) ? '' : 'none';
             });
+            const exploreCol = document.getElementById('footer-explore-links');
+            if (exploreCol) {
+                const col = exploreCol.closest('.footer-col');
+                if (col) {
+                    const anyVisible = Array.from(exploreCol.children).some(function (li) {
+                        return li.style.display !== 'none' && li.querySelector('a');
+                    });
+                    col.style.display = anyVisible || !restrict ? '' : 'none';
+                }
+            }
             const verifyNav = document.getElementById('nav-verify');
             if (verifyNav && !isShown('verify')) {
                 verifyNav.style.display = 'none';
@@ -1610,6 +1621,7 @@
             try {
                 const res = await fetch('/api/public/site-cms', { cache: 'no-store' });
                 const cms = await res.json();
+                window.__siteCms = cms || {};
                 if (typeof applySiteCms === 'function') applySiteCms(cms);
                 if (typeof renderAboutGallerySocial === 'function') renderAboutGallerySocial(cms);
                 if (typeof applyWebsiteMenuVisibility === 'function') applyWebsiteMenuVisibility();
@@ -1620,9 +1632,9 @@
 
         async function loadNotices() {
             try {
-                const [resN, cmsRes] = await Promise.all([fetch('/api/notices'), fetch('/api/public/site-cms')]);
+                const resN = await fetch('/api/notices');
                 const notices = await resN.json();
-                const cms = await cmsRes.json().catch(() => ({}));
+                const cms = window.__siteCms || {};
                 const extra = Array.isArray(cms.publicNotices) ? cms.publicNotices : [];
                 const container = document.getElementById('notices-container');
                 container.innerHTML = '';
@@ -1852,8 +1864,12 @@
         });
 
         showSection('home');
-        loadPublicCmsAndApply();
-        refreshPortalAuthUi().then(() => {
+        Promise.all([
+            loadPublicCmsAndApply(),
+            refreshPortalAuthUi().then(function () {
+                loadNotices();
+            })
+        ]).then(function () {
             const params = new URLSearchParams(window.location.search);
             if (params.get('emailVerified') === '1') {
                 alert('Your email address has been verified. You can sign in now.');
@@ -1869,12 +1885,11 @@
         });
         if (typeof applyPortalUrls === 'function') applyPortalUrls();
         if (typeof loadOpenSeminarsStrip === 'function') loadOpenSeminarsStrip();
-        loadNotices();
         loadTimerAndSeminars();
         loadVerifySeminars();
     </script>
-    <script src="/js/site-branding.js"></script>
-    <script src="/js/name-validation.js"></script>
-    <script src="/js/contact-validation.js"></script>
+    <script src="/js/site-branding.js" defer></script>
+    <script src="/js/name-validation.js" defer></script>
+    <script src="/js/contact-validation.js" defer></script>
 </body>
 </html>
