@@ -884,9 +884,10 @@ const DEFAULT_PUBLIC_SITE_CMS = {
         ctaSecondary: 'View programme'
     },
     heroStats: [
-        { value: '50+', label: 'Expert Speakers' },
-        { value: '500+', label: 'Delegates' },
-        { value: '30+', label: 'Research Papers' }
+        { value: '@active_seminars', label: 'Active seminars' },
+        { value: '@speaker_count', label: 'Expert speakers' },
+        { value: '1972', label: 'Founded' },
+        { value: '24/7', label: 'Online portal' }
     ],
     featureCards: [
         { icon: 'fa-microphone-alt', title: 'Expert Speakers', text: 'Renowned practitioners and researchers' },

@@ -12428,6 +12428,8 @@ function cmsApplyHeroFieldsToForm(cms) {
     set('cms-stat2-lbl', stats[1] && stats[1].label);
     set('cms-stat3-val', stats[2] && stats[2].value);
     set('cms-stat3-lbl', stats[2] && stats[2].label);
+    set('cms-stat4-val', stats[3] && stats[3].value);
+    set('cms-stat4-lbl', stats[3] && stats[3].label);
     set('cms-schedule-title', sched.title);
     set('cms-schedule-subtitle', sched.subtitle);
     set('cms-contact-address', contact.address);
@@ -12463,7 +12465,8 @@ function cmsCollectHeroFieldsFromForm() {
         heroStats: [
             { value: gv('cms-stat1-val'), label: gv('cms-stat1-lbl') },
             { value: gv('cms-stat2-val'), label: gv('cms-stat2-lbl') },
-            { value: gv('cms-stat3-val'), label: gv('cms-stat3-lbl') }
+            { value: gv('cms-stat3-val'), label: gv('cms-stat3-lbl') },
+            { value: gv('cms-stat4-val'), label: gv('cms-stat4-lbl') }
         ].filter((s) => s.value || s.label),
         schedulePage: {
             title: gv('cms-schedule-title'),

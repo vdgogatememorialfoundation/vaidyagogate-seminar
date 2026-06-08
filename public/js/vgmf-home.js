@@ -251,14 +251,18 @@
         }
 
         const stats = Array.isArray(cms.heroStats) ? cms.heroStats : [];
-        const statsWrap = document.getElementById('hero-stats');
-        if (statsWrap && stats.length) {
-            statsWrap.innerHTML = stats
-                .map(
-                    (s) =>
-                        `<div class="stat-item"><h3>${escHtml(s.value)}</h3><p>${escHtml(s.label)}</p></div>`
-                )
-                .join('');
+        if (typeof window.renderHomepageStats === 'function') {
+            window.renderHomepageStats(cms);
+        } else {
+            const statsWrap = document.getElementById('hero-stats');
+            if (statsWrap && stats.length) {
+                statsWrap.innerHTML = stats
+                    .map(
+                        (s) =>
+                            `<div class="stat-item"><h3>${escHtml(s.value)}</h3><p>${escHtml(s.label)}</p></div>`
+                    )
+                    .join('');
+            }
         }
 
         renderFeatureCards(cms.featureCards);
