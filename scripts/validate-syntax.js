@@ -23,6 +23,8 @@ const files = [
     path.join('lib', 'book-sales-auth.js'),
     path.join('lib', 'book-sales-inventory.js'),
     path.join('lib', 'book-sales-notify.js'),
+    path.join('lib', 'inbound-mail-reply.js'),
+    path.join('lib', 'message-reply-address.js'),
     path.join('public', 'js', 'fetch-json.js')
 ];
 

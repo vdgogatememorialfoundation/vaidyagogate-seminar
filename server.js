@@ -6132,65 +6132,17 @@ app.get('/api/admin/integrations/whatsapp-webhook-status', withIntegrationSettin
     });
 });
 
-// Support Ticket Route (Create Ticket)
-app.post('/api/support/ticket', (req, res) => {
-    const { userId, subject, message } = req.body;
-    const trackingId = generateId(); // 12-digit tracking id
-    
-    db.run(`INSERT INTO support_tickets (tracking_id, user_id, subject, status) VALUES (?, ?, ?, 'Open')`,
-        [trackingId, userId, subject],
-        function (err) {
-            if (err) return res.status(500).json({ error: err.message });
-            const ticketId = this.lastID;
-            
-            db.run(`INSERT INTO support_messages (ticket_id, sender, message) VALUES (?, 'doctor', ?)`,
-                [ticketId, message],
-                function (err2) {
-                    if (err2) return res.status(500).json({ error: err2.message });
-                    activityLog.logFromRequest(db, req, {
-                        user_id: userId,
-                        action: 'support.ticket_create',
-                        resource_type: 'ticket',
-                        resource_id: trackingId,
-                        meta: { subject: String(subject || '').slice(0, 120) }
-                    });
-                    res.json({ success: true, trackingId: trackingId, message: "Ticket raised successfully." });
-                });
-        });
-});
-
-// Get User's Tickets
-app.get('/api/support/tickets/:userId', (req, res) => {
-    db.all(`SELECT * FROM support_tickets WHERE user_id = ? ORDER BY created_at DESC`, [req.params.userId], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json(rows || []);
+function legacySupportTicketRetired(res) {
+    res.status(410).json({
+        error: 'This support API is retired. Use /api/support-ticket/* from the doctor portal instead.'
     });
-});
+}
 
-// Get Messages for a Ticket
-app.get('/api/support/ticket/:trackingId/messages', (req, res) => {
-    db.get(`SELECT id FROM support_tickets WHERE tracking_id = ?`, [req.params.trackingId], (err, ticket) => {
-        if (err || !ticket) return res.status(404).json({ error: 'Ticket not found' });
-        db.all(`SELECT * FROM support_messages WHERE ticket_id = ? ORDER BY created_at ASC`, [ticket.id], (err2, msgs) => {
-            if (err2) return res.status(500).json({ error: err2.message });
-            res.json(msgs || []);
-        });
-    });
-});
-
-// Reply to a Ticket
-app.post('/api/support/ticket/:trackingId/reply', (req, res) => {
-    const { message, sender } = req.body; // sender: 'doctor' or 'admin'
-    db.get(`SELECT id FROM support_tickets WHERE tracking_id = ?`, [req.params.trackingId], (err, ticket) => {
-        if (err || !ticket) return res.status(404).json({ error: 'Ticket not found' });
-        db.run(`INSERT INTO support_messages (ticket_id, sender, message) VALUES (?, ?, ?)`,
-            [ticket.id, sender, message],
-            function (err2) {
-                if (err2) return res.status(500).json({ error: err2.message });
-                res.json({ success: true, message: "Reply sent." });
-            });
-    });
-});
+// Legacy support routes (retired — use /api/support-ticket/*)
+app.post('/api/support/ticket', (req, res) => legacySupportTicketRetired(res));
+app.get('/api/support/tickets/:userId', (req, res) => legacySupportTicketRetired(res));
+app.get('/api/support/ticket/:trackingId/messages', (req, res) => legacySupportTicketRetired(res));
+app.post('/api/support/ticket/:trackingId/reply', (req, res) => legacySupportTicketRetired(res));
 
 // Notices / Announcements
 app.get('/api/notices', (req, res) => {
@@ -11750,14 +11702,19 @@ app.post('/api/admin/contact-inquiries/:id/send-email', async (req, res) => {
                         String(row.subject || '').slice(0, 120) +
                         '"\n\n';
                     const fullBody = replyIntro + b;
-                    const result = await adminComposeMail.sendSingleMailReliable(db, {
-                        to: row.email,
-                        name: row.name,
-                        subject: sub,
-                        body: fullBody,
-                        replyTo: (staffRow && staffRow.email) || undefined,
-                        fromDisplay: staffDisplay.formatStaffFromDisplay(staffRow)
-                    });
+                    let result;
+                    try {
+                        result = await adminComposeMail.sendSingleMailReliable(db, {
+                            to: row.email,
+                            name: row.name,
+                            subject: sub,
+                            body: fullBody,
+                            replyTo: (staffRow && staffRow.email) || undefined,
+                            fromDisplay: staffDisplay.formatStaffFromDisplay(staffRow)
+                        });
+                    } catch (mailErr) {
+                        return res.status(500).json({ error: mailErr.message || 'Email send failed' });
+                    }
                     if (!result.ok) {
                         return res.status(result.skipped ? 503 : 500).json({
                             error: result.error || 'Send failed',
@@ -11842,13 +11799,18 @@ app.post('/api/admin/email/send', (req, res) => {
                     );
                     return;
                 }
-                const result = await adminComposeMail.sendSingleMailReliable(db, {
-                    to,
-                    name,
-                    subject,
-                    body,
-                    fromDisplay
-                });
+                let result;
+                try {
+                    result = await adminComposeMail.sendSingleMailReliable(db, {
+                        to,
+                        name,
+                        subject,
+                        body,
+                        fromDisplay
+                    });
+                } catch (mailErr) {
+                    return res.status(500).json({ error: mailErr.message || 'Email send failed' });
+                }
                 if (!result.ok) {
                     return res.status(result.skipped ? 503 : 500).json({ error: result.error || 'Send failed', hint: result.hint });
                 }
