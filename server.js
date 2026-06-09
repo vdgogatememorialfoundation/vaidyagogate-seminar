@@ -12393,7 +12393,8 @@ require('./lib/support-desk-routes').registerSupportDeskRoutes(app, {
     loadPublicSiteCms,
     getSupportTicketPayload,
     resolveSupportTicketByRef,
-    canonicalTicketMessageId
+    canonicalTicketMessageId,
+    createSupportTicketRecord
 });
 
 app.use('/api/support-ticket', withSupportTickets);

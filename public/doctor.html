@@ -394,6 +394,7 @@
                 <button type="button" class="menu-item" id="nav-volunteer" data-tab="tab-volunteer"><i class="fas fa-hands-helping"></i> Volunteer</button>
                 <button type="button" class="menu-item" data-tab="tab-feedback"><i class="fas fa-star"></i> Seminar feedback</button>
                 <button type="button" class="menu-item" data-tab="tab-support"><i class="fas fa-ticket-alt"></i> Support tickets</button>
+                <button type="button" class="menu-item" data-tab="tab-live-chat"><i class="fas fa-comments"></i> Live chat</button>
                 <button type="button" class="menu-item" data-tab="tab-orders"><i class="fas fa-receipt"></i> Orders</button>
                 <button type="button" class="menu-item" data-tab="tab-receipts"><i class="fas fa-file-invoice"></i> Receipts</button>
                 <button type="button" class="menu-item hidden" id="nav-books" data-tab="tab-books"><i class="fas fa-book"></i> Book orders</button>
@@ -435,7 +436,7 @@
 
                 <div id="tab-dashboard" class="tab-pane">
                     <h2 class="section-title">Dashboard</h2>
-                    <p style="color: #64748b; margin: -10px 0 20px;">Overview of your seminar activity. Use <strong>Seminar feedback</strong> and <strong>Support tickets</strong> in the menu for those features.</p>
+                    <p style="color: #64748b; margin: -10px 0 20px;">Overview of your seminar activity. Use <strong>Seminar feedback</strong>, <strong>Support tickets</strong>, and <strong>Live chat</strong> in the menu when you need them.</p>
                     <div class="stat-grid">
                         <div class="stat-card"><h4 id="stat-registered">—</h4><p>Registered seminars</p></div>
                         <div class="stat-card" style="border-top-color:#10b981;"><h4 id="stat-paid">—</h4><p>Paid / confirmed</p></div>
@@ -767,7 +768,8 @@
 
                 <div id="tab-support" class="tab-pane hidden">
                     <h2 class="section-title">Support tickets</h2>
-                    <p style="color:#64748b;margin:-10px 0 20px;">Raise a ticket and follow replies here.</p>
+                    <p style="color:#64748b;margin:-10px 0 20px;">Raise a ticket and follow replies here. For real-time help during support hours, use <strong>Live chat</strong> in the menu.</p>
+
                     <div id="support-main-view">
                         <button type="button" class="btn-primary" onclick="document.getElementById('new-ticket-form').classList.remove('hidden')" style="margin-bottom:20px;">+ New support ticket</button>
                         <div id="new-ticket-form" class="card hidden">
@@ -803,6 +805,33 @@
                             <input type="text" id="chat-reply-msg" placeholder="Type your reply…" style="flex:1;padding:10px;border:1px solid #cbd5e1;border-radius:6px;">
                             <button type="button" class="btn-primary" onclick="sendReply()">Send</button>
                         </div>
+                    </div>
+                </div>
+
+                <div id="tab-live-chat" class="tab-pane hidden">
+                    <h2 class="section-title">Live chat</h2>
+                    <p style="color:#64748b;margin:-10px 0 20px;">Chat with a support agent during business hours. Your chat reference is shown below for follow-up.</p>
+                    <div id="doctor-live-chat-card" class="card" style="border:1px solid #99f6e4;background:linear-gradient(180deg,#f0fdfa 0%,#fff 100%);">
+                        <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px;">
+                            <div>
+                                <p id="doctor-live-hours" style="margin:0;font-size:0.85rem;color:#64748b;">Checking support hours…</p>
+                            </div>
+                            <div id="doctor-live-meta" style="font-size:0.82rem;color:#475569;text-align:right;">
+                                <div><strong>Chat ref:</strong> <span id="doctor-live-ref">—</span></div>
+                                <div><strong>Agent:</strong> <span id="doctor-live-agent">—</span></div>
+                            </div>
+                        </div>
+                        <div id="doctor-live-messages" style="min-height:220px;max-height:360px;overflow-y:auto;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px;margin-bottom:12px;display:flex;flex-direction:column;gap:8px;">
+                            <p style="color:#64748b;text-align:center;margin:auto;font-size:0.88rem;">Start live chat to talk with a support agent.</p>
+                        </div>
+                        <div id="doctor-live-active-row" class="hidden" style="display:flex;gap:10px;margin-bottom:10px;">
+                            <input type="text" id="doctor-live-input" placeholder="Type your message…" style="flex:1;padding:10px;border:1px solid #cbd5e1;border-radius:8px;">
+                            <button type="button" class="btn-primary" onclick="sendDoctorLiveMessage()">Send</button>
+                        </div>
+                        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                            <button type="button" id="doctor-live-start-btn" class="btn-primary" onclick="startDoctorLiveChat()"><i class="fas fa-headset"></i> Talk to support agent</button>
+                        </div>
+                        <p style="margin:12px 0 0;font-size:0.82rem;color:#64748b;">For non-urgent issues or after hours, use <strong>Support tickets</strong> in the menu.</p>
                     </div>
                 </div>
 
@@ -997,6 +1026,6 @@
     <link rel="stylesheet" href="/css/book-track.css?v=20260529stg">
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/doctor-books.js?v=20260528livetrack"></script>
-    <script src="/js/doctor.js?v=20260608case6"></script>
+    <script src="/js/doctor.js?v=20260609live2"></script>
 </body>
 </html>

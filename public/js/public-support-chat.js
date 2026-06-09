@@ -5,6 +5,8 @@
     if (document.getElementById('vgmf-support-widget-root')) return;
 
     let liveSessionId = null;
+    let liveChatRef = '';
+    let liveAgentName = '';
     let liveMsgSince = 0;
     let livePollTimer = null;
     let liveChatOpen = false;
@@ -19,19 +21,20 @@
     root.innerHTML =
         '<button type="button" id="vgmf-support-launcher" aria-label="Open support chat" style="position:fixed;bottom:22px;right:22px;z-index:9998;width:56px;height:56px;border-radius:50%;border:none;background:#0f766e;color:#fff;box-shadow:0 8px 24px rgba(15,118,110,0.35);cursor:pointer;font-size:1.4rem;"><i class="fas fa-headset"></i></button>' +
         '<div id="vgmf-support-panel" class="hidden" style="position:fixed;bottom:90px;right:22px;z-index:9999;width:min(380px,calc(100vw - 24px));max-height:min(560px,calc(100vh - 120px));background:#fff;border-radius:16px;box-shadow:0 16px 40px rgba(15,23,42,0.18);border:1px solid #ccfbf1;display:flex;flex-direction:column;overflow:hidden;">' +
-        '<div style="padding:14px 16px;background:linear-gradient(135deg,#0f766e,#115e59);color:#fff;"><strong>Help & support</strong><div id="vgmf-support-hours" style="font-size:0.78rem;opacity:0.9;margin-top:4px;">Loading hours…</div></div>' +
+        '<div style="padding:14px 16px;background:linear-gradient(135deg,#0f766e,#115e59);color:#fff;"><strong>Help & support</strong><div id="vgmf-support-hours" style="font-size:0.78rem;opacity:0.9;margin-top:4px;">Loading hours…</div><div id="vgmf-support-live-meta" class="hidden" style="font-size:0.72rem;opacity:0.92;margin-top:6px;"></div></div>' +
         '<div id="vgmf-support-messages" style="flex:1;overflow-y:auto;padding:12px;font-size:0.88rem;background:#f8fafc;"></div>' +
         '<div style="padding:10px 12px;border-top:1px solid #e2e8f0;background:#fff;">' +
         '<button type="button" id="vgmf-support-live-btn" class="hidden" style="width:100%;margin-bottom:8px;padding:8px;border:none;border-radius:8px;background:#115e59;color:#fff;font-weight:700;cursor:pointer;">Talk to a support agent (live)</button>' +
         '<input type="text" id="vgmf-support-track" placeholder="Application / ticket no. (optional)" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:8px;font-size:0.85rem;">' +
         '<div style="display:flex;gap:8px;"><input type="text" id="vgmf-support-input" placeholder="Ask a question…" style="flex:1;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:0.85rem;"><button type="button" id="vgmf-support-send" style="padding:8px 14px;border:none;border-radius:8px;background:#0f766e;color:#fff;font-weight:700;cursor:pointer;">Send</button></div>' +
-        '<p style="font-size:0.72rem;color:#64748b;margin:8px 0 0;">For account-specific help, sign in to the <a href="/doctor.html">doctor portal</a>.</p></div></div>';
+        '<p style="font-size:0.72rem;color:#64748b;margin:8px 0 0;">Account help: <a href="/doctor.html#tab-live-chat" style="color:#0f766e;">Live chat</a> or <a href="/doctor.html#tab-support" style="color:#0f766e;">Support tickets</a> in the doctor portal.</p></div></div>';
 
     document.body.appendChild(root);
 
     const panel = document.getElementById('vgmf-support-panel');
     const messages = document.getElementById('vgmf-support-messages');
     const hoursEl = document.getElementById('vgmf-support-hours');
+    const liveMetaEl = document.getElementById('vgmf-support-live-meta');
     const liveBtn = document.getElementById('vgmf-support-live-btn');
 
     function esc(s) {
@@ -40,25 +43,82 @@
         return d.innerHTML;
     }
 
-    function addBot(text) {
+    function updateLiveMeta() {
+        if (!liveMetaEl) return;
+        if (!liveSessionId) {
+            liveMetaEl.classList.add('hidden');
+            return;
+        }
+        liveMetaEl.classList.remove('hidden');
+        liveMetaEl.innerHTML =
+            'Ref: <strong>' +
+            esc(liveChatRef || 'LCHAT-' + String(liveSessionId).padStart(8, '0')) +
+            '</strong>' +
+            (liveAgentName ? ' · Agent: <strong>' + esc(liveAgentName) + '</strong>' : '');
+    }
+
+    function appendMessage(opts) {
+        const isUser = opts.role === 'user';
+        const isSystem = opts.role === 'system';
+        const label = opts.label || (isUser ? 'You' : isSystem ? 'Support desk' : 'Assistant');
+        const bg = isUser ? '#e2e8f0' : isSystem ? '#fef3c7' : '#ecfdf5';
+        const align = isUser ? 'margin-left:24px;text-align:right;' : '';
+        const radius = isUser ? '12px 12px 4px 12px' : '12px 12px 12px 4px';
         messages.innerHTML +=
-            '<div style="margin-bottom:10px;padding:10px 12px;background:#ecfdf5;border-radius:12px 12px 12px 4px;line-height:1.45;white-space:pre-wrap;">' +
-            esc(text) +
+            '<div style="margin-bottom:10px;padding:10px 12px;background:' +
+            bg +
+            ';border-radius:' +
+            radius +
+            ';line-height:1.45;white-space:pre-wrap;' +
+            align +
+            '">' +
+            (isUser ? '' : '<div style="font-size:0.72rem;color:#64748b;margin-bottom:4px;font-weight:700;">' + esc(label) + '</div>') +
+            esc(opts.text) +
             '</div>';
         messages.scrollTop = messages.scrollHeight;
     }
 
+    function addBot(text, label) {
+        appendMessage({ role: 'bot', text: text, label: label || 'Assistant' });
+    }
+
     function addUser(text) {
-        messages.innerHTML +=
-            '<div style="margin-bottom:10px;padding:10px 12px;background:#e2e8f0;border-radius:12px 12px 4px 12px;margin-left:24px;text-align:right;">' +
-            esc(text) +
-            '</div>';
-        messages.scrollTop = messages.scrollHeight;
+        appendMessage({ role: 'user', text: text });
+    }
+
+    function addLiveMessage(m) {
+        const st = String(m.sender_type || '').toLowerCase();
+        if (st === 'visitor') return;
+        if (st === 'agent' && m.sender_name) liveAgentName = m.sender_name;
+        appendMessage({
+            role: st === 'system' ? 'system' : 'bot',
+            text: m.message,
+            label: m.sender_name || (st === 'system' ? 'Support desk' : 'Support agent')
+        });
+        updateLiveMeta();
     }
 
     function startLivePoll() {
         if (livePollTimer) clearInterval(livePollTimer);
         livePollTimer = setInterval(pollLiveMessages, 3000);
+    }
+
+    async function refreshLiveSession() {
+        if (!liveSessionId) return;
+        try {
+            const session = await fetch('/api/public/support/live/' + encodeURIComponent(liveSessionId), {
+                cache: 'no-store'
+            }).then((r) => r.json());
+            if (session && session.chatRef) liveChatRef = session.chatRef;
+            if (session && session.agentName) liveAgentName = session.agentName;
+            if (session && session.status === 'closed') {
+                clearInterval(livePollTimer);
+                livePollTimer = null;
+                liveBtn.classList.remove('hidden');
+                liveBtn.textContent = 'Start a new live chat';
+            }
+            updateLiveMeta();
+        } catch (_) {}
     }
 
     async function pollLiveMessages() {
@@ -70,8 +130,9 @@
             ).then((r) => r.json());
             (rows || []).forEach((m) => {
                 if (m.id > liveMsgSince) liveMsgSince = m.id;
-                if (m.sender_type === 'agent') addBot(m.message);
+                addLiveMessage(m);
             });
+            await refreshLiveSession();
         } catch (_) {}
     }
 
@@ -85,19 +146,38 @@
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Could not start live chat');
             liveSessionId = data.sessionId;
+            liveChatRef = data.chatRef || '';
+            liveAgentName = data.agentName || '';
             liveMsgSince = 0;
+            updateLiveMeta();
             if (data.status === 'offline' || !data.canLive) {
-                addBot('Live chat is outside business hours. You can still ask questions here or email care@vaidyagogate.org.');
+                addBot(
+                    'Live chat is outside business hours. You can still ask questions here or email care@vaidyagogate.org. Your chat reference is ' +
+                        (liveChatRef || '') +
+                        '.'
+                );
                 return;
             }
             if (data.status === 'waiting') {
-                addBot('You are in the queue. An agent will join shortly…');
+                addBot(
+                    'You are in the queue. Chat reference ' +
+                        liveChatRef +
+                        '. An agent will join shortly — please keep this window open.',
+                    'Support desk'
+                );
             } else if (data.status === 'active') {
-                addBot('You are connected with a support agent.');
+                addBot(
+                    'Connected' +
+                        (liveAgentName ? ' with ' + liveAgentName : ' with a support agent') +
+                        '. Reference ' +
+                        liveChatRef +
+                        '.',
+                    'Support desk'
+                );
             }
             startLivePoll();
         } catch (e) {
-            addBot('Could not start live chat. Try again or use the doctor portal support tab.');
+            addBot('Could not start live chat. Try Live chat in the doctor portal or create a Support ticket.');
         }
     }
 
@@ -163,7 +243,7 @@
         }
 
         try {
-            const appMatch = text.match(/\b(SEM-[\w-]+|CASE-[\w-]+|TKT_[\w-]+|\d{6,})\b/i);
+            const appMatch = text.match(/\b(SEM-[\w-]+|CASE-[\w-]+|TKT_[\w-]+|LCHAT-[\d]+|\d{6,})\b/i);
             const trackRef = track || (appMatch && appMatch[1]);
             if (trackRef && /track|status|application|where|check/i.test(text)) {
                 const tr = await fetch('/api/public/support/track?q=' + encodeURIComponent(trackRef)).then((r) =>
@@ -199,7 +279,7 @@
                 liveBtn.classList.remove('hidden');
             }
         } catch (e) {
-            addBot('Sorry, something went wrong. Email care@vaidyagogate.org or use the doctor portal support tab.');
+            addBot('Sorry, something went wrong. Email care@vaidyagogate.org or use Live chat / Support tickets in the doctor portal.');
         }
     }
 

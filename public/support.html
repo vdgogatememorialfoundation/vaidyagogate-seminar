@@ -30,6 +30,7 @@
         .msg { padding: 10px 12px; border-radius: 10px; margin-bottom: 8px; max-width: 85%; }
         .msg-user { background: #f1f5f9; }
         .msg-staff { background: #ccfbf1; margin-left: auto; }
+        .msg-system { background: #fef3c7; border: 1px solid #fcd34d; max-width: 100%; }
         .msg-held { opacity: 0.65; border: 1px dashed #f59e0b; }
         #auth-overlay { position: fixed; inset: 0; background: rgba(15,118,110,0.2); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 100; }
         .layout { display: grid; grid-template-columns: 1fr 320px; gap: 16px; }
@@ -102,13 +103,23 @@
                 <button type="button" class="btn btn-primary" style="margin-bottom:12px;" onclick="supportLoadLiveSessions()">Refresh</button>
                 <div id="support-live-root"><p style="color:#64748b;">No active sessions.</p></div>
                 <div id="support-live-chat-panel" class="hidden" style="margin-top:16px;border-top:1px solid #e2e8f0;padding-top:16px;">
-                    <h3 style="margin:0 0 8px;font-size:1rem;" id="support-live-chat-title">Live chat</h3>
+                    <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;margin-bottom:8px;">
+                        <div>
+                            <h3 style="margin:0 0 4px;font-size:1rem;" id="support-live-chat-title">Live chat</h3>
+                            <p id="support-live-visitor-meta" class="sub" style="margin:0;font-size:0.82rem;"></p>
+                        </div>
+                        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                            <button type="button" class="btn btn-muted" style="padding:6px 10px;font-size:0.78rem;" onclick="supportSendTicketForm()">Send ticket form</button>
+                            <button type="button" class="btn btn-muted" style="padding:6px 10px;font-size:0.78rem;" onclick="supportCreateLiveTicket()">Create ticket</button>
+                        </div>
+                    </div>
                     <div id="support-live-thread" style="min-height:160px;max-height:280px;overflow-y:auto;background:#f8fafc;border-radius:8px;padding:10px;margin-bottom:10px;"></div>
-                    <div style="display:flex;gap:8px;">
+                    <div style="display:flex;gap:8px;margin-bottom:8px;">
                         <input type="text" id="support-live-input" placeholder="Reply to visitor…" style="flex:1;">
                         <button type="button" class="btn btn-primary" onclick="supportSendLiveMessage()">Send</button>
-                        <button type="button" class="btn btn-muted" onclick="supportCloseLiveSession()">End</button>
                     </div>
+                    <input type="text" id="support-live-close-note" placeholder="Optional closing note (shown to visitor when chat ends)…" style="width:100%;margin-bottom:8px;">
+                    <button type="button" class="btn btn-muted" onclick="supportCloseLiveSession()">End chat</button>
                 </div>
             </div>
 
@@ -168,6 +179,6 @@
 
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-auth.js?v=20260609support2"></script>
-    <script src="/js/support-portal.js?v=20260609support3"></script>
+    <script src="/js/support-portal.js?v=20260609support4"></script>
 </body>
 </html>

@@ -364,19 +364,29 @@
                 return;
             }
             root.innerHTML =
-                '<table class="data-table"><thead><tr><th>Session</th><th>Visitor</th><th>Status</th><th></th></tr></thead><tbody>' +
+                '<table class="data-table"><thead><tr><th>Reference</th><th>Visitor</th><th>Channel</th><th>Status</th><th>Agent</th><th></th></tr></thead><tbody>' +
                 rows
                     .map((s) => {
                         const name = s.first_name
                             ? esc(s.first_name + ' ' + (s.last_name || ''))
-                            : 'Guest #' + s.id;
+                            : s.user_id_string
+                              ? 'Portal ' + esc(s.user_id_string)
+                              : 'Guest';
+                        const agent = s.agent_first_name
+                            ? esc(s.agent_first_name + ' ' + (s.agent_last_name || ''))
+                            : '—';
+                        const ref = esc(s.chatRef || 'LCHAT-' + String(s.id).padStart(8, '0'));
                         return (
-                            '<tr><td>#' +
-                            s.id +
-                            '</td><td>' +
+                            '<tr><td><strong>' +
+                            ref +
+                            '</strong></td><td>' +
                             name +
                             '</td><td>' +
+                            esc(s.channel || 'web') +
+                            '</td><td>' +
                             esc(s.status) +
+                            '</td><td>' +
+                            agent +
                             '</td><td><button type="button" class="btn btn-primary" style="padding:6px 10px;font-size:0.8rem;" onclick="supportOpenLiveSession(' +
                             s.id +
                             ')">' +
@@ -394,15 +404,49 @@
     window.supportOpenLiveSession = async function (sessionId) {
         currentLiveSessionId = sessionId;
         liveMsgSince = 0;
+        const thread = document.getElementById('support-live-thread');
+        if (thread) thread.innerHTML = '';
         document.getElementById('support-live-chat-panel').classList.remove('hidden');
-        document.getElementById('support-live-chat-title').textContent = 'Live chat #' + sessionId;
         try {
             await api('/api/support-desk/live/' + sessionId + '/claim', { method: 'POST', body: {} });
         } catch (_) {}
+        try {
+            const session = await api('/api/support-desk/live/' + sessionId);
+            const ref = session.chatRef || 'LCHAT-' + String(sessionId).padStart(8, '0');
+            document.getElementById('support-live-chat-title').textContent = ref;
+            const meta = [];
+            if (session.visitorName) meta.push(session.visitorName);
+            if (session.visitorPortalId) meta.push('Portal ' + session.visitorPortalId);
+            if (session.visitorEmail) meta.push(session.visitorEmail);
+            if (session.agentName) meta.push('Agent: ' + session.agentName);
+            if (session.linkedTicketId) meta.push('Ticket ' + session.linkedTicketId);
+            const metaEl = document.getElementById('support-live-visitor-meta');
+            if (metaEl) metaEl.textContent = meta.join(' · ');
+        } catch (_) {
+            document.getElementById('support-live-chat-title').textContent =
+                'LCHAT-' + String(sessionId).padStart(8, '0');
+        }
         supportPollLiveMessages();
         if (livePollTimer) clearInterval(livePollTimer);
         livePollTimer = setInterval(supportPollLiveMessages, 3000);
     };
+
+    function renderLiveThreadMessage(m) {
+        const st = String(m.sender_type || '').toLowerCase();
+        const staff = st === 'agent';
+        const isSystem = st === 'system';
+        const label = m.sender_name || (isSystem ? 'Support desk' : staff ? 'You' : 'Visitor');
+        const cls = isSystem ? 'msg-system' : staff ? 'msg-staff' : 'msg-user';
+        return (
+            '<div class="msg ' +
+            cls +
+            '"><div style="font-size:0.72rem;color:#64748b;margin-bottom:4px;font-weight:700;">' +
+            esc(label) +
+            '</div>' +
+            esc(m.message) +
+            '</div>'
+        );
+    }
 
     async function supportPollLiveMessages() {
         if (!currentLiveSessionId) return;
@@ -413,13 +457,7 @@
             const thread = document.getElementById('support-live-thread');
             rows.forEach((m) => {
                 if (m.id > liveMsgSince) liveMsgSince = m.id;
-                const staff = m.sender_type === 'agent';
-                thread.innerHTML +=
-                    '<div class="msg ' +
-                    (staff ? 'msg-staff' : 'msg-user') +
-                    '">' +
-                    esc(m.message) +
-                    '</div>';
+                thread.innerHTML += renderLiveThreadMessage(m);
             });
             thread.scrollTop = thread.scrollHeight;
         } catch (_) {}
@@ -443,13 +481,51 @@
 
     window.supportCloseLiveSession = async function () {
         if (!currentLiveSessionId) return;
+        const noteEl = document.getElementById('support-live-close-note');
+        const closingMessage = noteEl && noteEl.value.trim ? noteEl.value.trim() : '';
         try {
-            await api('/api/support-desk/live/' + currentLiveSessionId + '/close', { method: 'POST', body: {} });
+            await api('/api/support-desk/live/' + currentLiveSessionId + '/close', {
+                method: 'POST',
+                body: closingMessage ? { closingMessage: closingMessage } : {}
+            });
         } catch (_) {}
         currentLiveSessionId = null;
         if (livePollTimer) clearInterval(livePollTimer);
+        if (noteEl) noteEl.value = '';
         document.getElementById('support-live-chat-panel').classList.add('hidden');
         supportLoadLiveSessions();
+    };
+
+    window.supportSendTicketForm = async function () {
+        if (!currentLiveSessionId) return alert('Open a live chat session first.');
+        try {
+            await api('/api/support-desk/live/' + currentLiveSessionId + '/send-ticket-form', {
+                method: 'POST',
+                body: {}
+            });
+            supportPollLiveMessages();
+        } catch (e) {
+            alert(e.message || 'Could not send ticket form link');
+        }
+    };
+
+    window.supportCreateLiveTicket = async function () {
+        if (!currentLiveSessionId) return alert('Open a live chat session first.');
+        const subject = window.prompt('Ticket subject:', 'Follow-up from live chat');
+        if (!subject || !subject.trim()) return;
+        const description = window.prompt('Ticket description (include issue details):', '');
+        if (!description || !description.trim()) return;
+        const category = window.prompt('Category (general, technical, billing, registration, other):', 'general') || 'general';
+        try {
+            const out = await api('/api/support-desk/live/' + currentLiveSessionId + '/create-ticket', {
+                method: 'POST',
+                body: { subject: subject.trim(), description: description.trim(), category: category.trim() }
+            });
+            alert('Ticket created: ' + (out.ticketId || '') + (out.expectedResponseDisplay ? ' — Expected response ' + out.expectedResponseDisplay : ''));
+            supportPollLiveMessages();
+        } catch (e) {
+            alert(e.message || 'Could not create ticket');
+        }
     };
 
     async function saveAvailability() {

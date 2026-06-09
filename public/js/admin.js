@@ -1388,6 +1388,7 @@ const DOCTOR_MODULE_TAB_DEFS = [
     ['tab-volunteer', 'Volunteer'],
     ['tab-feedback', 'Seminar feedback'],
     ['tab-support', 'Support tickets'],
+    ['tab-live-chat', 'Live chat'],
     ['tab-orders', 'Orders'],
     ['tab-receipts', 'Receipts'],
     ['tab-payments', 'Payments'],
