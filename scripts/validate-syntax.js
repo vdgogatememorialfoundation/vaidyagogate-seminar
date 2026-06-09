@@ -32,7 +32,7 @@ const files = [
     path.join('lib', 'support-desk-schema.js'),
     path.join('lib', 'support-live-chat.js'),
     path.join('lib', 'support-desk-admin-routes.js'),
-    path.join('lib', 'support-desk-admin-routes.js'),
+    path.join('lib', 'chatbot-knowledge.js'),
     path.join('public', 'js', 'fetch-json.js')
 ];
 
