@@ -7,7 +7,8 @@
         doctor: 'seminar_doctor_user',
         judge: 'seminar_judge_user',
         scanner: 'seminar_scanner_user',
-        staff: 'seminar_staff_user'
+        staff: 'seminar_staff_user',
+        support: 'seminar_support_user'
     };
 
     function normRole(user) {
@@ -31,6 +32,20 @@
     function isScannerUser(user) {
         const { ur } = normRole(user);
         return ur === 'scanner_portal_user' || ur === 'scanner_dashboard_user' || ur === 'venue_gate_user';
+    }
+
+    function isSupportAgentUser(user) {
+        const { ur } = normRole(user);
+        if (ur === 'support_agent') return true;
+        if (ur === 'co_admin') return true;
+        if (ur !== 'staff_user') return false;
+        try {
+            const raw = user && user.staff_modules;
+            const mods = typeof raw === 'string' ? JSON.parse(raw || '{}') : raw || {};
+            return !!mods['support-tickets'];
+        } catch (_) {
+            return false;
+        }
     }
 
     function isBookStaffUser(user) {
@@ -64,10 +79,11 @@
         if (portal === 'judge') return isJudgeUser(user);
         if (portal === 'scanner') return isScannerUser(user);
         if (portal === 'staff') {
-            if (isScannerUser(user) || isJudgeUser(user)) return false;
+            if (isScannerUser(user) || isJudgeUser(user) || isSupportAgentUser(user)) return false;
             if (isDoctorUser(user)) return false;
             return isStaffPortalUser(user);
         }
+        if (portal === 'support') return isSupportAgentUser(user);
         return false;
     }
 

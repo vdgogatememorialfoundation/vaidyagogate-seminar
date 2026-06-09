@@ -108,6 +108,7 @@
                 <a class="menu-item" data-admin-module="tab-applications" onclick="switchTab('tab-applications')"><i class="fas fa-folder-open"></i> Review Applications</a>
                 <a class="menu-item" data-admin-module="tab-feedback" onclick="switchTab('tab-feedback')"><i class="fas fa-comments"></i> Seminar Feedback</a>
                 <a class="menu-item" data-admin-module="tab-support-tickets" onclick="switchTab('tab-support-tickets')"><i class="fas fa-ticket-alt"></i> Support Tickets</a>
+                <a class="menu-item" data-admin-module="tab-support-desk" onclick="switchTab('tab-support-desk')"><i class="fas fa-headset"></i> Support desk</a>
                 <a class="menu-item" data-admin-module="tab-contact-inquiries" onclick="switchTab('tab-contact-inquiries'); loadContactInquiries();"><i class="fas fa-envelope-open-text"></i> Website contact</a>
                 <a class="menu-item" data-admin-module="tab-email-compose" onclick="switchTab('tab-email-compose'); initAdminEmailComposeTab();"><i class="fas fa-paper-plane"></i> Send email</a>
                 <a class="menu-item" data-admin-module="tab-transfer" onclick="switchTab('tab-transfer')"><i class="fas fa-exchange-alt"></i> Transfer Applications</a>
@@ -457,10 +458,9 @@
                     <h3 style="margin:0 0 8px;color:#0369a1;"><i class="fas fa-inbox"></i> Inbound email (free replies)</h3>
                     <p id="mail-inbound-status" style="margin:0 0 8px;font-size:0.88rem;color:#475569;">Checking…</p>
                     <ol style="margin:0;padding-left:20px;font-size:0.85rem;color:#475569;line-height:1.55;">
-                        <li>Inbox address: <code>stccahyu@mailparser.io</code> — set as <code>MAILPARSER_INBOUND_EMAIL</code> on Render</li>
-                        <li>Webhook URL: <code id="mail-inbound-webhook-url">…</code> · Method POST · Header <code>x-inbound-mail-secret</code> = your secret</li>
-                        <li>On Render set <code>INBOUND_MAIL_WEBHOOK_SECRET</code> to the same value as the webhook header</li>
-                        <li>Routes replies for <strong>Website contact</strong> (<code>[VGMF-CTC-id]</code>), <strong>support tickets</strong>, <strong>admin email threads</strong>, and <strong>case judge messages</strong>. Emails to the inbox without a reference are added under Website contact.</li>
+                        <li>Create a free inbox at <a href="https://mailparser.io" target="_blank" rel="noopener">mailparser.io</a></li>
+                        <li>Webhook URL: <code id="mail-inbound-webhook-url">…</code> · Header <code>x-inbound-mail-secret</code></li>
+                        <li>On Render set <code>MAILPARSER_INBOUND_EMAIL</code> (inbox address) and <code>INBOUND_MAIL_WEBHOOK_SECRET</code></li>
                     </ol>
                 </div>
                 <div class="card" style="margin-bottom:16px;">
@@ -576,6 +576,38 @@
                         <thead><tr><th>Ticket ID</th><th>Doctor Name</th><th>Subject</th><th>Category</th><th>Priority</th><th>Status</th><th>Created</th><th>Action</th></tr></thead>
                         <tbody id="support-tickets-list"><tr><td colspan="8" style="text-align: center;">Loading tickets...</td></tr></tbody>
                     </table>
+                </div>
+            </div>
+            <!-- Support desk (agents, hours, live chat) -->
+            <div id="tab-support-desk" class="tab-pane hidden">
+                <h2 style="margin-bottom:12px;">Support desk</h2>
+                <p style="color:#64748b;margin:-8px 0 18px;font-size:0.9rem;">Configure live chat, auto-assignment, agent schedules, and holidays. Agents use <a href="/support.html" target="_blank" rel="noopener">/support.html</a>.</p>
+                <div class="card" style="margin-bottom:16px;border:1px solid #99f6e4;background:#f0fdfa;">
+                    <h3 style="margin:0 0 10px;color:#0f766e;">Desk settings</h3>
+                    <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><input type="checkbox" id="sd-hold-replies" checked> Hide staff replies until SLA expected time</label>
+                    <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><input type="checkbox" id="sd-auto-assign" checked> Auto-assign new tickets to on-duty agents</label>
+                    <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;"><input type="checkbox" id="sd-live-chat" checked> Enable live chat on website (during hours)</label>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;max-width:520px;margin-bottom:10px;">
+                        <div><label style="font-size:0.8rem;">Live chat start (HH:MM IST)</label><input type="time" id="sd-bh-start" value="09:30" style="width:100%;padding:8px;"></div>
+                        <div><label style="font-size:0.8rem;">Live chat end (HH:MM IST)</label><input type="time" id="sd-bh-end" value="18:30" style="width:100%;padding:8px;"></div>
+                    </div>
+                    <button type="button" class="btn-primary" onclick="saveSupportDeskConfigAdmin()">Save desk settings</button>
+                    <p id="sd-config-msg" style="margin-top:8px;font-weight:600;font-size:0.88rem;"></p>
+                </div>
+                <div class="card" style="margin-bottom:16px;">
+                    <h3 style="margin:0 0 10px;">Support agents</h3>
+                    <p style="color:#64748b;font-size:0.85rem;margin-bottom:10px;">Assign the <strong>Support agent</strong> job role under Staff users, then set department and limits here.</p>
+                    <div id="sd-agents-root"><p>Loading…</p></div>
+                </div>
+                <div class="card">
+                    <h3 style="margin:0 0 10px;">Holidays</h3>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:flex-end;">
+                        <div><label style="font-size:0.8rem;">Date</label><input type="date" id="sd-hol-date" style="padding:8px;"></div>
+                        <div><label style="font-size:0.8rem;">Label</label><input type="text" id="sd-hol-label" placeholder="Optional" style="padding:8px;min-width:160px;"></div>
+                        <div><label style="font-size:0.8rem;">Agent (blank = all)</label><select id="sd-hol-agent" style="padding:8px;min-width:180px;"><option value="">All agents</option></select></div>
+                        <button type="button" class="btn-primary" onclick="addSupportDeskHolidayAdmin()">Add holiday</button>
+                    </div>
+                    <div id="sd-holidays-root"><p style="color:#64748b;">Loading…</p></div>
                 </div>
             </div>
             <!-- 7. Transfer Applications -->
@@ -2802,6 +2834,6 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260608menu2"></script>
-    <script src="/js/admin.js?v=20260609mailparser1"></script>
+    <script src="/js/admin.js?v=20260609support2"></script>
 </body>
 </html>

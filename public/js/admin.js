@@ -807,6 +807,9 @@ function switchTab(tabId) {
         loadUsers();
         if (tabId === 'tab-staff-users') loadJobRoles();
     }
+    if (tabId === 'tab-support-desk' && typeof loadSupportDeskAdminTab === 'function') {
+        loadSupportDeskAdminTab();
+    }
 }
 
 let adminAutoRefreshInterval = null;
@@ -1503,6 +1506,7 @@ const ADMIN_MODULE_TAB_DEFS = [
     ['tab-applications', 'Review applications'],
     ['tab-feedback', 'Seminar feedback'],
     ['tab-support-tickets', 'Support tickets'],
+    ['tab-support-desk', 'Support desk'],
     ['tab-contact-inquiries', 'Website contact'],
     ['tab-email-compose', 'Send email'],
     ['tab-transfer', 'Transfer applications'],
@@ -11356,9 +11360,7 @@ async function loadAdminMailInboundStatus() {
         const data = await res.json();
         if (st) {
             st.style.color = data.configured ? '#15803d' : '#b45309';
-            let line = data.configured ? '✓ ' + data.hint : '⚠ ' + (data.hint || 'Not configured');
-            if (data.parserInbox) line += ' Inbox: ' + data.parserInbox;
-            st.textContent = line;
+            st.textContent = data.configured ? '✓ ' + data.hint : '⚠ ' + (data.hint || 'Not configured');
         }
     } catch (_) {
         if (st) st.textContent = 'Could not load inbound status.';
@@ -13141,6 +13143,243 @@ async function saveSupportTicketSlaConfig() {
             msg.textContent = 'Network error';
         }
     }
+}
+
+function sdMinutesFromTimeInput(id) {
+    const el = document.getElementById(id);
+    if (!el || !el.value) return null;
+    const p = String(el.value).split(':');
+    return parseInt(p[0], 10) * 60 + parseInt(p[1], 10);
+}
+
+function sdTimeFromMinutes(m) {
+    const h = Math.floor(m / 60);
+    const min = m % 60;
+    return String(h).padStart(2, '0') + ':' + String(min).padStart(2, '0');
+}
+
+async function loadSupportDeskAdminTab() {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return;
+    try {
+        const res = await fetch('/api/admin/support-desk/config?actingAdminId=' + encodeURIComponent(adm.id));
+        const d = await res.json();
+        if (d.success && d.config) {
+            const c = d.config;
+            const hold = document.getElementById('sd-hold-replies');
+            const auto = document.getElementById('sd-auto-assign');
+            const live = document.getElementById('sd-live-chat');
+            if (hold) hold.checked = c.holdEarlyStaffReplies !== false;
+            if (auto) auto.checked = c.autoAssignEnabled !== false;
+            if (live) live.checked = c.liveChatEnabled !== false;
+            const bh = c.businessHours || {};
+            const st = document.getElementById('sd-bh-start');
+            const en = document.getElementById('sd-bh-end');
+            if (st && bh.startMinutes != null) st.value = sdTimeFromMinutes(bh.startMinutes);
+            if (en && bh.endMinutes != null) en.value = sdTimeFromMinutes(bh.endMinutes);
+        }
+    } catch (_) {}
+    loadSupportDeskAgentsAdmin();
+    loadSupportDeskHolidaysAdmin();
+}
+
+async function saveSupportDeskConfigAdmin() {
+    const adm = getStoredAdminUser();
+    const msg = document.getElementById('sd-config-msg');
+    if (!adm || !adm.id) return;
+    const startM = sdMinutesFromTimeInput('sd-bh-start');
+    const endM = sdMinutesFromTimeInput('sd-bh-end');
+    const config = {
+        holdEarlyStaffReplies: !!(document.getElementById('sd-hold-replies') || {}).checked,
+        autoAssignEnabled: !!(document.getElementById('sd-auto-assign') || {}).checked,
+        liveChatEnabled: !!(document.getElementById('sd-live-chat') || {}).checked,
+        businessHours: {
+            startMinutes: startM != null ? startM : 570,
+            endMinutes: endM != null ? endM : 1110,
+            days: [1, 2, 3, 4, 5, 6]
+        }
+    };
+    try {
+        const res = await fetch('/api/admin/support-desk/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: adm.id, config })
+        });
+        const d = await res.json();
+        if (msg) {
+            msg.style.color = d.success ? '#15803d' : '#b91c1c';
+            msg.textContent = d.success ? 'Support desk settings saved.' : d.error || 'Save failed';
+        }
+    } catch (e) {
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = 'Network error';
+        }
+    }
+}
+
+async function loadSupportDeskAgentsAdmin() {
+    const adm = getStoredAdminUser();
+    const root = document.getElementById('sd-agents-root');
+    const holSel = document.getElementById('sd-hol-agent');
+    if (!adm || !adm.id || !root) return;
+    root.innerHTML = '<p>Loading…</p>';
+    try {
+        const [aRes, dRes] = await Promise.all([
+            fetch('/api/admin/support-desk/agents?actingAdminId=' + encodeURIComponent(adm.id)),
+            fetch('/api/admin/support-desk/departments?actingAdminId=' + encodeURIComponent(adm.id))
+        ]);
+        const agents = (await aRes.json()).agents || [];
+        const depts = (await dRes.json()).departments || [];
+        if (holSel) {
+            holSel.innerHTML =
+                '<option value="">All agents</option>' +
+                agents.map((a) => '<option value="' + a.id + '">' + escHtml(a.first_name + ' ' + (a.last_name || '')) + '</option>').join('');
+        }
+        if (!agents.length) {
+            root.innerHTML = '<p style="color:#64748b;">No support agents yet. Create a staff user with job role <strong>Support agent</strong>.</p>';
+            return;
+        }
+        root.innerHTML =
+            '<table class="data-table"><thead><tr><th>Agent</th><th>Role</th><th>Department</th><th>Max tickets</th><th>Available</th><th>Live chat</th><th></th></tr></thead><tbody>' +
+            agents
+                .map((a) => {
+                    const deptOpts = depts
+                        .map(
+                            (d) =>
+                                '<option value="' +
+                                d.id +
+                                '"' +
+                                (a.department_id == d.id ? ' selected' : '') +
+                                '>' +
+                                escHtml(d.name) +
+                                '</option>'
+                        )
+                        .join('');
+                    return (
+                        '<tr data-agent-id="' +
+                        a.id +
+                        '"><td>' +
+                        escHtml(a.first_name + ' ' + (a.last_name || '')) +
+                        '<br><span style="font-size:0.78rem;color:#64748b;">' +
+                        escHtml(a.email) +
+                        '</span></td><td>' +
+                        escHtml(a.user_role) +
+                        '</td><td><select class="sd-agent-dept" style="padding:6px;">' +
+                        '<option value="">—</option>' +
+                        deptOpts +
+                        '</select></td><td><input type="number" class="sd-agent-max" min="1" max="100" value="' +
+                        escHtml(String(a.max_open_tickets || 15)) +
+                        '" style="width:70px;padding:6px;"></td><td><input type="checkbox" class="sd-agent-avail"' +
+                        (a.is_available !== 0 ? ' checked' : '') +
+                        '></td><td><input type="checkbox" class="sd-agent-live"' +
+                        (a.live_chat_enabled !== 0 ? ' checked' : '') +
+                        '></td><td><button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;" onclick="saveSupportDeskAgentAdmin(' +
+                        a.id +
+                        ')">Save</button></td></tr>'
+                    );
+                })
+                .join('') +
+            '</tbody></table>';
+    } catch (e) {
+        root.innerHTML = '<p style="color:#b91c1c;">Failed to load agents.</p>';
+    }
+}
+
+async function saveSupportDeskAgentAdmin(userId) {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return;
+    const row = document.querySelector('tr[data-agent-id="' + userId + '"]');
+    if (!row) return;
+    const body = {
+        actingAdminId: adm.id,
+        departmentId: parseInt(row.querySelector('.sd-agent-dept').value, 10) || null,
+        maxOpenTickets: parseInt(row.querySelector('.sd-agent-max').value, 10) || 15,
+        isAvailable: row.querySelector('.sd-agent-avail').checked,
+        liveChatEnabled: row.querySelector('.sd-agent-live').checked
+    };
+    try {
+        const res = await fetch('/api/admin/support-desk/agents/' + userId, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const d = await res.json();
+        alert(d.success ? 'Agent saved.' : d.error || 'Save failed');
+    } catch (_) {
+        alert('Network error');
+    }
+}
+
+async function loadSupportDeskHolidaysAdmin() {
+    const adm = getStoredAdminUser();
+    const root = document.getElementById('sd-holidays-root');
+    if (!adm || !adm.id || !root) return;
+    try {
+        const res = await fetch('/api/admin/support-desk/holidays?actingAdminId=' + encodeURIComponent(adm.id));
+        const d = await res.json();
+        const rows = d.holidays || [];
+        if (!rows.length) {
+            root.innerHTML = '<p style="color:#64748b;">No holidays configured.</p>';
+            return;
+        }
+        root.innerHTML =
+            '<table class="data-table"><thead><tr><th>Date</th><th>Label</th><th>Agent</th><th></th></tr></thead><tbody>' +
+            rows
+                .map(
+                    (h) =>
+                        '<tr><td>' +
+                        escHtml(h.holiday_date) +
+                        '</td><td>' +
+                        escHtml(h.label || '—') +
+                        '</td><td>' +
+                        escHtml(h.first_name ? h.first_name + ' ' + (h.last_name || '') : 'All agents') +
+                        '</td><td><button type="button" class="btn-muted" style="padding:4px 8px;font-size:0.78rem;" onclick="deleteSupportDeskHolidayAdmin(' +
+                        h.id +
+                        ')">Remove</button></td></tr>'
+                )
+                .join('') +
+            '</tbody></table>';
+    } catch (_) {
+        root.innerHTML = '<p style="color:#b91c1c;">Failed to load holidays.</p>';
+    }
+}
+
+async function addSupportDeskHolidayAdmin() {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return;
+    const date = (document.getElementById('sd-hol-date') || {}).value;
+    if (!date) return alert('Pick a date');
+    const label = (document.getElementById('sd-hol-label') || {}).value || '';
+    const userId = (document.getElementById('sd-hol-agent') || {}).value || '';
+    try {
+        const res = await fetch('/api/admin/support-desk/holidays', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                actingAdminId: adm.id,
+                holidayDate: date,
+                label,
+                userId: userId ? parseInt(userId, 10) : null
+            })
+        });
+        const d = await res.json();
+        if (!d.success) return alert(d.error || 'Failed');
+        loadSupportDeskHolidaysAdmin();
+    } catch (_) {
+        alert('Network error');
+    }
+}
+
+async function deleteSupportDeskHolidayAdmin(id) {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id || !confirm('Remove this holiday?')) return;
+    try {
+        await fetch('/api/admin/support-desk/holidays/' + id + '?actingAdminId=' + encodeURIComponent(adm.id), {
+            method: 'DELETE'
+        });
+        loadSupportDeskHolidaysAdmin();
+    } catch (_) {}
 }
 
 async function adminPriorityInviteDoctor() {

@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Support desk | VGMF Seminar</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #f0fdfa; color: #0f172a; }
+        .wrap { max-width: 1200px; margin: 0 auto; padding: 20px; }
+        .card { background: #fff; border-radius: 14px; padding: 20px; box-shadow: 0 4px 20px rgba(15,23,42,0.08); border: 1px solid #ccfbf1; margin-bottom: 16px; }
+        h1 { margin: 0 0 6px; font-size: 1.35rem; color: #0f766e; }
+        .sub { color: #64748b; font-size: 0.9rem; margin: 0 0 16px; }
+        label { display: block; font-size: 0.8rem; font-weight: 700; margin-bottom: 4px; color: #475569; }
+        input, select, textarea { width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.95rem; }
+        textarea { min-height: 90px; resize: vertical; }
+        .btn { display: inline-block; padding: 10px 18px; border: none; border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 0.9rem; }
+        .btn-primary { background: #0f766e; color: #fff; }
+        .btn-muted { background: #64748b; color: #fff; }
+        .tabs { display: flex; gap: 8px; margin: 16px 0; flex-wrap: wrap; }
+        .tab { padding: 8px 14px; border-radius: 8px; border: 1px solid #99f6e4; background: #fff; cursor: pointer; font-weight: 600; font-size: 0.85rem; }
+        .tab.active { background: #0f766e; color: #fff; border-color: #0f766e; }
+        .hidden { display: none !important; }
+        .data-table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        .data-table th, .data-table td { padding: 10px; border-bottom: 1px solid #e2e8f0; text-align: left; vertical-align: top; }
+        .data-table th { background: #f0fdfa; color: #115e59; font-size: 0.75rem; text-transform: uppercase; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; background: #ecfeff; color: #155e75; }
+        .badge-open { background: #fef3c7; color: #92400e; }
+        .msg { padding: 10px 12px; border-radius: 10px; margin-bottom: 8px; max-width: 85%; }
+        .msg-user { background: #f1f5f9; }
+        .msg-staff { background: #ccfbf1; margin-left: auto; }
+        .msg-held { opacity: 0.65; border: 1px dashed #f59e0b; }
+        #auth-overlay { position: fixed; inset: 0; background: rgba(15,118,110,0.2); display: flex; align-items: center; justify-content: center; padding: 16px; z-index: 100; }
+        .layout { display: grid; grid-template-columns: 1fr 320px; gap: 16px; }
+        @media (max-width: 900px) { .layout { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <div id="auth-overlay">
+        <div class="card" style="width:400px;max-width:100%;">
+            <h1>Support desk sign in</h1>
+            <p class="sub">For support agents only. Ask the super admin to assign the <strong>Support agent</strong> job role.</p>
+            <form id="support-login-form">
+                <div style="margin-bottom:12px;">
+                    <label>Email or portal user ID</label>
+                    <input type="text" id="support-login-email" autocomplete="username" required>
+                </div>
+                <div style="margin-bottom:14px;">
+                    <label>Password</label>
+                    <input type="password" id="support-login-password" autocomplete="current-password" required>
+                </div>
+                <button type="submit" class="btn btn-primary" style="width:100%;">Sign in</button>
+                <p id="support-login-msg" style="margin-top:10px;font-weight:600;font-size:0.88rem;"></p>
+            </form>
+        </div>
+    </div>
+
+    <div id="app-shell" class="hidden">
+        <div class="wrap">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:8px;">
+                <div>
+                    <h1>Support desk</h1>
+                    <p class="sub" id="support-user-label"></p>
+                    <p class="sub" id="support-duty-label"></p>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                    <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;margin:0;">
+                        <input type="checkbox" id="support-available-toggle" checked> Available for tickets
+                    </label>
+                    <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;margin:0;">
+                        <input type="checkbox" id="support-live-toggle" checked> Live chat
+                    </label>
+                    <button type="button" class="btn btn-muted" onclick="supportLogout()">Sign out</button>
+                </div>
+            </div>
+
+            <div class="tabs">
+                <button type="button" class="tab active" data-panel="tickets" onclick="supportSwitchTab('tickets')">My tickets</button>
+                <button type="button" class="tab" data-panel="queue" onclick="supportSwitchTab('queue')">Unassigned queue</button>
+                <button type="button" class="tab" data-panel="live" onclick="supportSwitchTab('live')">Live chat <span id="support-live-badge" class="badge badge-open hidden">0</span></button>
+                <button type="button" class="tab" data-panel="lookup" onclick="supportSwitchTab('lookup')">Account lookup</button>
+                <button type="button" class="tab" data-panel="assistant" onclick="supportSwitchTab('assistant')">Assistant</button>
+                <button type="button" class="tab" data-panel="inbox" onclick="supportSwitchTab('inbox')">Alerts <span id="support-inbox-badge" class="badge badge-open hidden">0</span></button>
+            </div>
+
+            <div id="panel-tickets" class="card">
+                <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+                    <button type="button" class="btn btn-primary" onclick="supportLoadTickets(true)">Refresh my queue</button>
+                </div>
+                <div id="support-tickets-root"><p>Loading…</p></div>
+            </div>
+
+            <div id="panel-queue" class="card hidden">
+                <button type="button" class="btn btn-primary" style="margin-bottom:12px;" onclick="supportLoadTickets(false)">Refresh queue</button>
+                <div id="support-queue-root"><p>Loading…</p></div>
+            </div>
+
+            <div id="panel-live" class="card hidden">
+                <p class="sub">Visitors from the website help widget appear here during business hours.</p>
+                <button type="button" class="btn btn-primary" style="margin-bottom:12px;" onclick="supportLoadLiveSessions()">Refresh</button>
+                <div id="support-live-root"><p style="color:#64748b;">No active sessions.</p></div>
+                <div id="support-live-chat-panel" class="hidden" style="margin-top:16px;border-top:1px solid #e2e8f0;padding-top:16px;">
+                    <h3 style="margin:0 0 8px;font-size:1rem;" id="support-live-chat-title">Live chat</h3>
+                    <div id="support-live-thread" style="min-height:160px;max-height:280px;overflow-y:auto;background:#f8fafc;border-radius:8px;padding:10px;margin-bottom:10px;"></div>
+                    <div style="display:flex;gap:8px;">
+                        <input type="text" id="support-live-input" placeholder="Reply to visitor…" style="flex:1;">
+                        <button type="button" class="btn btn-primary" onclick="supportSendLiveMessage()">Send</button>
+                        <button type="button" class="btn btn-muted" onclick="supportCloseLiveSession()">End</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="panel-lookup" class="card hidden">
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+                    <input type="search" id="support-lookup-q" placeholder="Portal ID, email, phone, application no., ticket ID…" style="flex:1;min-width:220px;">
+                    <button type="button" class="btn btn-primary" onclick="supportRunLookup()">Search</button>
+                </div>
+                <div id="support-lookup-root"><p style="color:#64748b;">Search for a participant account or application.</p></div>
+            </div>
+
+            <div id="panel-inbox" class="card hidden">
+                <div style="display:flex;gap:8px;margin-bottom:12px;">
+                    <button type="button" class="btn btn-primary" onclick="supportLoadInbox()">Refresh</button>
+                    <button type="button" class="btn btn-muted" onclick="supportMarkAllInboxRead()">Mark all read</button>
+                </div>
+                <div id="support-inbox-root"><p style="color:#64748b;">No alerts.</p></div>
+            </div>
+
+            <div id="panel-assistant" class="card hidden">
+                <p class="sub">Ask about a participant after searching — paste portal ID or application number in your question.</p>
+                <div id="support-assistant-log" style="min-height:180px;max-height:320px;overflow-y:auto;margin-bottom:12px;padding:8px;background:#f8fafc;border-radius:8px;"></div>
+                <div style="display:flex;gap:8px;">
+                    <input type="text" id="support-assistant-input" placeholder="e.g. Show pending payments for portal ID …">
+                    <button type="button" class="btn btn-primary" onclick="supportAssistantAsk()">Ask</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="support-ticket-modal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:50;padding:16px;overflow-y:auto;">
+        <div class="card layout" style="max-width:1100px;margin:0 auto;">
+            <div>
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;">
+                    <div>
+                        <h2 id="support-modal-title" style="margin:0 0 6px;font-size:1.1rem;"></h2>
+                        <p id="support-modal-meta" class="sub" style="margin:0;"></p>
+                    </div>
+                    <button type="button" class="btn btn-muted" onclick="supportCloseTicketModal()">Close</button>
+                </div>
+                <div id="support-modal-thread" style="margin:16px 0;max-height:360px;overflow-y:auto;"></div>
+                <textarea id="support-modal-reply" placeholder="Reply to participant…"></textarea>
+                <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+                    <button type="button" class="btn btn-primary" onclick="supportSendReply()">Send reply</button>
+                    <select id="support-transfer-agent" style="width:auto;min-width:180px;"><option value="">Transfer to agent…</option></select>
+                    <select id="support-transfer-dept" style="width:auto;min-width:160px;"><option value="">Department…</option></select>
+                    <button type="button" class="btn btn-muted" onclick="supportTransferTicket()">Transfer</button>
+                </div>
+                <p id="support-modal-msg" style="margin-top:8px;font-weight:600;font-size:0.88rem;"></p>
+            </div>
+            <div id="support-modal-side" class="card" style="margin:0;background:#f8fafc;">
+                <h3 style="margin:0 0 10px;font-size:0.95rem;">Participant</h3>
+                <div id="support-modal-user"><p style="color:#64748b;">Loading…</p></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="/js/fetch-json.js?v=20260527a"></script>
+    <script src="/js/portal-auth.js?v=20260609support1"></script>
+    <script src="/js/support-portal.js?v=20260609support2"></script>
+</body>
+</html>

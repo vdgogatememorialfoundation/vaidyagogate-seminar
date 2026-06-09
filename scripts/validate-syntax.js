@@ -26,7 +26,12 @@ const files = [
     path.join('lib', 'inbound-mail-reply.js'),
     path.join('lib', 'message-reply-address.js'),
     path.join('lib', 'case-upload-routes.js'),
-    path.join('lib', 'email-parser-normalize.js'),
+    path.join('lib', 'support-desk.js'),
+    path.join('lib', 'support-desk-routes.js'),
+    path.join('lib', 'support-desk-schema.js'),
+    path.join('lib', 'support-live-chat.js'),
+    path.join('lib', 'support-desk-notify.js'),
+    path.join('lib', 'support-desk-admin-routes.js'),
     path.join('public', 'js', 'fetch-json.js')
 ];
 

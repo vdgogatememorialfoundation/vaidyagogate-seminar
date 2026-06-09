@@ -48,6 +48,8 @@ const whatsappWebhook = require('./lib/whatsapp-webhook');
 const { ensureSupportTicketSchema } = require('./lib/support-tickets-schema');
 const supportTicketNotify = require('./lib/support-ticket-notify');
 const supportTicketSla = require('./lib/support-ticket-sla');
+const supportDesk = require('./lib/support-desk');
+const { ensureSupportDeskSchema } = require('./lib/support-desk-schema');
 const { ensureContactInquiriesSchema } = require('./lib/contact-inquiries-schema');
 const paymentsMod = require('./lib/payments-module');
 const adminPaymentFlow = require('./lib/admin-payment-flow');
@@ -517,9 +519,17 @@ app.get('/scanner/', (req, res) => {
 });
 
 const staffPortalHtml = path.join(__dirname, 'public', 'staff.html');
+const supportPortalHtml = path.join(__dirname, 'public', 'support.html');
 const adminPortalHtml = path.join(__dirname, 'public', 'admin.html');
 app.get(['/staff/login', '/staff'], (req, res) => {
     res.sendFile(staffPortalHtml);
+});
+app.get(['/support/login', '/support'], (req, res) => {
+    res.sendFile(supportPortalHtml);
+});
+app.get(['/support/desk', '/support/desk/'], (req, res) => {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.sendFile(supportPortalHtml);
 });
 app.get(['/staff/crm', '/staff/crm/'], (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
@@ -2671,7 +2681,12 @@ function withAuxiliaryTables(req, res, next) {
 function withSupportTickets(req, res, next) {
     if (!supportTicketSchemaPromise) {
         supportTicketSchemaPromise = new Promise((resolve) => {
-            const run = () => ensureSupportTicketSchema(db, ignoreSchemaMigrationErr, resolve);
+            const run = () =>
+                ensureSupportTicketSchema(db, ignoreSchemaMigrationErr, () => {
+                    ensureSupportDeskSchema(db, () => {
+                        supportDesk.loadConfig(db, () => resolve());
+                    });
+                });
             if (pgDb && typeof pgDb.ensureAuxiliaryTables === 'function') {
                 pgDb
                     .ensureAuxiliaryTables()
@@ -3999,6 +4014,11 @@ app.post('/api/auth/login', withAuxiliaryTables, (req, res) => {
                     if (ur === 'judge_user' || ur === 'reviewer') {
                         return res.status(403).json({
                             error: 'Judge accounts must use the judge portal at /judge.html.'
+                        });
+                    }
+                    if (ur === 'support_agent') {
+                        return res.status(403).json({
+                            error: 'Support agents must use the support desk at /support.html.'
                         });
                     }
                     return res.status(403).json({
@@ -9249,6 +9269,8 @@ app.post('/api/admin/support-ticket-config', (req, res) => {
     });
 });
 
+require('./lib/support-desk-admin-routes').registerSupportDeskAdminRoutes(app, db, assertAdminPortalActor);
+
 app.post('/api/admin/pending-registration-reminder-config', (req, res) => {
     const { actingAdminId, config } = req.body || {};
     const aid = parseInt(actingAdminId, 10);
@@ -11627,19 +11649,7 @@ app.post('/api/public/contact-inquiry', (req, res) => {
                     }
                     return res.status(500).json({ error: err.message });
                 }
-                const inquiryId = this.lastID;
-                const threadReplyNotify = require('./lib/thread-reply-notify');
-                threadReplyNotify.notifyStaffInbox(
-                    db,
-                    {
-                        threadLabel: 'Website contact — ' + sub,
-                        messagePreview: msg,
-                        dashboardUrl: threadReplyNotify.dashboardUrl('admin_contact_inquiries'),
-                        intro: 'A new message was submitted on the public contact form.'
-                    },
-                    () => {}
-                );
-                res.json({ success: true, id: inquiryId });
+                res.json({ success: true, id: this.lastID });
             }
         );
     });
@@ -11704,7 +11714,6 @@ app.post('/api/admin/contact-inquiries/:id/send-email', async (req, res) => {
             if (e2) return res.status(500).json({ error: e2.message });
             if (!row) return res.status(404).json({ error: 'Inquiry not found' });
             const staffDisplay = require('./lib/staff-display-name');
-            const messageReplyAddress = require('./lib/message-reply-address');
             db.get(
                 `SELECT id, first_name, middle_name, last_name, email FROM users WHERE id = ?`,
                 [aid],
@@ -11714,10 +11723,7 @@ app.post('/api/admin/contact-inquiries/:id/send-email', async (req, res) => {
                         'Thank you for contacting the Vaidya Gogate Memorial Foundation.\n\nRegarding your message: "' +
                         String(row.subject || '').slice(0, 120) +
                         '"\n\n';
-                    const refToken = messageReplyAddress.contactRefToken(id);
-                    const replyTo = messageReplyAddress.buildContactReplyAddress(id);
-                    const fullBody =
-                        replyIntro + b + messageReplyAddress.replyFooterNote(replyTo, refToken);
+                    const fullBody = replyIntro + b;
                     let result;
                     try {
                         result = await adminComposeMail.sendSingleMailReliable(db, {
@@ -11725,7 +11731,7 @@ app.post('/api/admin/contact-inquiries/:id/send-email', async (req, res) => {
                             name: row.name,
                             subject: sub,
                             body: fullBody,
-                            replyTo: replyTo || undefined,
+                            replyTo: (staffRow && staffRow.email) || undefined,
                             fromDisplay: staffDisplay.formatStaffFromDisplay(staffRow)
                         });
                     } catch (mailErr) {
@@ -12134,7 +12140,7 @@ function fetchTicketMessages(ticketRow, cb) {
         const ph = ids.map(() => '?').join(',');
         db.all(
             `SELECT tm.id, tm.ticket_id, tm.sender_id, tm.sender_type, tm.message, tm.attachment_path, tm.created_at,
-                    tm.source, u.first_name, u.last_name
+                    tm.source, tm.visible_at, u.first_name, u.last_name
              FROM ticket_messages tm
              LEFT JOIN users u ON tm.sender_id = u.id
              WHERE tm.ticket_id IN (${ph})
@@ -12197,12 +12203,21 @@ function fetchTicketMessages(ticketRow, cb) {
     });
 }
 
-function getSupportTicketPayload(ticketRef, cb) {
+function getSupportTicketPayload(ticketRef, options, cb) {
+    if (typeof options === 'function') {
+        cb = options;
+        options = {};
+    }
+    const opts = options || {};
     resolveSupportTicketByRef(ticketRef, (err, ticket) => {
         if (err) return cb(err);
         if (!ticket) return cb(null, null);
         fetchTicketMessages(ticket, (e2, messages) => {
             if (e2) return cb(e2);
+            let msgs = messages || [];
+            if (!opts.includeHiddenMessages) {
+                msgs = supportDesk.filterMessagesForUserView(msgs);
+            }
             const tid = canonicalTicketMessageId(ticket);
             const assignedAdminName = staffDisplay.formatStaffPersonName({
                 first_name: ticket.assigned_admin_first_name,
@@ -12211,7 +12226,7 @@ function getSupportTicketPayload(ticketRef, cb) {
             });
             cb(null, Object.assign({}, ticket, {
                 ticket_id: tid,
-                messages: messages || [],
+                messages: msgs,
                 assigned_admin_name: assignedAdminName !== 'Support team' ? assignedAdminName : ''
             }));
         });
@@ -12238,23 +12253,29 @@ function createSupportTicketRecord(opts, cb) {
             [ticketId, ticketId, uid, cat, subject, description, opts.attachment_path || null, opts.priority || 'medium', expectedAt],
             function (err) {
                 if (err) return cb(err);
-                db.run(
-                    `INSERT INTO ticket_messages (ticket_id, sender_id, sender_type, message) VALUES (?, ?, ?, ?)`,
-                    [ticketId, senderId, senderType, description],
-                    function (err2) {
-                        if (err2) return cb(err2);
-                        supportTicketNotify.notifySupportTicketCreated(db, ticketId, (nErr) => {
-                            if (nErr) console.warn('[support-ticket] create notify:', nErr.message);
-                            cb(null, {
-                                ticketId,
-                                userId: uid,
-                                expectedResponseAt: expectedAt,
-                                expectedResponseHours: slaMeta && slaMeta.hours,
-                                expectedResponseDisplay: supportTicketSla.formatExpectedDisplay(expectedAt)
-                            });
-                        });
+                const ticketDbId = this.lastID;
+                db.get(`SELECT * FROM support_tickets WHERE id = ?`, [ticketDbId], (eRow, ticketRow) => {
+                    if (!eRow && ticketRow) {
+                        supportDesk.autoAssignTicket(db, ticketRow, () => {});
                     }
-                );
+                    db.run(
+                        `INSERT INTO ticket_messages (ticket_id, sender_id, sender_type, message) VALUES (?, ?, ?, ?)`,
+                        [ticketId, senderId, senderType, description],
+                        function (err2) {
+                            if (err2) return cb(err2);
+                            supportTicketNotify.notifySupportTicketCreated(db, ticketId, (nErr) => {
+                                if (nErr) console.warn('[support-ticket] create notify:', nErr.message);
+                                cb(null, {
+                                    ticketId,
+                                    userId: uid,
+                                    expectedResponseAt: expectedAt,
+                                    expectedResponseHours: slaMeta && slaMeta.hours,
+                                    expectedResponseDisplay: supportTicketSla.formatExpectedDisplay(expectedAt)
+                                });
+                            });
+                        }
+                    );
+                });
             }
         );
     };
@@ -12270,6 +12291,16 @@ function createSupportTicketRecord(opts, cb) {
         afterSla(supportTicketSla.computeExpectedResponseAt(cat));
     });
 }
+
+app.use('/api/support-desk', withSupportTickets);
+app.use('/api/public/support', withSupportTickets);
+require('./lib/support-desk-routes').registerSupportDeskRoutes(app, {
+    db,
+    loadPublicSiteCms,
+    getSupportTicketPayload,
+    resolveSupportTicketByRef,
+    canonicalTicketMessageId
+});
 
 app.use('/api/support-ticket', withSupportTickets);
 app.use('/api/admin/support-ticket', withSupportTickets);
@@ -12410,11 +12441,13 @@ app.post('/api/support-ticket/:ticketId/reply', (req, res) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
         const canonical = canonicalTicketMessageId(ticket);
+        const isStaff = supportDesk.isStaffSenderType(senderType);
+        const visibleAt = isStaff ? supportDesk.computeVisibleAtForStaffReply(ticket) : null;
 
         db.run(
-            `INSERT INTO ticket_messages (ticket_id, sender_id, sender_type, message, attachment_path) 
-            VALUES (?, ?, ?, ?, ?)`,
-            [canonical, senderId, senderType, msg, attachment_path || null],
+            `INSERT INTO ticket_messages (ticket_id, sender_id, sender_type, message, attachment_path, visible_at) 
+            VALUES (?, ?, ?, ?, ?, ?)`,
+            [canonical, senderId, senderType, msg, attachment_path || null, visibleAt],
             function (err2) {
                 if (err2) return res.status(500).json({ error: err2.message });
                 const messageId = this.lastID;
@@ -12423,18 +12456,28 @@ app.post('/api/support-ticket/:ticketId/reply', (req, res) => {
                     `UPDATE support_tickets SET updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
                     [ticket.id],
                     () => {
-                        supportTicketNotify.notifySupportTicketReply(
-                            db,
-                            canonical,
-                            senderType,
-                            msg,
-                            senderId,
-                            (nErr) => {
-                                if (nErr) console.warn('[support-ticket] reply notify:', nErr.message);
-                                flushNotificationQueue();
-                                res.json({ success: true, messageId });
-                            }
-                        );
+                        if (!isStaff || !visibleAt) {
+                            supportTicketNotify.notifySupportTicketReply(
+                                db,
+                                canonical,
+                                senderType,
+                                msg,
+                                senderId,
+                                (nErr) => {
+                                    if (nErr) console.warn('[support-ticket] reply notify:', nErr.message);
+                                    flushNotificationQueue();
+                                    res.json({ success: true, messageId, heldUntil: visibleAt || null });
+                                }
+                            );
+                        } else {
+                            flushNotificationQueue();
+                            res.json({
+                                success: true,
+                                messageId,
+                                heldUntil: visibleAt,
+                                note: 'Reply hidden from participant until expected response time.'
+                            });
+                        }
                     }
                 );
             }
