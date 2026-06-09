@@ -13229,15 +13229,34 @@ async function loadSupportDeskAgentsAdmin() {
             fetch('/api/admin/support-desk/agents?actingAdminId=' + encodeURIComponent(adm.id)),
             fetch('/api/admin/support-desk/departments?actingAdminId=' + encodeURIComponent(adm.id))
         ]);
-        const agents = (await aRes.json()).agents || [];
-        const depts = (await dRes.json()).departments || [];
+        const aData = await aRes.json().catch(() => ({}));
+        const dData = await dRes.json().catch(() => ({}));
+        if (!aRes.ok) {
+            root.innerHTML =
+                '<p style="color:#b91c1c;">Could not load agents: ' +
+                escapeHtml(aData.error || 'HTTP ' + aRes.status) +
+                '</p>';
+            return;
+        }
+        const agents = Array.isArray(aData.agents) ? aData.agents : [];
+        const depts = Array.isArray(dData.departments) ? dData.departments : [];
         if (holSel) {
             holSel.innerHTML =
                 '<option value="">All agents</option>' +
-                agents.map((a) => '<option value="' + a.id + '">' + escHtml(a.first_name + ' ' + (a.last_name || '')) + '</option>').join('');
+                agents
+                    .map(
+                        (a) =>
+                            '<option value="' +
+                            a.id +
+                            '">' +
+                            escapeHtml(a.first_name + ' ' + (a.last_name || '')) +
+                            '</option>'
+                    )
+                    .join('');
         }
         if (!agents.length) {
-            root.innerHTML = '<p style="color:#64748b;">No support agents yet. Create a staff user with job role <strong>Support agent</strong>.</p>';
+            root.innerHTML =
+                '<p style="color:#64748b;">No support agents yet. Create a staff user with job role <strong>Support agent</strong> (or staff with support tickets module).</p>';
             return;
         }
         root.innerHTML =
@@ -13252,7 +13271,7 @@ async function loadSupportDeskAgentsAdmin() {
                                 '"' +
                                 (a.department_id == d.id ? ' selected' : '') +
                                 '>' +
-                                escHtml(d.name) +
+                                escapeHtml(d.name) +
                                 '</option>'
                         )
                         .join('');
@@ -13260,16 +13279,16 @@ async function loadSupportDeskAgentsAdmin() {
                         '<tr data-agent-id="' +
                         a.id +
                         '"><td>' +
-                        escHtml(a.first_name + ' ' + (a.last_name || '')) +
+                        escapeHtml(a.first_name + ' ' + (a.last_name || '')) +
                         '<br><span style="font-size:0.78rem;color:#64748b;">' +
-                        escHtml(a.email) +
+                        escapeHtml(a.email) +
                         '</span></td><td>' +
-                        escHtml(a.user_role) +
+                        escapeHtml(a.user_role) +
                         '</td><td><select class="sd-agent-dept" style="padding:6px;">' +
                         '<option value="">—</option>' +
                         deptOpts +
                         '</select></td><td><input type="number" class="sd-agent-max" min="1" max="100" value="' +
-                        escHtml(String(a.max_open_tickets || 15)) +
+                        escapeHtml(String(a.max_open_tickets || 15)) +
                         '" style="width:70px;padding:6px;"></td><td><input type="checkbox" class="sd-agent-avail"' +
                         (a.is_available !== 0 ? ' checked' : '') +
                         '></td><td><input type="checkbox" class="sd-agent-live"' +
@@ -13282,7 +13301,8 @@ async function loadSupportDeskAgentsAdmin() {
                 .join('') +
             '</tbody></table>';
     } catch (e) {
-        root.innerHTML = '<p style="color:#b91c1c;">Failed to load agents.</p>';
+        root.innerHTML =
+            '<p style="color:#b91c1c;">Failed to load agents: ' + escapeHtml(e.message || 'Network error') + '</p>';
     }
 }
 
@@ -13329,11 +13349,11 @@ async function loadSupportDeskHolidaysAdmin() {
                 .map(
                     (h) =>
                         '<tr><td>' +
-                        escHtml(h.holiday_date) +
+                        escapeHtml(h.holiday_date) +
                         '</td><td>' +
-                        escHtml(h.label || '—') +
+                        escapeHtml(h.label || '—') +
                         '</td><td>' +
-                        escHtml(h.first_name ? h.first_name + ' ' + (h.last_name || '') : 'All agents') +
+                        escapeHtml(h.first_name ? h.first_name + ' ' + (h.last_name || '') : 'All agents') +
                         '</td><td><button type="button" class="btn-muted" style="padding:4px 8px;font-size:0.78rem;" onclick="deleteSupportDeskHolidayAdmin(' +
                         h.id +
                         ')">Remove</button></td></tr>'
