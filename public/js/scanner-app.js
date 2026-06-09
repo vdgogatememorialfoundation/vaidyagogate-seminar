@@ -117,6 +117,7 @@
     let facingMode = 'environment';
     let stats = { ok: 0, err: 0, dup: 0 };
     let torchOn = false;
+    let scannerMediaTrack = null;
     let scanBusy = false;
     let lastScanKey = '';
     let lastScanAt = 0;
@@ -803,6 +804,109 @@
         }
     }
 
+    function getScannerVideoTrack() {
+        if (scannerMediaTrack && scannerMediaTrack.readyState === 'live') {
+            return scannerMediaTrack;
+        }
+        const reader = document.getElementById('reader');
+        if (reader) {
+            const video = reader.querySelector('video');
+            if (video && video.srcObject instanceof MediaStream) {
+                const t = video.srcObject.getVideoTracks()[0];
+                if (t && t.readyState === 'live') return t;
+            }
+        }
+        if (html5QrCode) {
+            const streams = [
+                html5QrCode._localMediaStream,
+                html5QrCode._mediaStream,
+                html5QrCode._stream,
+                html5QrCode._qrRegionCamera && html5QrCode._qrRegionCamera._localMediaStream
+            ];
+            for (let i = 0; i < streams.length; i++) {
+                const s = streams[i];
+                if (s && typeof s.getVideoTracks === 'function') {
+                    const t = s.getVideoTracks()[0];
+                    if (t && t.readyState === 'live') return t;
+                }
+            }
+        }
+        return null;
+    }
+
+    function refreshScannerMediaTrack() {
+        scannerMediaTrack = getScannerVideoTrack();
+        return scannerMediaTrack;
+    }
+
+    function waitForScannerVideo(maxMs) {
+        const limit = maxMs || 4000;
+        return new Promise((resolve) => {
+            const t0 = Date.now();
+            const tick = () => {
+                if (refreshScannerMediaTrack()) return resolve(true);
+                if (Date.now() - t0 >= limit) return resolve(false);
+                requestAnimationFrame(tick);
+            };
+            tick();
+        });
+    }
+
+    async function applyTorchToTrack(track, on) {
+        if (!track || track.readyState === 'ended') return false;
+        const value = !!on;
+        const attempts = [
+            { advanced: [{ torch: value }] },
+            { torch: value },
+            { advanced: [{ fillLightMode: value ? 'flash' : 'off' }] },
+            { fillLightMode: value ? 'flash' : 'off' }
+        ];
+        for (let i = 0; i < attempts.length; i++) {
+            try {
+                await track.applyConstraints(attempts[i]);
+                return true;
+            } catch (_) {}
+        }
+        return false;
+    }
+
+    async function restartCameraWithTorch(wantTorch) {
+        if (html5QrCode) {
+            try {
+                await html5QrCode.stop();
+            } catch (_) {}
+        }
+        scannerMediaTrack = null;
+        html5QrCode = new Html5Qrcode('reader');
+        const config = { fps: 15, qrbox: { width: 260, height: 260 }, aspectRatio: 1, disableFlip: false };
+        const cameraConfigs = wantTorch
+            ? [
+                  { facingMode: { exact: facingMode }, advanced: [{ torch: true }] },
+                  { facingMode: facingMode, advanced: [{ torch: true }] },
+                  { facingMode: { ideal: facingMode }, advanced: [{ torch: true }] },
+                  { facingMode: facingMode, torch: true }
+              ]
+            : [{ facingMode: facingMode }];
+        for (let i = 0; i < cameraConfigs.length; i++) {
+            try {
+                await html5QrCode.start(cameraConfigs[i], config, (text) => processScan(text));
+                await waitForScannerVideo(3000);
+                if (wantTorch) {
+                    const track = refreshScannerMediaTrack();
+                    if (track) await applyTorchToTrack(track, true);
+                }
+                return true;
+            } catch (_) {}
+        }
+        try {
+            await html5QrCode.start({ facingMode }, config, (text) => processScan(text));
+            await waitForScannerVideo(3000);
+            return !wantTorch;
+        } catch (e) {
+            throw e;
+        }
+    }
+
     async function startCam() {
         if (html5QrCode) {
             try {
@@ -810,10 +914,25 @@
             } catch (_) {}
         }
         torchOn = false;
+        scannerMediaTrack = null;
         updateTorchButton();
         html5QrCode = new Html5Qrcode('reader');
         const config = { fps: 15, qrbox: { width: 260, height: 260 }, aspectRatio: 1, disableFlip: false };
-        await html5QrCode.start({ facingMode }, config, (text) => processScan(text));
+        const cameraTry = [
+            { facingMode: { ideal: facingMode } },
+            { facingMode: facingMode }
+        ];
+        let started = false;
+        for (let i = 0; i < cameraTry.length && !started; i++) {
+            try {
+                await html5QrCode.start(cameraTry[i], config, (text) => processScan(text));
+                started = true;
+            } catch (_) {}
+        }
+        if (!started) {
+            await html5QrCode.start({ facingMode }, config, (text) => processScan(text));
+        }
+        await waitForScannerVideo(4000);
     }
 
     function showLogin() {
@@ -888,28 +1007,42 @@
     }
 
     async function setTorch(on) {
-        try {
-            const track = html5QrCode?._localMediaStream?.getVideoTracks?.()[0];
-            if (!track) {
-                alert('Start the camera first.');
-                return false;
-            }
-            const caps = track.getCapabilities?.() || {};
-            if (caps.torch) {
-                await track.applyConstraints({ advanced: [{ torch: !!on }] });
-            } else if (caps.fillLightMode && caps.fillLightMode.includes('flash')) {
-                await track.applyConstraints({ advanced: [{ fillLightMode: on ? 'flash' : 'off' }] });
-            } else {
-                alert('Torch not supported on this device or browser.');
-                return false;
-            }
-            torchOn = !!on;
-            updateTorchButton();
-            return true;
-        } catch (e) {
-            alert('Torch not available.');
+        const want = !!on;
+        let track = refreshScannerMediaTrack();
+        if (!track) {
+            alert('Start the camera first.');
             return false;
         }
+        let ok = await applyTorchToTrack(track, want);
+        if (!ok && want) {
+            try {
+                ok = await restartCameraWithTorch(true);
+            } catch (_) {
+                ok = false;
+            }
+        }
+        if (!ok && !want) {
+            ok = await applyTorchToTrack(track, false);
+            if (!ok) {
+                try {
+                    ok = await restartCameraWithTorch(false);
+                } catch (_) {
+                    ok = false;
+                }
+            }
+        }
+        if (ok) {
+            torchOn = want;
+            updateTorchButton();
+            refreshScannerMediaTrack();
+            return true;
+        }
+        alert(
+            want
+                ? 'Torch could not be enabled. Use the rear camera, allow camera permission, and try again.'
+                : 'Torch could not be turned off. Restart the scanner page if the light stays on.'
+        );
+        return false;
     }
 
     document.getElementById('btn-torch')?.addEventListener('click', async () => {
