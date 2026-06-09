@@ -125,7 +125,7 @@
 
             <div id="panel-lookup" class="card hidden">
                 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
-                    <input type="search" id="support-lookup-q" placeholder="Portal ID, email, phone, application no., ticket ID…" style="flex:1;min-width:220px;">
+                    <input type="search" id="support-lookup-q" placeholder="Portal ID, email, phone, application no., ticket ID…" style="flex:1;min-width:220px;" onkeydown="if(event.key==='Enter')supportRunLookup()">
                     <button type="button" class="btn btn-primary" onclick="supportRunLookup()">Search</button>
                 </div>
                 <div id="support-lookup-root"><p style="color:#64748b;">Search for a participant account or application.</p></div>
@@ -179,6 +179,6 @@
 
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-auth.js?v=20260609support2"></script>
-    <script src="/js/support-portal.js?v=20260609support4"></script>
+    <script src="/js/support-portal.js?v=20260609lookup1"></script>
 </body>
 </html>

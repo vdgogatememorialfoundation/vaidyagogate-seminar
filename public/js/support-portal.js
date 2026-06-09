@@ -2,6 +2,8 @@
     let currentUser = null;
     let currentTicketRef = null;
     let lastLookup = null;
+    let lastLookupQuery = '';
+    let lastLookupResults = null;
     let currentLiveSessionId = null;
     let livePollTimer = null;
     let liveMsgSince = 0;
@@ -222,55 +224,282 @@
         }
     };
 
+    function formatSupportWhen(iso) {
+        if (!iso) return '—';
+        try {
+            return (
+                new Date(iso).toLocaleString('en-IN', {
+                    timeZone: 'Asia/Kolkata',
+                    dateStyle: 'medium',
+                    timeStyle: 'short'
+                }) + ' IST'
+            );
+        } catch (_) {
+            return String(iso);
+        }
+    }
+
+    function supportStatusBadge(status) {
+        const s = String(status || '').toLowerCase();
+        let color = '#64748b';
+        if (s === 'open' || s === 'approved' || s === 'success' || s === 'paid') color = '#059669';
+        else if (s === 'in_progress' || s === 'pending' || s === 'waiting') color = '#d97706';
+        else if (s === 'closed' || s === 'resolved' || s === 'rejected') color = '#64748b';
+        return (
+            '<span style="display:inline-block;background:' +
+            color +
+            '22;color:' +
+            color +
+            ';padding:2px 8px;border-radius:999px;font-size:0.78rem;font-weight:700;">' +
+            esc(status || '—') +
+            '</span>'
+        );
+    }
+
+    function renderSupportTrackCard(track) {
+        if (!track || track.error) {
+            return track && track.error
+                ? '<p style="color:#64748b;font-size:0.88rem;margin:0 0 12px;">' + esc(track.error) + '</p>'
+                : '';
+        }
+        if (track.type === 'seminar') {
+            return (
+                '<div class="card" style="background:#ecfdf5;border:1px solid #99f6e4;margin-bottom:14px;padding:12px;">' +
+                '<strong style="color:#0f766e;">Seminar application</strong>' +
+                '<p style="margin:8px 0 0;font-size:0.88rem;"><code>' +
+                esc(track.applicationNo) +
+                '</code> · ' +
+                supportStatusBadge(track.status) +
+                (track.seminarTitle ? '<br>Seminar: ' + esc(track.seminarTitle) : '') +
+                (track.participant && track.participant.portalId
+                    ? '<br>Portal ID: <code>' + esc(track.participant.portalId) + '</code>'
+                    : '') +
+                '</p></div>'
+            );
+        }
+        if (track.type === 'case') {
+            return (
+                '<div class="card" style="background:#eff6ff;border:1px solid #bfdbfe;margin-bottom:14px;padding:12px;">' +
+                '<strong style="color:#1d4ed8;">Case submission</strong>' +
+                '<p style="margin:8px 0 0;font-size:0.88rem;"><code>' +
+                esc(track.applicationNo) +
+                '</code> · ' +
+                supportStatusBadge(track.status) +
+                (track.programTitle ? '<br>Program: ' + esc(track.programTitle) : '') +
+                '</p></div>'
+            );
+        }
+        if (track.type === 'support_ticket') {
+            return (
+                '<div class="card" style="background:#fef3c7;border:1px solid #fcd34d;margin-bottom:14px;padding:12px;">' +
+                '<strong style="color:#92400e;">Support ticket match</strong>' +
+                '<p style="margin:8px 0 0;font-size:0.88rem;"><code>' +
+                esc(track.ticketRef) +
+                '</code> · ' +
+                supportStatusBadge(track.status) +
+                (track.subject ? '<br>' + esc(track.subject) : '') +
+                '<br><button type="button" class="btn btn-primary" style="margin-top:8px;padding:6px 10px;font-size:0.8rem;" onclick="supportOpenTicket(' +
+                JSON.stringify(String(track.ticketRef || '')) +
+                ')">Open ticket</button></p></div>'
+            );
+        }
+        return '';
+    }
+
+    function renderSupportUserSummary(summary, opts) {
+        opts = opts || {};
+        const u = summary.user || {};
+        const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || '—';
+        let html = '';
+        if (opts.showBack) {
+            html +=
+                '<button type="button" class="btn btn-muted" style="margin-bottom:12px;" onclick="supportLookupBack()">← Back to search</button>';
+        }
+        html +=
+            '<div class="card" style="background:#f0fdfa;border:1px solid #99f6e4;margin-bottom:14px;padding:14px;">' +
+            '<h3 style="margin:0 0 10px;font-size:1.05rem;color:#0f766e;">' +
+            esc(name) +
+            '</h3>' +
+            '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;font-size:0.88rem;">' +
+            '<div><strong>Portal ID</strong><br><code>' +
+            esc(u.user_id_string || '—') +
+            '</code></div>' +
+            '<div><strong>Email</strong><br>' +
+            esc(u.email || '—') +
+            '</div>' +
+            '<div><strong>Phone</strong><br>' +
+            esc(u.phone || '—') +
+            '</div>' +
+            '<div><strong>Role</strong><br>' +
+            esc(u.user_role || '—') +
+            '</div>' +
+            '<div><strong>Joined</strong><br>' +
+            esc(formatSupportWhen(u.created_at)) +
+            '</div></div></div>';
+
+        const regs = summary.registrations || [];
+        html += '<h4 style="margin:0 0 8px;font-size:0.95rem;">Seminar registrations (' + regs.length + ')</h4>';
+        if (!regs.length) {
+            html += '<p style="color:#64748b;font-size:0.88rem;margin:0 0 16px;">No seminar registrations on file.</p>';
+        } else {
+            html +=
+                '<table class="data-table" style="margin-bottom:16px;"><thead><tr><th>Application</th><th>Status</th><th>Created</th></tr></thead><tbody>' +
+                regs
+                    .map(
+                        (r) =>
+                            '<tr><td><code>' +
+                            esc(r.application_no) +
+                            '</code></td><td>' +
+                            supportStatusBadge(r.status) +
+                            '</td><td>' +
+                            esc(formatSupportWhen(r.created_at)) +
+                            '</td></tr>'
+                    )
+                    .join('') +
+                '</tbody></table>';
+        }
+
+        const tickets = summary.tickets || [];
+        html += '<h4 style="margin:0 0 8px;font-size:0.95rem;">Support tickets (' + tickets.length + ')</h4>';
+        if (!tickets.length) {
+            html += '<p style="color:#64748b;font-size:0.88rem;margin:0 0 16px;">No support tickets.</p>';
+        } else {
+            html +=
+                '<table class="data-table" style="margin-bottom:16px;"><thead><tr><th>Ticket</th><th>Subject</th><th>Status</th><th>Category</th><th></th></tr></thead><tbody>' +
+                tickets
+                    .map((t) => {
+                        const ref = t.ticket_id || t.tracking_id || '';
+                        return (
+                            '<tr><td><code>' +
+                            esc(ref) +
+                            '</code></td><td>' +
+                            esc(t.subject || '—') +
+                            '</td><td>' +
+                            supportStatusBadge(t.status) +
+                            '</td><td>' +
+                            esc(t.category || '—') +
+                            '</td><td><button type="button" class="btn btn-primary" style="padding:4px 8px;font-size:0.78rem;" onclick="supportOpenTicket(' +
+                            JSON.stringify(String(ref)) +
+                            ')">Open</button></td></tr>'
+                        );
+                    })
+                    .join('') +
+                '</tbody></table>';
+        }
+
+        const orders = summary.orders || [];
+        html += '<h4 style="margin:0 0 8px;font-size:0.95rem;">Orders / payments (' + orders.length + ')</h4>';
+        if (!orders.length) {
+            html += '<p style="color:#64748b;font-size:0.88rem;margin:0;">No payment orders on file.</p>';
+        } else {
+            html +=
+                '<table class="data-table"><thead><tr><th>Order</th><th>Application</th><th>Amount</th><th>Status</th><th>Paid</th></tr></thead><tbody>' +
+                orders
+                    .map(
+                        (o) =>
+                            '<tr><td><code>' +
+                            esc(o.order_id_string || '—') +
+                            '</code></td><td>' +
+                            esc(o.application_no || '—') +
+                            '</td><td>₹' +
+                            esc(o.amount != null ? o.amount : '—') +
+                            '</td><td>' +
+                            supportStatusBadge(o.status) +
+                            '</td><td>' +
+                            esc(formatSupportWhen(o.payment_date)) +
+                            '</td></tr>'
+                    )
+                    .join('') +
+                '</tbody></table>';
+        }
+        return html;
+    }
+
+    function renderSupportLookupResults(data) {
+        let html = renderSupportTrackCard(data.track);
+        const users = data.users || [];
+        if (!users.length) {
+            html += '<p style="color:#64748b;">No matching doctor accounts. Try portal ID, email, or phone.</p>';
+            return html;
+        }
+        html +=
+            '<table class="data-table"><thead><tr><th>Portal ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Registrations</th><th>Open tickets</th><th></th></tr></thead><tbody>';
+        html += users
+            .map(
+                (u) =>
+                    '<tr><td><code>' +
+                    esc(u.user_id_string) +
+                    '</code></td><td>' +
+                    esc([u.first_name, u.last_name].filter(Boolean).join(' ')) +
+                    '</td><td>' +
+                    esc(u.email) +
+                    '</td><td>' +
+                    esc(u.phone || '—') +
+                    '</td><td>' +
+                    esc(u.registration_count != null ? u.registration_count : '0') +
+                    '</td><td>' +
+                    esc(u.open_tickets != null ? u.open_tickets : '0') +
+                    '</td><td><button type="button" class="btn btn-primary" style="padding:6px 10px;font-size:0.8rem;" onclick="supportShowUser(' +
+                    u.id +
+                    ', true)">View account</button></td></tr>'
+            )
+            .join('');
+        html += '</tbody></table>';
+        return html;
+    }
+
+    window.supportLookupBack = function () {
+        const root = document.getElementById('support-lookup-root');
+        if (!root) return;
+        if (lastLookupResults) {
+            root.innerHTML = renderSupportLookupResults(lastLookupResults);
+            lastLookup = lastLookupResults;
+            return;
+        }
+        if (lastLookupQuery) {
+            document.getElementById('support-lookup-q').value = lastLookupQuery;
+            supportRunLookup();
+        }
+    };
+
     window.supportRunLookup = async function () {
         const q = document.getElementById('support-lookup-q').value.trim();
         const root = document.getElementById('support-lookup-root');
         if (!q) return;
+        lastLookupQuery = q;
         root.innerHTML = '<p>Searching…</p>';
         try {
             const data = await api('/api/support-desk/lookup?q=' + encodeURIComponent(q));
+            lastLookupResults = data;
             lastLookup = data;
-            let html = '';
-            if (data.track) {
-                html +=
-                    '<div class="card" style="background:#ecfdf5;margin-bottom:12px;"><strong>Track result</strong><pre style="white-space:pre-wrap;font-size:0.85rem;">' +
-                    esc(JSON.stringify(data.track, null, 2)) +
-                    '</pre></div>';
+            const users = data.users || [];
+            if (users.length === 1) {
+                const u = users[0];
+                const exactPortal = u.user_id_string && String(u.user_id_string) === q;
+                const exactEmail = u.email && String(u.email).toLowerCase() === q.toLowerCase();
+                const exactPhone = u.phone && String(u.phone).replace(/\D/g, '') === q.replace(/\D/g, '');
+                if (exactPortal || exactEmail || exactPhone || /^\d{6,}$/.test(q)) {
+                    return supportShowUser(u.id, true);
+                }
             }
-            html += '<table class="data-table"><thead><tr><th>Portal ID</th><th>Name</th><th>Email</th><th>Open tickets</th><th></th></tr></thead><tbody>';
-            html += (data.users || [])
-                .map(
-                    (u) =>
-                        '<tr><td><code>' +
-                        esc(u.user_id_string) +
-                        '</code></td><td>' +
-                        esc(u.first_name + ' ' + (u.last_name || '')) +
-                        '</td><td>' +
-                        esc(u.email) +
-                        '</td><td>' +
-                        esc(u.open_tickets) +
-                        '</td><td><button type="button" class="btn btn-primary" style="padding:6px 10px;font-size:0.8rem;" onclick="supportShowUser(' +
-                        u.id +
-                        ')">Details</button></td></tr>'
-                )
-                .join('');
-            html += '</tbody></table>';
-            root.innerHTML = html;
+            root.innerHTML = renderSupportLookupResults(data);
         } catch (e) {
             root.innerHTML = '<p style="color:#b91c1c;">' + esc(e.message) + '</p>';
         }
     };
 
-    window.supportShowUser = async function (userId) {
+    window.supportShowUser = async function (userId, showBack) {
+        const root = document.getElementById('support-lookup-root');
+        if (root) root.innerHTML = '<p>Loading account…</p>';
         try {
             const summary = await api('/api/support-desk/user/' + userId + '/summary');
-            lastLookup = { summary };
-            document.getElementById('support-lookup-root').innerHTML =
-                '<pre style="white-space:pre-wrap;font-size:0.85rem;background:#f8fafc;padding:12px;border-radius:8px;">' +
-                esc(JSON.stringify(summary, null, 2)) +
-                '</pre>';
+            lastLookup = { summary: summary, userId: userId };
+            if (root) {
+                root.innerHTML = renderSupportUserSummary(summary, { showBack: !!showBack });
+            }
         } catch (e) {
-            alert(e.message);
+            if (root) root.innerHTML = '<p style="color:#b91c1c;">' + esc(e.message) + '</p>';
+            else alert(e.message);
         }
     };
 
@@ -284,24 +513,56 @@
         let reply = 'Search Account lookup first, then ask about portal ID, applications, or tickets.';
         if (lastLookup && lastLookup.summary) {
             const s = lastLookup.summary;
+            const u = s.user || {};
+            const openTickets = (s.tickets || []).filter((t) => {
+                const st = String(t.status || '').toLowerCase();
+                return st !== 'closed' && st !== 'resolved';
+            });
             reply =
                 'Account ' +
-                s.user.user_id_string +
-                ': ' +
+                (u.user_id_string || '') +
+                ' (' +
+                [u.first_name, u.last_name].filter(Boolean).join(' ') +
+                '): ' +
                 (s.registrations || []).length +
                 ' registration(s), ' +
                 (s.tickets || []).length +
-                ' ticket(s), ' +
+                ' ticket(s) (' +
+                openTickets.length +
+                ' open), ' +
                 (s.orders || []).length +
                 ' order(s).';
-            if (/pending|payment/i.test(q)) {
+            if (/ticket|support/i.test(q)) {
+                reply += openTickets.length
+                    ? ' Open: ' +
+                      openTickets
+                          .map((t) => (t.ticket_id || t.tracking_id) + ' — ' + t.subject + ' (' + t.status + ')')
+                          .join('; ')
+                    : ' No open tickets.';
+            }
+            if (/pending|payment|order/i.test(q)) {
                 const pending = (s.orders || []).filter((o) => String(o.status).toLowerCase() !== 'success');
                 reply += pending.length
-                    ? ' Pending payments: ' + pending.map((o) => o.application_no + ' (' + o.status + ')').join(', ')
+                    ? ' Pending payments: ' + pending.map((o) => (o.application_no || o.order_id_string) + ' (' + o.status + ')').join(', ')
                     : ' No pending payments found.';
             }
-        } else if (lastLookup && lastLookup.track) {
-            reply = 'Latest track: ' + JSON.stringify(lastLookup.track);
+            if (/registration|seminar|apply/i.test(q)) {
+                reply += (s.registrations || []).length
+                    ? ' Registrations: ' +
+                      (s.registrations || [])
+                          .slice(0, 5)
+                          .map((r) => r.application_no + ' (' + r.status + ')')
+                          .join(', ')
+                    : ' No seminar registrations on file.';
+            }
+        } else if (lastLookup && lastLookup.track && !lastLookup.track.error) {
+            const tr = lastLookup.track;
+            reply = 'Track result: ' + (tr.applicationNo || tr.ticketRef || '') + ' — ' + (tr.status || '');
+        } else if (lastLookup && lastLookup.users && lastLookup.users.length) {
+            reply =
+                'Found ' +
+                lastLookup.users.length +
+                ' account(s). Click View account on the best match, then ask again for details.';
         }
         log.innerHTML += '<div style="margin:8px 0;padding:8px;background:#ecfdf5;border-radius:8px;"><strong>Assistant:</strong> ' + esc(reply) + '</div>';
         log.scrollTop = log.scrollHeight;
