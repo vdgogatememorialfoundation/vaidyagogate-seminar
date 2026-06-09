@@ -27,7 +27,7 @@
         '<button type="button" id="vgmf-support-live-btn" class="hidden" style="width:100%;margin-bottom:8px;padding:8px;border:none;border-radius:8px;background:#115e59;color:#fff;font-weight:700;cursor:pointer;">Talk to a support agent (live)</button>' +
         '<input type="text" id="vgmf-support-track" placeholder="Application / ticket no. (optional)" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:8px;font-size:0.85rem;">' +
         '<div style="display:flex;gap:8px;"><input type="text" id="vgmf-support-input" placeholder="Ask a question…" style="flex:1;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:0.85rem;"><button type="button" id="vgmf-support-send" style="padding:8px 14px;border:none;border-radius:8px;background:#0f766e;color:#fff;font-weight:700;cursor:pointer;">Send</button></div>' +
-        '<p style="font-size:0.72rem;color:#64748b;margin:8px 0 0;">Account help: <a href="/doctor.html#tab-live-chat" style="color:#0f766e;">Live chat</a> or <a href="/doctor.html#tab-support" style="color:#0f766e;">Support tickets</a> in the doctor portal.</p></div></div>';
+        '<p style="font-size:0.72rem;color:#64748b;margin:8px 0 0;">Account help: sign in to the <a href="/doctor.html" style="color:#0f766e;">doctor portal</a> (live chat bubble or Support tickets).</p></div></div>';
 
     document.body.appendChild(root);
 

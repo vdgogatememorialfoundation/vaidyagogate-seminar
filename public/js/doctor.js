@@ -684,7 +684,6 @@ function resolveDoctorAllowedTabsClient(category, globalRegular, globalVolunteer
         'tab-volunteer',
         'tab-feedback',
         'tab-support',
-        'tab-live-chat',
         'tab-orders',
         'tab-receipts',
         'tab-payments',
@@ -733,6 +732,9 @@ function applyDoctorAllowedTabsToDom(allowed) {
         else el.setAttribute('hidden', 'hidden');
         el.setAttribute('aria-hidden', enabled ? 'false' : 'true');
     });
+    if (window.DoctorLiveChatWidget && typeof DoctorLiveChatWidget.setEnabled === 'function') {
+        DoctorLiveChatWidget.setEnabled(doctorTabModuleEnabled('tab-live-chat'));
+    }
     document.querySelectorAll('[data-doctor-tab]').forEach((el) => {
         const tab = el.getAttribute('data-doctor-tab');
         if (!tab) return;
@@ -1549,6 +1551,14 @@ async function bootDoctorDashboard(user) {
         .catch(() => {});
     scheduleDoctorModuleReapply();
     handleEasebuzzPaymentReturnQuery();
+    if (window.DoctorLiveChatWidget && typeof DoctorLiveChatWidget.boot === 'function') {
+        DoctorLiveChatWidget.boot({
+            getUserId: doctorNumericUserId,
+            isEnabled: function () {
+                return doctorTabModuleEnabled('tab-live-chat');
+            }
+        });
+    }
 }
 
 function handleEasebuzzPaymentReturnQuery() {
@@ -3168,9 +3178,6 @@ function switchTab(tabId, menuEl) {
     }
     if (tabId === 'tab-support') {
         loadTickets();
-    }
-    if (tabId === 'tab-live-chat') {
-        initDoctorLiveSupport();
     }
     if (tabId === 'tab-orders') {
         loadDoctorOrders();
@@ -7292,251 +7299,6 @@ async function submitSupportTicket() {
         }
     } catch (err) {
         console.error(err);
-    }
-}
-
-let doctorLiveSessionId = null;
-let doctorLiveChatRef = '';
-let doctorLiveMsgSince = 0;
-let doctorLivePollTimer = null;
-let doctorLiveAgentName = '';
-let doctorLiveHoursOpen = false;
-
-function doctorLiveStorageKey() {
-    const uid = doctorNumericUserId();
-    return uid ? 'vgmf_doctor_live_' + uid : 'vgmf_doctor_live';
-}
-
-function renderDoctorLiveMessage(m) {
-    const st = String(m.sender_type || '').toLowerCase();
-    const isSelf = st === 'visitor';
-    const isSystem = st === 'system';
-    const label = isSystem ? 'Support desk' : m.sender_name || (isSelf ? 'You' : 'Support agent');
-    const bg = isSystem ? '#fef3c7' : isSelf ? '#0f766e' : '#fff';
-    const color = isSelf ? '#fff' : '#334155';
-    const border = isSystem ? '#fcd34d' : isSelf ? '#0f766e' : '#cbd5e1';
-    const align = isSelf ? 'flex-end' : 'flex-start';
-    const subColor = isSelf ? '#ccfbf1' : '#64748b';
-    const time = m.created_at ? new Date(m.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : '';
-    return (
-        '<div style="align-self:' +
-        align +
-        ';max-width:85%;background:' +
-        bg +
-        ';color:' +
-        color +
-        ';border:1px solid ' +
-        border +
-        ';padding:10px 12px;border-radius:10px;">' +
-        '<p style="font-size:0.75rem;margin:0 0 6px;color:' +
-        subColor +
-        ';"><strong>' +
-        escapeHtml(label) +
-        '</strong>' +
-        (time ? ' · ' + escapeHtml(time) : '') +
-        '</p>' +
-        '<p style="margin:0;white-space:pre-wrap;line-height:1.45;">' +
-        escapeHtml(m.message || '') +
-        '</p></div>'
-    );
-}
-
-function updateDoctorLiveMeta() {
-    const refEl = document.getElementById('doctor-live-ref');
-    const agentEl = document.getElementById('doctor-live-agent');
-    if (refEl) refEl.textContent = doctorLiveChatRef || '—';
-    if (agentEl) agentEl.textContent = doctorLiveAgentName || (doctorLiveSessionId ? 'Waiting for agent…' : '—');
-}
-
-function stopDoctorLivePoll() {
-    if (doctorLivePollTimer) {
-        clearInterval(doctorLivePollTimer);
-        doctorLivePollTimer = null;
-    }
-}
-
-function startDoctorLivePoll() {
-    stopDoctorLivePoll();
-    doctorLivePollTimer = setInterval(pollDoctorLiveMessages, 3000);
-}
-
-async function refreshDoctorLiveSession() {
-    if (!doctorLiveSessionId) return;
-    try {
-        const res = await fetch('/api/support-ticket/live/' + encodeURIComponent(doctorLiveSessionId));
-        const session = await res.json();
-        if (!res.ok || !session) return;
-        doctorLiveChatRef = session.chatRef || doctorLiveChatRef;
-        if (session.agentName) doctorLiveAgentName = session.agentName;
-        if (session.status === 'closed') {
-            stopDoctorLivePoll();
-            document.getElementById('doctor-live-active-row').classList.add('hidden');
-            document.getElementById('doctor-live-start-btn').classList.remove('hidden');
-            sessionStorage.removeItem(doctorLiveStorageKey());
-        }
-        updateDoctorLiveMeta();
-    } catch (_) {}
-}
-
-async function pollDoctorLiveMessages() {
-    if (!doctorLiveSessionId) return;
-    try {
-        const res = await fetch(
-            '/api/support-ticket/live/' +
-                encodeURIComponent(doctorLiveSessionId) +
-                '/messages?since=' +
-                doctorLiveMsgSince
-        );
-        const rows = await res.json();
-        if (!res.ok) return;
-        const box = document.getElementById('doctor-live-messages');
-        if (!box) return;
-        if (box.querySelector('p[style*="margin:auto"]')) box.innerHTML = '';
-        (rows || []).forEach((m) => {
-            if (m.id > doctorLiveMsgSince) doctorLiveMsgSince = m.id;
-            if (m.sender_type === 'agent' && m.sender_name) doctorLiveAgentName = m.sender_name;
-            box.innerHTML += renderDoctorLiveMessage(m);
-        });
-        updateDoctorLiveMeta();
-        box.scrollTop = box.scrollHeight;
-        await refreshDoctorLiveSession();
-    } catch (_) {}
-}
-
-async function initDoctorLiveSupport() {
-    const hoursEl = document.getElementById('doctor-live-hours');
-    const startBtn = document.getElementById('doctor-live-start-btn');
-    try {
-        const hres = await fetch('/api/public/support/hours', { cache: 'no-store' });
-        const h = await hres.json();
-        doctorLiveHoursOpen = !!(h.openNow && h.liveChatEnabled);
-        if (hoursEl) {
-            hoursEl.textContent = doctorLiveHoursOpen
-                ? 'Support agents are available now — start live chat below.'
-                : 'Live chat is outside business hours. You can still create a support ticket below.';
-        }
-        if (startBtn && !doctorLiveHoursOpen) {
-            startBtn.style.opacity = '0.85';
-            startBtn.title = 'Outside live chat hours — we will still receive your message when agents return.';
-        }
-    } catch (_) {
-        if (hoursEl) hoursEl.textContent = 'Ask a question via live chat or create a support ticket.';
-    }
-
-    const saved = sessionStorage.getItem(doctorLiveStorageKey());
-    if (saved) {
-        try {
-            const parsed = JSON.parse(saved);
-            if (parsed && parsed.sessionId) {
-                doctorLiveSessionId = parsed.sessionId;
-                doctorLiveChatRef = parsed.chatRef || '';
-                doctorLiveMsgSince = 0;
-                doctorLiveAgentName = parsed.agentName || '';
-                document.getElementById('doctor-live-active-row').classList.remove('hidden');
-                document.getElementById('doctor-live-start-btn').classList.add('hidden');
-                updateDoctorLiveMeta();
-                await pollDoctorLiveMessages();
-                startDoctorLivePoll();
-            }
-        } catch (_) {
-            sessionStorage.removeItem(doctorLiveStorageKey());
-        }
-    }
-}
-
-async function startDoctorLiveChat() {
-    const uid = doctorNumericUserId();
-    if (!uid) return alert('Session expired. Please sign in again.');
-    const startBtn = document.getElementById('doctor-live-start-btn');
-    const box = document.getElementById('doctor-live-messages');
-    if (startBtn) {
-        startBtn.disabled = true;
-        startBtn.textContent = 'Connecting…';
-    }
-    try {
-        const res = await fetch('/api/support-ticket/live/start', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                userId: uid,
-                message: 'Hello, I need help from the doctor portal.'
-            })
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error((data && data.error) || 'Could not start live chat');
-        doctorLiveSessionId = data.sessionId;
-        doctorLiveChatRef = data.chatRef || '';
-        doctorLiveAgentName = data.agentName || '';
-        doctorLiveMsgSince = 0;
-        sessionStorage.setItem(
-            doctorLiveStorageKey(),
-            JSON.stringify({
-                sessionId: doctorLiveSessionId,
-                chatRef: doctorLiveChatRef,
-                agentName: doctorLiveAgentName
-            })
-        );
-        if (box) box.innerHTML = '';
-        updateDoctorLiveMeta();
-        document.getElementById('doctor-live-active-row').classList.remove('hidden');
-        if (startBtn) startBtn.classList.add('hidden');
-        if (data.status === 'offline' || !data.canLive) {
-            if (box) {
-                box.innerHTML +=
-                    '<p style="color:#92400e;background:#fef3c7;padding:10px;border-radius:8px;">Live chat is outside business hours. Your message is saved — an agent will follow up, or create a support ticket below.</p>';
-            }
-        } else if (data.status === 'waiting') {
-            if (box) {
-                box.innerHTML +=
-                    '<p style="color:#0369a1;background:#e0f2fe;padding:10px;border-radius:8px;">You are in the queue. Chat reference <strong>' +
-                    escapeHtml(doctorLiveChatRef) +
-                    '</strong>. An agent will join shortly.</p>';
-            }
-        } else if (data.status === 'active') {
-            if (box) {
-                box.innerHTML +=
-                    '<p style="color:#065f46;background:#d1fae5;padding:10px;border-radius:8px;">Connected' +
-                    (doctorLiveAgentName ? ' with <strong>' + escapeHtml(doctorLiveAgentName) + '</strong>' : '') +
-                    '. Reference <strong>' +
-                    escapeHtml(doctorLiveChatRef) +
-                    '</strong>.</p>';
-            }
-        }
-        startDoctorLivePoll();
-        pollDoctorLiveMessages();
-    } catch (err) {
-        alert(err.message || 'Could not start live chat');
-    } finally {
-        if (startBtn) {
-            startBtn.disabled = false;
-            startBtn.innerHTML = '<i class="fas fa-headset"></i> Talk to support agent';
-        }
-    }
-}
-
-async function sendDoctorLiveMessage() {
-    const input = document.getElementById('doctor-live-input');
-    const msg = (input && input.value.trim()) || '';
-    if (!msg) return;
-    const uid = doctorNumericUserId();
-    if (!uid) return alert('Session expired.');
-    if (!doctorLiveSessionId) return startDoctorLiveChat();
-    const box = document.getElementById('doctor-live-messages');
-    if (box && box.querySelector('p[style*="margin:auto"]')) box.innerHTML = '';
-    if (box) box.innerHTML += renderDoctorLiveMessage({ sender_type: 'visitor', sender_name: 'You', message: msg });
-    if (input) input.value = '';
-    if (box) box.scrollTop = box.scrollHeight;
-    try {
-        const res = await fetch('/api/support-ticket/live/' + encodeURIComponent(doctorLiveSessionId) + '/message', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: uid, message: msg })
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error((data && data.error) || 'Send failed');
-        pollDoctorLiveMessages();
-    } catch (err) {
-        alert(err.message || 'Could not send message');
     }
 }
 
