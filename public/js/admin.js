@@ -14861,10 +14861,7 @@ let __marketingBanners = [];
 let __marketingPopupImages = [];
 
 function marketingPopupPreviewUrl(path) {
-    if (!path) return '';
-    const p = String(path).trim();
-    if (p.startsWith('http') || p.startsWith('/')) return p;
-    return '/uploads/' + p;
+    return publicFileHref(path);
 }
 
 function marketingCollectPopupImagesFromDom() {

@@ -12,9 +12,18 @@
 
     function mediaUrl(path) {
         if (!path) return '';
-        const p = String(path).trim();
-        if (p.startsWith('http')) return p;
-        if (p.startsWith('/uploads/api/assets/')) return '/api/assets/' + p.slice('/uploads/api/assets/'.length);
+        let p = String(path).trim();
+        if (!p) return '';
+        if (/^https?:\/\//i.test(p)) return p;
+        if (p.startsWith('/uploads/api/assets/')) {
+            p = '/api/assets/' + p.slice('/uploads/api/assets/'.length);
+        } else if (p.startsWith('uploads/api/assets/')) {
+            p = '/api/assets/' + p.slice('uploads/api/assets/'.length);
+        } else if (/^(upload_asset_|cert_|file_)/i.test(p)) {
+            p = '/api/assets/' + encodeURIComponent(p);
+        } else if (p.startsWith('api/assets/')) {
+            p = '/' + p;
+        }
         if (p.startsWith('/')) return p;
         return '/uploads/' + p;
     }
@@ -399,35 +408,35 @@
             const frame = img.closest('.congress-hero-banner-frame');
             const stage = img.closest('.congress-hero-banner-stage');
             if (frame) frame.classList.add('is-pending');
-            function markReady() {
+            const src = String(img.getAttribute('src') || '').trim();
+            function finish(ok) {
                 img.classList.add('is-ready');
-                if (frame) frame.classList.remove('is-pending');
-                if (stage) stage.classList.add('is-ready');
-            }
-            function apply() {
-                if (frame) frame.classList.remove('is-missing-image');
-                markReady();
-            }
-            if (img.complete) {
-                if (img.naturalWidth) apply();
-                else {
-                    if (frame) frame.classList.add('is-missing-image');
-                    markReady();
+                if (frame) {
+                    frame.classList.remove('is-pending');
+                    frame.classList.toggle('is-missing-image', !ok);
                 }
-            } else {
-                img.addEventListener('load', apply, { once: true });
-                img.addEventListener(
-                    'error',
-                    function () {
-                        if (frame) frame.classList.add('is-missing-image');
-                        markReady();
-                    },
-                    { once: true }
-                );
+                if (stage && ok) stage.classList.add('is-ready');
             }
-            window.setTimeout(function () {
-                if (!img.classList.contains('is-ready')) apply();
-            }, 2500);
+            if (!src) {
+                finish(false);
+                return;
+            }
+            function checkLoaded() {
+                finish(img.naturalWidth > 0 && img.naturalHeight > 0);
+            }
+            img.addEventListener('load', checkLoaded, { once: true });
+            img.addEventListener('error', function () {
+                finish(false);
+            }, { once: true });
+            if (img.complete) {
+                if (typeof img.decode === 'function') {
+                    img.decode().then(checkLoaded).catch(function () {
+                        finish(false);
+                    });
+                } else {
+                    window.setTimeout(checkLoaded, 0);
+                }
+            }
         });
     }
 
