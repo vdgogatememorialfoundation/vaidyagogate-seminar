@@ -122,6 +122,8 @@
     let lastScanAt = 0;
     const SCAN_DEBOUNCE_MS = 2200;
     const AUTO_NEXT_MS = 2600;
+    /** ID/Aadhaar capture after scan — disabled; ticket scan + book pickup only. */
+    const ID_CAPTURE_ENABLED = false;
 
     function haptic(kind) {
         try {
@@ -333,6 +335,32 @@
             console.warn('[scanner] ID camera:', e.message);
             return false;
         }
+    }
+
+    function showTicketScanSuccess(result) {
+        const d = result.doctor || {};
+        const scanNote =
+            result.scanCount != null && result.scansRequired != null
+                ? '<p style="margin-top:8px;font-size:0.85rem;">Scans: <strong>' +
+                  result.scanCount +
+                  '/' +
+                  result.scansRequired +
+                  '</strong></p>'
+                : '';
+        renderResult(
+            true,
+            '<div class="scan-result-top">' +
+                profilePhotoHtml(d) +
+                '<div class="scan-result-body"><strong><i class="fas fa-check-circle"></i> ' +
+                (result.message || 'Checked in').replace(/</g, '&lt;') +
+                '</strong>' +
+                metaHtml(d) +
+                '</div></div>' +
+                scanNote,
+            'ok'
+        );
+        scanBusy = false;
+        scheduleAutoResume();
     }
 
     async function beginIdCaptureFlow(result) {
@@ -732,7 +760,11 @@
                 playTone('success');
                 stats.ok++;
                 pushHistory((d.name || 'Guest') + ' · ' + (d.ticketId || d.applicationNo || ''), true);
-                beginIdCaptureFlow(result);
+                if (ID_CAPTURE_ENABLED) {
+                    beginIdCaptureFlow(result);
+                } else {
+                    showTicketScanSuccess(result);
+                }
             } else {
                 const err =
                     result.error ||
@@ -777,6 +809,8 @@
                 await html5QrCode.stop();
             } catch (_) {}
         }
+        torchOn = false;
+        updateTorchButton();
         html5QrCode = new Html5Qrcode('reader');
         const config = { fps: 15, qrbox: { width: 260, height: 260 }, aspectRatio: 1, disableFlip: false };
         await html5QrCode.start({ facingMode }, config, (text) => processScan(text));
@@ -841,16 +875,45 @@
         else document.exitFullscreen?.();
     });
 
-    document.getElementById('btn-torch')?.addEventListener('click', async () => {
+    function updateTorchButton() {
+        const btn = document.getElementById('btn-torch');
+        if (!btn) return;
+        btn.classList.toggle('torch-on', torchOn);
+        btn.title = torchOn ? 'Torch off' : 'Torch on';
+        btn.setAttribute('aria-pressed', torchOn ? 'true' : 'false');
+        const icon = btn.querySelector('i');
+        if (icon) {
+            icon.className = torchOn ? 'fas fa-lightbulb' : 'far fa-lightbulb';
+        }
+    }
+
+    async function setTorch(on) {
         try {
             const track = html5QrCode?._localMediaStream?.getVideoTracks?.()[0];
-            if (track && track.getCapabilities?.().torch) {
-                torchOn = !torchOn;
-                await track.applyConstraints({ advanced: [{ torch: torchOn }] });
-            } else alert('Torch not supported on this device.');
-        } catch (_) {
+            if (!track) {
+                alert('Start the camera first.');
+                return false;
+            }
+            const caps = track.getCapabilities?.() || {};
+            if (caps.torch) {
+                await track.applyConstraints({ advanced: [{ torch: !!on }] });
+            } else if (caps.fillLightMode && caps.fillLightMode.includes('flash')) {
+                await track.applyConstraints({ advanced: [{ fillLightMode: on ? 'flash' : 'off' }] });
+            } else {
+                alert('Torch not supported on this device or browser.');
+                return false;
+            }
+            torchOn = !!on;
+            updateTorchButton();
+            return true;
+        } catch (e) {
             alert('Torch not available.');
+            return false;
         }
+    }
+
+    document.getElementById('btn-torch')?.addEventListener('click', async () => {
+        await setTorch(!torchOn);
     });
 
     document.getElementById('btn-logout')?.addEventListener('click', () => {

@@ -226,6 +226,13 @@ body.scanner-body.has-logo-theme {
     box-shadow: 0 4px 14px rgba(37, 99, 235, 0.3);
 }
 
+.tool-btn.torch-on {
+    background: #fef08a;
+    border: 1px solid #eab308;
+    color: #713f12;
+    box-shadow: 0 0 0 2px rgba(234, 179, 8, 0.35);
+}
+
 .manual-row {
     display: flex;
     gap: 8px;

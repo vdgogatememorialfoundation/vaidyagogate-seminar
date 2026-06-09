@@ -105,6 +105,7 @@ const {
     isCheckinOpenForSeminar,
     isSeminarEnded,
     isTicketExpiredForSeminar,
+    ticketExpiryStartsYmd,
     localDateYmd,
     normalizeCheckinDateYmd,
     normalizeCheckinDateForStorage
@@ -5930,7 +5931,8 @@ app.get('/api/doctor/event-tickets/:userId', (req, res) => {
     const uid = parseInt(req.params.userId, 10);
     if (Number.isNaN(uid)) return res.status(400).json({ error: 'Invalid user' });
     db.all(
-        `SELECT t.id as ticket_row_id, t.ticket_id_string, t.qr_code_data, t.is_scanned, t.scan_time, IFNULL(t.is_valid, 1) AS is_valid,
+        `SELECT t.id as ticket_row_id, t.ticket_id_string, t.qr_code_data, t.is_scanned, t.scan_time,
+                IFNULL(t.scan_count, 0) AS scan_count, IFNULL(t.is_valid, 1) AS is_valid,
                 o.order_id_string, o.amount, o.status as order_status, o.payment_date,
                 r.application_no, r.status as registration_status, s.title as seminar_title, s.id as seminar_id, s.event_date
          FROM tickets t
@@ -5942,14 +5944,22 @@ app.get('/api/doctor/event-tickets/:userId', (req, res) => {
         [uid],
         (err, rows) => {
             if (err) return res.status(500).json({ error: err.message });
-            const out = (rows || []).map((row) => ({
-                ...row,
-                seminar_ended: isSeminarEnded(row.event_date),
-                ticket_expired:
+            const out = (rows || []).map((row) => {
+                const scanned = Number(row.is_scanned) === 1 || Number(row.scan_count || 0) > 0;
+                const regSt = String(row.registration_status || '').toLowerCase();
+                const adminCheckedIn = regSt === 'checked_in' || regSt === 'certificate_issued';
+                const expired =
                     isTicketExpiredForSeminar(row.event_date) &&
-                    !row.is_scanned &&
-                    Number(row.scan_count || 0) < 1
-            }));
+                    !scanned &&
+                    !adminCheckedIn;
+                return {
+                    ...row,
+                    seminar_ended: isSeminarEnded(row.event_date),
+                    ticket_expires_on: ticketExpiryStartsYmd(row.event_date) || null,
+                    ticket_expired: expired,
+                    no_valid_ticket: expired
+                };
+            });
             res.json(out);
         }
     );
@@ -6430,7 +6440,8 @@ function ticketLookupInvalid(row) {
     const regSt = String(row.registration_status || '').toLowerCase();
     if (regSt === 'cancelled' || regSt === 'rejected') return true;
     if (isTicketExpiredForSeminar(row.event_date) && !row.is_scanned && Number(row.scan_count || 0) < 1) {
-        return true;
+        const regSt = String(row.registration_status || '').toLowerCase();
+        if (regSt !== 'checked_in' && regSt !== 'certificate_issued') return true;
     }
     return false;
 }
@@ -6815,24 +6826,27 @@ app.post('/api/scanner/mark', (req, res) => {
                         doctor: doctorPayloadFromScanRow(row)
                     });
                 }
-                if (isTicketExpiredForSeminar(row.event_date)) {
+                const scansRequired = certVerify.normalizeCertScansRequired(row.cert_scans_required);
+                const currentScanCount = Number(row.scan_count) || (row.is_scanned ? 1 : 0);
+                if (isTicketExpiredForSeminar(row.event_date) && currentScanCount < 1) {
                     logScanDashboard(
                         selectedSeminarId,
                         staffId,
                         'expired',
-                        'Seminar date has passed',
+                        'Ticket expired after event day',
                         row
                     );
                     return res.status(403).json({
                         success: false,
-                        error: 'Ticket expired — seminar date has passed. Use Admin → Applications → Check in for manual override.',
+                        error:
+                            'No valid ticket — expired after event day (' +
+                            (ticketExpiryStartsYmd(row.event_date) || 'next day') +
+                            ' 00:00 IST). Admin can manual check-in if attended.',
                         sound: 'error',
                         expired: true,
                         doctor: doctorPayloadFromScanRow(row)
                     });
                 }
-                const scansRequired = certVerify.normalizeCertScansRequired(row.cert_scans_required);
-                const currentScanCount = Number(row.scan_count) || (row.is_scanned ? 1 : 0);
                 if (currentScanCount >= scansRequired) {
                     logScanDashboard(
                         selectedSeminarId,
