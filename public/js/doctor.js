@@ -717,6 +717,14 @@ function doctorTabModuleEnabled(tabId) {
     return !__doctorAllowedTabs || __doctorAllowedTabs.has(tabId);
 }
 
+function doctorLiveChatWidgetEnabled() {
+    if (!currentUser) return false;
+    const userMap = parseDoctorModulesMap(currentUser && currentUser.doctor_modules);
+    if (userMap && userMap['tab-live-chat'] === false) return false;
+    if (!__doctorAllowedTabs) return true;
+    return __doctorAllowedTabs.has('tab-live-chat') || __doctorAllowedTabs.has('tab-support');
+}
+
 function applyDoctorAllowedTabsToDom(allowed) {
     __doctorAllowedTabs = allowed;
     document.querySelectorAll('.menu-item[data-tab]').forEach((el) => {
@@ -733,7 +741,7 @@ function applyDoctorAllowedTabsToDom(allowed) {
         el.setAttribute('aria-hidden', enabled ? 'false' : 'true');
     });
     if (window.DoctorLiveChatWidget && typeof DoctorLiveChatWidget.setEnabled === 'function') {
-        DoctorLiveChatWidget.setEnabled(doctorTabModuleEnabled('tab-live-chat'));
+        DoctorLiveChatWidget.setEnabled(doctorLiveChatWidgetEnabled());
     }
     document.querySelectorAll('[data-doctor-tab]').forEach((el) => {
         const tab = el.getAttribute('data-doctor-tab');
@@ -747,9 +755,17 @@ function applyDoctorAllowedTabsToDom(allowed) {
     });
     document.querySelectorAll('.tab-pane[id^="tab-"]').forEach((pane) => {
         const tabId = pane.id;
-        const enabled = doctorTabModuleEnabled(tabId);
-        pane.classList.toggle('hidden', !enabled);
+        if (!doctorTabModuleEnabled(tabId)) {
+            pane.classList.add('hidden');
+        }
     });
+    const activeMenu = document.querySelector('.menu-item.active[data-tab]');
+    const activeTabId = activeMenu && activeMenu.getAttribute('data-tab');
+    if (activeTabId && !doctorTabModuleEnabled(activeTabId)) {
+        switchTab('tab-dashboard');
+    } else if (!document.querySelector('.tab-pane:not(.hidden)')) {
+        switchTab('tab-dashboard');
+    }
     const slider = document.getElementById('doctor-seminar-slider');
     if (slider) {
         const showSlider = doctorTabModuleEnabled('tab-seminars') && slider.children.length > 0;
@@ -1551,12 +1567,11 @@ async function bootDoctorDashboard(user) {
         .catch(() => {});
     scheduleDoctorModuleReapply();
     handleEasebuzzPaymentReturnQuery();
+    switchTab('tab-dashboard');
     if (window.DoctorLiveChatWidget && typeof DoctorLiveChatWidget.boot === 'function') {
         DoctorLiveChatWidget.boot({
             getUserId: doctorNumericUserId,
-            isEnabled: function () {
-                return doctorTabModuleEnabled('tab-live-chat');
-            }
+            isEnabled: doctorLiveChatWidgetEnabled
         });
     }
 }

@@ -12,6 +12,7 @@
     let pollTimer = null;
     let hoursOpen = false;
     let enabled = true;
+    let isEnabledFn = null;
     let mounted = false;
 
     let root = null;
@@ -287,8 +288,8 @@
         root = document.createElement('div');
         root.id = 'vgmf-doctor-live-root';
         root.innerHTML =
-            '<button type="button" id="vgmf-doctor-live-launcher" aria-label="Open live chat" style="position:fixed;bottom:22px;right:22px;z-index:9998;width:56px;height:56px;border-radius:50%;border:none;background:#0f766e;color:#fff;box-shadow:0 8px 24px rgba(15,118,110,0.35);cursor:pointer;font-size:1.35rem;"><i class="fas fa-comments"></i></button>' +
-            '<div id="vgmf-doctor-live-panel" class="hidden" style="position:fixed;bottom:90px;right:22px;z-index:9999;width:min(380px,calc(100vw - 24px));max-height:min(520px,calc(100vh - 120px));background:#fff;border-radius:16px;box-shadow:0 16px 40px rgba(15,23,42,0.18);border:1px solid #99f6e4;display:flex;flex-direction:column;overflow:hidden;">' +
+            '<button type="button" id="vgmf-doctor-live-launcher" aria-label="Open live chat" style="position:fixed;bottom:22px;right:22px;z-index:10050;width:56px;height:56px;border-radius:50%;border:none;background:#0f766e;color:#fff;box-shadow:0 8px 24px rgba(15,118,110,0.35);cursor:pointer;font-size:1.35rem;"><i class="fas fa-comments"></i></button>' +
+            '<div id="vgmf-doctor-live-panel" class="hidden" style="position:fixed;bottom:90px;right:22px;z-index:10051;width:min(380px,calc(100vw - 24px));max-height:min(520px,calc(100vh - 120px));background:#fff;border-radius:16px;box-shadow:0 16px 40px rgba(15,23,42,0.18);border:1px solid #99f6e4;display:flex;flex-direction:column;overflow:hidden;">' +
             '<div style="padding:14px 16px;background:linear-gradient(135deg,#0f766e,#115e59);color:#fff;"><strong>Live chat</strong><div id="vgmf-doctor-live-hours" style="font-size:0.78rem;opacity:0.9;margin-top:4px;">Loading…</div><div id="vgmf-doctor-live-meta" class="hidden" style="font-size:0.72rem;opacity:0.92;margin-top:6px;"></div></div>' +
             '<div id="vgmf-doctor-live-messages" style="flex:1;overflow-y:auto;padding:12px;font-size:0.88rem;background:#f8fafc;min-height:180px;"><p data-live-placeholder style="color:#64748b;text-align:center;margin:40px 0;font-size:0.88rem;">Tap below to connect with a support agent.</p></div>' +
             '<div style="padding:10px 12px;border-top:1px solid #e2e8f0;background:#fff;">' +
@@ -330,13 +331,14 @@
 
     function boot(opts) {
         getUserId = opts && opts.getUserId;
-        enabled = opts && opts.isEnabled ? opts.isEnabled() : true;
+        isEnabledFn = opts && opts.isEnabled;
+        enabled = isEnabledFn ? isEnabledFn() : true;
         mount();
         init();
     }
 
     function setEnabled(on) {
-        enabled = !!on;
+        enabled = typeof on === 'function' ? !!on() : !!on;
         if (!root) return;
         root.style.display = enabled ? '' : 'none';
     }
