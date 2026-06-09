@@ -3215,6 +3215,23 @@ function isSuperAdminRow(row) {
     return r === 'admin' && ur !== 'co_admin';
 }
 
+function canLoginDedicatedPortal(row, portal) {
+    if (isSuperAdminRow(row)) return true;
+    const ur = String(row.user_role || '')
+        .trim()
+        .toLowerCase();
+    if (portal === 'support') {
+        if (ur === 'support_agent' || ur === 'co_admin') return true;
+        const supportDesk = require('./lib/support-desk');
+        return supportDesk.isSupportAgentUser(row);
+    }
+    if (portal === 'judge') return ur === 'judge_user' || ur === 'reviewer';
+    if (portal === 'scanner') {
+        return ur === 'scanner_portal_user' || ur === 'scanner_dashboard_user' || ur === 'venue_gate_user';
+    }
+    return true;
+}
+
 function parseAdminModulesJson(str) {
     if (str == null || !String(str).trim()) return null;
     try {
@@ -4025,6 +4042,19 @@ app.post('/api/auth/login', withAuxiliaryTables, (req, res) => {
                         error:
                             'This account has no staff portal access. Ask the super admin to assign a job role with staff portal modules.'
                     });
+                }
+
+                if (
+                    (loginPortal === 'support' || loginPortal === 'judge' || loginPortal === 'scanner') &&
+                    !canLoginDedicatedPortal(row, loginPortal)
+                ) {
+                    const portalErrors = {
+                        support:
+                            'Support desk login is for support agents. Ask the super admin to assign the Support agent job role and department.',
+                        judge: 'Judge accounts must use the judge portal at /judge.html.',
+                        scanner: 'Scanner accounts must use the scanner portal at /scanner.html.'
+                    };
+                    return res.status(403).json({ error: portalErrors[loginPortal] || 'This account cannot access this portal.' });
                 }
 
                 function sendUser() {
@@ -9803,6 +9833,11 @@ app.post('/api/admin/users/create', (req, res) => {
                                         flushNotificationQueue();
                                     }
                                 );
+                                const supportDeptId = parseInt(
+                                    (req.body && req.body.supportDepartmentId) || '',
+                                    10
+                                );
+                                const finishCreateResponse = () => {
                                 res.json({
                                     success: true,
                                     verified: true,
@@ -9822,6 +9857,35 @@ app.post('/api/admin/users/create', (req, res) => {
                                             ? 'Staff login: use this portal ID + password (same email as another account is allowed for testing).'
                                             : undefined
                                 });
+                                };
+                                if (
+                                    Number.isInteger(supportDeptId) &&
+                                    ['support_agent', 'staff_user', 'co_admin'].includes(String(userRole).toLowerCase())
+                                ) {
+                                    const { ensureSupportDeskSchema } = require('./lib/support-desk-schema');
+                                    return ensureSupportDeskSchema(db, () => {
+                                        db.get(
+                                            `SELECT user_id FROM support_agent_profiles WHERE user_id = ?`,
+                                            [newId],
+                                            (pErr, pRow) => {
+                                                if (pErr) return finishCreateResponse();
+                                                const saveProfile = pRow
+                                                    ? db.run.bind(
+                                                          db,
+                                                          `UPDATE support_agent_profiles SET department_id = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?`,
+                                                          [supportDeptId, newId]
+                                                      )
+                                                    : db.run.bind(
+                                                          db,
+                                                          `INSERT INTO support_agent_profiles (user_id, department_id, is_available, live_chat_enabled, updated_at) VALUES (?, ?, 1, 1, CURRENT_TIMESTAMP)`,
+                                                          [newId, supportDeptId]
+                                                      );
+                                                saveProfile(() => finishCreateResponse());
+                                            }
+                                        );
+                                    });
+                                }
+                                finishCreateResponse();
                             }
                         );
                     }
@@ -10552,6 +10616,7 @@ app.post('/api/admin/users/:userId/apply-job-role', (req, res) => {
     const targetId = parseInt(req.params.userId, 10);
     const jobRoleId = parseInt((req.body && req.body.jobRoleId) || '', 10);
     const actorId = parseInt((req.body && req.body.actingAdminId) || '', 10);
+    const supportDepartmentId = parseInt((req.body && req.body.supportDepartmentId) || '', 10);
     if (!Number.isInteger(targetId) || !Number.isInteger(jobRoleId) || !Number.isInteger(actorId)) {
         return res.status(400).json({ error: 'userId, jobRoleId, and actingAdminId are required' });
     }
@@ -10585,11 +10650,40 @@ app.post('/api/admin/users/:userId/apply-job-role', (req, res) => {
                 vals.push(targetId);
                 db.run(`UPDATE users SET ${sets.join(', ')} WHERE id = ?`, vals, function (err4) {
                     if (err4) return res.status(500).json({ error: err4.message });
-                    res.json({
-                        success: true,
-                        user_role: newRole,
-                        message: 'Job role applied. User must sign in again at their portal.'
-                    });
+                    const finishApply = () =>
+                        res.json({
+                            success: true,
+                            user_role: newRole,
+                            message: 'Job role applied. User must sign in again at their portal.'
+                        });
+                    if (
+                        Number.isInteger(supportDepartmentId) &&
+                        ['support_agent', 'staff_user', 'co_admin'].includes(String(newRole).toLowerCase())
+                    ) {
+                        const { ensureSupportDeskSchema } = require('./lib/support-desk-schema');
+                        return ensureSupportDeskSchema(db, () => {
+                            db.get(
+                                `SELECT user_id FROM support_agent_profiles WHERE user_id = ?`,
+                                [targetId],
+                                (pErr, pRow) => {
+                                    if (pErr) return finishApply();
+                                    const saveProfile = pRow
+                                        ? db.run.bind(
+                                              db,
+                                              `UPDATE support_agent_profiles SET department_id = ?, updated_at = CURRENT_TIMESTAMP WHERE user_id = ?`,
+                                              [supportDepartmentId, targetId]
+                                          )
+                                        : db.run.bind(
+                                              db,
+                                              `INSERT INTO support_agent_profiles (user_id, department_id, is_available, live_chat_enabled, updated_at) VALUES (?, ?, 1, 1, CURRENT_TIMESTAMP)`,
+                                              [targetId, supportDepartmentId]
+                                          );
+                                    saveProfile(() => finishApply());
+                                }
+                            );
+                        });
+                    }
+                    finishApply();
                 });
             });
         });

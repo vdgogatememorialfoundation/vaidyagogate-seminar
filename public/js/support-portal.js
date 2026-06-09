@@ -468,54 +468,71 @@
     document.getElementById('support-available-toggle').addEventListener('change', saveAvailability);
     document.getElementById('support-live-toggle').addEventListener('change', saveAvailability);
 
-    document.getElementById('support-login-form').addEventListener('submit', async function (ev) {
-        ev.preventDefault();
-        const msg = document.getElementById('support-login-msg');
-        msg.textContent = 'Signing in…';
-        msg.style.color = '#64748b';
-        try {
-            const email = document.getElementById('support-login-email').value.trim();
-            const password = document.getElementById('support-login-password').value;
-            const res = await fetch('/api/login', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password, loginPortal: 'staff' })
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error(data.error || 'Login failed');
-            const user = data.user;
-            const ur = String(user.user_role || '').toLowerCase();
-            if (ur !== 'support_agent' && ur !== 'co_admin' && ur !== 'staff_user') {
-                throw new Error('This account is not a support agent. Ask admin to assign the Support agent job role.');
-            }
-            if (window.PortalAuth) PortalAuth.setUser('support', user);
-            currentUser = user;
-            document.getElementById('auth-overlay').classList.add('hidden');
-            document.getElementById('app-shell').classList.remove('hidden');
-            await loadSession();
-            supportLoadTickets(true);
-            supportLoadInbox();
-            if (inboxPollTimer) clearInterval(inboxPollTimer);
-            inboxPollTimer = setInterval(function () {
+    function showSupportApp(user) {
+        currentUser = user;
+        document.getElementById('auth-overlay').classList.add('hidden');
+        document.getElementById('app-shell').classList.remove('hidden');
+        loadSession()
+            .then(() => {
+                supportLoadTickets(true);
                 supportLoadInbox();
-                supportLoadLiveSessions();
-            }, 30000);
-            if (location.hash === '#live') supportSwitchTab('live');
-            msg.textContent = '';
-        } catch (e) {
-            msg.textContent = e.message;
-            msg.style.color = '#b91c1c';
-        }
-    });
+                if (inboxPollTimer) clearInterval(inboxPollTimer);
+                inboxPollTimer = setInterval(function () {
+                    supportLoadInbox();
+                    supportLoadLiveSessions();
+                }, 30000);
+                if (location.hash === '#live') supportSwitchTab('live');
+            })
+            .catch(supportLogout);
+    }
+
+    if (window.PortalAuth && typeof PortalAuth.bindLoginForm === 'function') {
+        PortalAuth.bindLoginForm({
+            portal: 'support',
+            formId: 'support-login-form',
+            otpPanelId: 'support-login-otp-panel',
+            emailInputId: 'support-login-email',
+            passwordInputId: 'support-login-password',
+            onSuccess: showSupportApp,
+            onError: function (msg) {
+                const el = document.getElementById('support-login-msg');
+                if (el) {
+                    el.textContent = msg;
+                    el.style.color = '#b91c1c';
+                }
+            }
+        });
+    } else {
+        document.getElementById('support-login-form').addEventListener('submit', async function (ev) {
+            ev.preventDefault();
+            const msg = document.getElementById('support-login-msg');
+            msg.textContent = 'Signing in…';
+            msg.style.color = '#64748b';
+            try {
+                const email = document.getElementById('support-login-email').value.trim();
+                const password = document.getElementById('support-login-password').value;
+                const res = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password, portal: 'support' })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || !data.success) throw new Error(data.error || 'Login failed');
+                if (window.PortalAuth) PortalAuth.setUser('support', data.user);
+                showSupportApp(data.user);
+                msg.textContent = '';
+            } catch (e) {
+                msg.textContent = e.message;
+                msg.style.color = '#b91c1c';
+            }
+        });
+    }
 
     (function init() {
         if (window.PortalAuth) {
             const saved = PortalAuth.getUser('support');
             if (saved && saved.id) {
-                currentUser = saved;
-                document.getElementById('auth-overlay').classList.add('hidden');
-                document.getElementById('app-shell').classList.remove('hidden');
-                loadSession().then(() => supportLoadTickets(true)).catch(supportLogout);
+                showSupportApp(saved);
             }
         }
     })();

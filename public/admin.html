@@ -184,8 +184,8 @@
                         <button type="button" class="btn-secondary" onclick="adminClearStaffUsersSearch()">Clear search</button>
                     </div>
                     <table class="data-table">
-                        <thead><tr><th>12-Digit ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Created</th><th>Activated</th><th>Status</th><th>Actions</th></tr></thead>
-                        <tbody id="staff-users-list"><tr><td colspan="9" style="text-align: center;">Loading…</td></tr></tbody>
+                        <thead><tr><th>12-Digit ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Created</th><th>Activated</th><th>Role</th><th>Dept / portal</th><th>Status</th><th>Actions</th></tr></thead>
+                        <tbody id="staff-users-list"><tr><td colspan="10" style="text-align: center;">Loading…</td></tr></tbody>
                     </table>
                 </div>
             </div>
@@ -595,8 +595,32 @@
                     <p id="sd-config-msg" style="margin-top:8px;font-weight:600;font-size:0.88rem;"></p>
                 </div>
                 <div class="card" style="margin-bottom:16px;">
+                    <h3 style="margin:0 0 10px;">Departments</h3>
+                    <p style="color:#64748b;font-size:0.85rem;margin-bottom:12px;">Group support agents by team. Each department links to a portal login URL. Assign staff under <strong>Support agents</strong> below (or when creating a support user).</p>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:10px;max-width:920px;">
+                        <div><label style="font-size:0.8rem;">Name</label><input type="text" id="sd-dept-name" placeholder="e.g. Registration desk" style="width:100%;padding:8px;"></div>
+                        <div><label style="font-size:0.8rem;">Slug</label><input type="text" id="sd-dept-slug" placeholder="auto from name" style="width:100%;padding:8px;"></div>
+                        <div><label style="font-size:0.8rem;">Portal login</label><select id="sd-dept-portal" style="width:100%;padding:8px;">
+                            <option value="support">Support desk (/support.html)</option>
+                            <option value="staff">Staff portal (/staff/login)</option>
+                            <option value="judge">Judge (/judge.html)</option>
+                            <option value="scanner">Scanner (/scanner.html)</option>
+                            <option value="admin">Admin (/admin.html)</option>
+                        </select></div>
+                        <div><label style="font-size:0.8rem;">Sort order</label><input type="number" id="sd-dept-sort" value="0" style="width:100%;padding:8px;"></div>
+                    </div>
+                    <div style="margin-bottom:10px;max-width:920px;"><label style="font-size:0.8rem;">Description (optional)</label><input type="text" id="sd-dept-desc" placeholder="Shown internally" style="width:100%;padding:8px;"></div>
+                    <input type="hidden" id="sd-dept-edit-id" value="">
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+                        <button type="button" class="btn-primary" onclick="saveSupportDeskDepartmentAdmin()">Save department</button>
+                        <button type="button" class="btn-primary" style="background:#64748b;" onclick="cancelSupportDeskDepartmentEdit()">Clear</button>
+                    </div>
+                    <p id="sd-dept-msg" style="margin:0 0 10px;font-weight:600;font-size:0.88rem;"></p>
+                    <div id="sd-departments-root"><p style="color:#64748b;">Loading…</p></div>
+                </div>
+                <div class="card" style="margin-bottom:16px;">
                     <h3 style="margin:0 0 10px;">Support agents</h3>
-                    <p style="color:#64748b;font-size:0.85rem;margin-bottom:10px;">Assign the <strong>Support agent</strong> job role under Staff users, then set department and limits here.</p>
+                    <p style="color:#64748b;font-size:0.85rem;margin-bottom:10px;">Assign the <strong>Support agent</strong> job role under Staff users, then set department and limits here. Super admin can sign in at any portal with admin credentials.</p>
                     <div id="sd-agents-root"><p>Loading…</p></div>
                 </div>
                 <div class="card">
@@ -2424,6 +2448,7 @@
             <label style="display:block;font-size:0.8rem;font-weight:700;margin-bottom:4px;">Login portal</label>
             <select id="job-role-portal" style="width:100%;margin-bottom:10px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;" onchange="onJobRolePortalChange()">
                 <option value="staff">Staff portal (/staff/login)</option>
+                <option value="support">Support desk (/support.html)</option>
                 <option value="admin">Co-admin (admin + staff)</option>
                 <option value="judge">Judge portal (/judge.html)</option>
                 <option value="scanner">Scanner portal (/scanner.html)</option>
@@ -2436,6 +2461,7 @@
                 <option value="judge_user">Judge</option>
                 <option value="scanner_portal_user">Scanner volunteer</option>
                 <option value="reviewer">Reviewer</option>
+                <option value="support_agent">Support agent</option>
             </select>
             <div id="job-role-staff-modules-wrap">
                 <p style="font-size:0.85rem;color:#475569;margin:0 0 8px;font-weight:600;">Staff portal modules</p>
@@ -2457,7 +2483,11 @@
             <p style="color:#64748b;font-size:0.88rem;margin-bottom:12px;">User: <strong id="apply-job-role-user-label"></strong></p>
             <input type="hidden" id="apply-job-role-target-user-id" value="">
             <label style="display:block;font-size:0.8rem;font-weight:700;margin-bottom:4px;">Job role template</label>
-            <select id="apply-job-role-select" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:16px;"></select>
+            <select id="apply-job-role-select" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:10px;"></select>
+            <label style="display:block;font-size:0.8rem;font-weight:700;margin-bottom:4px;">Support department (optional)</label>
+            <select id="apply-job-role-dept" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:16px;">
+                <option value="">— No department —</option>
+            </select>
             <button type="button" class="btn-primary" style="width:100%;" onclick="applyJobRoleToUser()">Apply to user</button>
         </div>
     </div>
@@ -2477,7 +2507,7 @@
                 <select id="newuser-job-role" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;margin-bottom:8px;" onchange="onNewUserJobRoleChange()">
                     <option value="">-- Job role template (recommended) --</option>
                 </select>
-                <select id="newuser-role" required style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;">
+                <select id="newuser-role" required style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;" onchange="onNewUserRoleChangeForSupportDept()">
                     <option value="">-- Or pick account type manually --</option>
                     <option value="doctor">Doctor/Medical Professional</option>
                     <option value="staff_user">Staff user (operations portal)</option>
@@ -2487,7 +2517,15 @@
                     <option value="scanner_dashboard_user">Live scanner dashboard</option>
                     <option value="book_sales_staff">Book sales staff</option>
                     <option value="reviewer">Reviewer</option>
+                    <option value="support_agent">Support agent</option>
                 </select>
+                <div id="newuser-support-dept-wrap" style="display:none;margin-top:10px;">
+                    <label style="font-size:0.85rem;font-weight:600;">Support department (optional)</label>
+                    <select id="newuser-support-dept" style="width:100%;padding:8px;margin-top:4px;">
+                        <option value="">— No department yet —</option>
+                    </select>
+                    <p style="font-size:0.8rem;color:#64748b;margin:6px 0 0;">Portal login URL follows the department’s portal setting.</p>
+                </div>
                 <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;">
                     <input type="checkbox" id="newuser-custom-pass" onchange="toggleNewUserPasswordFields()">
                     Set custom password (otherwise system generates one)
@@ -2511,7 +2549,9 @@
                     Each role signs in at its own URL:
                     <strong>Doctor</strong> &rarr; /doctor.html &middot; <strong>Staff / Co-admin operations</strong> &rarr; /staff/login
                     &middot; <strong>Co-admin (full CRM)</strong> &rarr; /admin.html &middot;
+                    <strong>Support agent</strong> &rarr; /support.html &middot;
                     <strong>Judge/Reviewer</strong> &rarr; /judge.html &middot; <strong>Scanner</strong> &rarr; /scanner.html
+                    &middot; <strong>Super admin</strong> can use admin credentials on all staff portals.
                 </p>
                 <div id="newuser-admin-otp-wrap" style="display:none;padding:12px;border:1px solid #fed7aa;border-radius:8px;background:#fffbeb;margin-top:8px;">
                     <strong style="display:block;margin-bottom:8px;color:#9a3412;font-size:0.9rem;">Confirm it is you (email + WhatsApp)</strong>
@@ -2834,6 +2874,6 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260608menu2"></script>
-    <script src="/js/admin.js?v=20260609support3"></script>
+    <script src="/js/admin.js?v=20260609support4"></script>
 </body>
 </html>

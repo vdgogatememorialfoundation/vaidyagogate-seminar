@@ -34,7 +34,15 @@
         return ur === 'scanner_portal_user' || ur === 'scanner_dashboard_user' || ur === 'venue_gate_user';
     }
 
+    function isSuperAdminUser(user) {
+        if (!user) return false;
+        const { ur, r } = normRole(user);
+        return r === 'admin' && ur !== 'co_admin';
+    }
+
     function isSupportAgentUser(user) {
+        if (!user) return false;
+        if (isSuperAdminUser(user)) return true;
         const { ur } = normRole(user);
         if (ur === 'support_agent') return true;
         if (ur === 'co_admin') return true;
@@ -75,6 +83,9 @@
 
     function allowedForPortal(user, portal) {
         if (!user) return false;
+        if (isSuperAdminUser(user)) {
+            return portal === 'admin' || portal === 'judge' || portal === 'scanner' || portal === 'staff' || portal === 'support';
+        }
         if (portal === 'doctor') return isDoctorUser(user);
         if (portal === 'judge') return isJudgeUser(user);
         if (portal === 'scanner') return isScannerUser(user);
@@ -162,7 +173,7 @@
 
     async function refreshLoginOtpPanel(panelEl, portal) {
         if (!panelEl) return;
-        if (portal === 'judge' || portal === 'scanner' || portal === 'admin' || portal === 'staff') {
+        if (portal === 'judge' || portal === 'scanner' || portal === 'admin' || portal === 'staff' || portal === 'support') {
             panelEl.style.display = 'none';
             return;
         }
@@ -178,6 +189,7 @@
 
     function wrongPortalHint(user) {
         const { ur, r } = normRole(user);
+        if (isSuperAdminUser(user)) return 'Super admin can sign in at /admin.html, /support.html, /judge.html, /scanner.html, or /staff/login.';
         if (ur === 'co_admin') return 'Co-admins sign in at /staff/login (full CRM opens at /staff/crm).';
         if (r === 'admin' && ur !== 'co_admin') return 'Use the admin portal: /admin.html';
         if (isJudgeUser(user)) return 'Use the judge portal: /judge.html';
@@ -218,6 +230,10 @@
 
         function validatedLoginEmail() {
             const raw = String((document.getElementById(opts.emailInputId) || {}).value || '').trim();
+            const portalDigits = raw.replace(/\D/g, '');
+            if (portalDigits.length === 12) {
+                return { valid: true, cleanedEmail: portalDigits };
+            }
             if (typeof validateEmailClient === 'function') {
                 return validateEmailClient(raw, 'Email');
             }
@@ -428,6 +444,7 @@
         isJudgeUser,
         isScannerUser,
         isAdminPortalUser,
+        isSuperAdminUser,
         isBookStaffUser,
         isStaffPortalUser,
         wrongPortalHint,

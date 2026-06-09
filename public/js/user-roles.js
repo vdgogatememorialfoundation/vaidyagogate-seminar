@@ -11,6 +11,7 @@
         'reviewer',
         'book_sales_staff',
         'staff_user',
+        'support_agent',
         'admin'
     ]);
 
@@ -21,7 +22,8 @@
         'scanner_dashboard_user',
         'reviewer',
         'book_sales_staff',
-        'staff_user'
+        'staff_user',
+        'support_agent'
     ];
 
     function normalizeUserRole(userRole) {

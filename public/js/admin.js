@@ -935,6 +935,10 @@ function openAdminCreateUserModal(kind) {
     const title = modal.querySelector('h2');
     if (title) title.textContent = kind === 'doctor' ? 'Register new doctor' : 'Register new staff user';
     populateNewUserJobRoles(kind);
+    if (kind === 'staff') {
+        loadSupportDeskDepartmentsForForms();
+        onNewUserJobRoleChange();
+    }
     modal.classList.remove('hidden');
 }
 
@@ -999,7 +1003,7 @@ async function loadUsers() {
         if (!res.ok || !Array.isArray(users)) {
             const err = (users && users.error) || 'Could not load users';
             if (staffBody) {
-                staffBody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:#b91c1c;">${escAdmin(err)}</td></tr>`;
+                staffBody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:#b91c1c;">${escAdmin(err)}</td></tr>`;
             }
             if (doctorsBody) {
                 doctorsBody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#b91c1c;">${escAdmin(err)}</td></tr>`;
@@ -1018,6 +1022,24 @@ async function loadUsers() {
         window.__adminDoctorUsers = doctors;
         window.__adminUsersCounts = { staff: staff.length, doctors: doctors.length };
 
+        if (isSuperAdminUser()) {
+            const adm = getStoredAdminUser();
+            if (adm && adm.id) {
+                try {
+                    const ar = await fetch(
+                        '/api/admin/support-desk/agents?actingAdminId=' + encodeURIComponent(adm.id)
+                    );
+                    const ad = await ar.json().catch(() => ({}));
+                    window.__supportDeskAgentMap = {};
+                    (ad.agents || []).forEach((a) => {
+                        window.__supportDeskAgentMap[a.id] = a;
+                    });
+                } catch (_) {
+                    window.__supportDeskAgentMap = {};
+                }
+            }
+        }
+
         if (staffBody) {
             renderStaffUsersTable(staff);
         }
@@ -1035,7 +1057,7 @@ async function loadUsers() {
         const staffBody = document.getElementById('staff-users-list');
         if (staffBody) {
             staffBody.innerHTML =
-                '<tr><td colspan="9" style="text-align:center;">Could not load users. Hard refresh (Ctrl+F5) and try again.</td></tr>';
+                '<tr><td colspan="10" style="text-align:center;">Could not load users. Hard refresh (Ctrl+F5) and try again.</td></tr>';
         }
     }
 }
@@ -1053,7 +1075,8 @@ function adminStaffUserRoleValue(u) {
         'scanner_portal_user',
         'venue_gate_user',
         'scanner_dashboard_user',
-        'reviewer'
+        'reviewer',
+        'support_agent'
     ];
     if (staffVals.includes(ur)) return ur;
     if (staffVals.includes(r)) return r;
@@ -1098,12 +1121,12 @@ function renderStaffUsersTable(staffList) {
     }
     if (!total) {
         staffBody.innerHTML =
-            '<tr><td colspan="9" style="text-align:center;">No staff users yet. Use “+ Create staff user” and pick Judge / Co Admin / Scanner / Reviewer.</td></tr>';
+            '<tr><td colspan="10" style="text-align:center;">No staff users yet. Use “+ Create staff user” and pick Judge / Co Admin / Scanner / Support agent / Reviewer.</td></tr>';
         return;
     }
     if (!rows.length) {
         staffBody.innerHTML =
-            '<tr><td colspan="9" style="text-align:center;">No staff users match this search. ' +
+            '<tr><td colspan="10" style="text-align:center;">No staff users match this search. ' +
             (total
                 ? `${total} staff account${total === 1 ? '' : 's'} exist — <button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.82rem;" onclick="adminClearStaffUsersSearch()">Clear search</button> to show all. Also check the <strong>Doctors</strong> tab if the account was saved as Doctor.</td></tr>`
                 : '</td></tr>');
@@ -1147,9 +1170,13 @@ function renderStaffUsersTable(staffList) {
                             <option value="reviewer" ${userRole === 'reviewer' ? 'selected' : ''}>Reviewer</option>
                             <option value="book_sales_staff" ${userRole === 'book_sales_staff' ? 'selected' : ''}>Book sales staff</option>
                             <option value="staff_user" ${userRole === 'staff_user' ? 'selected' : ''}>Staff user</option>
+                            <option value="support_agent" ${userRole === 'support_agent' ? 'selected' : ''}>Support agent</option>
                             <option value="doctor" ${userRole === 'doctor' ? 'selected' : ''}>Doctor (doctor portal)</option>
                         </select>
                     </td>
+                    <td style="font-size:0.82rem;">${
+                        adminStaffShowsSupportDept(u) ? adminStaffSupportDeptLabel(u.id) : '<span style="color:#94a3b8;">—</span>'
+                    }</td>
                     <td>${adminUserStatusBadge(u)}</td>
                     <td>
                         <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-right:6px;" onclick="openAdminUserDetail(${u.id})">View</button>
@@ -2017,7 +2044,14 @@ function populateNewUserJobRoles(kind) {
     const roles = Object.values(window.__jobRolesById || {});
     const filtered =
         kind === 'staff'
-            ? roles.filter((r) => r.portal === 'staff' || r.portal === 'admin' || r.portal === 'judge' || r.portal === 'scanner')
+            ? roles.filter(
+                  (r) =>
+                      r.portal === 'staff' ||
+                      r.portal === 'admin' ||
+                      r.portal === 'judge' ||
+                      r.portal === 'scanner' ||
+                      r.portal === 'support'
+              )
             : [];
     sel.innerHTML =
         '<option value="">-- Job role template (recommended) --</option>' +
@@ -2040,6 +2074,7 @@ function populateNewUserJobRoles(kind) {
 function onNewUserJobRoleChange() {
     const sel = document.getElementById('newuser-job-role');
     const roleSel = document.getElementById('newuser-role');
+    const deptWrap = document.getElementById('newuser-support-dept-wrap');
     if (!sel || !roleSel) return;
     const jr = window.__jobRolesById[parseInt(sel.value, 10)];
     if (jr && jr.user_role) {
@@ -2048,6 +2083,20 @@ function onNewUserJobRoleChange() {
     } else {
         roleSel.disabled = false;
     }
+    const showDept =
+        (jr && (jr.portal === 'support' || jr.user_role === 'support_agent')) ||
+        roleSel.value === 'support_agent';
+    if (deptWrap) deptWrap.style.display = showDept ? '' : 'none';
+    if (showDept) loadSupportDeskDepartmentsForForms();
+}
+
+function onNewUserRoleChangeForSupportDept() {
+    const roleSel = document.getElementById('newuser-role');
+    const deptWrap = document.getElementById('newuser-support-dept-wrap');
+    if (!roleSel || !deptWrap) return;
+    const show = roleSel.value === 'support_agent';
+    deptWrap.style.display = show ? '' : 'none';
+    if (show) loadSupportDeskDepartmentsForForms();
 }
 
 function renderJobRoleModuleChecks(wrapId, mods, attr) {
@@ -2072,8 +2121,14 @@ function onJobRolePortalChange() {
     if (roleSel) {
         if (portal === 'judge') roleSel.value = 'judge_user';
         else if (portal === 'scanner') roleSel.value = 'scanner_portal_user';
+        else if (portal === 'support') roleSel.value = 'support_agent';
         else if (portal === 'admin') roleSel.value = 'co_admin';
-        else if (roleSel.value === 'co_admin' || roleSel.value === 'judge_user' || roleSel.value === 'scanner_portal_user') {
+        else if (
+            roleSel.value === 'co_admin' ||
+            roleSel.value === 'judge_user' ||
+            roleSel.value === 'scanner_portal_user' ||
+            roleSel.value === 'support_agent'
+        ) {
             roleSel.value = 'staff_user';
         }
     }
@@ -2190,6 +2245,7 @@ function openApplyJobRoleModal(userId) {
             )
             .join('');
         document.getElementById('apply-job-role-modal').classList.remove('hidden');
+        loadSupportDeskDepartmentsForForms();
     };
     if (!Object.keys(window.__jobRolesById || {}).length) {
         loadJobRoles().then(openModal);
@@ -2207,11 +2263,17 @@ async function applyJobRoleToUser() {
         return alert('Select a job role.');
     }
     if (!confirm('Apply this job role to the user? Their portal access and account type will be updated.')) return;
+    const deptSel = document.getElementById('apply-job-role-dept');
+    const supportDepartmentId = deptSel ? parseInt(deptSel.value, 10) : NaN;
     try {
         const res = await fetch('/api/admin/users/' + targetId + '/apply-job-role', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ jobRoleId, actingAdminId: adm.id })
+            body: JSON.stringify({
+                jobRoleId,
+                actingAdminId: adm.id,
+                supportDepartmentId: Number.isInteger(supportDepartmentId) ? supportDepartmentId : undefined
+            })
         });
         const data = await res.json();
         if (!res.ok || !data.success) return alert(data.error || 'Could not apply job role.');
@@ -2911,6 +2973,12 @@ async function adminCreateUser() {
     const demoChk = document.getElementById('newuser-is-demo');
     if (demoChk && demoChk.checked && adminDemoAccountsEnabled()) data.isDemo = true;
     if (Number.isInteger(jobRoleId)) data.jobRoleId = jobRoleId;
+    const deptSel = document.getElementById('newuser-support-dept');
+    const deptWrap = document.getElementById('newuser-support-dept-wrap');
+    if (deptWrap && deptWrap.style.display !== 'none' && deptSel) {
+        const deptId = parseInt(deptSel.value, 10);
+        if (Number.isInteger(deptId)) data.supportDepartmentId = deptId;
+    }
 
     try {
         const res = await fetch('/api/admin/users/create', {
@@ -13152,6 +13220,252 @@ function sdMinutesFromTimeInput(id) {
     return parseInt(p[0], 10) * 60 + parseInt(p[1], 10);
 }
 
+const SD_PORTAL_LABELS = {
+    support: '/support.html',
+    staff: '/staff/login',
+    judge: '/judge.html',
+    scanner: '/scanner.html',
+    admin: '/admin.html'
+};
+
+function sdPortalLabel(portal) {
+    const p = String(portal || 'support').toLowerCase();
+    return SD_PORTAL_LABELS[p] || '/';
+}
+
+function sdSlugifyName(name) {
+    return String(name || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+}
+
+async function refreshSupportDeskDepartmentSelects(depts) {
+    const list = Array.isArray(depts) ? depts.filter((d) => d.is_active !== 0) : [];
+    const opts =
+        '<option value="">— No department —</option>' +
+        list
+            .map(
+                (d) =>
+                    '<option value="' +
+                    d.id +
+                    '">' +
+                    escapeHtml(d.name) +
+                    ' (' +
+                    escapeHtml(sdPortalLabel(d.portal)) +
+                    ')</option>'
+            )
+            .join('');
+    ['newuser-support-dept', 'apply-job-role-dept'].forEach((id) => {
+        const sel = document.getElementById(id);
+        if (sel) sel.innerHTML = opts;
+    });
+    return list;
+}
+
+async function loadSupportDeskDepartmentsForForms() {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return [];
+    try {
+        const res = await fetch('/api/admin/support-desk/departments?actingAdminId=' + encodeURIComponent(adm.id));
+        const data = await res.json().catch(() => ({}));
+        const depts = Array.isArray(data.departments) ? data.departments : [];
+        window.__supportDeskDepartments = depts;
+        await refreshSupportDeskDepartmentSelects(depts);
+        return depts;
+    } catch (_) {
+        return [];
+    }
+}
+
+async function loadSupportDeskDepartmentsAdmin() {
+    const adm = getStoredAdminUser();
+    const root = document.getElementById('sd-departments-root');
+    if (!adm || !adm.id || !root) return;
+    root.innerHTML = '<p>Loading…</p>';
+    try {
+        const res = await fetch('/api/admin/support-desk/departments?actingAdminId=' + encodeURIComponent(adm.id));
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            root.innerHTML =
+                '<p style="color:#b91c1c;">Could not load departments: ' +
+                escapeHtml(data.error || 'HTTP ' + res.status) +
+                '</p>';
+            return;
+        }
+        const depts = await refreshSupportDeskDepartmentSelects(data.departments || []);
+        if (!depts.length) {
+            root.innerHTML = '<p style="color:#64748b;">No departments yet. Add one above.</p>';
+            return;
+        }
+        root.innerHTML =
+            '<table class="data-table"><thead><tr><th>Name</th><th>Slug</th><th>Portal login</th><th>Agents</th><th>Sort</th><th>Active</th><th></th></tr></thead><tbody>' +
+            depts
+                .map((d) => {
+                    const active = d.is_active !== 0;
+                    return (
+                        '<tr><td><strong>' +
+                        escapeHtml(d.name) +
+                        '</strong>' +
+                        (d.description
+                            ? '<br><span style="font-size:0.78rem;color:#64748b;">' +
+                              escapeHtml(d.description) +
+                              '</span>'
+                            : '') +
+                        '</td><td><code>' +
+                        escapeHtml(d.slug) +
+                        '</code></td><td>' +
+                        escapeHtml(sdPortalLabel(d.portal)) +
+                        '</td><td>' +
+                        escapeHtml(String(d.agent_count || 0)) +
+                        '</td><td>' +
+                        escapeHtml(String(d.sort_order || 0)) +
+                        '</td><td>' +
+                        (active ? 'Yes' : 'No') +
+                        '</td><td style="white-space:nowrap;"><button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.78rem;margin-right:4px;" onclick="editSupportDeskDepartmentAdmin(' +
+                        d.id +
+                        ')">Edit</button>' +
+                        (active
+                            ? '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.78rem;background:#b91c1c;" onclick="deactivateSupportDeskDepartmentAdmin(' +
+                              d.id +
+                              ')">Deactivate</button>'
+                            : '') +
+                        '</td></tr>'
+                    );
+                })
+                .join('') +
+            '</tbody></table>';
+    } catch (e) {
+        root.innerHTML =
+            '<p style="color:#b91c1c;">Failed to load departments: ' + escapeHtml(e.message || 'Network error') + '</p>';
+    }
+}
+
+function editSupportDeskDepartmentAdmin(id) {
+    const d = (window.__supportDeskDepartments || []).find((row) => Number(row.id) === Number(id));
+    if (!d) return;
+    document.getElementById('sd-dept-edit-id').value = String(d.id);
+    document.getElementById('sd-dept-name').value = d.name || '';
+    document.getElementById('sd-dept-slug').value = d.slug || '';
+    document.getElementById('sd-dept-portal').value = d.portal || 'support';
+    document.getElementById('sd-dept-sort').value = d.sort_order != null ? d.sort_order : 0;
+    document.getElementById('sd-dept-desc').value = d.description || '';
+    const msg = document.getElementById('sd-dept-msg');
+    if (msg) msg.textContent = 'Editing department — save to update.';
+}
+
+function cancelSupportDeskDepartmentEdit() {
+    ['sd-dept-edit-id', 'sd-dept-name', 'sd-dept-slug', 'sd-dept-desc'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.value = '';
+    });
+    const sort = document.getElementById('sd-dept-sort');
+    if (sort) sort.value = '0';
+    const portal = document.getElementById('sd-dept-portal');
+    if (portal) portal.value = 'support';
+    const msg = document.getElementById('sd-dept-msg');
+    if (msg) msg.textContent = '';
+}
+
+async function saveSupportDeskDepartmentAdmin() {
+    const adm = getStoredAdminUser();
+    const msg = document.getElementById('sd-dept-msg');
+    if (!adm || !adm.id) return;
+    const editId = parseInt((document.getElementById('sd-dept-edit-id') || {}).value, 10);
+    const name = String((document.getElementById('sd-dept-name') || {}).value || '').trim();
+    if (!name) {
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = 'Department name is required.';
+        }
+        return;
+    }
+    const slug =
+        String((document.getElementById('sd-dept-slug') || {}).value || '').trim() ||
+        sdSlugifyName(name);
+    const body = {
+        actingAdminId: adm.id,
+        name,
+        slug,
+        portal: (document.getElementById('sd-dept-portal') || {}).value || 'support',
+        sortOrder: parseInt((document.getElementById('sd-dept-sort') || {}).value, 10) || 0,
+        description: String((document.getElementById('sd-dept-desc') || {}).value || '').trim(),
+        isActive: true
+    };
+    try {
+        const res = await fetch(
+            Number.isInteger(editId)
+                ? '/api/admin/support-desk/departments/' + editId
+                : '/api/admin/support-desk/departments',
+            {
+                method: Number.isInteger(editId) ? 'PUT' : 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            }
+        );
+        const data = await res.json().catch(() => ({}));
+        if (msg) {
+            msg.style.color = data.success ? '#15803d' : '#b91c1c';
+            msg.textContent = data.success
+                ? 'Department saved. Login: ' + (data.loginPath || sdPortalLabel(body.portal))
+                : data.error || 'Save failed';
+        }
+        if (data.success) {
+            cancelSupportDeskDepartmentEdit();
+            loadSupportDeskDepartmentsAdmin();
+            loadSupportDeskAgentsAdmin();
+        }
+    } catch (e) {
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = e.message || 'Network error';
+        }
+    }
+}
+
+async function deactivateSupportDeskDepartmentAdmin(id) {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id || !confirm('Deactivate this department? Agents will be unassigned from it.')) return;
+    try {
+        const res = await fetch('/api/admin/support-desk/departments/' + id, {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: adm.id })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.success) return alert(data.error || 'Could not deactivate department.');
+        loadSupportDeskDepartmentsAdmin();
+        loadSupportDeskAgentsAdmin();
+    } catch (e) {
+        alert(e.message || 'Network error');
+    }
+}
+
+function adminStaffSupportDeptLabel(userId) {
+    const agent = (window.__supportDeskAgentMap || {})[userId];
+    if (!agent) return '<span style="color:#94a3b8;">—</span>';
+    const name = agent.department_name || 'Unassigned';
+    const portal = agent.department_portal ? sdPortalLabel(agent.department_portal) : '';
+    return (
+        escapeHtml(name) +
+        (portal ? '<br><span style="font-size:0.78rem;color:#64748b;">' + escapeHtml(portal) + '</span>' : '')
+    );
+}
+
+function adminStaffShowsSupportDept(user) {
+    const ur = adminStaffUserRoleValue(user);
+    if (ur === 'support_agent' || ur === 'co_admin') return true;
+    if (ur !== 'staff_user') return false;
+    try {
+        const mods =
+            typeof user.staff_modules === 'string' ? JSON.parse(user.staff_modules || '{}') : user.staff_modules || {};
+        return !!mods['support-tickets'];
+    } catch (_) {
+        return false;
+    }
+}
+
 function sdTimeFromMinutes(m) {
     const h = Math.floor(m / 60);
     const min = m % 60;
@@ -13179,6 +13493,7 @@ async function loadSupportDeskAdminTab() {
             if (en && bh.endMinutes != null) en.value = sdTimeFromMinutes(bh.endMinutes);
         }
     } catch (_) {}
+    loadSupportDeskDepartmentsAdmin();
     loadSupportDeskAgentsAdmin();
     loadSupportDeskHolidaysAdmin();
 }
@@ -13260,10 +13575,11 @@ async function loadSupportDeskAgentsAdmin() {
             return;
         }
         root.innerHTML =
-            '<table class="data-table"><thead><tr><th>Agent</th><th>Role</th><th>Department</th><th>Max tickets</th><th>Available</th><th>Live chat</th><th></th></tr></thead><tbody>' +
+            '<table class="data-table"><thead><tr><th>Agent</th><th>Role</th><th>Department</th><th>Portal login</th><th>Max tickets</th><th>Available</th><th>Live chat</th><th></th></tr></thead><tbody>' +
             agents
                 .map((a) => {
                     const deptOpts = depts
+                        .filter((d) => d.is_active !== 0)
                         .map(
                             (d) =>
                                 '<option value="' +
@@ -13275,6 +13591,12 @@ async function loadSupportDeskAgentsAdmin() {
                                 '</option>'
                         )
                         .join('');
+                    const selectedDept = depts.find((d) => d.id == a.department_id);
+                    const portalPath = selectedDept
+                        ? sdPortalLabel(selectedDept.portal)
+                        : a.department_portal
+                          ? sdPortalLabel(a.department_portal)
+                          : '/support.html';
                     return (
                         '<tr data-agent-id="' +
                         a.id +
@@ -13284,10 +13606,12 @@ async function loadSupportDeskAgentsAdmin() {
                         escapeHtml(a.email) +
                         '</span></td><td>' +
                         escapeHtml(a.user_role) +
-                        '</td><td><select class="sd-agent-dept" style="padding:6px;">' +
+                        '</td><td><select class="sd-agent-dept" style="padding:6px;" onchange="sdAgentDeptPortalPreview(this)">' +
                         '<option value="">—</option>' +
                         deptOpts +
-                        '</select></td><td><input type="number" class="sd-agent-max" min="1" max="100" value="' +
+                        '</select></td><td class="sd-agent-portal">' +
+                        escapeHtml(portalPath) +
+                        '</td><td><input type="number" class="sd-agent-max" min="1" max="100" value="' +
                         escapeHtml(String(a.max_open_tickets || 15)) +
                         '" style="width:70px;padding:6px;"></td><td><input type="checkbox" class="sd-agent-avail"' +
                         (a.is_available !== 0 ? ' checked' : '') +
@@ -13304,6 +13628,17 @@ async function loadSupportDeskAgentsAdmin() {
         root.innerHTML =
             '<p style="color:#b91c1c;">Failed to load agents: ' + escapeHtml(e.message || 'Network error') + '</p>';
     }
+}
+
+function sdAgentDeptPortalPreview(selectEl) {
+    if (!selectEl) return;
+    const row = selectEl.closest('tr');
+    if (!row) return;
+    const cell = row.querySelector('.sd-agent-portal');
+    if (!cell) return;
+    const deptId = parseInt(selectEl.value, 10);
+    const dept = (window.__supportDeskDepartments || []).find((d) => Number(d.id) === deptId);
+    cell.textContent = dept ? sdPortalLabel(dept.portal) : '/support.html';
 }
 
 async function saveSupportDeskAgentAdmin(userId) {

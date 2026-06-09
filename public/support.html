@@ -40,7 +40,7 @@
     <div id="auth-overlay">
         <div class="card" style="width:400px;max-width:100%;">
             <h1>Support desk sign in</h1>
-            <p class="sub">For support agents only. Ask the super admin to assign the <strong>Support agent</strong> job role.</p>
+            <p class="sub">For support agents and super admin. Assign the <strong>Support agent</strong> job role and department in Admin → Support desk.</p>
             <form id="support-login-form">
                 <div style="margin-bottom:12px;">
                     <label>Email or portal user ID</label>
@@ -50,6 +50,7 @@
                     <label>Password</label>
                     <input type="password" id="support-login-password" autocomplete="current-password" required>
                 </div>
+                <div id="support-login-otp-panel" style="display:none;"></div>
                 <button type="submit" class="btn btn-primary" style="width:100%;">Sign in</button>
                 <p id="support-login-msg" style="margin-top:10px;font-weight:600;font-size:0.88rem;"></p>
             </form>
@@ -166,7 +167,7 @@
     </div>
 
     <script src="/js/fetch-json.js?v=20260527a"></script>
-    <script src="/js/portal-auth.js?v=20260609support1"></script>
-    <script src="/js/support-portal.js?v=20260609support2"></script>
+    <script src="/js/portal-auth.js?v=20260609support2"></script>
+    <script src="/js/support-portal.js?v=20260609support3"></script>
 </body>
 </html>
