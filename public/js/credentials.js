@@ -20,6 +20,6 @@ async function sendCredentialsToNewUser(email, phone, firstName, userId, passwor
         success: true,
         email: true,
         whatsapp: true,
-        message: 'Login details were sent by email and WhatsApp (when configured).'
+        message: 'Login details were sent by email and WhatsApp where available on your account.'
     };
 }

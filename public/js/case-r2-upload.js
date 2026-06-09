@@ -11,16 +11,35 @@
         return (b / (1024 * 1024)).toFixed(1) + ' MB';
     }
 
+    function hostFallbackConfig() {
+        return {
+            r2Enabled: false,
+            defaultMaxMb: 50,
+            platformMaxMb: 50,
+            effectiveMaxMb: 50,
+            serverProxyMaxMb: 50,
+            serverProxyEnabled: false
+        };
+    }
+
     async function loadConfig(caseProgramId) {
         const q = caseProgramId ? '?caseProgramId=' + encodeURIComponent(caseProgramId) : '';
-        const res = await fetch('/api/case/uploads/config' + q, { cache: 'no-store' });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.error || 'Could not load upload settings');
-        if (data.r2SetupError) {
-            data.r2Enabled = false;
+        try {
+            const res = await fetch('/api/case/uploads/config' + q, { cache: 'no-store' });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                cachedConfig = hostFallbackConfig();
+                return cachedConfig;
+            }
+            if (data.r2SetupError) {
+                data.r2Enabled = false;
+            }
+            cachedConfig = data;
+            return data;
+        } catch (_e) {
+            cachedConfig = hostFallbackConfig();
+            return cachedConfig;
         }
-        cachedConfig = data;
-        return data;
     }
 
     function isEnabled(config) {

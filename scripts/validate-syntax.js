@@ -25,6 +25,7 @@ const files = [
     path.join('lib', 'book-sales-notify.js'),
     path.join('lib', 'inbound-mail-reply.js'),
     path.join('lib', 'message-reply-address.js'),
+    path.join('lib', 'case-upload-routes.js'),
     path.join('public', 'js', 'fetch-json.js')
 ];
 
