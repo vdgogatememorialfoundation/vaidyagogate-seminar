@@ -11356,7 +11356,9 @@ async function loadAdminMailInboundStatus() {
         const data = await res.json();
         if (st) {
             st.style.color = data.configured ? '#15803d' : '#b45309';
-            st.textContent = data.configured ? '✓ ' + data.hint : '⚠ ' + (data.hint || 'Not configured');
+            let line = data.configured ? '✓ ' + data.hint : '⚠ ' + (data.hint || 'Not configured');
+            if (data.parserInbox) line += ' Inbox: ' + data.parserInbox;
+            st.textContent = line;
         }
     } catch (_) {
         if (st) st.textContent = 'Could not load inbound status.';

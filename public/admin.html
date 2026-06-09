@@ -457,9 +457,10 @@
                     <h3 style="margin:0 0 8px;color:#0369a1;"><i class="fas fa-inbox"></i> Inbound email (free replies)</h3>
                     <p id="mail-inbound-status" style="margin:0 0 8px;font-size:0.88rem;color:#475569;">Checking…</p>
                     <ol style="margin:0;padding-left:20px;font-size:0.85rem;color:#475569;line-height:1.55;">
-                        <li>Create a free inbox at <a href="https://mailparser.io" target="_blank" rel="noopener">mailparser.io</a></li>
-                        <li>Webhook URL: <code id="mail-inbound-webhook-url">…</code> · Header <code>x-inbound-mail-secret</code></li>
-                        <li>On Render set <code>MAILPARSER_INBOUND_EMAIL</code> (inbox address) and <code>INBOUND_MAIL_WEBHOOK_SECRET</code></li>
+                        <li>Inbox address: <code>stccahyu@mailparser.io</code> — set as <code>MAILPARSER_INBOUND_EMAIL</code> on Render</li>
+                        <li>Webhook URL: <code id="mail-inbound-webhook-url">…</code> · Method POST · Header <code>x-inbound-mail-secret</code> = your secret</li>
+                        <li>On Render set <code>INBOUND_MAIL_WEBHOOK_SECRET</code> to the same value as the webhook header</li>
+                        <li>Routes replies for <strong>Website contact</strong> (<code>[VGMF-CTC-id]</code>), <strong>support tickets</strong>, <strong>admin email threads</strong>, and <strong>case judge messages</strong>. Emails to the inbox without a reference are added under Website contact.</li>
                     </ol>
                 </div>
                 <div class="card" style="margin-bottom:16px;">
@@ -2801,6 +2802,6 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260608menu2"></script>
-    <script src="/js/admin.js?v=20260608banner1"></script>
+    <script src="/js/admin.js?v=20260609mailparser1"></script>
 </body>
 </html>

@@ -11627,7 +11627,19 @@ app.post('/api/public/contact-inquiry', (req, res) => {
                     }
                     return res.status(500).json({ error: err.message });
                 }
-                res.json({ success: true, id: this.lastID });
+                const inquiryId = this.lastID;
+                const threadReplyNotify = require('./lib/thread-reply-notify');
+                threadReplyNotify.notifyStaffInbox(
+                    db,
+                    {
+                        threadLabel: 'Website contact — ' + sub,
+                        messagePreview: msg,
+                        dashboardUrl: threadReplyNotify.dashboardUrl('admin_contact_inquiries'),
+                        intro: 'A new message was submitted on the public contact form.'
+                    },
+                    () => {}
+                );
+                res.json({ success: true, id: inquiryId });
             }
         );
     });
@@ -11692,6 +11704,7 @@ app.post('/api/admin/contact-inquiries/:id/send-email', async (req, res) => {
             if (e2) return res.status(500).json({ error: e2.message });
             if (!row) return res.status(404).json({ error: 'Inquiry not found' });
             const staffDisplay = require('./lib/staff-display-name');
+            const messageReplyAddress = require('./lib/message-reply-address');
             db.get(
                 `SELECT id, first_name, middle_name, last_name, email FROM users WHERE id = ?`,
                 [aid],
@@ -11701,7 +11714,10 @@ app.post('/api/admin/contact-inquiries/:id/send-email', async (req, res) => {
                         'Thank you for contacting the Vaidya Gogate Memorial Foundation.\n\nRegarding your message: "' +
                         String(row.subject || '').slice(0, 120) +
                         '"\n\n';
-                    const fullBody = replyIntro + b;
+                    const refToken = messageReplyAddress.contactRefToken(id);
+                    const replyTo = messageReplyAddress.buildContactReplyAddress(id);
+                    const fullBody =
+                        replyIntro + b + messageReplyAddress.replyFooterNote(replyTo, refToken);
                     let result;
                     try {
                         result = await adminComposeMail.sendSingleMailReliable(db, {
@@ -11709,7 +11725,7 @@ app.post('/api/admin/contact-inquiries/:id/send-email', async (req, res) => {
                             name: row.name,
                             subject: sub,
                             body: fullBody,
-                            replyTo: (staffRow && staffRow.email) || undefined,
+                            replyTo: replyTo || undefined,
                             fromDisplay: staffDisplay.formatStaffFromDisplay(staffRow)
                         });
                     } catch (mailErr) {
