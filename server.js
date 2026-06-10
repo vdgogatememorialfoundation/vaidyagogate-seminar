@@ -11631,13 +11631,18 @@ app.get('/api/admin/payment_gateways', (req, res) => {
 app.post('/api/admin/payment_gateways/:name', (req, res) => {
     const { name } = req.params;
     const { is_active, config } = req.body;
-    const finish = (finalConfig) => {
+    const finish = (rawConfig) => {
+        const normalized = paymentGatewayOptions.normalizeGatewaySave(name, rawConfig || {}, !!is_active);
         db.run(
             `INSERT OR REPLACE INTO payment_gateways (name, is_active, config) VALUES (?, ?, ?)`,
-            [name, is_active ? 1 : 0, JSON.stringify(finalConfig)],
+            [name, normalized.is_active, JSON.stringify(normalized.config)],
             function (err) {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json({ success: true });
+                if (err) return res.status(500).json({ error: err.message });
+                res.json({ success: true, liveReady: paymentGatewayOptions.expandGatewayRow({
+                    name,
+                    is_active: normalized.is_active,
+                    config: normalized.config
+                }).some((o) => o.mode === 'live') });
             }
         );
     };
@@ -11651,6 +11656,22 @@ app.post('/api/admin/payment_gateways/:name', (req, res) => {
         });
     }
     finish(config || {});
+});
+
+// Admin: pick default live gateway for site config from enabled credentials
+app.post('/api/admin/payment_gateways/sync-default', (req, res) => {
+    db.all(`SELECT * FROM payment_gateways`, [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        const liveGateways = paymentGatewayOptions.listLiveGatewayNames(rows || []);
+        const defaultPg = paymentGatewayOptions.pickDefaultLiveGateway(rows || []);
+        if (!defaultPg) {
+            return res.json({ success: true, defaultGateway: null, liveGateways });
+        }
+        upsertGlobalSetting('payment_gateway', defaultPg, (setErr) => {
+            if (setErr) return res.status(500).json({ error: setErr.message });
+            res.json({ success: true, defaultGateway: defaultPg, liveGateways });
+        });
+    });
 });
 
 // ==================== EVENT SCHEDULE ENDPOINTS ====================

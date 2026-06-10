@@ -9893,38 +9893,25 @@ async function savePaymentGatewaysSettings() {
                 body: JSON.stringify({ is_active: gw.is_active, config: gw.config })
             });
         }
-        const pgPriority = [
-            'razorpay',
-            'cashfree',
-            'juspay',
-            'easebuzz',
-            'payu',
-            'paytm',
-            'phonepe',
-            'zoho'
-        ];
-        let defaultPg = null;
-        for (const name of pgPriority) {
-            const row = gateways.find((g) => g.name === name);
-            if (row && row.is_active && row.config && row.config.live && row.config.live.enabled) {
-                defaultPg = name;
-                break;
-            }
-        }
+        const syncRes = await fetch('/api/admin/payment_gateways/sync-default', { method: 'POST' });
+        const syncData = syncRes.ok ? await syncRes.json() : {};
+        const defaultPg = syncData.defaultGateway || null;
+        const liveGateways = Array.isArray(syncData.liveGateways) ? syncData.liveGateways : [];
         if (defaultPg) {
-            await fetch('/api/admin/global_settings', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ settings: [{ key: 'payment_gateway', value: defaultPg }] })
-            });
             const sel = document.getElementById('setting-pg');
             if (sel) sel.value = defaultPg;
         }
-        setAdminSettingsSaveMsg(
-            defaultPg
-                ? `Payment gateways saved. Default live gateway set to ${defaultPg} (Site configuration).`
-                : 'Payment gateways saved. Enable Live mode on at least one gateway for doctor payments.'
-        );
+        let saveMsg = 'Payment gateways saved.';
+        if (liveGateways.length) {
+            saveMsg +=
+                ' Live checkout ready: ' +
+                liveGateways.join(', ') +
+                (defaultPg ? `. Default gateway: ${defaultPg}.` : '.');
+        } else {
+            saveMsg +=
+                ' Add live API keys, enable the gateway, and save again — any of Razorpay, Cashfree, Juspay, Easebuzz, PayU, Paytm, PhonePe, or Zoho works.';
+        }
+        setAdminSettingsSaveMsg(saveMsg);
     } catch (err) {
         console.error(err);
         setAdminSettingsSaveMsg('Could not save payment gateways.', true);
