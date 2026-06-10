@@ -17,6 +17,26 @@ const APPS = [
     { dir: 'scanner-mobile', url: `${SEMINAR}/scanner.html?app=seminar`, title: 'VGMF Seminar Scanner' }
 ];
 
+function patchScannerAndroidManifest(appDir) {
+    const manifest = path.join(appDir, 'android', 'app', 'src', 'main', 'AndroidManifest.xml');
+    if (!fs.existsSync(manifest)) return;
+    let xml = fs.readFileSync(manifest, 'utf8');
+    const perms = ['android.permission.CAMERA', 'android.permission.INTERNET'];
+    for (const perm of perms) {
+        if (!xml.includes(perm)) {
+            xml = xml.replace('<manifest', `<uses-permission android:name="${perm}" />\n<manifest`);
+        }
+    }
+    if (!xml.includes('android.hardware.camera')) {
+        xml = xml.replace(
+            '</manifest>',
+            '    <uses-feature android:name="android.hardware.camera" android:required="false" />\n</manifest>'
+        );
+    }
+    fs.writeFileSync(manifest, xml);
+    console.log('[android] patched CAMERA permission in', manifest);
+}
+
 function writeConfig(app) {
     const base = path.join(root, app.dir);
     const config = {
@@ -73,6 +93,9 @@ for (const app of APPS) {
         execSync('npx cap add android', { cwd, stdio: 'inherit' });
     }
     execSync('npx cap sync android', { cwd, stdio: 'inherit' });
+    if (app.dir === 'scanner-mobile') {
+        patchScannerAndroidManifest(cwd);
+    }
     const assetCfg = path.join(cwd, 'android', 'app', 'src', 'main', 'assets', 'capacitor.config.json');
     if (fs.existsSync(assetCfg)) {
         const j = JSON.parse(fs.readFileSync(assetCfg, 'utf8'));

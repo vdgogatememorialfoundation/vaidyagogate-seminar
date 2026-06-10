@@ -9367,6 +9367,24 @@ async function loadSettings() {
                         live.enabled !== false && !!(live.app_id || config.app_id) && !!(live.secret_key || config.secret_key);
                 }
                 document.getElementById('pg-cashfree-active').checked = pg.is_active;
+            } else if (pg.name === 'juspay') {
+                const live = config.live || {};
+                const midEl = document.getElementById('pg-juspay-merchant-id');
+                const keyEl = document.getElementById('pg-juspay-api-key');
+                const cidEl = document.getElementById('pg-juspay-client-id');
+                if (midEl) midEl.value = live.merchant_id || config.merchant_id || '';
+                if (keyEl) keyEl.value = live.api_key || config.api_key || '';
+                if (cidEl) cidEl.value = live.payment_page_client_id || config.payment_page_client_id || '';
+                const jusLiveEl = document.getElementById('pg-juspay-live-enabled');
+                if (jusLiveEl) {
+                    jusLiveEl.checked =
+                        live.enabled !== false &&
+                        !!(live.merchant_id || config.merchant_id) &&
+                        !!(live.api_key || config.api_key) &&
+                        !!(live.payment_page_client_id || config.payment_page_client_id);
+                }
+                const jusActiveEl = document.getElementById('pg-juspay-active');
+                if (jusActiveEl) jusActiveEl.checked = pg.is_active;
             }
         });
     } catch(err) { console.error(err); }
@@ -9534,6 +9552,10 @@ async function savePaymentGatewaysSettings() {
     const cfAppId = document.getElementById('pg-cashfree-app-id').value.trim();
     const cfSecret = document.getElementById('pg-cashfree-secret-key').value.trim();
     const cfLiveOn = document.getElementById('pg-cashfree-live-enabled')?.checked;
+    const jusMerchantId = document.getElementById('pg-juspay-merchant-id')?.value.trim() || '';
+    const jusApiKey = document.getElementById('pg-juspay-api-key')?.value.trim() || '';
+    const jusClientId = document.getElementById('pg-juspay-client-id')?.value.trim() || '';
+    const jusLiveOn = document.getElementById('pg-juspay-live-enabled')?.checked;
         const gateways = [
         {
             name: 'razorpay',
@@ -9563,6 +9585,21 @@ async function savePaymentGatewaysSettings() {
                     secret_key: cfSecret
                 }
             }
+        },
+        {
+            name: 'juspay',
+            is_active: document.getElementById('pg-juspay-active')?.checked === true,
+            config: {
+                merchant_id: jusMerchantId,
+                api_key: jusApiKey,
+                payment_page_client_id: jusClientId,
+                live: {
+                    enabled: !!jusLiveOn,
+                    merchant_id: jusMerchantId,
+                    api_key: jusApiKey,
+                    payment_page_client_id: jusClientId
+                }
+            }
         }
     ];
     const legacyOff = ['payu', 'easebuzz', 'paytm', 'phonepe'].map((name) => ({
@@ -9580,9 +9617,11 @@ async function savePaymentGatewaysSettings() {
         }
         const razActive = gateways[0].is_active && gateways[0].config.live.enabled;
         const cfActive = gateways[1].is_active && gateways[1].config.live.enabled;
+        const jusActive = gateways[2].is_active && gateways[2].config.live.enabled;
         let defaultPg = null;
         if (razActive) defaultPg = 'razorpay';
         else if (cfActive) defaultPg = 'cashfree';
+        else if (jusActive) defaultPg = 'juspay';
         if (defaultPg) {
             await fetch('/api/admin/global_settings', {
                 method: 'POST',
@@ -9595,7 +9634,7 @@ async function savePaymentGatewaysSettings() {
         setAdminSettingsSaveMsg(
             defaultPg
                 ? `Payment gateways saved. Default live gateway set to ${defaultPg} (Site configuration).`
-                : 'Payment gateways saved. Enable Razorpay or Cashfree Live mode for doctor payments.'
+                : 'Payment gateways saved. Enable Razorpay, Cashfree, or Juspay Live mode for doctor payments.'
         );
     } catch (err) {
         console.error(err);
@@ -10762,6 +10801,8 @@ function editSeminar(index) {
     syncSeminarPreregUi();
     const waitlistCh = document.getElementById('seminar-waitlist-enabled');
     if (waitlistCh) waitlistCh.checked = Number(s.waiting_list_enabled) === 1;
+    const allowEditCh = document.getElementById('seminar-allow-application-edit');
+    if (allowEditCh) allowEditCh.checked = Number(s.allow_application_edit) === 1;
     document.getElementById('seminar-event-date').value = formatDt(s.event_date);
     const py = document.getElementById('seminar-portal-year');
     if (py) py.value = s.portal_year || adminPortalYear || new Date().getFullYear();
@@ -10854,6 +10895,7 @@ async function saveSeminar(e) {
             return window.PortalDateTime ? window.PortalDateTime.fromDatetimeLocal(v) : v;
         })(),
         waiting_list_enabled: document.getElementById('seminar-waitlist-enabled')?.checked === true,
+        allow_application_edit: document.getElementById('seminar-allow-application-edit')?.checked === true,
         event_date: window.PortalDateTime
             ? window.PortalDateTime.fromDatetimeLocal(document.getElementById('seminar-event-date').value)
             : document.getElementById('seminar-event-date').value,

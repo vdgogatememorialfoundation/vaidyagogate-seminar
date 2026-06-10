@@ -6061,7 +6061,9 @@ async function loadApplications(silentPoll) {
             // Render Table Row
             const st = String(a.status || '').toLowerCase();
             const isDraft = st === 'draft';
-            const canEdit = a.status === 'submitted' || a.status === 'pending_approval';
+            const canEdit =
+                Number(a.allow_application_edit) === 1 &&
+                (st === 'submitted' || st === 'pending_approval');
             const needsResubmit = st === 'revision_required' || st === 'documents_requested';
             const draftBtn = isDraft
                 ? `<button class="btn-warning" style="padding: 5px 10px; margin-right: 5px;" onclick="resumeDraftApplication(${a.id})">Continue draft</button>`
@@ -6085,7 +6087,7 @@ async function loadApplications(silentPoll) {
             list.innerHTML += `
                 <tr>
                     <td><strong>${a.application_no}</strong></td>
-                    <td><span style="background: ${a.status === 'rejected' ? '#fee2e2' : isDraft ? '#e0f2fe' : '#fef3c7'}; padding: 5px; border-radius: 5px;">${isDraft ? 'DRAFT' : a.status.toUpperCase()}</span></td>
+                    <td><span style="background: ${a.status === 'rejected' ? '#fee2e2' : isDraft ? '#e0f2fe' : st === 'waitlisted' ? '#fffbeb' : '#fef3c7'}; padding: 5px; border-radius: 5px;">${isDraft ? 'DRAFT' : st === 'waitlisted' ? 'WAITLISTED' : st === 'submitted' ? 'SUBMITTED' : a.status.toUpperCase()}</span></td>
                     <td>${draftBtn}${editBtn}${resubmitBtn}${cancelBtn}<button class="btn-primary" style="padding: 5px 10px;" onclick="viewApplication(${index})">View Details</button></td>
                 </tr>
             `;
@@ -7795,6 +7797,15 @@ async function applyRegistrationFormData(formData) {
 async function editApplication(index) {
     const app = userApplications[index];
     if (!app || !app.id) return alert('Application not found.');
+    if (!Number(app.allow_application_edit)) {
+        return alert(
+            'Editing is disabled for this seminar after submit. Contact the seminar office if you need changes.'
+        );
+    }
+    const appSt = String(app.status || '').toLowerCase();
+    if (appSt !== 'submitted' && appSt !== 'pending_approval') {
+        return alert('This application can no longer be edited.');
+    }
     let formData = {};
     try {
         formData = JSON.parse(app.form_data || '{}');

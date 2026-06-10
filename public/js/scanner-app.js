@@ -907,7 +907,32 @@
         }
     }
 
+    function showCameraError(message) {
+        const hintEl = document.querySelector('.camera-hint');
+        const msg =
+            message ||
+            'Could not open camera. Allow camera permission in browser or app settings, then tap Reset.';
+        if (hintEl) hintEl.textContent = msg;
+        console.error('[scanner] camera:', msg);
+    }
+
+    function pickCameraDeviceId(cameras, mode) {
+        const list = Array.isArray(cameras) ? cameras : [];
+        if (!list.length) return null;
+        const label = (c) => String((c && c.label) || '').toLowerCase();
+        if (mode === 'environment') {
+            const back =
+                list.find((c) => /back|rear|environment|wide/i.test(label(c))) ||
+                list[list.length - 1];
+            return back && back.id;
+        }
+        const front = list.find((c) => /front|user|selfie/i.test(label(c))) || list[0];
+        return front && front.id;
+    }
+
     async function startCam() {
+        const readerEl = document.getElementById('reader');
+        const hintEl = document.querySelector('.camera-hint');
         if (html5QrCode) {
             try {
                 await html5QrCode.stop();
@@ -916,23 +941,63 @@
         torchOn = false;
         scannerMediaTrack = null;
         updateTorchButton();
+        if (readerEl) readerEl.innerHTML = '';
         html5QrCode = new Html5Qrcode('reader');
-        const config = { fps: 15, qrbox: { width: 260, height: 260 }, aspectRatio: 1, disableFlip: false };
+        const config = { fps: 12, qrbox: { width: 260, height: 260 }, aspectRatio: 1, disableFlip: false };
+        const onScan = (text) => processScan(text);
+
+        if (!window.isSecureContext) {
+            showCameraError('Camera needs HTTPS. Open the scanner via https://seminar.vaidyagogate.org');
+            throw new Error('insecure_context');
+        }
+
+        let lastErr = null;
+        try {
+            if (typeof Html5Qrcode.getCameras === 'function') {
+                const cameras = await Html5Qrcode.getCameras();
+                const deviceId = pickCameraDeviceId(cameras, facingMode);
+                if (deviceId) {
+                    await html5QrCode.start(deviceId, config, onScan);
+                    await waitForScannerVideo(4000);
+                    if (hintEl) {
+                        hintEl.textContent =
+                            scannerMode() === 'books'
+                                ? 'Scan book order pickup QR'
+                                : 'Align QR inside the frame';
+                    }
+                    return;
+                }
+            }
+        } catch (e) {
+            lastErr = e;
+        }
+
         const cameraTry = [
+            { facingMode: { exact: facingMode } },
             { facingMode: { ideal: facingMode } },
             { facingMode: facingMode }
         ];
-        let started = false;
-        for (let i = 0; i < cameraTry.length && !started; i++) {
+        for (let i = 0; i < cameraTry.length; i++) {
             try {
-                await html5QrCode.start(cameraTry[i], config, (text) => processScan(text));
-                started = true;
-            } catch (_) {}
+                await html5QrCode.start(cameraTry[i], config, onScan);
+                await waitForScannerVideo(4000);
+                if (hintEl) {
+                    hintEl.textContent =
+                        scannerMode() === 'books'
+                            ? 'Scan book order pickup QR'
+                            : 'Align QR inside the frame';
+                }
+                return;
+            } catch (e) {
+                lastErr = e;
+            }
         }
-        if (!started) {
-            await html5QrCode.start({ facingMode }, config, (text) => processScan(text));
-        }
-        await waitForScannerVideo(4000);
+
+        const errMsg =
+            (lastErr && (lastErr.message || lastErr.name)) ||
+            'Camera permission denied or no camera available.';
+        showCameraError(errMsg);
+        throw lastErr || new Error(errMsg);
     }
 
     function showLogin() {
@@ -951,7 +1016,15 @@
             PortalAuth.renderLoginTime('scanner-login-time', u);
         }
         syncScannerModeUi();
-        loadCheckinSeminars().then(() => startCam()).catch(console.error);
+        loadCheckinSeminars()
+            .then(() => startCam())
+            .catch((e) => {
+                console.error(e);
+                showCameraError(
+                    (e && e.message) ||
+                        'Camera failed to start. Allow camera access and tap Reset below.'
+                );
+            });
     }
 
     document.getElementById('scanner-mode-select')?.addEventListener('change', syncScannerModeUi);

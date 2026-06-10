@@ -54,7 +54,8 @@ const out = [
     `INSERT INTO payment_gateways (name, is_active, config) VALUES
  ('razorpay', 0, '{}'),
  ('payu', 0, '{}'),
- ('cashfree', 0, '{}')
+ ('cashfree', 0, '{}'),
+ ('juspay', 0, '{}')
  ON CONFLICT (name) DO NOTHING;`,
     ''
 ].join('\n');

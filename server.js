@@ -1143,6 +1143,9 @@ function ensurePortalSchema(next) {
                                             ignoreSchemaMigrationErr(h7pre);
                                         db.run(`ALTER TABLE seminars ADD COLUMN waiting_list_enabled INTEGER DEFAULT 0`, (h7wl) => {
                                             ignoreSchemaMigrationErr(h7wl);
+                                            db.run(`ALTER TABLE seminars ADD COLUMN allow_application_edit INTEGER DEFAULT 0`, (h7ae) => {
+                                                ignoreSchemaMigrationErr(h7ae);
+                                            });
                                         });
                                             ticketScanEvents.ensureTicketScanEventsTable(db, () => {
                                                 scannerIdCapture.ensureSchema(db, () => {
@@ -1876,7 +1879,8 @@ function enqueueApplicationSubmitted(db, meta, cb) {
             userId,
             seminarId,
             registrationId,
-            vars: { approval_status: 'submitted' }
+            vars: { approval_status: 'submitted' },
+            immediate: true
         },
         () => cb && cb(null)
     );
@@ -4836,7 +4840,9 @@ function fetchApplicationsForUser(uid, yearFilter, cb) {
     const baseSelect = `SELECT r.id, r.seminar_id, r.application_no, r.status, r.form_data, r.created_at,
                 r.created_at AS updated_at,
                 s.title AS seminar_title, s.whatsapp_group_url, s.cancellation_policy_json, s.terms_conditions,
-                s.event_date AS seminar_event_date, s.price AS seminar_price, s.portal_year`;
+                s.event_date AS seminar_event_date, s.price AS seminar_price, s.portal_year,
+                IFNULL(s.allow_application_edit, 0) AS allow_application_edit,
+                IFNULL(s.waiting_list_enabled, 0) AS waiting_list_enabled`;
     const fromWhere = ` FROM registrations r
          LEFT JOIN seminars s ON r.seminar_id = s.id
          WHERE r.user_id = ?`;
@@ -5314,6 +5320,7 @@ app.post('/api/applications/submit', withCertificateUpload, (req, res) => {
                                                 userId,
                                                 seminarId,
                                                 registrationId: newId,
+                                                immediate: true,
                                                 vars: {
                                                     application_no: applicationNo,
                                                     seminar_name: seminarTitle,
@@ -5531,7 +5538,9 @@ app.put('/api/applications/:applicationId', withCertificateUpload, (req, res) =>
     const fieldOtpTokensObj = parseMaybeJson(fieldOtpTokens) || (fieldOtpTokens && typeof fieldOtpTokens === 'object' ? fieldOtpTokens : {});
     
     db.get(
-        `SELECT r.user_id, r.seminar_id, r.status, r.form_data, IFNULL(s.otp_on_application, 0) AS otp_on_application
+        `SELECT r.user_id, r.seminar_id, r.status, r.form_data,
+                IFNULL(s.otp_on_application, 0) AS otp_on_application,
+                IFNULL(s.allow_application_edit, 0) AS allow_application_edit
          FROM registrations r
          LEFT JOIN seminars s ON s.id = r.seminar_id
          WHERE r.id = ?`,
@@ -5541,7 +5550,12 @@ app.put('/api/applications/:applicationId', withCertificateUpload, (req, res) =>
         if (!row) return res.status(404).json({ error: 'Application not found' });
         
             const st = String(row.status || '').toLowerCase();
-            if (st !== 'submitted' && st !== 'pending_approval' && st !== 'revision_required') {
+            if (!Number(row.allow_application_edit)) {
+                return res.status(400).json({
+                    error: 'Editing is disabled for this seminar after submit. Contact the seminar office if you need changes.'
+                });
+            }
+            if (st !== 'submitted' && st !== 'pending_approval') {
                 return res.status(400).json({
                     error: 'This application can no longer be edited after it has moved forward in the workflow.'
                 });
@@ -7285,7 +7299,8 @@ app.post('/api/admin/seminars', (req, res) => {
         preregistration_enabled,
         preregistration_start,
         preregistration_end,
-        waiting_list_enabled
+        waiting_list_enabled,
+        allow_application_edit
     } = req.body;
     const certScansReq = certVerify.normalizeCertScansRequired(cert_scans_required);
     const rfj = registration_form_json != null && String(registration_form_json).trim() !== '' ? String(registration_form_json) : null;
@@ -7307,6 +7322,8 @@ app.post('/api/admin/seminars', (req, res) => {
             : 0;
     const waitListEnabled =
         waiting_list_enabled === true || waiting_list_enabled === 1 || waiting_list_enabled === '1' ? 1 : 0;
+    const allowAppEdit =
+        allow_application_edit === true || allow_application_edit === 1 || allow_application_edit === '1' ? 1 : 0;
     const regStart = seminarDt.normalizeSeminarDateTimeForStorage(registration_start);
     const regEnd = seminarDt.normalizeSeminarRegistrationEndForStorage(registration_end);
     const eventDt = seminarDt.normalizeSeminarDateTimeForStorage(event_date);
@@ -7317,8 +7334,8 @@ app.post('/api/admin/seminars', (req, res) => {
         const portalYear =
             Number.isInteger(bodyYear) && bodyYear > 2000 ? bodyYear : defaultYear;
         db.run(
-            `INSERT INTO seminars (title, description, registration_start, registration_end, event_date, capacity, price, checkin_enabled, checkin_date, location_url, terms_conditions, hero_image_path, flyer_path, gallery_paths, registration_form_json, cancellation_policy_json, whatsapp_group_url, otp_on_application, otp_on_step1, otp_on_submit, public_list_enabled, cert_scans_required, portal_year, is_active, show_seats_public, preregistration_enabled, preregistration_start, preregistration_end, waiting_list_enabled) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO seminars (title, description, registration_start, registration_end, event_date, capacity, price, checkin_enabled, checkin_date, location_url, terms_conditions, hero_image_path, flyer_path, gallery_paths, registration_form_json, cancellation_policy_json, whatsapp_group_url, otp_on_application, otp_on_step1, otp_on_submit, public_list_enabled, cert_scans_required, portal_year, is_active, show_seats_public, preregistration_enabled, preregistration_start, preregistration_end, waiting_list_enabled, allow_application_edit) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 title,
                 description,
@@ -7348,7 +7365,8 @@ app.post('/api/admin/seminars', (req, res) => {
                 preregEnabled,
                 preregStart,
                 preregEnd,
-                waitListEnabled
+                waitListEnabled,
+                allowAppEdit
             ],
             function (err) {
             if (err) return res.status(500).json({ error: err.message });
@@ -7393,7 +7411,8 @@ app.put('/api/admin/seminars/:id', (req, res) => {
         preregistration_enabled,
         preregistration_start,
         preregistration_end,
-        waiting_list_enabled
+        waiting_list_enabled,
+        allow_application_edit
     } = req.body;
     const certScansReq = certVerify.normalizeCertScansRequired(cert_scans_required);
     const rfj = registration_form_json != null && String(registration_form_json).trim() !== '' ? String(registration_form_json) : null;
@@ -7414,6 +7433,8 @@ app.put('/api/admin/seminars/:id', (req, res) => {
             : 0;
     const waitListEnabled =
         waiting_list_enabled === true || waiting_list_enabled === 1 || waiting_list_enabled === '1' ? 1 : 0;
+    const allowAppEdit =
+        allow_application_edit === true || allow_application_edit === 1 || allow_application_edit === '1' ? 1 : 0;
     const py = portal_year != null ? parseInt(portal_year, 10) : null;
     const regStart = seminarDt.normalizeSeminarDateTimeForStorage(registration_start);
     const regEnd = seminarDt.normalizeSeminarRegistrationEndForStorage(registration_end);
@@ -7424,7 +7445,7 @@ app.put('/api/admin/seminars/:id', (req, res) => {
         if (ePy) return res.status(500).json({ error: ePy.message });
         const finalPortalYear = Number.isInteger(py) && py > 2000 ? py : defaultYear;
         db.run(
-            `UPDATE seminars SET title=?, description=?, registration_start=?, registration_end=?, event_date=?, capacity=?, price=?, checkin_enabled=?, checkin_date=?, is_active=?, location_url=?, terms_conditions=?, hero_image_path=?, flyer_path=?, gallery_paths=?, registration_form_json=?, cancellation_policy_json=?, whatsapp_group_url=?, otp_on_application=?, otp_on_step1=?, otp_on_submit=?, public_list_enabled=?, cert_scans_required=?, portal_year=?, show_seats_public=?, preregistration_enabled=?, preregistration_start=?, preregistration_end=?, waiting_list_enabled=? WHERE id=?`,
+            `UPDATE seminars SET title=?, description=?, registration_start=?, registration_end=?, event_date=?, capacity=?, price=?, checkin_enabled=?, checkin_date=?, is_active=?, location_url=?, terms_conditions=?, hero_image_path=?, flyer_path=?, gallery_paths=?, registration_form_json=?, cancellation_policy_json=?, whatsapp_group_url=?, otp_on_application=?, otp_on_step1=?, otp_on_submit=?, public_list_enabled=?, cert_scans_required=?, portal_year=?, show_seats_public=?, preregistration_enabled=?, preregistration_start=?, preregistration_end=?, waiting_list_enabled=?, allow_application_edit=? WHERE id=?`,
             [
                 title,
                 description,
@@ -7455,6 +7476,7 @@ app.put('/api/admin/seminars/:id', (req, res) => {
                 preregStart,
                 preregEnd,
                 waitListEnabled,
+                allowAppEdit,
                 req.params.id
             ],
             function (err) {
@@ -8281,34 +8303,6 @@ app.post('/api/payments/verify', (req, res) => {
                                     return proceed(ord2);
                                 });
                             }
-                            if (ord.status === 'success') {
-                                markRegistrationETicketIssued(applicationId, () => {});
-                                return db.get(
-                                    `SELECT user_id, application_no FROM registrations WHERE id = ?`,
-                                    [applicationId],
-                                    (eReg, regRow) => {
-                                        if (eReg) return res.status(500).json({ error: eReg.message });
-                                        if (!regRow) return res.status(404).json({ error: 'Registration not found' });
-                                        insertParticipantTicket(
-                                            ord.id,
-                                            regRow.user_id,
-                                            ord.order_id_string || '',
-                                            applicationId,
-                                            regRow.application_no,
-                                            (eTix) => {
-                                                if (eTix) return res.status(500).json({ error: eTix.message });
-                                                markRegistrationETicketIssued(applicationId, () => {});
-                                                res.json({
-                                                    success: true,
-                                                    message:
-                                                        'Payment already recorded. Your e-ticket is under Participant tickets.',
-                                                    transactionId: razorpay_payment_id
-                                                });
-                                            }
-                                        );
-                                    }
-                                );
-                            }
                             db.get(`SELECT status FROM registrations WHERE id = ?`, [applicationId], (ers, regSt) => {
                                 if (ers) return res.status(500).json({ error: ers.message });
                                 const st = String((regSt && regSt.status) || '').toLowerCase();
@@ -8317,104 +8311,57 @@ app.post('/api/payments/verify', (req, res) => {
                                         error: 'This registration is rejected or cancelled; e-tickets are not issued.'
                                     });
                                 }
-                                db.run(
-                                    `UPDATE orders SET status = 'success', payment_date = CURRENT_TIMESTAMP, payment_gateway = 'razorpay', provider_transaction_id = ? WHERE id = ?`,
-                                    [razorpay_payment_id, ord.id],
-                                    function (uerr) {
-                                        if (uerr) return res.status(500).json({ error: uerr.message });
-                                        db.run(
-                                            `DELETE FROM orders WHERE registration_id = ? AND status = 'pending' AND id != ?`,
-                                            [applicationId, ord.id],
-                                            () => {}
-                                        );
-                                        markRegistrationETicketIssued(applicationId, () => {
-                                            portalTracking.registrationStatusToLog('e_ticket_issued', '').forEach((entry) => {
-                                                portalTracking.logRegistrationEvent(
-                                                    db,
-                                                    applicationId,
-                                                    entry.key,
-                                                    entry.label,
-                                                    entry.message,
-                                                    () => {}
-                                                );
-                                            });
-                                            db.get(
-                                                `SELECT r.user_id, r.seminar_id, o.amount FROM registrations r JOIN orders o ON o.id = ? WHERE r.id = ?`,
-                                                [ord.id, applicationId],
-                                                (ePay, pr) => {
-                                                    if (!ePay && pr) {
-                                                        notifEngine.notifyRegistrationPaid(db, {
-                                                            userId: pr.user_id,
-                                                            seminarId: pr.seminar_id,
-                                                            registrationId: applicationId,
-                                                            vars: {
-                                                                payment_amount: pr.amount,
-                                                                payment_status: 'PAID',
+                                db.get(
+                                    `SELECT o.id, o.amount, o.status, r.user_id, r.seminar_id, r.id AS registration_id
+                                     FROM orders o JOIN registrations r ON r.id = o.registration_id WHERE o.id = ?`,
+                                    [ord.id],
+                                    (eRow, payRow) => {
+                                        if (eRow) return res.status(500).json({ error: eRow.message });
+                                        if (!payRow) return res.status(404).json({ error: 'Order not found' });
+                                        const gwTag =
+                                            activeGateway.mode === 'live'
+                                                ? 'razorpay_live'
+                                                : activeGateway.mode === 'test'
+                                                  ? 'razorpay_test'
+                                                  : 'razorpay';
+                                        fulfillRegistrationPayment(
+                                            applicationId,
+                                            payRow.user_id,
+                                            Number(payRow.amount) || 0,
+                                            gwTag,
+                                            razorpay_payment_id,
+                                            (fErr, meta) => {
+                                                if (fErr) return res.status(500).json({ error: fErr.message });
+                                                db.run(
+                                                    `UPDATE orders SET provider_order_id = COALESCE(NULLIF(provider_order_id, ''), ?) WHERE id = ?`,
+                                                    [razorpay_order_id, ord.id],
+                                                    () => {
+                                                        adminPaymentFlow.notifyAfterRegistrationPaid(
+                                                            db,
+                                                            notifEngine,
+                                                            notifyTicketIssued,
+                                                            payRow,
+                                                            meta,
+                                                            {
                                                                 invoice_url:
                                                                     notifEngine.publicBaseUrl() +
                                                                     '/doctor.html#tab-orders'
-                                                            }
-                                                        });
-                                                    }
-                                                }
-                                            );
-                                        });
-                                        db.get(`SELECT application_no FROM registrations WHERE id = ?`, [applicationId], (e2, regRow) => {
-                                            db.get(
-                                                `SELECT id, ticket_id_string, qr_code_data FROM tickets WHERE order_id = ?`,
-                                                [ord.id],
-                                                (et, existingTix) => {
-                                                if (existingTix) {
-                                                    const hasEtk =
-                                                        existingTix.ticket_id_string &&
-                                                        String(existingTix.ticket_id_string).trim();
-                                                    if (hasEtk) {
-                                                        markRegistrationETicketIssued(applicationId, () => {});
-                                                        return res.json({
-                                                            success: true,
-                                                            message: 'Payment verified',
-                                                            transactionId: razorpay_payment_id
-                                                        });
-                                                    }
-                                                    return ensureTicketIdString(
-                                                        existingTix.id,
-                                                        ord.order_id_string || '',
-                                                        applicationId,
-                                                        regRow && regRow.application_no,
-                                                        req.body.userId,
-                                                        ord.id,
-                                                        existingTix.qr_code_data,
-                                                        (eBackfill) => {
-                                                            if (eBackfill) {
-                                                                return res.status(500).json({ error: eBackfill.message });
-                                                            }
-                                                            res.json({
-                                                                success: true,
-                                                                message: 'Payment verified and e-ticket ID assigned',
-                                                                transactionId: razorpay_payment_id
-                                                            });
-                                                        }
-                                                    );
-                                                }
-                                                insertParticipantTicket(
-                                                    ord.id,
-                                                    req.body.userId,
-                                                    ord.order_id_string || '',
-                                                    applicationId,
-                                                    regRow && regRow.application_no,
-                                                    (e3) => {
-                                                        if (e3) return res.status(500).json({ error: e3.message });
-                                                        markRegistrationETicketIssued(applicationId, () => {});
+                                                            },
+                                                            portalTracking
+                                                        );
                                                         res.json({
                                                             success: true,
-                                                            message: 'Payment verified and e-ticket generated',
-                                                            transactionId: razorpay_payment_id
+                                                            message:
+                                                                meta && meta.ticketId
+                                                                    ? 'Payment verified and e-ticket issued.'
+                                                                    : 'Payment verified. Your e-ticket is under Participant tickets.',
+                                                            transactionId: razorpay_payment_id,
+                                                            ticketId: meta && meta.ticketId
                                                         });
                                                     }
                                                 );
                                             }
-                                            );
-                                        });
+                                        );
                                     }
                                 );
                             });
