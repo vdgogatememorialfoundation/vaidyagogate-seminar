@@ -20,8 +20,15 @@ async function main() {
         console.log('[db] SQLite', dbFile);
     }
 
-    const { cleanupDuplicateLiveChatTickets } = require('../lib/cleanup-duplicate-live-chat-tickets');
-    const result = await cleanupDuplicateLiveChatTickets(db);
+    const {
+        cleanupDuplicateLiveChatTickets,
+        KNOWN_LCHAT_10_DUPLICATES
+    } = require('../lib/cleanup-duplicate-live-chat-tickets');
+    const deleteAll = process.argv.includes('--all');
+    const useKnown = process.argv.includes('--lchat-10');
+    const result = useKnown
+        ? await cleanupDuplicateLiveChatTickets(db, { ticketIds: KNOWN_LCHAT_10_DUPLICATES })
+        : await cleanupDuplicateLiveChatTickets(db, { deleteAll });
     console.log(JSON.stringify(result, null, 2));
     process.exit(0);
 }

@@ -13376,8 +13376,9 @@ app.get('/api/cron/live-chat-no-reply-escalations', (req, res) => {
 app.get('/api/cron/cleanup-duplicate-live-chat-tickets', (req, res) => {
     if (!authorizeCron(req, res)) return;
     const { cleanupDuplicateLiveChatTicketsCb } = require('./lib/cleanup-duplicate-live-chat-tickets');
+    const deleteAll = String(req.query.all || req.query.deleteAll || '').toLowerCase() === '1';
     const run = () => {
-        cleanupDuplicateLiveChatTicketsCb(db, (err, result) => {
+        cleanupDuplicateLiveChatTicketsCb(db, { deleteAll }, (err, result) => {
             if (err) return res.status(500).json({ error: err.message });
             res.json({ ok: true, ...(result || {}) });
         });
@@ -13387,6 +13388,29 @@ app.get('/api/cron/cleanup-duplicate-live-chat-tickets', (req, res) => {
         return appReadyPromise.then(run).catch((e) => res.status(503).json({ error: e.message }));
     }
     run();
+});
+
+app.post('/api/admin/support-tickets/purge-live-chat-escalation', (req, res) => {
+    const { actingAdminId, ticketIds, deleteAll } = req.body || {};
+    const aid = parseInt(actingAdminId, 10);
+    if (!Number.isInteger(aid) || aid < 1) {
+        return res.status(400).json({ error: 'actingAdminId is required' });
+    }
+    assertAdminPortalActor(aid, (e, adm) => {
+        if (e && e.message === 'BAD_ACTOR') return res.status(400).json({ error: 'actingAdminId is required' });
+        if (e && e.message === 'FORBIDDEN') return res.status(403).json({ error: 'Administrator access required' });
+        if (e) return res.status(500).json({ error: e.message });
+        if (!adm) return res.status(403).json({ error: 'Invalid administrator' });
+        const { cleanupDuplicateLiveChatTicketsCb } = require('./lib/cleanup-duplicate-live-chat-tickets');
+        const opts = {};
+        if (Array.isArray(ticketIds) && ticketIds.length) opts.ticketIds = ticketIds;
+        else if (deleteAll) opts.deleteAll = true;
+        else opts.deleteAll = true;
+        cleanupDuplicateLiveChatTicketsCb(db, opts, (err, result) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ success: true, ...(result || {}) });
+        });
+    });
 });
 
 app.get('/api/admin/case-judge-marking-reminder-config', (req, res) => {
