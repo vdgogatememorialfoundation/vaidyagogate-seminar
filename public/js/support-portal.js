@@ -636,7 +636,7 @@
                         const agent = s.agent_first_name
                             ? esc(s.agent_first_name + ' ' + (s.agent_last_name || ''))
                             : '—';
-                        const ref = esc(s.chatRef || 'LCHAT-' + String(s.id).padStart(8, '0'));
+                        const ref = esc(s.chatRef || 'LCHAT-' + String(s.id));
                         return (
                             '<tr><td><strong>' +
                             ref +
@@ -673,7 +673,7 @@
         } catch (_) {}
         try {
             const session = await api('/api/support-desk/live/' + sessionId);
-            const ref = session.chatRef || 'LCHAT-' + String(sessionId).padStart(8, '0');
+            const ref = session.chatRef || 'LCHAT-' + String(sessionId);
             document.getElementById('support-live-chat-title').textContent = ref;
             const meta = [];
             if (session.visitorName) meta.push(session.visitorName);
@@ -685,7 +685,7 @@
             if (metaEl) metaEl.textContent = meta.join(' · ');
         } catch (_) {
             document.getElementById('support-live-chat-title').textContent =
-                'LCHAT-' + String(sessionId).padStart(8, '0');
+                'LCHAT-' + String(sessionId);
         }
         supportPollLiveMessages();
         if (livePollTimer) clearInterval(livePollTimer);

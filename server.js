@@ -13202,6 +13202,22 @@ app.get('/api/cron/case-judge-marking-reminders', (req, res) => {
     run();
 });
 
+app.get('/api/cron/live-chat-no-reply-escalations', (req, res) => {
+    if (!authorizeCron(req, res)) return;
+    const supportLiveChat = require('./lib/support-live-chat');
+    const run = () => {
+        supportLiveChat.processAllNoReplyEscalations(db, { createSupportTicketRecord }, (err, result) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ ok: true, ...(result || {}) });
+        });
+    };
+    if (appReadyResolved) return run();
+    if (appReadyPromise) {
+        return appReadyPromise.then(run).catch((e) => res.status(503).json({ error: e.message }));
+    }
+    run();
+});
+
 app.get('/api/admin/case-judge-marking-reminder-config', (req, res) => {
     const aid = parseInt(req.query.actingAdminId, 10);
     if (!Number.isInteger(aid) || aid < 1) {

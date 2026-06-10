@@ -470,7 +470,7 @@
     <script src="/js/vgmf-home.js?v=20260608menu4"></script>
     <script src="/js/portal-theme.js"></script>
     <script src="/js/vgmf-congress.js?v=20260608banner1"></script>
-    <script src="/js/public-support-chat.js?v=20260609support5"></script>
+    <script src="/js/public-support-chat.js?v=20260609guest1"></script>
     <script src="/js/vgmf-home-stats.js?v=20260607stats2"></script>
     <script src="/js/vgmf-marketing.js?v=20260607popup2"></script>
     <script src="/js/otp-ui.js"></script>
@@ -1273,6 +1273,26 @@
                 }
             });
         }
+
+        (function prefillContactFormFromLiveChat() {
+            const params = new URLSearchParams(window.location.search);
+            const livechat = params.get('livechat');
+            const subjectParam = params.get('subject');
+            if (!livechat && !subjectParam && window.location.hash !== '#contact') return;
+            const subEl = document.getElementById('contact_subject');
+            const msgEl = document.getElementById('contact_message');
+            if (subEl) {
+                if (subjectParam) subEl.value = decodeURIComponent(subjectParam.replace(/\+/g, ' '));
+                else if (livechat) subEl.value = 'Live chat follow-up ' + livechat;
+            }
+            if (msgEl && livechat) {
+                msgEl.value =
+                    'I waited for a support agent during live chat ' +
+                    livechat +
+                    ' but did not receive a reply within 5 minutes.\n\n';
+            }
+            if (typeof window.showSection === 'function') window.showSection('contact');
+        })();
 
         function openAuthModal(tab) {
             refreshPortalAuthUi().then(() => {

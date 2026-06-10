@@ -57,7 +57,7 @@
         metaEl.classList.remove('hidden');
         metaEl.innerHTML =
             'Ref: <strong>' +
-            esc(chatRef || 'LCHAT-' + String(sessionId).padStart(8, '0')) +
+            esc(chatRef || 'LCHAT-' + String(sessionId)) +
             '</strong>' +
             (agentName ? ' · Agent: <strong>' + esc(agentName) + '</strong>' : ' · Waiting for agent…');
     }

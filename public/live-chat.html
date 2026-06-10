@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Live support chat — VGMF</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        :root { --teal: #0f766e; --teal-dark: #115e59; --ink: #0f172a; --muted: #64748b; --line: #e2e8f0; }
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background: #f1f5f9; color: var(--ink); min-height: 100vh; }
+        .wrap { max-width: 520px; margin: 0 auto; padding: 16px; min-height: 100vh; display: flex; flex-direction: column; }
+        header { text-align: center; padding: 12px 0 16px; }
+        header a { color: var(--teal); text-decoration: none; font-size: 0.85rem; }
+        header h1 { font-size: 1.15rem; margin: 8px 0 4px; }
+        header p { margin: 0; font-size: 0.85rem; color: var(--muted); }
+        #chat-card { flex: 1; display: flex; flex-direction: column; background: #fff; border-radius: 16px; border: 1px solid #ccfbf1; box-shadow: 0 8px 30px rgba(15,23,42,0.08); overflow: hidden; min-height: 420px; }
+        #chat-head { padding: 14px 16px; background: linear-gradient(135deg, var(--teal), var(--teal-dark)); color: #fff; }
+        #chat-head strong { display: block; }
+        #chat-meta { font-size: 0.75rem; opacity: 0.92; margin-top: 6px; }
+        #chat-messages { flex: 1; overflow-y: auto; padding: 14px; background: #f8fafc; font-size: 0.9rem; }
+        #chat-compose { padding: 12px; border-top: 1px solid var(--line); background: #fff; }
+        #chat-input-row { display: flex; gap: 8px; }
+        #chat-input { flex: 1; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.9rem; }
+        #chat-send { padding: 10px 16px; border: none; border-radius: 8px; background: var(--teal); color: #fff; font-weight: 700; cursor: pointer; }
+        #contact-panel { padding: 14px; border-top: 1px solid #fde68a; background: #fffbeb; display: none; }
+        #contact-panel h3 { margin: 0 0 10px; font-size: 0.95rem; }
+        #contact-panel input, #contact-panel textarea { width: 100%; padding: 8px 10px; margin-bottom: 8px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.88rem; }
+        #contact-panel button { width: 100%; padding: 10px; border: none; border-radius: 8px; background: var(--teal-dark); color: #fff; font-weight: 700; cursor: pointer; }
+        #contact-status { font-size: 0.82rem; margin-top: 8px; }
+        #start-panel { padding: 24px; text-align: center; }
+        #start-panel button { padding: 12px 20px; border: none; border-radius: 8px; background: var(--teal); color: #fff; font-weight: 700; cursor: pointer; font-size: 1rem; }
+        .msg { margin-bottom: 10px; padding: 10px 12px; border-radius: 12px; line-height: 1.45; white-space: pre-wrap; word-break: break-word; }
+        .msg-user { background: #e2e8f0; margin-left: 32px; text-align: right; border-radius: 12px 12px 4px 12px; }
+        .msg-bot { background: #ecfdf5; border-radius: 12px 12px 12px 4px; }
+        .msg-system { background: #fef3c7; border-radius: 12px 12px 12px 4px; }
+        .msg-label { font-size: 0.72rem; color: var(--muted); margin-bottom: 4px; font-weight: 700; }
+        .hidden { display: none !important; }
+        .guest-link-box { margin-top: 10px; padding: 10px; background: #ecfdf5; border-radius: 8px; font-size: 0.78rem; word-break: break-all; }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <header>
+            <a href="/"><i class="fas fa-arrow-left"></i> Back to main site</a>
+            <h1>1-to-1 support chat</h1>
+            <p>For website visitors without a doctor account</p>
+        </header>
+        <div id="chat-card">
+            <div id="start-panel">
+                <p style="color:#64748b;margin-bottom:16px;">Chat directly with our support team. No sign-in required.</p>
+                <button type="button" id="btn-start-chat">Start live chat</button>
+            </div>
+            <div id="chat-active" class="hidden" style="display:flex;flex-direction:column;flex:1;min-height:0;">
+                <div id="chat-head">
+                    <strong>Support team</strong>
+                    <div id="chat-meta"></div>
+                    <div id="guest-link-box" class="guest-link-box hidden"></div>
+                </div>
+                <div id="chat-messages"></div>
+                <div id="contact-panel">
+                    <h3>Send us your details</h3>
+                    <p style="font-size:0.82rem;color:#92400e;margin:0 0 10px;">No agent joined within 5 minutes. Fill this form so we can email you back.</p>
+                    <input type="text" id="cf-name" placeholder="Your name" required>
+                    <input type="email" id="cf-email" placeholder="Email" required>
+                    <input type="tel" id="cf-phone" placeholder="Phone (optional)">
+                    <input type="text" id="cf-subject" placeholder="Subject" required>
+                    <textarea id="cf-message" rows="3" placeholder="How can we help?" required></textarea>
+                    <button type="button" id="cf-submit">Send to support team</button>
+                    <p id="contact-status"></p>
+                </div>
+                <div id="chat-compose">
+                    <div id="chat-input-row">
+                        <input type="text" id="chat-input" placeholder="Type a message…" autocomplete="off">
+                        <button type="button" id="chat-send">Send</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="/js/contact-validation.js" defer></script>
+    <script src="/js/guest-live-chat.js?v=20260609guest1" defer></script>
+</body>
+</html>

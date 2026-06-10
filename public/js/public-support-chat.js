@@ -7,9 +7,11 @@
     let liveSessionId = null;
     let liveChatRef = '';
     let liveAgentName = '';
+    let liveGuestUrl = '';
     let liveMsgSince = 0;
     let livePollTimer = null;
     let liveChatOpen = false;
+    let contactFormShown = false;
     let visitorKey = localStorage.getItem('vgmf_support_visitor') || '';
     if (!visitorKey) {
         visitorKey = 'v_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -21,10 +23,21 @@
     root.innerHTML =
         '<button type="button" id="vgmf-support-launcher" aria-label="Open support chat" style="position:fixed;bottom:22px;right:22px;z-index:9998;width:56px;height:56px;border-radius:50%;border:none;background:#0f766e;color:#fff;box-shadow:0 8px 24px rgba(15,118,110,0.35);cursor:pointer;font-size:1.4rem;"><i class="fas fa-headset"></i></button>' +
         '<div id="vgmf-support-panel" class="hidden" style="position:fixed;bottom:90px;right:22px;z-index:9999;width:min(380px,calc(100vw - 24px));max-height:min(560px,calc(100vh - 120px));background:#fff;border-radius:16px;box-shadow:0 16px 40px rgba(15,23,42,0.18);border:1px solid #ccfbf1;display:flex;flex-direction:column;overflow:hidden;">' +
-        '<div style="padding:14px 16px;background:linear-gradient(135deg,#0f766e,#115e59);color:#fff;"><strong>Help & support</strong><div id="vgmf-support-hours" style="font-size:0.78rem;opacity:0.9;margin-top:4px;">Loading hours…</div><div id="vgmf-support-live-meta" class="hidden" style="font-size:0.72rem;opacity:0.92;margin-top:6px;"></div></div>' +
+        '<div style="padding:14px 16px;background:linear-gradient(135deg,#0f766e,#115e59);color:#fff;"><strong>Help & support</strong><div id="vgmf-support-hours" style="font-size:0.78rem;opacity:0.9;margin-top:4px;">Loading hours…</div><div id="vgmf-support-live-meta" class="hidden" style="font-size:0.72rem;opacity:0.92;margin-top:6px;"></div><div id="vgmf-support-guest-link" class="hidden" style="font-size:0.68rem;opacity:0.95;margin-top:6px;word-break:break-all;"></div></div>' +
         '<div id="vgmf-support-messages" style="flex:1;overflow-y:auto;padding:12px;font-size:0.88rem;background:#f8fafc;"></div>' +
+        '<div id="vgmf-support-contact-form" class="hidden" style="padding:10px 12px;border-top:1px solid #fde68a;background:#fffbeb;font-size:0.82rem;">' +
+        '<strong style="display:block;margin-bottom:6px;">Send us your details</strong>' +
+        '<p style="margin:0 0 8px;color:#92400e;">No agent joined within 5 minutes. We will email you back.</p>' +
+        '<input type="text" id="vgmf-cf-name" placeholder="Your name" style="width:100%;padding:7px 9px;margin-bottom:6px;border:1px solid #cbd5e1;border-radius:6px;box-sizing:border-box;">' +
+        '<input type="email" id="vgmf-cf-email" placeholder="Email" style="width:100%;padding:7px 9px;margin-bottom:6px;border:1px solid #cbd5e1;border-radius:6px;box-sizing:border-box;">' +
+        '<input type="tel" id="vgmf-cf-phone" placeholder="Phone (optional)" style="width:100%;padding:7px 9px;margin-bottom:6px;border:1px solid #cbd5e1;border-radius:6px;box-sizing:border-box;">' +
+        '<input type="text" id="vgmf-cf-subject" placeholder="Subject" style="width:100%;padding:7px 9px;margin-bottom:6px;border:1px solid #cbd5e1;border-radius:6px;box-sizing:border-box;">' +
+        '<textarea id="vgmf-cf-message" rows="3" placeholder="How can we help?" style="width:100%;padding:7px 9px;margin-bottom:6px;border:1px solid #cbd5e1;border-radius:6px;box-sizing:border-box;resize:vertical;"></textarea>' +
+        '<button type="button" id="vgmf-cf-submit" style="width:100%;padding:8px;border:none;border-radius:6px;background:#115e59;color:#fff;font-weight:700;cursor:pointer;">Send to support team</button>' +
+        '<p id="vgmf-cf-status" style="margin:6px 0 0;font-size:0.75rem;"></p></div>' +
         '<div style="padding:10px 12px;border-top:1px solid #e2e8f0;background:#fff;">' +
         '<button type="button" id="vgmf-support-live-btn" class="hidden" style="width:100%;margin-bottom:8px;padding:8px;border:none;border-radius:8px;background:#115e59;color:#fff;font-weight:700;cursor:pointer;">Talk to a support agent (live)</button>' +
+        '<a href="/live-chat.html" id="vgmf-support-dedicated-link" style="display:block;text-align:center;font-size:0.75rem;color:#0f766e;margin-bottom:8px;">Open full-screen 1-to-1 chat page</a>' +
         '<input type="text" id="vgmf-support-track" placeholder="Application / ticket no. (optional)" style="width:100%;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:8px;font-size:0.85rem;">' +
         '<div style="display:flex;gap:8px;"><input type="text" id="vgmf-support-input" placeholder="Ask a question…" style="flex:1;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:0.85rem;"><button type="button" id="vgmf-support-send" style="padding:8px 14px;border:none;border-radius:8px;background:#0f766e;color:#fff;font-weight:700;cursor:pointer;">Send</button></div>' +
         '<p style="font-size:0.72rem;color:#64748b;margin:8px 0 0;">Account help: sign in to the <a href="/doctor.html" style="color:#0f766e;">doctor portal</a> (live chat bubble or Support tickets).</p></div></div>';
@@ -35,7 +48,10 @@
     const messages = document.getElementById('vgmf-support-messages');
     const hoursEl = document.getElementById('vgmf-support-hours');
     const liveMetaEl = document.getElementById('vgmf-support-live-meta');
+    const guestLinkEl = document.getElementById('vgmf-support-guest-link');
+    const contactFormEl = document.getElementById('vgmf-support-contact-form');
     const liveBtn = document.getElementById('vgmf-support-live-btn');
+    const dedicatedLink = document.getElementById('vgmf-support-dedicated-link');
 
     function esc(s) {
         const d = document.createElement('div');
@@ -43,18 +59,49 @@
         return d.innerHTML;
     }
 
+    function linkify(text) {
+        return esc(text).replace(
+            /(https?:\/\/[^\s<]+)/g,
+            '<a href="$1" target="_blank" rel="noopener" style="color:#0f766e;word-break:break-all;">$1</a>'
+        );
+    }
+
     function updateLiveMeta() {
         if (!liveMetaEl) return;
         if (!liveSessionId) {
             liveMetaEl.classList.add('hidden');
+            if (guestLinkEl) guestLinkEl.classList.add('hidden');
             return;
         }
         liveMetaEl.classList.remove('hidden');
         liveMetaEl.innerHTML =
             'Ref: <strong>' +
-            esc(liveChatRef || 'LCHAT-' + String(liveSessionId).padStart(8, '0')) +
+            esc(liveChatRef || 'LCHAT-' + String(liveSessionId)) +
             '</strong>' +
             (liveAgentName ? ' · Agent: <strong>' + esc(liveAgentName) + '</strong>' : '');
+        if (guestLinkEl && liveGuestUrl) {
+            guestLinkEl.classList.remove('hidden');
+            guestLinkEl.innerHTML = 'Your 1-to-1 link: ' + linkify(liveGuestUrl);
+        }
+        if (dedicatedLink && liveGuestUrl) {
+            dedicatedLink.href = liveGuestUrl;
+        }
+    }
+
+    function showContactForm() {
+        if (contactFormShown || !contactFormEl || !liveSessionId) return;
+        contactFormShown = true;
+        contactFormEl.classList.remove('hidden');
+        const ref = liveChatRef || 'LCHAT-' + liveSessionId;
+        const sub = document.getElementById('vgmf-cf-subject');
+        const msg = document.getElementById('vgmf-cf-message');
+        if (sub && !sub.value) sub.value = 'Live chat follow-up ' + ref;
+        if (msg && !msg.value) {
+            msg.value =
+                'I waited for a support agent during live chat ' +
+                ref +
+                ' but did not receive a reply within 5 minutes.\n\n';
+        }
     }
 
     function appendMessage(opts) {
@@ -64,6 +111,7 @@
         const bg = isUser ? '#e2e8f0' : isSystem ? '#fef3c7' : '#ecfdf5';
         const align = isUser ? 'margin-left:24px;text-align:right;' : '';
         const radius = isUser ? '12px 12px 4px 12px' : '12px 12px 12px 4px';
+        const bodyHtml = isUser ? esc(opts.text) : linkify(opts.text);
         messages.innerHTML +=
             '<div style="margin-bottom:10px;padding:10px 12px;background:' +
             bg +
@@ -73,7 +121,7 @@
             align +
             '">' +
             (isUser ? '' : '<div style="font-size:0.72rem;color:#64748b;margin-bottom:4px;font-weight:700;">' + esc(label) + '</div>') +
-            esc(opts.text) +
+            bodyHtml +
             '</div>';
         messages.scrollTop = messages.scrollHeight;
     }
@@ -95,6 +143,9 @@
             text: m.message,
             label: m.sender_name || (st === 'system' ? 'Support desk' : 'Support agent')
         });
+        if (st === 'system' && /fill in the contact form|send us your details/i.test(m.message || '')) {
+            showContactForm();
+        }
         updateLiveMeta();
     }
 
@@ -111,6 +162,8 @@
             }).then((r) => r.json());
             if (session && session.chatRef) liveChatRef = session.chatRef;
             if (session && session.agentName) liveAgentName = session.agentName;
+            if (session && session.guestChatUrl) liveGuestUrl = session.guestChatUrl;
+            if (session && session.needsContactForm) showContactForm();
             if (session && session.status === 'closed') {
                 clearInterval(livePollTimer);
                 livePollTimer = null;
@@ -148,14 +201,22 @@
             liveSessionId = data.sessionId;
             liveChatRef = data.chatRef || '';
             liveAgentName = data.agentName || '';
+            liveGuestUrl = data.guestChatUrl || '';
             liveMsgSince = 0;
+            contactFormShown = false;
+            if (contactFormEl) contactFormEl.classList.add('hidden');
             updateLiveMeta();
             if (data.status === 'offline' || !data.canLive) {
                 addBot(
                     'Live chat is outside business hours. You can still ask questions here or email care@vaidyagogate.org. Your chat reference is ' +
                         (liveChatRef || '') +
-                        '.'
+                        '.',
+                    'Support desk'
                 );
+                if (liveGuestUrl) {
+                    addBot('Open your personal 1-to-1 chat page anytime:\n' + liveGuestUrl, 'Support desk');
+                }
+                startLivePoll();
                 return;
             }
             if (data.status === 'waiting') {
@@ -175,9 +236,61 @@
                     'Support desk'
                 );
             }
+            if (liveGuestUrl) {
+                addBot(
+                    'Bookmark your personal 1-to-1 chat link (no account needed):\n' + liveGuestUrl,
+                    'Support desk'
+                );
+            }
             startLivePoll();
         } catch (e) {
-            addBot('Could not start live chat. Try Live chat in the doctor portal or create a Support ticket.');
+            addBot('Could not start live chat. Try the full-screen chat at /live-chat.html or email care@vaidyagogate.org.');
+        }
+    }
+
+    async function submitContactForm() {
+        const statusEl = document.getElementById('vgmf-cf-status');
+        const payload = {
+            visitorKey,
+            name: document.getElementById('vgmf-cf-name').value.trim(),
+            email: document.getElementById('vgmf-cf-email').value.trim(),
+            phone: document.getElementById('vgmf-cf-phone').value.trim(),
+            subject: document.getElementById('vgmf-cf-subject').value.trim(),
+            message: document.getElementById('vgmf-cf-message').value.trim()
+        };
+        if (typeof validateEmailClient === 'function') {
+            const ev = validateEmailClient(payload.email, 'Email');
+            if (!ev.valid) return alert(ev.message);
+            payload.email = ev.cleanedEmail;
+        }
+        if (payload.phone && typeof validatePhoneClient === 'function') {
+            const pv = validatePhoneClient(payload.phone, 'Phone', { required: false });
+            if (!pv.valid) return alert(pv.message);
+            payload.phone = pv.cleanedPhone;
+        }
+        if (!payload.name || !payload.email || !payload.subject || !payload.message) {
+            return alert('Please fill name, email, subject, and message.');
+        }
+        if (statusEl) statusEl.textContent = 'Sending…';
+        try {
+            const res = await fetch('/api/public/support/live/' + liveSessionId + '/contact-form', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Could not send');
+            if (statusEl) {
+                statusEl.style.color = '#059669';
+                statusEl.textContent = 'Sent! Reference ' + (data.inquiryRef || '') + '.';
+            }
+            document.getElementById('vgmf-cf-submit').disabled = true;
+            pollLiveMessages();
+        } catch (e) {
+            if (statusEl) {
+                statusEl.style.color = '#b91c1c';
+                statusEl.textContent = e.message || 'Could not send.';
+            }
         }
     }
 
@@ -189,6 +302,8 @@
         liveBtn.classList.add('hidden');
         startLiveChat();
     });
+
+    document.getElementById('vgmf-cf-submit')?.addEventListener('click', submitContactForm);
 
     fetch('/api/public/support/hours', { cache: 'no-store' })
         .then((r) => r.json())
@@ -233,7 +348,7 @@
                 await fetch('/api/public/support/live/' + liveSessionId + '/message', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: text })
+                    body: JSON.stringify({ message: text, visitorKey })
                 });
                 pollLiveMessages();
             } catch (_) {
@@ -279,7 +394,7 @@
                 liveBtn.classList.remove('hidden');
             }
         } catch (e) {
-            addBot('Sorry, something went wrong. Email care@vaidyagogate.org or use Live chat / Support tickets in the doctor portal.');
+            addBot('Sorry, something went wrong. Email care@vaidyagogate.org or open /live-chat.html for 1-to-1 chat.');
         }
     }
 
