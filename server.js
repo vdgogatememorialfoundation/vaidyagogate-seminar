@@ -13373,6 +13373,22 @@ app.get('/api/cron/live-chat-no-reply-escalations', (req, res) => {
     run();
 });
 
+app.get('/api/cron/cleanup-duplicate-live-chat-tickets', (req, res) => {
+    if (!authorizeCron(req, res)) return;
+    const { cleanupDuplicateLiveChatTicketsCb } = require('./lib/cleanup-duplicate-live-chat-tickets');
+    const run = () => {
+        cleanupDuplicateLiveChatTicketsCb(db, (err, result) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ ok: true, ...(result || {}) });
+        });
+    };
+    if (appReadyResolved) return run();
+    if (appReadyPromise) {
+        return appReadyPromise.then(run).catch((e) => res.status(503).json({ error: e.message }));
+    }
+    run();
+});
+
 app.get('/api/admin/case-judge-marking-reminder-config', (req, res) => {
     const aid = parseInt(req.query.actingAdminId, 10);
     if (!Number.isInteger(aid) || aid < 1) {

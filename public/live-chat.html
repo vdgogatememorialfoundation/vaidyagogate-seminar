@@ -60,12 +60,12 @@
                 <div id="chat-messages"></div>
                 <div id="contact-panel">
                     <h3>Send us your details</h3>
-                    <p style="font-size:0.82rem;color:#92400e;margin:0 0 10px;">No agent joined within 5 minutes. Fill this form so we can email you back.</p>
-                    <input type="text" id="cf-name" placeholder="Your name" required>
+                    <p style="font-size:0.82rem;color:#92400e;margin:0 0 10px;">Share your full name, email, phone, and issue so our team can follow up.</p>
+                    <input type="text" id="cf-name" placeholder="Full name" required>
                     <input type="email" id="cf-email" placeholder="Email" required>
-                    <input type="tel" id="cf-phone" placeholder="Phone (optional)">
-                    <input type="text" id="cf-subject" placeholder="Subject" required>
-                    <textarea id="cf-message" rows="3" placeholder="How can we help?" required></textarea>
+                    <input type="tel" id="cf-phone" placeholder="Phone number" required>
+                    <input type="hidden" id="cf-subject" value="">
+                    <textarea id="cf-message" rows="3" placeholder="Describe your issue" required></textarea>
                     <button type="button" id="cf-submit">Send to support team</button>
                     <p id="contact-status"></p>
                 </div>

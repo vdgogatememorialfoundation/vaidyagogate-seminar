@@ -5,6 +5,24 @@
     let lastLookupQuery = '';
     let lastLookupResults = null;
     let currentLiveSessionId = null;
+    let currentLiveChatRef = '';
+    let currentLiveIsGuest = false;
+
+    function liveSessionApiId() {
+        return encodeURIComponent(currentLiveChatRef || String(currentLiveSessionId || ''));
+    }
+
+    function updateLiveSessionActions(session) {
+        currentLiveIsGuest = !!(session && !session.userId);
+        const contactBtn = document.getElementById('support-live-contact-form-btn');
+        const createBtn = document.getElementById('support-live-create-ticket-btn');
+        if (contactBtn) {
+            contactBtn.textContent = currentLiveIsGuest ? 'Send contact form' : 'Send portal ticket link';
+        }
+        if (createBtn) {
+            createBtn.style.display = currentLiveIsGuest ? 'none' : '';
+        }
+    }
     let livePollTimer = null;
     let liveMsgSince = 0;
     let inboxPollTimer = null;
@@ -118,14 +136,13 @@
         try {
             const ticket = await api('/api/support-desk/tickets/' + encodeURIComponent(ref));
             document.getElementById('support-modal-title').textContent = ticket.subject || ref;
-            document.getElementById('support-modal-meta').textContent =
-                (ticket.ticket_id || ref) +
-                ' · ' +
-                (ticket.status || '') +
-                ' · Expected response: ' +
-                (ticket.expected_response_at
-                    ? new Date(ticket.expected_response_at).toLocaleString('en-IN')
-                    : '—');
+            let meta = (ticket.ticket_id || ref) + ' · ' + (ticket.status || '');
+            if (ticket.expected_response_at) {
+                meta +=
+                    ' · Expected response: ' +
+                    new Date(ticket.expected_response_at).toLocaleString('en-IN');
+            }
+            document.getElementById('support-modal-meta').textContent = meta;
             const thread = document.getElementById('support-modal-thread');
             thread.innerHTML = (ticket.messages || [])
                 .map((m) => {
@@ -636,7 +653,7 @@
                         const agent = s.agent_first_name
                             ? esc(s.agent_first_name + ' ' + (s.agent_last_name || ''))
                             : '—';
-                        const ref = esc(s.chatRef || 'LCHAT-' + String(s.id));
+                        const ref = esc(s.chatRef || '—');
                         return (
                             '<tr><td><strong>' +
                             ref +
@@ -650,6 +667,8 @@
                             agent +
                             '</td><td><button type="button" class="btn btn-primary" style="padding:6px 10px;font-size:0.8rem;" onclick="supportOpenLiveSession(' +
                             s.id +
+                            ',' +
+                            JSON.stringify(s.chatRef || '') +
                             ')">' +
                             (s.status === 'waiting' ? 'Claim' : 'Open') +
                             '</button></td></tr>'
@@ -662,30 +681,34 @@
         }
     };
 
-    window.supportOpenLiveSession = async function (sessionId) {
+    window.supportOpenLiveSession = async function (sessionId, chatRef) {
         currentLiveSessionId = sessionId;
+        currentLiveChatRef = chatRef || '';
         liveMsgSince = 0;
         const thread = document.getElementById('support-live-thread');
         if (thread) thread.innerHTML = '';
         document.getElementById('support-live-chat-panel').classList.remove('hidden');
+        const apiId = encodeURIComponent(currentLiveChatRef || String(sessionId));
         try {
-            await api('/api/support-desk/live/' + sessionId + '/claim', { method: 'POST', body: {} });
+            await api('/api/support-desk/live/' + apiId + '/claim', { method: 'POST', body: {} });
         } catch (_) {}
         try {
-            const session = await api('/api/support-desk/live/' + sessionId);
-            const ref = session.chatRef || 'LCHAT-' + String(sessionId);
+            const session = await api('/api/support-desk/live/' + apiId);
+            currentLiveChatRef = session.chatRef || currentLiveChatRef;
+            updateLiveSessionActions(session);
+            const ref = session.chatRef || 'Live chat';
             document.getElementById('support-live-chat-title').textContent = ref;
             const meta = [];
             if (session.visitorName) meta.push(session.visitorName);
             if (session.visitorPortalId) meta.push('Portal ' + session.visitorPortalId);
             if (session.visitorEmail) meta.push(session.visitorEmail);
+            if (!session.userId) meta.push('Website guest');
             if (session.agentName) meta.push('Agent: ' + session.agentName);
             if (session.linkedTicketId) meta.push('Ticket ' + session.linkedTicketId);
             const metaEl = document.getElementById('support-live-visitor-meta');
             if (metaEl) metaEl.textContent = meta.join(' · ');
         } catch (_) {
-            document.getElementById('support-live-chat-title').textContent =
-                'LCHAT-' + String(sessionId);
+            document.getElementById('support-live-chat-title').textContent = 'Live chat';
         }
         supportPollLiveMessages();
         if (livePollTimer) clearInterval(livePollTimer);
@@ -713,7 +736,7 @@
         if (!currentLiveSessionId) return;
         try {
             const rows = await api(
-                '/api/support-desk/live/' + currentLiveSessionId + '/messages?since=' + liveMsgSince
+                '/api/support-desk/live/' + liveSessionApiId() + '/messages?since=' + liveMsgSince
             );
             const thread = document.getElementById('support-live-thread');
             rows.forEach((m) => {
@@ -729,7 +752,7 @@
         const msg = input.value.trim();
         if (!msg || !currentLiveSessionId) return;
         try {
-            await api('/api/support-desk/live/' + currentLiveSessionId + '/message', {
+            await api('/api/support-desk/live/' + liveSessionApiId() + '/message', {
                 method: 'POST',
                 body: { message: msg }
             });
@@ -745,12 +768,14 @@
         const noteEl = document.getElementById('support-live-close-note');
         const closingMessage = noteEl && noteEl.value.trim ? noteEl.value.trim() : '';
         try {
-            await api('/api/support-desk/live/' + currentLiveSessionId + '/close', {
+            await api('/api/support-desk/live/' + liveSessionApiId() + '/close', {
                 method: 'POST',
                 body: closingMessage ? { closingMessage: closingMessage } : {}
             });
         } catch (_) {}
         currentLiveSessionId = null;
+        currentLiveChatRef = '';
+        currentLiveIsGuest = false;
         if (livePollTimer) clearInterval(livePollTimer);
         if (noteEl) noteEl.value = '';
         document.getElementById('support-live-chat-panel').classList.add('hidden');
@@ -760,7 +785,7 @@
     window.supportSendTicketForm = async function () {
         if (!currentLiveSessionId) return alert('Open a live chat session first.');
         try {
-            await api('/api/support-desk/live/' + currentLiveSessionId + '/send-ticket-form', {
+            await api('/api/support-desk/live/' + liveSessionApiId() + '/send-ticket-form', {
                 method: 'POST',
                 body: {}
             });
@@ -778,7 +803,7 @@
         if (!description || !description.trim()) return;
         const category = window.prompt('Category (general, technical, billing, registration, other):', 'general') || 'general';
         try {
-            const out = await api('/api/support-desk/live/' + currentLiveSessionId + '/create-ticket', {
+            const out = await api('/api/support-desk/live/' + liveSessionApiId() + '/create-ticket', {
                 method: 'POST',
                 body: { subject: subject.trim(), description: description.trim(), category: category.trim() }
             });

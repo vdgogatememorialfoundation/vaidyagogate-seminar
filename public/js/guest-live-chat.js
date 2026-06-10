@@ -1,6 +1,6 @@
 /**
  * Dedicated 1-to-1 live chat page for main-site visitors (no doctor account).
- * Resume via ?ref=LCHAT-7&vk=visitor_key
+ * Resume via ?ref=LCHAT-384729105638&vk=visitor_key
  */
 (function () {
     const VK_KEY = 'vgmf_support_visitor';
@@ -32,6 +32,10 @@
     const guestLinkBox = document.getElementById('guest-link-box');
     const contactPanel = document.getElementById('contact-panel');
     const contactStatus = document.getElementById('contact-status');
+
+    function sessionApiKey() {
+        return encodeURIComponent(chatRef || String(sessionId || ''));
+    }
 
     function esc(s) {
         const d = document.createElement('div');
@@ -90,7 +94,7 @@
         const ref = session.chatRef || chatRef || '';
         const sub = document.getElementById('cf-subject');
         const msg = document.getElementById('cf-message');
-        if (sub && !sub.value) sub.value = 'Live chat follow-up ' + ref;
+        if (sub) sub.value = 'Live chat follow-up' + (ref ? ' ' + ref : '');
         if (msg && !msg.value) {
             msg.value =
                 'I waited for a support agent during live chat ' +
@@ -102,7 +106,7 @@
     async function refreshSession() {
         if (!sessionId) return null;
         try {
-            const session = await fetch('/api/public/support/live/' + encodeURIComponent(sessionId), {
+            const session = await fetch('/api/public/support/live/' + sessionApiKey(), {
                 cache: 'no-store'
             }).then((r) => r.json());
             if (session.chatRef) chatRef = session.chatRef;
@@ -130,7 +134,10 @@
             label: m.sender_name || (st === 'system' ? 'Support desk' : 'Support agent')
         });
         updateMeta();
-        if (st === 'system' && /fill in the contact form|send us your details/i.test(m.message || '')) {
+        if (
+            (st === 'system' || st === 'agent') &&
+            /contact form|personal support page|share your full name/i.test(m.message || '')
+        ) {
             showContactForm({ chatRef });
         }
     }
@@ -139,7 +146,7 @@
         if (!sessionId) return;
         try {
             const rows = await fetch(
-                '/api/public/support/live/' + sessionId + '/messages?since=' + msgSince,
+                '/api/public/support/live/' + sessionApiKey() + '/messages?since=' + msgSince,
                 { cache: 'no-store' }
             ).then((r) => r.json());
             (rows || []).forEach((m) => {
@@ -220,7 +227,7 @@
             showChatUi();
             updateMeta();
             if (session.guestChatUrl) showGuestLink(session.guestChatUrl);
-            const rows = await fetch('/api/public/support/live/' + sessionId + '/messages?since=0', {
+            const rows = await fetch('/api/public/support/live/' + sessionApiKey() + '/messages?since=0', {
                 cache: 'no-store'
             }).then((r) => r.json());
             (rows || []).forEach((m) => {
@@ -249,7 +256,7 @@
         appendMsg({ role: 'user', text });
         input.value = '';
         try {
-            await fetch('/api/public/support/live/' + sessionId + '/message', {
+            await fetch('/api/public/support/live/' + sessionApiKey() + '/message', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ message: text, visitorKey })
@@ -274,18 +281,18 @@
             if (!ev.valid) return alert(ev.message);
             payload.email = ev.cleanedEmail;
         }
-        if (payload.phone && typeof validatePhoneClient === 'function') {
-            const pv = validatePhoneClient(payload.phone, 'Phone', { required: false });
+        if (typeof validatePhoneClient === 'function') {
+            const pv = validatePhoneClient(payload.phone, 'Phone', { required: true });
             if (!pv.valid) return alert(pv.message);
             payload.phone = pv.cleanedPhone;
         }
-        if (!payload.name || !payload.email || !payload.subject || !payload.message) {
-            return alert('Please fill name, email, subject, and message.');
+        if (!payload.name || !payload.email || !payload.phone || !payload.message) {
+            return alert('Please fill full name, email, phone, and issue description.');
         }
         contactStatus.textContent = 'Sending…';
         contactStatus.style.color = '#64748b';
         try {
-            const res = await fetch('/api/public/support/live/' + sessionId + '/contact-form', {
+            const res = await fetch('/api/public/support/live/' + sessionApiKey() + '/contact-form', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)

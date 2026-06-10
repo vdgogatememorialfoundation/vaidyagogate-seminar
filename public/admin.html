@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -837,7 +837,8 @@
                 </div>
                 <div class="card" style="margin-bottom:18px;border:1px solid #bae6fd;background:#f0f9ff;">
                     <h3 style="margin:0 0 10px;color:#0369a1;font-size:1.05rem;">Support ticket response time (SLA)</h3>
-                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:10px;">When a doctor logs a support ticket, they see the expected response time. Default applies to all categories unless overridden below.</p>
+                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:10px;">When enabled, doctors see an expected response time on new tickets. Default applies to all categories unless overridden below.</p>
+                    <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;margin-bottom:12px;"><input type="checkbox" id="sts-show-expected" checked> Show expected response time to doctors</label>
                     <label style="font-size:0.82rem;font-weight:700;">Default response time (hours)</label>
                     <input type="number" id="sts-default-hours" min="1" max="720" value="24" style="width:120px;padding:8px;margin:6px 0 14px;">
                     <label style="font-size:0.82rem;font-weight:700;">Hours by category (optional)</label>

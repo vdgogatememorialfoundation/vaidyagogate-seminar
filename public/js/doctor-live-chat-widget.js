@@ -25,6 +25,10 @@
     let inputEl = null;
     let launcher = null;
 
+    function sessionApiKey() {
+        return encodeURIComponent(chatRef || String(sessionId || ''));
+    }
+
     function esc(s) {
         const d = document.createElement('div');
         d.textContent = s == null ? '' : String(s);
@@ -57,7 +61,7 @@
         metaEl.classList.remove('hidden');
         metaEl.innerHTML =
             'Ref: <strong>' +
-            esc(chatRef || 'LCHAT-' + String(sessionId)) +
+            esc(chatRef || '…') +
             '</strong>' +
             (agentName ? ' · Agent: <strong>' + esc(agentName) + '</strong>' : ' · Waiting for agent…');
     }
@@ -130,7 +134,7 @@
     async function refreshSession() {
         if (!sessionId) return;
         try {
-            const res = await fetch('/api/support-ticket/live/' + encodeURIComponent(sessionId), { cache: 'no-store' });
+            const res = await fetch('/api/support-ticket/live/' + sessionApiKey(), { cache: 'no-store' });
             const session = await res.json();
             if (!res.ok || !session) return;
             chatRef = session.chatRef || chatRef;
@@ -155,7 +159,7 @@
         if (!sessionId) return;
         try {
             const res = await fetch(
-                '/api/support-ticket/live/' + encodeURIComponent(sessionId) + '/messages?since=' + msgSince,
+                '/api/support-ticket/live/' + sessionApiKey() + '/messages?since=' + msgSince,
                 { cache: 'no-store' }
             );
             const rows = await res.json();
@@ -269,7 +273,7 @@
         appendLocalUser(msg);
         if (inputEl) inputEl.value = '';
         try {
-            const res = await fetch('/api/support-ticket/live/' + encodeURIComponent(sessionId) + '/message', {
+            const res = await fetch('/api/support-ticket/live/' + sessionApiKey() + '/message', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ userId: uid, message: msg })

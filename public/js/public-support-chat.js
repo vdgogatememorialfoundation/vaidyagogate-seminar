@@ -27,12 +27,12 @@
         '<div id="vgmf-support-messages" style="flex:1;overflow-y:auto;padding:12px;font-size:0.88rem;background:#f8fafc;"></div>' +
         '<div id="vgmf-support-contact-form" class="hidden" style="padding:10px 12px;border-top:1px solid #fde68a;background:#fffbeb;font-size:0.82rem;">' +
         '<strong style="display:block;margin-bottom:6px;">Send us your details</strong>' +
-        '<p style="margin:0 0 8px;color:#92400e;">No agent joined within 5 minutes. We will email you back.</p>' +
-        '<input type="text" id="vgmf-cf-name" placeholder="Your name" style="width:100%;padding:7px 9px;margin-bottom:6px;border:1px solid #cbd5e1;border-radius:6px;box-sizing:border-box;">' +
-        '<input type="email" id="vgmf-cf-email" placeholder="Email" style="width:100%;padding:7px 9px;margin-bottom:6px;border:1px solid #cbd5e1;border-radius:6px;box-sizing:border-box;">' +
-        '<input type="tel" id="vgmf-cf-phone" placeholder="Phone (optional)" style="width:100%;padding:7px 9px;margin-bottom:6px;border:1px solid #cbd5e1;border-radius:6px;box-sizing:border-box;">' +
-        '<input type="text" id="vgmf-cf-subject" placeholder="Subject" style="width:100%;padding:7px 9px;margin-bottom:6px;border:1px solid #cbd5e1;border-radius:6px;box-sizing:border-box;">' +
-        '<textarea id="vgmf-cf-message" rows="3" placeholder="How can we help?" style="width:100%;padding:7px 9px;margin-bottom:6px;border:1px solid #cbd5e1;border-radius:6px;box-sizing:border-box;resize:vertical;"></textarea>' +
+        '<p style="margin:0 0 8px;color:#92400e;">Share your name, email, phone, and issue so our team can follow up.</p>' +
+        '<input type="text" id="vgmf-cf-name" placeholder="Full name" required style="width:100%;padding:7px 9px;margin-bottom:6px;border:1px solid #cbd5e1;border-radius:6px;box-sizing:border-box;">' +
+        '<input type="email" id="vgmf-cf-email" placeholder="Email" required style="width:100%;padding:7px 9px;margin-bottom:6px;border:1px solid #cbd5e1;border-radius:6px;box-sizing:border-box;">' +
+        '<input type="tel" id="vgmf-cf-phone" placeholder="Phone number" required style="width:100%;padding:7px 9px;margin-bottom:6px;border:1px solid #cbd5e1;border-radius:6px;box-sizing:border-box;">' +
+        '<input type="hidden" id="vgmf-cf-subject" value="">' +
+        '<textarea id="vgmf-cf-message" rows="3" placeholder="Describe your issue" required style="width:100%;padding:7px 9px;margin-bottom:6px;border:1px solid #cbd5e1;border-radius:6px;box-sizing:border-box;resize:vertical;"></textarea>' +
         '<button type="button" id="vgmf-cf-submit" style="width:100%;padding:8px;border:none;border-radius:6px;background:#115e59;color:#fff;font-weight:700;cursor:pointer;">Send to support team</button>' +
         '<p id="vgmf-cf-status" style="margin:6px 0 0;font-size:0.75rem;"></p></div>' +
         '<div style="padding:10px 12px;border-top:1px solid #e2e8f0;background:#fff;">' +
@@ -52,6 +52,10 @@
     const contactFormEl = document.getElementById('vgmf-support-contact-form');
     const liveBtn = document.getElementById('vgmf-support-live-btn');
     const dedicatedLink = document.getElementById('vgmf-support-dedicated-link');
+
+    function liveSessionApiKey() {
+        return encodeURIComponent(liveChatRef || String(liveSessionId || ''));
+    }
 
     function esc(s) {
         const d = document.createElement('div');
@@ -76,7 +80,7 @@
         liveMetaEl.classList.remove('hidden');
         liveMetaEl.innerHTML =
             'Ref: <strong>' +
-            esc(liveChatRef || 'LCHAT-' + String(liveSessionId)) +
+            esc(liveChatRef || '…') +
             '</strong>' +
             (liveAgentName ? ' · Agent: <strong>' + esc(liveAgentName) + '</strong>' : '');
         if (guestLinkEl && liveGuestUrl) {
@@ -92,10 +96,10 @@
         if (contactFormShown || !contactFormEl || !liveSessionId) return;
         contactFormShown = true;
         contactFormEl.classList.remove('hidden');
-        const ref = liveChatRef || 'LCHAT-' + liveSessionId;
+        const ref = liveChatRef || '';
         const sub = document.getElementById('vgmf-cf-subject');
         const msg = document.getElementById('vgmf-cf-message');
-        if (sub && !sub.value) sub.value = 'Live chat follow-up ' + ref;
+        if (sub) sub.value = 'Live chat follow-up' + (ref ? ' ' + ref : '');
         if (msg && !msg.value) {
             msg.value =
                 'I waited for a support agent during live chat ' +
@@ -143,7 +147,10 @@
             text: m.message,
             label: m.sender_name || (st === 'system' ? 'Support desk' : 'Support agent')
         });
-        if (st === 'system' && /fill in the contact form|send us your details/i.test(m.message || '')) {
+        if (
+            (st === 'system' || st === 'agent') &&
+            /contact form|personal support page|share your full name/i.test(m.message || '')
+        ) {
             showContactForm();
         }
         updateLiveMeta();
@@ -157,7 +164,7 @@
     async function refreshLiveSession() {
         if (!liveSessionId) return;
         try {
-            const session = await fetch('/api/public/support/live/' + encodeURIComponent(liveSessionId), {
+            const session = await fetch('/api/public/support/live/' + liveSessionApiKey(), {
                 cache: 'no-store'
             }).then((r) => r.json());
             if (session && session.chatRef) liveChatRef = session.chatRef;
@@ -178,7 +185,7 @@
         if (!liveSessionId) return;
         try {
             const rows = await fetch(
-                '/api/public/support/live/' + liveSessionId + '/messages?since=' + liveMsgSince,
+                '/api/public/support/live/' + liveSessionApiKey() + '/messages?since=' + liveMsgSince,
                 { cache: 'no-store' }
             ).then((r) => r.json());
             (rows || []).forEach((m) => {
@@ -263,17 +270,17 @@
             if (!ev.valid) return alert(ev.message);
             payload.email = ev.cleanedEmail;
         }
-        if (payload.phone && typeof validatePhoneClient === 'function') {
-            const pv = validatePhoneClient(payload.phone, 'Phone', { required: false });
+        if (typeof validatePhoneClient === 'function') {
+            const pv = validatePhoneClient(payload.phone, 'Phone', { required: true });
             if (!pv.valid) return alert(pv.message);
             payload.phone = pv.cleanedPhone;
         }
-        if (!payload.name || !payload.email || !payload.subject || !payload.message) {
-            return alert('Please fill name, email, subject, and message.');
+        if (!payload.name || !payload.email || !payload.phone || !payload.message) {
+            return alert('Please fill full name, email, phone, and issue description.');
         }
         if (statusEl) statusEl.textContent = 'Sending…';
         try {
-            const res = await fetch('/api/public/support/live/' + liveSessionId + '/contact-form', {
+            const res = await fetch('/api/public/support/live/' + liveSessionApiKey() + '/contact-form', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
@@ -345,7 +352,7 @@
 
         if (liveSessionId) {
             try {
-                await fetch('/api/public/support/live/' + liveSessionId + '/message', {
+                await fetch('/api/public/support/live/' + liveSessionApiKey() + '/message', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ message: text, visitorKey })
@@ -358,7 +365,7 @@
         }
 
         try {
-            const appMatch = text.match(/\b(SEM-[\w-]+|CASE-[\w-]+|TKT_[\w-]+|LCHAT-[\d]+|\d{6,})\b/i);
+            const appMatch = text.match(/\b(SEM-[\w-]+|CASE-[\w-]+|TKT_[\w-]+|LCHAT-\d{12}|\d{12})\b/i);
             const trackRef = track || (appMatch && appMatch[1]);
             if (trackRef && /track|status|application|where|check/i.test(text)) {
                 const tr = await fetch('/api/public/support/track?q=' + encodeURIComponent(trackRef)).then((r) =>

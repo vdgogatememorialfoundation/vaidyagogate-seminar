@@ -13167,6 +13167,8 @@ async function loadSupportTicketSlaAdminForm() {
         const d = await res.json();
         if (!d.success || !d.config) return;
         def.value = String(d.config.defaultResponseHours || 24);
+        const showEl = document.getElementById('sts-show-expected');
+        if (showEl) showEl.checked = d.config.showExpectedResponse !== false;
         const by = d.config.byCategory || {};
         const set = (id, key) => {
             const el = document.getElementById(id);
@@ -13188,6 +13190,7 @@ async function saveSupportTicketSlaConfig() {
         return Number.isFinite(v) && v > 0 ? v : null;
     };
     const config = {
+        showExpectedResponse: !!(document.getElementById('sts-show-expected') || {}).checked,
         defaultResponseHours: num('sts-default-hours') || 24,
         byCategory: {}
     };
