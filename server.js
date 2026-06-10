@@ -11627,6 +11627,22 @@ app.get('/api/admin/payment_gateways', (req, res) => {
     });
 });
 
+// Admin: sync site default from any live gateway (must be registered before /:name)
+app.post('/api/admin/payment_gateways/sync-default', (req, res) => {
+    db.all(`SELECT * FROM payment_gateways`, [], (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        const liveGateways = paymentGatewayOptions.listLiveGatewayNames(rows || []);
+        const defaultPg = paymentGatewayOptions.pickDefaultLiveGateway(rows || []);
+        if (!defaultPg) {
+            return res.json({ success: true, defaultGateway: null, liveGateways });
+        }
+        upsertGlobalSetting('payment_gateway', defaultPg, (setErr) => {
+            if (setErr) return res.status(500).json({ error: setErr.message });
+            res.json({ success: true, defaultGateway: defaultPg, liveGateways });
+        });
+    });
+});
+
 // Admin: Update Payment Gateway
 app.post('/api/admin/payment_gateways/:name', (req, res) => {
     const { name } = req.params;
@@ -11656,22 +11672,6 @@ app.post('/api/admin/payment_gateways/:name', (req, res) => {
         });
     }
     finish(config || {});
-});
-
-// Admin: pick default live gateway for site config from enabled credentials
-app.post('/api/admin/payment_gateways/sync-default', (req, res) => {
-    db.all(`SELECT * FROM payment_gateways`, [], (err, rows) => {
-        if (err) return res.status(500).json({ error: err.message });
-        const liveGateways = paymentGatewayOptions.listLiveGatewayNames(rows || []);
-        const defaultPg = paymentGatewayOptions.pickDefaultLiveGateway(rows || []);
-        if (!defaultPg) {
-            return res.json({ success: true, defaultGateway: null, liveGateways });
-        }
-        upsertGlobalSetting('payment_gateway', defaultPg, (setErr) => {
-            if (setErr) return res.status(500).json({ error: setErr.message });
-            res.json({ success: true, defaultGateway: defaultPg, liveGateways });
-        });
-    });
 });
 
 // ==================== EVENT SCHEDULE ENDPOINTS ====================

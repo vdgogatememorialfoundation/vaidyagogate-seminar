@@ -9904,12 +9904,12 @@ async function savePaymentGatewaysSettings() {
         let saveMsg = 'Payment gateways saved.';
         if (liveGateways.length) {
             saveMsg +=
-                ' Live checkout ready: ' +
+                ' Doctor checkout is live for: ' +
                 liveGateways.join(', ') +
-                (defaultPg ? `. Default gateway: ${defaultPg}.` : '.');
+                (defaultPg ? ` (default: ${defaultPg}).` : '.');
         } else {
             saveMsg +=
-                ' Add live API keys, enable the gateway, and save again — any of Razorpay, Cashfree, Juspay, Easebuzz, PayU, Paytm, PhonePe, or Zoho works.';
+                ' No live gateway detected yet — enter merchant keys, check Enable gateway, and save again (PayU, Easebuzz, Paytm, PhonePe, Zoho, Juspay, Cashfree, or Razorpay).';
         }
         setAdminSettingsSaveMsg(saveMsg);
     } catch (err) {
