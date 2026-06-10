@@ -4905,6 +4905,133 @@ function respondApplicationsList(uid, yearFilter, res) {
     });
 }
 
+function parseApplicationFormBody(body) {
+    let formData = body && body.formData;
+    if (typeof formData === 'string') {
+        try {
+            formData = JSON.parse(formData);
+        } catch (_) {}
+    }
+    return formData || {};
+}
+
+function seminarRegistrationWindowOpen(sem, userId, seminarId, cb) {
+    const now = Date.now();
+    const rs = seminarDt.parseSeminarMs(sem.registration_start);
+    const re = seminarDt.parseSeminarMs(sem.registration_end);
+    if (rs != null && !Number.isNaN(rs) && now < rs) {
+        return cb(null, { open: false, error: 'Registration for this seminar has not opened yet.' });
+    }
+    if (re != null && !Number.isNaN(re) && now > re) {
+        return extModules.userHasActiveRegistrationOverride(db, userId, seminarId, (ovErr, hasOverride) => {
+            if (ovErr) return cb(ovErr);
+            if (hasOverride) return cb(null, { open: true, viaOverride: true });
+            return cb(null, { open: false, error: 'Registration for this seminar has closed.' });
+        });
+    }
+    cb(null, { open: true });
+}
+
+// 5a. Save seminar application draft (does not register — submit separately while registration is open)
+app.post('/api/applications/draft', withCertificateUpload, (req, res) => {
+    let { userId, seminarId, formData, userIdString, portalUserId } = req.body || {};
+    seminarId = parseInt(seminarId, 10);
+    if (!Number.isInteger(seminarId) || seminarId < 1) {
+        return res.status(400).json({ error: 'Invalid seminar.' });
+    }
+    formData = parseApplicationFormBody(req.body);
+
+    const portalHint = String(userIdString || portalUserId || '').trim();
+    const numericUserId = parsePositiveUserId(userId);
+    const beginDraft = (uid) => {
+        if (!uid) return res.status(400).json({ error: 'Invalid user session. Sign in again.' });
+        userId = uid;
+        db.get(
+            `SELECT registration_start, registration_end, title FROM seminars WHERE id = ? AND is_active = 1`,
+            [seminarId],
+            (eSem, sem) => {
+                if (eSem) return res.status(500).json({ error: eSem.message });
+                if (!sem) return res.status(400).json({ error: 'Seminar not found or is not active.' });
+                db.get(
+                    `SELECT id, status, application_no FROM registrations WHERE user_id = ? AND seminar_id = ?`,
+                    [userId, seminarId],
+                    (eRow, row) => {
+                        if (eRow) return res.status(500).json({ error: eRow.message });
+                        const st = row ? String(row.status || '').toLowerCase() : '';
+                        if (row && st !== 'draft') {
+                            return res.status(400).json({
+                                error: 'You already have a submitted application for this seminar. Track it under Track seminar applications.'
+                            });
+                        }
+                        const saveDraftRow = () => {
+                            persistUploadedCertificate(req, (certErr, certPath) => {
+                                if (certErr) return res.status(500).json({ error: certErr.message });
+                                if (certPath) formData.certificate_path = certPath;
+                                const stored = sanitizeFormDataForStorage(formData || {});
+                                const appNo = (row && row.application_no) || generateId();
+                                if (row) {
+                                    return db.run(
+                                        `UPDATE registrations SET form_data = ?, application_no = COALESCE(application_no, ?), updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'draft'`,
+                                        [JSON.stringify(stored), appNo, row.id],
+                                        function (uErr) {
+                                            if (uErr) return res.status(500).json({ error: uErr.message });
+                                            if (!this.changes) {
+                                                return res.status(400).json({ error: 'Draft could not be updated.' });
+                                            }
+                                            res.json({
+                                                success: true,
+                                                draft: true,
+                                                applicationId: row.id,
+                                                applicationNo: appNo
+                                            });
+                                        }
+                                    );
+                                }
+                                db.run(
+                                    `INSERT INTO registrations (user_id, seminar_id, application_no, status, form_data) VALUES (?, ?, ?, 'draft', ?)`,
+                                    [userId, seminarId, appNo, JSON.stringify(stored)],
+                                    function (insErr) {
+                                        if (insErr) return res.status(500).json({ error: insErr.message });
+                                        res.json({
+                                            success: true,
+                                            draft: true,
+                                            applicationId: this.lastID,
+                                            applicationNo: appNo
+                                        });
+                                    }
+                                );
+                            });
+                        };
+                        if (row) return saveDraftRow();
+                        seminarRegistrationWindowOpen(sem, userId, seminarId, (wErr, win) => {
+                            if (wErr) return res.status(500).json({ error: wErr.message });
+                            if (!win || !win.open) {
+                                return res.status(400).json({
+                                    error: (win && win.error) || 'Registration is closed. Drafts cannot be started now.'
+                                });
+                            }
+                            saveDraftRow();
+                        });
+                    }
+                );
+            }
+        );
+    };
+    if (portalHint) {
+        resolveInternalUserId(db, userId, portalHint, (eResolve, uid) => {
+            if (eResolve) return res.status(500).json({ error: eResolve.message });
+            beginDraft(uid || numericUserId);
+        });
+    } else if (numericUserId) {
+        beginDraft(numericUserId);
+    } else {
+        resolveInternalUserId(db, userId, userId, (eResolve, uid) => {
+            if (eResolve) return res.status(500).json({ error: eResolve.message });
+            beginDraft(uid);
+        });
+    }
+});
+
 // 5. Seminars: Register (Application Submission)
 app.post('/api/applications/submit', withCertificateUpload, (req, res) => {
     let {
@@ -4960,13 +5087,25 @@ app.post('/api/applications/submit', withCertificateUpload, (req, res) => {
     const fieldOtpTokensObj = parseMaybeJson(fieldOtpTokens) || (fieldOtpTokens && typeof fieldOtpTokens === 'object' ? fieldOtpTokens : {});
     const wantWaitlist = waitingList.parseJoinWaitlistFlag(joinWaitlist);
     
-    // Check if user already registered for this event
-    db.get(`SELECT id FROM registrations WHERE user_id = ? AND seminar_id = ?`, [userId, seminarId], (err, row) => {
+    let existingDraftId = null;
+    let existingDraftAppNo = null;
+
+    // Check if user already registered for this event (draft may be upgraded on submit)
+    db.get(
+        `SELECT id, status, application_no FROM registrations WHERE user_id = ? AND seminar_id = ?`,
+        [userId, seminarId],
+        (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
         if (row) {
-            return res.status(400).json({
-                error: 'You have already registered an application for this event. You can track it in your Dashboard.'
-            });
+            const st = String(row.status || '').toLowerCase();
+            if (st === 'draft') {
+                existingDraftId = row.id;
+                existingDraftAppNo = row.application_no || null;
+            } else {
+                return res.status(400).json({
+                    error: 'You have already registered an application for this event. You can track it in your Dashboard.'
+                });
+            }
         }
 
         db.get(
@@ -5106,7 +5245,7 @@ app.post('/api/applications/submit', withCertificateUpload, (req, res) => {
                     const otpTokensToConsume = [];
 
                     function doInsertRegistration() {
-                        const applicationNo = generateId();
+                        const applicationNo = existingDraftAppNo || generateId();
                         const autoRejectDuplicateAndRespond = (dup) => {
                             const stored = sanitizeFormDataForStorage(formData || {});
                             const review = {
@@ -5144,14 +5283,10 @@ app.post('/api/applications/submit', withCertificateUpload, (req, res) => {
                             );
                         };
                         const finishInsert = () => {
-                        const stored = sanitizeFormDataForStorage(formData || {});
-                        const regStatus = isWaitlistSubmit ? 'waitlisted' : 'submitted';
-                        db.run(
-                            `INSERT INTO registrations (user_id, seminar_id, application_no, status, form_data) VALUES (?, ?, ?, ?, ?)`,
-                            [userId, seminarId, applicationNo, regStatus, JSON.stringify(stored)],
-                function (err3) {
-                    if (err3) return res.status(500).json({ error: err3.message });
-                                const newId = this.lastID;
+                            const stored = sanitizeFormDataForStorage(formData || {});
+                            const regStatus = isWaitlistSubmit ? 'waitlisted' : 'submitted';
+                            const afterRegInserted = (newId, err3) => {
+                                if (err3) return res.status(500).json({ error: err3.message });
                                 portalTracking.logRegistrationEvent(
                                     db,
                                     newId,
@@ -5186,60 +5321,80 @@ app.post('/api/applications/submit', withCertificateUpload, (req, res) => {
                                                 }
                                             });
                                         }
-                                activityLog.logFromRequest(db, req, {
-                                    user_id: userId,
-                                    seminar_id: seminarId,
-                                    action: 'application.submit',
-                                    resource_type: 'registration',
-                                    resource_id: applicationNo,
-                                    meta: { applicationId: newId }
-                                });
-                                const finishResponse = (extra) => {
-                                    const payload = {
-                                        success: true,
-                                        applicationId: newId,
-                                        applicationNo,
-                                        waitlisted: isWaitlistSubmit,
-                                        ...(extra || {})
-                                    };
-                                    res.json(payload);
-                                };
-                                const afterVolunteerTicket = () => {
-                                    if (isWaitlistSubmit) {
-                                        if (!otpTokensToConsume.length) return finishResponse();
-                                        return otpLib.consumeVerificationTokens(db, otpTokensToConsume, (cErr) => {
-                                            if (cErr) console.warn('[otp] consume after waitlist:', cErr.message);
-                                            finishResponse();
+                                        activityLog.logFromRequest(db, req, {
+                                            user_id: userId,
+                                            seminar_id: seminarId,
+                                            action: 'application.submit',
+                                            resource_type: 'registration',
+                                            resource_id: applicationNo,
+                                            meta: { applicationId: newId }
+                                        });
+                                        const finishResponse = (extra) => {
+                                            res.json({
+                                                success: true,
+                                                applicationId: newId,
+                                                applicationNo,
+                                                waitlisted: isWaitlistSubmit,
+                                                ...(extra || {})
+                                            });
+                                        };
+                                        const afterVolunteerTicket = () => {
+                                            if (isWaitlistSubmit) {
+                                                if (!otpTokensToConsume.length) return finishResponse();
+                                                return otpLib.consumeVerificationTokens(db, otpTokensToConsume, (cErr) => {
+                                                    if (cErr) console.warn('[otp] consume after waitlist:', cErr.message);
+                                                    finishResponse();
+                                                });
+                                            }
+                                            volunteerTicketFlow.tryFulfillVolunteerAfterRegistration(
+                                                db,
+                                                volunteerTicketDeps(),
+                                                { userId, seminarId, registrationId: newId },
+                                                (vErr, vRes) => {
+                                                    const extra = {};
+                                                    if (vRes && vRes.issued) {
+                                                        extra.volunteerTicketIssued = true;
+                                                        extra.volunteerTicketId = vRes.ticketId;
+                                                        extra.message = vRes.message;
+                                                    }
+                                                    if (!otpTokensToConsume.length) return finishResponse(extra);
+                                                    otpLib.consumeVerificationTokens(db, otpTokensToConsume, (cErr) => {
+                                                        if (cErr) console.warn('[otp] consume after submit:', cErr.message);
+                                                        finishResponse(extra);
+                                                    });
+                                                }
+                                            );
+                                        };
+                                        if (!otpTokensToConsume.length) return afterVolunteerTicket();
+                                        otpLib.consumeVerificationTokens(db, otpTokensToConsume, (cErr) => {
+                                            if (cErr) console.warn('[otp] consume after submit:', cErr.message);
+                                            afterVolunteerTicket();
                                         });
                                     }
-                                    volunteerTicketFlow.tryFulfillVolunteerAfterRegistration(
-                                        db,
-                                        volunteerTicketDeps(),
-                                        { userId, seminarId, registrationId: newId },
-                                        (vErr, vRes) => {
-                                            const extra = {};
-                                            if (vRes && vRes.issued) {
-                                                extra.volunteerTicketIssued = true;
-                                                extra.volunteerTicketId = vRes.ticketId;
-                                                extra.message = vRes.message;
-                                            }
-                                            if (!otpTokensToConsume.length) return finishResponse(extra);
-                                            otpLib.consumeVerificationTokens(db, otpTokensToConsume, (cErr) => {
-                                                if (cErr) console.warn('[otp] consume after submit:', cErr.message);
-                                                finishResponse(extra);
+                                );
+                            };
+                            if (existingDraftId) {
+                                return db.run(
+                                    `UPDATE registrations SET status = ?, form_data = ?, application_no = COALESCE(application_no, ?), updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'draft'`,
+                                    [regStatus, JSON.stringify(stored), applicationNo, existingDraftId],
+                                    function (err3) {
+                                        if (err3) return res.status(500).json({ error: err3.message });
+                                        if (!this.changes) {
+                                            return res.status(400).json({
+                                                error: 'Draft not found or already submitted. Refresh and try again.'
                                             });
                                         }
-                                    );
-                                };
-                                if (!otpTokensToConsume.length) return afterVolunteerTicket();
-                                otpLib.consumeVerificationTokens(db, otpTokensToConsume, (cErr) => {
-                                    if (cErr) console.warn('[otp] consume after submit:', cErr.message);
-                                    afterVolunteerTicket();
-                                });
+                                        afterRegInserted(existingDraftId, null);
                                     }
                                 );
                             }
-                        );
+                            db.run(
+                                `INSERT INTO registrations (user_id, seminar_id, application_no, status, form_data) VALUES (?, ?, ?, ?, ?)`,
+                                [userId, seminarId, applicationNo, regStatus, JSON.stringify(stored)],
+                                function (err3) {
+                                    afterRegInserted(this.lastID, err3);
+                                }
+                            );
                         };
                         if (formData && formData.certificate_path && formData.ncism) {
                             regCertVerify.verifyCertificateForRegistration(
@@ -5862,7 +6017,7 @@ app.get('/api/doctor/dashboard-stats/:userId', (req, res) => {
     };
     const steps = [
         [
-            `SELECT COUNT(*) AS c FROM registrations WHERE user_id = ? AND IFNULL(status,'') NOT IN ('rejected','cancelled')`,
+            `SELECT COUNT(*) AS c FROM registrations WHERE user_id = ? AND IFNULL(status,'') NOT IN ('rejected','cancelled','draft')`,
             'registered_seminars'
         ],
         [

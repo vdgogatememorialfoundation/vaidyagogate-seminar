@@ -547,6 +547,7 @@ function backFromCasePreview() {
 function cancelCaseApplication() {
     window.__caseStagedUploadIds = null;
     window.__caseStagedFileMeta = [];
+    activeCaseDraftId = null;
     showCaseApplicationStep('instructions');
     const cb = document.getElementById('case-field-agree_terms');
     if (cb) cb.checked = false;
@@ -765,12 +766,6 @@ function applyDoctorAllowedTabsToDom(allowed) {
         switchTab('tab-dashboard');
     } else if (!document.querySelector('.tab-pane:not(.hidden)')) {
         switchTab('tab-dashboard');
-    }
-    const slider = document.getElementById('doctor-seminar-slider');
-    if (slider) {
-        const showSlider = doctorTabModuleEnabled('tab-seminars') && slider.children.length > 0;
-        slider.classList.toggle('hidden', !showSlider);
-        slider.setAttribute('aria-hidden', showSlider ? 'false' : 'true');
     }
 }
 
@@ -1293,6 +1288,18 @@ function renderSeminarApplicationTrackerCard(a) {
     const tl = a.timeline || {};
     const payAmt = Number(a.seminar_price) > 0 ? Number(a.seminar_price) : 1500;
     const st = String(a.status || '').toLowerCase();
+    if (st === 'draft') {
+        return (
+            '<div class="card" style="margin-bottom:15px;border-top:4px solid #0ea5e9;">' +
+            '<h4 style="color:#0369a1;margin-bottom:10px;"><i class="fas fa-file-alt"></i> Draft — ' +
+            escapeHtml(a.application_no) +
+            '</h4>' +
+            '<p style="color:#64748b;font-size:0.9rem;">Saved but not submitted. Complete and submit while registration is open.</p>' +
+            '<button type="button" class="btn-primary" onclick="resumeDraftApplication(' +
+            Number(a.id) +
+            ')">Continue draft</button></div>'
+        );
+    }
     const isPaid = st === 'completed' || st === 'checked_in';
     let waitlistBlock = '';
     if (st === 'waitlisted') {
@@ -1552,7 +1559,6 @@ async function bootDoctorDashboard(user) {
     loadProfile();
     loadDoctorPaymentOptions().then(() => {
         loadDoctorPortalYear().then(() => {
-            loadDoctorSeminarSlider();
             if (!__doctorAllowedTabs || __doctorAllowedTabs.has('tab-seminars')) loadSeminarsGrid();
             if (!__doctorAllowedTabs || __doctorAllowedTabs.has('tab-applications')) loadApplications();
         });
@@ -2510,44 +2516,7 @@ function renderDoctorSeminarSlider(slides, autoSlideMs) {
 }
 
 async function loadDoctorSeminarSlider() {
-    try {
-        let seminars = activeSeminars;
-        let autoSlideMs = 5500;
-        if (!seminars || !seminars.length) {
-            const res = await fetch('/api/seminars?bucket=current', { cache: 'no-store' });
-            if (res.ok) {
-                const payload = await res.json();
-                seminars = payload.seminars || [];
-                if (payload.portalYear != null) {
-                    doctorPortalYear = payload.portalYear;
-                    const lbl = document.getElementById('doctor-portal-year-label');
-                    if (lbl) lbl.textContent = String(doctorPortalYear);
-                }
-            }
-        }
-        let marketingBanners = [];
-        let cmsSlides = [];
-        try {
-            const [mRes, cRes] = await Promise.all([
-                fetch('/api/public/marketing', { cache: 'no-store' }),
-                fetch('/api/public/site-cms', { cache: 'no-store' })
-            ]);
-            if (mRes.ok) {
-                const m = await mRes.json();
-                marketingBanners = m.banners || [];
-                autoSlideMs = (m.carousel && m.carousel.autoSlideMs) || autoSlideMs;
-            }
-            if (cRes.ok) {
-                const cms = await cRes.json();
-                cmsSlides = cms.slides || [];
-            }
-        } catch (_) {}
-        const slides = buildDoctorSliderSlides(seminars, marketingBanners, cmsSlides);
-        renderDoctorSeminarSlider(slides, autoSlideMs);
-        applyDoctorAllowedTabsToDom(__doctorAllowedTabs);
-    } catch (e) {
-        console.warn('Doctor seminar slider', e);
-    }
+    /* Marketing banner carousel is main-site only — not shown in doctor portal. */
 }
 
 function registrationWindowState(seminar) {
@@ -2758,7 +2727,7 @@ function startSeminarGridCountdownTimer() {
     seminarGridCountdownTimer = setInterval(tick, 1000);
 }
 
-function renderSeminarGridCard(s, readOnlyPast, alreadyRegistered) {
+function renderSeminarGridCard(s, readOnlyPast, alreadyRegistered, draftApp) {
     const win = effectiveRegistrationWindowState(s);
     const regStartLabel = s.registration_start
         ? formatTrackDateTime(s.registration_start)
@@ -2766,7 +2735,19 @@ function renderSeminarGridCard(s, readOnlyPast, alreadyRegistered) {
     const regEndLabel = s.registration_end ? formatTrackDateTime(s.registration_end) : '';
     const eventLabel = s.event_date ? formatEventDate(s.event_date) : '—';
     let actionBlock = '';
-    if (alreadyRegistered) {
+    if (draftApp && !alreadyRegistered) {
+        const closedNote =
+            win.state !== 'open'
+                ? '<p style="font-size:0.85rem;color:#b45309;margin-bottom:10px;"><i class="fas fa-info-circle"></i> Registration has closed. You can update your draft but cannot submit until admin reopens or extends your window.</p>'
+                : '';
+        actionBlock =
+            closedNote +
+            '<p style="font-size:0.85rem;color:#0f766e;margin-bottom:10px;"><i class="fas fa-file-alt"></i> Draft saved — not submitted yet.</p>' +
+            '<button type="button" class="btn-primary" style="width:100%;margin-bottom:8px;" onclick="resumeDraftApplication(' +
+            Number(draftApp.id) +
+            ')">Continue draft</button>' +
+            '<button type="button" class="btn-primary" style="width:100%;background:#64748b;" onclick="switchTab(\'tab-applications\')">View drafts</button>';
+    } else if (alreadyRegistered) {
         actionBlock =
             '<p style="font-size:0.85rem;color:#15803d;margin-bottom:12px;"><i class="fas fa-check-circle"></i> You already have an application for this seminar.</p>' +
             '<button type="button" class="btn-primary" style="width:100%;opacity:0.7;" onclick="switchTab(\'tab-applications\')">View my application</button>';
@@ -2942,6 +2923,7 @@ async function loadSeminarsGrid() {
         }
         activeSeminars = payload.seminars || [];
         const registeredSeminarIds = new Set();
+        const draftBySeminarId = {};
         const uid = doctorNumericUserId();
         if (uid) {
             try {
@@ -2949,13 +2931,20 @@ async function loadSeminarsGrid() {
                 const appPayload = await appRes.json();
                 const apps = Array.isArray(appPayload) ? appPayload : appPayload.applications || [];
                 apps.forEach((a) => {
-                    if (a && a.seminar_id != null) registeredSeminarIds.add(Number(a.seminar_id));
+                    if (!a || a.seminar_id == null) return;
+                    const sid = Number(a.seminar_id);
+                    if (String(a.status || '').toLowerCase() === 'draft') {
+                        draftBySeminarId[sid] = a;
+                    } else {
+                        registeredSeminarIds.add(sid);
+                    }
                 });
             } catch (appErr) {
                 console.warn('Could not load applications for seminar grid', appErr);
             }
         }
         window.__userRegisteredSeminarIds = registeredSeminarIds;
+        window.__seminarDraftById = draftBySeminarId;
         window.__registrationOverrideSeminarIds = new Set();
         window.__registrationOverrideBySeminar = {};
         await refreshRegistrationOverrides();
@@ -2973,13 +2962,14 @@ async function loadSeminarsGrid() {
             const win = registrationWindowState(s);
             if (win.state === 'upcoming') hasUpcoming = true;
             if (effectiveRegistrationWindowState(s).state === 'open') hasOpenReg = true;
-            const alreadyRegistered = registeredSeminarIds.has(Number(s.id));
-            container.insertAdjacentHTML('beforeend', renderSeminarGridCard(s, false, alreadyRegistered));
+            const sid = Number(s.id);
+            const alreadyRegistered = registeredSeminarIds.has(sid);
+            const draftApp = draftBySeminarId[sid] || null;
+            container.insertAdjacentHTML('beforeend', renderSeminarGridCard(s, false, alreadyRegistered, draftApp));
         });
         if (hasUpcoming || hasOpenReg) {
             startSeminarGridCountdownTimer();
         }
-        loadDoctorSeminarSlider();
     } catch (err) {
         console.error(err);
         container.innerHTML =
@@ -3015,13 +3005,14 @@ async function startRegistration(seminarId, opts) {
     opts = opts || {};
     await refreshRegistrationOverrides();
     const editMode = !!opts.editMode;
-    const volunteerBypass = !!opts.volunteerBypass || editMode;
+    const draftResume = !!opts.draftResume;
+    const volunteerBypass = !!opts.volunteerBypass || editMode || draftResume;
     const waitlistMode = !!opts.waitlist;
     const sid = Number(seminarId);
     const s = activeSeminars.find((x) => Number(x.id) === sid);
     const seminarTitle = s && s.title ? s.title : 'Seminar';
     const regSet = window.__userRegisteredSeminarIds;
-    if (regSet && regSet.has(sid) && !editMode) {
+    if (regSet && regSet.has(sid) && !editMode && !draftResume) {
         alert('You have already registered for this seminar. Track your application under Track seminar applications.');
         switchTab('tab-applications');
         return;
@@ -3064,7 +3055,15 @@ async function startRegistration(seminarId, opts) {
     window.__draftApplicationNo = null;
     document.getElementById('registration-seminar-name').innerText = waitlistMode
         ? `Waiting list — ${seminarTitle}`
-        : `Registering for: ${seminarTitle}`;
+        : draftResume
+          ? `Draft — ${seminarTitle}`
+          : `Registering for: ${seminarTitle}`;
+    const draftStatusEl = document.getElementById('reg-draft-status');
+    if (draftStatusEl) {
+        draftStatusEl.textContent = draftResume
+            ? 'This is a saved draft only. Use Submit application while registration is open to register.'
+            : '';
+    }
     document.getElementById('seminars-grid-container').classList.add('hidden');
     document.getElementById('seminars-title').classList.add('hidden');
     document.getElementById('multi-step-form').classList.remove('hidden');
@@ -3935,6 +3934,64 @@ async function loadDoctorVolunteerPanel() {
     }
 }
 
+let activeCaseDraftId = null;
+
+function collectCaseFormPayload() {
+    const form = {};
+    (activeCaseProgram && activeCaseProgram.formFields ? activeCaseProgram.formFields : []).forEach((f) => {
+        if (!f || !f.key) return;
+        const el = document.getElementById(caseFieldElId(f.key));
+        if (!el) return;
+        if (el.type === 'checkbox') form[f.key] = el.checked ? '1' : '';
+        else if (el.type !== 'file') form[f.key] = el.value;
+    });
+    if (!form.fname) form.fname = document.getElementById('case-fname')?.value || '';
+    if (!form.lname) form.lname = document.getElementById('case-lname')?.value || '';
+    if (!form.email) form.email = document.getElementById('case-email')?.value || '';
+    if (!form.phone) form.phone = document.getElementById('case-phone')?.value || '';
+    if (!form.whatsapp) form.whatsapp = document.getElementById('case-whatsapp')?.value || '';
+    if (!form.category) form.category = document.getElementById('case-category')?.value || '';
+    if (!form.topic) form.topic = document.getElementById('case-topic')?.value || '';
+    return form;
+}
+
+async function saveCaseDraft() {
+    const uid = doctorUserIdOrAlert();
+    if (!uid || !activeCaseProgramId) return alert('Open a case program form first.');
+    const statusEl = document.getElementById('case-draft-status');
+    if (statusEl) statusEl.textContent = 'Saving draft…';
+    const form = collectCaseFormPayload();
+    try {
+        const res = await fetch('/api/case/draft', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                userId: uid,
+                caseProgramId: activeCaseProgramId,
+                formData: form
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Could not save draft');
+        activeCaseDraftId = data.submissionId;
+        if (statusEl) {
+            statusEl.style.color = '#059669';
+            statusEl.textContent =
+                'Draft saved (' +
+                (data.applicationNo || '') +
+                '). Submit while applications are open.';
+        }
+        loadCaseApplications();
+    } catch (e) {
+        if (statusEl) {
+            statusEl.style.color = '#b91c1c';
+            statusEl.textContent = e.message || 'Could not save draft.';
+        }
+    }
+}
+
+window.saveCaseDraft = saveCaseDraft;
+
 async function submitCasePresentation() {
     const validated = await validateCaseFormBeforePreviewOrSubmit();
     if (!validated) return;
@@ -4021,6 +4078,7 @@ async function submitCasePresentation() {
             fdLegacy.append('userId', String(uid));
             fdLegacy.append('caseProgramId', String(activeCaseProgramId));
             fdLegacy.append('formData', JSON.stringify(form));
+            if (activeCaseDraftId) fdLegacy.append('draftSubmissionId', String(activeCaseDraftId));
             preparedFiles.forEach((f) => fdLegacy.append('files', f));
             try {
                 const res = await fetch('/api/case/submit', { method: 'POST', body: fdLegacy });
@@ -4056,6 +4114,7 @@ async function submitCasePresentation() {
     fd.append('userId', String(uid));
     fd.append('caseProgramId', String(activeCaseProgramId));
     fd.append('formData', JSON.stringify(form));
+    if (activeCaseDraftId) fd.append('draftSubmissionId', String(activeCaseDraftId));
     if (uploadedFileIds.length) {
         fd.append('uploadedFileIds', JSON.stringify(uploadedFileIds));
     }
@@ -4091,6 +4150,7 @@ async function submitCasePresentation() {
 
 function caseApplicationStatusLabel(st) {
     const s = String(st || 'submitted').toLowerCase();
+    if (s === 'draft') return 'Draft (not submitted)';
     if (s === 'revision_required') return 'Re-upload documents required';
     if (s === 'documents_requested') return 'Additional documents requested';
     if (s === 'priority_invited') return 'Complete application (priority)';
@@ -5352,9 +5412,113 @@ async function verifyNcism() {
     }
 }
 
+function collectRegistrationFormData() {
+    return {
+        fname: document.getElementById('reg-fname')?.value || '',
+        mname: document.getElementById('reg-mname')?.value || '',
+        lname: document.getElementById('reg-lname')?.value || '',
+        email: document.getElementById('reg-email')?.value || '',
+        phone: document.getElementById('reg-phone')?.value || '',
+        dob: document.getElementById('reg-dob') ? document.getElementById('reg-dob').value : '',
+        address: document.getElementById('reg-addr')?.value || '',
+        pin: document.getElementById('reg-pin')?.value || '',
+        city: document.getElementById('reg-city')?.value || '',
+        state: document.getElementById('reg-state')?.value || '',
+        country: document.getElementById('reg-country')?.value || '',
+        qual: document.getElementById('reg-qual')?.value || '',
+        ncism: document.getElementById('reg-ncism')?.value || '',
+        cpin: document.getElementById('reg-cpin') ? document.getElementById('reg-cpin').value : '',
+        college: document.getElementById('reg-college')?.value || '',
+        ccity: document.getElementById('reg-ccity')?.value || '',
+        cstate: document.getElementById('reg-cstate')?.value || '',
+        agree_terms: document.getElementById('tnc')?.checked ? '1' : ''
+    };
+}
+
+async function saveApplicationDraft() {
+    const uid = doctorUserIdOrAlert();
+    if (!uid) return;
+    const sid = parseInt(activeSeminarIdForReg, 10);
+    if (!Number.isInteger(sid) || sid < 1) {
+        return alert('Open a seminar registration form first.');
+    }
+    const statusEl = document.getElementById('reg-draft-status');
+    if (statusEl) statusEl.textContent = 'Saving draft…';
+    const formDataObj = collectRegistrationFormData();
+    const payload = new FormData();
+    payload.append('userId', String(uid));
+    if (currentUser && currentUser.user_id_string) {
+        payload.append('userIdString', String(currentUser.user_id_string));
+    }
+    payload.append('seminarId', String(sid));
+    payload.append('formData', JSON.stringify(formDataObj));
+    const certFile = document.getElementById('reg-cert-file')?.files?.[0];
+    if (certFile) {
+        const certReady = await prepareUploadFileOrAlert(certFile);
+        if (!certReady) return;
+        payload.append('certificate', certReady);
+    }
+    try {
+        const res = await fetch('/api/applications/draft', { method: 'POST', body: payload });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Could not save draft');
+        window.editingApplicationId = data.applicationId;
+        window.__draftApplicationNo = data.applicationNo || window.__draftApplicationNo;
+        if (statusEl) {
+            statusEl.style.color = '#059669';
+            statusEl.textContent =
+                'Draft saved (' +
+                (data.applicationNo || '') +
+                '). This does not register you — submit while registration is open.';
+        }
+        loadSeminarsGrid();
+        loadApplications();
+    } catch (e) {
+        if (statusEl) {
+            statusEl.style.color = '#b91c1c';
+            statusEl.textContent = e.message || 'Could not save draft.';
+        }
+    }
+}
+
+async function resumeDraftApplication(appId) {
+    const draft =
+        (userApplications || []).find((a) => Number(a.id) === Number(appId)) ||
+        (window.__seminarDraftById &&
+            Object.values(window.__seminarDraftById).find((a) => Number(a.id) === Number(appId)));
+    if (!draft) {
+        await loadApplications();
+        return resumeDraftApplication(appId);
+    }
+    let formData = {};
+    try {
+        formData = JSON.parse(draft.form_data || '{}');
+    } catch (_) {}
+    if (!activeSeminars.some((x) => Number(x.id) === Number(draft.seminar_id))) {
+        await loadSeminarsGrid();
+    }
+    window.editingApplicationId = draft.id;
+    window.__draftApplicationNo = draft.application_no || null;
+    switchTab('tab-seminars');
+    await startRegistration(draft.seminar_id, {
+        draftResume: true,
+        editMode: true,
+        volunteerBypass: true,
+        prefillFormData: formData
+    });
+}
+
+window.saveApplicationDraft = saveApplicationDraft;
+window.resumeDraftApplication = resumeDraftApplication;
+
 async function submitApplication() {
     await refreshRegistrationOverrides();
     const isEdit = !!window.editingApplicationId;
+    const isDraftSubmit =
+        isEdit &&
+        userApplications.some(
+            (a) => Number(a.id) === Number(window.editingApplicationId) && String(a.status || '').toLowerCase() === 'draft'
+        );
     const sidCheck = parseInt(activeSeminarIdForReg, 10);
     if (!isEdit && Number.isInteger(sidCheck) && sidCheck > 0 && !isOverrideRegistrationActive(sidCheck)) {
         const sCheck = activeSeminars.find((x) => Number(x.id) === sidCheck);
@@ -5400,26 +5564,7 @@ async function submitApplication() {
         return;
     }
     
-    const formDataObj = {
-        fname: document.getElementById('reg-fname').value,
-        mname: document.getElementById('reg-mname').value,
-        lname: document.getElementById('reg-lname').value,
-        email: document.getElementById('reg-email').value,
-        phone: document.getElementById('reg-phone').value,
-        dob: document.getElementById('reg-dob') ? document.getElementById('reg-dob').value : '',
-        address: document.getElementById('reg-addr').value,
-        pin: document.getElementById('reg-pin').value,
-        city: document.getElementById('reg-city').value,
-        state: document.getElementById('reg-state').value,
-        country: document.getElementById('reg-country').value,
-        qual: document.getElementById('reg-qual').value,
-        ncism: document.getElementById('reg-ncism').value,
-        cpin: document.getElementById('reg-cpin') ? document.getElementById('reg-cpin').value : '',
-        college: document.getElementById('reg-college').value,
-        ccity: document.getElementById('reg-ccity').value,
-        cstate: document.getElementById('reg-cstate').value,
-        agree_terms: document.getElementById('tnc').checked ? '1' : ''
-    };
+    const formDataObj = collectRegistrationFormData();
 
     const uid = doctorUserIdOrAlert();
     if (!uid) return;
@@ -5456,7 +5601,7 @@ async function submitApplication() {
     }
 
     try {
-        if (isEdit) {
+        if (isEdit && !isDraftSubmit) {
             const editPayload = new FormData();
             editPayload.append('formData', JSON.stringify(formDataObj));
             if (window.__otpOnStep1) {
@@ -5915,8 +6060,12 @@ async function loadApplications(silentPoll) {
         userApplications.forEach((a, index) => {
             // Render Table Row
             const st = String(a.status || '').toLowerCase();
+            const isDraft = st === 'draft';
             const canEdit = a.status === 'submitted' || a.status === 'pending_approval';
             const needsResubmit = st === 'revision_required' || st === 'documents_requested';
+            const draftBtn = isDraft
+                ? `<button class="btn-warning" style="padding: 5px 10px; margin-right: 5px;" onclick="resumeDraftApplication(${a.id})">Continue draft</button>`
+                : '';
             const editBtn = canEdit
                 ? `<button class="btn-warning" style="padding: 5px 10px; margin-right: 5px;" onclick="editApplication(${index})">Edit</button>`
                 : '';
@@ -5936,8 +6085,8 @@ async function loadApplications(silentPoll) {
             list.innerHTML += `
                 <tr>
                     <td><strong>${a.application_no}</strong></td>
-                    <td><span style="background: ${a.status === 'rejected' ? '#fee2e2' : '#fef3c7'}; padding: 5px; border-radius: 5px;">${a.status.toUpperCase()}</span></td>
-                    <td>${editBtn}${resubmitBtn}${cancelBtn}<button class="btn-primary" style="padding: 5px 10px;" onclick="viewApplication(${index})">View Details</button></td>
+                    <td><span style="background: ${a.status === 'rejected' ? '#fee2e2' : isDraft ? '#e0f2fe' : '#fef3c7'}; padding: 5px; border-radius: 5px;">${isDraft ? 'DRAFT' : a.status.toUpperCase()}</span></td>
+                    <td>${draftBtn}${editBtn}${resubmitBtn}${cancelBtn}<button class="btn-primary" style="padding: 5px 10px;" onclick="viewApplication(${index})">View Details</button></td>
                 </tr>
             `;
             }
