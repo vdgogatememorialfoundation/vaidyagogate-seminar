@@ -2443,7 +2443,14 @@
 
                     <!-- PhonePe -->
                     <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-                        <h4>PhonePe (Live)</h4>
+                        <h4>PhonePe Standard Checkout v2 (recommended)</h4>
+                        <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px;">OAuth credentials from PhonePe Business → Developer Settings. If omitted, legacy v1 salt keys are used.</p>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div><label>Client ID</label><input type="text" id="pg-phonepe-client-id" placeholder="..."></div>
+                            <div><label>Client secret</label><input type="password" id="pg-phonepe-client-secret" placeholder="..."></div>
+                            <div><label>Client version</label><input type="text" id="pg-phonepe-client-version" placeholder="1" value="1"></div>
+                        </div>
+                        <h4 style="margin-top:14px;font-size:0.95rem;">PhonePe legacy v1 (optional fallback)</h4>
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                             <div><label>Merchant ID</label><input type="text" id="pg-phonepe-merchant-id" placeholder="..."></div>
                             <div><label>Salt key</label><input type="password" id="pg-phonepe-salt-key" placeholder="..."></div>

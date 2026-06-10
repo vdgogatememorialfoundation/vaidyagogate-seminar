@@ -9535,19 +9535,24 @@ async function loadSettings() {
                 if (activeEl) activeEl.checked = pg.is_active;
             } else if (pg.name === 'phonepe') {
                 const live = config.live || config;
+                const cidEl = document.getElementById('pg-phonepe-client-id');
+                const csecEl = document.getElementById('pg-phonepe-client-secret');
+                const cverEl = document.getElementById('pg-phonepe-client-version');
                 const midEl = document.getElementById('pg-phonepe-merchant-id');
                 const saltEl = document.getElementById('pg-phonepe-salt-key');
                 const idxEl = document.getElementById('pg-phonepe-salt-index');
+                if (cidEl) cidEl.value = live.client_id || config.client_id || '';
+                if (csecEl) csecEl.value = live.client_secret || config.client_secret || '';
+                if (cverEl) cverEl.value = live.client_version || config.client_version || '1';
                 if (midEl) midEl.value = live.merchant_id || config.merchant_id || '';
                 if (saltEl) saltEl.value = live.salt_key || config.salt_key || '';
                 if (idxEl) idxEl.value = live.salt_index || config.salt_index || '1';
+                const hasV2 =
+                    !!(live.client_id || config.client_id) && !!(live.client_secret || config.client_secret);
+                const hasV1 =
+                    !!(live.merchant_id || config.merchant_id) && !!(live.salt_key || config.salt_key);
                 const liveEl = document.getElementById('pg-phonepe-live-enabled');
-                if (liveEl) {
-                    liveEl.checked =
-                        live.enabled !== false &&
-                        !!(live.merchant_id || config.merchant_id) &&
-                        !!(live.salt_key || config.salt_key);
-                }
+                if (liveEl) liveEl.checked = live.enabled !== false && (hasV2 || hasV1);
                 const activeEl = document.getElementById('pg-phonepe-active');
                 if (activeEl) activeEl.checked = pg.is_active;
             } else if (pg.name === 'zoho') {
@@ -9753,6 +9758,9 @@ async function savePaymentGatewaysSettings() {
     const ptKey = document.getElementById('pg-paytm-merchant-key')?.value.trim() || '';
     const ptWeb = document.getElementById('pg-paytm-website')?.value.trim() || '';
     const ptLiveOn = document.getElementById('pg-paytm-live-enabled')?.checked;
+    const ppClientId = document.getElementById('pg-phonepe-client-id')?.value.trim() || '';
+    const ppClientSecret = document.getElementById('pg-phonepe-client-secret')?.value.trim() || '';
+    const ppClientVersion = document.getElementById('pg-phonepe-client-version')?.value.trim() || '1';
     const ppMid = document.getElementById('pg-phonepe-merchant-id')?.value.trim() || '';
     const ppSalt = document.getElementById('pg-phonepe-salt-key')?.value.trim() || '';
     const ppIdx = document.getElementById('pg-phonepe-salt-index')?.value.trim() || '1';
@@ -9843,7 +9851,18 @@ async function savePaymentGatewaysSettings() {
                 merchant_id: ppMid,
                 salt_key: ppSalt,
                 salt_index: ppIdx,
-                live: { enabled: !!ppLiveOn, merchant_id: ppMid, salt_key: ppSalt, salt_index: ppIdx }
+                client_id: ppClientId,
+                client_secret: ppClientSecret,
+                client_version: ppClientVersion,
+                live: {
+                    enabled: !!ppLiveOn,
+                    merchant_id: ppMid,
+                    salt_key: ppSalt,
+                    salt_index: ppIdx,
+                    client_id: ppClientId,
+                    client_secret: ppClientSecret,
+                    client_version: ppClientVersion
+                }
             }
         },
         {
