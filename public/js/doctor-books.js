@@ -221,12 +221,8 @@
             return;
         }
         panel.classList.remove('hidden');
-        const w = bookConfig.defaultParcelWeightKg || 0.5;
-        const l = bookConfig.defaultParcelLengthCm || 22;
-        const b = bookConfig.defaultParcelBreadthCm || 15;
-        const h = bookConfig.defaultParcelHeightCm || 5;
         const ratesHint = bookConfig.shiprocketRatesEnabled
-            ? 'Live Shiprocket rates — choose one before placing the order.'
+            ? 'Enter your address, fetch live rates, and choose a courier. Parcel weight and size are set by the book office.'
             : 'Courier rates are not configured; contact the office for courier delivery.';
         panel.innerHTML =
             '<div class="card" style="margin:16px 0;padding:16px;border:1px solid #e2e8f0;">' +
@@ -234,7 +230,7 @@
             '<label style="margin-right:18px;"><input type="radio" name="books-fulfillment" value="pickup" checked> Pick up at seminar book desk</label>' +
             '<label><input type="radio" name="books-fulfillment" value="courier"> Courier to my address</label>' +
             '<div id="books-courier-form" class="hidden" style="margin-top:16px;padding-top:14px;border-top:1px solid #e2e8f0;">' +
-            '<p style="font-size:0.85rem;color:#64748b;margin:0 0 12px;">Enter shipping details, parcel size, then fetch rates and select a courier. After the office confirms your order, shipment is booked automatically.</p>' +
+            '<p style="font-size:0.85rem;color:#64748b;margin:0 0 12px;">Enter your shipping address, fetch courier rates, and select one option. The book office handles parcel weight and packing when your order ships.</p>' +
             '<div style="display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));">' +
             '<label>Recipient name<input type="text" id="books-ship-name" style="width:100%;padding:8px;margin-top:4px;" autocomplete="name"></label>' +
             '<label>Mobile<input type="tel" id="books-ship-phone" style="width:100%;padding:8px;margin-top:4px;" maxlength="15" autocomplete="tel"></label>' +
@@ -243,19 +239,7 @@
             '<label>State<input type="text" id="books-ship-state" style="width:100%;padding:8px;margin-top:4px;"></label>' +
             '</div>' +
             '<label style="display:block;margin-top:10px;">Street / area / landmark<textarea id="books-ship-address" rows="2" style="width:100%;padding:8px;margin-top:4px;"></textarea></label>' +
-            '<div style="display:flex;flex-wrap:wrap;gap:12px;margin-top:12px;align-items:flex-end;">' +
-            '<label>Weight (kg)<input type="number" id="books-ship-weight" min="0.1" step="0.1" value="' +
-            w +
-            '" style="width:80px;padding:8px;margin-left:4px;"></label>' +
-            '<label>L (cm)<input type="number" id="books-ship-l" min="1" value="' +
-            l +
-            '" style="width:64px;padding:8px;margin-left:4px;"></label>' +
-            '<label>B (cm)<input type="number" id="books-ship-b" min="1" value="' +
-            b +
-            '" style="width:64px;padding:8px;margin-left:4px;"></label>' +
-            '<label>H (cm)<input type="number" id="books-ship-h" min="1" value="' +
-            h +
-            '" style="width:64px;padding:8px;margin-left:4px;"></label>' +
+            '<div style="margin-top:12px;">' +
             '<button type="button" id="books-fetch-rates-btn" class="btn-secondary"' +
             (bookConfig.shiprocketRatesEnabled ? '' : ' disabled') +
             '>Get courier rates</button>' +
@@ -304,11 +288,15 @@
     }
 
     function booksParcelParams() {
+        const cfg = bookConfig || {};
+        const items = typeof collectCartItems === 'function' ? collectCartItems() : [];
+        const totalQty = items.reduce((sum, line) => sum + (Number(line.qty) || 0), 0);
+        const perBookKg = Number(cfg.defaultParcelWeightKg) > 0 ? Number(cfg.defaultParcelWeightKg) : 0.5;
         return {
-            weightKg: parseFloat((document.getElementById('books-ship-weight') || {}).value) || 0.5,
-            lengthCm: parseFloat((document.getElementById('books-ship-l') || {}).value) || 22,
-            breadthCm: parseFloat((document.getElementById('books-ship-b') || {}).value) || 15,
-            heightCm: parseFloat((document.getElementById('books-ship-h') || {}).value) || 5
+            weightKg: Math.max(0.2, perBookKg * Math.max(1, totalQty || 1)),
+            lengthCm: Number(cfg.defaultParcelLengthCm) > 0 ? Number(cfg.defaultParcelLengthCm) : 22,
+            breadthCm: Number(cfg.defaultParcelBreadthCm) > 0 ? Number(cfg.defaultParcelBreadthCm) : 15,
+            heightCm: Number(cfg.defaultParcelHeightCm) > 0 ? Number(cfg.defaultParcelHeightCm) : 5
         };
     }
 
@@ -316,7 +304,6 @@
         const pin = String((document.getElementById('books-ship-pin') || {}).value || '')
             .replace(/\D/g, '')
             .slice(0, 6);
-        const parcel = booksParcelParams();
         const base = {
             fulfillmentType: 'courier',
             shippingRecipientName: String((document.getElementById('books-ship-name') || {}).value || '').trim(),
@@ -325,10 +312,7 @@
             city: String((document.getElementById('books-ship-city') || {}).value || '').trim(),
             state: String((document.getElementById('books-ship-state') || {}).value || '').trim(),
             pincode: pin,
-            weightKg: parcel.weightKg,
-            lengthCm: parcel.lengthCm,
-            breadthCm: parcel.breadthCm,
-            heightCm: parcel.heightCm
+            items: collectCartItems()
         };
         if (bookSelectedCourier) {
             base.shiprocketCourierId = bookSelectedCourier.courierId;
@@ -385,7 +369,7 @@
             if (!res.ok) throw new Error(data.error || 'Could not fetch rates');
             bookShiprocketRates = data.couriers || data.rates || [];
             if (!bookShiprocketRates.length) {
-                if (msg) msg.textContent = 'No courier options for this PIN and parcel size. Try different dimensions or contact the office.';
+                if (msg) msg.textContent = 'No courier options for this PIN. Try again later or contact the book office.';
                 if (wrap) {
                     wrap.classList.add('hidden');
                     wrap.innerHTML = '';
