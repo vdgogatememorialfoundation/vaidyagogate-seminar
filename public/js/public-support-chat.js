@@ -507,8 +507,10 @@
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Failed');
             addBot(data.reply);
-            if (data.liveChatAvailable && liveChatOpen) {
+            if (data.suggestLiveChat && data.liveChatAvailable && liveChatOpen) {
                 addBot('Tap "Talk to a support agent" below to chat live with our team.');
+                liveBtn.classList.remove('hidden');
+            } else if (data.liveChatAvailable) {
                 liveBtn.classList.remove('hidden');
             }
         } catch (e) {
