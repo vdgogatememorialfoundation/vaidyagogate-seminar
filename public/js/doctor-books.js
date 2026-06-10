@@ -523,6 +523,19 @@
                             '" alt="UPI QR" style="max-width:220px;display:block;margin-top:10px;">';
                     }
                     startBookPaymentPoll(data.bookOrderId, userId);
+                } else if (payData.paymentType === 'razorpay_checkout' && payData.razorpayOrder && payData.keyId) {
+                    await openBookRazorpayCheckout(payData, data.bookOrderId, userId);
+                    if (msg) msg.textContent = payData.message || 'Complete payment in the Razorpay window.';
+                } else if (payData.paymentUrl || payData.formPost || payData.easebuzzAccessKey) {
+                    const opened = openBookHostedCheckout(payData);
+                    if (!opened) {
+                        throw new Error(payData.message || 'Could not open payment gateway.');
+                    }
+                    if (msg) msg.textContent = payData.message || 'Complete payment on the gateway page.';
+                    startBookPaymentPoll(data.bookOrderId, userId);
+                } else if (payData.pollRequired) {
+                    startBookPaymentPoll(data.bookOrderId, userId);
+                    if (msg) msg.textContent = payData.message || 'Waiting for payment confirmation…';
                 } else {
                     if (msg) msg.textContent = payData.message || 'Complete payment.';
                 }
@@ -540,6 +553,79 @@
                 msg.textContent = e.message || 'Order failed';
             }
         }
+    }
+
+    function submitBookHostedFormPost(formPost) {
+        const f = document.createElement('form');
+        f.method = (formPost.method || 'POST').toUpperCase();
+        f.action = formPost.action;
+        f.style.display = 'none';
+        Object.entries(formPost.fields || {}).forEach(([k, v]) => {
+            const inp = document.createElement('input');
+            inp.type = 'hidden';
+            inp.name = k;
+            inp.value = String(v);
+            f.appendChild(inp);
+        });
+        document.body.appendChild(f);
+        f.submit();
+    }
+
+    function openBookHostedCheckout(payData) {
+        if (payData.formPost && payData.formPost.action) {
+            submitBookHostedFormPost(payData.formPost);
+            return true;
+        }
+        if (payData.paymentUrl) {
+            window.location.href = payData.paymentUrl;
+            return true;
+        }
+        if (payData.easebuzzAccessKey) {
+            window.location.href =
+                'https://pay.easebuzz.in/pay/' + encodeURIComponent(payData.easebuzzAccessKey);
+            return true;
+        }
+        return false;
+    }
+
+    async function openBookRazorpayCheckout(payData, bookOrderId, userId) {
+        if (typeof Razorpay === 'undefined') {
+            await new Promise((resolve, reject) => {
+                const s = document.createElement('script');
+                s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+                s.onload = resolve;
+                s.onerror = () => reject(new Error('Razorpay checkout failed to load'));
+                document.head.appendChild(s);
+            });
+        }
+        const cu = typeof currentUser !== 'undefined' ? currentUser : {};
+        const options = {
+            key: payData.keyId,
+            amount: payData.razorpayOrder.amount,
+            currency: payData.razorpayOrder.currency || 'INR',
+            name: 'Vaidya Gogate Memorial Foundation',
+            description: 'Book order',
+            order_id: payData.razorpayOrder.id,
+            handler: function () {
+                startBookPaymentPoll(bookOrderId, userId);
+            },
+            prefill: {
+                name: [cu.first_name, cu.last_name].filter(Boolean).join(' ').trim(),
+                email: cu.email || '',
+                contact: cu.phone || ''
+            },
+            theme: { color: '#0f766e' }
+        };
+        const rzp = new Razorpay(options);
+        rzp.on('payment.failed', function (resp) {
+            const m = document.getElementById('books-order-msg');
+            if (m) {
+                m.style.color = '#b91c1c';
+                m.textContent =
+                    (resp.error && resp.error.description) || 'Payment failed or was cancelled.';
+            }
+        });
+        rzp.open();
     }
 
     function startBookPaymentPoll(bookOrderId, userId) {

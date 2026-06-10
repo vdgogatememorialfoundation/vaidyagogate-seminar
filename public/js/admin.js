@@ -16444,6 +16444,7 @@ function stopBsOrdersAutoRefresh() {
 }
 
 async function loadBookSalesAdmin() {
+    loadBsPosGateways();
     const msg = document.getElementById('bs-config-msg');
     if (msg) msg.textContent = '';
     if (!globalSeminars || !globalSeminars.length) {
@@ -18159,6 +18160,67 @@ async function bsPosApplyOrderStatus(orderId) {
     }
 }
 
+function bsPosPayModeChanged() {
+    const mode = (document.getElementById('bs-pos-pay-mode') || {}).value;
+    const wrap = document.getElementById('bs-pos-gateway-wrap');
+    if (wrap) wrap.classList.toggle('hidden', mode !== 'online');
+}
+
+async function loadBsPosGateways() {
+    const sel = document.getElementById('bs-pos-pay-gateway');
+    if (!sel) return;
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return;
+    try {
+        const res = await fetch('/api/admin/payments/methods?actingAdminId=' + encodeURIComponent(adm.id));
+        const methods = await res.json();
+        const checkout = (methods || []).filter(
+            (m) => m.available !== false && m.id !== 'cash' && m.id !== 'dqr' && m.type !== 'mock'
+        );
+        sel.innerHTML = checkout.length
+            ? checkout.map((m) => '<option value="' + e(m.id) + '">' + e(m.label) + '</option>').join('')
+            : '<option value="">No gateway configured</option>';
+    } catch (_) {
+        sel.innerHTML = '<option value="">Could not load gateways</option>';
+    }
+}
+
+function bsPosOpenBookPayment(data) {
+    if (data.formPost && data.formPost.action) {
+        const f = document.createElement('form');
+        f.method = (data.formPost.method || 'POST').toUpperCase();
+        f.action = data.formPost.action;
+        f.style.display = 'none';
+        Object.entries(data.formPost.fields || {}).forEach(([k, v]) => {
+            const inp = document.createElement('input');
+            inp.type = 'hidden';
+            inp.name = k;
+            inp.value = String(v);
+            f.appendChild(inp);
+        });
+        document.body.appendChild(f);
+        f.submit();
+        return true;
+    }
+    if (data.paymentUrl) {
+        window.open(data.paymentUrl, '_blank', 'noopener');
+        return true;
+    }
+    if (data.easebuzzAccessKey) {
+        window.open(
+            'https://pay.easebuzz.in/pay/' + encodeURIComponent(data.easebuzzAccessKey),
+            '_blank',
+            'noopener'
+        );
+        return true;
+    }
+    if (data.paymentType === 'razorpay_checkout' && data.razorpayOrder && data.keyId && typeof openAdminRazorpayCheckout === 'function') {
+        openAdminRazorpayCheckout(data, () => loadBsPosOrders());
+        return true;
+    }
+    return false;
+}
+
 async function bsPosSave() {
     const msg = document.getElementById('bs-pos-msg');
     const adm = getStoredAdminUser();
@@ -18184,6 +18246,10 @@ async function bsPosSave() {
         buyerPhone: (document.getElementById('bs-pos-phone') || {}).value || '',
         userId: Number.isInteger(linkedUid) && linkedUid > 0 ? linkedUid : _bsPosSelectedUserId || null,
         paymentMode: (document.getElementById('bs-pos-pay-mode') || {}).value || 'cash',
+        methodId:
+            (document.getElementById('bs-pos-pay-mode') || {}).value === 'online'
+                ? (document.getElementById('bs-pos-pay-gateway') || {}).value || ''
+                : '',
         items,
         actingAdminId: adm && adm.id
     };
@@ -18196,6 +18262,22 @@ async function bsPosSave() {
         });
         const data = await res.json();
         if (!res.ok) { if (msg) { msg.style.color = '#b91c1c'; msg.textContent = data.error || 'Failed'; } return; }
+        if (data.pollRequired && !data.paid) {
+            if (msg) {
+                msg.style.color = '#0d9488';
+                msg.textContent = 'Order ' + e(data.orderCode || data.bookOrderId || '') + ' — open payment gateway…';
+            }
+            if (!bsPosOpenBookPayment(data)) {
+                if (msg) msg.textContent = data.message || 'Could not open payment gateway.';
+            } else if (msg) {
+                msg.innerHTML =
+                    '✓ Order <strong>' +
+                    e(data.orderCode || data.bookOrderId || '') +
+                    '</strong> awaiting payment. Complete checkout; pickup QR issues after payment.';
+            }
+            loadBsPosOrders();
+            return;
+        }
         if (msg) {
             msg.style.color = '#15803d';
             let html = '✓ Order placed: <strong>' + e(data.orderCode || '') + '</strong>';

@@ -1610,23 +1610,40 @@ function handleEasebuzzPaymentReturnQuery() {
     try {
         const p = new URLSearchParams(window.location.search);
         const payment = p.get('payment');
-        if (!payment) return;
+        const returnTab = p.get('tab');
+        const isBookReturn = returnTab === 'tab-books';
+        if (!payment && !returnTab) return;
         const msg = p.get('msg');
+        if (isBookReturn && typeof switchTab === 'function') {
+            switchTab('tab-books');
+        }
         if (payment === 'success') {
             alert(
                 msg ||
-                    'Payment successful. Your e-ticket is under Participant tickets. Join the seminar WhatsApp group from My Applications when shown.'
+                    (isBookReturn
+                        ? 'Payment successful. Your book order is confirmed — see Book orders for your pickup QR.'
+                        : 'Payment successful. Your e-ticket is under Participant tickets. Join the seminar WhatsApp group from My Applications when shown.')
             );
-            const lastReg = sessionStorage.getItem('doctor_last_pay_reg');
-            if (typeof loadApplications === 'function') {
-                loadApplications().then(() => {
-                    if (lastReg) showPostPaymentWhatsappBanner(lastReg);
-                });
+            if (isBookReturn) {
+                if (typeof loadBookOrders === 'function') loadBookOrders();
+            } else {
+                const lastReg = sessionStorage.getItem('doctor_last_pay_reg');
+                if (typeof loadApplications === 'function') {
+                    loadApplications().then(() => {
+                        if (lastReg) showPostPaymentWhatsappBanner(lastReg);
+                    });
+                }
+                if (typeof loadDoctorDashboardStats === 'function') loadDoctorDashboardStats();
+                if (typeof loadDoctorEventTickets === 'function') loadDoctorEventTickets();
             }
-            if (typeof loadDoctorDashboardStats === 'function') loadDoctorDashboardStats();
-            if (typeof loadDoctorEventTickets === 'function') loadDoctorEventTickets();
         } else if (payment === 'failed') {
-            alert(msg || 'Payment was not completed. You can try again from My Applications.');
+            alert(
+                msg ||
+                    (isBookReturn
+                        ? 'Book payment was not completed. You can try again from Book orders.'
+                        : 'Payment was not completed. You can try again from My Applications.')
+            );
+            if (isBookReturn && typeof loadBookOrders === 'function') loadBookOrders();
         } else if (payment === 'error') {
             alert(msg || 'Payment could not be verified. Contact the seminar office if money was debited.');
         }

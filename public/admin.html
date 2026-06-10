@@ -1310,13 +1310,19 @@
                                 <div><label>Buyer phone</label><input type="text" id="bs-pos-phone" placeholder="Phone" style="width:100%;padding:8px;"></div>
                             </div>
                             <div id="bs-pos-books" style="margin-bottom:12px;"></div>
-                            <div style="margin-bottom:12px;max-width:240px;">
+                            <div style="margin-bottom:12px;max-width:320px;">
                                 <label>Payment mode</label>
-                                <select id="bs-pos-pay-mode" style="width:100%;padding:8px;">
+                                <select id="bs-pos-pay-mode" style="width:100%;padding:8px;" onchange="bsPosPayModeChanged()">
                                     <option value="cash">Cash</option>
-                                    <option value="upi">UPI</option>
-                                    <option value="card">Card</option>
+                                    <option value="upi">UPI (manual)</option>
+                                    <option value="card">Card (manual)</option>
+                                    <option value="online">Online gateway (PayU, Razorpay, etc.)</option>
                                 </select>
+                            </div>
+                            <div id="bs-pos-gateway-wrap" class="hidden" style="margin-bottom:12px;max-width:320px;">
+                                <label>Payment gateway</label>
+                                <select id="bs-pos-pay-gateway" style="width:100%;padding:8px;"></select>
+                                <p style="font-size:0.8rem;color:#64748b;margin:6px 0 0;">Link a doctor account for online checkout (email required for PayU/Easebuzz).</p>
                             </div>
                             <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
                                 <button type="button" class="btn-primary" style="background:#7c3aed;" onclick="bsPosSave()">Place POS order</button>
@@ -2968,6 +2974,6 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260608menu2"></script>
-    <script src="/js/admin.js?v=20260610pg2"></script>
+    <script src="/js/admin.js?v=20260610books1"></script>
 </body>
 </html>

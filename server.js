@@ -189,7 +189,8 @@ function mountPaymentsRoutes() {
         getOrCreatePendingOrder,
         portalTracking,
         notifyTicketIssued,
-        assertAdminPortalActor
+        assertAdminPortalActor,
+        fulfillBookOrderPayment: bookSales.fulfillBookOrderPayment
     });
     supplementalPayments.registerSupplementalPaymentRoutes(app, db, {
         fileStore,
