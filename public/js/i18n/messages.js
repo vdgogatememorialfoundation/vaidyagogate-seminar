@@ -20,8 +20,17 @@
         'auth.forgotPassword': 'Forgot password?',
         'nav.home': 'Home',
         'nav.about': 'About',
+        'nav.foundation': 'Foundation',
+        'nav.agenda': 'Agenda',
+        'nav.delegates': 'Delegates',
+        'nav.contact': 'Contact',
         'nav.schedule': 'Schedule',
         'nav.gallery': 'Gallery',
+        'stat.activeSeminars': 'Active seminars',
+        'stat.expertSpeakers': 'Expert speakers',
+        'stat.delegates': 'Delegates',
+        'stat.founded': 'Founded',
+        'stat.onlinePortal': 'Online portal',
         'nav.register': 'Register',
         'nav.doctorPortal': 'Doctor portal',
         'nav.certificateVerify': 'Verify certificate',
@@ -152,8 +161,17 @@
         'auth.forgotPassword': 'पासवर्ड भूल गए?',
         'nav.home': 'होम',
         'nav.about': 'परिचय',
+        'nav.foundation': 'फाउंडेशन',
+        'nav.agenda': 'कार्यसूची',
+        'nav.delegates': 'प्रतिनिधि',
+        'nav.contact': 'संपर्क',
         'nav.schedule': 'कार्यक्रम',
         'nav.gallery': 'गैलरी',
+        'stat.activeSeminars': 'सक्रिय सेमिनार',
+        'stat.expertSpeakers': 'विशेषज्ञ वक्ता',
+        'stat.delegates': 'प्रतिनिधि',
+        'stat.founded': 'स्थापना',
+        'stat.onlinePortal': 'ऑनलाइन पोर्टल',
         'nav.register': 'पंजीकरण',
         'nav.doctorPortal': 'डॉक्टर पोर्टल',
         'nav.certificateVerify': 'प्रमाणपत्र सत्यापन',
@@ -263,139 +281,190 @@
         'support.feedbackSubmit': 'प्रतिक्रिया भेजें'
     };
 
-    const mr = Object.assign({}, hi, {
-        'lang.label': 'भाषा',
-        'nav.home': 'मुख्यपृष्ठ',
-        'nav.about': 'आमच्याबद्दल',
-        'nav.schedule': 'वेळापत्रक',
-        'nav.gallery': 'गॅलरी',
-        'doctor.portalTitle': 'डॉक्टर पोर्टल',
-        'doctor.menu.dashboard': 'डॅशबोर्ड',
-        'doctor.menu.profile': 'माझे प्रोफाइल',
-        'doctor.menu.seminars': 'उपलब्ध सेमिनार',
-        'doctor.menu.certificates': 'प्रमाणपत्रे',
-        'cert.downloadPdf': 'प्रमाणपत्र डाउनलोड करा',
-        'cert.downloadDone': 'प्रमाणपत्र आपल्या डिव्हाइसवर जतन केले.'
-    });
+    const regionalNav = {
+        mr: {
+            'lang.label': 'भाषा',
+            'site.tagline': 'राष्ट्रीय सेमिनार पोर्टल',
+            'auth.signIn': 'साइन इन',
+            'auth.createAccount': 'खाते तयार करा',
+            'auth.register': 'नोंदणी',
+            'nav.home': 'मुख्यपृष्ठ',
+            'nav.foundation': 'फाउंडेशन',
+            'nav.agenda': 'कार्यक्रम',
+            'nav.gallery': 'गॅलरी',
+            'nav.delegates': 'प्रतिनिधी',
+            'nav.contact': 'संपर्क',
+            'stat.expertSpeakers': 'तज्ञ वक्ते',
+            'stat.delegates': 'प्रतिनिधी',
+            'stat.founded': 'स्थापना',
+            'footer.explore': 'अन्वेषण'
+        },
+        kn: {
+            'lang.label': 'ಭಾಷೆ',
+            'site.tagline': 'ರಾಷ್ಟ್ರೀಯ ಸೆಮಿನಾರ್ ಪೋರ್ಟಲ್',
+            'auth.signIn': 'ಸೈನ್ ಇನ್',
+            'auth.createAccount': 'ಖಾತೆ ತೆರೆಯಿರಿ',
+            'auth.register': 'ನೋಂದಣಿ',
+            'nav.home': 'ಮುಖಪುಟ',
+            'nav.foundation': 'ಫೌಂಡೇಶನ್',
+            'nav.agenda': 'ಕಾರ್ಯಕ್ರಮ',
+            'nav.gallery': 'ಗ್ಯಾಲರಿ',
+            'nav.delegates': 'ಪ್ರತಿನಿಧಿಗಳು',
+            'nav.contact': 'ಸಂಪರ್ಕ',
+            'stat.expertSpeakers': 'ತಜ್ಞರು',
+            'stat.delegates': 'ಪ್ರತಿನಿಧಿಗಳು',
+            'stat.founded': 'ಸ್ಥಾಪಿತ',
+            'footer.explore': 'ಅನ್ವೇಷಿಸಿ'
+        },
+        ta: {
+            'lang.label': 'மொழி',
+            'site.tagline': 'தேசிய கருத்தரங்கு போர்டல்',
+            'auth.signIn': 'உள்நுழை',
+            'auth.createAccount': 'கணக்கு உருவாக்கு',
+            'auth.register': 'பதிவு',
+            'nav.home': 'முகப்பு',
+            'nav.foundation': 'அறக்கட்டளை',
+            'nav.agenda': 'நிகழ்ச்சி நிரல்',
+            'nav.gallery': 'கேலரி',
+            'nav.delegates': 'பிரதிநிதிகள்',
+            'nav.contact': 'தொடர்பு',
+            'stat.expertSpeakers': 'நிபுணர் பேச்சாளர்கள்',
+            'stat.delegates': 'பிரதிநிதிகள்',
+            'stat.founded': 'நிறுவப்பட்டது',
+            'footer.explore': 'ஆராயுங்கள்'
+        },
+        te: {
+            'lang.label': 'భాష',
+            'site.tagline': 'జాతీయ సెమినార్ పోర్టల్',
+            'auth.signIn': 'సైన్ ఇన్',
+            'auth.createAccount': 'ఖాతా సృష్టించండి',
+            'auth.register': 'నమోదు',
+            'nav.home': 'హోమ్',
+            'nav.foundation': 'ఫౌండేషన్',
+            'nav.agenda': 'కార్యక్రమం',
+            'nav.gallery': 'గ్యాలరీ',
+            'nav.delegates': 'ప్రతినిధులు',
+            'nav.certificateVerify': 'ధృవీకరణ',
+            'nav.contact': 'సంప్రదించండి',
+            'stat.activeSeminars': 'సక్రియ సెమినార్లు',
+            'stat.expertSpeakers': 'నిపుణులు',
+            'stat.delegates': 'ప్రతినిధులు',
+            'stat.founded': 'స్థాపించబడింది',
+            'stat.onlinePortal': 'ఆన్‌లైన్ పోర్టల్',
+            'footer.explore': 'అన్వేషించండి',
+            'footer.contact': 'సంప్రదింపు',
+            'doctor.portalTitle': 'డాక్టర్ పోర్టల్',
+            'doctor.menu.dashboard': 'డాష్‌బోర్డ్',
+            'doctor.menu.seminars': 'సెమినార్లు',
+            'doctor.menu.applications': 'అప్లికేషన్లు',
+            'support.title': 'సహాయం',
+            'support.send': 'పంపు'
+        },
+        ml: {
+            'lang.label': 'ഭാഷ',
+            'site.tagline': 'ദേശീയ സെമിനാർ പോർട്ടൽ',
+            'auth.signIn': 'സൈൻ ഇൻ',
+            'auth.createAccount': 'അക്കൗണ്ട് സൃഷ്ടിക്കുക',
+            'auth.register': 'രജിസ്റ്റർ',
+            'nav.home': 'ഹോം',
+            'nav.foundation': 'ഫൗണ്ടേഷൻ',
+            'nav.agenda': 'പരിപാടി',
+            'nav.gallery': 'ഗാലറി',
+            'nav.delegates': 'പ്രതിനിധികൾ',
+            'nav.contact': 'ബന്ധപ്പെടുക',
+            'stat.expertSpeakers': 'വിദഗ്ധർ',
+            'stat.delegates': 'പ്രതിനിധികൾ',
+            'stat.founded': 'സ്ഥാപിതം',
+            'footer.explore': 'പര്യവേക്ഷണം'
+        },
+        gu: {
+            'lang.label': 'ભાષા',
+            'site.tagline': 'રાષ્ટ્રીય સેમિનાર પોર્ટલ',
+            'auth.signIn': 'સાઇન ઇન',
+            'auth.createAccount': 'એકાઉન્ટ બનાવો',
+            'auth.register': 'નોંધણી',
+            'nav.home': 'હોમ',
+            'nav.foundation': 'ફાઉન્ડેશન',
+            'nav.agenda': 'કાર્યક્રમ',
+            'nav.gallery': 'ગેલેરી',
+            'nav.delegates': 'પ્રતિનિધિઓ',
+            'nav.contact': 'સંપર્ક',
+            'stat.expertSpeakers': 'નિષ્ણાતો',
+            'stat.delegates': 'પ્રતિનિધિઓ',
+            'stat.founded': 'સ્થાપના',
+            'footer.explore': 'અન્વેષણ'
+        },
+        bho: {
+            'lang.label': 'भाषा',
+            'site.tagline': 'राष्ट्रीय सेमिनार पोर्टल',
+            'auth.signIn': 'साइन इन',
+            'auth.createAccount': 'खाता बनाईं',
+            'auth.register': 'रजिस्टर',
+            'nav.home': 'घर',
+            'nav.foundation': 'फाउंडेशन',
+            'nav.agenda': 'कार्यक्रम',
+            'nav.gallery': 'गैलरी',
+            'nav.delegates': 'प्रतिनिधि',
+            'nav.contact': 'संपर्क',
+            'footer.explore': 'खोजीं'
+        },
+        pa: {
+            'lang.label': 'ਭਾਸ਼ਾ',
+            'site.tagline': 'ਰਾਸ਼ਟਰੀ ਸੈਮੀਨਾਰ ਪੋਰਟਲ',
+            'auth.signIn': 'ਸਾਈਨ ਇਨ',
+            'auth.createAccount': 'ਖਾਤਾ ਬਣਾਓ',
+            'auth.register': 'ਰਜਿਸਟਰ',
+            'nav.home': 'ਘਰ',
+            'nav.foundation': 'ਫਾਊਂਡੇਸ਼ਨ',
+            'nav.agenda': 'ਕਾਰਜਕ੍ਰਮ',
+            'nav.gallery': 'ਗੈਲਰੀ',
+            'nav.delegates': 'ਪ੍ਰਤਿਨਿਧੀ',
+            'nav.contact': 'ਸੰਪਰਕ',
+            'footer.explore': 'ਖੋਜ'
+        },
+        bn: {
+            'lang.label': 'ভাষা',
+            'site.tagline': 'জাতীয় সেমিনার পোর্টাল',
+            'auth.signIn': 'সাইন ইন',
+            'auth.createAccount': 'অ্যাকাউন্ট তৈরি',
+            'auth.register': 'নিবন্ধন',
+            'nav.home': 'হোম',
+            'nav.foundation': 'ফাউন্ডেশন',
+            'nav.agenda': 'কার্যসূচি',
+            'nav.gallery': 'গ্যালারি',
+            'nav.delegates': 'প্রতিনিধি',
+            'nav.contact': 'যোগাযোগ',
+            'stat.expertSpeakers': 'বিশেষজ্ঞ বক্তা',
+            'stat.delegates': 'প্রতিনিধি',
+            'stat.founded': 'প্রতিষ্ঠিত',
+            'footer.explore': 'অন্বেষণ'
+        },
+        or: {
+            'lang.label': 'ଭାଷା',
+            'site.tagline': 'ଜାତୀୟ ସେମିନାର ପୋର୍ଟାଲ୍',
+            'auth.signIn': 'ସାଇନ ଇନ୍',
+            'auth.createAccount': 'ଖାତା ତିଆରି',
+            'auth.register': 'ନିବନ୍ଧନ',
+            'nav.home': 'ମୁଖ୍ୟ ପୃଷ୍ଠା',
+            'nav.foundation': 'ଫାଉଣ୍ଡେସନ୍',
+            'nav.agenda': 'କାର୍ଯ୍ୟକ୍ରମ',
+            'nav.gallery': 'ଗ୍ୟାଲେରୀ',
+            'nav.delegates': 'ପ୍ରତିନିଧି',
+            'nav.contact': 'ଯୋଗାଯୋଗ',
+            'footer.explore': 'ଅନୁସନ୍ଧାନ'
+        }
+    };
 
-    const kn = Object.assign({}, hi, {
-        'lang.label': 'ಭಾಷೆ',
-        'nav.home': 'ಮುಖಪುಟ',
-        'nav.about': 'ನಮ್ಮ ಬಗ್ಗೆ',
-        'nav.schedule': 'ವೇಳಾಪಟ್ಟಿ',
-        'nav.gallery': 'ಗ್ಯಾಲರಿ',
-        'auth.signIn': 'ಸೈನ್ ಇನ್',
-        'auth.createAccount': 'ಖಾತೆ ತೆರೆಯಿರಿ',
-        'doctor.portalTitle': 'ವೈದ್ಯರ ಪೋರ್ಟಲ್',
-        'doctor.menu.dashboard': 'ಡ್ಯಾಶ್‌ಬೋರ್ಡ್',
-        'doctor.menu.certificates': 'ಪ್ರಮಾಣಪತ್ರಗಳು',
-        'cert.downloadPdf': 'ಪ್ರಮಾಣಪತ್ರ ಡೌನ್‌ಲೋಡ್',
-        'cert.downloadDone': 'ಪ್ರಮಾಣಪತ್ರ ನಿಮ್ಮ ಸಾಧನದಲ್ಲಿ ಉಳಿಸಲಾಗಿದೆ.'
-    });
-
-    const ta = Object.assign({}, hi, {
-        'lang.label': 'மொழி',
-        'nav.home': 'முகப்பு',
-        'nav.about': 'எங்களைப் பற்றி',
-        'nav.schedule': 'அட்டவணை',
-        'nav.gallery': 'கேலரி',
-        'auth.signIn': 'உள்நுழை',
-        'auth.createAccount': 'கணக்கு உருவாக்கு',
-        'doctor.portalTitle': 'மருத்துவர் போர்டல்',
-        'doctor.menu.certificates': 'சான்றிதழ்கள்',
-        'cert.downloadPdf': 'சான்றிதழ் பதிவிறக்கம்',
-        'cert.downloadDone': 'சான்றிதழ் உங்கள் சாதனத்தில் சேமிக்கப்பட்டது.'
-    });
-
-    const te = Object.assign({}, hi, {
-        'lang.label': 'భాష',
-        'nav.home': 'హోమ్',
-        'nav.about': 'మా గురించి',
-        'nav.schedule': 'షెడ్యూల్',
-        'nav.gallery': 'గ్యాలరీ',
-        'auth.signIn': 'సైన్ ఇన్',
-        'auth.createAccount': 'ఖాతా సృష్టించండి',
-        'doctor.portalTitle': 'డాక్టర్ పోర్టల్',
-        'doctor.menu.certificates': 'సర్టిఫికేట్లు',
-        'cert.downloadPdf': 'సర్టిఫికేట్ డౌన్‌లోడ్',
-        'cert.downloadDone': 'సర్టిఫికేట్ మీ పరికరంలో సేవ్ అయింది.'
-    });
-
-    const ml = Object.assign({}, hi, {
-        'lang.label': 'ഭാഷ',
-        'nav.home': 'ഹോം',
-        'nav.about': 'ഞങ്ങളെക്കുറിച്ച്',
-        'nav.schedule': 'ഷെഡ്യൂൾ',
-        'nav.gallery': 'ഗാലറി',
-        'auth.signIn': 'സൈൻ ഇൻ',
-        'auth.createAccount': 'അക്കൗണ്ട് സൃഷ്ടിക്കുക',
-        'doctor.portalTitle': 'ഡോക്ടർ പോർട്ടൽ',
-        'doctor.menu.certificates': 'സർട്ടിഫിക്കറ്റുകൾ',
-        'cert.downloadPdf': 'സർട്ടിഫിക്കറ്റ് ഡൗൺലോഡ്',
-        'cert.downloadDone': 'സർട്ടിഫിക്കറ്റ് നിങ്ങളുടെ ഉപകരണത്തിൽ സേവ് ചെയ്തു.'
-    });
-
-    const gu = Object.assign({}, hi, {
-        'lang.label': 'ભાષા',
-        'nav.home': 'હોમ',
-        'nav.about': 'અમારા વિશે',
-        'nav.schedule': 'સમયપત્રક',
-        'nav.gallery': 'ગેલેરી',
-        'auth.signIn': 'સાઇન ઇન',
-        'auth.createAccount': 'એકાઉન્ટ બનાવો',
-        'doctor.portalTitle': 'ડૉક્ટર પોર્ટલ',
-        'doctor.menu.certificates': 'પ્રમાણપત્રો',
-        'cert.downloadPdf': 'પ્રમાણપત્ર ડાઉનલોડ',
-        'cert.downloadDone': 'પ્રમાણપત્ર તમારા ઉપકરણમાં સાચવ્યું.'
-    });
-
-    const bho = Object.assign({}, hi, {
-        'lang.label': 'भाषा',
-        'nav.home': 'घर',
-        'doctor.portalTitle': 'डाक्टर पोर्टल',
-        'cert.downloadPdf': 'प्रमाणपत्र डाउनलोड करीं',
-        'cert.downloadDone': 'प्रमाणपत्र राउर डिवाइस पर सेव हो गइल.'
-    });
-
-    const pa = Object.assign({}, hi, {
-        'lang.label': 'ਭਾਸ਼ਾ',
-        'nav.home': 'ਘਰ',
-        'nav.about': 'ਸਾਡੇ ਬਾਰੇ',
-        'auth.signIn': 'ਸਾਈਨ ਇਨ',
-        'auth.createAccount': 'ਖਾਤਾ ਬਣਾਓ',
-        'doctor.portalTitle': 'ਡਾਕਟਰ ਪੋਰਟਲ',
-        'doctor.menu.certificates': 'ਸਰਟੀਫਿਕੇਟ',
-        'cert.downloadPdf': 'ਸਰਟੀਫਿਕੇਟ ਡਾਊਨਲੋਡ',
-        'cert.downloadDone': 'ਸਰਟੀਫਿਕੇਟ ਤੁਹਾਡੇ ਡਿਵਾਈਸ ਤੇ ਸੇਵ ਹੋ ਗਿਆ.'
-    });
-
-    const bn = Object.assign({}, hi, {
-        'lang.label': 'ভাষা',
-        'nav.home': 'হোম',
-        'nav.about': 'আমাদের সম্পর্কে',
-        'nav.schedule': 'সময়সূচি',
-        'nav.gallery': 'গ্যালারি',
-        'auth.signIn': 'সাইন ইন',
-        'auth.createAccount': 'অ্যাকাউন্ট তৈরি',
-        'doctor.portalTitle': 'ডাক্তার পোর্টাল',
-        'doctor.menu.certificates': 'সার্টিফিকেট',
-        'cert.downloadPdf': 'সার্টিফিকেট ডাউনলোড',
-        'cert.downloadDone': 'সার্টিফিকেট আপনার ডিভাইসে সংরক্ষিত হয়েছে.'
-    });
-
-    const or = Object.assign({}, hi, {
-        'lang.label': 'ଭାଷା',
-        'nav.home': 'ମୁଖ୍ୟ ପୃଷ୍ଠା',
-        'nav.about': 'ଆମ ବିଷୟରେ',
-        'nav.schedule': 'ସମୟସୂଚୀ',
-        'nav.gallery': 'ଗ୍ୟାଲେରୀ',
-        'auth.signIn': 'ସାଇନ ଇନ୍',
-        'auth.createAccount': 'ଖାତା ତିଆରି',
-        'doctor.portalTitle': 'ଡାକ୍ତର ପୋର୍ଟାଲ୍',
-        'doctor.menu.certificates': 'ପ୍ରମାଣପତ୍ର',
-        'cert.downloadPdf': 'ପ୍ରମାଣପତ୍ର ଡାଉନଲୋଡ୍',
-        'cert.downloadDone': 'ପ୍ରମାଣପତ୍ର ଆପଣଙ୍କ ଡିଭାଇସରେ ସେଭ ହେଲା.'
-    });
+    const mr = regionalNav.mr;
+    const kn = regionalNav.kn;
+    const ta = regionalNav.ta;
+    const te = regionalNav.te;
+    const ml = regionalNav.ml;
+    const gu = regionalNav.gu;
+    const bho = regionalNav.bho;
+    const pa = regionalNav.pa;
+    const bn = regionalNav.bn;
+    const or = regionalNav.or;
 
     function fillMissing(localePack) {
         const out = Object.assign({}, keys, localePack);

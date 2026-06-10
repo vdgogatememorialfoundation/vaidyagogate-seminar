@@ -16,6 +16,8 @@
     let msgSince = 0;
     let pollTimer = null;
     let contactFormShown = false;
+    let hoursOpen = false;
+    let hoursLabel = '';
 
     const params = new URLSearchParams(window.location.search);
     const urlRef = params.get('ref') || params.get('livechat') || '';
@@ -32,6 +34,33 @@
     const guestLinkBox = document.getElementById('guest-link-box');
     const contactPanel = document.getElementById('contact-panel');
     const contactStatus = document.getElementById('contact-status');
+    const hoursBanner = document.getElementById('live-chat-hours');
+
+    function clientDiagnostics() {
+        return window.LiveChatClientInfo && typeof window.LiveChatClientInfo.collect === 'function'
+            ? window.LiveChatClientInfo.collect()
+            : null;
+    }
+
+    function updateHoursUi(h) {
+        hoursLabel = (h && h.hoursLabel) || '';
+        hoursOpen = !!(h && h.agentsAvailableNow);
+        if (!hoursBanner) return;
+        if (hoursOpen) {
+            hoursBanner.textContent = 'Live agents available now · ' + hoursLabel;
+        } else {
+            hoursBanner.textContent =
+                'Agents join during: ' + (hoursLabel || 'business hours') + '. Leave your details below and we will reach out.';
+            showContactForm({ chatRef: '' });
+            if (contactPanel) {
+                const hint = contactPanel.querySelector('p');
+                if (hint) {
+                    hint.textContent =
+                        'Our team is offline right now. Share your details and we will contact you during the next live chat window.';
+                }
+            }
+        }
+    }
 
     function sessionApiKey() {
         return encodeURIComponent(chatRef || String(sessionId || ''));
@@ -163,11 +192,27 @@
     }
 
     async function startChat(initialMessage) {
+        if (!hoursOpen) {
+            showContactForm({ chatRef: '' });
+            appendMsg({
+                role: 'system',
+                text:
+                    'Live chat agents are available during: ' +
+                    (hoursLabel || 'scheduled hours') +
+                    '. Please use the contact form below and we will reach out to you.'
+            });
+            showChatUi();
+            return;
+        }
         try {
             const res = await fetch('/api/public/support/live/start', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ visitorKey, message: initialMessage || 'Hello, I need help from the website.' })
+                body: JSON.stringify({
+                    visitorKey,
+                    message: initialMessage || 'Hello, I need help from the website.',
+                    clientDiagnostics: clientDiagnostics()
+                })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Could not start chat');
@@ -198,9 +243,13 @@
                         '.'
                 });
             } else if (data.status === 'offline') {
+                showContactForm({ chatRef });
                 appendMsg({
                     role: 'system',
-                    text: 'Live chat is outside business hours. Leave a message below or use the contact form when it appears.'
+                    text:
+                        'Live chat is outside business hours (' +
+                        (hoursLabel || 'see schedule above') +
+                        '). Please use the contact form — we will reach out to you.'
                 });
             }
             startPoll();
@@ -292,17 +341,31 @@
         contactStatus.textContent = 'Sending…';
         contactStatus.style.color = '#64748b';
         try {
-            const res = await fetch('/api/public/support/live/' + sessionApiKey() + '/contact-form', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            const data = await res.json();
+            let res;
+            let data;
+            if (sessionId) {
+                res = await fetch('/api/public/support/live/' + sessionApiKey() + '/contact-form', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                data = await res.json();
+            } else {
+                if (!payload.subject) payload.subject = 'Live chat request (offline hours)';
+                res = await fetch('/api/public/contact-inquiry', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                data = await res.json();
+            }
             if (!res.ok) throw new Error(data.error || 'Could not send');
             contactStatus.style.color = '#059669';
-            contactStatus.textContent = 'Sent! Reference ' + (data.inquiryRef || '') + '. You can keep chatting here.';
+            contactStatus.textContent = sessionId
+                ? 'Sent! Reference ' + (data.inquiryRef || '') + '. You can keep chatting here.'
+                : 'Sent! Our team will contact you during the next live chat window.';
             contactPanel.querySelector('button').disabled = true;
-            pollMessages();
+            if (sessionId) pollMessages();
         } catch (e) {
             contactStatus.style.color = '#b91c1c';
             contactStatus.textContent = e.message || 'Could not send. Try again.';
@@ -315,6 +378,13 @@
         if (e.key === 'Enter') sendMessage();
     });
     document.getElementById('cf-submit')?.addEventListener('click', submitContactForm);
+
+    fetch('/api/public/support/hours', { cache: 'no-store' })
+        .then((r) => r.json())
+        .then((h) => updateHoursUi(h))
+        .catch(() => {
+            if (hoursBanner) hoursBanner.textContent = '';
+        });
 
     if (urlRef && urlVk) {
         resumeChat();

@@ -107,6 +107,10 @@
                         <div>
                             <h3 style="margin:0 0 4px;font-size:1rem;" id="support-live-chat-title">Live chat</h3>
                             <p id="support-live-visitor-meta" class="sub" style="margin:0;font-size:0.82rem;"></p>
+                            <details id="support-live-visitor-diag" class="hidden" style="margin-top:6px;font-size:0.75rem;color:#64748b;">
+                                <summary style="cursor:pointer;font-weight:600;">Device &amp; network (support only)</summary>
+                                <pre id="support-live-visitor-diag-body" style="margin:6px 0 0;white-space:pre-wrap;word-break:break-word;background:#f1f5f9;padding:8px;border-radius:6px;font-size:0.72rem;"></pre>
+                            </details>
                         </div>
                         <div style="display:flex;gap:6px;flex-wrap:wrap;">
                             <button type="button" id="support-live-contact-form-btn" class="btn btn-muted" style="padding:6px 10px;font-size:0.78rem;" onclick="supportSendTicketForm()">Send contact form</button>
@@ -162,12 +166,20 @@
                 </div>
                 <div id="support-modal-thread" style="margin:16px 0;max-height:360px;overflow-y:auto;"></div>
                 <textarea id="support-modal-reply" placeholder="Reply to participant…"></textarea>
-                <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;">
+                <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
                     <button type="button" class="btn btn-primary" onclick="supportSendReply()">Send reply</button>
                     <select id="support-transfer-agent" style="width:auto;min-width:180px;"><option value="">Transfer to agent…</option></select>
                     <select id="support-transfer-dept" style="width:auto;min-width:160px;"><option value="">Department…</option></select>
                     <button type="button" class="btn btn-muted" onclick="supportTransferTicket()">Transfer</button>
+                    <select id="support-ticket-status" style="width:auto;min-width:140px;">
+                        <option value="in_progress">In progress</option>
+                        <option value="resolved">Resolved</option>
+                        <option value="closed">Closed</option>
+                    </select>
+                    <input type="text" id="support-ticket-close-note" placeholder="Closing note to participant (optional)" style="flex:1;min-width:180px;">
+                    <button type="button" class="btn btn-muted" onclick="supportCloseTicket()">Mark ticket closed</button>
                 </div>
+                <p id="support-modal-feedback" class="sub" style="margin-top:8px;font-size:0.82rem;"></p>
                 <p id="support-modal-msg" style="margin-top:8px;font-weight:600;font-size:0.88rem;"></p>
             </div>
             <div id="support-modal-side" class="card" style="margin:0;background:#f8fafc;">
@@ -179,6 +191,16 @@
 
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-auth.js?v=20260609support2"></script>
-    <script src="/js/support-portal.js?v=20260609lookup1"></script>
+    <div id="support-app-detail-modal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:60;padding:16px;overflow-y:auto;">
+        <div class="card" style="max-width:900px;margin:0 auto;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:12px;">
+                <h2 id="support-app-detail-title" style="margin:0;font-size:1.05rem;">Application details</h2>
+                <button type="button" class="btn btn-muted" onclick="supportCloseAppDetail()">Close</button>
+            </div>
+            <div id="support-app-detail-body" style="font-size:0.88rem;max-height:70vh;overflow-y:auto;"></div>
+        </div>
+    </div>
+
+    <script src="/js/support-portal.js?v=20260610desk1"></script>
 </body>
 </html>

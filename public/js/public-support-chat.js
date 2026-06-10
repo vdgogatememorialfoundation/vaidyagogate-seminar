@@ -5,7 +5,6 @@
     if (document.getElementById('vgmf-support-widget-root')) return;
 
     function t(key) {
-        if (typeof PortalI18n !== 'undefined' && PortalI18n.t) return PortalI18n.t(key);
         const fallbacks = {
             'support.title': 'Help & support',
             'support.hoursLoading': 'Loading hours…',
@@ -35,6 +34,7 @@
     let liveMsgSince = 0;
     let livePollTimer = null;
     let liveChatOpen = false;
+    let hoursLabel = '';
     let contactFormShown = false;
     let visitorKey = localStorage.getItem('vgmf_support_visitor') || '';
     if (!visitorKey) {
@@ -185,38 +185,40 @@
         messages.scrollTop = messages.scrollHeight;
     }
 
-    function applySupportWidgetI18n() {
-        const launcher = document.getElementById('vgmf-support-launcher');
-        if (launcher) launcher.setAttribute('aria-label', t('support.openChat'));
-        const set = (id, key) => {
-            const el = document.getElementById(id);
-            if (el) el.textContent = t(key);
-        };
-        set('vgmf-support-title', 'support.title');
-        const hours = document.getElementById('vgmf-support-hours');
-        if (hours && /^Loading hours/i.test(hours.textContent || '')) set('vgmf-support-hours', 'support.hoursLoading');
-        set('vgmf-cf-title', 'support.contactTitle');
-        set('vgmf-cf-hint', 'support.contactHint');
-        const cfName = document.getElementById('vgmf-cf-name');
-        if (cfName) cfName.placeholder = t('support.fullName');
-        const cfEmail = document.getElementById('vgmf-cf-email');
-        if (cfEmail) cfEmail.placeholder = t('auth.email');
-        const cfPhone = document.getElementById('vgmf-cf-phone');
-        if (cfPhone) cfPhone.placeholder = t('support.phone');
-        const cfMsg = document.getElementById('vgmf-cf-message');
-        if (cfMsg) cfMsg.placeholder = t('support.describeIssue');
-        set('vgmf-cf-submit', 'support.sendTeam');
-        if (liveBtn && !liveSessionId) liveBtn.textContent = t('support.liveAgent');
-        if (dedicatedLink) dedicatedLink.textContent = t('support.fullScreenChat');
-        const track = document.getElementById('vgmf-support-track');
-        if (track) track.placeholder = t('support.trackPlaceholder');
-        const input = document.getElementById('vgmf-support-input');
-        if (input) input.placeholder = t('support.askPlaceholder');
-        const send = document.getElementById('vgmf-support-send');
-        if (send) send.textContent = t('support.send');
+    function clientDiagnostics() {
+        return window.LiveChatClientInfo && typeof window.LiveChatClientInfo.collect === 'function'
+            ? window.LiveChatClientInfo.collect()
+            : null;
     }
 
-    document.addEventListener('portal-locale-change', applySupportWidgetI18n);
+    function updateHoursUi(h) {
+        hoursLabel = (h && h.hoursLabel) || '';
+        liveChatOpen = !!(h && h.agentsAvailableNow);
+        if (!hoursEl) return;
+        if (liveChatOpen) {
+            hoursEl.textContent = 'Live agents available now · ' + hoursLabel;
+            liveBtn.classList.remove('hidden');
+            if (contactFormEl && !liveSessionId) contactFormEl.classList.add('hidden');
+        } else {
+            hoursEl.textContent =
+                'Agents join during: ' + (hoursLabel || 'business hours') + '. Leave your details and we will reach out.';
+            liveBtn.classList.add('hidden');
+            showOfflineContactForm();
+        }
+    }
+
+    function showOfflineContactForm() {
+        if (!contactFormEl) return;
+        contactFormShown = true;
+        contactFormEl.classList.remove('hidden');
+        const hint = document.getElementById('vgmf-cf-hint');
+        if (hint) {
+            hint.textContent =
+                'Our support team is offline right now. Share your details and we will contact you during the next live chat window.';
+        }
+        const sub = document.getElementById('vgmf-cf-subject');
+        if (sub && !sub.value) sub.value = 'Website support request (offline hours)';
+    }
 
     function addBot(text, label) {
         appendMessage({ role: 'bot', text: text, label: label || t('support.assistant') });
@@ -286,10 +288,24 @@
 
     async function startLiveChat(initialMessage) {
         try {
+            if (!liveChatOpen) {
+                showOfflineContactForm();
+                addBot(
+                    'Live chat agents are available during: ' +
+                        (hoursLabel || 'scheduled hours') +
+                        '. Please use the form below and we will reach out to you.',
+                    'Support desk'
+                );
+                return;
+            }
             const res = await fetch('/api/public/support/live/start', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ visitorKey, message: initialMessage || 'Hello, I need help.' })
+                body: JSON.stringify({
+                    visitorKey,
+                    message: initialMessage || 'Hello, I need help.',
+                    clientDiagnostics: clientDiagnostics()
+                })
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Could not start live chat');
@@ -368,19 +384,32 @@
         }
         if (statusEl) statusEl.textContent = 'Sending…';
         try {
-            const res = await fetch('/api/public/support/live/' + liveSessionApiKey() + '/contact-form', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            const data = await res.json();
+            let res;
+            let data;
+            if (liveSessionId) {
+                res = await fetch('/api/public/support/live/' + liveSessionApiKey() + '/contact-form', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                data = await res.json();
+            } else {
+                res = await fetch('/api/public/contact-inquiry', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                data = await res.json();
+            }
             if (!res.ok) throw new Error(data.error || 'Could not send');
             if (statusEl) {
                 statusEl.style.color = '#059669';
-                statusEl.textContent = 'Sent! Reference ' + (data.inquiryRef || '') + '.';
+                statusEl.textContent = liveSessionId
+                    ? 'Sent! Reference ' + (data.inquiryRef || '') + '. We will reach out soon.'
+                    : 'Sent! Our team will contact you during the next live chat window.';
             }
             document.getElementById('vgmf-cf-submit').disabled = true;
-            pollLiveMessages();
+            if (liveSessionId) pollLiveMessages();
         } catch (e) {
             if (statusEl) {
                 statusEl.style.color = '#b91c1c';
@@ -402,15 +431,9 @@
 
     fetch('/api/public/support/hours', { cache: 'no-store' })
         .then((r) => r.json())
-        .then((h) => {
-            liveChatOpen = !!(h.openNow && h.liveChatEnabled);
-            hoursEl.textContent = liveChatOpen
-                ? 'Live support hours — agents available now'
-                : 'Outside live chat hours — FAQs and tracking still work';
-            if (liveChatOpen) liveBtn.classList.remove('hidden');
-        })
+        .then((h) => updateHoursUi(h))
         .catch(() => {
-            hoursEl.textContent = 'Ask about seminars, registration, payments, or case presentation';
+            if (hoursEl) hoursEl.textContent = 'Ask about seminars, registration, payments, or case presentation';
         });
 
     fetch('/api/public/support/faqs', { cache: 'no-store' })
@@ -433,7 +456,7 @@
         addUser(text);
         input.value = '';
 
-        if (/live chat|talk to (a )?human|talk to agent|support agent/i.test(text) && liveChatOpen) {
+        if (/live chat|talk to (a )?human|talk to agent|support agent/i.test(text)) {
             liveBtn.classList.add('hidden');
             return startLiveChat(text);
         }

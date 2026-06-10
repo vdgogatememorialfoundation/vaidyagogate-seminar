@@ -13,7 +13,6 @@
     <link rel="stylesheet" href="/css/responsive-portals.css?v=20260608menu3">
     <link rel="stylesheet" href="/css/vgmf-portal-bright.css">
     <link rel="stylesheet" href="/css/vgmf-mobile-portal.css">
-    <link rel="stylesheet" href="/css/portal-lang.css?v=20260609lang2">
     <style>
         :root {
             --doctor-primary: #0f766e;
@@ -178,7 +177,6 @@
     <div id="auth-overlay">
         <div class="doctor-auth-card" style="background:#fff;border-radius:16px;padding:32px;width:100%;max-width:420px;box-shadow:0 24px 50px rgba(15,118,110,0.2);border:1px solid #99f6e4;">
             <div data-site-logo data-logo-height="44px" style="margin-bottom:12px;"></div>
-            <div data-portal-lang="doctor-auth-lang"></div>
             <h2 id="doctor-auth-title" style="color:#0f766e;margin-bottom:12px;font-size:1.35rem;" data-i18n="doctor.auth.title">Doctor's Portal Sign In</h2>
             <div style="display:flex;gap:8px;margin-bottom:16px;">
                 <button type="button" id="doctor-auth-tab-login" class="btn-primary" style="flex:1;padding:10px;" onclick="DoctorAuthUi.switchDoctorAuthTab('login')"><span data-i18n="auth.signIn">Sign in</span></button>
@@ -266,7 +264,6 @@
                 <h2 data-i18n="doctor.portalTitle">Doctor's Portal</h2>
                 <p>VGMF National Seminar (<span id="doctor-portal-year-label">2026</span>)</p>
             </div>
-            <div class="portal-lang-sidebar-slot" data-portal-lang="doctor-lang-sidebar"></div>
             <div class="menu-items">
                 <button type="button" class="menu-item active" data-tab="tab-dashboard"><i class="fas fa-home"></i> <span data-i18n="doctor.menu.dashboard">Dashboard</span></button>
                 <button type="button" class="menu-item" data-tab="tab-profile"><i class="fas fa-user-circle"></i> <span data-i18n="doctor.menu.profile">My Profile</span></button>
@@ -282,7 +279,7 @@
                 <button type="button" class="menu-item hidden" id="nav-books" data-tab="tab-books"><i class="fas fa-book"></i> <span data-i18n="doctor.menu.books">Book orders</span></button>
                 <button type="button" class="menu-item" data-tab="tab-payments"><i class="fas fa-credit-card"></i> <span data-i18n="doctor.menu.payments">Payments</span></button>
                 <button type="button" class="menu-item" data-tab="tab-ticket"><i class="fas fa-qrcode"></i> <span data-i18n="doctor.menu.tickets">Participant tickets</span></button>
-                <button type="button" class="menu-item" data-tab="tab-certificate"><i class="fas fa-award"></i> <span data-i18n="doctor.menu.certificates">Certificates</span></button>
+                <button type="button" class="menu-item" data-tab="tab-certificate"><i class="fas fa-award"></i> Certificates</button>
                 <button type="button" class="menu-item" data-tab="tab-reset-pwd"><i class="fas fa-key"></i> <span data-i18n="doctor.menu.password">Change password</span></button>
             </div>
         </aside>
@@ -291,10 +288,9 @@
 
         <div class="main-content">
             <header class="top-header">
-                <button type="button" class="doctor-menu-toggle" id="doctor-menu-toggle" aria-label="Open menu" data-i18n-aria="cert.openMenu"><i class="fas fa-bars"></i></button>
+                <button type="button" class="doctor-menu-toggle" id="doctor-menu-toggle" aria-label="Open menu" data-i18n-aria="common.open"><i class="fas fa-bars"></i></button>
                 <div class="header-title" data-i18n="doctor.headerTitle">Vaidya Gogate Memorial Foundation — Doctor's Portal</div>
                 <div class="user-info">
-                    <div data-portal-lang="doctor-lang-header"></div>
                     <img id="header-profile-photo" class="doctor-header-photo hidden" alt="Profile photo" src="">
                     <span class="hi-user" id="header-name">Hi, Doctor</span>
                     <span class="user-id" id="header-id">ID: —</span>
@@ -686,6 +682,19 @@
                         <button type="button" class="btn-primary" onclick="closeChat()" style="background:#64748b;margin-bottom:15px;"><i class="fas fa-arrow-left"></i> Back</button>
                         <h3 id="chat-title" style="color:#0f766e;border-bottom:1px solid #e2e8f0;padding-bottom:10px;margin-bottom:15px;">Ticket</h3>
                         <div id="chat-messages" style="height:300px;overflow-y:auto;background:#f8fafc;padding:15px;border-radius:8px;margin-bottom:15px;display:flex;flex-direction:column;gap:10px;"></div>
+                        <div id="ticket-feedback-panel" class="hidden" style="margin-bottom:14px;padding:12px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;">
+                            <p style="margin:0 0 8px;font-weight:600;color:#0f766e;">How was our support on this ticket?</p>
+                            <div style="display:flex;gap:6px;margin-bottom:8px;" id="ticket-feedback-stars">
+                                <button type="button" class="btn-primary" style="padding:6px 10px;background:#64748b;" data-rating="1" onclick="setTicketFeedbackRating(1)">1★</button>
+                                <button type="button" class="btn-primary" style="padding:6px 10px;background:#64748b;" data-rating="2" onclick="setTicketFeedbackRating(2)">2★</button>
+                                <button type="button" class="btn-primary" style="padding:6px 10px;background:#64748b;" data-rating="3" onclick="setTicketFeedbackRating(3)">3★</button>
+                                <button type="button" class="btn-primary" style="padding:6px 10px;background:#64748b;" data-rating="4" onclick="setTicketFeedbackRating(4)">4★</button>
+                                <button type="button" class="btn-primary" style="padding:6px 10px;background:#64748b;" data-rating="5" onclick="setTicketFeedbackRating(5)">5★</button>
+                            </div>
+                            <textarea id="ticket-feedback-comment" rows="2" placeholder="Optional comments about support quality…" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:6px;margin-bottom:8px;"></textarea>
+                            <button type="button" class="btn-primary" onclick="submitTicketFeedback()">Submit feedback</button>
+                            <p id="ticket-feedback-status" style="margin:8px 0 0;font-size:0.85rem;"></p>
+                        </div>
                         <div style="display:flex;gap:10px;">
                             <input type="text" id="chat-reply-msg" placeholder="Type your reply…" style="flex:1;padding:10px;border:1px solid #cbd5e1;border-radius:6px;">
                             <button type="button" class="btn-primary" onclick="sendReply()">Send</button>
@@ -749,8 +758,8 @@
                 </div>
 
                 <div id="tab-certificate" class="tab-pane hidden">
-                    <h2 class="section-title" style="color:#92400e;" data-i18n="doctor.section.certificates">Certificates</h2>
-                    <p style="color:#78716c;margin:-10px 0 16px;" data-i18n="cert.trackIntro">Track check-in and approval status, then download your certificate when issued.</p>
+                    <h2 class="section-title" style="color:#92400e;">Certificates</h2>
+                    <p style="color:#78716c;margin:-10px 0 16px;">Track check-in and approval status, then download your certificate when issued.</p>
                     <div class="card" style="margin-bottom:20px;border:1px solid #fde68a;background:#fffbeb;">
                         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
                             <h3 style="color:#92400e;margin:0;font-size:1rem;"><i class="fas fa-route"></i> Certificate status</h3>
@@ -759,8 +768,8 @@
                         <p style="font-size:0.88rem;color:#64748b;margin:0 0 12px;">Venue ticket scans are required before the foundation can approve your certificate. When a seminar uses <strong>entry and exit scans</strong>, both must be recorded and admin must enable your certificate — only then it appears below. A countdown shows if release is scheduled.</p>
                         <div id="doctor-cert-tracking-wrap"><p style="color:#94a3b8;text-align:center;">Loading status…</p></div>
                     </div>
-                    <h3 style="color:#92400e;margin:0 0 10px;font-size:1rem;"><i class="fas fa-award"></i> <span data-i18n="cert.yourCerts">Your certificates</span></h3>
-                    <p style="font-size:0.88rem;color:#64748b;margin:0 0 12px;" data-i18n="cert.intro">Browse certificates by seminar year. After venue check-in, your participation certificate is issued automatically.</p>
+                    <h3 style="color:#92400e;margin:0 0 10px;font-size:1rem;"><i class="fas fa-award"></i> Your certificates</h3>
+                    <p style="font-size:0.88rem;color:#64748b;margin:0 0 12px;">Browse certificates by seminar year. After venue check-in, your participation certificate is issued automatically.</p>
                     <div id="doctor-cert-years-nav" style="margin-bottom:14px;"></div>
                     <div id="doctor-certificates-wrap" class="card" style="border:1px solid #e8d48a;background:linear-gradient(180deg,#fffbeb 0%,#fff 50%);"><p style="color:#78716c;">Loading…</p></div>
                 </div>
@@ -886,9 +895,8 @@
     <link rel="stylesheet" href="/css/book-track.css?v=20260529stg">
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/doctor-books.js?v=20260528livetrack"></script>
-    <script src="/js/doctor-live-chat-widget.js?v=20260609bubble2"></script>
-    <script src="/js/i18n/messages.js?v=20260609i18n1"></script>
-    <script src="/js/portal-i18n.js?v=20260609lang2"></script>
+    <script src="/js/live-chat-client-info.js?v=20260610chat1"></script>
+    <script src="/js/doctor-live-chat-widget.js?v=20260610chat1"></script>
     <script src="/js/doctor.js?v=20260609i18n1"></script>
 </body>
 </html>

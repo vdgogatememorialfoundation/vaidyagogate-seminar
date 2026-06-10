@@ -143,6 +143,24 @@
                     new Date(ticket.expected_response_at).toLocaleString('en-IN');
             }
             document.getElementById('support-modal-meta').textContent = meta;
+            const statusSel = document.getElementById('support-ticket-status');
+            if (statusSel) {
+                const st = String(ticket.status || 'open').toLowerCase();
+                statusSel.value = st === 'resolved' || st === 'closed' ? st : st === 'in_progress' ? 'in_progress' : 'in_progress';
+            }
+            const fbEl = document.getElementById('support-modal-feedback');
+            if (fbEl) {
+                if (ticket.feedback) {
+                    fbEl.innerHTML =
+                        '<strong>Participant feedback:</strong> ' +
+                        '★'.repeat(Math.min(5, parseInt(ticket.feedback.rating, 10) || 0)) +
+                        (ticket.feedback.comment ? ' — ' + esc(ticket.feedback.comment) : '');
+                } else if (/^(closed|resolved)$/i.test(String(ticket.status || ''))) {
+                    fbEl.textContent = 'No participant feedback yet.';
+                } else {
+                    fbEl.textContent = '';
+                }
+            }
             const thread = document.getElementById('support-modal-thread');
             thread.innerHTML = (ticket.messages || [])
                 .map((m) => {
@@ -174,9 +192,34 @@
                     esc(summary.user.phone || '—') +
                     '</p><p style="font-size:0.82rem;margin-top:10px;"><strong>Registrations</strong><br>' +
                     (summary.registrations || [])
-                        .slice(0, 5)
-                        .map((r) => esc(r.application_no + ' — ' + r.status))
-                        .join('<br>') +
+                        .slice(0, 8)
+                        .map(
+                            (r) =>
+                                '<button type="button" class="btn btn-muted" style="display:block;margin:4px 0;padding:4px 8px;font-size:0.78rem;text-align:left;" onclick="supportViewRegistration(' +
+                                r.id +
+                                ')"><code>' +
+                                esc(r.application_no) +
+                                '</code> — ' +
+                                esc(r.status) +
+                                (r.seminar_title ? ' · ' + esc(r.seminar_title) : '') +
+                                '</button>'
+                        )
+                        .join('') +
+                    '</p><p style="font-size:0.82rem;margin-top:10px;"><strong>Case applications</strong><br>' +
+                    (summary.caseSubmissions || [])
+                        .slice(0, 8)
+                        .map(
+                            (c) =>
+                                '<button type="button" class="btn btn-muted" style="display:block;margin:4px 0;padding:4px 8px;font-size:0.78rem;text-align:left;" onclick="supportViewCaseSubmission(' +
+                                c.id +
+                                ')"><code>' +
+                                esc(c.application_no || 'CASE-' + c.id) +
+                                '</code> — ' +
+                                esc(c.status) +
+                                '</button>'
+                        )
+                        .join('') +
+                    ((summary.caseSubmissions || []).length ? '' : '—') +
                     '</p><p style="font-size:0.82rem;margin-top:10px;"><strong>Payments</strong><br>' +
                     (summary.orders || [])
                         .slice(0, 5)
@@ -241,6 +284,156 @@
         }
     };
 
+    window.supportCloseTicket = async function () {
+        if (!currentTicketRef) return;
+        const status = document.getElementById('support-ticket-status').value || 'closed';
+        const closingNote = document.getElementById('support-ticket-close-note').value.trim();
+        if (!confirm('Mark this ticket as ' + status + '? The participant can still read the thread and leave feedback.')) {
+            return;
+        }
+        try {
+            await api('/api/support-desk/tickets/' + encodeURIComponent(currentTicketRef) + '/status', {
+                method: 'PUT',
+                body: { status, closingNote }
+            });
+            document.getElementById('support-modal-msg').textContent = 'Ticket marked ' + status + '.';
+            document.getElementById('support-ticket-close-note').value = '';
+            supportLoadTickets(true);
+            supportOpenTicket(currentTicketRef);
+        } catch (e) {
+            document.getElementById('support-modal-msg').textContent = e.message;
+        }
+    };
+
+    function renderApplicationDetail(detail) {
+        if (!detail) return '<p style="color:#64748b;">No details.</p>';
+        const p = detail.participant || {};
+        let html =
+            '<div style="background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;padding:12px;margin-bottom:12px;">' +
+            '<strong>' +
+            esc(p.name || 'Participant') +
+            '</strong><br>Portal ID: <code>' +
+            esc(p.portalId || '—') +
+            '</code> · Email: ' +
+            esc(p.email || '—') +
+            ' · Phone: ' +
+            esc(p.phone || '—') +
+            '</div>';
+        html +=
+            '<p style="margin:0 0 10px;"><code>' +
+            esc(detail.applicationNo || '—') +
+            '</code> · ' +
+            supportStatusBadge(detail.status) +
+            '</p>';
+        if (detail.type === 'seminar') {
+            html +=
+                '<p><strong>Seminar:</strong> ' +
+                esc(detail.seminarTitle || '—') +
+                (detail.eventDate ? ' · ' + esc(formatSupportWhen(detail.eventDate)) : '') +
+                '</p>';
+            if (detail.timeline && detail.timeline.steps && detail.timeline.steps.length) {
+                html += '<h4 style="margin:14px 0 8px;">Timeline</h4><ul style="margin:0;padding-left:18px;">';
+                detail.timeline.steps.forEach((s) => {
+                    html +=
+                        '<li>' +
+                        esc(s.label || s.key || 'Step') +
+                        ': <strong>' +
+                        esc(s.state || s.status || '—') +
+                        '</strong></li>';
+                });
+                html += '</ul>';
+            }
+            if (detail.orders && detail.orders.length) {
+                html += '<h4 style="margin:14px 0 8px;">Payments</h4><ul style="margin:0;padding-left:18px;">';
+                detail.orders.forEach((o) => {
+                    html +=
+                        '<li>' +
+                        esc(o.order_id_string || 'Order') +
+                        ' · ₹' +
+                        esc(o.amount) +
+                        ' · ' +
+                        esc(o.status) +
+                        '</li>';
+                });
+                html += '</ul>';
+            }
+        } else if (detail.type === 'case') {
+            html +=
+                '<p><strong>Program:</strong> ' +
+                esc(detail.programTitle || '—') +
+                (detail.category ? ' · ' + esc(detail.category) : '') +
+                (detail.title ? '<br><strong>Case title:</strong> ' + esc(detail.title) : '') +
+                '</p>';
+            if (detail.files && detail.files.length) {
+                html += '<h4 style="margin:14px 0 8px;">Uploaded files</h4><ul style="margin:0;padding-left:18px;">';
+                detail.files.forEach((f) => {
+                    html += '<li>' + esc(f.name || 'file') + (f.type ? ' (' + esc(f.type) + ')' : '') + '</li>';
+                });
+                html += '</ul>';
+            }
+        }
+        if (detail.docReview) {
+            html +=
+                '<h4 style="margin:14px 0 8px;">Document review</h4><pre style="background:#f8fafc;padding:10px;border-radius:6px;white-space:pre-wrap;font-size:0.8rem;">' +
+                esc(JSON.stringify(detail.docReview, null, 2)) +
+                '</pre>';
+        }
+        if (detail.formFields && detail.formFields.length) {
+            html += '<h4 style="margin:14px 0 8px;">Application form</h4><table class="data-table"><tbody>';
+            detail.formFields.forEach((f) => {
+                const val =
+                    typeof f.value === 'object' ? JSON.stringify(f.value) : String(f.value == null ? '' : f.value);
+                html +=
+                    '<tr><td style="width:34%;font-weight:600;vertical-align:top;">' +
+                    esc(f.key) +
+                    '</td><td style="white-space:pre-wrap;word-break:break-word;">' +
+                    esc(val) +
+                    '</td></tr>';
+            });
+            html += '</tbody></table>';
+        }
+        return html;
+    }
+
+    window.supportViewRegistration = async function (regId) {
+        const modal = document.getElementById('support-app-detail-modal');
+        const body = document.getElementById('support-app-detail-body');
+        const title = document.getElementById('support-app-detail-title');
+        if (!modal || !body) return;
+        modal.classList.remove('hidden');
+        title.textContent = 'Seminar application';
+        body.innerHTML = '<p>Loading…</p>';
+        try {
+            const detail = await api('/api/support-desk/registrations/' + regId);
+            title.textContent = 'Seminar · ' + (detail.applicationNo || regId);
+            body.innerHTML = renderApplicationDetail(detail);
+        } catch (e) {
+            body.innerHTML = '<p style="color:#b91c1c;">' + esc(e.message) + '</p>';
+        }
+    };
+
+    window.supportViewCaseSubmission = async function (caseId) {
+        const modal = document.getElementById('support-app-detail-modal');
+        const body = document.getElementById('support-app-detail-body');
+        const title = document.getElementById('support-app-detail-title');
+        if (!modal || !body) return;
+        modal.classList.remove('hidden');
+        title.textContent = 'Case application';
+        body.innerHTML = '<p>Loading…</p>';
+        try {
+            const detail = await api('/api/support-desk/case-submissions/' + caseId);
+            title.textContent = 'Case · ' + (detail.applicationNo || caseId);
+            body.innerHTML = renderApplicationDetail(detail);
+        } catch (e) {
+            body.innerHTML = '<p style="color:#b91c1c;">' + esc(e.message) + '</p>';
+        }
+    };
+
+    window.supportCloseAppDetail = function () {
+        const modal = document.getElementById('support-app-detail-modal');
+        if (modal) modal.classList.add('hidden');
+    };
+
     function formatSupportWhen(iso) {
         if (!iso) return '—';
         try {
@@ -291,6 +484,11 @@
                 (track.participant && track.participant.portalId
                     ? '<br>Portal ID: <code>' + esc(track.participant.portalId) + '</code>'
                     : '') +
+                (track.registrationId
+                    ? '<br><button type="button" class="btn btn-primary" style="margin-top:8px;padding:6px 10px;font-size:0.8rem;" onclick="supportViewRegistration(' +
+                      track.registrationId +
+                      ')">View full application</button>'
+                    : '') +
                 '</p></div>'
             );
         }
@@ -303,6 +501,11 @@
                 '</code> · ' +
                 supportStatusBadge(track.status) +
                 (track.programTitle ? '<br>Program: ' + esc(track.programTitle) : '') +
+                (track.caseSubmissionId
+                    ? '<br><button type="button" class="btn btn-primary" style="margin-top:8px;padding:6px 10px;font-size:0.8rem;" onclick="supportViewCaseSubmission(' +
+                      track.caseSubmissionId +
+                      ')">View full application</button>'
+                    : '') +
                 '</p></div>'
             );
         }
@@ -360,17 +563,47 @@
             html += '<p style="color:#64748b;font-size:0.88rem;margin:0 0 16px;">No seminar registrations on file.</p>';
         } else {
             html +=
-                '<table class="data-table" style="margin-bottom:16px;"><thead><tr><th>Application</th><th>Status</th><th>Created</th></tr></thead><tbody>' +
+                '<table class="data-table" style="margin-bottom:16px;"><thead><tr><th>Application</th><th>Seminar</th><th>Status</th><th>Created</th><th></th></tr></thead><tbody>' +
                 regs
                     .map(
                         (r) =>
                             '<tr><td><code>' +
                             esc(r.application_no) +
                             '</code></td><td>' +
+                            esc(r.seminar_title || '—') +
+                            '</td><td>' +
                             supportStatusBadge(r.status) +
                             '</td><td>' +
                             esc(formatSupportWhen(r.created_at)) +
-                            '</td></tr>'
+                            '</td><td><button type="button" class="btn btn-primary" style="padding:4px 8px;font-size:0.78rem;" onclick="supportViewRegistration(' +
+                            r.id +
+                            ')">Details</button></td></tr>'
+                    )
+                    .join('') +
+                '</tbody></table>';
+        }
+
+        const cases = summary.caseSubmissions || [];
+        html += '<h4 style="margin:0 0 8px;font-size:0.95rem;">Case applications (' + cases.length + ')</h4>';
+        if (!cases.length) {
+            html += '<p style="color:#64748b;font-size:0.88rem;margin:0 0 16px;">No case applications on file.</p>';
+        } else {
+            html +=
+                '<table class="data-table" style="margin-bottom:16px;"><thead><tr><th>Application</th><th>Program</th><th>Status</th><th>Created</th><th></th></tr></thead><tbody>' +
+                cases
+                    .map(
+                        (c) =>
+                            '<tr><td><code>' +
+                            esc(c.application_no || 'CASE-' + c.id) +
+                            '</code></td><td>' +
+                            esc(c.program_title || c.title || '—') +
+                            '</td><td>' +
+                            supportStatusBadge(c.status) +
+                            '</td><td>' +
+                            esc(formatSupportWhen(c.created_at)) +
+                            '</td><td><button type="button" class="btn btn-primary" style="padding:4px 8px;font-size:0.78rem;" onclick="supportViewCaseSubmission(' +
+                            c.id +
+                            ')">Details</button></td></tr>'
                     )
                     .join('') +
                 '</tbody></table>';
@@ -707,6 +940,28 @@
             if (session.linkedTicketId) meta.push('Ticket ' + session.linkedTicketId);
             const metaEl = document.getElementById('support-live-visitor-meta');
             if (metaEl) metaEl.textContent = meta.join(' · ');
+            const diagWrap = document.getElementById('support-live-visitor-diag');
+            const diagBody = document.getElementById('support-live-visitor-diag-body');
+            if (diagWrap && diagBody) {
+                const lines = [];
+                if (session.visitorIp) lines.push('IP: ' + session.visitorIp);
+                if (session.visitorLocation) lines.push('Location (IP): ' + session.visitorLocation);
+                const d = session.clientDiagnostics || {};
+                if (d.network && d.network.downlinkMbps != null) {
+                    lines.push('Network: ~' + d.network.downlinkMbps + ' Mbps (' + (d.network.effectiveType || 'unknown') + ')');
+                }
+                if (d.network && d.network.rttMs != null) lines.push('RTT: ' + d.network.rttMs + ' ms');
+                if (d.timezone) lines.push('Timezone: ' + d.timezone);
+                if (d.platform) lines.push('Platform: ' + d.platform);
+                if (d.userAgent) lines.push('UA: ' + d.userAgent);
+                if (lines.length) {
+                    diagWrap.classList.remove('hidden');
+                    diagBody.textContent = lines.join('\n');
+                } else {
+                    diagWrap.classList.add('hidden');
+                    diagBody.textContent = '';
+                }
+            }
         } catch (_) {
             document.getElementById('support-live-chat-title').textContent = 'Live chat';
         }

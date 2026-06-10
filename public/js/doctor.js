@@ -4558,8 +4558,20 @@ function isBuiltinCertificateTemplate(path) {
 }
 
 function i18nT(key, vars) {
-    if (typeof PortalI18n !== 'undefined' && PortalI18n.t) return PortalI18n.t(key, vars);
-    return key;
+    const fallbacks = {
+        'common.open': 'Open',
+        'common.print': 'Print',
+        'pay.chooseMethod': 'Choose payment method',
+        'pay.redirecting':
+            'Redirecting to secure payment. After paying, return to My Applications for your e-ticket.'
+    };
+    let s = fallbacks[key] || key;
+    if (vars && typeof vars === 'object') {
+        Object.keys(vars).forEach((name) => {
+            s = String(s).split('{{' + name + '}}').join(String(vars[name]));
+        });
+    }
+    return s;
 }
 
 function certificateViewUrl(c, isVolunteer) {
@@ -4583,7 +4595,7 @@ function doctorCertificateLockedBlock(message) {
     return (
         '<div style="text-align:center;padding:24px;">' +
         '<i class="fas fa-lock" style="font-size:2rem;color:#94a3b8;margin-bottom:10px;display:block;"></i>' +
-        '<p style="margin:0;font-weight:600;color:#475569;">' + escapeHtml(i18nT('cert.locked')) + '</p>' +
+        '<p style="margin:0;font-weight:600;color:#475569;">Locked</p>' +
         '<p style="margin:8px 0 0;font-size:0.9rem;color:#64748b;">' + escapeHtml(msg) + '</p>' +
         '</div>'
     );
@@ -4740,14 +4752,14 @@ function renderDoctorCertYearNav(yearsPayload) {
     const active = __doctorCertYearFilter;
     let html =
         '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;"><span style="font-size:0.82rem;color:#64748b;font-weight:600;">' +
-        escapeHtml(i18nT('cert.year')) +
+        'Year' +
         ':</span>';
     const allActive = active == null;
     html +=
         '<button type="button" class="btn-primary" style="padding:6px 12px;font-size:0.82rem;' +
         (allActive ? '' : 'background:#e2e8f0;color:#334155;') +
         '" onclick="doctorSetCertYearFilter(null)">' +
-        escapeHtml(i18nT('cert.allYears')) +
+        'All years' +
         '</button>';
     years.forEach((y) => {
         const n = Number(y.year) || 0;
@@ -4860,7 +4872,7 @@ async function loadDoctorCertificates() {
                     `<div style="border:2px solid #e8d48a;border-radius:10px;overflow:hidden;"><iframe src="${viewUrl}" style="width:100%;min-height:420px;border:0;"></iframe></div>` +
                     `<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">` +
                     `<a href="${viewUrl}" target="_blank" class="btn-primary" style="text-decoration:none;background:linear-gradient(135deg,#c9a227,#a67c00);padding:8px 14px;">${escapeHtml(i18nT('common.open'))}</a>` +
-                    `<button type="button" class="btn-primary" style="background:#15803d;padding:8px 14px;" onclick="downloadDoctorCertificate('${dlUrl}', '${dlTitle}')"><i class="fas fa-download"></i> ${escapeHtml(i18nT('cert.downloadPdf'))}</button>` +
+                    `<button type="button" class="btn-primary" style="background:#15803d;padding:8px 14px;" onclick="downloadDoctorCertificate('${dlUrl}', '${dlTitle}')"><i class="fas fa-download"></i> Download certificate</button>` +
                     `<button type="button" class="btn-primary" style="background:#475569;padding:8px 14px;" onclick="var w=window.open('${viewUrl}');if(w)w.print();">${escapeHtml(i18nT('common.print'))}</button></div>`;
                 wrap.appendChild(card);
                 return;
@@ -4877,7 +4889,7 @@ async function loadDoctorCertificates() {
             } else {
                 card.innerHTML = `<h4 style="margin:0 0 8px;">${titleEsc}</h4>
                     <p style="margin-bottom:12px;">${name}</p>
-                    <a href="${c.template_path}" download class="btn-primary" style="display:inline-block;padding:8px 14px;text-decoration:none;">${escapeHtml(i18nT('cert.downloadPdf'))}</a>`;
+                    <a href="${c.template_path}" download class="btn-primary" style="display:inline-block;padding:8px 14px;text-decoration:none;">Download certificate</a>`;
             }
             wrap.appendChild(card);
         });
@@ -6768,14 +6780,14 @@ async function downloadDoctorCertificate(downloadUrl, seminarTitle) {
         a.click();
         a.remove();
         setTimeout(() => URL.revokeObjectURL(objectUrl), 8000);
-        if (typeof alert === 'function') alert(i18nT('cert.downloadDone'));
+        if (typeof alert === 'function') alert('Certificate saved to your device.');
         return;
     } catch (shareErr) {
         console.warn('certificate download', shareErr);
     }
     const printUrl = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'print=1';
     const w = window.open(printUrl, '_blank');
-    if (!w) alert(i18nT('cert.downloadFail'));
+    if (!w) alert('Could not download. Try Open, then Print → Save as PDF.');
 }
 
 async function loadDoctorCertificateTracking(quiet) {
@@ -7387,6 +7399,7 @@ async function loadTickets() {
 let currentTicketId = null;
 let currentLegacyTrackingId = null;
 let supportChatPollTimer = null;
+let ticketFeedbackRating = 0;
 
 function startSupportChatPoll() {
     stopSupportChatPoll();
@@ -7463,6 +7476,33 @@ async function loadChatMessages(silent) {
             }
             titleEl.innerText = t;
         }
+        const feedbackPanel = document.getElementById('ticket-feedback-panel');
+        const replyRow = document.getElementById('chat-reply-msg');
+        const replyBtn = replyRow && replyRow.parentElement;
+        const st = String(ticket.status || '').toLowerCase();
+        const closed = st === 'closed' || st === 'resolved';
+        if (feedbackPanel) {
+            if (closed && ticket.needsFeedback) {
+                feedbackPanel.classList.remove('hidden');
+                if (replyRow) replyRow.disabled = true;
+            } else if (closed && ticket.feedback) {
+                feedbackPanel.classList.remove('hidden');
+                feedbackPanel.innerHTML =
+                    '<p style="margin:0;color:#059669;font-weight:600;">Thank you for your feedback (' +
+                    ticket.feedback.rating +
+                    '/5).</p>';
+                if (replyRow) replyRow.disabled = true;
+            } else {
+                feedbackPanel.classList.add('hidden');
+                if (replyRow) replyRow.disabled = closed;
+            }
+        }
+        if (replyBtn && closed && !ticket.needsFeedback) {
+            replyBtn.style.display = closed ? 'none' : '';
+        } else if (replyBtn) {
+            replyBtn.style.display = '';
+        }
+
         const messages = Array.isArray(ticket.messages) ? ticket.messages : [];
         if (!messages.length) {
             box.innerHTML = '<p style="color:#64748b;text-align:center;">No messages yet. Send a reply below.</p>';
@@ -7471,15 +7511,17 @@ async function loadChatMessages(silent) {
         box.innerHTML = '';
         messages.forEach((m) => {
             const st = String(m.sender_type || '').toLowerCase();
-            const isDoc = st !== 'admin' && st !== 'staff';
+            const isDoc = st === 'user' || st === 'doctor' || (!st && true);
+            const isStaffMsg = st === 'admin' || st === 'staff' || st === 'support' || st === 'system';
             const staffName = m.sender_display_name || 'Support team';
             const viaEmail =
                 m.source === 'email'
                     ? ' <span style="font-size:0.72rem;background:#e0f2fe;color:#0369a1;padding:2px 6px;border-radius:4px;">Email</span>'
                     : '';
+            const showAsDoc = isDoc && !isStaffMsg;
             box.innerHTML += `
-                <div style="align-self: ${isDoc ? 'flex-end' : 'flex-start'}; background: ${isDoc ? '#0f766e' : 'white'}; color: ${isDoc ? 'white' : '#334155'}; border: 1px solid ${isDoc ? '#0f766e' : '#cbd5e1'}; padding: 10px 15px; border-radius: 8px; max-width: 80%;">
-                    <p style="font-size: 0.8rem; margin-bottom: 5px; color: ${isDoc ? '#ccfbf1' : '#64748b'};"><strong>${isDoc ? 'You' : staffName}</strong>${viaEmail} — ${new Date(m.created_at).toLocaleString()}</p>
+                <div style="align-self: ${showAsDoc ? 'flex-end' : 'flex-start'}; background: ${showAsDoc ? '#0f766e' : 'white'}; color: ${showAsDoc ? 'white' : '#334155'}; border: 1px solid ${showAsDoc ? '#0f766e' : '#cbd5e1'}; padding: 10px 15px; border-radius: 8px; max-width: 80%;">
+                    <p style="font-size: 0.8rem; margin-bottom: 5px; color: ${showAsDoc ? '#ccfbf1' : '#64748b'};"><strong>${showAsDoc ? 'You' : staffName}</strong>${viaEmail} — ${new Date(m.created_at).toLocaleString()}</p>
                     <p>${(m.message || '').replace(/</g, '&lt;')}</p>
                 </div>`;
         });
@@ -7494,6 +7536,45 @@ async function loadChatMessages(silent) {
     } finally {
         if (timeoutId) clearTimeout(timeoutId);
         box.scrollTop = box.scrollHeight;
+    }
+}
+
+function setTicketFeedbackRating(n) {
+    ticketFeedbackRating = n;
+    document.querySelectorAll('#ticket-feedback-stars button').forEach((btn) => {
+        const r = parseInt(btn.getAttribute('data-rating'), 10);
+        btn.style.background = r <= n ? '#0f766e' : '#64748b';
+    });
+}
+
+async function submitTicketFeedback() {
+    const statusEl = document.getElementById('ticket-feedback-status');
+    if (!currentTicketId) return alert('Open a ticket first.');
+    if (!ticketFeedbackRating || ticketFeedbackRating < 1) {
+        return alert('Please choose a rating from 1 to 5 stars.');
+    }
+    const uid = doctorNumericUserId();
+    if (!uid) return alert('Session expired.');
+    const comment = (document.getElementById('ticket-feedback-comment') || {}).value || '';
+    if (statusEl) statusEl.textContent = 'Sending…';
+    try {
+        const res = await fetch('/api/support-ticket/' + encodeURIComponent(currentTicketId) + '/feedback', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: uid, rating: ticketFeedbackRating, comment: comment.trim() })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error((data && data.error) || 'Could not submit feedback');
+        if (statusEl) {
+            statusEl.style.color = '#059669';
+            statusEl.textContent = 'Thank you! Your feedback helps us improve support.';
+        }
+        await loadChatMessages(true);
+    } catch (err) {
+        if (statusEl) {
+            statusEl.style.color = '#b91c1c';
+            statusEl.textContent = err.message || 'Could not submit feedback.';
+        }
     }
 }
 
@@ -8153,10 +8234,3 @@ if (document.readyState === 'loading') {
     initDoctorUploadHints();
 }
 
-document.addEventListener('portal-locale-change', () => {
-    if (typeof PortalI18n !== 'undefined') PortalI18n.apply(document);
-    const certPane = document.getElementById('tab-certificate');
-    if (certPane && !certPane.classList.contains('hidden') && typeof loadDoctorCertificateModule === 'function') {
-        loadDoctorCertificateModule();
-    }
-});

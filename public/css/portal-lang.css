@@ -1,21 +1,16 @@
-/* Language switcher — high visibility on light and dark backgrounds */
+/* Language switcher — single control, public site + doctor portal */
 
 .portal-lang-wrap {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    font-size: 0.88rem;
+    font-size: 0.9rem;
     font-weight: 700;
-    padding: 6px 12px;
+    padding: 6px 14px;
     border-radius: 999px;
     border: 2px solid #0f766e;
     background: linear-gradient(180deg, #f0fdfa 0%, #ecfdf5 100%);
-    box-shadow: 0 2px 10px rgba(15, 118, 110, 0.15);
-}
-
-.portal-lang-wrap--compact {
-    padding: 4px 10px;
-    font-size: 0.82rem;
+    box-shadow: 0 2px 10px rgba(15, 118, 110, 0.18);
 }
 
 .portal-lang-label {
@@ -29,7 +24,7 @@
 
 .portal-lang-label i {
     color: #d97706;
-    font-size: 1.05em;
+    font-size: 1.1em;
 }
 
 .portal-lang-select {
@@ -41,14 +36,13 @@
     border: 2px solid #14b8a6;
     background: #fff;
     color: #134e4a;
-    min-width: 10.5rem;
-    max-width: 14rem;
+    min-width: 11rem;
+    max-width: 15rem;
     cursor: pointer;
     appearance: none;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%230f766e' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: right 10px center;
-    box-shadow: inset 0 1px 2px rgba(15, 118, 110, 0.06);
 }
 
 .portal-lang-select:hover,
@@ -58,186 +52,32 @@
     box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.25);
 }
 
-/* Public site utility bar (white background) */
-.cg-utility .portal-lang-wrap {
-    margin-right: 4px;
-    border-color: #0d9488;
-    background: linear-gradient(180deg, #fff 0%, #f0fdfa 100%);
-}
-
-.cg-utility .portal-lang-label {
-    color: #0f766e;
-}
-
-.cg-utility .portal-lang-select {
-    border-color: #0d9488;
-    background-color: #fff;
-    color: #134e4a;
-}
-
-/* Header slot beside menu */
-.portal-lang-header-slot {
-    margin-left: auto;
+.cg-utility-auth .portal-lang-wrap {
+    order: -1;
     margin-right: 8px;
 }
 
-.cg-header-inner .portal-lang-wrap {
-    flex-shrink: 0;
-}
-
-/* Mobile nav drawer */
-.portal-lang-nav-slot {
-    display: block;
-    width: 100%;
-    margin: 0 0 14px;
-    padding: 0 4px;
-}
-
-.portal-lang-nav-slot .portal-lang-wrap {
-    width: 100%;
-    justify-content: space-between;
-    border-radius: 12px;
-    padding: 10px 14px;
-}
-
-.portal-lang-nav-slot .portal-lang-select {
-    flex: 1;
-    max-width: none;
-    min-width: 0;
-}
-
-/* Doctor portal */
 .top-header .portal-lang-wrap {
     border-color: #14b8a6;
     background: #f0fdfa;
 }
 
-.sidebar .portal-lang-sidebar-slot {
-    padding: 0 16px 14px;
-}
-
-.sidebar .portal-lang-sidebar-slot .portal-lang-wrap {
-    width: 100%;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
-    border-radius: 12px;
-    padding: 12px;
-    border-color: rgba(251, 191, 36, 0.65);
-    background: rgba(255, 255, 255, 0.1);
-    box-shadow: none;
-}
-
-.sidebar .portal-lang-sidebar-slot .portal-lang-label {
-    color: #fef3c7;
-    justify-content: center;
-}
-
-.sidebar .portal-lang-sidebar-slot .portal-lang-label i {
-    color: #fbbf24;
-}
-
-.sidebar .portal-lang-sidebar-slot .portal-lang-select {
-    width: 100%;
-    max-width: none;
-    min-width: 0;
-    border-color: #fbbf24;
-    color: #134e4a;
-}
-
 #auth-overlay .portal-lang-wrap {
-    justify-content: center;
-    margin: 0 auto 14px;
-    width: 100%;
-    max-width: 360px;
-}
-
-#auth-overlay .portal-lang-select {
-    flex: 1;
-    max-width: none;
-}
-
-/* Floating globe button — always visible */
-.portal-lang-fab {
-    position: fixed;
-    z-index: 9997;
-    left: max(16px, env(safe-area-inset-left, 0px));
-    bottom: max(22px, env(safe-area-inset-bottom, 0px));
-    display: flex;
-    align-items: center;
-    gap: 0;
-    border-radius: 999px;
-    border: 2px solid #fbbf24;
-    background: linear-gradient(135deg, #0f766e 0%, #115e59 100%);
-    color: #fff;
-    box-shadow: 0 8px 28px rgba(15, 118, 110, 0.45);
-    padding: 0;
-    overflow: hidden;
-    max-width: min(220px, calc(100vw - 100px));
-}
-
-.portal-lang-fab-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 48px;
-    height: 48px;
-    flex-shrink: 0;
-    font-size: 1.2rem;
-    color: #fbbf24;
-    pointer-events: none;
-}
-
-.portal-lang-fab .portal-lang-select {
-    border: none;
-    border-radius: 0;
-    min-height: 48px;
-    height: 48px;
-    padding: 0 28px 0 4px;
-    min-width: 7.5rem;
-    max-width: 10rem;
-    background-color: transparent;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23fef3c7' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
-    color: #fff;
-    font-size: 0.9rem;
-    box-shadow: none;
-}
-
-.portal-lang-fab .portal-lang-select:hover,
-.portal-lang-fab .portal-lang-select:focus {
-    box-shadow: none;
-    background-color: rgba(255, 255, 255, 0.08);
-}
-
-.portal-lang-fab-label {
     display: none;
 }
 
-/* Support chat is bottom-right — keep lang FAB bottom-left */
-body.congress-site .portal-lang-fab {
-    bottom: max(22px, env(safe-area-inset-bottom, 0px));
-}
-
 @media (max-width: 640px) {
-    .cg-utility-auth .portal-lang-wrap .portal-lang-label span {
-        display: inline;
+    .cg-utility-auth {
+        width: 100%;
+        justify-content: flex-end;
     }
-
-    .portal-lang-header-slot {
-        display: none;
+    .portal-lang-wrap {
+        width: 100%;
+        justify-content: space-between;
+        border-radius: 12px;
     }
-
-    .portal-lang-fab {
-        bottom: max(88px, calc(16px + env(safe-area-inset-bottom, 0px)));
-    }
-
-    body.congress-site .portal-lang-fab {
-        bottom: max(88px, calc(16px + env(safe-area-inset-bottom, 0px)));
-    }
-}
-
-@media (min-width: 901px) {
-    .portal-lang-nav-slot {
-        display: none;
+    .portal-lang-select {
+        flex: 1;
+        max-width: none;
     }
 }

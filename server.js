@@ -2712,7 +2712,9 @@ function withSupportTickets(req, res, next) {
             const run = () =>
                 ensureSupportTicketSchema(db, ignoreSchemaMigrationErr, () => {
                     ensureSupportDeskSchema(db, () => {
-                        supportDesk.loadConfig(db, () => resolve());
+                        require('./lib/support-ticket-feedback').ensureSupportTicketFeedbackSchema(db, () => {
+                            supportDesk.loadConfig(db, () => resolve());
+                        });
                     });
                 });
             if (pgDb && typeof pgDb.ensureAuxiliaryTables === 'function') {
@@ -12740,7 +12742,50 @@ app.get('/api/support-ticket/:ticketId', (req, res) => {
             return res.status(500).json({ error: err.message });
         }
         if (!payload) return res.status(404).json({ error: 'Ticket not found' });
-        res.json(payload);
+        const canonical = canonicalTicketMessageId(payload);
+        const supportTicketFeedback = require('./lib/support-ticket-feedback');
+        supportTicketFeedback.getTicketFeedback(db, canonical, (eFb, feedback) => {
+            if (eFb) console.warn('[support-ticket/get] feedback:', eFb.message);
+            const st = String(payload.status || '').toLowerCase();
+            const needsFeedback =
+                (st === 'closed' || st === 'resolved') && !feedback && payload.user_id;
+            res.json(Object.assign({}, payload, { feedback: feedback || null, needsFeedback: !!needsFeedback }));
+        });
+    });
+});
+
+app.post('/api/support-ticket/:ticketId/feedback', (req, res) => {
+    const userId = parseInt(req.body && req.body.userId, 10);
+    const rating = parseInt(req.body && req.body.rating, 10);
+    const comment = String((req.body && req.body.comment) || '').trim();
+    if (!Number.isInteger(userId) || userId < 1) {
+        return res.status(400).json({ error: 'userId required' });
+    }
+    resolveSupportTicketByRef(req.params.ticketId, (err, ticket) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
+        if (Number(ticket.user_id) !== userId) {
+            return res.status(403).json({ error: 'Not your ticket' });
+        }
+        const st = String(ticket.status || '').toLowerCase();
+        if (st !== 'closed' && st !== 'resolved') {
+            return res.status(400).json({ error: 'Feedback is available after the ticket is closed or resolved.' });
+        }
+        const supportTicketFeedback = require('./lib/support-ticket-feedback');
+        supportTicketFeedback.saveTicketFeedback(
+            db,
+            {
+                ticketRef: canonicalTicketMessageId(ticket),
+                userId,
+                rating,
+                comment,
+                closedByAgentId: ticket.assigned_to_staff || ticket.assigned_to_admin || null
+            },
+            (saveErr) => {
+                if (saveErr) return res.status(400).json({ error: saveErr.message });
+                res.json({ success: true });
+            }
+        );
     });
 });
 

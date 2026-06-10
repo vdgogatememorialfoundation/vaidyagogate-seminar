@@ -252,11 +252,6 @@
         if (typeof window.refreshPortalAuthUi === 'function') {
             window.refreshPortalAuthUi();
         }
-        if (typeof PortalI18n !== 'undefined') {
-            PortalI18n.apply(document);
-            PortalI18n.mountLangSelects();
-            if (PortalI18n.ensureFloatingLangPicker) PortalI18n.ensureFloatingLangPicker();
-        }
 
         const top = cms.topBar || {};
         setText('top-email', top.email);

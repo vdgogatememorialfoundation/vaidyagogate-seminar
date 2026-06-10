@@ -1,5 +1,5 @@
 /**
- * Client-side i18n for public site and doctor portal.
+ * Client-side i18n — public website and doctor portal only.
  */
 (function (global) {
     const STORAGE_KEY = 'portal_locale';
@@ -20,8 +20,27 @@
         { code: 'or', label: 'Odia', native: 'ଓଡ଼ିଆ' }
     ];
 
+    const NAV_SECTION_I18N = {
+        home: 'nav.home',
+        about: 'nav.foundation',
+        schedule: 'nav.agenda',
+        gallery: 'nav.gallery',
+        verify: 'nav.delegates',
+        certificate: 'nav.certificateVerify',
+        contact: 'nav.contact'
+    };
+
     let catalog = {};
     let locale = DEFAULT_LOCALE;
+    let enabled = false;
+
+    function isI18nEnabledPage() {
+        const b = document.body;
+        if (!b) return false;
+        if (b.classList.contains('congress-site')) return true;
+        if (b.getAttribute('data-portal-theme') === 'doctor') return true;
+        return false;
+    }
 
     function readStoredLocale() {
         try {
@@ -48,6 +67,31 @@
         return s;
     }
 
+    function navSectionI18nKey(section) {
+        return NAV_SECTION_I18N[String(section || '').trim()] || null;
+    }
+
+    function navLabelMarkup(section, fallbackLabel) {
+        const key = navSectionI18nKey(section);
+        const label = String(fallbackLabel || '').trim() || (key ? t(key) : '');
+        if (!key) return label;
+        return '<span data-i18n="' + key + '">' + label + '</span>';
+    }
+
+    function refreshDynamicUi() {
+        if (!enabled) return;
+        if (window.__siteCms && typeof window.applySiteMenu === 'function') {
+            window.applySiteMenu(window.__siteCms);
+        }
+        if (typeof window.renderHomepageStats === 'function') {
+            window.renderHomepageStats(window.__homeCms || window.__siteCms);
+        }
+        if (window.__siteCms && typeof window.applySiteFooterExplore === 'function') {
+            window.applySiteFooterExplore(window.__siteCms);
+        }
+        apply(document);
+    }
+
     function setLocale(code) {
         const next = String(code || DEFAULT_LOCALE);
         locale = LOCALES.some((l) => l.code === next) ? next : DEFAULT_LOCALE;
@@ -55,7 +99,7 @@
             localStorage.setItem(STORAGE_KEY, locale);
         } catch (_) {}
         document.documentElement.lang = locale === 'en' ? 'en' : locale;
-        apply(document);
+        refreshDynamicUi();
         syncLangSelects();
         try {
             global.dispatchEvent(new CustomEvent('portal-locale-change', { detail: { locale } }));
@@ -67,6 +111,7 @@
     }
 
     function apply(root) {
+        if (!enabled) return;
         root = root || document;
         root.querySelectorAll('[data-i18n]').forEach((el) => {
             const key = el.getAttribute('data-i18n');
@@ -120,24 +165,13 @@
 
     function renderLangSelect(container) {
         if (!container) return;
-        const mode = container.getAttribute('data-portal-lang-mode') || '';
         const id = container.id || 'portal-lang-' + Math.random().toString(36).slice(2, 8);
         if (!container.id) container.id = id;
-        const compact = mode === 'compact' || mode === 'fab';
-        container.className =
-            (container.className || '')
-                .split(/\s+/)
-                .filter((c) => c && c !== 'portal-lang-wrap' && c !== 'portal-lang-wrap--compact')
-                .join(' ') +
-            ' portal-lang-wrap' +
-            (compact ? ' portal-lang-wrap--compact' : '');
-        const showLabel = mode !== 'fab';
+        container.className = 'portal-lang-wrap';
         container.innerHTML =
-            (showLabel
-                ? '<label class="portal-lang-label" for="' +
-                  id +
-                  '-sel"><i class="fas fa-globe" aria-hidden="true"></i> <span data-i18n="lang.label">Language</span></label>'
-                : '') +
+            '<label class="portal-lang-label" for="' +
+            id +
+            '-sel"><i class="fas fa-globe" aria-hidden="true"></i> <span data-i18n="lang.label">Language</span></label>' +
             '<select id="' +
             id +
             '-sel" class="portal-lang-select" aria-label="' +
@@ -149,46 +183,26 @@
         apply(container);
     }
 
-    function ensureFloatingLangPicker() {
-        if (document.getElementById('portal-lang-floating')) return;
-        const fab = document.createElement('div');
-        fab.id = 'portal-lang-floating';
-        fab.className = 'portal-lang-fab';
-        fab.setAttribute('data-portal-lang', 'site-lang-fab');
-        fab.setAttribute('data-portal-lang-mode', 'fab');
-        fab.innerHTML =
-            '<span class="portal-lang-fab-icon" aria-hidden="true"><i class="fas fa-globe"></i></span>' +
-            '<select class="portal-lang-select" id="portal-lang-fab-sel" aria-label="Language"></select>';
-        document.body.appendChild(fab);
-        const sel = fab.querySelector('select');
-        if (sel) {
-            sel.innerHTML = buildLangOptions(locale);
-            wireLangSelect(sel);
-        }
-    }
-
     function mountLangSelects() {
+        if (!enabled) return;
         document.querySelectorAll('[data-portal-lang]').forEach((el) => renderLangSelect(el));
-        ensureFloatingLangPicker();
         syncLangSelects();
     }
 
     function syncLangSelects() {
-        const meta = currentLocaleMeta();
         document.querySelectorAll('.portal-lang-select').forEach((sel) => {
             if (sel.value !== locale) sel.value = locale;
-            if (sel.closest('.portal-lang-fab') && meta) {
-                sel.setAttribute('title', meta.native + ' (' + meta.label + ')');
-            }
         });
     }
 
     function init() {
+        enabled = isI18nEnabledPage();
+        if (!enabled) return;
         locale = readStoredLocale();
         document.documentElement.lang = locale === 'en' ? 'en' : locale;
         if (global.PortalI18nMessages) registerMessages(global.PortalI18nMessages);
-        apply(document);
         mountLangSelects();
+        apply(document);
     }
 
     if (document.readyState === 'loading') {
@@ -199,13 +213,17 @@
 
     global.PortalI18n = {
         LOCALES,
+        NAV_SECTION_I18N,
         registerMessages,
         t,
         setLocale,
         getLocale,
         apply,
+        refreshDynamicUi,
+        navSectionI18nKey,
+        navLabelMarkup,
         renderLangSelect,
         mountLangSelects,
-        ensureFloatingLangPicker
+        isI18nEnabledPage
     };
 })(typeof window !== 'undefined' ? window : global);
