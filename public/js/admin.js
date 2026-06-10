@@ -1034,7 +1034,7 @@ async function loadUsers() {
                 staffBody.innerHTML = `<tr><td colspan="10" style="text-align:center;color:#b91c1c;">${escAdmin(err)}</td></tr>`;
             }
             if (doctorsBody) {
-                doctorsBody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:#b91c1c;">${escAdmin(err)}</td></tr>`;
+                doctorsBody.innerHTML = `<tr><td colspan="11" style="text-align:center;color:#b91c1c;">${escAdmin(err)}</td></tr>`;
             }
             return;
         }
@@ -1073,6 +1073,12 @@ async function loadUsers() {
         }
 
         if (doctorsBody) {
+            try {
+                const telRes = await fetch('/api/admin/users/client-telemetry');
+                window.__adminDoctorTelemetry = telRes.ok ? await telRes.json().catch(() => ({})) : {};
+            } catch (_) {
+                window.__adminDoctorTelemetry = {};
+            }
             renderDoctorsUsersTable();
         }
         if (window.__highlightAdminUserId) {
@@ -3267,6 +3273,67 @@ function escAdmin(s) {
         .replace(/"/g, '&quot;');
 }
 
+function adminClientTelemetryShort(userId) {
+    const t = (window.__adminDoctorTelemetry || {})[String(userId)];
+    if (!t) return { location: '—', device: '—', network: '—' };
+    return {
+        location: t.location || t.ip || '—',
+        device: t.device || '—',
+        network: t.network || '—'
+    };
+}
+
+function renderAdminClientTelemetryPanel(telemetry, history) {
+    const latest = telemetry || null;
+    if (!latest) {
+        return '<p style="color:#64748b;font-size:0.88rem;">No device or network data yet. Data is collected when the doctor uses the portal.</p>';
+    }
+    const lines = [
+        ['IP address', latest.ip || '—'],
+        ['Location (from IP)', latest.location || '—'],
+        ['Device / platform', latest.device || '—'],
+        ['Network', latest.network || '—'],
+        ['Timezone', latest.timezone || '—'],
+        ['Screen', latest.screen || '—'],
+        ['Last seen', latest.updatedAt ? formatAdminAccountDateTime(latest.updatedAt) : '—']
+    ];
+    let html =
+        '<div style="margin:12px 0;padding:12px;border:1px solid #dbeafe;border-radius:8px;background:#f8fbff;">' +
+        '<h4 style="margin:0 0 10px;">Device &amp; network</h4>' +
+        '<table class="data-table" style="font-size:0.88rem;"><tbody>';
+    lines.forEach(([label, val]) => {
+        html += '<tr><td style="width:38%;color:#475569;">' + escAdmin(label) + '</td><td>' + escAdmin(val) + '</td></tr>';
+    });
+    html += '</tbody></table>';
+    if (latest.userAgent) {
+        html +=
+            '<p style="margin:10px 0 0;font-size:0.78rem;color:#64748b;word-break:break-word;"><strong>User agent:</strong> ' +
+            escAdmin(latest.userAgent) +
+            '</p>';
+    }
+    html += '</div>';
+    const hist = history || [];
+    if (hist.length) {
+        html += '<h4 style="margin:16px 0 8px;">Recent sessions</h4><table class="data-table" style="font-size:0.85rem;"><thead><tr><th>When</th><th>Location</th><th>Device</th><th>Network</th><th>IP</th></tr></thead><tbody>';
+        hist.forEach((h) => {
+            html +=
+                '<tr><td>' +
+                escAdmin(h.recordedAt ? formatAdminAccountDateTime(h.recordedAt) : '—') +
+                '</td><td>' +
+                escAdmin(h.location || '—') +
+                '</td><td>' +
+                escAdmin(h.device || '—') +
+                '</td><td>' +
+                escAdmin(h.network || '—') +
+                '</td><td>' +
+                escAdmin(h.ip || '—') +
+                '</td></tr>';
+        });
+        html += '</tbody></table>';
+    }
+    return html;
+}
+
 function renderAdminUserDetailTab() {
     const d = __adminUserDetailCache;
     const body = document.getElementById('admin-user-detail-body');
@@ -3396,6 +3463,7 @@ function renderAdminUserDetailTab() {
             <p style="font-size:0.88rem;color:#64748b;">${(d.abstracts || []).map((a) => `${escAdmin(a.topic)} (${escAdmin(a.status)})`).join(' · ') || 'None'}</p>
             <h4>Support tickets</h4>
             <p style="font-size:0.88rem;">${(d.supportTickets || []).map((t) => `#${t.id} ${escAdmin(t.subject)}`).join('<br>') || 'None'}</p>
+            ${isDoctorAccount(u) ? renderAdminClientTelemetryPanel(d.clientTelemetry, d.clientTelemetryHistory) : ''}
         `;
         if (document.getElementById('admin-edit-doc-use-global')) onAdminDoctorUseGlobalModulesChange();
         return;
@@ -7087,12 +7155,12 @@ function renderDoctorsUsersTable() {
     doctorsBody.innerHTML = '';
     if (!all.length) {
         doctorsBody.innerHTML =
-            '<tr><td colspan="8" style="text-align:center;">No doctors registered</td></tr>';
+            '<tr><td colspan="11" style="text-align:center;">No doctors registered</td></tr>';
         return;
     }
     if (!rows.length) {
         doctorsBody.innerHTML =
-            '<tr><td colspan="8" style="text-align:center;">No doctors match your search.</td></tr>';
+            '<tr><td colspan="11" style="text-align:center;">No doctors match your search.</td></tr>';
         return;
     }
     if (proxySelect) {
@@ -7104,12 +7172,16 @@ function renderDoctorsUsersTable() {
                 ? ' style="background:#ecfdf5;"'
                 : '';
         const cat = String(u.doctor_category || 'regular').toLowerCase() === 'volunteer' ? 'volunteer' : 'regular';
+        const tel = adminClientTelemetryShort(u.id);
         doctorsBody.innerHTML += `
                 <tr${hi}>
                     <td><strong>${u.user_id_string}</strong></td>
                     <td>${escAdmin(u.first_name)} ${escAdmin(u.last_name)}</td>
                     <td>${escAdmin(u.email)}</td>
                     <td>${escAdmin(u.phone || '—')}</td>
+                    <td style="font-size:0.82rem;max-width:140px;">${escAdmin(tel.location)}</td>
+                    <td style="font-size:0.82rem;">${escAdmin(tel.device)}</td>
+                    <td style="font-size:0.82rem;max-width:160px;">${escAdmin(tel.network)}</td>
                     <td style="white-space:nowrap;font-size:0.82rem;">${formatAdminAccountDateTime(u.created_at)}</td>
                     <td style="white-space:nowrap;font-size:0.82rem;">${adminAccountActivationLabel(u)}</td>
                     <td>${adminUserStatusBadge(u)}</td>

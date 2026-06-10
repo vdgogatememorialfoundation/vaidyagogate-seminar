@@ -67,6 +67,7 @@ const volunteerCertFlow = require('./lib/volunteer-cert-flow');
 const volunteerTicketFlow = require('./lib/volunteer-ticket-flow');
 const regPaymentStatus = require('./lib/registration-payment-status');
 const userAccountLifecycle = require('./lib/user-account-lifecycle');
+const userClientTelemetry = require('./lib/user-client-telemetry');
 
 function volunteerTicketDeps() {
     return {
@@ -4397,37 +4398,41 @@ function buildCaseRegistrationAnnouncement(row) {
 
 function mergeScrollingAnnouncementsWithOpenSeminars(cms, cb) {
     db.all(
-        `SELECT id, title, registration_start, registration_end, is_active
-         FROM case_programs WHERE IFNULL(is_active, 1) = 1
-         ORDER BY COALESCE(registration_start, created_at) DESC`,
+        `SELECT id, title, event_date, registration_start, registration_end, is_active
+         FROM seminars WHERE IFNULL(is_active, 1) = 1
+         ORDER BY COALESCE(registration_start, event_date, created_at) DESC`,
         [],
-        (errCase, caseRows) => {
-            if (errCase) return cb(errCase);
-            const base = sanitizeScrollingAnnouncements(cms.scrollingAnnouncements || []).filter(
-                (a) => !a || a.autoFromSeminarId == null
-            );
-            const byCaseId = new Map();
-            base.forEach((a) => {
-                if (a && a.autoFromCaseProgramId != null) byCaseId.set(Number(a.autoFromCaseProgramId), a);
-            });
-            (caseRows || []).forEach((row) => {
-                if (!Number(row.is_active) || !isCaseRegistrationOpen(row)) return;
-                const cid = Number(row.id);
-                if (!byCaseId.has(cid)) byCaseId.set(cid, buildCaseRegistrationAnnouncement(row));
-                else {
-                    const built = buildCaseRegistrationAnnouncement(row);
-                    byCaseId.set(cid, { ...byCaseId.get(cid), ...built, title: built.title, body: built.body });
+        (errSem, seminarRows) => {
+            if (errSem) return cb(errSem);
+            db.all(
+                `SELECT id, title, registration_start, registration_end, is_active
+                 FROM case_programs WHERE IFNULL(is_active, 1) = 1
+                 ORDER BY COALESCE(registration_start, created_at) DESC`,
+                [],
+                (errCase, caseRows) => {
+                    if (errCase) return cb(errCase);
+                    const manual = sanitizeScrollingAnnouncements(cms.scrollingAnnouncements || []).filter(
+                        (a) =>
+                            a &&
+                            a.autoFromSeminarId == null &&
+                            a.autoFromCaseProgramId == null &&
+                            !/registration open\s*[—-]/i.test(String(a.title || ''))
+                    );
+                    const bySeminarId = new Map();
+                    (seminarRows || []).forEach((row) => {
+                        if (!Number(row.is_active) || !isSeminarRegistrationOpen(row)) return;
+                        bySeminarId.set(Number(row.id), buildSeminarRegistrationAnnouncement(row));
+                    });
+                    const byCaseId = new Map();
+                    (caseRows || []).forEach((row) => {
+                        if (!Number(row.is_active) || !isCaseRegistrationOpen(row)) return;
+                        byCaseId.set(Number(row.id), buildCaseRegistrationAnnouncement(row));
+                    });
+                    const auto = [...bySeminarId.values(), ...byCaseId.values()];
+                    cms.scrollingAnnouncements = [...auto, ...manual].slice(0, 40);
+                    cb(null, cms);
                 }
-            });
-            const manual = base.filter(
-                (a) =>
-                    !a ||
-                    (a.autoFromCaseProgramId == null &&
-                        !/registration open\s*[—-]/i.test(String(a.title || '')))
             );
-            const auto = Array.from(byCaseId.values());
-            cms.scrollingAnnouncements = [...auto, ...manual].slice(0, 40);
-            cb(null, cms);
         }
     );
 }
@@ -5717,6 +5722,19 @@ app.post('/api/applications/:applicationId/cancel', (req, res) => {
     return res.status(403).json({
         error: 'Direct cancellation is disabled. Submit a cancellation request from your Applications tab.',
         useCancellationRequest: true
+    });
+});
+
+// Doctor portal: device / network / IP-location telemetry (admin visibility)
+app.post('/api/doctor/client-telemetry', (req, res) => {
+    const userId = parseInt((req.body && req.body.userId) || '', 10);
+    if (!Number.isInteger(userId) || userId < 1) {
+        return res.status(400).json({ error: 'Invalid session. Please sign in again.' });
+    }
+    const clientDiagnostics = req.body && req.body.clientDiagnostics;
+    userClientTelemetry.saveUserClientTelemetry(db, userId, req, clientDiagnostics, (err) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true });
     });
 });
 
@@ -8562,22 +8580,30 @@ app.get('/api/admin/users/:userId/detail', (req, res) => {
                                                     if (certErr) {
                                                         console.warn('[admin] user_certificates:', certErr.message);
                                                     }
-                                                    res.json({
-                                                        user,
-                                                        profile: profile || null,
-                                                        registrations: registrations || [],
-                                                        orders: orders || [],
-                                                        abstracts: abstracts || [],
-                                                        supportTickets: tickets,
-                                                        certificates: certificates || [],
-                                                        cancellationRequests: cancellationRequests || [],
-                                                        certificatesError:
-                                                            certErr &&
-                                                            /user_certificates|certificate_templates/i.test(
-                                                                certErr.message
-                                                            )
-                                                                ? certErr.message
-                                                                : undefined
+                                                    userClientTelemetry.getUserClientTelemetry(db, uid, (telErr, telemetry) => {
+                                                        if (telErr) {
+                                                            console.warn('[admin] user_client_telemetry:', telErr.message);
+                                                        }
+                                                        res.json({
+                                                            user,
+                                                            profile: profile || null,
+                                                            registrations: registrations || [],
+                                                            orders: orders || [],
+                                                            abstracts: abstracts || [],
+                                                            supportTickets: tickets,
+                                                            certificates: certificates || [],
+                                                            cancellationRequests: cancellationRequests || [],
+                                                            clientTelemetry: (telemetry && telemetry.latest) || null,
+                                                            clientTelemetryHistory:
+                                                                (telemetry && telemetry.history) || [],
+                                                            certificatesError:
+                                                                certErr &&
+                                                                /user_certificates|certificate_templates/i.test(
+                                                                    certErr.message
+                                                                )
+                                                                    ? certErr.message
+                                                                    : undefined
+                                                        });
                                                     });
                                                 };
                                                 db.all(
@@ -10135,6 +10161,20 @@ app.post('/api/admin/users/create', (req, res) => {
         { targetUserRole: userRole }
     );
     }
+});
+
+// Admin: doctor device / network telemetry summaries (for doctors list)
+app.get('/api/admin/users/client-telemetry', (req, res) => {
+    const userRoles = require('./lib/user-roles');
+    db.all(`SELECT id, role, user_role FROM users`, [], (err, rows) => {
+            if (err) return res.status(500).json({ error: err.message });
+            const ids = (rows || []).filter((r) => userRoles.isDoctorPortalAccount(r)).map((r) => r.id);
+            userClientTelemetry.getTelemetrySummariesForUsers(db, ids, (telErr, map) => {
+                if (telErr) return res.status(500).json({ error: telErr.message });
+                res.json(map || {});
+            });
+        }
+    );
 });
 
 // Admin: Get Users

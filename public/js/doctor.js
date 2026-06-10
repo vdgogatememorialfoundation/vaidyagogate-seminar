@@ -843,6 +843,7 @@ function initDoctorPortalAccessRefreshOnVisible() {
         if (document.visibilityState !== 'visible' || !currentUser) return;
         clearTimeout(_doctorPortalAccessRefreshTimer);
         _doctorPortalAccessRefreshTimer = setTimeout(() => {
+            sendDoctorClientTelemetry();
             refreshDoctorPortalAccess()
                 .catch(() => {})
                 .then(() => applyDoctorModuleAccessFromUser(currentUser))
@@ -1535,6 +1536,26 @@ function initDoctorMobileNav() {
     });
 }
 
+function sendDoctorClientTelemetry() {
+    const uid = doctorNumericUserId();
+    if (!uid) return;
+    const diagnostics =
+        window.LiveChatClientInfo && typeof window.LiveChatClientInfo.collect === 'function'
+            ? window.LiveChatClientInfo.collect()
+            : {};
+    fetch('/api/doctor/client-telemetry', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: uid, clientDiagnostics: diagnostics })
+    }).catch(() => {});
+}
+
+function scheduleDoctorClientTelemetry() {
+    sendDoctorClientTelemetry();
+    if (window.__doctorTelemetryTimer) clearInterval(window.__doctorTelemetryTimer);
+    window.__doctorTelemetryTimer = setInterval(sendDoctorClientTelemetry, 5 * 60 * 1000);
+}
+
 async function bootDoctorDashboard(user) {
     currentUser = user;
     window.__doctorResolvedInternalId = doctorNumericUserId();
@@ -1582,6 +1603,7 @@ async function bootDoctorDashboard(user) {
             isEnabled: doctorLiveChatWidgetEnabled
         });
     }
+    scheduleDoctorClientTelemetry();
 }
 
 function handleEasebuzzPaymentReturnQuery() {
