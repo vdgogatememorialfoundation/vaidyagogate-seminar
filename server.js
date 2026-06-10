@@ -1089,7 +1089,7 @@ function ensureMessagingOtpSchema(next) {
 }
 
 function seedPaymentGatewaysIfMissing(done) {
-    const gateways = ['razorpay', 'payu', 'easebuzz', 'paytm', 'phonepe', 'cashfree', 'juspay'];
+    const gateways = ['razorpay', 'payu', 'easebuzz', 'paytm', 'phonepe', 'cashfree', 'juspay', 'zoho'];
     let i = 0;
     const run = () => {
         if (i >= gateways.length) return done && done();

@@ -9486,6 +9486,92 @@ async function loadSettings() {
                 }
                 const jusActiveEl = document.getElementById('pg-juspay-active');
                 if (jusActiveEl) jusActiveEl.checked = pg.is_active;
+            } else if (pg.name === 'easebuzz') {
+                const live = config.live || config;
+                const keyEl = document.getElementById('pg-easebuzz-merchant-key');
+                const saltEl = document.getElementById('pg-easebuzz-merchant-salt');
+                if (keyEl) keyEl.value = live.merchant_key || config.merchant_key || '';
+                if (saltEl) saltEl.value = live.merchant_salt || config.merchant_salt || '';
+                const liveEl = document.getElementById('pg-easebuzz-live-enabled');
+                if (liveEl) {
+                    liveEl.checked =
+                        live.enabled !== false &&
+                        !!(live.merchant_key || config.merchant_key) &&
+                        !!(live.merchant_salt || config.merchant_salt);
+                }
+                const activeEl = document.getElementById('pg-easebuzz-active');
+                if (activeEl) activeEl.checked = pg.is_active;
+            } else if (pg.name === 'payu') {
+                const live = config.live || config;
+                const keyEl = document.getElementById('pg-payu-merchant-key');
+                const saltEl = document.getElementById('pg-payu-merchant-salt');
+                if (keyEl) keyEl.value = live.merchant_key || config.merchant_key || '';
+                if (saltEl) saltEl.value = live.merchant_salt || config.merchant_salt || '';
+                const liveEl = document.getElementById('pg-payu-live-enabled');
+                if (liveEl) {
+                    liveEl.checked =
+                        live.enabled !== false &&
+                        !!(live.merchant_key || config.merchant_key) &&
+                        !!(live.merchant_salt || config.merchant_salt);
+                }
+                const activeEl = document.getElementById('pg-payu-active');
+                if (activeEl) activeEl.checked = pg.is_active;
+            } else if (pg.name === 'paytm') {
+                const live = config.live || config;
+                const midEl = document.getElementById('pg-paytm-merchant-id');
+                const keyEl = document.getElementById('pg-paytm-merchant-key');
+                const webEl = document.getElementById('pg-paytm-website');
+                if (midEl) midEl.value = live.merchant_id || config.merchant_id || '';
+                if (keyEl) keyEl.value = live.merchant_key || config.merchant_key || '';
+                if (webEl) webEl.value = live.website || config.website || '';
+                const liveEl = document.getElementById('pg-paytm-live-enabled');
+                if (liveEl) {
+                    liveEl.checked =
+                        live.enabled !== false &&
+                        !!(live.merchant_id || config.merchant_id) &&
+                        !!(live.merchant_key || config.merchant_key);
+                }
+                const activeEl = document.getElementById('pg-paytm-active');
+                if (activeEl) activeEl.checked = pg.is_active;
+            } else if (pg.name === 'phonepe') {
+                const live = config.live || config;
+                const midEl = document.getElementById('pg-phonepe-merchant-id');
+                const saltEl = document.getElementById('pg-phonepe-salt-key');
+                const idxEl = document.getElementById('pg-phonepe-salt-index');
+                if (midEl) midEl.value = live.merchant_id || config.merchant_id || '';
+                if (saltEl) saltEl.value = live.salt_key || config.salt_key || '';
+                if (idxEl) idxEl.value = live.salt_index || config.salt_index || '1';
+                const liveEl = document.getElementById('pg-phonepe-live-enabled');
+                if (liveEl) {
+                    liveEl.checked =
+                        live.enabled !== false &&
+                        !!(live.merchant_id || config.merchant_id) &&
+                        !!(live.salt_key || config.salt_key);
+                }
+                const activeEl = document.getElementById('pg-phonepe-active');
+                if (activeEl) activeEl.checked = pg.is_active;
+            } else if (pg.name === 'zoho') {
+                const live = config.live || config;
+                const set = (id, key) => {
+                    const el = document.getElementById(id);
+                    if (el) el.value = live[key] || config[key] || '';
+                };
+                set('pg-zoho-organization-id', 'organization_id');
+                set('pg-zoho-client-id', 'client_id');
+                set('pg-zoho-client-secret', 'client_secret');
+                set('pg-zoho-refresh-token', 'refresh_token');
+                set('pg-zoho-signing-key', 'signing_key');
+                const liveEl = document.getElementById('pg-zoho-live-enabled');
+                if (liveEl) {
+                    liveEl.checked =
+                        live.enabled !== false &&
+                        !!(live.organization_id || config.organization_id) &&
+                        !!(live.client_id || config.client_id) &&
+                        !!(live.client_secret || config.client_secret) &&
+                        !!(live.refresh_token || config.refresh_token);
+                }
+                const activeEl = document.getElementById('pg-zoho-active');
+                if (activeEl) activeEl.checked = pg.is_active;
             }
         });
     } catch(err) { console.error(err); }
@@ -9657,7 +9743,27 @@ async function savePaymentGatewaysSettings() {
     const jusApiKey = document.getElementById('pg-juspay-api-key')?.value.trim() || '';
     const jusClientId = document.getElementById('pg-juspay-client-id')?.value.trim() || '';
     const jusLiveOn = document.getElementById('pg-juspay-live-enabled')?.checked;
-        const gateways = [
+    const ebKey = document.getElementById('pg-easebuzz-merchant-key')?.value.trim() || '';
+    const ebSalt = document.getElementById('pg-easebuzz-merchant-salt')?.value.trim() || '';
+    const ebLiveOn = document.getElementById('pg-easebuzz-live-enabled')?.checked;
+    const payuKey = document.getElementById('pg-payu-merchant-key')?.value.trim() || '';
+    const payuSalt = document.getElementById('pg-payu-merchant-salt')?.value.trim() || '';
+    const payuLiveOn = document.getElementById('pg-payu-live-enabled')?.checked;
+    const ptMid = document.getElementById('pg-paytm-merchant-id')?.value.trim() || '';
+    const ptKey = document.getElementById('pg-paytm-merchant-key')?.value.trim() || '';
+    const ptWeb = document.getElementById('pg-paytm-website')?.value.trim() || '';
+    const ptLiveOn = document.getElementById('pg-paytm-live-enabled')?.checked;
+    const ppMid = document.getElementById('pg-phonepe-merchant-id')?.value.trim() || '';
+    const ppSalt = document.getElementById('pg-phonepe-salt-key')?.value.trim() || '';
+    const ppIdx = document.getElementById('pg-phonepe-salt-index')?.value.trim() || '1';
+    const ppLiveOn = document.getElementById('pg-phonepe-live-enabled')?.checked;
+    const zohoOrg = document.getElementById('pg-zoho-organization-id')?.value.trim() || '';
+    const zohoClient = document.getElementById('pg-zoho-client-id')?.value.trim() || '';
+    const zohoSecret = document.getElementById('pg-zoho-client-secret')?.value.trim() || '';
+    const zohoRefresh = document.getElementById('pg-zoho-refresh-token')?.value.trim() || '';
+    const zohoSign = document.getElementById('pg-zoho-signing-key')?.value.trim() || '';
+    const zohoLiveOn = document.getElementById('pg-zoho-live-enabled')?.checked;
+    const gateways = [
         {
             name: 'razorpay',
             is_active: document.getElementById('pg-razorpay-active').checked,
@@ -9701,28 +9807,91 @@ async function savePaymentGatewaysSettings() {
                     payment_page_client_id: jusClientId
                 }
             }
+        },
+        {
+            name: 'easebuzz',
+            is_active: document.getElementById('pg-easebuzz-active')?.checked === true,
+            config: {
+                merchant_key: ebKey,
+                merchant_salt: ebSalt,
+                live: { enabled: !!ebLiveOn, merchant_key: ebKey, merchant_salt: ebSalt }
+            }
+        },
+        {
+            name: 'payu',
+            is_active: document.getElementById('pg-payu-active')?.checked === true,
+            config: {
+                merchant_key: payuKey,
+                merchant_salt: payuSalt,
+                live: { enabled: !!payuLiveOn, merchant_key: payuKey, merchant_salt: payuSalt }
+            }
+        },
+        {
+            name: 'paytm',
+            is_active: document.getElementById('pg-paytm-active')?.checked === true,
+            config: {
+                merchant_id: ptMid,
+                merchant_key: ptKey,
+                website: ptWeb,
+                live: { enabled: !!ptLiveOn, merchant_id: ptMid, merchant_key: ptKey, website: ptWeb }
+            }
+        },
+        {
+            name: 'phonepe',
+            is_active: document.getElementById('pg-phonepe-active')?.checked === true,
+            config: {
+                merchant_id: ppMid,
+                salt_key: ppSalt,
+                salt_index: ppIdx,
+                live: { enabled: !!ppLiveOn, merchant_id: ppMid, salt_key: ppSalt, salt_index: ppIdx }
+            }
+        },
+        {
+            name: 'zoho',
+            is_active: document.getElementById('pg-zoho-active')?.checked === true,
+            config: {
+                organization_id: zohoOrg,
+                client_id: zohoClient,
+                client_secret: zohoSecret,
+                refresh_token: zohoRefresh,
+                signing_key: zohoSign,
+                live: {
+                    enabled: !!zohoLiveOn,
+                    organization_id: zohoOrg,
+                    client_id: zohoClient,
+                    client_secret: zohoSecret,
+                    refresh_token: zohoRefresh,
+                    signing_key: zohoSign
+                }
+            }
         }
     ];
-    const legacyOff = ['payu', 'easebuzz', 'paytm', 'phonepe'].map((name) => ({
-        name,
-        is_active: false,
-        config: {}
-    }));
     try {
-        for (const gw of [...gateways, ...legacyOff]) {
+        for (const gw of gateways) {
             await fetch(`/api/admin/payment_gateways/${gw.name}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ is_active: gw.is_active, config: gw.config })
             });
         }
-        const razActive = gateways[0].is_active && gateways[0].config.live.enabled;
-        const cfActive = gateways[1].is_active && gateways[1].config.live.enabled;
-        const jusActive = gateways[2].is_active && gateways[2].config.live.enabled;
+        const pgPriority = [
+            'razorpay',
+            'cashfree',
+            'juspay',
+            'easebuzz',
+            'payu',
+            'paytm',
+            'phonepe',
+            'zoho'
+        ];
         let defaultPg = null;
-        if (razActive) defaultPg = 'razorpay';
-        else if (cfActive) defaultPg = 'cashfree';
-        else if (jusActive) defaultPg = 'juspay';
+        for (const name of pgPriority) {
+            const row = gateways.find((g) => g.name === name);
+            if (row && row.is_active && row.config && row.config.live && row.config.live.enabled) {
+                defaultPg = name;
+                break;
+            }
+        }
         if (defaultPg) {
             await fetch('/api/admin/global_settings', {
                 method: 'POST',
@@ -9735,7 +9904,7 @@ async function savePaymentGatewaysSettings() {
         setAdminSettingsSaveMsg(
             defaultPg
                 ? `Payment gateways saved. Default live gateway set to ${defaultPg} (Site configuration).`
-                : 'Payment gateways saved. Enable Razorpay, Cashfree, or Juspay Live mode for doctor payments.'
+                : 'Payment gateways saved. Enable Live mode on at least one gateway for doctor payments.'
         );
     } catch (err) {
         console.error(err);

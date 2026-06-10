@@ -2201,6 +2201,11 @@
                             <option value="razorpay">Razorpay (Live)</option>
                             <option value="cashfree">Cashfree (Live)</option>
                             <option value="juspay">Juspay (Live)</option>
+                            <option value="easebuzz">Easebuzz (Live)</option>
+                            <option value="payu">PayU (Live)</option>
+                            <option value="paytm">Paytm (Live)</option>
+                            <option value="phonepe">PhonePe (Live)</option>
+                            <option value="zoho">Zoho Payments (Live)</option>
                         </select>
                         <label style="display:flex;align-items:center;gap:8px;margin-top:12px;">
                             <input type="checkbox" id="setting-ncism-disable-ocr">
@@ -2361,7 +2366,7 @@
                 
                 <div class="card" style="margin-top: 20px;">
                     <h3>Payment Gateway Configurations</h3>
-                    <p style="color: #64748b; font-size: 0.9rem; margin-bottom: 20px;">Live doctor payments use <strong>Razorpay</strong>, <strong>Cashfree</strong>, or <strong>Juspay Hyper Checkout</strong>. Enable one or more; saving updates the default gateway in Site configuration for new transactions.</p>
+                    <p style="color: #64748b; font-size: 0.9rem; margin-bottom: 20px;">Enable one or more live gateways for doctor checkout: Razorpay, Cashfree, Juspay, Easebuzz, PayU, Paytm, PhonePe, or Zoho Payments. Saving updates the default gateway in Site configuration.</p>
                     
                     <!-- Razorpay -->
                     <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
@@ -2400,6 +2405,67 @@
                         </div>
                         <label style="margin-top: 10px; display:block;"><input type="checkbox" id="pg-juspay-live-enabled"> Enable Live mode for doctors</label>
                         <label style="margin-top: 10px; display:block;"><input type="checkbox" id="pg-juspay-active"> Enable Juspay gateway</label>
+                    </div>
+
+                    <!-- Easebuzz -->
+                    <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                        <h4>Easebuzz (Live)</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div><label>Merchant key</label><input type="text" id="pg-easebuzz-merchant-key" placeholder="..."></div>
+                            <div><label>Merchant salt</label><input type="password" id="pg-easebuzz-merchant-salt" placeholder="..."></div>
+                        </div>
+                        <label style="margin-top: 10px; display:block;"><input type="checkbox" id="pg-easebuzz-live-enabled"> Enable Live mode for doctors</label>
+                        <label style="margin-top: 10px; display:block;"><input type="checkbox" id="pg-easebuzz-active"> Enable Easebuzz gateway</label>
+                    </div>
+
+                    <!-- PayU -->
+                    <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                        <h4>PayU (Live)</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div><label>Merchant key</label><input type="text" id="pg-payu-merchant-key" placeholder="..."></div>
+                            <div><label>Merchant salt</label><input type="password" id="pg-payu-merchant-salt" placeholder="..."></div>
+                        </div>
+                        <label style="margin-top: 10px; display:block;"><input type="checkbox" id="pg-payu-live-enabled"> Enable Live mode for doctors</label>
+                        <label style="margin-top: 10px; display:block;"><input type="checkbox" id="pg-payu-active"> Enable PayU gateway</label>
+                    </div>
+
+                    <!-- Paytm -->
+                    <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                        <h4>Paytm (Live)</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div><label>Merchant ID</label><input type="text" id="pg-paytm-merchant-id" placeholder="..."></div>
+                            <div><label>Merchant key</label><input type="password" id="pg-paytm-merchant-key" placeholder="..."></div>
+                            <div style="grid-column:1/-1;"><label>Website (optional)</label><input type="text" id="pg-paytm-website" placeholder="DEFAULT"></div>
+                        </div>
+                        <label style="margin-top: 10px; display:block;"><input type="checkbox" id="pg-paytm-live-enabled"> Enable Live mode for doctors</label>
+                        <label style="margin-top: 10px; display:block;"><input type="checkbox" id="pg-paytm-active"> Enable Paytm gateway</label>
+                    </div>
+
+                    <!-- PhonePe -->
+                    <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                        <h4>PhonePe (Live)</h4>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div><label>Merchant ID</label><input type="text" id="pg-phonepe-merchant-id" placeholder="..."></div>
+                            <div><label>Salt key</label><input type="password" id="pg-phonepe-salt-key" placeholder="..."></div>
+                            <div><label>Salt index</label><input type="text" id="pg-phonepe-salt-index" placeholder="1" value="1"></div>
+                        </div>
+                        <label style="margin-top: 10px; display:block;"><input type="checkbox" id="pg-phonepe-live-enabled"> Enable Live mode for doctors</label>
+                        <label style="margin-top: 10px; display:block;"><input type="checkbox" id="pg-phonepe-active"> Enable PhonePe gateway</label>
+                    </div>
+
+                    <!-- Zoho Payments -->
+                    <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+                        <h4>Zoho Payments (Live)</h4>
+                        <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px;">Create OAuth credentials in Zoho Payments → Settings → Developer Space. Use India data center (accounts.zoho.in).</p>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                            <div><label>Organization ID</label><input type="text" id="pg-zoho-organization-id" placeholder="..."></div>
+                            <div><label>Client ID</label><input type="text" id="pg-zoho-client-id" placeholder="..."></div>
+                            <div><label>Client secret</label><input type="password" id="pg-zoho-client-secret" placeholder="..."></div>
+                            <div><label>Refresh token</label><input type="password" id="pg-zoho-refresh-token" placeholder="..."></div>
+                            <div style="grid-column:1/-1;"><label>Signing key (return URL verification)</label><input type="password" id="pg-zoho-signing-key" placeholder="..."></div>
+                        </div>
+                        <label style="margin-top: 10px; display:block;"><input type="checkbox" id="pg-zoho-live-enabled"> Enable Live mode for doctors</label>
+                        <label style="margin-top: 10px; display:block;"><input type="checkbox" id="pg-zoho-active"> Enable Zoho Payments gateway</label>
                     </div>
                 </div>
                 
