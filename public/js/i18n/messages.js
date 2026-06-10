@@ -2,6 +2,7 @@
 (function (global) {
     const keys = {
         'lang.label': 'Language',
+        'lang.choose': 'Choose your language',
         'common.loading': 'Loading…',
         'common.open': 'Open',
         'common.print': 'Print',
@@ -133,6 +134,7 @@
 
     const hi = {
         'lang.label': 'भाषा',
+        'lang.choose': 'अपनी भाषा चुनें',
         'common.loading': 'लोड हो रहा है…',
         'common.open': 'खोलें',
         'common.print': 'प्रिंट',

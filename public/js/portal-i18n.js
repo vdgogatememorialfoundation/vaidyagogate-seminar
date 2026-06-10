@@ -89,6 +89,10 @@
         });
     }
 
+    function currentLocaleMeta() {
+        return LOCALES.find((l) => l.code === locale) || LOCALES[0];
+    }
+
     function buildLangOptions(selected) {
         return LOCALES.map((l) => {
             const sel = l.code === selected ? ' selected' : '';
@@ -105,38 +109,77 @@
         }).join('');
     }
 
+    function wireLangSelect(sel) {
+        if (!sel || sel.dataset.portalLangWired === '1') return;
+        sel.dataset.portalLangWired = '1';
+        sel.value = locale;
+        sel.addEventListener('change', function () {
+            setLocale(sel.value);
+        });
+    }
+
     function renderLangSelect(container) {
         if (!container) return;
-        const id = container.id || 'portal-lang-select';
+        const mode = container.getAttribute('data-portal-lang-mode') || '';
+        const id = container.id || 'portal-lang-' + Math.random().toString(36).slice(2, 8);
         if (!container.id) container.id = id;
-        container.classList.add('portal-lang-wrap');
+        const compact = mode === 'compact' || mode === 'fab';
+        container.className =
+            (container.className || '')
+                .split(/\s+/)
+                .filter((c) => c && c !== 'portal-lang-wrap' && c !== 'portal-lang-wrap--compact')
+                .join(' ') +
+            ' portal-lang-wrap' +
+            (compact ? ' portal-lang-wrap--compact' : '');
+        const showLabel = mode !== 'fab';
         container.innerHTML =
-            '<label class="portal-lang-label" for="' +
-            id +
-            '-sel"><i class="fas fa-globe" aria-hidden="true"></i> <span data-i18n="lang.label">Language</span></label>' +
+            (showLabel
+                ? '<label class="portal-lang-label" for="' +
+                  id +
+                  '-sel"><i class="fas fa-globe" aria-hidden="true"></i> <span data-i18n="lang.label">Language</span></label>'
+                : '') +
             '<select id="' +
             id +
-            '-sel" class="portal-lang-select" aria-label="Choose language">' +
+            '-sel" class="portal-lang-select" aria-label="' +
+            t('lang.label') +
+            '">' +
             buildLangOptions(locale) +
             '</select>';
-        const sel = container.querySelector('select');
-        if (sel) {
-            sel.value = locale;
-            sel.addEventListener('change', function () {
-                setLocale(sel.value);
-            });
-        }
+        wireLangSelect(container.querySelector('select'));
         apply(container);
+    }
+
+    function ensureFloatingLangPicker() {
+        if (document.getElementById('portal-lang-floating')) return;
+        const fab = document.createElement('div');
+        fab.id = 'portal-lang-floating';
+        fab.className = 'portal-lang-fab';
+        fab.setAttribute('data-portal-lang', 'site-lang-fab');
+        fab.setAttribute('data-portal-lang-mode', 'fab');
+        fab.innerHTML =
+            '<span class="portal-lang-fab-icon" aria-hidden="true"><i class="fas fa-globe"></i></span>' +
+            '<select class="portal-lang-select" id="portal-lang-fab-sel" aria-label="Language"></select>';
+        document.body.appendChild(fab);
+        const sel = fab.querySelector('select');
+        if (sel) {
+            sel.innerHTML = buildLangOptions(locale);
+            wireLangSelect(sel);
+        }
     }
 
     function mountLangSelects() {
         document.querySelectorAll('[data-portal-lang]').forEach((el) => renderLangSelect(el));
+        ensureFloatingLangPicker();
         syncLangSelects();
     }
 
     function syncLangSelects() {
+        const meta = currentLocaleMeta();
         document.querySelectorAll('.portal-lang-select').forEach((sel) => {
             if (sel.value !== locale) sel.value = locale;
+            if (sel.closest('.portal-lang-fab') && meta) {
+                sel.setAttribute('title', meta.native + ' (' + meta.label + ')');
+            }
         });
     }
 
@@ -162,6 +205,7 @@
         getLocale,
         apply,
         renderLangSelect,
-        mountLangSelects
+        mountLangSelects,
+        ensureFloatingLangPicker
     };
 })(typeof window !== 'undefined' ? window : global);
