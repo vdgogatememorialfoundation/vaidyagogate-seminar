@@ -1,11 +1,13 @@
-/* VGMF certificate — gold / charcoal theme (landscape A4) */
+/* VGMF certificate — refined gold / navy theme (landscape A4) */
 :root {
-    --cert-gold: #c9a227;
-    --cert-gold-light: #e8d48a;
-    --cert-charcoal: #4a4a4a;
-    --cert-ink: #2d2d2d;
-    --cert-name: #c45c26;
-    --cert-bg: #f3f3f3;
+    --cert-gold: #b8860b;
+    --cert-gold-light: #f0d78c;
+    --cert-gold-deep: #8b6914;
+    --cert-navy: #1e3a5f;
+    --cert-charcoal: #334155;
+    --cert-ink: #1f2937;
+    --cert-name: #9a3412;
+    --cert-bg: #faf8f3;
 }
 
 * {
@@ -26,10 +28,24 @@
     max-width: 100%;
     min-height: 210mm;
     margin: 0 auto;
-    background: var(--cert-bg);
-    border: 3px solid var(--cert-gold);
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+    background:
+        radial-gradient(circle at 12% 18%, rgba(184, 134, 11, 0.08), transparent 42%),
+        radial-gradient(circle at 88% 82%, rgba(30, 58, 95, 0.06), transparent 45%),
+        var(--cert-bg);
+    border: 4px double var(--cert-gold);
+    outline: 1px solid rgba(184, 134, 11, 0.35);
+    outline-offset: -10px;
+    box-shadow: 0 16px 48px rgba(30, 58, 95, 0.14);
     overflow: hidden;
+}
+
+.cert-page::before {
+    content: '';
+    position: absolute;
+    inset: 18px;
+    border: 1px solid rgba(184, 134, 11, 0.28);
+    pointer-events: none;
+    z-index: 1;
 }
 
 .cert-inner {
@@ -111,12 +127,13 @@
 
 .cert-title {
     font-family: Inter, 'Segoe UI', sans-serif;
-    font-size: 3.2rem;
-    font-weight: 700;
-    color: #9ca3af;
-    letter-spacing: 0.35em;
+    font-size: 3rem;
+    font-weight: 800;
+    color: var(--cert-navy);
+    letter-spacing: 0.28em;
     margin: 0;
     line-height: 1;
+    text-transform: uppercase;
 }
 
 .cert-of {

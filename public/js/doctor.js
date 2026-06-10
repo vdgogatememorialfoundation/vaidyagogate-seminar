@@ -1055,7 +1055,9 @@ function paymentGatewaySelectHtml(regId) {
         );
     }
     let h =
-        '<label style="display:block;margin-top:10px;font-size:0.85rem;font-weight:600;color:#0f766e;">Choose payment method</label><select id="pay-opt-' +
+        '<label style="display:block;margin-top:10px;font-size:0.85rem;font-weight:600;color:#0f766e;">' +
+        escapeHtml(i18nT('pay.chooseMethod')) +
+        '</label><select id="pay-opt-' +
         regId +
         '" onchange="updateDoctorPayMethodHint(' +
         regId +
@@ -4555,11 +4557,23 @@ function isBuiltinCertificateTemplate(path) {
     return p === '__builtin_vgmf_participant__' || p === '__builtin_vgmf_volunteer__';
 }
 
+function i18nT(key, vars) {
+    if (typeof PortalI18n !== 'undefined' && PortalI18n.t) return PortalI18n.t(key, vars);
+    return key;
+}
+
 function certificateViewUrl(c, isVolunteer) {
     const uid = currentUser && currentUser.id != null ? Number(currentUser.id) : 0;
     if (!uid || !c.id) return '#';
     const q = isVolunteer ? `vc=${c.id}&uid=${uid}` : `uc=${c.id}&uid=${uid}`;
     return `/certificate/view?${q}`;
+}
+
+function certificateDownloadUrl(c, isVolunteer) {
+    const uid = currentUser && currentUser.id != null ? Number(currentUser.id) : 0;
+    if (!uid || !c.id) return '#';
+    const q = isVolunteer ? `vc=${c.id}&uid=${uid}` : `uc=${c.id}&uid=${uid}`;
+    return `/certificate/download?${q}`;
 }
 
 function doctorCertificateLockedBlock(message) {
@@ -4569,7 +4583,7 @@ function doctorCertificateLockedBlock(message) {
     return (
         '<div style="text-align:center;padding:24px;">' +
         '<i class="fas fa-lock" style="font-size:2rem;color:#94a3b8;margin-bottom:10px;display:block;"></i>' +
-        '<p style="margin:0;font-weight:600;color:#475569;">Locked</p>' +
+        '<p style="margin:0;font-weight:600;color:#475569;">' + escapeHtml(i18nT('cert.locked')) + '</p>' +
         '<p style="margin:8px 0 0;font-size:0.9rem;color:#64748b;">' + escapeHtml(msg) + '</p>' +
         '</div>'
     );
@@ -4713,6 +4727,57 @@ async function loadDoctorCertificateModule() {
     await loadDoctorCertificates();
 }
 
+let __doctorCertYearFilter = null;
+
+function renderDoctorCertYearNav(yearsPayload) {
+    const nav = document.getElementById('doctor-cert-years-nav');
+    if (!nav) return;
+    const years = (yearsPayload && yearsPayload.years) || [];
+    if (!years.length) {
+        nav.innerHTML = '';
+        return;
+    }
+    const active = __doctorCertYearFilter;
+    let html =
+        '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;"><span style="font-size:0.82rem;color:#64748b;font-weight:600;">' +
+        escapeHtml(i18nT('cert.year')) +
+        ':</span>';
+    const allActive = active == null;
+    html +=
+        '<button type="button" class="btn-primary" style="padding:6px 12px;font-size:0.82rem;' +
+        (allActive ? '' : 'background:#e2e8f0;color:#334155;') +
+        '" onclick="doctorSetCertYearFilter(null)">' +
+        escapeHtml(i18nT('cert.allYears')) +
+        '</button>';
+    years.forEach((y) => {
+        const n = Number(y.year) || 0;
+        if (!n) return;
+        const issued = (y.seminars || []).filter((s) => s.certEnabled && s.scanVerified).length;
+        const attended = (y.seminars || []).length;
+        const on = active === n;
+        html +=
+            '<button type="button" class="btn-primary" style="padding:6px 12px;font-size:0.82rem;' +
+            (on ? '' : 'background:#e2e8f0;color:#334155;') +
+            '" onclick="doctorSetCertYearFilter(' +
+            n +
+            ')">' +
+            escapeHtml(String(n)) +
+            ' <span style="opacity:0.85;">(' +
+            issued +
+            '/' +
+            attended +
+            ')</span></button>';
+    });
+    html += '</div>';
+    nav.innerHTML = html;
+}
+
+function doctorSetCertYearFilter(year) {
+    __doctorCertYearFilter = year == null ? null : Number(year);
+    loadDoctorCertificates();
+}
+window.doctorSetCertYearFilter = doctorSetCertYearFilter;
+
 async function loadDoctorCertificates() {
     const wrap = document.getElementById('doctor-certificates-wrap');
     if (!wrap || !currentUser) return;
@@ -4724,10 +4789,17 @@ async function loadDoctorCertificates() {
             return;
         }
         const idQ = doctorUserIdQuerySuffix();
-        const [res, vres] = await Promise.all([
-            fetch('/api/doctor/certificates/' + uid + idQ),
-            fetch('/api/doctor/volunteer-certificates/' + uid + idQ)
+        const yearQ =
+            __doctorCertYearFilter != null && Number.isFinite(__doctorCertYearFilter)
+                ? '&year=' + encodeURIComponent(String(__doctorCertYearFilter))
+                : '';
+        const [yearsRes, res, vres] = await Promise.all([
+            fetch('/api/doctor/certificate-years/' + uid + idQ),
+            fetch('/api/doctor/certificates/' + uid + idQ + yearQ),
+            fetch('/api/doctor/volunteer-certificates/' + uid + idQ + yearQ)
         ]);
+        const yearsPayload = await yearsRes.json().catch(() => ({ years: [] }));
+        renderDoctorCertYearNav(yearsPayload);
         const rows = await res.json().catch(() => []);
         const vrows = await vres.json().catch(() => []);
         const trackingRows = Array.isArray(window.__doctorCertTrackingRows) ? window.__doctorCertTrackingRows : [];
@@ -4779,15 +4851,17 @@ async function loadDoctorCertificates() {
             const titleEsc = escapeHtml(title);
             const name = escapeHtml(c.display_name || '');
             const viewUrl = certificateViewUrl(c, !!c._volunteer);
+            const dlUrl = certificateDownloadUrl(c, !!c._volunteer);
+            const dlTitle = String(c.seminar_title || 'Seminar').replace(/'/g, "\\'");
             if (isBuiltinCertificateTemplate(c.template_path)) {
                 card.innerHTML =
                     `<h4 style="margin:0 0 8px;color:#92400e;">${titleEsc}</h4>` +
                     `<p style="font-size:0.88rem;color:#78716c;margin-bottom:10px;">${name}</p>` +
                     `<div style="border:2px solid #e8d48a;border-radius:10px;overflow:hidden;"><iframe src="${viewUrl}" style="width:100%;min-height:420px;border:0;"></iframe></div>` +
                     `<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">` +
-                    `<a href="${viewUrl}" target="_blank" class="btn-primary" style="text-decoration:none;background:linear-gradient(135deg,#c9a227,#a67c00);padding:8px 14px;">Open</a>` +
-                    `<button type="button" class="btn-primary" style="background:#15803d;padding:8px 14px;" onclick="downloadDoctorCertificate('${viewUrl}')"><i class="fas fa-download"></i> Download PDF</button>` +
-                    `<button type="button" class="btn-primary" style="background:#475569;padding:8px 14px;" onclick="var w=window.open('${viewUrl}');if(w)w.print();">Print</button></div>`;
+                    `<a href="${viewUrl}" target="_blank" class="btn-primary" style="text-decoration:none;background:linear-gradient(135deg,#c9a227,#a67c00);padding:8px 14px;">${escapeHtml(i18nT('common.open'))}</a>` +
+                    `<button type="button" class="btn-primary" style="background:#15803d;padding:8px 14px;" onclick="downloadDoctorCertificate('${dlUrl}', '${dlTitle}')"><i class="fas fa-download"></i> ${escapeHtml(i18nT('cert.downloadPdf'))}</button>` +
+                    `<button type="button" class="btn-primary" style="background:#475569;padding:8px 14px;" onclick="var w=window.open('${viewUrl}');if(w)w.print();">${escapeHtml(i18nT('common.print'))}</button></div>`;
                 wrap.appendChild(card);
                 return;
             }
@@ -4799,11 +4873,11 @@ async function loadDoctorCertificates() {
                         <img src="${c.template_path}" alt="Certificate" style="width:100%;border-radius:8px;border:1px solid #e2e8f0;">
                         <div style="position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);font-size:clamp(1rem,3vw,1.75rem);font-weight:700;color:#1e3a5f;text-align:center;width:80%;text-shadow:0 0 8px rgba(255,255,255,0.9);">${name}</div>
                     </div>
-                    <button type="button" class="btn-primary" style="margin-top:12px;" onclick="window.print()">Print / Save as PDF</button>`;
+                    <button type="button" class="btn-primary" style="margin-top:12px;" onclick="window.print()">${escapeHtml(i18nT('common.print'))} / PDF</button>`;
             } else {
                 card.innerHTML = `<h4 style="margin:0 0 8px;">${titleEsc}</h4>
                     <p style="margin-bottom:12px;">${name}</p>
-                    <a href="${c.template_path}" target="_blank" class="btn-primary" style="display:inline-block;padding:8px 14px;text-decoration:none;">Download certificate</a>`;
+                    <a href="${c.template_path}" download class="btn-primary" style="display:inline-block;padding:8px 14px;text-decoration:none;">${escapeHtml(i18nT('cert.downloadPdf'))}</a>`;
             }
             wrap.appendChild(card);
         });
@@ -6403,9 +6477,7 @@ function openPaymentUrlInPage(url, message) {
 }
 
 async function openHostedPaymentCheckout(result) {
-    const msg =
-        result.message ||
-        'Redirecting to secure payment. After paying, return to My Applications for your e-ticket.';
+    const msg = result.message || i18nT('pay.redirecting');
 
     if (result.formPost && result.formPost.action) {
         submitHostedFormPost(result.formPost);
@@ -6673,20 +6745,37 @@ async function processPayment(appId, amount, appNo, paymentOption, cancelPending
 
 window.processPayment = processPayment;
 
-function downloadDoctorCertificate(viewUrl, seminarTitle) {
-    const url = String(viewUrl || '');
+async function downloadDoctorCertificate(downloadUrl, seminarTitle) {
+    const url = String(downloadUrl || '');
     if (!url || url === '#') return;
-    const w = window.open(url, '_blank');
-    if (w) {
-        w.addEventListener('load', function onLd() {
-            w.removeEventListener('load', onLd);
-            try {
-                w.print();
-            } catch (_) {}
-        });
-    } else {
-        alert('Allow pop-ups to download or print your certificate.');
+    const safeTitle = String(seminarTitle || 'Seminar').replace(/[^\w.-]+/g, '_');
+    const filename = 'VGMF_Certificate_' + safeTitle + '.html';
+    try {
+        const res = await fetch(url, { credentials: 'same-origin' });
+        if (!res.ok) throw new Error('download failed');
+        const blob = await res.blob();
+        const file = new File([blob], filename, { type: 'text/html;charset=utf-8' });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file], title: 'VGMF Certificate' });
+            return;
+        }
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = objectUrl;
+        a.download = filename;
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 8000);
+        if (typeof alert === 'function') alert(i18nT('cert.downloadDone'));
+        return;
+    } catch (shareErr) {
+        console.warn('certificate download', shareErr);
     }
+    const printUrl = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'print=1';
+    const w = window.open(printUrl, '_blank');
+    if (!w) alert(i18nT('cert.downloadFail'));
 }
 
 async function loadDoctorCertificateTracking(quiet) {
@@ -6791,12 +6880,12 @@ function openDoctorCertificateDownload(certId, seminarId) {
     if (!currentUser) return;
     const uid = doctorNumericUserId();
     if (!uid) return alert('Please sign in again.');
-    const viewUrl =
-        '/certificate/view?uc=' +
+    const dlUrl =
+        '/certificate/download?uc=' +
         encodeURIComponent(String(certId)) +
         '&uid=' +
         encodeURIComponent(String(uid));
-    downloadDoctorCertificate(viewUrl);
+    downloadDoctorCertificate(dlUrl, 'Seminar');
 }
 
 async function loadDoctorDashboardStats() {
@@ -8063,3 +8152,11 @@ if (document.readyState === 'loading') {
     initRegistrationAddressUi();
     initDoctorUploadHints();
 }
+
+document.addEventListener('portal-locale-change', () => {
+    if (typeof PortalI18n !== 'undefined') PortalI18n.apply(document);
+    const certPane = document.getElementById('tab-certificate');
+    if (certPane && !certPane.classList.contains('hidden') && typeof loadDoctorCertificateModule === 'function') {
+        loadDoctorCertificateModule();
+    }
+});

@@ -554,6 +554,10 @@ app.get('/certificate/view', (req, res) => {
     certRender.handleViewRequest(db, req, res);
 });
 
+app.get('/certificate/download', (req, res) => {
+    certRender.handleDownloadRequest(db, req, res);
+});
+
 app.use(
     express.static('public', {
         maxAge: process.env.NODE_ENV === 'production' ? '86400000' : 0,
@@ -1083,6 +1087,21 @@ function ensureMessagingOtpSchema(next) {
     });
 }
 
+function seedPaymentGatewaysIfMissing(done) {
+    const gateways = ['razorpay', 'payu', 'easebuzz', 'paytm', 'phonepe', 'cashfree', 'juspay'];
+    let i = 0;
+    const run = () => {
+        if (i >= gateways.length) return done && done();
+        const name = gateways[i++];
+        db.run(
+            `INSERT OR IGNORE INTO payment_gateways (name, is_active, config) VALUES (?, 0, '{}')`,
+            [name],
+            () => run()
+        );
+    };
+    run();
+}
+
 function ensurePortalSchema(next) {
     db.run(
         `CREATE TABLE IF NOT EXISTS global_settings (
@@ -1206,6 +1225,8 @@ function ensurePortalSchema(next) {
                                                                                                                                             pendingRegReminders.ensureSchema(
                                                                                                                                                 db,
                                                                                                                                                 () => {
+                                                                                                                                    seedPaymentGatewaysIfMissing(
+                                                                                                                                        () => {
                                                                                                                                     paymentGatewayOptions.activateGatewaysWithCredentials(
                                                                                                                                         db,
                                                                                                                                         (pgActErr) => {
@@ -1224,6 +1245,8 @@ function ensurePortalSchema(next) {
                                                                                                                                     });
                                                                                                                                 }
                                                                                                                             );
+                                                                                                                                        }
+                                                                                                                                    );
                                                                                                                                         }
                                                                                                                                     );
                                                                                                                                                 }
@@ -5960,7 +5983,7 @@ function mapDoctorCertificateTrackingRows(rows) {
 }
 
 const DOCTOR_CERT_TRACKING_SQL = `SELECT r.id AS registration_id, r.application_no, r.status AS reg_status, r.seminar_id,
-                s.title AS seminar_title, COALESCE(s.cert_scans_required, 1) AS cert_scans_required,
+                s.title AS seminar_title, s.portal_year, COALESCE(s.cert_scans_required, 1) AS cert_scans_required,
                 s.event_date, COALESCE(s.certificate_verify_enabled, 0) AS certificate_verify_enabled,
                 COALESCE(s.certificate_verify_manual, 0) AS certificate_verify_manual,
                 s.certificate_verify_go_live_at,
@@ -7108,6 +7131,24 @@ app.post('/api/scanner/mark', (req, res) => {
                         const regId = row.registration_id;
                         const finishScanResponse = (scanAtIso) => {
                             syncCertificateEligibilityForTicket(row.ticket_id, () => {
+                                certVerify.finalizeParticipantCertificateAfterScan(
+                                    db,
+                                    row.ticket_id,
+                                    {
+                                        notifEngine,
+                                        portalTracking,
+                                        promoteRegistrationToCertificateIssued
+                                    },
+                                    (cErr, cOut) => {
+                                        if (cErr) console.warn('[scanner] cert auto-issue:', cErr.message);
+                                        else if (cOut && cOut.issued) {
+                                            console.log(
+                                                '[scanner] certificate auto-issued for ticket',
+                                                row.ticket_id
+                                            );
+                                        }
+                                    }
+                                );
                                 const doctorName = buildDisplayNameFromFormData(row.form_data, {
                                     first_name: row.doctor_first_name,
                                     last_name: row.doctor_last_name
@@ -7251,17 +7292,31 @@ app.post('/api/scanner/mark', (req, res) => {
 });
 
 // 6. QR Code Generation
+async function sendQrPng(res, text) {
+    const qrCodeDataUrl = await QRCode.toDataURL(String(text || ''));
+    const base64Data = qrCodeDataUrl.replace(/^data:image\/png;base64,/, '');
+    const img = Buffer.from(base64Data, 'base64');
+    res.writeHead(200, {
+        'Content-Type': 'image/png',
+        'Content-Length': img.length,
+        'Cache-Control': 'public, max-age=3600'
+    });
+    res.end(img);
+}
+
+app.get('/api/qrcode', async (req, res) => {
+    try {
+        const text = req.query.data || req.query.text || '';
+        if (!text) return res.status(400).json({ error: 'data query parameter required' });
+        await sendQrPng(res, text);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to generate QR Code' });
+    }
+});
+
 app.get('/api/qrcode/:text', async (req, res) => {
     try {
-        const text = req.params.text;
-        const qrCodeDataUrl = await QRCode.toDataURL(text);
-        const base64Data = qrCodeDataUrl.replace(/^data:image\/png;base64,/, "");
-        const img = Buffer.from(base64Data, 'base64');
-        res.writeHead(200, {
-            'Content-Type': 'image/png',
-            'Content-Length': img.length
-        });
-        res.end(img);
+        await sendQrPng(res, decodeURIComponent(req.params.text || ''));
     } catch (err) {
         res.status(500).json({ error: 'Failed to generate QR Code' });
     }
@@ -8066,7 +8121,13 @@ app.post('/api/admin/registrations/:id/manual-checkin', (req, res) => {
     }
     adminManualCheckin.performManualCheckin(
         db,
-        { syncCertificateEligibilityForTicket, portalTracking },
+        {
+            syncCertificateEligibilityForTicket,
+            portalTracking,
+            finalizeParticipantCertificateAfterScan: certVerify.finalizeParticipantCertificateAfterScan,
+            notifEngine,
+            promoteRegistrationToCertificateIssued
+        },
         rid,
         adminId,
         (err, result) => {
@@ -9150,17 +9211,59 @@ app.post('/api/public/certificate-verify/confirm', (req, res) => {
 // Doctor: certificate eligibility for logged-in user
 app.get('/api/doctor/certificates/:userId', (req, res) => {
     resolveDoctorApiUserId(req, res, (uid) => {
-        db.all(
-            `SELECT uc.*, s.title AS seminar_title, ct.file_path AS template_path, ct.mime_type
+        const year = req.query.year != null ? parseInt(req.query.year, 10) : null;
+        let sql = `SELECT uc.*, s.title AS seminar_title, s.portal_year, s.event_date, ct.file_path AS template_path, ct.mime_type
              FROM user_certificates uc
              LEFT JOIN seminars s ON s.id = uc.seminar_id
              LEFT JOIN certificate_templates ct ON ct.id = uc.template_id
-             WHERE uc.user_id = ?
-             ORDER BY uc.seminar_id DESC`,
+             WHERE uc.user_id = ?`;
+        const params = [uid];
+        if (Number.isInteger(year) && year > 2000) {
+            sql += ` AND s.portal_year = ?`;
+            params.push(year);
+        }
+        sql += ` ORDER BY COALESCE(s.portal_year, 0) DESC, uc.seminar_id DESC`;
+        db.all(sql, params, (err, rows) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json(rows || []);
+        });
+    });
+});
+
+app.get('/api/doctor/certificate-years/:userId', (req, res) => {
+    resolveDoctorApiUserId(req, res, (uid) => {
+        db.all(
+            `SELECT DISTINCT COALESCE(s.portal_year, CAST(strftime('%Y', s.event_date) AS INTEGER)) AS year,
+                    s.id AS seminar_id, s.title, s.event_date, uc.id AS cert_id,
+                    COALESCE(uc.enabled, 0) AS cert_enabled, COALESCE(uc.scan_verified, 0) AS scan_verified,
+                    r.status AS reg_status, o.status AS order_status
+             FROM registrations r
+             JOIN seminars s ON s.id = r.seminar_id
+             LEFT JOIN orders o ON o.registration_id = r.id AND LOWER(TRIM(o.status)) = 'success'
+             LEFT JOIN user_certificates uc ON uc.user_id = r.user_id AND uc.seminar_id = r.seminar_id
+             WHERE r.user_id = ? AND COALESCE(r.status, '') NOT IN ('rejected', 'cancelled', 'draft')
+             ORDER BY year DESC, s.event_date DESC`,
             [uid],
             (err, rows) => {
                 if (err) return res.status(500).json({ error: err.message });
-                res.json(rows || []);
+                const byYear = {};
+                (rows || []).forEach((row) => {
+                    const y = Number(row.year) || 0;
+                    if (!byYear[y]) byYear[y] = { year: y, seminars: [] };
+                    byYear[y].seminars.push({
+                        seminarId: row.seminar_id,
+                        title: row.title,
+                        eventDate: row.event_date,
+                        certId: row.cert_id,
+                        certEnabled: Number(row.cert_enabled) === 1,
+                        scanVerified: Number(row.scan_verified) === 1,
+                        regStatus: row.reg_status,
+                        paid: String(row.order_status || '').toLowerCase() === 'success'
+                    });
+                });
+                res.json({
+                    years: Object.values(byYear).sort((a, b) => b.year - a.year)
+                });
             }
         );
     });

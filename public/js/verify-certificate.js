@@ -74,6 +74,12 @@
     }
 
     function refreshCountdownUi() {
+        if (state.token) {
+            showStep('cv-step-lookup');
+            const msg = document.getElementById('cv-lookup-msg');
+            showMsg(msg, 'Verifying certificate from QR code…', 'info');
+            return;
+        }
         const pending = (state.schedule || []).filter((x) => x.countdown && !x.live);
         const live = (state.schedule || []).filter((x) => x.live);
         if (!pending.length && live.length) {
@@ -323,14 +329,14 @@
 
     document.addEventListener('DOMContentLoaded', () => {
         state.token = qs('t');
-        loadSchedule().then(() => {
-            if (state.token) {
-                showStep('cv-step-lookup');
-                doLookup();
-            } else {
-                refreshCountdownUi();
-            }
-        });
+        if (state.token) {
+            showStep('cv-step-lookup');
+            const msg = document.getElementById('cv-lookup-msg');
+            showMsg(msg, 'Verifying certificate from QR code…', 'info');
+            doLookup();
+            return;
+        }
+        loadSchedule().then(() => refreshCountdownUi());
         document.getElementById('cv-lookup-btn')?.addEventListener('click', doLookup);
         document.getElementById('cv-send-otp-btn')?.addEventListener('click', sendOtps);
         document.getElementById('cv-confirm-btn')?.addEventListener('click', confirmVerify);

@@ -26,13 +26,14 @@
     <link rel="stylesheet" href="/css/vgmf-congress.css?v=20260608hero5">
     <link rel="stylesheet" href="/css/vgmf-responsive.css?v=20260608hero5">
     <link rel="stylesheet" href="/css/gallery-lightbox.css">
+    <link rel="stylesheet" href="/css/portal-lang.css">
     <script src="/js/site-seo.js?v=20260522a"></script>
     <script src="/js/portal-datetime.js"></script>
     <script src="/js/gallery-lightbox.js"></script>
 </head>
 <body class="congress-site" data-portal-theme="public">
-    <a href="#main-content" class="vg-skip-link">Skip to main content</a>
-    <div id="site-preloader" aria-hidden="true"><div class="preloader-ring"></div><p style="color:var(--muted);font-weight:600;">Loading seminar portal…</p></div>
+    <a href="#main-content" class="vg-skip-link" data-i18n="site.skip">Skip to main content</a>
+    <div id="site-preloader" aria-hidden="true"><div class="preloader-ring"></div><p style="color:var(--muted);font-weight:600;" data-i18n="site.preloader">Loading seminar portal…</p></div>
     <script>
         window.dismissSitePreloader = function dismissSitePreloader() {
             var pre = document.getElementById('site-preloader');
@@ -74,9 +75,10 @@
                 </span>
             </div>
             <div class="cg-utility-auth">
-                <a href="#" class="cg-utility-signin" onclick="openAuthModal('login'); return false;"><i class="fas fa-user"></i> Sign in</a>
+                <div data-portal-lang="site-lang-top"></div>
+                <a href="#" class="cg-utility-signin" data-portal-auth="login" onclick="openAuthModal('login'); return false;"><i class="fas fa-user"></i> <span data-i18n="auth.signIn">Sign in</span></a>
                 <span class="cg-utility-sep" aria-hidden="true">|</span>
-                <a href="#" class="cg-utility-signup" data-portal-auth="signup" onclick="openRegisterModal(); return false;"><i class="fas fa-user-plus"></i> Create account</a>
+                <a href="#" class="cg-utility-signup" data-portal-auth="signup" onclick="openRegisterModal(); return false;"><i class="fas fa-user-plus"></i> <span data-i18n="auth.createAccount">Create account</span></a>
             </div>
         </div>
     </div>
@@ -88,7 +90,7 @@
                     <div data-site-logo data-logo-height="48px" data-logo-width="48px" data-logo-fallback="icon"><i class="fas fa-leaf" style="font-size:1.5rem;color:#0f766e;"></i></div>
                     <div class="cg-logo-text">
                         <h1>Vaidya Gogate Memorial Foundation</h1>
-                        <p>National Seminar Portal</p>
+                        <p data-i18n="site.tagline">National Seminar Portal</p>
                     </div>
                 </a>
                 <button type="button" class="cg-menu-toggle" id="cg-menu-toggle" aria-label="Open menu" aria-expanded="false" aria-controls="cg-nav"><i class="fas fa-bars"></i></button>
@@ -97,7 +99,7 @@
         <nav class="cg-nav" id="cg-nav" aria-label="Site menu" aria-hidden="true">
             <button type="button" class="cg-nav-close" id="cg-nav-close" aria-label="Close menu"><i class="fas fa-times"></i></button>
             <span id="cg-nav-menu-links">
-                <a href="#" data-nav-section="home" data-menu-key="home" class="active">Home</a>
+                <a href="#" data-nav-section="home" data-menu-key="home" class="active"><span data-i18n="nav.home">Home</span></a>
                 <a href="#" data-nav-section="about" data-menu-key="about">Foundation</a>
                 <a href="#" data-nav-section="schedule" data-menu-key="schedule">Agenda</a>
                 <a href="#" data-nav-section="gallery" data-menu-key="gallery">Gallery</a>
@@ -429,7 +431,7 @@
             <div class="footer-col">
                 <h4 id="footer-doctor-title">Doctor access</h4>
                 <ul id="footer-doctor-links">
-                    <li><a href="#" onclick="openAuthModal('login'); return false;">Sign in</a></li>
+                    <li><a href="#" data-portal-auth="login" onclick="openAuthModal('login'); return false;">Sign in</a></li>
                     <li><a href="#" data-portal-auth="signup" onclick="openRegisterModal(); return false;">Create account</a></li>
                 </ul>
                 </div>
@@ -464,13 +466,15 @@
         </div>
     </div>
 
+    <script src="/js/i18n/messages.js?v=20260609i18n1"></script>
+    <script src="/js/portal-i18n.js?v=20260609i18n1"></script>
     <script src="/js/portal-website-menu.js?v=20260608menu3"></script>
     <script src="/js/portal-content-protection.js"></script>
     <script src="/js/portal-scrolling-announcements.js"></script>
     <script src="/js/vgmf-home.js?v=20260608menu4"></script>
     <script src="/js/portal-theme.js"></script>
     <script src="/js/vgmf-congress.js?v=20260608banner1"></script>
-    <script src="/js/public-support-chat.js?v=20260609guest1"></script>
+    <script src="/js/public-support-chat.js?v=20260609i18n1"></script>
     <script src="/js/vgmf-home-stats.js?v=20260607stats2"></script>
     <script src="/js/vgmf-marketing.js?v=20260607popup2"></script>
     <script src="/js/otp-ui.js"></script>
@@ -494,6 +498,16 @@
                 document.querySelectorAll('[data-portal-auth="signup"]').forEach((el) => {
                     el.style.display = window.__portalAuth.showSignup !== false ? '' : 'none';
                 });
+                document.querySelectorAll('[data-portal-auth="login"]').forEach((el) => {
+                    el.style.display = window.__portalAuth.showLogin !== false ? '' : 'none';
+                });
+                const footerDoctorCol = document.getElementById('footer-doctor-links');
+                if (footerDoctorCol) {
+                    const footerCol = footerDoctorCol.closest('.footer-col');
+                    const hideDoctorFooter =
+                        window.__portalAuth.showLogin === false && window.__portalAuth.showSignup === false;
+                    if (footerCol) footerCol.style.display = hideDoctorFooter ? 'none' : '';
+                }
                 const utilAuth = document.querySelector('.cg-utility-auth');
                 if (utilAuth) {
                     const showIn = utilAuth.querySelector('.cg-utility-signin');
@@ -524,6 +538,11 @@
                 }
             } catch (_) {}
         }
+        window.refreshPortalAuthUi = refreshPortalAuthUi;
+
+        document.addEventListener('portal-locale-change', function () {
+            if (typeof PortalI18n !== 'undefined') PortalI18n.apply(document);
+        });
 
         function applyWebsiteMenuVisibility() {
             const pages = (window.__portalAuth && window.__portalAuth.websiteMenuPages) || {};

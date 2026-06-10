@@ -13,6 +13,7 @@
     <link rel="stylesheet" href="/css/responsive-portals.css?v=20260608menu3">
     <link rel="stylesheet" href="/css/vgmf-portal-bright.css">
     <link rel="stylesheet" href="/css/vgmf-mobile-portal.css">
+    <link rel="stylesheet" href="/css/portal-lang.css">
     <style>
         :root {
             --doctor-primary: #0f766e;
@@ -177,13 +178,14 @@
     <div id="auth-overlay">
         <div class="doctor-auth-card" style="background:#fff;border-radius:16px;padding:32px;width:100%;max-width:420px;box-shadow:0 24px 50px rgba(15,118,110,0.2);border:1px solid #99f6e4;">
             <div data-site-logo data-logo-height="44px" style="margin-bottom:12px;"></div>
-            <h2 id="doctor-auth-title" style="color:#0f766e;margin-bottom:12px;font-size:1.35rem;">Doctor's Portal Sign In</h2>
+            <div data-portal-lang="doctor-auth-lang"></div>
+            <h2 id="doctor-auth-title" style="color:#0f766e;margin-bottom:12px;font-size:1.35rem;" data-i18n="doctor.auth.title">Doctor's Portal Sign In</h2>
             <div style="display:flex;gap:8px;margin-bottom:16px;">
-                <button type="button" id="doctor-auth-tab-login" class="btn-primary" style="flex:1;padding:10px;" onclick="DoctorAuthUi.switchDoctorAuthTab('login')">Sign in</button>
-                <button type="button" id="doctor-auth-tab-signup" class="btn-primary" style="flex:1;padding:10px;opacity:0.75;background:#64748b;" onclick="DoctorAuthUi.switchDoctorAuthTab('signup')">Create account</button>
+                <button type="button" id="doctor-auth-tab-login" class="btn-primary" style="flex:1;padding:10px;" onclick="DoctorAuthUi.switchDoctorAuthTab('login')"><span data-i18n="auth.signIn">Sign in</span></button>
+                <button type="button" id="doctor-auth-tab-signup" class="btn-primary" style="flex:1;padding:10px;opacity:0.75;background:#64748b;" onclick="DoctorAuthUi.switchDoctorAuthTab('signup')"><span data-i18n="doctor.auth.createBtn">Create account</span></button>
             </div>
             <div id="doctor-auth-login-panel">
-            <p style="color:#64748b;font-size:0.88rem;margin-bottom:14px;">Sign in with your doctor account.</p>
+            <p style="color:#64748b;font-size:0.88rem;margin-bottom:14px;" data-i18n="doctor.auth.signInHint">Sign in with your doctor account.</p>
             <form id="doctor-login-form">
                 <label style="display:block;font-size:0.82rem;font-weight:700;color:#0f766e;margin:10px 0 6px;">Email</label>
                 <input type="email" id="doctor-login-email" required autocomplete="email" style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;">
@@ -212,7 +214,7 @@
                     </div>
                 </div>
                 <p id="doctor-login-err" class="hidden" style="color:#b91c1c;font-size:0.85rem;margin-top:10px;font-weight:600;"></p>
-                <button type="submit" class="btn-primary" style="width:100%;margin-top:16px;">Sign in</button>
+                <button type="submit" class="btn-primary" style="width:100%;margin-top:16px;"><span data-i18n="auth.signIn">Sign in</span></button>
             </form>
             </div>
             <div id="doctor-auth-signup-panel" class="hidden">
@@ -261,26 +263,26 @@
                 <div class="doctor-sidebar-photo-wrap hidden" id="sidebar-profile-photo-wrap">
                     <img id="sidebar-profile-photo" class="doctor-sidebar-photo" alt="Your profile photo" src="">
                 </div>
-                <h2>Doctor's Portal</h2>
+                <h2 data-i18n="doctor.portalTitle">Doctor's Portal</h2>
                 <p>VGMF National Seminar (<span id="doctor-portal-year-label">2026</span>)</p>
             </div>
             <div class="menu-items">
-                <button type="button" class="menu-item active" data-tab="tab-dashboard"><i class="fas fa-home"></i> Dashboard</button>
-                <button type="button" class="menu-item" data-tab="tab-profile"><i class="fas fa-user-circle"></i> My Profile</button>
-                <button type="button" class="menu-item" data-tab="tab-seminars"><i class="fas fa-calendar-check"></i> Available Seminars</button>
-                <button type="button" class="menu-item" data-tab="tab-applications"><i class="fas fa-tasks"></i> Track seminar applications</button>
-                <button type="button" class="menu-item" data-tab="tab-abstract"><i class="fas fa-file-upload"></i> Case presentation</button>
-                <button type="button" class="menu-item" data-tab="tab-case-track"><i class="fas fa-route"></i> Track case applications</button>
-                <button type="button" class="menu-item" id="nav-volunteer" data-tab="tab-volunteer"><i class="fas fa-hands-helping"></i> Volunteer</button>
-                <button type="button" class="menu-item" data-tab="tab-feedback"><i class="fas fa-star"></i> Seminar feedback</button>
-                <button type="button" class="menu-item" data-tab="tab-support"><i class="fas fa-ticket-alt"></i> Support tickets</button>
-                <button type="button" class="menu-item" data-tab="tab-orders"><i class="fas fa-receipt"></i> Orders</button>
-                <button type="button" class="menu-item" data-tab="tab-receipts"><i class="fas fa-file-invoice"></i> Receipts</button>
-                <button type="button" class="menu-item hidden" id="nav-books" data-tab="tab-books"><i class="fas fa-book"></i> Book orders</button>
-                <button type="button" class="menu-item" data-tab="tab-payments"><i class="fas fa-credit-card"></i> Payments</button>
-                <button type="button" class="menu-item" data-tab="tab-ticket"><i class="fas fa-qrcode"></i> Participant tickets</button>
-                <button type="button" class="menu-item" data-tab="tab-certificate"><i class="fas fa-award"></i> Certificates</button>
-                <button type="button" class="menu-item" data-tab="tab-reset-pwd"><i class="fas fa-key"></i> Change password</button>
+                <button type="button" class="menu-item active" data-tab="tab-dashboard"><i class="fas fa-home"></i> <span data-i18n="doctor.menu.dashboard">Dashboard</span></button>
+                <button type="button" class="menu-item" data-tab="tab-profile"><i class="fas fa-user-circle"></i> <span data-i18n="doctor.menu.profile">My Profile</span></button>
+                <button type="button" class="menu-item" data-tab="tab-seminars"><i class="fas fa-calendar-check"></i> <span data-i18n="doctor.menu.seminars">Available Seminars</span></button>
+                <button type="button" class="menu-item" data-tab="tab-applications"><i class="fas fa-tasks"></i> <span data-i18n="doctor.menu.applications">Track seminar applications</span></button>
+                <button type="button" class="menu-item" data-tab="tab-abstract"><i class="fas fa-file-upload"></i> <span data-i18n="doctor.menu.case">Case presentation</span></button>
+                <button type="button" class="menu-item" data-tab="tab-case-track"><i class="fas fa-route"></i> <span data-i18n="doctor.menu.caseTrack">Track case applications</span></button>
+                <button type="button" class="menu-item" id="nav-volunteer" data-tab="tab-volunteer"><i class="fas fa-hands-helping"></i> <span data-i18n="doctor.menu.volunteer">Volunteer</span></button>
+                <button type="button" class="menu-item" data-tab="tab-feedback"><i class="fas fa-star"></i> <span data-i18n="doctor.menu.feedback">Seminar feedback</span></button>
+                <button type="button" class="menu-item" data-tab="tab-support"><i class="fas fa-ticket-alt"></i> <span data-i18n="doctor.menu.support">Support tickets</span></button>
+                <button type="button" class="menu-item" data-tab="tab-orders"><i class="fas fa-receipt"></i> <span data-i18n="doctor.menu.orders">Orders</span></button>
+                <button type="button" class="menu-item" data-tab="tab-receipts"><i class="fas fa-file-invoice"></i> <span data-i18n="doctor.menu.receipts">Receipts</span></button>
+                <button type="button" class="menu-item hidden" id="nav-books" data-tab="tab-books"><i class="fas fa-book"></i> <span data-i18n="doctor.menu.books">Book orders</span></button>
+                <button type="button" class="menu-item" data-tab="tab-payments"><i class="fas fa-credit-card"></i> <span data-i18n="doctor.menu.payments">Payments</span></button>
+                <button type="button" class="menu-item" data-tab="tab-ticket"><i class="fas fa-qrcode"></i> <span data-i18n="doctor.menu.tickets">Participant tickets</span></button>
+                <button type="button" class="menu-item" data-tab="tab-certificate"><i class="fas fa-award"></i> <span data-i18n="doctor.menu.certificates">Certificates</span></button>
+                <button type="button" class="menu-item" data-tab="tab-reset-pwd"><i class="fas fa-key"></i> <span data-i18n="doctor.menu.password">Change password</span></button>
             </div>
         </aside>
 
@@ -288,22 +290,23 @@
 
         <div class="main-content">
             <header class="top-header">
-                <button type="button" class="doctor-menu-toggle" id="doctor-menu-toggle" aria-label="Open menu"><i class="fas fa-bars"></i></button>
-                <div class="header-title">Vaidya Gogate Memorial Foundation — Doctor's Portal</div>
+                <button type="button" class="doctor-menu-toggle" id="doctor-menu-toggle" aria-label="Open menu" data-i18n-aria="cert.openMenu"><i class="fas fa-bars"></i></button>
+                <div class="header-title" data-i18n="doctor.headerTitle">Vaidya Gogate Memorial Foundation — Doctor's Portal</div>
                 <div class="user-info">
+                    <div data-portal-lang="doctor-lang-header"></div>
                     <img id="header-profile-photo" class="doctor-header-photo hidden" alt="Profile photo" src="">
                     <span class="hi-user" id="header-name">Hi, Doctor</span>
                     <span class="user-id" id="header-id">ID: —</span>
                     <span class="portal-login-time hidden" id="header-login-time"></span>
-                    <a href="/" class="header-link doctor-web-only" target="_blank"><i class="fas fa-external-link-alt"></i> Public site</a>
-                    <button type="button" class="btn-primary" id="btn-logout" style="padding:8px 16px;"><i class="fas fa-sign-out-alt"></i> Logout</button>
+                    <a href="/" class="header-link doctor-web-only" target="_blank"><i class="fas fa-external-link-alt"></i> <span data-i18n="doctor.publicSite">Public site</span></a>
+                    <button type="button" class="btn-primary" id="btn-logout" style="padding:8px 16px;"><i class="fas fa-sign-out-alt"></i> <span data-i18n="common.logout">Logout</span></button>
                 </div>
             </header>
 
-            <div class="notification-bar" id="profile-complete-banner"><i class="fas fa-info-circle"></i> Complete your profile before registering for seminars.</div>
+            <div class="notification-bar" id="profile-complete-banner"><i class="fas fa-info-circle"></i> <span data-i18n="doctor.completeProfile">Complete your profile before registering for seminars.</span></div>
 
             <div class="announcements-box">
-                <h4 style="color: #0f766e; margin-bottom: 10px;"><i class="fas fa-bullhorn"></i> Updates</h4>
+                <h4 style="color: #0f766e; margin-bottom: 10px;"><i class="fas fa-bullhorn"></i> <span data-i18n="doctor.updates">Updates</span></h4>
                 <ul id="doctor-updates-list" style="list-style-position: inside; color: #64748b; font-size: 0.9rem;">
                     <li style="color:#94a3b8;">Loading…</li>
                 </ul>
@@ -312,7 +315,7 @@
             <div class="content-area">
 
                 <div id="tab-dashboard" class="tab-pane">
-                    <h2 class="section-title">Dashboard</h2>
+                    <h2 class="section-title" data-i18n="doctor.section.dashboard">Dashboard</h2>
                     <p style="color: #64748b; margin: -10px 0 20px;">Overview of your seminar activity. Use <strong>Seminar feedback</strong> and <strong>Support tickets</strong> in the menu. Live chat is the chat button at the bottom right.</p>
                     <div class="stat-grid">
                         <div class="stat-card"><h4 id="stat-registered">—</h4><p>Registered seminars</p></div>
@@ -367,7 +370,7 @@
                     <div id="seminars-grid-container" class="seminars-grid"></div>
 
                     <div id="multi-step-form" class="card hidden">
-                        <h3 id="registration-seminar-name" style="color:#0f766e;margin-bottom:16px;">Registering for seminar</h3>
+                        <h3 id="registration-seminar-name" style="color:#0f766e;margin-bottom:16px;" data-i18n="reg.registeringFor">Registering for seminar</h3>
                         <div class="step-indicator">
                             <span class="step" id="ind-step-0">Terms</span>
                             <span class="step" id="ind-step-1">1. Personal</span>
@@ -379,7 +382,7 @@
 
                         <div id="step-0" class="form-step hidden">
                             <h4 style="color:#0f766e;margin-bottom:10px;">Terms &amp; conditions</h4>
-                            <p style="color:#64748b;font-size:0.88rem;margin-bottom:12px;">Read and accept the seminar terms before filling the registration form.</p>
+                            <p style="color:#64748b;font-size:0.88rem;margin-bottom:12px;" data-i18n="reg.termsHint">Read and accept the seminar terms before filling the registration form.</p>
                             <div id="reg-tnc-text" style="max-height:320px;overflow-y:auto;padding:16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;font-size:0.9rem;line-height:1.55;white-space:pre-wrap;margin-bottom:16px;">Loading terms…</div>
                             <div id="reg-cancel-policy-wrap" class="hidden" style="margin-bottom:16px;padding:14px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;">
                                 <p style="font-size:0.85rem;font-weight:600;color:#92400e;margin:0 0 8px;">Cancellation &amp; refund policy</p>
@@ -431,7 +434,7 @@
                                     <span id="reg-otp-status-phone" style="font-size:0.85rem;color:#64748b;"></span>
                                 </div>
                             </div>
-                            <button type="button" class="btn-primary" onclick="nextStep(2)">Next</button>
+                            <button type="button" class="btn-primary" onclick="nextStep(2)"><span data-i18n="reg.next">Next</span></button>
                             <button type="button" class="btn-primary" style="background:#64748b;margin-left:8px;" onclick="nextStep(0)">Back</button>
                         </div>
 
@@ -535,7 +538,7 @@
                             </div>
                             <label style="display:flex;align-items:center;gap:8px;margin:16px 0;"><input type="checkbox" id="tnc"> I agree to the terms and confirm the information is correct.</label>
                             <div style="display:flex;flex-wrap:wrap;gap:10px;">
-                                <button type="button" class="btn-primary" onclick="submitApplication()">Submit application</button>
+                                <button type="button" class="btn-primary" onclick="submitApplication()"><span data-i18n="reg.submit">Submit application</span></button>
                                 <button type="button" class="btn-primary" style="background:#0d9488;" onclick="saveApplicationDraft()">Save draft</button>
                                 <button type="button" class="btn-primary" onclick="downloadPdf()">Download preview PDF</button>
                                 <button type="button" class="btn-primary" style="background:#64748b;" onclick="nextStep(4)">Back</button>
@@ -666,7 +669,7 @@
                             </div>
                             <div class="form-group"><label>Subject</label><input type="text" id="ticket-subj"></div>
                             <div class="form-group"><label>Description</label><textarea id="ticket-desc" rows="4"></textarea></div>
-                            <button type="button" class="btn-primary" onclick="submitSupportTicket()">Submit ticket</button>
+                            <button type="button" class="btn-primary" onclick="submitSupportTicket()"><span data-i18n="support.submitTicket">Submit ticket</span></button>
                             <button type="button" class="btn-primary" style="background:#64748b;margin-left:8px;" onclick="document.getElementById('new-ticket-form').classList.add('hidden')">Cancel</button>
                             <p id="ticket-result" style="margin-top:15px;color:#059669;font-weight:600;"></p>
                         </div>
@@ -730,12 +733,12 @@
 
                 <div id="tab-payments" class="tab-pane hidden">
                     <h2 class="section-title">Payments</h2>
-                    <p style="color:#64748b;margin:-10px 0 16px;">Seminar registration fees are paid from <strong>Track seminar applications</strong>. Additional charges from the office appear below.</p>
+                    <p style="color:#64748b;margin:-10px 0 16px;" data-i18n="pay.sectionHint">Seminar registration fees are paid from Track seminar applications. Additional charges from the office appear below.</p>
                     <div class="card" style="margin-bottom:16px;">
                         <h3 style="color:#0f766e;margin:0 0 10px;font-size:1rem;">Additional payments</h3>
                         <div id="doctor-supplemental-payments-list"><p style="color:#64748b;">Loading…</p></div>
                     </div>
-                    <div class="card" id="make-payments-container"><p style="color:#64748b;">Open <strong>Track seminar applications</strong> to complete payment for approved registrations.</p></div>
+                    <div class="card" id="make-payments-container"><p style="color:#64748b;" data-i18n="pay.openApplications">Open Track seminar applications to complete payment for approved registrations.</p></div>
                 </div>
 
                 <div id="tab-ticket" class="tab-pane hidden">
@@ -745,8 +748,8 @@
                 </div>
 
                 <div id="tab-certificate" class="tab-pane hidden">
-                    <h2 class="section-title" style="color:#92400e;">Certificates</h2>
-                    <p style="color:#78716c;margin:-10px 0 16px;">Track check-in and approval status, then download your certificate when issued.</p>
+                    <h2 class="section-title" style="color:#92400e;" data-i18n="doctor.section.certificates">Certificates</h2>
+                    <p style="color:#78716c;margin:-10px 0 16px;" data-i18n="cert.trackIntro">Track check-in and approval status, then download your certificate when issued.</p>
                     <div class="card" style="margin-bottom:20px;border:1px solid #fde68a;background:#fffbeb;">
                         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
                             <h3 style="color:#92400e;margin:0;font-size:1rem;"><i class="fas fa-route"></i> Certificate status</h3>
@@ -755,7 +758,9 @@
                         <p style="font-size:0.88rem;color:#64748b;margin:0 0 12px;">Venue ticket scans are required before the foundation can approve your certificate. When a seminar uses <strong>entry and exit scans</strong>, both must be recorded and admin must enable your certificate — only then it appears below. A countdown shows if release is scheduled.</p>
                         <div id="doctor-cert-tracking-wrap"><p style="color:#94a3b8;text-align:center;">Loading status…</p></div>
                     </div>
-                    <h3 style="color:#92400e;margin:0 0 10px;font-size:1rem;"><i class="fas fa-award"></i> Your certificates</h3>
+                    <h3 style="color:#92400e;margin:0 0 10px;font-size:1rem;"><i class="fas fa-award"></i> <span data-i18n="cert.yourCerts">Your certificates</span></h3>
+                    <p style="font-size:0.88rem;color:#64748b;margin:0 0 12px;" data-i18n="cert.intro">Browse certificates by seminar year. After venue check-in, your participation certificate is issued automatically.</p>
+                    <div id="doctor-cert-years-nav" style="margin-bottom:14px;"></div>
                     <div id="doctor-certificates-wrap" class="card" style="border:1px solid #e8d48a;background:linear-gradient(180deg,#fffbeb 0%,#fff 50%);"><p style="color:#78716c;">Loading…</p></div>
                 </div>
                 <div id="tab-reset-pwd" class="tab-pane hidden">
@@ -881,6 +886,8 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/doctor-books.js?v=20260528livetrack"></script>
     <script src="/js/doctor-live-chat-widget.js?v=20260609bubble2"></script>
-    <script src="/js/doctor.js?v=20260609scan1"></script>
+    <script src="/js/i18n/messages.js?v=20260609i18n1"></script>
+    <script src="/js/portal-i18n.js?v=20260609i18n1"></script>
+    <script src="/js/doctor.js?v=20260609i18n1"></script>
 </body>
 </html>

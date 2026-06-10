@@ -61,6 +61,27 @@ function adminCountByStatus(items, statusKey) {
     return { total: list.length, counts };
 }
 
+function adminIstDateKey(iso) {
+    if (!iso) return '';
+    try {
+        return new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Kolkata',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        }).format(new Date(iso));
+    } catch (_) {
+        return '';
+    }
+}
+
+function adminCountApplicationsToday(items) {
+    const todayKey = adminIstDateKey(new Date().toISOString());
+    return (Array.isArray(items) ? items : []).filter(
+        (a) => adminIstDateKey(a.created_at) === todayKey
+    ).length;
+}
+
 function adminStatusLabel(value, statusList) {
     const st = String(value || '').toLowerCase();
     const found = (statusList || []).find((s) => s.value === st);
@@ -73,14 +94,21 @@ function adminRenderStatusFilterBar(opts) {
     const statuses = opts.statuses || [];
     const counts = opts.counts || {};
     const total = opts.total != null ? opts.total : 0;
+    const daily = opts.dailyCount != null ? opts.dailyCount : null;
     const active = String(opts.activeFilter || '');
     const fn = opts.onClickFn || '';
     let html =
         '<p style="margin:0 0 8px;font-size:0.82rem;color:#64748b;">Filter by status · <strong>' +
         total +
         '</strong> total application' +
-        (total === 1 ? '' : 's') +
-        '</p><div style="display:flex;flex-wrap:wrap;gap:8px;">';
+        (total === 1 ? '' : 's');
+    if (daily != null) {
+        html +=
+            ' · <strong>' +
+            daily +
+            '</strong> submitted today <span style="opacity:0.85;">(IST)</span>';
+    }
+    html += '</p><div style="display:flex;flex-wrap:wrap;gap:8px;">';
     html += adminStatusFilterChip('All', total, !active, fn, '');
     statuses.forEach((s) => {
         const n = counts[s.value] || 0;
@@ -6948,6 +6976,7 @@ function renderApplicationsTable() {
         statuses: ADMIN_REGISTRATION_STATUSES,
         counts: summary.counts,
         total: summary.total,
+        dailyCount: adminCountApplicationsToday(apps),
         activeFilter: __adminAppStatusFilter,
         onClickFn: 'adminSetApplicationStatusFilter'
     });

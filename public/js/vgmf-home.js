@@ -234,9 +234,13 @@
         if (doctorUl && Array.isArray(foot.doctorLinks) && foot.doctorLinks.length) {
             doctorUl.innerHTML = foot.doctorLinks
                 .map((l) => {
-                    const action = l.action === 'signup' ? 'openRegisterModal()' : 'openAuthModal(\'login\')';
+                    const isSignup = l.action === 'signup';
+                    const action = isSignup ? 'openRegisterModal()' : 'openAuthModal(\'login\')';
+                    const authAttr = isSignup ? 'signup' : 'login';
                     return (
-                        '<li><a href="#" onclick="' +
+                        '<li><a href="#" data-portal-auth="' +
+                        authAttr +
+                        '" onclick="' +
                         action +
                         '; return false;">' +
                         escHtml(l.label) +
@@ -244,6 +248,13 @@
                     );
                 })
                 .join('');
+        }
+        if (typeof window.refreshPortalAuthUi === 'function') {
+            window.refreshPortalAuthUi();
+        }
+        if (typeof PortalI18n !== 'undefined') {
+            PortalI18n.apply(document);
+            PortalI18n.mountLangSelects();
         }
 
         const top = cms.topBar || {};
