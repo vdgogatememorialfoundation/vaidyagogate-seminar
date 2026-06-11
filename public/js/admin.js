@@ -6094,6 +6094,7 @@ async function initAdminReportsTab() {
     await fillAdminSeminarSelect('reg-ov-seminar', false);
     initRegOverrideUntilPicker();
     await loadAdminRegistrationOverrides();
+    await loadAdminPlatformBackupConfig();
     const rs = document.getElementById('report-seminar');
     if (rs && !rs.__verifyDelegateBound) {
         rs.__verifyDelegateBound = true;
@@ -6107,6 +6108,91 @@ function downloadAdminReport(type, format) {
     if (!sid) return alert('Select a seminar');
     const fmt = format || 'xlsx';
     window.location.href = `/api/admin/reports/${sid}/${type}?format=${encodeURIComponent(fmt)}`;
+}
+
+async function loadAdminPlatformBackupConfig() {
+    const admin = getStoredAdminUser();
+    if (!admin || !admin.id) return;
+    const lastEl = document.getElementById('pb-last-run');
+    try {
+        const res = await fetch('/api/admin/platform-backup/config?actingAdminId=' + encodeURIComponent(admin.id));
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Failed to load backup config');
+        const cfg = data.config || {};
+        const en = document.getElementById('pb-enabled');
+        if (en) en.checked = !!cfg.enabled;
+        const cron = document.getElementById('pb-cron');
+        if (cron) cron.value = cfg.cron || '0 2 * * *';
+        const dest = document.getElementById('pb-destination');
+        if (dest) dest.value = cfg.destination || 'r2';
+        const folder = document.getElementById('pb-gdrive-folder');
+        if (folder) folder.value = cfg.googleDriveFolderId || '';
+        const sa = document.getElementById('pb-gdrive-sa');
+        if (sa && cfg.googleServiceAccountJson && cfg.googleServiceAccountJson !== '********') {
+            sa.value = cfg.googleServiceAccountJson;
+        }
+        if (lastEl) {
+            const lr = data.lastRun;
+            lastEl.textContent = lr && lr.finishedAt
+                ? 'Last run: ' + lr.finishedAt + (lr.ok ? ' ✓' : ' (errors)')
+                : 'No backup run recorded yet.';
+        }
+    } catch (e) {
+        if (lastEl) lastEl.textContent = e.message || 'Could not load backup settings';
+    }
+}
+
+async function saveAdminPlatformBackupConfig() {
+    const admin = getStoredAdminUser();
+    if (!admin || !admin.id) return alert('Sign in as admin');
+    const payload = {
+        actingAdminId: admin.id,
+        config: {
+            enabled: document.getElementById('pb-enabled')?.checked === true,
+            cron: (document.getElementById('pb-cron')?.value || '0 2 * * *').trim(),
+            destination: document.getElementById('pb-destination')?.value || 'r2',
+            googleDriveFolderId: (document.getElementById('pb-gdrive-folder')?.value || '').trim(),
+            googleServiceAccountJson: (document.getElementById('pb-gdrive-sa')?.value || '').trim()
+        }
+    };
+    try {
+        const res = await fetch('/api/admin/platform-backup/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Save failed');
+        alert('Backup settings saved.');
+        await loadAdminPlatformBackupConfig();
+    } catch (e) {
+        alert(e.message || 'Save failed');
+    }
+}
+
+async function runAdminPlatformBackupNow() {
+    const admin = getStoredAdminUser();
+    if (!admin || !admin.id) return alert('Sign in as admin');
+    const lastEl = document.getElementById('pb-last-run');
+    if (lastEl) lastEl.textContent = 'Running backup…';
+    try {
+        const res = await fetch('/api/admin/platform-backup/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: admin.id })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Backup failed');
+        alert(
+            data.ok
+                ? 'Backup uploaded: ' + (data.filename || '') + ' → ' + (data.destinations || []).map((d) => d.storage).join(', ')
+                : 'Backup finished with errors: ' + JSON.stringify(data.errors || [])
+        );
+        await loadAdminPlatformBackupConfig();
+    } catch (e) {
+        alert(e.message || 'Backup failed');
+        if (lastEl) lastEl.textContent = e.message;
+    }
 }
 
 function verifyDelegateReasonLabel(reason) {
@@ -8363,7 +8449,13 @@ function viewFullApplication(index) {
         : '<p class="muted">No certificate file on record.</p>';
     const st = String(a.status || '').toLowerCase();
     const dupReview = parseAppDuplicateReview(a);
+    let docReview = null;
+    try {
+        docReview = a && a.doc_review_json ? JSON.parse(a.doc_review_json) : null;
+    } catch (_) {}
+    const autoConfirmed = !!(docReview && (docReview.auto_confirmed || docReview.decision === 'auto_confirm'));
     const canVerify = st === 'submitted' || st === 'pending_approval' || st === 'waitlisted';
+    const canRejectAfterAuto = st === 'approved_pending_payment' && autoConfirmed;
     const docChecks = needsDocs
         ? `<label style="display:block;margin:6px 0;"><input type="checkbox" id="admin-verify-info"> Applicant details are correct</label>
         <label style="display:block;margin:6px 0;"><input type="checkbox" id="admin-verify-ncism"> NCISM / registration number is correct</label>
@@ -8397,7 +8489,17 @@ function viewFullApplication(index) {
         <p class="muted" style="font-size:0.85rem;">This applicant joined after registration closed. No payment yet. Offer a seat with regular seminar fee or as volunteer (₹0).</p>
         ${adminRenderApproveFeeBlockHtml(a)}
         <button type="button" class="btn-primary" style="background:#15803d;margin-top:8px;" onclick="adminPromoteFromWaitlist(${a.id})">Offer seat</button>`
-          : '<p class="muted" style="margin-top:12px;">Verification actions appear when status is Submitted, Waitlisted, or Under review.</p>';
+          : canRejectAfterAuto
+            ? `<hr style="margin:14px 0;">
+        <h4 style="margin:0 0 8px;">Auto-confirmed registration</h4>
+        <p class="muted" style="font-size:0.85rem;">This application was auto-approved for payment without manual review. You can still reject or request documents if something looks wrong.</p>
+        <div class="form-group" style="margin-top:10px;"><label>Reason</label>
+        <textarea id="admin-verify-reason" rows="2" style="width:100%;"></textarea></div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
+        <button type="button" class="btn-primary" style="background:#b45309;" onclick="adminVerifySeminarApplication(${a.id},'reject_documents')">Request document re-upload</button>
+        <button type="button" class="btn-primary" style="background:#b91c1c;" onclick="adminVerifySeminarApplication(${a.id},'reject_application')">Reject application</button>
+        </div>`
+            : '<p class="muted" style="margin-top:12px;">Verification actions appear when status is Submitted, Waitlisted, or Under review.</p>';
 
     const content = document.getElementById('admin-view-content');
     content.innerHTML = `
@@ -11079,6 +11181,8 @@ function editSeminar(index) {
     if (waitlistCh) waitlistCh.checked = Number(s.waiting_list_enabled) === 1;
     const allowEditCh = document.getElementById('seminar-allow-application-edit');
     if (allowEditCh) allowEditCh.checked = Number(s.allow_application_edit) === 1;
+    const autoConfirmCh = document.getElementById('seminar-auto-confirm-enabled');
+    if (autoConfirmCh) autoConfirmCh.checked = Number(s.auto_confirm_registration) === 1;
     document.getElementById('seminar-event-date').value = formatDt(s.event_date);
     const py = document.getElementById('seminar-portal-year');
     if (py) py.value = s.portal_year || adminPortalYear || new Date().getFullYear();
@@ -11172,6 +11276,7 @@ async function saveSeminar(e) {
         })(),
         waiting_list_enabled: document.getElementById('seminar-waitlist-enabled')?.checked === true,
         allow_application_edit: document.getElementById('seminar-allow-application-edit')?.checked === true,
+        auto_confirm_registration: document.getElementById('seminar-auto-confirm-enabled')?.checked === true,
         event_date: window.PortalDateTime
             ? window.PortalDateTime.fromDatetimeLocal(document.getElementById('seminar-event-date').value)
             : document.getElementById('seminar-event-date').value,

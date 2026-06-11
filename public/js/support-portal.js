@@ -305,9 +305,138 @@
         }
     };
 
+    function supportCaseStatusLabel(status) {
+        const s = String(status || '').toLowerCase();
+        if (s === 'draft') return 'Draft (not submitted)';
+        if (s === 'revision_required') return 'Re-upload documents required';
+        if (s === 'documents_requested') return 'Additional documents requested';
+        if (s === 'priority_invited') return 'Complete application (priority)';
+        if (s === 'judging') return 'Judging in progress';
+        if (s === 'judged') return 'Final review in progress';
+        if (s === 'under_review') return 'Under review';
+        if (s === 'approved_for_judging') return 'Approved for judging';
+        if (s === 'selected') return 'Selected / winner';
+        if (s === 'disqualified') return 'Disqualified';
+        if (s === 'cancelled') return 'Cancelled';
+        if (s === 'submitted') return 'Submitted';
+        if (s === 'rejected') return 'Rejected';
+        return s ? s.replace(/_/g, ' ') : '—';
+    }
+
+    function supportCaseFormFieldLabels() {
+        return {
+            fname: 'First name',
+            mname: 'Middle name',
+            lname: 'Last name',
+            dob: 'Date of birth',
+            email: 'Email',
+            phone: 'Phone',
+            whatsapp: 'WhatsApp',
+            category: 'Category',
+            qual: 'Qualification',
+            upload_cv: 'CV / document',
+            upload_video: 'Presentation video',
+            agree_terms: 'Terms accepted',
+            topic: 'Case topic / title'
+        };
+    }
+
+    function formatSupportCaseFormValue(key, val) {
+        if (val == null || String(val).trim() === '') return '—';
+        if (key === 'agree_terms') return val === '1' || val === 1 || val === true ? 'Yes' : 'No';
+        return String(val);
+    }
+
+    function renderSupportCaseFormTable(formData) {
+        const fd = formData && typeof formData === 'object' ? formData : {};
+        const labels = supportCaseFormFieldLabels();
+        const order = [
+            'fname',
+            'mname',
+            'lname',
+            'dob',
+            'email',
+            'phone',
+            'whatsapp',
+            'topic',
+            'category',
+            'qual',
+            'upload_cv',
+            'upload_video',
+            'agree_terms'
+        ];
+        const seen = new Set();
+        let rows = '';
+        order.forEach((key) => {
+            if (!(key in fd)) return;
+            seen.add(key);
+            rows +=
+                '<tr><td style="width:34%;font-weight:600;vertical-align:top;">' +
+                esc(labels[key] || key.replace(/_/g, ' ')) +
+                '</td><td style="white-space:pre-wrap;word-break:break-word;">' +
+                esc(formatSupportCaseFormValue(key, fd[key])) +
+                '</td></tr>';
+        });
+        Object.keys(fd).forEach((key) => {
+            if (seen.has(key)) return;
+            rows +=
+                '<tr><td style="width:34%;font-weight:600;vertical-align:top;">' +
+                esc(labels[key] || key.replace(/_/g, ' ')) +
+                '</td><td style="white-space:pre-wrap;word-break:break-word;">' +
+                esc(formatSupportCaseFormValue(key, fd[key])) +
+                '</td></tr>';
+        });
+        if (!rows) return '';
+        return '<h4 style="margin:14px 0 8px;">Application form</h4><table class="data-table"><tbody>' + rows + '</tbody></table>';
+    }
+
+    function renderSupportDocReviewHtml(docReview) {
+        if (!docReview || typeof docReview !== 'object') return '';
+        const decisionLabels = {
+            approve_for_judging: 'Approved for judging',
+            reject_documents: 'Document revision requested',
+            reject_application: 'Application rejected'
+        };
+        const decision = String(docReview.decision || '').toLowerCase();
+        const decisionLabel = decisionLabels[decision] || (decision ? decision.replace(/_/g, ' ') : '—');
+        let html =
+            '<h4 style="margin:14px 0 8px;">Document review</h4>' +
+            '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;">' +
+            '<p style="margin:0 0 8px;"><strong>Decision:</strong> ' +
+            esc(decisionLabel) +
+            '</p>';
+        if (docReview.reviewed_at) {
+            html +=
+                '<p style="margin:0 0 8px;"><strong>Reviewed:</strong> ' + esc(formatSupportWhen(docReview.reviewed_at)) + '</p>';
+        }
+        html +=
+            '<p style="margin:0 0 8px;"><strong>Applicant details OK:</strong> ' +
+            (docReview.info_ok ? 'Yes' : 'No') +
+            '</p>' +
+            '<p style="margin:0;"><strong>Files OK:</strong> ' +
+            (docReview.files_ok ? 'Yes' : 'No') +
+            '</p>';
+        if (docReview.rejection_reason) {
+            html +=
+                '<p style="margin:10px 0 0;padding-top:10px;border-top:1px solid #e2e8f0;"><strong>Note:</strong> ' +
+                esc(docReview.rejection_reason) +
+                '</p>';
+        }
+        if (docReview.requested_docs && docReview.requested_docs.length) {
+            html +=
+                '<p style="margin:8px 0 0;"><strong>Requested documents:</strong> ' +
+                esc(docReview.requested_docs.join(', ')) +
+                '</p>';
+        }
+        html += '</div>';
+        return html;
+    }
+
     function renderApplicationDetail(detail) {
         if (!detail) return '<p style="color:#64748b;">No details.</p>';
         const p = detail.participant || {};
+        const statusLabel =
+            detail.type === 'case' ? supportCaseStatusLabel(detail.status) : detail.status || '—';
         let html =
             '<div style="background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;padding:12px;margin-bottom:12px;">' +
             '<strong>' +
@@ -323,7 +452,7 @@
             '<p style="margin:0 0 10px;"><code>' +
             esc(detail.applicationNo || '—') +
             '</code> · ' +
-            supportStatusBadge(detail.status) +
+            supportStatusBadge(detail.status, statusLabel) +
             '</p>';
         if (detail.type === 'seminar') {
             html +=
@@ -364,21 +493,43 @@
                 (detail.category ? ' · ' + esc(detail.category) : '') +
                 (detail.title ? '<br><strong>Case title:</strong> ' + esc(detail.title) : '') +
                 '</p>';
+            if (detail.markingDeadline) {
+                html +=
+                    '<p style="margin:0 0 10px;font-size:0.85rem;color:#4338ca;"><strong>Judge deadline:</strong> ' +
+                    esc(formatSupportWhen(detail.markingDeadline)) +
+                    '</p>';
+            }
             if (detail.files && detail.files.length) {
-                html += '<h4 style="margin:14px 0 8px;">Uploaded files</h4><ul style="margin:0;padding-left:18px;">';
+                html += '<h4 style="margin:14px 0 8px;">Uploaded files</h4><ul style="margin:0;padding-left:0;list-style:none;">';
                 detail.files.forEach((f) => {
-                    html += '<li>' + esc(f.name || 'file') + (f.type ? ' (' + esc(f.type) + ')' : '') + '</li>';
+                    const size =
+                        f.size && Number(f.size) > 0
+                            ? ' · ' + (Number(f.size) >= 1048576 ? (Number(f.size) / 1048576).toFixed(1) + ' MB' : Math.round(Number(f.size) / 1024) + ' KB')
+                            : '';
+                    html += '<li style="margin:0 0 8px;">';
+                    if (f.id) {
+                        html +=
+                            '<button type="button" class="btn btn-primary" style="padding:4px 10px;font-size:0.8rem;" onclick="supportOpenCaseFile(' +
+                            Number(f.id) +
+                            ')"><i class="fas fa-download"></i> ' +
+                            esc(f.name || 'file') +
+                            '</button>';
+                    } else {
+                        html += esc(f.name || 'file');
+                    }
+                    if (f.status) html += ' <span style="color:#64748b;font-size:0.8rem;">(' + esc(f.status) + ')</span>';
+                    if (size) html += '<span style="color:#94a3b8;font-size:0.78rem;">' + esc(size) + '</span>';
+                    html += '</li>';
                 });
                 html += '</ul>';
             }
         }
         if (detail.docReview) {
-            html +=
-                '<h4 style="margin:14px 0 8px;">Document review</h4><pre style="background:#f8fafc;padding:10px;border-radius:6px;white-space:pre-wrap;font-size:0.8rem;">' +
-                esc(JSON.stringify(detail.docReview, null, 2)) +
-                '</pre>';
+            html += renderSupportDocReviewHtml(detail.docReview);
         }
-        if (detail.formFields && detail.formFields.length) {
+        if (detail.type === 'case' && detail.formData) {
+            html += renderSupportCaseFormTable(detail.formData);
+        } else if (detail.formFields && detail.formFields.length) {
             html += '<h4 style="margin:14px 0 8px;">Application form</h4><table class="data-table"><tbody>';
             detail.formFields.forEach((f) => {
                 const val =
@@ -394,6 +545,16 @@
         }
         return html;
     }
+
+    window.supportOpenCaseFile = async function (fileId) {
+        try {
+            const data = await api('/api/support-desk/case-files/' + encodeURIComponent(fileId) + '/access');
+            if (data && data.url) window.open(data.url, '_blank', 'noopener,noreferrer');
+            else throw new Error('No download URL returned');
+        } catch (e) {
+            alert(e.message || 'Could not open file');
+        }
+    };
 
     window.supportViewRegistration = async function (regId) {
         const modal = document.getElementById('support-app-detail-modal');
@@ -449,19 +610,38 @@
         }
     }
 
-    function supportStatusBadge(status) {
+    function supportStatusBadge(status, labelOverride) {
         const s = String(status || '').toLowerCase();
+        const label = labelOverride != null && String(labelOverride).trim() !== '' ? labelOverride : status || '—';
         let color = '#64748b';
-        if (s === 'open' || s === 'approved' || s === 'success' || s === 'paid') color = '#059669';
-        else if (s === 'in_progress' || s === 'pending' || s === 'waiting') color = '#d97706';
-        else if (s === 'closed' || s === 'resolved' || s === 'rejected') color = '#64748b';
+        if (
+            s === 'open' ||
+            s === 'approved' ||
+            s === 'success' ||
+            s === 'paid' ||
+            s === 'selected' ||
+            s === 'approved_for_judging'
+        )
+            color = '#059669';
+        else if (
+            s === 'in_progress' ||
+            s === 'pending' ||
+            s === 'waiting' ||
+            s === 'under_review' ||
+            s === 'judging' ||
+            s === 'judged' ||
+            s === 'submitted'
+        )
+            color = '#d97706';
+        else if (s === 'closed' || s === 'resolved' || s === 'rejected' || s === 'disqualified' || s === 'cancelled')
+            color = '#64748b';
         return (
             '<span style="display:inline-block;background:' +
             color +
             '22;color:' +
             color +
             ';padding:2px 8px;border-radius:999px;font-size:0.78rem;font-weight:700;">' +
-            esc(status || '—') +
+            esc(label) +
             '</span>'
         );
     }

@@ -1903,6 +1903,30 @@
                     </div>
                 </div>
                 <div class="card" style="margin-top:16px;">
+                    <h3>Daily platform backup</h3>
+                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:12px;">Exports registrations, payments, users, seminars, tickets, case submissions, support tickets, and book orders to an Excel workbook every night. Upload to <strong>Cloudflare R2</strong> (uses existing R2 keys) and/or <strong>Google Drive</strong> (service account). Terabox has no public upload API — download from R2 or Google Drive instead.</p>
+                    <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-weight:600;">
+                        <input type="checkbox" id="pb-enabled"> Enable daily backup
+                    </label>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:720px;">
+                        <div><label>Cron (IST server time)</label><input type="text" id="pb-cron" value="0 2 * * *" style="width:100%;padding:8px;" placeholder="0 2 * * *"></div>
+                        <div><label>Destination</label>
+                            <select id="pb-destination" style="width:100%;padding:8px;">
+                                <option value="r2">Cloudflare R2 only</option>
+                                <option value="google_drive">Google Drive only</option>
+                                <option value="both">R2 + Google Drive</option>
+                            </select>
+                        </div>
+                        <div style="grid-column:1/-1;"><label>Google Drive folder ID</label><input type="text" id="pb-gdrive-folder" style="width:100%;padding:8px;" placeholder="Optional — shared folder ID"></div>
+                        <div style="grid-column:1/-1;"><label>Google service account JSON</label><textarea id="pb-gdrive-sa" rows="4" style="width:100%;padding:8px;font-family:monospace;font-size:0.78rem;" placeholder='Paste {"type":"service_account",...}'></textarea></div>
+                    </div>
+                    <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+                        <button type="button" class="btn-primary" onclick="saveAdminPlatformBackupConfig()">Save backup settings</button>
+                        <button type="button" class="btn-primary" style="background:#334155;" onclick="runAdminPlatformBackupNow()">Run backup now</button>
+                        <span id="pb-last-run" class="muted" style="font-size:0.85rem;"></span>
+                    </div>
+                </div>
+                <div class="card" style="margin-top:16px;">
                     <h3>Per-user registration override</h3>
                     <p style="color:#64748b;font-size:0.88rem;">Allow one doctor to register after the public deadline. Set a personal <strong>register-by</strong> date and time — if they miss it, they cannot register or attend.</p>
                     <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin:12px 0;">
@@ -2697,6 +2721,13 @@
                 </div>
                 <div style="background:#f0fdf4;padding:14px;border:1px solid #bbf7d0;border-radius:10px;">
                     <label style="display:flex;align-items:flex-start;gap:8px;font-weight:600;color:#166534;">
+                        <input type="checkbox" id="seminar-auto-confirm-enabled">
+                        Auto-confirm registrations (skip manual review)
+                    </label>
+                    <p style="font-size:0.82rem;color:#64748b;margin:8px 0 0 26px;">When enabled, applications are approved for payment immediately after submit. Admin can still reject later from Applications. When disabled, the normal document review workflow applies.</p>
+                </div>
+                <div style="background:#f0fdf4;padding:14px;border:1px solid #bbf7d0;border-radius:10px;">
+                    <label style="display:flex;align-items:flex-start;gap:8px;font-weight:600;color:#166534;">
                         <input type="checkbox" id="seminar-prereg-enabled" onchange="syncSeminarPreregUi()">
                         Pre-registration (early interest window)
                     </label>
@@ -2974,6 +3005,6 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260608menu2"></script>
-    <script src="/js/admin.js?v=20260610books1"></script>
+    <script src="/js/admin.js?v=20260608autoconf1"></script>
 </body>
 </html>

@@ -87,6 +87,8 @@ const certRender = require('./lib/certificate-render');
 const certTemplateCfg = require('./lib/certificate-template-config');
 const certVerify = require('./lib/certificate-verify');
 const docVerify = require('./lib/application-document-verify');
+const seminarAutoConfirm = require('./lib/seminar-auto-confirm');
+const platformDailyBackup = require('./lib/platform-daily-backup');
 const waitingList = require('./lib/waiting-list');
 const seminarPurge = require('./lib/seminar-purge');
 const supplementalPayments = require('./lib/supplemental-payments');
@@ -1166,6 +1168,9 @@ function ensurePortalSchema(next) {
                                             ignoreSchemaMigrationErr(h7wl);
                                             db.run(`ALTER TABLE seminars ADD COLUMN allow_application_edit INTEGER DEFAULT 0`, (h7ae) => {
                                                 ignoreSchemaMigrationErr(h7ae);
+                                            db.run(`ALTER TABLE seminars ADD COLUMN auto_confirm_registration INTEGER DEFAULT 0`, (h7ac) => {
+                                                ignoreSchemaMigrationErr(h7ac);
+                                            });
                                             });
                                         });
                                             ticketScanEvents.ensureTicketScanEventsTable(db, () => {
@@ -5146,7 +5151,7 @@ app.post('/api/applications/submit', withCertificateUpload, (req, res) => {
         }
 
         db.get(
-            `SELECT registration_start, registration_end, otp_on_application, otp_on_step1, otp_on_submit, title, waiting_list_enabled, price
+            `SELECT registration_start, registration_end, otp_on_application, otp_on_step1, otp_on_submit, title, waiting_list_enabled, price, auto_confirm_registration
              FROM seminars WHERE id = ? AND is_active = 1`,
             [seminarId],
             (err2, sem) => {
@@ -5340,39 +5345,45 @@ app.post('/api/applications/submit', withCertificateUpload, (req, res) => {
                                     [userId],
                                     (uerr, urow) => {
                                         const uname = urow ? `${urow.first_name || ''} ${urow.last_name || ''}`.trim() : '';
-                                        if (!isWaitlistSubmit) {
-                                            enqueueApplicationSubmitted(db, {
-                                                userId,
-                                                seminarId,
-                                                registrationId: newId
-                                            });
-                                        } else {
-                                            notifEngine.notify(db, 'WAITLIST_JOINED', {
-                                                userId,
-                                                seminarId,
-                                                registrationId: newId,
-                                                immediate: true,
-                                                vars: {
-                                                    application_no: applicationNo,
-                                                    seminar_name: seminarTitle,
-                                                    full_name: uname
-                                                }
-                                            });
-                                        }
+                                        const autoConfirmOn =
+                                            !isWaitlistSubmit && seminarAutoConfirm.isAutoConfirmEnabled(sem);
+                                        const runPostSubmit = () => {
+                                            if (isWaitlistSubmit) {
+                                                notifEngine.notify(db, 'WAITLIST_JOINED', {
+                                                    userId,
+                                                    seminarId,
+                                                    registrationId: newId,
+                                                    immediate: true,
+                                                    vars: {
+                                                        application_no: applicationNo,
+                                                        seminar_name: seminarTitle,
+                                                        full_name: uname
+                                                    }
+                                                });
+                                            } else if (!autoConfirmOn) {
+                                                enqueueApplicationSubmitted(db, {
+                                                    userId,
+                                                    seminarId,
+                                                    registrationId: newId
+                                                });
+                                            }
+                                        };
                                         activityLog.logFromRequest(db, req, {
                                             user_id: userId,
                                             seminar_id: seminarId,
                                             action: 'application.submit',
                                             resource_type: 'registration',
                                             resource_id: applicationNo,
-                                            meta: { applicationId: newId }
+                                            meta: { applicationId: newId, autoConfirm: autoConfirmOn }
                                         });
+                                        let submitExtra = {};
                                         const finishResponse = (extra) => {
                                             res.json({
                                                 success: true,
                                                 applicationId: newId,
                                                 applicationNo,
                                                 waitlisted: isWaitlistSubmit,
+                                                ...submitExtra,
                                                 ...(extra || {})
                                             });
                                         };
@@ -5403,11 +5414,39 @@ app.post('/api/applications/submit', withCertificateUpload, (req, res) => {
                                                 }
                                             );
                                         };
-                                        if (!otpTokensToConsume.length) return afterVolunteerTicket();
-                                        otpLib.consumeVerificationTokens(db, otpTokensToConsume, (cErr) => {
-                                            if (cErr) console.warn('[otp] consume after submit:', cErr.message);
-                                            afterVolunteerTicket();
-                                        });
+                                        const proceedAfterSubmit = () => {
+                                            runPostSubmit();
+                                            if (!otpTokensToConsume.length) return afterVolunteerTicket();
+                                            otpLib.consumeVerificationTokens(db, otpTokensToConsume, (cErr) => {
+                                                if (cErr) console.warn('[otp] consume after submit:', cErr.message);
+                                                afterVolunteerTicket();
+                                            });
+                                        };
+                                        if (autoConfirmOn) {
+                                            return seminarAutoConfirm.autoConfirmRegistration(
+                                                db,
+                                                { portalTracking, notifEngine, getOrCreatePendingOrder },
+                                                {
+                                                    registrationId: newId,
+                                                    userId,
+                                                    seminarId,
+                                                    applicationNo,
+                                                    seminarPrice: sem.price
+                                                },
+                                                (acErr, acRes) => {
+                                                    if (acErr) console.warn('[auto-confirm]', acErr.message);
+                                                    if (acRes && acRes.ok) {
+                                                        submitExtra = {
+                                                            autoConfirmed: true,
+                                                            status: 'approved_pending_payment',
+                                                            message: 'Application confirmed — you can pay now.'
+                                                        };
+                                                    }
+                                                    proceedAfterSubmit();
+                                                }
+                                            );
+                                        }
+                                        proceedAfterSubmit();
                                     }
                                 );
                             };
@@ -7376,7 +7415,8 @@ app.post('/api/admin/seminars', (req, res) => {
         preregistration_start,
         preregistration_end,
         waiting_list_enabled,
-        allow_application_edit
+        allow_application_edit,
+        auto_confirm_registration
     } = req.body;
     const certScansReq = certVerify.normalizeCertScansRequired(cert_scans_required);
     const rfj = registration_form_json != null && String(registration_form_json).trim() !== '' ? String(registration_form_json) : null;
@@ -7400,6 +7440,10 @@ app.post('/api/admin/seminars', (req, res) => {
         waiting_list_enabled === true || waiting_list_enabled === 1 || waiting_list_enabled === '1' ? 1 : 0;
     const allowAppEdit =
         allow_application_edit === true || allow_application_edit === 1 || allow_application_edit === '1' ? 1 : 0;
+    const autoConfirmReg =
+        auto_confirm_registration === true || auto_confirm_registration === 1 || auto_confirm_registration === '1'
+            ? 1
+            : 0;
     const regStart = seminarDt.normalizeSeminarDateTimeForStorage(registration_start);
     const regEnd = seminarDt.normalizeSeminarRegistrationEndForStorage(registration_end);
     const eventDt = seminarDt.normalizeSeminarDateTimeForStorage(event_date);
@@ -7410,8 +7454,8 @@ app.post('/api/admin/seminars', (req, res) => {
         const portalYear =
             Number.isInteger(bodyYear) && bodyYear > 2000 ? bodyYear : defaultYear;
         db.run(
-            `INSERT INTO seminars (title, description, registration_start, registration_end, event_date, capacity, price, checkin_enabled, checkin_date, location_url, terms_conditions, hero_image_path, flyer_path, gallery_paths, registration_form_json, cancellation_policy_json, whatsapp_group_url, otp_on_application, otp_on_step1, otp_on_submit, public_list_enabled, cert_scans_required, portal_year, is_active, show_seats_public, preregistration_enabled, preregistration_start, preregistration_end, waiting_list_enabled, allow_application_edit) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO seminars (title, description, registration_start, registration_end, event_date, capacity, price, checkin_enabled, checkin_date, location_url, terms_conditions, hero_image_path, flyer_path, gallery_paths, registration_form_json, cancellation_policy_json, whatsapp_group_url, otp_on_application, otp_on_step1, otp_on_submit, public_list_enabled, cert_scans_required, portal_year, is_active, show_seats_public, preregistration_enabled, preregistration_start, preregistration_end, waiting_list_enabled, allow_application_edit, auto_confirm_registration) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 title,
                 description,
@@ -7442,7 +7486,8 @@ app.post('/api/admin/seminars', (req, res) => {
                 preregStart,
                 preregEnd,
                 waitListEnabled,
-                allowAppEdit
+                allowAppEdit,
+                autoConfirmReg
             ],
             function (err) {
             if (err) return res.status(500).json({ error: err.message });
@@ -7488,7 +7533,8 @@ app.put('/api/admin/seminars/:id', (req, res) => {
         preregistration_start,
         preregistration_end,
         waiting_list_enabled,
-        allow_application_edit
+        allow_application_edit,
+        auto_confirm_registration
     } = req.body;
     const certScansReq = certVerify.normalizeCertScansRequired(cert_scans_required);
     const rfj = registration_form_json != null && String(registration_form_json).trim() !== '' ? String(registration_form_json) : null;
@@ -7511,6 +7557,10 @@ app.put('/api/admin/seminars/:id', (req, res) => {
         waiting_list_enabled === true || waiting_list_enabled === 1 || waiting_list_enabled === '1' ? 1 : 0;
     const allowAppEdit =
         allow_application_edit === true || allow_application_edit === 1 || allow_application_edit === '1' ? 1 : 0;
+    const autoConfirmReg =
+        auto_confirm_registration === true || auto_confirm_registration === 1 || auto_confirm_registration === '1'
+            ? 1
+            : 0;
     const py = portal_year != null ? parseInt(portal_year, 10) : null;
     const regStart = seminarDt.normalizeSeminarDateTimeForStorage(registration_start);
     const regEnd = seminarDt.normalizeSeminarRegistrationEndForStorage(registration_end);
@@ -7521,7 +7571,7 @@ app.put('/api/admin/seminars/:id', (req, res) => {
         if (ePy) return res.status(500).json({ error: ePy.message });
         const finalPortalYear = Number.isInteger(py) && py > 2000 ? py : defaultYear;
         db.run(
-            `UPDATE seminars SET title=?, description=?, registration_start=?, registration_end=?, event_date=?, capacity=?, price=?, checkin_enabled=?, checkin_date=?, is_active=?, location_url=?, terms_conditions=?, hero_image_path=?, flyer_path=?, gallery_paths=?, registration_form_json=?, cancellation_policy_json=?, whatsapp_group_url=?, otp_on_application=?, otp_on_step1=?, otp_on_submit=?, public_list_enabled=?, cert_scans_required=?, portal_year=?, show_seats_public=?, preregistration_enabled=?, preregistration_start=?, preregistration_end=?, waiting_list_enabled=?, allow_application_edit=? WHERE id=?`,
+            `UPDATE seminars SET title=?, description=?, registration_start=?, registration_end=?, event_date=?, capacity=?, price=?, checkin_enabled=?, checkin_date=?, is_active=?, location_url=?, terms_conditions=?, hero_image_path=?, flyer_path=?, gallery_paths=?, registration_form_json=?, cancellation_policy_json=?, whatsapp_group_url=?, otp_on_application=?, otp_on_step1=?, otp_on_submit=?, public_list_enabled=?, cert_scans_required=?, portal_year=?, show_seats_public=?, preregistration_enabled=?, preregistration_start=?, preregistration_end=?, waiting_list_enabled=?, allow_application_edit=?, auto_confirm_registration=? WHERE id=?`,
             [
                 title,
                 description,
@@ -7553,6 +7603,7 @@ app.put('/api/admin/seminars/:id', (req, res) => {
                 preregEnd,
                 waitListEnabled,
                 allowAppEdit,
+                autoConfirmReg,
                 req.params.id
             ],
             function (err) {
@@ -8081,34 +8132,65 @@ app.post('/api/applications/:applicationId/resubmit-documents', withApplicationD
                 }
                 saveAdditionalDoc(() => {
                     const saveResubmit = (mergedStored) => {
-                        db.run(
-                            `UPDATE registrations SET form_data = ?, status = 'pending_approval', doc_review_json = NULL WHERE id = ?`,
-                            [JSON.stringify(mergedStored), appId],
-                            (e2) => {
-                                if (e2) return res.status(500).json({ error: e2.message });
-                                portalTracking.logRegistrationEvent(
-                                    db,
-                                    appId,
-                                    'pending_approval',
-                                    'Documents resubmitted',
-                                    resubmitSt === 'documents_requested'
-                                        ? 'Additional verification documents received — under review again.'
-                                        : 'Updated certificate/NCISM received — under review again.',
-                                    () => {}
-                                );
-                                notifEngine.notify(db, 'APPLICATION_UNDER_REVIEW', {
-                                    userId: row.user_id,
-                                    seminarId: row.seminar_id,
-                                    registrationId: appId,
-                                    vars: { application_no: row.application_no || '' }
-                                });
-                                res.json({
-                                    success: true,
-                                    message:
-                                        'Documents resubmitted on application ' +
-                                        (row.application_no || appId) +
-                                        '. Admin will review again.'
-                                });
+                        db.get(
+                            `SELECT auto_confirm_registration, price FROM seminars WHERE id = ?`,
+                            [row.seminar_id],
+                            (eSem, semRow) => {
+                                if (eSem) return res.status(500).json({ error: eSem.message });
+                                const autoConfirmOn = seminarAutoConfirm.isAutoConfirmEnabled(semRow);
+                                const afterResubmitSaved = () => {
+                                    const msg = autoConfirmOn
+                                        ? 'Documents resubmitted on application ' +
+                                          (row.application_no || appId) +
+                                          '. You can proceed to payment.'
+                                        : 'Documents resubmitted on application ' +
+                                          (row.application_no || appId) +
+                                          '. Admin will review again.';
+                                    res.json({ success: true, message: msg, autoConfirmed: autoConfirmOn });
+                                };
+                                const runResubmitUpdate = (newStatus) => {
+                                    db.run(
+                                        `UPDATE registrations SET form_data = ?, status = ?, doc_review_json = NULL WHERE id = ?`,
+                                        [JSON.stringify(mergedStored), newStatus, appId],
+                                        (e2) => {
+                                            if (e2) return res.status(500).json({ error: e2.message });
+                                            portalTracking.logRegistrationEvent(
+                                                db,
+                                                appId,
+                                                autoConfirmOn ? 'approved' : 'pending_approval',
+                                                autoConfirmOn ? 'Auto-confirmed after resubmit' : 'Documents resubmitted',
+                                                autoConfirmOn
+                                                    ? 'Updated documents received — approved for payment automatically.'
+                                                    : resubmitSt === 'documents_requested'
+                                                      ? 'Additional verification documents received — under review again.'
+                                                      : 'Updated certificate/NCISM received — under review again.',
+                                                () => {}
+                                            );
+                                            if (autoConfirmOn) {
+                                                return seminarAutoConfirm.autoConfirmRegistration(
+                                                    db,
+                                                    { portalTracking, notifEngine, getOrCreatePendingOrder },
+                                                    {
+                                                        registrationId: appId,
+                                                        userId: row.user_id,
+                                                        seminarId: row.seminar_id,
+                                                        applicationNo: row.application_no,
+                                                        seminarPrice: semRow && semRow.price
+                                                    },
+                                                    () => afterResubmitSaved()
+                                                );
+                                            }
+                                            notifEngine.notify(db, 'APPLICATION_UNDER_REVIEW', {
+                                                userId: row.user_id,
+                                                seminarId: row.seminar_id,
+                                                registrationId: appId,
+                                                vars: { application_no: row.application_no || '' }
+                                            });
+                                            afterResubmitSaved();
+                                        }
+                                    );
+                                };
+                                runResubmitUpdate(autoConfirmOn ? 'submitted' : 'pending_approval');
                             }
                         );
                     };
@@ -9548,6 +9630,7 @@ app.post('/api/admin/support-ticket-config', (req, res) => {
 });
 
 require('./lib/support-desk-admin-routes').registerSupportDeskAdminRoutes(app, db, assertAdminPortalActor);
+platformDailyBackup.registerPlatformBackupRoutes(app, db, assertAdminPortalActor);
 
 app.post('/api/admin/pending-registration-reminder-config', (req, res) => {
     const { actingAdminId, config } = req.body || {};
