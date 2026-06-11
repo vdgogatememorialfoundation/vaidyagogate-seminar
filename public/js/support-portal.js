@@ -1039,9 +1039,22 @@
         } catch (_) {}
     };
 
+    function bindLiveSessionClicks(root) {
+        if (!root || root.__liveClickBound) return;
+        root.__liveClickBound = true;
+        root.addEventListener('click', (ev) => {
+            const btn = ev.target.closest('[data-live-session-id]');
+            if (!btn) return;
+            const sid = parseInt(btn.getAttribute('data-live-session-id'), 10);
+            if (!Number.isInteger(sid) || sid < 1) return;
+            supportOpenLiveSession(sid);
+        });
+    }
+
     window.supportLoadLiveSessions = async function () {
         const root = document.getElementById('support-live-root');
         if (!root) return;
+        bindLiveSessionClicks(root);
         try {
             const rows = await api('/api/support-desk/live/sessions?status=waiting,active');
             const waiting = rows.filter((r) => r.status === 'waiting').length;
@@ -1067,6 +1080,7 @@
                             ? esc(s.agent_first_name + ' ' + (s.agent_last_name || ''))
                             : '—';
                         const ref = esc(s.chatRef || '—');
+                        const sid = Number(s.id);
                         return (
                             '<tr><td><strong>' +
                             ref +
@@ -1078,11 +1092,9 @@
                             esc(s.status) +
                             '</td><td>' +
                             agent +
-                            '</td><td><button type="button" class="btn btn-primary" style="padding:6px 10px;font-size:0.8rem;" onclick="supportOpenLiveSession(' +
-                            s.id +
-                            ',' +
-                            JSON.stringify(s.chatRef || '') +
-                            ')">' +
+                            '</td><td><button type="button" class="btn btn-primary support-live-claim-btn" data-live-session-id="' +
+                            sid +
+                            '" style="padding:6px 10px;font-size:0.8rem;">' +
                             (s.status === 'waiting' ? 'Claim' : 'Open') +
                             '</button></td></tr>'
                         );
@@ -1095,20 +1107,30 @@
     };
 
     window.supportOpenLiveSession = async function (sessionId, chatRef) {
-        currentLiveSessionId = sessionId;
+        const sid = parseInt(sessionId, 10);
+        if (!Number.isInteger(sid) || sid < 1) return;
+        currentLiveSessionId = sid;
         currentLiveChatRef = chatRef || '';
         liveMsgSince = 0;
         const thread = document.getElementById('support-live-thread');
         if (thread) thread.innerHTML = '';
-        document.getElementById('support-live-chat-panel').classList.remove('hidden');
-        const apiId = encodeURIComponent(currentLiveChatRef || String(sessionId));
+        const panel = document.getElementById('support-live-chat-panel');
+        if (panel) panel.classList.remove('hidden');
+        const apiId = encodeURIComponent(String(sid));
+        let claimErr = '';
         try {
             await api('/api/support-desk/live/' + apiId + '/claim', { method: 'POST', body: {} });
-        } catch (_) {}
+        } catch (e) {
+            claimErr = e.message || 'Could not claim session';
+        }
         try {
             const session = await api('/api/support-desk/live/' + apiId);
             currentLiveChatRef = session.chatRef || currentLiveChatRef;
             updateLiveSessionActions(session);
+            if (claimErr && session.status === 'waiting' && !session.agentName) {
+                alert(claimErr);
+                return;
+            }
             const ref = session.chatRef || 'Live chat';
             document.getElementById('support-live-chat-title').textContent = ref;
             const meta = [];
