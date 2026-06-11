@@ -89,6 +89,7 @@ const certVerify = require('./lib/certificate-verify');
 const docVerify = require('./lib/application-document-verify');
 const seminarAutoConfirm = require('./lib/seminar-auto-confirm');
 const platformDailyBackup = require('./lib/platform-daily-backup');
+const renderKeepalive = require('./lib/render-keepalive');
 const waitingList = require('./lib/waiting-list');
 const seminarPurge = require('./lib/seminar-purge');
 const supplementalPayments = require('./lib/supplemental-payments');
@@ -13705,6 +13706,7 @@ if (require.main === module) {
             app.listen(PORT, () => {
                 console.log(`Server is running on http://localhost:${PORT}`);
                 console.log('[routes] Case presentation APIs: /api/admin/case/programs, /api/case/programs');
+                renderKeepalive.startRenderKeepalive();
             });
         });
     });
