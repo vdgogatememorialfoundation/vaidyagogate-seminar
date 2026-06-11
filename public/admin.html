@@ -1917,8 +1917,9 @@
                                 <option value="both">R2 + Google Drive</option>
                             </select>
                         </div>
-                        <div style="grid-column:1/-1;"><label>Google Drive folder ID</label><input type="text" id="pb-gdrive-folder" style="width:100%;padding:8px;" placeholder="Optional — shared folder ID"></div>
-                        <div style="grid-column:1/-1;"><label>Google service account JSON</label><textarea id="pb-gdrive-sa" rows="4" style="width:100%;padding:8px;font-family:monospace;font-size:0.78rem;" placeholder='Paste {"type":"service_account",...}'></textarea></div>
+                        <div style="grid-column:1/-1;"><label>Google Drive folder ID <span style="font-weight:400;color:#64748b;">(required for Drive)</span></label><input type="text" id="pb-gdrive-folder" style="width:100%;padding:8px;" placeholder="From folder URL: drive.google.com/drive/folders/FOLDER_ID"></div>
+                        <div style="grid-column:1/-1;"><label>Google service account JSON</label><textarea id="pb-gdrive-sa" rows="4" style="width:100%;padding:8px;font-family:monospace;font-size:0.78rem;" placeholder='Paste {"type":"service_account",...}'></textarea>
+                        <p style="font-size:0.8rem;color:#64748b;margin:8px 0 0;line-height:1.45;">Setup: Google Cloud → enable <strong>Google Drive API</strong> → create service account → download JSON. In Google Drive, create a folder → Share → add the service account <code>client_email</code> as <strong>Editor</strong> → paste the folder ID above. Service accounts cannot upload to their own Drive (403 without a shared folder).</p></div>
                     </div>
                     <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
                         <button type="button" class="btn-primary" onclick="saveAdminPlatformBackupConfig()">Save backup settings</button>

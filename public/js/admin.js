@@ -6133,9 +6133,15 @@ async function loadAdminPlatformBackupConfig() {
         }
         if (lastEl) {
             const lr = data.lastRun;
-            lastEl.textContent = lr && lr.finishedAt
-                ? 'Last run: ' + lr.finishedAt + (lr.ok ? ' ✓' : ' (errors)')
-                : 'No backup run recorded yet.';
+            if (!lr || !lr.finishedAt) {
+                lastEl.textContent = 'No backup run recorded yet.';
+            } else {
+                let txt = 'Last run: ' + lr.finishedAt + (lr.ok ? ' ✓' : ' (errors)');
+                if (lr.errors && lr.errors.length) {
+                    txt += ' — ' + lr.errors.map((e) => (e.destination || 'error') + ': ' + (e.error || '')).join('; ');
+                }
+                lastEl.textContent = txt;
+            }
         }
     } catch (e) {
         if (lastEl) lastEl.textContent = e.message || 'Could not load backup settings';
@@ -6183,11 +6189,19 @@ async function runAdminPlatformBackupNow() {
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || 'Backup failed');
-        alert(
-            data.ok
-                ? 'Backup uploaded: ' + (data.filename || '') + ' → ' + (data.destinations || []).map((d) => d.storage).join(', ')
-                : 'Backup finished with errors: ' + JSON.stringify(data.errors || [])
-        );
+        if (data.ok) {
+            alert(
+                'Backup uploaded: ' +
+                    (data.filename || '') +
+                    ' → ' +
+                    (data.destinations || []).map((d) => d.storage).join(', ')
+            );
+        } else {
+            const errTxt = (data.errors || [])
+                .map((e) => (e.destination || 'error') + ': ' + (e.error || 'unknown'))
+                .join('\n\n');
+            alert('Backup finished with errors:\n\n' + (errTxt || JSON.stringify(data.errors || [])));
+        }
         await loadAdminPlatformBackupConfig();
     } catch (e) {
         alert(e.message || 'Backup failed');
