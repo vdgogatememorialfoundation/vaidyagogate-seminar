@@ -6090,6 +6090,16 @@ async function loadAdminSeminarAnalytics() {
 let __adminVerifyDelegateCache = { listed: [], missingPaid: [] };
 
 async function initAdminReportsTab() {
+    const oauthParams = new URLSearchParams(window.location.search);
+    if (oauthParams.get('backup_oauth') === 'ok') {
+        alert('Google Drive connected successfully. Set your backup folder ID, save, then run backup.');
+        window.history.replaceState({}, '', window.location.pathname + '#tab-reports');
+        switchTab('tab-reports');
+    } else if (oauthParams.get('backup_oauth_error')) {
+        alert('Google Drive connect failed: ' + decodeURIComponent(oauthParams.get('backup_oauth_error')));
+        window.history.replaceState({}, '', window.location.pathname + '#tab-reports');
+        switchTab('tab-reports');
+    }
     await fillAdminSeminarSelect('report-seminar', false);
     await fillAdminSeminarSelect('reg-ov-seminar', false);
     initRegOverrideUntilPicker();
@@ -6110,6 +6120,14 @@ function downloadAdminReport(type, format) {
     window.location.href = `/api/admin/reports/${sid}/${type}?format=${encodeURIComponent(fmt)}`;
 }
 
+function togglePlatformBackupDriveAuthUi() {
+    const mode = document.getElementById('pb-gdrive-auth-mode')?.value || 'oauth';
+    const oauthPanel = document.getElementById('pb-gdrive-oauth-panel');
+    const saPanel = document.getElementById('pb-gdrive-sa-panel');
+    if (oauthPanel) oauthPanel.style.display = mode === 'oauth' ? '' : 'none';
+    if (saPanel) saPanel.style.display = mode === 'service_account' ? '' : 'none';
+}
+
 async function loadAdminPlatformBackupConfig() {
     const admin = getStoredAdminUser();
     if (!admin || !admin.id) return;
@@ -6127,12 +6145,40 @@ async function loadAdminPlatformBackupConfig() {
         if (dest) dest.value = cfg.destination || 'r2';
         const folder = document.getElementById('pb-gdrive-folder');
         if (folder) folder.value = cfg.googleDriveFolderId || '';
-        const imp = document.getElementById('pb-gdrive-impersonate');
-        if (imp) imp.value = cfg.googleDriveImpersonateEmail || '';
+        const authMode = document.getElementById('pb-gdrive-auth-mode');
+        if (authMode) authMode.value = cfg.googleDriveAuthMode === 'service_account' ? 'service_account' : 'oauth';
+        const oauthClientId = document.getElementById('pb-gdrive-oauth-client-id');
+        if (oauthClientId) oauthClientId.value = cfg.googleOAuthClientId || '';
+        const oauthSecret = document.getElementById('pb-gdrive-oauth-client-secret');
+        if (oauthSecret && cfg.googleOAuthClientSecret && cfg.googleOAuthClientSecret !== '********') {
+            oauthSecret.value = cfg.googleOAuthClientSecret;
+        }
         const sa = document.getElementById('pb-gdrive-sa');
         if (sa && cfg.googleServiceAccountJson && cfg.googleServiceAccountJson !== '********') {
             sa.value = cfg.googleServiceAccountJson;
         }
+        const oauthStatus = document.getElementById('pb-gdrive-oauth-status');
+        if (oauthStatus) {
+            if (data.googleDriveConnected) {
+                oauthStatus.style.color = '#059669';
+                oauthStatus.textContent =
+                    'Connected' + (cfg.googleOAuthConnectedEmail ? ' as ' + cfg.googleOAuthConnectedEmail : '') + ' ✓';
+            } else if (data.googleOAuthConfigured) {
+                oauthStatus.style.color = '#92400e';
+                oauthStatus.textContent = 'OAuth client configured on server — click Connect Google Drive';
+            } else {
+                oauthStatus.style.color = '#64748b';
+                oauthStatus.textContent = 'Not connected — add OAuth client ID/secret or set env vars on server';
+            }
+        }
+        const redirectHint = document.getElementById('pb-gdrive-oauth-redirect-hint');
+        if (redirectHint && data.googleOAuthRedirectUri) {
+            redirectHint.innerHTML =
+                'OAuth redirect URI (add in Google Cloud Console): <code style="word-break:break-all;">' +
+                data.googleOAuthRedirectUri +
+                '</code>';
+        }
+        togglePlatformBackupDriveAuthUi();
         if (lastEl) {
             const lr = data.lastRun;
             if (!lr || !lr.finishedAt) {
@@ -6150,17 +6196,49 @@ async function loadAdminPlatformBackupConfig() {
     }
 }
 
-async function saveAdminPlatformBackupConfig() {
+function connectPlatformBackupGoogleDrive() {
     const admin = getStoredAdminUser();
     if (!admin || !admin.id) return alert('Sign in as admin');
+    saveAdminPlatformBackupConfig(true).then(() => {
+        window.location.href =
+            '/api/admin/platform-backup/google-oauth/start?actingAdminId=' + encodeURIComponent(admin.id);
+    });
+}
+
+async function disconnectPlatformBackupGoogleDrive() {
+    const admin = getStoredAdminUser();
+    if (!admin || !admin.id) return alert('Sign in as admin');
+    if (!confirm('Disconnect Google Drive from daily backup?')) return;
+    try {
+        const res = await fetch('/api/admin/platform-backup/google-oauth/disconnect', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: admin.id })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Disconnect failed');
+        await loadAdminPlatformBackupConfig();
+    } catch (e) {
+        alert(e.message || 'Disconnect failed');
+    }
+}
+
+async function saveAdminPlatformBackupConfig(silent) {
+    const admin = getStoredAdminUser();
+    if (!admin || !admin.id) {
+        if (!silent) alert('Sign in as admin');
+        return;
+    }
     const payload = {
         actingAdminId: admin.id,
         config: {
             enabled: document.getElementById('pb-enabled')?.checked === true,
             cron: (document.getElementById('pb-cron')?.value || '0 2 * * *').trim(),
             destination: document.getElementById('pb-destination')?.value || 'r2',
+            googleDriveAuthMode: document.getElementById('pb-gdrive-auth-mode')?.value || 'oauth',
             googleDriveFolderId: (document.getElementById('pb-gdrive-folder')?.value || '').trim(),
-            googleDriveImpersonateEmail: (document.getElementById('pb-gdrive-impersonate')?.value || '').trim(),
+            googleOAuthClientId: (document.getElementById('pb-gdrive-oauth-client-id')?.value || '').trim(),
+            googleOAuthClientSecret: (document.getElementById('pb-gdrive-oauth-client-secret')?.value || '').trim(),
             googleServiceAccountJson: (document.getElementById('pb-gdrive-sa')?.value || '').trim()
         }
     };
@@ -6172,10 +6250,13 @@ async function saveAdminPlatformBackupConfig() {
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || 'Save failed');
-        alert('Backup settings saved.');
-        await loadAdminPlatformBackupConfig();
+        if (!silent) {
+            alert('Backup settings saved.');
+            await loadAdminPlatformBackupConfig();
+        }
     } catch (e) {
-        alert(e.message || 'Save failed');
+        if (!silent) alert(e.message || 'Save failed');
+        else throw e;
     }
 }
 

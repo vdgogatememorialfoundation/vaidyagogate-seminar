@@ -1904,7 +1904,7 @@
                 </div>
                 <div class="card" style="margin-top:16px;">
                     <h3>Daily platform backup</h3>
-                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:12px;">Exports registrations, payments, users, seminars, tickets, case submissions, support tickets, and book orders to an Excel workbook every night. Upload to <strong>Cloudflare R2</strong> (uses existing R2 keys) and/or <strong>Google Drive</strong> (service account). Terabox has no public upload API — download from R2 or Google Drive instead.</p>
+                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:12px;">Exports registrations, payments, users, seminars, tickets, case submissions, support tickets, and book orders to an Excel workbook every night. Upload to <strong>Cloudflare R2</strong> and/or <strong>Google Drive</strong>. Personal Gmail uses <strong>OAuth</strong> (no Workspace). Service accounts only work with Google Workspace Shared drives.</p>
                     <label style="display:flex;align-items:center;gap:8px;margin-bottom:10px;font-weight:600;">
                         <input type="checkbox" id="pb-enabled"> Enable daily backup
                     </label>
@@ -1917,10 +1917,31 @@
                                 <option value="both">R2 + Google Drive</option>
                             </select>
                         </div>
-                        <div style="grid-column:1/-1;"><label>Google Drive folder ID <span style="font-weight:400;color:#64748b;">(required for Drive)</span></label><input type="text" id="pb-gdrive-folder" style="width:100%;padding:8px;" placeholder="Folder ID from drive.google.com/drive/folders/…"></div>
-                        <div style="grid-column:1/-1;"><label>Impersonate Workspace user <span style="font-weight:400;color:#64748b;">(recommended for My Drive)</span></label><input type="email" id="pb-gdrive-impersonate" style="width:100%;padding:8px;" placeholder="e.g. care@vaidyagogate.org"></div>
-                        <div style="grid-column:1/-1;"><label>Google service account JSON</label><textarea id="pb-gdrive-sa" rows="4" style="width:100%;padding:8px;font-family:monospace;font-size:0.78rem;" placeholder='Paste {"type":"service_account",...}'></textarea>
-                        <p style="font-size:0.8rem;color:#64748b;margin:8px 0 0;line-height:1.45;"><strong>Option A — Shared drive (no impersonation):</strong> Google Workspace → Shared drives → create drive → <strong>Manage members</strong> → add <code>vgmf-national-seminar@…iam.gserviceaccount.com</code> as <strong>Content manager</strong> → create backup folder inside → paste folder ID.<br><strong>Option B — My Drive folder (impersonation):</strong> Google Cloud → service account → enable <strong>Domain-wide delegation</strong> → Workspace Admin → Security → API controls → Domain-wide delegation → add client ID + scope <code>https://www.googleapis.com/auth/drive</code> → set impersonate email above → create folder in that user’s Drive → paste folder ID. Sharing a personal folder with the service account alone is not enough (storage quota error).</p></div>
+                        <div style="grid-column:1/-1;"><label>Google Drive sign-in</label>
+                            <select id="pb-gdrive-auth-mode" style="width:100%;padding:8px;max-width:420px;" onchange="togglePlatformBackupDriveAuthUi()">
+                                <option value="oauth">Personal Google account (OAuth) — recommended</option>
+                                <option value="service_account">Workspace service account (Shared drives only)</option>
+                            </select>
+                        </div>
+                        <div id="pb-gdrive-oauth-panel" style="grid-column:1/-1;">
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:720px;">
+                                <div><label>OAuth client ID</label><input type="text" id="pb-gdrive-oauth-client-id" style="width:100%;padding:8px;" placeholder="Or set GOOGLE_DRIVE_OAUTH_CLIENT_ID on server"></div>
+                                <div><label>OAuth client secret</label><input type="password" id="pb-gdrive-oauth-client-secret" style="width:100%;padding:8px;" placeholder="Or set GOOGLE_DRIVE_OAUTH_CLIENT_SECRET on server" autocomplete="off"></div>
+                            </div>
+                            <p id="pb-gdrive-oauth-status" style="font-size:0.85rem;color:#0f766e;margin:10px 0 8px;font-weight:600;">Not connected</p>
+                            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:8px;">
+                                <button type="button" class="btn-primary" style="background:#1d4ed8;" onclick="connectPlatformBackupGoogleDrive()">Connect Google Drive</button>
+                                <button type="button" class="btn-primary" style="background:#64748b;" onclick="disconnectPlatformBackupGoogleDrive()">Disconnect</button>
+                            </div>
+                            <p id="pb-gdrive-oauth-redirect-hint" style="font-size:0.78rem;color:#64748b;margin:0 0 8px;line-height:1.45;"></p>
+                            <p style="font-size:0.8rem;color:#64748b;margin:0;line-height:1.45;">Google Cloud → OAuth client (Web) → add redirect URI shown above → enable Drive API → Connect with your Gmail. Create a backup folder in your Drive and paste its folder ID below.</p>
+                        </div>
+                        <div id="pb-gdrive-sa-panel" style="grid-column:1/-1;display:none;">
+                            <label>Google service account JSON</label>
+                            <textarea id="pb-gdrive-sa" rows="4" style="width:100%;padding:8px;font-family:monospace;font-size:0.78rem;" placeholder='Paste {"type":"service_account",...}'></textarea>
+                            <p style="font-size:0.8rem;color:#64748b;margin:8px 0 0;line-height:1.45;">Requires <strong>Google Workspace</strong> and a <strong>Shared drive</strong> folder shared with the service account. Does not work with personal @gmail.com storage.</p>
+                        </div>
+                        <div style="grid-column:1/-1;"><label>Google Drive folder ID <span style="font-weight:400;color:#64748b;">(required for Drive)</span></label><input type="text" id="pb-gdrive-folder" style="width:100%;padding:8px;" placeholder="drive.google.com/drive/folders/FOLDER_ID"></div>
                     </div>
                     <div style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
                         <button type="button" class="btn-primary" onclick="saveAdminPlatformBackupConfig()">Save backup settings</button>
