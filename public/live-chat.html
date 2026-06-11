@@ -36,7 +36,9 @@
         .msg-system { background: #fef3c7; border-radius: 12px 12px 12px 4px; }
         .msg-label { font-size: 0.72rem; color: var(--muted); margin-bottom: 4px; font-weight: 700; }
         .hidden { display: none !important; }
-        .guest-link-box { margin-top: 10px; padding: 10px; background: #ecfdf5; border-radius: 8px; font-size: 0.78rem; word-break: break-all; }
+        .guest-link-box { margin-top: 10px; padding: 10px; background: #fff; border-radius: 8px; font-size: 0.78rem; word-break: break-all; border: 1px solid rgba(255,255,255,0.35); }
+        .chat-link, .msg-bot a, .msg-system a, .guest-link-box a { color: #1d4ed8; text-decoration: underline; font-weight: 600; word-break: break-all; }
+        #chat-head .guest-link-box a { color: #1e3a8a; }
     </style>
 </head>
 <body>
@@ -81,6 +83,6 @@
     </div>
     <script src="/js/contact-validation.js" defer></script>
     <script src="/js/live-chat-client-info.js?v=20260610chat1" defer></script>
-    <script src="/js/guest-live-chat.js?v=20260610chat1" defer></script>
+    <script src="/js/guest-live-chat.js?v=20260611liveform1" defer></script>
 </body>
 </html>

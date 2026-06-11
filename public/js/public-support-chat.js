@@ -35,7 +35,7 @@
     let livePollTimer = null;
     let liveChatOpen = false;
     let hoursLabel = '';
-    let contactFormShown = false;
+    let contactFormDismissed = false;
     let visitorKey = localStorage.getItem('vgmf_support_visitor') || '';
     if (!visitorKey) {
         visitorKey = 'v_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
@@ -120,7 +120,7 @@
     function linkify(text) {
         return esc(text).replace(
             /(https?:\/\/[^\s<]+)/g,
-            '<a href="$1" target="_blank" rel="noopener" style="color:#0f766e;word-break:break-all;">$1</a>'
+            '<a href="$1" target="_blank" rel="noopener" style="color:#1d4ed8;text-decoration:underline;font-weight:600;word-break:break-all;">$1</a>'
         );
     }
 
@@ -146,9 +146,13 @@
         }
     }
 
+    function hideContactForm() {
+        if (!contactFormEl) return;
+        contactFormEl.classList.add('hidden');
+    }
+
     function showContactForm() {
-        if (contactFormShown || !contactFormEl || !liveSessionId) return;
-        contactFormShown = true;
+        if (contactFormDismissed || !contactFormEl || !liveSessionId) return;
         contactFormEl.classList.remove('hidden');
         const ref = liveChatRef || '';
         const sub = document.getElementById('vgmf-cf-subject');
@@ -208,8 +212,7 @@
     }
 
     function showOfflineContactForm() {
-        if (!contactFormEl) return;
-        contactFormShown = true;
+        if (!contactFormEl || contactFormDismissed) return;
         contactFormEl.classList.remove('hidden');
         const hint = document.getElementById('vgmf-cf-hint');
         if (hint) {
@@ -238,6 +241,7 @@
             label: m.sender_name || (st === 'system' ? 'Support desk' : 'Support agent')
         });
         if (
+            !contactFormDismissed &&
             (st === 'system' || st === 'agent') &&
             /contact form|personal support page|share your full name/i.test(m.message || '')
         ) {
@@ -260,7 +264,12 @@
             if (session && session.chatRef) liveChatRef = session.chatRef;
             if (session && session.agentName) liveAgentName = session.agentName;
             if (session && session.guestChatUrl) liveGuestUrl = session.guestChatUrl;
-            if (session && session.needsContactForm) showContactForm();
+            if (session && session.needsContactForm) {
+                showContactForm();
+            } else if (session && session.linkedTicketId) {
+                contactFormDismissed = true;
+                hideContactForm();
+            }
             if (session && session.status === 'closed') {
                 clearInterval(livePollTimer);
                 livePollTimer = null;
@@ -314,7 +323,7 @@
             liveAgentName = data.agentName || '';
             liveGuestUrl = data.guestChatUrl || '';
             liveMsgSince = 0;
-            contactFormShown = false;
+            contactFormDismissed = false;
             if (contactFormEl) contactFormEl.classList.add('hidden');
             updateLiveMeta();
             if (data.status === 'offline' || !data.canLive) {
@@ -402,14 +411,28 @@
                 data = await res.json();
             }
             if (!res.ok) throw new Error(data.error || 'Could not send');
-            if (statusEl) {
-                statusEl.style.color = '#059669';
-                statusEl.textContent = liveSessionId
-                    ? 'Sent! Reference ' + (data.inquiryRef || '') + '. We will reach out soon.'
-                    : 'Sent! Our team will contact you during the next live chat window.';
+            const refLabel = data.ticketRef || data.inquiryRef || '';
+            if (liveSessionId) {
+                contactFormDismissed = true;
+                hideContactForm();
+                appendMessage({
+                    role: 'system',
+                    text:
+                        'Thank you — your details were sent' +
+                        (refLabel ? ' (' + refLabel + ')' : '') +
+                        '. You can keep chatting here while our team follows up by email.',
+                    label: 'Support desk'
+                });
+                pollLiveMessages();
+            } else {
+                contactFormDismissed = true;
+                hideContactForm();
+                appendMessage({
+                    role: 'system',
+                    text: 'Thank you! Our team will contact you during the next live chat window.',
+                    label: 'Support desk'
+                });
             }
-            document.getElementById('vgmf-cf-submit').disabled = true;
-            if (liveSessionId) pollLiveMessages();
         } catch (e) {
             if (statusEl) {
                 statusEl.style.color = '#b91c1c';

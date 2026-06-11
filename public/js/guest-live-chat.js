@@ -15,7 +15,7 @@
     let agentName = '';
     let msgSince = 0;
     let pollTimer = null;
-    let contactFormShown = false;
+    let contactFormDismissed = false;
     let hoursOpen = false;
     let hoursLabel = '';
 
@@ -75,7 +75,7 @@
     function linkify(text) {
         return esc(text).replace(
             /(https?:\/\/[^\s<]+)/g,
-            '<a href="$1" target="_blank" rel="noopener" style="color:#0f766e;word-break:break-all;">$1</a>'
+            '<a href="$1" target="_blank" rel="noopener" class="chat-link">$1</a>'
         );
     }
 
@@ -116,10 +116,16 @@
         messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
+    function hideContactForm() {
+        if (!contactPanel) return;
+        contactPanel.style.display = 'none';
+        contactPanel.classList.add('hidden');
+    }
+
     function showContactForm(session) {
-        if (contactFormShown || !contactPanel) return;
-        contactFormShown = true;
+        if (contactFormDismissed || !contactPanel) return;
         contactPanel.style.display = 'block';
+        contactPanel.classList.remove('hidden');
         const ref = session.chatRef || chatRef || '';
         const sub = document.getElementById('cf-subject');
         const msg = document.getElementById('cf-message');
@@ -142,7 +148,12 @@
             if (session.agentName) agentName = session.agentName;
             updateMeta();
             if (session.guestChatUrl) showGuestLink(session.guestChatUrl);
-            if (session.needsContactForm) showContactForm(session);
+            if (session.needsContactForm) {
+                showContactForm(session);
+            } else if (session.linkedTicketId) {
+                contactFormDismissed = true;
+                hideContactForm();
+            }
             if (session.status === 'closed') {
                 clearInterval(pollTimer);
                 pollTimer = null;
@@ -164,6 +175,7 @@
         });
         updateMeta();
         if (
+            !contactFormDismissed &&
             (st === 'system' || st === 'agent') &&
             /contact form|personal support page|share your full name/i.test(m.message || '')
         ) {
@@ -287,7 +299,12 @@
                     addLiveRow(m);
                 }
             });
-            if (session.needsContactForm) showContactForm(session);
+            if (session.needsContactForm) {
+                showContactForm(session);
+            } else if (session.linkedTicketId) {
+                contactFormDismissed = true;
+                hideContactForm();
+            }
             startPoll();
         } catch (e) {
             startPanel.innerHTML =
@@ -360,12 +377,23 @@
                 data = await res.json();
             }
             if (!res.ok) throw new Error(data.error || 'Could not send');
-            contactStatus.style.color = '#059669';
-            contactStatus.textContent = sessionId
-                ? 'Sent! Reference ' + (data.inquiryRef || '') + '. You can keep chatting here.'
-                : 'Sent! Our team will contact you during the next live chat window.';
-            contactPanel.querySelector('button').disabled = true;
-            if (sessionId) pollMessages();
+            const refLabel = data.ticketRef || data.inquiryRef || '';
+            if (sessionId) {
+                contactFormDismissed = true;
+                hideContactForm();
+                appendMsg({
+                    role: 'system',
+                    text:
+                        'Thank you — your details were sent' +
+                        (refLabel ? ' (' + refLabel + ')' : '') +
+                        '. You can keep chatting here while our team follows up by email.'
+                });
+                pollMessages();
+            } else {
+                contactStatus.style.color = '#059669';
+                contactStatus.textContent = 'Sent! Our team will contact you during the next live chat window.';
+                hideContactForm();
+            }
         } catch (e) {
             contactStatus.style.color = '#b91c1c';
             contactStatus.textContent = e.message || 'Could not send. Try again.';

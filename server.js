@@ -12110,7 +12110,16 @@ app.post('/api/public/contact-inquiry', (req, res) => {
                     }
                     return res.status(500).json({ error: err.message });
                 }
-                res.json({ success: true, id: this.lastID });
+                const inquiryId = this.lastID;
+                const contactInquiryNotify = require('./lib/contact-inquiry-notify');
+                contactInquiryNotify.notifyStaffContactInquiry(
+                    db,
+                    { id: inquiryId, name: n, email: em, phone: phoneStored, subject: sub, message: msg },
+                    (nErr) => {
+                        if (nErr) console.warn('[contact-inquiry] staff notify:', nErr.message);
+                        res.json({ success: true, id: inquiryId });
+                    }
+                );
             }
         );
     });
@@ -12187,12 +12196,13 @@ app.post('/api/admin/contact-inquiries/:id/send-email', async (req, res) => {
                     const fullBody = replyIntro + b;
                     let result;
                     try {
+                        const { careReplyToEmail } = require('./lib/support-care-email');
                         result = await adminComposeMail.sendSingleMailReliable(db, {
                             to: row.email,
                             name: row.name,
                             subject: sub,
                             body: fullBody,
-                            replyTo: (staffRow && staffRow.email) || undefined,
+                            replyTo: careReplyToEmail(),
                             fromDisplay: staffDisplay.formatStaffFromDisplay(staffRow)
                         });
                     } catch (mailErr) {
