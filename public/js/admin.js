@@ -6127,6 +6127,8 @@ async function loadAdminPlatformBackupConfig() {
         if (dest) dest.value = cfg.destination || 'r2';
         const folder = document.getElementById('pb-gdrive-folder');
         if (folder) folder.value = cfg.googleDriveFolderId || '';
+        const imp = document.getElementById('pb-gdrive-impersonate');
+        if (imp) imp.value = cfg.googleDriveImpersonateEmail || '';
         const sa = document.getElementById('pb-gdrive-sa');
         if (sa && cfg.googleServiceAccountJson && cfg.googleServiceAccountJson !== '********') {
             sa.value = cfg.googleServiceAccountJson;
@@ -6158,6 +6160,7 @@ async function saveAdminPlatformBackupConfig() {
             cron: (document.getElementById('pb-cron')?.value || '0 2 * * *').trim(),
             destination: document.getElementById('pb-destination')?.value || 'r2',
             googleDriveFolderId: (document.getElementById('pb-gdrive-folder')?.value || '').trim(),
+            googleDriveImpersonateEmail: (document.getElementById('pb-gdrive-impersonate')?.value || '').trim(),
             googleServiceAccountJson: (document.getElementById('pb-gdrive-sa')?.value || '').trim()
         }
     };
