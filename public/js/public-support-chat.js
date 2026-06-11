@@ -117,10 +117,17 @@
         return d.innerHTML;
     }
 
-    function linkify(text) {
+    function linkStyle(darkBg) {
+        return darkBg
+            ? 'color:#fef08a;text-decoration:underline;font-weight:700;word-break:break-all;'
+            : 'color:#1d4ed8;text-decoration:underline;font-weight:600;word-break:break-all;';
+    }
+
+    function linkify(text, darkBg) {
+        const style = linkStyle(!!darkBg);
         return esc(text).replace(
             /(https?:\/\/[^\s<]+)/g,
-            '<a href="$1" target="_blank" rel="noopener" style="color:#1d4ed8;text-decoration:underline;font-weight:600;word-break:break-all;">$1</a>'
+            '<a href="$1" target="_blank" rel="noopener" style="' + style + '">$1</a>'
         );
     }
 
@@ -139,7 +146,12 @@
             (liveAgentName ? ' · Agent: <strong>' + esc(liveAgentName) + '</strong>' : '');
         if (guestLinkEl && liveGuestUrl) {
             guestLinkEl.classList.remove('hidden');
-            guestLinkEl.innerHTML = 'Your 1-to-1 link: ' + linkify(liveGuestUrl);
+            guestLinkEl.innerHTML =
+                '<span style="display:block;margin-top:6px;padding:8px 10px;background:rgba(255,255,255,0.96);color:#0f172a;border-radius:8px;line-height:1.45;">' +
+                '<strong style="color:#115e59;font-size:0.7rem;">Your personal chat link</strong> ' +
+                '<span style="font-size:0.65rem;color:#64748b;">(bookmark or open on another device)</span><br>' +
+                linkify(liveGuestUrl, false) +
+                '</span>';
         }
         if (dedicatedLink && liveGuestUrl) {
             dedicatedLink.href = liveGuestUrl;
@@ -333,9 +345,6 @@
                         '.',
                     'Support desk'
                 );
-                if (liveGuestUrl) {
-                    addBot('Open your personal 1-to-1 chat page anytime:\n' + liveGuestUrl, 'Support desk');
-                }
                 startLivePoll();
                 return;
             }
@@ -346,23 +355,9 @@
                         '. An agent will join shortly — please keep this window open.',
                     'Support desk'
                 );
-            } else if (data.status === 'active') {
-                addBot(
-                    'Connected' +
-                        (liveAgentName ? ' with ' + liveAgentName : ' with a support agent') +
-                        '. Reference ' +
-                        liveChatRef +
-                        '.',
-                    'Support desk'
-                );
-            }
-            if (liveGuestUrl) {
-                addBot(
-                    'Bookmark your personal 1-to-1 chat link (no account needed):\n' + liveGuestUrl,
-                    'Support desk'
-                );
             }
             startLivePoll();
+            pollLiveMessages();
         } catch (e) {
             addBot('Could not start live chat. Try the full-screen chat at /live-chat.html or email care@vaidyagogate.org.');
         }
