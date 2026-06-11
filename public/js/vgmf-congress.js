@@ -665,9 +665,67 @@
         }
     };
 
+    function normalizeYoutubePlaylistUrl(raw) {
+        const s = String(raw || '').trim();
+        if (!s) return '';
+        const m = s.match(/[?&]list=([a-zA-Z0-9_-]+)/);
+        if (m) return 'https://www.youtube.com/playlist?list=' + m[1];
+        if (/^PL[\w-]+$/i.test(s)) return 'https://www.youtube.com/playlist?list=' + s;
+        if (/youtube\.com|youtu\.be/i.test(s)) return s;
+        return '';
+    }
+
+    function galleryYoutubeButton(yg) {
+        const url = normalizeYoutubePlaylistUrl(yg && yg.youtubePlaylistUrl);
+        if (!url) return '';
+        const label = String((yg && yg.youtubePlaylistLabel) || '').trim() || 'Watch on YouTube';
+        return (
+            '<p class="cg-gallery-youtube"><a href="' +
+            esc(url) +
+            '" target="_blank" rel="noopener noreferrer" class="social-pill social-pill--youtube"><i class="fab fa-youtube" aria-hidden="true"></i> ' +
+            esc(label) +
+            '</a></p>'
+        );
+    }
+
     window.renderCongressPastSeminars = function renderCongressPastSeminars(cms) {
         const root = document.getElementById('cg-past-timeline');
         if (!root) return;
+        const yearGroups =
+            Array.isArray(cms.seminarGalleryYears) && cms.seminarGalleryYears.length
+                ? cms.seminarGalleryYears.slice().sort((a, b) => String(b.year || '').localeCompare(String(a.year || '')))
+                : null;
+        if (yearGroups && yearGroups.length) {
+            root.innerHTML = yearGroups
+                .map((yg) => {
+                    const items = yg.images || [];
+                    const figures = items
+                        .map(
+                            (it) =>
+                                '<figure><img class="vgmf-gallery-thumb" src="' +
+                                esc(mediaUrl(it.src)) +
+                                '" data-gallery-src="' +
+                                esc(mediaUrl(it.src)) +
+                                '" alt="' +
+                                esc(it.caption || '') +
+                                '" loading="lazy"><figcaption>' +
+                                esc(it.caption || '') +
+                                '</figcaption></figure>'
+                        )
+                        .join('');
+                    return (
+                        '<div class="cg-past-year"><div class="cg-past-year-label">' +
+                        esc(yg.title || yg.year || 'Archive') +
+                        '</div>' +
+                        galleryYoutubeButton(yg) +
+                        '<div class="cg-past-gallery">' +
+                        (figures || '<p style="color:#64748b;">Watch the YouTube playlist for this year.</p>') +
+                        '</div></div>'
+                    );
+                })
+                .join('');
+            return;
+        }
         const gallery = galleryItemsFromCms(cms);
         if (!gallery.length) {
             root.innerHTML = '<p style="color:#64748b;">Past seminar highlights coming soon.</p>';

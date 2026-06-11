@@ -967,6 +967,31 @@
             return Array.isArray(cms.pastSeminarGallery) ? cms.pastSeminarGallery : [];
         }
 
+        function normalizeYoutubePlaylistUrl(raw) {
+            const s = String(raw || '').trim();
+            if (!s) return '';
+            const m = s.match(/[?&]list=([a-zA-Z0-9_-]+)/);
+            if (m) return 'https://www.youtube.com/playlist?list=' + m[1];
+            if (/^PL[\w-]+$/i.test(s)) return 'https://www.youtube.com/playlist?list=' + s;
+            if (/youtube\.com|youtu\.be/i.test(s)) return s;
+            return '';
+        }
+
+        function galleryYoutubeButton(yg) {
+            const url = normalizeYoutubePlaylistUrl(yg && yg.youtubePlaylistUrl);
+            if (!url) return '';
+            const label = String((yg && yg.youtubePlaylistLabel) || '').trim() || 'Watch on YouTube';
+            return (
+                '<p style="margin:0 0 14px;">' +
+                '<a href="' +
+                escHtml(url) +
+                '" target="_blank" rel="noopener noreferrer" style="display:inline-flex;align-items:center;gap:8px;padding:10px 16px;background:#dc2626;color:#fff;border-radius:10px;font-weight:700;text-decoration:none;box-shadow:0 4px 14px rgba(220,38,38,0.25);">' +
+                '<i class="fab fa-youtube" aria-hidden="true"></i> ' +
+                escHtml(label) +
+                '</a></p>'
+            );
+        }
+
         function renderAboutGallerySocial(cms) {
             const aboutEl = document.getElementById('about-content');
             if (aboutEl) {
@@ -986,6 +1011,11 @@
                         .slice()
                         .sort((a, b) => String(b.year || '').localeCompare(String(a.year || '')))
                         .map((yg) => {
+                            const imgCount = (yg.images || []).length;
+                            const ytUrl = normalizeYoutubePlaylistUrl(yg.youtubePlaylistUrl);
+                            const metaParts = [escHtml(yg.year || '')];
+                            if (imgCount) metaParts.push(imgCount + ' photos');
+                            if (ytUrl) metaParts.push('YouTube playlist');
                             const imgs = (yg.images || [])
                                 .map(
                                     (g) =>
@@ -998,15 +1028,20 @@
                                         '</h3></div></div>'
                                 )
                                 .join('');
+                            const gridInner =
+                                imgs ||
+                                (ytUrl
+                                    ? '<p style="color:#78716c;margin:0;">Photos coming soon — watch the seminar playlist on YouTube.</p>'
+                                    : '<p style="color:#78716c;">No images for this year.</p>');
                             return (
                                 '<section style="grid-column:1/-1;margin-bottom:24px;"><h3 style="font-family:Fraunces,Georgia,serif;color:#0f766e;margin:0 0 12px;">' +
                                 escHtml(yg.title || 'Seminar ' + (yg.year || '')) +
                                 ' <span style="color:#78716c;font-size:0.9rem;">(' +
-                                escHtml(yg.year || '') +
-                                ' · ' +
-                                (yg.images || []).length +
-                                ' photos)</span></h3><div class="cards-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;">' +
-                                (imgs || '<p style="color:#78716c;">No images for this year.</p>') +
+                                metaParts.join(' · ') +
+                                ')</span></h3>' +
+                                galleryYoutubeButton(yg) +
+                                '<div class="cards-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;">' +
+                                gridInner +
                                 '</div></section>'
                             );
                         })

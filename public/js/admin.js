@@ -12922,9 +12922,11 @@ function cmsCollectGalleryYearsFromDom() {
                     caption: ((imgRow.querySelector('.cgy-cap') || {}).value || '').trim()
                 }))
                 .filter((img) => img.src);
-            return { year, title, images };
+            const youtubePlaylistUrl = ((yearRow.querySelector('.cgy-youtube') || {}).value || '').trim();
+            const youtubePlaylistLabel = ((yearRow.querySelector('.cgy-youtube-label') || {}).value || '').trim();
+            return { year, title, youtubePlaylistUrl, youtubePlaylistLabel, images };
         })
-        .filter((yg) => yg.year && yg.images.length);
+        .filter((yg) => yg.year && (yg.images.length || yg.youtubePlaylistUrl));
 }
 
 function cmsFillGalleryYears(yearGroups) {
@@ -12946,6 +12948,8 @@ function cmsAddGalleryYear(prefill) {
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
           <div><label style="font-size:0.8rem;font-weight:700;">Year</label><input class="cgy-year" type="text" style="width:100%" placeholder="2025"></div>
           <div><label style="font-size:0.8rem;font-weight:700;">Album title (optional)</label><input class="cgy-title" type="text" style="width:100%" placeholder="National Seminar 2025"></div>
+          <div style="grid-column:1/-1;"><label style="font-size:0.8rem;font-weight:700;">YouTube playlist URL (optional)</label><input class="cgy-youtube" type="url" style="width:100%;" placeholder="https://www.youtube.com/playlist?list=..."></div>
+          <div style="grid-column:1/-1;"><label style="font-size:0.8rem;font-weight:700;">Playlist link label (optional)</label><input class="cgy-youtube-label" type="text" style="width:100%;" placeholder="Watch on YouTube"></div>
         </div>
         <div class="cgy-images"></div>
         <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center;">
@@ -12956,8 +12960,12 @@ function cmsAddGalleryYear(prefill) {
         </div>`;
     const yearInp = wrap.querySelector('.cgy-year');
     const titleInp = wrap.querySelector('.cgy-title');
+    const ytInp = wrap.querySelector('.cgy-youtube');
+    const ytLabelInp = wrap.querySelector('.cgy-youtube-label');
     if (yearInp) yearInp.value = p.year || '';
     if (titleInp) titleInp.value = p.title || '';
+    if (ytInp) ytInp.value = p.youtubePlaylistUrl || '';
+    if (ytLabelInp) ytLabelInp.value = p.youtubePlaylistLabel || '';
     const imagesHost = wrap.querySelector('.cgy-images');
     (p.images || []).forEach((img) => cmsAppendGalleryImageRow(imagesHost, img));
     root.appendChild(wrap);
