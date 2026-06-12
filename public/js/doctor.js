@@ -6569,11 +6569,7 @@ function loadRazorpayCheckoutScript() {
 }
 
 function isRazorpayPaymentMethod(methodId) {
-    if (methodId) return String(methodId).indexOf('razorpay') === 0;
-    const opts = window.__doctorPaymentOptions || [];
-    if (!opts.length) return true;
-    if (opts.length === 1 && opts[0].gateway === 'razorpay') return true;
-    return opts.some((o) => o.gateway === 'razorpay');
+    return !!methodId && String(methodId).indexOf('razorpay:') === 0;
 }
 
 function doctorRazorpayPaymentOption(methodId, resultMode) {
@@ -6766,6 +6762,9 @@ async function processPayment(appId, amount, appNo, paymentOption, cancelPending
     const methodId = paymentOption || getPaymentOptionForReg(regId);
     if (!methodId && (window.__doctorPaymentOptions || []).length > 1) {
         return alert('Please choose a payment method from the dropdown first.');
+    }
+    if (!methodId) {
+        return alert('No payment method is available. Ask the seminar office to enable Razorpay test mode in Admin → Payment gateways.');
     }
     if (isRazorpayPaymentMethod(methodId)) {
         return processRazorpayStandardCheckout(regId, uid, amount, methodId);

@@ -11738,7 +11738,12 @@ app.post('/api/admin/maintenance-settings', (req, res) => {
 app.get('/api/admin/payment_gateways', (req, res) => {
     db.all(`SELECT * FROM payment_gateways`, [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(rows || []);
+        res.json(
+            (rows || []).map((row) => ({
+                ...row,
+                checkout_options: paymentGatewayOptions.expandGatewayRow(row)
+            }))
+        );
     });
 });
 

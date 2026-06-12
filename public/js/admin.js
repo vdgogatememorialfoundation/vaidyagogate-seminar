@@ -9628,6 +9628,26 @@ async function testIntegrationWhatsApp() {
     }
 }
 
+function populateDefaultPaymentGatewaySelect(pgs, savedValue) {
+    const sel = document.getElementById('setting-pg');
+    if (!sel) return;
+    const opts = [{ value: 'mock', label: 'Mock Gateway' }];
+    (pgs || []).forEach((pg) => {
+        const checkout = pg.checkout_options || [];
+        checkout.forEach((o) => {
+            if (o.mode !== 'live') return;
+            if (!opts.some((x) => x.value === o.gateway)) {
+                opts.push({ value: o.gateway, label: o.label || o.gateway });
+            }
+        });
+    });
+    sel.innerHTML = opts
+        .map((o) => '<option value="' + escapeHtml(o.value) + '">' + escapeHtml(o.label) + '</option>')
+        .join('');
+    const want = savedValue || 'mock';
+    sel.value = opts.some((o) => o.value === want) ? want : opts[0].value;
+}
+
 async function loadSettings() {
     try {
         await loadIntegrationSettings();
@@ -9635,7 +9655,7 @@ async function loadSettings() {
         const settings = await res.json();
         document.getElementById('setting-sitename').value = settings.site_name || '';
         document.getElementById('setting-domain').value = settings.domain || '';
-        document.getElementById('setting-pg').value = settings.payment_gateway || 'mock';
+        const savedPg = settings.payment_gateway || 'mock';
         document.getElementById('setting-disabled').value = settings.is_site_disabled || '0';
         let portalFlags = {};
         try {
@@ -9650,24 +9670,35 @@ async function loadSettings() {
         // Load payment gateways
         const pgRes = await fetch('/api/admin/payment_gateways');
         const pgs = await pgRes.json();
+        populateDefaultPaymentGatewaySelect(pgs, savedPg);
         pgs.forEach(pg => {
             const config = JSON.parse(pg.config || '{}');
             if (pg.name === 'razorpay') {
                 const test = config.test || {};
                 const live = config.live || {};
-                if (!test.key_id && config.key_id) {
+                if (!test.key_id && config.key_id && String(config.key_id).startsWith('rzp_test_')) {
                     test.key_id = config.key_id;
-                    test.key_secret = config.key_secret;
-                    test.enabled = test.enabled !== false;
+                    test.enabled = test.enabled === true;
+                }
+                if (!live.key_id && config.key_id && String(config.key_id).startsWith('rzp_live_')) {
+                    live.key_id = config.key_id;
+                    live.enabled = live.enabled === true;
                 }
                 document.getElementById('pg-razorpay-test-key-id').value = test.key_id || '';
-                document.getElementById('pg-razorpay-test-key-secret').value = test.key_secret || '';
-                document.getElementById('pg-razorpay-test-enabled').checked = test.enabled !== false;
+                const testSecEl = document.getElementById('pg-razorpay-test-key-secret');
+                if (testSecEl) {
+                    testSecEl.value = '';
+                    testSecEl.placeholder = test.key_secret ? 'Saved — leave blank to keep' : '...';
+                }
+                document.getElementById('pg-razorpay-test-enabled').checked = test.enabled === true;
                 document.getElementById('pg-razorpay-live-key-id').value = live.key_id || '';
-                document.getElementById('pg-razorpay-live-key-secret').value = live.key_secret || '';
-                document.getElementById('pg-razorpay-live-enabled').checked =
-                    !!live.enabled || !!(live.key_id && live.key_secret);
-                document.getElementById('pg-razorpay-active').checked = pg.is_active;
+                const liveSecEl = document.getElementById('pg-razorpay-live-key-secret');
+                if (liveSecEl) {
+                    liveSecEl.value = '';
+                    liveSecEl.placeholder = live.key_secret ? 'Saved — leave blank to keep' : '...';
+                }
+                document.getElementById('pg-razorpay-live-enabled').checked = live.enabled === true;
+                document.getElementById('pg-razorpay-active').checked = !!pg.is_active;
             } else if (pg.name === 'cashfree') {
                 const live = config.live || {};
                 document.getElementById('pg-cashfree-app-id').value = live.app_id || config.app_id || '';
@@ -10103,32 +10134,6 @@ async function savePaymentGatewaysSettings() {
                 body: JSON.stringify({ is_active: gw.is_active, config: gw.config })
             });
         }
-        const checkoutLabels = [];
-        gateways.forEach((gw) => {
-            if (!gw.is_active) return;
-            const probe =
-                gw.name === 'razorpay'
-                    ? [
-                          gw.config &&
-                          gw.config.test &&
-                          gw.config.test.key_id &&
-                          gw.config.test.key_secret &&
-                          gw.config.test.enabled !== false
-                              ? 'Razorpay (Test)'
-                              : null,
-                          gw.config &&
-                          gw.config.live &&
-                          gw.config.live.key_id &&
-                          gw.config.live.key_secret &&
-                          gw.config.live.enabled !== false
-                              ? 'Razorpay'
-                              : null
-                      ].filter(Boolean)
-                    : gw.is_active
-                      ? [String(gw.name || '').toUpperCase()]
-                      : [];
-            checkoutLabels.push(...probe);
-        });
         const syncRes = await fetch('/api/admin/payment_gateways/sync-default', { method: 'POST' });
         const syncData = syncRes.ok ? await syncRes.json() : {};
         const defaultPg = syncData.defaultGateway || null;
@@ -10138,14 +10143,23 @@ async function savePaymentGatewaysSettings() {
             if (sel) sel.value = defaultPg;
         }
         let saveMsg = 'Payment gateways saved.';
-        if (checkoutLabels.length) {
-            saveMsg += ' Doctor checkout: ' + [...new Set(checkoutLabels)].join(', ') + '.';
-            if (liveGateways.length && defaultPg) {
-                saveMsg += ` Default live gateway: ${defaultPg}.`;
+        try {
+            const pgRes2 = await fetch('/api/admin/payment_gateways');
+            const pgs2 = await pgRes2.json();
+            populateDefaultPaymentGatewaySelect(pgs2, defaultPg);
+            const labels = [];
+            (pgs2 || []).forEach((pg) => {
+                (pg.checkout_options || []).forEach((o) => labels.push(o.label));
+            });
+            if (labels.length) {
+                saveMsg += ' Doctor checkout: ' + [...new Set(labels)].join(', ') + '.';
+            } else {
+                saveMsg +=
+                    ' No checkout method active — check Enable gateway, tick Test or Live, enter keys (rzp_test_… / rzp_live_…), then save.';
             }
-        } else {
-            saveMsg +=
-                ' No checkout gateway detected yet — enter keys, enable the gateway (and Razorpay test mode if using test keys), then save again.';
+        } catch (_) {}
+        if (liveGateways.length && defaultPg) {
+            saveMsg += ` Default live gateway: ${defaultPg}.`;
         }
         setAdminSettingsSaveMsg(saveMsg);
     } catch (err) {
