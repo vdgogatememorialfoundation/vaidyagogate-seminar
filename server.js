@@ -11768,6 +11768,26 @@ app.post('/api/admin/payment_gateways/sync-default', (req, res) => {
     });
 });
 
+// Admin: test saved Razorpay keys (must be registered before /:name)
+app.post('/api/admin/payment_gateways/razorpay/test', (req, res) => {
+    const mode = String((req.body && req.body.mode) || 'test').toLowerCase();
+    db.get(`SELECT config FROM payment_gateways WHERE name = ?`, ['razorpay'], (e, row) => {
+        if (e) return res.status(500).json({ error: e.message });
+        const c = paymentGatewayOptions.migrateLegacyRazorpay(
+            paymentGatewayOptions.parseGatewayConfig(row && row.config)
+        );
+        const m = mode === 'live' ? c.live : c.test;
+        const normalized = paymentGatewayOptions.normalizeRazorpayModeSave(m);
+        if (!normalized.enabled) {
+            return res.json({ success: true, ok: false, error: mode + ' mode is not enabled.' });
+        }
+        adminPaymentFlow.validateRazorpayCredentials(normalized.key_id, normalized.key_secret, (vErr, result) => {
+            if (vErr) return res.status(500).json({ error: vErr.message });
+            res.json({ success: true, mode, ...result });
+        });
+    });
+});
+
 // Admin: Update Payment Gateway
 app.post('/api/admin/payment_gateways/:name', (req, res) => {
     const { name } = req.params;
@@ -11779,11 +11799,20 @@ app.post('/api/admin/payment_gateways/:name', (req, res) => {
             [name, normalized.is_active, JSON.stringify(normalized.config)],
             function (err) {
                 if (err) return res.status(500).json({ error: err.message });
-                res.json({ success: true, liveReady: paymentGatewayOptions.expandGatewayRow({
-                    name,
-                    is_active: normalized.is_active,
-                    config: normalized.config
-                }).some((o) => o.mode === 'live') });
+                const liveReady = paymentGatewayOptions
+                    .expandGatewayRow({
+                        name,
+                        is_active: normalized.is_active,
+                        config: normalized.config
+                    })
+                    .some((o) => o.mode === 'live');
+                if (String(name).toLowerCase() !== 'razorpay') {
+                    return res.json({ success: true, liveReady });
+                }
+                adminPaymentFlow.validateSavedRazorpayConfig(normalized.config, (vErr, validation) => {
+                    if (vErr) return res.status(500).json({ error: vErr.message });
+                    res.json({ success: true, liveReady, razorpayValidation: validation });
+                });
             }
         );
     };

@@ -10012,7 +10012,7 @@ async function savePaymentGatewaysSettings() {
     const zohoRefresh = document.getElementById('pg-zoho-refresh-token')?.value.trim() || '';
     const zohoSign = document.getElementById('pg-zoho-signing-key')?.value.trim() || '';
     const zohoLiveOn = document.getElementById('pg-zoho-live-enabled')?.checked;
-    const gateways = [
+        const gateways = [
         {
             name: 'razorpay',
             is_active: document.getElementById('pg-razorpay-active').checked,
@@ -10125,14 +10125,21 @@ async function savePaymentGatewaysSettings() {
                 }
             }
         }
-    ];
+        ];
     try {
+        let razorpayValidation = null;
         for (const gw of gateways) {
-            await fetch(`/api/admin/payment_gateways/${gw.name}`, {
+            const res = await fetch(`/api/admin/payment_gateways/${gw.name}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ is_active: gw.is_active, config: gw.config })
             });
+            if (gw.name === 'razorpay' && res.ok) {
+                try {
+                    const data = await res.json();
+                    razorpayValidation = data.razorpayValidation || null;
+                } catch (_) {}
+            }
         }
         const syncRes = await fetch('/api/admin/payment_gateways/sync-default', { method: 'POST' });
         const syncData = syncRes.ok ? await syncRes.json() : {};
@@ -10160,6 +10167,18 @@ async function savePaymentGatewaysSettings() {
         } catch (_) {}
         if (liveGateways.length && defaultPg) {
             saveMsg += ` Default live gateway: ${defaultPg}.`;
+        }
+        if (razorpayValidation) {
+            if (razorpayValidation.test && !razorpayValidation.test.skipped) {
+                saveMsg += razorpayValidation.test.ok
+                    ? ' Razorpay test keys verified OK.'
+                    : ' Razorpay TEST keys failed: ' + (razorpayValidation.test.error || 'invalid');
+            }
+            if (razorpayValidation.live && !razorpayValidation.live.skipped) {
+                saveMsg += razorpayValidation.live.ok
+                    ? ' Razorpay live keys verified OK.'
+                    : ' Razorpay LIVE keys failed: ' + (razorpayValidation.live.error || 'invalid');
+            }
         }
         setAdminSettingsSaveMsg(saveMsg);
     } catch (err) {
@@ -15118,17 +15137,17 @@ function renderWebsiteMenuPagesCheckboxes() {
         .map(([id, title]) => {
             const isLegal = id === 'legal' || String(id).indexOf('legal-') === 0;
             const checked = isLegal ? pages[id] !== false : !restrict || pages[id] === true;
-            return (
-                '<label style="display:flex;align-items:center;gap:8px;font-size:0.88rem;cursor:pointer;">' +
-                '<input type="checkbox" data-website-menu-key="' +
-                id +
-                '" ' +
-                (checked ? 'checked' : '') +
+        return (
+            '<label style="display:flex;align-items:center;gap:8px;font-size:0.88rem;cursor:pointer;">' +
+            '<input type="checkbox" data-website-menu-key="' +
+            id +
+            '" ' +
+            (checked ? 'checked' : '') +
                 ' onchange="syncAdminFooterExplorePreview()">' +
-                '<span>' +
-                title +
-                '</span></label>'
-            );
+            '<span>' +
+            title +
+            '</span></label>'
+        );
         })
         .join('');
     syncAdminFooterExplorePreview();
