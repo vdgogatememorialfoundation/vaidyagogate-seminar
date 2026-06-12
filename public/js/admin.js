@@ -828,6 +828,9 @@ function switchTab(tabId) {
     if (tabId === 'tab-case-mgmt' && typeof initAdminCaseMgmtTab === 'function') {
         initAdminCaseMgmtTab();
     }
+    if (tabId === 'tab-case-applications' && typeof initAdminCaseApplicationsTab === 'function') {
+        initAdminCaseApplicationsTab();
+    }
     if (tabId === 'tab-book-sales' && typeof loadBookSalesAdmin === 'function') {
         loadBookSalesAdmin();
     }
@@ -1567,6 +1570,7 @@ const ADMIN_MODULE_TAB_DEFS = [
     ['tab-seminars', 'Seminar management'],
     ['tab-event-schedules', 'Event schedules'],
     ['tab-applications', 'Review applications'],
+    ['tab-case-applications', 'Review case applications'],
     ['tab-feedback', 'Seminar feedback'],
     ['tab-support-tickets', 'Support tickets'],
     ['tab-support-desk', 'Support desk'],
@@ -5168,17 +5172,22 @@ async function loadAdminCaseReviewers() {
     }
 }
 
+async function initAdminCaseApplicationsTab() {
+    await loadAdminCaseSubmissions();
+    await loadAdminCaseReviewers();
+}
+
 async function initAdminCaseMgmtTab() {
     await fillAdminSeminarSelect('case-prog-seminar', true);
     if (!document.getElementById('case-prog-edit-id') || !document.getElementById('case-prog-edit-id').value) {
         resetAdminCaseProgramForm();
     }
     await loadAdminCasePrograms();
-    await loadAdminCaseSubmissions();
-    await loadAdminCaseReviewers();
     await populateCaseResultsProgramSelect();
     await loadAdminCaseResults();
 }
+
+window.initAdminCaseApplicationsTab = initAdminCaseApplicationsTab;
 
 function formatCaseCriteriaBreakdown(sc, criteriaDefs) {
     let crit = [];

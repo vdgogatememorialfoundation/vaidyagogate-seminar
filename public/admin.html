@@ -106,6 +106,7 @@
                 <a class="menu-item" data-admin-module="tab-seminars" onclick="switchTab('tab-seminars')"><i class="fas fa-calendar-alt"></i> Seminar Management</a>
                 <a class="menu-item" data-admin-module="tab-event-schedules" onclick="switchTab('tab-event-schedules'); loadEventSchedules();"><i class="fas fa-clock"></i> Event Schedules</a>
                 <a class="menu-item" data-admin-module="tab-applications" onclick="switchTab('tab-applications')"><i class="fas fa-folder-open"></i> Review Applications</a>
+                <a class="menu-item" data-admin-module="tab-case-applications" onclick="switchTab('tab-case-applications'); initAdminCaseApplicationsTab();"><i class="fas fa-file-medical"></i> Review case applications</a>
                 <a class="menu-item" data-admin-module="tab-feedback" onclick="switchTab('tab-feedback')"><i class="fas fa-comments"></i> Seminar Feedback</a>
                 <a class="menu-item" data-admin-module="tab-support-tickets" onclick="switchTab('tab-support-tickets')"><i class="fas fa-ticket-alt"></i> Support Tickets</a>
                 <a class="menu-item" data-admin-module="tab-support-desk" onclick="switchTab('tab-support-desk')"><i class="fas fa-headset"></i> Support desk</a>
@@ -233,6 +234,34 @@
                         <tbody id="applications-list"><tr><td colspan="5" style="text-align: center;">Loading applications...</td></tr></tbody>
                     </table>
                 </div>
+            </div>
+
+            <!-- Review case applications (case presentation submissions) -->
+            <div id="tab-case-applications" class="tab-pane hidden">
+                <h2 style="margin-bottom: 20px;">Review case applications</h2>
+                <div class="card" style="margin-bottom:16px;background:#f0fdf4;border:1px solid #bbf7d0;">
+                    <p style="margin:0;color:#166534;font-size:0.92rem;line-height:1.55;">
+                        <strong>Seminar registrations</strong> are reviewed under <em>Review Applications</em>.
+                        This queue is only for <strong>case presentation</strong> submissions — verify files, assign judges, and track judging status.
+                        Selected participants receive a <strong>cash prize selection letter</strong>; final winners are declared on <strong>seminar day</strong>.
+                        <strong>Seminar registration is mandatory</strong> for selected presenters.
+                    </p>
+                </div>
+                <div class="card">
+                    <p style="color:#64748b;font-size:0.88rem;margin:0 0 12px;">Search applications, open <strong>Review</strong> to verify files, assign judges, and process results. Configure programs under <strong>Case Management</strong>.</p>
+                    <button type="button" class="btn-primary" style="background:#64748b;margin-bottom:12px;" onclick="loadAdminCaseSubmissions()">Refresh submissions</button>
+                    <div id="case-submissions-status-bar" style="margin-bottom:14px;"></div>
+                    <div style="margin-bottom:12px;">
+                        <label for="case-submissions-search" style="font-weight:600;font-size:0.9rem;">Search submissions</label>
+                        <input type="search" id="case-submissions-search" placeholder="Application ID, doctor, category, topic, or status…" oninput="renderAdminCaseSubmissionsTable()" style="width:100%;max-width:560px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;margin-top:6px;">
+                        <p id="case-submissions-search-count" style="margin:6px 0 0;font-size:0.82rem;color:#64748b;"></p>
+                    </div>
+                    <table class="data-table">
+                        <thead><tr><th>App ID</th><th>Doctor</th><th>Category</th><th>Topic</th><th>Status</th><th>Files</th><th>Actions</th></tr></thead>
+                        <tbody id="case-mgmt-list"><tr><td colspan="7" style="text-align:center;">Open this tab or click Refresh to load submissions.</td></tr></tbody>
+                    </table>
+                </div>
+                <div id="case-mgmt-detail" class="card hidden" style="margin-top:16px;"></div>
             </div>
 
             <!-- Seminar Management -->
@@ -1770,9 +1799,9 @@
                     <ol style="margin:8px 0 0 18px;color:#334155;line-height:1.6;font-size:0.92rem;">
                         <li><strong>Step 1 — Program &amp; form:</strong> Set dates, categories, and application form fields below, then click <strong>Save program</strong>.</li>
                         <li><strong>Step 2 — Judge criteria:</strong> Add scoring criteria and max marks (you can refine these later before judging opens).</li>
-                        <li><strong>Step 3 — Applications:</strong> Doctors apply from the portal; submissions appear in the table below.</li>
-                        <li><strong>Step 4 — Judge allotment:</strong> Open a submission → set marking deadline → tick judges → <strong>Assign selected judges</strong>.</li>
-                        <li><strong>Step 5 — Results:</strong> View scores, transfer judges if needed, mark winner, and export marksheets.</li>
+                        <li><strong>Step 3 — Applications:</strong> Doctors apply from the portal; staff review submissions under <strong>Review case applications</strong> (separate from seminar <em>Review Applications</em>).</li>
+                        <li><strong>Step 4 — Judge allotment:</strong> In <strong>Review case applications</strong>, open a submission → set marking deadline → tick judges → <strong>Assign selected judges</strong>.</li>
+                        <li><strong>Step 5 — Results:</strong> Mark winners below; selected doctors receive a cash-prize letter. Winners are declared on seminar day — <strong>seminar registration is mandatory</strong> for selected presenters.</li>
                     </ol>
                 </div>
                 <div class="card" style="margin-bottom:16px;">
@@ -1839,25 +1868,9 @@
                     </div>
                     <p id="case-priority-msg" style="margin-top:8px;font-size:0.88rem;font-weight:600;"></p>
                 </div>
-                <div class="card">
-                    <h3 style="margin:0 0 8px;">Case application review</h3>
-                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:12px;">Search applications, open <strong>Review</strong> to verify files, assign judges, and process results.</p>
-                    <button type="button" class="btn-primary" style="background:#64748b;margin-bottom:12px;" onclick="loadAdminCaseSubmissions()">Refresh submissions</button>
-                    <div id="case-submissions-status-bar" style="margin-bottom:14px;"></div>
-                    <div style="margin-bottom:12px;">
-                        <label for="case-submissions-search" style="font-weight:600;font-size:0.9rem;">Search submissions</label>
-                        <input type="search" id="case-submissions-search" placeholder="Application ID, doctor, category, topic, or status…" oninput="renderAdminCaseSubmissionsTable()" style="width:100%;max-width:560px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;margin-top:6px;">
-                        <p id="case-submissions-search-count" style="margin:6px 0 0;font-size:0.82rem;color:#64748b;"></p>
-                    </div>
-                    <table class="data-table">
-                        <thead><tr><th>App ID</th><th>Doctor</th><th>Category</th><th>Topic</th><th>Status</th><th>Files</th><th>Actions</th></tr></thead>
-                        <tbody id="case-mgmt-list"><tr><td colspan="6" style="text-align:center;">Loading…</td></tr></tbody>
-                    </table>
-                </div>
-                <div id="case-mgmt-detail" class="card hidden" style="margin-top:16px;"></div>
                 <div class="card" style="margin-top:16px;">
                     <h3 style="margin-bottom:8px;">Case results (auto-ranked)</h3>
-                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:12px;">Average judge scores. Highest row highlighted — you still choose admission via <strong>Mark winner</strong>.</p>
+                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:12px;">Average judge scores. Highest row highlighted — use <strong>Mark winner</strong> to select. Selected doctors receive a cash-prize letter; final prizes are declared on seminar day. Seminar registration is mandatory.</p>
                     <label style="font-size:0.82rem;font-weight:700;">Program filter</label>
                     <select id="case-results-program" style="width:100%;max-width:360px;padding:8px;margin:8px 0 12px;" onchange="loadAdminCaseResults(); loadAdminCaseMarksheetPreview();">
                         <option value="">All programs</option>
@@ -3034,6 +3047,6 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
-    <script src="/js/admin.js?v=20260612legal2"></script>
+    <script src="/js/admin.js?v=20260612case1"></script>
 </body>
 </html>
