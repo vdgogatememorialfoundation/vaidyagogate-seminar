@@ -72,6 +72,56 @@
             });
     }
 
+    function legalPageMenuKey(id) {
+        const slug = String(id || '')
+            .trim()
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, '-')
+            .replace(/^-+|-+$/g, '');
+        return 'legal-' + (slug || 'page');
+    }
+
+    function legalPageIdFromHref(href) {
+        const h = String(href || '');
+        if (h.indexOf('legal.html') === -1) return '';
+        const m = h.match(/[?&]p=([^&#]+)/i);
+        if (!m) return '';
+        try {
+            return decodeURIComponent(m[1]).trim().toLowerCase();
+        } catch (_) {
+            return String(m[1] || '').trim().toLowerCase();
+        }
+    }
+
+    function buildFooterLegalLinks(menuPages, legalPages) {
+        const list = Array.isArray(legalPages) ? legalPages : [];
+        return list
+            .filter(function (p) {
+                return p && p.id && websiteMenuPageEnabled(menuPages, legalPageMenuKey(p.id));
+            })
+            .sort(function (a, b) {
+                return (
+                    (Number(a.order) || 0) - (Number(b.order) || 0) ||
+                    String(a.title || '').localeCompare(String(b.title || ''))
+                );
+            })
+            .map(function (p) {
+                return {
+                    id: p.id,
+                    title: p.title || p.id,
+                    href: '/legal.html?p=' + encodeURIComponent(p.id),
+                    menuKey: legalPageMenuKey(p.id)
+                };
+            });
+    }
+
+    function buildLegalMenuDefs(legalPages) {
+        const list = Array.isArray(legalPages) ? legalPages : [];
+        return list.map(function (p) {
+            return [legalPageMenuKey(p.id), 'Legal: ' + (p.title || p.id)];
+        });
+    }
+
     function filterSiteMenuItems(pages, siteMenu) {
         const items = Array.isArray(siteMenu) ? siteMenu : [];
         return items.filter(function (it) {
@@ -81,6 +131,10 @@
             if (href && (href.startsWith('/') || href.startsWith('http'))) {
                 if (href.indexOf('verify-certificate') !== -1) {
                     return websiteMenuPageEnabled(pages, 'certificate');
+                }
+                const legalId = legalPageIdFromHref(href);
+                if (legalId) {
+                    return websiteMenuPageEnabled(pages, legalPageMenuKey(legalId));
                 }
                 return true;
             }
@@ -129,6 +183,9 @@
     window.PortalWebsiteMenu = {
         defs: WEBSITE_MENU_PAGE_DEFS,
         pageEnabled: websiteMenuPageEnabled,
+        legalPageMenuKey: legalPageMenuKey,
+        buildLegalMenuDefs: buildLegalMenuDefs,
+        buildFooterLegalLinks: buildFooterLegalLinks,
         buildFooterExploreLinks: buildFooterExploreLinks,
         buildSiteMenuNavItems: buildSiteMenuNavItems,
         filterSiteMenuItems: filterSiteMenuItems,

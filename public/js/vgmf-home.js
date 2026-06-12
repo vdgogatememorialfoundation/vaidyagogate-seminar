@@ -162,6 +162,35 @@
             .join('');
     }
 
+    window.applySiteFooterLegal = function applySiteFooterLegal(cms) {
+        const legalNav = document.getElementById('footer-legal-nav');
+        if (!legalNav || !cms) return;
+        const menuPages = (window.__portalAuth && window.__portalAuth.websiteMenuPages) || {};
+        const legalLinks =
+            window.PortalWebsiteMenu &&
+            typeof window.PortalWebsiteMenu.buildFooterLegalLinks === 'function'
+                ? window.PortalWebsiteMenu.buildFooterLegalLinks(menuPages, cms.legalPages || [])
+                : [];
+        legalNav.innerHTML = legalLinks
+            .map((item) => {
+                return (
+                    '<a href="' +
+                    escHtml(item.href) +
+                    '" data-menu-key="' +
+                    escHtml(item.menuKey || '') +
+                    '">' +
+                    escHtml(item.title) +
+                    '</a>'
+                );
+            })
+            .join('');
+        if (!legalLinks.length) {
+            legalNav.classList.add('hidden');
+        } else {
+            legalNav.classList.remove('hidden');
+        }
+    };
+
     window.applySiteFooterExplore = function applySiteFooterExplore(cms) {
         const exploreUl = document.getElementById('footer-explore-links');
         if (!exploreUl || !cms) return;
@@ -253,27 +282,7 @@
             window.refreshPortalAuthUi();
         }
 
-        const legalNav = document.getElementById('footer-legal-nav');
-        const legalPages = cms.legalPages || {};
-        if (legalNav) {
-            const links = [
-                { key: 'terms', page: legalPages.terms },
-                { key: 'privacy', page: legalPages.privacy },
-                { key: 'refund', page: legalPages.refund }
-            ];
-            legalNav.innerHTML = links
-                .map((item) => {
-                    const label = (item.page && item.page.title) || item.key;
-                    return (
-                        '<a href="/legal.html?p=' +
-                        encodeURIComponent(item.key) +
-                        '">' +
-                        escHtml(label) +
-                        '</a>'
-                    );
-                })
-                .join('');
-        }
+        window.applySiteFooterLegal(cms);
 
         const top = cms.topBar || {};
         setText('top-email', top.email);

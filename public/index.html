@@ -465,10 +465,10 @@
         </div>
     </div>
 
-    <script src="/js/portal-website-menu.js?v=20260608menu3"></script>
+    <script src="/js/portal-website-menu.js?v=20260611legal2"></script>
     <script src="/js/portal-content-protection.js"></script>
     <script src="/js/portal-scrolling-announcements.js"></script>
-    <script src="/js/vgmf-home.js?v=20260611legal1"></script>
+    <script src="/js/vgmf-home.js?v=20260611legal2"></script>
     <script src="/js/portal-theme.js"></script>
     <script src="/js/vgmf-congress.js?v=20260610i18n3"></script>
     <script src="/js/live-chat-client-info.js?v=20260610chat1"></script>
@@ -528,9 +528,11 @@
                     if (typeof applySiteMenu === 'function') applySiteMenu(window.__siteCms);
                     if (typeof window.applySiteFooterExplore === 'function') {
                         window.applySiteFooterExplore(window.__siteCms);
-                    } else {
-                        applyWebsiteMenuVisibility();
                     }
+                    if (typeof window.applySiteFooterLegal === 'function') {
+                        window.applySiteFooterLegal(window.__siteCms);
+                    }
+                    applyWebsiteMenuVisibility();
                 } else {
                     applyWebsiteMenuVisibility();
                 }

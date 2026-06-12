@@ -772,8 +772,8 @@
                         </div>
                 <div class="card" style="margin-bottom:18px;border:1px solid #a7f3d0;background:#ecfdf5;" id="website-menu-policy-card">
                     <h3 style="margin:0 0 10px;color:#047857;font-size:1.05rem;">Website menu pages</h3>
-                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:12px;">Choose which pages appear in the public website <strong>header menu and footer Explore links</strong>. Uncheck to hide a page from both. Save with <strong>Save portal auth policy</strong> below.</p>
-                    <div id="website-menu-pages-checkboxes" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;max-height:200px;overflow-y:auto;padding:8px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;"></div>
+                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:12px;">Choose which pages appear in the public website <strong>header menu</strong>, <strong>footer Explore links</strong>, and <strong>footer legal policy links</strong>. Legal pages you add in Website content appear here as <em>Legal: …</em> checkboxes. Save with <strong>Save portal auth policy</strong> below.</p>
+                    <div id="website-menu-pages-checkboxes" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;max-height:280px;overflow-y:auto;padding:8px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;"></div>
                 </div>
                 <div class="card" style="margin-bottom:18px;border:1px solid #c7d2fe;background:#eef2ff;" id="admin-pages-policy-card">
                     <h3 style="margin:0 0 10px;color:#4338ca;font-size:1.05rem;">Admin menu pages (global)</h3>
@@ -1095,24 +1095,9 @@
                     </div>
                     <div style="margin-top:22px;padding-top:16px;border-top:1px solid #e2e8f0;">
                         <label style="font-weight:700;">Legal pages (main site)</label>
-                        <p style="color:#64748b;font-size:0.88rem;margin:6px 0 10px;">Terms &amp; Conditions, Privacy Policy, and Refund Policy shown at <code>/legal.html</code> and linked in the site footer. Use blank lines between paragraphs.</p>
-                        <div style="display:grid;gap:14px;">
-                            <div style="padding:12px;border:1px solid #cbd5e1;border-radius:10px;background:#f8fafc;">
-                                <label style="font-weight:700;">Terms &amp; Conditions</label>
-                                <input type="text" id="cms-legal-terms-title" style="width:100%;padding:8px;margin:8px 0;" placeholder="Terms &amp; Conditions">
-                                <textarea id="cms-legal-terms-body" rows="8" style="width:100%;padding:8px;font-size:0.88rem;" placeholder="Page content…"></textarea>
-                            </div>
-                            <div style="padding:12px;border:1px solid #cbd5e1;border-radius:10px;background:#f8fafc;">
-                                <label style="font-weight:700;">Privacy Policy</label>
-                                <input type="text" id="cms-legal-privacy-title" style="width:100%;padding:8px;margin:8px 0;" placeholder="Privacy Policy">
-                                <textarea id="cms-legal-privacy-body" rows="8" style="width:100%;padding:8px;font-size:0.88rem;" placeholder="Page content…"></textarea>
-                            </div>
-                            <div style="padding:12px;border:1px solid #cbd5e1;border-radius:10px;background:#f8fafc;">
-                                <label style="font-weight:700;">Refund Policy</label>
-                                <input type="text" id="cms-legal-refund-title" style="width:100%;padding:8px;margin:8px 0;" placeholder="Refund Policy">
-                                <textarea id="cms-legal-refund-body" rows="8" style="width:100%;padding:8px;font-size:0.88rem;" placeholder="Page content…"></textarea>
-                            </div>
-                        </div>
+                        <p style="color:#64748b;font-size:0.88rem;margin:6px 0 10px;">Custom policy pages shown at <code>/legal.html?p=slug</code> and linked in the site footer. Each page can be shown or hidden under <strong>Website menu pages</strong> (Super Admin → Portal auth). Use blank lines between paragraphs.</p>
+                        <div id="cms-legal-pages-rows"></div>
+                        <button type="button" class="btn-primary" style="margin-top:8px;padding:8px 14px;font-size:0.9rem;background:#0d9488;" onclick="cmsAddLegalPageRow(); renderWebsiteMenuPagesCheckboxes();">+ Add legal page</button>
                     </div>
                     <div style="margin-top:22px;padding-top:16px;border-top:1px solid #e2e8f0;">
                         <label style="font-weight:700;">About us</label>
@@ -3048,7 +3033,7 @@
     <link rel="stylesheet" href="/css/book-track.css?v=20260529stg">
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
-    <script src="/js/portal-website-menu.js?v=20260608menu2"></script>
-    <script src="/js/admin.js?v=20260611legal1"></script>
+    <script src="/js/portal-website-menu.js?v=20260611legal2"></script>
+    <script src="/js/admin.js?v=20260611legal2"></script>
 </body>
 </html>

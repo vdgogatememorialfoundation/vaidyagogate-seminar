@@ -13238,30 +13238,104 @@ function cmsCollectAboutFromDom() {
         .filter((x) => x.heading || x.body);
 }
 
+function cmsSlugLegalIdFromDom(raw, fallback) {
+    let s = String(raw || '')
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '');
+    return s || fallback || 'page';
+}
+
+function cmsAddLegalPageRow(prefill) {
+    const root = document.getElementById('cms-legal-pages-rows');
+    if (!root) return;
+    const p = prefill || {};
+    const wrap = document.createElement('div');
+    wrap.className = 'cms-legal-page-row';
+    wrap.style.cssText =
+        'padding:12px;border:1px solid #cbd5e1;border-radius:10px;background:#f8fafc;margin-bottom:12px;';
+    wrap.innerHTML =
+        '<div style="display:grid;grid-template-columns:1fr 2fr;gap:8px;margin-bottom:8px;">' +
+        '<div><label style="font-size:0.8rem;font-weight:600;">URL slug</label>' +
+        '<input class="clp-id" type="text" style="width:100%;" placeholder="e.g. cookie-policy"></div>' +
+        '<div><label style="font-size:0.8rem;font-weight:600;">Page title</label>' +
+        '<input class="clp-title" type="text" style="width:100%;" placeholder="Cookie Policy"></div></div>' +
+        '<div><label style="font-size:0.8rem;font-weight:600;">Content</label>' +
+        '<textarea class="clp-body" rows="8" style="width:100%;padding:8px;font-size:0.88rem;" placeholder="Page content…"></textarea></div>' +
+        '<div style="margin-top:8px;"><button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;background:#64748b;" onclick="cmsRemoveLegalPageRow(this)">Remove page</button></div>';
+    wrap.querySelector('.clp-id').value = p.id || '';
+    wrap.querySelector('.clp-title').value = p.title || '';
+    wrap.querySelector('.clp-body').value = p.body || '';
+    root.appendChild(wrap);
+}
+
+function cmsRemoveLegalPageRow(btn) {
+    const row = btn && btn.closest('.cms-legal-page-row');
+    if (row) row.remove();
+    renderWebsiteMenuPagesCheckboxes();
+}
+
 function cmsCollectLegalPagesFromDom() {
-    const pick = (titleId, bodyId) => ({
-        title: ((document.getElementById(titleId) || {}).value || '').trim(),
-        body: ((document.getElementById(bodyId) || {}).value || '').trim()
-    });
-    return {
-        terms: pick('cms-legal-terms-title', 'cms-legal-terms-body'),
-        privacy: pick('cms-legal-privacy-title', 'cms-legal-privacy-body'),
-        refund: pick('cms-legal-refund-title', 'cms-legal-refund-body')
-    };
+    const root = document.getElementById('cms-legal-pages-rows');
+    if (!root) return [];
+    const seen = new Set();
+    return Array.from(root.querySelectorAll('.cms-legal-page-row'))
+        .map((row, idx) => {
+            const rawId = (row.querySelector('.clp-id') || {}).value || '';
+            const title = ((row.querySelector('.clp-title') || {}).value || '').trim();
+            const body = ((row.querySelector('.clp-body') || {}).value || '').trim();
+            let id = cmsSlugLegalIdFromDom(rawId, cmsSlugLegalIdFromDom(title, 'page-' + (idx + 1)));
+            let unique = id;
+            let n = 2;
+            while (seen.has(unique)) {
+                unique = id + '-' + n;
+                n += 1;
+            }
+            seen.add(unique);
+            return { id: unique, title: title || unique, body, order: idx + 1 };
+        })
+        .filter((x) => x.title || x.body);
 }
 
 function cmsFillLegalPages(legalPages) {
-    const lp = legalPages || {};
-    const set = (id, val) => {
-        const el = document.getElementById(id);
-        if (el) el.value = val == null ? '' : String(val);
-    };
-    set('cms-legal-terms-title', lp.terms && lp.terms.title);
-    set('cms-legal-terms-body', lp.terms && lp.terms.body);
-    set('cms-legal-privacy-title', lp.privacy && lp.privacy.title);
-    set('cms-legal-privacy-body', lp.privacy && lp.privacy.body);
-    set('cms-legal-refund-title', lp.refund && lp.refund.title);
-    set('cms-legal-refund-body', lp.refund && lp.refund.body);
+    const root = document.getElementById('cms-legal-pages-rows');
+    if (!root) return;
+    root.innerHTML = '';
+    let list = [];
+    if (Array.isArray(legalPages)) {
+        list = legalPages;
+    } else if (legalPages && typeof legalPages === 'object') {
+        list = ['terms', 'privacy', 'refund'].map((id, idx) => ({
+            id,
+            title: legalPages[id] && legalPages[id].title,
+            body: legalPages[id] && legalPages[id].body,
+            order: idx + 1
+        }));
+    }
+    if (!list.length) {
+        cmsAddLegalPageRow({ id: 'terms', title: 'Terms & Conditions' });
+        cmsAddLegalPageRow({ id: 'privacy', title: 'Privacy Policy' });
+        cmsAddLegalPageRow({ id: 'refund', title: 'Refund Policy' });
+    } else {
+        list.forEach((p) => cmsAddLegalPageRow(p));
+    }
+    if (__siteCmsEditing) __siteCmsEditing.legalPages = cmsCollectLegalPagesFromDom();
+    renderWebsiteMenuPagesCheckboxes();
+}
+
+function getWebsiteMenuPageDefs() {
+    const legalFromDom = cmsCollectLegalPagesFromDom();
+    const legalFromCms =
+        __siteCmsEditing && Array.isArray(__siteCmsEditing.legalPages) ? __siteCmsEditing.legalPages : [];
+    const legalPages = legalFromDom.length ? legalFromDom : legalFromCms;
+    const legalDefs =
+        window.PortalWebsiteMenu && typeof window.PortalWebsiteMenu.buildLegalMenuDefs === 'function'
+            ? window.PortalWebsiteMenu.buildLegalMenuDefs(legalPages)
+            : legalPages.map(function (p) {
+                  return ['legal-' + (p.id || 'page'), 'Legal: ' + (p.title || p.id || 'page')];
+              });
+    return WEBSITE_MENU_PAGE_DEFS.concat(legalDefs);
 }
 
 function cmsFillAboutRows(items) {
@@ -13527,10 +13601,11 @@ function cmsWebsiteMenuPagesFromAdminDom() {
 
 function cmsEnabledWebsiteMenuSections() {
     const pages = cmsWebsiteMenuPagesFromAdminDom();
+    const defs = getWebsiteMenuPageDefs();
     if (window.PortalWebsiteMenu && typeof window.PortalWebsiteMenu.orderedEnabledSections === 'function') {
-        return window.PortalWebsiteMenu.orderedEnabledSections(pages, [], WEBSITE_MENU_PAGE_DEFS);
+        return window.PortalWebsiteMenu.orderedEnabledSections(pages, [], defs);
     }
-    return WEBSITE_MENU_PAGE_DEFS.map(function (pair) {
+    return defs.map(function (pair) {
         return pair[0];
     });
 }
@@ -14783,7 +14858,7 @@ async function loadAdminSiteCms() {
         cmsFillPublicNoticeRows(cms.publicNotices || []);
         cmsFillDoctorRows(cms.doctorUpdates || []);
         cmsFillAboutRows(cms.aboutSections || []);
-        cmsFillLegalPages(cms.legalPages || {});
+        cmsFillLegalPages(cms.legalPages || []);
         cmsFillSocialRows(cms.socialLinks || []);
         const galleryYears =
             Array.isArray(cms.seminarGalleryYears) && cms.seminarGalleryYears.length
@@ -14978,20 +15053,22 @@ function renderWebsiteMenuPagesCheckboxes() {
     const pages = window.__websiteMenuPages || {};
     const keys = Object.keys(pages);
     const restrict = keys.length && keys.some((k) => pages[k] === true);
-    wrap.innerHTML = WEBSITE_MENU_PAGE_DEFS.map(([id, title]) => {
-        const checked = !restrict || pages[id] === true;
-        return (
-            '<label style="display:flex;align-items:center;gap:8px;font-size:0.88rem;cursor:pointer;">' +
-            '<input type="checkbox" data-website-menu-key="' +
-            id +
-            '" ' +
-            (checked ? 'checked' : '') +
-            ' onchange="syncAdminFooterExplorePreview()">' +
-            '<span>' +
-            title +
-            '</span></label>'
-        );
-    }).join('');
+    wrap.innerHTML = getWebsiteMenuPageDefs()
+        .map(([id, title]) => {
+            const checked = !restrict || pages[id] === true;
+            return (
+                '<label style="display:flex;align-items:center;gap:8px;font-size:0.88rem;cursor:pointer;">' +
+                '<input type="checkbox" data-website-menu-key="' +
+                id +
+                '" ' +
+                (checked ? 'checked' : '') +
+                ' onchange="syncAdminFooterExplorePreview()">' +
+                '<span>' +
+                title +
+                '</span></label>'
+            );
+        })
+        .join('');
     syncAdminFooterExplorePreview();
 }
 
