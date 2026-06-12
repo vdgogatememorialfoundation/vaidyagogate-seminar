@@ -970,7 +970,8 @@ const DEFAULT_PUBLIC_SITE_CMS = {
             { label: 'Sign in', action: 'login' },
             { label: 'Create account', action: 'signup' }
         ]
-    }
+    },
+    legalPages: siteCmsHelpers.DEFAULT_LEGAL_PAGES
 };
 const DEFAULT_PUBLIC_SITE_CMS_JSON = JSON.stringify(DEFAULT_PUBLIC_SITE_CMS);
 

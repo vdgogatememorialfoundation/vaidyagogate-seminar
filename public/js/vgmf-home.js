@@ -253,6 +253,28 @@
             window.refreshPortalAuthUi();
         }
 
+        const legalNav = document.getElementById('footer-legal-nav');
+        const legalPages = cms.legalPages || {};
+        if (legalNav) {
+            const links = [
+                { key: 'terms', page: legalPages.terms },
+                { key: 'privacy', page: legalPages.privacy },
+                { key: 'refund', page: legalPages.refund }
+            ];
+            legalNav.innerHTML = links
+                .map((item) => {
+                    const label = (item.page && item.page.title) || item.key;
+                    return (
+                        '<a href="/legal.html?p=' +
+                        encodeURIComponent(item.key) +
+                        '">' +
+                        escHtml(label) +
+                        '</a>'
+                    );
+                })
+                .join('');
+        }
+
         const top = cms.topBar || {};
         setText('top-email', top.email);
         setText('top-phone', top.phone);

@@ -13238,6 +13238,32 @@ function cmsCollectAboutFromDom() {
         .filter((x) => x.heading || x.body);
 }
 
+function cmsCollectLegalPagesFromDom() {
+    const pick = (titleId, bodyId) => ({
+        title: ((document.getElementById(titleId) || {}).value || '').trim(),
+        body: ((document.getElementById(bodyId) || {}).value || '').trim()
+    });
+    return {
+        terms: pick('cms-legal-terms-title', 'cms-legal-terms-body'),
+        privacy: pick('cms-legal-privacy-title', 'cms-legal-privacy-body'),
+        refund: pick('cms-legal-refund-title', 'cms-legal-refund-body')
+    };
+}
+
+function cmsFillLegalPages(legalPages) {
+    const lp = legalPages || {};
+    const set = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.value = val == null ? '' : String(val);
+    };
+    set('cms-legal-terms-title', lp.terms && lp.terms.title);
+    set('cms-legal-terms-body', lp.terms && lp.terms.body);
+    set('cms-legal-privacy-title', lp.privacy && lp.privacy.title);
+    set('cms-legal-privacy-body', lp.privacy && lp.privacy.body);
+    set('cms-legal-refund-title', lp.refund && lp.refund.title);
+    set('cms-legal-refund-body', lp.refund && lp.refund.body);
+}
+
 function cmsFillAboutRows(items) {
     const root = document.getElementById('cms-about-rows');
     if (!root) return;
@@ -14757,6 +14783,7 @@ async function loadAdminSiteCms() {
         cmsFillPublicNoticeRows(cms.publicNotices || []);
         cmsFillDoctorRows(cms.doctorUpdates || []);
         cmsFillAboutRows(cms.aboutSections || []);
+        cmsFillLegalPages(cms.legalPages || {});
         cmsFillSocialRows(cms.socialLinks || []);
         const galleryYears =
             Array.isArray(cms.seminarGalleryYears) && cms.seminarGalleryYears.length
@@ -15067,6 +15094,7 @@ async function saveAdminSiteCms() {
     }
     const reviews = cmsCollectReviewsFromDom();
     const aboutSections = cmsCollectAboutFromDom();
+    const legalPages = cmsCollectLegalPagesFromDom();
     const socialLinks = cmsCollectSocialFromDom();
     const seminarGalleryYears = cmsCollectGalleryYearsFromDom();
     const pastSeminarGallery = seminarGalleryYears.reduce((acc, yg) => {
@@ -15087,6 +15115,7 @@ async function saveAdminSiteCms() {
             reviews,
             publicNotices: cmsCollectPublicNoticesFromDom(),
             aboutSections,
+            legalPages,
             socialLinks,
             pastSeminarGallery,
             seminarGalleryYears,
