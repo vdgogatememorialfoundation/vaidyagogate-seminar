@@ -11768,6 +11768,61 @@ app.post('/api/admin/payment_gateways/sync-default', (req, res) => {
     });
 });
 
+// Admin: Razorpay key diagnostics (must be registered before /:name)
+app.get('/api/admin/payment_gateways/razorpay/diagnostics', (req, res) => {
+    const razorpayResolve = require('./lib/razorpay-resolve');
+    razorpayResolve.razorpayDiagnostics(db, (e, diag) => {
+        if (e) return res.status(500).json({ error: e.message });
+        res.json({ success: true, ...diag });
+    });
+});
+
+// Admin: copy Render env keys into DB after validation (must be registered before /:name)
+app.post('/api/admin/payment_gateways/razorpay/sync-from-env', (req, res) => {
+    const env = require('./lib/razorpay-credentials').fromEnv();
+    if (!env) {
+        return res.status(400).json({
+            success: false,
+            error: 'RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET are not set on the server (Render environment).'
+        });
+    }
+    adminPaymentFlow.validateRazorpayCredentials(env.key_id, env.key_secret, (vErr, result) => {
+        if (vErr) return res.status(500).json({ error: vErr.message });
+        if (!result.ok) {
+            return res.status(400).json({ success: false, error: result.error });
+        }
+        db.get(`SELECT config FROM payment_gateways WHERE name = ?`, ['razorpay'], (e, row) => {
+            if (e) return res.status(500).json({ error: e.message });
+            const existing = row && row.config ? paymentGatewayOptions.parseGatewayConfig(row.config) : {};
+            const ex = paymentGatewayOptions.migrateLegacyRazorpay(existing);
+            const incoming = {
+                test: { ...(ex.test || {}), enabled: ex.test && ex.test.enabled === true },
+                live: { ...(ex.live || {}), enabled: ex.live && ex.live.enabled === true }
+            };
+            if (env.mode === 'test') {
+                incoming.test = { enabled: true, key_id: env.key_id, key_secret: env.key_secret };
+            } else {
+                incoming.live = { enabled: true, key_id: env.key_id, key_secret: env.key_secret };
+            }
+            const merged = paymentGatewayOptions.mergeRazorpayConfig(existing, incoming);
+            const normalized = paymentGatewayOptions.normalizeGatewaySave('razorpay', merged, true);
+            db.run(
+                `INSERT OR REPLACE INTO payment_gateways (name, is_active, config) VALUES (?, ?, ?)`,
+                ['razorpay', normalized.is_active, JSON.stringify(normalized.config)],
+                (uErr) => {
+                    if (uErr) return res.status(500).json({ error: uErr.message });
+                    res.json({
+                        success: true,
+                        message: 'Razorpay keys copied from Render environment into payment gateways.',
+                        mode: env.mode,
+                        keyPrefix: require('./lib/razorpay-credentials').keyIdPrefix(env.key_id)
+                    });
+                }
+            );
+        });
+    });
+});
+
 // Admin: test saved Razorpay keys (must be registered before /:name)
 app.post('/api/admin/payment_gateways/razorpay/test', (req, res) => {
     const mode = String((req.body && req.body.mode) || 'test').toLowerCase();
@@ -11794,27 +11849,46 @@ app.post('/api/admin/payment_gateways/:name', (req, res) => {
     const { is_active, config } = req.body;
     const finish = (rawConfig) => {
         const normalized = paymentGatewayOptions.normalizeGatewaySave(name, rawConfig || {}, !!is_active);
-        db.run(
-            `INSERT OR REPLACE INTO payment_gateways (name, is_active, config) VALUES (?, ?, ?)`,
-            [name, normalized.is_active, JSON.stringify(normalized.config)],
-            function (err) {
-                if (err) return res.status(500).json({ error: err.message });
-                const liveReady = paymentGatewayOptions
-                    .expandGatewayRow({
-                        name,
-                        is_active: normalized.is_active,
-                        config: normalized.config
-                    })
-                    .some((o) => o.mode === 'live');
-                if (String(name).toLowerCase() !== 'razorpay') {
-                    return res.json({ success: true, liveReady });
+        const persist = () => {
+            db.run(
+                `INSERT OR REPLACE INTO payment_gateways (name, is_active, config) VALUES (?, ?, ?)`,
+                [name, normalized.is_active, JSON.stringify(normalized.config)],
+                function (err) {
+                    if (err) return res.status(500).json({ error: err.message });
+                    const liveReady = paymentGatewayOptions
+                        .expandGatewayRow({
+                            name,
+                            is_active: normalized.is_active,
+                            config: normalized.config
+                        })
+                        .some((o) => o.mode === 'live');
+                    if (String(name).toLowerCase() !== 'razorpay') {
+                        return res.json({ success: true, liveReady });
+                    }
+                    adminPaymentFlow.validateSavedRazorpayConfig(normalized.config, (vErr, validation) => {
+                        if (vErr) return res.status(500).json({ error: vErr.message });
+                        res.json({ success: true, liveReady, razorpayValidation: validation });
+                    });
                 }
-                adminPaymentFlow.validateSavedRazorpayConfig(normalized.config, (vErr, validation) => {
-                    if (vErr) return res.status(500).json({ error: vErr.message });
-                    res.json({ success: true, liveReady, razorpayValidation: validation });
-                });
+            );
+        };
+        if (String(name).toLowerCase() !== 'razorpay') {
+            return persist();
+        }
+        adminPaymentFlow.validateSavedRazorpayConfig(normalized.config, (vErr, validation) => {
+            if (vErr) return res.status(500).json({ error: vErr.message });
+            const failed =
+                (validation.test && !validation.test.skipped && !validation.test.ok) ||
+                (validation.live && !validation.live.skipped && !validation.live.ok);
+            if (failed) {
+                const errMsg =
+                    (validation.test && !validation.test.skipped && !validation.test.ok && validation.test.error) ||
+                    (validation.live && !validation.live.skipped && !validation.live.ok && validation.live.error) ||
+                    'Razorpay keys are invalid.';
+                return res.status(400).json({ success: false, error: errMsg, razorpayValidation: validation });
             }
-        );
+            persist();
+        });
     };
     if (String(name).toLowerCase() === 'razorpay' && config) {
         return db.get(`SELECT config FROM payment_gateways WHERE name = ?`, [name], (e, row) => {

@@ -9699,6 +9699,7 @@ async function loadSettings() {
                 }
                 document.getElementById('pg-razorpay-live-enabled').checked = live.enabled === true;
                 document.getElementById('pg-razorpay-active').checked = !!pg.is_active;
+                loadRazorpayGatewayDiagnostics();
             } else if (pg.name === 'cashfree') {
                 const live = config.live || {};
                 document.getElementById('pg-cashfree-app-id').value = live.app_id || config.app_id || '';
@@ -9981,6 +9982,66 @@ function previewLiveSiteDuringMaintenance() {
     window.open(url, '_blank', 'noopener');
 }
         
+async function loadRazorpayGatewayDiagnostics() {
+    const el = document.getElementById('pg-razorpay-diag');
+    if (!el) return;
+    try {
+        const res = await fetch('/api/admin/payment_gateways/razorpay/diagnostics');
+        const d = await res.json();
+        if (!res.ok || !d.success) {
+            el.textContent = '';
+            return;
+        }
+        const parts = [];
+        if (d.dbTestActive) parts.push('Admin test: ' + (d.dbTestKeyPrefix || '(none)'));
+        if (d.envConfigured) parts.push('Render env: ' + (d.envKeyPrefix || '(none)'));
+        if (d.hint) parts.push(d.hint);
+        else if (d.envConfigured && d.dbTestActive && !d.envMatchesDbTest) {
+            parts.push('Warning: Render env Key ID differs from admin test Key ID.');
+        }
+        el.textContent = parts.join(' · ');
+    } catch (_) {
+        el.textContent = '';
+    }
+}
+
+async function syncRazorpayFromRenderEnv() {
+    if (!confirm('Copy RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET from Render into payment gateways? This overwrites the saved test/live keys for that mode.')) {
+        return;
+    }
+    try {
+        const res = await fetch('/api/admin/payment_gateways/razorpay/sync-from-env', { method: 'POST' });
+        const data = await res.json();
+        if (!res.ok || !data.success) {
+            alert(data.error || 'Could not sync from Render environment.');
+            return;
+        }
+        alert(data.message || 'Synced from Render.');
+        await loadSettings();
+        await loadRazorpayGatewayDiagnostics();
+    } catch (e) {
+        alert('Network error');
+    }
+}
+
+async function testRazorpayGatewayKeys(mode) {
+    try {
+        const res = await fetch('/api/admin/payment_gateways/razorpay/test', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mode: mode || 'test' })
+        });
+        const data = await res.json();
+        if (data.ok) {
+            alert('Razorpay ' + (mode || 'test') + ' keys verified OK.');
+        } else {
+            alert('Razorpay ' + (mode || 'test') + ' keys failed: ' + (data.error || 'invalid'));
+        }
+    } catch (e) {
+        alert('Network error');
+    }
+}
+
 async function savePaymentGatewaysSettings() {
     const cfAppId = document.getElementById('pg-cashfree-app-id').value.trim();
     const cfSecret = document.getElementById('pg-cashfree-secret-key').value.trim();
@@ -10128,18 +10189,29 @@ async function savePaymentGatewaysSettings() {
         ];
     try {
         let razorpayValidation = null;
+        let razorpaySaveFailed = false;
         for (const gw of gateways) {
             const res = await fetch(`/api/admin/payment_gateways/${gw.name}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ is_active: gw.is_active, config: gw.config })
             });
-            if (gw.name === 'razorpay' && res.ok) {
-                try {
-                    const data = await res.json();
-                    razorpayValidation = data.razorpayValidation || null;
-                } catch (_) {}
+            let data = {};
+            try {
+                data = await res.json();
+            } catch (_) {}
+            if (gw.name === 'razorpay') {
+                razorpayValidation = data.razorpayValidation || null;
+                if (!res.ok) {
+                    razorpaySaveFailed = true;
+                    alert(data.error || 'Razorpay keys were not saved — fix Key ID and Secret, then save again.');
+                }
             }
+        }
+        if (razorpaySaveFailed) {
+            setAdminSettingsSaveMsg('Razorpay keys not saved — see alert.', true);
+            await loadRazorpayGatewayDiagnostics();
+            return;
         }
         const syncRes = await fetch('/api/admin/payment_gateways/sync-default', { method: 'POST' });
         const syncData = syncRes.ok ? await syncRes.json() : {};
@@ -10181,6 +10253,7 @@ async function savePaymentGatewaysSettings() {
             }
         }
         setAdminSettingsSaveMsg(saveMsg);
+        await loadRazorpayGatewayDiagnostics();
     } catch (err) {
         console.error(err);
         setAdminSettingsSaveMsg('Could not save payment gateways.', true);

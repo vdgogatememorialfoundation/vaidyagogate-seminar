@@ -2454,6 +2454,12 @@
                         </div>
                         <label style="margin-top: 8px; display:block;"><input type="checkbox" id="pg-razorpay-live-enabled"> Enable Live mode for doctors</label>
                         <label style="margin-top: 10px; display:block;"><input type="checkbox" id="pg-razorpay-active"> Enable Razorpay gateway</label>
+                        <p style="margin-top:10px;font-size:0.85rem;color:#64748b;">Use a matching Key ID and Secret from Razorpay Dashboard → Settings → API Keys. Re-enter the secret whenever you change Key ID.</p>
+                        <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
+                            <button type="button" class="btn-secondary" onclick="syncRazorpayFromRenderEnv()">Use Render env keys</button>
+                            <button type="button" class="btn-secondary" onclick="testRazorpayGatewayKeys('test')">Test test keys</button>
+                        </div>
+                        <p id="pg-razorpay-diag" style="margin-top:8px;font-size:0.82rem;color:#475569;"></p>
                     </div>
                     
                     <!-- Cashfree -->
