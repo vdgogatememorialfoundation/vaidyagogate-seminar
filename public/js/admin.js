@@ -15055,7 +15055,8 @@ function renderWebsiteMenuPagesCheckboxes() {
     const restrict = keys.length && keys.some((k) => pages[k] === true);
     wrap.innerHTML = getWebsiteMenuPageDefs()
         .map(([id, title]) => {
-            const checked = !restrict || pages[id] === true;
+            const isLegal = String(id).indexOf('legal-') === 0;
+            const checked = isLegal ? pages[id] !== false : !restrict || pages[id] === true;
             return (
                 '<label style="display:flex;align-items:center;gap:8px;font-size:0.88rem;cursor:pointer;">' +
                 '<input type="checkbox" data-website-menu-key="' +
@@ -15118,7 +15119,12 @@ async function savePortalAuthAdminConfig() {
         const websiteMenuPages = {};
         document.querySelectorAll('#website-menu-pages-checkboxes input[data-website-menu-key]').forEach((inp) => {
             const id = inp.getAttribute('data-website-menu-key');
-            if (id && inp.checked) websiteMenuPages[id] = true;
+            if (!id) return;
+            if (String(id).indexOf('legal-') === 0) {
+                websiteMenuPages[id] = !!inp.checked;
+            } else if (inp.checked) {
+                websiteMenuPages[id] = true;
+            }
         });
         config.websiteMenuPages = websiteMenuPages;
     }

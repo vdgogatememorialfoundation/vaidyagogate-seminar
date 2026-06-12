@@ -16,8 +16,30 @@
         });
     }
 
+    function normalizeLegalPagesList(raw) {
+        if (Array.isArray(raw)) return raw;
+        if (raw && typeof raw === 'object') {
+            return ['terms', 'privacy', 'refund']
+                .map(function (id, idx) {
+                    return {
+                        id: id,
+                        title: raw[id] && raw[id].title,
+                        body: raw[id] && raw[id].body,
+                        order: idx + 1
+                    };
+                })
+                .filter(function (p) {
+                    return (p.title && String(p.title).trim()) || (p.body && String(p.body).trim());
+                });
+        }
+        return [];
+    }
+
     function websiteMenuPageEnabled(pages, key) {
         if (!websiteMenuPagesRestrict(pages)) return true;
+        if (String(key || '').indexOf('legal-') === 0) {
+            return pages[key] !== false;
+        }
         return pages[key] === true;
     }
 
@@ -94,7 +116,7 @@
     }
 
     function buildFooterLegalLinks(menuPages, legalPages) {
-        const list = Array.isArray(legalPages) ? legalPages : [];
+        const list = normalizeLegalPagesList(legalPages);
         return list
             .filter(function (p) {
                 return p && p.id && websiteMenuPageEnabled(menuPages, legalPageMenuKey(p.id));
@@ -116,7 +138,7 @@
     }
 
     function buildLegalMenuDefs(legalPages) {
-        const list = Array.isArray(legalPages) ? legalPages : [];
+        const list = normalizeLegalPagesList(legalPages);
         return list.map(function (p) {
             return [legalPageMenuKey(p.id), 'Legal: ' + (p.title || p.id)];
         });
@@ -184,6 +206,7 @@
         defs: WEBSITE_MENU_PAGE_DEFS,
         pageEnabled: websiteMenuPageEnabled,
         legalPageMenuKey: legalPageMenuKey,
+        normalizeLegalPagesList: normalizeLegalPagesList,
         buildLegalMenuDefs: buildLegalMenuDefs,
         buildFooterLegalLinks: buildFooterLegalLinks,
         buildFooterExploreLinks: buildFooterExploreLinks,

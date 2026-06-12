@@ -4477,6 +4477,9 @@ app.get('/api/public/site-cms', (req, res) => {
     const cacheKey = 'api:public:site-cms';
     const cached = cacheGet(cacheKey);
     if (cached) {
+        if (cached.legalPages) {
+            cached.legalPages = siteCmsHelpers.normalizeLegalPages(cached.legalPages);
+        }
         setEdgeCache(res, 60);
         return res.json(cached);
     }
@@ -4510,7 +4513,8 @@ app.post('/api/admin/site-cms', (req, res) => {
         'pastSeminarGallery',
         'seminarGalleryYears',
         'siteMenu',
-        'speakers'
+        'speakers',
+        'legalPages'
     ];
     for (let i = 0; i < arrayKeys.length; i++) {
         const k = arrayKeys[i];
@@ -4536,7 +4540,8 @@ app.post('/api/admin/site-cms', (req, res) => {
             'pastSeminarGallery',
             'seminarGalleryYears',
             'siteMenu',
-            'speakers'
+            'speakers',
+            'legalPages'
         ].forEach((k) => {
             if (incoming[k] !== undefined) merged[k] = incoming[k];
         });
@@ -4585,7 +4590,23 @@ app.post('/api/admin/site-cms', (req, res) => {
             if (err) return res.status(500).json({ error: err.message });
             cacheInvalidatePrefix('api:public:site-cms');
             cacheInvalidatePrefix('api:public:announcements');
-            res.json({ success: true });
+            portalAuthPolicy.loadPortalAuthConfig(db, () => {
+                const existing = portalAuthPolicy.getPortalAuthConfig();
+                const syncedMenu = siteCmsHelpers.mergeLegalPagesWebsiteMenu(
+                    existing.websiteMenuPages || {},
+                    normalized.legalPages
+                );
+                const nextAuth = portalAuthPolicy.merge({
+                    ...existing,
+                    websiteMenuPages: syncedMenu
+                });
+                upsertGlobalSetting(portalAuthPolicy.KEY, JSON.stringify(nextAuth), (authErr) => {
+                    if (!authErr) {
+                        portalAuthPolicy.loadPortalAuthConfig(db, () => {});
+                    }
+                    res.json({ success: true });
+                });
+            });
         });
     });
 });

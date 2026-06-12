@@ -465,10 +465,10 @@
         </div>
     </div>
 
-    <script src="/js/portal-website-menu.js?v=20260611legal2"></script>
+    <script src="/js/portal-website-menu.js?v=20260612legal1"></script>
     <script src="/js/portal-content-protection.js"></script>
     <script src="/js/portal-scrolling-announcements.js"></script>
-    <script src="/js/vgmf-home.js?v=20260611legal2"></script>
+    <script src="/js/vgmf-home.js?v=20260612legal1"></script>
     <script src="/js/portal-theme.js"></script>
     <script src="/js/vgmf-congress.js?v=20260610i18n3"></script>
     <script src="/js/live-chat-client-info.js?v=20260610chat1"></script>
@@ -548,7 +548,11 @@
             const pages = (window.__portalAuth && window.__portalAuth.websiteMenuPages) || {};
             const keys = Object.keys(pages);
             const restrict = keys.length && keys.some((k) => pages[k] === true);
-            const isShown = (key) => !restrict || pages[key] === true;
+            const isShown = (key) => {
+                if (!restrict) return true;
+                if (key && String(key).indexOf('legal-') === 0) return pages[key] !== false;
+                return pages[key] === true;
+            };
             document
                 .querySelectorAll('#cg-nav-menu-links a[data-nav-section], #cg-nav-menu-links a[data-menu-key]')
                 .forEach((a) => {
