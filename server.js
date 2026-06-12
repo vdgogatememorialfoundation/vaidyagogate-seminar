@@ -6141,7 +6141,7 @@ app.get('/api/doctor/dashboard-stats/:userId', (req, res) => {
             'registered_seminars'
         ],
         [
-            `SELECT COUNT(*) AS c FROM registrations WHERE user_id = ? AND status IN ('completed','checked_in','approved_pending_payment')`,
+            `SELECT COUNT(*) AS c FROM registrations WHERE user_id = ? AND status IN ('completed','checked_in','e_ticket_issued','certificate_issued')`,
             'paid_or_confirmed'
         ],
         [

@@ -6569,18 +6569,19 @@ function loadRazorpayCheckoutScript() {
 }
 
 function openDoctorRazorpayCheckout(result, regId, methodId) {
+    const rzOrder = result.razorpayOrder || result.order;
     const checkoutKey = result.keyId || (result.order && result.order.key_id);
-    if (!checkoutKey || !result.order) {
+    if (!checkoutKey || !rzOrder || !rzOrder.id) {
         alert('Online payment could not be started. Try another method or contact the seminar office.');
         return;
     }
                 const options = {
         key: checkoutKey,
-                    amount: result.order.amount,
-        currency: result.order.currency || 'INR',
+                    amount: rzOrder.amount,
+        currency: rzOrder.currency || 'INR',
                     name: 'Vaidya Gogate Memorial Foundation National Seminar',
                     description: 'Seminar Registration',
-                    order_id: result.order.id,
+                    order_id: rzOrder.id,
                     handler: function (response) {
                         fetch('/api/payments/verify', {
                             method: 'POST',
@@ -6753,7 +6754,11 @@ async function processPayment(appId, amount, appNo, paymentOption, cancelPending
             ensureDoctorPaymentPoll();
             return;
         }
-        if (result.paymentType === 'razorpay_checkout' || result.gateway === 'razorpay') {
+        if (
+            (result.paymentType === 'razorpay_checkout' || result.gateway === 'razorpay') &&
+            (result.razorpayOrder || result.order) &&
+            result.keyId
+        ) {
             await loadRazorpayCheckoutScript();
             if (typeof Razorpay === 'undefined') {
                 alert('Payment checkout could not load. Disable ad blockers and refresh the page.');

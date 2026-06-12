@@ -150,11 +150,6 @@
                 <div id="case-participant-panel" class="participant-panel hidden"></div>
                 <div class="jp-toolbar">
                     <button type="button" class="btn" id="case-contact-participant-btn"><i class="fas fa-comments"></i> Messages</button>
-                    <span class="jp-toolbar-label">Transfer case</span>
-                    <select id="case-transfer-judge-select" class="jp-select">
-                        <option value="">Select judge…</option>
-                    </select>
-                    <button type="button" class="btn btn-transfer" id="case-transfer-judge-btn"><i class="fas fa-arrow-right-arrow-left"></i> Transfer</button>
                 </div>
                 <div id="case-score-files" class="case-files-grid"></div>
                 <div id="case-score-criteria"></div>
@@ -209,7 +204,6 @@
             let activeScoreSubmissionId = null;
             let caseCriteriaDefs = [];
             let activeParticipant = null;
-            let judgePeerList = [];
             let caseRowsCache = [];
             let caseFilter = 'all';
             let contactPollTimer = null;
@@ -243,32 +237,6 @@
                     PortalAuth.renderLoginTime('judge-login-time', u);
                 }
                 loadCaseAssignments();
-                loadJudgePeerList();
-            }
-
-            async function loadJudgePeerList() {
-                const sel = document.getElementById('case-transfer-judge-select');
-                if (!sel || !user) return;
-                try {
-                    const jid = judgeNumericUserId();
-                    const res = await fetch(
-                        '/api/judge/case/reviewers?judgeUserId=' +
-                            encodeURIComponent(jid) +
-                            '&judgeUserIdString=' +
-                            encodeURIComponent(judgePortalIdString())
-                    );
-                    const data = await res.json();
-                    judgePeerList = data.judges || [];
-                    sel.innerHTML = '<option value="">Select judge…</option>';
-                    judgePeerList.forEach((j) => {
-                        const opt = document.createElement('option');
-                        opt.value = String(j.id);
-                        opt.textContent = j.name || 'Judge';
-                        sel.appendChild(opt);
-                    });
-                } catch (e) {
-                    console.error(e);
-                }
             }
 
             function escapeHtml(s) {
@@ -672,35 +640,6 @@
 
             document.getElementById('case-contact-cancel').addEventListener('click', closeContactModal);
             document.getElementById('case-contact-cancel-x').addEventListener('click', closeContactModal);
-
-            document.getElementById('case-transfer-judge-btn').addEventListener('click', async () => {
-                if (!user || !activeScoreSubmissionId) return;
-                const toJudgeId = parseInt(document.getElementById('case-transfer-judge-select')?.value, 10);
-                if (!Number.isInteger(toJudgeId) || toJudgeId < 1) return alert('Select a judge from the list');
-                const picked = judgePeerList.find((j) => j.id === toJudgeId);
-                const label = picked ? picked.name : 'selected judge';
-                if (!confirm('Transfer this case to ' + label + '? You will no longer see it in your list.')) return;
-                try {
-                    const jid = judgeNumericUserId();
-                    const res = await fetch('/api/judge/case/submissions/' + activeScoreSubmissionId + '/transfer-judge', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            judgeUserId: jid,
-                            judgeUserIdString: judgePortalIdString(),
-                            toJudgeUserId: toJudgeId
-                        })
-                    });
-                    const data = await res.json();
-                    if (!res.ok) return alert(data.error || 'Transfer failed');
-                    alert('Case transferred to ' + label);
-                    closeScoreModal();
-                    closeContactModal();
-                    loadCaseAssignments();
-                } catch (e) {
-                    alert('Network error');
-                }
-            });
 
             document.getElementById('case-contact-send').addEventListener('click', async () => {
                 if (!user || !activeScoreSubmissionId) return;
