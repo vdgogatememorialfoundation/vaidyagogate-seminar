@@ -5803,7 +5803,10 @@ app.post('/api/doctor/client-telemetry', (req, res) => {
     }
     const clientDiagnostics = req.body && req.body.clientDiagnostics;
     userClientTelemetry.saveUserClientTelemetry(db, userId, req, clientDiagnostics, (err) => {
-        if (err) return res.status(500).json({ error: err.message });
+        if (err) {
+            console.warn('[client-telemetry]', err.message);
+            return res.json({ success: true, skipped: true });
+        }
         res.json({ success: true });
     });
 });

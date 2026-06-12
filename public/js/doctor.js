@@ -1091,9 +1091,26 @@ function getPaymentOptionForReg(regId) {
 
 function defaultPaymentMethodForPayButton() {
     const opts = window.__doctorPaymentOptions || [];
-    if (opts.length === 1) return "'" + String(opts[0].id).replace(/'/g, "\\'") + "'";
-    return null;
+    return opts.length === 1 ? opts[0].id : '';
 }
+
+function bindDoctorPayButtonDelegation() {
+    if (window.__doctorPayClickBound) return;
+    window.__doctorPayClickBound = true;
+    const root = document.getElementById('dashboard-main') || document.body;
+    root.addEventListener('click', (e) => {
+        const btn = e.target && e.target.closest ? e.target.closest('.doctor-pay-btn') : null;
+        if (!btn || btn.disabled) return;
+        e.preventDefault();
+        const regId = parseInt(btn.getAttribute('data-reg-id') || '', 10);
+        const amount = parseFloat(btn.getAttribute('data-amount') || '0');
+        const appNo = btn.getAttribute('data-app-no') || '';
+        const method = btn.getAttribute('data-method') || '';
+        if (Number.isNaN(regId) || regId < 1) return;
+        processPayment(regId, amount, appNo, method || undefined);
+    });
+}
+window.bindDoctorPayButtonDelegation = bindDoctorPayButtonDelegation;
 window.getPaymentOptionForReg = getPaymentOptionForReg;
 
 function renderTrackerStepsHtml(timeline) {
@@ -1352,19 +1369,20 @@ function renderSeminarApplicationTrackerCard(a) {
             (st === 'documents_requested' ? 'Upload additional documents' : 'Re-upload certificate &amp; NCISM') +
             '</button></div>';
     }
-    const payMethodOnclick = defaultPaymentMethodForPayButton();
+    const defaultPayMethod = defaultPaymentMethodForPayButton();
     const payBtn =
         st === 'approved_pending_payment' && !isPaid
             ? paymentGatewaySelectHtml(a.id) +
-              '<button type="button" class="btn-success" style="margin-top:10px;" onclick="processPayment(' +
-              a.id +
-              ', ' +
-              payAmt +
-              ', ' +
-              JSON.stringify(String(a.application_no || '')) +
-              ', ' +
-              (payMethodOnclick || 'getPaymentOptionForReg(' + a.id + ')') +
-              ')">Make Payment (₹' +
+              '<button type="button" class="btn-success doctor-pay-btn" style="margin-top:10px;" ' +
+              'data-reg-id="' +
+              escapeHtml(String(a.id)) +
+              '" data-amount="' +
+              escapeHtml(String(payAmt)) +
+              '" data-app-no="' +
+              escapeHtml(String(a.application_no || '')) +
+              '" data-method="' +
+              escapeHtml(defaultPayMethod) +
+              '">Make Payment (₹' +
               payAmt +
               ')</button>'
             : '';
@@ -1546,7 +1564,7 @@ function initDoctorMobileNav() {
 }
 
 function sendDoctorClientTelemetry() {
-    const uid = doctorNumericUserId();
+    const uid = window.__doctorResolvedInternalId || doctorNumericUserId();
     if (!uid) return;
     const diagnostics =
         window.LiveChatClientInfo && typeof window.LiveChatClientInfo.collect === 'function'
@@ -1567,6 +1585,7 @@ function scheduleDoctorClientTelemetry() {
 
 async function bootDoctorDashboard(user) {
     currentUser = user;
+    bindDoctorPayButtonDelegation();
     window.__doctorResolvedInternalId = doctorNumericUserId();
     initDoctorPortalAccessRefreshOnVisible();
     const resolved = await ensureDoctorInternalUserId();
