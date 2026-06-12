@@ -96,6 +96,20 @@
             .join('');
     }
 
+    function renderLegalFooter(legalPages, menuPages) {
+        const footer = document.getElementById('legal-footer-nav');
+        if (!footer || !window.PortalWebsiteMenu) return;
+        const links =
+            typeof window.PortalWebsiteMenu.buildFooterLegalLinks === 'function'
+                ? window.PortalWebsiteMenu.buildFooterLegalLinks(menuPages, legalPages)
+                : [];
+        footer.innerHTML =
+            typeof window.PortalWebsiteMenu.renderFooterLegalLinksHtml === 'function'
+                ? window.PortalWebsiteMenu.renderFooterLegalLinksHtml(links, esc)
+                : '';
+        footer.parentElement.style.display = links.length ? '' : 'none';
+    }
+
     async function init() {
         const requested = normalizeKeyInput(new URLSearchParams(window.location.search).get('p') || new URLSearchParams(window.location.search).get('page') || 'terms');
         const titleEl = document.getElementById('legal-title');
@@ -122,6 +136,7 @@
                         '<p style="color:#64748b;">This page is not available on the public website.</p>';
                 }
                 renderLegalNav(legalPages, menuPages, '');
+                renderLegalFooter(legalPages, menuPages);
                 if (statusEl) statusEl.textContent = '';
                 return;
             }
@@ -130,6 +145,7 @@
             if (titleEl) titleEl.textContent = page.title || 'Legal';
             if (bodyEl) bodyEl.innerHTML = formatBody(page.body);
             renderLegalNav(legalPages, menuPages, pageId);
+            renderLegalFooter(legalPages, menuPages);
             if (statusEl) statusEl.textContent = '';
         } catch (e) {
             if (statusEl) statusEl.textContent = 'Could not load page content. Please try again later.';

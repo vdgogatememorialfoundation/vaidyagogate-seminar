@@ -1557,7 +1557,8 @@ const WEBSITE_MENU_PAGE_DEFS = [
     ['gallery', 'Gallery'],
     ['verify', 'Delegates (participant search)'],
     ['certificate', 'Certificate verification'],
-    ['contact', 'Contact']
+    ['contact', 'Contact'],
+    ['legal', 'Legal (all policy pages)']
 ];
 
 const ADMIN_MODULE_TAB_DEFS = [
@@ -15055,7 +15056,7 @@ function renderWebsiteMenuPagesCheckboxes() {
     const restrict = keys.length && keys.some((k) => pages[k] === true);
     wrap.innerHTML = getWebsiteMenuPageDefs()
         .map(([id, title]) => {
-            const isLegal = String(id).indexOf('legal-') === 0;
+            const isLegal = id === 'legal' || String(id).indexOf('legal-') === 0;
             const checked = isLegal ? pages[id] !== false : !restrict || pages[id] === true;
             return (
                 '<label style="display:flex;align-items:center;gap:8px;font-size:0.88rem;cursor:pointer;">' +
@@ -15120,7 +15121,7 @@ async function savePortalAuthAdminConfig() {
         document.querySelectorAll('#website-menu-pages-checkboxes input[data-website-menu-key]').forEach((inp) => {
             const id = inp.getAttribute('data-website-menu-key');
             if (!id) return;
-            if (String(id).indexOf('legal-') === 0) {
+            if (id === 'legal' || String(id).indexOf('legal-') === 0) {
                 websiteMenuPages[id] = !!inp.checked;
             } else if (inp.checked) {
                 websiteMenuPages[id] = true;

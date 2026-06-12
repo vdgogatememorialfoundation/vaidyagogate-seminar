@@ -596,7 +596,11 @@
         const menuPages =
             (window.__portalAuth && window.__portalAuth.websiteMenuPages) || {};
         if (window.PortalWebsiteMenu && typeof window.PortalWebsiteMenu.buildSiteMenuNavItems === 'function') {
-            const navItems = window.PortalWebsiteMenu.buildSiteMenuNavItems(menuPages, cms.siteMenu);
+            const navItems = window.PortalWebsiteMenu.buildSiteMenuNavItems(
+                menuPages,
+                cms.siteMenu,
+                cms.legalPages
+            );
             host.innerHTML = navItems
                 .map(function (item) {
                     if (item.kind === 'href') {

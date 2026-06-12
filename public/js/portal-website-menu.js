@@ -6,7 +6,8 @@
         ['gallery', 'Gallery'],
         ['verify', 'Delegates'],
         ['certificate', 'Certificate'],
-        ['contact', 'Contact']
+        ['contact', 'Contact'],
+        ['legal', 'Legal (all policy pages)']
     ];
 
     function websiteMenuPagesRestrict(pages) {
@@ -35,9 +36,14 @@
         return [];
     }
 
+    function isLegalMenuKey(key) {
+        const k = String(key || '');
+        return k === 'legal' || k.indexOf('legal-') === 0;
+    }
+
     function websiteMenuPageEnabled(pages, key) {
         if (!websiteMenuPagesRestrict(pages)) return true;
-        if (String(key || '').indexOf('legal-') === 0) {
+        if (isLegalMenuKey(key)) {
             return pages[key] !== false;
         }
         return pages[key] === true;
@@ -84,7 +90,7 @@
         const defs = WEBSITE_MENU_PAGE_DEFS;
         return orderedEnabledSections(pages, siteMenu, defs)
             .filter(function (section) {
-                return section !== 'certificate';
+                return section !== 'certificate' && section !== 'legal';
             })
             .map(function (section) {
                 return {
@@ -113,6 +119,26 @@
         } catch (_) {
             return String(m[1] || '').trim().toLowerCase();
         }
+    }
+
+    function renderFooterLegalLinksHtml(links, escHtml) {
+        const esc = typeof escHtml === 'function' ? escHtml : function (s) { return String(s == null ? '' : s); };
+        return (Array.isArray(links) ? links : [])
+            .map(function (item, idx) {
+                const sep =
+                    idx > 0 ? '<span class="footer-legal-sep" aria-hidden="true"> | </span>' : '';
+                return (
+                    sep +
+                    '<a href="' +
+                    esc(item.href) +
+                    '" data-menu-key="' +
+                    esc(item.menuKey || '') +
+                    '">' +
+                    esc(item.title) +
+                    '</a>'
+                );
+            })
+            .join('');
     }
 
     function buildFooterLegalLinks(menuPages, legalPages) {
@@ -154,9 +180,12 @@
                 if (href.indexOf('verify-certificate') !== -1) {
                     return websiteMenuPageEnabled(pages, 'certificate');
                 }
-                const legalId = legalPageIdFromHref(href);
-                if (legalId) {
-                    return websiteMenuPageEnabled(pages, legalPageMenuKey(legalId));
+                if (href.indexOf('legal.html') !== -1) {
+                    const legalId = legalPageIdFromHref(href);
+                    if (legalId) {
+                        return websiteMenuPageEnabled(pages, legalPageMenuKey(legalId));
+                    }
+                    return websiteMenuPageEnabled(pages, 'legal');
                 }
                 return true;
             }
@@ -165,8 +194,10 @@
         });
     }
 
-    function buildSiteMenuNavItems(pages, siteMenu) {
-        const defs = WEBSITE_MENU_PAGE_DEFS;
+    function buildSiteMenuNavItems(pages, siteMenu, legalPages) {
+        const defs = WEBSITE_MENU_PAGE_DEFS.filter(function (pair) {
+            return pair[0] !== 'legal';
+        });
         const sections = orderedEnabledSections(pages, siteMenu, defs);
         const cmsBySection = {};
         (Array.isArray(siteMenu) ? siteMenu : []).forEach(function (it) {
@@ -174,7 +205,7 @@
                 cmsBySection[String(it.section).trim()] = it;
             }
         });
-        return sections.map(function (section) {
+        const items = sections.map(function (section) {
             const cmsItem = cmsBySection[section];
             const label =
                 cmsItem && String(cmsItem.label || '').trim()
@@ -200,6 +231,17 @@
             }
             return { kind: 'section', section: section, label: label, menuKey: section };
         });
+        const legalLinks = buildFooterLegalLinks(pages, legalPages);
+        if (legalLinks.length && websiteMenuPageEnabled(pages, 'legal')) {
+            items.push({
+                kind: 'href',
+                href: '/legal.html',
+                label: 'Legal',
+                menuKey: 'legal',
+                external: false
+            });
+        }
+        return items;
     }
 
     window.PortalWebsiteMenu = {
@@ -209,6 +251,7 @@
         normalizeLegalPagesList: normalizeLegalPagesList,
         buildLegalMenuDefs: buildLegalMenuDefs,
         buildFooterLegalLinks: buildFooterLegalLinks,
+        renderFooterLegalLinksHtml: renderFooterLegalLinksHtml,
         buildFooterExploreLinks: buildFooterExploreLinks,
         buildSiteMenuNavItems: buildSiteMenuNavItems,
         filterSiteMenuItems: filterSiteMenuItems,

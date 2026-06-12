@@ -171,19 +171,25 @@
             typeof window.PortalWebsiteMenu.buildFooterLegalLinks === 'function'
                 ? window.PortalWebsiteMenu.buildFooterLegalLinks(menuPages, cms.legalPages || [])
                 : [];
-        legalNav.innerHTML = legalLinks
-            .map((item) => {
-                return (
-                    '<a href="' +
-                    escHtml(item.href) +
-                    '" data-menu-key="' +
-                    escHtml(item.menuKey || '') +
-                    '">' +
-                    escHtml(item.title) +
-                    '</a>'
-                );
-            })
-            .join('');
+        legalNav.innerHTML =
+            window.PortalWebsiteMenu &&
+            typeof window.PortalWebsiteMenu.renderFooterLegalLinksHtml === 'function'
+                ? window.PortalWebsiteMenu.renderFooterLegalLinksHtml(legalLinks, escHtml)
+                : legalLinks
+                      .map((item, idx) => {
+                          const sep = idx > 0 ? '<span class="footer-legal-sep" aria-hidden="true"> | </span>' : '';
+                          return (
+                              sep +
+                              '<a href="' +
+                              escHtml(item.href) +
+                              '" data-menu-key="' +
+                              escHtml(item.menuKey || '') +
+                              '">' +
+                              escHtml(item.title) +
+                              '</a>'
+                          );
+                      })
+                      .join('');
         if (!legalLinks.length) {
             legalNav.classList.add('hidden');
         } else {
