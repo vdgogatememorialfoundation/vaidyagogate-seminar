@@ -6754,11 +6754,16 @@ async function processPayment(appId, amount, appNo, paymentOption, cancelPending
             ensureDoctorPaymentPoll();
             return;
         }
-        if (
-            (result.paymentType === 'razorpay_checkout' || result.gateway === 'razorpay') &&
-            (result.razorpayOrder || result.order) &&
-            result.keyId
-        ) {
+        if (result.paymentType === 'razorpay_checkout' || result.gateway === 'razorpay') {
+            const rzOrder = result.razorpayOrder || result.order;
+            if (!result.keyId || !rzOrder || !rzOrder.id) {
+                console.error('[payment] incomplete Razorpay checkout payload', result);
+                alert(
+                    result.error ||
+                        'Razorpay checkout could not start. Hard-refresh this page (Ctrl+Shift+R), allow pop-ups, and try again. If it persists, re-save test keys under Admin → Payment gateways.'
+                );
+                return;
+            }
             await loadRazorpayCheckoutScript();
             if (typeof Razorpay === 'undefined') {
                 alert('Payment checkout could not load. Disable ad blockers and refresh the page.');

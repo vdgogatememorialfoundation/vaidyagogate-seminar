@@ -6570,6 +6570,7 @@ function finishDoctorPayment(res, err, out) {
         body.gateway = 'razorpay';
         body.keyId = out.keyId;
         body.order = out.razorpayOrder;
+        body.razorpayOrder = out.razorpayOrder;
         body.mode = out.mode;
     }
     if (out.paymentType && String(out.paymentType).endsWith('_checkout') && out.gateway !== 'razorpay') {

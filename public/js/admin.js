@@ -10103,6 +10103,32 @@ async function savePaymentGatewaysSettings() {
                 body: JSON.stringify({ is_active: gw.is_active, config: gw.config })
             });
         }
+        const checkoutLabels = [];
+        gateways.forEach((gw) => {
+            if (!gw.is_active) return;
+            const probe =
+                gw.name === 'razorpay'
+                    ? [
+                          gw.config &&
+                          gw.config.test &&
+                          gw.config.test.key_id &&
+                          gw.config.test.key_secret &&
+                          gw.config.test.enabled !== false
+                              ? 'Razorpay (Test)'
+                              : null,
+                          gw.config &&
+                          gw.config.live &&
+                          gw.config.live.key_id &&
+                          gw.config.live.key_secret &&
+                          gw.config.live.enabled !== false
+                              ? 'Razorpay'
+                              : null
+                      ].filter(Boolean)
+                    : gw.is_active
+                      ? [String(gw.name || '').toUpperCase()]
+                      : [];
+            checkoutLabels.push(...probe);
+        });
         const syncRes = await fetch('/api/admin/payment_gateways/sync-default', { method: 'POST' });
         const syncData = syncRes.ok ? await syncRes.json() : {};
         const defaultPg = syncData.defaultGateway || null;
@@ -10112,14 +10138,14 @@ async function savePaymentGatewaysSettings() {
             if (sel) sel.value = defaultPg;
         }
         let saveMsg = 'Payment gateways saved.';
-        if (liveGateways.length) {
-            saveMsg +=
-                ' Doctor checkout is live for: ' +
-                liveGateways.join(', ') +
-                (defaultPg ? ` (default: ${defaultPg}).` : '.');
+        if (checkoutLabels.length) {
+            saveMsg += ' Doctor checkout: ' + [...new Set(checkoutLabels)].join(', ') + '.';
+            if (liveGateways.length && defaultPg) {
+                saveMsg += ` Default live gateway: ${defaultPg}.`;
+            }
         } else {
             saveMsg +=
-                ' No live gateway detected yet — enter merchant keys, check Enable gateway, and save again (PayU, Easebuzz, Paytm, PhonePe, Zoho, Juspay, Cashfree, or Razorpay).';
+                ' No checkout gateway detected yet — enter keys, enable the gateway (and Razorpay test mode if using test keys), then save again.';
         }
         setAdminSettingsSaveMsg(saveMsg);
     } catch (err) {
@@ -10386,7 +10412,7 @@ async function proxyInitiatePayment() {
         }
         if (data.manualConfirm && markBtn) markBtn.classList.remove('hidden');
         else if (markBtn) markBtn.classList.add('hidden');
-        if (data.paymentType === 'razorpay_checkout' && data.razorpayOrder && data.keyId) {
+        if (data.paymentType === 'razorpay_checkout' && adminRazorpayCheckoutPayload(data)) {
             openProxyRazorpayCheckout(data);
         } else if (data.paymentType && String(data.paymentType).endsWith('_checkout') && data.gateway !== 'razorpay') {
             openAdminHostedCheckout(data, () => startProxyPaymentPoll());
@@ -10398,6 +10424,12 @@ async function proxyInitiatePayment() {
         console.error(e);
         alert('Network error');
     }
+}
+
+function adminRazorpayCheckoutPayload(data) {
+    const rzOrder = data && (data.razorpayOrder || data.order);
+    if (!data || !rzOrder || !rzOrder.id || !data.keyId) return null;
+    return Object.assign({}, data, { razorpayOrder: rzOrder });
 }
 
 function openAdminHostedCheckout(data, onPoll) {
@@ -10436,17 +10468,22 @@ function openAdminHostedCheckout(data, onPoll) {
 }
 
 function openAdminRazorpayCheckout(data, onPaid) {
+    const payload = adminRazorpayCheckoutPayload(data);
+    if (!payload) {
+        alert('Razorpay checkout could not start. Re-save gateway keys in Admin → Payment gateways and try again.');
+        return false;
+    }
     if (typeof Razorpay === 'undefined') {
         alert('Razorpay checkout script not loaded. Refresh the page and allow pop-ups for this site.');
         return false;
     }
     const options = {
-        key: data.keyId,
-        amount: data.razorpayOrder.amount,
-        currency: data.razorpayOrder.currency || 'INR',
+        key: payload.keyId,
+        amount: payload.razorpayOrder.amount,
+        currency: payload.razorpayOrder.currency || 'INR',
         name: 'VGMF Seminar',
-        description: 'Registration ' + (data.applicationNo || ''),
-        order_id: data.razorpayOrder.id,
+        description: 'Registration ' + (payload.applicationNo || ''),
+        order_id: payload.razorpayOrder.id,
         handler: function () {
             if (typeof onPaid === 'function') onPaid();
         },
@@ -15537,7 +15574,7 @@ async function initiateAdminCreateOrderPayment() {
             return;
         }
         __coOrderDbId = data.orderDbId;
-        if (data.paymentType === 'razorpay_checkout' && data.razorpayOrder && data.keyId) {
+        if (data.paymentType === 'razorpay_checkout' && adminRazorpayCheckoutPayload(data)) {
             if (msg) msg.textContent = 'Opening Razorpay checkout… allow pop-ups if prompted.';
             const opened = openAdminRazorpayCheckout(data, () => pollAdminCreateOrderPayment());
             if (!opened && msg) {
@@ -15806,7 +15843,7 @@ async function adminRetryOrderPayment(registrationId, orderDbId) {
         const data = await res.json();
         if (!res.ok) return alert(data.error || 'Retry failed');
         __coOrderDbId = data.orderDbId;
-        if (data.paymentType === 'razorpay_checkout' && data.razorpayOrder && data.keyId) {
+        if (data.paymentType === 'razorpay_checkout' && adminRazorpayCheckoutPayload(data)) {
             openAdminRazorpayCheckout(data, () => pollAdminCreateOrderPayment());
         } else if (data.paymentType && String(data.paymentType).endsWith('_checkout') && data.gateway !== 'razorpay') {
             openAdminHostedCheckout(data, () => pollAdminCreateOrderPayment());
@@ -18547,7 +18584,11 @@ function bsPosOpenBookPayment(data) {
         );
         return true;
     }
-    if (data.paymentType === 'razorpay_checkout' && data.razorpayOrder && data.keyId && typeof openAdminRazorpayCheckout === 'function') {
+    if (
+        data.paymentType === 'razorpay_checkout' &&
+        adminRazorpayCheckoutPayload(data) &&
+        typeof openAdminRazorpayCheckout === 'function'
+    ) {
         openAdminRazorpayCheckout(data, () => loadBsPosOrders());
         return true;
     }

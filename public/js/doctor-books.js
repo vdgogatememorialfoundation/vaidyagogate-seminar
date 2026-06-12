@@ -507,7 +507,11 @@
                             '" alt="UPI QR" style="max-width:220px;display:block;margin-top:10px;">';
                     }
                     startBookPaymentPoll(data.bookOrderId, userId);
-                } else if (payData.paymentType === 'razorpay_checkout' && payData.razorpayOrder && payData.keyId) {
+                } else if (
+                    payData.paymentType === 'razorpay_checkout' &&
+                    payData.keyId &&
+                    (payData.razorpayOrder || payData.order)
+                ) {
                     await openBookRazorpayCheckout(payData, data.bookOrderId, userId);
                     if (msg) msg.textContent = payData.message || 'Complete payment in the Razorpay window.';
                 } else if (payData.paymentUrl || payData.formPost || payData.easebuzzAccessKey) {
@@ -583,13 +587,17 @@
             });
         }
         const cu = typeof currentUser !== 'undefined' ? currentUser : {};
+        const rzOrder = payData.razorpayOrder || payData.order;
+        if (!payData.keyId || !rzOrder || !rzOrder.id) {
+            throw new Error('Razorpay checkout could not start. Refresh and try again.');
+        }
         const options = {
             key: payData.keyId,
-            amount: payData.razorpayOrder.amount,
-            currency: payData.razorpayOrder.currency || 'INR',
+            amount: rzOrder.amount,
+            currency: rzOrder.currency || 'INR',
             name: 'Vaidya Gogate Memorial Foundation',
             description: 'Book order',
-            order_id: payData.razorpayOrder.id,
+            order_id: rzOrder.id,
             handler: function () {
                 startBookPaymentPoll(bookOrderId, userId);
             },
