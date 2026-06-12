@@ -1084,7 +1084,15 @@ function getPaymentOptionForReg(regId) {
     const el = document.getElementById('pay-opt-' + regId);
     if (el && el.value) return el.value;
     const opts = window.__doctorPaymentOptions || [];
+    const rz = opts.find((o) => o.gateway === 'razorpay');
+    if (rz) return rz.id;
     return opts[0] ? opts[0].id : '';
+}
+
+function defaultPaymentMethodForPayButton() {
+    const opts = window.__doctorPaymentOptions || [];
+    if (opts.length === 1) return "'" + String(opts[0].id).replace(/'/g, "\\'") + "'";
+    return null;
 }
 window.getPaymentOptionForReg = getPaymentOptionForReg;
 
@@ -1344,18 +1352,19 @@ function renderSeminarApplicationTrackerCard(a) {
             (st === 'documents_requested' ? 'Upload additional documents' : 'Re-upload certificate &amp; NCISM') +
             '</button></div>';
     }
+    const payMethodOnclick = defaultPaymentMethodForPayButton();
     const payBtn =
         st === 'approved_pending_payment' && !isPaid
             ? paymentGatewaySelectHtml(a.id) +
-              '<button class="btn-success" style="margin-top:10px;" onclick="processPayment(' +
+              '<button type="button" class="btn-success" style="margin-top:10px;" onclick="processPayment(' +
               a.id +
               ', ' +
               payAmt +
               ', ' +
               JSON.stringify(String(a.application_no || '')) +
-              ', getPaymentOptionForReg(' +
-              a.id +
-              '))">Make Payment (₹' +
+              ', ' +
+              (payMethodOnclick || 'getPaymentOptionForReg(' + a.id + ')') +
+              ')">Make Payment (₹' +
               payAmt +
               ')</button>'
             : '';
@@ -6568,10 +6577,6 @@ function loadRazorpayCheckoutScript() {
     });
 }
 
-function isRazorpayPaymentMethod(methodId) {
-    return !!methodId && String(methodId).indexOf('razorpay:') === 0;
-}
-
 function doctorRazorpayPaymentOption(methodId, resultMode) {
     if (methodId) return methodId;
     if (resultMode) return 'razorpay:' + resultMode;
@@ -6585,10 +6590,18 @@ function openDoctorRazorpayCheckout(result, regId, methodId) {
     const orderId = (rzOrder && rzOrder.id) || result.order_id;
     const amountPaise = (rzOrder && rzOrder.amount) || result.amount;
     if (!checkoutKey || !orderId || !amountPaise) {
-        alert('Online payment could not be started. Try another method or contact the seminar office.');
+        console.error('[razorpay] missing checkout fields', result);
+        alert(
+            'Online payment could not be started (missing order details). Please refresh and try again, or contact the seminar office.'
+        );
+        return;
+    }
+    if (typeof Razorpay === 'undefined') {
+        alert('Razorpay checkout script did not load. Disable ad blockers and refresh the page.');
         return;
     }
     const payOpt = doctorRazorpayPaymentOption(methodId, result.mode);
+    const user = typeof currentUser !== 'undefined' && currentUser ? currentUser : {};
     const options = {
         key: checkoutKey,
         amount: amountPaise,
@@ -6635,9 +6648,9 @@ function openDoctorRazorpayCheckout(result, regId, methodId) {
             }
         },
         prefill: {
-            name: (currentUser.first_name || '') + ' ' + (currentUser.last_name || ''),
-            email: currentUser.email || '',
-            contact: currentUser.phone || ''
+            name: ((user.first_name || '') + ' ' + (user.last_name || '')).trim(),
+            email: user.email || '',
+            contact: user.phone || ''
         },
         theme: { color: '#0f766e' }
     };
@@ -6653,46 +6666,6 @@ function openDoctorRazorpayCheckout(result, regId, methodId) {
     } catch (openErr) {
         console.error(openErr);
         alert('Could not open payment. Allow pop-ups and try again.');
-    }
-}
-
-async function processRazorpayStandardCheckout(regId, uid, amountRupee, methodId) {
-    try {
-        await loadRazorpayCheckoutScript();
-        if (typeof Razorpay === 'undefined') {
-            alert('Payment checkout could not load. Disable ad blockers and refresh the page.');
-            return;
-        }
-        const res = await fetch('/api/create-order', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                registrationId: regId,
-                userId: uid,
-                amount: amountRupee,
-                paymentOption: methodId || 'razorpay:test'
-            })
-        });
-        let data = {};
-        if (window.HttpJson) {
-            const parsed = await window.HttpJson.readJsonResponse(res);
-            data = parsed.data;
-            if (parsed.parseFailed) {
-                alert(window.HttpJson.apiErrorMessage(res, data, true));
-                return;
-            }
-        } else {
-            data = await res.json();
-        }
-        if (!res.ok || !data.success) {
-            alert(data.error || 'Could not start Razorpay checkout.');
-            return;
-        }
-        openDoctorRazorpayCheckout(data, regId, methodId);
-        ensureDoctorPaymentPoll();
-    } catch (err) {
-        console.error(err);
-        alert(err.message || 'Razorpay checkout could not be started.');
     }
 }
 
@@ -6740,7 +6713,8 @@ async function doctorCancelPendingPayment(regId) {
 window.doctorCancelPendingPayment = doctorCancelPendingPayment;
 
 async function processPayment(appId, amount, appNo, paymentOption, cancelPending) {
-    const uid = doctorNumericUserId();
+    let uid = window.__doctorResolvedInternalId || doctorNumericUserId();
+    if (!uid) uid = await ensureDoctorInternalUserId();
     if (!uid) {
         alert('Please sign out and sign in again, then try payment.');
         return;
@@ -6766,10 +6740,8 @@ async function processPayment(appId, amount, appNo, paymentOption, cancelPending
     if (!methodId) {
         return alert('No payment method is available. Ask the seminar office to enable Razorpay test mode in Admin → Payment gateways.');
     }
-    if (isRazorpayPaymentMethod(methodId)) {
-        return processRazorpayStandardCheckout(regId, uid, amount, methodId);
-    }
     try {
+        await loadRazorpayCheckoutScript();
         const res = await fetch('/api/payments/process', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
