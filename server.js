@@ -1097,7 +1097,14 @@ function seedPaymentGatewaysIfMissing(done) {
     const gateways = ['razorpay', 'payu', 'easebuzz', 'paytm', 'phonepe', 'cashfree', 'juspay', 'zoho'];
     let i = 0;
     const run = () => {
-        if (i >= gateways.length) return done && done();
+        if (i >= gateways.length) {
+            const razorpayStandard = require('./lib/razorpay-standard-checkout');
+            return razorpayStandard.syncRazorpayEnvToDb(db, (syncErr, synced) => {
+                if (syncErr) console.warn('[razorpay] env sync:', syncErr.message);
+                else if (synced) console.log('[razorpay] synced RAZORPAY_KEY_* from environment into payment_gateways');
+                if (done) done();
+            });
+        }
         const name = gateways[i++];
         db.run(
             `INSERT OR IGNORE INTO payment_gateways (name, is_active, config) VALUES (?, 0, '{}')`,

@@ -6568,60 +6568,84 @@ function loadRazorpayCheckoutScript() {
     });
 }
 
+function isRazorpayPaymentMethod(methodId) {
+    if (methodId) return String(methodId).indexOf('razorpay') === 0;
+    const opts = window.__doctorPaymentOptions || [];
+    if (!opts.length) return true;
+    if (opts.length === 1 && opts[0].gateway === 'razorpay') return true;
+    return opts.some((o) => o.gateway === 'razorpay');
+}
+
+function doctorRazorpayPaymentOption(methodId, resultMode) {
+    if (methodId) return methodId;
+    if (resultMode) return 'razorpay:' + resultMode;
+    const opt = (window.__doctorPaymentOptions || []).find((o) => o.gateway === 'razorpay');
+    return opt ? opt.id : 'razorpay:test';
+}
+
 function openDoctorRazorpayCheckout(result, regId, methodId) {
     const rzOrder = result.razorpayOrder || result.order;
-    const checkoutKey = result.keyId || (result.order && result.order.key_id);
-    if (!checkoutKey || !rzOrder || !rzOrder.id) {
+    const checkoutKey = result.keyId || result.key_id || (result.order && result.order.key_id);
+    const orderId = (rzOrder && rzOrder.id) || result.order_id;
+    const amountPaise = (rzOrder && rzOrder.amount) || result.amount;
+    if (!checkoutKey || !orderId || !amountPaise) {
         alert('Online payment could not be started. Try another method or contact the seminar office.');
         return;
     }
-                const options = {
+    const payOpt = doctorRazorpayPaymentOption(methodId, result.mode);
+    const options = {
         key: checkoutKey,
-                    amount: rzOrder.amount,
-        currency: rzOrder.currency || 'INR',
-                    name: 'Vaidya Gogate Memorial Foundation National Seminar',
-                    description: 'Seminar Registration',
-                    order_id: rzOrder.id,
-                    handler: function (response) {
-                        fetch('/api/payments/verify', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
+        amount: amountPaise,
+        currency: (rzOrder && rzOrder.currency) || result.currency || 'INR',
+        name: 'Vaidya Gogate Memorial Foundation National Seminar',
+        description: 'Seminar Registration',
+        order_id: orderId,
+        handler: function (response) {
+            fetch('/api/verify-payment', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    applicationId: regId,
-                    paymentData: response,
-                    gateway: 'razorpay',
-                    mode: result.mode,
-                    paymentOption: methodId,
-                    userId: doctorNumericUserId()
+                    registrationId: regId,
+                    userId: doctorNumericUserId(),
+                    paymentOption: payOpt,
+                    razorpay_order_id: response.razorpay_order_id,
+                    razorpay_payment_id: response.razorpay_payment_id,
+                    razorpay_signature: response.razorpay_signature
                 })
             })
                 .then((r) => r.json())
                 .then((verifyResult) => {
-                            if (verifyResult.success) {
+                    if (verifyResult.success) {
                         alert(
                             verifyResult.message ||
                                 'Payment successful. Your e-ticket is under Participant tickets. Join the seminar WhatsApp group from My Applications when the link appears.'
                         );
-                                loadApplications().then(() => {
-                                    showPostPaymentWhatsappBanner(regId);
-                                });
+                        loadApplications().then(() => {
+                            showPostPaymentWhatsappBanner(regId);
+                        });
                         loadDoctorDashboardStats();
                         loadDoctorOrders();
                         loadDoctorReceipts();
                         loadDoctorEventTickets();
-                            } else {
+                    } else {
                         alert(verifyResult.error || 'Payment verification failed');
-                            }
-                        });
-                    },
-                    prefill: {
+                    }
+                })
+                .catch(() => alert('Payment verification request failed. Contact the seminar office with your payment receipt.'));
+        },
+        modal: {
+            ondismiss: function () {
+                console.info('[razorpay] checkout dismissed');
+            }
+        },
+        prefill: {
             name: (currentUser.first_name || '') + ' ' + (currentUser.last_name || ''),
             email: currentUser.email || '',
             contact: currentUser.phone || ''
         },
         theme: { color: '#0f766e' }
-                };
-                const rzp = new Razorpay(options);
+    };
+    const rzp = new Razorpay(options);
     rzp.on('payment.failed', function (resp) {
         alert(
             (resp.error && resp.error.description) ||
@@ -6629,10 +6653,50 @@ function openDoctorRazorpayCheckout(result, regId, methodId) {
         );
     });
     try {
-                rzp.open();
+        rzp.open();
     } catch (openErr) {
         console.error(openErr);
         alert('Could not open payment. Allow pop-ups and try again.');
+    }
+}
+
+async function processRazorpayStandardCheckout(regId, uid, amountRupee, methodId) {
+    try {
+        await loadRazorpayCheckoutScript();
+        if (typeof Razorpay === 'undefined') {
+            alert('Payment checkout could not load. Disable ad blockers and refresh the page.');
+            return;
+        }
+        const res = await fetch('/api/create-order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                registrationId: regId,
+                userId: uid,
+                amount: amountRupee,
+                paymentOption: methodId || 'razorpay:test'
+            })
+        });
+        let data = {};
+        if (window.HttpJson) {
+            const parsed = await window.HttpJson.readJsonResponse(res);
+            data = parsed.data;
+            if (parsed.parseFailed) {
+                alert(window.HttpJson.apiErrorMessage(res, data, true));
+                return;
+            }
+        } else {
+            data = await res.json();
+        }
+        if (!res.ok || !data.success) {
+            alert(data.error || 'Could not start Razorpay checkout.');
+            return;
+        }
+        openDoctorRazorpayCheckout(data, regId, methodId);
+        ensureDoctorPaymentPoll();
+    } catch (err) {
+        console.error(err);
+        alert(err.message || 'Razorpay checkout could not be started.');
     }
 }
 
@@ -6702,6 +6766,9 @@ async function processPayment(appId, amount, appNo, paymentOption, cancelPending
     const methodId = paymentOption || getPaymentOptionForReg(regId);
     if (!methodId && (window.__doctorPaymentOptions || []).length > 1) {
         return alert('Please choose a payment method from the dropdown first.');
+    }
+    if (isRazorpayPaymentMethod(methodId)) {
+        return processRazorpayStandardCheckout(regId, uid, amount, methodId);
     }
     try {
         const res = await fetch('/api/payments/process', {
