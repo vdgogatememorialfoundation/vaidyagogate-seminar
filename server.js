@@ -13855,6 +13855,12 @@ function startBackgroundWorkers() {
                 }
             });
         });
+        try {
+            const inboundImap = require('./lib/inbound-imap-poller');
+            inboundImap.startBackgroundPoll(db);
+        } catch (eImap) {
+            console.warn('[inbound-imap] start:', eImap.message);
+        }
     });
     if (jobsModule && typeof jobsModule.startWorkers === 'function' && process.env.DISABLE_BACKGROUND_JOBS !== '1') {
         jobsModule.startWorkers(db);
@@ -13941,6 +13947,22 @@ app.get('/api/cron/live-chat-no-reply-escalations', (req, res) => {
     const supportLiveChat = require('./lib/support-live-chat');
     const run = () => {
         supportLiveChat.processAllNoReplyEscalations(db, { createSupportTicketRecord }, (err, result) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ ok: true, ...(result || {}) });
+        });
+    };
+    if (appReadyResolved) return run();
+    if (appReadyPromise) {
+        return appReadyPromise.then(run).catch((e) => res.status(503).json({ error: e.message }));
+    }
+    run();
+});
+
+app.get('/api/cron/poll-inbound-mail', (req, res) => {
+    if (!authorizeCron(req, res)) return;
+    const inboundImap = require('./lib/inbound-imap-poller');
+    const run = () => {
+        inboundImap.pollOnce(db, (err, result) => {
             if (err) return res.status(500).json({ error: err.message });
             res.json({ ok: true, ...(result || {}) });
         });

@@ -12442,17 +12442,16 @@ async function initAdminEmailComposeTab() {
 
 async function loadAdminMailInboundStatus() {
     const st = document.getElementById('mail-inbound-status');
-    const wh = document.getElementById('mail-inbound-webhook-url');
-    if (wh) {
-        const base = (window.__publicBaseUrl || 'https://seminar.vaidyagogate.org').replace(/\/$/, '');
-        wh.textContent = base + '/api/webhooks/mailparser';
-    }
     try {
         const res = await fetch('/api/admin/mail/inbound-status');
         const data = await res.json();
         if (st) {
             st.style.color = data.configured ? '#15803d' : '#b45309';
-            st.textContent = data.configured ? '✓ ' + data.hint : '⚠ ' + (data.hint || 'Not configured');
+            let line = data.configured ? '✓ ' + (data.hint || 'Inbound ready') : '⚠ ' + (data.hint || 'Not configured');
+            if (data.imap && data.imap.mailbox) {
+                line += ' · Mailbox: ' + data.imap.mailbox;
+            }
+            st.textContent = line;
         }
     } catch (_) {
         if (st) st.textContent = 'Could not load inbound status.';

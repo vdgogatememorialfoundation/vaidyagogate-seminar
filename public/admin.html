@@ -496,14 +496,15 @@
 
             <div id="tab-email-compose" class="tab-pane hidden">
                 <h2 style="margin-bottom:8px;">Send email &amp; conversations</h2>
-                <p style="color:#64748b;margin:-4px 0 16px;">Outbound mail uses ZeptoMail. With <strong>Track email replies</strong> on, each send opens a conversation thread — participants can reply by email and you reply here. Case judges use the Judge portal (same inbound setup). For ~10k users use bulk send (500 per batch); inbound via Mailparser.io free tier + webhook.</p>
+                <p style="color:#64748b;margin:-4px 0 16px;">Outbound mail uses ZeptoMail. With <strong>Track email replies</strong> on, each send opens a conversation thread — participants can reply by email and you reply here. Support tickets use the same system: doctors reply to <code>care@vaidyagogate.org</code> and the server reads your Zoho inbox automatically (no Mailparser).</p>
                 <div class="card" style="margin-bottom:16px;border-color:#bae6fd;background:#f0f9ff;">
-                    <h3 style="margin:0 0 8px;color:#0369a1;"><i class="fas fa-inbox"></i> Inbound email (free replies)</h3>
+                    <h3 style="margin:0 0 8px;color:#0369a1;"><i class="fas fa-inbox"></i> Inbound email (built-in, free)</h3>
                     <p id="mail-inbound-status" style="margin:0 0 8px;font-size:0.88rem;color:#475569;">Checking…</p>
                     <ol style="margin:0;padding-left:20px;font-size:0.85rem;color:#475569;line-height:1.55;">
-                        <li>Create a free inbox at <a href="https://mailparser.io" target="_blank" rel="noopener">mailparser.io</a></li>
-                        <li>Webhook URL: <code id="mail-inbound-webhook-url">…</code> · Header <code>x-inbound-mail-secret</code></li>
-                        <li>On Render set <code>MAILPARSER_INBOUND_EMAIL</code> (inbox address) and <code>INBOUND_MAIL_WEBHOOK_SECRET</code></li>
+                        <li>Enable <strong>IMAP</strong> in Zoho Mail for <code>care@vaidyagogate.org</code> (use the same app password as SMTP standby in Integrations).</li>
+                        <li>On Render set <code>INBOUND_IMAP_USER=care@vaidyagogate.org</code> (and <code>ZOHO_PASS</code> if not saved in admin).</li>
+                        <li>Optional cron backup: <code>GET /api/cron/poll-inbound-mail</code> every 2 min with <code>Authorization: Bearer CRON_SECRET</code>.</li>
+                        <li>Ticket emails include <code>[VGMF-TKT-…]</code> — keep that line when replying by email.</li>
                     </ol>
                 </div>
                 <div class="card" style="margin-bottom:16px;">
@@ -3150,6 +3151,6 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
-    <script src="/js/admin.js?v=20260613cancel3"></script>
+    <script src="/js/admin.js?v=20260613imap1"></script>
 </body>
 </html>
