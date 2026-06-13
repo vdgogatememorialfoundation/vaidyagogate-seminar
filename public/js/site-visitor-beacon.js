@@ -9,6 +9,8 @@
 
     let activityState = { kind: isDoctorPortal ? 'doctor_portal' : 'homepage', formProgress: 0 };
     let started = false;
+    let cachedClientGeo = null;
+    let geoRequested = false;
 
     function sessionId() {
         try {
@@ -151,14 +153,31 @@
         global.__siteRadarTimer = setInterval(sendHeartbeat, heartbeatMs());
     }
 
+    function requestClientGeo(cb) {
+        if (cachedClientGeo) return cb(cachedClientGeo);
+        if (geoRequested || !navigator.geolocation) return cb(null);
+        geoRequested = true;
+        navigator.geolocation.getCurrentPosition(
+            function (pos) {
+                cachedClientGeo = {
+                    lat: pos.coords.latitude,
+                    lon: pos.coords.longitude,
+                    accuracy: pos.coords.accuracy
+                };
+                cb(cachedClientGeo);
+            },
+            function () {
+                cb(null);
+            },
+            { enableHighAccuracy: false, timeout: 8000, maximumAge: 300000 }
+        );
+    }
+
     function sendHeartbeat() {
         const ctx = userContext();
         const activity = mergedActivity();
-        fetch('/api/public/visitor-heartbeat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            keepalive: true,
-            body: JSON.stringify({
+        requestClientGeo(function (clientGeo) {
+            const payload = {
                 sessionId: sessionId(),
                 path: currentPath(),
                 pageTitle: document.title || '',
@@ -167,18 +186,25 @@
                 userLabel: ctx.userLabel,
                 activity: activity,
                 clientDiagnostics: collectDiagnostics()
+            };
+            if (clientGeo) payload.clientGeo = clientGeo;
+            fetch('/api/public/visitor-heartbeat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                keepalive: true,
+                body: JSON.stringify(payload)
             })
-        })
-            .then(function (r) {
-                return r.json();
-            })
-            .then(function (d) {
-                if (d && d.skipped) {
-                    console.warn('[site-radar] heartbeat skipped — server could not store session');
-                }
-            })
-            .catch(function () {});
-        scheduleTimer();
+                .then(function (r) {
+                    return r.json();
+                })
+                .then(function (d) {
+                    if (d && d.skipped) {
+                        console.warn('[site-radar] heartbeat skipped — server could not store session');
+                    }
+                })
+                .catch(function () {});
+            scheduleTimer();
+        });
     }
 
     function setActivity(partial) {

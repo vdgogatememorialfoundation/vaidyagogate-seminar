@@ -223,11 +223,24 @@
         feed.innerHTML = html;
     }
 
+    function formatLocation(s) {
+        if (s.geo) {
+            const parts = [s.geo.city, s.geo.region, s.geo.country].filter(Boolean);
+            if (parts.length) return parts.join(', ');
+        }
+        if (s.city || s.region || s.country) {
+            return [s.city, s.region, s.country].filter(Boolean).join(', ');
+        }
+        if (s.location) return s.location;
+        if (s.ip) return 'IP ' + s.ip;
+        return 'Location pending';
+    }
+
     function renderSessionCards(rows) {
         return rows
             .map(function (s, idx) {
                 const name = s.userLabel || (s.userId ? 'User #' + s.userId : 'Anonymous visitor');
-                const loc = s.location || (s.ip ? 'IP ' + s.ip : 'Location pending');
+                const loc = formatLocation(s);
                 const isApply = s.activityKind === 'seminar_apply';
                 const guestCls = s.visitorType === 'site_guest' ? ' lr-session-guest' : '';
                 const funnel = isApply ? renderStepFunnel(s.stepNumber) : '';
@@ -329,7 +342,7 @@
         if (countEl) {
             countEl.textContent = mapPoints.length
                 ? mapPoints.length + ' on map'
-                : 'Geo resolves on first heartbeat';
+                : 'Resolving city / state / country…';
         }
         if (!mapAnimFrame && mapCtx) drawMapFrame();
     }
