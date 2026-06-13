@@ -117,6 +117,7 @@
                 <a class="menu-item" data-admin-module="tab-reg-form" onclick="switchTab('tab-reg-form'); loadAdminRegistrationFormConfig();"><i class="fas fa-list-alt"></i> Registration Form Fields</a>
                 <a class="menu-item" data-admin-module="tab-site-cms" onclick="switchTab('tab-site-cms'); loadAdminSiteCms();"><i class="fas fa-globe"></i> Website &amp; doctor updates</a>
                 <a class="menu-item" data-admin-module="tab-admin-payments" onclick="switchTab('tab-admin-payments'); loadAdminPaymentsModule();"><i class="fas fa-file-invoice-dollar"></i> Payments</a>
+                <a class="menu-item" data-admin-module="tab-cancellation-review" onclick="switchTab('tab-cancellation-review'); initAdminCancellationReviewTab();"><i class="fas fa-user-times"></i> Cancellation review</a>
                 <a class="menu-item" data-admin-module="tab-book-sales" onclick="switchTab('tab-book-sales'); loadBookSalesAdmin();"><i class="fas fa-book"></i> Book sales</a>
                 <a class="menu-item" data-admin-module="tab-certificates" onclick="switchTab('tab-certificates'); initAdminCertificatesTab();"><i class="fas fa-award"></i> Certificate Management</a>
                 <a class="menu-item" data-admin-module="tab-volunteers" onclick="switchTab('tab-volunteers'); initAdminVolunteersTab();"><i class="fas fa-hands-helping"></i> Volunteers</a>
@@ -1569,7 +1570,7 @@
                 <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
                     <button type="button" class="btn-primary admin-payments-subtab active" data-pay-tab="orders" style="background:#0d9488;" onclick="switchAdminPaymentsTab('orders')">Orders</button>
                     <button type="button" class="btn-primary admin-payments-subtab" data-pay-tab="supplemental" style="background:#7c3aed;" onclick="switchAdminPaymentsTab('supplemental')">Additional payments</button>
-                    <button type="button" class="btn-primary admin-payments-subtab" data-pay-tab="cancellations" style="background:#64748b;" onclick="switchAdminPaymentsTab('cancellations')">Cancellation requests</button>
+                    <button type="button" class="btn-primary admin-payments-subtab" data-pay-tab="cancellations" style="background:#64748b;" onclick="switchTab('tab-cancellation-review'); initAdminCancellationReviewTab();">Cancellation review</button>
                 </div>
                 <div id="admin-payments-panel-supplemental" class="card hidden" style="margin-bottom:16px;border:1px solid #ddd6fe;background:#faf5ff;">
                     <h3 style="margin:0 0 10px;color:#6d28d9;">Additional payments (doctor portal)</h3>
@@ -1636,10 +1637,42 @@
                         <tbody id="admin-orders-tbody"><tr><td colspan="9" style="text-align:center;">Open this tab or click Refresh</td></tr></tbody>
                     </table>
                 </div>
-                <div id="admin-payments-panel-cancellations" class="card hidden" style="margin-top:0;">
+                </div>
+            </div>
+
+            <!-- Cancellation review, approval & refund -->
+            <div id="tab-cancellation-review" class="tab-pane hidden">
+                <h2 style="margin-bottom:8px;">Cancellation review &amp; refunds</h2>
+                <p style="color:#64748b;margin-bottom:16px;max-width:920px;">Review doctor cancellation requests, approve or reject with notes, and process eligible refunds per the seminar IST policy. Razorpay and Cashfree refunds are sent automatically; other gateways are queued for manual completion.</p>
+                <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+                    <div class="card" style="flex:1;min-width:140px;padding:14px 18px;margin:0;border-left:4px solid #f59e0b;background:#fffbeb;">
+                        <div style="font-size:0.78rem;color:#92400e;font-weight:600;text-transform:uppercase;">Pending review</div>
+                        <div id="cancel-review-stat-pending" style="font-size:1.6rem;font-weight:800;color:#b45309;">—</div>
+                    </div>
+                    <div class="card" style="flex:1;min-width:140px;padding:14px 18px;margin:0;border-left:4px solid #10b981;background:#ecfdf5;">
+                        <div style="font-size:0.78rem;color:#047857;font-weight:600;text-transform:uppercase;">Approved</div>
+                        <div id="cancel-review-stat-approved" style="font-size:1.6rem;font-weight:800;color:#047857;">—</div>
+                    </div>
+                    <div class="card" style="flex:1;min-width:140px;padding:14px 18px;margin:0;border-left:4px solid #64748b;background:#f8fafc;">
+                        <div style="font-size:0.78rem;color:#475569;font-weight:600;text-transform:uppercase;">Rejected</div>
+                        <div id="cancel-review-stat-rejected" style="font-size:1.6rem;font-weight:800;color:#64748b;">—</div>
+                    </div>
+                    <div class="card" style="flex:1;min-width:140px;padding:14px 18px;margin:0;border-left:4px solid #6366f1;background:#eef2ff;">
+                        <div style="font-size:0.78rem;color:#4338ca;font-weight:600;text-transform:uppercase;">Refund in progress</div>
+                        <div id="cancel-review-stat-refund" style="font-size:1.6rem;font-weight:800;color:#4338ca;">—</div>
+                    </div>
+                </div>
+                <div class="card" style="margin-top:0;">
                     <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
-                        <label>Status <select id="admin-cancel-req-filter" onchange="loadAdminCancellationRequests()"><option value="">All</option><option value="pending" selected>Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select></label>
-                        <button type="button" class="btn-primary" style="background:#64748b;" onclick="loadAdminCancellationRequests()">Refresh</button>
+                        <label>Status
+                            <select id="admin-cancel-req-filter" onchange="loadAdminCancellationRequests()">
+                                <option value="">All</option>
+                                <option value="pending" selected>Pending</option>
+                                <option value="approved">Approved</option>
+                                <option value="rejected">Rejected</option>
+                            </select>
+                        </label>
+                        <button type="button" class="btn-primary" style="background:#64748b;" onclick="loadAdminCancellationRequests()"><i class="fas fa-sync"></i> Refresh</button>
                     </div>
                     <div style="margin-bottom:12px;">
                         <label for="cancellation-requests-search" style="font-weight:600;font-size:0.9rem;">Search cancellation requests</label>
@@ -1647,8 +1680,8 @@
                         <p id="cancellation-requests-search-count" style="margin:6px 0 0;font-size:0.82rem;color:#64748b;"></p>
                     </div>
                     <table class="data-table">
-                        <thead><tr><th>Requested</th><th>Doctor</th><th>Seminar</th><th>App</th><th>Reason</th><th>Policy refund</th><th>Status</th><th>Refund tracking</th><th>Actions</th></tr></thead>
-                        <tbody id="admin-cancel-req-tbody"><tr><td colspan="9" style="text-align:center;">—</td></tr></tbody>
+                        <thead><tr><th>Requested</th><th>Doctor</th><th>Seminar</th><th>App</th><th>Reason</th><th>Policy refund</th><th>Status</th><th>Tracking</th><th>Actions</th></tr></thead>
+                        <tbody id="admin-cancel-req-tbody"><tr><td colspan="9" style="text-align:center;">Open this tab or click Refresh</td></tr></tbody>
                     </table>
                 </div>
             </div>
@@ -3050,6 +3083,34 @@
                     <button class="btn-primary" onclick="submitTicketReply()">Reply</button>
                 </div>
             </div>
+        </div>
+    </div>
+    <!-- Cancellation review modal -->
+    <div id="admin-cancel-review-modal" class="hidden" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:10003;display:flex;align-items:center;justify-content:center;">
+        <div style="background:white;padding:28px;border-radius:16px;width:760px;max-width:96vw;max-height:92vh;overflow-y:auto;position:relative;">
+            <button type="button" onclick="closeAdminCancellationReviewModal()" style="position:absolute;top:16px;right:16px;background:none;border:none;font-size:1.5rem;cursor:pointer;">&times;</button>
+            <h2 style="color:#9a3412;margin-bottom:4px;" id="admin-cancel-review-title">Review cancellation</h2>
+            <p id="admin-cancel-review-sub" style="color:#64748b;font-size:0.88rem;margin-bottom:16px;"></p>
+            <div id="admin-cancel-review-meta" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:14px;font-size:0.88rem;line-height:1.55;"></div>
+            <div id="admin-cancel-review-tracking" style="margin-bottom:14px;"></div>
+            <label style="display:block;font-weight:600;margin-bottom:6px;">Admin notes (visible to doctor if shared in response)</label>
+            <textarea id="admin-cancel-review-notes" rows="2" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;margin-bottom:12px;" placeholder="Optional notes for the doctor…"></textarea>
+            <div id="admin-cancel-review-refund-panel" style="background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;padding:12px;margin-bottom:14px;">
+                <label style="font-weight:600;display:block;margin-bottom:6px;">Refund amount (₹)</label>
+                <input type="number" id="admin-cancel-review-amount" step="0.01" style="width:100%;max-width:220px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;">
+                <p style="font-size:0.82rem;color:#64748b;margin:8px 0 0;">Leave as policy preview or override. Refund only if you choose to process payment below.</p>
+                <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-weight:600;">
+                    <input type="checkbox" id="admin-cancel-review-process-refund" checked>
+                    Process payment gateway refund on approve
+                </label>
+            </div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                <button type="button" class="btn-primary" style="background:#15803d;" onclick="submitAdminCancellationReview('approve')"><i class="fas fa-check"></i> Approve &amp; cancel</button>
+                <button type="button" class="btn-primary" style="background:#64748b;" onclick="submitAdminCancellationReview('reject')"><i class="fas fa-times"></i> Reject request</button>
+                <button type="button" class="btn-primary" style="background:#6366f1;" id="admin-cancel-review-refund-btn" onclick="adminProcessCancellationRefundFromModal()"><i class="fas fa-undo"></i> Process refund now</button>
+                <button type="button" class="btn-primary" style="background:#94a3b8;" onclick="closeAdminCancellationReviewModal()">Close</button>
+            </div>
+            <p id="admin-cancel-review-msg" style="margin-top:12px;font-size:0.88rem;"></p>
         </div>
     </div>
     <!-- User detail (profile, activity, password) -->

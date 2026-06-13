@@ -842,6 +842,9 @@ function switchTab(tabId) {
     if (tabId === 'tab-support-desk' && typeof loadSupportDeskAdminTab === 'function') {
         loadSupportDeskAdminTab();
     }
+    if (tabId === 'tab-cancellation-review' && typeof initAdminCancellationReviewTab === 'function') {
+        initAdminCancellationReviewTab();
+    }
 }
 
 let adminAutoRefreshInterval = null;
@@ -1583,6 +1586,7 @@ const ADMIN_MODULE_TAB_DEFS = [
     ['tab-site-cms', 'Website & doctor updates'],
     ['tab-book-sales', 'Book sales'],
     ['tab-admin-payments', 'Payments'],
+    ['tab-cancellation-review', 'Cancellation review & refunds'],
     ['tab-certificates', 'Certificate management'],
     ['tab-volunteers', 'Volunteers'],
     ['tab-volunteer-assignments', 'Volunteer assignments'],
@@ -7099,7 +7103,9 @@ function renderAdminUserCancellationTab(bodyEl, userId) {
             let act = '—';
             if (r.status === 'pending') {
                 act =
-                    '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;" onclick="closeAdminUserDetailModal();switchTab(\'tab-admin-payments\');switchAdminPaymentsTab(\'cancellations\');loadAdminCancellationRequests();">Review in Payments</button>';
+                    '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;" onclick="closeAdminUserDetailModal();switchTab(\'tab-cancellation-review\');initAdminCancellationReviewTab();openAdminCancellationReviewModal(' +
+                    r.id +
+                    ');">Review cancellation</button>';
             }
             html +=
                 '<tr><td>' +
@@ -7852,6 +7858,149 @@ function renderAdminSupplementalPaymentsTable() {
         .join('');
 }
 
+function renderAdminCancelTrackingStepsHtml(steps) {
+    if (!steps || !steps.length) return '<span class="muted">—</span>';
+    return (
+        '<div style="font-size:0.78rem;line-height:1.45;">' +
+        steps
+            .map((s) => {
+                const icon =
+                    s.state === 'completed'
+                        ? '✓'
+                        : s.state === 'active'
+                          ? '●'
+                          : s.state === 'cancelled'
+                            ? '✕'
+                            : '○';
+                const color =
+                    s.state === 'completed'
+                        ? '#047857'
+                        : s.state === 'active'
+                          ? '#b45309'
+                          : s.state === 'cancelled'
+                            ? '#b91c1c'
+                            : '#94a3b8';
+                return (
+                    '<div style="color:' +
+                    color +
+                    ';margin:2px 0;"><span style="font-weight:700;margin-right:4px;">' +
+                    icon +
+                    '</span>' +
+                    escAdmin(s.title || '') +
+                    '</div>'
+                );
+            })
+            .join('') +
+        '</div>'
+    );
+}
+
+function updateAdminCancellationReviewStats() {
+    const all = __adminCancelRequestsCache || [];
+    const pending = all.filter((r) => r.status === 'pending').length;
+    const approved = all.filter((r) => r.status === 'approved').length;
+    const rejected = all.filter((r) => r.status === 'rejected').length;
+    const refundActive = all.filter((r) => {
+        const rs = String(r.refund_status || '').toLowerCase();
+        return (
+            r.status === 'approved' &&
+            (rs === 'pending' || rs === 'processing' || rs === 'manual_pending' || rs === 'failed')
+        );
+    }).length;
+    const set = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = String(val);
+    };
+    set('cancel-review-stat-pending', pending);
+    set('cancel-review-stat-approved', approved);
+    set('cancel-review-stat-rejected', rejected);
+    set('cancel-review-stat-refund', refundActive);
+}
+
+function initAdminCancellationReviewTab() {
+    loadAdminCancellationRequests();
+}
+
+let __adminCancelReviewRequestId = null;
+
+function openAdminCancellationReviewModal(requestId) {
+    const row = (__adminCancelRequestsCache || []).find((x) => Number(x.id) === Number(requestId));
+    if (!row) return alert('Refresh the list and try again.');
+    __adminCancelReviewRequestId = row.id;
+    const title = document.getElementById('admin-cancel-review-title');
+    const sub = document.getElementById('admin-cancel-review-sub');
+    const meta = document.getElementById('admin-cancel-review-meta');
+    const track = document.getElementById('admin-cancel-review-tracking');
+    const notes = document.getElementById('admin-cancel-review-notes');
+    const amt = document.getElementById('admin-cancel-review-amount');
+    const proc = document.getElementById('admin-cancel-review-process-refund');
+    const refundPanel = document.getElementById('admin-cancel-review-refund-panel');
+    const refundBtn = document.getElementById('admin-cancel-review-refund-btn');
+    const msg = document.getElementById('admin-cancel-review-msg');
+    const when = row.requested_at
+        ? new Date(row.requested_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
+        : '—';
+    if (title) title.textContent = 'Review · ' + (row.application_no || 'Application');
+    if (sub) {
+        sub.textContent =
+            (row.first_name || '') +
+            ' ' +
+            (row.last_name || '') +
+            ' · ' +
+            (row.seminar_title || '') +
+            ' · requested ' +
+            when;
+    }
+    if (meta) {
+        meta.innerHTML =
+            '<p style="margin:0 0 6px;"><strong>Reason:</strong> ' +
+            escAdmin(row.reason || '—') +
+            '</p>' +
+            '<p style="margin:0 0 6px;"><strong>Status:</strong> ' +
+            escAdmin(row.status) +
+            ' · <strong>Policy refund:</strong> ₹' +
+            escAdmin(row.refund_amount || 0) +
+            ' (' +
+            escAdmin(row.refund_percent || 0) +
+            '%)</p>' +
+            (row.payment_gateway
+                ? '<p style="margin:0;"><strong>Gateway:</strong> ' +
+                  escAdmin(row.payment_gateway) +
+                  (row.order_amount ? ' · Paid ₹' + escAdmin(row.order_amount) : '') +
+                  '</p>'
+                : '<p style="margin:0;color:#b45309;">No successful online payment on file — refund may be N/A or manual.</p>');
+    }
+    if (track) {
+        track.innerHTML =
+            '<p style="font-weight:700;margin:0 0 8px;color:#334155;">Tracking timeline</p>' +
+            renderAdminCancelTrackingStepsHtml(row.trackingSteps || []);
+    }
+    if (notes) notes.value = row.admin_notes || '';
+    if (amt) amt.value = row.refund_amount != null ? String(row.refund_amount) : '';
+    if (proc) proc.checked = Number(row.refund_amount) > 0;
+    if (refundPanel) refundPanel.style.display = row.status === 'pending' ? 'block' : 'none';
+    const canProcessRefund =
+        row.status === 'approved' &&
+        Number(row.refund_amount) > 0 &&
+        !['completed'].includes(String(row.refund_status || '').toLowerCase());
+    if (refundBtn) refundBtn.style.display = canProcessRefund ? 'inline-block' : 'none';
+    if (msg) msg.textContent = '';
+    const m = document.getElementById('admin-cancel-review-modal');
+    if (m) {
+        m.classList.remove('hidden');
+        m.style.display = 'flex';
+    }
+}
+
+function closeAdminCancellationReviewModal() {
+    __adminCancelReviewRequestId = null;
+    const m = document.getElementById('admin-cancel-review-modal');
+    if (m) {
+        m.classList.add('hidden');
+        m.style.display = '';
+    }
+}
+
 function renderAdminCancellationRequestsTable() {
     const tbody = document.getElementById('admin-cancel-req-tbody');
     if (!tbody) return;
@@ -7867,7 +8016,8 @@ function renderAdminCancellationRequestsTable() {
             r.reason,
             r.status,
             r.refund_amount,
-            r.refund_percent
+            r.refund_percent,
+            r.refund_status
         ]
             .join(' ')
             .toLowerCase()
@@ -7876,11 +8026,13 @@ function renderAdminCancellationRequestsTable() {
     tbody.innerHTML = '';
     if (!all.length) {
         tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#94a3b8;">No requests.</td></tr>';
+        updateAdminCancellationReviewStats();
         return;
     }
     if (!rows.length) {
         tbody.innerHTML =
             '<tr><td colspan="9" style="text-align:center;color:#94a3b8;">No requests match your search.</td></tr>';
+        updateAdminCancellationReviewStats();
         return;
     }
     rows.forEach((r) => {
@@ -7889,21 +8041,33 @@ function renderAdminCancellationRequestsTable() {
             ? new Date(r.requested_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
             : '—';
         const pol = '₹' + (r.refund_amount || 0) + ' (' + (r.refund_percent || 0) + '%)';
+        const statusBadge =
+            r.status === 'pending'
+                ? '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:6px;font-weight:600;">PENDING</span>'
+                : r.status === 'approved'
+                  ? '<span style="background:#d1fae5;color:#047857;padding:2px 8px;border-radius:6px;font-weight:600;">APPROVED</span>'
+                  : '<span style="background:#f1f5f9;color:#64748b;padding:2px 8px;border-radius:6px;font-weight:600;">' +
+                    escAdmin(String(r.status || '').toUpperCase()) +
+                    '</span>';
         const refundTrack =
-            '<div style="font-size:0.82rem;line-height:1.45;">' +
+            '<div style="font-size:0.82rem;line-height:1.45;margin-bottom:6px;">' +
             escAdmin(r.refundStatusLabel || r.refund_status || '—') +
             (r.provider_refund_id ? '<br><span class="muted">Ref: ' + escAdmin(r.provider_refund_id) + '</span>' : '') +
-            (r.order_refund_status ? '<br><span class="muted">Order: ' + escAdmin(r.order_refund_status) + '</span>' : '') +
-            '</div>';
-        let actions = '—';
-        if (r.status === 'pending') {
-            actions =
-                '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;margin-right:4px;" onclick="adminResolveCancelRequest(' +
+            '</div>' +
+            renderAdminCancelTrackingStepsHtml(r.trackingSteps || []);
+        let actions =
+            '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;margin-right:4px;" onclick="openAdminCancellationReviewModal(' +
+            r.id +
+            ')">Review</button>';
+        if (
+            r.status === 'approved' &&
+            Number(r.refund_amount) > 0 &&
+            !['completed'].includes(String(r.refund_status || '').toLowerCase())
+        ) {
+            actions +=
+                '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;background:#6366f1;border:none;" onclick="adminProcessCancellationRefund(' +
                 r.id +
-                ',\'approve\')">Approve</button>' +
-                '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;background:#64748b;border:none;" onclick="adminResolveCancelRequest(' +
-                r.id +
-                ',\'reject\')">Reject</button>';
+                ')">Refund</button>';
         }
         tbody.innerHTML +=
             '<tr><td>' +
@@ -7919,13 +8083,14 @@ function renderAdminCancellationRequestsTable() {
             '</td><td>' +
             escAdmin(pol) +
             '</td><td>' +
-            escAdmin(r.status) +
-            '</td><td>' +
+            statusBadge +
+            '</td><td style="min-width:160px;">' +
             refundTrack +
-            '</td><td>' +
+            '</td><td style="white-space:nowrap;">' +
             actions +
             '</td></tr>';
     });
+    updateAdminCancellationReviewStats();
 }
 
 function renderSeminarsTable() {
@@ -15461,22 +15626,24 @@ let __adminFeedbackCache = [];
 let __adminScannerLogsCache = [];
 
 function switchAdminPaymentsTab(tab) {
+    if (tab === 'cancellations') {
+        switchTab('tab-cancellation-review');
+        initAdminCancellationReviewTab();
+        return;
+    }
     __adminPaymentsTab = tab;
-    const tabColors = { orders: '#0d9488', supplemental: '#7c3aed', cancellations: '#64748b' };
+    const tabColors = { orders: '#0d9488', supplemental: '#7c3aed' };
     document.querySelectorAll('.admin-payments-subtab').forEach((btn) => {
         const on = btn.getAttribute('data-pay-tab') === tab;
         btn.style.background = on ? tabColors[tab] || '#0d9488' : '#64748b';
         btn.classList.toggle('active', on);
     });
     const ordersPanel = document.getElementById('admin-payments-panel-orders');
-    const cancelPanel = document.getElementById('admin-payments-panel-cancellations');
     const supPanel = document.getElementById('admin-payments-panel-supplemental');
     if (ordersPanel) ordersPanel.classList.toggle('hidden', tab !== 'orders');
-    if (cancelPanel) cancelPanel.classList.toggle('hidden', tab !== 'cancellations');
     if (supPanel) supPanel.classList.toggle('hidden', tab !== 'supplemental');
     if (tab === 'orders') loadAdminEnrichedOrders();
     else if (tab === 'supplemental') loadAdminSupplementalPayments();
-    else loadAdminCancellationRequests();
 }
 
 function syncSeminarOtpOptionsUi() {
@@ -15999,7 +16166,7 @@ async function loadAdminCancellationRequests() {
     const tbody = document.getElementById('admin-cancel-req-tbody');
     if (!tbody) return;
     const status = document.getElementById('admin-cancel-req-filter')?.value || '';
-    tbody.innerHTML = '<tr><td colspan="8">Loading…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9">Loading…</td></tr>';
     try {
         const q = status ? '?status=' + encodeURIComponent(status) : '';
         const res = await fetch('/api/admin/cancellation-requests' + q);
@@ -16008,33 +16175,40 @@ async function loadAdminCancellationRequests() {
         renderAdminCancellationRequestsTable();
     } catch (e) {
         console.error(e);
-        tbody.innerHTML = '<tr><td colspan="8">Failed to load</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9">Failed to load</td></tr>';
     }
 }
 
-async function adminResolveCancelRequest(requestId, action) {
+async function adminResolveCancelRequest(requestId, action, opts) {
+    opts = opts || {};
     const adm = getStoredAdminUser();
     if (!adm || !adm.id) return alert('Not logged in.');
     const row = __adminCancelRequestsCache.find((x) => Number(x.id) === Number(requestId));
     if (!row) return alert('Refresh the list.');
-    const adminNotes = prompt('Admin notes (optional):', '') || '';
-    let processRefund = false;
-    let refundAmount = null;
-    if (action === 'approve') {
-        const defAmt = row.refund_amount != null ? row.refund_amount : '';
-        const amtRaw = prompt(
-            'Refund amount in ₹ (IST policy preview: ' + defAmt + '). Leave blank to use policy amount:',
-            String(defAmt)
-        );
-        if (amtRaw === null) return;
-        if (amtRaw.trim() !== '') {
-            refundAmount = Number(amtRaw);
-            if (Number.isNaN(refundAmount)) return alert('Invalid amount.');
+    const adminNotes = opts.adminNotes != null ? opts.adminNotes : prompt('Admin notes (optional):', '') || '';
+    let processRefund = !!opts.processRefund;
+    let refundAmount = opts.refundAmount != null ? opts.refundAmount : null;
+    if (opts.skipConfirm !== true) {
+        if (action === 'approve') {
+            if (opts.refundAmount == null) {
+                const defAmt = row.refund_amount != null ? row.refund_amount : '';
+                const amtRaw = prompt(
+                    'Refund amount in ₹ (IST policy preview: ' + defAmt + '). Leave blank to use policy amount:',
+                    String(defAmt)
+                );
+                if (amtRaw === null) return;
+                if (amtRaw.trim() !== '') {
+                    refundAmount = Number(amtRaw);
+                    if (Number.isNaN(refundAmount)) return alert('Invalid amount.');
+                }
+            }
+            if (opts.processRefund == null) {
+                processRefund = confirm('Process payment gateway refund when approving? (No = cancel registration only)');
+            }
+            if (!confirm('Approve cancellation for ' + (row.application_no || 'application') + '?')) return;
+        } else if (!confirm('Reject this cancellation request?')) {
+            return;
         }
-        processRefund = confirm('Process payment gateway refund when approving? (No = cancel registration only)');
-        if (!confirm('Approve cancellation for ' + (row.application_no || 'application') + '?')) return;
-    } else if (!confirm('Reject this cancellation request?')) {
-        return;
     }
     try {
         const res = await fetch('/api/admin/cancellation-requests/' + requestId + '/resolve', {
@@ -16050,13 +16224,72 @@ async function adminResolveCancelRequest(requestId, action) {
         });
         const data = await res.json();
         if (!res.ok) return alert(data.error || 'Failed');
-        alert(data.message || 'Done.');
+        if (opts.skipConfirm !== true) alert(data.message || 'Done.');
+        loadAdminCancellationRequests();
+        loadAdminEnrichedOrders();
+        return data;
+    } catch (e) {
+        console.error(e);
+        alert('Network error.');
+    }
+}
+
+async function submitAdminCancellationReview(action) {
+    if (!__adminCancelReviewRequestId) return;
+    const notes = document.getElementById('admin-cancel-review-notes')?.value || '';
+    const amtRaw = document.getElementById('admin-cancel-review-amount')?.value;
+    const processRefund = !!document.getElementById('admin-cancel-review-process-refund')?.checked;
+    const msg = document.getElementById('admin-cancel-review-msg');
+    let refundAmount = null;
+    if (amtRaw != null && String(amtRaw).trim() !== '') {
+        refundAmount = Number(amtRaw);
+        if (Number.isNaN(refundAmount)) return alert('Invalid refund amount.');
+    }
+    if (action === 'reject' && !confirm('Reject this cancellation request?')) return;
+    if (action === 'approve' && !confirm('Approve cancellation and mark registration cancelled?')) return;
+    if (msg) msg.textContent = 'Saving…';
+    const data = await adminResolveCancelRequest(__adminCancelReviewRequestId, action, {
+        adminNotes: notes,
+        processRefund: action === 'approve' ? processRefund : false,
+        refundAmount,
+        skipConfirm: true
+    });
+    if (data && data.success) {
+        if (msg) msg.textContent = data.message || 'Saved.';
+        closeAdminCancellationReviewModal();
+    } else if (msg) {
+        msg.textContent = '';
+    }
+}
+
+async function adminProcessCancellationRefund(requestId) {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return alert('Not logged in.');
+    const row = __adminCancelRequestsCache.find((x) => Number(x.id) === Number(requestId));
+    if (!row) return alert('Refresh the list.');
+    if (!confirm('Process gateway refund of ₹' + (row.refund_amount || 0) + ' for ' + (row.application_no || 'application') + '?')) {
+        return;
+    }
+    try {
+        const res = await fetch('/api/admin/cancellation-requests/' + requestId + '/process-refund', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: adm.id })
+        });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Refund failed');
+        alert(data.message || 'Refund initiated.');
         loadAdminCancellationRequests();
         loadAdminEnrichedOrders();
     } catch (e) {
         console.error(e);
         alert('Network error.');
     }
+}
+
+function adminProcessCancellationRefundFromModal() {
+    if (!__adminCancelReviewRequestId) return;
+    adminProcessCancellationRefund(__adminCancelReviewRequestId);
 }
 
 async function loadAdminUserPaymentsPanel(userId, bodyEl) {

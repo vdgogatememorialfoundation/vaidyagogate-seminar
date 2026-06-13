@@ -1250,35 +1250,7 @@ function registrationQualFromApp(a) {
 
 function renderRefundTrackingStepsHtml(steps) {
     if (!steps || !steps.length) return '';
-    let html = '<div class="tracker-vertical" style="margin-top:10px;">';
-    steps.forEach(function (step) {
-        const cls =
-            step.state === 'completed'
-                ? 'completed'
-                : step.state === 'active'
-                  ? 'active'
-                  : step.state === 'cancelled'
-                    ? 'cancelled'
-                    : 'upcoming';
-        const when =
-            step.at && (step.state === 'completed' || step.state === 'active')
-                ? '<p class="track-when" style="font-size:0.78rem;color:#0f766e;margin:4px 0 0;font-weight:600;">' +
-                  escapeHtml(formatTrackDateTime(step.at)) +
-                  '</p>'
-                : '';
-        html +=
-            '<div class="track-step ' +
-            cls +
-            '"><div class="track-icon"><i class="fas fa-circle"></i></div><div class="track-content"><div class="track-title">' +
-            escapeHtml(step.title || '') +
-            '</div><div class="track-desc">' +
-            escapeHtml(step.desc || '') +
-            '</div>' +
-            when +
-            '</div></div>';
-    });
-    html += '</div>';
-    return html;
+    return renderTrackerStepsHtml({ steps: steps });
 }
 
 function renderRefundEligibilityHtml(eligibility) {
@@ -1341,6 +1313,10 @@ function renderRefundEligibilityHtml(eligibility) {
 function renderCancellationRefundBlock(a) {
     const tr = a && a.cancellationTracking;
     if (!tr) return '';
+    const st = String(tr.status || '').toLowerCase();
+    const rs = String(tr.refundStatus || 'none').toLowerCase();
+    const livePending =
+        st === 'pending' || rs === 'pending' || rs === 'processing' || rs === 'manual_pending';
     const tone =
         tr.refundStatusTone === 'success'
             ? '#047857'
@@ -1349,28 +1325,31 @@ function renderCancellationRefundBlock(a) {
               : tr.refundStatusTone === 'pending'
                 ? '#b45309'
                 : '#475569';
-    let html =
-        '<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:12px;">' +
-        '<p style="margin:0 0 8px;font-weight:700;color:#334155;"><i class="fas fa-undo-alt"></i> Cancellation &amp; refund tracking</p>' +
-        '<p style="margin:0 0 8px;font-size:0.88rem;">Request status: <strong>' +
+    let badge =
+        '<div style="background:linear-gradient(135deg,#fff7ed,#f8fafc);border:1px solid #fed7aa;border-radius:10px;padding:10px 14px;margin-bottom:10px;">' +
+        (livePending
+            ? '<span style="display:inline-flex;align-items:center;gap:6px;font-size:0.72rem;font-weight:700;color:#b45309;text-transform:uppercase;margin-bottom:6px;"><span class="vtrk-dot" style="width:8px;height:8px;border-radius:50%;background:#f59e0b;display:inline-block;animation:satPulse 1.4s ease-in-out infinite;"></span>Live cancellation tracking</span><br>'
+            : '') +
+        '<span style="font-weight:700;color:#334155;"><i class="fas fa-undo-alt"></i> Cancellation request · ' +
         escapeHtml(String(tr.status || '').toUpperCase()) +
-        '</strong>';
+        '</span>';
     if (tr.refundAmount > 0) {
-        html += ' · Eligible refund: <strong>₹' + escapeHtml(String(tr.refundAmount)) + '</strong> (' + escapeHtml(String(tr.refundPercent || 0)) + '%)';
+        badge +=
+            ' · Policy refund <strong>₹' +
+            escapeHtml(String(tr.refundAmount)) +
+            '</strong> (' +
+            escapeHtml(String(tr.refundPercent || 0)) +
+            '%)';
     }
-    html += '</p>';
-    html +=
-        '<p style="margin:0 0 8px;font-size:0.85rem;color:' +
+    badge +=
+        '<br><span style="font-size:0.85rem;color:' +
         tone +
         ';"><strong>Refund:</strong> ' +
         escapeHtml(tr.refundStatusLabel || '') +
         (tr.providerRefundId ? ' · Ref: ' + escapeHtml(tr.providerRefundId) : '') +
-        '</p>';
-    if (tr.trackingSteps && tr.trackingSteps.length) {
-        html += renderRefundTrackingStepsHtml(tr.trackingSteps);
-    }
-    html += '</div>';
-    return html;
+        '</span></div>';
+    if (!tr.trackingSteps || !tr.trackingSteps.length) return badge;
+    return badge + renderRefundTrackingStepsHtml(tr.trackingSteps);
 }
 
 function renderSeminarApplicationTrackerCard(a) {
@@ -6275,7 +6254,17 @@ function seminarTrackFingerprint(apps) {
         .map((a) => {
             const tl = a.timeline || {};
             const stepSig = (tl.steps || []).map((s) => s.key + ':' + s.state + ':' + (s.at || '')).join(',');
-            return [a.id, a.status, a.updated_at || '', stepSig].join(':');
+            const ct = a.cancellationTracking;
+            const cancelSig = ct
+                ? [
+                      ct.status,
+                      ct.refundStatus,
+                      ct.refundAmount,
+                      ct.providerRefundId || '',
+                      (ct.trackingSteps || []).map((s) => s.key + ':' + s.state).join(',')
+                  ].join(':')
+                : '';
+            return [a.id, a.status, a.updated_at || '', stepSig, cancelSig].join(':');
         })
         .join('|');
 }
