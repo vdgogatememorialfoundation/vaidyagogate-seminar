@@ -1632,6 +1632,10 @@ async function bootDoctorDashboard(user) {
         });
     }
     scheduleDoctorClientTelemetry();
+    syncLiveActivity({ kind: 'doctor_portal', stepLabel: 'Dashboard open' });
+    if (window.SiteVisitorBeacon && typeof window.SiteVisitorBeacon.boot === 'function') {
+        window.SiteVisitorBeacon.boot();
+    }
 }
 
 function handleEasebuzzPaymentReturnQuery() {

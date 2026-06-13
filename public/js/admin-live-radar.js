@@ -1,13 +1,19 @@
 /**
- * Admin Live Radar — realtime seminar application tracking (SSE + graphics).
+ * Admin — seminar application Live Radar (realtime SSE, graphics, animations).
  */
 (function (global) {
     let eventSource = null;
     let pollTimer = null;
     let mapCanvas = null;
     let mapCtx = null;
+    let mapPoints = [];
+    let mapAnimFrame = null;
+    let mapPhase = 0;
     let lastSnapshot = null;
     let mounted = false;
+    let streamConnected = false;
+
+    const STEP_NAMES = ['Terms', 'Personal', 'Address', 'Qualification', 'College', 'Submit'];
 
     function esc(s) {
         return String(s == null ? '' : s)
@@ -16,84 +22,110 @@
             .replace(/"/g, '&quot;');
     }
 
-    function deviceEmoji(type) {
+    function deviceIcon(type) {
         if (type === 'mobile') return '📱';
         if (type === 'tablet') return '📲';
-        return '💻';
+        return '🖥️';
     }
 
-    function activityClass(kind) {
-        if (kind === 'seminar_apply') return 'apply';
-        if (kind === 'payment') return 'pay';
-        return 'browse';
-    }
-
-    function activityLabel(s) {
-        if (s.activityKind === 'seminar_apply') {
-            return '📝 Applying' + (s.seminarTitle ? ' · ' + s.seminarTitle : '');
-        }
-        if (s.activityKind === 'payment') return '💳 Payment';
-        if (s.activityKind === 'track_applications') return '📂 Tracking apps';
-        if (s.activityKind === 'browse_seminars') return '🔍 Browsing seminars';
-        return '🌐 ' + (s.activityLabel || 'On site');
+    function deviceLabel(s) {
+        const browser = s.browser || 'Browser';
+        const dt = s.deviceType === 'mobile' ? 'Mobile' : s.deviceType === 'tablet' ? 'Tablet' : 'Desktop';
+        return browser + ' · ' + dt;
     }
 
     function formatAge(sec) {
         if (sec == null) return '—';
-        if (sec < 5) return 'just now';
-        if (sec < 60) return sec + 's ago';
-        return Math.floor(sec / 60) + 'm ago';
+        if (sec < 5) return 'live';
+        if (sec < 60) return sec + 's';
+        return Math.floor(sec / 60) + 'm';
     }
 
     function statIcon(kind) {
         const icons = {
-            live: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>',
-            apply:
-                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="M9 12h6M9 16h6"/></svg>',
+            apply: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/></svg>',
+            live: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/></svg>',
             pay: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>',
-            mobile:
-                '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg>'
+            browser: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg>'
         };
         return icons[kind] || icons.live;
+    }
+
+    function renderStepFunnel(stepNumber) {
+        const n = stepNumber != null ? parseInt(stepNumber, 10) : 0;
+        return (
+            '<div class="lr-step-funnel" aria-hidden="true">' +
+            STEP_NAMES.map(function (label, i) {
+                let cls = 'step';
+                if (i < n) cls += ' done';
+                if (i === n) cls += ' active';
+                return '<div class="' + cls + '" title="' + esc(label) + '"></div>';
+            }).join('') +
+            '</div><div class="lr-step-labels">' +
+            STEP_NAMES.map(function (label, i) {
+                return (
+                    '<span class="' +
+                    (i === n ? 'active' : i < n ? 'done' : '') +
+                    '">' +
+                    esc(label) +
+                    '</span>'
+                );
+            }).join('') +
+            '</div>'
+        );
     }
 
     function buildShell(root) {
         root.innerHTML =
             '<div class="live-radar-wrap">' +
             '<div class="live-radar-hero">' +
-            '<div><h2><span aria-hidden="true">📡</span> Live Radar <span class="live-radar-live-pill"><span class="dot"></span>Realtime</span></h2>' +
-            '<p class="live-radar-sub">Watch doctors browse seminars, fill applications step-by-step, and pay — with location, device, and form progress updating every few seconds.</p></div>' +
-            '<div class="live-radar-updated" id="lr-updated">Connecting…</div></div>' +
+            '<div><h2>📋 Seminar Application Radar <span class="live-radar-live-pill" id="lr-stream-pill"><span class="dot"></span><span id="lr-stream-text">Connecting</span></span></h2>' +
+            '<p class="live-radar-sub">Realtime doctor portal tracking — who is applying, which step they are on, browser/device, and location. Updates every 4 seconds while someone fills a form.</p></div>' +
+            '<div class="live-radar-updated" id="lr-updated">Starting stream…</div></div>' +
             '<div class="live-radar-stats" id="lr-stats"></div>' +
             '<div class="live-radar-grid">' +
-            '<div class="lr-panel"><div class="lr-panel-head"><h3>🗺 Visitor map</h3><span class="live-radar-updated" id="lr-map-count"></span></div>' +
-            '<div class="lr-map-wrap"><canvas id="lr-map-canvas" width="640" height="320"></canvas>' +
-            '<div class="lr-map-legend"><span><i style="background:#2dd4bf"></i> Live</span><span><i style="background:#fb923c"></i> Applying</span></div></div>' +
-            '<div class="lr-panel-head" style="margin-top:14px;"><h3>📊 Applications in progress</h3></div>' +
+            '<div class="lr-panel lr-panel-map">' +
+            '<div class="lr-panel-head"><h3>🗺 Live locations</h3><span class="live-radar-updated" id="lr-map-count"></span></div>' +
+            '<div class="lr-map-wrap"><canvas id="lr-map-canvas" width="720" height="360"></canvas>' +
+            '<div class="lr-map-legend"><span><i style="background:#2dd4bf"></i> Active</span><span><i style="background:#fb923c"></i> Applying</span></div></div>' +
+            '<div class="lr-panel-head" style="margin-top:14px;"><h3>📊 By seminar</h3></div>' +
             '<div class="lr-seminar-bars" id="lr-seminar-bars"></div></div>' +
-            '<div class="lr-panel"><div class="lr-panel-head"><h3>⚡ Live activity feed</h3><span id="lr-feed-count" class="live-radar-updated"></span></div>' +
+            '<div class="lr-panel"><div class="lr-panel-head"><h3>⚡ Application sessions</h3><span id="lr-feed-count" class="live-radar-updated"></span></div>' +
             '<div class="lr-feed" id="lr-feed"></div></div></div></div>';
         mapCanvas = root.querySelector('#lr-map-canvas');
         if (mapCanvas) mapCtx = mapCanvas.getContext('2d');
+    }
+
+    function setStreamStatus(connected, msg) {
+        streamConnected = connected;
+        const pill = document.getElementById('lr-stream-pill');
+        const txt = document.getElementById('lr-stream-text');
+        if (txt) txt.textContent = msg || (connected ? 'Live' : 'Reconnecting');
+        if (pill) {
+            pill.style.borderColor = connected ? 'rgba(45,212,191,0.45)' : 'rgba(251,146,60,0.45)';
+            pill.style.color = connected ? '#2dd4bf' : '#fb923c';
+        }
     }
 
     function renderStats(stats) {
         const el = document.getElementById('lr-stats');
         if (!el || !stats) return;
         const cards = [
-            { cls: 'teal', key: 'liveNow', label: 'Live now', icon: 'live' },
-            { cls: 'orange', key: 'applying', label: 'Applying', icon: 'apply' },
-            { cls: 'purple', key: 'paying', label: 'Paying', icon: 'pay' },
-            { cls: 'blue', key: 'mobile', label: 'On mobile', icon: 'mobile' },
-            { cls: 'teal', key: 'newVisitors', label: 'New (3 min)', icon: 'live' },
-            { cls: 'blue', key: 'active', label: 'Active (10 min)', icon: 'live' }
+            { cls: 'orange', key: 'applying', label: 'Applying now', icon: 'apply' },
+            { cls: 'teal', key: 'liveNow', label: 'Live (<20s)', icon: 'live' },
+            { cls: 'purple', key: 'paying', label: 'At payment', icon: 'pay' },
+            { cls: 'blue', key: 'desktop', label: 'Desktop browser', icon: 'browser' },
+            { cls: 'blue', key: 'mobile', label: 'Mobile browser', icon: 'browser' },
+            { cls: 'teal', key: 'active', label: 'Doctor portal (10m)', icon: 'live' }
         ];
         el.innerHTML = cards
-            .map(function (c) {
+            .map(function (c, idx) {
                 return (
                     '<div class="lr-stat-card ' +
                     c.cls +
-                    '"><div class="icon">' +
+                    ' lr-stat-enter" style="animation-delay:' +
+                    idx * 0.06 +
+                    's"><div class="icon">' +
                     statIcon(c.icon) +
                     '</div><div class="value">' +
                     esc(stats[c.key] != null ? stats[c.key] : 0) +
@@ -109,20 +141,23 @@
         const el = document.getElementById('lr-seminar-bars');
         if (!el) return;
         if (!breakdown || !breakdown.length) {
-            el.innerHTML = '<div class="lr-empty">No one is filling an application right now.</div>';
+            el.innerHTML =
+                '<div class="lr-empty"><div class="lr-empty-icon">📝</div>No active applications — open <strong>/doctor</strong> and start registering to test.</div>';
             return;
         }
         const max = breakdown[0].count || 1;
         el.innerHTML = breakdown
-            .slice(0, 6)
-            .map(function (row) {
+            .slice(0, 5)
+            .map(function (row, idx) {
                 const pct = Math.round((row.count / max) * 100);
                 return (
-                    '<div class="lr-seminar-row"><span>' +
+                    '<div class="lr-seminar-row lr-stat-enter" style="animation-delay:' +
+                    idx * 0.08 +
+                    's"><span>' +
                     esc(row.title) +
                     '</span><strong>' +
                     esc(row.count) +
-                    '</strong><div class="bar"><span style="width:' +
+                    '</strong><div class="bar"><span class="lr-bar-fill" style="width:' +
                     pct +
                     '%"></span></div></div>'
                 );
@@ -134,52 +169,65 @@
         const feed = document.getElementById('lr-feed');
         const countEl = document.getElementById('lr-feed-count');
         if (!feed) return;
-        const rows = (sessions || []).slice(0, 40);
-        if (countEl) countEl.textContent = rows.length + ' sessions';
+        const rows = (sessions || []).slice(0, 30);
+        if (countEl) countEl.textContent = rows.length + ' tracked';
         if (!rows.length) {
             feed.innerHTML =
-                '<div class="lr-empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M12 6v6l4 2"/></svg><div>Waiting for visitors… Open the doctor portal on your phone to test.</div></div>';
+                '<div class="lr-empty"><div class="lr-empty-icon lr-pulse-icon">📡</div>' +
+                '<strong>Waiting for doctor portal activity</strong><p style="margin:8px 0 0;font-size:0.85rem;">Log in at <code>/doctor</code> on your phone or browser, open <em>Available Seminars</em>, and click Register. This panel updates automatically.</p></div>';
             return;
         }
         feed.innerHTML = rows
-            .map(function (s) {
-                const tagCls = activityClass(s.activityKind);
-                const name = s.userLabel || (s.userId ? 'Doctor #' + s.userId : 'Guest visitor');
-                const loc = s.location || s.ip || 'Unknown location';
-                const page = s.page || '—';
-                const progress =
-                    s.activityKind === 'seminar_apply'
-                        ? '<div class="lr-progress"><span style="width:' +
-                          esc(s.formProgress || 0) +
-                          '%"></span></div><div class="meta" style="margin-top:4px;">Step ' +
-                          esc(s.stepNumber != null ? s.stepNumber : '?') +
-                          ' · ' +
-                          esc(s.stepLabel || s.activityLabel || '') +
-                          ' · ' +
-                          esc(s.formProgress || 0) +
-                          '%</div>'
-                        : '';
+            .map(function (s, idx) {
+                const name = s.userLabel || (s.userId ? 'Doctor #' + s.userId : 'Guest (not signed in)');
+                const loc = s.location || (s.ip ? 'IP ' + s.ip : 'Location pending');
+                const isApply = s.activityKind === 'seminar_apply';
+                const tag =
+                    isApply
+                        ? '📝 Applying'
+                        : s.activityKind === 'payment'
+                          ? '💳 Payment'
+                          : s.activityKind === 'browse_seminars'
+                            ? '🔍 Browsing seminars'
+                            : s.activityKind === 'track_applications'
+                              ? '📂 Tracking apps'
+                              : '🩺 Doctor portal';
+                const funnel = isApply ? renderStepFunnel(s.stepNumber) : '';
+                const progressPct = isApply ? s.formProgress || 0 : 0;
                 return (
-                    '<article class="lr-session' +
+                    '<article class="lr-session lr-stat-enter' +
                     (s.isNew ? ' new' : '') +
-                    '"><div class="lr-device-badge" title="' +
-                    esc(s.deviceType) +
+                    (s.pulse === 'live' ? ' lr-session-live' : '') +
+                    '" style="animation-delay:' +
+                    idx * 0.04 +
+                    's">' +
+                    '<div class="lr-device-badge" title="' +
+                    esc(deviceLabel(s)) +
                     '">' +
-                    deviceEmoji(s.deviceType) +
-                    '</div><div class="lr-session-main"><strong>' +
+                    deviceIcon(s.deviceType) +
+                    '</div>' +
+                    '<div class="lr-session-main"><strong>' +
                     esc(name) +
-                    (s.isNew ? ' <span style="color:#2dd4bf;font-size:0.72rem;">NEW</span>' : '') +
-                    '</strong><div class="meta">📍 ' +
+                    (s.isNew ? ' <em class="lr-new-tag">NEW</em>' : '') +
+                    '</strong>' +
+                    '<div class="meta">' +
+                    esc(deviceLabel(s)) +
+                    '<br>📍 ' +
                     esc(loc) +
-                    '<br>📄 ' +
-                    esc(page) +
-                    '</div><span class="lr-activity-tag ' +
-                    tagCls +
+                    (s.seminarTitle ? '<br>🎓 ' + esc(s.seminarTitle) : '') +
+                    '</div>' +
+                    '<span class="lr-activity-tag ' +
+                    (isApply ? 'apply' : s.activityKind === 'payment' ? 'pay' : 'browse') +
                     '">' +
-                    esc(activityLabel(s)) +
+                    esc(tag) +
+                    (isApply && s.stepLabel ? ' · ' + esc(s.stepLabel) : '') +
                     '</span>' +
-                    progress +
-                    '</div><div class="lr-age">' +
+                    funnel +
+                    (isApply
+                        ? '<div class="lr-progress"><span style="width:' + esc(progressPct) + '%"></span></div>'
+                        : '') +
+                    '</div>' +
+                    '<div class="lr-age">' +
                     esc(formatAge(s.ageSec)) +
                     '</div></article>'
                 );
@@ -187,73 +235,103 @@
             .join('');
     }
 
-    function drawMap(points) {
+    function drawMapFrame() {
         if (!mapCanvas || !mapCtx) return;
         const w = mapCanvas.width;
         const h = mapCanvas.height;
         mapCtx.clearRect(0, 0, w, h);
 
-        mapCtx.strokeStyle = 'rgba(148,163,184,0.08)';
+        const grd = mapCtx.createLinearGradient(0, 0, 0, h);
+        grd.addColorStop(0, 'rgba(15,23,42,0.2)');
+        grd.addColorStop(1, 'rgba(2,6,23,0.85)');
+        mapCtx.fillStyle = grd;
+        mapCtx.fillRect(0, 0, w, h);
+
+        mapCtx.strokeStyle = 'rgba(148,163,184,0.07)';
         mapCtx.lineWidth = 1;
-        for (let i = 1; i < 12; i++) {
-            const y = (h / 12) * i;
+        for (let i = 1; i < 10; i++) {
+            const y = (h / 10) * i;
             mapCtx.beginPath();
             mapCtx.moveTo(0, y);
             mapCtx.lineTo(w, y);
             mapCtx.stroke();
         }
-        for (let j = 1; j < 24; j++) {
-            const x = (w / 24) * j;
-            mapCtx.beginPath();
-            mapCtx.moveTo(x, 0);
-            mapCtx.lineTo(x, h);
-            mapCtx.stroke();
-        }
 
-        const pts = points || [];
-        const countEl = document.getElementById('lr-map-count');
-        if (countEl) countEl.textContent = pts.length ? pts.length + ' on map' : 'No geo yet';
-
-        pts.forEach(function (p) {
+        mapPhase += 0.04;
+        (mapPoints || []).forEach(function (p, idx) {
             const x = ((Number(p.lon) + 180) / 360) * w;
             const y = ((90 - Number(p.lat)) / 180) * h;
             const applying = p.kind === 'seminar_apply';
-            const color = applying ? '#fb923c' : p.pulse === 'live' ? '#2dd4bf' : '#64748b';
-            const r = applying ? 7 : p.pulse === 'live' ? 6 : 4;
+            const color = applying ? '#fb923c' : '#2dd4bf';
+            const pulse = 4 + Math.sin(mapPhase + idx) * 3;
 
             mapCtx.beginPath();
-            mapCtx.fillStyle = color + '33';
-            mapCtx.arc(x, y, r + 6, 0, Math.PI * 2);
-            mapCtx.fill();
+            mapCtx.strokeStyle = color + '55';
+            mapCtx.lineWidth = 2;
+            mapCtx.arc(x, y, 10 + pulse, 0, Math.PI * 2);
+            mapCtx.stroke();
 
             mapCtx.beginPath();
             mapCtx.fillStyle = color;
-            mapCtx.arc(x, y, r, 0, Math.PI * 2);
+            mapCtx.arc(x, y, applying ? 6 : 4, 0, Math.PI * 2);
             mapCtx.fill();
         });
+
+        mapAnimFrame = requestAnimationFrame(drawMapFrame);
+    }
+
+    function startMapAnim(points) {
+        mapPoints = points || [];
+        const countEl = document.getElementById('lr-map-count');
+        if (countEl) {
+            countEl.textContent = mapPoints.length
+                ? mapPoints.length + ' on map'
+                : 'Geo resolves on first heartbeat';
+        }
+        if (!mapAnimFrame && mapCtx) drawMapFrame();
+    }
+
+    function stopMapAnim() {
+        if (mapAnimFrame) {
+            cancelAnimationFrame(mapAnimFrame);
+            mapAnimFrame = null;
+        }
     }
 
     function renderSnapshot(data) {
-        if (!data || data.error) return;
+        if (!data) return;
+        if (data.error) {
+            setStreamStatus(false, 'Error');
+            const upd = document.getElementById('lr-updated');
+            if (upd) upd.textContent = 'Error: ' + data.error;
+            return;
+        }
         lastSnapshot = data;
+        setStreamStatus(true, 'Live');
         renderStats(data.stats);
         renderSeminarBars(data.seminarBreakdown);
         renderFeed(data.sessions);
-        drawMap(data.mapPoints);
+        startMapAnim(data.mapPoints);
         const upd = document.getElementById('lr-updated');
         if (upd) {
             upd.textContent =
                 'Updated ' +
                 new Date(data.generatedAt || Date.now()).toLocaleTimeString() +
-                ' · realtime stream';
+                ' · ' +
+                (data.stats.applying || 0) +
+                ' applying';
         }
     }
 
     function startStream() {
         stopStream();
+        setStreamStatus(false, 'Connecting');
         if (typeof EventSource !== 'undefined') {
             try {
                 eventSource = new EventSource('/api/admin/live-radar/stream');
+                eventSource.onopen = function () {
+                    setStreamStatus(true, 'Live');
+                };
                 eventSource.onmessage = function (ev) {
                     try {
                         renderSnapshot(JSON.parse(ev.data));
@@ -264,6 +342,7 @@
                         eventSource.close();
                         eventSource = null;
                     }
+                    setStreamStatus(false, 'Polling');
                     startPollFallback();
                 };
                 return;
@@ -280,15 +359,19 @@
                     return r.json();
                 })
                 .then(function (d) {
-                    if (d && d.success !== false) renderSnapshot(d);
+                    if (d && d.error) renderSnapshot({ error: d.error });
+                    else renderSnapshot(d);
                 })
-                .catch(function () {});
+                .catch(function (e) {
+                    renderSnapshot({ error: e.message || 'Network error' });
+                });
         };
         pull();
-        pollTimer = setInterval(pull, 4000);
+        pollTimer = setInterval(pull, 3000);
     }
 
     function stopStream() {
+        stopMapAnim();
         if (eventSource) {
             eventSource.close();
             eventSource = null;
@@ -311,12 +394,13 @@
 
     function stopAdminLiveRadar() {
         stopStream();
+        setStreamStatus(false, 'Paused');
     }
 
     global.initAdminLiveRadar = initAdminLiveRadar;
     global.stopAdminLiveRadar = stopAdminLiveRadar;
     global.refreshAdminLiveVisitors = function () {
-        if (lastSnapshot) renderSnapshot(lastSnapshot);
+        if (lastSnapshot && !lastSnapshot.error) renderSnapshot(lastSnapshot);
         else initAdminLiveRadar();
     };
 })(typeof window !== 'undefined' ? window : global);

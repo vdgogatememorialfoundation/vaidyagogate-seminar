@@ -375,3 +375,126 @@
     font-size: 0.78rem;
     color: var(--lr-muted);
 }
+
+.lr-stat-enter {
+    animation: lr-slide-in 0.45s ease both;
+}
+
+@keyframes lr-slide-in {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.lr-step-funnel {
+    display: flex;
+    gap: 5px;
+    margin-top: 10px;
+}
+
+.lr-step-funnel .step {
+    flex: 1;
+    height: 7px;
+    border-radius: 999px;
+    background: rgba(148, 163, 184, 0.15);
+    transition: background 0.3s, box-shadow 0.3s;
+}
+
+.lr-step-funnel .step.done {
+    background: rgba(45, 212, 191, 0.75);
+}
+
+.lr-step-funnel .step.active {
+    background: linear-gradient(90deg, #f97316, #fb923c);
+    animation: lr-step-glow 1.4s ease-in-out infinite;
+}
+
+@keyframes lr-step-glow {
+    0%,
+    100% {
+        box-shadow: 0 0 0 0 rgba(251, 146, 60, 0.5);
+    }
+    50% {
+        box-shadow: 0 0 12px 2px rgba(251, 146, 60, 0.35);
+    }
+}
+
+.lr-step-labels {
+    display: flex;
+    gap: 2px;
+    margin-top: 4px;
+    font-size: 0.62rem;
+    color: var(--lr-muted);
+}
+
+.lr-step-labels span {
+    flex: 1;
+    text-align: center;
+    opacity: 0.55;
+}
+
+.lr-step-labels span.done {
+    color: var(--lr-teal);
+    opacity: 0.85;
+}
+
+.lr-step-labels span.active {
+    color: #fdba74;
+    opacity: 1;
+    font-weight: 700;
+}
+
+.lr-session-live {
+    box-shadow: 0 0 0 1px rgba(45, 212, 191, 0.25);
+}
+
+.lr-new-tag {
+    font-style: normal;
+    color: #2dd4bf;
+    font-size: 0.68rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+}
+
+.lr-pulse-icon {
+    font-size: 2.4rem;
+    animation: lr-pulse 2s infinite;
+    display: inline-block;
+}
+
+.lr-empty-icon {
+    font-size: 2rem;
+    margin-bottom: 8px;
+}
+
+.lr-bar-fill {
+    display: block;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #f97316, #fb923c);
+    animation: lr-bar-grow 0.6s ease;
+}
+
+@keyframes lr-bar-grow {
+    from {
+        width: 0 !important;
+    }
+}
+
+.lr-panel-map {
+    position: relative;
+}
+
+.lr-panel-map::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    border-radius: 18px;
+    background: linear-gradient(135deg, rgba(45, 212, 191, 0.04), transparent 40%);
+}

@@ -1596,7 +1596,7 @@ const ADMIN_MODULE_TAB_DEFS = [
     ['tab-feedback-form', 'Feedback form editor'],
     ['tab-activity-logs', 'User & doctor activity'],
     ['tab-notifications', 'Notifications'],
-    ['tab-live-radar', 'Live Radar'],
+    ['tab-live-radar', 'Application Radar'],
     ['tab-system-platform', 'System health'],
     ['tab-system-users', 'User health'],
     ['tab-settings', 'Global settings']
