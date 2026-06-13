@@ -4727,6 +4727,34 @@ function withUploadAssets(req, res, next) {
     });
 }
 
+function withUploadReelMedia(req, res, next) {
+    casePresentationDiskUpload.single('file')(req, res, (err) => {
+        if (err) {
+            if (err.code === 'LIMIT_FILE_SIZE') {
+                return res.status(400).json({
+                    error: 'File is too large (max 50 MB for reel video). Use a YouTube Shorts URL for longer clips.'
+                });
+            }
+            return res.status(400).json({ error: uploadErrorMessage(err) });
+        }
+        next();
+    });
+}
+
+function isReelVideoFile(file) {
+    if (!file) return false;
+    const mime = String(file.mimetype || '').toLowerCase();
+    const name = String(file.originalname || '').toLowerCase();
+    return mime.startsWith('video/') || /\.(mp4|webm|mov|m4v)$/i.test(name);
+}
+
+function isReelImageFile(file) {
+    if (!file) return false;
+    const mime = String(file.mimetype || '').toLowerCase();
+    const name = String(file.originalname || '').toLowerCase();
+    return mime.startsWith('image/') || /\.(jpe?g|png|webp|gif)$/i.test(name);
+}
+
 function persistOneUploadAsset(file, cb) {
     if (!file) return cb(null, null);
     fileStore.persistToGlobalAsset(db, upsertGlobalSetting, file, 'upload_asset_', (err, assetPath) => {
@@ -4780,6 +4808,31 @@ app.post('/api/admin/upload-assets', withUploadAssets, (req, res) => {
         });
     };
     nextFile();
+});
+
+/** Homepage reel videos (MP4 up to 50 MB) and optional thumbnails. */
+app.post('/api/admin/upload-reel-media', withUploadReelMedia, (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ error: 'Choose a video or image file first.' });
+    }
+    const video = isReelVideoFile(req.file);
+    const image = isReelImageFile(req.file);
+    if (!video && !image) {
+        return res.status(400).json({ error: 'Upload MP4/WebM video or JPG/PNG thumbnail only.' });
+    }
+    const maxBytes = uploadLimits.getHostMaxBytes();
+    if (req.file.size > maxBytes) {
+        const maxMb = Math.round(maxBytes / (1024 * 1024));
+        return res.status(400).json({
+            error:
+                `File is too large (${Math.ceil(req.file.size / (1024 * 1024))} MB). Maximum ${maxMb} MB for reel uploads.` +
+                (video ? ' For longer clips, paste a YouTube Shorts URL instead.' : '')
+        });
+    }
+    persistOneUploadAsset(req.file, (err, assetPath) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true, path: assetPath, kind: video ? 'video' : 'image' });
+    });
 });
 
 app.get('/api/assets/:key', fileStore.serveAssetHandler(db));

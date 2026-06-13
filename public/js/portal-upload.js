@@ -25,6 +25,14 @@
         return file.type === 'application/pdf' || /\.pdf$/i.test(file.name || '');
     }
 
+    function isVideoFile(file) {
+        if (!file) return false;
+        if (String(file.type || '').startsWith('video/')) return true;
+        return /\.(mp4|webm|mov|m4v)$/i.test(file.name || '');
+    }
+
+    const REEL_VIDEO_MAX_BYTES = 50 * 1024 * 1024;
+
     function compressHelpMessage(file) {
         const name = (file && file.name) || 'file';
         const size = formatBytes(file && file.size);
@@ -174,6 +182,56 @@
         return r.path || null;
     }
 
+    async function uploadAdminReelMedia(file) {
+        if (!file) {
+            alert('Choose a file first.');
+            return null;
+        }
+        if (isVideoFile(file)) {
+            if (file.size > REEL_VIDEO_MAX_BYTES) {
+                alert(
+                    `"${file.name}" is ${formatBytes(file.size)}. Reel videos must be under 50 MB.\n\nUse a YouTube Shorts link for longer clips, or compress the MP4 first.`
+                );
+                return null;
+            }
+        } else if (isImageFile(file)) {
+            const prep = await prepareFileForUpload(file);
+            if (!prep.ok) {
+                alert(prep.error);
+                return null;
+            }
+            file = prep.file;
+        } else {
+            alert('Use MP4/WebM video or JPG/PNG thumbnail.');
+            return null;
+        }
+        const fd = new FormData();
+        fd.append('file', file);
+        const result = await postFormData('/api/admin/upload-reel-media', fd);
+        if (!result.ok) {
+            alert(result.error + (file.name ? ' (' + file.name + ')' : ''));
+            return null;
+        }
+        return result.data.path || null;
+    }
+
+    async function uploadAdminReelFromInput(fileInput, kind) {
+        const file = fileInput && fileInput.files && fileInput.files[0];
+        if (!file) {
+            alert(kind === 'video' ? 'Choose an MP4/WebM video first.' : 'Choose a thumbnail image first.');
+            return null;
+        }
+        if (kind === 'video' && !isVideoFile(file)) {
+            alert('Please choose a video file (MP4 or WebM).');
+            return null;
+        }
+        if (kind === 'thumb' && !isImageFile(file)) {
+            alert('Please choose an image file (JPG or PNG).');
+            return null;
+        }
+        return uploadAdminReelMedia(file);
+    }
+
     async function uploadAdminAssetsSequential(files, opts) {
         const list = Array.from(files || []);
         const paths = [];
@@ -245,10 +303,14 @@
         formatBytes,
         isImageFile,
         isPdfFile,
+        isVideoFile,
+        REEL_VIDEO_MAX_BYTES,
         compressHelpMessage,
         compressImageFile,
         prepareFileForUpload,
         uploadAdminAsset,
+        uploadAdminReelMedia,
+        uploadAdminReelFromInput,
         uploadAdminAssetsSequential,
         uploadFromInput,
         uploadPreparedToUrl,

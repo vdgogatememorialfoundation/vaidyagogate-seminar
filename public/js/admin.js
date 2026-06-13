@@ -11671,21 +11671,6 @@ function syncSeminarPreregUi() {
     wrap.style.pointerEvents = on ? 'auto' : 'none';
 }
 
-function syncSeminarWebinarUi() {
-    const mode = (document.getElementById('seminar-delivery-mode') || {}).value || 'in_person';
-    const online = mode === 'online' || mode === 'hybrid';
-    const wrap = document.getElementById('seminar-webinar-fields');
-    const prov = document.getElementById('seminar-webinar-provider-wrap');
-    if (wrap) {
-        wrap.style.opacity = online ? '1' : '0.5';
-        wrap.style.pointerEvents = online ? 'auto' : 'none';
-    }
-    if (prov) {
-        prov.style.opacity = online ? '1' : '0.5';
-        prov.style.pointerEvents = online ? 'auto' : 'none';
-    }
-}
-
 function openCreateSeminarModal() {
     document.getElementById('admin-seminar-modal').classList.remove('hidden');
     document.getElementById('seminar-form').reset();
@@ -11704,7 +11689,6 @@ function openCreateSeminarModal() {
     const preregCh = document.getElementById('seminar-prereg-enabled');
     if (preregCh) preregCh.checked = false;
     syncSeminarPreregUi();
-    syncSeminarWebinarUi();
 }
 
 async function loadAdminPortalYear() {
@@ -11822,21 +11806,6 @@ function editSeminar(index) {
     const ple = document.getElementById('seminar-public-list-enabled');
     if (ple) ple.value = s.public_list_enabled ? '1' : '0';
     document.getElementById('seminar-location-url').value = s.location_url || '';
-    const dm = document.getElementById('seminar-delivery-mode');
-    if (dm) dm.value = s.delivery_mode || 'in_person';
-    const wp = document.getElementById('seminar-webinar-provider');
-    if (wp) wp.value = s.webinar_provider || 'custom_link';
-    const wu = document.getElementById('seminar-webinar-url');
-    if (wu) wu.value = s.webinar_meeting_url || '';
-    const wi = document.getElementById('seminar-webinar-instructions');
-    if (wi) wi.value = s.webinar_join_instructions || '';
-    const wo = document.getElementById('seminar-webinar-opens');
-    if (wo) wo.value = formatDt(s.webinar_join_opens);
-    const wc = document.getElementById('seminar-webinar-closes');
-    if (wc) wc.value = formatDt(s.webinar_join_closes);
-    const wsd = document.getElementById('seminar-webinar-single-device');
-    if (wsd) wsd.checked = Number(s.webinar_single_device) === 1;
-    syncSeminarWebinarUi();
     document.getElementById('seminar-terms').value = s.terms_conditions || '';
     const wh = document.getElementById('seminar-whatsapp');
     if (wh) wh.value = s.whatsapp_group_url || '';
@@ -11926,21 +11895,6 @@ async function saveSeminar(e) {
         public_list_enabled: document.getElementById('seminar-public-list-enabled')?.value === '1',
         cert_scans_required: parseInt(document.getElementById('seminar-cert-scans-required')?.value || '1', 10) === 2 ? 2 : 1,
         location_url: document.getElementById('seminar-location-url').value || null,
-        delivery_mode: (document.getElementById('seminar-delivery-mode') || {}).value || 'in_person',
-        webinar_provider: (document.getElementById('seminar-webinar-provider') || {}).value || null,
-        webinar_meeting_url: (document.getElementById('seminar-webinar-url') || {}).value || null,
-        webinar_join_instructions: (document.getElementById('seminar-webinar-instructions') || {}).value || null,
-        webinar_join_opens: (() => {
-            const el = document.getElementById('seminar-webinar-opens');
-            if (!el || !el.value) return null;
-            return window.PortalDateTime ? window.PortalDateTime.fromDatetimeLocal(el.value) : el.value;
-        })(),
-        webinar_join_closes: (() => {
-            const el = document.getElementById('seminar-webinar-closes');
-            if (!el || !el.value) return null;
-            return window.PortalDateTime ? window.PortalDateTime.fromDatetimeLocal(el.value) : el.value;
-        })(),
-        webinar_single_device: (document.getElementById('seminar-webinar-single-device') || {}).checked === true,
         terms_conditions: document.getElementById('seminar-terms').value || null,
         hero_image_path: (document.getElementById('seminar-hero-image') || {}).value || null,
         flyer_path: (document.getElementById('seminar-flyer') || {}).value || null,
@@ -14021,13 +13975,15 @@ function cmsAddReelRow(prefill) {
           <div><label style="font-size:0.8rem;">Uploaded video path (MP4)</label><input class="crl-video" type="text" style="width:100%" placeholder="/uploads/reel.mp4"></div>
         </div>
         <div style="margin-top:8px;"><label style="font-size:0.8rem;">Thumbnail path (optional)</label><input class="crl-thumb" type="text" style="width:100%" placeholder="/uploads/reel-thumb.jpg"></div>
+        <p class="crl-upload-hint" style="margin:8px 0 0;font-size:0.78rem;color:#64748b;">MP4/WebM up to 50 MB, or paste a YouTube Shorts URL above. Thumbnails: JPG/PNG (auto-compressed).</p>
         <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-          <input type="file" class="crl-video-file" accept="video/mp4,video/webm,video/*" style="max-width:180px;">
+          <input type="file" class="crl-video-file" accept="video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov" style="max-width:220px;">
           <button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;" onclick="cmsUploadReelVideo(this)">Upload video</button>
           <input type="file" class="crl-thumb-file" accept="image/*" style="max-width:180px;">
           <button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;" onclick="cmsUploadReelThumb(this)">Upload thumb</button>
           <button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;background:#64748b;" onclick="this.closest('.cms-reel-row').remove()">Remove</button>
-        </div>`;
+        </div>
+        <p class="crl-upload-status" style="margin:8px 0 0;font-size:0.82rem;font-weight:600;"></p>`;
     wrap.querySelector('.crl-title').value = p.title || '';
     wrap.querySelector('.crl-subtitle').value = p.subtitle || p.category || '';
     wrap.querySelector('.crl-youtube').value = p.youtubeId || p.url || '';
@@ -14058,24 +14014,77 @@ function cmsFillReelRows(items) {
     (items || []).forEach((it) => cmsAddReelRow(it));
 }
 
+function cmsSetReelUploadStatus(row, text, ok) {
+    const el = row && row.querySelector('.crl-upload-status');
+    if (!el) return;
+    el.textContent = text || '';
+    el.style.color = ok ? '#15803d' : text ? '#b91c1c' : '#64748b';
+}
+
 async function cmsUploadReelVideo(btn) {
     const row = btn.closest('.cms-reel-row');
     if (!row) return;
     const fileInp = row.querySelector('.crl-video-file');
-    const path = await uploadAdminAssetFromInput(fileInp);
+    if (!fileInp || !fileInp.files || !fileInp.files.length) {
+        cmsSetReelUploadStatus(row, 'Choose an MP4/WebM file first, then click Upload video.', false);
+        return;
+    }
+    btn.disabled = true;
+    cmsSetReelUploadStatus(row, 'Uploading video…', true);
+    let path = null;
+    try {
+        if (window.PortalUpload && typeof window.PortalUpload.uploadAdminReelFromInput === 'function') {
+            path = await window.PortalUpload.uploadAdminReelFromInput(fileInp, 'video');
+        } else {
+            path = await uploadAdminAssetFromInput(fileInp);
+        }
+    } catch (e) {
+        cmsSetReelUploadStatus(row, e.message || 'Upload failed', false);
+        btn.disabled = false;
+        return;
+    }
+    btn.disabled = false;
     if (fileInp) fileInp.value = '';
     const pathEl = row.querySelector('.crl-video');
-    if (path && pathEl) pathEl.value = path;
+    if (path && pathEl) {
+        pathEl.value = path;
+        cmsSetReelUploadStatus(row, 'Video uploaded — path filled. Click Save website & portal content below.', true);
+    } else if (!path) {
+        cmsSetReelUploadStatus(row, 'Upload failed or cancelled.', false);
+    }
 }
 
 async function cmsUploadReelThumb(btn) {
     const row = btn.closest('.cms-reel-row');
     if (!row) return;
     const fileInp = row.querySelector('.crl-thumb-file');
-    const path = await uploadAdminAssetFromInput(fileInp);
+    if (!fileInp || !fileInp.files || !fileInp.files.length) {
+        cmsSetReelUploadStatus(row, 'Choose a thumbnail image first, then click Upload thumb.', false);
+        return;
+    }
+    btn.disabled = true;
+    cmsSetReelUploadStatus(row, 'Uploading thumbnail…', true);
+    let path = null;
+    try {
+        if (window.PortalUpload && typeof window.PortalUpload.uploadAdminReelFromInput === 'function') {
+            path = await window.PortalUpload.uploadAdminReelFromInput(fileInp, 'thumb');
+        } else {
+            path = await uploadAdminAssetFromInput(fileInp);
+        }
+    } catch (e) {
+        cmsSetReelUploadStatus(row, e.message || 'Upload failed', false);
+        btn.disabled = false;
+        return;
+    }
+    btn.disabled = false;
     if (fileInp) fileInp.value = '';
     const pathEl = row.querySelector('.crl-thumb');
-    if (path && pathEl) pathEl.value = path;
+    if (path && pathEl) {
+        pathEl.value = path;
+        cmsSetReelUploadStatus(row, 'Thumbnail uploaded — path filled. Click Save website & portal content below.', true);
+    } else if (!path) {
+        cmsSetReelUploadStatus(row, 'Upload failed or cancelled.', false);
+    }
 }
 
 async function cmsUploadRowPdf(btn, pathSelector) {
