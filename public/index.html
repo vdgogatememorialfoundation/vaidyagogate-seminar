@@ -102,7 +102,7 @@
                 <a href="#" data-nav-section="schedule" data-menu-key="schedule">Agenda</a>
                 <a href="#" data-nav-section="gallery" data-menu-key="gallery">Gallery</a>
                 <a href="#" id="nav-verify" data-nav-section="verify" data-menu-key="verify">Delegates</a>
-                <a href="/verify-certificate.html" data-menu-key="certificate">Certificate</a>
+                <a href="/verify-certificate" data-menu-key="certificate">Certificate</a>
                 <a href="#" data-nav-section="contact" data-menu-key="contact">Contact</a>
             </span>
         </nav>
@@ -847,16 +847,16 @@
         function portalHintForUser(user) {
             const ur = String(user.user_role || '').toLowerCase();
             const r = String(user.role || '').toLowerCase();
-            if (r === 'admin' || ur === 'co_admin') return 'Open the admin portal: /admin.html';
-            if (ur === 'judge_user' || ur === 'reviewer') return 'Open the judge portal: /judge.html';
-            if (ur === 'scanner_portal_user') return 'Open the scanner portal: /scanner.html';
+            if (r === 'admin' || ur === 'co_admin') return 'Open the admin portal: /admin';
+            if (ur === 'judge_user' || ur === 'reviewer') return 'Open the judge portal: /judge';
+            if (ur === 'scanner_portal_user') return 'Open the scanner portal: /scanner';
             return 'Please use the correct portal for your account type.';
         }
 
         /** Public site login is for doctors only; staff use their own portal URLs. */
         function doctorPortalUrl() {
             const app = new URLSearchParams(window.location.search).get('app') === '1';
-            return '/doctor.html' + (app ? '?app=1' : '');
+            return '/doctor' + (app ? '?app=1' : '');
         }
 
         function routeUserAfterLogin(user) {
@@ -1841,7 +1841,7 @@
                     '<div class="box"><h2 class="cv-home-cd-m" style="margin:0;">00</h2><span style="font-size:0.65rem;color:#166534;font-weight:700;">MINUTES</span></div>' +
                     '<div class="box"><h2 class="cv-home-cd-s" style="margin:0;">00</h2><span style="font-size:0.65rem;color:#166534;font-weight:700;">SECONDS</span></div>' +
                     '</div>' +
-                    '<p style="margin:12px 0 0;"><a href="/verify-certificate.html" style="color:#0f766e;font-weight:600;">Open certificate verification page</a></p>' +
+                    '<p style="margin:12px 0 0;"><a href="/verify-certificate" style="color:#0f766e;font-weight:600;">Open certificate verification page</a></p>' +
                     '</div>';
                 const tick = () => {
                     const dist = new Date(opensAt).getTime() - Date.now();

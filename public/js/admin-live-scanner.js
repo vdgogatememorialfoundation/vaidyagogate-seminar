@@ -265,7 +265,7 @@
     async function init() {
         actor = getActor();
         if (!actor || !actor.id) {
-            window.location.href = '/admin.html';
+            window.location.href = '/admin';
             return;
         }
         tickClock();
@@ -302,7 +302,7 @@
             });
         }
         document.getElementById('live-scanner-back').addEventListener('click', () => {
-            window.location.href = '/admin.html';
+            window.location.href = '/admin';
         });
         updateEmptyState();
     }

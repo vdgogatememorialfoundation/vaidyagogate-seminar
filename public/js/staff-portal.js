@@ -715,14 +715,14 @@
                     if (ur === 'scanner_portal_user' || ur === 'scanner_dashboard_user') {
                         if (msg) {
                             msg.style.color = '#b91c1c';
-                            msg.textContent = 'Use the scanner portal at /scanner.html for entry scanning.';
+                            msg.textContent = 'Use the scanner portal at /scanner for entry scanning.';
                         }
                         return;
                     }
                     if (ur === 'judge_user' || ur === 'reviewer') {
                         if (msg) {
                             msg.style.color = '#b91c1c';
-                            msg.textContent = 'Judge accounts must use the judge portal at /judge.html.';
+                            msg.textContent = 'Judge accounts must use the judge portal at /judge.';
                         }
                         return;
                     }

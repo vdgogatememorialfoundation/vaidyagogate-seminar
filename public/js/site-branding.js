@@ -26,7 +26,7 @@
     async function loadSiteBranding() {
         const onScanner =
             document.documentElement.classList.contains('scanner-native-shell') ||
-            /\/scanner\.html$/i.test(window.location.pathname || '');
+            /^\/scanner(?:\.html)?$/i.test(window.location.pathname || '');
         if (onScanner && !document.querySelector('[data-site-logo]')) {
             return;
         }

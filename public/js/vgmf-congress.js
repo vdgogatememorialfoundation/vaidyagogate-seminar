@@ -30,13 +30,13 @@
 
     const QUICK_ACCESS = [
         { icon: 'fa-user-plus', title: 'Start enrollment', text: 'Create your doctor account', action: 'register' },
-        { icon: 'fa-user-md', title: "Doctor's Portal Sign In", text: 'Sign in and manage applications', href: '/doctor.html' },
+        { icon: 'fa-user-md', title: "Doctor's Portal Sign In", text: 'Sign in and manage applications', href: '/doctor' },
         { icon: 'fa-calendar-alt', title: 'Event agenda', text: 'Sessions and timings', section: 'schedule' },
         { icon: 'fa-microphone', title: 'Faculty board', text: 'Featured experts', section: 'home', anchor: 'speakers-section' },
         { icon: 'fa-ticket-alt', title: 'Open windows', text: 'Current registrations', section: 'home', anchor: 'seminars-section' },
         { icon: 'fa-images', title: 'Seminar gallery', text: 'Past highlights', section: 'gallery' },
         { icon: 'fa-shield-check', title: 'Delegate directory', text: 'Paid participant lookup', section: 'verify' },
-        { icon: 'fa-award', title: 'Certificate authenticity', text: 'OTP validation', href: '/verify-certificate.html' },
+        { icon: 'fa-award', title: 'Certificate authenticity', text: 'OTP validation', href: '/verify-certificate' },
         { icon: 'fa-info-circle', title: 'Foundation profile', text: 'Mission and history', section: 'about' },
         { icon: 'fa-envelope', title: 'Support desk', text: 'Contact the office', section: 'contact' }
     ];
@@ -310,7 +310,7 @@
         const cta = String(sl.cta || '');
         const isRegister =
             link === '#register' ||
-            link === '/doctor.html' ||
+            link === '/doctor' ||
             /register/i.test(cta) ||
             /register/i.test(link);
         if (isRegister) {

@@ -747,11 +747,11 @@ document.getElementById('admin-login-form').addEventListener('submit', async (e)
             const snippet = (await res.text()).slice(0, 120).replace(/\s+/g, ' ');
             if (res.status === 503 || /maintenance/i.test(snippet)) {
                 alert(
-                    'The site is in maintenance mode and returned a web page instead of login data. Open the admin page from the same address as your server (e.g. http://localhost:3000/admin.html) and try again.'
+                    'The site is in maintenance mode and returned a web page instead of login data. Open the admin page from the same address as your server (e.g. http://localhost:3000/admin) and try again.'
                 );
             } else {
                 alert(
-                    'Login did not receive JSON from the server. Open admin from the app URL (not as a local file). Example: http://localhost:3000/admin.html'
+                    'Login did not receive JSON from the server. Open admin from the app URL (not as a local file). Example: http://localhost:3000/admin'
                 );
             }
             return;
@@ -1658,10 +1658,10 @@ function openAdminLiveScannerBoard() {
     try {
         sessionStorage.setItem('admin_user', JSON.stringify(actor));
     } catch (_) {}
-    const w = window.open('/admin-live-scanner.html', '_blank', 'noopener,noreferrer');
+    const w = window.open('/admin/live-scanner', '_blank', 'noopener,noreferrer');
     if (!w) {
         if (confirm('Pop-up blocked. Open the live board in this tab instead?')) {
-            location.href = '/admin-live-scanner.html';
+            location.href = '/admin/live-scanner';
         }
     }
 }
@@ -3628,7 +3628,7 @@ async function loadCertVerifySettings() {
             status.textContent =
                 'Public verification is live for “' +
                 (data.title || 'this seminar') +
-                '”. Visitors can verify participant and volunteer certificates at /verify-certificate.html';
+                '”. Visitors can verify participant and volunteer certificates at /verify-certificate';
         } else if (data.enabled && data.countdown) {
             status.style.color = '#0369a1';
             status.textContent =
@@ -13228,7 +13228,7 @@ function cmsAddMenuRow(prefill) {
     wrap.innerHTML = `
         <div><label style="font-size:0.78rem;">Label</label><input class="cm-label" type="text" style="width:100%" placeholder="Gallery"></div>
         <div><label style="font-size:0.78rem;">Section</label><select class="cm-section" style="width:100%">${sectionOpts}</select></div>
-        <div><label style="font-size:0.78rem;">URL (external)</label><input class="cm-href" type="text" style="width:100%" placeholder="/verify-certificate.html"></div>
+        <div><label style="font-size:0.78rem;">URL (external)</label><input class="cm-href" type="text" style="width:100%" placeholder="/verify-certificate"></div>
         <div><label style="font-size:0.78rem;">Order</label><input class="cm-order" type="number" min="1" style="width:100%" value="1"></div>
         <div><label style="font-size:0.78rem;display:flex;align-items:center;gap:6px;padding-bottom:8px;"><input class="cm-visible" type="checkbox" checked> Show</label>
           <button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.78rem;background:#64748b;width:100%;" onclick="this.closest('.cms-menu-row').remove()">Remove</button></div>`;
@@ -14008,11 +14008,11 @@ function sdMinutesFromTimeInput(id) {
 }
 
 const SD_PORTAL_LABELS = {
-    support: '/support.html',
+    support: '/support',
     staff: '/staff/login',
-    judge: '/judge.html',
-    scanner: '/scanner.html',
-    admin: '/admin.html'
+    judge: '/judge',
+    scanner: '/scanner',
+    admin: '/admin'
 };
 
 function sdPortalLabel(portal) {
@@ -14383,7 +14383,7 @@ async function loadSupportDeskAgentsAdmin() {
                         ? sdPortalLabel(selectedDept.portal)
                         : a.department_portal
                           ? sdPortalLabel(a.department_portal)
-                          : '/support.html';
+                          : '/support';
                     return (
                         '<tr data-agent-id="' +
                         a.id +
@@ -14425,7 +14425,7 @@ function sdAgentDeptPortalPreview(selectEl) {
     if (!cell) return;
     const deptId = parseInt(selectEl.value, 10);
     const dept = (window.__supportDeskDepartments || []).find((d) => Number(d.id) === deptId);
-    cell.textContent = dept ? sdPortalLabel(dept.portal) : '/support.html';
+    cell.textContent = dept ? sdPortalLabel(dept.portal) : '/support';
 }
 
 async function saveSupportDeskAgentAdmin(userId) {

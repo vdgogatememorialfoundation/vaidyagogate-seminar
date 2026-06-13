@@ -20,7 +20,7 @@
             const u = new URL(url, window.location.href);
             if (!isSeminarPortalHost(u.hostname)) return false;
             if (u.origin !== window.location.origin) return false;
-            return /\/scanner\.html$/i.test(u.pathname) || u.pathname === '/scanner';
+            return /\/scanner(?:\.html)?$/i.test(u.pathname) || u.pathname === '/scanner';
         } catch (_) {
             return false;
         }
@@ -102,7 +102,7 @@
 
     installSeminarPortalGuard();
     if (isNativeScannerShell) lockScannerNavigation();
-    if (/scanner\.html$/i.test(window.location.pathname || '')) {
+    if (/^\/scanner(?:\.html)?$/i.test(window.location.pathname || '')) {
         document.body.classList.add('scanner-standalone-page');
     }
 

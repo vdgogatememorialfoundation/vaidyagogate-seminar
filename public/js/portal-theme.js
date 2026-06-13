@@ -32,8 +32,8 @@
     function detectPortal() {
         const p = document.body && document.body.getAttribute('data-portal-theme');
         if (p) return p;
-        if (/\/doctor\.html/i.test(location.pathname)) return 'doctor';
-        if (/\/judge\.html/i.test(location.pathname)) return 'judge';
+        if (/\/doctor(?:\.html)?$/i.test(location.pathname)) return 'doctor';
+        if (/\/judge(?:\.html)?$/i.test(location.pathname)) return 'judge';
         if (document.documentElement.classList.contains('congress-site')) return 'public';
         return 'public';
     }

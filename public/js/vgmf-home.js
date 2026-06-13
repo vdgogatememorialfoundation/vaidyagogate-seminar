@@ -536,7 +536,7 @@
                         escHtml(s.description || '') +
                         '</p>' +
                         (ed ? '<p class="seminar-meta"><i class="fas fa-calendar"></i> ' + escHtml(ed) + '</p>' : '') +
-                        '<a href="/doctor.html" class="btn-primary" style="margin-top:auto;text-align:center;">Register</a>' +
+                        '<a href="/doctor" class="btn-primary" style="margin-top:auto;text-align:center;">Register</a>' +
                         '</article>'
                     );
                 })

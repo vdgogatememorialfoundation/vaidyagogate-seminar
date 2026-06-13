@@ -73,7 +73,7 @@
     }
 
     function legalHref(id) {
-        return '/legal.html?p=' + encodeURIComponent(id);
+        return '/legal?p=' + encodeURIComponent(id);
     }
 
     function renderLegalNav(legalPages, menuPages, activeId) {

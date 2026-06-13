@@ -610,7 +610,7 @@
             <!-- Support desk (agents, hours, live chat) -->
             <div id="tab-support-desk" class="tab-pane hidden">
                 <h2 style="margin-bottom:12px;">Support desk</h2>
-                <p style="color:#64748b;margin:-8px 0 18px;font-size:0.9rem;">Configure live chat, auto-assignment, agent schedules, and holidays. Agents use <a href="/support.html" target="_blank" rel="noopener">/support.html</a>.</p>
+                <p style="color:#64748b;margin:-8px 0 18px;font-size:0.9rem;">Configure live chat, auto-assignment, agent schedules, and holidays. Agents use <a href="/support" target="_blank" rel="noopener">/support</a>.</p>
                 <div class="card" style="margin-bottom:16px;border:1px solid #99f6e4;background:#f0fdfa;">
                     <h3 style="margin:0 0 10px;color:#0f766e;">Desk settings</h3>
                     <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><input type="checkbox" id="sd-hold-replies" checked> Hide staff replies until SLA expected time</label>
@@ -630,11 +630,11 @@
                         <div><label style="font-size:0.8rem;">Name</label><input type="text" id="sd-dept-name" placeholder="e.g. Registration desk" style="width:100%;padding:8px;"></div>
                         <div><label style="font-size:0.8rem;">Slug</label><input type="text" id="sd-dept-slug" placeholder="auto from name" style="width:100%;padding:8px;"></div>
                         <div><label style="font-size:0.8rem;">Portal login</label><select id="sd-dept-portal" style="width:100%;padding:8px;">
-                            <option value="support">Support desk (/support.html)</option>
+                            <option value="support">Support desk (/support)</option>
                             <option value="staff">Staff portal (/staff/login)</option>
-                            <option value="judge">Judge (/judge.html)</option>
-                            <option value="scanner">Scanner (/scanner.html)</option>
-                            <option value="admin">Admin (/admin.html)</option>
+                            <option value="judge">Judge (/judge)</option>
+                            <option value="scanner">Scanner (/scanner)</option>
+                            <option value="admin">Admin (/admin)</option>
                         </select></div>
                         <div><label style="font-size:0.8rem;">Sort order</label><input type="number" id="sd-dept-sort" value="0" style="width:100%;padding:8px;"></div>
                     </div>
@@ -1124,7 +1124,7 @@
                     </div>
                     <div style="margin-top:22px;padding-top:16px;border-top:1px solid #e2e8f0;">
                         <label style="font-weight:700;">Legal pages (main site)</label>
-                        <p style="color:#64748b;font-size:0.88rem;margin:6px 0 10px;">Custom policy pages shown at <code>/legal.html?p=slug</code> and linked in the site footer. Each page can be shown or hidden under <strong>Website menu pages</strong> (Super Admin → Portal auth). Use blank lines between paragraphs.</p>
+                        <p style="color:#64748b;font-size:0.88rem;margin:6px 0 10px;">Custom policy pages shown at <code>/legal?p=slug</code> and linked in the site footer. Each page can be shown or hidden under <strong>Website menu pages</strong> (Super Admin → Portal auth). Use blank lines between paragraphs.</p>
                         <div id="cms-legal-pages-rows"></div>
                         <button type="button" class="btn-primary" style="margin-top:8px;padding:8px 14px;font-size:0.9rem;background:#0d9488;" onclick="cmsAddLegalPageRow(); renderWebsiteMenuPagesCheckboxes();">+ Add legal page</button>
                     </div>
@@ -1701,7 +1701,7 @@
                 </div>
                 <div class="card cert-mgmt-card" style="margin-top:16px;">
                     <h3 style="margin:0 0 8px;color:#92400e;">Public verification &amp; dispatch</h3>
-                    <p style="font-size:0.85rem;color:#78716c;margin:0 0 12px;">Turn on the public certificate verification page at <code>/verify-certificate.html</code>. Visitors must pass <strong>email and WhatsApp one-time password</strong> to confirm authenticity. You may enable verification manually before the seminar ends, or schedule an opening date and time.</p>
+                    <p style="font-size:0.85rem;color:#78716c;margin:0 0 12px;">Turn on the public certificate verification page at <code>/verify-certificate</code>. Visitors must pass <strong>email and WhatsApp one-time password</strong> to confirm authenticity. You may enable verification manually before the seminar ends, or schedule an opening date and time.</p>
                     <label style="display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:8px;">
                         <input type="checkbox" id="cert-verify-enabled" onchange="saveCertVerifyEnabled()">
                         Enable public certificate verification for this seminar
@@ -2613,10 +2613,10 @@
             <label style="display:block;font-size:0.8rem;font-weight:700;margin-bottom:4px;">Login portal</label>
             <select id="job-role-portal" style="width:100%;margin-bottom:10px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;" onchange="onJobRolePortalChange()">
                 <option value="staff">Staff portal (/staff/login)</option>
-                <option value="support">Support desk (/support.html)</option>
+                <option value="support">Support desk (/support)</option>
                 <option value="admin">Co-admin (admin + staff)</option>
-                <option value="judge">Judge portal (/judge.html)</option>
-                <option value="scanner">Scanner portal (/scanner.html)</option>
+                <option value="judge">Judge portal (/judge)</option>
+                <option value="scanner">Scanner portal (/scanner)</option>
             </select>
             <label style="display:block;font-size:0.8rem;font-weight:700;margin-bottom:4px;">Account type (user_role)</label>
             <select id="job-role-user-role" style="width:100%;margin-bottom:12px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;">
@@ -2712,10 +2712,10 @@
                 </p>
                 <p style="font-size: 0.85rem; color: #64748b; margin-top: 4px; background: #f0f4ff; padding: 10px; border-radius: 4px;">
                     Each role signs in at its own URL:
-                    <strong>Doctor</strong> &rarr; /doctor.html &middot; <strong>Staff / Co-admin operations</strong> &rarr; /staff/login
-                    &middot; <strong>Co-admin (full CRM)</strong> &rarr; /admin.html &middot;
-                    <strong>Support agent</strong> &rarr; /support.html &middot;
-                    <strong>Judge/Reviewer</strong> &rarr; /judge.html &middot; <strong>Scanner</strong> &rarr; /scanner.html
+                    <strong>Doctor</strong> &rarr; /doctor &middot; <strong>Staff / Co-admin operations</strong> &rarr; /staff/login
+                    &middot; <strong>Co-admin (full CRM)</strong> &rarr; /admin &middot;
+                    <strong>Support agent</strong> &rarr; /support &middot;
+                    <strong>Judge/Reviewer</strong> &rarr; /judge &middot; <strong>Scanner</strong> &rarr; /scanner
                     &middot; <strong>Super admin</strong> can use admin credentials on all staff portals.
                 </p>
                 <div id="newuser-admin-otp-wrap" style="display:none;padding:12px;border:1px solid #fed7aa;border-radius:8px;background:#fffbeb;margin-top:8px;">

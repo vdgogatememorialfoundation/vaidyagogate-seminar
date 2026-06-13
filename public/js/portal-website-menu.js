@@ -111,7 +111,7 @@
 
     function legalPageIdFromHref(href) {
         const h = String(href || '');
-        if (h.indexOf('legal.html') === -1) return '';
+        if (h.indexOf('/legal') === -1 && h.indexOf('legal.html') === -1) return '';
         const m = h.match(/[?&]p=([^&#]+)/i);
         if (!m) return '';
         try {
@@ -157,7 +157,7 @@
                 return {
                     id: p.id,
                     title: p.title || p.id,
-                    href: '/legal.html?p=' + encodeURIComponent(p.id),
+                    href: '/legal?p=' + encodeURIComponent(p.id),
                     menuKey: legalPageMenuKey(p.id)
                 };
             });
@@ -180,7 +180,7 @@
                 if (href.indexOf('verify-certificate') !== -1) {
                     return websiteMenuPageEnabled(pages, 'certificate');
                 }
-                if (href.indexOf('legal.html') !== -1) {
+                if (href.indexOf('/legal') !== -1 || href.indexOf('legal.html') !== -1) {
                     const legalId = legalPageIdFromHref(href);
                     if (legalId) {
                         return websiteMenuPageEnabled(pages, legalPageMenuKey(legalId));
@@ -214,7 +214,7 @@
             if (section === 'certificate') {
                 return {
                     kind: 'href',
-                    href: (cmsItem && cmsItem.href) || '/verify-certificate.html',
+                    href: (cmsItem && cmsItem.href) || '/verify-certificate',
                     label: label,
                     menuKey: 'certificate'
                 };
@@ -235,7 +235,7 @@
         if (legalLinks.length && websiteMenuPageEnabled(pages, 'legal')) {
             items.push({
                 kind: 'href',
-                href: '/legal.html',
+                href: '/legal',
                 label: 'Legal',
                 menuKey: 'legal',
                 external: false

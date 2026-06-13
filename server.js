@@ -504,34 +504,15 @@ app.use(siteKillSwitch.createSiteKillSwitchMiddleware(db));
 
 app.use(subdomainPortalMiddleware);
 
-app.get(['/track-shipment', '/track-shipment/'], (req, res) => {
-    const q = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
-    res.redirect(302, '/track-shipment.html' + q);
-});
-app.get(['/order-tracker', '/order-tracker/', '/order-tracker.html'], (req, res) => {
-    const q = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
-    res.redirect(302, '/track-shipment.html' + q);
-});
-app.get(['/track-book', '/track-book/', '/track-book.html'], (req, res) => {
-    const q = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
-    res.redirect(302, '/track-shipment.html' + q);
-});
+const appPaths = require('./lib/app-paths');
+const publicDir = path.join(__dirname, 'public');
+appPaths.registerAppPageRoutes(app, publicDir);
 
-app.get('/scanner', (req, res) => {
-    res.redirect(302, '/scanner.html');
-});
-app.get('/scanner/', (req, res) => {
-    res.redirect(302, '/scanner.html');
-});
-
-const staffPortalHtml = path.join(__dirname, 'public', 'staff.html');
-const supportPortalHtml = path.join(__dirname, 'public', 'support.html');
-const adminPortalHtml = path.join(__dirname, 'public', 'admin.html');
+const staffPortalHtml = path.join(publicDir, 'staff.html');
+const supportPortalHtml = path.join(publicDir, 'support.html');
+const adminPortalHtml = path.join(publicDir, 'admin.html');
 app.get(['/staff/login', '/staff'], (req, res) => {
     res.sendFile(staffPortalHtml);
-});
-app.get(['/support/login', '/support'], (req, res) => {
-    res.sendFile(supportPortalHtml);
 });
 app.get(['/support/desk', '/support/desk/'], (req, res) => {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
@@ -542,17 +523,6 @@ app.get(['/staff/crm', '/staff/crm/'], (req, res) => {
     res.setHeader('Pragma', 'no-cache');
     res.sendFile(adminPortalHtml);
 });
-
-const portalHtmlAliases = {
-    '/admin': 'admin.html',
-    '/doctor': 'doctor.html',
-    '/judge': 'judge.html'
-};
-for (const [from, file] of Object.entries(portalHtmlAliases)) {
-    app.get(from, (req, res) => {
-        res.redirect(302, '/' + file);
-    });
-}
 
 
 app.get('/certificate/view', (req, res) => {
@@ -1590,7 +1560,7 @@ function buildSeminarRegistrationAnnouncement(row) {
         body: `Registration is now open. Apply from the doctor portal.${eventBit}`,
         date: new Date().toISOString().slice(0, 10),
         autoFromSeminarId: row.id,
-        link: '/doctor.html'
+        link: '/doctor'
     };
 }
 
@@ -2088,7 +2058,7 @@ function runNotifyTicketIssued(userId, registrationId, ticketId, opts) {
                 encodeURIComponent(String(userId));
             const vars = {
                 ticket_id: ticketId,
-                qr_code_url: base + '/doctor.html#tab-tickets',
+                qr_code_url: base + '/doctor#tab-tickets',
                 ticket_pdf_url: pdfUrl,
                 payment_status: 'PAID'
             };
@@ -4065,23 +4035,23 @@ app.post('/api/auth/login', withAuxiliaryTables, (req, res) => {
                     const ur = String(row.user_role || '').toLowerCase();
                     if (ur === 'scanner_portal_user' || ur === 'scanner_dashboard_user') {
                         return res.status(403).json({
-                            error: 'Scanner accounts must use the scanner portal at /scanner.html.'
+                            error: 'Scanner accounts must use the scanner portal at /scanner.'
                         });
                     }
                     if (ur === 'venue_gate_user') {
                         return res.status(403).json({
                             error:
-                                'Venue gate (DigiYatra) was removed. Ask the super admin to assign Scanner volunteer and use /scanner.html.'
+                                'Venue gate (DigiYatra) was removed. Ask the super admin to assign Scanner volunteer and use /scanner.'
                         });
                     }
                     if (ur === 'judge_user' || ur === 'reviewer') {
                         return res.status(403).json({
-                            error: 'Judge accounts must use the judge portal at /judge.html.'
+                            error: 'Judge accounts must use the judge portal at /judge.'
                         });
                     }
                     if (ur === 'support_agent') {
                         return res.status(403).json({
-                            error: 'Support agents must use the support desk at /support.html.'
+                            error: 'Support agents must use the support desk at /support.'
                         });
                     }
                     return res.status(403).json({
@@ -4097,8 +4067,8 @@ app.post('/api/auth/login', withAuxiliaryTables, (req, res) => {
                     const portalErrors = {
                         support:
                             'Support desk login is for support agents. Ask the super admin to assign the Support agent job role and department.',
-                        judge: 'Judge accounts must use the judge portal at /judge.html.',
-                        scanner: 'Scanner accounts must use the scanner portal at /scanner.html.'
+                        judge: 'Judge accounts must use the judge portal at /judge.',
+                        scanner: 'Scanner accounts must use the scanner portal at /scanner.'
                     };
                     return res.status(403).json({ error: portalErrors[loginPortal] || 'This account cannot access this portal.' });
                 }
@@ -4406,7 +4376,7 @@ function buildCaseRegistrationAnnouncement(row) {
         body: 'Submit your case presentation from the doctor portal.',
         date: new Date().toISOString().slice(0, 10),
         autoFromCaseProgramId: row.id,
-        link: '/doctor.html#tab-case',
+        link: '/doctor#tab-case',
         priority: 5
     };
 }
@@ -6328,8 +6298,7 @@ app.post('/api/auth/forgot-password', withAuxiliaryTables, (req, res) => {
     if (!forgotEmailV.valid) return res.status(400).json({ error: forgotEmailV.message });
     const emailNorm = forgotEmailV.cleanedEmail;
     const respond = () => res.json({ success: true, message: 'If an account exists, reset instructions were sent.' });
-    let returnPage = String((req.body && req.body.returnTo) || 'index.html').trim();
-    if (!/^[a-z0-9._-]+\.html$/i.test(returnPage)) returnPage = 'index.html';
+    let returnPage = appPaths.normalizeReturnPath((req.body && req.body.returnTo) || '/');
     authUsers.findUserByEmail(db, emailNorm, (err, user) => {
         if (err) return res.status(500).json({ error: err.message });
         if (!user) return respond();
@@ -8545,7 +8514,7 @@ app.post('/api/payments/verify', (req, res) => {
                                                             {
                                                                 invoice_url:
                                                                     notifEngine.publicBaseUrl() +
-                                                                    '/doctor.html#tab-orders'
+                                                                    '/doctor#tab-orders'
                                                             },
                                                             portalTracking
                                                         );
@@ -9107,7 +9076,7 @@ app.post('/api/admin/certificates/:id/toggle', (req, res) => {
                                 immediate: true,
                                 vars: {
                                     certificate_url:
-                                        notifEngine.publicBaseUrl() + '/doctor.html#tab-certificates'
+                                        notifEngine.publicBaseUrl() + '/doctor#tab-certificates'
                                 }
                             });
                                 res.json({ success: true });

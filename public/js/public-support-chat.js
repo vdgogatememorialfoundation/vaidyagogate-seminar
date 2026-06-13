@@ -83,7 +83,7 @@
         '<button type="button" id="vgmf-support-live-btn" class="hidden" style="width:100%;margin-bottom:8px;padding:8px;border:none;border-radius:8px;background:#115e59;color:#fff;font-weight:700;cursor:pointer;">' +
         t('support.liveAgent') +
         '</button>' +
-        '<a href="/live-chat.html" id="vgmf-support-dedicated-link" style="display:block;text-align:center;font-size:0.75rem;color:#0f766e;margin-bottom:8px;">' +
+        '<a href="/live-chat" id="vgmf-support-dedicated-link" style="display:block;text-align:center;font-size:0.75rem;color:#0f766e;margin-bottom:8px;">' +
         t('support.fullScreenChat') +
         '</a>' +
         '<input type="text" id="vgmf-support-track" placeholder="' +
@@ -94,7 +94,7 @@
         '" style="flex:1;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:0.85rem;"><button type="button" id="vgmf-support-send" style="padding:8px 14px;border:none;border-radius:8px;background:#0f766e;color:#fff;font-weight:700;cursor:pointer;">' +
         t('support.send') +
         '</button></div>' +
-        '<p style="font-size:0.72rem;color:#64748b;margin:8px 0 0;">Account help: sign in to the <a href="/doctor.html" style="color:#0f766e;">doctor portal</a> (live chat bubble or Support tickets).</p></div></div>';
+        '<p style="font-size:0.72rem;color:#64748b;margin:8px 0 0;">Account help: sign in to the <a href="/doctor" style="color:#0f766e;">doctor portal</a> (live chat bubble or Support tickets).</p></div></div>';
 
     document.body.appendChild(root);
 
@@ -359,7 +359,7 @@
             startLivePoll();
             pollLiveMessages();
         } catch (e) {
-            addBot('Could not start live chat. Try the full-screen chat at /live-chat.html or email care@vaidyagogate.org.');
+            addBot('Could not start live chat. Try the full-screen chat at /live-chat or email care@vaidyagogate.org.');
         }
     }
 
@@ -532,7 +532,7 @@
                 liveBtn.classList.remove('hidden');
             }
         } catch (e) {
-            addBot('Sorry, something went wrong. Email care@vaidyagogate.org or open /live-chat.html for 1-to-1 chat.');
+            addBot('Sorry, something went wrong. Email care@vaidyagogate.org or open /live-chat for 1-to-1 chat.');
         }
     }
 

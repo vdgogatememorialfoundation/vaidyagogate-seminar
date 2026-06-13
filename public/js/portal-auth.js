@@ -189,13 +189,13 @@
 
     function wrongPortalHint(user) {
         const { ur, r } = normRole(user);
-        if (isSuperAdminUser(user)) return 'Super admin can sign in at /admin.html, /support.html, /judge.html, /scanner.html, or /staff/login.';
+        if (isSuperAdminUser(user)) return 'Super admin can sign in at /admin, /support, /judge, /scanner, or /staff/login.';
         if (ur === 'co_admin') return 'Co-admins sign in at /staff/login (full CRM opens at /staff/crm).';
-        if (r === 'admin' && ur !== 'co_admin') return 'Use the admin portal: /admin.html';
-        if (isJudgeUser(user)) return 'Use the judge portal: /judge.html';
-        if (isScannerUser(user)) return 'Use the scanner portal: /scanner.html';
+        if (r === 'admin' && ur !== 'co_admin') return 'Use the admin portal: /admin';
+        if (isJudgeUser(user)) return 'Use the judge portal: /judge';
+        if (isScannerUser(user)) return 'Use the scanner portal: /scanner';
         if (isBookStaffUser(user)) return 'Use the staff portal: /staff/login';
-        if (isDoctorUser(user)) return 'Use the doctor portal: /doctor.html';
+        if (isDoctorUser(user)) return 'Use the doctor portal: /doctor';
         return 'This account cannot access this portal. Please sign in with the correct account.';
     }
 
@@ -399,8 +399,8 @@
                         }
                         const go = confirm(msg + '\n\nCreate an account now?');
                         if (go) {
-                            if (/\/doctor\.html/i.test(String(global.location.pathname || ''))) {
-                                global.location.href = '/doctor.html?register=1';
+                            if (/\/doctor(?:\.html)?$/i.test(String(global.location.pathname || ''))) {
+                                global.location.href = '/doctor?register=1';
                             } else {
                                 global.location.href = '/?register=1';
                             }

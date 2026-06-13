@@ -116,9 +116,9 @@ async function main() {
     await expectStatus('legacy support ticket retired', 'POST', '/api/support/ticket', 410, {});
 
     await expectHtml('homepage', '/index.html');
-    await expectHtml('doctor portal', '/doctor.html');
-    await expectHtml('admin portal', '/admin.html');
-    await expectHtml('judge portal', '/judge.html');
+    await expectHtml('doctor portal', '/doctor');
+    await expectHtml('admin portal', '/admin');
+    await expectHtml('judge portal', '/judge');
 
     const mkt = await request('GET', '/api/public/marketing');
     if (mkt.json && Array.isArray(mkt.json.banners)) {
