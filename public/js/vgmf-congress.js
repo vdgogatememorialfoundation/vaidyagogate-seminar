@@ -797,12 +797,28 @@
             .join('');
     };
 
+    function isLocalReelMediaUrl(raw) {
+        const s = String(raw || '').trim();
+        if (!s) return false;
+        if (/^\/uploads\//i.test(s) || /^\/api\/assets\//i.test(s)) return true;
+        if (/\.(mp4|webm|mov|m4v)(\?|#|$)/i.test(s)) return true;
+        if (/^https?:\/\//i.test(s) && !/youtube\.com|youtu\.be/i.test(s)) return true;
+        return false;
+    }
+
     function youtubeIdFromValue(raw) {
-        return (String(raw || '').match(/[\w-]{11}/) || [])[0] || '';
+        const s = String(raw || '').trim();
+        if (!s || isLocalReelMediaUrl(s)) return '';
+        const m = s.match(
+            /(?:youtube\.com\/(?:shorts\/|live\/|watch\?(?:.*&)?v=|embed\/|v\/)|youtu\.be\/)([\w-]{11})/i
+        );
+        if (m) return m[1];
+        if (/^[\w-]{11}$/.test(s) && /[a-zA-Z]/.test(s)) return s;
+        return '';
     }
 
     function reelThumbUrl(reel, ytId) {
-        if (reel.thumbnail) return esc(reel.thumbnail);
+        if (reel.thumbnail) return esc(String(reel.thumbnail).trim());
         if (ytId) return 'https://i.ytimg.com/vi/' + ytId + '/hqdefault.jpg';
         return '';
     }
@@ -810,29 +826,33 @@
     function renderReelCard(reel) {
         const title = esc(reel.title || 'Reel');
         const subtitle = esc(reel.subtitle || reel.category || '');
-        const ytId = youtubeIdFromValue(reel.youtubeId || reel.url || reel.videoUrl);
-        const videoUrl = reel.videoUrl && !ytId ? esc(reel.videoUrl) : '';
+        const localVideo = isLocalReelMediaUrl(reel.videoUrl) ? esc(String(reel.videoUrl).trim()) : '';
+        const ytId = youtubeIdFromValue(reel.youtubeId || reel.url);
+        const videoUrl = localVideo;
         const thumb = reelThumbUrl(reel, ytId);
         let media = '';
         if (videoUrl) {
             media =
                 '<video src="' +
                 videoUrl +
-                '" muted playsinline loop preload="metadata" poster="' +
-                thumb +
-                '"></video><span class="cg-reel-play" aria-hidden="true"><i class="fas fa-play-circle"></i></span>';
-        } else if (thumb) {
-            const watch = ytId ? 'https://www.youtube.com/watch?v=' + ytId : reel.url || '#';
+                '#t=0.1" muted playsinline loop preload="metadata"' +
+                (thumb ? ' poster="' + thumb + '"' : '') +
+                '></video><span class="cg-reel-play" aria-hidden="true"><i class="fas fa-play-circle"></i></span>';
+        } else if (ytId || thumb) {
+            const watch = ytId ? 'https://www.youtube.com/watch?v=' + ytId : esc(reel.url || '#');
             media =
                 '<a href="' +
-                esc(watch) +
+                watch +
                 '" target="_blank" rel="noopener noreferrer" style="display:block;height:100%;">' +
                 '<img src="' +
-                thumb +
+                (thumb || 'https://i.ytimg.com/vi/' + ytId + '/hqdefault.jpg') +
                 '" alt="' +
                 title +
                 '" loading="lazy">' +
                 '<span class="cg-reel-play" aria-hidden="true"><i class="fas fa-play-circle"></i></span></a>';
+        } else {
+            media =
+                '<div class="cg-reel-fallback" style="display:grid;place-items:center;height:100%;color:#94a3b8;font-size:0.85rem;padding:12px;text-align:center;">Video preview unavailable</div>';
         }
         return (
             '<article class="cg-reel-card">' +
@@ -868,6 +888,11 @@
         const cards = reels.map(renderReelCard).join('');
         track.innerHTML = cards + cards;
         track.querySelectorAll('video').forEach(function (vid) {
+            vid.addEventListener('loadeddata', function () {
+                try {
+                    vid.currentTime = 0.1;
+                } catch (_) {}
+            });
             vid.addEventListener('mouseenter', function () {
                 try {
                     vid.play();
@@ -876,6 +901,12 @@
             vid.addEventListener('mouseleave', function () {
                 try {
                     vid.pause();
+                } catch (_) {}
+            });
+            vid.addEventListener('click', function () {
+                try {
+                    if (vid.paused) vid.play();
+                    else vid.pause();
                 } catch (_) {}
             });
         });

@@ -1049,6 +1049,10 @@ footer a.menu-page-hidden {
     object-fit: cover;
     border: 0;
     display: block;
+    background: #0f172a;
+}
+.cg-reel-media video {
+    cursor: pointer;
 }
 .cg-reel-play {
     position: absolute;
