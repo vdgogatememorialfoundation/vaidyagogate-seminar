@@ -101,6 +101,39 @@
 
     document.body.appendChild(root);
 
+    function adjustLauncherForRegisterFab() {
+        const reg = document.getElementById('cg-fab-register');
+        const launcher = document.getElementById('vgmf-support-launcher');
+        const panelEl = document.getElementById('vgmf-support-panel');
+        if (!launcher) return;
+        const mob = window.matchMedia('(max-width: 900px)').matches;
+        let launcherBottom = 22;
+        let panelBottom = 90;
+        if (mob && reg && !reg.classList.contains('hidden')) {
+            const cs = window.getComputedStyle(reg);
+            if (cs.display !== 'none' && cs.visibility !== 'hidden' && cs.opacity !== '0') {
+                const regH = reg.offsetHeight || 52;
+                const regBottom = parseFloat(cs.bottom) || 16;
+                const gap = 12;
+                launcherBottom = regBottom + regH + gap;
+                panelBottom = launcherBottom + (launcher.offsetHeight || 56) + 12;
+            }
+        }
+        const safe = 'env(safe-area-inset-bottom, 0px)';
+        launcher.style.bottom = 'calc(' + launcherBottom + 'px + ' + safe + ')';
+        if (panelEl) panelEl.style.bottom = 'calc(' + panelBottom + 'px + ' + safe + ')';
+    }
+
+    adjustLauncherForRegisterFab();
+    window.addEventListener('resize', adjustLauncherForRegisterFab);
+    const regFab = document.getElementById('cg-fab-register');
+    if (regFab && typeof MutationObserver !== 'undefined') {
+        new MutationObserver(adjustLauncherForRegisterFab).observe(regFab, {
+            attributes: true,
+            attributeFilter: ['class', 'style']
+        });
+    }
+
     const panel = document.getElementById('vgmf-support-panel');
     const messages = document.getElementById('vgmf-support-messages');
     const hoursEl = document.getElementById('vgmf-support-hours');

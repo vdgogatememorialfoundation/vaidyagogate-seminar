@@ -525,6 +525,16 @@ svg {
     z-index: 900;
 }
 
+/* Live chat FAB stacks above mobile Register pill (home page) */
+@media (max-width: 900px) {
+    body:has(#cg-fab-register:not(.hidden)) #vgmf-support-launcher {
+        bottom: calc(84px + env(safe-area-inset-bottom, 0px)) !important;
+    }
+    body:has(#cg-fab-register:not(.hidden)) #vgmf-support-panel {
+        bottom: calc(152px + env(safe-area-inset-bottom, 0px)) !important;
+    }
+}
+
 /* Modals & auth */
 .modal-content,
 .cg-modal-panel {
