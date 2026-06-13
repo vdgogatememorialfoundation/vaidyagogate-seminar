@@ -498,3 +498,55 @@
     border-radius: 18px;
     background: linear-gradient(135deg, rgba(45, 212, 191, 0.04), transparent 40%);
 }
+
+.lr-feed-section h4 {
+    margin: 0 0 10px;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--lr-muted);
+    font-weight: 800;
+}
+
+.lr-feed-section + .lr-feed-section {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px solid var(--lr-border);
+}
+
+.lr-session-guest {
+    border-color: rgba(167, 139, 250, 0.35) !important;
+    background: rgba(167, 139, 250, 0.06) !important;
+}
+
+.lr-visitor-badge {
+    display: inline-block;
+    font-size: 0.62rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 2px 7px;
+    border-radius: 999px;
+    margin-left: 6px;
+    vertical-align: middle;
+}
+
+.lr-visitor-badge.guest {
+    background: rgba(167, 139, 250, 0.2);
+    color: #c4b5fd;
+}
+
+.lr-visitor-badge.doctor {
+    background: rgba(45, 212, 191, 0.15);
+    color: #2dd4bf;
+}
+
+.lr-visitor-badge.doctor-guest {
+    background: rgba(96, 165, 250, 0.15);
+    color: #93c5fd;
+}
+
+.lr-activity-tag.guest {
+    background: rgba(167, 139, 250, 0.15);
+    color: #c4b5fd;
+}

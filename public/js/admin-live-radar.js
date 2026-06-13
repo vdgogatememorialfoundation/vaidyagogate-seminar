@@ -79,18 +79,18 @@
         root.innerHTML =
             '<div class="live-radar-wrap">' +
             '<div class="live-radar-hero">' +
-            '<div><h2>📋 Seminar Application Radar <span class="live-radar-live-pill" id="lr-stream-pill"><span class="dot"></span><span id="lr-stream-text">Connecting</span></span></h2>' +
-            '<p class="live-radar-sub">Realtime doctor portal tracking — who is applying, which step they are on, browser/device, and location. Updates every 4 seconds while someone fills a form.</p></div>' +
+            '<div><h2>📡 Live Radar <span class="live-radar-live-pill" id="lr-stream-pill"><span class="dot"></span><span id="lr-stream-text">Connecting</span></span></h2>' +
+            '<p class="live-radar-sub">Realtime view of doctor seminar applications <strong>and</strong> all site visitors — homepage, signup, certificate verify, and more. Location, browser, device, and live activity.</p></div>' +
             '<div class="live-radar-updated" id="lr-updated">Starting stream…</div></div>' +
             '<div class="live-radar-stats" id="lr-stats"></div>' +
             '<div class="live-radar-grid">' +
             '<div class="lr-panel lr-panel-map">' +
             '<div class="lr-panel-head"><h3>🗺 Live locations</h3><span class="live-radar-updated" id="lr-map-count"></span></div>' +
             '<div class="lr-map-wrap"><canvas id="lr-map-canvas" width="720" height="360"></canvas>' +
-            '<div class="lr-map-legend"><span><i style="background:#2dd4bf"></i> Active</span><span><i style="background:#fb923c"></i> Applying</span></div></div>' +
+            '<div class="lr-map-legend"><span><i style="background:#2dd4bf"></i> Active</span><span><i style="background:#fb923c"></i> Applying</span><span><i style="background:#a78bfa"></i> Guest</span></div></div>' +
             '<div class="lr-panel-head" style="margin-top:14px;"><h3>📊 By seminar</h3></div>' +
             '<div class="lr-seminar-bars" id="lr-seminar-bars"></div></div>' +
-            '<div class="lr-panel"><div class="lr-panel-head"><h3>⚡ Application sessions</h3><span id="lr-feed-count" class="live-radar-updated"></span></div>' +
+            '<div class="lr-panel"><div class="lr-panel-head"><h3>⚡ Live activity</h3><span id="lr-feed-count" class="live-radar-updated"></span></div>' +
             '<div class="lr-feed" id="lr-feed"></div></div></div></div>';
         mapCanvas = root.querySelector('#lr-map-canvas');
         if (mapCanvas) mapCtx = mapCanvas.getContext('2d');
@@ -112,11 +112,11 @@
         if (!el || !stats) return;
         const cards = [
             { cls: 'orange', key: 'applying', label: 'Applying now', icon: 'apply' },
+            { cls: 'purple', key: 'siteGuests', label: 'Site guests', icon: 'browser' },
             { cls: 'teal', key: 'liveNow', label: 'Live (<20s)', icon: 'live' },
+            { cls: 'blue', key: 'doctorPortal', label: 'Doctor portal', icon: 'browser' },
             { cls: 'purple', key: 'paying', label: 'At payment', icon: 'pay' },
-            { cls: 'blue', key: 'desktop', label: 'Desktop browser', icon: 'browser' },
-            { cls: 'blue', key: 'mobile', label: 'Mobile browser', icon: 'browser' },
-            { cls: 'teal', key: 'active', label: 'Doctor portal (10m)', icon: 'live' }
+            { cls: 'blue', key: 'mobile', label: 'Mobile', icon: 'browser' }
         ];
         el.innerHTML = cards
             .map(function (c, idx) {
@@ -165,37 +165,76 @@
             .join('');
     }
 
+    function activityLabel(s) {
+        if (s.activityKind === 'seminar_apply') {
+            return '📝 Applying' + (s.seminarTitle ? ' · ' + s.seminarTitle : '');
+        }
+        if (s.activityKind === 'payment') return '💳 Payment checkout';
+        if (s.activityKind === 'track_applications') return '📂 Tracking applications';
+        if (s.activityKind === 'browse_seminars') return '🔍 Browsing seminars';
+        if (s.activityKind === 'homepage') return '🏠 Homepage';
+        if (s.activityKind === 'signup') return '✨ Sign up';
+        if (s.activityKind === 'login') return '🔐 Sign in';
+        if (s.activityKind === 'verify_certificate') return '🎓 Verify certificate';
+        if (s.visitorType === 'site_guest') return '🌐 ' + (s.activityLabel || 'Browsing site');
+        if (s.isDoctorPortal) return '🩺 Doctor portal';
+        return '🌐 ' + (s.activityLabel || 'On site');
+    }
+
+    function visitorBadge(s) {
+        if (s.visitorType === 'site_guest') return ' <span class="lr-visitor-badge guest">Guest</span>';
+        if (s.visitorType === 'doctor') return ' <span class="lr-visitor-badge doctor">Doctor</span>';
+        if (s.visitorType === 'doctor_guest') return ' <span class="lr-visitor-badge doctor-guest">Guest</span>';
+        return '';
+    }
+
     function renderFeed(sessions) {
         const feed = document.getElementById('lr-feed');
         const countEl = document.getElementById('lr-feed-count');
         if (!feed) return;
-        const rows = (sessions || []).slice(0, 30);
+        const rows = (sessions || []).slice(0, 40);
         if (countEl) countEl.textContent = rows.length + ' tracked';
         if (!rows.length) {
             feed.innerHTML =
                 '<div class="lr-empty"><div class="lr-empty-icon lr-pulse-icon">📡</div>' +
-                '<strong>Waiting for doctor portal activity</strong><p style="margin:8px 0 0;font-size:0.85rem;">Log in at <code>/doctor</code> on your phone or browser, open <em>Available Seminars</em>, and click Register. This panel updates automatically.</p></div>';
+                '<strong>Waiting for activity</strong><p style="margin:8px 0 0;font-size:0.85rem;">Open your homepage or <code>/doctor</code> in another tab — visitors appear here within seconds.</p></div>';
             return;
         }
-        feed.innerHTML = rows
+        const applyingRows = rows.filter(function (s) {
+            return s.activityKind === 'seminar_apply' || s.activityKind === 'payment';
+        });
+        const guestRows = rows.filter(function (s) {
+            return s.visitorType === 'site_guest';
+        });
+        const doctorRows = rows.filter(function (s) {
+            return s.isDoctorPortal && s.activityKind !== 'seminar_apply' && s.activityKind !== 'payment';
+        });
+        let html = '';
+        if (applyingRows.length) {
+            html += '<div class="lr-feed-section"><h4>📝 Seminar applications</h4>' + renderSessionCards(applyingRows) + '</div>';
+        }
+        if (guestRows.length) {
+            html += '<div class="lr-feed-section"><h4>🌐 Site visitors</h4>' + renderSessionCards(guestRows) + '</div>';
+        }
+        if (doctorRows.length) {
+            html += '<div class="lr-feed-section"><h4>🩺 Doctor portal</h4>' + renderSessionCards(doctorRows) + '</div>';
+        }
+        if (!html) html = renderSessionCards(rows);
+        feed.innerHTML = html;
+    }
+
+    function renderSessionCards(rows) {
+        return rows
             .map(function (s, idx) {
-                const name = s.userLabel || (s.userId ? 'Doctor #' + s.userId : 'Guest (not signed in)');
+                const name = s.userLabel || (s.userId ? 'User #' + s.userId : 'Anonymous visitor');
                 const loc = s.location || (s.ip ? 'IP ' + s.ip : 'Location pending');
                 const isApply = s.activityKind === 'seminar_apply';
-                const tag =
-                    isApply
-                        ? '📝 Applying'
-                        : s.activityKind === 'payment'
-                          ? '💳 Payment'
-                          : s.activityKind === 'browse_seminars'
-                            ? '🔍 Browsing seminars'
-                            : s.activityKind === 'track_applications'
-                              ? '📂 Tracking apps'
-                              : '🩺 Doctor portal';
+                const guestCls = s.visitorType === 'site_guest' ? ' lr-session-guest' : '';
                 const funnel = isApply ? renderStepFunnel(s.stepNumber) : '';
                 const progressPct = isApply ? s.formProgress || 0 : 0;
                 return (
                     '<article class="lr-session lr-stat-enter' +
+                    guestCls +
                     (s.isNew ? ' new' : '') +
                     (s.pulse === 'live' ? ' lr-session-live' : '') +
                     '" style="animation-delay:' +
@@ -208,18 +247,21 @@
                     '</div>' +
                     '<div class="lr-session-main"><strong>' +
                     esc(name) +
+                    visitorBadge(s) +
                     (s.isNew ? ' <em class="lr-new-tag">NEW</em>' : '') +
                     '</strong>' +
                     '<div class="meta">' +
                     esc(deviceLabel(s)) +
                     '<br>📍 ' +
                     esc(loc) +
+                    '<br>📄 ' +
+                    esc(s.page || '—') +
                     (s.seminarTitle ? '<br>🎓 ' + esc(s.seminarTitle) : '') +
                     '</div>' +
                     '<span class="lr-activity-tag ' +
-                    (isApply ? 'apply' : s.activityKind === 'payment' ? 'pay' : 'browse') +
+                    (isApply ? 'apply' : s.activityKind === 'payment' ? 'pay' : s.visitorType === 'site_guest' ? 'guest' : 'browse') +
                     '">' +
-                    esc(tag) +
+                    esc(activityLabel(s)) +
                     (isApply && s.stepLabel ? ' · ' + esc(s.stepLabel) : '') +
                     '</span>' +
                     funnel +
@@ -262,7 +304,8 @@
             const x = ((Number(p.lon) + 180) / 360) * w;
             const y = ((90 - Number(p.lat)) / 180) * h;
             const applying = p.kind === 'seminar_apply';
-            const color = applying ? '#fb923c' : '#2dd4bf';
+            const isGuest = p.kind === 'homepage' || p.kind === 'browse' || p.kind === 'signup' || p.kind === 'login';
+            const color = applying ? '#fb923c' : isGuest ? '#a78bfa' : '#2dd4bf';
             const pulse = 4 + Math.sin(mapPhase + idx) * 3;
 
             mapCtx.beginPath();

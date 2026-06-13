@@ -168,7 +168,21 @@
         #pdf-viewer { width: 100%; height: 480px; border: none; display: block; }
         /* Off-screen — source for PDF only; must not stack on the iframe */
         #prev-qrcode { position: absolute; left: -9999px; width: 128px; height: 128px; opacity: 0; pointer-events: none; }
-        #seminar-track-live, #case-track-live { font-size: 0.82rem; color: #0f766e; font-weight: 700; margin-bottom: 10px; }
+        #seminar-track-live, #case-track-live { font-size: 0.82rem; color: #0f766e; font-weight: 700; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+        #seminar-track-live .vtrk-dot, #case-track-live .vtrk-dot { width: 8px; height: 8px; }
+        .sat-live-track { border-radius: 14px; overflow: hidden; border: 1px solid #e2e8f0; margin: 0 0 16px; box-shadow: 0 8px 28px rgba(15,118,110,0.08); }
+        .sat-live-track--enter { animation: sat-track-in 0.55s cubic-bezier(.4,0,.2,1); }
+        @keyframes sat-track-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+        .sat-progress-label { font-size: 0.72rem; opacity: 0.9; margin-top: 8px; font-weight: 600; }
+        .sat-step-pop { animation: sat-step-in 0.4s ease both; }
+        @keyframes sat-step-in { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: translateX(0); } }
+        .sat-step-active-glow .vtrk-step-circle { animation: sat-active-glow 2s ease-in-out infinite; }
+        @keyframes sat-active-glow { 0%,100% { box-shadow: 0 0 0 4px rgba(15,118,110,0.15); } 50% { box-shadow: 0 0 0 8px rgba(15,118,110,0.28); } }
+        .sat-icon-spin { animation: sat-spin 2.5s linear infinite; }
+        @keyframes sat-spin { to { transform: rotate(360deg); } }
+        .sat-step-upcoming { color: #94a3b8 !important; font-style: italic; font-weight: 500 !important; }
+        .sat-progress-animate { transition: width 0.8s cubic-bezier(.4,0,.2,1); }
+        .sat-app-card .vtrk-steps { border-left: none; border-right: none; }
 
     </style>
 </head>
@@ -549,7 +563,7 @@
 
                 <div id="tab-applications" class="tab-pane hidden">
                     <h2 class="section-title">Track seminar applications</h2>
-                    <p id="seminar-track-live" class="hidden"><i class="fas fa-circle" style="color:#10b981;font-size:0.5rem;vertical-align:middle;"></i> Live status updates</p>
+                    <p id="seminar-track-live" class="hidden"><span class="vtrk-live" style="margin:0;"><span class="vtrk-dot"></span>Live tracking · updates every 7s</span></p>
                     <div class="card" id="applications-tracker-container"><p style="color:#64748b;">Loading trackers…</p></div>
                     <div class="card">
                         <h3 style="margin-bottom:12px;color:#0f766e;">Application list</h3>
@@ -902,7 +916,7 @@
     <script src="/js/doctor-books.js?v=20260610books2"></script>
     <script src="/js/live-chat-client-info.js?v=20260610chat1"></script>
     <script src="/js/doctor-live-chat-widget.js?v=20260610chat1"></script>
-    <script src="/js/site-visitor-beacon.js?v=20260608radar2"></script>
-    <script src="/js/doctor.js?v=20260612pay6"></script>
+    <script src="/js/site-visitor-beacon.js?v=20260613radar3"></script>
+    <script src="/js/doctor.js?v=20260613radar3"></script>
 </body>
 </html>

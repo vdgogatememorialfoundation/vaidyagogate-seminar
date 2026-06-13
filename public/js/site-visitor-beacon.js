@@ -1,25 +1,25 @@
 /**
- * Doctor portal only — realtime seminar application tracking beacon.
+ * Site-wide realtime activity beacon — doctor portal + public website visitors.
  */
 (function (global) {
-    const path = String(global.location.pathname || '').replace(/\/+$/, '');
-    const isDoctorPortal = path === '/doctor' || path.endsWith('/doctor') || /\/doctor\.html$/i.test(path);
-    if (!isDoctorPortal) return;
+    const pathNorm = String(global.location.pathname || '').replace(/\/+$/, '');
+    const isDoctorPortal =
+        pathNorm === '/doctor' || pathNorm.endsWith('/doctor') || /\/doctor\.html$/i.test(pathNorm);
+    const SESSION_KEY = isDoctorPortal ? 'vgmf_doctor_radar_session' : 'vgmf_site_radar_session';
 
-    const KEY = 'vgmf_doctor_radar_session';
-    let activityState = { kind: 'doctor_portal', formProgress: 0 };
+    let activityState = { kind: isDoctorPortal ? 'doctor_portal' : 'homepage', formProgress: 0 };
     let started = false;
 
     function sessionId() {
         try {
-            let id = sessionStorage.getItem(KEY);
+            let id = sessionStorage.getItem(SESSION_KEY);
             if (!id) {
-                id = 'dr_' + Math.random().toString(36).slice(2) + Date.now().toString(36);
-                sessionStorage.setItem(KEY, id);
+                id = (isDoctorPortal ? 'dr_' : 'sv_') + Math.random().toString(36).slice(2) + Date.now().toString(36);
+                sessionStorage.setItem(SESSION_KEY, id);
             }
             return id;
         } catch (_) {
-            return 'dr_' + Date.now();
+            return (isDoctorPortal ? 'dr_' : 'sv_') + Date.now();
         }
     }
 
@@ -42,17 +42,24 @@
         const out = { userId: null, userLabel: null };
         try {
             if (global.PortalAuth && global.PortalAuth.getUser) {
-                const u = global.PortalAuth.getUser('doctor');
-                if (u && u.id) {
-                    out.userId = u.id;
-                    out.userLabel =
-                        [u.first_name, u.last_name].filter(Boolean).join(' ').trim() ||
-                        u.user_id_string ||
-                        u.email ||
-                        'Doctor';
+                const portals = isDoctorPortal
+                    ? ['doctor']
+                    : ['doctor', 'admin', 'judge', 'scanner', 'staff', 'support'];
+                for (let i = 0; i < portals.length; i++) {
+                    const u = global.PortalAuth.getUser(portals[i]);
+                    if (u && u.id) {
+                        out.userId = u.id;
+                        out.userLabel =
+                            [u.first_name, u.last_name].filter(Boolean).join(' ').trim() ||
+                            u.user_id_string ||
+                            u.email ||
+                            portals[i];
+                        break;
+                    }
                 }
             }
         } catch (_) {}
+        if (!out.userLabel && !isDoctorPortal) out.userLabel = 'Site visitor';
         return out;
     }
 
@@ -68,7 +75,7 @@
         return null;
     }
 
-    function inferActivityFromDom() {
+    function inferDoctorActivity() {
         const form = document.getElementById('multi-step-form');
         if (form && !form.classList.contains('hidden')) {
             const step = visibleRegistrationStep();
@@ -93,24 +100,55 @@
         return { kind: 'doctor_portal', formProgress: 0 };
     }
 
+    function inferPublicActivity() {
+        const p = currentPath().toLowerCase();
+        if (p === '/' || p === '/index.html' || p.endsWith('/index')) {
+            if (p.indexOf('#signup') !== -1 || p.indexOf('signup') !== -1) {
+                return { kind: 'signup', stepLabel: 'Sign up', formProgress: 0 };
+            }
+            if (p.indexOf('#login') !== -1 || p.indexOf('login') !== -1) {
+                return { kind: 'login', stepLabel: 'Sign in', formProgress: 0 };
+            }
+            return { kind: 'homepage', stepLabel: 'Homepage', formProgress: 0 };
+        }
+        if (p.indexOf('/verify-certificate') !== -1) {
+            return { kind: 'verify_certificate', stepLabel: 'Verify certificate', formProgress: 0 };
+        }
+        if (p.indexOf('/track-shipment') !== -1) {
+            return { kind: 'track_shipment', stepLabel: 'Track shipment', formProgress: 0 };
+        }
+        if (p.indexOf('/legal') !== -1) {
+            return { kind: 'legal', stepLabel: 'Legal pages', formProgress: 0 };
+        }
+        if (p.indexOf('/live-chat') !== -1 || p.indexOf('/support') !== -1) {
+            return { kind: 'support', stepLabel: 'Support', formProgress: 0 };
+        }
+        if (p.indexOf('/admin') !== -1) {
+            return { kind: 'admin', stepLabel: 'Admin portal', formProgress: 0 };
+        }
+        return { kind: 'browse', stepLabel: 'Browsing site', formProgress: 0 };
+    }
+
     function mergedActivity() {
-        const inferred = inferActivityFromDom();
+        const inferred = isDoctorPortal ? inferDoctorActivity() : inferPublicActivity();
         const merged = Object.assign({}, inferred, activityState);
         if (activityState.kind === 'payment') merged.kind = 'payment';
-        else if (activityState.kind === 'seminar_apply' || inferred.kind === 'seminar_apply') merged.kind = 'seminar_apply';
-        else if (inferred.kind) merged.kind = inferred.kind;
+        else if (isDoctorPortal && (activityState.kind === 'seminar_apply' || inferred.kind === 'seminar_apply')) {
+            merged.kind = 'seminar_apply';
+        } else if (inferred.kind) merged.kind = inferred.kind;
         return merged;
     }
 
     function heartbeatMs() {
         const k = mergedActivity().kind;
         if (k === 'seminar_apply' || k === 'payment') return 4000;
-        return 8000;
+        if (k === 'signup' || k === 'login') return 6000;
+        return isDoctorPortal ? 8000 : 10000;
     }
 
     function scheduleTimer() {
-        if (global.__doctorRadarTimer) clearInterval(global.__doctorRadarTimer);
-        global.__doctorRadarTimer = setInterval(sendHeartbeat, heartbeatMs());
+        if (global.__siteRadarTimer) clearInterval(global.__siteRadarTimer);
+        global.__siteRadarTimer = setInterval(sendHeartbeat, heartbeatMs());
     }
 
     function sendHeartbeat() {
@@ -123,6 +161,7 @@
             body: JSON.stringify({
                 sessionId: sessionId(),
                 path: currentPath(),
+                pageTitle: document.title || '',
                 referrer: document.referrer || '',
                 userId: ctx.userId,
                 userLabel: ctx.userLabel,
@@ -135,7 +174,7 @@
             })
             .then(function (d) {
                 if (d && d.skipped) {
-                    console.warn('[seminar-radar] heartbeat skipped — server could not save session');
+                    console.warn('[site-radar] heartbeat skipped');
                 }
             })
             .catch(function () {});
@@ -164,7 +203,8 @@
         setActivity: setActivity,
         sessionId: sessionId,
         getActivity: mergedActivity,
-        boot: boot
+        boot: boot,
+        isDoctorPortal: isDoctorPortal
     };
 
     if (document.readyState === 'loading') {

@@ -1117,45 +1117,106 @@ function renderTrackerStepsHtml(timeline) {
     if (!timeline) return '';
     if (timeline.disqualified) {
         return (
-            '<p style="color:#b91c1c;">Disqualified' +
-            (timeline.disqualifiedAt ? ' · ' + escapeHtml(formatTrackDateTime(timeline.disqualifiedAt)) : '') +
-            '</p>'
+            '<div class="sat-live-track sat-live-track--error">' +
+            '<div class="vtrk-header cancelled"><div class="vtrk-headline">Application disqualified</div>' +
+            '<div class="vtrk-subheadline">' +
+            escapeHtml(timeline.disqualifiedAt ? formatTrackDateTime(timeline.disqualifiedAt) : 'Contact the seminar office.') +
+            '</div></div></div>'
         );
     }
     if (timeline.rejected) {
-        return '<p style="color:#b91c1c;">This application was rejected or cancelled.</p>';
+        return (
+            '<div class="sat-live-track sat-live-track--error">' +
+            '<div class="vtrk-header cancelled"><div class="vtrk-headline">Application rejected</div>' +
+            '<div class="vtrk-subheadline">This application was rejected or cancelled.</div></div></div>'
+        );
     }
     const steps = timeline.steps || [];
-    let html = '<div class="tracker-vertical">';
-    steps.forEach((step) => {
+    if (!steps.length) return '';
+
+    let completed = 0;
+    let activeStep = null;
+    steps.forEach(function (step) {
+        if (step.state === 'completed') completed++;
+        if (step.state === 'active') activeStep = step;
+    });
+    const progressPct = Math.min(
+        100,
+        Math.round(((completed + (activeStep ? 0.45 : 0)) / steps.length) * 100)
+    );
+    const headline = activeStep ? activeStep.title : completed >= steps.length ? 'Journey complete' : 'Tracking your application';
+    const subheadline = activeStep
+        ? activeStep.desc || 'We will update this timeline automatically.'
+        : completed >= steps.length
+          ? 'All steps completed for this application.'
+          : 'Live updates every few seconds while this page is open.';
+
+    let html =
+        '<div class="sat-live-track sat-live-track--enter">' +
+        '<div class="vtrk-header live">' +
+        '<span class="vtrk-live"><span class="vtrk-dot"></span>Live tracking</span>' +
+        '<div class="vtrk-headline">' +
+        escapeHtml(headline) +
+        '</div>' +
+        '<div class="vtrk-subheadline">' +
+        escapeHtml(subheadline) +
+        '</div>' +
+        '<div class="vtrk-progress-wrap"><div class="vtrk-progress-bar sat-progress-animate" style="width:' +
+        progressPct +
+        '%"></div></div>' +
+        '<div class="sat-progress-label">' +
+        progressPct +
+        '% complete · ' +
+        completed +
+        ' of ' +
+        steps.length +
+        ' milestones</div>' +
+        '</div>' +
+        '<div class="vtrk-steps">';
+
+    steps.forEach(function (step, idx) {
+        const isLast = idx === steps.length - 1;
         const cls =
             step.state === 'completed'
-                ? 'completed'
+                ? 'vtrk-step done sat-step-pop'
                 : step.state === 'active'
-                  ? 'active'
-                  : 'upcoming';
-        const when =
-            step.at && (step.state === 'completed' || step.state === 'active')
-                ? '<p class="track-when" style="font-size:0.78rem;color:#0f766e;margin:4px 0 0;font-weight:600;">' +
+                  ? 'vtrk-step active sat-step-pop sat-step-active-glow'
+                  : 'vtrk-step upcoming';
+        const whenHtml =
+            step.at && step.state !== 'upcoming'
+                ? '<span class="vtrk-step-when"><i class="fas fa-clock"></i> ' +
                   escapeHtml(formatTrackDateTime(step.at)) +
-                  '</p>'
-                : step.state === 'pending'
-                  ? '<p class="track-when" style="font-size:0.78rem;color:#94a3b8;margin:4px 0 0;">Upcoming</p>'
+                  '</span>'
+                : step.state === 'upcoming'
+                  ? '<span class="vtrk-step-when sat-step-upcoming"><i class="fas fa-hourglass-half"></i> Upcoming</span>'
                   : '';
+        const iconHtml =
+            step.state === 'completed'
+                ? '<i class="fas fa-check"></i>'
+                : step.state === 'active'
+                  ? '<i class="fas ' + escapeHtml(step.icon || 'fa-circle-notch') + ' sat-icon-spin"></i>'
+                  : '<i class="fas ' + escapeHtml(step.icon || 'fa-circle') + '"></i>';
+
         html +=
-            '<div class="track-step ' +
+            '<div class="' +
             cls +
-            '"><div class="track-icon"><i class="fas ' +
-            (step.icon || 'fa-circle') +
-            '"></i></div><div class="track-content"><div class="track-title">' +
+            '" style="animation-delay:' +
+            idx * 0.07 +
+            's">' +
+            '<div class="vtrk-step-left"><div class="vtrk-step-circle">' +
+            iconHtml +
+            '</div>' +
+            (isLast ? '' : '<div class="vtrk-step-line"></div>') +
+            '</div><div class="vtrk-step-body"><div class="vtrk-step-title">' +
             escapeHtml(step.title || '') +
-            '</div><div class="track-desc">' +
+            '</div><div class="vtrk-step-sub">' +
             escapeHtml(step.desc || '') +
             '</div>' +
-            when +
+            whenHtml +
             '</div></div>';
     });
-    html += '</div>';
+
+    html += '</div></div>';
     return html;
 }
 
@@ -1399,7 +1460,8 @@ function renderSeminarApplicationTrackerCard(a) {
           '</p>'
         : '';
     return (
-        '<div class="card" style="margin-bottom:15px;border-top:4px solid #1a237e;">' +
+        '<div class="card sat-app-card" style="margin-bottom:15px;border-top:4px solid #1a237e;overflow:hidden;padding:0;">' +
+        '<div style="padding:16px 16px 0;">' +
         '<h4 style="color:#1a237e;margin-bottom:16px;"><i class="fas fa-calendar-check"></i> Seminar · ' +
         escapeHtml(a.application_no) +
         (a.seminar_title ? ' · ' + escapeHtml(a.seminar_title) : '') +
@@ -1409,10 +1471,12 @@ function renderSeminarApplicationTrackerCard(a) {
         waitlistBlock +
         revisionBlock +
         renderCancellationRefundBlock(a) +
+        '</div>' +
         renderTrackerStepsHtml(tl) +
+        '<div style="padding:0 16px 16px;">' +
         payBtn +
         waBlock +
-        '</div>'
+        '</div></div>'
     );
 }
 
