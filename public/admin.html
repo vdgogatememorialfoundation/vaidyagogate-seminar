@@ -1679,7 +1679,7 @@
                         <p id="cancellation-requests-search-count" style="margin:6px 0 0;font-size:0.82rem;color:#64748b;"></p>
                     </div>
                     <table class="data-table">
-                        <thead><tr><th>Requested</th><th>Doctor</th><th>Seminar</th><th>App</th><th>Reason</th><th>Policy refund</th><th>Status</th><th>Tracking</th><th>Actions</th></tr></thead>
+                        <thead><tr><th>Requested</th><th>Doctor</th><th>Seminar</th><th>Application</th><th>Reason</th><th>Policy refund</th><th>Status</th><th>Tracking</th><th>Actions</th></tr></thead>
                         <tbody id="admin-cancel-req-tbody"><tr><td colspan="9" style="text-align:center;">Open this tab or click Refresh</td></tr></tbody>
                     </table>
                 </div>
@@ -3086,10 +3086,11 @@
     </div>
     <!-- Cancellation review modal -->
     <div id="admin-cancel-review-modal" class="hidden" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.55);z-index:10003;display:flex;align-items:center;justify-content:center;">
-        <div style="background:white;padding:28px;border-radius:16px;width:760px;max-width:96vw;max-height:92vh;overflow-y:auto;position:relative;">
+        <div style="background:white;padding:28px;border-radius:16px;width:920px;max-width:96vw;max-height:92vh;overflow-y:auto;position:relative;">
             <button type="button" onclick="closeAdminCancellationReviewModal()" style="position:absolute;top:16px;right:16px;background:none;border:none;font-size:1.5rem;cursor:pointer;">&times;</button>
             <h2 style="color:#9a3412;margin-bottom:4px;" id="admin-cancel-review-title">Review cancellation</h2>
             <p id="admin-cancel-review-sub" style="color:#64748b;font-size:0.88rem;margin-bottom:16px;"></p>
+            <div id="admin-cancel-review-application" style="margin-bottom:14px;"></div>
             <div id="admin-cancel-review-meta" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;margin-bottom:14px;font-size:0.88rem;line-height:1.55;"></div>
             <div id="admin-cancel-review-tracking" style="margin-bottom:14px;"></div>
             <label style="display:block;font-weight:600;margin-bottom:6px;">Admin notes (visible to doctor if shared in response)</label>
@@ -3149,6 +3150,6 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
-    <script src="/js/admin.js?v=20260613cancel2"></script>
+    <script src="/js/admin.js?v=20260613cancel3"></script>
 </body>
 </html>

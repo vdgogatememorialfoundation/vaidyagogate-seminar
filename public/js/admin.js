@@ -7946,12 +7946,133 @@ function initAdminCancellationReviewTab() {
 
 let __adminCancelReviewRequestId = null;
 
-function openAdminCancellationReviewModal(requestId) {
-    const row = (__adminCancelRequestsCache || []).find((x) => Number(x.id) === Number(requestId));
-    if (!row) return alert('Refresh the list and try again.');
+function adminFormatCancelReviewDateTime(iso) {
+    if (!iso) return '—';
+    try {
+        return new Date(iso).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', dateStyle: 'medium', timeStyle: 'short' });
+    } catch (_) {
+        return String(iso);
+    }
+}
+
+function renderAdminCancellationEligibilityHtml(eligibility) {
+    if (!eligibility) return '';
+    const tone = eligibility.applicable ? '#047857' : '#92400e';
+    const bg = eligibility.applicable ? '#ecfdf5' : '#fffbeb';
+    const border = eligibility.applicable ? '#a7f3d0' : '#fde68a';
+    let html =
+        '<div style="margin-top:12px;padding:10px 12px;background:' +
+        bg +
+        ';border:1px solid ' +
+        border +
+        ';border-radius:8px;font-size:0.85rem;">' +
+        '<p style="margin:0 0 6px;font-weight:700;color:' +
+        tone +
+        ';">Refund eligibility now (IST)</p>';
+    if (eligibility.daysUntilLabel) {
+        html += '<p style="margin:0 0 6px;color:#475569;">' + escAdmin(eligibility.daysUntilLabel) + '</p>';
+    }
+    html +=
+        '<p style="margin:0;">If approved today: <strong>' +
+        escAdmin(String(eligibility.eligiblePercent || 0)) +
+        '%</strong> — <strong>₹' +
+        escAdmin(String(eligibility.eligibleAmount || 0)) +
+        '</strong></p></div>';
+    return html;
+}
+
+function renderAdminCancellationApplicationHtml(row) {
+    const ad = row && row.applicationDetails;
+    if (!ad) return '<p class="muted" style="font-size:0.88rem;">Application details unavailable.</p>';
+    const formData = ad.formData || {};
+    const certPath = formData.certificate_path ? String(formData.certificate_path) : '';
+    const certLink = certPath
+        ? '<p><a href="' +
+          escAdmin(publicFileHref(certPath)) +
+          '" target="_blank" rel="noopener">View certificate document</a></p>'
+        : '<p class="muted" style="margin:0;">No certificate file on record.</p>';
+    const pay = ad.payment || {};
+    const ticket = ad.ticket || {};
+    const regSt = String(ad.registrationStatus || '').replace(/_/g, ' ').toUpperCase();
+    const payLabel = pay.orderId
+        ? escAdmin(pay.gateway || 'Payment') +
+          ' · ₹' +
+          escAdmin(pay.amount || 0) +
+          (pay.transactionId ? ' · Txn ' + escAdmin(pay.transactionId) : '')
+        : 'Not paid online';
+    const checkIn = ticket.isScanned
+        ? 'Checked in' + (ticket.scanTime ? ' · ' + escAdmin(adminFormatCancelReviewDateTime(ticket.scanTime)) : '')
+        : 'Not checked in';
+    let html =
+        '<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:14px 16px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;margin-bottom:12px;">' +
+        '<p style="margin:0;font-weight:700;color:#1e40af;font-size:1rem;"><i class="fas fa-file-alt"></i> Application details</p>' +
+        '<button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.78rem;background:#2563eb;" onclick="adminOpenCancellationApplicationInReview(' +
+        Number(ad.registrationId || 0) +
+        ')"><i class="fas fa-external-link-alt"></i> Open full application</button></div>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px 16px;font-size:0.86rem;margin-bottom:12px;">' +
+        '<div><span class="muted">Application no.</span><br><strong>' +
+        escAdmin(ad.applicationNo || '—') +
+        '</strong></div>' +
+        '<div><span class="muted">Registration status</span><br><strong>' +
+        escAdmin(regSt || '—') +
+        '</strong></div>' +
+        '<div><span class="muted">Applied</span><br>' +
+        escAdmin(adminFormatCancelReviewDateTime(ad.applicationCreatedAt)) +
+        '</div>' +
+        '<div><span class="muted">Seminar fee</span><br>₹' +
+        escAdmin(ad.seminarPrice != null ? ad.seminarPrice : '—') +
+        '</div>' +
+        '<div><span class="muted">Event (IST)</span><br>' +
+        escAdmin(adminFormatCancelReviewDateTime(ad.eventDate)) +
+        '</div>' +
+        '<div><span class="muted">Payment</span><br>' +
+        payLabel +
+        '</div>' +
+        '<div><span class="muted">E-ticket / check-in</span><br>' +
+        escAdmin(ticket.ticketId ? ticket.ticketId + ' · ' : '') +
+        checkIn +
+        '</div>' +
+        '<div><span class="muted">Doctor contact</span><br>' +
+        escAdmin(row.email || '') +
+        (row.phone ? ' · ' + escAdmin(row.phone) : '') +
+        '</div></div>' +
+        '<div style="background:#fff;border:1px solid #dbeafe;border-radius:8px;padding:12px;font-size:0.88rem;line-height:1.55;">' +
+        formatAdminApplicationDetailsHtml(formData, certLink);
+    if (ad.ncismCheck && seminarNeedsDocReview(formData.qual)) {
+        html += formatNcismCertificateCheckHtml(ad.ncismCheck);
+    }
+    html += '</div>';
+    if (ad.policySummary) {
+        html +=
+            '<p style="margin:12px 0 0;font-size:0.85rem;color:#475569;"><strong>Cancellation policy:</strong> ' +
+            escAdmin(ad.policySummary) +
+            '</p>';
+    }
+    html += renderAdminCancellationEligibilityHtml(ad.liveEligibility);
+    html += '</div>';
+    return html;
+}
+
+function adminOpenCancellationApplicationInReview(registrationId) {
+    const rid = Number(registrationId);
+    if (!rid) return;
+    const idx = (globalAdminApps || []).findIndex((a) => Number(a.id) === rid);
+    if (idx < 0) {
+        alert('Application not in the current list. Open Review Applications and search for it there.');
+        switchTab('tab-applications');
+        return;
+    }
+    closeAdminCancellationReviewModal();
+    viewFullApplication(idx);
+}
+
+function populateAdminCancellationReviewModal(row) {
+    if (!row) return;
     __adminCancelReviewRequestId = row.id;
     const title = document.getElementById('admin-cancel-review-title');
     const sub = document.getElementById('admin-cancel-review-sub');
+    const appEl = document.getElementById('admin-cancel-review-application');
     const meta = document.getElementById('admin-cancel-review-meta');
     const track = document.getElementById('admin-cancel-review-tracking');
     const notes = document.getElementById('admin-cancel-review-notes');
@@ -7960,9 +8081,7 @@ function openAdminCancellationReviewModal(requestId) {
     const refundPanel = document.getElementById('admin-cancel-review-refund-panel');
     const refundBtn = document.getElementById('admin-cancel-review-refund-btn');
     const msg = document.getElementById('admin-cancel-review-msg');
-    const when = row.requested_at
-        ? new Date(row.requested_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
-        : '—';
+    const when = adminFormatCancelReviewDateTime(row.requested_at);
     if (title) title.textContent = 'Review · ' + (row.application_no || 'Application');
     if (sub) {
         sub.textContent =
@@ -7974,14 +8093,16 @@ function openAdminCancellationReviewModal(requestId) {
             ' · requested ' +
             when;
     }
+    if (appEl) appEl.innerHTML = renderAdminCancellationApplicationHtml(row);
     if (meta) {
         meta.innerHTML =
-            '<p style="margin:0 0 6px;"><strong>Reason:</strong> ' +
+            '<p style="margin:0 0 6px;font-weight:700;color:#334155;">Cancellation request</p>' +
+            '<p style="margin:0 0 6px;"><strong>Doctor reason:</strong> ' +
             escAdmin(row.reason || '—') +
             '</p>' +
-            '<p style="margin:0 0 6px;"><strong>Status:</strong> ' +
+            '<p style="margin:0 0 6px;"><strong>Request status:</strong> ' +
             escAdmin(row.status) +
-            ' · <strong>Policy refund:</strong> ₹' +
+            ' · <strong>Policy refund preview:</strong> ₹' +
             escAdmin(row.refund_amount || 0) +
             ' (' +
             escAdmin(row.refund_percent || 0) +
@@ -7990,6 +8111,7 @@ function openAdminCancellationReviewModal(requestId) {
                 ? '<p style="margin:0;"><strong>Gateway:</strong> ' +
                   escAdmin(row.payment_gateway) +
                   (row.order_amount ? ' · Paid ₹' + escAdmin(row.order_amount) : '') +
+                  (row.order_refund_status ? ' · Order refund: ' + escAdmin(row.order_refund_status) : '') +
                   '</p>'
                 : '<p style="margin:0;color:#b45309;">No successful online payment on file — refund may be N/A or manual.</p>');
     }
@@ -8008,10 +8130,41 @@ function openAdminCancellationReviewModal(requestId) {
         !['completed'].includes(String(row.refund_status || '').toLowerCase());
     if (refundBtn) refundBtn.style.display = canProcessRefund ? 'inline-block' : 'none';
     if (msg) msg.textContent = '';
+}
+
+async function openAdminCancellationReviewModal(requestId) {
+    const cached = (__adminCancelRequestsCache || []).find((x) => Number(x.id) === Number(requestId));
+    if (!cached) return alert('Refresh the list and try again.');
     const m = document.getElementById('admin-cancel-review-modal');
+    const appEl = document.getElementById('admin-cancel-review-application');
+    populateAdminCancellationReviewModal(cached);
+    if (appEl && !cached.applicationDetails) {
+        appEl.innerHTML = '<p class="muted" style="font-size:0.88rem;">Loading application details…</p>';
+    }
     if (m) {
         m.classList.remove('hidden');
         m.style.display = 'flex';
+    }
+    try {
+        const res = await fetch('/api/admin/cancellation-requests/' + encodeURIComponent(requestId), { cache: 'no-store' });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+            if (appEl && !cached.applicationDetails) {
+                appEl.innerHTML =
+                    '<p style="color:#b91c1c;font-size:0.88rem;">' +
+                    escAdmin((data && data.error) || 'Could not load application details') +
+                    '</p>';
+            }
+            return;
+        }
+        const ix = __adminCancelRequestsCache.findIndex((x) => Number(x.id) === Number(requestId));
+        if (ix >= 0) __adminCancelRequestsCache[ix] = data;
+        populateAdminCancellationReviewModal(data);
+    } catch (e) {
+        console.error(e);
+        if (appEl && !cached.applicationDetails) {
+            appEl.innerHTML = '<p style="color:#b91c1c;font-size:0.88rem;">Network error loading application details.</p>';
+        }
     }
 }
 
@@ -8101,6 +8254,11 @@ function renderAdminCancellationRequestsTable() {
             escAdmin(r.seminar_title) +
             '</td><td>' +
             escAdmin(r.application_no) +
+            (r.registration_status
+                ? '<br><span style="font-size:0.75rem;color:#64748b;">' +
+                  escAdmin(String(r.registration_status).replace(/_/g, ' ')) +
+                  '</span>'
+                : '') +
             '</td><td style="max-width:200px;font-size:0.85rem;">' +
             escAdmin(r.reason) +
             '</td><td>' +
