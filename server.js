@@ -879,6 +879,11 @@ const DEFAULT_PUBLIC_SITE_CMS = {
         { name: 'Dr. B. Patil', role: 'PG Scholar', text: 'Well organised — valuable for clinical practice.', rating: 5 },
         { name: 'Dr. C. Joshi', role: 'Ayurvedic physician', text: 'Highly recommended for continuing medical education.', rating: 5 }
     ],
+    videoReels: [],
+    videoReelsSection: {
+        title: 'Seminar reels & highlights',
+        subtitle: 'Short clips from our events and programmes'
+    },
     topBar: {
         email: 'info@vaidyagogate.org',
         phone: '+91 9876543210',
@@ -1482,6 +1487,10 @@ function loadPublicSiteCms(callback) {
                     if (!Array.isArray(base.publicNotices)) base.publicNotices = [];
                     if (!Array.isArray(base.scrollingAnnouncements)) base.scrollingAnnouncements = [];
                     if (!Array.isArray(base.reviews)) base.reviews = DEFAULT_PUBLIC_SITE_CMS.reviews;
+                    if (!Array.isArray(base.videoReels)) base.videoReels = [];
+                    if (!base.videoReelsSection || typeof base.videoReelsSection !== 'object') {
+                        base.videoReelsSection = { ...DEFAULT_PUBLIC_SITE_CMS.videoReelsSection };
+                    }
                     if (!Array.isArray(base.aboutSections)) base.aboutSections = DEFAULT_PUBLIC_SITE_CMS.aboutSections;
                     if (!Array.isArray(base.socialLinks)) base.socialLinks = DEFAULT_PUBLIC_SITE_CMS.socialLinks;
                     if (!Array.isArray(base.pastSeminarGallery)) base.pastSeminarGallery = [];

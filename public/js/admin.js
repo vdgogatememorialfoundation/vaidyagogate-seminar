@@ -13957,6 +13957,81 @@ function cmsFillReviewRows(items) {
     (items || []).forEach((it) => cmsAddReviewRow(it));
 }
 
+function cmsAddReelRow(prefill) {
+    const root = document.getElementById('cms-reel-rows');
+    if (!root) return;
+    const p = prefill || {};
+    const wrap = document.createElement('div');
+    wrap.className = 'cms-reel-row';
+    wrap.style.cssText =
+        'margin-bottom:12px;padding:12px;border:1px solid #e2e8f0;border-radius:10px;background:#fafafa;';
+    wrap.innerHTML = `
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div><label style="font-size:0.8rem;">Reel name / title</label><input class="crl-title" type="text" style="width:100%" placeholder="Opening ceremony highlights"></div>
+          <div><label style="font-size:0.8rem;">Subtitle (optional)</label><input class="crl-subtitle" type="text" style="width:100%" placeholder="National Seminar 2026"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">
+          <div><label style="font-size:0.8rem;">YouTube URL or ID</label><input class="crl-youtube" type="text" style="width:100%" placeholder="https://youtube.com/shorts/..."></div>
+          <div><label style="font-size:0.8rem;">Uploaded video path (MP4)</label><input class="crl-video" type="text" style="width:100%" placeholder="/uploads/reel.mp4"></div>
+        </div>
+        <div style="margin-top:8px;"><label style="font-size:0.8rem;">Thumbnail path (optional)</label><input class="crl-thumb" type="text" style="width:100%" placeholder="/uploads/reel-thumb.jpg"></div>
+        <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <input type="file" class="crl-video-file" accept="video/mp4,video/webm,video/*" style="max-width:180px;">
+          <button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;" onclick="cmsUploadReelVideo(this)">Upload video</button>
+          <input type="file" class="crl-thumb-file" accept="image/*" style="max-width:180px;">
+          <button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;" onclick="cmsUploadReelThumb(this)">Upload thumb</button>
+          <button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;background:#64748b;" onclick="this.closest('.cms-reel-row').remove()">Remove</button>
+        </div>`;
+    wrap.querySelector('.crl-title').value = p.title || '';
+    wrap.querySelector('.crl-subtitle').value = p.subtitle || p.category || '';
+    wrap.querySelector('.crl-youtube').value = p.youtubeId || p.url || '';
+    wrap.querySelector('.crl-video').value = p.videoUrl || '';
+    wrap.querySelector('.crl-thumb').value = p.thumbnail || '';
+    root.appendChild(wrap);
+}
+
+function cmsCollectReelsFromDom() {
+    const root = document.getElementById('cms-reel-rows');
+    if (!root) return [];
+    return Array.from(root.querySelectorAll('.cms-reel-row'))
+        .map((row) => ({
+            title: (row.querySelector('.crl-title') || {}).value || '',
+            subtitle: (row.querySelector('.crl-subtitle') || {}).value || '',
+            youtubeId: (row.querySelector('.crl-youtube') || {}).value || '',
+            url: (row.querySelector('.crl-youtube') || {}).value || '',
+            videoUrl: (row.querySelector('.crl-video') || {}).value || '',
+            thumbnail: (row.querySelector('.crl-thumb') || {}).value || ''
+        }))
+        .filter((x) => x.title || x.youtubeId || x.videoUrl);
+}
+
+function cmsFillReelRows(items) {
+    const root = document.getElementById('cms-reel-rows');
+    if (!root) return;
+    root.innerHTML = '';
+    (items || []).forEach((it) => cmsAddReelRow(it));
+}
+
+async function cmsUploadReelVideo(btn) {
+    const row = btn.closest('.cms-reel-row');
+    if (!row) return;
+    const fileInp = row.querySelector('.crl-video-file');
+    const path = await uploadAdminAssetFromInput(fileInp);
+    if (fileInp) fileInp.value = '';
+    const pathEl = row.querySelector('.crl-video');
+    if (path && pathEl) pathEl.value = path;
+}
+
+async function cmsUploadReelThumb(btn) {
+    const row = btn.closest('.cms-reel-row');
+    if (!row) return;
+    const fileInp = row.querySelector('.crl-thumb-file');
+    const path = await uploadAdminAssetFromInput(fileInp);
+    if (fileInp) fileInp.value = '';
+    const pathEl = row.querySelector('.crl-thumb');
+    if (path && pathEl) pathEl.value = path;
+}
+
 async function cmsUploadRowPdf(btn, pathSelector) {
     const row = btn.closest('.cms-scroll-row') || btn.closest('.cms-notice-row');
     if (!row) return;
@@ -15392,6 +15467,12 @@ async function loadAdminSiteCms() {
         const sl = document.getElementById('cms-slides');
         if (sl) sl.value = JSON.stringify(cms.slides || [], null, 2);
         cmsFillReviewRows(cms.reviews || []);
+        cmsFillReelRows(cms.videoReels || []);
+        const reelsTitle = document.getElementById('cms-reels-title');
+        const reelsSub = document.getElementById('cms-reels-subtitle');
+        const reelsMeta = cms.videoReelsSection || {};
+        if (reelsTitle) reelsTitle.value = reelsMeta.title || 'Seminar reels & highlights';
+        if (reelsSub) reelsSub.value = reelsMeta.subtitle || 'Short clips from our events and programmes';
         cmsFillScrollingRows(cms.scrollingAnnouncements || []);
         cmsFillPublicNoticeRows(cms.publicNotices || []);
         cmsFillDoctorRows(cms.doctorUpdates || []);
@@ -15714,6 +15795,7 @@ async function saveAdminSiteCms() {
         return;
     }
     const reviews = cmsCollectReviewsFromDom();
+    const videoReels = cmsCollectReelsFromDom();
     const aboutSections = cmsCollectAboutFromDom();
     const legalPages = cmsCollectLegalPagesFromDom();
     const socialLinks = cmsCollectSocialFromDom();
@@ -15734,6 +15816,11 @@ async function saveAdminSiteCms() {
             doctorUpdates: cmsCollectDoctorUpdatesFromDom(),
             slides,
             reviews,
+            videoReels,
+            videoReelsSection: {
+                title: (document.getElementById('cms-reels-title') || {}).value || 'Seminar reels & highlights',
+                subtitle: (document.getElementById('cms-reels-subtitle') || {}).value || 'Short clips from our events and programmes'
+            },
             publicNotices: cmsCollectPublicNoticesFromDom(),
             aboutSections,
             legalPages,

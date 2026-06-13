@@ -227,6 +227,7 @@
         if (s.geo) {
             const parts = [s.geo.city, s.geo.region, s.geo.country].filter(Boolean);
             if (parts.length) return parts.join(', ');
+            if (s.geo.label) return s.geo.label;
         }
         if (s.city || s.region || s.country) {
             return [s.city, s.region, s.country].filter(Boolean).join(', ');

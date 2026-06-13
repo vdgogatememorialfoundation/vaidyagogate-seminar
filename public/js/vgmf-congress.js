@@ -797,6 +797,90 @@
             .join('');
     };
 
+    function youtubeIdFromValue(raw) {
+        return (String(raw || '').match(/[\w-]{11}/) || [])[0] || '';
+    }
+
+    function reelThumbUrl(reel, ytId) {
+        if (reel.thumbnail) return esc(reel.thumbnail);
+        if (ytId) return 'https://i.ytimg.com/vi/' + ytId + '/hqdefault.jpg';
+        return '';
+    }
+
+    function renderReelCard(reel) {
+        const title = esc(reel.title || 'Reel');
+        const subtitle = esc(reel.subtitle || reel.category || '');
+        const ytId = youtubeIdFromValue(reel.youtubeId || reel.url || reel.videoUrl);
+        const videoUrl = reel.videoUrl && !ytId ? esc(reel.videoUrl) : '';
+        const thumb = reelThumbUrl(reel, ytId);
+        let media = '';
+        if (videoUrl) {
+            media =
+                '<video src="' +
+                videoUrl +
+                '" muted playsinline loop preload="metadata" poster="' +
+                thumb +
+                '"></video><span class="cg-reel-play" aria-hidden="true"><i class="fas fa-play-circle"></i></span>';
+        } else if (thumb) {
+            const watch = ytId ? 'https://www.youtube.com/watch?v=' + ytId : reel.url || '#';
+            media =
+                '<a href="' +
+                esc(watch) +
+                '" target="_blank" rel="noopener noreferrer" style="display:block;height:100%;">' +
+                '<img src="' +
+                thumb +
+                '" alt="' +
+                title +
+                '" loading="lazy">' +
+                '<span class="cg-reel-play" aria-hidden="true"><i class="fas fa-play-circle"></i></span></a>';
+        }
+        return (
+            '<article class="cg-reel-card">' +
+            '<div class="cg-reel-media">' +
+            media +
+            '</div>' +
+            '<div class="cg-reel-body"><h4>' +
+            title +
+            '</h4>' +
+            (subtitle ? '<p>' + subtitle + '</p>' : '') +
+            '</div></article>'
+        );
+    }
+
+    window.renderCongressReels = function renderCongressReels(cms) {
+        const section = document.getElementById('cg-reels-section');
+        const track = document.getElementById('cg-reels-track');
+        const titleEl = document.getElementById('cg-reels-title');
+        const subEl = document.getElementById('cg-reels-subtitle');
+        if (!section || !track) return;
+        const reels = (Array.isArray(cms.videoReels) ? cms.videoReels : []).filter(function (r) {
+            return r && (r.title || r.youtubeId || r.url || r.videoUrl);
+        });
+        const meta = cms.videoReelsSection || {};
+        if (titleEl) titleEl.textContent = meta.title || 'Seminar reels & highlights';
+        if (subEl) subEl.textContent = meta.subtitle || 'Short clips from our events and programmes';
+        if (!reels.length) {
+            section.classList.add('hidden');
+            track.innerHTML = '';
+            return;
+        }
+        section.classList.remove('hidden');
+        const cards = reels.map(renderReelCard).join('');
+        track.innerHTML = cards + cards;
+        track.querySelectorAll('video').forEach(function (vid) {
+            vid.addEventListener('mouseenter', function () {
+                try {
+                    vid.play();
+                } catch (_) {}
+            });
+            vid.addEventListener('mouseleave', function () {
+                try {
+                    vid.pause();
+                } catch (_) {}
+            });
+        });
+    };
+
     function bindSpeakerModal() {
         const modal = document.getElementById('cg-speaker-modal');
         const body = document.getElementById('cg-speaker-modal-body');
@@ -947,6 +1031,7 @@
         renderCongressTicker(cms.scrollingAnnouncements || []);
         renderCongressPastSeminars(cms);
         renderCongressVideos(cms);
+        renderCongressReels(cms);
     };
 
     const origSchedules = window.loadEventSchedulesPublic;
