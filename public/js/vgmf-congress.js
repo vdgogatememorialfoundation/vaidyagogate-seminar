@@ -901,14 +901,16 @@
         let player = '';
         if (localVideo) {
             player =
-                '<div class="cg-reel-modal-video"><video src="' +
+                '<div class="cg-reel-modal-video">' +
+                '<video src="' +
                 localVideo +
-                '" controls autoplay playsinline></video></div>';
+                '" controls autoplay playsinline controlsList="nodownload noremoteplayback" disablePictureInPicture disableremoteplayback></video></div>';
         } else if (ytId) {
             player =
-                '<div class="cg-reel-modal-video"><iframe src="https://www.youtube-nocookie.com/embed/' +
+                '<div class="cg-reel-modal-video">' +
+                '<iframe src="https://www.youtube-nocookie.com/embed/' +
                 ytId +
-                '?autoplay=1&rel=0&playsinline=1" title="' +
+                '?autoplay=1&rel=0&playsinline=1&modestbranding=1" title="' +
                 title +
                 '" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>';
         } else {
@@ -925,11 +927,24 @@
         document.body.classList.add('cg-reel-modal-open');
         const vid = body.querySelector('video');
         if (vid) {
+            vid.setAttribute('controlsList', 'nodownload noremoteplayback');
+            vid.setAttribute('disablePictureInPicture', '');
+            vid.oncontextmenu = function (e) {
+                e.preventDefault();
+                return false;
+            };
             vid.muted = false;
             vid.play().catch(function () {
                 vid.muted = true;
                 vid.play().catch(function () {});
             });
+        }
+        const videoWrap = body.querySelector('.cg-reel-modal-video');
+        if (videoWrap) {
+            videoWrap.oncontextmenu = function (e) {
+                e.preventDefault();
+                return false;
+            };
         }
     }
 
