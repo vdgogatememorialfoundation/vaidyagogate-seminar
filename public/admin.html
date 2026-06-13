@@ -496,16 +496,18 @@
 
             <div id="tab-email-compose" class="tab-pane hidden">
                 <h2 style="margin-bottom:8px;">Send email &amp; conversations</h2>
-                <p style="color:#64748b;margin:-4px 0 16px;">Outbound mail uses ZeptoMail. With <strong>Track email replies</strong> on, each send opens a conversation thread — participants can reply by email and you reply here. Support tickets use the same system: doctors reply to <code>care@vaidyagogate.org</code> and the server reads your Zoho inbox automatically (no Mailparser).</p>
+                <p style="color:#64748b;margin:-4px 0 16px;">Outbound mail uses ZeptoMail. With <strong>Track email replies</strong> on, each send opens a conversation thread — participants can reply by email and you reply here. Case judges use the Judge portal (same inbound setup). For ~10k users use bulk send (500 per batch); inbound via Mailparser.io free tier + webhook.</p>
                 <div class="card" style="margin-bottom:16px;border-color:#bae6fd;background:#f0f9ff;">
-                    <h3 style="margin:0 0 8px;color:#0369a1;"><i class="fas fa-inbox"></i> Inbound email (built-in, free)</h3>
+                    <h3 style="margin:0 0 8px;color:#0369a1;"><i class="fas fa-inbox"></i> Support ticket email replies (free — no Mailparser)</h3>
                     <p id="mail-inbound-status" style="margin:0 0 8px;font-size:0.88rem;color:#475569;">Checking…</p>
                     <ol style="margin:0;padding-left:20px;font-size:0.85rem;color:#475569;line-height:1.55;">
-                        <li>Enable <strong>IMAP</strong> in Zoho Mail for <code>care@vaidyagogate.org</code> (use the same app password as SMTP standby in Integrations).</li>
-                        <li>On Render set <code>INBOUND_IMAP_USER=care@vaidyagogate.org</code> (and <code>ZOHO_PASS</code> if not saved in admin).</li>
-                        <li>Optional cron backup: <code>GET /api/cron/poll-inbound-mail</code> every 2 min with <code>Authorization: Bearer CRON_SECRET</code>.</li>
-                        <li>Ticket emails include <code>[VGMF-TKT-…]</code> — keep that line when replying by email.</li>
+                        <li>In <strong>Zoho Mail</strong>, forward <code>care@vaidyagogate.org</code> → <code>vd.gogatememorialfoundation@gmail.com</code> (keep a copy if you like).</li>
+                        <li>In Google Account → Security → App passwords, create one for “Seminar inbound”.</li>
+                        <li>On Render set <code>GMAIL_INBOUND_USER</code> and <code>GMAIL_INBOUND_APP_PASSWORD</code>.</li>
+                        <li>Outbound ticket emails use Reply-To <code>care@vaidyagogate.org</code> with a <code>[VGMF-TKT-…]</code> reference — replies land in the portal thread.</li>
+                        <li>Agents reply in <a href="/support">Support desk</a> or by email from their registered address (keep the reference line).</li>
                     </ol>
+                    <p style="margin:10px 0 0;font-size:0.82rem;color:#64748b;">Optional webhook: <code id="mail-inbound-webhook-url">…</code> · Header <code>x-inbound-mail-secret</code></p>
                 </div>
                 <div class="card" style="margin-bottom:16px;">
                     <h3 style="margin:0 0 12px;">Conversations</h3>
@@ -597,7 +599,8 @@
                 <div class="card">
                     <div style="display: flex; gap: 10px; margin-bottom: 15px;">
                         <select id="ticket-status-filter" onchange="loadSupportTickets()" style="flex: 1;">
-                            <option value="">All Status</option>
+                            <option value="">Active tickets</option>
+                            <option value="__all__">All statuses</option>
                             <option value="open">Open</option>
                             <option value="in_progress">In Progress</option>
                             <option value="resolved">Resolved</option>
@@ -3151,6 +3154,6 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
-    <script src="/js/admin.js?v=20260613imap1"></script>
+    <script src="/js/admin.js?v=20260613cancel3"></script>
 </body>
 </html>

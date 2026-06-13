@@ -12626,6 +12626,25 @@ app.get('/api/admin/mail/inbound-status', (req, res) => {
     res.json(adminMailThreads.inboundStatus());
 });
 
+app.post('/api/admin/mail/poll-inbound', (req, res) => {
+    const aid = parseInt((req.body && req.body.actingAdminId) || (req.query && req.query.actingAdminId), 10);
+    if (!Number.isInteger(aid) || aid < 1) return res.status(400).json({ error: 'actingAdminId is required' });
+    assertAdminPortalActor(aid, (e) => {
+        if (e && e.message === 'FORBIDDEN') return res.status(403).json({ error: 'Administrator access required' });
+        if (e) return res.status(500).json({ error: e.message });
+        const gmailInbound = require('./lib/gmail-inbound-poller');
+        if (!gmailInbound.enabled()) {
+            return res.status(503).json({
+                error: 'Gmail inbound not configured. Set GMAIL_INBOUND_USER and GMAIL_INBOUND_APP_PASSWORD on the server.'
+            });
+        }
+        gmailInbound
+            .pollOnce(db)
+            .then((stats) => res.json({ success: true, stats: stats || {} }))
+            .catch((err) => res.status(500).json({ error: err.message }));
+    });
+});
+
 app.get('/api/admin/mail/threads', (req, res) => {
     const aid = parseInt(req.query.actingAdminId, 10);
     if (!Number.isInteger(aid) || aid < 1) return res.status(400).json({ error: 'actingAdminId is required' });
@@ -13273,6 +13292,32 @@ app.post('/api/support-ticket/:ticketId/feedback', (req, res) => {
     });
 });
 
+app.get('/api/support-rating/:token', (req, res) => {
+    const supportTicketFeedback = require('./lib/support-ticket-feedback');
+    supportTicketFeedback.resolveFeedbackToken(db, req.params.token, (err, info) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!info) return res.status(404).json({ error: 'Invalid or expired rating link' });
+        res.json({
+            ticketId: info.ticketId,
+            subject: info.subject,
+            status: info.status,
+            userName: info.userName,
+            alreadyRated: info.alreadyRated,
+            rating: info.rating
+        });
+    });
+});
+
+app.post('/api/support-rating/:token', (req, res) => {
+    const rating = parseInt(req.body && req.body.rating, 10);
+    const comment = String((req.body && req.body.comment) || '').trim();
+    const supportTicketFeedback = require('./lib/support-ticket-feedback');
+    supportTicketFeedback.submitFeedbackByToken(db, req.params.token, rating, comment, (err) => {
+        if (err) return res.status(400).json({ error: err.message });
+        res.json({ success: true });
+    });
+});
+
 // Add Reply to Support Ticket
 app.post('/api/support-ticket/:ticketId/reply', (req, res) => {
     const { ticketId } = req.params;
@@ -13600,6 +13645,8 @@ app.get('/api/admin/support-tickets', (req, res) => {
     if (status) {
         query += ` AND st.status = ?`;
         params.push(status);
+    } else if (req.query.includeClosed !== '1') {
+        query += ` AND LOWER(TRIM(st.status)) NOT IN ('resolved','closed')`;
     }
     if (category) {
         query += ` AND st.category = ?`;
@@ -13640,9 +13687,11 @@ app.put('/api/admin/support-ticket/:ticketId/status', (req, res) => {
         if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
         const oldStatus = ticket.status;
         const canonical = canonicalTicketMessageId(ticket);
+        const terminal = String(status || '').toLowerCase() === 'resolved' || String(status || '').toLowerCase() === 'closed';
+        const resolvedSql = terminal ? `, resolved_at = COALESCE(resolved_at, CURRENT_TIMESTAMP)` : '';
 
         db.run(
-            `UPDATE support_tickets SET status = ?, assigned_to_admin = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+            `UPDATE support_tickets SET status = ?, assigned_to_admin = ?, updated_at = CURRENT_TIMESTAMP${resolvedSql} WHERE id = ?`,
             [status, adminId || null, ticket.id],
             function (updErr) {
                 if (updErr) return res.status(500).json({ error: updErr.message });
@@ -13652,10 +13701,12 @@ app.put('/api/admin/support-ticket/:ticketId/status', (req, res) => {
                     oldStatus,
                     status,
                     adminId,
-                    (nErr) => {
+                    (nErr, out) => {
                         if (nErr) console.warn('[support-ticket] status notify:', nErr.message);
                         flushNotificationQueue();
-                        res.json({ success: true });
+                        const payload = { success: true, status };
+                        if (out && out.ratingUrl) payload.ratingUrl = out.ratingUrl;
+                        res.json(payload);
                     }
                 );
             }
@@ -13855,12 +13906,6 @@ function startBackgroundWorkers() {
                 }
             });
         });
-        try {
-            const inboundImap = require('./lib/inbound-imap-poller');
-            inboundImap.startBackgroundPoll(db);
-        } catch (eImap) {
-            console.warn('[inbound-imap] start:', eImap.message);
-        }
     });
     if (jobsModule && typeof jobsModule.startWorkers === 'function' && process.env.DISABLE_BACKGROUND_JOBS !== '1') {
         jobsModule.startWorkers(db);
@@ -13947,22 +13992,6 @@ app.get('/api/cron/live-chat-no-reply-escalations', (req, res) => {
     const supportLiveChat = require('./lib/support-live-chat');
     const run = () => {
         supportLiveChat.processAllNoReplyEscalations(db, { createSupportTicketRecord }, (err, result) => {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json({ ok: true, ...(result || {}) });
-        });
-    };
-    if (appReadyResolved) return run();
-    if (appReadyPromise) {
-        return appReadyPromise.then(run).catch((e) => res.status(503).json({ error: e.message }));
-    }
-    run();
-});
-
-app.get('/api/cron/poll-inbound-mail', (req, res) => {
-    if (!authorizeCron(req, res)) return;
-    const inboundImap = require('./lib/inbound-imap-poller');
-    const run = () => {
-        inboundImap.pollOnce(db, (err, result) => {
             if (err) return res.status(500).json({ error: err.message });
             res.json({ ok: true, ...(result || {}) });
         });
@@ -14067,6 +14096,11 @@ if (require.main === module) {
                 console.log(`Server is running on http://localhost:${PORT}`);
                 console.log('[routes] Case presentation APIs: /api/admin/case/programs, /api/case/programs');
                 renderKeepalive.startRenderKeepalive();
+                try {
+                    require('./lib/gmail-inbound-poller').startGmailInboundPoller(db);
+                } catch (e) {
+                    console.warn('[gmail-inbound] start failed:', e.message);
+                }
             });
         });
     });

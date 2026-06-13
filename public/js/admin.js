@@ -12442,16 +12442,21 @@ async function initAdminEmailComposeTab() {
 
 async function loadAdminMailInboundStatus() {
     const st = document.getElementById('mail-inbound-status');
+    const wh = document.getElementById('mail-inbound-webhook-url');
+    if (wh) {
+        const base = (window.__publicBaseUrl || 'https://seminar.vaidyagogate.org').replace(/\/$/, '');
+        wh.textContent = base + '/api/webhooks/inbound-email';
+    }
     try {
         const res = await fetch('/api/admin/mail/inbound-status');
         const data = await res.json();
         if (st) {
             st.style.color = data.configured ? '#15803d' : '#b45309';
-            let line = data.configured ? '✓ ' + (data.hint || 'Inbound ready') : '⚠ ' + (data.hint || 'Not configured');
-            if (data.imap && data.imap.mailbox) {
-                line += ' · Mailbox: ' + data.imap.mailbox;
+            let txt = data.configured ? '✓ ' + data.hint : '⚠ ' + (data.hint || 'Not configured');
+            if (data.gmailInbound && data.gmailInbound.enabled) {
+                txt += ' · Gmail: ' + (data.gmailInbound.user || 'connected');
             }
-            st.textContent = line;
+            st.textContent = txt;
         }
     } catch (_) {
         if (st) st.textContent = 'Could not load inbound status.';
@@ -12881,7 +12886,8 @@ async function loadSupportTickets() {
         
         let url = '/api/admin/support-tickets';
         const params = [];
-        if(status) params.push(`status=${status}`);
+        if (status === '__all__') params.push('includeClosed=1');
+        else if (status) params.push(`status=${encodeURIComponent(status)}`);
         if(priority) params.push(`priority=${priority}`);
         if(params.length > 0) url += '?' + params.join('&');
         
@@ -12967,9 +12973,23 @@ async function updateTicketStatus() {
         });
         
         if(res.ok) {
-            alert('Ticket status updated');
+            const data = await res.json().catch(() => ({}));
+            const terminal = newStatus === 'resolved' || newStatus === 'closed';
+            alert(
+                terminal
+                    ? 'Ticket marked ' +
+                      newStatus +
+                      '. It is removed from the active list and a rating link was emailed to the participant.'
+                    : 'Ticket status updated'
+            );
             document.getElementById('ticket-status-update').value = '';
             loadSupportTickets();
+            if (terminal) {
+                document.getElementById('ticket-detail-modal').classList.add('hidden');
+                currentViewingTicketId = null;
+            } else {
+                viewSupportTicket(currentViewingTicketId);
+            }
         }
     } catch(err) { console.error(err); }
 }

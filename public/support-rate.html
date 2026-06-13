@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Rate support | Vaidya Gogate Memorial Foundation</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/vgmf-site.css">
+    <link rel="stylesheet" href="/css/vgmf-responsive.css?v=20260520c">
+    <style>
+        body { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; background: #f8fafc; margin: 0; min-height: 100vh; }
+        .sr-wrap { max-width: 520px; margin: 0 auto; padding: 32px 16px 48px; }
+        .sr-card { background: #fff; border-radius: 16px; box-shadow: 0 8px 30px rgba(15, 23, 42, 0.08); padding: 28px 24px; }
+        .sr-card h1 { margin: 0 0 8px; font-size: 1.35rem; color: #0f172a; }
+        .sr-lead { color: #64748b; font-size: 0.95rem; line-height: 1.55; margin: 0 0 20px; }
+        .sr-meta { font-size: 0.88rem; color: #475569; margin-bottom: 18px; }
+        .sr-stars { display: flex; gap: 8px; margin: 16px 0; }
+        .sr-star { font-size: 2rem; cursor: pointer; color: #cbd5e1; background: none; border: none; padding: 0; line-height: 1; }
+        .sr-star.active, .sr-star:hover { color: #f59e0b; }
+        textarea { width: 100%; min-height: 90px; border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px 12px; font: inherit; box-sizing: border-box; }
+        .sr-btn { margin-top: 16px; width: 100%; padding: 12px 16px; border: none; border-radius: 10px; background: #0f766e; color: #fff; font-weight: 700; font-size: 1rem; cursor: pointer; }
+        .sr-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+        .sr-msg { margin-top: 14px; font-size: 0.9rem; }
+        .sr-msg.err { color: #b91c1c; }
+        .sr-msg.ok { color: #0f766e; }
+        .sr-back { display: inline-block; margin-bottom: 16px; color: #0f766e; text-decoration: none; font-weight: 600; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+    <div class="sr-wrap">
+        <a href="/" class="sr-back">← Back to portal</a>
+        <div class="sr-card">
+            <div id="sr-loading"><p class="sr-lead">Loading…</p></div>
+            <div id="sr-form" style="display:none;">
+                <h1>Rate your support experience</h1>
+                <p class="sr-lead">Your feedback helps us improve. This link works once for your ticket.</p>
+                <div class="sr-meta" id="sr-meta"></div>
+                <p style="font-weight:600;margin:0 0 4px;">Your rating</p>
+                <div class="sr-stars" id="sr-stars" aria-label="Star rating"></div>
+                <label for="sr-comment" style="display:block;font-weight:600;margin:12px 0 6px;">Comments (optional)</label>
+                <textarea id="sr-comment" maxlength="2000" placeholder="Tell us what went well or what we can improve…"></textarea>
+                <button type="button" class="sr-btn" id="sr-submit" disabled>Submit feedback</button>
+                <div id="sr-msg" class="sr-msg" style="display:none;"></div>
+            </div>
+            <div id="sr-done" style="display:none;">
+                <h1>Thank you</h1>
+                <p class="sr-lead" id="sr-done-text">Your feedback has been recorded.</p>
+            </div>
+        </div>
+    </div>
+    <script>
+        (function () {
+            const params = new URLSearchParams(window.location.search);
+            const token = params.get('token') || '';
+            let selectedRating = 0;
+            const loading = document.getElementById('sr-loading');
+            const form = document.getElementById('sr-form');
+            const done = document.getElementById('sr-done');
+            const starsRoot = document.getElementById('sr-stars');
+            const submitBtn = document.getElementById('sr-submit');
+            const msg = document.getElementById('sr-msg');
+
+            function showMsg(text, ok) {
+                msg.style.display = 'block';
+                msg.textContent = text;
+                msg.className = 'sr-msg ' + (ok ? 'ok' : 'err');
+            }
+
+            function renderStars() {
+                starsRoot.innerHTML = '';
+                for (let i = 1; i <= 5; i++) {
+                    const btn = document.createElement('button');
+                    btn.type = 'button';
+                    btn.className = 'sr-star' + (i <= selectedRating ? ' active' : '');
+                    btn.textContent = '★';
+                    btn.setAttribute('aria-label', i + ' star' + (i > 1 ? 's' : ''));
+                    btn.onclick = function () {
+                        selectedRating = i;
+                        renderStars();
+                        submitBtn.disabled = false;
+                    };
+                    starsRoot.appendChild(btn);
+                }
+            }
+
+            async function init() {
+                if (!token) {
+                    loading.innerHTML = '<p class="sr-lead sr-msg err">Missing rating link. Open the link from your email.</p>';
+                    return;
+                }
+                try {
+                    const res = await fetch('/api/support-rating/' + encodeURIComponent(token));
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || 'Invalid link');
+                    loading.style.display = 'none';
+                    if (data.alreadyRated) {
+                        done.style.display = 'block';
+                        document.getElementById('sr-done-text').textContent =
+                            'You already rated this ticket' +
+                            (data.rating ? ' (' + data.rating + '/5).' : '.') +
+                            ' Thank you for your feedback.';
+                        return;
+                    }
+                    form.style.display = 'block';
+                    document.getElementById('sr-meta').textContent =
+                        (data.ticketId ? 'Ticket ' + data.ticketId : 'Support ticket') +
+                        (data.subject ? ' — ' + data.subject : '');
+                    renderStars();
+                } catch (e) {
+                    loading.innerHTML =
+                        '<p class="sr-lead sr-msg err">' + (e.message || 'Could not load rating page') + '</p>';
+                }
+            }
+
+            submitBtn.onclick = async function () {
+                submitBtn.disabled = true;
+                showMsg('Submitting…', true);
+                try {
+                    const res = await fetch('/api/support-rating/' + encodeURIComponent(token), {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            rating: selectedRating,
+                            comment: document.getElementById('sr-comment').value.trim()
+                        })
+                    });
+                    const data = await res.json();
+                    if (!res.ok) throw new Error(data.error || 'Submit failed');
+                    form.style.display = 'none';
+                    done.style.display = 'block';
+                    document.getElementById('sr-done-text').textContent =
+                        'Thank you for rating our support ' + selectedRating + '/5.';
+                } catch (e) {
+                    showMsg(e.message || 'Submit failed', false);
+                    submitBtn.disabled = selectedRating < 1;
+                }
+            };
+
+            init();
+        })();
+    </script>
+</body>
+</html>

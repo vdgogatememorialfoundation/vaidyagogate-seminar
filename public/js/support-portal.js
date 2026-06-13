@@ -288,7 +288,7 @@
         if (!currentTicketRef) return;
         const status = document.getElementById('support-ticket-status').value || 'closed';
         const closingNote = document.getElementById('support-ticket-close-note').value.trim();
-        if (!confirm('Mark this ticket as ' + status + '? The participant can still read the thread and leave feedback.')) {
+        if (!confirm('Mark this ticket as ' + status + '? It will leave the active queue and the participant will receive a one-time rating link by email.')) {
             return;
         }
         try {
@@ -296,10 +296,10 @@
                 method: 'PUT',
                 body: { status, closingNote }
             });
-            document.getElementById('support-modal-msg').textContent = 'Ticket marked ' + status + '.';
             document.getElementById('support-ticket-close-note').value = '';
+            document.getElementById('support-ticket-modal').classList.add('hidden');
+            currentTicketRef = null;
             supportLoadTickets(true);
-            supportOpenTicket(currentTicketRef);
         } catch (e) {
             document.getElementById('support-modal-msg').textContent = e.message;
         }
