@@ -2876,6 +2876,23 @@
                     <div><label>Is Active?</label><select id="seminar-active"><option value="1">Yes</option><option value="0">No</option></select></div>
                 </div>
                 <div><label>Google Maps Embed URL</label><input type="text" id="seminar-location-url" placeholder="https://www.google.com/maps/embed?..."></div>
+                <div style="background:#eef2ff;padding:15px;border:1px solid #c7d2fe;border-radius:12px;">
+                    <h4 style="margin:0 0 10px;color:#3730a3;">Online webinar</h4>
+                    <p style="color:#64748b;font-size:0.85rem;margin:0 0 12px;">For online or hybrid seminars. The meeting link is <strong>never shown directly</strong> — only registered, paid doctors get a one-time join link from the doctor portal (Zoom, Meet, Teams, Webex, or custom URL).</p>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+                        <div><label>Delivery mode</label><select id="seminar-delivery-mode" onchange="syncSeminarWebinarUi()"><option value="in_person">In-person only</option><option value="online">Online webinar only</option><option value="hybrid">Hybrid (venue + online)</option></select></div>
+                        <div id="seminar-webinar-provider-wrap"><label>Meeting platform</label><select id="seminar-webinar-provider"><option value="zoom">Zoom</option><option value="google_meet">Google Meet</option><option value="microsoft_teams">Microsoft Teams</option><option value="cisco_webex">Cisco Webex</option><option value="custom_link">Custom link</option><option value="vgmf_room">VGMF room (built-in, coming soon)</option></select></div>
+                    </div>
+                    <div id="seminar-webinar-fields" style="display:grid;gap:10px;opacity:0.5;pointer-events:none;">
+                        <div><label>Meeting link (admin only — not public)</label><input type="url" id="seminar-webinar-url" placeholder="https://zoom.us/j/... or meet.google.com/..."></div>
+                        <div><label>Join instructions for doctors</label><textarea id="seminar-webinar-instructions" rows="2" placeholder="Join 10 minutes early. Keep camera off until Q&amp;A."></textarea></div>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                            <div><label>Join opens (IST, optional)</label><input type="datetime-local" id="seminar-webinar-opens"></div>
+                            <div><label>Join closes (IST, optional)</label><input type="datetime-local" id="seminar-webinar-closes"></div>
+                        </div>
+                        <label style="display:flex;align-items:flex-start;gap:8px;font-size:0.9rem;"><input type="checkbox" id="seminar-webinar-single-device"> Lock join to first device used (reduces link sharing)</label>
+                    </div>
+                </div>
                 <div><label>Terms and Conditions</label><textarea id="seminar-terms" rows="3"></textarea></div>
                 <div style="background: #eff6ff; padding: 15px; border: 1px solid #bfdbfe; border-radius: 12px;">
                     <h4 style="margin-bottom: 10px; color:#1e40af;">Per-seminar links, policy &amp; form override</h4>

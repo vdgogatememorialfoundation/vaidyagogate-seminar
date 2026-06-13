@@ -11671,6 +11671,21 @@ function syncSeminarPreregUi() {
     wrap.style.pointerEvents = on ? 'auto' : 'none';
 }
 
+function syncSeminarWebinarUi() {
+    const mode = (document.getElementById('seminar-delivery-mode') || {}).value || 'in_person';
+    const online = mode === 'online' || mode === 'hybrid';
+    const wrap = document.getElementById('seminar-webinar-fields');
+    const prov = document.getElementById('seminar-webinar-provider-wrap');
+    if (wrap) {
+        wrap.style.opacity = online ? '1' : '0.5';
+        wrap.style.pointerEvents = online ? 'auto' : 'none';
+    }
+    if (prov) {
+        prov.style.opacity = online ? '1' : '0.5';
+        prov.style.pointerEvents = online ? 'auto' : 'none';
+    }
+}
+
 function openCreateSeminarModal() {
     document.getElementById('admin-seminar-modal').classList.remove('hidden');
     document.getElementById('seminar-form').reset();
@@ -11689,6 +11704,7 @@ function openCreateSeminarModal() {
     const preregCh = document.getElementById('seminar-prereg-enabled');
     if (preregCh) preregCh.checked = false;
     syncSeminarPreregUi();
+    syncSeminarWebinarUi();
 }
 
 async function loadAdminPortalYear() {
@@ -11806,6 +11822,21 @@ function editSeminar(index) {
     const ple = document.getElementById('seminar-public-list-enabled');
     if (ple) ple.value = s.public_list_enabled ? '1' : '0';
     document.getElementById('seminar-location-url').value = s.location_url || '';
+    const dm = document.getElementById('seminar-delivery-mode');
+    if (dm) dm.value = s.delivery_mode || 'in_person';
+    const wp = document.getElementById('seminar-webinar-provider');
+    if (wp) wp.value = s.webinar_provider || 'custom_link';
+    const wu = document.getElementById('seminar-webinar-url');
+    if (wu) wu.value = s.webinar_meeting_url || '';
+    const wi = document.getElementById('seminar-webinar-instructions');
+    if (wi) wi.value = s.webinar_join_instructions || '';
+    const wo = document.getElementById('seminar-webinar-opens');
+    if (wo) wo.value = formatDt(s.webinar_join_opens);
+    const wc = document.getElementById('seminar-webinar-closes');
+    if (wc) wc.value = formatDt(s.webinar_join_closes);
+    const wsd = document.getElementById('seminar-webinar-single-device');
+    if (wsd) wsd.checked = Number(s.webinar_single_device) === 1;
+    syncSeminarWebinarUi();
     document.getElementById('seminar-terms').value = s.terms_conditions || '';
     const wh = document.getElementById('seminar-whatsapp');
     if (wh) wh.value = s.whatsapp_group_url || '';
@@ -11895,6 +11926,21 @@ async function saveSeminar(e) {
         public_list_enabled: document.getElementById('seminar-public-list-enabled')?.value === '1',
         cert_scans_required: parseInt(document.getElementById('seminar-cert-scans-required')?.value || '1', 10) === 2 ? 2 : 1,
         location_url: document.getElementById('seminar-location-url').value || null,
+        delivery_mode: (document.getElementById('seminar-delivery-mode') || {}).value || 'in_person',
+        webinar_provider: (document.getElementById('seminar-webinar-provider') || {}).value || null,
+        webinar_meeting_url: (document.getElementById('seminar-webinar-url') || {}).value || null,
+        webinar_join_instructions: (document.getElementById('seminar-webinar-instructions') || {}).value || null,
+        webinar_join_opens: (() => {
+            const el = document.getElementById('seminar-webinar-opens');
+            if (!el || !el.value) return null;
+            return window.PortalDateTime ? window.PortalDateTime.fromDatetimeLocal(el.value) : el.value;
+        })(),
+        webinar_join_closes: (() => {
+            const el = document.getElementById('seminar-webinar-closes');
+            if (!el || !el.value) return null;
+            return window.PortalDateTime ? window.PortalDateTime.fromDatetimeLocal(el.value) : el.value;
+        })(),
+        webinar_single_device: (document.getElementById('seminar-webinar-single-device') || {}).checked === true,
         terms_conditions: document.getElementById('seminar-terms').value || null,
         hero_image_path: (document.getElementById('seminar-hero-image') || {}).value || null,
         flyer_path: (document.getElementById('seminar-flyer') || {}).value || null,

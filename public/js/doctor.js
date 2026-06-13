@@ -7353,6 +7353,26 @@ async function openDoctorOrderReceipt(orderDbId) {
     w.document.close();
 }
 
+async function joinDoctorWebinar(ticketIdString) {
+    const uid = doctorNumericUserId();
+    if (!uid || !ticketIdString) return;
+    try {
+        const res = await fetch('/api/doctor/webinar/join', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: uid, ticketIdString: ticketIdString })
+        });
+        const data = await res.json();
+        if (!res.ok || !data.success || !data.enterUrl) {
+            alert((data && data.error) || 'Could not open webinar join link.');
+            return;
+        }
+        window.open(data.enterUrl, '_blank', 'noopener,noreferrer');
+    } catch (e) {
+        alert(e.message || 'Network error');
+    }
+}
+
 async function loadDoctorEventTickets() {
     const box = document.getElementById('tickets-container');
     if (!box || !currentUser) return;
@@ -7405,6 +7425,17 @@ async function loadDoctorEventTickets() {
                     <p style="margin:4px 0;font-size:0.9rem;"><strong>Order:</strong> ${escapeHtml(String(t.order_id_string || '—'))} · <strong>Application:</strong> ${escapeHtml(String(t.application_no || '—'))}</p>
                     <p style="margin:4px 0;font-size:0.9rem;"><strong>Registration:</strong> ${escapeHtml(t.registration_status || '—')} · <strong>Payment:</strong> ${escapeHtml(t.order_status || '—')}</p>
                     ${statusLine}
+                    ${
+                        !invalid && t.can_join_webinar
+                            ? `<p style="margin:12px 0 0;"><button type="button" class="btn-success" style="padding:10px 16px;border:none;border-radius:8px;cursor:pointer;font-weight:700;" onclick="joinDoctorWebinar('${escapeHtml(String(t.ticket_id_string || ''))}')"><i class="fas fa-video"></i> Join webinar (${escapeHtml(t.webinar_provider_label || 'secure link')})</button></p>` +
+                              (t.webinar_join_instructions
+                                  ? `<p style="margin:8px 0 0;font-size:0.82rem;color:#475569;">${escapeHtml(t.webinar_join_instructions)}</p>`
+                                  : '') +
+                              `<p style="margin:6px 0 0;font-size:0.78rem;color:#64748b;">One-time join link · valid 15 minutes · do not share</p>`
+                            : !invalid && t.delivery_mode && (t.delivery_mode === 'online' || t.delivery_mode === 'hybrid') && t.webinar_join_error
+                              ? `<p style="margin:12px 0 0;font-size:0.82rem;color:#92400e;">${escapeHtml(t.webinar_join_error)}</p>`
+                              : ''
+                    }
                     ${
                         !invalid && t.ticket_id_string
                             ? `<p style="margin:12px 0 0;"><a href="/api/doctor/ticket-document/${encodeURIComponent(t.ticket_id_string)}?userId=${encodeURIComponent(String(uid))}" target="_blank" rel="noopener" class="btn-primary" style="display:inline-block;padding:8px 14px;text-decoration:none;font-size:0.88rem;">Download / print e-ticket (PDF)</a></p>`
