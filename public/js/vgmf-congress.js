@@ -835,7 +835,7 @@
             media =
                 '<video src="' +
                 videoUrl +
-                '#t=0.1" muted playsinline loop preload="metadata"' +
+                '" muted playsinline loop preload="metadata"' +
                 (thumb ? ' poster="' + thumb + '"' : '') +
                 '></video><span class="cg-reel-play" aria-hidden="true"><i class="fas fa-play-circle"></i></span>';
         } else if (ytId || thumb) {
@@ -867,49 +867,107 @@
         );
     }
 
+    function dedupeReels(list) {
+        const seen = new Set();
+        return (list || []).filter(function (r) {
+            if (!r) return false;
+            const key = [r.title, r.videoUrl, r.youtubeId, r.url, r.thumbnail].join('||').toLowerCase();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return !!(r.title || r.youtubeId || r.url || r.videoUrl);
+        });
+    }
+
+    function bindReelVideos(track) {
+        if (!track) return;
+        track.querySelectorAll('.cg-reel-media').forEach(function (wrap) {
+            const vid = wrap.querySelector('video');
+            if (!vid) return;
+
+            function markPlaying() {
+                wrap.classList.add('is-playing');
+            }
+            function markPaused() {
+                wrap.classList.remove('is-playing');
+            }
+
+            vid.addEventListener('loadeddata', function () {
+                try {
+                    vid.currentTime = 0.1;
+                } catch (_) {}
+            });
+            vid.addEventListener('play', markPlaying);
+            vid.addEventListener('pause', markPaused);
+            vid.addEventListener('ended', markPaused);
+
+            function togglePlay(e) {
+                if (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+                if (vid.paused) {
+                    vid.muted = false;
+                    const p = vid.play();
+                    if (p && typeof p.then === 'function') {
+                        p.then(markPlaying).catch(function () {
+                            vid.muted = true;
+                            return vid.play().then(markPlaying).catch(markPaused);
+                        });
+                    }
+                } else {
+                    vid.pause();
+                    markPaused();
+                }
+            }
+
+            wrap.addEventListener('click', togglePlay);
+            wrap.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' || e.key === ' ') togglePlay(e);
+            });
+            wrap.setAttribute('tabindex', '0');
+            wrap.setAttribute('role', 'button');
+            wrap.setAttribute('aria-label', 'Play video');
+
+            wrap.addEventListener('mouseenter', function () {
+                if (window.matchMedia('(hover: hover)').matches) {
+                    vid.muted = true;
+                    vid.play().catch(function () {});
+                }
+            });
+            wrap.addEventListener('mouseleave', function () {
+                if (window.matchMedia('(hover: hover)').matches && !wrap.classList.contains('is-playing')) {
+                    vid.pause();
+                    try {
+                        vid.currentTime = 0.1;
+                    } catch (_) {}
+                }
+            });
+        });
+    }
+
     window.renderCongressReels = function renderCongressReels(cms) {
         const section = document.getElementById('cg-reels-section');
         const track = document.getElementById('cg-reels-track');
         const titleEl = document.getElementById('cg-reels-title');
         const subEl = document.getElementById('cg-reels-subtitle');
         if (!section || !track) return;
-        const reels = (Array.isArray(cms.videoReels) ? cms.videoReels : []).filter(function (r) {
-            return r && (r.title || r.youtubeId || r.url || r.videoUrl);
-        });
+        const reels = dedupeReels(Array.isArray(cms.videoReels) ? cms.videoReels : []);
         const meta = cms.videoReelsSection || {};
         if (titleEl) titleEl.textContent = meta.title || 'Seminar reels & highlights';
         if (subEl) subEl.textContent = meta.subtitle || 'Short clips from our events and programmes';
+        section.classList.toggle('cg-reels-section--single', reels.length === 1);
         if (!reels.length) {
             section.classList.add('hidden');
             track.innerHTML = '';
+            track.className = 'cg-reels-track';
             return;
         }
         section.classList.remove('hidden');
         const cards = reels.map(renderReelCard).join('');
-        track.innerHTML = cards + cards;
-        track.querySelectorAll('video').forEach(function (vid) {
-            vid.addEventListener('loadeddata', function () {
-                try {
-                    vid.currentTime = 0.1;
-                } catch (_) {}
-            });
-            vid.addEventListener('mouseenter', function () {
-                try {
-                    vid.play();
-                } catch (_) {}
-            });
-            vid.addEventListener('mouseleave', function () {
-                try {
-                    vid.pause();
-                } catch (_) {}
-            });
-            vid.addEventListener('click', function () {
-                try {
-                    if (vid.paused) vid.play();
-                    else vid.pause();
-                } catch (_) {}
-            });
-        });
+        const useMarquee = reels.length >= 3;
+        track.className = 'cg-reels-track' + (useMarquee ? '' : ' cg-reels-track--static');
+        track.innerHTML = useMarquee ? cards + cards : cards;
+        bindReelVideos(track);
     };
 
     function bindSpeakerModal() {

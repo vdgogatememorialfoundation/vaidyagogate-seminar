@@ -1006,6 +1006,8 @@ footer a.menu-page-hidden {
 .cg-reels-viewport {
     overflow: hidden;
     width: 100%;
+    display: flex;
+    justify-content: center;
     mask-image: linear-gradient(90deg, transparent, #000 4%, #000 96%, transparent);
 }
 .cg-reels-track {
@@ -1014,6 +1016,17 @@ footer a.menu-page-hidden {
     width: max-content;
     animation: cg-reels-marquee 80s linear infinite;
     padding: 4px 0 8px;
+    margin: 0 auto;
+}
+.cg-reels-track.cg-reels-track--static {
+    animation: none;
+    width: auto;
+    max-width: 100%;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+.cg-reels-section.cg-reels-section--single .cg-reel-card {
+    flex: 0 0 min(72vw, 280px);
 }
 .cg-reels-track:hover {
     animation-play-state: paused;
@@ -1040,6 +1053,7 @@ footer a.menu-page-hidden {
     aspect-ratio: 9 / 16;
     background: #0f172a;
     overflow: hidden;
+    cursor: pointer;
 }
 .cg-reel-media video,
 .cg-reel-media iframe,
@@ -1063,6 +1077,13 @@ footer a.menu-page-hidden {
     color: #fff;
     font-size: 2rem;
     pointer-events: none;
+    transition: opacity 0.25s;
+}
+.cg-reel-media.is-playing .cg-reel-play {
+    opacity: 0;
+}
+.cg-reel-media.is-playing:hover .cg-reel-play {
+    opacity: 0.85;
 }
 .cg-reel-body {
     padding: 12px 14px 14px;
