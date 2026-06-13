@@ -7752,7 +7752,8 @@ async function loadChatMessages(silent) {
             const st = String(m.sender_type || '').toLowerCase();
             const isDoc = st === 'user' || st === 'doctor' || (!st && true);
             const isStaffMsg = st === 'admin' || st === 'staff' || st === 'support' || st === 'system';
-            const staffName = m.sender_display_name || 'Support team';
+            const staffName =
+                st === 'system' ? 'Support desk' : m.sender_display_name || 'Support team';
             const viaEmail =
                 m.source === 'email'
                     ? ' <span style="font-size:0.72rem;background:#e0f2fe;color:#0369a1;padding:2px 6px;border-radius:4px;">Email</span>'
@@ -7865,19 +7866,15 @@ async function submitSupportTicket() {
             return;
         }
         if (result.success) {
-            let msg = 'Ticket created: ' + result.ticketId;
-            if (result.expectedResponseDisplay) {
-                msg += ' — Expected response by ' + result.expectedResponseDisplay + ' (IST)';
-            }
-            document.getElementById('ticket-result').innerText = msg;
             document.getElementById('ticket-subj').value = '';
             document.getElementById('ticket-desc').value = '';
-            setTimeout(() => {
-                document.getElementById('new-ticket-form').classList.add('hidden');
-                document.getElementById('ticket-result').innerText = '';
-            }, 2500);
+            document.getElementById('new-ticket-form').classList.add('hidden');
+            document.getElementById('ticket-result').innerText = '';
             loadTickets();
             loadDoctorDashboardStats();
+            if (result.ticketId) {
+                openTicketThread(result.ticketId);
+            }
         }
     } catch (err) {
         console.error(err);

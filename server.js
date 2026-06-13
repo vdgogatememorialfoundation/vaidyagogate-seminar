@@ -13043,16 +13043,35 @@ function createSupportTicketRecord(opts, cb) {
                         [ticketId, senderId, senderType, description],
                         function (err2) {
                             if (err2) return cb(err2);
-                            supportTicketNotify.notifySupportTicketCreated(db, ticketId, (nErr) => {
-                                if (nErr) console.warn('[support-ticket] create notify:', nErr.message);
-                                cb(null, {
-                                    ticketId,
-                                    userId: uid,
-                                    expectedResponseAt: expectedAt,
-                                    expectedResponseHours: slaMeta && slaMeta.hours,
-                                    expectedResponseDisplay: supportTicketSla.formatExpectedDisplay(expectedAt)
-                                });
-                            });
+                            let systemMsg =
+                                'Support ticket ' +
+                                ticketId +
+                                ' was created successfully. Our team has been notified.';
+                            if (expectedAt) {
+                                systemMsg +=
+                                    ' Expected response by ' +
+                                    supportTicketSla.formatExpectedDisplay(expectedAt) +
+                                    ' (IST).';
+                            } else {
+                                systemMsg += ' We will respond as soon as possible.';
+                            }
+                            db.run(
+                                `INSERT INTO ticket_messages (ticket_id, sender_id, sender_type, message) VALUES (?, NULL, 'system', ?)`,
+                                [ticketId, systemMsg],
+                                function (err3) {
+                                    if (err3) console.warn('[support-ticket] system message:', err3.message);
+                                    supportTicketNotify.notifySupportTicketCreated(db, ticketId, (nErr) => {
+                                        if (nErr) console.warn('[support-ticket] create notify:', nErr.message);
+                                        cb(null, {
+                                            ticketId,
+                                            userId: uid,
+                                            expectedResponseAt: expectedAt,
+                                            expectedResponseHours: slaMeta && slaMeta.hours,
+                                            expectedResponseDisplay: supportTicketSla.formatExpectedDisplay(expectedAt)
+                                        });
+                                    });
+                                }
+                            );
                         }
                     );
                 });

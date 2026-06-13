@@ -33,6 +33,9 @@
     let liveGuestUrl = '';
     let liveMsgSince = 0;
     let livePollTimer = null;
+    let liveWaitTimerInterval = null;
+    let liveWaitStartedAt = null;
+    const LIVE_WAIT_MS = 5 * 60 * 1000;
     let liveChatOpen = false;
     let hoursLabel = '';
     let contactFormDismissed = false;
@@ -131,7 +134,52 @@
         );
     }
 
-    function updateLiveMeta() {
+    function stopLiveWaitTimer() {
+        if (liveWaitTimerInterval) {
+            clearInterval(liveWaitTimerInterval);
+            liveWaitTimerInterval = null;
+        }
+    }
+
+    function formatLiveWaitRemaining(ms) {
+        const s = Math.max(0, Math.ceil(ms / 1000));
+        const m = Math.floor(s / 60);
+        const r = s % 60;
+        return m + ':' + String(r).padStart(2, '0');
+    }
+
+    function showLiveWaitTimeoutForm() {
+        showContactForm();
+        addBot(
+            'No agent joined within 5 minutes. Please fill in the contact form below — we will reach out to you.',
+            'Support desk'
+        );
+    }
+
+    function startLiveWaitTimer(startedAtIso) {
+        stopLiveWaitTimer();
+        liveWaitStartedAt = startedAtIso ? new Date(startedAtIso).getTime() : Date.now();
+        if (Number.isNaN(liveWaitStartedAt)) liveWaitStartedAt = Date.now();
+        const tick = () => {
+            if (!liveSessionId || liveAgentName) {
+                stopLiveWaitTimer();
+                updateLiveMeta();
+                return;
+            }
+            const remaining = LIVE_WAIT_MS - (Date.now() - liveWaitStartedAt);
+            if (remaining <= 0) {
+                stopLiveWaitTimer();
+                showLiveWaitTimeoutForm();
+                updateLiveMeta();
+                return;
+            }
+            updateLiveMeta(formatLiveWaitRemaining(remaining));
+        };
+        tick();
+        liveWaitTimerInterval = setInterval(tick, 1000);
+    }
+
+    function updateLiveMeta(waitRemainingLabel) {
         if (!liveMetaEl) return;
         if (!liveSessionId) {
             liveMetaEl.classList.add('hidden');
@@ -139,11 +187,20 @@
             return;
         }
         liveMetaEl.classList.remove('hidden');
-        liveMetaEl.innerHTML =
+        let meta =
             'Ref: <strong>' +
             esc(liveChatRef || '…') +
             '</strong>' +
             (liveAgentName ? ' · Agent: <strong>' + esc(liveAgentName) + '</strong>' : '');
+        if (!liveAgentName && waitRemainingLabel) {
+            meta +=
+                ' · <span style="color:#fef08a;">Waiting ' +
+                esc(waitRemainingLabel) +
+                ' — form opens if no reply</span>';
+        } else if (!liveAgentName) {
+            meta += ' · Waiting for agent…';
+        }
+        liveMetaEl.innerHTML = meta;
         if (guestLinkEl && liveGuestUrl) {
             guestLinkEl.classList.remove('hidden');
             guestLinkEl.innerHTML =
@@ -246,7 +303,10 @@
     function addLiveMessage(m) {
         const st = String(m.sender_type || '').toLowerCase();
         if (st === 'visitor') return;
-        if (st === 'agent' && m.sender_name) liveAgentName = m.sender_name;
+        if (st === 'agent' && m.sender_name) {
+            liveAgentName = m.sender_name;
+            stopLiveWaitTimer();
+        }
         appendMessage({
             role: st === 'system' ? 'system' : 'bot',
             text: m.message,
@@ -274,15 +334,21 @@
                 cache: 'no-store'
             }).then((r) => r.json());
             if (session && session.chatRef) liveChatRef = session.chatRef;
-            if (session && session.agentName) liveAgentName = session.agentName;
+            if (session && session.agentName) {
+                liveAgentName = session.agentName;
+                stopLiveWaitTimer();
+            }
             if (session && session.guestChatUrl) liveGuestUrl = session.guestChatUrl;
             if (session && session.needsContactForm) {
-                showContactForm();
+                showLiveWaitTimeoutForm();
             } else if (session && session.linkedTicketId) {
                 contactFormDismissed = true;
                 hideContactForm();
+            } else if (session && session.status === 'waiting' && !session.agentName) {
+                startLiveWaitTimer(session.startedAt);
             }
             if (session && session.status === 'closed') {
+                stopLiveWaitTimer();
                 clearInterval(livePollTimer);
                 livePollTimer = null;
                 liveBtn.classList.remove('hidden');
@@ -339,22 +405,15 @@
             if (contactFormEl) contactFormEl.classList.add('hidden');
             updateLiveMeta();
             if (data.status === 'offline' || !data.canLive) {
-                addBot(
-                    'Live chat is outside business hours. You can still ask questions here or email care@vaidyagogate.org. Your chat reference is ' +
-                        (liveChatRef || '') +
-                        '.',
-                    'Support desk'
-                );
+                showOfflineContactForm();
                 startLivePoll();
+                pollLiveMessages();
                 return;
             }
             if (data.status === 'waiting') {
-                addBot(
-                    'You are in the queue. Chat reference ' +
-                        liveChatRef +
-                        '. An agent will join shortly — please keep this window open.',
-                    'Support desk'
-                );
+                startLiveWaitTimer(data.startedAt);
+            } else if (data.agentName) {
+                stopLiveWaitTimer();
             }
             startLivePoll();
             pollLiveMessages();

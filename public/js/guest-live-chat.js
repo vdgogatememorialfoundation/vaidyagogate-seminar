@@ -15,6 +15,9 @@
     let agentName = '';
     let msgSince = 0;
     let pollTimer = null;
+    let waitTimerInterval = null;
+    let waitStartedAt = null;
+    const WAIT_MS = 5 * 60 * 1000;
     let contactFormDismissed = false;
     let hoursOpen = false;
     let hoursLabel = '';
@@ -85,11 +88,66 @@
         chatActive.style.display = 'flex';
     }
 
-    function updateMeta() {
+    function stopWaitTimer() {
+        if (waitTimerInterval) {
+            clearInterval(waitTimerInterval);
+            waitTimerInterval = null;
+        }
+    }
+
+    function formatWaitRemaining(ms) {
+        const s = Math.max(0, Math.ceil(ms / 1000));
+        const m = Math.floor(s / 60);
+        const r = s % 60;
+        return m + ':' + String(r).padStart(2, '0');
+    }
+
+    function showWaitTimeoutForm() {
+        showContactForm({ chatRef });
+        appendMsg({
+            role: 'system',
+            text: 'No agent joined within 5 minutes. Please fill in the contact form below — we will reach out to you.'
+        });
+    }
+
+    function startWaitTimer(startedAtIso) {
+        stopWaitTimer();
+        waitStartedAt = startedAtIso ? new Date(startedAtIso).getTime() : Date.now();
+        if (Number.isNaN(waitStartedAt)) waitStartedAt = Date.now();
+        const tick = () => {
+            if (!sessionId || agentName) {
+                stopWaitTimer();
+                updateMeta();
+                return;
+            }
+            const remaining = WAIT_MS - (Date.now() - waitStartedAt);
+            if (remaining <= 0) {
+                stopWaitTimer();
+                showWaitTimeoutForm();
+                updateMeta();
+                return;
+            }
+            updateMeta(formatWaitRemaining(remaining));
+        };
+        tick();
+        waitTimerInterval = setInterval(tick, 1000);
+    }
+
+    function updateMeta(waitRemainingLabel) {
         if (!metaEl) return;
         let html = '';
         if (chatRef) html += 'Ref: <strong>' + esc(chatRef) + '</strong>';
-        if (agentName) html += (html ? ' · ' : '') + 'Agent: <strong>' + esc(agentName) + '</strong>';
+        if (agentName) {
+            html += (html ? ' · ' : '') + 'Agent: <strong>' + esc(agentName) + '</strong>';
+        } else if (waitRemainingLabel) {
+            html +=
+                (html ? ' · ' : '') +
+                'Waiting <strong>' +
+                esc(waitRemainingLabel) +
+                '</strong> — form opens if no reply';
+        } else if (sessionId) {
+            html += (html ? ' · ' : '') + 'Waiting for agent…';
+        }
         metaEl.innerHTML = html;
     }
 
@@ -145,16 +203,22 @@
                 cache: 'no-store'
             }).then((r) => r.json());
             if (session.chatRef) chatRef = session.chatRef;
-            if (session.agentName) agentName = session.agentName;
+            if (session.agentName) {
+                agentName = session.agentName;
+                stopWaitTimer();
+            }
             updateMeta();
             if (session.guestChatUrl) showGuestLink(session.guestChatUrl);
             if (session.needsContactForm) {
-                showContactForm(session);
+                showWaitTimeoutForm();
+            } else if (session.status === 'waiting' && !session.agentName) {
+                startWaitTimer(session.startedAt);
             } else if (session.linkedTicketId) {
                 contactFormDismissed = true;
                 hideContactForm();
             }
             if (session.status === 'closed') {
+                stopWaitTimer();
                 clearInterval(pollTimer);
                 pollTimer = null;
             }
@@ -167,7 +231,10 @@
     function addLiveRow(m) {
         const st = String(m.sender_type || '').toLowerCase();
         if (st === 'visitor') return;
-        if (st === 'agent' && m.sender_name) agentName = m.sender_name;
+        if (st === 'agent' && m.sender_name) {
+            agentName = m.sender_name;
+            stopWaitTimer();
+        }
         appendMsg({
             role: st === 'system' ? 'system' : 'bot',
             text: m.message,
@@ -237,32 +304,11 @@
             updateMeta();
             if (data.guestChatUrl) showGuestLink(data.guestChatUrl);
             if (data.status === 'waiting') {
-                appendMsg({
-                    role: 'system',
-                    text:
-                        'You are in the queue. Reference ' +
-                        chatRef +
-                        '. An agent will join shortly — keep this page open. Your personal link is shown above.'
-                });
-            } else if (data.status === 'active') {
-                appendMsg({
-                    role: 'system',
-                    text:
-                        'Connected' +
-                        (agentName ? ' with ' + agentName : '') +
-                        '. Reference ' +
-                        chatRef +
-                        '.'
-                });
+                startWaitTimer(data.startedAt);
             } else if (data.status === 'offline') {
                 showContactForm({ chatRef });
-                appendMsg({
-                    role: 'system',
-                    text:
-                        'Live chat is outside business hours (' +
-                        (hoursLabel || 'see schedule above') +
-                        '). Please use the contact form — we will reach out to you.'
-                });
+            } else if (data.agentName) {
+                stopWaitTimer();
             }
             startPoll();
             pollMessages();
@@ -300,7 +346,9 @@
                 }
             });
             if (session.needsContactForm) {
-                showContactForm(session);
+                showWaitTimeoutForm();
+            } else if (session.status === 'waiting' && !session.agentName) {
+                startWaitTimer(session.startedAt);
             } else if (session.linkedTicketId) {
                 contactFormDismissed = true;
                 hideContactForm();

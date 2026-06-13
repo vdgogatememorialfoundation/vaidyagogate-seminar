@@ -10,6 +10,9 @@
     let agentName = '';
     let msgSince = 0;
     let pollTimer = null;
+    let waitTimerInterval = null;
+    let waitStartedAt = null;
+    const WAIT_MS = 5 * 60 * 1000;
     let hoursOpen = false;
     let hoursLabel = '';
     let enabled = true;
@@ -48,6 +51,58 @@
         return uid ? 'vgmf_doctor_live_' + uid : 'vgmf_doctor_live';
     }
 
+    function stopWaitTimer() {
+        if (waitTimerInterval) {
+            clearInterval(waitTimerInterval);
+            waitTimerInterval = null;
+        }
+    }
+
+    function formatWaitRemaining(ms) {
+        const s = Math.max(0, Math.ceil(ms / 1000));
+        const m = Math.floor(s / 60);
+        const r = s % 60;
+        return m + ':' + String(r).padStart(2, '0');
+    }
+
+    function showWaitTimeoutForm() {
+        setOfflineMode(true);
+        addSystemNote(
+            '<p style="color:#92400e;background:#fef3c7;padding:10px;border-radius:8px;font-size:0.85rem;margin:0;">No agent joined within 5 minutes. Please send your message below — <strong>we will reach out</strong> as soon as possible.</p>'
+        );
+    }
+
+    function startWaitTimer(startedAtIso) {
+        stopWaitTimer();
+        waitStartedAt = startedAtIso ? new Date(startedAtIso).getTime() : Date.now();
+        if (Number.isNaN(waitStartedAt)) waitStartedAt = Date.now();
+        const tick = () => {
+            const timerEl = document.getElementById('vgmf-doctor-live-wait-timer');
+            if (!sessionId || agentName) {
+                stopWaitTimer();
+                if (timerEl) timerEl.classList.add('hidden');
+                return;
+            }
+            const remaining = WAIT_MS - (Date.now() - waitStartedAt);
+            if (remaining <= 0) {
+                stopWaitTimer();
+                if (timerEl) {
+                    timerEl.textContent = 'Wait time elapsed — please use the form below.';
+                    timerEl.style.color = '#fef08a';
+                }
+                showWaitTimeoutForm();
+                return;
+            }
+            if (timerEl) {
+                timerEl.classList.remove('hidden');
+                timerEl.textContent =
+                    'Waiting for agent… ' + formatWaitRemaining(remaining) + ' remaining (form opens if no reply)';
+            }
+        };
+        tick();
+        waitTimerInterval = setInterval(tick, 1000);
+    }
+
     function stopPoll() {
         if (pollTimer) {
             clearInterval(pollTimer);
@@ -72,6 +127,8 @@
             esc(chatRef || '…') +
             '</strong>' +
             (agentName ? ' · Agent: <strong>' + esc(agentName) + '</strong>' : ' · Waiting for agent…');
+        const timerEl = document.getElementById('vgmf-doctor-live-wait-timer');
+        if (agentName && timerEl) timerEl.classList.add('hidden');
     }
 
     function renderMessage(m) {
@@ -117,7 +174,10 @@
         clearPlaceholder();
         rows.forEach((m) => {
             if (m.id > msgSince) msgSince = m.id;
-            if (m.sender_type === 'agent' && m.sender_name) agentName = m.sender_name;
+            if (m.sender_type === 'agent' && m.sender_name) {
+                agentName = m.sender_name;
+                stopWaitTimer();
+            }
             if (m.sender_type !== 'visitor') {
                 messagesEl.innerHTML += renderMessage(m);
             }
@@ -152,8 +212,15 @@
             const session = await res.json();
             if (!res.ok || !session) return;
             chatRef = session.chatRef || chatRef;
-            if (session.agentName) agentName = session.agentName;
+            if (session.agentName) {
+                agentName = session.agentName;
+                stopWaitTimer();
+            }
+            if (session.needsContactForm || session.noReplyEscalated) {
+                showWaitTimeoutForm();
+            }
             if (session.status === 'closed') {
+                stopWaitTimer();
                 stopPoll();
                 sessionId = null;
                 chatRef = '';
@@ -166,6 +233,9 @@
                 updateMeta();
             } else {
                 updateMeta();
+                if (session.status === 'waiting' && !session.agentName) {
+                    startWaitTimer(session.startedAt);
+                }
             }
         } catch (_) {}
     }
@@ -216,6 +286,7 @@
             updateMeta();
             await pollMessages();
             startPoll();
+            if (!agentName) startWaitTimer(parsed.startedAt);
         } catch (_) {
             sessionStorage.removeItem(storageKey());
         }
@@ -299,28 +370,21 @@
             if (inputRow) inputRow.classList.remove('hidden');
             if (startBtn) startBtn.classList.add('hidden');
             if (data.status === 'waiting') {
-                addSystemNote(
-                    '<p style="color:#0369a1;background:#e0f2fe;padding:10px;border-radius:8px;font-size:0.85rem;margin:0;">In queue — reference <strong>' +
-                        esc(chatRef) +
-                        '</strong>. An agent will join shortly.</p>'
-                );
+                startWaitTimer(data.startedAt);
             } else if (data.status === 'active' && agentName) {
+                stopWaitTimer();
+            } else if (data.status === 'offline') {
+                setOfflineMode(true);
                 addSystemNote(
-                    '<p style="color:#065f46;background:#d1fae5;padding:10px;border-radius:8px;font-size:0.85rem;margin:0;">Connected with <strong>' +
-                        esc(agentName) +
-                        '</strong>. Reference <strong>' +
-                        esc(chatRef) +
+                    '<p style="color:#92400e;background:#fef3c7;padding:10px;border-radius:8px;font-size:0.85rem;margin:0;">Support agents are offline. Use the form below — <strong>we will reach out</strong> during: <strong>' +
+                        esc(hoursLabel || 'business hours') +
                         '</strong>.</p>'
                 );
-            } else if (data.status === 'active') {
-                addSystemNote(
-                    '<p style="color:#065f46;background:#d1fae5;padding:10px;border-radius:8px;font-size:0.85rem;margin:0;">Connected. Reference <strong>' +
-                        esc(chatRef) +
-                        '</strong>.</p>'
-                );
+                return;
             }
             startPoll();
             pollMessages();
+            refreshSession();
         } catch (err) {
             alert(err.message || 'Could not start live chat');
         } finally {
@@ -364,7 +428,7 @@
         root.innerHTML =
             '<button type="button" id="vgmf-doctor-live-launcher" aria-label="Open live chat" style="position:fixed;bottom:22px;right:22px;z-index:10050;width:56px;height:56px;border-radius:50%;border:none;background:#0f766e;color:#fff;box-shadow:0 8px 24px rgba(15,118,110,0.35);cursor:pointer;font-size:1.35rem;"><i class="fas fa-comments"></i></button>' +
             '<div id="vgmf-doctor-live-panel" class="hidden" style="position:fixed;bottom:90px;right:22px;z-index:10051;width:min(380px,calc(100vw - 24px));max-height:min(520px,calc(100vh - 120px));background:#fff;border-radius:16px;box-shadow:0 16px 40px rgba(15,23,42,0.18);border:1px solid #99f6e4;display:flex;flex-direction:column;overflow:hidden;">' +
-            '<div style="padding:14px 16px;background:linear-gradient(135deg,#0f766e,#115e59);color:#fff;"><strong>Live chat</strong><div id="vgmf-doctor-live-hours" style="font-size:0.78rem;opacity:0.9;margin-top:4px;">Loading…</div><div id="vgmf-doctor-live-meta" class="hidden" style="font-size:0.72rem;opacity:0.92;margin-top:6px;"></div></div>' +
+            '<div style="padding:14px 16px;background:linear-gradient(135deg,#0f766e,#115e59);color:#fff;"><strong>Live chat</strong><div id="vgmf-doctor-live-hours" style="font-size:0.78rem;opacity:0.9;margin-top:4px;">Loading…</div><div id="vgmf-doctor-live-meta" class="hidden" style="font-size:0.72rem;opacity:0.92;margin-top:6px;"></div><div id="vgmf-doctor-live-wait-timer" class="hidden" style="font-size:0.72rem;opacity:0.95;margin-top:6px;font-weight:600;"></div></div>' +
             '<div id="vgmf-doctor-live-messages" style="flex:1;overflow-y:auto;padding:12px;font-size:0.88rem;background:#f8fafc;min-height:180px;"><p data-live-placeholder style="color:#64748b;text-align:center;margin:40px 0;font-size:0.88rem;">Tap below to connect with a support agent.</p></div>' +
             '<div style="padding:10px 12px;border-top:1px solid #e2e8f0;background:#fff;">' +
             '<button type="button" id="vgmf-doctor-live-start" style="width:100%;margin-bottom:8px;padding:8px;border:none;border-radius:8px;background:#115e59;color:#fff;font-weight:700;cursor:pointer;"><i class="fas fa-headset"></i> Talk to support agent</button>' +
