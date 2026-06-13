@@ -174,7 +174,7 @@
             })
             .then(function (d) {
                 if (d && d.skipped) {
-                    console.warn('[site-radar] heartbeat skipped');
+                    console.warn('[site-radar] heartbeat skipped — server could not store session');
                 }
             })
             .catch(function () {});

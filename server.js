@@ -5803,7 +5803,7 @@ app.post('/api/public/visitor-heartbeat', (req, res) => {
     siteVisitors.recordHeartbeat(db, req, req.body || {}, (err, out) => {
         if (err) {
             console.warn('[visitor-heartbeat]', err.message);
-            return res.json({ success: true, skipped: true });
+            return res.status(500).json({ success: false, skipped: true, error: 'Could not record visitor session' });
         }
         res.json({ success: true, sessionId: out.sessionId, isNew: !!out.isNew });
     });
