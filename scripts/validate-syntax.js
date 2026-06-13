@@ -30,6 +30,8 @@ const files = [
     path.join('lib', 'support-ticket-notify.js'),
     path.join('lib', 'case-upload-routes.js'),
     path.join('lib', 'support-desk.js'),
+    path.join('lib', 'support-authority.js'),
+    path.join('lib', 'request-guard.js'),
     path.join('lib', 'support-desk-routes.js'),
     path.join('lib', 'support-desk-schema.js'),
     path.join('lib', 'support-live-chat.js'),

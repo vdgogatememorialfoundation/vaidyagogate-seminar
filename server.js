@@ -55,6 +55,7 @@ const paymentsMod = require('./lib/payments-module');
 const adminPaymentFlow = require('./lib/admin-payment-flow');
 const { registerPaymentsRoutes } = require('./lib/routes-payments');
 const seminarCapacity = require('./lib/seminar-capacity');
+const requestGuard = require('./lib/request-guard');
 const ticketScanEvents = require('./lib/ticket-scan-events');
 const scannerIdCapture = require('./lib/scanner-id-capture');
 const feedbackFormConfig = require('./lib/feedback-form-config');
@@ -3945,7 +3946,7 @@ app.post('/api/auth/signup', (req, res) => {
 });
 
 // 2. Auth: Login (optional phone + email OTP when messaging is configured)
-app.post('/api/auth/login', withAuxiliaryTables, (req, res) => {
+app.post('/api/auth/login', requestGuard.authLoginLimit, withAuxiliaryTables, (req, res) => {
     const { email, password, phoneOtpToken, emailOtpToken } = req.body;
     if (!email || password === undefined || password === null) {
         return res.status(400).json({ error: 'Email or portal user ID and password are required' });
@@ -4991,7 +4992,7 @@ function seminarRegistrationWindowOpen(sem, userId, seminarId, cb) {
 }
 
 // 5a. Save seminar application draft (does not register — submit separately while registration is open)
-app.post('/api/applications/draft', withCertificateUpload, (req, res) => {
+app.post('/api/applications/draft', requestGuard.registrationDraftLimit, withCertificateUpload, (req, res) => {
     let { userId, seminarId, formData, userIdString, portalUserId } = req.body || {};
     seminarId = parseInt(seminarId, 10);
     if (!Number.isInteger(seminarId) || seminarId < 1) {
@@ -5091,7 +5092,7 @@ app.post('/api/applications/draft', withCertificateUpload, (req, res) => {
 });
 
 // 5. Seminars: Register (Application Submission)
-app.post('/api/applications/submit', withCertificateUpload, (req, res) => {
+app.post('/api/applications/submit', requestGuard.registrationSubmitLimit, withCertificateUpload, (req, res) => {
     let {
         userId,
         seminarId,
@@ -13043,13 +13044,15 @@ function createSupportTicketRecord(opts, cb) {
     const cat = opts.category || 'general';
     const senderType = opts.senderType || 'user';
     const senderId = parseInt(opts.senderId, 10) || uid;
+    const supportAuthority = require('./lib/support-authority');
+    const requiredAuthorityLevel = supportAuthority.computeRequiredLevel(cat, subject, description);
 
     const runInsert = (slaMeta) => {
         const expectedAt = slaMeta && slaMeta.iso ? slaMeta.iso : null;
         db.run(
-            `INSERT INTO support_tickets (ticket_id, tracking_id, user_id, category, subject, description, attachment_path, priority, status, expected_response_at, created_at, updated_at) 
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-            [ticketId, ticketId, uid, cat, subject, description, opts.attachment_path || null, opts.priority || 'medium', expectedAt],
+            `INSERT INTO support_tickets (ticket_id, tracking_id, user_id, category, subject, description, attachment_path, priority, status, expected_response_at, required_authority_level, created_at, updated_at) 
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'open', ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+            [ticketId, ticketId, uid, cat, subject, description, opts.attachment_path || null, opts.priority || 'medium', expectedAt, requiredAuthorityLevel],
             function (err) {
                 if (err) return cb(err);
                 const ticketDbId = this.lastID;

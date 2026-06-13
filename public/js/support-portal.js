@@ -74,9 +74,12 @@
         const session = await api('/api/support-desk/session');
         document.getElementById('support-user-label').textContent =
             session.user.name + ' · ' + session.user.email;
-        document.getElementById('support-duty-label').textContent = session.onDuty
-            ? 'On duty (within your working hours)'
-            : 'Outside working hours — tickets can still be viewed';
+        document.getElementById('support-duty-label').textContent =
+            (session.onDuty
+                ? 'On duty (within your working hours)'
+                : 'Outside working hours — tickets can still be viewed') +
+            ' · Your authority: ' +
+            (session.authorityLabel || 'Frontline');
         document.getElementById('support-available-toggle').checked = session.profile.is_available !== 0;
         document.getElementById('support-live-toggle').checked = session.profile.live_chat_enabled !== 0;
     }
@@ -88,12 +91,18 @@
             return;
         }
         root.innerHTML =
-            '<table class="data-table"><thead><tr><th>Ticket</th><th>Subject</th><th>Status</th><th>Category</th><th>Assignee</th><th></th></tr></thead><tbody>' +
+            '<table class="data-table"><thead><tr><th>Ticket</th><th>Subject</th><th>Status</th><th>Category</th><th>Authority</th><th>Assignee</th><th></th></tr></thead><tbody>' +
             rows
                 .map((t) => {
                     const agent = t.agent_first_name
                         ? esc(t.agent_first_name + ' ' + (t.agent_last_name || ''))
                         : '<span style="color:#94a3b8;">Unassigned</span>';
+                    const authBadge =
+                        (t.required_authority_level || 1) >= 3
+                            ? '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:999px;font-size:0.72rem;font-weight:700;">Authority</span>'
+                            : (t.required_authority_level || 1) >= 2
+                              ? '<span style="background:#e0e7ff;color:#3730a3;padding:2px 8px;border-radius:999px;font-size:0.72rem;font-weight:700;">Senior</span>'
+                              : '<span style="color:#64748b;font-size:0.78rem;">Frontline</span>';
                     return (
                         '<tr><td><code>' +
                         esc(t.ticket_id) +
@@ -103,6 +112,8 @@
                         esc(t.status) +
                         '</span></td><td>' +
                         esc(t.category || '') +
+                        '</td><td>' +
+                        authBadge +
                         '</td><td>' +
                         agent +
                         '</td><td><button type="button" class="btn btn-primary" style="padding:6px 10px;font-size:0.8rem;" onclick="supportOpenTicket(\'' +
@@ -137,12 +148,35 @@
             const ticket = await api('/api/support-desk/tickets/' + encodeURIComponent(ref));
             document.getElementById('support-modal-title').textContent = ticket.subject || ref;
             let meta = (ticket.ticket_id || ref) + ' · ' + (ticket.status || '');
+            if (ticket.required_authority_label) {
+                meta += ' · Requires ' + ticket.required_authority_label;
+            }
             if (ticket.expected_response_at) {
                 meta +=
                     ' · Expected response: ' +
                     new Date(ticket.expected_response_at).toLocaleString('en-IN');
             }
             document.getElementById('support-modal-meta').textContent = meta;
+            const authBanner = document.getElementById('support-authority-banner');
+            if (authBanner) {
+                if (ticket.needsEscalation) {
+                    authBanner.style.display = 'block';
+                    authBanner.innerHTML =
+                        '<strong>Higher authority required.</strong> This ticket needs ' +
+                        esc(ticket.required_authority_label || 'Authority') +
+                        '. You can view details and escalate, but cannot reply or close until it is handled by the right level.';
+                } else {
+                    authBanner.style.display = 'none';
+                    authBanner.textContent = '';
+                }
+            }
+            const replyBtn = document.querySelector('#support-ticket-modal button[onclick="supportSendReply()"]');
+            const closeBtn = document.querySelector('#support-ticket-modal button[onclick="supportCloseTicket()"]');
+            const replyBox = document.getElementById('support-modal-reply');
+            const canAct = ticket.canAct !== false;
+            if (replyBtn) replyBtn.disabled = !canAct;
+            if (closeBtn) closeBtn.disabled = !canAct;
+            if (replyBox) replyBox.disabled = !canAct;
             const statusSel = document.getElementById('support-ticket-status');
             if (statusSel) {
                 const st = String(ticket.status || 'open').toLowerCase();
@@ -279,6 +313,26 @@
             });
             document.getElementById('support-modal-msg').textContent = 'Ticket transferred.';
             supportLoadTickets(true);
+        } catch (e) {
+            document.getElementById('support-modal-msg').textContent = e.message;
+        }
+    };
+
+    window.supportEscalateTicket = async function () {
+        if (!currentTicketRef) return;
+        const note = window.prompt('Optional note for higher authority (cancellation/refund/certificate issues):', '');
+        if (note === null) return;
+        try {
+            const out = await api('/api/support-desk/tickets/' + encodeURIComponent(currentTicketRef) + '/escalate', {
+                method: 'POST',
+                body: { note: note.trim() }
+            });
+            document.getElementById('support-modal-msg').textContent =
+                out.message || 'Ticket escalated to higher authority.';
+            document.getElementById('support-ticket-modal').classList.add('hidden');
+            currentTicketRef = null;
+            supportLoadTickets(true);
+            supportLoadTickets(false);
         } catch (e) {
             document.getElementById('support-modal-msg').textContent = e.message;
         }

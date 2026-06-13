@@ -14731,7 +14731,7 @@ async function loadSupportDeskAgentsAdmin() {
             return;
         }
         root.innerHTML =
-            '<table class="data-table"><thead><tr><th>Agent</th><th>Role</th><th>Department</th><th>Portal login</th><th>Max tickets</th><th>Available</th><th>Live chat</th><th></th></tr></thead><tbody>' +
+            '<table class="data-table"><thead><tr><th>Agent</th><th>Role</th><th>Department</th><th>Authority</th><th>Portal login</th><th>Max tickets</th><th>Available</th><th>Live chat</th><th></th></tr></thead><tbody>' +
             agents
                 .map((a) => {
                     const deptOpts = depts
@@ -14744,6 +14744,19 @@ async function loadSupportDeskAgentsAdmin() {
                                 (a.department_id == d.id ? ' selected' : '') +
                                 '>' +
                                 escapeHtml(d.name) +
+                                '</option>'
+                        )
+                        .join('');
+                    const authLevel = parseInt(a.authority_level, 10) || 1;
+                    const authOpts = [1, 2, 3]
+                        .map(
+                            (lv) =>
+                                '<option value="' +
+                                lv +
+                                '"' +
+                                (authLevel === lv ? ' selected' : '') +
+                                '>' +
+                                (lv === 1 ? 'L1 Frontline' : lv === 2 ? 'L2 Senior' : 'L3 Authority') +
                                 '</option>'
                         )
                         .join('');
@@ -14765,6 +14778,8 @@ async function loadSupportDeskAgentsAdmin() {
                         '</td><td><select class="sd-agent-dept" style="padding:6px;" onchange="sdAgentDeptPortalPreview(this)">' +
                         '<option value="">—</option>' +
                         deptOpts +
+                        '</select></td><td><select class="sd-agent-authority" style="padding:6px;min-width:130px;">' +
+                        authOpts +
                         '</select></td><td class="sd-agent-portal">' +
                         escapeHtml(portalPath) +
                         '</td><td><input type="number" class="sd-agent-max" min="1" max="100" value="' +
@@ -14805,6 +14820,7 @@ async function saveSupportDeskAgentAdmin(userId) {
     const body = {
         actingAdminId: adm.id,
         departmentId: parseInt(row.querySelector('.sd-agent-dept').value, 10) || null,
+        authorityLevel: parseInt(row.querySelector('.sd-agent-authority').value, 10) || 1,
         maxOpenTickets: parseInt(row.querySelector('.sd-agent-max').value, 10) || 15,
         isAvailable: row.querySelector('.sd-agent-avail').checked,
         liveChatEnabled: row.querySelector('.sd-agent-live').checked
