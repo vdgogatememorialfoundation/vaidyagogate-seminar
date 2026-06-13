@@ -815,6 +815,7 @@ function switchTab(tabId) {
         return;
     }
     if (liveScansInterval) clearInterval(liveScansInterval);
+    if (tabId !== 'tab-live-radar' && typeof stopAdminLiveRadar === 'function') stopAdminLiveRadar();
     document.querySelectorAll('.tab-pane').forEach((t) => t.classList.add('hidden'));
     document.querySelectorAll('.menu-item').forEach((m) => m.classList.remove('active'));
     document.getElementById(tabId).classList.remove('hidden');
@@ -1595,6 +1596,7 @@ const ADMIN_MODULE_TAB_DEFS = [
     ['tab-feedback-form', 'Feedback form editor'],
     ['tab-activity-logs', 'User & doctor activity'],
     ['tab-notifications', 'Notifications'],
+    ['tab-live-radar', 'Live Radar'],
     ['tab-system-platform', 'System health'],
     ['tab-system-users', 'User health'],
     ['tab-settings', 'Global settings']

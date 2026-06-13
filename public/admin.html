@@ -131,6 +131,7 @@
                 <a class="menu-item" data-admin-module="tab-feedback-form" onclick="switchTab('tab-feedback-form'); loadAdminFeedbackFormConfig();"><i class="fas fa-edit"></i> Feedback form editor</a>
                 <a class="menu-item" data-admin-module="tab-activity-logs" onclick="switchTab('tab-activity-logs'); initAdminActivityLogsTab();"><i class="fas fa-history"></i> User &amp; doctor activity</a>
                 <a class="menu-item" data-admin-module="tab-notifications" onclick="switchTab('tab-notifications'); initAdminNotificationsTab();"><i class="fas fa-bell"></i> Notifications</a>
+                <a class="menu-item" data-admin-module="tab-live-radar" onclick="switchTab('tab-live-radar'); initAdminLiveRadar();"><i class="fas fa-satellite-dish"></i> Live Radar</a>
                 <a class="menu-item" data-admin-module="tab-system-platform" onclick="switchTab('tab-system-platform'); initAdminSystemHealth('platform');"><i class="fas fa-server"></i> System health</a>
                 <a class="menu-item" data-admin-module="tab-system-users" onclick="switchTab('tab-system-users'); initAdminSystemHealth('users');"><i class="fas fa-users-cog"></i> User health</a>
                 <a class="menu-item" data-admin-module="tab-settings" onclick="switchTab('tab-settings'); initAdminBrandingPreview();"><i class="fas fa-cogs"></i> Global Settings</a>
@@ -2235,6 +2236,10 @@
                 </div>
             </div>
 
+            <div id="tab-live-radar" class="tab-pane hidden">
+                <div id="live-radar-root"></div>
+            </div>
+
             <div id="tab-system-platform" class="tab-pane hidden">
                 <h2 style="margin-bottom:12px;color:#0c4a6e;">System health — platform &amp; apps</h2>
                 <p style="color:#475569;margin-bottom:16px;max-width:900px;">Live status for admin backend, doctor/judge/scanner portals, mobile app URLs, database, email/WhatsApp, and notification queue. Refreshes every 12 seconds. Issues trigger automatic remediation where possible.</p>
@@ -2248,14 +2253,10 @@
                     <div id="sys-platform-components"></div>
                     <pre id="sys-platform-ai-out" style="margin-top:14px;padding:12px;background:#f8fafc;border-radius:8px;font-size:0.82rem;white-space:pre-wrap;max-height:200px;overflow:auto;"></pre>
                 </div>
-                <div class="card" style="margin-top:16px;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
-                        <h3 style="margin:0;">Live site visitors</h3>
-                        <button type="button" class="btn-secondary btn-sm" onclick="refreshAdminLiveVisitors()">Refresh</button>
-                    </div>
-                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:8px;">Active in last 15 minutes — page, device, and approximate location from IP.</p>
-                    <p id="admin-live-visitors-summary" style="font-weight:600;margin-bottom:8px;">—</p>
-                    <div id="admin-live-visitors-list" style="max-height:320px;overflow:auto;font-size:0.85rem;"></div>
+                <div class="card" style="margin-top:16px;border-left:4px solid #2dd4bf;">
+                    <h3 style="margin-top:0;">📡 Realtime visitor &amp; application tracking</h3>
+                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:12px;">Open the dedicated <strong>Live Radar</strong> tab for the full realtime map, graphics, and seminar application progress feed.</p>
+                    <button type="button" class="btn-primary" onclick="switchTab('tab-live-radar'); initAdminLiveRadar();">Open Live Radar</button>
                 </div>
                 <div class="card" style="margin-top:16px;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
@@ -3077,7 +3078,9 @@
     <script src="/js/name-validation.js"></script>
     <script src="/js/admin-notifications.js"></script>
     <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <link rel="stylesheet" href="/css/admin-live-radar.css?v=20260608radar1">
     <script src="/js/admin-system-health.js"></script>
+    <script src="/js/admin-live-radar.js?v=20260608radar1"></script>
     <script src="/js/otp-ui.js"></script>
     <script src="/js/portal-upload.js?v=20260522"></script>
     <script src="/js/user-roles.js?v=20260522f"></script>

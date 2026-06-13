@@ -69,6 +69,7 @@ const regPaymentStatus = require('./lib/registration-payment-status');
 const userAccountLifecycle = require('./lib/user-account-lifecycle');
 const userClientTelemetry = require('./lib/user-client-telemetry');
 const siteVisitors = require('./lib/site-visitors');
+const liveRadarHub = require('./lib/live-radar-hub');
 const paymentAttempts = require('./lib/payment-attempts');
 const emailDeliveryFlags = require('./lib/email-delivery-flags');
 const seminarEventOps = require('./lib/seminar-event-ops');
@@ -5848,6 +5849,39 @@ app.get('/api/admin/site-visitors/live', (req, res) => {
     siteVisitors.listLiveVisitors(db, { minutes: req.query.minutes }, (err, data) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ success: true, ...data });
+    });
+});
+
+// Admin: Live Radar snapshot (realtime seminar application tracking)
+app.get('/api/admin/live-radar', (req, res) => {
+    siteVisitors.getLiveRadarSnapshot(db, { minutes: req.query.minutes }, (err, data) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true, ...data });
+    });
+});
+
+// Admin: Live Radar SSE stream (~3s updates while tab open)
+app.get('/api/admin/live-radar/stream', (req, res) => {
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    if (typeof res.flushHeaders === 'function') res.flushHeaders();
+
+    const sendSnapshot = () => {
+        siteVisitors.getLiveRadarSnapshot(db, { minutes: 10 }, (err, data) => {
+            if (err || res.writableEnded) return;
+            try {
+                res.write('data: ' + JSON.stringify(err ? { error: err.message } : data) + '\n\n');
+            } catch (_) {}
+        });
+    };
+
+    liveRadarHub.subscribe(res);
+    sendSnapshot();
+    const timer = setInterval(sendSnapshot, 3000);
+    req.on('close', () => {
+        clearInterval(timer);
     });
 });
 

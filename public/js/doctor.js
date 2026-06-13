@@ -1800,6 +1800,22 @@ function getMaxRegStep() {
 }
 
 const REGISTRATION_PREVIEW_STEP = 5;
+const REGISTRATION_STEP_LABELS = [
+    'Terms & conditions',
+    'Personal details',
+    'Address',
+    'Qualification',
+    'College details',
+    'Review & submit'
+];
+
+function syncLiveActivity(partial) {
+    if (window.SiteVisitorBeacon && typeof window.SiteVisitorBeacon.setActivity === 'function') {
+        window.SiteVisitorBeacon.setActivity(partial || {});
+    } else if (window.SiteVisitorBeacon && typeof window.SiteVisitorBeacon.sendHeartbeat === 'function') {
+        window.SiteVisitorBeacon.sendHeartbeat();
+    }
+}
 
 function needsAdvancedQualDoctor() {
     const q = (document.getElementById('reg-qual') || {}).value || '';
@@ -3177,6 +3193,14 @@ async function startRegistration(seminarId, opts) {
     }
 
     nextStep(hasTerms || window.__seminarCancellationSummary ? 0 : 1);
+    syncLiveActivity({
+        kind: 'seminar_apply',
+        seminarId: sid,
+        seminarTitle: seminarTitle,
+        stepNumber: hasTerms || window.__seminarCancellationSummary ? 0 : 1,
+        stepLabel: REGISTRATION_STEP_LABELS[hasTerms || window.__seminarCancellationSummary ? 0 : 1],
+        formProgress: Math.round(((hasTerms || window.__seminarCancellationSummary ? 0 : 1) / REGISTRATION_PREVIEW_STEP) * 100)
+    });
 }
 
 /** Assigned volunteers may need to register after the public window closes; server still enforces rules on submit. */
@@ -3215,6 +3239,7 @@ function cancelRegistration() {
     document.getElementById('seminars-grid-container').classList.remove('hidden');
     document.getElementById('seminars-title').classList.remove('hidden');
     document.getElementById('multi-step-form').classList.add('hidden');
+    syncLiveActivity({ kind: 'browse_seminars', seminarId: null, seminarTitle: null, stepNumber: null, stepLabel: null, formProgress: 0 });
 }
 
 function switchTab(tabId, menuEl) {
@@ -3292,9 +3317,13 @@ function switchTab(tabId, menuEl) {
     }
     if (tabId === 'tab-applications') {
         loadApplications();
+        syncLiveActivity({ kind: 'track_applications' });
     }
     if (tabId === 'tab-seminars') {
         loadSeminarsGrid();
+        if (document.getElementById('multi-step-form') && document.getElementById('multi-step-form').classList.contains('hidden')) {
+            syncLiveActivity({ kind: 'browse_seminars' });
+        }
     }
     syncDoctorTrackingPolls();
 }
@@ -5065,6 +5094,20 @@ async function nextStep(step) {
         qrImg.onerror = () => generatePdfBlob(null);
         qrImg.src = `/api/qrcode/${encodeURIComponent(draftAppNo)}`;
     }
+
+    const semName = String((document.getElementById('registration-seminar-name') || {}).innerText || '')
+        .replace(/^Registering for:\s*/i, '')
+        .replace(/^Waiting list —\s*/i, '')
+        .replace(/^Draft —\s*/i, '')
+        .trim();
+    syncLiveActivity({
+        kind: 'seminar_apply',
+        seminarId: activeSeminarIdForReg,
+        seminarTitle: semName || undefined,
+        stepNumber: step,
+        stepLabel: REGISTRATION_STEP_LABELS[step] || 'Step ' + step,
+        formProgress: Math.round((step / REGISTRATION_PREVIEW_STEP) * 100)
+    });
 }
 
 let currentPdfBlobUrl = null;
@@ -6770,6 +6813,7 @@ async function processPayment(appId, amount, appNo, paymentOption, cancelPending
     try {
         sessionStorage.setItem('doctor_last_pay_reg', String(regId));
     } catch (_) {}
+    syncLiveActivity({ kind: 'payment', stepLabel: 'Opening checkout', formProgress: 100 });
     const methodId = paymentOption || getPaymentOptionForReg(regId);
     if (!methodId && (window.__doctorPaymentOptions || []).length > 1) {
         return alert('Please choose a payment method from the dropdown first.');
