@@ -324,6 +324,18 @@
                 </div>
                 <div id="seminar-detail-status-bar" style="margin-bottom:20px;"></div>
 
+                <div class="card" id="seminar-event-ops-card">
+                    <h3 style="margin-top:0;">Event day checklist &amp; reminders</h3>
+                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:12px;">Tick items on seminar day. Send WhatsApp group invites and event reminders to paid ticket holders.</p>
+                    <ul id="seminar-event-checklist" style="list-style:none;padding:0;margin:0 0 12px;"></ul>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px;">
+                        <button type="button" class="btn-primary btn-sm" onclick="sendSeminarEventReminders('event_day')">Send event-day reminder</button>
+                        <button type="button" class="btn-primary btn-sm" style="background:#25D366;" onclick="sendSeminarEventReminders('whatsapp_group')">Send WhatsApp group invite</button>
+                        <button type="button" class="btn-secondary btn-sm" onclick="loadSeminarEventChecklist()">Refresh checklist</button>
+                    </div>
+                    <p id="seminar-event-ops-msg" style="font-size:0.82rem;color:#64748b;margin:10px 0 0;"></p>
+                </div>
+
                 <div class="card">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
                         <h3>Applications for this Seminar</h3>
@@ -2236,6 +2248,27 @@
                     <div id="sys-platform-components"></div>
                     <pre id="sys-platform-ai-out" style="margin-top:14px;padding:12px;background:#f8fafc;border-radius:8px;font-size:0.82rem;white-space:pre-wrap;max-height:200px;overflow:auto;"></pre>
                 </div>
+                <div class="card" style="margin-top:16px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                        <h3 style="margin:0;">Live site visitors</h3>
+                        <button type="button" class="btn-secondary btn-sm" onclick="refreshAdminLiveVisitors()">Refresh</button>
+                    </div>
+                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:8px;">Active in last 15 minutes — page, device, and approximate location from IP.</p>
+                    <p id="admin-live-visitors-summary" style="font-weight:600;margin-bottom:8px;">—</p>
+                    <div id="admin-live-visitors-list" style="max-height:320px;overflow:auto;font-size:0.85rem;"></div>
+                </div>
+                <div class="card" style="margin-top:16px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                        <h3 style="margin:0;">Payment failures (Razorpay)</h3>
+                        <button type="button" class="btn-secondary btn-sm" onclick="refreshAdminPaymentAttempts()">Refresh</button>
+                    </div>
+                    <div id="admin-payment-attempts-list" style="max-height:280px;overflow:auto;font-size:0.85rem;"></div>
+                </div>
+                <div class="card" style="margin-top:16px;">
+                    <h3 style="margin-top:0;">Email delivery issues</h3>
+                    <p style="color:#64748b;font-size:0.88rem;">Mailboxes full or invalid addresses detected from send failures.</p>
+                    <div id="admin-email-delivery-flags" style="max-height:200px;overflow:auto;font-size:0.85rem;"></div>
+                </div>
             </div>
 
             <div id="tab-system-users" class="tab-pane hidden">
@@ -3053,6 +3086,7 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
-    <script src="/js/admin.js?v=20260612pay4"></script>
+    <script src="/js/site-visitor-beacon.js"></script>
+    <script src="/js/admin.js?v=20260612ops1"></script>
 </body>
 </html>

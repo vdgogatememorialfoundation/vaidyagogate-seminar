@@ -11642,6 +11642,7 @@ async function manageSeminar(id, title) {
 
     // Start Live Scans Polling
     loadLiveScans();
+    loadSeminarEventChecklist();
     if(liveScansInterval) clearInterval(liveScansInterval);
     liveScansInterval = setInterval(loadLiveScans, 5000);
 }
@@ -18806,3 +18807,187 @@ async function saveAdminSitePopup() {
         marketingSetMsg(e.message || 'Save failed', false);
     }
 }
+
+async function refreshAdminLiveVisitors() {
+    const summary = document.getElementById('admin-live-visitors-summary');
+    const list = document.getElementById('admin-live-visitors-list');
+    if (!list) return;
+    try {
+        const res = await fetch('/api/admin/site-visitors/live?minutes=15');
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed');
+        if (summary) {
+            summary.textContent =
+                data.count + ' active · ' + (data.newCount || 0) + ' new in last 3 min';
+        }
+        if (!(data.visitors || []).length) {
+            list.innerHTML = '<p style="color:#64748b;">No active visitors in the last 15 minutes.</p>';
+            return;
+        }
+        list.innerHTML =
+            '<table class="data-table" style="font-size:0.82rem;"><thead><tr><th>When</th><th>Page</th><th>User</th><th>Location</th><th>Device</th></tr></thead><tbody>' +
+            data.visitors
+                .map(function (v) {
+                    return (
+                        '<tr' +
+                        (v.isNew ? ' style="background:#ecfdf5;"' : '') +
+                        '><td>' +
+                        escAdmin(v.isNew ? 'New' : 'Active') +
+                        '</td><td>' +
+                        escAdmin(v.page || '—') +
+                        '</td><td>' +
+                        escAdmin(v.userLabel || (v.userId ? '#' + v.userId : 'Guest')) +
+                        '</td><td>' +
+                        escAdmin(v.location || v.ip || '—') +
+                        '</td><td>' +
+                        escAdmin(v.device || '—') +
+                        '</td></tr>'
+                    );
+                })
+                .join('') +
+            '</tbody></table>';
+    } catch (e) {
+        if (summary) summary.textContent = e.message;
+        list.innerHTML = '';
+    }
+}
+window.refreshAdminLiveVisitors = refreshAdminLiveVisitors;
+
+async function refreshAdminPaymentAttempts() {
+    const list = document.getElementById('admin-payment-attempts-list');
+    if (!list) return;
+    try {
+        const res = await fetch('/api/admin/payment-attempts?status=failed&limit=40');
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed');
+        const rows = data.attempts || [];
+        if (!rows.length) {
+            list.innerHTML = '<p style="color:#64748b;">No failed payment attempts logged yet.</p>';
+            return;
+        }
+        list.innerHTML =
+            '<table class="data-table" style="font-size:0.82rem;"><thead><tr><th>When</th><th>Doctor</th><th>App</th><th>Amount</th><th>Error</th></tr></thead><tbody>' +
+            rows
+                .map(function (a) {
+                    return (
+                        '<tr><td>' +
+                        escAdmin(a.created_at ? formatAdminAccountDateTime(a.created_at) : '—') +
+                        '</td><td>' +
+                        escAdmin(a.user_name || a.user_email || '—') +
+                        '</td><td>' +
+                        escAdmin(a.application_no || '—') +
+                        '</td><td>₹' +
+                        escAdmin(a.amount != null ? a.amount : '—') +
+                        '</td><td>' +
+                        escAdmin(a.error_description || a.error_code || '—') +
+                        '</td></tr>'
+                    );
+                })
+                .join('') +
+            '</tbody></table>';
+    } catch (e) {
+        list.innerHTML = '<p style="color:#b91c1c;">' + escAdmin(e.message) + '</p>';
+    }
+}
+window.refreshAdminPaymentAttempts = refreshAdminPaymentAttempts;
+
+async function refreshAdminEmailDeliveryFlags() {
+    const el = document.getElementById('admin-email-delivery-flags');
+    if (!el) return;
+    try {
+        const res = await fetch('/api/admin/email-delivery-flags');
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed');
+        const rows = data.flags || [];
+        if (!rows.length) {
+            el.innerHTML = '<p style="color:#64748b;">No mailbox-full or invalid-address issues detected yet.</p>';
+            return;
+        }
+        el.innerHTML =
+            '<table class="data-table" style="font-size:0.82rem;"><thead><tr><th>Email</th><th>Issue</th><th>Last error</th></tr></thead><tbody>' +
+            rows
+                .map(function (f) {
+                    const issue =
+                        Number(f.mailbox_full) === 1
+                            ? 'Mailbox full'
+                            : Number(f.invalid_address) === 1
+                              ? 'Invalid address'
+                              : 'Delivery issue';
+                    return (
+                        '<tr><td>' +
+                        escAdmin(f.email) +
+                        '</td><td>' +
+                        escAdmin(issue) +
+                        '</td><td>' +
+                        escAdmin(f.last_error || '—') +
+                        '</td></tr>'
+                    );
+                })
+                .join('') +
+            '</tbody></table>';
+    } catch (e) {
+        el.innerHTML = '<p style="color:#b91c1c;">' + escAdmin(e.message) + '</p>';
+    }
+}
+window.refreshAdminEmailDeliveryFlags = refreshAdminEmailDeliveryFlags;
+
+async function loadSeminarEventChecklist() {
+    const ul = document.getElementById('seminar-event-checklist');
+    if (!ul || !currentManageSeminarId) return;
+    try {
+        const res = await fetch('/api/admin/seminars/' + currentManageSeminarId + '/event-checklist');
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed');
+        ul.innerHTML = (data.items || [])
+            .map(function (item) {
+                return (
+                    '<li style="margin:6px 0;display:flex;align-items:center;gap:8px;"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" ' +
+                    (Number(item.is_done) ? 'checked' : '') +
+                    ' onchange="toggleSeminarChecklistItem(' +
+                    item.id +
+                    ', this.checked)"> <span>' +
+                    escAdmin(item.label) +
+                    '</span></label></li>'
+                );
+            })
+            .join('');
+    } catch (e) {
+        ul.innerHTML = '<li style="color:#b91c1c;">' + escAdmin(e.message) + '</li>';
+    }
+}
+window.loadSeminarEventChecklist = loadSeminarEventChecklist;
+
+async function toggleSeminarChecklistItem(itemId, done) {
+    const adm = getStoredAdminUser();
+    try {
+        await fetch(
+            '/api/admin/seminars/' + currentManageSeminarId + '/event-checklist/' + itemId,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ adminUserId: adm && adm.id, done: !!done })
+            }
+        );
+    } catch (_) {}
+}
+
+async function sendSeminarEventReminders(type) {
+    const msg = document.getElementById('seminar-event-ops-msg');
+    if (!currentManageSeminarId) return;
+    const label = type === 'whatsapp_group' ? 'WhatsApp group invites' : 'event-day reminders';
+    if (!confirm('Send ' + label + ' to all paid ticket holders who have not received this yet?')) return;
+    if (msg) msg.textContent = 'Sending…';
+    try {
+        const res = await fetch('/api/admin/seminars/' + currentManageSeminarId + '/event-reminders', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ type: type || 'event_day' })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed');
+        if (msg) msg.textContent = 'Sent ' + (data.sent || 0) + ' of ' + (data.total || 0) + ' ticket holders.';
+    } catch (e) {
+        if (msg) msg.textContent = e.message;
+    }
+}
+window.sendSeminarEventReminders = sendSeminarEventReminders;

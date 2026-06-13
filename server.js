@@ -68,6 +68,10 @@ const volunteerTicketFlow = require('./lib/volunteer-ticket-flow');
 const regPaymentStatus = require('./lib/registration-payment-status');
 const userAccountLifecycle = require('./lib/user-account-lifecycle');
 const userClientTelemetry = require('./lib/user-client-telemetry');
+const siteVisitors = require('./lib/site-visitors');
+const paymentAttempts = require('./lib/payment-attempts');
+const emailDeliveryFlags = require('./lib/email-delivery-flags');
+const seminarEventOps = require('./lib/seminar-event-ops');
 
 function volunteerTicketDeps() {
     return {
@@ -3572,10 +3576,15 @@ app.post('/api/otp/send', withIntegrationSettingsLoaded, withAuxiliaryTables, (r
         meta.certId = certId;
     }
 
-    otpLib.countRecentSends(db, channel, dest, (cerr, cnt) => {
-        if (cerr) return res.status(500).json({ error: cerr.message });
-        if (cnt >= otpLib.MAX_SENDS_PER_HOUR) {
-            return res.status(429).json({ error: 'Too many OTP requests. Try again later.' });
+    otpLib.evaluateSendPolicy(db, channel, dest, purpose, (policyErr, policy) => {
+        if (policyErr) return res.status(500).json({ error: policyErr.message });
+        if (!policy || !policy.allowed) {
+            return res.status(429).json({
+                error: (policy && policy.reason) || 'Too many OTP requests. Try again later.',
+                retryAfterSeconds: policy && policy.retryAfterSeconds,
+                resendsRemaining: policy && policy.resendsRemaining,
+                resetAt: policy && policy.resetAt
+            });
         }
         const code = otpLib.generateOtpDigits();
         otpLib.saveOtp(db, { channel, destination: dest, purpose, meta }, code, (serr) => {
@@ -3589,12 +3598,18 @@ app.post('/api/otp/send', withIntegrationSettingsLoaded, withAuxiliaryTables, (r
             }).then((results) => {
                 const sent = channel === 'phone' ? results.whatsapp : results.email;
                 const debug = process.env.OTP_RETURN_CODE === '1' || process.env.NODE_ENV === 'development';
-                const payload = { success: true, ttlMinutes: otpLib.OTP_TTL_MIN };
+                const payload = {
+                    success: true,
+                    ttlMinutes: otpLib.OTP_TTL_MIN,
+                    resendsRemaining: policy.resendsRemaining,
+                    cooldownSeconds: policy.cooldownSeconds || Math.ceil(otpLib.SIGNUP_MIN_GAP_MS / 1000)
+                };
                 if (debug) payload.debugCode = code;
                 if (!sent.ok && !sent.skipped) {
                     return res.status(503).json({
                         error: sent.error || 'Could not deliver OTP. Configure Zoho email and/or WhatsApp API.',
-                        debugCode: debug ? code : undefined
+                        debugCode: debug ? code : undefined,
+                        mailboxFull: !!(sent.mailboxFull || (sent.hint && /mailbox is full|over quota/i.test(String(sent.hint))))
                     });
                 }
                 if (sent.skipped) {
@@ -5781,6 +5796,121 @@ app.post('/api/doctor/client-telemetry', (req, res) => {
     });
 });
 
+// Public: live visitor heartbeat (page, device, location)
+app.post('/api/public/visitor-heartbeat', (req, res) => {
+    siteVisitors.recordHeartbeat(db, req, req.body || {}, (err, out) => {
+        if (err) {
+            console.warn('[visitor-heartbeat]', err.message);
+            return res.json({ success: true, skipped: true });
+        }
+        res.json({ success: true, sessionId: out.sessionId, isNew: !!out.isNew });
+    });
+});
+
+// Payment attempt log (Razorpay success / failure / cancel)
+app.post('/api/payments/log-attempt', (req, res) => {
+    const body = req.body || {};
+    const userId = parseInt(body.userId, 10);
+    const registrationId = parseInt(body.registrationId, 10);
+    const base = {
+        registration_id: Number.isInteger(registrationId) ? registrationId : null,
+        user_id: Number.isInteger(userId) ? userId : null,
+        order_db_id: body.orderDbId || null,
+        application_no: body.applicationNo || null,
+        gateway: body.gateway || 'razorpay',
+        mode: body.mode || null,
+        amount: body.amount,
+        status: String(body.status || 'failed'),
+        error_code: body.errorCode || (body.error && body.error.code) || null,
+        error_description:
+            body.errorDescription ||
+            (body.error && body.error.description) ||
+            body.message ||
+            null,
+        razorpay_order_id: body.razorpay_order_id || body.orderId || null,
+        razorpay_payment_id: body.razorpay_payment_id || body.paymentId || null,
+        metadata: body.metadata || body
+    };
+    const finish = (row) => {
+        paymentAttempts.logPaymentAttempt(db, row, (logErr) => {
+            if (logErr) return res.status(500).json({ success: false, error: logErr.message });
+            res.json({ success: true });
+        });
+    };
+    if (Number.isInteger(userId) && userId > 0) {
+        return paymentAttempts.enrichFromUser(db, userId, base, (e, row) => finish(row));
+    }
+    finish(base);
+});
+
+// Admin: live site visitors
+app.get('/api/admin/site-visitors/live', (req, res) => {
+    siteVisitors.listLiveVisitors(db, { minutes: req.query.minutes }, (err, data) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true, ...data });
+    });
+});
+
+// Admin: recent payment attempts (especially failures)
+app.get('/api/admin/payment-attempts', (req, res) => {
+    paymentAttempts.listRecentAttempts(
+        db,
+        { limit: req.query.limit, status: req.query.status || '' },
+        (err, rows) => {
+            if (err) return res.status(500).json({ error: err.message });
+            res.json({ success: true, attempts: rows });
+        }
+    );
+});
+
+// Admin: emails with delivery problems (mailbox full, invalid)
+app.get('/api/admin/email-delivery-flags', (req, res) => {
+    emailDeliveryFlags.listProblemEmails(db, (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true, flags: rows || [] });
+    });
+});
+
+// Admin: seminar event-day checklist
+app.get('/api/admin/seminars/:id/event-checklist', (req, res) => {
+    const sid = parseInt(req.params.id, 10);
+    if (!sid) return res.status(400).json({ error: 'Invalid seminar id' });
+    seminarEventOps.getChecklist(db, sid, (err, items) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true, items });
+    });
+});
+
+app.post('/api/admin/seminars/:id/event-checklist/:itemId', (req, res) => {
+    const itemId = parseInt(req.params.itemId, 10);
+    const adminId = parseInt((req.body && req.body.adminUserId) || '', 10);
+    const done = !!(req.body && req.body.done);
+    if (!itemId) return res.status(400).json({ error: 'Invalid item id' });
+    seminarEventOps.toggleChecklistItem(db, itemId, adminId, done, (err, n) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true, updated: n });
+    });
+});
+
+app.post('/api/admin/seminars/:id/event-reminders', (req, res) => {
+    const sid = parseInt(req.params.id, 10);
+    const type = (req.body && req.body.type) || 'event_day';
+    if (!sid) return res.status(400).json({ error: 'Invalid seminar id' });
+    seminarEventOps.sendEventDayReminders(db, notifEngine, sid, type, (err, result) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true, ...result });
+    });
+});
+
+app.get('/api/admin/seminars/:id/paid-ticket-holders', (req, res) => {
+    const sid = parseInt(req.params.id, 10);
+    if (!sid) return res.status(400).json({ error: 'Invalid seminar id' });
+    seminarEventOps.listPaidWithTickets(db, sid, (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ success: true, holders: rows });
+    });
+});
+
 // 6. Doctor Profile Management
 // Create or update doctor profile
 app.post('/api/doctor/profile', withMemoryAwareUpload('profilePhoto'), (req, res) => {
@@ -6518,10 +6648,28 @@ app.get('/api/payments/options', (req, res) => {
     });
 });
 
-function finishDoctorPayment(res, err, out) {
+function logPaymentInitFailure(ctx, errorMsg) {
+    if (!ctx || !ctx.registrationId) return;
+    const base = {
+        registration_id: ctx.registrationId,
+        user_id: ctx.userId,
+        gateway: ctx.methodId || 'razorpay',
+        status: 'failed',
+        error_description: String(errorMsg || '').slice(0, 500),
+        metadata: { phase: 'init' }
+    };
+    paymentAttempts.enrichFromUser(db, ctx.userId, base, (e, row) => {
+        paymentAttempts.logPaymentAttempt(db, row, () => {});
+    });
+}
+
+function finishDoctorPayment(res, err, out, payCtx) {
     if (err) return res.status(500).json({ success: false, error: err.message });
     if (!out) return res.status(500).json({ success: false, error: 'No response from payment service' });
-    if (out.error) return res.status(400).json({ success: false, error: out.error });
+    if (out.error) {
+        logPaymentInitFailure(payCtx, out.error);
+        return res.status(400).json({ success: false, error: out.error });
+    }
     if (out.paid) {
         return res.json({
             success: true,
@@ -6616,7 +6764,12 @@ app.post('/api/payments/process', (req, res) => {
                             db,
                             doctorPaymentDeps(),
                             { registrationId: regId, methodId: options[0].id },
-                            (e, o) => finishDoctorPayment(res, e, o)
+                            (e, o) =>
+                                finishDoctorPayment(res, e, o, {
+                                    registrationId: regId,
+                                    userId: uid,
+                                    methodId: options[0].id
+                                })
                         );
                     }
                     if (options && options.length > 1) {
@@ -6635,7 +6788,12 @@ app.post('/api/payments/process', (req, res) => {
                         db,
                         doctorPaymentDeps(),
                         { registrationId: regId, methodId: 'mock' },
-                        (e, o) => finishDoctorPayment(res, e, o)
+                        (e, o) =>
+                            finishDoctorPayment(res, e, o, {
+                                registrationId: regId,
+                                userId: uid,
+                                methodId: 'mock'
+                            })
                     );
                 });
             }
@@ -6643,7 +6801,12 @@ app.post('/api/payments/process', (req, res) => {
                 db,
                 doctorPaymentDeps(),
                 { registrationId: regId, methodId: mid },
-                (e, o) => finishDoctorPayment(res, e, o)
+                (e, o) =>
+                    finishDoctorPayment(res, e, o, {
+                        registrationId: regId,
+                        userId: uid,
+                        methodId: mid
+                    })
             );
         };
 

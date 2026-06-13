@@ -81,11 +81,16 @@
         const parsed = readJson ? await readJson(res) : { data: await res.json(), parseFailed: false };
         const data = parsed.data;
         if (parsed.parseFailed || !res.ok) {
+            if (data.retryAfterSeconds && window.OtpUi) {
+                window.OtpUi.startResendCooldown(['doctor-signup-resend-otp-' + channel], data.retryAfterSeconds, {
+                    resendsRemaining: data.resendsRemaining
+                });
+            }
             return alert(
                 errMsg ? errMsg(res, data, parsed.parseFailed) : data.error || 'Could not send code.'
             );
         }
-        if (window.OtpUi) window.OtpUi.notifyOtpSent(channel, data);
+        if (window.OtpUi) window.OtpUi.notifyOtpSent(channel, data, { purpose: 'signup', signupCooldown: true });
         else alert('OTP sent successfully to your ' + (channel === 'email' ? 'email' : 'WhatsApp') + '.');
     }
 

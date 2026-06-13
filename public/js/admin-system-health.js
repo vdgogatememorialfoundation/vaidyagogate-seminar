@@ -75,6 +75,9 @@
             if (status) status.textContent = lastPlatformReport.overallLabel || '';
             const errIds = collectErrorIds(lastPlatformReport);
             if (errIds.length) await runAutoFix(errIds, 'sys-platform-ai-out');
+            if (typeof window.refreshAdminLiveVisitors === 'function') window.refreshAdminLiveVisitors();
+            if (typeof window.refreshAdminPaymentAttempts === 'function') window.refreshAdminPaymentAttempts();
+            if (typeof window.refreshAdminEmailDeliveryFlags === 'function') window.refreshAdminEmailDeliveryFlags();
         } catch (e) {
             if (status) status.textContent = e.message;
         }

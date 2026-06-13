@@ -6675,6 +6675,24 @@ function openDoctorRazorpayCheckout(result, regId, methodId) {
     };
     const rzp = new Razorpay(options);
     rzp.on('payment.failed', function (resp) {
+        const uid = doctorNumericUserId();
+        fetch('/api/payments/log-attempt', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                userId: uid,
+                registrationId: regId,
+                orderDbId: result.orderDbId,
+                applicationNo: appNo,
+                gateway: 'razorpay',
+                mode: result.mode,
+                amount: result.amount,
+                status: 'failed',
+                error: resp.error,
+                razorpay_order_id: resp.error && resp.error.metadata && resp.error.metadata.order_id,
+                razorpay_payment_id: resp.error && resp.error.metadata && resp.error.metadata.payment_id
+            })
+        }).catch(function () {});
         alert(
             (resp.error && resp.error.description) ||
                 'Payment failed or was cancelled. You can try again from My Applications.'
@@ -6789,6 +6807,20 @@ async function processPayment(appId, amount, appNo, paymentOption, cancelPending
             }
         }
         if (!res.ok || !result.success) {
+            fetch('/api/payments/log-attempt', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    userId: uid,
+                    registrationId: regId,
+                    applicationNo: appNo,
+                    gateway: methodId || 'razorpay',
+                    amount: amount,
+                    status: 'failed',
+                    errorDescription: result.error || result.message || 'Payment could not be started.',
+                    metadata: { phase: 'init_client' }
+                })
+            }).catch(function () {});
             if (result.error && String(result.error).includes('already in progress')) {
                 if (confirm(result.error + '\n\nCancel the pending attempt and start again?')) {
                     return processPayment(appId, amount, appNo, methodId, true);
