@@ -556,8 +556,9 @@ function mergeAdminEnabledPagesPolicy(stored) {
     const pages = stored && typeof stored === 'object' ? { ...stored } : {};
     const keys = Object.keys(pages);
     const restrict = keys.length && keys.some((k) => pages[k] === true);
-    if (restrict && !('tab-book-sales' in pages)) {
-        pages['tab-book-sales'] = true;
+    if (restrict) {
+        if (!('tab-book-sales' in pages)) pages['tab-book-sales'] = true;
+        if (!('tab-cancellation-review' in pages)) pages['tab-cancellation-review'] = true;
     }
     return pages;
 }
@@ -595,10 +596,17 @@ function adminCanAccessTab(tabId) {
     if (isSuperAdminUser()) return true;
     const u = getStoredAdminUser();
     const isCo = String(u && u.user_role || '').toLowerCase() === 'co_admin';
-    if (!isCo) return globalAdminTabAllowed(checkId);
+    if (!isCo) {
+        if (tabId === 'tab-cancellation-review' && globalAdminTabAllowed('tab-admin-payments')) return true;
+        return globalAdminTabAllowed(checkId);
+    }
     const { unset, mods } = coAdminModulesState(u);
-    if (unset) return globalAdminTabAllowed(checkId);
+    if (unset) {
+        if (tabId === 'tab-cancellation-review' && globalAdminTabAllowed('tab-admin-payments')) return true;
+        return globalAdminTabAllowed(checkId);
+    }
     if (!Object.keys(mods).length) return false;
+    if (tabId === 'tab-cancellation-review' && mods['tab-admin-payments'] === true) return true;
     return mods[checkId] === true;
 }
 
@@ -819,7 +827,9 @@ function switchTab(tabId) {
     document.querySelectorAll('.tab-pane').forEach((t) => t.classList.add('hidden'));
     document.querySelectorAll('.menu-item').forEach((m) => m.classList.remove('active'));
     document.getElementById(tabId).classList.remove('hidden');
-    if (typeof event !== 'undefined' && event && event.currentTarget) event.currentTarget.classList.add('active');
+    const menuMatch = document.querySelector('.menu-item[data-admin-module="' + tabId + '"]');
+    if (menuMatch) menuMatch.classList.add('active');
+    else if (typeof event !== 'undefined' && event && event.currentTarget) event.currentTarget.classList.add('active');
     if (tabId === 'tab-behalf-reg' || tabId === 'tab-site-cms') {
         refreshAdminSensitiveOtpRequirement();
     }
@@ -854,9 +864,13 @@ function startAdminAutoRefresh() {
     adminAutoRefreshInterval = setInterval(() => {
         const applicationsTabVisible = !document.getElementById('tab-applications').classList.contains('hidden');
         const seminarDetailsTabVisible = !document.getElementById('tab-seminar-details').classList.contains('hidden');
+        const cancelTabVisible =
+            document.getElementById('tab-cancellation-review') &&
+            !document.getElementById('tab-cancellation-review').classList.contains('hidden');
 
         if (applicationsTabVisible) loadApplications();
         if (seminarDetailsTabVisible && currentManageSeminarId) refreshSeminarDashboard();
+        if (cancelTabVisible && typeof loadAdminCancellationRequests === 'function') loadAdminCancellationRequests();
     }, 15000);
 }
 
@@ -7915,6 +7929,15 @@ function updateAdminCancellationReviewStats() {
     set('cancel-review-stat-approved', approved);
     set('cancel-review-stat-rejected', rejected);
     set('cancel-review-stat-refund', refundActive);
+    const badge = document.getElementById('admin-cancel-review-badge');
+    if (badge) {
+        if (pending > 0) {
+            badge.textContent = String(pending);
+            badge.style.display = 'inline-block';
+        } else {
+            badge.style.display = 'none';
+        }
+    }
 }
 
 function initAdminCancellationReviewTab() {
@@ -12857,6 +12880,7 @@ function loadAllData() {
     loadEventSchedules();
     loadFeedbackSeminars();
     loadSupportTickets();
+    if (adminCanAccessTab('tab-cancellation-review')) loadAdminCancellationRequests();
     startAdminAutoRefresh();
     refreshCoAdminSessionFromServer().then(() => applyCoAdminSidebarVisibility());
 }
@@ -16169,13 +16193,25 @@ async function loadAdminCancellationRequests() {
     tbody.innerHTML = '<tr><td colspan="9">Loading…</td></tr>';
     try {
         const q = status ? '?status=' + encodeURIComponent(status) : '';
-        const res = await fetch('/api/admin/cancellation-requests' + q);
-        const rows = await res.json();
-        __adminCancelRequestsCache = Array.isArray(rows) ? rows : [];
+        const res = await fetch('/api/admin/cancellation-requests' + q, { cache: 'no-store' });
+        const data = await res.json().catch(() => null);
+        if (!res.ok) {
+            const errMsg = (data && data.error) || res.statusText || 'Failed to load cancellation requests';
+            tbody.innerHTML =
+                '<tr><td colspan="9" style="text-align:center;color:#b91c1c;">' +
+                escAdmin(errMsg) +
+                '</td></tr>';
+            __adminCancelRequestsCache = [];
+            updateAdminCancellationReviewStats();
+            return;
+        }
+        __adminCancelRequestsCache = Array.isArray(data) ? data : [];
         renderAdminCancellationRequestsTable();
     } catch (e) {
         console.error(e);
-        tbody.innerHTML = '<tr><td colspan="9">Failed to load</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#b91c1c;">Failed to load</td></tr>';
+        __adminCancelRequestsCache = [];
+        updateAdminCancellationReviewStats();
     }
 }
 

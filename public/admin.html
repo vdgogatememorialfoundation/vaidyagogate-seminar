@@ -117,7 +117,7 @@
                 <a class="menu-item" data-admin-module="tab-reg-form" onclick="switchTab('tab-reg-form'); loadAdminRegistrationFormConfig();"><i class="fas fa-list-alt"></i> Registration Form Fields</a>
                 <a class="menu-item" data-admin-module="tab-site-cms" onclick="switchTab('tab-site-cms'); loadAdminSiteCms();"><i class="fas fa-globe"></i> Website &amp; doctor updates</a>
                 <a class="menu-item" data-admin-module="tab-admin-payments" onclick="switchTab('tab-admin-payments'); loadAdminPaymentsModule();"><i class="fas fa-file-invoice-dollar"></i> Payments</a>
-                <a class="menu-item" data-admin-module="tab-cancellation-review" onclick="switchTab('tab-cancellation-review'); initAdminCancellationReviewTab();"><i class="fas fa-user-times"></i> Cancellation review</a>
+                <a class="menu-item" data-admin-module="tab-cancellation-review" onclick="switchTab('tab-cancellation-review'); initAdminCancellationReviewTab();"><i class="fas fa-user-times"></i> Cancellation review <span id="admin-cancel-review-badge" style="display:none;margin-left:6px;background:#f59e0b;color:#fff;font-size:0.68rem;font-weight:700;padding:2px 7px;border-radius:999px;vertical-align:middle;"></span></a>
                 <a class="menu-item" data-admin-module="tab-book-sales" onclick="switchTab('tab-book-sales'); loadBookSalesAdmin();"><i class="fas fa-book"></i> Book sales</a>
                 <a class="menu-item" data-admin-module="tab-certificates" onclick="switchTab('tab-certificates'); initAdminCertificatesTab();"><i class="fas fa-award"></i> Certificate Management</a>
                 <a class="menu-item" data-admin-module="tab-volunteers" onclick="switchTab('tab-volunteers'); initAdminVolunteersTab();"><i class="fas fa-hands-helping"></i> Volunteers</a>
@@ -1666,8 +1666,8 @@
                     <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
                         <label>Status
                             <select id="admin-cancel-req-filter" onchange="loadAdminCancellationRequests()">
-                                <option value="">All</option>
-                                <option value="pending" selected>Pending</option>
+                                <option value="" selected>All</option>
+                                <option value="pending">Pending</option>
                                 <option value="approved">Approved</option>
                                 <option value="rejected">Rejected</option>
                             </select>
@@ -3150,6 +3150,6 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
-    <script src="/js/admin.js?v=20260612ops1"></script>
+    <script src="/js/admin.js?v=20260613cancel1"></script>
 </body>
 </html>
