@@ -212,6 +212,18 @@
         sendHeartbeat();
     }
 
+    function sendGoodbye() {
+        try {
+            var payload = JSON.stringify({ sessionId: sessionId(), goodbye: true });
+            if (navigator.sendBeacon) {
+                navigator.sendBeacon(
+                    '/api/public/visitor-heartbeat',
+                    new Blob([payload], { type: 'application/json' })
+                );
+            }
+        } catch (_) {}
+    }
+
     function boot() {
         if (started) return;
         started = true;
@@ -222,6 +234,7 @@
             if (!document.hidden) sendHeartbeat();
         });
         global.addEventListener('focus', sendHeartbeat);
+        global.addEventListener('pagehide', sendGoodbye);
     }
 
     global.SiteVisitorBeacon = {

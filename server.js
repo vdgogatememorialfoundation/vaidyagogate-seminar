@@ -5870,7 +5870,7 @@ app.get('/api/admin/live-radar/stream', (req, res) => {
     if (typeof res.flushHeaders === 'function') res.flushHeaders();
 
     const sendSnapshot = () => {
-        siteVisitors.getLiveRadarSnapshot(db, { minutes: 10 }, (err, data) => {
+        siteVisitors.getLiveRadarSnapshot(db, { minutes: 3 }, (err, data) => {
             if (err || res.writableEnded) return;
             try {
                 res.write('data: ' + JSON.stringify(err ? { error: err.message } : data) + '\n\n');

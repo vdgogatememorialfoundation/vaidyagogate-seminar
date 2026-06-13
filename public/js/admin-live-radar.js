@@ -297,18 +297,25 @@
         mapCtx.clearRect(0, 0, w, h);
 
         const grd = mapCtx.createLinearGradient(0, 0, 0, h);
-        grd.addColorStop(0, 'rgba(15,23,42,0.2)');
-        grd.addColorStop(1, 'rgba(2,6,23,0.85)');
+        grd.addColorStop(0, '#ffffff');
+        grd.addColorStop(1, '#f1f5f9');
         mapCtx.fillStyle = grd;
         mapCtx.fillRect(0, 0, w, h);
 
-        mapCtx.strokeStyle = 'rgba(148,163,184,0.07)';
+        mapCtx.strokeStyle = 'rgba(148,163,184,0.28)';
         mapCtx.lineWidth = 1;
         for (let i = 1; i < 10; i++) {
             const y = (h / 10) * i;
             mapCtx.beginPath();
             mapCtx.moveTo(0, y);
             mapCtx.lineTo(w, y);
+            mapCtx.stroke();
+        }
+        for (let i = 1; i < 18; i++) {
+            const x = (w / 18) * i;
+            mapCtx.beginPath();
+            mapCtx.moveTo(x, 0);
+            mapCtx.lineTo(x, h);
             mapCtx.stroke();
         }
 
@@ -322,7 +329,7 @@
             const pulse = 4 + Math.sin(mapPhase + idx) * 3;
 
             mapCtx.beginPath();
-            mapCtx.strokeStyle = color + '55';
+            mapCtx.strokeStyle = color + '88';
             mapCtx.lineWidth = 2;
             mapCtx.arc(x, y, 10 + pulse, 0, Math.PI * 2);
             mapCtx.stroke();
@@ -410,7 +417,7 @@
     function startPollFallback() {
         if (pollTimer) clearInterval(pollTimer);
         const pull = function () {
-            fetch('/api/admin/live-radar?minutes=10')
+            fetch('/api/admin/live-radar?minutes=3')
                 .then(function (r) {
                     return r.json();
                 })
