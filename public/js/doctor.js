@@ -7353,24 +7353,82 @@ async function openDoctorOrderReceipt(orderDbId) {
     w.document.close();
 }
 
-async function joinDoctorWebinar(ticketIdString) {
-    const uid = doctorNumericUserId();
-    if (!uid || !ticketIdString) return;
-    try {
-        const res = await fetch('/api/doctor/webinar/join', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: uid, ticketIdString: ticketIdString })
-        });
-        const data = await res.json();
-        if (!res.ok || !data.success || !data.enterUrl) {
-            alert((data && data.error) || 'Could not open webinar join link.');
-            return;
-        }
-        window.open(data.enterUrl, '_blank', 'noopener,noreferrer');
-    } catch (e) {
-        alert(e.message || 'Network error');
+function doctorDisplayName() {
+    if (!currentUser) return 'Participant';
+    return [currentUser.first_name, currentUser.last_name].filter(Boolean).join(' ').trim() || 'Participant';
+}
+
+function eticketViewUrl(t) {
+    const token = t.download_token || '';
+    if (token) {
+        return (
+            '/api/doctor/ticket-document/' +
+            encodeURIComponent(t.ticket_id_string) +
+            '?token=' +
+            encodeURIComponent(token)
+        );
     }
+    const uid = doctorNumericUserId();
+    return (
+        '/api/doctor/ticket-document/' +
+        encodeURIComponent(t.ticket_id_string) +
+        '?userId=' +
+        encodeURIComponent(String(uid || ''))
+    );
+}
+
+async function downloadEticketPdf(t) {
+    if (!window.jspdf) {
+        alert('PDF library is still loading. Please try again in a moment.');
+        return;
+    }
+    if (!t || !t.ticket_id_string) return;
+    await preloadSiteLogoForPdf();
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF();
+    const accent = [15, 118, 110];
+    const ink = [15, 23, 42];
+    const muted = [71, 85, 105];
+    const holder = doctorDisplayName();
+    let y = pdfCongressHeader(doc, 'E-Ticket — venue entry pass');
+    y = pdfCongressSectionTitle(doc, y + 2, 'Participant', accent, ink);
+    const drawRow = (label, value) => {
+        doc.setFontSize(9.5);
+        doc.setFont('helvetica', 'bold');
+        doc.setTextColor(...muted);
+        doc.text(label, 18, y + 7);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(...ink);
+        const lines = doc.splitTextToSize(String(value || '—'), 118);
+        doc.text(lines, 72, y + 7);
+        y += Math.max(10, lines.length * 6);
+    };
+    drawRow('Name', holder);
+    drawRow('Seminar', t.seminar_title || 'Seminar');
+    drawRow('E-ticket ID', t.ticket_id_string || '—');
+    drawRow('Application', t.application_no || '—');
+    drawRow('Order', t.order_id_string || '—');
+    y = pdfCongressSectionTitle(doc, y + 4, 'Entry QR', accent, ink);
+    const qrUrl = ticketQrImageUrl(t);
+    if (qrUrl) {
+        await new Promise(function (resolve) {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = function () {
+                pdfAddQrCode(doc, img, 18, y + 2, 42);
+                resolve();
+            };
+            img.onerror = function () {
+                resolve();
+            };
+            img.src = qrUrl;
+        });
+    }
+    doc.setFontSize(8);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Issued to: ' + holder, 14, 282);
+    doc.text('Non-transferable · Do not share this QR or PDF', 14, 288);
+    doc.save('e-ticket-' + String(t.ticket_id_string).replace(/[^\w-]+/g, '-') + '.pdf');
 }
 
 async function loadDoctorEventTickets() {
@@ -7390,7 +7448,9 @@ async function loadDoctorEventTickets() {
             return;
         }
         let html = '<div style="display:flex;flex-direction:column;gap:20px;">';
+        window.__eticketRows = {};
         rows.forEach((t) => {
+            if (t.ticket_id_string) window.__eticketRows[t.ticket_id_string] = t;
             const regSt = String(t.registration_status || '').toLowerCase();
             const expired = !!t.ticket_expired || !!t.no_valid_ticket;
             const adminOverride =
@@ -7417,28 +7477,25 @@ async function loadDoctorEventTickets() {
                             '. Do not use this QR for entry.'
                   }</p>`
                 : `<p style="margin:8px 0 0;font-size:0.85rem;color:#64748b;">${escapeHtml(scanned)}${escapeHtml(expiryNote)}</p>`;
+            const holder = escapeHtml(doctorDisplayName());
             html += `<div style="border:1px solid ${invalid ? '#fecaca' : '#e2e8f0'};border-radius:12px;padding:16px;display:grid;grid-template-columns:128px 1fr;gap:16px;align-items:start;${invalid ? 'opacity:0.85;background:#fef2f2;' : ''}">
-                <div>${qr ? `<img src="${qr}" alt="QR code" style="width:128px;height:128px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;">` : (t.is_scanned ? '<span style="color:#059669;font-size:0.85rem;font-weight:700;"><i class="fas fa-check-circle"></i> QR used at entry</span>' : '<span style="color:#94a3b8;font-size:0.85rem;">QR unavailable</span>')}</div>
+                <div style="position:relative;width:128px;-webkit-touch-callout:none;user-select:none;">
+                    ${qr ? `<img src="${qr}" alt="QR code" draggable="false" style="width:128px;height:128px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;-webkit-user-drag:none;pointer-events:none;">` : (t.is_scanned ? '<span style="color:#059669;font-size:0.85rem;font-weight:700;"><i class="fas fa-check-circle"></i> QR used at entry</span>' : '<span style="color:#94a3b8;font-size:0.85rem;">QR unavailable</span>')}
+                    ${qr ? `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;font-size:0.52rem;font-weight:800;color:rgba(15,118,110,0.18);text-align:center;line-height:1.15;padding:6px;transform:rotate(-18deg);">${holder}</div>` : ''}
+                </div>
                 <div>
                     <h4 style="margin:0 0 8px;color:#1a237e;">${escapeHtml(t.seminar_title || 'Seminar')}</h4>
                     <p style="margin:0 0 6px;font-size:0.9rem;"><strong>E‑ticket ID:</strong> <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px;">${escapeHtml(t.ticket_id_string || '—')}</code></p>
                     <p style="margin:4px 0;font-size:0.9rem;"><strong>Order:</strong> ${escapeHtml(String(t.order_id_string || '—'))} · <strong>Application:</strong> ${escapeHtml(String(t.application_no || '—'))}</p>
                     <p style="margin:4px 0;font-size:0.9rem;"><strong>Registration:</strong> ${escapeHtml(t.registration_status || '—')} · <strong>Payment:</strong> ${escapeHtml(t.order_status || '—')}</p>
+                    <p style="margin:6px 0 0;font-size:0.78rem;color:#64748b;">Issued to <strong>${holder}</strong> · non-transferable</p>
                     ${statusLine}
                     ${
-                        !invalid && t.can_join_webinar
-                            ? `<p style="margin:12px 0 0;"><button type="button" class="btn-success" style="padding:10px 16px;border:none;border-radius:8px;cursor:pointer;font-weight:700;" onclick="joinDoctorWebinar('${escapeHtml(String(t.ticket_id_string || ''))}')"><i class="fas fa-video"></i> Join webinar (${escapeHtml(t.webinar_provider_label || 'secure link')})</button></p>` +
-                              (t.webinar_join_instructions
-                                  ? `<p style="margin:8px 0 0;font-size:0.82rem;color:#475569;">${escapeHtml(t.webinar_join_instructions)}</p>`
-                                  : '') +
-                              `<p style="margin:6px 0 0;font-size:0.78rem;color:#64748b;">One-time join link · valid 15 minutes · do not share</p>`
-                            : !invalid && t.delivery_mode && (t.delivery_mode === 'online' || t.delivery_mode === 'hybrid') && t.webinar_join_error
-                              ? `<p style="margin:12px 0 0;font-size:0.82rem;color:#92400e;">${escapeHtml(t.webinar_join_error)}</p>`
-                              : ''
-                    }
-                    ${
                         !invalid && t.ticket_id_string
-                            ? `<p style="margin:12px 0 0;"><a href="/api/doctor/ticket-document/${encodeURIComponent(t.ticket_id_string)}?userId=${encodeURIComponent(String(uid))}" target="_blank" rel="noopener" class="btn-primary" style="display:inline-block;padding:8px 14px;text-decoration:none;font-size:0.88rem;">Download / print e-ticket (PDF)</a></p>`
+                            ? `<div style="margin:12px 0 0;display:flex;flex-wrap:wrap;gap:8px;">
+                                <button type="button" class="btn-primary" style="padding:8px 14px;font-size:0.88rem;" onclick="downloadEticketPdf(window.__eticketRows[${JSON.stringify(String(t.ticket_id_string))}])"><i class="fas fa-download"></i> Save PDF to device</button>
+                                <a href="${escapeHtml(eticketViewUrl(t))}" target="_blank" rel="noopener" class="btn-primary" style="display:inline-block;padding:8px 14px;text-decoration:none;font-size:0.88rem;background:#475569;"><i class="fas fa-print"></i> Print view</a>
+                               </div>`
                             : ''
                     }
                 </div>

@@ -23,6 +23,7 @@ const pincodeLookup = require('./lib/pincode-lookup');
 const countriesList = require('./lib/countries');
 const designatedNotify = require('./lib/designated-notify');
 const ticketHtml = require('./lib/ticket-html');
+const ticketAccess = require('./lib/ticket-access');
 const {
     validateDynamicForm,
     normalizeFields,
@@ -71,7 +72,6 @@ const userAccountLifecycle = require('./lib/user-account-lifecycle');
 const userClientTelemetry = require('./lib/user-client-telemetry');
 const siteVisitors = require('./lib/site-visitors');
 const liveRadarHub = require('./lib/live-radar-hub');
-const webinarAccess = require('./lib/webinar-access');
 const paymentAttempts = require('./lib/payment-attempts');
 const emailDeliveryFlags = require('./lib/email-delivery-flags');
 const seminarEventOps = require('./lib/seminar-event-ops');
@@ -1167,7 +1167,6 @@ function ensurePortalSchema(next) {
                                             ticketScanEvents.ensureTicketScanEventsTable(db, () => {
                                                 scannerIdCapture.ensureSchema(db, () => {
                                                     adminMailThreads.ensureSchema(db, () => {});
-                                                    webinarAccess.ensureSchema(db, () => {});
                                                 });
                                             });
                                         db.run(`ALTER TABLE tickets ADD COLUMN ticket_id_string TEXT`, (e2) => {
@@ -2028,6 +2027,27 @@ function backfillTicketsForPaidOrders(cb) {
     );
 }
 
+function ticketDocumentUrl(ticketIdString, userId, ttlMs) {
+    const base = notifEngine.publicBaseUrl();
+    const token = ticketAccess.createTicketAccessToken(ticketIdString, userId, ttlMs || 7 * 24 * 60 * 60 * 1000);
+    if (!token) {
+        return (
+            base +
+            '/api/doctor/ticket-document/' +
+            encodeURIComponent(String(ticketIdString)) +
+            '?userId=' +
+            encodeURIComponent(String(userId))
+        );
+    }
+    return (
+        base +
+        '/api/doctor/ticket-document/' +
+        encodeURIComponent(String(ticketIdString)) +
+        '?token=' +
+        encodeURIComponent(token)
+    );
+}
+
 function notifyTicketIssued(userId, registrationId, ticketId, channelOpts) {
     channelOpts = channelOpts || {};
     if (!userId || !registrationId || !ticketId) return;
@@ -2066,13 +2086,7 @@ function runNotifyTicketIssued(userId, registrationId, ticketId, opts) {
         (e, row) => {
             if (e) return;
             const seminarId = row && row.seminar_id;
-            const base = notifEngine.publicBaseUrl();
-            const pdfUrl =
-                base +
-                '/api/doctor/ticket-document/' +
-                encodeURIComponent(String(ticketId)) +
-                '?userId=' +
-                encodeURIComponent(String(userId));
+            const pdfUrl = ticketDocumentUrl(String(ticketId), userId);
             const vars = {
                 ticket_id: ticketId,
                 qr_code_url: base + '/doctor#tab-tickets',
@@ -6365,10 +6379,7 @@ app.get('/api/doctor/event-tickets/:userId', (req, res) => {
         `SELECT t.id as ticket_row_id, t.ticket_id_string, t.qr_code_data, t.is_scanned, t.scan_time,
                 IFNULL(t.scan_count, 0) AS scan_count, IFNULL(t.is_valid, 1) AS is_valid,
                 o.order_id_string, o.amount, o.status as order_status, o.payment_date,
-                r.application_no, r.status as registration_status, r.user_id,
-                s.title as seminar_title, s.id as seminar_id, s.event_date, s.price,
-                s.delivery_mode, s.webinar_provider, s.webinar_join_instructions,
-                s.webinar_join_opens, s.webinar_join_closes, s.webinar_meeting_url
+                r.application_no, r.status as registration_status, s.title as seminar_title, s.id as seminar_id, s.event_date
          FROM tickets t
          JOIN orders o ON t.order_id = o.id
          JOIN registrations r ON o.registration_id = r.id
@@ -6386,20 +6397,13 @@ app.get('/api/doctor/event-tickets/:userId', (req, res) => {
                     isTicketExpiredForSeminar(row.event_date) &&
                     !scanned &&
                     !adminCheckedIn;
-                const eligibility = webinarAccess.ticketEligibleForWebinar(row);
-                const safe = { ...row };
-                delete safe.webinar_meeting_url;
                 return {
-                    ...safe,
+                    ...row,
+                    download_token: ticketAccess.createTicketAccessToken(row.ticket_id_string, uid, 900000),
                     seminar_ended: isSeminarEnded(row.event_date),
                     ticket_expires_on: ticketExpiryStartsYmd(row.event_date) || null,
                     ticket_expired: expired,
-                    no_valid_ticket: expired,
-                    can_join_webinar: !!(eligibility && eligibility.ok),
-                    webinar_join_error: eligibility && !eligibility.ok ? eligibility.error : null,
-                    webinar_provider_label: row.webinar_provider
-                        ? webinarAccess.providerLabel(row.webinar_provider)
-                        : null
+                    no_valid_ticket: expired
                 };
             });
             res.json(out);
@@ -6407,68 +6411,9 @@ app.get('/api/doctor/event-tickets/:userId', (req, res) => {
     );
 });
 
-app.post('/api/doctor/webinar/join', (req, res) => {
-    const uid = parseInt((req.body && req.body.userId) || '', 10);
-    const ticketIdString = String((req.body && req.body.ticketIdString) || '').trim();
-    if (!Number.isInteger(uid) || uid < 1) return res.status(400).json({ error: 'Invalid session.' });
-    if (!ticketIdString) return res.status(400).json({ error: 'Ticket id required.' });
-
-    webinarAccess.ensureSchema(db, (schemaErr) => {
-        if (schemaErr) return res.status(500).json({ error: schemaErr.message });
-        db.get(
-            `SELECT t.id AS ticket_row_id, t.ticket_id_string, t.is_valid, t.user_id,
-                    r.status AS registration_status, r.user_id AS reg_user_id,
-                    o.status AS order_status, s.id AS seminar_id, s.price, s.delivery_mode,
-                    s.webinar_meeting_url, s.webinar_provider, s.webinar_join_opens, s.webinar_join_closes,
-                    s.webinar_single_device
-             FROM tickets t
-             JOIN orders o ON t.order_id = o.id
-             JOIN registrations r ON o.registration_id = r.id
-             JOIN seminars s ON r.seminar_id = s.id
-             WHERE TRIM(t.ticket_id_string) = TRIM(?) AND r.user_id = ?`,
-            [ticketIdString, uid],
-            (err, row) => {
-                if (err) return res.status(500).json({ error: err.message });
-                if (!row) return res.status(404).json({ error: 'Ticket not found.' });
-                row.user_id = uid;
-                webinarAccess.createJoinToken(db, req, row, (tokErr, out) => {
-                    if (tokErr) return res.status(500).json({ error: tokErr.message });
-                    if (!out || !out.ok) return res.status(400).json({ error: (out && out.error) || 'Cannot join webinar.' });
-                    const base = (integrationSettings.getPublicBaseUrl() || getPortalUrls().seminar || '').replace(/\/$/, '');
-                    res.json({
-                        success: true,
-                        enterUrl: base + out.enterPath,
-                        expiresAt: out.expiresAt,
-                        message: 'Opening secure join link. Link expires in 15 minutes and works once.'
-                    });
-                });
-            }
-        );
-    });
-});
-
-app.get('/webinar/enter/:token', (req, res) => {
-    const token = String(req.params.token || '').trim();
-    webinarAccess.ensureSchema(db, (schemaErr) => {
-        if (schemaErr) return res.status(500).send('Service unavailable');
-        webinarAccess.consumeJoinToken(db, token, req, (err, out) => {
-            if (err) return res.status(500).send('Could not verify join link.');
-            if (!out || !out.ok) {
-                return res
-                    .status(403)
-                    .send(
-                        '<!DOCTYPE html><html><body style="font-family:sans-serif;padding:40px;max-width:520px;margin:auto;"><h1>Webinar access denied</h1><p>' +
-                            String((out && out.error) || 'Invalid link.') +
-                            '</p><p>Open the <strong>Doctor portal → Participant tickets</strong> tab and tap <strong>Join webinar</strong> again.</p></body></html>'
-                    );
-            }
-            res.redirect(302, out.meetingUrl);
-        });
-    });
-});
-
 app.get('/api/doctor/ticket-document/:ticketId', (req, res) => {
     const ticketId = String(req.params.ticketId || '').trim();
+    const token = String(req.query.token || '').trim();
     const uid = parseInt(req.query.userId, 10);
     if (!ticketId) return res.status(400).send('Ticket id required');
     const internalRowId = safeInternalTicketRowId(ticketId);
@@ -6479,7 +6424,7 @@ app.get('/api/doctor/ticket-document/:ticketId', (req, res) => {
     db.get(
         `SELECT t.ticket_id_string, t.qr_code_data, t.is_scanned, t.scan_time, IFNULL(t.is_valid, 1) AS is_valid,
                 r.application_no, r.user_id, o.status AS payment_status,
-                s.title AS seminar_title, s.event_date, s.location_url, s.portal_year, s.delivery_mode,
+                s.title AS seminar_title, s.event_date, s.location_url, s.portal_year,
                 u.first_name, u.last_name
          FROM tickets t
          JOIN orders o ON t.order_id = o.id
@@ -6491,9 +6436,22 @@ app.get('/api/doctor/ticket-document/:ticketId', (req, res) => {
         (err, row) => {
             if (err) return res.status(500).send(err.message);
             if (!row) return res.status(404).send('Ticket not found');
-            if (Number.isInteger(uid) && uid > 0 && Number(row.user_id) !== uid) {
-                return res.status(403).send('Not your ticket');
+            const ownerId = Number(row.user_id);
+            let authorized = false;
+            if (token) {
+                authorized = ticketAccess.verifyTicketAccessToken(token, row.ticket_id_string, ownerId);
+                if (!authorized) {
+                    const parsed = ticketAccess.parseTicketAccessToken(token);
+                    if (parsed && parsed.expired) {
+                        return res.status(403).send('Ticket link expired — open the doctor portal and download again.');
+                    }
+                    return res.status(403).send('Invalid ticket link');
+                }
+            } else if (Number.isInteger(uid) && uid > 0 && ownerId === uid) {
+                authorized = true;
             }
+            if (!authorized) return res.status(403).send('Sign in to the doctor portal to view this ticket.');
+            const displayName = [row.first_name, row.last_name].filter(Boolean).join(' ');
             ticketHtml
                 .buildTicketHtmlFromRow(
                     {
@@ -6503,8 +6461,8 @@ app.get('/api/doctor/ticket-document/:ticketId', (req, res) => {
                         event_date: row.event_date,
                         location_url: row.location_url,
                         portal_year: row.portal_year,
-                        delivery_mode: row.delivery_mode,
-                        display_name: [row.first_name, row.last_name].filter(Boolean).join(' '),
+                        display_name: displayName,
+                        watermark_text: displayName + ' · Non-transferable',
                         qr_code_data: row.qr_code_data,
                         is_scanned: row.is_scanned,
                         scan_time: row.scan_time,
@@ -6515,7 +6473,14 @@ app.get('/api/doctor/ticket-document/:ticketId', (req, res) => {
                 )
                 .then((html) => {
                     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-                    res.setHeader('Cache-Control', 'no-store');
+                    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+                    res.setHeader('Pragma', 'no-cache');
+                    if (req.query.download === '1') {
+                        res.setHeader(
+                            'Content-Disposition',
+                            'attachment; filename="e-ticket-' + String(row.ticket_id_string || ticketId).replace(/[^\w-]+/g, '_') + '.html"'
+                        );
+                    }
                     res.send(html);
                 })
                 .catch((e) => res.status(500).send(e.message));
@@ -7670,33 +7635,6 @@ app.get('/api/qrcode/:text', async (req, res) => {
 
 // --- ADMIN APIs ---
 
-function webinarFieldsFromBody(body) {
-    const mode = webinarAccess.normalizeDeliveryMode(body && body.delivery_mode);
-    const online = webinarAccess.isOnlineDelivery(mode);
-    return {
-        delivery_mode: mode,
-        webinar_provider:
-            online && body && body.webinar_provider ? webinarAccess.normalizeProvider(body.webinar_provider) : null,
-        webinar_meeting_url:
-            online && body && body.webinar_meeting_url && String(body.webinar_meeting_url).trim()
-                ? String(body.webinar_meeting_url).trim().slice(0, 2000)
-                : null,
-        webinar_join_instructions:
-            online && body && body.webinar_join_instructions && String(body.webinar_join_instructions).trim()
-                ? String(body.webinar_join_instructions).trim().slice(0, 2000)
-                : null,
-        webinar_join_opens: online ? seminarDt.normalizeSeminarDateTimeForStorage(body.webinar_join_opens) : null,
-        webinar_join_closes: online ? seminarDt.normalizeSeminarDateTimeForStorage(body.webinar_join_closes) : null,
-        webinar_single_device:
-            online &&
-            (body.webinar_single_device === true ||
-                body.webinar_single_device === 1 ||
-                body.webinar_single_device === '1')
-                ? 1
-                : 0
-    };
-}
-
 // Admin: Create Seminar
 app.post('/api/admin/seminars', (req, res) => {
     const {
@@ -7757,7 +7695,6 @@ app.post('/api/admin/seminars', (req, res) => {
         auto_confirm_registration === true || auto_confirm_registration === 1 || auto_confirm_registration === '1'
             ? 1
             : 0;
-    const wf = webinarFieldsFromBody(req.body);
     const regStart = seminarDt.normalizeSeminarDateTimeForStorage(registration_start);
     const regEnd = seminarDt.normalizeSeminarRegistrationEndForStorage(registration_end);
     const eventDt = seminarDt.normalizeSeminarDateTimeForStorage(event_date);
@@ -7768,8 +7705,8 @@ app.post('/api/admin/seminars', (req, res) => {
         const portalYear =
             Number.isInteger(bodyYear) && bodyYear > 2000 ? bodyYear : defaultYear;
         db.run(
-            `INSERT INTO seminars (title, description, registration_start, registration_end, event_date, capacity, price, checkin_enabled, checkin_date, location_url, terms_conditions, hero_image_path, flyer_path, gallery_paths, registration_form_json, cancellation_policy_json, whatsapp_group_url, otp_on_application, otp_on_step1, otp_on_submit, public_list_enabled, cert_scans_required, portal_year, is_active, show_seats_public, preregistration_enabled, preregistration_start, preregistration_end, waiting_list_enabled, allow_application_edit, auto_confirm_registration, delivery_mode, webinar_provider, webinar_meeting_url, webinar_join_instructions, webinar_join_opens, webinar_join_closes, webinar_single_device) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO seminars (title, description, registration_start, registration_end, event_date, capacity, price, checkin_enabled, checkin_date, location_url, terms_conditions, hero_image_path, flyer_path, gallery_paths, registration_form_json, cancellation_policy_json, whatsapp_group_url, otp_on_application, otp_on_step1, otp_on_submit, public_list_enabled, cert_scans_required, portal_year, is_active, show_seats_public, preregistration_enabled, preregistration_start, preregistration_end, waiting_list_enabled, allow_application_edit, auto_confirm_registration) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 title,
                 description,
@@ -7801,14 +7738,7 @@ app.post('/api/admin/seminars', (req, res) => {
                 preregEnd,
                 waitListEnabled,
                 allowAppEdit,
-                autoConfirmReg,
-                wf.delivery_mode,
-                wf.webinar_provider,
-                wf.webinar_meeting_url,
-                wf.webinar_join_instructions,
-                wf.webinar_join_opens,
-                wf.webinar_join_closes,
-                wf.webinar_single_device
+                autoConfirmReg
             ],
             function (err) {
             if (err) return res.status(500).json({ error: err.message });
@@ -7882,7 +7812,6 @@ app.put('/api/admin/seminars/:id', (req, res) => {
         auto_confirm_registration === true || auto_confirm_registration === 1 || auto_confirm_registration === '1'
             ? 1
             : 0;
-    const wf = webinarFieldsFromBody(req.body);
     const py = portal_year != null ? parseInt(portal_year, 10) : null;
     const regStart = seminarDt.normalizeSeminarDateTimeForStorage(registration_start);
     const regEnd = seminarDt.normalizeSeminarRegistrationEndForStorage(registration_end);
@@ -7893,7 +7822,7 @@ app.put('/api/admin/seminars/:id', (req, res) => {
         if (ePy) return res.status(500).json({ error: ePy.message });
         const finalPortalYear = Number.isInteger(py) && py > 2000 ? py : defaultYear;
         db.run(
-            `UPDATE seminars SET title=?, description=?, registration_start=?, registration_end=?, event_date=?, capacity=?, price=?, checkin_enabled=?, checkin_date=?, is_active=?, location_url=?, terms_conditions=?, hero_image_path=?, flyer_path=?, gallery_paths=?, registration_form_json=?, cancellation_policy_json=?, whatsapp_group_url=?, otp_on_application=?, otp_on_step1=?, otp_on_submit=?, public_list_enabled=?, cert_scans_required=?, portal_year=?, show_seats_public=?, preregistration_enabled=?, preregistration_start=?, preregistration_end=?, waiting_list_enabled=?, allow_application_edit=?, auto_confirm_registration=?, delivery_mode=?, webinar_provider=?, webinar_meeting_url=?, webinar_join_instructions=?, webinar_join_opens=?, webinar_join_closes=?, webinar_single_device=? WHERE id=?`,
+            `UPDATE seminars SET title=?, description=?, registration_start=?, registration_end=?, event_date=?, capacity=?, price=?, checkin_enabled=?, checkin_date=?, is_active=?, location_url=?, terms_conditions=?, hero_image_path=?, flyer_path=?, gallery_paths=?, registration_form_json=?, cancellation_policy_json=?, whatsapp_group_url=?, otp_on_application=?, otp_on_step1=?, otp_on_submit=?, public_list_enabled=?, cert_scans_required=?, portal_year=?, show_seats_public=?, preregistration_enabled=?, preregistration_start=?, preregistration_end=?, waiting_list_enabled=?, allow_application_edit=?, auto_confirm_registration=? WHERE id=?`,
             [
                 title,
                 description,
@@ -7926,13 +7855,6 @@ app.put('/api/admin/seminars/:id', (req, res) => {
                 waitListEnabled,
                 allowAppEdit,
                 autoConfirmReg,
-                wf.delivery_mode,
-                wf.webinar_provider,
-                wf.webinar_meeting_url,
-                wf.webinar_join_instructions,
-                wf.webinar_join_opens,
-                wf.webinar_join_closes,
-                wf.webinar_single_device,
                 req.params.id
             ],
             function (err) {
@@ -13579,7 +13501,7 @@ app.get('/api/admin/e-tickets/lookup', (req, res) => {
                 hasTicket: !!row.ticket_id_string,
                 ticketPreviewUrl:
                     row.ticket_id_string && row.user_id
-                        ? `${base}/api/doctor/ticket-document/${encodeURIComponent(row.ticket_id_string)}?userId=${encodeURIComponent(String(row.user_id))}`
+                        ? ticketDocumentUrl(row.ticket_id_string, row.user_id)
                         : null
             }));
             res.json({ success: true, results: list });
