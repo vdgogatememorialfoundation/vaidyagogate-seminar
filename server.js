@@ -547,6 +547,8 @@ app.get('/certificate/download', (req, res) => {
     certRender.handleDownloadRequest(db, req, res);
 });
 
+siteSeoMod.registerFaviconRoutes(app, { db });
+
 app.use(
     express.static('public', {
         maxAge: process.env.NODE_ENV === 'production' ? '86400000' : 0,

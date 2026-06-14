@@ -10,10 +10,15 @@
         '/staff',
         '/support'
     ];
+    const LEGACY_FAVICONS = ['/favicon.svg', '/favicon.ico', '/api/branding/logo/file', ''];
 
     function isPrivatePortalPath() {
         const p = (window.location.pathname || '/').replace(/\/+$/, '') || '/';
-        if (PRIVATE_PREFIXES.some((x) => p === x || p.startsWith(x + '/'))) return true;
+        if (PRIVATE_PREFIXES.some(function (x) {
+            return p === x || p.startsWith(x + '/');
+        })) {
+            return true;
+        }
         return p.startsWith('/admin/');
     }
 
@@ -46,14 +51,21 @@
 
     function faviconMime(url) {
         const u = String(url || '').toLowerCase();
-        if (u.endsWith('.svg')) return 'image/svg+xml';
-        if (u.endsWith('.jpg') || u.endsWith('.jpeg')) return 'image/jpeg';
-        if (u.endsWith('.webp')) return 'image/webp';
+        if (u.indexOf('.svg') >= 0) return 'image/svg+xml';
+        if (u.indexOf('.jpg') >= 0 || u.indexOf('.jpeg') >= 0) return 'image/jpeg';
+        if (u.indexOf('.webp') >= 0) return 'image/webp';
         return 'image/png';
     }
 
+    function resolveFaviconHref(seo, logoPath) {
+        if (logoPath) return logoPath;
+        const cmsFav = seo && seo.faviconUrl ? String(seo.faviconUrl) : '';
+        if (cmsFav && LEGACY_FAVICONS.indexOf(cmsFav) < 0) return cmsFav;
+        return '/favicon.ico';
+    }
+
     function applySeo(seo, logoPath) {
-        if (!seo || typeof seo !== 'object') return;
+        if (!seo || typeof seo !== 'object') seo = {};
         const title = seo.title || seo.siteName;
         if (title) document.title = title;
         upsertMeta('name', 'description', seo.description || '');
@@ -68,11 +80,9 @@
         const canon = (window.location.origin || '') + (window.location.pathname || '/');
         upsertLink('canonical', canon);
 
-        const legacyFavicons = ['/favicon.svg', ''];
-        let fav = seo.faviconUrl || logoPath || '/api/branding/logo/file';
-        if (legacyFavicons.indexOf(fav) >= 0 && logoPath) fav = logoPath;
+        const fav = resolveFaviconHref(seo, logoPath);
         upsertLink('icon', fav, { type: faviconMime(fav) });
-        upsertLink('shortcut icon', '/favicon.ico');
+        upsertLink('shortcut icon', fav);
         upsertLink('apple-touch-icon', fav);
 
         upsertMeta('property', 'og:title', title || '');
