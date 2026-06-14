@@ -11822,6 +11822,7 @@ function openCreateSeminarModal() {
     if (py) py.value = adminPortalYear || new Date().getFullYear();
     if (typeof loadSeminarCancellationUi === 'function') loadSeminarCancellationUi('');
     if (typeof loadSeminarFormOverrideUi === 'function') loadSeminarFormOverrideUi('');
+    loadSeminarSubEventsUi([]);
     const preregCh = document.getElementById('seminar-prereg-enabled');
     if (preregCh) preregCh.checked = false;
     syncSeminarPreregUi();
@@ -11885,6 +11886,73 @@ async function loadSeminars() {
         globalSeminars = await res.json();
         renderSeminarsTable();
     } catch (err) { console.error(err); }
+}
+
+function addSeminarSubEventRow(prefill) {
+    const list = document.getElementById('seminar-sub-events-list');
+    if (!list) return;
+    const row = document.createElement('div');
+    row.className = 'seminar-sub-event-row';
+    row.style.cssText =
+        'display:grid;grid-template-columns:2fr 1fr 1fr 0.8fr 0.8fr auto;gap:8px;align-items:end;margin-bottom:8px;padding:10px;background:#fff;border:1px solid #d1fae5;border-radius:8px;';
+    const p = prefill || {};
+    const fmtDt = (v) =>
+        window.PortalDateTime && window.PortalDateTime.toDatetimeLocal
+            ? window.PortalDateTime.toDatetimeLocal(v)
+            : v
+              ? String(v).slice(0, 16)
+              : '';
+    row.innerHTML =
+        '<div><label style="font-size:0.78rem;">Session name</label><input type="text" class="se-title" value="' +
+        escAdmin(p.title || '') +
+        '" placeholder="e.g. Ayurveda Workshop"></div>' +
+        '<div><label style="font-size:0.78rem;">Event date (IST)</label><input type="datetime-local" class="se-date" value="' +
+        escAdmin(fmtDt(p.event_date || p.eventDate)) +
+        '"></div>' +
+        '<div><label style="font-size:0.78rem;">Check-in date</label><input type="date" class="se-checkin" value="' +
+        escAdmin(String(p.checkin_date || p.checkinDate || '').slice(0, 10)) +
+        '"></div>' +
+        '<div><label style="font-size:0.78rem;">Price ₹</label><input type="number" class="se-price" step="0.01" value="' +
+        escAdmin(p.price != null ? p.price : 0) +
+        '"></div>' +
+        '<div><label style="font-size:0.78rem;display:block;margin-bottom:4px;">Scans</label><select class="se-scans"><option value="1"' +
+        (Number(p.cert_scans_required || p.certScansRequired) !== 2 ? ' selected' : '') +
+        '>Entry</option><option value="2"' +
+        (Number(p.cert_scans_required || p.certScansRequired) === 2 ? ' selected' : '') +
+        '>Entry+Exit</option></select></div>' +
+        '<button type="button" class="btn-primary" style="background:#b91c1c;padding:6px 10px;" onclick="this.closest(\'.seminar-sub-event-row\').remove()">×</button>';
+    list.appendChild(row);
+}
+
+function collectSeminarSubEventsFromUi() {
+    const rows = document.querySelectorAll('#seminar-sub-events-list .seminar-sub-event-row');
+    const out = [];
+    rows.forEach((row, idx) => {
+        const title = row.querySelector('.se-title')?.value.trim() || '';
+        if (!title) return;
+        const eventDateRaw = row.querySelector('.se-date')?.value || '';
+        const event_date =
+            eventDateRaw && window.PortalDateTime
+                ? window.PortalDateTime.fromDatetimeLocal(eventDateRaw)
+                : eventDateRaw || null;
+        out.push({
+            title,
+            event_date,
+            checkin_date: row.querySelector('.se-checkin')?.value || null,
+            price: parseFloat(row.querySelector('.se-price')?.value) || 0,
+            sort_order: idx,
+            cert_scans_required: parseInt(row.querySelector('.se-scans')?.value || '1', 10) === 2 ? 2 : 1,
+            is_active: true
+        });
+    });
+    return out;
+}
+
+function loadSeminarSubEventsUi(events) {
+    const list = document.getElementById('seminar-sub-events-list');
+    if (!list) return;
+    list.innerHTML = '';
+    (events || []).forEach((ev) => addSeminarSubEventRow(ev));
 }
 
 function editSeminar(index) {
@@ -11967,6 +12035,7 @@ function editSeminar(index) {
             gal.value = s.gallery_paths || '';
         }
     }
+    loadSeminarSubEventsUi(s.sub_events || s.subEvents || []);
 
     document.getElementById('admin-seminar-modal').classList.remove('hidden');
 }
@@ -12045,6 +12114,7 @@ async function saveSeminar(e) {
             !!(document.getElementById('seminar-otp-submit') || {}).checked,
         cancellation_policy_json: cancelPol,
         registration_form_json: regFormOverride,
+        sub_events: collectSeminarSubEventsFromUi(),
         portal_year: parseInt((document.getElementById('seminar-portal-year') || {}).value, 10) || adminPortalYear
     };
     if (data.portal_year !== adminPortalYear) {

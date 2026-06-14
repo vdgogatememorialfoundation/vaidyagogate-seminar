@@ -2898,8 +2898,14 @@
                     <div style="grid-column:1/-1;"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="seminar-show-seats-public" checked> Show seat count publicly on registration</label></div>
                 </div>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                    <div><label>Price (&#8377;)</label><input type="number" id="seminar-price" step="0.01" value="0" required></div>
+                    <div><label>Price (&#8377;) — used when no sub-events</label><input type="number" id="seminar-price" step="0.01" value="0" required></div>
                     <div><label>Is Active?</label><select id="seminar-active"><option value="1">Yes</option><option value="0">No</option></select></div>
+                </div>
+                <div style="grid-column:1/-1;margin-top:8px;padding:14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;">
+                    <h4 style="margin:0 0 8px;color:#166534;">Sub-events / sessions (optional)</h4>
+                    <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px;">Example: Ayurveda Workshop (3rd) + National Seminar (4th). Doctors pick one or both; each session has its own price, e-ticket, scanner check-in, and certificate.</p>
+                    <div id="seminar-sub-events-list"></div>
+                    <button type="button" class="btn-primary" style="margin-top:8px;background:#0d9488;" onclick="addSeminarSubEventRow()">+ Add session</button>
                 </div>
                 <div><label>Google Maps Embed URL</label><input type="text" id="seminar-location-url" placeholder="https://www.google.com/maps/embed?..."></div>
                 <div><label>Terms and Conditions</label><textarea id="seminar-terms" rows="3"></textarea></div>

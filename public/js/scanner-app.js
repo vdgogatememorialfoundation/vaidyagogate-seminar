@@ -245,6 +245,30 @@
         return h + '</dl>';
     }
 
+    let checkinSeminarsCache = [];
+
+    function populateScannerEventSelect(seminar) {
+        const wrap = document.getElementById('scanner-event-wrap');
+        const evSel = document.getElementById('scanner-event-select');
+        if (!wrap || !evSel) return;
+        const events = (seminar && seminar.subEvents) || [];
+        if (!events.length) {
+            wrap.classList.add('hidden');
+            evSel.innerHTML = '';
+            return;
+        }
+        wrap.classList.remove('hidden');
+        evSel.innerHTML = '<option value="">— Select session —</option>';
+        events.forEach((ev) => {
+            const opt = document.createElement('option');
+            opt.value = String(ev.id);
+            opt.textContent =
+                ev.title + (ev.checkinDate ? ' · check-in ' + String(ev.checkinDate).slice(0, 10) : '');
+            evSel.appendChild(opt);
+        });
+        if (events.length === 1) evSel.value = String(events[0].id);
+    }
+
     async function loadCheckinSeminars() {
         const sel = document.getElementById('scanner-seminar-select');
         const hint = document.getElementById('scanner-seminar-hint');
@@ -254,32 +278,31 @@
             const res = await fetch('/api/scanner/checkin-seminars', { cache: 'no-store' });
             if (!res.ok) throw new Error('HTTP ' + res.status);
             const list = await res.json();
-            if (!Array.isArray(list) || !list.length) {
+            checkinSeminarsCache = Array.isArray(list) ? list : [];
+            if (!checkinSeminarsCache.length) {
                 sel.innerHTML = '<option value="">No check-in seminars</option>';
+                populateScannerEventSelect(null);
                 if (hint) hint.textContent = 'Check-in is not enabled for any seminar yet.';
                 return;
             }
             sel.innerHTML = '<option value="">— Select seminar —</option>';
-            list.forEach((s) => {
+            checkinSeminarsCache.forEach((s) => {
                 const opt = document.createElement('option');
                 opt.value = String(s.id);
                 opt.textContent = s.title + (s.checkinDate ? ' · ' + String(s.checkinDate).slice(0, 10) : '');
                 sel.appendChild(opt);
             });
-            if (list.length === 1) sel.value = String(list[0].id);
+            if (checkinSeminarsCache.length === 1) sel.value = String(checkinSeminarsCache[0].id);
             sel.onchange = () => {
                 selectedSeminarId = sel.value ? parseInt(sel.value, 10) : null;
-                const s = list.find((x) => Number(x.id) === Number(selectedSeminarId));
+                const s = checkinSeminarsCache.find((x) => Number(x.id) === Number(selectedSeminarId));
+                populateScannerEventSelect(s);
                 if (hint && s) {
                     if (s.checkinOpenToday === false) {
-                        const today = s.todayYmd || 'today';
                         const cfg = s.checkinDate ? String(s.checkinDate).slice(0, 10) : 'not set';
-                        hint.textContent =
-                            'Check-in date is ' +
-                            cfg +
-                            ' (India today: ' +
-                            today +
-                            '). Check-in is not allowed on this date for this seminar.';
+                        hint.textContent = 'Check-in date is ' + cfg + '. Check-in is not allowed today for this seminar.';
+                    } else if (s.hasSubEvents) {
+                        hint.textContent = 'Select the session, then scan the matching e-ticket.';
                     } else {
                         hint.textContent = 'Ready to scan.';
                     }
@@ -288,6 +311,7 @@
             sel.dispatchEvent(new Event('change'));
         } catch (e) {
             sel.innerHTML = '<option value="">Error</option>';
+            populateScannerEventSelect(null);
             if (hint) hint.textContent = e.message || 'Could not load seminars.';
         }
     }
@@ -718,6 +742,14 @@
             alert('Select the seminar first.');
             return;
         }
+        const evSel = document.getElementById('scanner-event-select');
+        const eventId = evSel && evSel.value ? parseInt(evSel.value, 10) : null;
+        const sem = checkinSeminarsCache.find((x) => Number(x.id) === Number(sid));
+        if (sem && sem.hasSubEvents && (!eventId || eventId < 1)) {
+            alert('Select the session/event before scanning.');
+            scanBusy = false;
+            return;
+        }
 
         scanBusy = true;
         lastScanKey = scanKey;
@@ -732,7 +764,8 @@
                 body: JSON.stringify({
                     qrData: decodedText,
                     scannerUserId: Number(user.id),
-                    seminarId: sid
+                    seminarId: sid,
+                    eventId: eventId || undefined
                 })
             });
             let result = {};

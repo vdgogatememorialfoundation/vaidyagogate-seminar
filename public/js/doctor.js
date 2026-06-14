@@ -1171,17 +1171,35 @@ function renderTrackerStepsHtml(timeline) {
         ' of ' +
         steps.length +
         ' milestones</div>' +
-        '</div>' +
-        '<div class="vtrk-steps">';
+        '</div>';
+    if (timeline.cancellationLivePending) {
+        html +=
+            '<div style="margin:0 0 10px;padding:8px 12px;background:linear-gradient(135deg,#fff7ed,#f8fafc);border:1px solid #fed7aa;border-radius:8px;font-size:0.82rem;color:#b45309;">' +
+            '<strong><i class="fas fa-undo-alt"></i> Cancellation &amp; Razorpay refund</strong> — live updates below</div>';
+    }
+    const ct = timeline.cancellationTracking;
+    if (ct && ct.razorpayLive && (ct.razorpayLive.providerRefundId || ct.razorpayLive.providerStatus)) {
+        const rz = ct.razorpayLive;
+        html +=
+            '<div style="margin:0 0 10px;padding:8px 10px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;font-size:0.82rem;color:#0c4a6e;">' +
+            '<strong>Razorpay:</strong> ' +
+            escapeHtml(ct.refundStatusLabel || '') +
+            (rz.providerRefundId ? ' · ' + escapeHtml(rz.providerRefundId) : '') +
+            (rz.providerStatus ? ' · ' + escapeHtml(String(rz.providerStatus).toUpperCase()) : '') +
+            '</div>';
+    }
+    html += '<div class="vtrk-steps">';
 
     steps.forEach(function (step, idx) {
         const isLast = idx === steps.length - 1;
         const cls =
             step.state === 'completed'
                 ? 'vtrk-step done sat-step-pop'
-                : step.state === 'active'
-                  ? 'vtrk-step active sat-step-pop sat-step-active-glow'
-                  : 'vtrk-step upcoming';
+                : step.state === 'cancelled'
+                  ? 'vtrk-step done sat-step-pop'
+                  : step.state === 'active'
+                    ? 'vtrk-step active sat-step-pop sat-step-active-glow'
+                    : 'vtrk-step upcoming';
         const whenHtml =
             step.at && step.state !== 'upcoming'
                 ? '<span class="vtrk-step-when"><i class="fas fa-clock"></i> ' +
@@ -1193,9 +1211,11 @@ function renderTrackerStepsHtml(timeline) {
         const iconHtml =
             step.state === 'completed'
                 ? '<i class="fas fa-check"></i>'
-                : step.state === 'active'
-                  ? '<i class="fas ' + escapeHtml(step.icon || 'fa-circle-notch') + ' sat-icon-spin"></i>'
-                  : '<i class="fas ' + escapeHtml(step.icon || 'fa-circle') + '"></i>';
+                : step.state === 'cancelled'
+                  ? '<i class="fas fa-times" style="color:#b91c1c;"></i>'
+                  : step.state === 'active'
+                    ? '<i class="fas ' + escapeHtml(step.icon || 'fa-circle-notch') + ' sat-icon-spin"></i>'
+                    : '<i class="fas ' + escapeHtml(step.icon || 'fa-circle') + '"></i>';
 
         html +=
             '<div class="' +
@@ -1481,7 +1501,6 @@ function renderSeminarApplicationTrackerCard(a) {
         qualBadge +
         waitlistBlock +
         revisionBlock +
-        renderCancellationRefundBlock(a) +
         '</div>' +
         renderTrackerStepsHtml(tl) +
         '<div style="padding:0 16px 16px;">' +
@@ -1950,6 +1969,8 @@ function collectRegistrationFormData() {
         else if (el.type === 'checkbox') o[k] = el.checked ? '1' : '';
         else o[k] = el.value;
     });
+    const eventIds = getSelectedSeminarEventIds();
+    if (eventIds.length) o.selected_event_ids = eventIds;
     return o;
 }
 
@@ -3004,9 +3025,8 @@ function renderSeminarGridCard(s, readOnlyPast, alreadyRegistered, draftApp) {
         (s.portal_year
             ? '<p style="font-size:0.8rem;color:#64748b;">Year ' + escapeHtml(String(s.portal_year)) + '</p>'
             : '') +
-        '<p style="font-size:0.85rem;margin-top:8px;"><strong>Fee:</strong> ₹' +
-        (s.price || 0) +
-        '</p></div>' +
+        seminarFeeLabelHtml(s) +
+        '</div>' +
         '<div>' +
         actionBlock +
         '</div></div>'
@@ -3256,6 +3276,7 @@ async function startRegistration(seminarId, opts) {
     if (step0) step0.classList.toggle('hidden', !hasTerms && !window.__seminarCancellationSummary);
     if (ind0) ind0.style.display = hasTerms || window.__seminarCancellationSummary ? '' : 'none';
     await loadRegistrationFormConfigAndApply(seminarId);
+    renderSeminarEventPicker(s);
     const emailEl = document.getElementById('reg-email');
     const phoneEl = document.getElementById('reg-phone');
     if (emailEl && currentUser && currentUser.email) emailEl.value = currentUser.email;
@@ -5687,27 +5708,89 @@ async function verifyNcism() {
     }
 }
 
-function collectRegistrationFormData() {
-    return {
-        fname: document.getElementById('reg-fname')?.value || '',
-        mname: document.getElementById('reg-mname')?.value || '',
-        lname: document.getElementById('reg-lname')?.value || '',
-        email: document.getElementById('reg-email')?.value || '',
-        phone: document.getElementById('reg-phone')?.value || '',
-        dob: document.getElementById('reg-dob') ? document.getElementById('reg-dob').value : '',
-        address: document.getElementById('reg-addr')?.value || '',
-        pin: document.getElementById('reg-pin')?.value || '',
-        city: document.getElementById('reg-city')?.value || '',
-        state: document.getElementById('reg-state')?.value || '',
-        country: document.getElementById('reg-country')?.value || '',
-        qual: document.getElementById('reg-qual')?.value || '',
-        ncism: document.getElementById('reg-ncism')?.value || '',
-        cpin: document.getElementById('reg-cpin') ? document.getElementById('reg-cpin').value : '',
-        college: document.getElementById('reg-college')?.value || '',
-        ccity: document.getElementById('reg-ccity')?.value || '',
-        cstate: document.getElementById('reg-cstate')?.value || '',
-        agree_terms: document.getElementById('tnc')?.checked ? '1' : ''
-    };
+function seminarFeeLabelHtml(s) {
+    const evs = (s && (s.sub_events || s.subEvents)) || [];
+    if (!evs.length) {
+        return '<p style="font-size:0.85rem;margin-top:8px;"><strong>Fee:</strong> ₹' + (s.price || 0) + '</p>';
+    }
+    let html =
+        '<div style="margin-top:8px;padding:10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:0.84rem;">' +
+        '<strong style="color:#047857;">Sessions (choose at registration)</strong><ul style="margin:8px 0 0;padding-left:18px;line-height:1.5;">';
+    evs.forEach(function (ev) {
+        const when = ev.eventDate || ev.event_date ? formatEventDate(ev.eventDate || ev.event_date) : '';
+        html +=
+            '<li><strong>' +
+            escapeHtml(ev.title) +
+            '</strong>' +
+            (when ? ' · ' + escapeHtml(when) : '') +
+            ' — ₹' +
+            (Number(ev.price) || 0) +
+            '</li>';
+    });
+    html += '</ul></div>';
+    return html;
+}
+
+function renderSeminarEventPicker(seminar) {
+    const panel = document.getElementById('reg-seminar-events-panel');
+    if (!panel) return;
+    const events = (seminar && (seminar.sub_events || seminar.subEvents)) || [];
+    if (!events.length) {
+        panel.classList.add('hidden');
+        panel.innerHTML = '';
+        return;
+    }
+    let html =
+        '<p style="font-weight:700;color:#047857;margin:0 0 10px;"><i class="fas fa-calendar-day"></i> Choose session(s) to attend</p>' +
+        '<p style="font-size:0.84rem;color:#64748b;margin:0 0 12px;">Select one or both. Payment is the sum of selected sessions. Each session has its own e-ticket, scanner check-in, and certificate.</p>';
+    events.forEach(function (ev) {
+        const dt = ev.eventDate || ev.event_date;
+        html +=
+            '<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;padding:10px;background:#fff;border:1px solid #bbf7d0;border-radius:8px;cursor:pointer;">' +
+            '<input type="checkbox" class="reg-event-cb" value="' +
+            Number(ev.id) +
+            '" style="margin-top:4px;">' +
+            '<span><strong>' +
+            escapeHtml(ev.title) +
+            '</strong>' +
+            (dt ? '<br><span style="font-size:0.82rem;color:#64748b;">' + escapeHtml(formatEventDate(dt)) + '</span>' : '') +
+            '<br><span style="font-size:0.9rem;color:#047857;font-weight:700;">₹' +
+            (Number(ev.price) || 0) +
+            '</span></span></label>';
+    });
+    html += '<p id="reg-events-total" style="margin:8px 0 0;font-weight:700;color:#334155;"></p>';
+    panel.innerHTML = html;
+    panel.classList.remove('hidden');
+    panel.querySelectorAll('.reg-event-cb').forEach(function (cb) {
+        cb.addEventListener('change', updateRegEventTotal);
+    });
+    updateRegEventTotal();
+}
+
+function getSelectedSeminarEventIds() {
+    return Array.from(document.querySelectorAll('.reg-event-cb:checked'))
+        .map(function (el) {
+            return parseInt(el.value, 10);
+        })
+        .filter(function (n) {
+            return Number.isInteger(n) && n > 0;
+        });
+}
+
+function updateRegEventTotal() {
+    const el = document.getElementById('reg-events-total');
+    if (!el) return;
+    const sid = parseInt(activeSeminarIdForReg, 10);
+    const s = activeSeminars.find(function (x) {
+        return Number(x.id) === sid;
+    });
+    const events = (s && (s.sub_events || s.subEvents)) || [];
+    const ids = getSelectedSeminarEventIds();
+    let total = 0;
+    events.forEach(function (ev) {
+        if (ids.indexOf(Number(ev.id)) >= 0) total += Number(ev.price) || 0;
+    });
+    el.textContent = ids.length ? 'Selected total: ₹' + total : 'Select at least one session';
 }
 
 async function saveApplicationDraft() {
