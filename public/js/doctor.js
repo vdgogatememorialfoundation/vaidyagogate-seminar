@@ -1406,7 +1406,12 @@ function renderCancellationRefundBlock(a) {
 
 function renderSeminarApplicationTrackerCard(a) {
     const tl = a.timeline || {};
-    const payAmt = Number(a.seminar_price) > 0 ? Number(a.seminar_price) : 1500;
+    const payAmt =
+        a.payment_amount != null && Number.isFinite(Number(a.payment_amount)) && Number(a.payment_amount) >= 0
+            ? Number(a.payment_amount)
+            : Number(a.seminar_price) > 0
+              ? Number(a.seminar_price)
+              : 1500;
     const st = String(a.status || '').toLowerCase();
     if (st === 'draft') {
         return (
@@ -5715,7 +5720,11 @@ function seminarFeeLabelHtml(s) {
     }
     let html =
         '<div style="margin-top:8px;padding:10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;font-size:0.84rem;">' +
-        '<strong style="color:#047857;">Sessions (choose at registration)</strong><ul style="margin:8px 0 0;padding-left:18px;line-height:1.5;">';
+        '<strong style="color:#047857;">Sessions (choose at registration)</strong>';
+    if (Number(s.price) > 0) {
+        html += '<p style="margin:6px 0 0;color:#334155;">Base seminar fee: <strong>₹' + (Number(s.price) || 0) + '</strong> (added to selected sessions)</p>';
+    }
+    html += '<ul style="margin:8px 0 0;padding-left:18px;line-height:1.5;">';
     evs.forEach(function (ev) {
         const when = ev.eventDate || ev.event_date ? formatEventDate(ev.eventDate || ev.event_date) : '';
         const loc = ev.locationText || ev.location_text || '';
@@ -5744,7 +5753,7 @@ function renderSeminarEventPicker(seminar) {
     }
     let html =
         '<p style="font-weight:700;color:#047857;margin:0 0 10px;"><i class="fas fa-calendar-day"></i> Choose session(s) to attend</p>' +
-        '<p style="font-size:0.84rem;color:#64748b;margin:0 0 12px;">Select one or both. Payment is the sum of selected sessions. Each session has its own e-ticket, scanner check-in, and certificate.</p>';
+        '<p style="font-size:0.84rem;color:#64748b;margin:0 0 12px;">Select one or both. Payment is the base seminar fee plus the sum of selected sessions. Each session has its own e-ticket, scanner check-in, and certificate.</p>';
     events.forEach(function (ev) {
         const dt = ev.eventDate || ev.event_date;
         const loc = ev.locationText || ev.location_text || '';
@@ -5792,11 +5801,23 @@ function updateRegEventTotal() {
     });
     const events = (s && (s.sub_events || s.subEvents)) || [];
     const ids = getSelectedSeminarEventIds();
-    let total = 0;
+    const base = Number(s && s.price) || 0;
+    let sessionsTotal = 0;
     events.forEach(function (ev) {
-        if (ids.indexOf(Number(ev.id)) >= 0) total += Number(ev.price) || 0;
+        if (ids.indexOf(Number(ev.id)) >= 0) sessionsTotal += Number(ev.price) || 0;
     });
-    el.textContent = ids.length ? 'Selected total: ₹' + total : 'Select at least one session';
+    const total = base + sessionsTotal;
+    if (!ids.length) {
+        el.textContent = 'Select at least one session';
+        return;
+    }
+    if (base > 0 && sessionsTotal > 0) {
+        el.textContent = 'Selected total: ₹' + total + ' (base ₹' + base + ' + sessions ₹' + sessionsTotal + ')';
+    } else if (base > 0) {
+        el.textContent = 'Selected total: ₹' + total + ' (base fee ₹' + base + ')';
+    } else {
+        el.textContent = 'Selected total: ₹' + total;
+    }
 }
 
 async function saveApplicationDraft() {

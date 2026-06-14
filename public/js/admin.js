@@ -4480,6 +4480,9 @@ async function lookupVolunteerUserPreview(silent) {
 }
 
 function adminSeminarFeeAmount(app) {
+    if (app && app.payment_amount != null && Number.isFinite(Number(app.payment_amount))) {
+        return Number(app.payment_amount);
+    }
     const p = app && app.seminar_price != null ? Number(app.seminar_price) : NaN;
     return Number.isFinite(p) && p > 0 ? p : 1500;
 }
@@ -8950,7 +8953,7 @@ function viewFullApplication(index) {
     } catch (_) {}
     const autoConfirmed = !!(docReview && (docReview.auto_confirmed || docReview.decision === 'auto_confirm'));
     const canVerify = st === 'submitted' || st === 'pending_approval' || st === 'waitlisted';
-    const canRejectAfterAuto = st === 'approved_pending_payment' && autoConfirmed;
+    const canPostApproveDocActions = ['approved_pending_payment', 'completed', 'e_ticket_issued'].includes(st);
     const docChecks = needsDocs
         ? `<label style="display:block;margin:6px 0;"><input type="checkbox" id="admin-verify-info"> Applicant details are correct</label>
         <label style="display:block;margin:6px 0;"><input type="checkbox" id="admin-verify-ncism"> NCISM / registration number is correct</label>
@@ -8984,17 +8987,42 @@ function viewFullApplication(index) {
         <p class="muted" style="font-size:0.85rem;">This applicant joined after registration closed. No payment yet. Offer a seat with regular seminar fee or as volunteer (₹0).</p>
         ${adminRenderApproveFeeBlockHtml(a)}
         <button type="button" class="btn-primary" style="background:#15803d;margin-top:8px;" onclick="adminPromoteFromWaitlist(${a.id})">Offer seat</button>`
-          : canRejectAfterAuto
+          : canPostApproveDocActions
             ? `<hr style="margin:14px 0;">
-        <h4 style="margin:0 0 8px;">Auto-confirmed registration</h4>
-        <p class="muted" style="font-size:0.85rem;">This application was auto-approved for payment without manual review. You can still reject or request documents if something looks wrong.</p>
-        <div class="form-group" style="margin-top:10px;"><label>Reason</label>
-        <textarea id="admin-verify-reason" rows="2" style="width:100%;"></textarea></div>
+        <h4 style="margin:0 0 8px;">${
+            st === 'approved_pending_payment' ? 'Approved — document review' : 'Document review'
+        }</h4>
+        <p class="muted" style="font-size:0.85rem;">${
+            st === 'approved_pending_payment'
+                ? autoConfirmed
+                    ? 'This application was auto-approved for payment without manual review.'
+                    : 'This application was approved for payment.'
+                : st === 'e_ticket_issued'
+                  ? 'Payment and e-ticket are already issued.'
+                  : 'Payment is complete.'
+        } You can still request document corrections at any time before check-in.</p>
+        <div class="form-group" style="margin-top:10px;"><label>Reason (required)</label>
+        <textarea id="admin-verify-reason" rows="2" style="width:100%;" placeholder="e.g. NCISM number does not match certificate"></textarea></div>
+        <div class="form-group" style="margin-top:8px;"><label>Additional documents needed (comma-separated)</label>
+        <input type="text" id="admin-verify-requested-docs" style="width:100%;padding:8px;" placeholder="e.g. ID proof, address proof"></div>
         <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
-        <button type="button" class="btn-primary" style="background:#b45309;" onclick="adminVerifySeminarApplication(${a.id},'reject_documents')">Request document re-upload</button>
-        <button type="button" class="btn-primary" style="background:#b91c1c;" onclick="adminVerifySeminarApplication(${a.id},'reject_application')">Reject application</button>
+        ${
+            needsDocs
+                ? '<button type="button" class="btn-primary" style="background:#b45309;" onclick="adminVerifySeminarApplication(' +
+                  a.id +
+                  ",'reject_documents')\">Reject documents only</button>"
+                : ''
+        }
+        <button type="button" class="btn-primary" style="background:#7c3aed;" onclick="adminVerifySeminarApplication(${a.id},'request_documents')">Request additional documents</button>
+        ${
+            st === 'approved_pending_payment'
+                ? '<button type="button" class="btn-primary" style="background:#b91c1c;" onclick="adminVerifySeminarApplication(' +
+                  a.id +
+                  ",'reject_application')\">Reject application</button>"
+                : ''
+        }
         </div>`
-            : '<p class="muted" style="margin-top:12px;">Verification actions appear when status is Submitted, Waitlisted, or Under review.</p>';
+            : '<p class="muted" style="margin-top:12px;">Verification actions appear when status is Submitted, Waitlisted, Under review, or Approved pending payment.</p>';
 
     const content = document.getElementById('admin-view-content');
     content.innerHTML = `

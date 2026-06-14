@@ -5118,19 +5118,22 @@ function respondApplicationsList(uid, yearFilter, res) {
                 }
                 return { ...r, doc_review };
             });
-            portalTracking.attachRegistrationTimelines(db, withReview, (e2, enriched) => {
-                if (e2) {
-                    console.error('[applications] timeline attach failed:', e2.message);
-                    enriched = (list || []).map((r) => ({ ...r, timeline: { steps: [], status: r.status } }));
-                }
-                refundTracking.attachCancellationRefundToApplications(db, enriched || [], (eCr, withCancel) => {
-                    if (eCr) {
-                        console.warn('[applications] cancellation tracking attach failed:', eCr.message);
-                        withCancel = enriched || [];
+            seminarEvents.attachPaymentAmountsToRegistrations(db, withReview, (ePay, withPay) => {
+                const baseList = withPay || withReview;
+                portalTracking.attachRegistrationTimelines(db, baseList, (e2, enriched) => {
+                    if (e2) {
+                        console.error('[applications] timeline attach failed:', e2.message);
+                        enriched = (list || []).map((r) => ({ ...r, timeline: { steps: [], status: r.status } }));
                     }
-                    portalTracking.getPortalYear(db, (e3, portalYear) => {
-                        if (e3) return res.status(500).json({ error: e3.message });
-                        res.json({ portalYear, applications: withCancel || [] });
+                    refundTracking.attachCancellationRefundToApplications(db, enriched || [], (eCr, withCancel) => {
+                        if (eCr) {
+                            console.warn('[applications] cancellation tracking attach failed:', eCr.message);
+                            withCancel = enriched || [];
+                        }
+                        portalTracking.getPortalYear(db, (e3, portalYear) => {
+                            if (e3) return res.status(500).json({ error: e3.message });
+                            res.json({ portalYear, applications: withCancel || [] });
+                        });
                     });
                 });
             });
@@ -8380,7 +8383,10 @@ app.get('/api/admin/applications', (req, res) => {
         ORDER BY a.created_at DESC
     `, [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        res.json(rows || []);
+        seminarEvents.attachPaymentAmountsToRegistrations(db, rows || [], (ePay, withPay) => {
+            if (ePay) return res.status(500).json({ error: ePay.message });
+            res.json(withPay || []);
+        });
     });
 });
 
