@@ -2798,6 +2798,10 @@ function integrationSettingsJson(data) {
     masked.email_status = integrationSettings.getEmailConfigStatus();
     masked.whatsapp_configured = integrationSettings.isWhatsAppConfiguredFromSettings();
     masked.whatsapp_status = integrationSettings.getWhatsAppConfigStatus();
+    masked.msg91_auth_key_saved = !!(raw.msg91_auth_key && String(raw.msg91_auth_key).trim());
+    masked.msg91_configured = integrationSettings.isMsg91ConfiguredFromSettings();
+    masked.msg91_status = integrationSettings.getMsg91ConfigStatus();
+    masked.msg91_sms_enabled = integrationSettings.isMsg91SmsEnabled();
     return masked;
 }
 
@@ -3237,6 +3241,43 @@ app.post('/api/admin/integrations/test-whatsapp', withIntegrationSettingsLoaded,
             'Add +' +
             to +
             ' as test recipient in development mode.'
+    });
+});
+
+app.post('/api/admin/integrations/test-msg91', withIntegrationSettingsLoaded, async (req, res) => {
+    const phone = String((req.body && req.body.phone) || '').trim();
+    if (!phone) return res.status(400).json({ error: 'phone required' });
+    const { sendMsg91Test, normalizePhoneE164, isMsg91Configured } = require('./lib/msg91-service');
+    if (!isMsg91Configured()) {
+        return res.status(503).json({
+            error: 'MSG91 not configured — save auth key and enable SMS notifications first.'
+        });
+    }
+    const to = normalizePhoneE164(phone);
+    const r = await sendMsg91Test(phone);
+    notifEngine.logNotification(db, {
+        event_key: 'INTEGRATION_TEST_SMS',
+        channel: 'sms',
+        destination: to,
+        status: r.ok ? 'sent' : r.skipped ? 'skipped' : 'failed',
+        provider_message_id: r.requestId || null,
+        subject: 'Admin MSG91 test',
+        body_preview: 'MSG91 integration test',
+        error: r.ok ? null : (r.error || '').slice(0, 900)
+    });
+    if (r.ok) {
+        return res.json({
+            success: true,
+            to,
+            requestId: r.requestId || null,
+            hint: 'SMS accepted by MSG91. Check the handset in a few seconds.'
+        });
+    }
+    res.status(503).json({
+        error: r.error || 'Send failed',
+        to,
+        skipped: r.skipped,
+        hint: 'Verify MSG91 auth key, sender ID / flow ID, and DLT template approval in the MSG91 panel.'
     });
 });
 

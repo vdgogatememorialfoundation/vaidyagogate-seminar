@@ -9489,6 +9489,29 @@ function renderIntegrationSecretStatus(s) {
             : 'Paste your permanent System User token from Meta, then save.';
         waHint.style.color = waSaved ? '#15803d' : '#64748b';
     }
+
+    const msg91Saved = !!(settings.msg91_configured || settings.msg91_auth_key_saved);
+    window.__integrationMsg91KeySaved = msg91Saved;
+    const msg91Badge = document.getElementById('int-msg91-key-saved-badge');
+    if (msg91Badge) {
+        if (msg91Saved) {
+            msg91Badge.textContent = '✓ MSG91 auth key saved on server';
+            msg91Badge.style.background = '#ecfdf5';
+            msg91Badge.style.borderColor = '#a7f3d0';
+            msg91Badge.style.color = '#15803d';
+        } else {
+            msg91Badge.textContent = 'MSG91 auth key not saved yet';
+            msg91Badge.style.background = '#f8fafc';
+            msg91Badge.style.borderColor = '#e2e8f0';
+            msg91Badge.style.color = '#64748b';
+        }
+    }
+    const msg91New = document.getElementById('int-msg91-key-new');
+    if (msg91New) {
+        msg91New.placeholder = msg91Saved
+            ? 'Leave empty to keep saved key — paste here only to replace it'
+            : 'Paste MSG91 auth key here, then Save API keys & messaging';
+    }
 }
 
 function applySavedIntegrationSecrets(data) {
@@ -9521,7 +9544,9 @@ function applySavedIntegrationSecrets(data) {
         email_fallback_enabled: settings.email_fallback_enabled,
         email_smtp_standby_enabled: settings.email_smtp_standby_enabled,
         whatsapp_configured: !!(data && data.whatsapp_configured) || !!settings.whatsapp_token_saved,
-        whatsapp_token_saved: !!settings.whatsapp_token_saved || !!(data && data.whatsapp_configured)
+        whatsapp_token_saved: !!settings.whatsapp_token_saved || !!(data && data.whatsapp_configured),
+        msg91_configured: !!(data && data.msg91_configured) || !!settings.msg91_auth_key_saved,
+        msg91_auth_key_saved: !!settings.msg91_auth_key_saved || !!(data && data.msg91_configured)
     });
 }
 
@@ -9558,6 +9583,16 @@ async function loadIntegrationSettings() {
         set('int-wa-lang', s.whatsapp_template_lang || 'en');
         set('int-wa-otp-template', s.whatsapp_otp_template_name);
         set('int-otp-email-subject', s.otp_email_subject);
+        setIntegrationCheckbox('int-msg91-enabled', s.msg91_sms_enabled !== false && s.msg91_sms_enabled !== 0 && s.msg91_sms_enabled !== '0');
+        set('int-msg91-sender', s.msg91_sender_id);
+        set('int-msg91-route', s.msg91_route || '4');
+        set('int-msg91-flow-id', s.msg91_default_flow_id);
+        set('int-msg91-flow-var', s.msg91_flow_message_var || 'VAR1');
+        const testSmsPhone = document.getElementById('int-test-msg91-phone');
+        const testWaPhone = document.getElementById('int-test-phone');
+        if (testSmsPhone && testWaPhone && testWaPhone.value && !testSmsPhone.value) {
+            testSmsPhone.value = testWaPhone.value;
+        }
         const waHook = document.getElementById('int-wa-webhook-url');
         if (waHook) {
             let base = (s.public_base_url || '').trim().replace(/\/$/, '');
@@ -9613,7 +9648,16 @@ async function loadIntegrationSettings() {
                 }
                 if (s.whatsapp_waba_id) waLine += ' WABA: ' + s.whatsapp_waba_id + '.';
             }
-            line.textContent = emailLine + ' ' + waLine;
+            let smsLine = s.msg91_configured
+                ? 'MSG91 SMS: configured (event/status updates only).'
+                : s.msg91_sms_enabled === false || s.msg91_sms_enabled === 0 || s.msg91_sms_enabled === '0'
+                  ? 'MSG91 SMS: disabled.'
+                  : 'MSG91 SMS: not configured.';
+            const mst = s.msg91_status;
+            if (!s.msg91_configured && mst && Array.isArray(mst.missing) && mst.missing.length) {
+                smsLine += ' Missing: ' + mst.missing.join(', ') + '.';
+            }
+            line.textContent = emailLine + ' ' + waLine + ' ' + smsLine;
         }
         await loadWhatsAppEventTemplatesTable();
     } catch (e) {
@@ -9706,8 +9750,15 @@ async function saveIntegrationSettings() {
         whatsapp_verify_token: (document.getElementById('int-wa-verify') || {}).value,
         whatsapp_template_lang: (document.getElementById('int-wa-lang') || {}).value.trim() || 'en',
         whatsapp_otp_template_name: (document.getElementById('int-wa-otp-template') || {}).value.trim(),
-        otp_email_subject: (document.getElementById('int-otp-email-subject') || {}).value.trim()
+        otp_email_subject: (document.getElementById('int-otp-email-subject') || {}).value.trim(),
+        msg91_sms_enabled: (document.getElementById('int-msg91-enabled') || {}).checked !== false,
+        msg91_sender_id: (document.getElementById('int-msg91-sender') || {}).value.trim(),
+        msg91_route: (document.getElementById('int-msg91-route') || {}).value.trim() || '4',
+        msg91_default_flow_id: (document.getElementById('int-msg91-flow-id') || {}).value.trim(),
+        msg91_flow_message_var: (document.getElementById('int-msg91-flow-var') || {}).value.trim() || 'VAR1'
     };
+    const newMsg91Key = ((document.getElementById('int-msg91-key-new') || {}).value || '').trim();
+    if (newMsg91Key) body.msg91_auth_key = newMsg91Key;
     if (newZohoPass) body.zoho_pass = newZohoPass;
     if (newEmailApiKey) body.email_api_key = newEmailApiKey;
     if (newEmailFallbackKey) body.email_api_fallback_key = newEmailFallbackKey;
@@ -9731,6 +9782,8 @@ async function saveIntegrationSettings() {
         });
         const waNewEl = document.getElementById('int-wa-token-new');
         if (waNewEl) waNewEl.value = '';
+        const msg91NewEl = document.getElementById('int-msg91-key-new');
+        if (msg91NewEl) msg91NewEl.value = '';
         applySavedIntegrationSecrets(data);
         await loadIntegrationSettings();
         const st = data.email_status;
@@ -9749,7 +9802,15 @@ async function saveIntegrationSettings() {
             : wst && Array.isArray(wst.missing) && wst.missing.length
               ? 'WhatsApp still missing: ' + wst.missing.join(', ') + '. Paste token and phone number ID, then save.'
               : 'WhatsApp not configured — add token + phone number ID (OTP template alone is not enough).';
-        setAdminSettingsSaveMsg('API keys and messaging saved. ' + emailHint + ' ' + waHint);
+        const mst = data.settings && data.settings.msg91_status;
+        const smsHint = data.msg91_configured
+            ? 'MSG91 SMS is configured for event/status updates (not OTP).'
+            : data.msg91_sms_enabled === false
+              ? 'MSG91 SMS is disabled.'
+              : mst && Array.isArray(mst.missing) && mst.missing.length
+                ? 'MSG91 still missing: ' + mst.missing.join(', ') + '.'
+                : 'MSG91 not configured — add auth key and flow ID or sender ID.';
+        setAdminSettingsSaveMsg('API keys and messaging saved. ' + emailHint + ' ' + waHint + ' ' + smsHint);
     } catch (e) {
         setAdminSettingsSaveMsg('Save failed', true);
     }
@@ -9973,6 +10034,33 @@ async function testIntegrationWhatsApp() {
         ].filter(Boolean);
         alert(lines.join('\n\n') + '\n\nSee Notifications → Logs.');
         if (typeof loadNotificationLogs === 'function') loadNotificationLogs();
+    }
+}
+
+async function testIntegrationMsg91() {
+    const phone =
+        (document.getElementById('int-test-msg91-phone') || {}).value.trim() ||
+        (document.getElementById('int-test-phone') || {}).value.trim();
+    if (!phone) return alert('Enter test phone number');
+    const res = await fetch('/api/admin/integrations/test-msg91', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+        alert(
+            [data.hint || 'SMS test sent.', data.to ? 'Sent to: +' + data.to : '', data.requestId ? 'Request ID: ' + data.requestId : '']
+                .filter(Boolean)
+                .join('\n\n')
+        );
+        if (typeof loadNotificationLogs === 'function') loadNotificationLogs();
+    } else {
+        alert(
+            [data.error || 'SMS test failed', data.hint, data.to ? 'Normalized to: +' + data.to : '']
+                .filter(Boolean)
+                .join('\n\n') + '\n\nSee Notifications → Logs.'
+        );
     }
 }
 

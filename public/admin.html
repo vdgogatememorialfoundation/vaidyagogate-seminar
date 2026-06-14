@@ -2511,6 +2511,27 @@
                         </div>
 
                         <div style="display:flex;gap:8px;align-items:flex-end;"><input type="text" id="int-test-phone" placeholder="10-digit mobile (no leading 0)" style="flex:1"><button type="button" class="btn-primary" style="background:#64748b;padding:8px 12px;" onclick="testIntegrationWhatsApp()">Test WhatsApp</button></div>
+
+                        <div style="grid-column:1/-1;margin-top:18px;"><h4 style="margin:0 0 8px;color:#0c4a6e;">MSG91 SMS (status updates)</h4>
+                        <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px;line-height:1.5;">Sends SMS for <strong>event/status updates only</strong> (registration, payment, ticket, cancellation, case, books, support). Signup/login OTP stays on email and WhatsApp — not MSG91 SMS.</p></div>
+                        <div style="grid-column:1/-1;">
+                            <label style="display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:8px;">
+                                <input type="checkbox" id="int-msg91-enabled" checked> Enable MSG91 SMS for all status notifications
+                            </label>
+                        </div>
+                        <div style="grid-column:1/-1;">
+                            <label>MSG91 auth key</label>
+                            <div id="int-msg91-key-saved-badge" style="margin:6px 0 8px;padding:8px 12px;border-radius:8px;background:#f8fafc;border:1px solid #e2e8f0;font-size:0.88rem;font-weight:600;color:#64748b;">MSG91 auth key not saved yet</div>
+                            <input type="password" id="int-msg91-key-new" placeholder="Paste MSG91 auth key, then Save" style="width:100%;" autocomplete="off" spellcheck="false">
+                        </div>
+                        <div><label>Sender ID (6 chars)</label><input type="text" id="int-msg91-sender" placeholder="VGOMF" style="width:100%" maxlength="6"></div>
+                        <div><label>Route</label><input type="text" id="int-msg91-route" placeholder="4 = transactional" style="width:100%"></div>
+                        <div><label>Default flow ID (DLT)</label><input type="text" id="int-msg91-flow-id" placeholder="MSG91 flow ID for status SMS" style="width:100%"></div>
+                        <div><label>Flow message variable</label><input type="text" id="int-msg91-flow-var" placeholder="VAR1" style="width:100%"></div>
+                        <div style="grid-column:1/-1;display:flex;gap:8px;align-items:flex-end;margin-top:4px;">
+                            <input type="text" id="int-test-msg91-phone" placeholder="10-digit mobile for SMS test" style="flex:1">
+                            <button type="button" class="btn-primary" style="background:#0d9488;padding:8px 12px;" onclick="testIntegrationMsg91()">Test SMS</button>
+                        </div>
                     </div>
                     <p id="int-status-line" style="margin-top:12px;font-size:0.85rem;color:#64748b;"></p>
                     <button type="button" class="btn-primary" style="margin-top:8px;background:#0d9488;" onclick="saveIntegrationSettings()">Save API keys &amp; messaging</button>
