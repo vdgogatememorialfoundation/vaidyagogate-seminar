@@ -1179,11 +1179,9 @@ function renderTrackerStepsHtml(timeline) {
         const cls =
             step.state === 'completed'
                 ? 'vtrk-step done sat-step-pop'
-                : step.state === 'cancelled'
-                  ? 'vtrk-step done sat-step-pop'
-                  : step.state === 'active'
-                    ? 'vtrk-step active sat-step-pop sat-step-active-glow'
-                    : 'vtrk-step upcoming';
+                : step.state === 'active'
+                  ? 'vtrk-step active sat-step-pop sat-step-active-glow'
+                  : 'vtrk-step upcoming';
         const whenHtml =
             step.at && step.state !== 'upcoming'
                 ? '<span class="vtrk-step-when"><i class="fas fa-clock"></i> ' +
@@ -1195,11 +1193,9 @@ function renderTrackerStepsHtml(timeline) {
         const iconHtml =
             step.state === 'completed'
                 ? '<i class="fas fa-check"></i>'
-                : step.state === 'cancelled'
-                  ? '<i class="fas fa-times" style="color:#b91c1c;"></i>'
-                  : step.state === 'active'
-                    ? '<i class="fas ' + escapeHtml(step.icon || 'fa-circle-notch') + ' sat-icon-spin"></i>'
-                    : '<i class="fas ' + escapeHtml(step.icon || 'fa-circle') + '"></i>';
+                : step.state === 'active'
+                  ? '<i class="fas ' + escapeHtml(step.icon || 'fa-circle-notch') + ' sat-icon-spin"></i>'
+                  : '<i class="fas ' + escapeHtml(step.icon || 'fa-circle') + '"></i>';
 
         html +=
             '<div class="' +
@@ -1255,6 +1251,137 @@ function registrationQualFromApp(a) {
 function renderRefundTrackingStepsHtml(steps) {
     if (!steps || !steps.length) return '';
     return renderTrackerStepsHtml({ steps: steps });
+}
+
+function renderRefundEligibilityHtml(eligibility) {
+    if (!eligibility) return '';
+    const tone = eligibility.applicable ? '#047857' : '#92400e';
+    const bg = eligibility.applicable ? '#ecfdf5' : '#fffbeb';
+    const border = eligibility.applicable ? '#a7f3d0' : '#fde68a';
+    let html =
+        '<div style="background:' +
+        bg +
+        ';border:1px solid ' +
+        border +
+        ';border-radius:8px;padding:12px;margin:10px 0;line-height:1.5;">' +
+        '<p style="margin:0 0 6px;font-weight:700;color:' +
+        tone +
+        ';">Refund eligibility (IST · ' +
+        escapeHtml(eligibility.evaluatedAtIst || 'now') +
+        ')</p>';
+    if (eligibility.daysUntilLabel) {
+        html += '<p style="margin:0 0 6px;font-size:0.85rem;color:#475569;">' + escapeHtml(eligibility.daysUntilLabel) + '</p>';
+    }
+    if (!eligibility.cancellationAllowed) {
+        html +=
+            '<p style="margin:0;font-size:0.88rem;color:#b91c1c;">' +
+            escapeHtml(eligibility.cancellationReason || 'Cancellation is not available.') +
+            '</p></div>';
+        return html;
+    }
+    html +=
+        '<p style="margin:0 0 8px;font-size:0.9rem;">If approved now: <strong>' +
+        (eligibility.eligiblePercent || 0) +
+        '%</strong> — <strong>₹' +
+        (eligibility.eligibleAmount || 0) +
+        '</strong>' +
+        (eligibility.orderAmount > 0 ? ' of ₹' + eligibility.orderAmount : '') +
+        '</p>';
+    if (eligibility.insideNoRefundWindow && eligibility.noRefundWithinDays != null) {
+        html +=
+            '<p style="margin:0 0 8px;font-size:0.85rem;color:#b45309;">Inside no-refund window (' +
+            eligibility.noRefundWithinDays +
+            ' days before event).</p>';
+    }
+    if (eligibility.tiers && eligibility.tiers.length) {
+        html += '<ul style="margin:0;padding-left:18px;font-size:0.84rem;color:#475569;">';
+        eligibility.tiers.forEach(function (t) {
+            html +=
+                '<li style="margin:4px 0;' +
+                (t.active ? 'font-weight:700;color:#047857;' : '') +
+                '">' +
+                escapeHtml(t.label) +
+                (t.active ? ' ✓ applies now' : '') +
+                '</li>';
+        });
+        html += '</ul>';
+    }
+    html += '</div>';
+    return html;
+}
+
+function renderCancellationRefundBlock(a) {
+    const tr = a && a.cancellationTracking;
+    if (!tr) return '';
+    const st = String(tr.status || '').toLowerCase();
+    const rs = String(tr.refundStatus || 'none').toLowerCase();
+    const livePending =
+        st === 'pending' || rs === 'pending' || rs === 'processing' || rs === 'manual_pending';
+    const tone =
+        tr.refundStatusTone === 'success'
+            ? '#047857'
+            : tr.refundStatusTone === 'error'
+              ? '#b91c1c'
+              : tr.refundStatusTone === 'pending'
+                ? '#b45309'
+                : '#475569';
+    const rz = tr.razorpayLive || null;
+    const latestRz = (tr.refunds || []).find((r) => r.gateway === 'razorpay') || null;
+    let badge =
+        '<div style="background:linear-gradient(135deg,#fff7ed,#f8fafc);border:1px solid #fed7aa;border-radius:10px;padding:10px 14px;margin-bottom:10px;">' +
+        (livePending
+            ? '<span style="display:inline-flex;align-items:center;gap:6px;font-size:0.72rem;font-weight:700;color:#b45309;text-transform:uppercase;margin-bottom:6px;"><span class="vtrk-dot" style="width:8px;height:8px;border-radius:50%;background:#f59e0b;display:inline-block;animation:satPulse 1.4s ease-in-out infinite;"></span>Live cancellation &amp; Razorpay refund tracking</span><br>'
+            : '') +
+        '<span style="font-weight:700;color:#334155;"><i class="fas fa-undo-alt"></i> Cancellation request · ' +
+        escapeHtml(String(tr.status || '').toUpperCase()) +
+        '</span>';
+    if (tr.refundAmount > 0) {
+        badge +=
+            ' · Policy refund <strong>₹' +
+            escapeHtml(String(tr.refundAmount)) +
+            '</strong> (' +
+            escapeHtml(String(tr.refundPercent || 0)) +
+            '%)';
+    }
+    badge +=
+        '<br><span style="font-size:0.85rem;color:' +
+        tone +
+        ';"><strong>Refund:</strong> ' +
+        escapeHtml(tr.refundStatusLabel || '') +
+        (tr.providerRefundId ? ' · Ref: ' + escapeHtml(tr.providerRefundId) : '') +
+        '</span>';
+    if (rz && (rz.providerRefundId || rz.providerStatus)) {
+        badge +=
+            '<div style="margin-top:8px;padding:8px 10px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;font-size:0.82rem;color:#0c4a6e;line-height:1.5;">' +
+            '<strong><i class="fas fa-bolt"></i> Razorpay</strong><br>' +
+            (rz.providerRefundId
+                ? 'Refund ID: <code style="font-size:0.78rem;">' + escapeHtml(rz.providerRefundId) + '</code><br>'
+                : '') +
+            (rz.providerStatus
+                ? 'Gateway status: <strong>' + escapeHtml(String(rz.providerStatus).toUpperCase()) + '</strong><br>'
+                : '') +
+            (rz.summary && rz.summary.paymentId
+                ? 'Payment ID: <code style="font-size:0.78rem;">' + escapeHtml(rz.summary.paymentId) + '</code><br>'
+                : '') +
+            (rz.summary && rz.summary.speedProcessed
+                ? 'Speed: ' + escapeHtml(rz.summary.speedProcessed) + '<br>'
+                : '') +
+            (rz.failureReason
+                ? '<span style="color:#b91c1c;">Reason: ' + escapeHtml(rz.failureReason) + '</span>'
+                : livePending
+                  ? 'Updates automatically when Razorpay processes the refund.'
+                  : '') +
+            '</div>';
+    } else if (latestRz && latestRz.providerRefundId) {
+        badge +=
+            '<div style="margin-top:8px;font-size:0.82rem;color:#64748b;">Razorpay ref: ' +
+            escapeHtml(latestRz.providerRefundId) +
+            (latestRz.providerStatus ? ' · ' + escapeHtml(String(latestRz.providerStatus).toUpperCase()) : '') +
+            '</div>';
+    }
+    badge += '</div>';
+    if (!tr.trackingSteps || !tr.trackingSteps.length) return badge;
+    return badge + renderRefundTrackingStepsHtml(tr.trackingSteps);
 }
 
 function renderSeminarApplicationTrackerCard(a) {
@@ -1354,6 +1481,7 @@ function renderSeminarApplicationTrackerCard(a) {
         qualBadge +
         waitlistBlock +
         revisionBlock +
+        renderCancellationRefundBlock(a) +
         '</div>' +
         renderTrackerStepsHtml(tl) +
         '<div style="padding:0 16px 16px;">' +
@@ -6061,14 +6189,39 @@ async function openCancelRequestModal(applicationId) {
     __cancelRequestAppId = applicationId;
     const label = document.getElementById('cancel-request-app-label');
     const pol = document.getElementById('cancel-request-policy');
+    const preview = document.getElementById('cancel-request-refund-preview');
     const reason = document.getElementById('cancel-request-reason');
     if (label) label.textContent = 'Application ' + (app.application_no || '') + ' — ' + (app.seminar_title || app.title || '');
-    if (pol) pol.textContent = summaryCancellationPolicy(app.cancellation_policy_json) || 'Refund eligibility is determined in IST when admin reviews your request.';
+    if (pol) pol.textContent = summaryCancellationPolicy(app.cancellation_policy_json) || 'Refund eligibility is calculated in IST when admin reviews your request.';
+    if (preview) preview.innerHTML = '<p class="muted" style="margin:0;font-size:0.85rem;">Calculating refund eligibility…</p>';
     if (reason) reason.value = '';
     const m = document.getElementById('cancel-request-modal');
     if (m) {
         m.classList.remove('hidden');
         m.style.display = 'flex';
+    }
+    try {
+        const res = await fetch(
+            '/api/doctor/cancellation-preview?userId=' +
+                encodeURIComponent(currentUser.id) +
+                '&registrationId=' +
+                encodeURIComponent(applicationId)
+        );
+        const data = await res.json().catch(function () {
+            return {};
+        });
+        if (preview) {
+            if (res.ok && data.eligibility) {
+                preview.innerHTML = renderRefundEligibilityHtml(data.eligibility);
+            } else {
+                preview.innerHTML =
+                    '<p style="color:#b91c1c;margin:0;font-size:0.85rem;">' +
+                    escapeHtml(data.error || 'Could not load refund preview.') +
+                    '</p>';
+            }
+        }
+    } catch (e) {
+        if (preview) preview.innerHTML = '<p style="color:#b91c1c;margin:0;font-size:0.85rem;">Network error loading refund preview.</p>';
     }
 }
 
@@ -6100,10 +6253,13 @@ async function submitCancellationRequest() {
         });
         const data = await res.json();
         if (!res.ok) return alert(data.error || 'Could not submit request.');
-        alert(
-            (data.message || 'Request submitted.') +
-                '\n\nTrack status under Track seminar applications — cancellation and refund steps appear in the same live timeline.'
-        );
+        const prev = data.refundPreview;
+        let msg = data.message || 'Request submitted.';
+        if (prev && prev.amount != null) {
+            msg += '\n\nPolicy preview (IST): ' + (prev.percent || 0) + '% — ₹' + prev.amount + '. ' + (prev.reason || '');
+            msg += '\n\nTrack refund status under Track seminar applications after admin approval.';
+        }
+        alert(msg);
         closeCancelRequestModal();
         await loadDoctorCancellationRequests();
         loadApplications();
@@ -6130,7 +6286,17 @@ function seminarTrackFingerprint(apps) {
         .map((a) => {
             const tl = a.timeline || {};
             const stepSig = (tl.steps || []).map((s) => s.key + ':' + s.state + ':' + (s.at || '')).join(',');
-            return [a.id, a.status, a.updated_at || '', stepSig].join(':');
+            const ct = a.cancellationTracking;
+            const cancelSig = ct
+                ? [
+                      ct.status,
+                      ct.refundStatus,
+                      ct.refundAmount,
+                      ct.providerRefundId || '',
+                      (ct.trackingSteps || []).map((s) => s.key + ':' + s.state).join(',')
+                  ].join(':')
+                : '';
+            return [a.id, a.status, a.updated_at || '', stepSig, cancelSig].join(':');
         })
         .join('|');
 }
