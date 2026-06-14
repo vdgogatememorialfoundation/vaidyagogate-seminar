@@ -2555,6 +2555,11 @@
                         </div>
                         <label style="margin-top: 8px; display:block;"><input type="checkbox" id="pg-razorpay-live-enabled"> Enable Live mode for doctors</label>
                         <label style="margin-top: 10px; display:block;"><input type="checkbox" id="pg-razorpay-active"> Enable Razorpay gateway</label>
+                        <div style="margin-top:12px;">
+                            <label>Webhook secret (refund status updates)</label>
+                            <input type="password" id="pg-razorpay-webhook-secret" placeholder="From Razorpay Dashboard → Webhooks" style="width:100%;max-width:420px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;">
+                            <p style="margin:6px 0 0;font-size:0.82rem;color:#64748b;">Webhook URL: <code>/api/payments/razorpay/webhook</code> · Events: refund.created, refund.processed, refund.failed. Or set <code>RAZORPAY_WEBHOOK_SECRET</code> in Render env.</p>
+                        </div>
                         <p style="margin-top:10px;font-size:0.85rem;color:#64748b;">Use a matching Key ID and Secret from Razorpay Dashboard → Settings → API Keys. Re-enter the secret whenever you change Key ID.</p>
                         <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;">
                             <button type="button" class="btn-secondary" onclick="syncRazorpayFromRenderEnv()">Use Render env keys</button>
@@ -3143,6 +3148,7 @@
                 <button type="button" class="btn-primary" style="background:#15803d;" onclick="submitAdminCancellationReview('approve')"><i class="fas fa-check"></i> Approve &amp; cancel</button>
                 <button type="button" class="btn-primary" style="background:#64748b;" onclick="submitAdminCancellationReview('reject')"><i class="fas fa-times"></i> Reject request</button>
                 <button type="button" class="btn-primary" style="background:#6366f1;" id="admin-cancel-review-refund-btn" onclick="adminProcessCancellationRefundFromModal()"><i class="fas fa-undo"></i> Process refund now</button>
+                <button type="button" class="btn-primary" style="background:#0ea5e9;" id="admin-cancel-review-sync-btn" onclick="adminSyncCancellationRefundFromModal()"><i class="fas fa-sync"></i> Sync from Razorpay</button>
                 <button type="button" class="btn-primary" style="background:#94a3b8;" onclick="closeAdminCancellationReviewModal()">Close</button>
             </div>
             <p id="admin-cancel-review-msg" style="margin-top:12px;font-size:0.88rem;"></p>

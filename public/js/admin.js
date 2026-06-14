@@ -8080,6 +8080,7 @@ function populateAdminCancellationReviewModal(row) {
     const proc = document.getElementById('admin-cancel-review-process-refund');
     const refundPanel = document.getElementById('admin-cancel-review-refund-panel');
     const refundBtn = document.getElementById('admin-cancel-review-refund-btn');
+    const syncBtn = document.getElementById('admin-cancel-review-sync-btn');
     const msg = document.getElementById('admin-cancel-review-msg');
     const when = adminFormatCancelReviewDateTime(row.requested_at);
     if (title) title.textContent = 'Review · ' + (row.application_no || 'Application');
@@ -8108,12 +8109,35 @@ function populateAdminCancellationReviewModal(row) {
             escAdmin(row.refund_percent || 0) +
             '%)</p>' +
             (row.payment_gateway
-                ? '<p style="margin:0;"><strong>Gateway:</strong> ' +
+                ? '<p style="margin:0 0 6px;"><strong>Gateway:</strong> ' +
                   escAdmin(row.payment_gateway) +
                   (row.order_amount ? ' · Paid ₹' + escAdmin(row.order_amount) : '') +
                   (row.order_refund_status ? ' · Order refund: ' + escAdmin(row.order_refund_status) : '') +
                   '</p>'
-                : '<p style="margin:0;color:#b45309;">No successful online payment on file — refund may be N/A or manual.</p>');
+                : '<p style="margin:0 0 6px;color:#b45309;">No successful online payment on file — refund may be N/A or manual.</p>') +
+            (row.razorpayLive && (row.razorpayLive.providerRefundId || row.razorpayLive.providerStatus)
+                ? '<div style="margin-top:8px;padding:8px 10px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;">' +
+                  '<strong style="color:#0c4a6e;">Razorpay refund</strong><br>' +
+                  (row.razorpayLive.providerRefundId
+                      ? 'Refund ID: <code style="font-size:0.78rem;">' +
+                        escAdmin(row.razorpayLive.providerRefundId) +
+                        '</code><br>'
+                      : '') +
+                  (row.razorpayLive.providerStatus
+                      ? 'Status: <strong>' + escAdmin(String(row.razorpayLive.providerStatus).toUpperCase()) + '</strong><br>'
+                      : '') +
+                  (row.razorpayLive.summary && row.razorpayLive.summary.paymentId
+                      ? 'Payment: <code style="font-size:0.78rem;">' +
+                        escAdmin(row.razorpayLive.summary.paymentId) +
+                        '</code><br>'
+                      : '') +
+                  (row.razorpayLive.failureReason
+                      ? '<span style="color:#b91c1c;">' + escAdmin(row.razorpayLive.failureReason) + '</span>'
+                      : '') +
+                  '</div>'
+                : row.provider_refund_id
+                  ? '<p style="margin:6px 0 0;"><strong>Razorpay ref:</strong> ' + escAdmin(row.provider_refund_id) + '</p>'
+                  : '');
     }
     if (track) {
         track.innerHTML =
@@ -8128,7 +8152,11 @@ function populateAdminCancellationReviewModal(row) {
         row.status === 'approved' &&
         Number(row.refund_amount) > 0 &&
         !['completed'].includes(String(row.refund_status || '').toLowerCase());
+    const canSyncRefund =
+        !!row.provider_refund_id &&
+        !['completed', 'none'].includes(String(row.refund_status || '').toLowerCase());
     if (refundBtn) refundBtn.style.display = canProcessRefund ? 'inline-block' : 'none';
+    if (syncBtn) syncBtn.style.display = canSyncRefund ? 'inline-block' : 'none';
     if (msg) msg.textContent = '';
 }
 
@@ -8229,6 +8257,11 @@ function renderAdminCancellationRequestsTable() {
             '<div style="font-size:0.82rem;line-height:1.45;margin-bottom:6px;">' +
             escAdmin(r.refundStatusLabel || r.refund_status || '—') +
             (r.provider_refund_id ? '<br><span class="muted">Ref: ' + escAdmin(r.provider_refund_id) + '</span>' : '') +
+            (r.razorpayLive && r.razorpayLive.providerStatus
+                ? '<br><span class="muted">Razorpay: ' +
+                  escAdmin(String(r.razorpayLive.providerStatus).toUpperCase()) +
+                  '</span>'
+                : '') +
             '</div>' +
             renderAdminCancelTrackingStepsHtml(r.trackingSteps || []);
         let actions =
@@ -8241,9 +8274,15 @@ function renderAdminCancellationRequestsTable() {
             !['completed'].includes(String(r.refund_status || '').toLowerCase())
         ) {
             actions +=
-                '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;background:#6366f1;border:none;" onclick="adminProcessCancellationRefund(' +
+                '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;background:#6366f1;border:none;margin-right:4px;" onclick="adminProcessCancellationRefund(' +
                 r.id +
                 ')">Refund</button>';
+        }
+        if (r.provider_refund_id && !['completed', 'none'].includes(String(r.refund_status || '').toLowerCase())) {
+            actions +=
+                '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;background:#0ea5e9;border:none;" onclick="adminSyncCancellationRefund(' +
+                r.id +
+                ')"><i class="fas fa-sync"></i></button>';
         }
         tbody.innerHTML +=
             '<tr><td>' +
@@ -10135,6 +10174,13 @@ async function loadSettings() {
                 }
                 document.getElementById('pg-razorpay-live-enabled').checked = live.enabled === true;
                 document.getElementById('pg-razorpay-active').checked = !!pg.is_active;
+                const whEl = document.getElementById('pg-razorpay-webhook-secret');
+                if (whEl) {
+                    whEl.value = '';
+                    whEl.placeholder = config.webhook_secret || config.webhookSecret
+                        ? 'Saved — leave blank to keep'
+                        : 'From Razorpay Dashboard → Webhooks';
+                }
                 loadRazorpayGatewayDiagnostics();
             } else if (pg.name === 'cashfree') {
                 const live = config.live || {};
@@ -10509,11 +10555,13 @@ async function savePaymentGatewaysSettings() {
     const zohoRefresh = document.getElementById('pg-zoho-refresh-token')?.value.trim() || '';
     const zohoSign = document.getElementById('pg-zoho-signing-key')?.value.trim() || '';
     const zohoLiveOn = document.getElementById('pg-zoho-live-enabled')?.checked;
+    const rzWebhookSecret = document.getElementById('pg-razorpay-webhook-secret')?.value.trim() || '';
         const gateways = [
         {
             name: 'razorpay',
             is_active: document.getElementById('pg-razorpay-active').checked,
             config: {
+                webhook_secret: rzWebhookSecret,
                 test: {
                     enabled: document.getElementById('pg-razorpay-test-enabled').checked,
                     key_id: document.getElementById('pg-razorpay-test-key-id').value.trim(),
@@ -16737,9 +16785,33 @@ async function adminProcessCancellationRefund(requestId) {
         });
         const data = await res.json();
         if (!res.ok) return alert(data.error || 'Refund failed');
-        alert(data.message || 'Refund initiated.');
+        alert(data.message || 'Refund initiated at Razorpay. Status will update automatically.');
         loadAdminCancellationRequests();
         loadAdminEnrichedOrders();
+    } catch (e) {
+        console.error(e);
+        alert('Network error.');
+    }
+}
+
+async function adminSyncCancellationRefund(requestId) {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return alert('Not logged in.');
+    try {
+        const res = await fetch('/api/admin/cancellation-requests/' + requestId + '/sync-refund', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: adm.id })
+        });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Sync failed');
+        const st = data.internalStatus || data.providerStatus || 'updated';
+        alert('Razorpay refund synced · status: ' + st);
+        await loadAdminCancellationRequests();
+        if (__adminCancelReviewRequestId && Number(__adminCancelReviewRequestId) === Number(requestId)) {
+            const fresh = (__adminCancelRequestsCache || []).find((x) => Number(x.id) === Number(requestId));
+            if (fresh) populateAdminCancellationReviewModal(fresh);
+        }
     } catch (e) {
         console.error(e);
         alert('Network error.');
@@ -16749,6 +16821,11 @@ async function adminProcessCancellationRefund(requestId) {
 function adminProcessCancellationRefundFromModal() {
     if (!__adminCancelReviewRequestId) return;
     adminProcessCancellationRefund(__adminCancelReviewRequestId);
+}
+
+function adminSyncCancellationRefundFromModal() {
+    if (!__adminCancelReviewRequestId) return;
+    adminSyncCancellationRefund(__adminCancelReviewRequestId);
 }
 
 async function loadAdminUserPaymentsPanel(userId, bodyEl) {
