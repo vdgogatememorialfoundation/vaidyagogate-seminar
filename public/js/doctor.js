@@ -5718,11 +5718,13 @@ function seminarFeeLabelHtml(s) {
         '<strong style="color:#047857;">Sessions (choose at registration)</strong><ul style="margin:8px 0 0;padding-left:18px;line-height:1.5;">';
     evs.forEach(function (ev) {
         const when = ev.eventDate || ev.event_date ? formatEventDate(ev.eventDate || ev.event_date) : '';
+        const loc = ev.locationText || ev.location_text || '';
         html +=
             '<li><strong>' +
             escapeHtml(ev.title) +
             '</strong>' +
             (when ? ' · ' + escapeHtml(when) : '') +
+            (loc ? ' · ' + escapeHtml(loc) : '') +
             ' — ₹' +
             (Number(ev.price) || 0) +
             '</li>';
@@ -5745,6 +5747,8 @@ function renderSeminarEventPicker(seminar) {
         '<p style="font-size:0.84rem;color:#64748b;margin:0 0 12px;">Select one or both. Payment is the sum of selected sessions. Each session has its own e-ticket, scanner check-in, and certificate.</p>';
     events.forEach(function (ev) {
         const dt = ev.eventDate || ev.event_date;
+        const loc = ev.locationText || ev.location_text || '';
+        const desc = ev.description || '';
         html +=
             '<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;padding:10px;background:#fff;border:1px solid #bbf7d0;border-radius:8px;cursor:pointer;">' +
             '<input type="checkbox" class="reg-event-cb" value="' +
@@ -5754,6 +5758,8 @@ function renderSeminarEventPicker(seminar) {
             escapeHtml(ev.title) +
             '</strong>' +
             (dt ? '<br><span style="font-size:0.82rem;color:#64748b;">' + escapeHtml(formatEventDate(dt)) + '</span>' : '') +
+            (loc ? '<br><span style="font-size:0.82rem;color:#64748b;"><i class="fas fa-map-marker-alt"></i> ' + escapeHtml(loc) + '</span>' : '') +
+            (desc ? '<br><span style="font-size:0.82rem;color:#475569;">' + escapeHtml(desc) + '</span>' : '') +
             '<br><span style="font-size:0.9rem;color:#047857;font-weight:700;">₹' +
             (Number(ev.price) || 0) +
             '</span></span></label>';

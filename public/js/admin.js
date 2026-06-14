@@ -11894,7 +11894,7 @@ function addSeminarSubEventRow(prefill) {
     const row = document.createElement('div');
     row.className = 'seminar-sub-event-row';
     row.style.cssText =
-        'display:grid;grid-template-columns:2fr 1fr 1fr 0.8fr 0.8fr auto;gap:8px;align-items:end;margin-bottom:8px;padding:10px;background:#fff;border:1px solid #d1fae5;border-radius:8px;';
+        'position:relative;margin-bottom:12px;padding:14px;background:#fff;border:1px solid #bbf7d0;border-radius:10px;';
     const p = prefill || {};
     const fmtDt = (v) =>
         window.PortalDateTime && window.PortalDateTime.toDatetimeLocal
@@ -11902,25 +11902,54 @@ function addSeminarSubEventRow(prefill) {
             : v
               ? String(v).slice(0, 16)
               : '';
+    const checkinOn =
+        p.checkin_enabled !== false &&
+        p.checkinEnabled !== false &&
+        p.checkin_enabled !== 0 &&
+        p.checkinEnabled !== 0;
+    const capVal =
+        p.capacity != null && p.capacity !== '' ? String(parseInt(p.capacity, 10) || '') : '';
     row.innerHTML =
+        '<button type="button" class="se-remove btn-primary" style="position:absolute;top:10px;right:10px;background:#b91c1c;padding:4px 10px;font-size:0.78rem;">Remove</button>' +
+        '<div style="display:grid;gap:10px;padding-right:72px;">' +
         '<div><label style="font-size:0.78rem;">Session name</label><input type="text" class="se-title" value="' +
         escAdmin(p.title || '') +
         '" placeholder="e.g. Ayurveda Workshop"></div>' +
+        '<div><label style="font-size:0.78rem;">Description / details</label><textarea class="se-desc" rows="2" placeholder="Agenda, speakers, notes for doctors">' +
+        escAdmin(p.description || '') +
+        '</textarea></div>' +
+        '<div><label style="font-size:0.78rem;">Venue / location</label><input type="text" class="se-location" value="' +
+        escAdmin(p.location_text || p.locationText || '') +
+        '" placeholder="e.g. Auditorium A, Pune"></div>' +
+        '<div><label style="font-size:0.78rem;">Google Maps embed URL</label><input type="text" class="se-location-url" value="' +
+        escAdmin(p.location_url || p.locationUrl || '') +
+        '" placeholder="https://www.google.com/maps/embed?..."></div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
         '<div><label style="font-size:0.78rem;">Event date (IST)</label><input type="datetime-local" class="se-date" value="' +
         escAdmin(fmtDt(p.event_date || p.eventDate)) +
         '"></div>' +
         '<div><label style="font-size:0.78rem;">Check-in date</label><input type="date" class="se-checkin" value="' +
         escAdmin(String(p.checkin_date || p.checkinDate || '').slice(0, 10)) +
-        '"></div>' +
+        '"></div></div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">' +
         '<div><label style="font-size:0.78rem;">Price ₹</label><input type="number" class="se-price" step="0.01" value="' +
         escAdmin(p.price != null ? p.price : 0) +
         '"></div>' +
-        '<div><label style="font-size:0.78rem;display:block;margin-bottom:4px;">Scans</label><select class="se-scans"><option value="1"' +
+        '<div><label style="font-size:0.78rem;">Capacity (optional)</label><input type="number" class="se-capacity" min="0" value="' +
+        escAdmin(capVal) +
+        '" placeholder="Unlimited"></div>' +
+        '<div><label style="font-size:0.78rem;display:block;margin-bottom:4px;">Scans for certificate</label><select class="se-scans"><option value="1"' +
         (Number(p.cert_scans_required || p.certScansRequired) !== 2 ? ' selected' : '') +
         '>Entry</option><option value="2"' +
         (Number(p.cert_scans_required || p.certScansRequired) === 2 ? ' selected' : '') +
-        '>Entry+Exit</option></select></div>' +
-        '<button type="button" class="btn-primary" style="background:#b91c1c;padding:6px 10px;" onclick="this.closest(\'.seminar-sub-event-row\').remove()">×</button>';
+        '>Entry+Exit</option></select></div></div>' +
+        '<label style="display:flex;align-items:center;gap:8px;font-size:0.84rem;color:#334155;">' +
+        '<input type="checkbox" class="se-checkin-enabled"' +
+        (checkinOn ? ' checked' : '') +
+        '> Enable scanner check-in for this session</label></div>';
+    row.querySelector('.se-remove').addEventListener('click', function () {
+        row.remove();
+    });
     list.appendChild(row);
 }
 
@@ -11935,12 +11964,18 @@ function collectSeminarSubEventsFromUi() {
             eventDateRaw && window.PortalDateTime
                 ? window.PortalDateTime.fromDatetimeLocal(eventDateRaw)
                 : eventDateRaw || null;
+        const capRaw = parseInt(row.querySelector('.se-capacity')?.value, 10);
         out.push({
             title,
+            description: row.querySelector('.se-desc')?.value.trim() || null,
+            location_text: row.querySelector('.se-location')?.value.trim() || null,
+            location_url: row.querySelector('.se-location-url')?.value.trim() || null,
             event_date,
             checkin_date: row.querySelector('.se-checkin')?.value || null,
             price: parseFloat(row.querySelector('.se-price')?.value) || 0,
+            capacity: Number.isInteger(capRaw) && capRaw > 0 ? capRaw : null,
             sort_order: idx,
+            checkin_enabled: row.querySelector('.se-checkin-enabled')?.checked !== false,
             cert_scans_required: parseInt(row.querySelector('.se-scans')?.value || '1', 10) === 2 ? 2 : 1,
             is_active: true
         });
@@ -19832,3 +19867,18 @@ async function sendSeminarEventReminders(type) {
     }
 }
 window.sendSeminarEventReminders = sendSeminarEventReminders;
+
+window.addSeminarSubEventRow = addSeminarSubEventRow;
+(function wireSeminarSubEventAddBtn() {
+    function bind() {
+        const btn = document.getElementById('seminar-add-sub-event-btn');
+        if (!btn || btn.dataset.bound) return;
+        btn.dataset.bound = '1';
+        btn.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            addSeminarSubEventRow();
+        });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
+    else bind();
+})();
