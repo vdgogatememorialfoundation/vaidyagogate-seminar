@@ -15372,7 +15372,7 @@ function cmsApplySeoFieldsToForm(seo) {
     set('seo-og-image', s.ogImage);
     set('seo-google-verify', s.googleSiteVerification);
     set('seo-bing-verify', s.bingSiteVerification);
-    set('seo-favicon', s.faviconUrl || '/favicon.svg');
+    set('seo-favicon', s.faviconUrl || '/api/branding/logo/file');
     const ri = document.getElementById('seo-robots-index');
     if (ri) ri.checked = s.robotsIndex !== false;
 }
@@ -15388,7 +15388,7 @@ function cmsCollectSeoFieldsFromForm() {
         ogImage: gv('seo-og-image'),
         googleSiteVerification: gv('seo-google-verify'),
         bingSiteVerification: gv('seo-bing-verify'),
-        faviconUrl: gv('seo-favicon') || '/favicon.svg',
+        faviconUrl: gv('seo-favicon') || '/api/branding/logo/file',
         robotsIndex: ri ? !!ri.checked : true
     };
 }
