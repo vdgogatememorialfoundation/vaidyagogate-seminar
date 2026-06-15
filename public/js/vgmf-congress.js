@@ -1222,5 +1222,13 @@
         bindHeaderScroll();
         bindSpeakerModal();
         if (typeof window.dismissSitePreloader === 'function') window.dismissSitePreloader();
+        window.setTimeout(function () {
+            const root = document.getElementById('congress-hero-slides');
+            if (root && !root.children.length) {
+                loadHeroMarketing().then(function () {
+                    renderCongressHero(window.__siteCms || {});
+                });
+            }
+        }, 2500);
     });
 })();
