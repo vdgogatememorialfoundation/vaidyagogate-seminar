@@ -665,15 +665,29 @@ function isLegacyVolunteerDefaultModulesClient(userModulesRaw) {
     return !Object.keys(userMap).some((k) => userMap[k] === true && !defaults[k]);
 }
 
+function expandDoctorRefundTabAccess(allowed) {
+    if (!allowed || allowed.has('tab-refunds')) return allowed;
+    if (
+        allowed.has('tab-payments') ||
+        allowed.has('tab-applications') ||
+        allowed.has('tab-orders')
+    ) {
+        const out = new Set(allowed);
+        out.add('tab-refunds');
+        return out;
+    }
+    return allowed;
+}
+
 function resolveDoctorAllowedTabsClient(category, globalRegular, globalVolunteer, userModulesRaw) {
     const cat = String(category || 'regular').toLowerCase() === 'volunteer' ? 'volunteer' : 'regular';
     const globalMap = cat === 'volunteer' ? globalVolunteer || {} : globalRegular || {};
     let allowed = modulesMapToAllowedSetClient(globalMap);
-    if (isLegacyVolunteerDefaultModulesClient(userModulesRaw)) return allowed;
+    if (isLegacyVolunteerDefaultModulesClient(userModulesRaw)) return expandDoctorRefundTabAccess(allowed);
     const userMap = parseDoctorModulesMap(userModulesRaw);
-    if (!userMap || !Object.keys(userMap).length) return allowed;
+    if (!userMap || !Object.keys(userMap).length) return expandDoctorRefundTabAccess(allowed);
     const hasExplicitOff = Object.keys(userMap).some((k) => userMap[k] === false);
-    if (!hasExplicitOff) return modulesMapToAllowedSetClient(userMap);
+    if (!hasExplicitOff) return expandDoctorRefundTabAccess(modulesMapToAllowedSetClient(userMap));
     const out = new Set();
     const tabIds = [
         'tab-dashboard',
@@ -702,7 +716,7 @@ function resolveDoctorAllowedTabsClient(category, globalRegular, globalVolunteer
         if (userMap[tabId] === false) return;
         if (allowed === null || allowed.has(tabId)) out.add(tabId);
     });
-    return out.size ? out : new Set();
+    return expandDoctorRefundTabAccess(out.size ? out : new Set());
 }
 
 function doctorPortalFetchBust() {
@@ -728,7 +742,10 @@ function doctorLiveChatWidgetEnabled() {
 }
 
 function applyDoctorAllowedTabsToDom(allowed) {
-    __doctorAllowedTabs = allowed;
+    let set = allowed;
+    if (set && !(set instanceof Set)) set = new Set(set);
+    set = expandDoctorRefundTabAccess(set);
+    __doctorAllowedTabs = set;
     document.querySelectorAll('.menu-item[data-tab]').forEach((el) => {
         const tab = el.getAttribute('data-tab');
         if (!tab) return;
@@ -761,9 +778,13 @@ function applyDoctorAllowedTabsToDom(allowed) {
             pane.classList.add('hidden');
         }
     });
+    const visiblePane = document.querySelector('.tab-pane[id^="tab-"]:not(.hidden)');
+    const visibleTabId = visiblePane && visiblePane.id;
     const activeMenu = document.querySelector('.menu-item.active[data-tab]');
     const activeTabId = activeMenu && activeMenu.getAttribute('data-tab');
-    if (activeTabId && !doctorTabModuleEnabled(activeTabId)) {
+    if (visibleTabId && doctorTabModuleEnabled(visibleTabId)) {
+        switchTab(visibleTabId);
+    } else if (activeTabId && !doctorTabModuleEnabled(activeTabId)) {
         switchTab('tab-dashboard');
     } else if (!document.querySelector('.tab-pane:not(.hidden)')) {
         switchTab('tab-dashboard');
@@ -1278,6 +1299,12 @@ function renderTrackerStepsHtml(timeline) {
     });
 
     html += '</div></div>';
+    if (timeline.hasCancellationTracking || timeline.cancelled) {
+        html +=
+            '<p style="margin:12px 0 0;text-align:center;">' +
+            '<button type="button" class="btn-primary" style="background:#0f766e;border:none;font-size:0.88rem;padding:10px 18px;" ' +
+            'onclick="openDoctorRefundModule()">Open full refund module</button></p>';
+    }
     return html;
 }
 
@@ -3762,6 +3789,30 @@ function switchTab(tabId, menuEl) {
     syncDoctorTrackingPolls();
 }
 window.switchTab = switchTab;
+
+function openDoctorRefundModule() {
+    if (__doctorAllowedTabs) {
+        const expanded = expandDoctorRefundTabAccess(new Set(__doctorAllowedTabs));
+        expanded.add('tab-refunds');
+        __doctorAllowedTabs = expanded;
+        const menuBtn = document.querySelector('.menu-item[data-tab="tab-refunds"]');
+        if (menuBtn) {
+            menuBtn.classList.remove('hidden');
+            menuBtn.style.display = '';
+            menuBtn.removeAttribute('hidden');
+            menuBtn.setAttribute('aria-hidden', 'false');
+        }
+    }
+    switchTab('tab-refunds');
+    const pane = document.getElementById('tab-refunds');
+    if (pane) pane.classList.remove('hidden');
+    try {
+        const base = window.location.pathname + window.location.search;
+        window.history.replaceState(null, '', base + '#refunds');
+    } catch (_) {}
+}
+window.openDoctorRefundModule = openDoctorRefundModule;
+
 window.startRegistrationVolunteerFlow = startRegistrationVolunteerFlow;
 
 let activeCaseProgramId = null;

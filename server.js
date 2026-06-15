@@ -6257,11 +6257,13 @@ function respondDoctorPortalAccess(res, row) {
         const globalVolunteer = c.doctorPortalModulesVolunteer || {};
         const useGlobalModules = !doctorPortalModules.userHasCustomModules(row.doctor_modules);
         const modulesForResolve = useGlobalModules ? null : row.doctor_modules;
-        const allowedSet = doctorPortalModules.resolveDoctorAllowedTabs(
-            row.doctor_category,
-            globalRegular,
-            globalVolunteer,
-            modulesForResolve
+        const allowedSet = expandRefundTabAccess(
+            doctorPortalModules.resolveDoctorAllowedTabs(
+                row.doctor_category,
+                globalRegular,
+                globalVolunteer,
+                modulesForResolve
+            )
         );
         const parsed = doctorPortalModules.parseModulesJson(row.doctor_modules);
         const doctor_modules =
