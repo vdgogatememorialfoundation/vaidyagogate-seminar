@@ -2173,9 +2173,10 @@
                         <div><label>First name</label><input type="text" id="pos-fname" style="width:100%;padding:8px;"></div>
                         <div><label>Middle name <span style="font-weight:400;color:#64748b;">(optional)</span></label><input type="text" id="pos-mname" style="width:100%;padding:8px;"></div>
                         <div><label>Last name</label><input type="text" id="pos-lname" style="width:100%;padding:8px;"></div>
-                        <div><label>Phone</label><input type="text" id="pos-phone" style="width:100%;padding:8px;"></div>
-                        <div><label>Email (optional)</label><input type="email" id="pos-email" style="width:100%;padding:8px;"></div>
+                        <div><label>Phone</label><input type="text" id="pos-phone" style="width:100%;padding:8px;" oninput="schedulePosUserLookup()" onblur="lookupPosUser()"></div>
+                        <div><label>Email (optional)</label><input type="email" id="pos-email" style="width:100%;padding:8px;" oninput="schedulePosUserLookup()" onblur="lookupPosUser()"></div>
                     </div>
+                    <p id="pos-user-hint" style="margin:8px 0 0;font-size:0.85rem;color:#64748b;min-height:1.2em;"></p>
                     <label style="display:flex;align-items:flex-start;gap:8px;margin-top:14px;font-size:0.88rem;color:#475569;max-width:560px;">
                         <input type="checkbox" id="pos-send-ticket-email" style="margin-top:3px;">
                         <span>Queue ticket email after registration (off by default — use printed QR at venue; avoids Zoho rate limits)</span>

@@ -9996,7 +9996,9 @@ registerPosRoutes(app, {
     notifyTicketIssued,
     emailDeliveryPolicy,
     adminPaymentFlow,
-    paymentDeps: doctorPaymentDeps()
+    paymentDeps: doctorPaymentDeps(),
+    notifEngine,
+    flushNotificationQueue
 });
 
 app.get('/api/public/feedback-form', (req, res) => {

@@ -1889,6 +1889,65 @@ async function posMarkUpiPaid() {
     }
 }
 
+let __posUserLookupTimer = null;
+
+function schedulePosUserLookup() {
+    if (__posUserLookupTimer) clearTimeout(__posUserLookupTimer);
+    __posUserLookupTimer = setTimeout(() => lookupPosUser(), 450);
+}
+
+async function lookupPosUser() {
+    const hint = document.getElementById('pos-user-hint');
+    const adm = getStoredAdminUser();
+    const email = (document.getElementById('pos-email') || {}).value || '';
+    const phone = (document.getElementById('pos-phone') || {}).value || '';
+    if (!hint || !adm?.id) return;
+    if (!String(email).trim() && !String(phone).trim()) {
+        hint.textContent = '';
+        return;
+    }
+    hint.style.color = '#64748b';
+    hint.textContent = 'Checking for existing account…';
+    try {
+        const q = new URLSearchParams({
+            actingAdminId: String(adm.id),
+            email: String(email).trim(),
+            phone: String(phone).trim()
+        });
+        const res = await fetch('/api/admin/pos/lookup-user?' + q.toString(), { cache: 'no-store' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            hint.style.color = '#b91c1c';
+            hint.textContent = data.error || 'Could not look up user';
+            return;
+        }
+        if (data.found && data.user) {
+            hint.style.color = '#0f766e';
+            hint.innerHTML =
+                '<i class="fas fa-user-check"></i> Existing account <strong>' +
+                escAdmin(data.user.userIdString || '') +
+                '</strong>' +
+                (data.user.name ? ' · ' + escAdmin(data.user.name) : '') +
+                (data.user.email ? ' · ' + escAdmin(data.user.email) : '');
+            if (data.user.name) {
+                const parts = String(data.user.name).trim().split(/\s+/);
+                const fn = document.getElementById('pos-fname');
+                const ln = document.getElementById('pos-lname');
+                if (fn && !fn.value.trim() && parts[0]) fn.value = parts[0];
+                if (ln && !ln.value.trim() && parts.length > 1) ln.value = parts[parts.length - 1];
+            }
+        } else {
+            hint.style.color = '#b45309';
+            hint.innerHTML =
+                '<i class="fas fa-user-plus"></i> ' +
+                escAdmin(data.message || 'New doctor — portal ID will be created and emailed on registration.');
+        }
+    } catch (e) {
+        hint.style.color = '#b91c1c';
+        hint.textContent = 'Network error checking account';
+    }
+}
+
 async function submitAdminPosRegistration() {
     const actor = getStoredAdminUser();
     if (!actor) return alert('Sign in as admin first.');
@@ -1921,11 +1980,18 @@ async function submitAdminPosRegistration() {
                 sendTicketEmail: !!(document.getElementById('pos-send-ticket-email') || {}).checked
             })
         });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error || 'Failed');
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || data.message || 'Registration failed (HTTP ' + res.status + ')');
         if (data.paid) {
             let note =
-                'Done. Ticket ' + (data.ticketId || '—') + ' — doctor must complete profile in portal.';
+                (data.isNewUser && data.userIdString
+                    ? 'New ID ' + data.userIdString + ' — login emailed. '
+                    : data.userIdString
+                      ? 'Doctor ' + data.userIdString + '. '
+                      : '') +
+                'Ticket ' +
+                (data.ticketId || '—') +
+                ' — doctor must complete profile in portal.';
             if (data.emailNote) note += ' ' + data.emailNote;
             status.textContent = note;
             status.style.color = '#059669';
@@ -17522,6 +17588,7 @@ async function adminSyncCancellationRefund(requestId) {
         const st = data.internalStatus || data.providerStatus || 'updated';
         alert('Razorpay refund synced · status: ' + st);
         await loadAdminCancellationRequests();
+        if (typeof loadAdminRefundTracking === 'function') loadAdminRefundTracking(true);
         if (__adminCancelReviewRequestId && Number(__adminCancelReviewRequestId) === Number(requestId)) {
             const fresh = (__adminCancelRequestsCache || []).find((x) => Number(x.id) === Number(requestId));
             if (fresh) populateAdminCancellationReviewModal(fresh);
