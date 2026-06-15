@@ -522,20 +522,17 @@ const appPaths = require('./lib/app-paths');
 const publicDir = path.join(__dirname, 'public');
 appPaths.registerAppPageRoutes(app, publicDir);
 
-const staffPortalHtml = path.join(publicDir, 'staff.html');
-const supportPortalHtml = path.join(publicDir, 'support.html');
-const adminPortalHtml = path.join(publicDir, 'admin.html');
+const { sendPortalHtml } = require('./lib/html-delivery');
+const { registerProtectedJsDelivery } = require('./lib/js-delivery');
+
 app.get(['/staff/login', '/staff'], (req, res) => {
-    res.sendFile(staffPortalHtml);
+    sendPortalHtml(res, publicDir, 'staff.html');
 });
 app.get(['/support/desk', '/support/desk/'], (req, res) => {
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    res.sendFile(supportPortalHtml);
+    sendPortalHtml(res, publicDir, 'support.html');
 });
 app.get(['/staff/crm', '/staff/crm/'], (req, res) => {
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-    res.setHeader('Pragma', 'no-cache');
-    res.sendFile(adminPortalHtml);
+    sendPortalHtml(res, publicDir, 'admin.html');
 });
 
 
@@ -548,6 +545,8 @@ app.get('/certificate/download', (req, res) => {
 });
 
 siteSeoMod.registerFaviconRoutes(app, { db });
+
+registerProtectedJsDelivery(app, publicDir);
 
 app.use(
     express.static('public', {
