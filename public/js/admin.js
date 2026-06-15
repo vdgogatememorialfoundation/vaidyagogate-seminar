@@ -10808,6 +10808,7 @@ async function loadSettings() {
         }
         const ocrToggle = document.getElementById('setting-ncism-disable-ocr');
         if (ocrToggle) ocrToggle.checked = !!portalFlags.ncism_disable_ocr;
+        await loadWebsiteLiveChatSetting();
         await loadMaintenanceSettings();
 
         // Load payment gateways
@@ -10981,6 +10982,64 @@ function setAdminSettingsSaveMsg(text, isError) {
     msg.textContent = text || '';
 }
 
+async function loadWebsiteLiveChatSetting() {
+    const adm = getStoredAdminUser();
+    const websiteEl = document.getElementById('setting-website-live-chat');
+    const doctorEl = document.getElementById('setting-doctor-live-chat');
+    const sdWebsiteEl = document.getElementById('sd-website-live-chat');
+    const sdDoctorEl = document.getElementById('sd-doctor-live-chat');
+    if (!adm || !adm.id) return;
+    try {
+        const res = await fetch('/api/admin/support-desk/config?actingAdminId=' + encodeURIComponent(adm.id));
+        const d = await res.json();
+        const cfg = d.success && d.config ? d.config : {};
+        const websiteOn = cfg.websiteLiveChatEnabled != null ? cfg.websiteLiveChatEnabled !== false : cfg.liveChatEnabled !== false;
+        const doctorOn =
+            cfg.doctorPortalLiveChatEnabled != null ? cfg.doctorPortalLiveChatEnabled !== false : cfg.liveChatEnabled !== false;
+        if (websiteEl) websiteEl.checked = websiteOn;
+        if (doctorEl) doctorEl.checked = doctorOn;
+        if (sdWebsiteEl) sdWebsiteEl.checked = websiteOn;
+        if (sdDoctorEl) sdDoctorEl.checked = doctorOn;
+    } catch (_) {
+        if (websiteEl) websiteEl.checked = true;
+        if (doctorEl) doctorEl.checked = true;
+    }
+}
+
+async function saveWebsiteLiveChatSetting() {
+    const adm = getStoredAdminUser();
+    const websiteEl = document.getElementById('setting-website-live-chat');
+    const doctorEl = document.getElementById('setting-doctor-live-chat');
+    if (!adm || !adm.id) return;
+    try {
+        const res = await fetch('/api/admin/support-desk/config?actingAdminId=' + encodeURIComponent(adm.id));
+        const d = await res.json();
+        const config =
+            d.success && d.config
+                ? Object.assign({}, d.config, {
+                      websiteLiveChatEnabled: !!(websiteEl && websiteEl.checked),
+                      doctorPortalLiveChatEnabled: !!(doctorEl && doctorEl.checked),
+                      liveChatEnabled: !!(websiteEl && websiteEl.checked)
+                  })
+                : {
+                      websiteLiveChatEnabled: !!(websiteEl && websiteEl.checked),
+                      doctorPortalLiveChatEnabled: !!(doctorEl && doctorEl.checked),
+                      liveChatEnabled: !!(websiteEl && websiteEl.checked)
+                  };
+        await fetch('/api/admin/support-desk/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: adm.id, config })
+        });
+        const sdWebsiteEl = document.getElementById('sd-website-live-chat');
+        const sdDoctorEl = document.getElementById('sd-doctor-live-chat');
+        if (sdWebsiteEl) sdWebsiteEl.checked = config.websiteLiveChatEnabled !== false;
+        if (sdDoctorEl) sdDoctorEl.checked = config.doctorPortalLiveChatEnabled !== false;
+    } catch (err) {
+        console.warn('Could not save portal live chat settings', err);
+    }
+}
+
 async function saveSiteConfigSettings() {
     const ocrToggle = document.getElementById('setting-ncism-disable-ocr');
     const portalFlags = {
@@ -10998,6 +11057,7 @@ async function saveSiteConfigSettings() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ settings })
         });
+        await saveWebsiteLiveChatSetting();
         setAdminSettingsSaveMsg('Site configuration saved.');
     } catch (err) {
         console.error(err);
@@ -15679,10 +15739,15 @@ async function loadSupportDeskAdminTab() {
             const c = d.config;
             const hold = document.getElementById('sd-hold-replies');
             const auto = document.getElementById('sd-auto-assign');
-            const live = document.getElementById('sd-live-chat');
+            const websiteLive = document.getElementById('sd-website-live-chat');
+            const doctorLive = document.getElementById('sd-doctor-live-chat');
             if (hold) hold.checked = c.holdEarlyStaffReplies !== false;
             if (auto) auto.checked = c.autoAssignEnabled !== false;
-            if (live) live.checked = c.liveChatEnabled !== false;
+            const websiteOn = c.websiteLiveChatEnabled != null ? c.websiteLiveChatEnabled !== false : c.liveChatEnabled !== false;
+            const doctorOn =
+                c.doctorPortalLiveChatEnabled != null ? c.doctorPortalLiveChatEnabled !== false : c.liveChatEnabled !== false;
+            if (websiteLive) websiteLive.checked = websiteOn;
+            if (doctorLive) doctorLive.checked = doctorOn;
             const bh = c.businessHours || {};
             const st = document.getElementById('sd-bh-start');
             const en = document.getElementById('sd-bh-end');
@@ -15704,7 +15769,9 @@ async function saveSupportDeskConfigAdmin() {
     const config = {
         holdEarlyStaffReplies: !!(document.getElementById('sd-hold-replies') || {}).checked,
         autoAssignEnabled: !!(document.getElementById('sd-auto-assign') || {}).checked,
-        liveChatEnabled: !!(document.getElementById('sd-live-chat') || {}).checked,
+        websiteLiveChatEnabled: !!(document.getElementById('sd-website-live-chat') || {}).checked,
+        doctorPortalLiveChatEnabled: !!(document.getElementById('sd-doctor-live-chat') || {}).checked,
+        liveChatEnabled: !!(document.getElementById('sd-website-live-chat') || {}).checked,
         businessHours: {
             startMinutes: startM != null ? startM : 570,
             endMinutes: endM != null ? endM : 1110,
@@ -15722,6 +15789,10 @@ async function saveSupportDeskConfigAdmin() {
             msg.style.color = d.success ? '#15803d' : '#b91c1c';
             msg.textContent = d.success ? 'Support desk settings saved.' : d.error || 'Save failed';
         }
+        const globalWebsiteLive = document.getElementById('setting-website-live-chat');
+        const globalDoctorLive = document.getElementById('setting-doctor-live-chat');
+        if (globalWebsiteLive) globalWebsiteLive.checked = config.websiteLiveChatEnabled !== false;
+        if (globalDoctorLive) globalDoctorLive.checked = config.doctorPortalLiveChatEnabled !== false;
     } catch (e) {
         if (msg) {
             msg.style.color = '#b91c1c';

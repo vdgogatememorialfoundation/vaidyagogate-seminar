@@ -20,6 +20,7 @@
     const WAIT_MS = 5 * 60 * 1000;
     let contactFormDismissed = false;
     let hoursOpen = false;
+    let websiteLiveChatEnabled = true;
     let hoursLabel = '';
 
     const params = new URLSearchParams(window.location.search);
@@ -46,9 +47,21 @@
     }
 
     function updateHoursUi(h) {
+        websiteLiveChatEnabled = h
+            ? h.websiteLiveChatEnabled != null
+                ? h.websiteLiveChatEnabled !== false
+                : h.liveChatEnabled !== false
+            : true;
         hoursLabel = (h && h.hoursLabel) || '';
-        hoursOpen = !!(h && h.agentsAvailableNow);
+        hoursOpen = !!(h && h.agentsAvailableNow && websiteLiveChatEnabled);
         if (!hoursBanner) return;
+        if (!websiteLiveChatEnabled) {
+            hoursBanner.textContent =
+                'Live chat is currently turned off on the main website. Please use the contact form below or email care@vaidyagogate.org.';
+            if (startPanel) startPanel.classList.add('hidden');
+            showContactForm({ chatRef: '' });
+            return;
+        }
         if (hoursOpen) {
             hoursBanner.textContent = 'Live agents available now · ' + hoursLabel;
         } else {
@@ -455,7 +468,7 @@
     });
     document.getElementById('cf-submit')?.addEventListener('click', submitContactForm);
 
-    fetch('/api/public/support/hours', { cache: 'no-store' })
+    fetch('/api/public/support/hours?portal=website', { cache: 'no-store' })
         .then((r) => r.json())
         .then((h) => updateHoursUi(h))
         .catch(() => {

@@ -637,7 +637,8 @@
                     <h3 style="margin:0 0 10px;color:#0f766e;">Desk settings</h3>
                     <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><input type="checkbox" id="sd-hold-replies" checked> Hide staff replies until SLA expected time</label>
                     <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><input type="checkbox" id="sd-auto-assign" checked> Auto-assign new tickets to on-duty agents</label>
-                    <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;"><input type="checkbox" id="sd-live-chat" checked> Enable live chat on website (during hours)</label>
+                    <label style="display:flex;align-items:center;gap:8px;margin-bottom:8px;"><input type="checkbox" id="sd-website-live-chat" checked> Enable live chat on <strong>main website</strong> (during hours)</label>
+                    <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;"><input type="checkbox" id="sd-doctor-live-chat" checked> Enable live chat on <strong>doctor portal</strong> (during hours)</label>
                     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;max-width:520px;margin-bottom:10px;">
                         <div><label style="font-size:0.8rem;">Live chat start (HH:MM IST)</label><input type="time" id="sd-bh-start" value="09:30" style="width:100%;padding:8px;"></div>
                         <div><label style="font-size:0.8rem;">Live chat end (HH:MM IST)</label><input type="time" id="sd-bh-end" value="18:30" style="width:100%;padding:8px;"></div>
@@ -2395,6 +2396,15 @@
                             <input type="checkbox" id="setting-ncism-disable-ocr">
                             Disable NCISM OCR auto-check in doctor registration (manual review only)
                         </label>
+                        <label style="display:flex;align-items:center;gap:8px;margin-top:12px;">
+                            <input type="checkbox" id="setting-website-live-chat" checked>
+                            Enable live chat on <strong>main website</strong> (during support desk hours)
+                        </label>
+                        <label style="display:flex;align-items:center;gap:8px;margin-top:12px;">
+                            <input type="checkbox" id="setting-doctor-live-chat" checked>
+                            Enable live chat on <strong>doctor portal</strong> (during support desk hours)
+                        </label>
+                        <p style="font-size:0.8rem;color:#64748b;margin:4px 0 0 28px;">FAQ help on the main site stays on when website live chat is off. Each portal can be toggled independently. Also available under <strong>Support desk</strong>.</p>
                     </div>
                     <div>
                         <h3 style="color: #ef4444;"><i class="fas fa-exclamation-triangle"></i> Maintenance mode</h3>

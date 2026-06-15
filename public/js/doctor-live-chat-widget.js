@@ -15,6 +15,7 @@
     const WAIT_MS = 5 * 60 * 1000;
     let hoursOpen = false;
     let hoursLabel = '';
+    let doctorPortalLiveChatEnabled = true;
     let enabled = true;
     let isEnabledFn = null;
     let mounted = false;
@@ -256,15 +257,25 @@
 
     async function loadHours() {
         try {
-            const h = await fetch('/api/public/support/hours', { cache: 'no-store' }).then((r) => r.json());
+            const h = await fetch('/api/public/support/hours?portal=doctor', { cache: 'no-store' }).then((r) => r.json());
             hoursLabel = h.hoursLabel || '';
-            hoursOpen = !!(h.agentsAvailableNow);
+            doctorPortalLiveChatEnabled = h
+                ? h.doctorPortalLiveChatEnabled != null
+                    ? h.doctorPortalLiveChatEnabled !== false
+                    : h.liveChatEnabled !== false
+                : true;
+            hoursOpen = !!(h.agentsAvailableNow && doctorPortalLiveChatEnabled);
             if (hoursEl) {
-                hoursEl.textContent = hoursOpen
-                    ? 'Live agents available now · ' + hoursLabel
-                    : 'Agents join during: ' + (hoursLabel || 'business hours');
+                if (!doctorPortalLiveChatEnabled) {
+                    hoursEl.textContent =
+                        'Live agent chat is currently turned off. You can still raise a support ticket below.';
+                } else {
+                    hoursEl.textContent = hoursOpen
+                        ? 'Live agents available now · ' + hoursLabel
+                        : 'Agents join during: ' + (hoursLabel || 'business hours');
+                }
             }
-            if (!sessionId) setOfflineMode(!hoursOpen);
+            if (!sessionId) setOfflineMode(!hoursOpen || !doctorPortalLiveChatEnabled);
         } catch (_) {
             if (hoursEl) hoursEl.textContent = 'Chat with our support team';
         }
@@ -331,6 +342,13 @@
     async function startChat() {
         const uid = getUserId && getUserId();
         if (!uid) return alert('Session expired. Please sign in again.');
+        if (!doctorPortalLiveChatEnabled) {
+            setOfflineMode(true);
+            addSystemNote(
+                '<p data-live-placeholder style="color:#92400e;background:#fef3c7;padding:10px;border-radius:8px;font-size:0.85rem;margin:0;">Live agent chat is currently turned off on the doctor portal. Use the support ticket form below — our team will follow up by email.</p>'
+            );
+            return;
+        }
         if (!hoursOpen) {
             setOfflineMode(true);
             addSystemNote(

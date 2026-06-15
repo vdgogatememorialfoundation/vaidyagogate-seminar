@@ -37,6 +37,7 @@
     let liveWaitStartedAt = null;
     const LIVE_WAIT_MS = 5 * 60 * 1000;
     let liveChatOpen = false;
+    let websiteLiveChatEnabled = true;
     let hoursLabel = '';
     let contactFormDismissed = false;
     let visitorKey = localStorage.getItem('vgmf_support_visitor') || '';
@@ -298,9 +299,22 @@
     }
 
     function updateHoursUi(h) {
+        websiteLiveChatEnabled = h
+            ? h.websiteLiveChatEnabled != null
+                ? h.websiteLiveChatEnabled !== false
+                : h.liveChatEnabled !== false
+            : true;
         hoursLabel = (h && h.hoursLabel) || '';
-        liveChatOpen = !!(h && h.agentsAvailableNow);
+        liveChatOpen = !!(h && h.agentsAvailableNow && websiteLiveChatEnabled);
+        const dedicatedLink = document.getElementById('vgmf-support-dedicated-link');
+        if (dedicatedLink) dedicatedLink.style.display = websiteLiveChatEnabled ? '' : 'none';
         if (!hoursEl) return;
+        if (!websiteLiveChatEnabled) {
+            hoursEl.textContent =
+                'Live agent chat is currently turned off. You can still ask questions below or send us a message.';
+            if (liveBtn) liveBtn.classList.add('hidden');
+            return;
+        }
         if (liveChatOpen) {
             hoursEl.textContent = 'Live agents available now · ' + hoursLabel;
             liveBtn.classList.remove('hidden');
@@ -539,7 +553,7 @@
 
     document.getElementById('vgmf-cf-submit')?.addEventListener('click', submitContactForm);
 
-    fetch('/api/public/support/hours', { cache: 'no-store' })
+    fetch('/api/public/support/hours?portal=website', { cache: 'no-store' })
         .then((r) => r.json())
         .then((h) => updateHoursUi(h))
         .catch(() => {
@@ -617,14 +631,18 @@
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Failed');
             addBot(data.reply);
-            if (data.suggestLiveChat && data.liveChatAvailable && liveChatOpen) {
+            if (data.suggestLiveChat && data.liveChatAvailable && liveChatOpen && websiteLiveChatEnabled) {
                 addBot('Tap "Talk to a support agent" below to chat live with our team.');
                 liveBtn.classList.remove('hidden');
-            } else if (data.liveChatAvailable) {
+            } else if (data.liveChatAvailable && websiteLiveChatEnabled) {
                 liveBtn.classList.remove('hidden');
             }
         } catch (e) {
-            addBot('Sorry, something went wrong. Email care@vaidyagogate.org or open /live-chat for 1-to-1 chat.');
+            addBot(
+                websiteLiveChatEnabled
+                    ? 'Sorry, something went wrong. Email care@vaidyagogate.org or open /live-chat for 1-to-1 chat.'
+                    : 'Sorry, something went wrong. Email care@vaidyagogate.org or use the contact form below.'
+            );
         }
     }
 
