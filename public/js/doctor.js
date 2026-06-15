@@ -686,6 +686,7 @@ function resolveDoctorAllowedTabsClient(category, globalRegular, globalVolunteer
         'tab-feedback',
         'tab-support',
         'tab-orders',
+        'tab-refunds',
         'tab-receipts',
         'tab-payments',
         'tab-books',
@@ -916,7 +917,14 @@ function isApplicationDetailModalOpen() {
 }
 
 function shouldPollSeminarTracking() {
-    return doctorTabVisible('tab-applications') || isApplicationDetailModalOpen();
+    return (
+        doctorTabVisible('tab-applications') ||
+        isApplicationDetailModalOpen() ||
+        (userApplications || []).some((a) => {
+            const tl = a.timeline || {};
+            return tl.cancellationLivePending || tl.hasCancellationTracking;
+        })
+    );
 }
 
 function shouldPollCertTracking() {
@@ -979,12 +987,15 @@ function syncDoctorTrackingPolls() {
     if (document.hidden) {
         stopSeminarTrackingPoll();
         stopCaseTrackingPoll();
+        stopRefundTrackingPoll();
         return;
     }
     if (shouldPollSeminarTracking()) startSeminarTrackingPoll();
     else stopSeminarTrackingPoll();
     if (doctorTabVisible('tab-case-track')) startCaseTrackingPoll();
     else stopCaseTrackingPoll();
+    if (shouldPollRefundTracking()) startRefundTrackingPoll();
+    else stopRefundTrackingPoll();
 }
 
 document.addEventListener('visibilitychange', () => syncDoctorTrackingPolls());
@@ -1124,14 +1135,21 @@ function renderTrackerStepsHtml(timeline) {
             '</div></div></div>'
         );
     }
-    if (timeline.rejected) {
+    if (timeline.rejected && !timeline.hasCancellationTracking) {
         return (
             '<div class="sat-live-track sat-live-track--error">' +
             '<div class="vtrk-header cancelled"><div class="vtrk-headline">Application rejected</div>' +
-            '<div class="vtrk-subheadline">This application was rejected or cancelled.</div></div></div>'
+            '<div class="vtrk-subheadline">This application was rejected.</div></div></div>'
         );
     }
     const steps = timeline.steps || [];
+    if (!steps.length && timeline.cancelled && !timeline.hasCancellationTracking) {
+        return (
+            '<div class="sat-live-track sat-live-track--error">' +
+            '<div class="vtrk-header cancelled"><div class="vtrk-headline">Application cancelled</div>' +
+            '<div class="vtrk-subheadline">This registration was cancelled. Check <strong>Refund tracking</strong> for refund updates.</div></div></div>'
+        );
+    }
     if (!steps.length) return '';
 
     let completed = 0;
@@ -1144,17 +1162,35 @@ function renderTrackerStepsHtml(timeline) {
         100,
         Math.round(((completed + (activeStep ? 0.45 : 0)) / steps.length) * 100)
     );
-    const headline = activeStep ? activeStep.title : completed >= steps.length ? 'Journey complete' : 'Tracking your application';
-    const subheadline = activeStep
-        ? activeStep.desc || 'We will update this timeline automatically.'
-        : completed >= steps.length
-          ? 'All steps completed for this application.'
-          : 'Live updates every few seconds while this page is open.';
+    const headline = timeline.cancelled
+        ? timeline.cancellationLivePending
+            ? 'Cancellation & refund in progress'
+            : 'Application cancelled'
+        : activeStep
+          ? activeStep.title
+          : completed >= steps.length
+            ? 'Journey complete'
+            : 'Tracking your application';
+    const subheadline = timeline.cancelled
+        ? timeline.cancellationLivePending
+            ? 'Live Razorpay refund updates appear below as your refund is processed.'
+            : 'Your cancellation and refund journey is shown below.'
+        : activeStep
+          ? activeStep.desc || 'We will update this timeline automatically.'
+          : completed >= steps.length
+            ? 'All steps completed for this application.'
+            : 'Live updates every few seconds while this page is open.';
 
     let html =
         '<div class="sat-live-track sat-live-track--enter">' +
-        '<div class="vtrk-header live">' +
-        '<span class="vtrk-live"><span class="vtrk-dot"></span>Live tracking</span>' +
+        '<div class="vtrk-header ' +
+        (timeline.cancelled ? 'cancelled' : 'live') +
+        '">' +
+        (timeline.cancelled || timeline.cancellationLivePending
+            ? '<span class="vtrk-live"><span class="vtrk-dot"></span>' +
+              (timeline.cancellationLivePending ? 'Live refund tracking' : 'Cancelled') +
+              '</span>'
+            : '<span class="vtrk-live"><span class="vtrk-dot"></span>Live tracking</span>') +
         '<div class="vtrk-headline">' +
         escapeHtml(headline) +
         '</div>' +
@@ -1402,6 +1438,152 @@ function renderCancellationRefundBlock(a) {
     badge += '</div>';
     if (!tr.trackingSteps || !tr.trackingSteps.length) return badge;
     return badge + renderRefundTrackingStepsHtml(tr.trackingSteps);
+}
+
+function cancellationRowToTracking(row) {
+    if (!row) return null;
+    return {
+        status: row.status,
+        refundStatus: row.refundStatus || row.refund_status || 'none',
+        refundStatusLabel: row.refundStatusLabel,
+        refundStatusTone: row.refundStatusTone,
+        refundAmount: row.refundAmount != null ? row.refundAmount : row.refund_amount,
+        refundPercent: row.refundPercent != null ? row.refundPercent : row.refund_percent,
+        providerRefundId: row.providerRefundId || row.provider_refund_id || null,
+        trackingSteps: row.trackingSteps || [],
+        refunds: row.refunds || [],
+        razorpayLive: row.razorpayLive || null
+    };
+}
+
+function renderDoctorRefundModuleCard(row) {
+    const tr = cancellationRowToTracking(row);
+    if (!tr) return '';
+    const appNo = escapeHtml(row.applicationNo || row.application_no || '—');
+    const seminar = escapeHtml(row.seminarTitle || row.seminar_title || '');
+    const eventDate = row.eventDate || row.event_date;
+    const requestedAt = row.requestedAt || row.requested_at;
+    const reviewedAt = row.reviewedAt || row.reviewed_at;
+    const orderAmt = row.orderAmount != null ? row.orderAmount : row.order_amount;
+    const regSt = String(row.registrationStatus || row.registration_status || '').toLowerCase();
+    const meta =
+        '<div style="padding:16px 16px 0;">' +
+        '<h4 style="color:#1a237e;margin-bottom:8px;"><i class="fas fa-undo-alt"></i> ' +
+        appNo +
+        (seminar ? ' · ' + seminar : '') +
+        '</h4>' +
+        '<p style="font-size:0.88rem;color:#475569;margin:0 0 12px;">' +
+        (eventDate ? '<strong>Event:</strong> ' + escapeHtml(formatEventDate(eventDate)) + ' · ' : '') +
+        '<strong>Application status:</strong> ' +
+        escapeHtml(regSt ? regSt.replace(/_/g, ' ').toUpperCase() : '—') +
+        (orderAmt != null ? ' · <strong>Paid:</strong> ₹' + escapeHtml(String(orderAmt)) : '') +
+        '</p>' +
+        (requestedAt
+            ? '<p style="font-size:0.82rem;color:#64748b;margin:0 0 12px;">Requested ' +
+              escapeHtml(formatTrackDateTime(requestedAt)) +
+              (reviewedAt ? ' · Reviewed ' + escapeHtml(formatTrackDateTime(reviewedAt)) : '') +
+              '</p>'
+            : '') +
+        '</div>';
+  return (
+        '<div class="card sat-app-card" style="margin-bottom:15px;border-top:4px solid #b45309;overflow:hidden;padding:0;">' +
+        meta +
+        '<div style="padding:0 16px 16px;">' +
+        renderCancellationRefundBlock({ cancellationTracking: tr }) +
+        '</div></div>'
+    );
+}
+
+let __doctorRefundRequests = [];
+let _lastRefundTrackFingerprint = '';
+let refundTrackPollTimer = null;
+
+function refundTrackFingerprint(rows) {
+    return (rows || [])
+        .map((r) => {
+            const tr = cancellationRowToTracking(r);
+            const stepSig = (tr && tr.trackingSteps ? tr.trackingSteps : [])
+                .map((s) => s.key + ':' + s.state + ':' + (s.at || ''))
+                .join(',');
+            return [
+                r.id,
+                r.status,
+                tr && tr.refundStatus,
+                tr && tr.refundAmount,
+                tr && tr.providerRefundId,
+                stepSig,
+                r.reviewedAt || r.reviewed_at || ''
+            ].join(':');
+        })
+        .join('|');
+}
+
+function doctorRefundLivePending(rows) {
+    return (rows || []).some((r) => {
+        const st = String(r.status || '').toLowerCase();
+        const rs = String((r.refundStatus || r.refund_status || 'none')).toLowerCase();
+        return st === 'pending' || rs === 'pending' || rs === 'processing' || rs === 'manual_pending';
+    });
+}
+
+async function loadDoctorRefundsModule(silentPoll) {
+    const uid = doctorNumericUserId();
+    const container = document.getElementById('refunds-tracker-container');
+    if (!uid) {
+        if (container) container.innerHTML = '<p style="color:#64748b;">Please sign in to track refunds.</p>';
+        return;
+    }
+    if (!silentPoll && container) container.innerHTML = '<p style="color:#64748b;">Loading refund activity…</p>';
+    try {
+        const res = await fetch('/api/doctor/cancellation-requests?userId=' + encodeURIComponent(uid), {
+            cache: 'no-store'
+        });
+        const rows = await res.json().catch(() => []);
+        if (!res.ok) {
+            const msg = (rows && rows.error) || 'Could not load refund tracking.';
+            if (container) container.innerHTML = '<p style="color:#b91c1c;">' + escapeHtml(msg) + '</p>';
+            return;
+        }
+        __doctorRefundRequests = Array.isArray(rows) ? rows : [];
+        const fp = refundTrackFingerprint(__doctorRefundRequests);
+        if (silentPoll && fp === _lastRefundTrackFingerprint) return;
+        _lastRefundTrackFingerprint = fp;
+        if (!container) return;
+        if (!__doctorRefundRequests.length) {
+            container.innerHTML =
+                '<p style="color:#64748b;margin:0;">No cancellation or refund activity yet. When you submit a cancellation request and it is approved, your refund journey will appear here with live Razorpay updates.</p>' +
+                '<p style="margin:12px 0 0;font-size:0.88rem;color:#64748b;">You can request cancellation from <strong>Track seminar applications</strong> for eligible registrations.</p>';
+            return;
+        }
+        container.innerHTML = __doctorRefundRequests.map((r) => renderDoctorRefundModuleCard(r)).join('');
+    } catch (e) {
+        console.warn('[refunds]', e);
+        if (container && !silentPoll) {
+            container.innerHTML = '<p style="color:#b91c1c;">Network error loading refund tracking.</p>';
+        }
+    }
+}
+
+function shouldPollRefundTracking() {
+    return doctorTabVisible('tab-refunds');
+}
+
+function stopRefundTrackingPoll() {
+    if (refundTrackPollTimer) {
+        clearInterval(refundTrackPollTimer);
+        refundTrackPollTimer = null;
+    }
+    const live = document.getElementById('refund-track-live');
+    if (live) live.classList.add('hidden');
+}
+
+function startRefundTrackingPoll() {
+    stopRefundTrackingPoll();
+    const live = document.getElementById('refund-track-live');
+    if (live) live.classList.remove('hidden');
+    refundTrackPollTimer = setInterval(() => {
+        if (shouldPollRefundTracking()) loadDoctorRefundsModule(true);
+    }, DOCTOR_TRACK_POLL_MS);
 }
 
 function renderSeminarApplicationTrackerCard(a) {
@@ -3442,6 +3624,10 @@ function switchTab(tabId, menuEl) {
     }
     if (tabId === 'tab-orders') {
         loadDoctorOrders();
+    }
+    if (tabId === 'tab-refunds') {
+        loadDoctorRefundsModule();
+        syncDoctorTrackingPolls();
     }
     if (tabId === 'tab-receipts') {
         loadDoctorReceipts();
@@ -6417,12 +6603,13 @@ async function submitCancellationRequest() {
         let msg = data.message || 'Request submitted.';
         if (prev && prev.amount != null) {
             msg += '\n\nPolicy preview (IST): ' + (prev.percent || 0) + '% — ₹' + prev.amount + '. ' + (prev.reason || '');
-            msg += '\n\nTrack refund status under Track seminar applications after admin approval.';
+            msg += '\n\nTrack refund status under Refund tracking after admin approval.';
         }
         alert(msg);
         closeCancelRequestModal();
         await loadDoctorCancellationRequests();
         loadApplications();
+        if (doctorTabVisible('tab-refunds')) loadDoctorRefundsModule();
     } catch (e) {
         console.error(e);
         alert('Network error.');
@@ -6550,6 +6737,7 @@ async function loadApplications(silentPoll) {
             clearInterval(_doctorPayPollTimer);
             _doctorPayPollTimer = null;
         }
+        syncDoctorTrackingPolls();
     } catch (err) {
         console.error(err);
     }

@@ -1493,6 +1493,7 @@ const DOCTOR_MODULE_TAB_DEFS = [
     ['tab-support', 'Support tickets'],
     ['tab-live-chat', 'Live chat (floating widget)'],
     ['tab-orders', 'Orders'],
+    ['tab-refunds', 'Refund tracking'],
     ['tab-receipts', 'Receipts'],
     ['tab-payments', 'Payments'],
     ['tab-books', 'Book orders (Agnikarma / Viddhakarma)'],

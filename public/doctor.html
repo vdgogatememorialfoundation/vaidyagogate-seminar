@@ -290,6 +290,7 @@
                 <button type="button" class="menu-item" data-tab="tab-feedback"><i class="fas fa-star"></i> <span data-i18n="doctor.menu.feedback">Seminar feedback</span></button>
                 <button type="button" class="menu-item" data-tab="tab-support"><i class="fas fa-ticket-alt"></i> <span data-i18n="doctor.menu.support">Support tickets</span></button>
                 <button type="button" class="menu-item" data-tab="tab-orders"><i class="fas fa-receipt"></i> <span data-i18n="doctor.menu.orders">Orders</span></button>
+                <button type="button" class="menu-item" data-tab="tab-refunds"><i class="fas fa-undo-alt"></i> <span data-i18n="doctor.menu.refunds">Refund tracking</span></button>
                 <button type="button" class="menu-item" data-tab="tab-receipts"><i class="fas fa-file-invoice"></i> <span data-i18n="doctor.menu.receipts">Receipts</span></button>
                 <button type="button" class="menu-item hidden" id="nav-books" data-tab="tab-books"><i class="fas fa-book"></i> <span data-i18n="doctor.menu.books">Book orders</span></button>
                 <button type="button" class="menu-item" data-tab="tab-payments"><i class="fas fa-credit-card"></i> <span data-i18n="doctor.menu.payments">Payments</span></button>
@@ -733,6 +734,13 @@
                             <tbody id="orders-list"><tr><td colspan="8" style="text-align:center;color:#64748b;">Loading…</td></tr></tbody>
                         </table>
                     </div>
+                </div>
+
+                <div id="tab-refunds" class="tab-pane hidden">
+                    <h2 class="section-title">Refund tracking</h2>
+                    <p style="color:#64748b;margin:-10px 0 20px;">Follow your cancellation requests and Razorpay refund status after an application is cancelled. Updates refresh automatically while this page is open.</p>
+                    <p id="refund-track-live" class="hidden"><span class="vtrk-live" style="margin:0;"><span class="vtrk-dot"></span>Live refund tracking · updates every 7s</span></p>
+                    <div class="card" id="refunds-tracker-container"><p style="color:#64748b;">Loading refund activity…</p></div>
                 </div>
 
                 <div id="tab-receipts" class="tab-pane hidden">
