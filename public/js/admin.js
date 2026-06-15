@@ -647,15 +647,18 @@ function adminCanAccessTab(tabId) {
     const isCo = String(u && u.user_role || '').toLowerCase() === 'co_admin';
     if (!isCo) {
         if (tabId === 'tab-cancellation-review' && globalAdminTabAllowed('tab-admin-payments')) return true;
+        if (tabId === 'tab-refund-tracking' && globalAdminTabAllowed('tab-admin-payments')) return true;
         return globalAdminTabAllowed(checkId);
     }
     const { unset, mods } = coAdminModulesState(u);
     if (unset) {
         if (tabId === 'tab-cancellation-review' && globalAdminTabAllowed('tab-admin-payments')) return true;
+        if (tabId === 'tab-refund-tracking' && globalAdminTabAllowed('tab-admin-payments')) return true;
         return globalAdminTabAllowed(checkId);
     }
     if (!Object.keys(mods).length) return false;
     if (tabId === 'tab-cancellation-review' && mods['tab-admin-payments'] === true) return true;
+    if (tabId === 'tab-refund-tracking' && mods['tab-admin-payments'] === true) return true;
     return mods[checkId] === true;
 }
 
@@ -871,6 +874,9 @@ function switchTab(tabId) {
     }
     if (typeof closeAdminMobileNav === 'function') closeAdminMobileNav();
     if (liveScansInterval) clearInterval(liveScansInterval);
+    if (tabId !== 'tab-refund-tracking' && typeof stopAdminRefundTrackingPoll === 'function') {
+        stopAdminRefundTrackingPoll();
+    }
     if (tabId !== 'tab-live-radar' && typeof stopAdminLiveRadar === 'function') stopAdminLiveRadar();
     document.querySelectorAll('.tab-pane').forEach((t) => t.classList.add('hidden'));
     document.querySelectorAll('.menu-item').forEach((m) => m.classList.remove('active'));
@@ -902,6 +908,9 @@ function switchTab(tabId) {
     }
     if (tabId === 'tab-cancellation-review' && typeof initAdminCancellationReviewTab === 'function') {
         initAdminCancellationReviewTab();
+    }
+    if (tabId === 'tab-refund-tracking' && typeof initAdminRefundTrackingTab === 'function') {
+        initAdminRefundTrackingTab();
     }
 }
 
@@ -1650,6 +1659,7 @@ const ADMIN_MODULE_TAB_DEFS = [
     ['tab-book-sales', 'Book sales'],
     ['tab-admin-payments', 'Payments'],
     ['tab-cancellation-review', 'Cancellation review & refunds'],
+    ['tab-refund-tracking', 'Refund tracking'],
     ['tab-certificates', 'Certificate management'],
     ['tab-volunteers', 'Volunteers'],
     ['tab-volunteer-assignments', 'Volunteer assignments'],
@@ -1738,6 +1748,7 @@ function openAdminLiveScannerBoard() {
 async function initAdminPosTab() {
     const sel = document.getElementById('pos-seminar');
     if (!sel) return;
+    stopPosPaymentPoll();
     try {
         const res = await fetch('/api/seminars?bucket=current');
         const data = await res.json();
@@ -1755,8 +1766,126 @@ async function initAdminPosTab() {
             const priceEl = document.getElementById('pos-amount');
             if (priceEl && opt && opt.dataset.price) priceEl.value = opt.dataset.price;
         };
+        await loadPosPaymentMethods();
     } catch (e) {
         console.warn(e);
+    }
+}
+
+let __posOrderDbId = null;
+let __posPollTimer = null;
+
+function stopPosPaymentPoll() {
+    if (__posPollTimer) {
+        clearInterval(__posPollTimer);
+        __posPollTimer = null;
+    }
+}
+
+function updatePosMethodDesc() {
+    const sel = document.getElementById('pos-payment-method');
+    const hint = document.getElementById('pos-method-desc');
+    if (!sel || !hint) return;
+    const m = (window.__posPaymentMethods || []).find((x) => x.id === sel.value);
+    hint.textContent = (m && m.description) || '';
+}
+
+async function loadPosPaymentMethods() {
+    const sel = document.getElementById('pos-payment-method');
+    const adm = getStoredAdminUser();
+    if (!sel || !adm?.id) return;
+    try {
+        const res = await fetch('/api/admin/payments/methods?actingAdminId=' + encodeURIComponent(adm.id));
+        const data = await res.json();
+        const methods = (data.methods || []).filter((m) => m.available !== false);
+        window.__posPaymentMethods = methods;
+        if (!methods.length) {
+            sel.innerHTML = '<option value="cash">Cash</option>';
+            updatePosMethodDesc();
+            return;
+        }
+        const dqr = methods.find((m) => m.id === 'dqr');
+        const preferred = dqr || methods.find((m) => m.id === 'cash') || methods[0];
+        sel.innerHTML = methods
+            .map(
+                (m) =>
+                    '<option value="' +
+                    escAdmin(m.id) +
+                    '"' +
+                    (m.id === preferred.id ? ' selected' : '') +
+                    '>' +
+                    escAdmin(m.label) +
+                    '</option>'
+            )
+            .join('');
+        sel.onchange = updatePosMethodDesc;
+        updatePosMethodDesc();
+    } catch (e) {
+        console.warn(e);
+        sel.innerHTML = '<option value="cash">Cash</option>';
+    }
+}
+
+async function posPollPaymentOnce() {
+    const adm = getStoredAdminUser();
+    if (!adm?.id || !__posOrderDbId) return;
+    const pollSt = document.getElementById('pos-poll-status');
+    try {
+        const res = await fetch(
+            '/api/admin/payments/poll/' +
+                encodeURIComponent(__posOrderDbId) +
+                '?actingAdminId=' +
+                encodeURIComponent(adm.id)
+        );
+        const data = await res.json();
+        if (!res.ok) return;
+        if (data.paid) {
+            stopPosPaymentPoll();
+            const status = document.getElementById('pos-status');
+            if (status) {
+                status.textContent =
+                    'Payment received — ticket ' + (data.ticketId || 'issued') + '. Doctor must complete profile in portal.';
+                status.style.color = '#059669';
+            }
+            if (pollSt) {
+                pollSt.style.color = '#15803d';
+                pollSt.textContent = data.message || 'Payment complete. E-ticket issued.';
+            }
+            return;
+        }
+        if (pollSt && data.message) pollSt.textContent = data.message;
+    } catch (e) {
+        console.warn(e);
+    }
+}
+
+function startPosPaymentPoll() {
+    stopPosPaymentPoll();
+    posPollPaymentOnce();
+    __posPollTimer = setInterval(posPollPaymentOnce, 4000);
+}
+
+async function posMarkUpiPaid() {
+    const adm = getStoredAdminUser();
+    if (!adm?.id || !__posOrderDbId) return alert('No pending UPI order.');
+    if (!confirm('Confirm that UPI payment was received in the bank?')) return;
+    try {
+        const res = await fetch('/api/admin/payments/mark-upi-paid', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ orderDbId: __posOrderDbId, adminUserId: adm.id })
+        });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Could not mark paid');
+        stopPosPaymentPoll();
+        const status = document.getElementById('pos-status');
+        if (status) {
+            status.textContent = data.message || 'Marked paid.';
+            status.style.color = '#059669';
+        }
+        alert(data.message || 'Payment recorded.');
+    } catch (e) {
+        alert('Network error');
     }
 }
 
@@ -1764,6 +1893,17 @@ async function submitAdminPosRegistration() {
     const actor = getStoredAdminUser();
     if (!actor) return alert('Sign in as admin first.');
     const status = document.getElementById('pos-status');
+    const pollSt = document.getElementById('pos-poll-status');
+    const qrBlock = document.getElementById('pos-qr-block');
+    const qrImg = document.getElementById('pos-qr-img');
+    const qrAmt = document.getElementById('pos-qr-amount');
+    const markBtn = document.getElementById('pos-mark-upi-btn');
+    stopPosPaymentPoll();
+    __posOrderDbId = null;
+    if (qrBlock) qrBlock.classList.add('hidden');
+    if (markBtn) markBtn.classList.add('hidden');
+    if (pollSt) pollSt.textContent = '';
+    const methodId = (document.getElementById('pos-payment-method') || {}).value || 'cash';
     try {
         const res = await fetch('/api/admin/pos/register', {
             method: 'POST',
@@ -1777,16 +1917,54 @@ async function submitAdminPosRegistration() {
                 phone: document.getElementById('pos-phone').value,
                 email: document.getElementById('pos-email').value,
                 amount: document.getElementById('pos-amount').value,
-                paymentMethod: 'cash',
+                paymentMethod: methodId,
                 sendTicketEmail: !!(document.getElementById('pos-send-ticket-email') || {}).checked
             })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed');
-        let note =
-            'Done. Ticket ' + (data.ticketId || '—') + ' — doctor must complete profile in portal.';
-        if (data.emailNote) note += ' ' + data.emailNote;
-        status.textContent = note;
+        if (data.paid) {
+            let note =
+                'Done. Ticket ' + (data.ticketId || '—') + ' — doctor must complete profile in portal.';
+            if (data.emailNote) note += ' ' + data.emailNote;
+            status.textContent = note;
+            status.style.color = '#059669';
+            return;
+        }
+        if (data.paymentPending && data.payment) {
+            const pay = data.payment;
+            __posOrderDbId = pay.orderDbId;
+            status.textContent =
+                'Registration saved for ' +
+                (data.applicationNo || data.registrationId) +
+                '. Waiting for payment…';
+            status.style.color = '#b45309';
+            if (qrAmt) {
+                qrAmt.textContent =
+                    'Amount: ₹' + (pay.amount || '') + ' — Order ' + (pay.orderIdString || '');
+            }
+            if (pay.qrImageUrl && qrImg) {
+                qrImg.src =
+                    String(pay.qrImageUrl).indexOf('http') === 0 || String(pay.qrImageUrl).indexOf('/') === 0
+                        ? pay.qrImageUrl
+                        : pay.qrImageUrl;
+                if (qrBlock) qrBlock.classList.remove('hidden');
+            }
+            if (pay.manualConfirm && markBtn) markBtn.classList.remove('hidden');
+            if (pay.paymentType === 'razorpay_checkout' && adminRazorpayCheckoutPayload(pay)) {
+                openAdminRazorpayCheckout(pay, () => startPosPaymentPoll());
+            } else if (pay.paymentType && String(pay.paymentType).endsWith('_checkout') && pay.gateway !== 'razorpay') {
+                openAdminHostedCheckout(pay, () => startPosPaymentPoll());
+            }
+            if (pay.pollRequired) {
+                if (pollSt) pollSt.textContent = pay.message || 'Waiting for payment confirmation…';
+                startPosPaymentPoll();
+            } else if (pollSt) {
+                pollSt.textContent = pay.message || '';
+            }
+            return;
+        }
+        status.textContent = data.message || 'Registration saved.';
         status.style.color = '#059669';
     } catch (e) {
         status.textContent = e.message;
@@ -2872,10 +3050,12 @@ async function loadBehalfPaymentMethodsUI() {
             box.innerHTML = '<p style="color:#64748b;">No payment methods configured.</p>';
             return;
         }
-        __behalfSelectedMethodId = methods[0].id;
+        const dqr = methods.find((m) => m.id === 'dqr');
+        const preferred = dqr || methods[0];
+        __behalfSelectedMethodId = preferred.id;
         box.innerHTML = methods
-            .map((m, i) => {
-                const checked = i === 0 ? ' checked' : '';
+            .map((m) => {
+                const checked = m.id === preferred.id ? ' checked' : '';
                 return (
                     '<label style="display:flex;gap:10px;align-items:flex-start;padding:8px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;cursor:pointer;">' +
                     '<input type="radio" name="behalf-pay-method" value="' +
@@ -8122,6 +8302,127 @@ function initAdminCancellationReviewTab() {
     loadAdminCancellationRequests();
 }
 
+let __adminRefundTrackPoll = null;
+let __adminRefundTrackFp = '';
+
+function stopAdminRefundTrackingPoll() {
+    if (__adminRefundTrackPoll) {
+        clearInterval(__adminRefundTrackPoll);
+        __adminRefundTrackPoll = null;
+    }
+    const live = document.getElementById('admin-refund-track-live');
+    if (live) live.classList.add('hidden');
+}
+
+function startAdminRefundTrackingPoll() {
+    stopAdminRefundTrackingPoll();
+    const live = document.getElementById('admin-refund-track-live');
+    if (live) live.classList.remove('hidden');
+    __adminRefundTrackPoll = setInterval(() => {
+        if (
+            document.getElementById('tab-refund-tracking') &&
+            !document.getElementById('tab-refund-tracking').classList.contains('hidden')
+        ) {
+            loadAdminRefundTracking(true);
+        }
+    }, 8000);
+}
+
+function adminRefundTrackFilterMatch(row, filter) {
+    const f = String(filter || '').toLowerCase();
+    if (!f) {
+        return (
+            row.status === 'approved' &&
+            (Number(row.refund_amount) > 0 || String(row.refund_status || 'none').toLowerCase() !== 'none')
+        );
+    }
+    const rs = String(row.refund_status || 'none').toLowerCase();
+    if (f === 'in_progress') {
+        return ['pending', 'processing', 'manual_pending'].includes(rs) || (row.status === 'approved' && rs === 'none' && Number(row.refund_amount) > 0);
+    }
+    if (f === 'completed') return rs === 'completed';
+    if (f === 'failed') return rs === 'failed';
+    return true;
+}
+
+function renderAdminRefundTrackCard(r) {
+    const doc = escAdmin((r.first_name || '') + ' ' + (r.last_name || '') + ' · ' + (r.user_id_string || ''));
+    const when = r.reviewed_at || r.requested_at;
+    const whenStr = when
+        ? new Date(when).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
+        : '—';
+  return (
+        '<div class="card" style="margin-bottom:14px;border-left:4px solid #6366f1;padding:16px;">' +
+        '<div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:8px;margin-bottom:10px;">' +
+        '<div><strong style="color:#1e293b;">' +
+        escAdmin(r.application_no || '') +
+        '</strong> · ' +
+        escAdmin(r.seminar_title || '') +
+        '<br><span style="font-size:0.85rem;color:#64748b;">' +
+        doc +
+        '</span></div>' +
+        '<div style="text-align:right;font-size:0.82rem;color:#64748b;">' +
+        escAdmin(whenStr) +
+        '</div></div>' +
+        '<p style="margin:0 0 8px;font-size:0.88rem;"><strong>Refund:</strong> ₹' +
+        escAdmin(String(r.refund_amount || 0)) +
+        ' (' +
+        escAdmin(String(r.refund_percent || 0)) +
+        '%) · <strong>' +
+        escAdmin(r.refundStatusLabel || r.refund_status || '—') +
+        '</strong>' +
+        (r.provider_refund_id ? ' · Ref ' + escAdmin(r.provider_refund_id) : '') +
+        '</p>' +
+        renderAdminCancelTrackingStepsHtml(r.trackingSteps || []) +
+        '<div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;">' +
+        '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.78rem;" onclick="openAdminCancellationReviewModal(' +
+        r.id +
+        ')">Open review</button>' +
+        (r.provider_refund_id &&
+        !['completed', 'none'].includes(String(r.refund_status || '').toLowerCase())
+            ? '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.78rem;background:#0ea5e9;border:none;" onclick="adminSyncCancellationRefund(' +
+              r.id +
+              ')"><i class="fas fa-sync"></i> Sync Razorpay</button>'
+            : '') +
+        '</div></div>'
+    );
+}
+
+async function loadAdminRefundTracking(silentPoll) {
+    const box = document.getElementById('admin-refund-track-container');
+    if (!box) return;
+    const filter = (document.getElementById('admin-refund-track-filter') || {}).value || '';
+    if (!silentPoll) box.innerHTML = '<p style="color:#64748b;">Loading refund journeys…</p>';
+    try {
+        const res = await fetch('/api/admin/cancellation-requests', { cache: 'no-store' });
+        const data = await res.json().catch(() => []);
+        if (!res.ok) {
+            box.innerHTML =
+                '<p style="color:#b91c1c;">' + escAdmin((data && data.error) || 'Could not load refunds') + '</p>';
+            return;
+        }
+        const all = Array.isArray(data) ? data : [];
+        const rows = all.filter((r) => adminRefundTrackFilterMatch(r, filter));
+        const fp = rows.map((r) => r.id + ':' + r.refund_status + ':' + (r.trackingSteps || []).length).join('|');
+        if (silentPoll && fp === __adminRefundTrackFp) return;
+        __adminRefundTrackFp = fp;
+        if (!rows.length) {
+            box.innerHTML =
+                '<p style="color:#64748b;">No refund journeys match this filter. Approved cancellations with refunds appear here after admin processes them.</p>';
+            return;
+        }
+        box.innerHTML = rows.map((r) => renderAdminRefundTrackCard(r)).join('');
+    } catch (e) {
+        console.error(e);
+        if (!silentPoll) box.innerHTML = '<p style="color:#b91c1c;">Network error loading refunds.</p>';
+    }
+}
+
+function initAdminRefundTrackingTab() {
+    loadAdminRefundTracking();
+    startAdminRefundTrackingPoll();
+}
+
 let __adminCancelReviewRequestId = null;
 
 function adminFormatCancelReviewDateTime(iso) {
@@ -11171,10 +11472,12 @@ async function loadProxyPaymentMethodsUI() {
             box.innerHTML = '<p style="color:#64748b;">No payment methods configured.</p>';
             return;
         }
-        __proxySelectedMethodId = methods[0].id;
+        const dqr = methods.find((m) => m.id === 'dqr');
+        const preferred = dqr || methods[0];
+        __proxySelectedMethodId = preferred.id;
         box.innerHTML = methods
-            .map((m, i) => {
-                const checked = i === 0 ? ' checked' : '';
+            .map((m) => {
+                const checked = m.id === preferred.id ? ' checked' : '';
                 return (
                     '<label style="display:flex;gap:10px;align-items:flex-start;padding:10px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;cursor:pointer;">' +
                     '<input type="radio" name="proxy-pay-method" value="' +
@@ -16588,8 +16891,13 @@ async function loadCreateOrderPaymentMethods() {
         if (!res.ok) return;
         const methods = (data.methods || []).filter((m) => m.available);
         __coPaymentMethods = methods;
+        const dqr = methods.find((m) => m.id === 'dqr');
+        const preferred = dqr || methods[0];
         sel.innerHTML = methods.map((m) => '<option value="' + escAdmin(m.id) + '">' + escAdmin(m.label) + '</option>').join('');
-        if (methods.length) __coMethodId = methods[0].id;
+        if (methods.length) {
+            __coMethodId = preferred.id;
+            sel.value = preferred.id;
+        }
         sel.onchange = () => {
             __coMethodId = sel.value;
             updateCoMethodDesc();

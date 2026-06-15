@@ -118,6 +118,7 @@
                 <a class="menu-item" data-admin-module="tab-site-cms" onclick="switchTab('tab-site-cms'); loadAdminSiteCms();"><i class="fas fa-globe"></i> Website &amp; doctor updates</a>
                 <a class="menu-item" data-admin-module="tab-admin-payments" onclick="switchTab('tab-admin-payments'); loadAdminPaymentsModule();"><i class="fas fa-file-invoice-dollar"></i> Payments</a>
                 <a class="menu-item" data-admin-module="tab-cancellation-review" onclick="switchTab('tab-cancellation-review'); initAdminCancellationReviewTab();"><i class="fas fa-user-times"></i> Cancellation review <span id="admin-cancel-review-badge" style="display:none;margin-left:6px;background:#f59e0b;color:#fff;font-size:0.68rem;font-weight:700;padding:2px 7px;border-radius:999px;vertical-align:middle;"></span></a>
+                <a class="menu-item" data-admin-module="tab-refund-tracking" onclick="switchTab('tab-refund-tracking'); initAdminRefundTrackingTab();"><i class="fas fa-undo-alt"></i> Refund tracking</a>
                 <a class="menu-item" data-admin-module="tab-book-sales" onclick="switchTab('tab-book-sales'); loadBookSalesAdmin();"><i class="fas fa-book"></i> Book sales</a>
                 <a class="menu-item" data-admin-module="tab-certificates" onclick="switchTab('tab-certificates'); initAdminCertificatesTab();"><i class="fas fa-award"></i> Certificate Management</a>
                 <a class="menu-item" data-admin-module="tab-volunteers" onclick="switchTab('tab-volunteers'); initAdminVolunteersTab();"><i class="fas fa-hands-helping"></i> Volunteers</a>
@@ -1703,6 +1704,24 @@
                 </div>
             </div>
 
+            <div id="tab-refund-tracking" class="tab-pane hidden">
+                <h2 style="margin-bottom:8px;">Refund tracking</h2>
+                <p style="color:#64748b;margin-bottom:16px;max-width:920px;">Live Razorpay refund journeys for approved cancellations. Syncs automatically while this tab is open.</p>
+                <p id="admin-refund-track-live" class="hidden" style="margin-bottom:12px;"><span class="vtrk-live" style="margin:0;"><span class="vtrk-dot"></span>Live · refreshes every 8s</span></p>
+                <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+                    <label>Status
+                        <select id="admin-refund-track-filter" onchange="loadAdminRefundTracking()">
+                            <option value="">All with refund activity</option>
+                            <option value="in_progress">In progress</option>
+                            <option value="completed">Completed</option>
+                            <option value="failed">Failed / manual</option>
+                        </select>
+                    </label>
+                    <button type="button" class="btn-primary" style="background:#64748b;" onclick="loadAdminRefundTracking()"><i class="fas fa-sync"></i> Refresh</button>
+                </div>
+                <div id="admin-refund-track-container"><p style="color:#64748b;">Open this tab or click Refresh to load refund journeys…</p></div>
+            </div>
+
             <!-- Certificate management -->
             <div id="tab-certificates" class="tab-pane hidden cert-mgmt-theme">
                 <h2 class="cert-mgmt-heading">Certificate Management</h2>
@@ -2145,11 +2164,12 @@
 
             <div id="tab-pos" class="tab-pane hidden">
                 <h2 style="margin-bottom:12px;">On-spot POS registration</h2>
-                <p style="color:#64748b;margin-bottom:16px;">Register a doctor at the venue, record cash payment, and issue an e-ticket immediately. They must complete their profile later in the doctor portal.</p>
-                <div class="card" style="max-width:640px;">
+                <p style="color:#64748b;margin-bottom:16px;">Register a doctor at the venue. Record <strong>cash</strong> or collect via <strong>Razorpay DQR</strong> / other integrated payment gateways. E-ticket is issued immediately for cash, or automatically when the gateway confirms payment.</p>
+                <div class="card" style="max-width:720px;">
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
                         <div><label>Seminar</label><select id="pos-seminar" style="width:100%;padding:8px;"></select></div>
                         <div><label>Amount (₹)</label><input type="number" id="pos-amount" min="0" step="1" style="width:100%;padding:8px;"></div>
+                        <div style="grid-column:1/-1;"><label>Payment method</label><select id="pos-payment-method" style="width:100%;padding:8px;"><option value="cash">Cash</option></select><p id="pos-method-desc" style="font-size:0.8rem;color:#64748b;margin:6px 0 0;"></p></div>
                         <div><label>First name</label><input type="text" id="pos-fname" style="width:100%;padding:8px;"></div>
                         <div><label>Middle name <span style="font-weight:400;color:#64748b;">(optional)</span></label><input type="text" id="pos-mname" style="width:100%;padding:8px;"></div>
                         <div><label>Last name</label><input type="text" id="pos-lname" style="width:100%;padding:8px;"></div>
@@ -2160,7 +2180,14 @@
                         <input type="checkbox" id="pos-send-ticket-email" style="margin-top:3px;">
                         <span>Queue ticket email after registration (off by default — use printed QR at venue; avoids Zoho rate limits)</span>
                     </label>
-                    <button type="button" class="btn-primary" style="margin-top:16px;" onclick="submitAdminPosRegistration()">Register &amp; issue ticket</button>
+                    <button type="button" class="btn-primary" style="margin-top:16px;" onclick="submitAdminPosRegistration()">Register &amp; collect payment</button>
+                    <p id="pos-poll-status" style="margin-top:10px;font-size:0.88rem;color:#0f766e;"></p>
+                    <div id="pos-qr-block" class="hidden" style="text-align:center;margin-top:12px;padding:14px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:10px;">
+                        <p id="pos-qr-amount" style="font-weight:700;color:#0f766e;margin-bottom:8px;"></p>
+                        <img id="pos-qr-img" alt="Payment QR" style="max-width:240px;border:1px solid #cbd5e1;border-radius:8px;">
+                        <p style="font-size:0.8rem;color:#64748b;margin-top:8px;">Doctor scans with any UPI app. Razorpay DQR confirms automatically and issues the e-ticket.</p>
+                        <button type="button" class="btn-primary hidden" id="pos-mark-upi-btn" style="margin-top:10px;background:#64748b;" onclick="posMarkUpiPaid()">Mark UPI received</button>
+                    </div>
                     <p id="pos-status" style="margin-top:12px;font-weight:600;"></p>
                 </div>
             </div>

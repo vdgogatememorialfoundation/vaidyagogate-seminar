@@ -1095,6 +1095,8 @@ function getPaymentOptionForReg(regId) {
     const el = document.getElementById('pay-opt-' + regId);
     if (el && el.value) return el.value;
     const opts = window.__doctorPaymentOptions || [];
+    const dqr = opts.find((o) => o.id === 'dqr');
+    if (dqr) return dqr.id;
     const rz = opts.find((o) => o.gateway === 'razorpay');
     if (rz) return rz.id;
     return opts[0] ? opts[0].id : '';
@@ -1102,6 +1104,9 @@ function getPaymentOptionForReg(regId) {
 
 function defaultPaymentMethodForPayButton() {
     const opts = window.__doctorPaymentOptions || [];
+    if (!opts.length) return '';
+    const dqr = opts.find((o) => o.id === 'dqr');
+    if (dqr) return dqr.id;
     return opts.length === 1 ? opts[0].id : '';
 }
 
@@ -1565,7 +1570,9 @@ async function loadDoctorRefundsModule(silentPoll) {
 }
 
 function shouldPollRefundTracking() {
-    return doctorTabVisible('tab-refunds');
+    if (doctorTabVisible('tab-refunds')) return true;
+    if (doctorTabVisible('tab-payments') && doctorRefundLivePending(__doctorRefundRequests)) return true;
+    return false;
 }
 
 function stopRefundTrackingPoll() {
@@ -1582,8 +1589,88 @@ function startRefundTrackingPoll() {
     const live = document.getElementById('refund-track-live');
     if (live) live.classList.remove('hidden');
     refundTrackPollTimer = setInterval(() => {
-        if (shouldPollRefundTracking()) loadDoctorRefundsModule(true);
+        if (shouldPollRefundTracking()) {
+            loadDoctorRefundsModule(true);
+            if (doctorTabVisible('tab-payments')) loadDoctorPaymentsRefundsInline(true);
+        }
     }, DOCTOR_TRACK_POLL_MS);
+}
+
+function doctorRefundRowsForPaymentsInline(rows) {
+    return (rows || []).filter((r) => {
+        const st = String(r.status || '').toLowerCase();
+        const rs = String(r.refundStatus || r.refund_status || 'none').toLowerCase();
+        if (st === 'pending' || st === 'approved') return true;
+        if (rs !== 'none') return true;
+        return Number(r.refund_amount || r.refundAmount) > 0;
+    });
+}
+
+function renderDoctorRefundInlineCard(row) {
+    const tr = cancellationRowToTracking(row);
+    if (!tr) return '';
+    const appNo = escapeHtml(row.applicationNo || row.application_no || '—');
+    const seminar = escapeHtml(row.seminarTitle || row.seminar_title || '');
+    return (
+        '<div style="border:1px solid #fde68a;border-radius:8px;padding:12px;margin-bottom:10px;background:#fff;">' +
+        '<p style="margin:0 0 8px;font-weight:600;color:#92400e;font-size:0.9rem;">' +
+        appNo +
+        (seminar ? ' · ' + seminar : '') +
+        '</p>' +
+        renderCancellationRefundBlock({ cancellationTracking: tr }) +
+        '</div>'
+    );
+}
+
+let _lastPaymentsRefundFp = '';
+
+async function loadDoctorPaymentsRefundsInline(silentPoll) {
+    const box = document.getElementById('doctor-payments-refunds-list');
+    const wrap = document.getElementById('doctor-payments-refunds-wrap');
+    if (!box || !wrap) return;
+    const uid = doctorNumericUserId();
+    if (!uid) {
+        box.innerHTML = '<p style="color:#64748b;margin:0;">Sign in to view refund activity.</p>';
+        return;
+    }
+    if (!silentPoll) box.innerHTML = '<p style="color:#64748b;margin:0;">Loading refund activity…</p>';
+    try {
+        let rows = __doctorRefundRequests;
+        if (!silentPoll || !rows.length) {
+            const res = await fetch('/api/doctor/cancellation-requests?userId=' + encodeURIComponent(uid), {
+                cache: 'no-store'
+            });
+            const data = await res.json().catch(() => []);
+            if (!res.ok) {
+                box.innerHTML =
+                    '<p style="color:#b91c1c;margin:0;">' +
+                    escapeHtml((data && data.error) || 'Could not load refunds') +
+                    '</p>';
+                return;
+            }
+            __doctorRefundRequests = Array.isArray(data) ? data : [];
+            rows = __doctorRefundRequests;
+        }
+        const visible = doctorRefundRowsForPaymentsInline(rows);
+        const fp = refundTrackFingerprint(visible);
+        if (silentPoll && fp === _lastPaymentsRefundFp) return;
+        _lastPaymentsRefundFp = fp;
+        const live = document.getElementById('doctor-payments-refund-live');
+        if (live) {
+            if (doctorRefundLivePending(visible)) live.classList.remove('hidden');
+            else live.classList.add('hidden');
+        }
+        if (!visible.length) {
+            box.innerHTML =
+                '<p style="color:#64748b;margin:0;">No refund activity yet. After a cancellation is approved, your Razorpay refund status will appear here and under <strong>Refund tracking</strong>.</p>';
+            return;
+        }
+        box.innerHTML = visible.map((r) => renderDoctorRefundInlineCard(r)).join('');
+        if (doctorTabVisible('tab-payments') && doctorRefundLivePending(visible)) syncDoctorTrackingPolls();
+    } catch (e) {
+        console.warn('[payments-refunds]', e);
+        if (!silentPoll) box.innerHTML = '<p style="color:#b91c1c;margin:0;">Network error loading refunds.</p>';
+    }
 }
 
 function renderSeminarApplicationTrackerCard(a) {
@@ -1905,7 +1992,12 @@ async function bootDoctorDashboard(user) {
         .catch(() => {});
     scheduleDoctorModuleReapply();
     handleEasebuzzPaymentReturnQuery();
-    switchTab('tab-dashboard');
+    const hashTab = String(window.location.hash || '').replace(/^#/, '').toLowerCase();
+    if (hashTab === 'refunds' && (!__doctorAllowedTabs || __doctorAllowedTabs.has('tab-refunds'))) {
+        switchTab('tab-refunds');
+    } else {
+        switchTab('tab-dashboard');
+    }
     if (window.DoctorLiveChatWidget && typeof DoctorLiveChatWidget.boot === 'function') {
         DoctorLiveChatWidget.boot({
             getUserId: doctorNumericUserId,
@@ -3634,6 +3726,9 @@ function switchTab(tabId, menuEl) {
     }
     if (tabId === 'tab-payments') {
         loadDoctorSupplementalPayments();
+        loadDoctorSeminarPaymentsPanel();
+        loadDoctorPaymentsRefundsInline();
+        syncDoctorTrackingPolls();
     }
     if (tabId === 'tab-books' && typeof initDoctorBooksTab === 'function') {
         initDoctorBooksTab();
@@ -7317,6 +7412,7 @@ async function processPayment(appId, amount, appNo, paymentOption, cancelPending
             loadDoctorOrders();
             loadDoctorReceipts();
             loadDoctorEventTickets();
+            loadDoctorSeminarPaymentsPanel();
             return;
         }
         if (result.paymentType === 'dqr' && result.qrImageUrl) {
@@ -8470,6 +8566,71 @@ async function loadProfile() {
         console.error('Error loading profile:', err);
     }
 }
+
+async function loadDoctorSeminarPaymentsPanel() {
+    const box = document.getElementById('make-payments-container');
+    if (!box) return;
+    const uid = doctorNumericUserId();
+    if (!uid) {
+        box.innerHTML = '<p style="color:#b91c1c;">Please sign in again.</p>';
+        return;
+    }
+    await loadDoctorPaymentOptions();
+    if (!userApplications || !userApplications.length) {
+        try {
+            const res = await fetch('/api/applications/' + encodeURIComponent(uid), { cache: 'no-store' });
+            const payload = await res.json().catch(() => ({}));
+            if (res.ok) userApplications = Array.isArray(payload) ? payload : payload.applications || [];
+        } catch (_) {}
+    }
+    const pending = (userApplications || []).filter(
+        (a) => String(a.status || '').toLowerCase() === 'approved_pending_payment'
+    );
+    if (!pending.length) {
+        box.innerHTML =
+            '<h3 style="color:#0f766e;margin:0 0 10px;font-size:1rem;">Seminar registration fees</h3>' +
+            '<p style="color:#64748b;margin:0;">No payments due right now. Approved registrations awaiting payment will appear here with <strong>DQR (UPI scan)</strong> and other gateway options.</p>';
+        loadDoctorPaymentsRefundsInline();
+        return;
+    }
+    let html =
+        '<h3 style="color:#0f766e;margin:0 0 12px;font-size:1rem;">Seminar registration fees</h3>' +
+        '<p style="font-size:0.88rem;color:#64748b;margin:0 0 14px;">Pay with <strong>Razorpay DQR</strong> — scan the UPI QR from your phone — or choose another method. Your e-ticket is issued automatically when payment confirms.</p>';
+    pending.forEach((a) => {
+        const payAmt =
+            a.payment_amount != null && Number.isFinite(Number(a.payment_amount)) && Number(a.payment_amount) >= 0
+                ? Number(a.payment_amount)
+                : Number(a.seminar_price) > 0
+                  ? Number(a.seminar_price)
+                  : 1500;
+        const defaultPayMethod = defaultPaymentMethodForPayButton();
+        html +=
+            '<div class="card" style="margin-bottom:12px;padding:14px;border:1px solid #99f6e4;background:#f8fffc;">' +
+            '<p style="margin:0 0 8px;font-weight:700;color:#0f766e;">' +
+            escapeHtml(a.application_no || '') +
+            (a.seminar_title ? ' · ' + escapeHtml(a.seminar_title) : '') +
+            '</p>' +
+            '<p style="margin:0 0 10px;font-size:0.88rem;color:#475569;">Amount due: <strong>₹' +
+            escapeHtml(String(payAmt)) +
+            '</strong></p>' +
+            paymentGatewaySelectHtml(a.id) +
+            '<button type="button" class="btn-success doctor-pay-btn" style="margin-top:10px;" ' +
+            'data-reg-id="' +
+            escapeHtml(String(a.id)) +
+            '" data-amount="' +
+            escapeHtml(String(payAmt)) +
+            '" data-app-no="' +
+            escapeHtml(String(a.application_no || '')) +
+            '" data-method="' +
+            escapeHtml(defaultPayMethod) +
+            '">Pay now (₹' +
+            payAmt +
+            ')</button></div>';
+    });
+    box.innerHTML = html;
+    loadDoctorPaymentsRefundsInline();
+}
+window.loadDoctorSeminarPaymentsPanel = loadDoctorSeminarPaymentsPanel;
 
 async function loadDoctorSupplementalPayments() {
     const box = document.getElementById('doctor-supplemental-payments-list');
