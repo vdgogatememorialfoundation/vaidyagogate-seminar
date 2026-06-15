@@ -8439,10 +8439,18 @@ app.get('/api/admin/applications', (req, res) => {
     db.all(`
         SELECT a.id, a.application_no, a.status, a.form_data, a.doc_review_json, a.created_at, a.seminar_id,
                u.first_name, u.last_name, u.user_id_string, u.id AS user_id,
-               s.title AS seminar_title, s.price AS seminar_price
+               s.title AS seminar_title, s.price AS seminar_price, s.event_date AS seminar_event_date,
+               o.id AS order_id, o.order_id_string, o.amount AS order_amount, o.status AS order_status,
+               o.payment_gateway, o.payment_date, o.provider_transaction_id,
+               o.refund_status AS order_refund_status, o.refunded_amount AS order_refunded_amount,
+               t.ticket_id_string, t.is_scanned, t.scan_time
         FROM registrations a
         JOIN users u ON a.user_id = u.id
         LEFT JOIN seminars s ON s.id = a.seminar_id
+        LEFT JOIN orders o ON o.registration_id = a.id AND o.id = (
+            SELECT id FROM orders WHERE registration_id = a.id ORDER BY id DESC LIMIT 1
+        )
+        LEFT JOIN tickets t ON t.order_id = o.id
         ORDER BY a.created_at DESC
     `, [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });

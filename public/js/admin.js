@@ -7914,6 +7914,13 @@ function renderAdminEnrichedOrdersTable() {
         const amt = Number(o.amount) || 0;
         const canRefund = o.status === 'success' && refunded < amt - 0.01;
         const actions = [];
+        if (o.registration_id) {
+            actions.push(
+                '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;margin-right:4px;background:#2563eb;border:none;" onclick="adminOpenApplicationInView(' +
+                    o.registration_id +
+                    ')">Application</button>'
+            );
+        }
         if (o.status === 'success') {
             actions.push(
                 '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;margin-right:4px;" onclick="openAdminOrderReceipt(' +
@@ -8224,17 +8231,114 @@ function renderAdminCancellationApplicationHtml(row) {
     return html;
 }
 
-function adminOpenCancellationApplicationInReview(registrationId) {
+async function adminOpenApplicationInView(registrationId) {
     const rid = Number(registrationId);
     if (!rid) return;
-    const idx = (globalAdminApps || []).findIndex((a) => Number(a.id) === rid);
+    let idx = (globalAdminApps || []).findIndex((a) => Number(a.id) === rid);
     if (idx < 0) {
-        alert('Application not in the current list. Open Review Applications and search for it there.');
-        switchTab('tab-applications');
+        try {
+            const res = await fetch('/api/admin/applications');
+            const rows = await res.json();
+            globalAdminApps = Array.isArray(rows) ? rows : [];
+            idx = globalAdminApps.findIndex((a) => Number(a.id) === rid);
+        } catch (e) {
+            console.error(e);
+            alert('Could not load application details.');
+            return;
+        }
+    }
+    if (idx < 0) {
+        alert('Application not found.');
         return;
     }
-    closeAdminCancellationReviewModal();
     viewFullApplication(idx);
+}
+
+function adminOpenCancellationApplicationInReview(registrationId) {
+    closeAdminCancellationReviewModal();
+    adminOpenApplicationInView(registrationId);
+}
+
+function renderAdminApplicationPaymentHtml(app) {
+    if (!app) return '';
+    const orderId = app.order_id_string || null;
+    const orderDbId = app.order_id != null ? app.order_id : null;
+    const orderStatus = String(app.order_status || '').toLowerCase();
+    const gateway = app.payment_gateway || null;
+    const amt = app.order_amount != null ? Number(app.order_amount) : null;
+    const refunded = app.order_refunded_amount != null ? Number(app.order_refunded_amount) : 0;
+    const txnId = app.provider_transaction_id || null;
+    const payDate = app.payment_date || null;
+    const refundSt = app.order_refund_status || null;
+    const ticketId = app.ticket_id_string || null;
+    const isScanned = Number(app.is_scanned) === 1 || app.is_scanned === true;
+    const scanTime = app.scan_time || null;
+    const feeDue = adminSeminarFeeAmount(app);
+    const breakdown = Array.isArray(app.payment_breakdown) ? app.payment_breakdown : [];
+    const paySummary = orderId
+        ? escAdmin(gateway || 'Payment') +
+          ' · ₹' +
+          escAdmin(amt != null ? amt : 0) +
+          (txnId ? ' · Txn ' + escAdmin(txnId) : '')
+        : 'No payment order yet';
+    const checkIn = ticketId
+        ? escAdmin(ticketId) +
+          ' · ' +
+          (isScanned
+              ? 'Checked in' + (scanTime ? ' · ' + escAdmin(adminFormatCancelReviewDateTime(scanTime)) : '')
+              : 'Not checked in')
+        : 'No e-ticket issued';
+    let html =
+        '<div style="margin:12px 0;padding:14px 16px;border:1px solid #bbf7d0;background:#f0fdf4;border-radius:10px;">' +
+        '<h4 style="margin:0 0 10px;color:#166534;"><i class="fas fa-credit-card"></i> Payment details</h4>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px 14px;font-size:0.86rem;">' +
+        '<div><span class="muted">Seminar fee due</span><br><strong>₹' +
+        escAdmin(feeDue) +
+        '</strong></div>' +
+        '<div><span class="muted">Order</span><br><strong>' +
+        escAdmin(orderId || '—') +
+        '</strong></div>' +
+        '<div><span class="muted">Order status</span><br><strong>' +
+        escAdmin(orderStatus ? orderStatus.toUpperCase() : '—') +
+        '</strong></div>' +
+        '<div><span class="muted">Payment</span><br>' +
+        paySummary +
+        '</div>' +
+        '<div><span class="muted">Paid on</span><br>' +
+        escAdmin(payDate ? adminFormatCancelReviewDateTime(payDate) : '—') +
+        '</div>' +
+        '<div><span class="muted">Refunded</span><br>₹' +
+        escAdmin(refunded) +
+        (refundSt ? ' (' + escAdmin(refundSt) + ')' : '') +
+        '</div>' +
+        '<div><span class="muted">E-ticket / check-in</span><br>' +
+        checkIn +
+        '</div></div>';
+    if (!orderId && orderStatus !== 'success') {
+        html +=
+            '<p class="muted" style="margin:10px 0 0;font-size:0.84rem;">Payment has not been collected for this application yet.</p>';
+    }
+    if (breakdown.length) {
+        html +=
+            '<div style="margin-top:10px;font-size:0.86rem;"><strong>Fee breakdown</strong><ul style="margin:6px 0 0;padding-left:18px;">';
+        breakdown.forEach(function (b) {
+            html +=
+                '<li>' +
+                escAdmin(b.label || b.name || 'Item') +
+                ': ₹' +
+                escAdmin(b.amount != null ? b.amount : 0) +
+                '</li>';
+        });
+        html += '</ul></div>';
+    }
+    if (orderDbId && orderStatus === 'success') {
+        html +=
+            '<div style="margin-top:10px;"><button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.78rem;" onclick="openAdminOrderReceipt(' +
+            orderDbId +
+            ')"><i class="fas fa-receipt"></i> View receipt</button></div>';
+    }
+    html += '</div>';
+    return html;
 }
 
 function populateAdminCancellationReviewModal(row) {
@@ -9197,6 +9301,7 @@ function viewFullApplication(index) {
         <p><strong>Status:</strong> ${escAdmin(String(a.status || '').toUpperCase())}</p>
         <p><strong>Seminar:</strong> ${escAdmin(a.seminar_title || '—')}${a.seminar_price != null ? ' · Fee ₹' + escAdmin(String(adminSeminarFeeAmount(a))) : ''}</p>
         <p><strong>Portal ID:</strong> ${escAdmin(a.user_id_string || '')}</p>
+        ${renderAdminApplicationPaymentHtml(a)}
         ${
             dupReview
                 ? `<div style="margin:10px 0;padding:10px 12px;border:1px solid #fecaca;background:#fef2f2;border-radius:8px;">
