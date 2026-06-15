@@ -6349,6 +6349,68 @@ app.get('/api/doctor/profile/:userId', (req, res) => {
     });
 });
 
+/** Latest seminar registration form_data for pre-filling new applications (excludes current seminar). */
+app.get('/api/doctor/registration-prefill/:userId', (req, res) => {
+    const uid = parseInt(req.params.userId, 10);
+    if (!Number.isInteger(uid) || uid < 1) {
+        return res.status(400).json({ error: 'Invalid user id' });
+    }
+    const excludeSid =
+        req.query && req.query.excludeSeminarId != null
+            ? parseInt(req.query.excludeSeminarId, 10)
+            : null;
+    let sql = `SELECT r.form_data, u.first_name, u.middle_name, u.last_name, u.email, u.phone
+               FROM registrations r
+               JOIN users u ON u.id = r.user_id
+               WHERE r.user_id = ? AND r.status NOT IN ('draft','cancelled','rejected')`;
+    const params = [uid];
+    if (Number.isInteger(excludeSid) && excludeSid > 0) {
+        sql += ` AND r.seminar_id != ?`;
+        params.push(excludeSid);
+    }
+    sql += ` ORDER BY r.id DESC LIMIT 1`;
+    db.get(sql, params, (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!row) {
+            return db.get(
+                `SELECT first_name, middle_name, last_name, email, phone FROM users WHERE id = ?`,
+                [uid],
+                (e2, u) => {
+                    if (e2) return res.status(500).json({ error: e2.message });
+                    res.json({
+                        fromRegistration: false,
+                        formData: {
+                            fname: u?.first_name || '',
+                            mname: u?.middle_name || '',
+                            lname: u?.last_name || '',
+                            email: u?.email || '',
+                            phone: u?.phone || ''
+                        }
+                    });
+                }
+            );
+        }
+        let fd = {};
+        try {
+            fd = row.form_data ? JSON.parse(row.form_data) : {};
+        } catch (_) {
+            fd = {};
+        }
+        const formData = {
+            ...fd,
+            fname: fd.fname || row.first_name || '',
+            mname: fd.mname || row.middle_name || '',
+            lname: fd.lname || row.last_name || '',
+            email: fd.email || row.email || '',
+            phone: fd.phone || row.phone || ''
+        };
+        delete formData.selected_event_ids;
+        delete formData.selectedEventIds;
+        delete formData.agree_terms;
+        res.json({ fromRegistration: true, formData });
+    });
+});
+
 function isPublicListEnabled(val) {
     return val === 1 || val === true || val === '1' || val === 't' || val === 'true';
 }
@@ -11734,6 +11796,21 @@ function runAdminRegistrationUpsertBody(req, res, tid, sid, aid, formData) {
         );
         if (validationError) return res.status(400).json({ error: validationError });
 
+        seminarEvents.listForSeminar(db, sid, true, (evErr, events) => {
+            if (evErr) return res.status(500).json({ error: evErr.message });
+            if (events && events.length) {
+                const selected = seminarEvents.parseSelectedEventIds(stored);
+                if (!selected.length) {
+                    return res.status(400).json({
+                        error: 'Select at least one session to attend (you can choose one or both).'
+                    });
+                }
+                const okSel = selected.every((id) => events.some((ev) => ev.id === id));
+                if (!okSel) {
+                    return res.status(400).json({ error: 'Invalid session selection. Refresh and try again.' });
+                }
+            }
+
         db.get(`SELECT id, form_data FROM registrations WHERE user_id = ? AND seminar_id = ?`, [tid, sid], (e2, reg) => {
             if (e2) return res.status(500).json({ error: e2.message });
             if (reg) {
@@ -11801,6 +11878,7 @@ function runAdminRegistrationUpsertBody(req, res, tid, sid, aid, formData) {
                     }
                 );
             });
+        });
         });
     });
 }

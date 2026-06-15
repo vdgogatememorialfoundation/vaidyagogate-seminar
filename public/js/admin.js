@@ -276,6 +276,55 @@ function applyStaffCrmChrome() {
     }
 }
 
+function closeAdminMobileNav() {
+    const sidebar = document.querySelector('#dashboard-main .sidebar');
+    const backdrop = document.getElementById('admin-nav-backdrop');
+    sidebar?.classList.remove('mobile-open');
+    if (backdrop) {
+        backdrop.classList.remove('is-open');
+        backdrop.setAttribute('aria-hidden', 'true');
+    }
+    document.body.classList.remove('doctor-nav-open');
+}
+window.closeAdminMobileNav = closeAdminMobileNav;
+
+function initAdminMobileNav() {
+    const toggle = document.getElementById('admin-menu-toggle');
+    const sidebar = document.querySelector('#dashboard-main .sidebar');
+    const backdrop = document.getElementById('admin-nav-backdrop');
+    if (!toggle || !sidebar) return;
+    if (toggle.dataset.navInited === '1') return;
+    toggle.dataset.navInited = '1';
+
+    closeAdminMobileNav();
+
+    const open = () => {
+        sidebar.classList.add('mobile-open');
+        if (backdrop) {
+            backdrop.classList.add('is-open');
+            backdrop.setAttribute('aria-hidden', 'false');
+        }
+        document.body.classList.add('doctor-nav-open');
+    };
+
+    toggle.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (sidebar.classList.contains('mobile-open')) closeAdminMobileNav();
+        else open();
+    });
+    backdrop?.addEventListener('click', closeAdminMobileNav);
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && sidebar.classList.contains('mobile-open')) closeAdminMobileNav();
+    });
+}
+
+function showAdminDashboard() {
+    document.getElementById('auth-overlay').classList.add('hidden');
+    document.getElementById('dashboard-main').classList.remove('hidden');
+    initAdminMobileNav();
+}
+
 function resetAdminSensitiveOtpTokens() {
     __adminSensitivePhoneOtpToken = null;
     __adminSensitiveEmailOtpToken = null;
@@ -643,8 +692,7 @@ window.onload = async () => {
         }
     }
     if (localStorage.getItem('admin_auth')) {
-        document.getElementById('auth-overlay').classList.add('hidden');
-        document.getElementById('dashboard-main').classList.remove('hidden');
+        showAdminDashboard();
         await refreshCoAdminSessionFromServer();
         loadAllData();
         loadPortalAuthAdminForm()
@@ -791,8 +839,7 @@ document.getElementById('admin-login-form').addEventListener('submit', async (e)
         localStorage.setItem('admin_user', JSON.stringify(data.user));
         __adminLoginPhoneOtpToken = null;
         __adminLoginEmailOtpToken = null;
-        document.getElementById('auth-overlay').classList.add('hidden');
-        document.getElementById('dashboard-main').classList.remove('hidden');
+        showAdminDashboard();
         await refreshCoAdminSessionFromServer();
         loadAllData();
         loadPortalAuthAdminForm()
@@ -822,6 +869,7 @@ function switchTab(tabId) {
         );
         return;
     }
+    if (typeof closeAdminMobileNav === 'function') closeAdminMobileNav();
     if (liveScansInterval) clearInterval(liveScansInterval);
     if (tabId !== 'tab-live-radar' && typeof stopAdminLiveRadar === 'function') stopAdminLiveRadar();
     document.querySelectorAll('.tab-pane').forEach((t) => t.classList.add('hidden'));
@@ -2438,7 +2486,20 @@ function renderAdminBehalfFormFields() {
         if (f.onlyWhenPgCollege && !adminQualIsPg((document.getElementById('behalf-f-qual') || {}).value)) return;
         const id = 'behalf-f-' + f.key;
         const req = f.required ? ' *' : '';
-        const span = f.type === 'textarea' ? 'grid-column:1/-1;' : '';
+        const t = String(f.type || 'text').toLowerCase();
+        const span = f.type === 'textarea' || t === 'boolean' || t === 'checkbox' ? 'grid-column:1/-1;' : '';
+        if (t === 'boolean' || t === 'checkbox') {
+            html +=
+                '<div class="form-group" style="' +
+                span +
+                '"><label style="display:flex;align-items:flex-start;gap:8px;font-weight:600;"><input type="checkbox" id="' +
+                id +
+                '" style="width:auto;margin-top:4px;"> <span>' +
+                escAdmin(f.label || f.key) +
+                req +
+                '</span></label></div>';
+            return;
+        }
         html += '<div class="form-group" style="' + span + '"><label for="' + id + '">' + escAdmin(f.label || f.key) + req + '</label>';
         if (f.type === 'textarea') {
             html += '<textarea id="' + id + '" rows="2" style="width:100%;padding:8px;"></textarea>';
@@ -2474,6 +2535,60 @@ function renderAdminBehalfFormFields() {
     });
 }
 
+function getSelectedBehalfEventIds() {
+    return Array.from(document.querySelectorAll('.behalf-event-cb:checked'))
+        .map((el) => parseInt(el.value, 10))
+        .filter((n) => Number.isInteger(n) && n > 0);
+}
+
+function renderAdminBehalfEventPicker(seminar) {
+    const panel = document.getElementById('behalf-events-panel');
+    if (!panel) return;
+    const events = (seminar && (seminar.sub_events || seminar.subEvents)) || [];
+    if (!events.length) {
+        panel.classList.add('hidden');
+        panel.innerHTML = '';
+        return;
+    }
+    let html =
+        '<p style="font-weight:700;color:#047857;margin:0 0 10px;"><i class="fas fa-calendar-day"></i> Seminar sessions</p>' +
+        '<p style="font-size:0.84rem;color:#64748b;margin:0 0 12px;">Select one or both sessions for this application. Payment is base fee plus selected sessions.</p>';
+    events.forEach((ev) => {
+        const dt = ev.event_date || ev.eventDate;
+        const loc = ev.location_text || ev.locationText || '';
+        html +=
+            '<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;padding:10px;background:#fff;border:1px solid #bbf7d0;border-radius:8px;cursor:pointer;">' +
+            '<input type="checkbox" class="behalf-event-cb" value="' +
+            Number(ev.id) +
+            '" style="margin-top:4px;">' +
+            '<span><strong>' +
+            escAdmin(ev.title || 'Session') +
+            '</strong>' +
+            (dt ? '<br><span style="font-size:0.82rem;color:#64748b;">' + escAdmin(String(dt)) + '</span>' : '') +
+            (loc ? '<br><span style="font-size:0.82rem;color:#64748b;">' + escAdmin(loc) + '</span>' : '') +
+            '<br><span style="font-size:0.9rem;color:#047857;font-weight:700;">₹' +
+            (Number(ev.price) || 0) +
+            '</span></span></label>';
+    });
+    panel.innerHTML = html;
+    panel.classList.remove('hidden');
+    panel.querySelectorAll('.behalf-event-cb').forEach((cb) => {
+        cb.addEventListener('change', () => {
+            syncBehalfJsonFromForm();
+            scheduleBehalfRegSave();
+        });
+    });
+}
+
+function applyBehalfSelectedEvents(formData) {
+    const ids = (formData && (formData.selected_event_ids || formData.selectedEventIds)) || [];
+    if (!Array.isArray(ids) || !ids.length) return;
+    const idSet = new Set(ids.map((x) => Number(x)));
+    document.querySelectorAll('.behalf-event-cb').forEach((cb) => {
+        cb.checked = idSet.has(parseInt(cb.value, 10));
+    });
+}
+
 function collectAdminBehalfFormData() {
     const o = { country: 'India' };
     const qual = (document.getElementById('behalf-f-qual') || {}).value;
@@ -2483,8 +2598,15 @@ function collectAdminBehalfFormData() {
         if (f.onlyWhenPgCollege && !isPg) return;
         const el = document.getElementById('behalf-f-' + f.key);
         if (!el) return;
-        o[f.key] = el.value;
+        const t = String(f.type || 'text').toLowerCase();
+        if (t === 'boolean' || t === 'checkbox' || el.type === 'checkbox') {
+            o[f.key] = el.checked ? '1' : '';
+        } else {
+            o[f.key] = el.value;
+        }
     });
+    const eventIds = getSelectedBehalfEventIds();
+    if (eventIds.length) o.selected_event_ids = eventIds;
     return o;
 }
 
@@ -2503,8 +2625,15 @@ function syncBehalfFormFromJson() {
         const fd = JSON.parse(ta.value || '{}');
         (__behalfFormFields || ADMIN_BEHALF_FIELD_DEFAULTS).forEach((f) => {
             const el = document.getElementById('behalf-f-' + f.key);
-            if (el && fd[f.key] != null) el.value = fd[f.key];
+            if (!el || fd[f.key] == null) return;
+            const t = String(f.type || 'text').toLowerCase();
+            if (t === 'boolean' || t === 'checkbox' || el.type === 'checkbox') {
+                el.checked = fd[f.key] === true || fd[f.key] === 1 || fd[f.key] === '1';
+            } else {
+                el.value = fd[f.key];
+            }
         });
+        applyBehalfSelectedEvents(fd);
     } catch (_) {}
 }
 
@@ -2580,6 +2709,8 @@ async function onAdminBehalfDoctorOrSeminarChange() {
         return;
     }
     await loadAdminBehalfFormConfig(sid);
+    const semRow = (globalSeminars || []).find((s) => Number(s.id) === Number(sid));
+    renderAdminBehalfEventPicker(semRow);
     if (Number.isInteger(docId) && docId > 0) {
         const u = window.__adminUsersById && window.__adminUsersById[docId];
         if (u) {
@@ -2608,10 +2739,46 @@ async function onAdminBehalfDoctorOrSeminarChange() {
             (__behalfFormFields || []).forEach((f) => {
                 const el = document.getElementById('behalf-f-' + f.key);
                 if (el && data.registration.formData[f.key] != null) {
-                    el.value = data.registration.formData[f.key];
+                    const t = String(f.type || 'text').toLowerCase();
+                    if (t === 'boolean' || t === 'checkbox' || el.type === 'checkbox') {
+                        el.checked =
+                            data.registration.formData[f.key] === true ||
+                            data.registration.formData[f.key] === 1 ||
+                            data.registration.formData[f.key] === '1';
+                    } else {
+                        el.value = data.registration.formData[f.key];
+                    }
                 }
             });
+            applyBehalfSelectedEvents(data.registration.formData);
             syncBehalfJsonFromForm();
+        } else if (Number.isInteger(docId) && docId > 0) {
+            try {
+                const preRes = await fetch(
+                    '/api/doctor/registration-prefill/' +
+                        encodeURIComponent(docId) +
+                        '?excludeSeminarId=' +
+                        encodeURIComponent(sid)
+                );
+                const pre = await preRes.json();
+                if (pre && pre.formData) {
+                    (__behalfFormFields || []).forEach((f) => {
+                        const el = document.getElementById('behalf-f-' + f.key);
+                        if (!el || pre.formData[f.key] == null || String(pre.formData[f.key]).trim() === '') return;
+                        if (String(el.value || '').trim()) return;
+                        const t = String(f.type || 'text').toLowerCase();
+                        if (t === 'boolean' || t === 'checkbox' || el.type === 'checkbox') {
+                            el.checked =
+                                pre.formData[f.key] === true ||
+                                pre.formData[f.key] === 1 ||
+                                pre.formData[f.key] === '1';
+                        } else {
+                            el.value = pre.formData[f.key];
+                        }
+                    });
+                    syncBehalfJsonFromForm();
+                }
+            } catch (_) {}
         }
         refreshAdminBehalfWorkflow(data);
         if (summary) {

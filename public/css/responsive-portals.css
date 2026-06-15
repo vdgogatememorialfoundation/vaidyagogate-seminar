@@ -212,27 +212,33 @@ body.doctor-nav-open {
         align-items: center;
         gap: 8px 10px;
     }
-    .top-header .doctor-menu-toggle {
+    .top-header .doctor-menu-toggle,
+    .top-header .admin-menu-toggle {
         grid-row: 1 / span 2;
         grid-column: 1;
         align-self: start;
     }
-    .top-header .header-title {
-        grid-column: 2 / -1;
+    .top-header .header-title,
+    .top-header h2 {
+        grid-column: 2 / 3;
         grid-row: 1;
         font-size: 0.78rem !important;
         line-height: 1.25;
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+        margin: 0;
     }
-    .top-header .user-info {
+    .top-header .user-info,
+    .top-header .admin-header-tools {
         grid-column: 2 / -1;
         grid-row: 2;
         width: 100%;
+        display: flex;
         flex-wrap: wrap;
         gap: 6px 10px;
         justify-content: flex-start;
+        align-items: center;
     }
     .top-header .portal-login-time {
         display: none !important;
@@ -293,6 +299,64 @@ body.doctor-nav-open {
         touch-action: manipulation;
         z-index: 51;
         position: relative;
+    }
+    body.portal-bright .main-content {
+        padding: 0 0 28px !important;
+    }
+    body.portal-bright .main-content > .top-header {
+        margin: 0 0 12px;
+        border-radius: 0;
+    }
+    body.portal-bright .main-content > .tab-pane {
+        padding: 0 14px 14px;
+    }
+    body.portal-bright .admin-year-label {
+        font-size: 0.78rem !important;
+        display: inline-flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 4px;
+    }
+    body.portal-bright #admin-portal-year-select {
+        min-height: 40px;
+        font-size: 16px !important;
+        margin-left: 0 !important;
+    }
+    body.portal-bright #auth-overlay {
+        align-items: flex-start;
+        padding: max(12px, env(safe-area-inset-top, 0px)) 12px 24px;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    body.portal-bright #auth-overlay > div {
+        width: 100% !important;
+        max-width: 100% !important;
+        margin: auto 0;
+    }
+    body.portal-bright #auth-overlay input,
+    body.portal-bright #auth-overlay button {
+        font-size: 16px !important;
+        min-height: 44px;
+        touch-action: manipulation;
+    }
+    body.portal-bright [id$="-modal"]:not(.hidden),
+    body.portal-bright #admin-view-modal:not(.hidden) {
+        align-items: flex-start !important;
+        padding: 12px !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch;
+    }
+    body.portal-bright [id$="-modal"] > div,
+    body.portal-bright #admin-view-modal > div {
+        width: 100% !important;
+        max-width: 100% !important;
+        max-height: none !important;
+        margin: 0 auto 24px !important;
+        overflow-y: visible !important;
+    }
+    body.portal-bright .main-content .card [style*="grid-template-columns: 1fr 1fr"],
+    body.portal-bright .main-content .card [style*="grid-template-columns:1fr 1fr"] {
+        grid-template-columns: 1fr !important;
     }
     .announcements-box {
         margin: 12px 14px 0 !important;

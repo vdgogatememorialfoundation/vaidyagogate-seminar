@@ -2,12 +2,12 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>Super Admin CMS | Vaidya Gogate Memorial Foundation National Seminar</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="/css/responsive-portals.css">
+    <link rel="stylesheet" href="/css/responsive-portals.css?v=20260608mobile1">
     <link rel="stylesheet" href="/css/vgmf-portal-bright.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -139,16 +139,19 @@
             </div>
         </aside>
 
+        <div id="admin-nav-backdrop" class="doctor-nav-backdrop" aria-hidden="true"></div>
+
         <main class="main-content">
             <header class="top-header">
-                <h2>Admin Control Panel <span id="admin-portal-year-badge" style="font-size:0.85rem;color:#0d9488;font-weight:600;"></span></h2>
-                <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-                    <label style="font-size:0.85rem;color:#475569;font-weight:600;">Portal year
+                <button type="button" class="admin-menu-toggle" id="admin-menu-toggle" aria-label="Open menu"><i class="fas fa-bars"></i></button>
+                <div class="header-title">Admin Control Panel <span id="admin-portal-year-badge" style="font-size:0.85rem;color:#0d9488;font-weight:600;"></span></div>
+                <div class="user-info admin-header-tools">
+                    <label class="admin-year-label" style="font-size:0.85rem;color:#475569;font-weight:600;">Portal year
                         <select id="admin-portal-year-select" style="width:auto;min-width:88px;margin-left:6px;" onchange="saveAdminPortalYear()"></select>
                     </label>
-                    <a href="/" target="_blank" style="margin-right: 20px; color: #0d9488; font-weight: 600; text-decoration: none;"><i class="fas fa-external-link-alt"></i> View Live Site</a>
-                    <button class="btn-danger" id="btn-logout"><i class="fas fa-sign-out-alt"></i> Logout</button>
+                    <a href="/" target="_blank" class="header-link admin-web-only" style="color:#0d9488;font-weight:600;text-decoration:none;"><i class="fas fa-external-link-alt"></i> View Live Site</a>
                 </div>
+                <button type="button" class="btn-danger" id="btn-logout"><i class="fas fa-sign-out-alt"></i> Logout</button>
             </header>
 
             <!-- Staff users -->
@@ -739,6 +742,7 @@
                     </div>
                     <p id="behalf-app-summary" style="margin-top:12px;font-size:0.9rem;color:#475569;">Select a doctor and seminar to load or create an application.</p>
                 </div>
+                <div id="behalf-events-panel" class="card hidden" style="margin-bottom:16px;padding:14px;border:1px solid #a7f3d0;background:#ecfdf5;"></div>
                 <div class="card" style="margin-bottom:16px;">
                     <h3 style="margin:0 0 12px;color:#1a237e;">Application form</h3>
                     <p style="font-size:0.85rem;color:#64748b;margin:0 0 12px;">Rendered from seminar registration form config. Certificate: use Applications tab after save.</p>
@@ -3197,6 +3201,6 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
-    <script src="/js/admin.js?v=20260608pricing1"></script>
+    <script src="/js/admin.js?v=20260608regfix1"></script>
 </body>
 </html>

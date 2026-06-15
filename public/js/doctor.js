@@ -1838,6 +1838,12 @@ function registrationQualIsPg() {
     return q === 'PG';
 }
 
+function registrationAgreeTermsChecked() {
+    const tnc = document.getElementById('tnc');
+    const regTnc = document.getElementById('reg-tnc-accept');
+    return !!(tnc && tnc.checked) || !!(regTnc && regTnc.checked);
+}
+
 const REGISTRATION_COLLEGE_KEYS = new Set(['cpin', 'college', 'ccity', 'cstate']);
 
 function registrationFieldStep(f) {
@@ -1974,6 +1980,7 @@ function collectRegistrationFormData() {
         else if (el.type === 'checkbox') o[k] = el.checked ? '1' : '';
         else o[k] = el.value;
     });
+    o.agree_terms = registrationAgreeTermsChecked() ? '1' : '';
     const eventIds = getSelectedSeminarEventIds();
     if (eventIds.length) o.selected_event_ids = eventIds;
     return o;
@@ -2226,7 +2233,14 @@ function validateRegistrationAgainstConfigForSteps(upToStepInclusive) {
     for (let sn = 1; sn <= upToStepInclusive; sn++) {
         for (const f of fields) {
             if (!f.enabled) continue;
-            if (f.key === 'agree_terms') continue;
+            if (f.key === 'agree_terms') {
+                if (f.required !== false && registrationAgreeTermsChecked() === false) {
+                    if (sn === upToStepInclusive) {
+                        return `Please confirm: ${f.label || 'I confirm the information is accurate'}`;
+                    }
+                }
+                continue;
+            }
             const fStep = registrationFieldStep(f);
             if (fStep !== sn) continue;
             if (f.onlyWhenAdvancedQual && !adv) continue;
@@ -3187,7 +3201,23 @@ function proceedFromSeminarTnc() {
         alert('Please accept the Terms and Conditions to continue.');
         return;
     }
+    if (!validateSeminarEventSelectionOrAlert()) return;
     nextStep(1);
+}
+
+function validateSeminarEventSelectionOrAlert() {
+    const sid = parseInt(activeSeminarIdForReg, 10);
+    const s = activeSeminars.find(function (x) {
+        return Number(x.id) === sid;
+    });
+    const events = (s && (s.sub_events || s.subEvents)) || [];
+    if (!events.length) return true;
+    const ids = getSelectedSeminarEventIds();
+    if (!ids.length) {
+        alert('Select at least one session to attend (you can choose one or both).');
+        return false;
+    }
+    return true;
 }
 
 async function startRegistration(seminarId, opts) {
@@ -3294,6 +3324,24 @@ async function startRegistration(seminarId, opts) {
             if (tnc) tnc.checked = true;
             nextStep(1);
             return;
+        }
+    } else if (!opts.editMode && !opts.draftResume) {
+        const uid = doctorNumericUserId();
+        if (uid) {
+            try {
+                const res = await fetch(
+                    '/api/doctor/registration-prefill/' +
+                        encodeURIComponent(uid) +
+                        '?excludeSeminarId=' +
+                        encodeURIComponent(sid)
+                );
+                const data = await res.json();
+                if (data && data.formData) {
+                    await applyRegistrationFormData(data.formData, { onlyBlank: true });
+                }
+            } catch (e) {
+                console.warn('[registration-prefill]', e);
+            }
         }
     }
 
@@ -5132,6 +5180,7 @@ async function nextStep(step) {
             alertRegistrationValidation(err);
             return;
         }
+        if (step >= 2 && !validateSeminarEventSelectionOrAlert()) return;
     }
 
     // Hide all steps
@@ -5948,6 +5997,7 @@ async function submitApplication() {
         alertRegistrationValidation(vErr);
         return;
     }
+    if (!validateSeminarEventSelectionOrAlert()) return;
     
     const formDataObj = collectRegistrationFormData();
 
@@ -8369,13 +8419,15 @@ async function saveProfile(event) {
 }
 
 // Application edit — opens the live registration form with saved data
-async function applyRegistrationFormData(formData) {
+async function applyRegistrationFormData(formData, opts) {
     if (!formData || typeof formData !== 'object') return;
+    const onlyBlank = !!(opts && opts.onlyBlank);
     await initRegistrationAddressUi();
     Object.keys(REGISTRATION_FIELD_IDS).forEach(function (key) {
         if (key === 'certificate') return;
         const el = document.getElementById(REGISTRATION_FIELD_IDS[key]);
         if (!el || formData[key] == null || formData[key] === '') return;
+        if (onlyBlank && String(el.value || '').trim()) return;
         el.value = String(formData[key]);
     });
     const qualEl = document.getElementById('reg-qual');
@@ -8427,6 +8479,14 @@ async function applyRegistrationFormData(formData) {
     if (formData.certificate_path) {
         window.__regCertServerUploaded = true;
         updateRegCertUploadUi({ uploaded: true });
+    }
+    const eventIds = formData.selected_event_ids || formData.selectedEventIds;
+    if (Array.isArray(eventIds) && eventIds.length) {
+        const idSet = new Set(eventIds.map((x) => Number(x)));
+        document.querySelectorAll('.reg-event-cb').forEach(function (cb) {
+            cb.checked = idSet.has(parseInt(cb.value, 10));
+        });
+        updateRegEventTotal();
     }
 }
 

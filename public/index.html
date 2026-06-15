@@ -861,6 +861,17 @@
             return ur === 'doctor' || r === 'doctor';
         }
 
+        function portalUrlForStaffUser(user) {
+            const ur = String(user.user_role || '').toLowerCase();
+            const r = String(user.role || '').toLowerCase();
+            const urls = window.__portalUrls || {};
+            if (r === 'admin' && ur !== 'co_admin') return urls.admin || '/admin';
+            if (ur === 'co_admin') return urls.staff || '/staff/login';
+            if (ur === 'judge_user' || ur === 'reviewer') return urls.judge || '/judge';
+            if (ur === 'scanner_portal_user') return urls.scanner || '/scanner';
+            return null;
+        }
+
         function portalHintForUser(user) {
             const ur = String(user.user_role || '').toLowerCase();
             const r = String(user.role || '').toLowerCase();
@@ -881,6 +892,11 @@
                 localStorage.setItem('seminar_doctor_user', JSON.stringify(user));
                 currentUserId = user.id;
                 window.location.href = doctorPortalUrl();
+                return;
+            }
+            const staffPortal = portalUrlForStaffUser(user);
+            if (staffPortal) {
+                window.location.href = staffPortal;
                 return;
             }
             alert(
