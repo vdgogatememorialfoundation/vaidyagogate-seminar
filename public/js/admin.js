@@ -14560,17 +14560,6 @@ async function uploadAdminAssetFromInput(fileInputEl, options) {
     return window.PortalUpload.uploadFromInput(fileInputEl, options);
 }
 
-async function cmsUploadBannerImage() {
-    const inp = document.getElementById('cms-banner-file');
-    const path = await uploadAdminAssetFromInput(inp);
-    if (inp) inp.value = '';
-    if (path) {
-        const t = document.getElementById('cms-banner');
-        if (t) t.value = path;
-        cmsUploadPublishHint('Banner image uploaded — click Save website & portal content. It will open as a homepage lightbox popup.');
-    }
-}
-
 async function cmsUploadHeroImage() {
     const inp = document.getElementById('cms-hero-file');
     const path = await uploadAdminAssetFromInput(inp);
@@ -14587,6 +14576,226 @@ function cmsUploadPublishHint(text) {
     if (!msg) return;
     msg.style.color = '#b45309';
     msg.innerText = text;
+}
+
+let __cmsLightboxSlides = [];
+
+function cmsNormalizeLightboxSlide(s) {
+    if (!s || typeof s !== 'object') return null;
+    const imagePath = String(s.imagePath || s.image || '').trim();
+    const heading = String(s.heading || s.title || '').trim();
+    const body = String(s.body || '').trim();
+    if (!imagePath && !heading && !body) return null;
+    return {
+        imagePath,
+        heading,
+        body,
+        ctaText: String(s.ctaText || s.cta || '').trim(),
+        ctaUrl: String(s.ctaUrl || s.link || '').trim(),
+        cta2Text: String(s.cta2Text || '').trim(),
+        cta2Url: String(s.cta2Url || '').trim()
+    };
+}
+
+function cmsLightboxFromCms(cms) {
+    if (cms && cms.lightbox && Array.isArray(cms.lightbox.slides)) {
+        return {
+            enabled: cms.lightbox.enabled !== false,
+            showMode: cms.lightbox.showMode || 'once_session',
+            delaySeconds: parseInt(cms.lightbox.delaySeconds, 10) || 0,
+            autoSlideMs: parseInt(cms.lightbox.autoSlideMs, 10) || 5500,
+            slides: cms.lightbox.slides.map(cmsNormalizeLightboxSlide).filter(Boolean)
+        };
+    }
+    const banner = cms && cms.bannerImage ? String(cms.bannerImage).trim() : '';
+    return {
+        enabled: !!banner,
+        showMode: 'once_session',
+        delaySeconds: 0,
+        autoSlideMs: 5500,
+        slides: banner
+            ? [{ imagePath: banner, heading: '', body: '', ctaText: '', ctaUrl: '', cta2Text: '', cta2Url: '' }]
+            : []
+    };
+}
+
+function cmsCollectLightboxFromDom() {
+    const root = document.getElementById('cms-lightbox-rows');
+    if (!root) {
+        return {
+            enabled: true,
+            showMode: 'once_session',
+            delaySeconds: 0,
+            autoSlideMs: 5500,
+            slides: __cmsLightboxSlides.slice()
+        };
+    }
+    const slides = Array.from(root.querySelectorAll('.cms-lightbox-row'))
+        .map((row) =>
+            cmsNormalizeLightboxSlide({
+                imagePath: (row.querySelector('.lb-img') || {}).value,
+                heading: (row.querySelector('.lb-heading') || {}).value,
+                body: (row.querySelector('.lb-body') || {}).value,
+                ctaText: (row.querySelector('.lb-cta1-t') || {}).value,
+                ctaUrl: (row.querySelector('.lb-cta1-u') || {}).value,
+                cta2Text: (row.querySelector('.lb-cta2-t') || {}).value,
+                cta2Url: (row.querySelector('.lb-cta2-u') || {}).value
+            })
+        )
+        .filter(Boolean);
+    return {
+        enabled: (document.getElementById('cms-lightbox-enabled') || {}).value !== '0',
+        showMode: (document.getElementById('cms-lightbox-mode') || {}).value || 'once_session',
+        delaySeconds: parseInt((document.getElementById('cms-lightbox-delay') || {}).value, 10) || 0,
+        autoSlideMs: parseInt((document.getElementById('cms-lightbox-automs') || {}).value, 10) || 5500,
+        slides
+    };
+}
+
+function cmsRenderLightboxRows(lightbox) {
+    const root = document.getElementById('cms-lightbox-rows');
+    if (!root) return;
+    const box = lightbox || { slides: [] };
+    __cmsLightboxSlides = Array.isArray(box.slides) ? box.slides.map(cmsNormalizeLightboxSlide).filter(Boolean) : [];
+    if (!__cmsLightboxSlides.length) {
+        root.innerHTML =
+            '<p class="muted" style="font-size:0.85rem;margin:0;">No lightbox slides yet — click <strong>Add lightbox slide</strong> or upload images.</p>';
+        return;
+    }
+    root.innerHTML = '';
+    __cmsLightboxSlides.forEach((sl, idx) => {
+        const wrap = document.createElement('div');
+        wrap.className = 'cms-lightbox-row';
+        wrap.style.cssText =
+            'border:1px solid #bbf7d0;border-radius:10px;padding:12px;margin-bottom:10px;background:#fff;';
+        const preview = sl.imagePath
+            ? '<img src="' +
+              escAdmin(publicFileHref(sl.imagePath)) +
+              '" alt="" style="max-width:200px;max-height:120px;object-fit:contain;border:1px solid #e2e8f0;border-radius:8px;background:#f8fafc;margin-bottom:8px;">'
+            : '';
+        wrap.innerHTML =
+            '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px;">' +
+            '<strong style="color:#166534;">Lightbox slide #' +
+            (idx + 1) +
+            '</strong>' +
+            '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.75rem;background:#64748b;" onclick="cmsMoveLightboxRow(this,-1)">↑</button>' +
+            '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.75rem;background:#64748b;" onclick="cmsMoveLightboxRow(this,1)">↓</button>' +
+            '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.75rem;background:#b91c1c;margin-left:auto;" onclick="cmsRemoveLightboxRow(this)">Remove</button>' +
+            '</div>' +
+            preview +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
+            '<div style="grid-column:1/-1;"><label style="font-size:0.75rem;">Image path</label><input class="lb-img" style="width:100%" value="' +
+            escAdmin(sl.imagePath || '') +
+            '"></div>' +
+            '<div style="grid-column:1/-1;"><label style="font-size:0.75rem;">Heading</label><input class="lb-heading" style="width:100%" value="' +
+            escAdmin(sl.heading || '') +
+            '"></div>' +
+            '<div style="grid-column:1/-1;"><label style="font-size:0.75rem;">Body text</label><textarea class="lb-body" rows="2" style="width:100%">' +
+            escAdmin(sl.body || '') +
+            '</textarea></div>' +
+            '<div><label style="font-size:0.75rem;">Primary button text</label><input class="lb-cta1-t" style="width:100%" placeholder="Register now" value="' +
+            escAdmin(sl.ctaText || '') +
+            '"></div>' +
+            '<div><label style="font-size:0.75rem;">Primary button URL</label><input class="lb-cta1-u" style="width:100%" placeholder="#register" value="' +
+            escAdmin(sl.ctaUrl || '') +
+            '"></div>' +
+            '<div><label style="font-size:0.75rem;">Secondary button text</label><input class="lb-cta2-t" style="width:100%" placeholder="View programme" value="' +
+            escAdmin(sl.cta2Text || '') +
+            '"></div>' +
+            '<div><label style="font-size:0.75rem;">Secondary button URL</label><input class="lb-cta2-u" style="width:100%" placeholder="#schedule" value="' +
+            escAdmin(sl.cta2Url || '') +
+            '"></div>' +
+            '</div>' +
+            '<div style="margin-top:8px;"><input type="file" class="lb-file" accept="image/*"><button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;margin-left:8px;background:#0d9488;" onclick="cmsUploadLightboxImage(this)">Upload image</button></div>';
+        root.appendChild(wrap);
+    });
+}
+
+function cmsApplyLightboxToForm(cms) {
+    const box = cmsLightboxFromCms(cms || {});
+    const set = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.value = val != null ? String(val) : '';
+    };
+    set('cms-lightbox-enabled', box.enabled ? '1' : '0');
+    set('cms-lightbox-mode', box.showMode || 'once_session');
+    set('cms-lightbox-delay', box.delaySeconds || 0);
+    set('cms-lightbox-automs', box.autoSlideMs || 5500);
+    cmsRenderLightboxRows(box);
+    const legacyBanner = document.getElementById('cms-banner');
+    if (legacyBanner && box.slides[0] && box.slides[0].imagePath) {
+        legacyBanner.value = box.slides[0].imagePath;
+    }
+}
+
+function cmsAddLightboxRow() {
+    const current = cmsCollectLightboxFromDom();
+    current.slides.push({
+        imagePath: '',
+        heading: '',
+        body: '',
+        ctaText: '',
+        ctaUrl: '',
+        cta2Text: '',
+        cta2Url: ''
+    });
+    cmsRenderLightboxRows(current);
+}
+
+function cmsRemoveLightboxRow(btn) {
+    const row = btn.closest('.cms-lightbox-row');
+    const root = document.getElementById('cms-lightbox-rows');
+    if (!row || !root) return;
+    row.remove();
+    if (!root.querySelector('.cms-lightbox-row')) {
+        cmsRenderLightboxRows({ slides: [] });
+    }
+}
+
+function cmsMoveLightboxRow(btn, dir) {
+    const row = btn.closest('.cms-lightbox-row');
+    const root = document.getElementById('cms-lightbox-rows');
+    if (!row || !root) return;
+    const rows = Array.from(root.querySelectorAll('.cms-lightbox-row'));
+    const idx = rows.indexOf(row);
+    const next = idx + dir;
+    if (next < 0 || next >= rows.length) return;
+    if (dir < 0) root.insertBefore(row, rows[next]);
+    else root.insertBefore(rows[next], row);
+}
+
+async function cmsUploadLightboxImage(btn) {
+    const row = btn.closest('.cms-lightbox-row');
+    const fileInp = row && row.querySelector('.lb-file');
+    const path = await uploadAdminAssetFromInput(fileInp);
+    if (fileInp) fileInp.value = '';
+    if (!path || !row) return;
+    const imgEl = row.querySelector('.lb-img');
+    if (imgEl) imgEl.value = path;
+    cmsUploadPublishHint('Lightbox image uploaded — click Save website & portal content to publish.');
+}
+
+async function cmsBatchUploadLightbox() {
+    const fileInp = document.getElementById('cms-lightbox-batch-file');
+    const paths = await uploadAdminAssetFromInput(fileInp, { multiple: true });
+    if (fileInp) fileInp.value = '';
+    if (!paths || !paths.length) return;
+    const current = cmsCollectLightboxFromDom();
+    paths.forEach((path) => {
+        current.slides.push({
+            imagePath: path,
+            heading: '',
+            body: '',
+            ctaText: '',
+            ctaUrl: '',
+            cta2Text: '',
+            cta2Url: ''
+        });
+    });
+    cmsRenderLightboxRows(current);
+    cmsUploadPublishHint(
+        'Uploaded ' + paths.length + ' image(s) — add headings/buttons if needed, then Save website & portal content.'
+    );
 }
 
 function cmsParseJsonArray(raw, fieldLabel) {
@@ -16816,6 +17025,7 @@ async function loadAdminSiteCms() {
         cmsFillGalleryYears(galleryYears);
         cmsFillMenuRows(cms.siteMenu || []);
         cmsApplyHeroFieldsToForm(cms);
+        cmsApplyLightboxToForm(cms);
         cmsApplySeoFieldsToForm(cms.seo || {});
         cmsFillSpeakerRows(cms.speakers || []);
         cmsFillFeatureRows(cms.featureCards || []);
@@ -17141,7 +17351,11 @@ async function saveAdminSiteCms() {
     try {
         const cms = {
             tickerText: (document.getElementById('cms-ticker') || {}).value || '',
-            bannerImage: (document.getElementById('cms-banner') || {}).value || '',
+            bannerImage:
+                ((cmsCollectLightboxFromDom().slides || [])[0] || {}).imagePath ||
+                (document.getElementById('cms-banner') || {}).value ||
+                '',
+            lightbox: cmsCollectLightboxFromDom(),
             scrollingAnnouncements: cmsCollectScrollingAnnouncementsFromDom(),
             doctorUpdates: cmsCollectDoctorUpdatesFromDom(),
             slides,
@@ -20694,18 +20908,6 @@ async function bsPosSave() {
 async function saveAdminSitePopup() {
     const savedBanners = await marketingSaveAllBanners(true);
     if (!savedBanners) return;
-    const popupImages = marketingCollectPopupImagesFromDom();
-    const popup = {
-        enabled: (document.getElementById('mkt-popup-enabled') || {}).value === '1',
-        showMode: (document.getElementById('mkt-popup-mode') || {}).value || 'once_session',
-        delaySeconds: parseInt((document.getElementById('mkt-popup-delay') || {}).value, 10) || 0,
-        images: popupImages,
-        imagePath: popupImages[0] ? popupImages[0].imagePath : '',
-        heading: (document.getElementById('mkt-popup-heading') || {}).value || '',
-        body: (document.getElementById('mkt-popup-body') || {}).value || '',
-        ctaText: (document.getElementById('mkt-popup-cta-text') || {}).value || '',
-        ctaUrl: (document.getElementById('mkt-popup-cta-url') || {}).value || ''
-    };
     const carousel = {
         autoSlideMs: parseInt((document.getElementById('mkt-carousel-ms') || {}).value, 10) || 5500
     };
@@ -20713,10 +20915,10 @@ async function saveAdminSitePopup() {
         const res = await fetch('/api/admin/site-popup', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ popup, carousel })
+            body: JSON.stringify({ carousel })
         });
         const data = await res.json();
-        marketingSetMsg(res.ok && data.success ? 'Slider banners, popup & carousel settings saved.' : data.error || 'Save failed', !!(res.ok && data.success));
+        marketingSetMsg(res.ok && data.success ? 'Hero slider timing saved.' : data.error || 'Save failed', !!(res.ok && data.success));
         if (res.ok && data.success) await loadAdminMarketing();
     } catch (e) {
         marketingSetMsg(e.message || 'Save failed', false);

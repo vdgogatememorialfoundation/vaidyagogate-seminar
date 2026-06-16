@@ -1525,6 +1525,10 @@ function loadPublicSiteCms(callback) {
         }
         if (!base.seo) base.seo = siteSeoMod.normalizeSeo(DEFAULT_PUBLIC_SITE_CMS.seo);
         base.scrollingAnnouncements = sanitizeScrollingAnnouncements(base.scrollingAnnouncements);
+        base.lightbox = siteMarketing.migrateLightboxFromCms(base);
+        if (base.lightbox.slides && base.lightbox.slides[0] && base.lightbox.slides[0].imagePath) {
+            base.bannerImage = base.lightbox.slides[0].imagePath;
+        }
         callback(null, siteCmsHelpers.normalizeSiteCms(base));
     });
 }
@@ -4710,6 +4714,14 @@ app.post('/api/admin/site-cms', (req, res) => {
         if (incoming.seo && typeof incoming.seo === 'object') {
             merged.seo = siteSeoMod.normalizeSeo({ ...(merged.seo || {}), ...incoming.seo });
         }
+        if (incoming.lightbox !== undefined) {
+            merged.lightbox = siteMarketing.normalizeLightbox(incoming.lightbox);
+        } else {
+            merged.lightbox = siteMarketing.migrateLightboxFromCms(merged);
+        }
+        if (merged.lightbox && merged.lightbox.slides && merged.lightbox.slides[0]) {
+            merged.bannerImage = merged.lightbox.slides[0].imagePath || merged.bannerImage || '';
+        }
         merged.scrollingAnnouncements = sanitizeScrollingAnnouncements(merged.scrollingAnnouncements);
         const normalized = siteCmsHelpers.normalizeSiteCms(merged);
         const payload = JSON.stringify(normalized);
@@ -4717,7 +4729,10 @@ app.post('/api/admin/site-cms', (req, res) => {
             if (err) return res.status(500).json({ error: err.message });
             cacheInvalidatePrefix('api:public:site-cms');
             cacheInvalidatePrefix('api:public:announcements');
-            portalAuthPolicy.loadPortalAuthConfig(db, () => {
+            const popupPayload = siteMarketing.lightboxToPopupConfig(normalized.lightbox);
+            siteMarketing.savePopupConfig(db, popupPayload, upsertGlobalSetting, (popErr) => {
+                if (popErr) console.warn('[site-cms] lightbox popup sync:', popErr.message);
+                portalAuthPolicy.loadPortalAuthConfig(db, () => {
                 const existing = portalAuthPolicy.getPortalAuthConfig();
                 const syncedMenu = siteCmsHelpers.mergeLegalPagesWebsiteMenu(
                     existing.websiteMenuPages || {},
@@ -4733,6 +4748,7 @@ app.post('/api/admin/site-cms', (req, res) => {
                     }
                     res.json({ success: true });
                 });
+            });
             });
         });
     });

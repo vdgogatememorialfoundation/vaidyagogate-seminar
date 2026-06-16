@@ -167,41 +167,103 @@
         restartTimer();
     }
 
-    function popupImagesFromConfig(popup) {
+    function popupSlidesFromConfig(popup) {
         if (!popup) return [];
         if (Array.isArray(popup.images) && popup.images.length) {
-            return popup.images.filter(function (i) {
-                return i && i.imagePath;
+            return popup.images.filter(function (sl) {
+                return sl && (sl.imagePath || sl.heading || sl.body);
             });
         }
-        if (popup.imagePath) return [{ imagePath: popup.imagePath }];
+        if (popup.imagePath || popup.heading || popup.body) {
+            return [
+                {
+                    imagePath: popup.imagePath || '',
+                    heading: popup.heading || '',
+                    body: popup.body || '',
+                    ctaText: popup.ctaText || '',
+                    ctaUrl: popup.ctaUrl || '',
+                    cta2Text: popup.cta2Text || '',
+                    cta2Url: popup.cta2Url || ''
+                }
+            ];
+        }
         return [];
+    }
+
+    function popupImagesFromConfig(popup) {
+        return popupSlidesFromConfig(popup).filter(function (sl) {
+            return sl && sl.imagePath;
+        });
+    }
+
+    function lightboxToPopupClient(lb) {
+        if (!lb || typeof lb !== 'object' || lb.enabled === false) return null;
+        const slides = Array.isArray(lb.slides)
+            ? lb.slides.filter(function (sl) {
+                  return sl && (sl.imagePath || sl.heading || sl.body);
+              })
+            : [];
+        if (!slides.length) return null;
+        return {
+            enabled: true,
+            showMode: lb.showMode || 'once_session',
+            delaySeconds: lb.delaySeconds || 0,
+            autoSlideMs: lb.autoSlideMs || 5500,
+            images: slides
+        };
     }
 
     function popupFromCms(cms) {
         if (!cms || typeof cms !== 'object') return null;
+        if (cms.lightbox) return lightboxToPopupClient(cms.lightbox);
         const banner = cms.bannerImage ? String(cms.bannerImage).trim() : '';
         if (!banner) return null;
-        const hero = cms.hero || {};
-        const hasCopy = !!(hero.title || hero.subtitle || hero.ctaPrimary);
-        return {
+        return lightboxToPopupClient({
             enabled: true,
             showMode: 'once_session',
             delaySeconds: 0,
-            images: [{ imagePath: banner }],
-            heading: hasCopy ? hero.title || '' : '',
-            body: hasCopy ? hero.subtitle || '' : '',
-            ctaText: hasCopy ? hero.ctaPrimary || '' : '',
-            ctaUrl: '#register',
-            imageOnly: !hasCopy
+            slides: [{ imagePath: banner }]
+        });
+    }
+
+    function slideCopy(slide, popup) {
+        slide = slide || {};
+        popup = popup || {};
+        return {
+            heading: String(slide.heading || popup.heading || '').trim(),
+            body: String(slide.body || popup.body || '').trim(),
+            ctaText: String(slide.ctaText || popup.ctaText || '').trim(),
+            ctaUrl: String(slide.ctaUrl || popup.ctaUrl || '').trim(),
+            cta2Text: String(slide.cta2Text || popup.cta2Text || '').trim(),
+            cta2Url: String(slide.cta2Url || popup.cta2Url || '').trim()
         };
+    }
+
+    function bindPopupCta(el, text, url) {
+        if (!el) return;
+        if (text && url) {
+            el.href = url;
+            el.textContent = text;
+            el.classList.remove('hidden');
+            if (url === '#register' || url === '/doctor') {
+                el.onclick = function (e) {
+                    e.preventDefault();
+                    if (typeof openRegisterModal === 'function') openRegisterModal();
+                    return false;
+                };
+            } else {
+                el.onclick = null;
+            }
+        } else {
+            el.classList.add('hidden');
+            el.onclick = null;
+        }
     }
 
     function resolvePopupConfig(marketingPopup, cms) {
         const mkt = marketingPopup || {};
-        if (mkt.enabled && (popupImagesFromConfig(mkt).length || mkt.heading || mkt.body)) {
-            return mkt;
-        }
+        const mktSlides = popupSlidesFromConfig(mkt);
+        if (mkt.enabled && mktSlides.length) return mkt;
         return popupFromCms(cms);
     }
 
@@ -210,15 +272,8 @@
         var modal = document.getElementById('site-announce-popup');
         if (!modal) return false;
 
-        var images = popupImagesFromConfig(popup);
-        var heading = popup.heading ? String(popup.heading).trim() : '';
-        var bodyText = popup.body ? String(popup.body).trim() : '';
-        var hasCta = !!(popup.ctaText && popup.ctaUrl);
-        var imageOnly =
-            popup.imageOnly === true ||
-            (images.length > 0 && !heading && !bodyText && !hasCta);
-
-        if (!images.length && !heading && !bodyText) return false;
+        var slides = popupSlidesFromConfig(popup);
+        if (!slides.length) return false;
 
         var mode = popup.showMode || 'once_session';
         if (mode === 'once_session' && sessionStorage.getItem(POPUP_SEEN_KEY) === '1') return false;
@@ -227,6 +282,7 @@
         var imgEl = document.getElementById('sap-image');
         var titleEl = document.getElementById('sap-heading');
         var ctaEl = document.getElementById('sap-cta');
+        var cta2El = document.getElementById('sap-cta-secondary');
         var prevBtn = modal.querySelector('.sap-slide-prev');
         var nextBtn = modal.querySelector('.sap-slide-next');
         var dotsRoot = document.getElementById('sap-slide-dots');
@@ -234,42 +290,51 @@
         var bodyWrap = modal.querySelector('.sap-body-wrap');
         var panel = modal.querySelector('.sap-panel');
 
-        if (panel) panel.classList.toggle('sap-panel--image-only', imageOnly);
-        if (bodyWrap) bodyWrap.classList.toggle('hidden', imageOnly);
-
-        if (titleEl) {
-            if (imageOnly) {
-                titleEl.textContent = '';
-                titleEl.classList.add('hidden');
-            } else {
-                titleEl.textContent = heading || 'Announcement';
-                titleEl.classList.remove('hidden');
-            }
-        }
-        if (body) {
-            body.textContent = bodyText || '';
-            body.classList.toggle('hidden', imageOnly || !bodyText);
-        }
-        if (ctaEl) {
-            if (!imageOnly && popup.ctaText && popup.ctaUrl) {
-                ctaEl.href = popup.ctaUrl;
-                ctaEl.textContent = popup.ctaText;
-                ctaEl.classList.remove('hidden');
-            } else {
-                ctaEl.classList.add('hidden');
-            }
-        }
-
         popupSlideIndex = 0;
         if (popupSlideTimer) clearInterval(popupSlideTimer);
 
+        function applySlideVisual(slide) {
+            var copy = slideCopy(slide, popup);
+            var hasImage = !!(slide && slide.imagePath);
+            var imageOnly =
+                hasImage && !copy.heading && !copy.body && !copy.ctaText && !copy.cta2Text;
+
+            if (panel) panel.classList.toggle('sap-panel--image-only', imageOnly);
+            if (bodyWrap) bodyWrap.classList.toggle('hidden', imageOnly);
+
+            if (titleEl) {
+                if (imageOnly || !copy.heading) {
+                    titleEl.textContent = '';
+                    titleEl.classList.add('hidden');
+                } else {
+                    titleEl.textContent = copy.heading;
+                    titleEl.classList.remove('hidden');
+                }
+            }
+            if (body) {
+                body.textContent = copy.body || '';
+                body.classList.toggle('hidden', imageOnly || !copy.body);
+            }
+            bindPopupCta(ctaEl, copy.ctaText, copy.ctaUrl || (copy.ctaText ? '#' : ''));
+            bindPopupCta(cta2El, copy.cta2Text, copy.cta2Url || (copy.cta2Text ? '#' : ''));
+
+            if (imgEl && imageWrap) {
+                if (hasImage) {
+                    imgEl.src = imgUrl(slide.imagePath);
+                    imgEl.alt = copy.heading || 'Seminar announcement';
+                    imgEl.classList.remove('hidden');
+                    imageWrap.classList.remove('hidden');
+                } else {
+                    imgEl.removeAttribute('src');
+                    imgEl.classList.add('hidden');
+                    imageWrap.classList.add('hidden');
+                }
+            }
+        }
+
         function renderPopupSlide(idx) {
-            if (!images.length || !imgEl) return;
-            popupSlideIndex = (idx + images.length) % images.length;
-            var slide = images[popupSlideIndex];
-            imgEl.src = imgUrl(slide.imagePath);
-            imgEl.alt = heading || 'Seminar announcement';
-            imgEl.classList.remove('hidden');
+            popupSlideIndex = (idx + slides.length) % slides.length;
+            applySlideVisual(slides[popupSlideIndex]);
             if (dotsRoot) {
                 dotsRoot.querySelectorAll('.sap-dot').forEach(function (d, i) {
                     d.classList.toggle('is-active', i === popupSlideIndex);
@@ -277,31 +342,22 @@
             }
         }
 
-        if (imgEl) {
-            if (images.length) {
-                renderPopupSlide(0);
-                if (imageWrap) imageWrap.classList.remove('hidden');
-            } else {
-                imgEl.removeAttribute('src');
-                imgEl.classList.add('hidden');
-                if (imageWrap) imageWrap.classList.add('hidden');
-            }
-        }
+        renderPopupSlide(0);
 
-        var showNav = images.length > 1;
+        var showNav = slides.length > 1;
         if (prevBtn) prevBtn.classList.toggle('hidden', !showNav);
         if (nextBtn) nextBtn.classList.toggle('hidden', !showNav);
 
         if (dotsRoot) {
             if (showNav) {
-                dotsRoot.innerHTML = images
+                dotsRoot.innerHTML = slides
                     .map(function (_, i) {
                         return (
                             '<button type="button" class="sap-dot' +
                             (i === 0 ? ' is-active' : '') +
                             '" data-go="' +
                             i +
-                            '" aria-label="Image ' +
+                            '" aria-label="Slide ' +
                             (i + 1) +
                             '"></button>'
                         );
@@ -322,7 +378,7 @@
 
         function restartPopupTimer() {
             if (popupSlideTimer) clearInterval(popupSlideTimer);
-            if (images.length > 1) {
+            if (slides.length > 1) {
                 var ms = Math.max(
                     3000,
                     parseInt(popup.autoSlideMs, 10) || parseInt(carouselMs, 10) || 5500

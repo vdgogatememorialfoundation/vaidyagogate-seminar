@@ -1007,7 +1007,7 @@
 <div class="card">
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
                         <div><label>Homepage ticker text</label><input type="text" id="cms-ticker" placeholder="Short announcement line (single line)"></div>
-                        <div><label>Banner image URL <span style="font-weight:400;color:#64748b;">(lightbox popup on visit)</span></label><input type="text" id="cms-banner" placeholder="/uploads/banner.jpg"></div>
+                        <div><label style="font-size:0.82rem;color:#64748b;">Legacy banner URL (auto-filled from lightbox slide 1)</label><input type="text" id="cms-banner" placeholder="/uploads/banner.jpg" readonly style="background:#f8fafc;"></div>
                             </div>
                     <div style="margin-top:22px;padding-top:16px;border-top:1px solid #e2e8f0;">
                         <label style="font-weight:700;">Homepage hero &amp; top bar</label>
@@ -1085,15 +1085,26 @@
                         <div style="grid-column:1/-1;"><label>Doctor access links</label><div id="cms-footer-doctor-rows"></div><button type="button" class="btn-primary" style="margin-top:6px;padding:6px 12px;font-size:0.85rem;" onclick="cmsAddFooterDoctorRow()">+ Link</button></div>
                     </div>
                     <p style="color:#64748b;font-size:0.85rem;margin:12px 0 8px;">Homepage images: max <strong>4 MB</strong> per file on this server. iPhone photos are auto-compressed.</p>
+                    <div style="margin-top:8px;padding:16px;border:1px solid #bbf7d0;border-radius:10px;background:#f0fdf4;">
+                        <label style="font-weight:700;color:#166534;">Homepage lightbox popups</label>
+                        <p style="color:#64748b;font-size:0.88rem;margin:6px 0 12px;">Add one or more slides — each can have an image, heading, body text, and up to two buttons. Visitors see this as a full-screen lightbox when they land on the homepage (slides rotate if you add more than one).</p>
+                        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:12px;max-width:720px;">
+                            <div><label style="font-size:0.8rem;">Lightbox enabled</label><select id="cms-lightbox-enabled" style="width:100%;"><option value="1">On</option><option value="0">Off</option></select></div>
+                            <div><label style="font-size:0.8rem;">Show mode</label><select id="cms-lightbox-mode" style="width:100%;"><option value="once_session">Once per session</option><option value="every_visit">Every visit</option></select></div>
+                            <div><label style="font-size:0.8rem;">Delay (seconds)</label><input type="number" id="cms-lightbox-delay" style="width:100%;" value="0" min="0"></div>
+                            <div><label style="font-size:0.8rem;">Auto-slide (ms)</label><input type="number" id="cms-lightbox-automs" style="width:100%;" value="5500" min="3000" step="500"></div>
+                        </div>
+                        <div id="cms-lightbox-rows"></div>
+                        <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+                            <button type="button" class="btn-primary" style="padding:8px 14px;font-size:0.9rem;background:#0d9488;" onclick="cmsAddLightboxRow()">+ Add lightbox slide</button>
+                            <input type="file" id="cms-lightbox-batch-file" accept="image/*" multiple style="max-width:220px;">
+                            <button type="button" class="btn-primary" style="padding:8px 14px;font-size:0.9rem;background:#4338ca;" onclick="cmsBatchUploadLightbox()">Upload multiple images</button>
+                        </div>
+                    </div>
                     <div style="margin-top:8px;display:grid;gap:10px;max-width:520px;">
                         <div style="padding:10px;border:1px solid #e2e8f0;border-radius:8px;background:#fafafa;">
-                            <label style="font-size:0.8rem;font-weight:700;">Banner image (lightbox popup)</label>
-                            <p style="font-size:0.78rem;color:#64748b;margin:4px 0 6px;">Opens as a full-screen lightbox when visitors land on the homepage (once per session). Hero image stays in the top carousel.</p>
-                            <input type="file" id="cms-banner-file" accept="image/*" style="margin-top:6px;max-width:100%;">
-                            <button type="button" class="btn-primary" style="margin-top:8px;padding:6px 12px;font-size:0.85rem;" onclick="cmsUploadBannerImage()">Upload banner</button>
-                        </div>
-                        <div style="padding:10px;border:1px solid #e2e8f0;border-radius:8px;background:#fafafa;">
                             <label style="font-size:0.8rem;font-weight:700;">Hero background image</label>
+                            <p style="font-size:0.78rem;color:#64748b;margin:4px 0 6px;">Shown in the top homepage carousel (not the lightbox).</p>
                             <input type="file" id="cms-hero-file" accept="image/*" style="margin-top:6px;max-width:100%;">
                             <button type="button" class="btn-primary" style="margin-top:8px;padding:6px 12px;font-size:0.85rem;background:#0d9488;" onclick="cmsUploadHeroImage()">Upload hero image</button>
                         </div>
@@ -1137,23 +1148,17 @@
                         <p id="mkt-banner-msg" style="margin-top:8px;font-weight:600;"></p>
                     </div>
                     <div style="margin-top:22px;padding-top:16px;border-top:1px solid #e2e8f0;">
-                        <label style="font-weight:700;">Homepage popup / lightbox</label>
-                        <p style="color:#64748b;font-size:0.88rem;margin:6px 0 10px;">Upload one or many images — the full image is shown (not cropped). Multiple images slide left/right in the popup. Shared heading, body, and button apply to all slides.</p>
-                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px;">
-                            <div><label style="font-size:0.8rem;">Enabled</label><select id="mkt-popup-enabled" style="width:100%;"><option value="0">Off</option><option value="1">On</option></select></div>
-                            <div><label style="font-size:0.8rem;">Show mode</label><select id="mkt-popup-mode" style="width:100%;"><option value="once_session">Once per session</option><option value="every_visit">Every visit</option></select></div>
-                            <div><label style="font-size:0.8rem;">Delay (seconds)</label><input type="number" id="mkt-popup-delay" style="width:100%;" value="0" min="0"></div>
-                            <input type="hidden" id="mkt-popup-image" value="">
-                            <div style="grid-column:1/-1;"><label style="font-size:0.8rem;">Heading</label><input type="text" id="mkt-popup-heading" style="width:100%;"></div>
-                            <div style="grid-column:1/-1;"><label style="font-size:0.8rem;">Body</label><textarea id="mkt-popup-body" rows="3" style="width:100%;"></textarea></div>
-                            <div><label style="font-size:0.8rem;">CTA text</label><input type="text" id="mkt-popup-cta-text" style="width:100%;"></div>
-                            <div><label style="font-size:0.8rem;">CTA URL</label><input type="text" id="mkt-popup-cta-url" style="width:100%;"></div>
-                        </div>
-                        <div id="mkt-popup-images-list" style="margin-top:12px;"></div>
-                        <div style="margin-top:10px;">
-                            <input type="file" id="mkt-popup-file" accept="image/*" multiple>
-                            <button type="button" class="btn-primary" style="margin-left:8px;background:#64748b;" onclick="marketingUploadPopupImages()">Upload popup images</button>
-                        </div>
+                        <label style="font-weight:700;">Homepage popup / lightbox (advanced)</label>
+                        <p style="color:#64748b;font-size:0.88rem;margin:6px 0 10px;">Use <strong>Homepage lightbox popups</strong> above (saved with <em>Save website &amp; portal content</em>). This section only saves hero slider timing — click <strong>Save popup &amp; carousel</strong> after changing auto-slide for the main hero slider.</p>
+                        <input type="hidden" id="mkt-popup-enabled" value="1">
+                        <input type="hidden" id="mkt-popup-mode" value="once_session">
+                        <input type="hidden" id="mkt-popup-delay" value="0">
+                        <input type="hidden" id="mkt-popup-image" value="">
+                        <input type="hidden" id="mkt-popup-heading" value="">
+                        <input type="hidden" id="mkt-popup-body" value="">
+                        <input type="hidden" id="mkt-popup-cta-text" value="">
+                        <input type="hidden" id="mkt-popup-cta-url" value="">
+                        <div id="mkt-popup-images-list" class="hidden" aria-hidden="true"></div>
                     </div>
                     <div style="margin-top:18px;"><label>Legacy slides JSON (fallback if no DB banners)</label><textarea id="cms-slides" rows="4" placeholder='[{"src":"/uploads/a.jpg","caption":"","link":""}]'></textarea></div>
                     <div style="margin-top:22px;padding-top:16px;border-top:1px solid #e2e8f0;">

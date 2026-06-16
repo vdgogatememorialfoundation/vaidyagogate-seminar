@@ -1450,8 +1450,34 @@ body.cg-reel-modal-open {
     font-weight: 700;
     text-decoration: none;
 }
-#site-announce-popup #sap-cta.hidden {
+#site-announce-popup #sap-cta.hidden,
+#site-announce-popup #sap-cta-secondary.hidden {
     display: none !important;
+}
+#site-announce-popup .sap-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 4px;
+}
+#site-announce-popup .sap-cta-primary {
+    display: inline-block;
+    padding: 10px 18px;
+    border-radius: 999px;
+    background: var(--cg-green, #0f766e);
+    color: #fff !important;
+    font-weight: 700;
+    text-decoration: none;
+}
+#site-announce-popup .sap-cta-secondary {
+    display: inline-block;
+    padding: 10px 18px;
+    border-radius: 999px;
+    border: 2px solid var(--cg-green, #0f766e);
+    color: var(--cg-green, #0f766e) !important;
+    font-weight: 700;
+    text-decoration: none;
+    background: #fff;
 }
 #site-announce-popup .sap-panel--image-only {
     max-width: min(980px, 98vw);
