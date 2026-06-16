@@ -7292,8 +7292,10 @@ function lookupTicketForScan(qrData, cb) {
 
     const strategies = [];
     const seen = new Set();
-    const isCoalesceTypeMatchError = (msg) =>
-        /COALESCE\s+types\s+.*cannot\s+be\s+matched/i.test(String(msg || ''));
+    const isCoalesceTypeMatchError = (msg) => {
+        const m = String(msg || '');
+        return /COALESCE/i.test(m) && /cannot/i.test(m) && /matched/i.test(m) && /integer/i.test(m) && /boolean/i.test(m);
+    };
     const add = (clause, param) => {
         const key = clause + '\0' + String(param);
         if (seen.has(key)) return;
