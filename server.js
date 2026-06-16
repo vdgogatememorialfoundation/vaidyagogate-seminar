@@ -7336,9 +7336,69 @@ function lookupTicketForScan(qrData, cb) {
         if (i >= strategies.length) return cb(null, null);
         const [clause, param] = strategies[i++];
         db.get(SCANNER_TICKET_LOOKUP_SQL + ' WHERE ' + clause, [param], (err, row) => {
-            if (err) return cb(err);
+            if (err) {
+                const msg = String(err.message || '');
+                if (/COALESCE types integer and boolean cannot be matched/i.test(msg)) {
+                    const fallbackSql = `
+                        SELECT t.id AS ticket_id, t.is_scanned, t.scan_count, t.ticket_id_string, t.is_valid,
+                               t.qr_code_data, t.event_id,
+                               s.id AS seminar_id, s.checkin_enabled AS seminar_checkin_enabled,
+                               se.checkin_enabled AS event_checkin_enabled,
+                               se.checkin_date AS event_checkin_date, s.checkin_date AS seminar_checkin_date,
+                               s.title AS seminar_title,
+                               se.title AS scan_event_title,
+                               se.event_date AS event_event_date, s.event_date AS seminar_event_date,
+                               se.cert_scans_required AS event_cert_scans_required, s.cert_scans_required AS seminar_cert_scans_required,
+                               u.id AS doctor_user_id, u.user_id_string AS doctor_user_id_string,
+                               u.first_name AS doctor_first_name, u.last_name AS doctor_last_name, u.email AS doctor_email, u.phone AS doctor_phone,
+                               u.is_disabled AS doctor_is_disabled_raw, u.is_banned AS doctor_is_banned_raw, u.ban_reason AS doctor_ban_reason,
+                               dp.profile_photo_path AS profile_photo_path,
+                               r.id AS registration_id, r.application_no, r.form_data, r.status AS registration_status, o.status AS payment_status
+                        FROM tickets t
+                        JOIN orders o ON t.order_id = o.id
+                        JOIN registrations r ON o.registration_id = r.id
+                        JOIN seminars s ON r.seminar_id = s.id
+                        LEFT JOIN seminar_events se ON se.id = t.event_id
+                        JOIN users u ON t.user_id = u.id
+                        LEFT JOIN doctor_profile dp ON dp.user_id = u.id
+                        WHERE ${clause}
+                    `;
+                    return db.get(fallbackSql, [param], (e2, raw) => {
+                        if (e2) return cb(e2);
+                        if (!raw) return nextStrategy();
+                        const toInt = (v, def) => {
+                            if (v == null || v === '') return def;
+                            if (typeof v === 'boolean') return v ? 1 : 0;
+                            const s = String(v).trim().toLowerCase();
+                            if (s === 'true' || s === 't' || s === 'yes') return 1;
+                            if (s === 'false' || s === 'f' || s === 'no') return 0;
+                            const n = Number(v);
+                            return Number.isFinite(n) ? (n ? 1 : 0) : def;
+                        };
+                        return cb(null, {
+                            ...raw,
+                            scan_count: raw.scan_count == null ? 0 : parseInt(raw.scan_count, 10) || 0,
+                            is_valid: raw.is_valid == null ? 1 : toInt(raw.is_valid, 1),
+                            checkin_enabled:
+                                raw.event_checkin_enabled != null
+                                    ? toInt(raw.event_checkin_enabled, 0)
+                                    : toInt(raw.seminar_checkin_enabled, 0),
+                            checkin_date: raw.event_checkin_date || raw.seminar_checkin_date || null,
+                            scan_event_title: raw.scan_event_title || raw.seminar_title,
+                            event_date: raw.event_event_date || raw.seminar_event_date || null,
+                            cert_scans_required:
+                                raw.event_cert_scans_required != null
+                                    ? parseInt(raw.event_cert_scans_required, 10) || 1
+                                    : parseInt(raw.seminar_cert_scans_required, 10) || 1,
+                            doctor_is_disabled: toInt(raw.doctor_is_disabled_raw, 0),
+                            doctor_is_banned: toInt(raw.doctor_is_banned_raw, 0)
+                        });
+                    });
+                }
+                return cb(err);
+            }
             if (row) return cb(null, row);
-            nextStrategy();
+            return nextStrategy();
         });
     };
     nextStrategy();
@@ -7374,7 +7434,51 @@ const SCANNER_REG_LOOKUP_SQL = `
 function lookupRegistrationForScan(raw, cb) {
     const appNo = String(raw || '').trim();
     if (!appNo) return cb(null, null);
-    db.get(SCANNER_REG_LOOKUP_SQL + ` WHERE r.application_no = ? ORDER BY o.id DESC, t.id DESC LIMIT 1`, [appNo], cb);
+    db.get(SCANNER_REG_LOOKUP_SQL + ` WHERE r.application_no = ? ORDER BY o.id DESC, t.id DESC LIMIT 1`, [appNo], (err, row) => {
+        if (!err) return cb(null, row);
+        const msg = String(err.message || '');
+        if (!/COALESCE types integer and boolean cannot be matched/i.test(msg)) return cb(err);
+        const fallbackSql = `
+            SELECT r.id AS registration_id, r.application_no, r.form_data, r.status AS registration_status, r.user_id,
+                   o.id AS order_db_id, o.order_id_string, o.status AS payment_status,
+                   t.id AS ticket_id, t.ticket_id_string, t.is_scanned, t.scan_count, t.qr_code_data, t.is_valid,
+                   s.id AS seminar_id, s.checkin_enabled, s.checkin_date, s.title AS seminar_title, s.event_date, s.cert_scans_required,
+                   u.id AS doctor_user_id, u.user_id_string AS doctor_user_id_string,
+                   u.first_name AS doctor_first_name, u.last_name AS doctor_last_name, u.email AS doctor_email, u.phone AS doctor_phone,
+                   u.is_disabled AS doctor_is_disabled_raw, u.is_banned AS doctor_is_banned_raw, u.ban_reason AS doctor_ban_reason,
+                   dp.profile_photo_path AS profile_photo_path
+            FROM registrations r
+            JOIN users u ON u.id = r.user_id
+            JOIN seminars s ON s.id = r.seminar_id
+            LEFT JOIN doctor_profile dp ON dp.user_id = u.id
+            LEFT JOIN orders o ON o.registration_id = r.id AND lower(trim(o.status)) = 'success'
+            LEFT JOIN tickets t ON t.order_id = o.id
+            WHERE r.application_no = ?
+            ORDER BY o.id DESC, t.id DESC LIMIT 1
+        `;
+        db.get(fallbackSql, [appNo], (e2, rawRow) => {
+            if (e2) return cb(e2);
+            if (!rawRow) return cb(null, null);
+            const toInt = (v, def) => {
+                if (v == null || v === '') return def;
+                if (typeof v === 'boolean') return v ? 1 : 0;
+                const s = String(v).trim().toLowerCase();
+                if (s === 'true' || s === 't' || s === 'yes') return 1;
+                if (s === 'false' || s === 'f' || s === 'no') return 0;
+                const n = Number(v);
+                return Number.isFinite(n) ? (n ? 1 : 0) : def;
+            };
+            return cb(null, {
+                ...rawRow,
+                scan_count: rawRow.scan_count == null ? 0 : parseInt(rawRow.scan_count, 10) || 0,
+                is_valid: rawRow.is_valid == null ? 1 : toInt(rawRow.is_valid, 1),
+                checkin_enabled: toInt(rawRow.checkin_enabled, 0),
+                cert_scans_required: rawRow.cert_scans_required == null ? 1 : parseInt(rawRow.cert_scans_required, 10) || 1,
+                doctor_is_disabled: toInt(rawRow.doctor_is_disabled_raw, 0),
+                doctor_is_banned: toInt(rawRow.doctor_is_banned_raw, 0)
+            });
+        });
+    });
 }
 
 function registrationRowToTicketScanShape(row) {
