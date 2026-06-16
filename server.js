@@ -7219,7 +7219,10 @@ function doctorPayloadFromScanRow(row, extra) {
 }
 
 const SCANNER_TICKET_LOOKUP_SQL = `
-        SELECT t.id AS ticket_id, t.is_scanned, COALESCE(t.scan_count, 0) AS scan_count, t.ticket_id_string, COALESCE(CAST(t.is_valid AS INTEGER), 1) AS is_valid,
+        SELECT t.id AS ticket_id, t.is_scanned,
+               CASE WHEN t.scan_count IS NULL THEN 0 ELSE CAST(t.scan_count AS INTEGER) END AS scan_count,
+               t.ticket_id_string,
+               CASE WHEN t.is_valid IS NULL THEN 1 ELSE CAST(t.is_valid AS INTEGER) END AS is_valid,
                t.qr_code_data, t.event_id,
                s.id AS seminar_id,
                CASE
@@ -7227,14 +7230,20 @@ const SCANNER_TICKET_LOOKUP_SQL = `
                    WHEN LOWER(TRIM(CAST(s.checkin_enabled AS TEXT))) IN ('1', 'true', 't', 'yes') THEN 1
                    ELSE 0
                END AS checkin_enabled,
-               COALESCE(se.checkin_date, s.checkin_date) AS checkin_date,
+               CASE WHEN se.checkin_date IS NOT NULL THEN se.checkin_date ELSE s.checkin_date END AS checkin_date,
                s.title AS seminar_title,
-               COALESCE(se.title, s.title) AS scan_event_title,
-               COALESCE(se.event_date, s.event_date) AS event_date,
-               COALESCE(CAST(se.cert_scans_required AS INTEGER), CAST(s.cert_scans_required AS INTEGER), 1) AS cert_scans_required,
+               CASE WHEN se.title IS NOT NULL THEN se.title ELSE s.title END AS scan_event_title,
+               CASE WHEN se.event_date IS NOT NULL THEN se.event_date ELSE s.event_date END AS event_date,
+               CASE
+                   WHEN se.cert_scans_required IS NOT NULL THEN CAST(se.cert_scans_required AS INTEGER)
+                   WHEN s.cert_scans_required IS NOT NULL THEN CAST(s.cert_scans_required AS INTEGER)
+                   ELSE 1
+               END AS cert_scans_required,
                u.id AS doctor_user_id, u.user_id_string AS doctor_user_id_string,
                u.first_name AS doctor_first_name, u.last_name AS doctor_last_name, u.email AS doctor_email, u.phone AS doctor_phone,
-               COALESCE(CAST(u.is_disabled AS INTEGER), 0) AS doctor_is_disabled, COALESCE(CAST(u.is_banned AS INTEGER), 0) AS doctor_is_banned, u.ban_reason AS doctor_ban_reason,
+               CASE WHEN u.is_disabled IS NULL THEN 0 ELSE CAST(u.is_disabled AS INTEGER) END AS doctor_is_disabled,
+               CASE WHEN u.is_banned IS NULL THEN 0 ELSE CAST(u.is_banned AS INTEGER) END AS doctor_is_banned,
+               u.ban_reason AS doctor_ban_reason,
                dp.profile_photo_path AS profile_photo_path,
                r.id AS registration_id, r.application_no, r.form_data, r.status AS registration_status, o.status AS payment_status
         FROM tickets t
@@ -7336,17 +7345,22 @@ function lookupTicketForScan(qrData, cb) {
 const SCANNER_REG_LOOKUP_SQL = `
         SELECT r.id AS registration_id, r.application_no, r.form_data, r.status AS registration_status, r.user_id,
                o.id AS order_db_id, o.order_id_string, o.status AS payment_status,
-               t.id AS ticket_id, t.ticket_id_string, t.is_scanned, COALESCE(t.scan_count, 0) AS scan_count, t.qr_code_data, COALESCE(CAST(t.is_valid AS INTEGER), 1) AS is_valid,
+               t.id AS ticket_id, t.ticket_id_string, t.is_scanned,
+               CASE WHEN t.scan_count IS NULL THEN 0 ELSE CAST(t.scan_count AS INTEGER) END AS scan_count,
+               t.qr_code_data,
+               CASE WHEN t.is_valid IS NULL THEN 1 ELSE CAST(t.is_valid AS INTEGER) END AS is_valid,
                s.id AS seminar_id,
                CASE
                    WHEN LOWER(TRIM(CAST(s.checkin_enabled AS TEXT))) IN ('1', 'true', 't', 'yes') THEN 1
                    ELSE 0
                END AS checkin_enabled,
                s.checkin_date, s.title AS seminar_title, s.event_date,
-               COALESCE(CAST(s.cert_scans_required AS INTEGER), 1) AS cert_scans_required,
+               CASE WHEN s.cert_scans_required IS NULL THEN 1 ELSE CAST(s.cert_scans_required AS INTEGER) END AS cert_scans_required,
                u.id AS doctor_user_id, u.user_id_string AS doctor_user_id_string,
                u.first_name AS doctor_first_name, u.last_name AS doctor_last_name, u.email AS doctor_email, u.phone AS doctor_phone,
-               COALESCE(CAST(u.is_disabled AS INTEGER), 0) AS doctor_is_disabled, COALESCE(CAST(u.is_banned AS INTEGER), 0) AS doctor_is_banned, u.ban_reason AS doctor_ban_reason,
+               CASE WHEN u.is_disabled IS NULL THEN 0 ELSE CAST(u.is_disabled AS INTEGER) END AS doctor_is_disabled,
+               CASE WHEN u.is_banned IS NULL THEN 0 ELSE CAST(u.is_banned AS INTEGER) END AS doctor_is_banned,
+               u.ban_reason AS doctor_ban_reason,
                dp.profile_photo_path AS profile_photo_path
         FROM registrations r
         JOIN users u ON u.id = r.user_id
