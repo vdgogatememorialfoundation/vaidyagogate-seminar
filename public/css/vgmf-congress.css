@@ -1453,6 +1453,35 @@ body.cg-reel-modal-open {
 #site-announce-popup #sap-cta.hidden {
     display: none !important;
 }
+#site-announce-popup .sap-panel--image-only {
+    max-width: min(980px, 98vw);
+    background: transparent;
+    box-shadow: none;
+    border-radius: 12px;
+}
+#site-announce-popup .sap-panel--image-only .sap-close {
+    background: rgba(255, 255, 255, 0.95);
+    color: #0f172a;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+#site-announce-popup .sap-panel--image-only .sap-image-wrap {
+    max-height: min(88vh, 900px);
+    min-height: 0;
+    background: transparent;
+    border-radius: 12px;
+    overflow: hidden;
+}
+#site-announce-popup .sap-panel--image-only #sap-image {
+    max-height: min(88vh, 900px);
+    width: auto;
+    max-width: 100%;
+    margin: 0 auto;
+    border-radius: 8px;
+    box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+}
+#site-announce-popup .sap-body-wrap.hidden {
+    display: none !important;
+}
 
 /* FAB mobile register */
 .cg-fab-register {

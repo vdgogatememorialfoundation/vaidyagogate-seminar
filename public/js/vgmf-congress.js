@@ -219,22 +219,6 @@
             slides.push(sl);
         }
 
-        function pushCmsImageSlide(imagePath, copy, imageOnly) {
-            const image = mediaUrl(imagePath);
-            if (!image) return;
-            pushSlide({
-                image,
-                title: (copy && copy.title) || '',
-                subtitle: (copy && copy.subtitle) || '',
-                eyebrow: (copy && copy.eyebrow) || '',
-                cta: (copy && copy.cta) || '',
-                link: (copy && copy.link) || '#register',
-                cta2: (copy && copy.cta2) || '',
-                link2: (copy && copy.link2) || '',
-                imageOnly: imageOnly !== false
-            });
-        }
-
         // CMS hero background + headline (Admin → Website content → Hero background image)
         const heroImage = hero.image ? mediaUrl(hero.image) : '';
         if (heroImage || hero.title || hero.subtitle || hero.venue) {
@@ -252,10 +236,7 @@
             });
         }
 
-        // CMS banner image field (Admin → Banner image URL / upload)
-        if (cms && cms.bannerImage) {
-            pushCmsImageSlide(cms.bannerImage, null, true);
-        }
+        // CMS banner image → homepage lightbox popup (not hero carousel; see VgmfMarketing)
 
         // Main homepage hero slider rows (homepage_banners table)
         buildMarketingBannerSlides(marketingBanners, cms).forEach(pushSlide);
@@ -1237,6 +1218,9 @@
         Promise.all([loadHeroMarketing()]).then(function () {
             renderCongressHero(window.__siteCms);
         });
+        if (window.VgmfMarketing && typeof window.VgmfMarketing.tryShowSitePopup === 'function') {
+            window.VgmfMarketing.tryShowSitePopup(cms, window.__siteMarketing);
+        }
         renderCongressTicker(cms.scrollingAnnouncements || []);
         renderCongressPastSeminars(cms);
         renderCongressVideos(cms);

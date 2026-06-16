@@ -1007,7 +1007,7 @@
 <div class="card">
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
                         <div><label>Homepage ticker text</label><input type="text" id="cms-ticker" placeholder="Short announcement line (single line)"></div>
-                        <div><label>Banner image URL</label><input type="text" id="cms-banner" placeholder="/uploads/banner.jpg"></div>
+                        <div><label>Banner image URL <span style="font-weight:400;color:#64748b;">(lightbox popup on visit)</span></label><input type="text" id="cms-banner" placeholder="/uploads/banner.jpg"></div>
                             </div>
                     <div style="margin-top:22px;padding-top:16px;border-top:1px solid #e2e8f0;">
                         <label style="font-weight:700;">Homepage hero &amp; top bar</label>
@@ -1087,7 +1087,8 @@
                     <p style="color:#64748b;font-size:0.85rem;margin:12px 0 8px;">Homepage images: max <strong>4 MB</strong> per file on this server. iPhone photos are auto-compressed.</p>
                     <div style="margin-top:8px;display:grid;gap:10px;max-width:520px;">
                         <div style="padding:10px;border:1px solid #e2e8f0;border-radius:8px;background:#fafafa;">
-                            <label style="font-size:0.8rem;font-weight:700;">Banner image</label>
+                            <label style="font-size:0.8rem;font-weight:700;">Banner image (lightbox popup)</label>
+                            <p style="font-size:0.78rem;color:#64748b;margin:4px 0 6px;">Opens as a full-screen lightbox when visitors land on the homepage (once per session). Hero image stays in the top carousel.</p>
                             <input type="file" id="cms-banner-file" accept="image/*" style="margin-top:6px;max-width:100%;">
                             <button type="button" class="btn-primary" style="margin-top:8px;padding:6px 12px;font-size:0.85rem;" onclick="cmsUploadBannerImage()">Upload banner</button>
                         </div>

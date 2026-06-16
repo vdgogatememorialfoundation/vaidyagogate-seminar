@@ -1,5 +1,5 @@
 /**
- * DB-driven homepage hero carousel + promotional popup.
+ * DB-driven homepage hero carousel + promotional lightbox popup.
  */
 (function () {
     function esc(s) {
@@ -11,8 +11,19 @@
 
     function imgUrl(path) {
         if (!path) return '';
-        const p = String(path).trim();
-        if (p.startsWith('http') || p.startsWith('/')) return p;
+        let p = String(path).trim();
+        if (!p) return '';
+        if (/^https?:\/\//i.test(p)) return p;
+        if (p.startsWith('/uploads/api/assets/')) {
+            p = '/api/assets/' + p.slice('/uploads/api/assets/'.length);
+        } else if (p.startsWith('uploads/api/assets/')) {
+            p = '/api/assets/' + p.slice('uploads/api/assets/'.length);
+        } else if (/^(upload_asset_|cert_|file_)/i.test(p)) {
+            p = '/api/assets/' + encodeURIComponent(p);
+        } else if (p.startsWith('api/assets/')) {
+            p = '/' + p;
+        }
+        if (p.startsWith('/')) return p;
         return '/uploads/' + p;
     }
 
@@ -20,6 +31,7 @@
     let carouselIndex = 0;
     let popupSlideTimer = null;
     let popupSlideIndex = 0;
+    const POPUP_SEEN_KEY = 'vgmf_popup_seen';
 
     function renderCarousel(banners, autoSlideMs) {
         const wrap = document.getElementById('marketing-hero');
@@ -166,17 +178,50 @@
         return [];
     }
 
+    function popupFromCms(cms) {
+        if (!cms || typeof cms !== 'object') return null;
+        const banner = cms.bannerImage ? String(cms.bannerImage).trim() : '';
+        if (!banner) return null;
+        const hero = cms.hero || {};
+        const hasCopy = !!(hero.title || hero.subtitle || hero.ctaPrimary);
+        return {
+            enabled: true,
+            showMode: 'once_session',
+            delaySeconds: 0,
+            images: [{ imagePath: banner }],
+            heading: hasCopy ? hero.title || '' : '',
+            body: hasCopy ? hero.subtitle || '' : '',
+            ctaText: hasCopy ? hero.ctaPrimary || '' : '',
+            ctaUrl: '#register',
+            imageOnly: !hasCopy
+        };
+    }
+
+    function resolvePopupConfig(marketingPopup, cms) {
+        const mkt = marketingPopup || {};
+        if (mkt.enabled && (popupImagesFromConfig(mkt).length || mkt.heading || mkt.body)) {
+            return mkt;
+        }
+        return popupFromCms(cms);
+    }
+
     function showPopup(popup, carouselMs) {
-        if (!popup || !popup.enabled) return;
+        if (!popup || !popup.enabled) return false;
         var modal = document.getElementById('site-announce-popup');
-        if (!modal) return;
+        if (!modal) return false;
 
         var images = popupImagesFromConfig(popup);
-        if (!images.length && !popup.heading && !popup.body) return;
+        var heading = popup.heading ? String(popup.heading).trim() : '';
+        var bodyText = popup.body ? String(popup.body).trim() : '';
+        var hasCta = !!(popup.ctaText && popup.ctaUrl);
+        var imageOnly =
+            popup.imageOnly === true ||
+            (images.length > 0 && !heading && !bodyText && !hasCta);
+
+        if (!images.length && !heading && !bodyText) return false;
 
         var mode = popup.showMode || 'once_session';
-        var key = 'vgmf_popup_seen';
-        if (mode === 'once_session' && sessionStorage.getItem(key) === '1') return;
+        if (mode === 'once_session' && sessionStorage.getItem(POPUP_SEEN_KEY) === '1') return false;
 
         var body = document.getElementById('sap-body');
         var imgEl = document.getElementById('sap-image');
@@ -186,11 +231,27 @@
         var nextBtn = modal.querySelector('.sap-slide-next');
         var dotsRoot = document.getElementById('sap-slide-dots');
         var imageWrap = document.getElementById('sap-image-wrap');
+        var bodyWrap = modal.querySelector('.sap-body-wrap');
+        var panel = modal.querySelector('.sap-panel');
 
-        if (titleEl) titleEl.textContent = popup.heading || 'Announcement';
-        if (body) body.textContent = popup.body || '';
+        if (panel) panel.classList.toggle('sap-panel--image-only', imageOnly);
+        if (bodyWrap) bodyWrap.classList.toggle('hidden', imageOnly);
+
+        if (titleEl) {
+            if (imageOnly) {
+                titleEl.textContent = '';
+                titleEl.classList.add('hidden');
+            } else {
+                titleEl.textContent = heading || 'Announcement';
+                titleEl.classList.remove('hidden');
+            }
+        }
+        if (body) {
+            body.textContent = bodyText || '';
+            body.classList.toggle('hidden', imageOnly || !bodyText);
+        }
         if (ctaEl) {
-            if (popup.ctaText && popup.ctaUrl) {
+            if (!imageOnly && popup.ctaText && popup.ctaUrl) {
                 ctaEl.href = popup.ctaUrl;
                 ctaEl.textContent = popup.ctaText;
                 ctaEl.classList.remove('hidden');
@@ -207,6 +268,7 @@
             popupSlideIndex = (idx + images.length) % images.length;
             var slide = images[popupSlideIndex];
             imgEl.src = imgUrl(slide.imagePath);
+            imgEl.alt = heading || 'Seminar announcement';
             imgEl.classList.remove('hidden');
             if (dotsRoot) {
                 dotsRoot.querySelectorAll('.sap-dot').forEach(function (d, i) {
@@ -285,36 +347,60 @@
         }
         restartPopupTimer();
 
-        function open() {
-            modal.classList.add('is-open');
-            modal.setAttribute('aria-hidden', 'false');
-            if (mode === 'once_session') sessionStorage.setItem(key, '1');
-        }
-
         function closePopup() {
             modal.classList.remove('is-open');
             modal.setAttribute('aria-hidden', 'true');
             if (popupSlideTimer) clearInterval(popupSlideTimer);
         }
 
+        function open() {
+            modal.classList.add('is-open');
+            modal.setAttribute('aria-hidden', 'false');
+            if (mode === 'once_session') sessionStorage.setItem(POPUP_SEEN_KEY, '1');
+        }
+
         setTimeout(open, Math.max(0, parseInt(popup.delaySeconds, 10) || 0) * 1000);
 
-        modal.querySelector('.sap-close')?.addEventListener('click', closePopup);
-        modal.querySelector('.sap-backdrop')?.addEventListener('click', function (e) {
-            if (e.target.classList.contains('sap-backdrop')) closePopup();
-        });
+        if (modal.dataset.popupBound !== '1') {
+            modal.dataset.popupBound = '1';
+            modal.querySelector('.sap-close')?.addEventListener('click', closePopup);
+            modal.querySelector('.sap-backdrop')?.addEventListener('click', function (e) {
+                if (e.target.classList.contains('sap-backdrop')) closePopup();
+            });
+            document.addEventListener('keydown', function (e) {
+                if (e.key === 'Escape' && modal.classList.contains('is-open')) closePopup();
+            });
+        }
+
+        return true;
+    }
+
+    function tryShowSitePopup(cms, marketingMeta) {
+        const meta = marketingMeta || window.__siteMarketing || {};
+        const resolved = resolvePopupConfig(meta.popup, cms);
+        if (!resolved) return false;
+        return showPopup(resolved, (meta.carousel || {}).autoSlideMs);
     }
 
     window.loadSiteMarketing = async function loadSiteMarketing() {
         try {
-            var res = await fetch('/api/public/marketing');
+            var res = await fetch('/api/public/marketing', { cache: 'no-store' });
             var data = await res.json();
             if (!res.ok) return;
+            window.__siteMarketing = data;
             renderCarousel(data.banners || [], (data.carousel || {}).autoSlideMs);
-            showPopup(data.popup || {}, (data.carousel || {}).autoSlideMs);
+            tryShowSitePopup(window.__siteCms || null, data);
         } catch (e) {
             console.warn('[marketing]', e);
         }
+    };
+
+    window.VgmfMarketing = {
+        imgUrl,
+        showPopup,
+        tryShowSitePopup,
+        popupFromCms,
+        resolvePopupConfig
     };
 
     document.addEventListener('DOMContentLoaded', function () {

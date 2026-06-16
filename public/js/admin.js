@@ -14567,7 +14567,7 @@ async function cmsUploadBannerImage() {
     if (path) {
         const t = document.getElementById('cms-banner');
         if (t) t.value = path;
-        cmsUploadPublishHint('Banner image uploaded — click Save website & portal content to publish on the live site.');
+        cmsUploadPublishHint('Banner image uploaded — click Save website & portal content. It will open as a homepage lightbox popup.');
     }
 }
 
