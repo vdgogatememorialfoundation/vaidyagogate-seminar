@@ -371,7 +371,15 @@ let __behalfApplicantEmailOtpToken = '';
 let __proxyLastRegId = null;
 let __proxyLastUserId = null;
 let __proxyPaymentAmount = 0;
-let __proxySelectedMethodId = 'dqr';
+let __proxySelectedMethodId = '';
+
+function preferredGatewayMethodId(methods) {
+    const list = Array.isArray(methods) ? methods : [];
+    const rz =
+        list.find((m) => m && m.gateway === 'razorpay') ||
+        list.find((m) => m && String(m.type || '').includes('razorpay'));
+    return rz ? rz.id : list[0] ? list[0].id : '';
+}
 let __proxyLastOrderDbId = null;
 let __proxyPollTimer = null;
 
@@ -1804,8 +1812,8 @@ async function loadPosPaymentMethods() {
             updatePosMethodDesc();
             return;
         }
-        const dqr = methods.find((m) => m.id === 'dqr');
-        const preferred = dqr || methods.find((m) => m.id === 'cash') || methods[0];
+        const preferred =
+            preferredGatewayMethodId(methods) || methods.find((m) => m.id === 'cash') || methods[0];
         sel.innerHTML = methods
             .map(
                 (m) =>
@@ -1957,7 +1965,6 @@ async function submitAdminPosRegistration() {
     const qrImg = document.getElementById('pos-qr-img');
     const qrAmt = document.getElementById('pos-qr-amount');
     const markBtn = document.getElementById('pos-mark-upi-btn');
-    const requestOnly = !!document.getElementById('pos-request-only')?.checked;
     stopPosPaymentPoll();
     __posOrderDbId = null;
     if (qrBlock) qrBlock.classList.add('hidden');
@@ -2018,21 +2025,13 @@ async function submitAdminPosRegistration() {
                 if (qrBlock) qrBlock.classList.remove('hidden');
             }
             if (pay.manualConfirm && markBtn) markBtn.classList.remove('hidden');
-            if (!requestOnly) {
-                if (pay.paymentType === 'razorpay_checkout' && adminRazorpayCheckoutPayload(pay)) {
-                    openAdminRazorpayCheckout(pay, () => startPosPaymentPoll());
-                } else if (pay.paymentType && String(pay.paymentType).endsWith('_checkout') && pay.gateway !== 'razorpay') {
-                    openAdminHostedCheckout(pay, () => startPosPaymentPoll());
-                }
+            if (pay.paymentType === 'razorpay_checkout' && adminRazorpayCheckoutPayload(pay)) {
+                openAdminRazorpayCheckout(pay, () => startPosPaymentPoll());
+            } else if (pay.paymentType && String(pay.paymentType).endsWith('_checkout') && pay.gateway !== 'razorpay') {
+                openAdminHostedCheckout(pay, () => startPosPaymentPoll());
             }
             if (pay.pollRequired) {
-                if (pollSt) {
-                    pollSt.textContent = requestOnly
-                        ? pay.paymentUrl
-                            ? 'Payment request created. Share this link: ' + pay.paymentUrl
-                            : pay.message || 'Payment request created. Waiting for doctor to pay.'
-                        : pay.message || 'Waiting for payment confirmation…';
-                }
+                if (pollSt) pollSt.textContent = pay.message || 'Waiting for payment confirmation…';
                 startPosPaymentPoll();
             } else if (pollSt) {
                 pollSt.textContent = pay.message || '';
@@ -2650,7 +2649,7 @@ async function applyJobRoleToUser() {
 let __behalfRegId = null;
 let __behalfRegApplicationNo = '';
 let __behalfFormFields = [];
-let __behalfSelectedMethodId = 'dqr';
+let __behalfSelectedMethodId = '';
 let __behalfOrderDbId = null;
 let __behalfPollTimer = null;
 
@@ -3204,8 +3203,7 @@ async function loadBehalfPaymentMethodsUI() {
             box.innerHTML = '<p style="color:#64748b;">No payment methods configured.</p>';
             return;
         }
-        const dqr = methods.find((m) => m.id === 'dqr');
-        const preferred = dqr || methods[0];
+        const preferred = preferredGatewayMethodId(methods) || methods[0];
         __behalfSelectedMethodId = preferred.id;
         box.innerHTML = methods
             .map((m) => {
@@ -3235,7 +3233,6 @@ async function behalfInitiatePayment() {
     if (!adm?.id || !__behalfRegId) return alert('Save an application first.');
     stopBehalfPaymentPoll();
     const pollSt = document.getElementById('behalf-poll-status');
-    const requestOnly = !!document.getElementById('behalf-request-only')?.checked;
     try {
         const res = await fetch('/api/admin/payments/initiate', {
             method: 'POST',
@@ -3243,7 +3240,7 @@ async function behalfInitiatePayment() {
             body: JSON.stringify({
                 registrationId: __behalfRegId,
                 adminUserId: adm.id,
-                methodId: __behalfSelectedMethodId || 'dqr'
+                methodId: __behalfSelectedMethodId || preferredGatewayMethodId(window.__behalfPaymentMethods || [])
             })
         });
         const data = await res.json();
@@ -3262,20 +3259,12 @@ async function behalfInitiatePayment() {
             if (qrBlock) qrBlock.classList.remove('hidden');
         }
         if (data.manualConfirm && markBtn) markBtn.classList.remove('hidden');
-        if (!requestOnly) {
-            if (data.paymentType === 'razorpay_checkout' && adminRazorpayCheckoutPayload(data)) {
-                openAdminRazorpayCheckout(data, () => behalfPollPayment());
-            } else if (data.paymentType && String(data.paymentType).endsWith('_checkout')) {
-                openAdminHostedCheckout(data, () => behalfPollPayment());
-            }
+        if (data.paymentType === 'razorpay_checkout' && adminRazorpayCheckoutPayload(data)) {
+            openAdminRazorpayCheckout(data, () => behalfPollPayment());
+        } else if (data.paymentType && String(data.paymentType).endsWith('_checkout')) {
+            openAdminHostedCheckout(data, () => behalfPollPayment());
         }
-        if (pollSt) {
-            pollSt.textContent = requestOnly
-                ? data.paymentUrl
-                    ? 'Payment request created. Share this link with doctor: ' + data.paymentUrl
-                    : data.message || 'Payment request created. Doctor can complete payment from portal.'
-                : data.message || 'Waiting for payment…';
-        }
+        if (pollSt) pollSt.textContent = data.message || 'Waiting for payment…';
         __behalfPollTimer = setInterval(behalfPollPayment, 4000);
     } catch (e) {
         alert('Network error');
@@ -11801,8 +11790,7 @@ async function loadProxyPaymentMethodsUI() {
             box.innerHTML = '<p style="color:#64748b;">No payment methods configured.</p>';
             return;
         }
-        const dqr = methods.find((m) => m.id === 'dqr');
-        const preferred = dqr || methods[0];
+        const preferred = preferredGatewayMethodId(methods) || methods[0];
         __proxySelectedMethodId = preferred.id;
         box.innerHTML = methods
             .map((m) => {
@@ -11891,7 +11879,7 @@ function startProxyPaymentPoll() {
 async function proxyInitiatePayment() {
     const adm = getStoredAdminUser();
     if (!adm || !adm.id || !__proxyLastRegId) return alert('Save an application first.');
-    const methodId = __proxySelectedMethodId || 'dqr';
+    const methodId = __proxySelectedMethodId || preferredGatewayMethodId(window.__proxyPaymentMethods || []);
     stopProxyPaymentPoll();
     const pollSt = document.getElementById('proxy-poll-status');
     const qrBlock = document.getElementById('proxy-qr-block');
@@ -11935,20 +11923,13 @@ async function proxyInitiatePayment() {
         }
         if (data.manualConfirm && markBtn) markBtn.classList.remove('hidden');
         else if (markBtn) markBtn.classList.add('hidden');
-        // Proxy flow is "payment request" first; do not auto-open checkout popups here.
-        if (data.pollRequired) {
-            if (pollSt) {
-                pollSt.textContent = data.paymentUrl
-                    ? 'Payment request created. Share this link with doctor: ' + data.paymentUrl
-                    : data.message || 'Payment request created. Waiting for confirmation…';
-            }
-            startProxyPaymentPoll();
+        if (data.paymentType === 'razorpay_checkout' && adminRazorpayCheckoutPayload(data)) {
+            openProxyRazorpayCheckout(data);
+        } else if (data.paymentType && String(data.paymentType).endsWith('_checkout') && data.gateway !== 'razorpay') {
+            openAdminHostedCheckout(data, () => startProxyPaymentPoll());
         }
-        else if (pollSt) {
-            pollSt.textContent = data.paymentUrl
-                ? 'Payment request created. Share this link with doctor: ' + data.paymentUrl
-                : data.message || '';
-        }
+        if (data.pollRequired) startProxyPaymentPoll();
+        else if (pollSt) pollSt.textContent = data.message || '';
         else alert(data.message || 'Payment request created.');
     } catch (e) {
         console.error(e);
@@ -11962,145 +11943,39 @@ function adminRazorpayCheckoutPayload(data) {
     return Object.assign({}, data, { razorpayOrder: rzOrder });
 }
 
-function ensureCustomCheckoutUiStyles() {
-    if (document.getElementById('custom-checkout-ui-style')) return;
-    const st = document.createElement('style');
-    st.id = 'custom-checkout-ui-style';
-    st.textContent = `
-        .cco-overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:10050;display:flex;align-items:center;justify-content:center;padding:16px;}
-        .cco-card{width:min(540px,100%);background:#fff;border-radius:16px;box-shadow:0 18px 44px rgba(2,6,23,.28);overflow:hidden;border:1px solid #e2e8f0;}
-        .cco-head{padding:14px 16px;background:#2563eb;color:#fff;}
-        .cco-title{font-size:1rem;font-weight:800;margin:0;}
-        .cco-sub{font-size:.8rem;opacity:.95;margin:4px 0 0;}
-        .cco-body{padding:14px 16px;}
-        .cco-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
-        .cco-opt{display:flex;align-items:center;gap:8px;padding:10px;border:1px solid #cbd5e1;border-radius:10px;background:#f8fafc;}
-        .cco-opt input{margin:0;}
-        .cco-upi{margin-top:10px;padding:10px;border:1px solid #bfdbfe;border-radius:10px;background:#eff6ff;}
-        .cco-upi input{width:100%;padding:10px;border:1px solid #93c5fd;border-radius:8px;}
-        .cco-sum{margin-top:12px;border:1px solid #e2e8f0;border-radius:10px;padding:10px;background:#f8fafc;font-size:.9rem;}
-        .cco-row{display:flex;justify-content:space-between;gap:10px;padding:3px 0;}
-        .cco-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px;}
-    `;
-    document.head.appendChild(st);
-}
-
-function openCustomCheckoutSheet(opts, onContinue) {
-    ensureCustomCheckoutUiStyles();
-    const o = opts || {};
-    const amount = Number(o.amount) || 0;
-    const overlay = document.createElement('div');
-    overlay.className = 'cco-overlay';
-    overlay.innerHTML =
-        '<div class="cco-card">' +
-        '<div class="cco-head"><p class="cco-title">' +
-        escAdmin(o.title || 'Secure payment checkout') +
-        '</p><p class="cco-sub">Choose UPI app or enter UPI ID</p></div>' +
-        '<div class="cco-body">' +
-        '<div class="cco-grid">' +
-        '<label class="cco-opt"><input type="radio" name="cco-opt" value="gpay" checked> Google Pay</label>' +
-        '<label class="cco-opt"><input type="radio" name="cco-opt" value="phonepe"> PhonePe</label>' +
-        '</div>' +
-        '<label class="cco-opt" style="margin-top:10px;"><input type="radio" name="cco-opt" value="upi_id"> Enter UPI ID manually</label>' +
-        '<div class="cco-upi hidden"><input type="text" id="cco-upi-input" placeholder="yourname@bank"></div>' +
-        '<div class="cco-sum">' +
-        '<div class="cco-row"><span>Amount payable</span><strong>₹' +
-        escAdmin(amount ? amount.toFixed(2) : '0.00') +
-        '</strong></div>' +
-        '<div class="cco-row"><span>Order reference</span><strong>' +
-        escAdmin(o.orderId || '-') +
-        '</strong></div>' +
-        '</div>' +
-        '<div class="cco-actions">' +
-        '<button type="button" class="btn-primary" style="background:#64748b;" id="cco-cancel-btn">Cancel</button>' +
-        '<button type="button" class="btn-primary" id="cco-continue-btn">Continue to payment</button>' +
-        '</div></div></div>';
-    document.body.appendChild(overlay);
-    const upiWrap = overlay.querySelector('.cco-upi');
-    const radios = overlay.querySelectorAll('input[name="cco-opt"]');
-    const cleanup = () => {
-        if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
-    };
-    const getChoice = () => {
-        const selected = overlay.querySelector('input[name="cco-opt"]:checked');
-        const channel = selected ? selected.value : 'gpay';
-        const upiId = String((overlay.querySelector('#cco-upi-input') || {}).value || '').trim();
-        return { channel, upiId };
-    };
-    radios.forEach((r) =>
-        r.addEventListener('change', () => {
-            const c = getChoice();
-            if (upiWrap) upiWrap.classList.toggle('hidden', c.channel !== 'upi_id');
-        })
-    );
-    overlay.querySelector('#cco-cancel-btn')?.addEventListener('click', cleanup);
-    overlay.querySelector('#cco-continue-btn')?.addEventListener('click', () => {
-        const c = getChoice();
-        if (c.channel === 'upi_id' && !/^[a-zA-Z0-9.\-_]{2,}@[a-zA-Z]{2,}$/i.test(c.upiId)) {
-            alert('Enter a valid UPI ID (example: name@bank).');
-            return;
-        }
-        cleanup();
-        if (typeof onContinue === 'function') onContinue(c);
-    });
-    return true;
-}
-
-function normalizeCheckoutUrl(url) {
-    const raw = String(url || '').trim();
-    if (!raw) return '';
-    if (/^https?:\/\//i.test(raw)) return raw;
-    if (/^\/\//.test(raw)) return 'https:' + raw;
-    if (/^\//.test(raw)) return window.location.origin + raw;
-    if (/^[a-z0-9.-]+\.[a-z]{2,}(\/.*)?$/i.test(raw)) return 'https://' + raw;
-    return raw;
-}
-
 function openAdminHostedCheckout(data, onPoll) {
-    const launch = () => {
-        if (data.formPost && data.formPost.action) {
-            const f = document.createElement('form');
-            f.method = 'POST';
-            f.action = data.formPost.action;
-            f.target = '_blank';
-            Object.entries(data.formPost.fields || {}).forEach(([k, v]) => {
-                const inp = document.createElement('input');
-                inp.type = 'hidden';
-                inp.name = k;
-                inp.value = String(v);
-                f.appendChild(inp);
-            });
-            document.body.appendChild(f);
-            f.submit();
-            setTimeout(() => f.remove(), 2000);
-            if (typeof onPoll === 'function') onPoll();
-            return true;
-        }
-        if (data.paymentUrl) {
-            const paymentUrl = normalizeCheckoutUrl(data.paymentUrl);
-            if (!paymentUrl) {
-                alert('Gateway returned an invalid payment URL. Please retry with Razorpay or DQR.');
-                return false;
-            }
-            const w = window.open(paymentUrl, '_blank', 'noopener');
-            if (!w && confirm('Open payment page in this tab?')) window.location.href = paymentUrl;
-            if (typeof onPoll === 'function') onPoll();
-            return true;
-        }
-        if (data.easebuzzAccessKey) {
-            const payUrl = 'https://pay.easebuzz.in/pay/' + encodeURIComponent(data.easebuzzAccessKey);
-            const w = window.open(payUrl, '_blank', 'noopener');
-            if (!w && confirm('Open Easebuzz payment in this tab?')) window.location.href = payUrl;
-            if (typeof onPoll === 'function') onPoll();
-            return true;
-        }
-        return false;
-    };
-    openCustomCheckoutSheet(
-        { title: 'Admin payment request', amount: data.amount, orderId: data.orderIdString || data.orderDbId || '' },
-        () => launch()
-    );
-    return true;
+    if (data.formPost && data.formPost.action) {
+        const f = document.createElement('form');
+        f.method = 'POST';
+        f.action = data.formPost.action;
+        f.target = '_blank';
+        Object.entries(data.formPost.fields || {}).forEach(([k, v]) => {
+            const inp = document.createElement('input');
+            inp.type = 'hidden';
+            inp.name = k;
+            inp.value = String(v);
+            f.appendChild(inp);
+        });
+        document.body.appendChild(f);
+        f.submit();
+        setTimeout(() => f.remove(), 2000);
+        if (typeof onPoll === 'function') onPoll();
+        return true;
+    }
+    if (data.paymentUrl) {
+        const w = window.open(data.paymentUrl, '_blank', 'noopener');
+        if (!w && confirm('Open payment page in this tab?')) window.location.href = data.paymentUrl;
+        if (typeof onPoll === 'function') onPoll();
+        return true;
+    }
+    if (data.easebuzzAccessKey) {
+        const payUrl = 'https://pay.easebuzz.in/pay/' + encodeURIComponent(data.easebuzzAccessKey);
+        const w = window.open(payUrl, '_blank', 'noopener');
+        if (!w && confirm('Open Easebuzz payment in this tab?')) window.location.href = payUrl;
+        if (typeof onPoll === 'function') onPoll();
+        return true;
+    }
+    return false;
 }
 
 function openAdminRazorpayCheckout(data, onPaid) {
@@ -12113,50 +11988,38 @@ function openAdminRazorpayCheckout(data, onPaid) {
         alert('Razorpay checkout script not loaded. Refresh the page and allow pop-ups for this site.');
         return false;
     }
-    openCustomCheckoutSheet(
-        {
-            title: 'Admin Razorpay checkout',
-            amount: Number(payload.razorpayOrder.amount || 0) / 100,
-            orderId: payload.razorpayOrder.id
+    const options = {
+        key: payload.keyId,
+        amount: payload.razorpayOrder.amount,
+        currency: payload.razorpayOrder.currency || 'INR',
+        name: 'VGMF Seminar',
+        description: 'Registration ' + (payload.applicationNo || ''),
+        order_id: payload.razorpayOrder.id,
+        handler: function () {
+            if (typeof onPaid === 'function') onPaid();
         },
-        (checkoutChoice) => {
-            const options = {
-                key: payload.keyId,
-                amount: payload.razorpayOrder.amount,
-                currency: payload.razorpayOrder.currency || 'INR',
-                name: 'VGMF Seminar',
-                description: 'Registration ' + (payload.applicationNo || ''),
-                order_id: payload.razorpayOrder.id,
-                notes: {
-                    preferred_upi_channel: checkoutChoice && checkoutChoice.channel,
-                    preferred_upi_id: (checkoutChoice && checkoutChoice.upiId) || ''
-                },
-                handler: function () {
-                    if (typeof onPaid === 'function') onPaid();
-                },
-                modal: {
-                    ondismiss: function () {
-                        const msg = document.getElementById('co-pay-msg');
-                        if (msg) msg.textContent = 'Payment window closed — try again or use Check status.';
-                    }
-                }
-            };
-            const rzp = new Razorpay(options);
-            rzp.on('payment.failed', function (resp) {
-                alert(
-                    (resp.error && resp.error.description) ||
-                        'Payment failed or was cancelled. You can try again.'
-                );
-            });
-            try {
-                rzp.open();
-            } catch (e) {
-                console.error(e);
-                alert('Could not open Razorpay. Allow pop-ups for admin.vaidyagogate.org and try again.');
+        modal: {
+            ondismiss: function () {
+                const msg = document.getElementById('co-pay-msg');
+                if (msg) msg.textContent = 'Payment window closed — try again or use Check status.';
             }
         }
-    );
-    return true;
+    };
+    const rzp = new Razorpay(options);
+    rzp.on('payment.failed', function (resp) {
+        alert(
+            (resp.error && resp.error.description) ||
+                'Payment failed or was cancelled. You can try again.'
+        );
+    });
+    try {
+        rzp.open();
+        return true;
+    } catch (e) {
+        console.error(e);
+        alert('Could not open Razorpay. Allow pop-ups for admin.vaidyagogate.org and try again.');
+        return false;
+    }
 }
 
 function openProxyRazorpayCheckout(data) {
@@ -17412,7 +17275,7 @@ function syncSeminarOtpOptionsUi() {
 let __coLookup = null;
 let __coRegId = null;
 let __coOrderDbId = null;
-let __coMethodId = 'dqr';
+let __coMethodId = '';
 let __coPaymentMethods = [];
 
 function updateCoFinalAmount() {
@@ -17440,8 +17303,7 @@ async function loadCreateOrderPaymentMethods() {
         if (!res.ok) return;
         const methods = (data.methods || []).filter((m) => m.available);
         __coPaymentMethods = methods;
-        const dqr = methods.find((m) => m.id === 'dqr');
-        const preferred = dqr || methods[0];
+        const preferred = preferredGatewayMethodId(methods) || methods[0];
         sel.innerHTML = methods.map((m) => '<option value="' + escAdmin(m.id) + '">' + escAdmin(m.label) + '</option>').join('');
         if (methods.length) {
             __coMethodId = preferred.id;
@@ -17560,7 +17422,7 @@ async function ensureAdminCreateOrderRegistration() {
 async function initiateAdminCreateOrderPayment() {
     const adm = getStoredAdminUser();
     if (!adm?.id || !__coRegId) return alert('Look up doctor and ensure application first.');
-    const methodId = document.getElementById('co-method')?.value || __coMethodId || 'dqr';
+    const methodId = document.getElementById('co-method')?.value || __coMethodId || preferredGatewayMethodId(window.__coPaymentMethods || []);
     const amount = parseFloat(document.getElementById('co-amount')?.value || '0');
     const discount = parseFloat(document.getElementById('co-discount')?.value || '0');
     const msg = document.getElementById('co-pay-msg');
