@@ -7292,10 +7292,6 @@ function lookupTicketForScan(qrData, cb) {
 
     const strategies = [];
     const seen = new Set();
-    const isCoalesceTypeMatchError = (msg) => {
-        const m = String(msg || '');
-        return /COALESCE/i.test(m) && /cannot/i.test(m) && /matched/i.test(m) && /integer/i.test(m) && /boolean/i.test(m);
-    };
     const add = (clause, param) => {
         const key = clause + '\0' + String(param);
         if (seen.has(key)) return;
@@ -7341,9 +7337,7 @@ function lookupTicketForScan(qrData, cb) {
         const [clause, param] = strategies[i++];
         db.get(SCANNER_TICKET_LOOKUP_SQL + ' WHERE ' + clause, [param], (err, row) => {
             if (err) {
-                const msg = String(err.message || '');
-                if (isCoalesceTypeMatchError(msg)) {
-                    const fallbackSql = `
+                const fallbackSql = `
                         SELECT t.id AS ticket_id, t.is_scanned, t.scan_count, t.ticket_id_string, t.is_valid,
                                t.qr_code_data, t.event_id,
                                s.id AS seminar_id, s.checkin_enabled AS seminar_checkin_enabled,
@@ -7367,39 +7361,37 @@ function lookupTicketForScan(qrData, cb) {
                         LEFT JOIN doctor_profile dp ON dp.user_id = u.id
                         WHERE ${clause}
                     `;
-                    return db.get(fallbackSql, [param], (e2, raw) => {
-                        if (e2) return cb(e2);
-                        if (!raw) return nextStrategy();
-                        const toInt = (v, def) => {
-                            if (v == null || v === '') return def;
-                            if (typeof v === 'boolean') return v ? 1 : 0;
-                            const s = String(v).trim().toLowerCase();
-                            if (s === 'true' || s === 't' || s === 'yes') return 1;
-                            if (s === 'false' || s === 'f' || s === 'no') return 0;
-                            const n = Number(v);
-                            return Number.isFinite(n) ? (n ? 1 : 0) : def;
-                        };
-                        return cb(null, {
-                            ...raw,
-                            scan_count: raw.scan_count == null ? 0 : parseInt(raw.scan_count, 10) || 0,
-                            is_valid: raw.is_valid == null ? 1 : toInt(raw.is_valid, 1),
-                            checkin_enabled:
-                                raw.event_checkin_enabled != null
-                                    ? toInt(raw.event_checkin_enabled, 0)
-                                    : toInt(raw.seminar_checkin_enabled, 0),
-                            checkin_date: raw.event_checkin_date || raw.seminar_checkin_date || null,
-                            scan_event_title: raw.scan_event_title || raw.seminar_title,
-                            event_date: raw.event_event_date || raw.seminar_event_date || null,
-                            cert_scans_required:
-                                raw.event_cert_scans_required != null
-                                    ? parseInt(raw.event_cert_scans_required, 10) || 1
-                                    : parseInt(raw.seminar_cert_scans_required, 10) || 1,
-                            doctor_is_disabled: toInt(raw.doctor_is_disabled_raw, 0),
-                            doctor_is_banned: toInt(raw.doctor_is_banned_raw, 0)
-                        });
+                return db.get(fallbackSql, [param], (e2, raw) => {
+                    if (e2) return cb(e2);
+                    if (!raw) return nextStrategy();
+                    const toInt = (v, def) => {
+                        if (v == null || v === '') return def;
+                        if (typeof v === 'boolean') return v ? 1 : 0;
+                        const s = String(v).trim().toLowerCase();
+                        if (s === 'true' || s === 't' || s === 'yes') return 1;
+                        if (s === 'false' || s === 'f' || s === 'no') return 0;
+                        const n = Number(v);
+                        return Number.isFinite(n) ? (n ? 1 : 0) : def;
+                    };
+                    return cb(null, {
+                        ...raw,
+                        scan_count: raw.scan_count == null ? 0 : parseInt(raw.scan_count, 10) || 0,
+                        is_valid: raw.is_valid == null ? 1 : toInt(raw.is_valid, 1),
+                        checkin_enabled:
+                            raw.event_checkin_enabled != null
+                                ? toInt(raw.event_checkin_enabled, 0)
+                                : toInt(raw.seminar_checkin_enabled, 0),
+                        checkin_date: raw.event_checkin_date || raw.seminar_checkin_date || null,
+                        scan_event_title: raw.scan_event_title || raw.seminar_title,
+                        event_date: raw.event_event_date || raw.seminar_event_date || null,
+                        cert_scans_required:
+                            raw.event_cert_scans_required != null
+                                ? parseInt(raw.event_cert_scans_required, 10) || 1
+                                : parseInt(raw.seminar_cert_scans_required, 10) || 1,
+                        doctor_is_disabled: toInt(raw.doctor_is_disabled_raw, 0),
+                        doctor_is_banned: toInt(raw.doctor_is_banned_raw, 0)
                     });
-                }
-                return cb(err);
+                });
             }
             if (row) return cb(null, row);
             return nextStrategy();
@@ -7440,8 +7432,6 @@ function lookupRegistrationForScan(raw, cb) {
     if (!appNo) return cb(null, null);
     db.get(SCANNER_REG_LOOKUP_SQL + ` WHERE r.application_no = ? ORDER BY o.id DESC, t.id DESC LIMIT 1`, [appNo], (err, row) => {
         if (!err) return cb(null, row);
-        const msg = String(err.message || '');
-        if (!/COALESCE\s+types\s+.*cannot\s+be\s+matched/i.test(msg)) return cb(err);
         const fallbackSql = `
             SELECT r.id AS registration_id, r.application_no, r.form_data, r.status AS registration_status, r.user_id,
                    o.id AS order_db_id, o.order_id_string, o.status AS payment_status,
