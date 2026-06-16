@@ -7292,6 +7292,8 @@ function lookupTicketForScan(qrData, cb) {
 
     const strategies = [];
     const seen = new Set();
+    const isCoalesceTypeMatchError = (msg) =>
+        /COALESCE\s+types\s+.*cannot\s+be\s+matched/i.test(String(msg || ''));
     const add = (clause, param) => {
         const key = clause + '\0' + String(param);
         if (seen.has(key)) return;
@@ -7338,7 +7340,7 @@ function lookupTicketForScan(qrData, cb) {
         db.get(SCANNER_TICKET_LOOKUP_SQL + ' WHERE ' + clause, [param], (err, row) => {
             if (err) {
                 const msg = String(err.message || '');
-                if (/COALESCE types integer and boolean cannot be matched/i.test(msg)) {
+                if (isCoalesceTypeMatchError(msg)) {
                     const fallbackSql = `
                         SELECT t.id AS ticket_id, t.is_scanned, t.scan_count, t.ticket_id_string, t.is_valid,
                                t.qr_code_data, t.event_id,
@@ -7437,7 +7439,7 @@ function lookupRegistrationForScan(raw, cb) {
     db.get(SCANNER_REG_LOOKUP_SQL + ` WHERE r.application_no = ? ORDER BY o.id DESC, t.id DESC LIMIT 1`, [appNo], (err, row) => {
         if (!err) return cb(null, row);
         const msg = String(err.message || '');
-        if (!/COALESCE types integer and boolean cannot be matched/i.test(msg)) return cb(err);
+        if (!/COALESCE\s+types\s+.*cannot\s+be\s+matched/i.test(msg)) return cb(err);
         const fallbackSql = `
             SELECT r.id AS registration_id, r.application_no, r.form_data, r.status AS registration_status, r.user_id,
                    o.id AS order_db_id, o.order_id_string, o.status AS payment_status,
