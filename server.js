@@ -2131,7 +2131,56 @@ function runNotifyTicketIssued(userId, registrationId, ticketId, opts) {
                     }
                 );
             }
-            if (row && row.qr_code_data) {
+            db.get(`SELECT email, phone FROM users WHERE id = ?`, [userId], (eu, u) => {
+                if (eu || !u) return;
+                const waLine =
+                    'Your e-ticket for ' +
+                    (row && row.seminar_title ? row.seminar_title : 'the seminar') +
+                    ' is ready.\nTicket ID: ' +
+                    ticketId +
+                    '\nDownload / print: ' +
+                    pdfUrl;
+                const sendTicketEmail = (attachments) => {
+                    if (!sendEmail || !u.email) return;
+                    notifEngine.enqueueDirectMessage(
+                        db,
+                        {
+                            channel: 'email',
+                            destination: u.email,
+                            subject: 'Your e-ticket (printable)',
+                            html:
+                                '<p>Your e-ticket is ready. Download / print: <a href="' +
+                                pdfUrl +
+                                '">' +
+                                pdfUrl +
+                                '</a></p>',
+                            text: 'E-ticket: ' + pdfUrl,
+                            attachments: Array.isArray(attachments) ? attachments : undefined,
+                            event_key: 'TICKET_ISSUED',
+                            immediate: drainImmediate,
+                            priority: true
+                        },
+                        () => {}
+                    );
+                };
+                if (sendWhatsapp && u.phone) {
+                    notifEngine.enqueueDirectMessage(
+                        db,
+                        {
+                            channel: 'whatsapp',
+                            destination: u.phone,
+                            body: waLine,
+                            event_key: 'TICKET_ISSUED',
+                            immediate: drainImmediate,
+                            userId
+                        },
+                        () => {}
+                    );
+                }
+                if (!(row && row.qr_code_data)) {
+                    sendTicketEmail(null);
+                    return;
+                }
                 ticketHtml
                     .buildTicketHtmlFromRow(
                         {
@@ -2151,62 +2200,19 @@ function runNotifyTicketIssued(userId, registrationId, ticketId, opts) {
                         db
                     )
                     .then((html) => {
-                        db.get(`SELECT email, phone FROM users WHERE id = ?`, [userId], (eu, u) => {
-                            if (eu || !u) return;
-                            const attach = [
-                                {
-                                    filename: 'E-Ticket-' + String(ticketId).replace(/\W/g, '') + '.html',
-                                    content: html,
-                                    contentType: 'text/html'
-                                }
-                            ];
-                            const waLine =
-                                'Your e-ticket for ' +
-                                (row.seminar_title || 'the seminar') +
-                                ' is ready.\nTicket ID: ' +
-                                ticketId +
-                                '\nDownload / print: ' +
-                                pdfUrl;
-                            if (sendEmail && u.email) {
-                                notifEngine.enqueueDirectMessage(
-                                    db,
-                                    {
-                                        channel: 'email',
-                                        destination: u.email,
-                                        subject: 'Your e-ticket (printable)',
-                                        html:
-                                            '<p>Your e-ticket is attached. You can also open: <a href="' +
-                                            pdfUrl +
-                                            '">' +
-                                            pdfUrl +
-                                            '</a></p>',
-                                        text: 'E-ticket: ' + pdfUrl,
-                                        attachments: attach,
-                                        event_key: 'TICKET_ISSUED',
-                                        immediate: drainImmediate,
-                                        priority: true
-                                    },
-                                    () => {}
-                                );
+                        sendTicketEmail([
+                            {
+                                filename: 'E-Ticket-' + String(ticketId).replace(/\W/g, '') + '.html',
+                                content: html,
+                                contentType: 'text/html'
                             }
-                            if (sendWhatsapp && u.phone) {
-                                notifEngine.enqueueDirectMessage(
-                                    db,
-                                    {
-                                        channel: 'whatsapp',
-                                        destination: u.phone,
-                                        body: waLine,
-                                        event_key: 'TICKET_ISSUED',
-                                        immediate: drainImmediate,
-                                        userId
-                                    },
-                                    () => {}
-                                );
-                            }
-                        });
+                        ]);
                     })
-                    .catch(() => {});
-            }
+                    .catch(() => {
+                        // Fallback to link-only email so delivery logs still show ticket mail trace.
+                        sendTicketEmail(null);
+                    });
+            });
         }
     );
 }
@@ -5840,8 +5846,14 @@ app.post('/api/applications/submit', requestGuard.registrationSubmitLimit, withC
                     if (resolved && resolved.blocked) {
                         return res.status(400).json({ error: resolved.error });
                     }
-                    existingDraftId = resolved.id;
-                    existingDraftAppNo = resolved.application_no || null;
+                    // Cancelled + refund-settled reapply now creates a fresh application row.
+                    if (resolved && resolved.id) {
+                        existingDraftId = resolved.id;
+                        existingDraftAppNo = resolved.application_no || null;
+                    } else {
+                        existingDraftId = null;
+                        existingDraftAppNo = null;
+                    }
                     afterExistingResolved();
                 }
             );
@@ -7209,7 +7221,12 @@ function doctorPayloadFromScanRow(row, extra) {
 const SCANNER_TICKET_LOOKUP_SQL = `
         SELECT t.id AS ticket_id, t.is_scanned, COALESCE(t.scan_count, 0) AS scan_count, t.ticket_id_string, COALESCE(CAST(t.is_valid AS INTEGER), 1) AS is_valid,
                t.qr_code_data, t.event_id,
-               s.id AS seminar_id, COALESCE(CAST(se.checkin_enabled AS INTEGER), CAST(s.checkin_enabled AS INTEGER), 0) AS checkin_enabled,
+               s.id AS seminar_id,
+               CASE
+                   WHEN se.checkin_enabled IS NOT NULL THEN CAST(se.checkin_enabled AS INTEGER)
+                   WHEN LOWER(TRIM(CAST(s.checkin_enabled AS TEXT))) IN ('1', 'true', 't', 'yes') THEN 1
+                   ELSE 0
+               END AS checkin_enabled,
                COALESCE(se.checkin_date, s.checkin_date) AS checkin_date,
                s.title AS seminar_title,
                COALESCE(se.title, s.title) AS scan_event_title,
@@ -7320,7 +7337,12 @@ const SCANNER_REG_LOOKUP_SQL = `
         SELECT r.id AS registration_id, r.application_no, r.form_data, r.status AS registration_status, r.user_id,
                o.id AS order_db_id, o.order_id_string, o.status AS payment_status,
                t.id AS ticket_id, t.ticket_id_string, t.is_scanned, COALESCE(t.scan_count, 0) AS scan_count, t.qr_code_data, COALESCE(CAST(t.is_valid AS INTEGER), 1) AS is_valid,
-               s.id AS seminar_id, COALESCE(CAST(s.checkin_enabled AS INTEGER), 0) AS checkin_enabled, s.checkin_date, s.title AS seminar_title, s.event_date,
+               s.id AS seminar_id,
+               CASE
+                   WHEN LOWER(TRIM(CAST(s.checkin_enabled AS TEXT))) IN ('1', 'true', 't', 'yes') THEN 1
+                   ELSE 0
+               END AS checkin_enabled,
+               s.checkin_date, s.title AS seminar_title, s.event_date,
                COALESCE(CAST(s.cert_scans_required AS INTEGER), 1) AS cert_scans_required,
                u.id AS doctor_user_id, u.user_id_string AS doctor_user_id_string,
                u.first_name AS doctor_first_name, u.last_name AS doctor_last_name, u.email AS doctor_email, u.phone AS doctor_phone,
