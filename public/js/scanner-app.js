@@ -122,7 +122,7 @@
     let lastScanKey = '';
     let lastScanAt = 0;
     const SCAN_DEBOUNCE_MS = 2200;
-    const AUTO_NEXT_MS = 2600;
+    const AUTO_NEXT_MS = 4000;
     /** ID/Aadhaar capture after scan — disabled; ticket scan + book pickup only. */
     const ID_CAPTURE_ENABLED = false;
 

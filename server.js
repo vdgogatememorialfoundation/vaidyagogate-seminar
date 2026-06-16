@@ -7918,6 +7918,67 @@ app.post('/api/scanner/mark', (req, res) => {
                         if (err2) return res.status(500).json({ success: false, error: err2.message });
                         const regId = row.registration_id;
                         const finishScanResponse = (scanAtIso) => {
+                            const doctorName = buildDisplayNameFromFormData(row.form_data, {
+                                first_name: row.doctor_first_name,
+                                last_name: row.doctor_last_name
+                            });
+                            const atIso = scanAtIso || new Date().toISOString();
+                            const certEligibleNow =
+                                String(row.payment_status || '').toLowerCase() === 'success' &&
+                                newScanCount >= scansRequired;
+                            let scanMsg = 'Attendance marked. Doctor tracking updated.';
+                            if (scansRequired === 2) {
+                                if (newScanCount === 1) {
+                                    scanMsg =
+                                        'Entry scan recorded (1 of 2). Exit scan still required for certificate eligibility.';
+                                } else {
+                                    scanMsg =
+                                        'Exit scan recorded (2 of 2). Certificate eligibility updated pending admin approval.';
+                                }
+                            } else if (certEligibleNow) {
+                                scanMsg +=
+                                    ' Participation & Volunteer certificate attendance recorded (if assigned as seminar volunteer).';
+                            }
+
+                            // Return scanner response fast; run heavy post-scan sync in background.
+                            recordScanEventForDashboard(
+                                selectedSeminarId,
+                                staffId,
+                                {
+                                    ticket_db_id: row.ticket_id,
+                                    ticket_id_string: row.ticket_id_string,
+                                    application_no: row.application_no,
+                                    doctor_user_id: row.doctor_user_id,
+                                    doctor_name: doctorName,
+                                    outcome: 'success',
+                                    message: scanMsg
+                                },
+                                (_evErr, scanEventId) => {
+                                    res.json({
+                                        success: true,
+                                        sound: 'success',
+                                        message: scanMsg,
+                                        scanCount: newScanCount,
+                                        scansRequired,
+                                        certificateEligible: certEligibleNow,
+                                        scanEventId: scanEventId || null,
+                                        ticketDbId: row.ticket_id,
+                                        registrationId: regId || null,
+                                        doctorUserId: row.doctor_user_id,
+                                        doctor: doctorPayloadFromScanRow(row, {
+                                            name: doctorName,
+                                            ticketId: row.ticket_id_string,
+                                            registrationType: 'checked_in',
+                                            paymentStatus:
+                                                row.payment_status === 'success' ? 'PAID' : 'UNPAID',
+                                            checkedInAt: atIso
+                                        }),
+                                        scannedByStaffId: staffId,
+                                        needsIdCapture: true
+                                    });
+                                }
+                            );
+
                             syncCertificateEligibilityForTicket(row.ticket_id, () => {
                                 certVerify.finalizeParticipantCertificateAfterScan(
                                     db,
@@ -7937,100 +7998,27 @@ app.post('/api/scanner/mark', (req, res) => {
                                         }
                                     }
                                 );
-                                const doctorName = buildDisplayNameFromFormData(row.form_data, {
-                                    first_name: row.doctor_first_name,
-                                    last_name: row.doctor_last_name
-                                });
-                                const atIso = scanAtIso || new Date().toISOString();
-                                notifEngine.notify(
-                                    db,
-                                    'CHECK_IN_SUCCESS',
-                                    {
-                                        userId: row.doctor_user_id,
-                                        seminarId: row.seminar_id,
-                                        registrationId: regId || null,
-                                        immediate: true,
-                                        vars: {
-                                            ticket_id: row.ticket_id_string,
-                                            payment_status:
-                                                row.payment_status === 'success' ? 'PAID' : 'UNPAID',
-                                            approval_status: 'checked_in',
-                                            check_in_time: formatCheckInTimeForNotify(atIso)
-                                        }
-                                    },
-                                    (nErr) => {
-                                        if (nErr) console.warn('[scanner] check-in notify:', nErr.message);
-                                    }
-                                );
-
-                                const certEligibleNow =
-                                    String(row.payment_status || '').toLowerCase() === 'success' &&
-                                    newScanCount >= scansRequired;
-                                let scanMsg =
-                                    'Attendance marked. Doctor tracking updated.';
-                                if (scansRequired === 2) {
-                                    if (newScanCount === 1) {
-                                        scanMsg =
-                                            'Entry scan recorded (1 of 2). Exit scan still required for certificate eligibility.';
-                                    } else {
-                                        scanMsg =
-                                            'Exit scan recorded (2 of 2). Certificate eligibility updated pending admin approval.';
-                                    }
-                                } else if (certEligibleNow) {
-                                    scanMsg +=
-                                        ' Participation & Volunteer certificate attendance recorded (if assigned as seminar volunteer).';
-                                }
-                                db.get(
-                                    `SELECT 1 AS ok FROM seminar_volunteers WHERE user_id = ? AND seminar_id = ? AND status = 'approved' LIMIT 1`,
-                                    [row.doctor_user_id, row.seminar_id],
-                                    (_eSv, svRow) => {
-                                        if (svRow && svRow.ok) {
-                                            scanMsg +=
-                                                ' Dual certificates (Participation + Volunteer) updated from this QR scan.';
-                                        }
-                                        sendScanSuccess();
-                                    }
-                                );
-                                function sendScanSuccess() {
-                                    recordScanEventForDashboard(
-                                        selectedSeminarId,
-                                        staffId,
-                                        {
-                                            ticket_db_id: row.ticket_id,
-                                            ticket_id_string: row.ticket_id_string,
-                                            application_no: row.application_no,
-                                            doctor_user_id: row.doctor_user_id,
-                                            doctor_name: doctorName,
-                                            outcome: 'success',
-                                            message: scanMsg
-                                        },
-                                        (_evErr, scanEventId) => {
-                                            res.json({
-                                                success: true,
-                                                sound: 'success',
-                                                message: scanMsg,
-                                                scanCount: newScanCount,
-                                                scansRequired,
-                                                certificateEligible: certEligibleNow,
-                                                scanEventId: scanEventId || null,
-                                                ticketDbId: row.ticket_id,
-                                                registrationId: regId || null,
-                                                doctorUserId: row.doctor_user_id,
-                                                doctor: doctorPayloadFromScanRow(row, {
-                                                    name: doctorName,
-                                                    ticketId: row.ticket_id_string,
-                                                    registrationType: 'checked_in',
-                                                    paymentStatus:
-                                                        row.payment_status === 'success' ? 'PAID' : 'UNPAID',
-                                                    checkedInAt: atIso
-                                                }),
-                                                scannedByStaffId: staffId,
-                                                needsIdCapture: true
-                                            });
-                                        }
-                                    );
-                                }
                             });
+                            notifEngine.notify(
+                                db,
+                                'CHECK_IN_SUCCESS',
+                                {
+                                    userId: row.doctor_user_id,
+                                    seminarId: row.seminar_id,
+                                    registrationId: regId || null,
+                                    immediate: true,
+                                    vars: {
+                                        ticket_id: row.ticket_id_string,
+                                        payment_status:
+                                            row.payment_status === 'success' ? 'PAID' : 'UNPAID',
+                                        approval_status: 'checked_in',
+                                        check_in_time: formatCheckInTimeForNotify(atIso)
+                                    }
+                                },
+                                (nErr) => {
+                                    if (nErr) console.warn('[scanner] check-in notify:', nErr.message);
+                                }
+                            );
                         };
 
                         if (!regId) return finishScanResponse(new Date().toISOString());
