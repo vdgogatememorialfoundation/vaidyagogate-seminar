@@ -12046,6 +12046,16 @@ function openCustomCheckoutSheet(opts, onContinue) {
     return true;
 }
 
+function normalizeCheckoutUrl(url) {
+    const raw = String(url || '').trim();
+    if (!raw) return '';
+    if (/^https?:\/\//i.test(raw)) return raw;
+    if (/^\/\//.test(raw)) return 'https:' + raw;
+    if (/^\//.test(raw)) return window.location.origin + raw;
+    if (/^[a-z0-9.-]+\.[a-z]{2,}(\/.*)?$/i.test(raw)) return 'https://' + raw;
+    return raw;
+}
+
 function openAdminHostedCheckout(data, onPoll) {
     const launch = () => {
         if (data.formPost && data.formPost.action) {
@@ -12067,8 +12077,13 @@ function openAdminHostedCheckout(data, onPoll) {
             return true;
         }
         if (data.paymentUrl) {
-            const w = window.open(data.paymentUrl, '_blank', 'noopener');
-            if (!w && confirm('Open payment page in this tab?')) window.location.href = data.paymentUrl;
+            const paymentUrl = normalizeCheckoutUrl(data.paymentUrl);
+            if (!paymentUrl) {
+                alert('Gateway returned an invalid payment URL. Please retry with Razorpay or DQR.');
+                return false;
+            }
+            const w = window.open(paymentUrl, '_blank', 'noopener');
+            if (!w && confirm('Open payment page in this tab?')) window.location.href = paymentUrl;
             if (typeof onPoll === 'function') onPoll();
             return true;
         }

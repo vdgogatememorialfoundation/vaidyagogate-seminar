@@ -7149,7 +7149,17 @@ function submitHostedFormPost(formPost) {
 }
 
 function openPaymentUrlInPage(url, message) {
-    if (!url) return false;
+    const normalizeCheckoutUrl = (u) => {
+        const raw = String(u || '').trim();
+        if (!raw) return '';
+        if (/^https?:\/\//i.test(raw)) return raw;
+        if (/^\/\//.test(raw)) return 'https:' + raw;
+        if (/^\//.test(raw)) return window.location.origin + raw;
+        if (/^[a-z0-9.-]+\.[a-z]{2,}(\/.*)?$/i.test(raw)) return 'https://' + raw;
+        return raw;
+    };
+    const paymentUrl = normalizeCheckoutUrl(url);
+    if (!paymentUrl) return false;
     try {
         sessionStorage.setItem(
             'vgmf_payment_return',
@@ -7161,7 +7171,7 @@ function openPaymentUrlInPage(url, message) {
             sessionStorage.setItem('vgmf_payment_msg', message);
         } catch (_) {}
     }
-    window.location.href = url;
+    window.location.href = paymentUrl;
     return true;
 }
 
