@@ -33,8 +33,18 @@
     function mediaUrl(path) {
         if (!path) return '';
         const p = String(path).trim();
-        if (p.startsWith('http')) return p;
-        if (p.startsWith('/uploads/api/assets/')) return '/api/assets/' + p.slice('/uploads/api/assets/'.length);
+        if (!p) return '';
+        if (/^https?:\/\//i.test(p)) return p;
+        if (p.startsWith('/uploads/api/assets/')) {
+            return '/api/assets/' + p.slice('/uploads/api/assets/'.length);
+        }
+        if (p.startsWith('uploads/api/assets/')) {
+            return '/api/assets/' + p.slice('uploads/api/assets/'.length);
+        }
+        if (/^(upload_asset_|cert_|file_)/i.test(p)) {
+            return '/api/assets/' + encodeURIComponent(p);
+        }
+        if (p.startsWith('api/assets/')) return '/' + p;
         if (p.startsWith('/')) return p;
         return '/uploads/' + p;
     }

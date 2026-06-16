@@ -14567,6 +14567,7 @@ async function cmsUploadBannerImage() {
     if (path) {
         const t = document.getElementById('cms-banner');
         if (t) t.value = path;
+        cmsUploadPublishHint('Banner image uploaded — click Save website & portal content to publish on the live site.');
     }
 }
 
@@ -14577,7 +14578,15 @@ async function cmsUploadHeroImage() {
     if (path) {
         const t = document.getElementById('cms-hero-image');
         if (t) t.value = path;
+        cmsUploadPublishHint('Hero image uploaded — click Save website & portal content to publish on the live site.');
     }
+}
+
+function cmsUploadPublishHint(text) {
+    const msg = document.getElementById('cms-save-msg');
+    if (!msg) return;
+    msg.style.color = '#b45309';
+    msg.innerText = text;
 }
 
 function cmsParseJsonArray(raw, fieldLabel) {

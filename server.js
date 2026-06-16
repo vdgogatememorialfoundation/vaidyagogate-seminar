@@ -7923,6 +7923,9 @@ app.post('/api/scanner/mark', (req, res) => {
                                 last_name: row.doctor_last_name
                             });
                             const atIso = scanAtIso || new Date().toISOString();
+                            const eventName =
+                                String(row.scan_event_title || row.seminar_title || '').trim() ||
+                                'National Seminar';
                             const certEligibleNow =
                                 String(row.payment_status || '').toLowerCase() === 'success' &&
                                 newScanCount >= scansRequired;
@@ -7986,14 +7989,21 @@ app.post('/api/scanner/mark', (req, res) => {
                                     {
                                         notifEngine,
                                         portalTracking,
-                                        promoteRegistrationToCertificateIssued
+                                        promoteRegistrationToCertificateIssued,
+                                        scanCount: newScanCount
                                     },
                                     (cErr, cOut) => {
                                         if (cErr) console.warn('[scanner] cert auto-issue:', cErr.message);
                                         else if (cOut && cOut.issued) {
                                             console.log(
                                                 '[scanner] certificate auto-issued for ticket',
-                                                row.ticket_id
+                                                row.ticket_id,
+                                                cOut.notified ? '(notified)' : '(no notify)'
+                                            );
+                                        } else if (certEligibleNow && cOut && cOut.skipped) {
+                                            console.warn(
+                                                '[scanner] certificate eligible but auto-issue skipped:',
+                                                cOut.reason || 'unknown'
                                             );
                                         }
                                     }
@@ -8009,6 +8019,8 @@ app.post('/api/scanner/mark', (req, res) => {
                                     immediate: true,
                                     vars: {
                                         ticket_id: row.ticket_id_string,
+                                        event_name: eventName,
+                                        scan_event_title: eventName,
                                         payment_status:
                                             row.payment_status === 'success' ? 'PAID' : 'UNPAID',
                                         approval_status: 'checked_in',

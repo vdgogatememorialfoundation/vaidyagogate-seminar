@@ -207,42 +207,75 @@
         const slides = [];
         const seen = new Set();
         const hero = (cms && cms.hero) || {};
+
         function pushSlide(sl) {
-            if (!sl || (!sl.title && !sl.image)) return;
-            const key = String(sl.image || '') + '|' + String(sl.title || '');
+            if (!sl) return;
+            const image = sl.image ? String(sl.image).trim() : '';
+            const title = sl.title ? String(sl.title).trim() : '';
+            if (!image && !title) return;
+            const key = image + '|' + title + '|' + (sl.imageOnly ? '1' : '0');
             if (seen.has(key)) return;
             seen.add(key);
             slides.push(sl);
         }
-        const uploaded = buildMarketingBannerSlides(marketingBanners, cms);
-        uploaded.forEach(pushSlide);
-        const hasUploaded = uploaded.length > 0;
+
+        function pushCmsImageSlide(imagePath, copy, imageOnly) {
+            const image = mediaUrl(imagePath);
+            if (!image) return;
+            pushSlide({
+                image,
+                title: (copy && copy.title) || '',
+                subtitle: (copy && copy.subtitle) || '',
+                eyebrow: (copy && copy.eyebrow) || '',
+                cta: (copy && copy.cta) || '',
+                link: (copy && copy.link) || '#register',
+                cta2: (copy && copy.cta2) || '',
+                link2: (copy && copy.link2) || '',
+                imageOnly: imageOnly !== false
+            });
+        }
+
+        // CMS hero background + headline (Admin → Website content → Hero background image)
+        const heroImage = hero.image ? mediaUrl(hero.image) : '';
+        if (heroImage || hero.title || hero.subtitle || hero.venue) {
+            const heroCopyOnly = !!(hero.title || hero.subtitle || hero.venue || hero.eyebrow);
+            pushSlide({
+                image: heroImage,
+                title: hero.title || 'VGMF National Seminar',
+                subtitle: hero.subtitle || hero.venue || '',
+                eyebrow: hero.eyebrow || 'National Seminar Portal',
+                cta: hero.ctaPrimary || 'Register now',
+                link: '#register',
+                cta2: hero.ctaSecondary || 'View programme',
+                link2: '#schedule',
+                imageOnly: !!(heroImage && !heroCopyOnly)
+            });
+        }
+
+        // CMS banner image field (Admin → Banner image URL / upload)
+        if (cms && cms.bannerImage) {
+            pushCmsImageSlide(cms.bannerImage, null, true);
+        }
+
+        // Main homepage hero slider rows (homepage_banners table)
+        buildMarketingBannerSlides(marketingBanners, cms).forEach(pushSlide);
+
+        // Legacy JSON slides field
         const fromCms = Array.isArray(cms && cms.slides) ? cms.slides : [];
-        if (!hasUploaded) fromCms.forEach((sl) => {
+        fromCms.forEach((sl) => {
             if (!sl || (!sl.image && !sl.title)) return;
             pushSlide({
                 image: mediaUrl(sl.image),
                 title: sl.title || 'National Seminar',
                 subtitle: sl.subtitle || '',
                 eyebrow: 'Featured',
-                cta: sl.cta || (cms.hero && cms.hero.ctaPrimary) || 'Register now',
+                cta: sl.cta || hero.ctaPrimary || 'Register now',
                 link: sl.link || '#register',
                 cta2: sl.cta2 || '',
                 link2: sl.link2 || ''
             });
         });
-        if (!hasUploaded && !slides.length && (hero.image || hero.title)) {
-            pushSlide({
-                image: mediaUrl(hero.image),
-                title: hero.title || 'VGMF National Seminar',
-                subtitle: hero.venue || hero.subtitle || '',
-                eyebrow: hero.eyebrow || 'National Seminar Portal',
-                cta: hero.ctaPrimary || 'Register now',
-                link: '#register',
-                cta2: hero.ctaSecondary || 'View programme',
-                link2: '#schedule'
-            });
-        }
+
         if (!slides.length) {
             pushSlide({
                 image: '',
