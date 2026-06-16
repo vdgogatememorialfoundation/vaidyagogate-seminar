@@ -1303,7 +1303,7 @@ function renderTrackerStepsHtml(timeline) {
         html +=
             '<p style="margin:12px 0 0;text-align:center;">' +
             '<button type="button" class="btn-primary" style="background:#0f766e;border:none;font-size:0.88rem;padding:10px 18px;" ' +
-            'onclick="openDoctorRefundModule()">Open full refund module</button></p>';
+            'onclick="openDoctorRefundModule()">Open Refund tracking</button></p>';
     }
     return html;
 }
@@ -1622,9 +1622,7 @@ async function loadDoctorRefundsModule(silentPoll) {
 }
 
 function shouldPollRefundTracking() {
-    if (doctorTabVisible('tab-refunds')) return true;
-    if (doctorTabVisible('tab-payments') && doctorRefundLivePending(__doctorRefundRequests)) return true;
-    return false;
+    return doctorTabVisible('tab-refunds');
 }
 
 function stopRefundTrackingPoll() {
@@ -1641,88 +1639,8 @@ function startRefundTrackingPoll() {
     const live = document.getElementById('refund-track-live');
     if (live) live.classList.remove('hidden');
     refundTrackPollTimer = setInterval(() => {
-        if (shouldPollRefundTracking()) {
-            loadDoctorRefundsModule(true);
-            if (doctorTabVisible('tab-payments')) loadDoctorPaymentsRefundsInline(true);
-        }
+        if (shouldPollRefundTracking()) loadDoctorRefundsModule(true);
     }, DOCTOR_TRACK_POLL_MS);
-}
-
-function doctorRefundRowsForPaymentsInline(rows) {
-    return (rows || []).filter((r) => {
-        const st = String(r.status || '').toLowerCase();
-        const rs = String(r.refundStatus || r.refund_status || 'none').toLowerCase();
-        if (st === 'pending' || st === 'approved') return true;
-        if (rs !== 'none') return true;
-        return Number(r.refund_amount || r.refundAmount) > 0;
-    });
-}
-
-function renderDoctorRefundInlineCard(row) {
-    const tr = cancellationRowToTracking(row);
-    if (!tr) return '';
-    const appNo = escapeHtml(row.applicationNo || row.application_no || '—');
-    const seminar = escapeHtml(row.seminarTitle || row.seminar_title || '');
-    return (
-        '<div style="border:1px solid #fde68a;border-radius:8px;padding:12px;margin-bottom:10px;background:#fff;">' +
-        '<p style="margin:0 0 8px;font-weight:600;color:#92400e;font-size:0.9rem;">' +
-        appNo +
-        (seminar ? ' · ' + seminar : '') +
-        '</p>' +
-        renderCancellationRefundBlock({ cancellationTracking: tr }) +
-        '</div>'
-    );
-}
-
-let _lastPaymentsRefundFp = '';
-
-async function loadDoctorPaymentsRefundsInline(silentPoll) {
-    const box = document.getElementById('doctor-payments-refunds-list');
-    const wrap = document.getElementById('doctor-payments-refunds-wrap');
-    if (!box || !wrap) return;
-    const uid = doctorNumericUserId();
-    if (!uid) {
-        box.innerHTML = '<p style="color:#64748b;margin:0;">Sign in to view refund activity.</p>';
-        return;
-    }
-    if (!silentPoll) box.innerHTML = '<p style="color:#64748b;margin:0;">Loading refund activity…</p>';
-    try {
-        let rows = __doctorRefundRequests;
-        if (!silentPoll || !rows.length) {
-            const res = await fetch('/api/doctor/cancellation-requests?userId=' + encodeURIComponent(uid), {
-                cache: 'no-store'
-            });
-            const data = await res.json().catch(() => []);
-            if (!res.ok) {
-                box.innerHTML =
-                    '<p style="color:#b91c1c;margin:0;">' +
-                    escapeHtml((data && data.error) || 'Could not load refunds') +
-                    '</p>';
-                return;
-            }
-            __doctorRefundRequests = Array.isArray(data) ? data : [];
-            rows = __doctorRefundRequests;
-        }
-        const visible = doctorRefundRowsForPaymentsInline(rows);
-        const fp = refundTrackFingerprint(visible);
-        if (silentPoll && fp === _lastPaymentsRefundFp) return;
-        _lastPaymentsRefundFp = fp;
-        const live = document.getElementById('doctor-payments-refund-live');
-        if (live) {
-            if (doctorRefundLivePending(visible)) live.classList.remove('hidden');
-            else live.classList.add('hidden');
-        }
-        if (!visible.length) {
-            box.innerHTML =
-                '<p style="color:#64748b;margin:0;">No refund activity yet. After a cancellation is approved, your Razorpay refund status will appear here and under <strong>Refund tracking</strong>.</p>';
-            return;
-        }
-        box.innerHTML = visible.map((r) => renderDoctorRefundInlineCard(r)).join('');
-        if (doctorTabVisible('tab-payments') && doctorRefundLivePending(visible)) syncDoctorTrackingPolls();
-    } catch (e) {
-        console.warn('[payments-refunds]', e);
-        if (!silentPoll) box.innerHTML = '<p style="color:#b91c1c;margin:0;">Network error loading refunds.</p>';
-    }
 }
 
 function renderSeminarApplicationTrackerCard(a) {
@@ -2061,6 +1979,9 @@ async function bootDoctorDashboard(user) {
     if (window.SiteVisitorBeacon && typeof window.SiteVisitorBeacon.boot === 'function') {
         window.SiteVisitorBeacon.boot();
     }
+    setTimeout(() => {
+        handleDirectApplicationPaymentLink();
+    }, 80);
 }
 
 function handleEasebuzzPaymentReturnQuery() {
@@ -2103,6 +2024,46 @@ function handleEasebuzzPaymentReturnQuery() {
             if (isBookReturn && typeof loadBookOrders === 'function') loadBookOrders();
         } else if (payment === 'error') {
             alert(msg || 'Payment could not be verified. Contact the seminar office if money was debited.');
+        }
+        const clean = window.location.pathname + (window.location.hash || '');
+        window.history.replaceState({}, '', clean);
+    } catch (_) {}
+}
+
+async function handleDirectApplicationPaymentLink() {
+    try {
+        const p = new URLSearchParams(window.location.search);
+        const regId = parseInt(p.get('pay_registration') || '', 10);
+        const appNo = String(p.get('pay_app') || '').trim();
+        const methodId = String(p.get('pay_method') || '').trim();
+        if (!regId && !appNo) return;
+        switchTab('tab-payments');
+        await loadDoctorSeminarPaymentsPanel();
+        const pending = (userApplications || []).filter(
+            (a) => String(a.status || '').toLowerCase() === 'approved_pending_payment'
+        );
+        const target =
+            pending.find((a) => Number(a.id) === regId) ||
+            pending.find((a) => String(a.application_no || '').toLowerCase() === appNo.toLowerCase());
+        if (!target) {
+            alert('This payment link is not available or this application is already paid.');
+            return;
+        }
+        const btn = document.querySelector('.doctor-pay-btn[data-reg-id="' + String(target.id) + '"]');
+        const card = btn ? btn.closest('.card') : null;
+        if (card) {
+            card.style.boxShadow = '0 0 0 3px #86efac';
+            setTimeout(() => {
+                card.style.boxShadow = '';
+            }, 1800);
+            card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        if (btn && confirm('Open checkout now for application ' + (target.application_no || target.id) + '?')) {
+            const payAmt =
+                target.payment_amount != null && Number.isFinite(Number(target.payment_amount))
+                    ? Number(target.payment_amount)
+                    : Number(target.seminar_price) || 0;
+            processPayment(target.id, payAmt, target.application_no || '', methodId || null, false);
         }
         const clean = window.location.pathname + (window.location.hash || '');
         window.history.replaceState({}, '', clean);
@@ -3779,8 +3740,6 @@ function switchTab(tabId, menuEl) {
     if (tabId === 'tab-payments') {
         loadDoctorSupplementalPayments();
         loadDoctorSeminarPaymentsPanel();
-        loadDoctorPaymentsRefundsInline();
-        syncDoctorTrackingPolls();
     }
     if (tabId === 'tab-books' && typeof initDoctorBooksTab === 'function') {
         initDoctorBooksTab();
@@ -7206,26 +7165,117 @@ function openPaymentUrlInPage(url, message) {
     return true;
 }
 
+function ensureDoctorCustomCheckoutStyles() {
+    if (document.getElementById('doctor-custom-checkout-style')) return;
+    const st = document.createElement('style');
+    st.id = 'doctor-custom-checkout-style';
+    st.textContent = `
+        .dco-overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:12000;display:flex;align-items:center;justify-content:center;padding:16px;}
+        .dco-card{width:min(560px,100%);background:#fff;border-radius:16px;box-shadow:0 18px 44px rgba(2,6,23,.28);overflow:hidden;border:1px solid #e2e8f0;}
+        .dco-head{padding:14px 16px;background:#0f766e;color:#fff;}
+        .dco-title{font-size:1rem;font-weight:800;margin:0;}
+        .dco-sub{font-size:.8rem;opacity:.95;margin:4px 0 0;}
+        .dco-body{padding:14px 16px;}
+        .dco-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+        .dco-opt{display:flex;align-items:center;gap:8px;padding:10px;border:1px solid #cbd5e1;border-radius:10px;background:#f8fafc;}
+        .dco-upi{margin-top:10px;padding:10px;border:1px solid #99f6e4;border-radius:10px;background:#f0fdfa;}
+        .dco-upi input{width:100%;padding:10px;border:1px solid #5eead4;border-radius:8px;}
+        .dco-sum{margin-top:12px;border:1px solid #e2e8f0;border-radius:10px;padding:10px;background:#f8fafc;font-size:.9rem;}
+        .dco-row{display:flex;justify-content:space-between;gap:10px;padding:3px 0;}
+        .dco-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px;}
+    `;
+    document.head.appendChild(st);
+}
+
+function openDoctorCustomCheckoutSheet(opts, onContinue) {
+    ensureDoctorCustomCheckoutStyles();
+    const o = opts || {};
+    const amount = Number(o.amount) || 0;
+    const overlay = document.createElement('div');
+    overlay.className = 'dco-overlay';
+    overlay.innerHTML =
+        '<div class="dco-card">' +
+        '<div class="dco-head"><p class="dco-title">' +
+        escapeHtmlDoctor(o.title || 'Secure payment checkout') +
+        '</p><p class="dco-sub">Choose UPI app or enter UPI ID</p></div>' +
+        '<div class="dco-body">' +
+        '<div class="dco-grid">' +
+        '<label class="dco-opt"><input type="radio" name="dco-opt" value="gpay" checked> Google Pay</label>' +
+        '<label class="dco-opt"><input type="radio" name="dco-opt" value="phonepe"> PhonePe</label>' +
+        '</div>' +
+        '<label class="dco-opt" style="margin-top:10px;"><input type="radio" name="dco-opt" value="upi_id"> Enter UPI ID manually</label>' +
+        '<div class="dco-upi hidden"><input type="text" id="dco-upi-input" placeholder="yourname@bank"></div>' +
+        '<div class="dco-sum">' +
+        '<div class="dco-row"><span>Amount payable</span><strong>₹' +
+        escapeHtmlDoctor(amount ? amount.toFixed(2) : '0.00') +
+        '</strong></div>' +
+        '<div class="dco-row"><span>Order reference</span><strong>' +
+        escapeHtmlDoctor(o.orderId || '-') +
+        '</strong></div>' +
+        '</div>' +
+        '<div class="dco-actions">' +
+        '<button type="button" class="btn-primary" style="background:#64748b;" id="dco-cancel-btn">Cancel</button>' +
+        '<button type="button" class="btn-primary" id="dco-continue-btn">Continue to payment</button>' +
+        '</div></div></div>';
+    document.body.appendChild(overlay);
+    const upiWrap = overlay.querySelector('.dco-upi');
+    const cleanup = () => {
+        if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    };
+    const getChoice = () => {
+        const selected = overlay.querySelector('input[name="dco-opt"]:checked');
+        const channel = selected ? selected.value : 'gpay';
+        const upiId = String((overlay.querySelector('#dco-upi-input') || {}).value || '').trim();
+        return { channel, upiId };
+    };
+    overlay.querySelectorAll('input[name="dco-opt"]').forEach((r) =>
+        r.addEventListener('change', () => {
+            const c = getChoice();
+            if (upiWrap) upiWrap.classList.toggle('hidden', c.channel !== 'upi_id');
+        })
+    );
+    overlay.querySelector('#dco-cancel-btn')?.addEventListener('click', cleanup);
+    overlay.querySelector('#dco-continue-btn')?.addEventListener('click', () => {
+        const c = getChoice();
+        if (c.channel === 'upi_id' && !/^[a-zA-Z0-9.\-_]{2,}@[a-zA-Z]{2,}$/i.test(c.upiId)) {
+            alert('Enter a valid UPI ID (example: name@bank).');
+            return;
+        }
+        cleanup();
+        if (typeof onContinue === 'function') onContinue(c);
+    });
+    return true;
+}
+
 async function openHostedPaymentCheckout(result) {
     const msg = result.message || i18nT('pay.redirecting');
+    const launch = () => {
+        if (result.formPost && result.formPost.action) {
+            submitHostedFormPost(result.formPost);
+            alert(msg);
+            ensureDoctorPaymentPoll();
+            return true;
+        }
 
-    if (result.formPost && result.formPost.action) {
-        submitHostedFormPost(result.formPost);
-        alert(msg);
-        ensureDoctorPaymentPoll();
-        return true;
-    }
+        if (result.paymentUrl) {
+            return openPaymentUrlInPage(result.paymentUrl, msg);
+        }
 
-    if (result.paymentUrl) {
-        return openPaymentUrlInPage(result.paymentUrl, msg);
-    }
-
-    if (result.easebuzzAccessKey && result.easebuzzKey) {
-        const payUrl = 'https://pay.easebuzz.in/pay/' + encodeURIComponent(result.easebuzzAccessKey);
-        return openPaymentUrlInPage(payUrl, msg);
-    }
-
-    return false;
+        if (result.easebuzzAccessKey && result.easebuzzKey) {
+            const payUrl = 'https://pay.easebuzz.in/pay/' + encodeURIComponent(result.easebuzzAccessKey);
+            return openPaymentUrlInPage(payUrl, msg);
+        }
+        return false;
+    };
+    openDoctorCustomCheckoutSheet(
+        {
+            title: 'Doctor payment request',
+            amount: result.amount,
+            orderId: result.orderIdString || result.orderDbId || ''
+        },
+        () => launch()
+    );
+    return true;
 }
 
 function loadRazorpayCheckoutScript() {
@@ -7272,89 +7322,102 @@ function openDoctorRazorpayCheckout(result, regId, methodId) {
     }
     const payOpt = doctorRazorpayPaymentOption(methodId, result.mode);
     const user = typeof currentUser !== 'undefined' && currentUser ? currentUser : {};
-    const options = {
-        key: checkoutKey,
-        amount: amountPaise,
-        currency: (rzOrder && rzOrder.currency) || result.currency || 'INR',
-        name: 'Vaidya Gogate Memorial Foundation National Seminar',
-        description: 'Seminar Registration',
-        order_id: orderId,
-        handler: function (response) {
-            fetch('/api/verify-payment', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    registrationId: regId,
-                    userId: doctorNumericUserId(),
-                    paymentOption: payOpt,
-                    razorpay_order_id: response.razorpay_order_id,
-                    razorpay_payment_id: response.razorpay_payment_id,
-                    razorpay_signature: response.razorpay_signature
-                })
-            })
-                .then((r) => r.json())
-                .then((verifyResult) => {
-                    if (verifyResult.success) {
-                        alert(
-                            verifyResult.message ||
-                                'Payment successful. Your e-ticket is under Participant tickets. Join the seminar WhatsApp group from My Applications when the link appears.'
+    openDoctorCustomCheckoutSheet(
+        { title: 'Doctor Razorpay checkout', amount: Number(amountPaise || 0) / 100, orderId },
+        (checkoutChoice) => {
+            const options = {
+                key: checkoutKey,
+                amount: amountPaise,
+                currency: (rzOrder && rzOrder.currency) || result.currency || 'INR',
+                name: 'Vaidya Gogate Memorial Foundation National Seminar',
+                description: 'Seminar Registration',
+                order_id: orderId,
+                notes: {
+                    preferred_upi_channel: checkoutChoice && checkoutChoice.channel,
+                    preferred_upi_id: (checkoutChoice && checkoutChoice.upiId) || ''
+                },
+                handler: function (response) {
+                    fetch('/api/verify-payment', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            registrationId: regId,
+                            userId: doctorNumericUserId(),
+                            paymentOption: payOpt,
+                            razorpay_order_id: response.razorpay_order_id,
+                            razorpay_payment_id: response.razorpay_payment_id,
+                            razorpay_signature: response.razorpay_signature
+                        })
+                    })
+                        .then((r) => r.json())
+                        .then((verifyResult) => {
+                            if (verifyResult.success) {
+                                alert(
+                                    verifyResult.message ||
+                                        'Payment successful. Your e-ticket is under Participant tickets. Join the seminar WhatsApp group from My Applications when the link appears.'
+                                );
+                                loadApplications().then(() => {
+                                    showPostPaymentWhatsappBanner(regId);
+                                });
+                                loadDoctorDashboardStats();
+                                loadDoctorOrders();
+                                loadDoctorReceipts();
+                                loadDoctorEventTickets();
+                            } else {
+                                alert(verifyResult.error || 'Payment verification failed');
+                            }
+                        })
+                        .catch(() =>
+                            alert(
+                                'Payment verification request failed. Contact the seminar office with your payment receipt.'
+                            )
                         );
-                        loadApplications().then(() => {
-                            showPostPaymentWhatsappBanner(regId);
-                        });
-                        loadDoctorDashboardStats();
-                        loadDoctorOrders();
-                        loadDoctorReceipts();
-                        loadDoctorEventTickets();
-                    } else {
-                        alert(verifyResult.error || 'Payment verification failed');
+                },
+                modal: {
+                    ondismiss: function () {
+                        console.info('[razorpay] checkout dismissed');
                     }
-                })
-                .catch(() => alert('Payment verification request failed. Contact the seminar office with your payment receipt.'));
-        },
-        modal: {
-            ondismiss: function () {
-                console.info('[razorpay] checkout dismissed');
+                },
+                prefill: {
+                    name: ((user.first_name || '') + ' ' + (user.last_name || '')).trim(),
+                    email: user.email || '',
+                    contact: user.phone || ''
+                },
+                theme: { color: '#0f766e' }
+            };
+            const rzp = new Razorpay(options);
+            rzp.on('payment.failed', function (resp) {
+                const uid = doctorNumericUserId();
+                fetch('/api/payments/log-attempt', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        userId: uid,
+                        registrationId: regId,
+                        orderDbId: result.orderDbId,
+                        applicationNo: appNo,
+                        gateway: 'razorpay',
+                        mode: result.mode,
+                        amount: result.amount,
+                        status: 'failed',
+                        error: resp.error,
+                        razorpay_order_id: resp.error && resp.error.metadata && resp.error.metadata.order_id,
+                        razorpay_payment_id: resp.error && resp.error.metadata && resp.error.metadata.payment_id
+                    })
+                }).catch(function () {});
+                alert(
+                    (resp.error && resp.error.description) ||
+                        'Payment failed or was cancelled. You can try again from My Applications.'
+                );
+            });
+            try {
+                rzp.open();
+            } catch (openErr) {
+                console.error(openErr);
+                alert('Could not open payment. Allow pop-ups and try again.');
             }
-        },
-        prefill: {
-            name: ((user.first_name || '') + ' ' + (user.last_name || '')).trim(),
-            email: user.email || '',
-            contact: user.phone || ''
-        },
-        theme: { color: '#0f766e' }
-    };
-    const rzp = new Razorpay(options);
-    rzp.on('payment.failed', function (resp) {
-        const uid = doctorNumericUserId();
-        fetch('/api/payments/log-attempt', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                userId: uid,
-                registrationId: regId,
-                orderDbId: result.orderDbId,
-                applicationNo: appNo,
-                gateway: 'razorpay',
-                mode: result.mode,
-                amount: result.amount,
-                status: 'failed',
-                error: resp.error,
-                razorpay_order_id: resp.error && resp.error.metadata && resp.error.metadata.order_id,
-                razorpay_payment_id: resp.error && resp.error.metadata && resp.error.metadata.payment_id
-            })
-        }).catch(function () {});
-        alert(
-            (resp.error && resp.error.description) ||
-                'Payment failed or was cancelled. You can try again from My Applications.'
-        );
-    });
-    try {
-        rzp.open();
-    } catch (openErr) {
-        console.error(openErr);
-        alert('Could not open payment. Allow pop-ups and try again.');
-    }
+        }
+    );
 }
 
 function showDoctorPaymentQr(regId, result) {
@@ -8666,7 +8729,6 @@ async function loadDoctorSeminarPaymentsPanel() {
         box.innerHTML =
             '<h3 style="color:#0f766e;margin:0 0 10px;font-size:1rem;">Seminar registration fees</h3>' +
             '<p style="color:#64748b;margin:0;">No payments due right now. Approved registrations awaiting payment will appear here with <strong>DQR (UPI scan)</strong> and other gateway options.</p>';
-        loadDoctorPaymentsRefundsInline();
         return;
     }
     let html =
@@ -8704,7 +8766,6 @@ async function loadDoctorSeminarPaymentsPanel() {
             ')</button></div>';
     });
     box.innerHTML = html;
-    loadDoctorPaymentsRefundsInline();
 }
 window.loadDoctorSeminarPaymentsPanel = loadDoctorSeminarPaymentsPanel;
 

@@ -548,7 +548,18 @@
                                 <option value="custom_emails">Custom email list</option>
                             </select>
                         </div>
-                        <div id="mail-bulk-seminar-wrap"><label>Seminar</label><select id="mail-bulk-seminar" style="width:100%;padding:8px;"></select></div>
+                        <div id="mail-bulk-seminar-wrap"><label>Seminar</label><select id="mail-bulk-seminar" style="width:100%;padding:8px;" onchange="loadMailBulkSeminarDoctors()"></select></div>
+                        <div id="mail-bulk-seminar-doctors-wrap" class="hidden" style="grid-column:1/-1;">
+                            <label style="display:flex;justify-content:space-between;align-items:center;gap:8px;">Choose doctors from this seminar (optional)
+                                <span style="font-size:0.82rem;color:#64748b;">Leave empty to email all in selected audience</span>
+                            </label>
+                            <div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 8px;">
+                                <button type="button" class="btn-primary" style="background:#64748b;padding:4px 10px;font-size:0.78rem;" onclick="setMailBulkDoctorSelection(true)">Select all</button>
+                                <button type="button" class="btn-primary" style="background:#94a3b8;padding:4px 10px;font-size:0.78rem;" onclick="setMailBulkDoctorSelection(false)">Clear</button>
+                                <span id="mail-bulk-doctors-count" style="font-size:0.82rem;color:#64748b;"></span>
+                            </div>
+                            <div id="mail-bulk-seminar-doctors" style="max-height:180px;overflow:auto;border:1px solid #e2e8f0;border-radius:8px;padding:8px;background:#f8fafc;"></div>
+                        </div>
                         <div id="mail-bulk-emails-wrap" class="hidden" style="grid-column:1/-1;"><label>Emails</label><textarea id="mail-bulk-emails" rows="3" style="width:100%;padding:8px;"></textarea></div>
                         <div style="grid-column:1/-1;"><label>Subject</label><input type="text" id="mail-bulk-subject" style="width:100%;padding:8px;"></div>
                         <div style="grid-column:1/-1;"><label>Message</label><textarea id="mail-bulk-body" rows="6" style="width:100%;padding:8px;"></textarea></div>
@@ -733,6 +744,15 @@
                 </div>
                     <div class="card">
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+                        <div style="grid-column:1/-1;">
+                            <label style="font-size:0.82rem;color:#64748b;">Search doctor by name, phone, or email</label>
+                            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+                                <input type="text" id="behalf-doctor-search" placeholder="e.g. Nitin / 9876543210 / doctor@email.com" style="flex:1;min-width:240px;padding:8px;">
+                                <button type="button" class="btn-primary" style="padding:8px 14px;" onclick="lookupBehalfDoctor()">Search</button>
+                                <button type="button" class="btn-primary" style="background:#64748b;padding:8px 14px;" onclick="useBehalfUnregisteredDoctor()">Use form details (new doctor)</button>
+                            </div>
+                            <div id="behalf-doctor-search-results" style="margin-top:10px;"></div>
+                        </div>
                         <div>
                             <label>Doctor account</label>
                             <select id="behalf-doctor-select" onchange="onAdminBehalfDoctorOrSeminarChange()"><option value="">— Select doctor —</option></select>
@@ -770,7 +790,12 @@
                     <div id="behalf-payment-wrap" class="hidden" style="padding:14px;border:1px solid #a7f3d0;border-radius:8px;background:#ecfdf5;">
                         <p id="behalf-payment-status" style="margin-bottom:10px;font-size:0.9rem;"></p>
                         <div id="behalf-payment-methods" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;"></div>
-                        <button type="button" class="btn-primary" onclick="behalfInitiatePayment()">Start payment</button>
+                        <label style="display:flex;align-items:center;gap:8px;font-size:0.84rem;margin-bottom:10px;color:#475569;">
+                            <input type="checkbox" id="behalf-request-only" checked>
+                            Create payment request only (do not open checkout now)
+                        </label>
+                        <button type="button" class="btn-primary" onclick="behalfInitiatePayment()">Create payment request</button>
+                        <button type="button" class="btn-primary" style="background:#1d4ed8;margin-left:8px;" onclick="copyApplicationPaymentLink(__behalfRegId, __behalfRegApplicationNo, __behalfSelectedMethodId || 'dqr')">Copy payment link</button>
                         <button type="button" class="btn-primary hidden" id="behalf-mark-upi-btn" style="background:#64748b;margin-left:8px;" onclick="behalfMarkUpiPaid()">Mark UPI received</button>
                         <button type="button" class="btn-primary" style="background:#15803d;margin-left:8px;" onclick="behalfPollPayment()">Check status</button>
                         <div id="behalf-qr-block" class="hidden" style="margin-top:12px;text-align:center;"><img id="behalf-qr-img" alt="QR" style="max-width:220px;"><p id="behalf-qr-amount" style="font-weight:600;"></p></div>
@@ -2182,6 +2207,10 @@
                         <input type="checkbox" id="pos-send-ticket-email" style="margin-top:3px;">
                         <span>Queue ticket email after registration (off by default — use printed QR at venue; avoids Zoho rate limits)</span>
                     </label>
+                    <label style="display:flex;align-items:flex-start;gap:8px;margin-top:10px;font-size:0.86rem;color:#475569;max-width:560px;">
+                        <input type="checkbox" id="pos-request-only" style="margin-top:3px;" checked>
+                        <span>Create payment request only (save registration + request payment without opening checkout popup)</span>
+                    </label>
                     <button type="button" class="btn-primary" style="margin-top:16px;" onclick="submitAdminPosRegistration()">Register &amp; collect payment</button>
                     <p id="pos-poll-status" style="margin-top:10px;font-size:0.88rem;color:#0f766e;"></p>
                     <div id="pos-qr-block" class="hidden" style="text-align:center;margin-top:12px;padding:14px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:10px;">
@@ -3091,6 +3120,7 @@
                 <div id="proxy-payment-methods" style="display:grid;gap:10px;margin-bottom:12px;"></div>
                 <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px;">
                     <button type="button" class="btn-primary" style="background:#0f766e;" onclick="proxyInitiatePayment()">Create payment request</button>
+                    <button type="button" class="btn-primary" style="background:#1d4ed8;" onclick="copyApplicationPaymentLink(__proxyLastRegId, '', __proxySelectedMethodId || 'dqr')">Copy payment link</button>
                     <button type="button" class="btn-primary" style="background:#64748b;" onclick="proxyWaivePayment()">Waive fee &amp; issue ticket</button>
                     <button type="button" class="btn-outline hidden" id="proxy-mark-upi-btn" onclick="proxyMarkUpiPaid()">Mark UPI received</button>
                 </div>

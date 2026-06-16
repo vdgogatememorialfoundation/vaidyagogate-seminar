@@ -1957,6 +1957,7 @@ async function submitAdminPosRegistration() {
     const qrImg = document.getElementById('pos-qr-img');
     const qrAmt = document.getElementById('pos-qr-amount');
     const markBtn = document.getElementById('pos-mark-upi-btn');
+    const requestOnly = !!document.getElementById('pos-request-only')?.checked;
     stopPosPaymentPoll();
     __posOrderDbId = null;
     if (qrBlock) qrBlock.classList.add('hidden');
@@ -2017,13 +2018,21 @@ async function submitAdminPosRegistration() {
                 if (qrBlock) qrBlock.classList.remove('hidden');
             }
             if (pay.manualConfirm && markBtn) markBtn.classList.remove('hidden');
-            if (pay.paymentType === 'razorpay_checkout' && adminRazorpayCheckoutPayload(pay)) {
-                openAdminRazorpayCheckout(pay, () => startPosPaymentPoll());
-            } else if (pay.paymentType && String(pay.paymentType).endsWith('_checkout') && pay.gateway !== 'razorpay') {
-                openAdminHostedCheckout(pay, () => startPosPaymentPoll());
+            if (!requestOnly) {
+                if (pay.paymentType === 'razorpay_checkout' && adminRazorpayCheckoutPayload(pay)) {
+                    openAdminRazorpayCheckout(pay, () => startPosPaymentPoll());
+                } else if (pay.paymentType && String(pay.paymentType).endsWith('_checkout') && pay.gateway !== 'razorpay') {
+                    openAdminHostedCheckout(pay, () => startPosPaymentPoll());
+                }
             }
             if (pay.pollRequired) {
-                if (pollSt) pollSt.textContent = pay.message || 'Waiting for payment confirmation…';
+                if (pollSt) {
+                    pollSt.textContent = requestOnly
+                        ? pay.paymentUrl
+                            ? 'Payment request created. Share this link: ' + pay.paymentUrl
+                            : pay.message || 'Payment request created. Waiting for doctor to pay.'
+                        : pay.message || 'Waiting for payment confirmation…';
+                }
                 startPosPaymentPoll();
             } else if (pollSt) {
                 pollSt.textContent = pay.message || '';
@@ -2971,7 +2980,11 @@ async function onAdminBehalfDoctorOrSeminarChange() {
     }
     syncBehalfJsonFromForm();
     if (!Number.isInteger(docId) || docId < 1) {
-        if (summary) summary.textContent = 'Select a doctor account.';
+        refreshAdminBehalfWorkflow({ found: false, registration: null, order: null, ticket: null });
+        if (summary) {
+            summary.textContent =
+                'No existing doctor account selected. Fill name/email/phone and save — account will be auto-created if needed.';
+        }
         return;
     }
     try {
@@ -3033,6 +3046,81 @@ async function onAdminBehalfDoctorOrSeminarChange() {
         }
     } catch (e) {
         if (summary) summary.textContent = e.message || 'Could not load application.';
+    }
+}
+
+function chooseBehalfDoctorFromLookup(id) {
+    const sel = document.getElementById('behalf-doctor-select');
+    if (!sel) return;
+    const val = String(id || '');
+    let opt = Array.from(sel.options || []).find((o) => String(o.value) === val);
+    if (!opt && window.__adminUsersById && window.__adminUsersById[id]) {
+        const u = window.__adminUsersById[id];
+        opt = document.createElement('option');
+        opt.value = String(id);
+        opt.textContent =
+            [u.first_name || '', u.last_name || ''].join(' ').trim() +
+            ' (' +
+            (u.user_id_string || u.email || '#' + id) +
+            ')';
+        sel.appendChild(opt);
+    }
+    sel.value = val;
+    const box = document.getElementById('behalf-doctor-search-results');
+    if (box) box.innerHTML = '';
+    onAdminBehalfDoctorOrSeminarChange();
+}
+
+function useBehalfUnregisteredDoctor() {
+    const sel = document.getElementById('behalf-doctor-select');
+    if (sel) sel.value = '';
+    const box = document.getElementById('behalf-doctor-search-results');
+    if (box) box.innerHTML = '<p style="margin:0;color:#0f766e;">Using form details for new/existing doctor auto-detection.</p>';
+    onAdminBehalfDoctorOrSeminarChange();
+}
+
+async function lookupBehalfDoctor() {
+    const q = String((document.getElementById('behalf-doctor-search') || {}).value || '').trim();
+    const box = document.getElementById('behalf-doctor-search-results');
+    if (!q) return alert('Enter doctor name, phone, or email.');
+    if (box) box.innerHTML = '<p style="margin:0;color:#64748b;">Searching…</p>';
+    try {
+        const res = await fetch('/api/admin/users/lookup?q=' + encodeURIComponent(q), { cache: 'no-store' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Lookup failed');
+        const rows = data.multiple ? data.matches || [] : data.user ? [data.user] : [];
+        const docs = rows.filter((u) => {
+            const ur = String(u.user_role || '').toLowerCase();
+            const r = String(u.role || '').toLowerCase();
+            return ur === 'doctor' || r === 'doctor';
+        });
+        if (!docs.length) {
+            if (box) {
+                box.innerHTML =
+                    '<p style="margin:0;color:#b45309;">No doctor account matched this query. You can continue with "Use form details (new doctor)".</p>';
+            }
+            return;
+        }
+        if (box) {
+            box.innerHTML = docs
+                .map(
+                    (u) =>
+                        '<button type="button" class="btn-secondary" style="display:block;width:100%;text-align:left;margin:4px 0;padding:8px 10px;" onclick="chooseBehalfDoctorFromLookup(' +
+                        Number(u.id) +
+                        ')">' +
+                        escAdmin(
+                            [u.first_name || '', u.last_name || ''].join(' ').trim() +
+                                ' · ' +
+                                (u.user_id_string || '') +
+                                (u.email ? ' · ' + u.email : '') +
+                                (u.phone ? ' · ' + u.phone : '')
+                        ) +
+                        '</button>'
+                )
+                .join('');
+        }
+    } catch (e) {
+        if (box) box.innerHTML = '<p style="margin:0;color:#b91c1c;">' + escAdmin(e.message || 'Lookup failed') + '</p>';
     }
 }
 
@@ -3147,6 +3235,7 @@ async function behalfInitiatePayment() {
     if (!adm?.id || !__behalfRegId) return alert('Save an application first.');
     stopBehalfPaymentPoll();
     const pollSt = document.getElementById('behalf-poll-status');
+    const requestOnly = !!document.getElementById('behalf-request-only')?.checked;
     try {
         const res = await fetch('/api/admin/payments/initiate', {
             method: 'POST',
@@ -3173,7 +3262,20 @@ async function behalfInitiatePayment() {
             if (qrBlock) qrBlock.classList.remove('hidden');
         }
         if (data.manualConfirm && markBtn) markBtn.classList.remove('hidden');
-        if (pollSt) pollSt.textContent = data.message || 'Waiting for payment…';
+        if (!requestOnly) {
+            if (data.paymentType === 'razorpay_checkout' && adminRazorpayCheckoutPayload(data)) {
+                openAdminRazorpayCheckout(data, () => behalfPollPayment());
+            } else if (data.paymentType && String(data.paymentType).endsWith('_checkout')) {
+                openAdminHostedCheckout(data, () => behalfPollPayment());
+            }
+        }
+        if (pollSt) {
+            pollSt.textContent = requestOnly
+                ? data.paymentUrl
+                    ? 'Payment request created. Share this link with doctor: ' + data.paymentUrl
+                    : data.message || 'Payment request created. Doctor can complete payment from portal.'
+                : data.message || 'Waiting for payment…';
+        }
         __behalfPollTimer = setInterval(behalfPollPayment, 4000);
     } catch (e) {
         alert('Network error');
@@ -3196,6 +3298,37 @@ async function behalfMarkUpiPaid() {
         onAdminBehalfDoctorOrSeminarChange();
     } catch (e) {
         alert('Network error');
+    }
+}
+
+async function copyApplicationPaymentLink(registrationId, applicationNo, methodId) {
+    const adm = getStoredAdminUser();
+    const regId = parseInt(registrationId, 10);
+    if (!adm?.id || !regId) return alert('Save/select an application first.');
+    try {
+        const q = new URLSearchParams({
+            actingAdminId: String(adm.id),
+            registrationId: String(regId)
+        });
+        if (methodId) q.set('methodId', String(methodId));
+        const res = await fetch('/api/admin/payments/application-link?' + q.toString(), {
+            cache: 'no-store'
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.paymentLink) throw new Error(data.error || 'Could not create payment link');
+        const link = data.paymentLink;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(link);
+            alert(
+                'Payment link copied for ' +
+                    (applicationNo || data.applicationNo || ('Reg #' + regId)) +
+                    '. Share it with the doctor.'
+            );
+        } else {
+            prompt('Copy and share this payment link:', link);
+        }
+    } catch (e) {
+        alert(e.message || 'Could not create payment link');
     }
 }
 
@@ -3267,8 +3400,8 @@ async function flushBehalfRegistrationSave(manual) {
     const docId = parseInt((document.getElementById('behalf-doctor-select') || {}).value, 10);
     const sid = parseInt((document.getElementById('behalf-seminar-select') || {}).value, 10);
     const ta = document.getElementById('behalf-form-json');
-    if (!Number.isInteger(docId) || docId < 1 || !Number.isInteger(sid) || sid < 1) {
-        if (st) st.textContent = 'Select a doctor and seminar to enable auto-save.';
+    if (!Number.isInteger(sid) || sid < 1) {
+        if (st) st.textContent = 'Select a seminar to enable save.';
         return;
     }
     let formData;
@@ -3299,7 +3432,7 @@ async function flushBehalfRegistrationSave(manual) {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                targetUserId: docId,
+                targetUserId: Number.isInteger(docId) && docId > 0 ? docId : null,
                 seminarId: sid,
                 formData,
                 adminUserId: adm.id,
@@ -3317,6 +3450,19 @@ async function flushBehalfRegistrationSave(manual) {
             st.textContent = `Saved ${data.created ? '(new application)' : '(updated)'} at ${new Date().toLocaleTimeString()}`;
         __behalfRegId = data.registrationId || __behalfRegId;
         if (data.applicationNo) __behalfRegApplicationNo = data.applicationNo;
+        if (data.userId && data.userIdString) {
+            const sel = document.getElementById('behalf-doctor-select');
+            if (sel) {
+                let opt = Array.from(sel.options || []).find((o) => String(o.value) === String(data.userId));
+                if (!opt) {
+                    opt = document.createElement('option');
+                    opt.value = String(data.userId);
+                    opt.textContent = (data.userName || 'Doctor') + ' (' + data.userIdString + ')';
+                    sel.appendChild(opt);
+                }
+                sel.value = String(data.userId);
+            }
+        }
         onAdminBehalfDoctorOrSeminarChange();
     } catch (e) {
         console.error(e);
@@ -11789,13 +11935,20 @@ async function proxyInitiatePayment() {
         }
         if (data.manualConfirm && markBtn) markBtn.classList.remove('hidden');
         else if (markBtn) markBtn.classList.add('hidden');
-        if (data.paymentType === 'razorpay_checkout' && adminRazorpayCheckoutPayload(data)) {
-            openProxyRazorpayCheckout(data);
-        } else if (data.paymentType && String(data.paymentType).endsWith('_checkout') && data.gateway !== 'razorpay') {
-            openAdminHostedCheckout(data, () => startProxyPaymentPoll());
+        // Proxy flow is "payment request" first; do not auto-open checkout popups here.
+        if (data.pollRequired) {
+            if (pollSt) {
+                pollSt.textContent = data.paymentUrl
+                    ? 'Payment request created. Share this link with doctor: ' + data.paymentUrl
+                    : data.message || 'Payment request created. Waiting for confirmation…';
+            }
+            startProxyPaymentPoll();
         }
-        if (data.pollRequired) startProxyPaymentPoll();
-        else if (pollSt) pollSt.textContent = data.message || '';
+        else if (pollSt) {
+            pollSt.textContent = data.paymentUrl
+                ? 'Payment request created. Share this link with doctor: ' + data.paymentUrl
+                : data.message || '';
+        }
         else alert(data.message || 'Payment request created.');
     } catch (e) {
         console.error(e);
@@ -11809,39 +11962,130 @@ function adminRazorpayCheckoutPayload(data) {
     return Object.assign({}, data, { razorpayOrder: rzOrder });
 }
 
+function ensureCustomCheckoutUiStyles() {
+    if (document.getElementById('custom-checkout-ui-style')) return;
+    const st = document.createElement('style');
+    st.id = 'custom-checkout-ui-style';
+    st.textContent = `
+        .cco-overlay{position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:10050;display:flex;align-items:center;justify-content:center;padding:16px;}
+        .cco-card{width:min(540px,100%);background:#fff;border-radius:16px;box-shadow:0 18px 44px rgba(2,6,23,.28);overflow:hidden;border:1px solid #e2e8f0;}
+        .cco-head{padding:14px 16px;background:#2563eb;color:#fff;}
+        .cco-title{font-size:1rem;font-weight:800;margin:0;}
+        .cco-sub{font-size:.8rem;opacity:.95;margin:4px 0 0;}
+        .cco-body{padding:14px 16px;}
+        .cco-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+        .cco-opt{display:flex;align-items:center;gap:8px;padding:10px;border:1px solid #cbd5e1;border-radius:10px;background:#f8fafc;}
+        .cco-opt input{margin:0;}
+        .cco-upi{margin-top:10px;padding:10px;border:1px solid #bfdbfe;border-radius:10px;background:#eff6ff;}
+        .cco-upi input{width:100%;padding:10px;border:1px solid #93c5fd;border-radius:8px;}
+        .cco-sum{margin-top:12px;border:1px solid #e2e8f0;border-radius:10px;padding:10px;background:#f8fafc;font-size:.9rem;}
+        .cco-row{display:flex;justify-content:space-between;gap:10px;padding:3px 0;}
+        .cco-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:12px;}
+    `;
+    document.head.appendChild(st);
+}
+
+function openCustomCheckoutSheet(opts, onContinue) {
+    ensureCustomCheckoutUiStyles();
+    const o = opts || {};
+    const amount = Number(o.amount) || 0;
+    const overlay = document.createElement('div');
+    overlay.className = 'cco-overlay';
+    overlay.innerHTML =
+        '<div class="cco-card">' +
+        '<div class="cco-head"><p class="cco-title">' +
+        escAdmin(o.title || 'Secure payment checkout') +
+        '</p><p class="cco-sub">Choose UPI app or enter UPI ID</p></div>' +
+        '<div class="cco-body">' +
+        '<div class="cco-grid">' +
+        '<label class="cco-opt"><input type="radio" name="cco-opt" value="gpay" checked> Google Pay</label>' +
+        '<label class="cco-opt"><input type="radio" name="cco-opt" value="phonepe"> PhonePe</label>' +
+        '</div>' +
+        '<label class="cco-opt" style="margin-top:10px;"><input type="radio" name="cco-opt" value="upi_id"> Enter UPI ID manually</label>' +
+        '<div class="cco-upi hidden"><input type="text" id="cco-upi-input" placeholder="yourname@bank"></div>' +
+        '<div class="cco-sum">' +
+        '<div class="cco-row"><span>Amount payable</span><strong>₹' +
+        escAdmin(amount ? amount.toFixed(2) : '0.00') +
+        '</strong></div>' +
+        '<div class="cco-row"><span>Order reference</span><strong>' +
+        escAdmin(o.orderId || '-') +
+        '</strong></div>' +
+        '</div>' +
+        '<div class="cco-actions">' +
+        '<button type="button" class="btn-primary" style="background:#64748b;" id="cco-cancel-btn">Cancel</button>' +
+        '<button type="button" class="btn-primary" id="cco-continue-btn">Continue to payment</button>' +
+        '</div></div></div>';
+    document.body.appendChild(overlay);
+    const upiWrap = overlay.querySelector('.cco-upi');
+    const radios = overlay.querySelectorAll('input[name="cco-opt"]');
+    const cleanup = () => {
+        if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    };
+    const getChoice = () => {
+        const selected = overlay.querySelector('input[name="cco-opt"]:checked');
+        const channel = selected ? selected.value : 'gpay';
+        const upiId = String((overlay.querySelector('#cco-upi-input') || {}).value || '').trim();
+        return { channel, upiId };
+    };
+    radios.forEach((r) =>
+        r.addEventListener('change', () => {
+            const c = getChoice();
+            if (upiWrap) upiWrap.classList.toggle('hidden', c.channel !== 'upi_id');
+        })
+    );
+    overlay.querySelector('#cco-cancel-btn')?.addEventListener('click', cleanup);
+    overlay.querySelector('#cco-continue-btn')?.addEventListener('click', () => {
+        const c = getChoice();
+        if (c.channel === 'upi_id' && !/^[a-zA-Z0-9.\-_]{2,}@[a-zA-Z]{2,}$/i.test(c.upiId)) {
+            alert('Enter a valid UPI ID (example: name@bank).');
+            return;
+        }
+        cleanup();
+        if (typeof onContinue === 'function') onContinue(c);
+    });
+    return true;
+}
+
 function openAdminHostedCheckout(data, onPoll) {
-    if (data.formPost && data.formPost.action) {
-        const f = document.createElement('form');
-        f.method = 'POST';
-        f.action = data.formPost.action;
-        f.target = '_blank';
-        Object.entries(data.formPost.fields || {}).forEach(([k, v]) => {
-            const inp = document.createElement('input');
-            inp.type = 'hidden';
-            inp.name = k;
-            inp.value = String(v);
-            f.appendChild(inp);
-        });
-        document.body.appendChild(f);
-        f.submit();
-        setTimeout(() => f.remove(), 2000);
-        if (typeof onPoll === 'function') onPoll();
-        return true;
-    }
-    if (data.paymentUrl) {
-        const w = window.open(data.paymentUrl, '_blank', 'noopener');
-        if (!w && confirm('Open payment page in this tab?')) window.location.href = data.paymentUrl;
-        if (typeof onPoll === 'function') onPoll();
-        return true;
-    }
-    if (data.easebuzzAccessKey) {
-        const payUrl = 'https://pay.easebuzz.in/pay/' + encodeURIComponent(data.easebuzzAccessKey);
-        const w = window.open(payUrl, '_blank', 'noopener');
-        if (!w && confirm('Open Easebuzz payment in this tab?')) window.location.href = payUrl;
-        if (typeof onPoll === 'function') onPoll();
-        return true;
-    }
-    return false;
+    const launch = () => {
+        if (data.formPost && data.formPost.action) {
+            const f = document.createElement('form');
+            f.method = 'POST';
+            f.action = data.formPost.action;
+            f.target = '_blank';
+            Object.entries(data.formPost.fields || {}).forEach(([k, v]) => {
+                const inp = document.createElement('input');
+                inp.type = 'hidden';
+                inp.name = k;
+                inp.value = String(v);
+                f.appendChild(inp);
+            });
+            document.body.appendChild(f);
+            f.submit();
+            setTimeout(() => f.remove(), 2000);
+            if (typeof onPoll === 'function') onPoll();
+            return true;
+        }
+        if (data.paymentUrl) {
+            const w = window.open(data.paymentUrl, '_blank', 'noopener');
+            if (!w && confirm('Open payment page in this tab?')) window.location.href = data.paymentUrl;
+            if (typeof onPoll === 'function') onPoll();
+            return true;
+        }
+        if (data.easebuzzAccessKey) {
+            const payUrl = 'https://pay.easebuzz.in/pay/' + encodeURIComponent(data.easebuzzAccessKey);
+            const w = window.open(payUrl, '_blank', 'noopener');
+            if (!w && confirm('Open Easebuzz payment in this tab?')) window.location.href = payUrl;
+            if (typeof onPoll === 'function') onPoll();
+            return true;
+        }
+        return false;
+    };
+    openCustomCheckoutSheet(
+        { title: 'Admin payment request', amount: data.amount, orderId: data.orderIdString || data.orderDbId || '' },
+        () => launch()
+    );
+    return true;
 }
 
 function openAdminRazorpayCheckout(data, onPaid) {
@@ -11854,38 +12098,50 @@ function openAdminRazorpayCheckout(data, onPaid) {
         alert('Razorpay checkout script not loaded. Refresh the page and allow pop-ups for this site.');
         return false;
     }
-    const options = {
-        key: payload.keyId,
-        amount: payload.razorpayOrder.amount,
-        currency: payload.razorpayOrder.currency || 'INR',
-        name: 'VGMF Seminar',
-        description: 'Registration ' + (payload.applicationNo || ''),
-        order_id: payload.razorpayOrder.id,
-        handler: function () {
-            if (typeof onPaid === 'function') onPaid();
+    openCustomCheckoutSheet(
+        {
+            title: 'Admin Razorpay checkout',
+            amount: Number(payload.razorpayOrder.amount || 0) / 100,
+            orderId: payload.razorpayOrder.id
         },
-        modal: {
-            ondismiss: function () {
-                const msg = document.getElementById('co-pay-msg');
-                if (msg) msg.textContent = 'Payment window closed — try again or use Check status.';
+        (checkoutChoice) => {
+            const options = {
+                key: payload.keyId,
+                amount: payload.razorpayOrder.amount,
+                currency: payload.razorpayOrder.currency || 'INR',
+                name: 'VGMF Seminar',
+                description: 'Registration ' + (payload.applicationNo || ''),
+                order_id: payload.razorpayOrder.id,
+                notes: {
+                    preferred_upi_channel: checkoutChoice && checkoutChoice.channel,
+                    preferred_upi_id: (checkoutChoice && checkoutChoice.upiId) || ''
+                },
+                handler: function () {
+                    if (typeof onPaid === 'function') onPaid();
+                },
+                modal: {
+                    ondismiss: function () {
+                        const msg = document.getElementById('co-pay-msg');
+                        if (msg) msg.textContent = 'Payment window closed — try again or use Check status.';
+                    }
+                }
+            };
+            const rzp = new Razorpay(options);
+            rzp.on('payment.failed', function (resp) {
+                alert(
+                    (resp.error && resp.error.description) ||
+                        'Payment failed or was cancelled. You can try again.'
+                );
+            });
+            try {
+                rzp.open();
+            } catch (e) {
+                console.error(e);
+                alert('Could not open Razorpay. Allow pop-ups for admin.vaidyagogate.org and try again.');
             }
         }
-    };
-    const rzp = new Razorpay(options);
-    rzp.on('payment.failed', function (resp) {
-        alert(
-            (resp.error && resp.error.description) ||
-                'Payment failed or was cancelled. You can try again.'
-        );
-    });
-    try {
-        rzp.open();
-        return true;
-    } catch (e) {
-        console.error(e);
-        alert('Could not open Razorpay. Allow pop-ups for admin.vaidyagogate.org and try again.');
-        return false;
-    }
+    );
+    return true;
 }
 
 function openProxyRazorpayCheckout(data) {
@@ -13464,6 +13720,7 @@ async function sendContactInquiryEmail() {
 async function initAdminEmailComposeTab() {
     await fillAdminSeminarSelect('mail-bulk-seminar', false);
     onMailBulkAudienceChange();
+    loadMailBulkSeminarDoctors();
     loadAdminMailInboundStatus();
     loadAdminMailThreads();
 }
@@ -13619,10 +13876,86 @@ async function sendAdminMailThreadReply(threadId) {
 function onMailBulkAudienceChange() {
     const aud = document.getElementById('mail-bulk-audience')?.value || '';
     const semWrap = document.getElementById('mail-bulk-seminar-wrap');
+    const doctorsWrap = document.getElementById('mail-bulk-seminar-doctors-wrap');
     const emWrap = document.getElementById('mail-bulk-emails-wrap');
     const showSem = aud === 'seminar_paid' || aud === 'seminar_all';
     if (semWrap) semWrap.style.display = showSem ? '' : 'none';
+    if (doctorsWrap) doctorsWrap.classList.toggle('hidden', !showSem);
     if (emWrap) emWrap.classList.toggle('hidden', aud !== 'custom_emails');
+    if (showSem) loadMailBulkSeminarDoctors();
+}
+
+function selectedMailBulkDoctorIds() {
+    const nodes = document.querySelectorAll('#mail-bulk-seminar-doctors input[type="checkbox"][data-user-id]:checked');
+    return Array.from(nodes)
+        .map((n) => parseInt(n.getAttribute('data-user-id') || '', 10))
+        .filter((n) => Number.isInteger(n) && n > 0);
+}
+
+function refreshMailBulkDoctorsCount() {
+    const el = document.getElementById('mail-bulk-doctors-count');
+    if (!el) return;
+    const all = document.querySelectorAll('#mail-bulk-seminar-doctors input[type="checkbox"][data-user-id]').length;
+    const sel = selectedMailBulkDoctorIds().length;
+    el.textContent = sel ? `Selected ${sel} of ${all}` : `Selected all (${all})`;
+}
+
+function setMailBulkDoctorSelection(on) {
+    document
+        .querySelectorAll('#mail-bulk-seminar-doctors input[type="checkbox"][data-user-id]')
+        .forEach((n) => (n.checked = !!on));
+    refreshMailBulkDoctorsCount();
+}
+
+async function loadMailBulkSeminarDoctors() {
+    const admin = getStoredAdminUser();
+    const aud = document.getElementById('mail-bulk-audience')?.value || '';
+    const seminarId = document.getElementById('mail-bulk-seminar')?.value || '';
+    const box = document.getElementById('mail-bulk-seminar-doctors');
+    if (!box) return;
+    if (!admin?.id || !seminarId || (aud !== 'seminar_paid' && aud !== 'seminar_all')) {
+        box.innerHTML = '<p style="margin:0;color:#64748b;">Select seminar audience and seminar to load doctors.</p>';
+        const count = document.getElementById('mail-bulk-doctors-count');
+        if (count) count.textContent = '';
+        return;
+    }
+    box.innerHTML = '<p style="margin:0;color:#64748b;">Loading doctors…</p>';
+    try {
+        const url =
+            '/api/admin/email/seminar-recipients?actingAdminId=' +
+            encodeURIComponent(admin.id) +
+            '&seminarId=' +
+            encodeURIComponent(seminarId) +
+            '&audience=' +
+            encodeURIComponent(aud);
+        const res = await fetch(url, { cache: 'no-store' });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Could not load doctors');
+        const rows = Array.isArray(data.recipients) ? data.recipients : [];
+        if (!rows.length) {
+            box.innerHTML = '<p style="margin:0;color:#64748b;">No doctors with valid email in this seminar audience.</p>';
+            refreshMailBulkDoctorsCount();
+            return;
+        }
+        box.innerHTML = rows
+            .map(
+                (r) =>
+                    '<label style="display:flex;align-items:center;gap:8px;padding:4px 0;">' +
+                    '<input type="checkbox" data-user-id="' +
+                    escAdmin(r.id) +
+                    '" checked onchange="refreshMailBulkDoctorsCount()">' +
+                    '<span style="font-size:0.86rem;">' +
+                    escAdmin(r.name || '') +
+                    (r.userIdString ? ' · ' + escAdmin(r.userIdString) : '') +
+                    ' · ' +
+                    escAdmin(r.email || '') +
+                    '</span></label>'
+            )
+            .join('');
+        refreshMailBulkDoctorsCount();
+    } catch (e) {
+        box.innerHTML = '<p style="margin:0;color:#b91c1c;">' + escAdmin(e.message || 'Could not load doctors') + '</p>';
+    }
 }
 
 async function previewMailBulkCount() {
@@ -13630,10 +13963,15 @@ async function previewMailBulkCount() {
     const aud = document.getElementById('mail-bulk-audience')?.value || '';
     const sid = document.getElementById('mail-bulk-seminar')?.value || '';
     const emails = document.getElementById('mail-bulk-emails')?.value || '';
+    const pickedUserIds = selectedMailBulkDoctorIds();
     const el = document.getElementById('mail-bulk-count');
     if (!admin?.id) return alert('Admin session required');
     if (el) el.textContent = 'Counting…';
     try {
+        if (pickedUserIds.length) {
+            if (el) el.textContent = `Recipients with valid email: ${pickedUserIds.length}`;
+            return;
+        }
         let url =
             `/api/admin/email/recipient-count?actingAdminId=${admin.id}&audience=${encodeURIComponent(aud)}`;
         if (sid && (aud === 'seminar_paid' || aud === 'seminar_all')) {
@@ -13702,6 +14040,7 @@ async function sendAdminBulkEmail() {
     const subject = document.getElementById('mail-bulk-subject')?.value || '';
     const body = document.getElementById('mail-bulk-body')?.value || '';
     const msgEl = document.getElementById('mail-bulk-msg');
+    const pickedUserIds = selectedMailBulkDoctorIds();
     if (!subject.trim() || !body.trim()) return alert('Subject and message are required');
     if (!confirm('Send bulk email to the selected audience?')) return;
     if (msgEl) msgEl.textContent = 'Queueing…';
@@ -13711,8 +14050,9 @@ async function sendAdminBulkEmail() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 actingAdminId: admin.id,
-                audience,
+                audience: pickedUserIds.length ? 'user_ids' : audience,
                 seminarId: seminarId ? parseInt(seminarId, 10) : null,
+                userIds: pickedUserIds,
                 emails: emailsRaw.split(/[,\s;]+/).filter(Boolean),
                 subject,
                 body,

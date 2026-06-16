@@ -11791,7 +11791,7 @@ function respondAdminRegUpsertWithVolunteerTicket(res, payload, tid, sid, regist
     );
 }
 
-function runAdminRegistrationUpsertBody(req, res, tid, sid, aid, formData) {
+function runAdminRegistrationUpsertBody(req, res, tid, sid, aid, formData, resolvedUser) {
     const stored =
         formData && typeof formData === 'object'
             ? sanitizeFormDataForStorage(formData)
@@ -11847,7 +11847,12 @@ function runAdminRegistrationUpsertBody(req, res, tid, sid, aid, formData) {
                                 success: true,
                                 registrationId: reg.id,
                                 applicationNo: result.applicationNo,
-                                created: false
+                                created: false,
+                                userId: tid,
+                                userIdString: (resolvedUser && resolvedUser.user_id_string) || '',
+                                userName:
+                                    (resolvedUser && [resolvedUser.first_name, resolvedUser.last_name].filter(Boolean).join(' ').trim()) ||
+                                    ''
                             },
                             tid,
                             sid,
@@ -11883,7 +11888,12 @@ function runAdminRegistrationUpsertBody(req, res, tid, sid, aid, formData) {
                                 success: true,
                                 registrationId: newRegId,
                                 applicationNo,
-                                created: true
+                                created: true,
+                                userId: tid,
+                                userIdString: (resolvedUser && resolvedUser.user_id_string) || '',
+                                userName:
+                                    (resolvedUser && [resolvedUser.first_name, resolvedUser.last_name].filter(Boolean).join(' ').trim()) ||
+                                    ''
                             },
                             tid,
                             sid,
@@ -11895,6 +11905,92 @@ function runAdminRegistrationUpsertBody(req, res, tid, sid, aid, formData) {
         });
         });
     });
+}
+
+function resolveOrCreateBehalfDoctorUser(db, targetUserId, formData, cb) {
+    const tid = parseInt(targetUserId, 10);
+    if (Number.isInteger(tid) && tid > 0) {
+        return db.get(
+            `SELECT id, user_id_string, first_name, last_name, email, phone FROM users WHERE id = ? LIMIT 1`,
+            [tid],
+            (e, row) => {
+                if (e) return cb(e);
+                if (!row) return cb(new Error('Selected doctor account was not found.'));
+                cb(null, row);
+            }
+        );
+    }
+    const fd = formData && typeof formData === 'object' ? formData : {};
+    const firstName = String(fd.fname || fd.first_name || '').trim();
+    const lastName = String(fd.lname || fd.last_name || '').trim();
+    const email = String(fd.email || '').trim().toLowerCase();
+    const phone = String(fd.phone || '').trim();
+    if (!firstName || !lastName) return cb(new Error('Enter doctor first and last name.'));
+    if (!email && !phone) return cb(new Error('Enter doctor email or phone.'));
+
+    const emailCond = email ? `LOWER(TRIM(email)) = LOWER(TRIM(?))` : '1=0';
+    const phoneCond = phone ? `TRIM(phone) = TRIM(?)` : '1=0';
+    const params = [];
+    if (email) params.push(email);
+    if (phone) params.push(phone);
+    db.get(
+        `SELECT id, user_id_string, first_name, last_name, email, phone
+         FROM users
+         WHERE ((${emailCond}) OR (${phoneCond}))
+           AND (LOWER(TRIM(COALESCE(user_role,''))) = 'doctor' OR LOWER(TRIM(COALESCE(role,''))) = 'doctor')
+         ORDER BY id ASC LIMIT 1`,
+        params,
+        (eFind, existing) => {
+            if (eFind) return cb(eFind);
+            if (existing) return cb(null, existing);
+            const tempPass = 'ADM_' + generateId().slice(0, 10);
+            const userIdString = generateId();
+            const loginEmail = email || `doctor_${userIdString}@pending.local`;
+            const finishInsert = function (insErr) {
+                if (insErr) return cb(insErr);
+                const uid = this.lastID;
+                db.get(
+                    `SELECT id, user_id_string, first_name, last_name, email, phone FROM users WHERE id = ?`,
+                    [uid],
+                    (eRow, row) => {
+                        if (eRow || !row) return cb(eRow || new Error('Could not load saved doctor account.'));
+                        if (email) {
+                            try {
+                                notifEngine.notify(
+                                    db,
+                                    'ACCOUNT_CREATED',
+                                    {
+                                        userId: row.id,
+                                        vars: { temporary_password: tempPass }
+                                    },
+                                    () => {}
+                                );
+                            } catch (_) {}
+                        }
+                        cb(null, row);
+                    }
+                );
+            };
+            db.run(
+                `INSERT INTO users (user_id_string, first_name, last_name, email, phone, password, role, user_role, email_verified, profile_complete)
+                 VALUES (?, ?, ?, ?, ?, ?, 'doctor', 'doctor', 1, 0)`,
+                [userIdString, firstName, lastName, loginEmail, phone, tempPass],
+                function (insErr) {
+                    if (insErr && /no such column|profile_complete/i.test(String(insErr.message || ''))) {
+                        return db.run(
+                            `INSERT INTO users (user_id_string, first_name, last_name, email, phone, password, role, user_role, email_verified)
+                             VALUES (?, ?, ?, ?, ?, ?, 'doctor', 'doctor', 1)`,
+                            [userIdString, firstName, lastName, loginEmail, phone, tempPass],
+                            function (e2) {
+                                finishInsert.call(this, e2);
+                            }
+                        );
+                    }
+                    finishInsert.call(this, insErr);
+                }
+            );
+        }
+    );
 }
 
 // Admin: create or update a registration on behalf of a doctor (admin-edited; distinct from doctor self-edit API)
@@ -11909,11 +12005,10 @@ app.post('/api/admin/registrations/upsert', (req, res) => {
         applicantPhoneOtpToken,
         applicantEmailOtpToken
     } = req.body || {};
-    const tid = parseInt(targetUserId, 10);
     const sid = parseInt(seminarId, 10);
     const aid = parseInt(adminUserId, 10);
-    if (!Number.isInteger(tid) || !Number.isInteger(sid) || !Number.isInteger(aid)) {
-        return res.status(400).json({ error: 'targetUserId, seminarId, and adminUserId are required' });
+    if (!Number.isInteger(sid) || !Number.isInteger(aid)) {
+        return res.status(400).json({ error: 'seminarId and adminUserId are required' });
     }
     adminLiveEdit.assertAdminAccess(db, aid, (eAdm, admResult) => {
         if (eAdm) return res.status(500).json({ error: eAdm.message });
@@ -11940,11 +12035,17 @@ app.post('/api/admin/registrations/upsert', (req, res) => {
                                 'Verify applicant phone and email OTP before saving this application.'
                         });
                     }
-                    runAdminRegistrationUpsertBody(req, res, tid, sid, aid, formData);
+                    resolveOrCreateBehalfDoctorUser(db, targetUserId, formData, (eUser, userRow) => {
+                        if (eUser) return res.status(400).json({ error: eUser.message });
+                        runAdminRegistrationUpsertBody(req, res, userRow.id, sid, aid, formData, userRow);
+                    });
                 }
             );
         }
-        runAdminRegistrationUpsertBody(req, res, tid, sid, aid, formData);
+        resolveOrCreateBehalfDoctorUser(db, targetUserId, formData, (eUser, userRow) => {
+            if (eUser) return res.status(400).json({ error: eUser.message });
+            runAdminRegistrationUpsertBody(req, res, userRow.id, sid, aid, formData, userRow);
+        });
     });
 });
 
@@ -12949,6 +13050,49 @@ app.get('/api/admin/email/recipient-count', (req, res) => {
         adminComposeMail.countRecipients(db, { audience, seminarId, emails }, (err, out) => {
             if (err) return res.status(400).json({ error: err.message });
             res.json({ success: true, count: out.count });
+        });
+    });
+});
+
+app.get('/api/admin/email/seminar-recipients', (req, res) => {
+    const aid = parseInt(req.query.actingAdminId, 10);
+    const seminarId = parseInt(req.query.seminarId, 10);
+    const audience = String(req.query.audience || 'seminar_all').trim();
+    if (!Number.isInteger(aid) || aid < 1) {
+        return res.status(400).json({ error: 'actingAdminId is required' });
+    }
+    if (!Number.isInteger(seminarId) || seminarId < 1) {
+        return res.status(400).json({ error: 'seminarId is required' });
+    }
+    if (audience !== 'seminar_all' && audience !== 'seminar_paid') {
+        return res.status(400).json({ error: 'Audience must be seminar_all or seminar_paid' });
+    }
+    assertAdminPortalActor(aid, (e) => {
+        if (e && e.message === 'BAD_ACTOR') return res.status(400).json({ error: 'actingAdminId is required' });
+        if (e && e.message === 'FORBIDDEN') return res.status(403).json({ error: 'Administrator access required' });
+        if (e) return res.status(500).json({ error: e.message });
+        let sql = `SELECT DISTINCT u.id, u.email, u.first_name, u.last_name, u.user_id_string
+                   FROM registrations r
+                   JOIN users u ON u.id = r.user_id
+                   WHERE r.seminar_id = ? AND r.status NOT IN ('rejected', 'cancelled')
+                     AND IFNULL(u.is_disabled,0) = 0
+                     AND u.email IS NOT NULL AND trim(u.email) != ''`;
+        if (audience === 'seminar_paid') {
+            sql += ` AND EXISTS (
+                        SELECT 1 FROM orders o
+                        WHERE o.registration_id = r.id AND lower(trim(o.status)) = 'success'
+                     )`;
+        }
+        sql += ` ORDER BY u.first_name, u.last_name, u.id`;
+        db.all(sql, [seminarId], (err, rows) => {
+            if (err) return res.status(500).json({ error: err.message });
+            const recipients = (rows || []).map((r) => ({
+                id: r.id,
+                userIdString: r.user_id_string || '',
+                email: String(r.email || '').trim().toLowerCase(),
+                name: [r.first_name, r.last_name].filter(Boolean).join(' ').trim()
+            }));
+            res.json({ success: true, recipients });
         });
     });
 });
