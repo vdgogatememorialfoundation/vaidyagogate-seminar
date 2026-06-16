@@ -1398,6 +1398,20 @@ function renderRefundEligibilityHtml(eligibility) {
     return html;
 }
 
+function renderDoctorBankUtrBlock(bankUtr) {
+    const utr = String(bankUtr || '').trim();
+    if (!utr) return '';
+    return (
+        '<div style="margin-top:8px;padding:10px 12px;background:#ecfdf5;border:1px solid #6ee7b7;border-radius:8px;font-size:0.84rem;color:#065f46;line-height:1.5;">' +
+        '<strong><i class="fas fa-university"></i> Bank UTR / RRN</strong><br>' +
+        '<code style="font-size:0.95rem;font-weight:700;letter-spacing:0.04em;">' +
+        escapeHtml(utr) +
+        '</code><br>' +
+        '<span style="font-size:0.78rem;color:#047857;">Share this reference with your bank or UPI app if the refund credit is not visible yet.</span>' +
+        '</div>'
+    );
+}
+
 function renderCancellationRefundBlock(a) {
     const tr = a && a.cancellationTracking;
     if (!tr) return '';
@@ -1415,6 +1429,11 @@ function renderCancellationRefundBlock(a) {
                 : '#475569';
     const rz = tr.razorpayLive || null;
     const latestRz = (tr.refunds || []).find((r) => r.gateway === 'razorpay') || null;
+    const bankUtr =
+        tr.bankUtr ||
+        (rz && rz.bankUtr) ||
+        (latestRz && (latestRz.bankUtr || (latestRz.razorpay && latestRz.razorpay.bankUtr))) ||
+        null;
     let badge =
         '<div style="background:linear-gradient(135deg,#fff7ed,#f8fafc);border:1px solid #fed7aa;border-radius:10px;padding:10px 14px;margin-bottom:10px;">' +
         (livePending
@@ -1459,13 +1478,17 @@ function renderCancellationRefundBlock(a) {
                 : livePending
                   ? 'Updates automatically when Razorpay processes the refund.'
                   : '') +
+            renderDoctorBankUtrBlock(bankUtr || (rz.summary && rz.summary.bankUtr)) +
             '</div>';
     } else if (latestRz && latestRz.providerRefundId) {
         badge +=
             '<div style="margin-top:8px;font-size:0.82rem;color:#64748b;">Razorpay ref: ' +
             escapeHtml(latestRz.providerRefundId) +
             (latestRz.providerStatus ? ' · ' + escapeHtml(String(latestRz.providerStatus).toUpperCase()) : '') +
-            '</div>';
+            '</div>' +
+            renderDoctorBankUtrBlock(bankUtr);
+    } else if (bankUtr) {
+        badge += renderDoctorBankUtrBlock(bankUtr);
     }
     badge += '</div>';
     if (!tr.trackingSteps || !tr.trackingSteps.length) return badge;
@@ -1482,6 +1505,7 @@ function cancellationRowToTracking(row) {
         refundAmount: row.refundAmount != null ? row.refundAmount : row.refund_amount,
         refundPercent: row.refundPercent != null ? row.refundPercent : row.refund_percent,
         providerRefundId: row.providerRefundId || row.provider_refund_id || null,
+        bankUtr: row.bankUtr || row.bank_utr || null,
         trackingSteps: row.trackingSteps || [],
         refunds: row.refunds || [],
         razorpayLive: row.razorpayLive || null
@@ -1543,6 +1567,7 @@ function refundTrackFingerprint(rows) {
                 tr && tr.refundStatus,
                 tr && tr.refundAmount,
                 tr && tr.providerRefundId,
+                tr && tr.bankUtr,
                 stepSig,
                 r.reviewedAt || r.reviewed_at || ''
             ].join(':');

@@ -3192,6 +3192,14 @@
                     Process payment gateway refund on approve
                 </label>
             </div>
+            <div id="admin-cancel-review-bank-utr-panel" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:12px;margin-bottom:14px;display:none;">
+                <p style="margin:0 0 8px;font-weight:700;color:#1e40af;">Bank UTR / RRN</p>
+                <p style="margin:0 0 10px;font-size:0.82rem;color:#475569;">Doctors can share this reference with their bank to trace the refund credit. Auto-filled from Razorpay when available; you can also enter it manually after NEFT/UPI settlement.</p>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+                    <input type="text" id="admin-cancel-review-bank-utr" placeholder="e.g. 123456789012" style="flex:1;min-width:200px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;font-family:monospace;">
+                    <button type="button" class="btn-primary" style="background:#2563eb;" onclick="adminSaveCancellationBankUtrFromModal()"><i class="fas fa-save"></i> Save UTR</button>
+                </div>
+            </div>
             <div style="display:flex;gap:10px;flex-wrap:wrap;">
                 <button type="button" class="btn-primary" style="background:#15803d;" onclick="submitAdminCancellationReview('approve')"><i class="fas fa-check"></i> Approve &amp; cancel</button>
                 <button type="button" class="btn-primary" style="background:#64748b;" onclick="submitAdminCancellationReview('reject')"><i class="fas fa-times"></i> Reject request</button>

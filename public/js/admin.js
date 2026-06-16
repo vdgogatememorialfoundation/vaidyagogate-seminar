@@ -8438,6 +8438,11 @@ function renderAdminRefundTrackCard(r) {
         escAdmin(r.refundStatusLabel || r.refund_status || '—') +
         '</strong>' +
         (r.provider_refund_id ? ' · Ref ' + escAdmin(r.provider_refund_id) : '') +
+        (r.bank_utr || (r.refunds && r.refunds[0] && r.refunds[0].bank_utr)
+            ? ' · UTR <code style="font-size:0.78rem;">' +
+              escAdmin(r.bank_utr || r.refunds[0].bank_utr) +
+              '</code>'
+            : '') +
         '</p>' +
         renderAdminCancelTrackingStepsHtml(r.trackingSteps || []) +
         '<div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;">' +
@@ -8723,6 +8728,8 @@ function populateAdminCancellationReviewModal(row) {
     const refundPanel = document.getElementById('admin-cancel-review-refund-panel');
     const refundBtn = document.getElementById('admin-cancel-review-refund-btn');
     const syncBtn = document.getElementById('admin-cancel-review-sync-btn');
+    const utrPanel = document.getElementById('admin-cancel-review-bank-utr-panel');
+    const utrInput = document.getElementById('admin-cancel-review-bank-utr');
     const msg = document.getElementById('admin-cancel-review-msg');
     const when = adminFormatCancelReviewDateTime(row.requested_at);
     if (title) title.textContent = 'Review · ' + (row.application_no || 'Application');
@@ -8776,6 +8783,11 @@ function populateAdminCancellationReviewModal(row) {
                   (row.razorpayLive.failureReason
                       ? '<span style="color:#b91c1c;">' + escAdmin(row.razorpayLive.failureReason) + '</span>'
                       : '') +
+                  (row.razorpayLive.bankUtr || (row.razorpayLive.summary && row.razorpayLive.summary.bankUtr)
+                      ? '<p style="margin:8px 0 0;"><strong>Bank UTR / RRN:</strong> <code style="font-size:0.78rem;">' +
+                        escAdmin(row.razorpayLive.bankUtr || row.razorpayLive.summary.bankUtr) +
+                        '</code></p>'
+                      : '') +
                   '</div>'
                 : row.provider_refund_id
                   ? '<p style="margin:6px 0 0;"><strong>Razorpay ref:</strong> ' + escAdmin(row.provider_refund_id) + '</p>'
@@ -8799,7 +8811,52 @@ function populateAdminCancellationReviewModal(row) {
         !['completed', 'none'].includes(String(row.refund_status || '').toLowerCase());
     if (refundBtn) refundBtn.style.display = canProcessRefund ? 'inline-block' : 'none';
     if (syncBtn) syncBtn.style.display = canSyncRefund ? 'inline-block' : 'none';
+    const latestRefund = (row.refunds || [])[0];
+    const bankUtr =
+        (latestRefund && latestRefund.bank_utr) ||
+        (row.razorpayLive && (row.razorpayLive.bankUtr || (row.razorpayLive.summary && row.razorpayLive.summary.bankUtr))) ||
+        '';
+    if (utrPanel) {
+        utrPanel.style.display =
+            row.status === 'approved' && Number(row.refund_amount) > 0 ? 'block' : 'none';
+    }
+    if (utrInput) utrInput.value = bankUtr || '';
     if (msg) msg.textContent = '';
+}
+
+async function adminSaveCancellationBankUtrFromModal() {
+    const adm = getStoredAdminUser();
+    const msg = document.getElementById('admin-cancel-review-msg');
+    const utrInput = document.getElementById('admin-cancel-review-bank-utr');
+    const id = __adminCancelReviewRequestId;
+    if (!adm || !adm.id || !id) return alert('Open a cancellation review first.');
+    const bankUtr = (utrInput && utrInput.value || '').trim();
+    if (!bankUtr) return alert('Enter the bank UTR / RRN.');
+    if (msg) {
+        msg.style.color = '#64748b';
+        msg.textContent = 'Saving UTR…';
+    }
+    try {
+        const res = await fetch('/api/admin/cancellation-requests/' + encodeURIComponent(id) + '/bank-utr', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: adm.id, bankUtr })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error((data && data.error) || 'Could not save UTR');
+        if (msg) {
+            msg.style.color = '#15803d';
+            msg.textContent = 'Bank UTR saved. Doctors will see it in refund tracking.';
+        }
+        await loadAdminCancellationReviewList(true);
+        const fresh = (__adminCancelRequestsCache || []).find((x) => Number(x.id) === Number(id));
+        if (fresh) populateAdminCancellationReviewModal(fresh);
+    } catch (e) {
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = e.message || 'Could not save UTR.';
+        }
+    }
 }
 
 async function openAdminCancellationReviewModal(requestId) {
