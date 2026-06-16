@@ -271,8 +271,8 @@
             if (data.success) {
                 signupPhoneOtpToken = null;
                 signupEmailOtpToken = null;
-                alert(data.message || 'Account created. Please sign in.');
-                switchDoctorAuthTab('login');
+                document.getElementById('doctor-signup-form')?.reset();
+                showDoctorSignupSuccessModal(data, email);
                 const le = document.getElementById('doctor-login-email');
                 const lp = document.getElementById('doctor-login-password');
                 if (le) le.value = email;
@@ -458,9 +458,42 @@
         );
     }
 
+    function showDoctorSignupSuccessModal(data, email) {
+        const modal = document.getElementById('doctor-signup-success-modal');
+        const msg = document.getElementById('doctor-signup-success-msg');
+        const uidEl = document.getElementById('doctor-signup-success-userid');
+        const emailEl = document.getElementById('doctor-signup-success-email');
+        if (msg) {
+            let base =
+                data.message ||
+                'Your doctor account is ready. Complete your profile after signing in, then apply for seminars.';
+            if (data.needsEmailVerification) {
+                base += ' Check your email for a verification link before you sign in.';
+            }
+            msg.textContent = base;
+        }
+        if (uidEl) uidEl.textContent = data.user_id_string || '—';
+        if (emailEl) emailEl.textContent = email || '—';
+        if (modal) {
+            modal.classList.remove('hidden');
+            modal.style.display = 'flex';
+        }
+    }
+
+    function closeDoctorSignupSuccessModal() {
+        const modal = document.getElementById('doctor-signup-success-modal');
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.style.display = 'none';
+        }
+        switchDoctorAuthTab('login');
+    }
+
     window.DoctorAuthUi = {
         isStandaloneDoctorApp,
         switchDoctorAuthTab,
+        showDoctorSignupSuccessModal,
+        closeDoctorSignupSuccessModal,
         init: function () {
             applyStandaloneUi();
             blockHomepageNavigation();

@@ -782,12 +782,12 @@ function applyDoctorAllowedTabsToDom(allowed) {
     const visibleTabId = visiblePane && visiblePane.id;
     const activeMenu = document.querySelector('.menu-item.active[data-tab]');
     const activeTabId = activeMenu && activeMenu.getAttribute('data-tab');
-    if (visibleTabId && doctorTabModuleEnabled(visibleTabId)) {
-        switchTab(visibleTabId);
-    } else if (activeTabId && !doctorTabModuleEnabled(activeTabId)) {
+    if (activeTabId && !doctorTabModuleEnabled(activeTabId)) {
         switchTab('tab-dashboard');
-    } else if (!document.querySelector('.tab-pane:not(.hidden)')) {
-        switchTab('tab-dashboard');
+    } else if (!visibleTabId || !doctorTabModuleEnabled(visibleTabId)) {
+        if (!document.querySelector('.tab-pane:not(.hidden)')) {
+            switchTab('tab-dashboard');
+        }
     }
 }
 
@@ -849,11 +849,9 @@ async function refreshDoctorPortalAccess() {
 
 function scheduleDoctorModuleReapply() {
     if (!currentUser) return;
-    [250, 1500, 4000].forEach((ms) => {
-        setTimeout(() => {
-            if (currentUser) applyDoctorModuleAccessFromUser(currentUser).catch(() => {});
-        }, ms);
-    });
+    setTimeout(() => {
+        if (currentUser) applyDoctorModuleAccessFromUser(currentUser).catch(() => {});
+    }, 400);
 }
 
 let _doctorPortalAccessRefreshTimer = null;
@@ -3421,8 +3419,11 @@ async function loadSeminarsGrid() {
                 apps.forEach((a) => {
                     if (!a || a.seminar_id == null) return;
                     const sid = Number(a.seminar_id);
-                    if (String(a.status || '').toLowerCase() === 'draft') {
+                    const st = String(a.status || '').toLowerCase();
+                    if (st === 'draft') {
                         draftBySeminarId[sid] = a;
+                    } else if (st === 'cancelled' && a.reapplyAllowed) {
+                        return;
                     } else {
                         registeredSeminarIds.add(sid);
                     }
@@ -7891,57 +7892,89 @@ function eticketViewUrl(t) {
 }
 
 async function downloadEticketPdf(t) {
-    if (!window.jspdf) {
-        alert('PDF library is still loading. Please try again in a moment.');
+    if (!t || !t.ticket_id_string) return alert('Ticket not found.');
+    const openPrintFallback = () => {
+        const url = eticketViewUrl(t);
+        const w = window.open(url, '_blank', 'noopener');
+        if (!w) {
+            alert('Allow pop-ups, or open Print view and use your browser Save as PDF.');
+            window.location.href = url;
+        }
+    };
+    if (!window.jspdf || !window.jspdf.jsPDF) {
+        openPrintFallback();
         return;
     }
-    if (!t || !t.ticket_id_string) return;
-    await preloadSiteLogoForPdf();
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF();
-    const accent = [15, 118, 110];
-    const ink = [15, 23, 42];
-    const muted = [71, 85, 105];
-    const holder = doctorDisplayName();
-    let y = pdfCongressHeader(doc, 'E-Ticket — venue entry pass');
-    y = pdfCongressSectionTitle(doc, y + 2, 'Participant', accent, ink);
-    const drawRow = (label, value) => {
-        doc.setFontSize(9.5);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(...muted);
-        doc.text(label, 18, y + 7);
-        doc.setFont('helvetica', 'normal');
-        doc.setTextColor(...ink);
-        const lines = doc.splitTextToSize(String(value || '—'), 118);
-        doc.text(lines, 72, y + 7);
-        y += Math.max(10, lines.length * 6);
-    };
-    drawRow('Name', holder);
-    drawRow('Seminar', t.seminar_title || 'Seminar');
-    drawRow('E-ticket ID', t.ticket_id_string || '—');
-    drawRow('Application', t.application_no || '—');
-    drawRow('Order', t.order_id_string || '—');
-    y = pdfCongressSectionTitle(doc, y + 4, 'Entry QR', accent, ink);
-    const qrUrl = ticketQrImageUrl(t);
-    if (qrUrl) {
-        await new Promise(function (resolve) {
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
-            img.onload = function () {
-                pdfAddQrCode(doc, img, 18, y + 2, 42);
-                resolve();
-            };
-            img.onerror = function () {
-                resolve();
-            };
-            img.src = qrUrl;
-        });
+    try {
+        await preloadSiteLogoForPdf();
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        const accent = [15, 118, 110];
+        const ink = [15, 23, 42];
+        const muted = [71, 85, 105];
+        const holder = doctorDisplayName();
+        let y = pdfCongressHeader(doc, 'E-Ticket — venue entry pass');
+        y = pdfCongressSectionTitle(doc, y + 2, 'Participant', accent, ink);
+        const drawRow = (label, value) => {
+            doc.setFontSize(9.5);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(...muted);
+            doc.text(label, 18, y + 7);
+            doc.setFont('helvetica', 'normal');
+            doc.setTextColor(...ink);
+            const lines = doc.splitTextToSize(String(value || '—'), 118);
+            doc.text(lines, 72, y + 7);
+            y += Math.max(10, lines.length * 6);
+        };
+        drawRow('Name', holder);
+        drawRow('Seminar', t.seminar_title || 'Seminar');
+        drawRow('E-ticket ID', t.ticket_id_string || '—');
+        drawRow('Application', t.application_no || '—');
+        drawRow('Order', t.order_id_string || '—');
+        y = pdfCongressSectionTitle(doc, y + 4, 'Entry QR', accent, ink);
+        const qrUrl = ticketQrImageUrl(t);
+        if (qrUrl) {
+            await new Promise(function (resolve) {
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.onload = function () {
+                    try {
+                        pdfAddQrCode(doc, img, 18, y + 2, 42);
+                    } catch (qrErr) {
+                        console.warn('[eticket-pdf] QR embed failed', qrErr);
+                    }
+                    resolve();
+                };
+                img.onerror = function () {
+                    resolve();
+                };
+                img.src = qrUrl;
+            });
+        }
+        doc.setFontSize(8);
+        doc.setTextColor(100, 116, 139);
+        doc.text('Issued to: ' + holder, 14, 282);
+        doc.text('Non-transferable · Do not share this QR or PDF', 14, 288);
+        const filename = 'e-ticket-' + String(t.ticket_id_string).replace(/[^\w-]+/g, '-') + '.pdf';
+        try {
+            doc.save(filename);
+        } catch (saveErr) {
+            console.warn('[eticket-pdf] save failed', saveErr);
+            const blob = doc.output('blob');
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            setTimeout(() => {
+                URL.revokeObjectURL(link.href);
+                link.remove();
+            }, 2000);
+        }
+    } catch (e) {
+        console.error('[eticket-pdf]', e);
+        openPrintFallback();
     }
-    doc.setFontSize(8);
-    doc.setTextColor(100, 116, 139);
-    doc.text('Issued to: ' + holder, 14, 282);
-    doc.text('Non-transferable · Do not share this QR or PDF', 14, 288);
-    doc.save('e-ticket-' + String(t.ticket_id_string).replace(/[^\w-]+/g, '-') + '.pdf');
 }
 
 async function loadDoctorEventTickets() {

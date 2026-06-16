@@ -923,6 +923,24 @@ function switchTab(tabId) {
 }
 
 let adminAutoRefreshInterval = null;
+let __adminAppsFingerprint = '';
+
+async function loadApplications(silentRefresh) {
+    try {
+        const res = await fetch('/api/admin/applications');
+        const apps = await res.json();
+        const list = Array.isArray(apps) ? apps : [];
+        const fp = list
+            .map((a) => [a.id, a.status, a.application_no, a.updated_at || ''].join(':'))
+            .join('|');
+        if (silentRefresh && fp === __adminAppsFingerprint) return;
+        __adminAppsFingerprint = fp;
+        globalAdminApps = list;
+        renderApplicationsTable();
+    } catch (err) {
+        console.error(err);
+    }
+}
 
 function startAdminAutoRefresh() {
     if (adminAutoRefreshInterval) clearInterval(adminAutoRefreshInterval);
@@ -933,7 +951,7 @@ function startAdminAutoRefresh() {
             document.getElementById('tab-cancellation-review') &&
             !document.getElementById('tab-cancellation-review').classList.contains('hidden');
 
-        if (applicationsTabVisible) loadApplications();
+        if (applicationsTabVisible) loadApplications(true);
         if (seminarDetailsTabVisible && currentManageSeminarId) refreshSeminarDashboard();
         if (cancelTabVisible && typeof loadAdminCancellationRequests === 'function') loadAdminCancellationRequests();
     }, 15000);
@@ -7756,15 +7774,6 @@ function parseAppDuplicateReview(app) {
     }
     if (!review || review.decision !== 'auto_rejected_duplicate') return null;
     return review;
-}
-
-async function loadApplications() {
-    try {
-        const res = await fetch('/api/admin/applications');
-        const apps = await res.json();
-        globalAdminApps = Array.isArray(apps) ? apps : [];
-        renderApplicationsTable();
-    } catch(err) { console.error(err); }
 }
 
 function adminApplicationSearchBlob(a) {

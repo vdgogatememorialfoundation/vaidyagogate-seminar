@@ -269,6 +269,22 @@
         </div>
     </div>
 
+    <div id="doctor-signup-success-modal" class="hidden" style="position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:10020;display:flex;align-items:center;justify-content:center;padding:16px;">
+        <div style="max-width:420px;width:100%;background:#fff;border-radius:16px;padding:28px;text-align:center;box-shadow:0 18px 44px rgba(2,6,23,.28);">
+            <div style="width:56px;height:56px;margin:0 auto 16px;border-radius:50%;background:#ecfdf5;color:#059669;display:flex;align-items:center;justify-content:center;font-size:1.5rem;">
+                <i class="fas fa-check" aria-hidden="true"></i>
+            </div>
+            <h3 style="font-size:1.2rem;margin-bottom:8px;color:#0f172a;">Welcome to VGMF Seminar</h3>
+            <p id="doctor-signup-success-msg" style="color:#64748b;font-size:0.9rem;line-height:1.5;margin-bottom:18px;"></p>
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px;text-align:left;font-size:0.9rem;margin-bottom:22px;">
+                <p style="margin:0 0 12px;"><span style="display:block;font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:#64748b;">Your portal user ID</span><strong id="doctor-signup-success-userid" style="color:#0f172a;"></strong></p>
+                <p style="margin:0;"><span style="display:block;font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:#64748b;">Email (for sign-in)</span><span id="doctor-signup-success-email" style="color:#0f172a;"></span></p>
+            </div>
+            <p style="font-size:0.82rem;color:#64748b;margin-bottom:16px;">Sign in with your <strong>email</strong> and password. Keep your portal user ID for office reference.</p>
+            <button type="button" class="btn-primary" style="width:100%;" onclick="DoctorAuthUi.closeDoctorSignupSuccessModal()">Continue to sign in</button>
+        </div>
+    </div>
+
     <div class="dashboard-container hidden" id="dashboard-main">
         <aside class="sidebar">
             <div class="sidebar-header">
@@ -920,7 +936,7 @@
     <script src="/js/portal-auth.js?v=20260608loginfix1"></script>
     <script src="/js/name-validation.js"></script>
     <script src="/js/contact-validation.js"></script>
-    <script src="/js/doctor-auth-ui.js"></script>
+    <script src="/js/doctor-auth-ui.js?v=20260616fixes1"></script>
     <script src="/js/portal-upload.js?v=20260523"></script>
     <script src="/js/case-r2-upload.js?v=20260608case2"></script>
     <link rel="stylesheet" href="/css/book-track.css?v=20260529stg">
@@ -929,6 +945,6 @@
     <script src="/js/live-chat-client-info.js?v=20260610chat1"></script>
     <script src="/js/doctor-live-chat-widget.js?v=20260615live2"></script>
     <script src="/js/site-visitor-beacon.js?v=20260613radar6"></script>
-    <script src="/js/doctor.js?v=20260616razorpay1"></script>
+    <script src="/js/doctor.js?v=20260616fixes1"></script>
 </body>
 </html>

@@ -40,6 +40,7 @@ const extModules = require('./lib/extended-modules');
 const portalTracking = require('./lib/portal-tracking');
 const adminManualCheckin = require('./lib/admin-manual-checkin');
 const refundTracking = require('./lib/refund-tracking');
+const reregistrationEligibility = require('./lib/reregistration-eligibility');
 const seminarEvents = require('./lib/seminar-events');
 const seminarDt = require('./lib/seminar-datetime');
 const cancelPolicy = require('./lib/cancellation-policy');
@@ -2061,11 +2062,18 @@ function ticketDocumentUrl(ticketIdString, userId, ttlMs) {
 function notifyTicketIssued(userId, registrationId, ticketId, channelOpts) {
     channelOpts = channelOpts || {};
     if (!userId || !registrationId || !ticketId) return;
+    if (channelOpts.templateNotify == null && channelOpts.email !== false) {
+        channelOpts.templateNotify = true;
+    }
     emailDeliveryPolicy.loadConfig(db, (eCfg, deliveryCfg) => {
         const skipPosEmail = emailDeliveryPolicy.shouldSkipPosParticipantEmail(deliveryCfg, channelOpts);
-        const sendEmail = !skipPosEmail && channelOpts.email !== false;
-        const sendWhatsapp = !!(channelOpts.whatsapp === true);
-        const sendTemplateNotify = !!(channelOpts.templateNotify === true || channelOpts.whatsapp === true);
+    const sendEmail = !skipPosEmail && channelOpts.email !== false;
+    const sendWhatsapp = !!(channelOpts.whatsapp === true);
+    const sendTemplateNotify = !!(
+        channelOpts.templateNotify === true ||
+        channelOpts.whatsapp === true ||
+        sendEmail
+    );
         const drainImmediate = channelOpts.immediate === true && !emailDeliveryPolicy.shouldDeferImmediateEmail(deliveryCfg);
         runNotifyTicketIssued(
             userId,
@@ -2175,7 +2183,8 @@ function runNotifyTicketIssued(userId, registrationId, ticketId, opts) {
                                         text: 'E-ticket: ' + pdfUrl,
                                         attachments: attach,
                                         event_key: 'TICKET_ISSUED',
-                                        immediate: drainImmediate
+                                        immediate: drainImmediate,
+                                        priority: true
                                     },
                                     () => {}
                                 );
@@ -5131,9 +5140,14 @@ function respondApplicationsList(uid, yearFilter, res) {
                             console.warn('[applications] cancellation tracking attach failed:', eCr.message);
                             withCancel = enriched || [];
                         }
+                        const withReapply = (withCancel || []).map((row) =>
+                            Object.assign({}, row, {
+                                reapplyAllowed: reregistrationEligibility.reapplyAllowedFromApplication(row)
+                            })
+                        );
                         portalTracking.getPortalYear(db, (e3, portalYear) => {
                             if (e3) return res.status(500).json({ error: e3.message });
-                            res.json({ portalYear, applications: withCancel || [] });
+                            res.json({ portalYear, applications: withReapply });
                         });
                     });
                 });
@@ -5192,6 +5206,46 @@ app.post('/api/applications/draft', requestGuard.registrationDraftLimit, withCer
     const beginDraft = (uid) => {
         if (!uid) return res.status(400).json({ error: 'Invalid user session. Sign in again.' });
         userId = uid;
+        let row = null;
+        const saveDraftRow = () => {
+            persistUploadedCertificate(req, (certErr, certPath) => {
+                if (certErr) return res.status(500).json({ error: certErr.message });
+                if (certPath) formData.certificate_path = certPath;
+                const stored = sanitizeFormDataForStorage(formData || {});
+                const appNo = (row && row.application_no) || generateId();
+                if (row) {
+                    return db.run(
+                        `UPDATE registrations SET form_data = ?, application_no = COALESCE(application_no, ?), updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'draft'`,
+                        [JSON.stringify(stored), appNo, row.id],
+                        function (uErr) {
+                            if (uErr) return res.status(500).json({ error: uErr.message });
+                            if (!this.changes) {
+                                return res.status(400).json({ error: 'Draft could not be updated.' });
+                            }
+                            res.json({
+                                success: true,
+                                draft: true,
+                                applicationId: row.id,
+                                applicationNo: appNo
+                            });
+                        }
+                    );
+                }
+                db.run(
+                    `INSERT INTO registrations (user_id, seminar_id, application_no, status, form_data) VALUES (?, ?, ?, 'draft', ?)`,
+                    [userId, seminarId, appNo, JSON.stringify(stored)],
+                    function (insErr) {
+                        if (insErr) return res.status(500).json({ error: insErr.message });
+                        res.json({
+                            success: true,
+                            draft: true,
+                            applicationId: this.lastID,
+                            applicationNo: appNo
+                        });
+                    }
+                );
+            });
+        };
         db.get(
             `SELECT registration_start, registration_end, title FROM seminars WHERE id = ? AND is_active = 1`,
             [seminarId],
@@ -5199,65 +5253,34 @@ app.post('/api/applications/draft', requestGuard.registrationDraftLimit, withCer
                 if (eSem) return res.status(500).json({ error: eSem.message });
                 if (!sem) return res.status(400).json({ error: 'Seminar not found or is not active.' });
                 db.get(
-                    `SELECT id, status, application_no FROM registrations WHERE user_id = ? AND seminar_id = ?`,
+                    `SELECT id, status, application_no FROM registrations WHERE user_id = ? AND seminar_id = ? ORDER BY id DESC LIMIT 1`,
                     [userId, seminarId],
-                    (eRow, row) => {
+                    (eRow, existing) => {
                         if (eRow) return res.status(500).json({ error: eRow.message });
-                        const st = row ? String(row.status || '').toLowerCase() : '';
-                        if (row && st !== 'draft') {
-                            return res.status(400).json({
-                                error: 'You already have a submitted application for this seminar. Track it under Track seminar applications.'
+                        if (!existing) {
+                            return seminarRegistrationWindowOpen(sem, userId, seminarId, (wErr, win) => {
+                                if (wErr) return res.status(500).json({ error: wErr.message });
+                                if (!win || !win.open) {
+                                    return res.status(400).json({
+                                        error: (win && win.error) || 'Registration is closed. Drafts cannot be started now.'
+                                    });
+                                }
+                                return saveDraftRow();
                             });
                         }
-                        const saveDraftRow = () => {
-                            persistUploadedCertificate(req, (certErr, certPath) => {
-                                if (certErr) return res.status(500).json({ error: certErr.message });
-                                if (certPath) formData.certificate_path = certPath;
-                                const stored = sanitizeFormDataForStorage(formData || {});
-                                const appNo = (row && row.application_no) || generateId();
-                                if (row) {
-                                    return db.run(
-                                        `UPDATE registrations SET form_data = ?, application_no = COALESCE(application_no, ?), updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'draft'`,
-                                        [JSON.stringify(stored), appNo, row.id],
-                                        function (uErr) {
-                                            if (uErr) return res.status(500).json({ error: uErr.message });
-                                            if (!this.changes) {
-                                                return res.status(400).json({ error: 'Draft could not be updated.' });
-                                            }
-                                            res.json({
-                                                success: true,
-                                                draft: true,
-                                                applicationId: row.id,
-                                                applicationNo: appNo
-                                            });
-                                        }
-                                    );
+                        return reregistrationEligibility.resolveExistingRegistrationForSeminar(
+                            db,
+                            userId,
+                            seminarId,
+                            (resErr, resolved) => {
+                                if (resErr) return res.status(500).json({ error: resErr.message });
+                                if (resolved && resolved.blocked) {
+                                    return res.status(400).json({ error: resolved.error });
                                 }
-                                db.run(
-                                    `INSERT INTO registrations (user_id, seminar_id, application_no, status, form_data) VALUES (?, ?, ?, 'draft', ?)`,
-                                    [userId, seminarId, appNo, JSON.stringify(stored)],
-                                    function (insErr) {
-                                        if (insErr) return res.status(500).json({ error: insErr.message });
-                                        res.json({
-                                            success: true,
-                                            draft: true,
-                                            applicationId: this.lastID,
-                                            applicationNo: appNo
-                                        });
-                                    }
-                                );
-                            });
-                        };
-                        if (row) return saveDraftRow();
-                        seminarRegistrationWindowOpen(sem, userId, seminarId, (wErr, win) => {
-                            if (wErr) return res.status(500).json({ error: wErr.message });
-                            if (!win || !win.open) {
-                                return res.status(400).json({
-                                    error: (win && win.error) || 'Registration is closed. Drafts cannot be started now.'
-                                });
+                                row = resolved;
+                                return saveDraftRow();
                             }
-                            saveDraftRow();
-                        });
+                        );
                     }
                 );
             }
@@ -5338,22 +5361,11 @@ app.post('/api/applications/submit', requestGuard.registrationSubmitLimit, withC
 
     // Check if user already registered for this event (draft may be upgraded on submit)
     db.get(
-        `SELECT id, status, application_no FROM registrations WHERE user_id = ? AND seminar_id = ?`,
+        `SELECT id, status, application_no FROM registrations WHERE user_id = ? AND seminar_id = ? ORDER BY id DESC LIMIT 1`,
         [userId, seminarId],
         (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
-        if (row) {
-            const st = String(row.status || '').toLowerCase();
-            if (st === 'draft') {
-                existingDraftId = row.id;
-                existingDraftAppNo = row.application_no || null;
-            } else {
-                return res.status(400).json({
-                    error: 'You have already registered an application for this event. You can track it in your Dashboard.'
-                });
-            }
-        }
-
+        function afterExistingResolved() {
         db.get(
             `SELECT registration_start, registration_end, otp_on_application, otp_on_step1, otp_on_submit, title, waiting_list_enabled, price, auto_confirm_registration
              FROM seminars WHERE id = ? AND is_active = 1`,
@@ -5808,6 +5820,35 @@ app.post('/api/applications/submit', requestGuard.registrationSubmitLimit, withC
                 }
             }
         );
+        }
+        if (!row) {
+            return afterExistingResolved();
+        }
+        const st = String(row.status || '').toLowerCase();
+        if (st === 'draft') {
+            existingDraftId = row.id;
+            existingDraftAppNo = row.application_no || null;
+            return afterExistingResolved();
+        }
+        if (st === 'cancelled') {
+            return reregistrationEligibility.resolveExistingRegistrationForSeminar(
+                db,
+                userId,
+                seminarId,
+                (reErr, resolved) => {
+                    if (reErr) return res.status(500).json({ error: reErr.message });
+                    if (resolved && resolved.blocked) {
+                        return res.status(400).json({ error: resolved.error });
+                    }
+                    existingDraftId = resolved.id;
+                    existingDraftAppNo = resolved.application_no || null;
+                    afterExistingResolved();
+                }
+            );
+        }
+        return res.status(400).json({
+            error: 'You have already registered an application for this event. You can track it in your Dashboard.'
+        });
     });
     }
 });
@@ -7168,7 +7209,7 @@ function doctorPayloadFromScanRow(row, extra) {
 const SCANNER_TICKET_LOOKUP_SQL = `
         SELECT t.id AS ticket_id, t.is_scanned, IFNULL(t.scan_count, 0) AS scan_count, t.ticket_id_string, IFNULL(t.is_valid, 1) AS is_valid,
                t.qr_code_data, t.event_id,
-               s.id AS seminar_id, IFNULL(se.checkin_enabled, s.checkin_enabled) AS checkin_enabled,
+               s.id AS seminar_id, COALESCE(se.checkin_enabled, s.checkin_enabled) AS checkin_enabled,
                COALESCE(se.checkin_date, s.checkin_date) AS checkin_date,
                s.title AS seminar_title,
                COALESCE(se.title, s.title) AS scan_event_title,
