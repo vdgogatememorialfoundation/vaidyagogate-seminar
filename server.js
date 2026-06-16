@@ -7207,17 +7207,17 @@ function doctorPayloadFromScanRow(row, extra) {
 }
 
 const SCANNER_TICKET_LOOKUP_SQL = `
-        SELECT t.id AS ticket_id, t.is_scanned, IFNULL(t.scan_count, 0) AS scan_count, t.ticket_id_string, IFNULL(t.is_valid, 1) AS is_valid,
+        SELECT t.id AS ticket_id, t.is_scanned, COALESCE(t.scan_count, 0) AS scan_count, t.ticket_id_string, COALESCE(CAST(t.is_valid AS INTEGER), 1) AS is_valid,
                t.qr_code_data, t.event_id,
-               s.id AS seminar_id, COALESCE(se.checkin_enabled, s.checkin_enabled) AS checkin_enabled,
+               s.id AS seminar_id, COALESCE(CAST(se.checkin_enabled AS INTEGER), CAST(s.checkin_enabled AS INTEGER), 0) AS checkin_enabled,
                COALESCE(se.checkin_date, s.checkin_date) AS checkin_date,
                s.title AS seminar_title,
                COALESCE(se.title, s.title) AS scan_event_title,
                COALESCE(se.event_date, s.event_date) AS event_date,
-               IFNULL(COALESCE(se.cert_scans_required, s.cert_scans_required), 1) AS cert_scans_required,
+               COALESCE(CAST(se.cert_scans_required AS INTEGER), CAST(s.cert_scans_required AS INTEGER), 1) AS cert_scans_required,
                u.id AS doctor_user_id, u.user_id_string AS doctor_user_id_string,
                u.first_name AS doctor_first_name, u.last_name AS doctor_last_name, u.email AS doctor_email, u.phone AS doctor_phone,
-               IFNULL(u.is_disabled, 0) AS doctor_is_disabled, IFNULL(u.is_banned, 0) AS doctor_is_banned, u.ban_reason AS doctor_ban_reason,
+               COALESCE(CAST(u.is_disabled AS INTEGER), 0) AS doctor_is_disabled, COALESCE(CAST(u.is_banned AS INTEGER), 0) AS doctor_is_banned, u.ban_reason AS doctor_ban_reason,
                dp.profile_photo_path AS profile_photo_path,
                r.id AS registration_id, r.application_no, r.form_data, r.status AS registration_status, o.status AS payment_status
         FROM tickets t
@@ -7319,12 +7319,12 @@ function lookupTicketForScan(qrData, cb) {
 const SCANNER_REG_LOOKUP_SQL = `
         SELECT r.id AS registration_id, r.application_no, r.form_data, r.status AS registration_status, r.user_id,
                o.id AS order_db_id, o.order_id_string, o.status AS payment_status,
-               t.id AS ticket_id, t.ticket_id_string, t.is_scanned, IFNULL(t.scan_count, 0) AS scan_count, t.qr_code_data, IFNULL(t.is_valid, 1) AS is_valid,
-               s.id AS seminar_id, s.checkin_enabled, s.checkin_date, s.title AS seminar_title, s.event_date,
-               IFNULL(s.cert_scans_required, 1) AS cert_scans_required,
+               t.id AS ticket_id, t.ticket_id_string, t.is_scanned, COALESCE(t.scan_count, 0) AS scan_count, t.qr_code_data, COALESCE(CAST(t.is_valid AS INTEGER), 1) AS is_valid,
+               s.id AS seminar_id, COALESCE(CAST(s.checkin_enabled AS INTEGER), 0) AS checkin_enabled, s.checkin_date, s.title AS seminar_title, s.event_date,
+               COALESCE(CAST(s.cert_scans_required AS INTEGER), 1) AS cert_scans_required,
                u.id AS doctor_user_id, u.user_id_string AS doctor_user_id_string,
                u.first_name AS doctor_first_name, u.last_name AS doctor_last_name, u.email AS doctor_email, u.phone AS doctor_phone,
-               IFNULL(u.is_disabled, 0) AS doctor_is_disabled, IFNULL(u.is_banned, 0) AS doctor_is_banned, u.ban_reason AS doctor_ban_reason,
+               COALESCE(CAST(u.is_disabled AS INTEGER), 0) AS doctor_is_disabled, COALESCE(CAST(u.is_banned AS INTEGER), 0) AS doctor_is_banned, u.ban_reason AS doctor_ban_reason,
                dp.profile_photo_path AS profile_photo_path
         FROM registrations r
         JOIN users u ON u.id = r.user_id
@@ -7473,7 +7473,7 @@ app.get('/api/scanner/verify', (req, res) => {
 app.get('/api/scanner/checkin-seminars', (req, res) => {
     db.all(
         `SELECT id, title, checkin_date, event_date, checkin_enabled
-         FROM seminars WHERE is_active = 1 AND IFNULL(checkin_enabled, 0) = 1
+         FROM seminars WHERE COALESCE(CAST(is_active AS INTEGER), 0) = 1 AND COALESCE(CAST(checkin_enabled AS INTEGER), 0) = 1
          ORDER BY event_date ASC, title ASC`,
         [],
         (err, rows) => {
@@ -7522,7 +7522,7 @@ app.post('/api/scanner/mark', (req, res) => {
     }
 
     db.get(
-        `SELECT id, role, user_role FROM users WHERE id = ? AND IFNULL(is_disabled,0) = 0`,
+        `SELECT id, role, user_role FROM users WHERE id = ? AND COALESCE(CAST(is_disabled AS INTEGER), 0) = 0`,
         [staffId],
         (eu, staff) => {
             if (eu) return res.status(500).json({ success: false, error: eu.message });
@@ -9996,7 +9996,7 @@ function assertAdminPortalActor(adminId, cb) {
     const aid = parseInt(adminId, 10);
     if (!Number.isInteger(aid) || aid < 1) return cb(new Error('BAD_ACTOR'), null);
     db.get(
-        `SELECT id, role, user_role FROM users WHERE id = ? AND IFNULL(is_disabled,0) = 0`,
+        `SELECT id, role, user_role FROM users WHERE id = ? AND COALESCE(CAST(is_disabled AS INTEGER), 0) = 0`,
         [aid],
         (e, adm) => {
             if (e) return cb(e, null);
