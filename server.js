@@ -2102,7 +2102,9 @@ function runNotifyTicketIssued(userId, registrationId, ticketId, opts) {
          WHERE r.id = ? AND TRIM(t.ticket_id_string) = TRIM(?)`,
         [registrationId, String(ticketId)],
         (e, row) => {
-            if (e) return;
+            if (e) {
+                console.warn('[ticket-issue] lookup failed, using link-only fallback:', e.message);
+            }
             const seminarId = row && row.seminar_id;
             const pdfUrl = ticketDocumentUrl(String(ticketId), userId);
             const vars = {
