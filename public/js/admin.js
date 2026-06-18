@@ -9765,9 +9765,6 @@ function formatNcismCertificateCheckHtml(check) {
     </div>`;
 }
 
-    </div>`;
-}
-
 function adminApplicationReviewLevelBadge(level) {
     const lv = parseInt(level, 10) || 1;
     const labels = { 1: 'L1 Frontline', 2: 'L2 Senior', 3: 'L3 Authority' };
