@@ -219,7 +219,13 @@ function mountPaymentsRoutes() {
         parsePositiveUserId,
         upsertGlobalSetting
     });
-    require('./lib/staff-portal-routes').registerStaffPortalRoutes(app, db, {});
+    require('./lib/staff-portal-routes').registerStaffPortalRoutes(app, db, {
+        portalTracking,
+        notifEngine,
+        getOrCreatePendingOrder,
+        volunteerTicketFlow,
+        volunteerTicketDeps
+    });
 }
 
 function bootstrapApp(done) {
@@ -1344,7 +1350,13 @@ function ensureCertificateSchema(next) {
                     ignoreSchemaMigrationErr(e2);
                     certVerify.ensureCertificateVerifySchema(db, ignoreSchemaMigrationErr, () => {
                         docVerify.ensureDocumentVerifySchema(db, ignoreSchemaMigrationErr, () => {
-                            if (next) next();
+                            require('./lib/application-reviewer-schema').ensureApplicationReviewerSchema(
+                                db,
+                                ignoreSchemaMigrationErr,
+                                () => {
+                                    if (next) next();
+                                }
+                            );
                         });
                     });
                 }
@@ -8633,6 +8645,7 @@ app.get('/api/admin/seminars/:id/applications', (req, res) => {
 app.get('/api/admin/applications', (req, res) => {
     db.all(`
         SELECT a.id, a.application_no, a.status, a.form_data, a.doc_review_json, a.created_at, a.seminar_id,
+               a.review_required_level, a.review_escalated_at, a.review_escalated_by, a.review_escalation_json,
                u.first_name, u.last_name, u.user_id_string, u.id AS user_id,
                s.title AS seminar_title, s.price AS seminar_price, s.event_date AS seminar_event_date,
                o.id AS order_id, o.order_id_string, o.amount AS order_amount, o.status AS order_status,
@@ -8814,6 +8827,61 @@ app.post('/api/admin/applications/:applicationId/document-verify', (req, res) =>
             res.json({ success: true, status: result.status, message: result.message });
         }
     );
+});
+
+const appEscalation = require('./lib/application-escalation');
+const appAuthority = require('./lib/application-authority');
+
+app.post('/api/admin/applications/:applicationId/escalate', (req, res) => {
+    const note = String((req.body && req.body.note) || '').trim();
+    const actingAdminId =
+        req.body && req.body.actingAdminId != null ? parseInt(req.body.actingAdminId, 10) : null;
+    if (!Number.isInteger(actingAdminId) || actingAdminId < 1) {
+        return res.status(400).json({ error: 'actingAdminId is required' });
+    }
+    db.get(
+        `SELECT id, role, user_role, staff_modules, first_name, last_name, email FROM users WHERE id = ?`,
+        [actingAdminId],
+        (e, actor) => {
+            if (e) return res.status(500).json({ error: e.message });
+            if (!actor) return res.status(400).json({ error: 'Reviewer account not found' });
+            appEscalation.escalateSeminarApplication(
+                db,
+                req.params.applicationId,
+                actor,
+                note,
+                { portalTracking },
+                (err, result) => {
+                    if (err) return res.status(500).json({ error: err.message });
+                    if (!result || !result.ok) {
+                        return res.status(400).json({ error: (result && result.error) || 'Escalation failed' });
+                    }
+                    res.json({
+                        success: true,
+                        reviewRequiredLevel: result.reviewRequiredLevel,
+                        reviewRequiredLabel: result.reviewRequiredLabel,
+                        message: result.message
+                    });
+                }
+            );
+        }
+    );
+});
+
+app.get('/api/admin/application-reviewers', (req, res) => {
+    appEscalation.listApplicationReviewers(db, (err, reviewers) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json({ reviewers: reviewers || [] });
+    });
+});
+
+app.post('/api/admin/application-reviewers/:userId', (req, res) => {
+    const uid = parseInt(req.params.userId, 10);
+    if (!Number.isInteger(uid) || uid < 1) return res.status(400).json({ error: 'Invalid user id' });
+    appEscalation.saveApplicationReviewerProfile(db, uid, req.body || {}, (err, result) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(result);
+    });
 });
 
 // Doctor: re-upload certificate / NCISM on same application after admin document rejection

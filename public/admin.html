@@ -228,6 +228,11 @@
             <!-- 2. Review Applications -->
             <div id="tab-applications" class="tab-pane hidden">
                 <h2 style="margin-bottom: 20px;">Application Processing Queue</h2>
+                <div class="card" style="margin-bottom:16px;border:1px solid #c7d2fe;background:#eef2ff;">
+                    <h3 style="margin:0 0 8px;color:#312e81;">Application review authority (L1 → L2 → L3)</h3>
+                    <p style="margin:0 0 12px;font-size:0.88rem;color:#475569;">Staff with <strong>Review applications</strong> module can escalate issues to senior (L2) or authority (L3). Set each reviewer’s level below — separate from support desk authority.</p>
+                    <div id="application-reviewers-root"><p style="color:#64748b;">Loading reviewers…</p></div>
+                </div>
                 <div class="card">
                     <div id="applications-status-bar" style="margin-bottom:14px;"></div>
                     <div style="margin-bottom:12px;">
@@ -236,8 +241,8 @@
                         <p id="applications-search-count" style="margin:6px 0 0;font-size:0.82rem;color:#64748b;"></p>
                     </div>
                     <table class="data-table">
-                        <thead><tr><th>App ID (Barcode)</th><th>Doctor ID</th><th>Doctor Name</th><th>Current Status</th><th>Action</th></tr></thead>
-                        <tbody id="applications-list"><tr><td colspan="5" style="text-align: center;">Loading applications...</td></tr></tbody>
+                        <thead><tr><th>App ID (Barcode)</th><th>Doctor ID</th><th>Doctor Name</th><th>Review level</th><th>Current Status</th><th>Action</th></tr></thead>
+                        <tbody id="applications-list"><tr><td colspan="6" style="text-align: center;">Loading applications...</td></tr></tbody>
                     </table>
                 </div>
             </div>
@@ -3275,6 +3280,6 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
-    <script src="/js/admin.js?v=20260616fixes1"></script>
+    <script src="/js/admin.js?v=20260616escalate"></script>
 </body>
 </html>

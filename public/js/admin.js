@@ -920,6 +920,9 @@ function switchTab(tabId) {
     if (tabId === 'tab-refund-tracking' && typeof initAdminRefundTrackingTab === 'function') {
         initAdminRefundTrackingTab();
     }
+    if (tabId === 'tab-applications' && typeof loadApplicationReviewersPanel === 'function') {
+        loadApplicationReviewersPanel();
+    }
 }
 
 let adminAutoRefreshInterval = null;
@@ -931,7 +934,11 @@ async function loadApplications(silentRefresh) {
         const apps = await res.json();
         const list = Array.isArray(apps) ? apps : [];
         const fp = list
-            .map((a) => [a.id, a.status, a.application_no, a.updated_at || ''].join(':'))
+            .map((a) =>
+                [a.id, a.status, a.application_no, a.review_required_level, a.review_escalated_at, a.updated_at || ''].join(
+                    ':'
+                )
+            )
             .join('|');
         if (silentRefresh && fp === __adminAppsFingerprint) return;
         __adminAppsFingerprint = fp;
@@ -7835,12 +7842,12 @@ function renderApplicationsTable() {
     tbody.innerHTML = '';
     if (!apps.length) {
         tbody.innerHTML =
-            '<tr><td colspan="5" style="text-align:center;">No applications yet.</td></tr>';
+            '<tr><td colspan="6" style="text-align:center;">No applications yet.</td></tr>';
         return;
     }
     if (!filtered.length) {
         tbody.innerHTML =
-            '<tr><td colspan="5" style="text-align:center;">No applications match your filters.</td></tr>';
+            '<tr><td colspan="6" style="text-align:center;">No applications match your filters.</td></tr>';
         return;
     }
     filtered.forEach((a) => {
@@ -7859,6 +7866,8 @@ function renderApplicationsTable() {
         const dupBadge = dupReview
             ? `<div style="margin-top:6px;"><span style="background:#fee2e2;color:#991b1b;padding:3px 8px;border-radius:999px;font-size:0.72rem;">Auto duplicate rejected</span></div>`
             : '';
+        const reviewLv = parseInt(a.review_required_level, 10) || 1;
+        const reviewBadge = adminApplicationReviewLevelBadge(reviewLv);
 
             tbody.innerHTML += `
                 <tr>
@@ -7868,6 +7877,7 @@ function renderApplicationsTable() {
                     </td>
                     <td>${a.user_id_string}</td>
                     <td>${candidateName}${fileLink}${dupBadge}</td>
+                    <td>${reviewBadge}</td>
                     <td>
                         <select onchange="onApplicationStatusChange(${a.id}, this, ${index})" style="width: auto; min-width: 200px;">
                             ${adminRegistrationStatusOptionsHtml(a.status)}
@@ -9755,6 +9765,144 @@ function formatNcismCertificateCheckHtml(check) {
     </div>`;
 }
 
+    </div>`;
+}
+
+function adminApplicationReviewLevelBadge(level) {
+    const lv = parseInt(level, 10) || 1;
+    const labels = { 1: 'L1 Frontline', 2: 'L2 Senior', 3: 'L3 Authority' };
+    const colors = { 1: '#0369a1', 2: '#b45309', 3: '#7c3aed' };
+    const bg = colors[lv] || '#64748b';
+    return (
+        '<span style="display:inline-block;padding:3px 10px;border-radius:999px;font-size:0.78rem;font-weight:700;color:#fff;background:' +
+        bg +
+        ';">' +
+        escAdmin(labels[lv] || 'L' + lv) +
+        '</span>'
+    );
+}
+
+function adminParseApplicationEscalation(a) {
+    if (!a || !a.review_escalation_json) return { history: [] };
+    try {
+        const o = JSON.parse(a.review_escalation_json);
+        return o && Array.isArray(o.history) ? o : { history: [] };
+    } catch (_) {
+        return { history: [] };
+    }
+}
+
+async function loadApplicationReviewersPanel() {
+    const root = document.getElementById('application-reviewers-root');
+    if (!root) return;
+    root.innerHTML = '<p style="color:#64748b;">Loading reviewers…</p>';
+    try {
+        const res = await fetch('/api/admin/application-reviewers');
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed to load reviewers');
+        const reviewers = Array.isArray(data.reviewers) ? data.reviewers : [];
+        if (!reviewers.length) {
+            root.innerHTML =
+                '<p style="color:#64748b;">No staff with <strong>Review applications</strong> access yet. Assign the applications module under Staff users → Portal access.</p>';
+            return;
+        }
+        root.innerHTML =
+            '<table class="data-table"><thead><tr><th>Reviewer</th><th>Role</th><th>Authority level</th><th></th></tr></thead><tbody>' +
+            reviewers
+                .map((r) => {
+                    const authLevel = parseInt(r.authority_level, 10) || 1;
+                    const isCoAdmin = String(r.user_role || '').toLowerCase() === 'co_admin';
+                    if (isCoAdmin) {
+                        return (
+                            '<tr><td>' +
+                            escAdmin((r.first_name || '') + ' ' + (r.last_name || '')) +
+                            '<br><span style="font-size:0.78rem;color:#64748b;">' +
+                            escAdmin(r.email || '') +
+                            '</span></td><td>' +
+                            escAdmin(r.user_role || '') +
+                            '</td><td>' +
+                            adminApplicationReviewLevelBadge(3) +
+                            '</td><td><span style="font-size:0.82rem;color:#64748b;">Full authority</span></td></tr>'
+                        );
+                    }
+                    const opts = [1, 2, 3]
+                        .map(
+                            (lv) =>
+                                '<option value="' +
+                                lv +
+                                '"' +
+                                (authLevel === lv ? ' selected' : '') +
+                                '>' +
+                                (lv === 1 ? 'L1 Frontline' : lv === 2 ? 'L2 Senior' : 'L3 Authority') +
+                                '</option>'
+                        )
+                        .join('');
+                    return (
+                        '<tr><td>' +
+                        escAdmin((r.first_name || '') + ' ' + (r.last_name || '')) +
+                        '<br><span style="font-size:0.78rem;color:#64748b;">' +
+                        escAdmin(r.email || '') +
+                        '</span></td><td>' +
+                        escAdmin(r.user_role || '') +
+                        '</td><td><select id="app-reviewer-lv-' +
+                        r.id +
+                        '" style="padding:6px;min-width:140px;">' +
+                        opts +
+                        '</select></td><td><button type="button" class="btn-primary" style="padding:6px 12px;font-size:0.82rem;" onclick="adminSaveApplicationReviewerAuthority(' +
+                        r.id +
+                        ')">Save</button></td></tr>'
+                    );
+                })
+                .join('') +
+            '</tbody></table>';
+    } catch (e) {
+        root.innerHTML = '<p style="color:#b91c1c;">' + escAdmin(e.message || 'Could not load reviewers') + '</p>';
+    }
+}
+
+async function adminSaveApplicationReviewerAuthority(userId) {
+    const sel = document.getElementById('app-reviewer-lv-' + userId);
+    const authorityLevel = sel ? parseInt(sel.value, 10) : 1;
+    try {
+        const res = await fetch('/api/admin/application-reviewers/' + userId, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ authorityLevel })
+        });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Save failed');
+        alert('Application review authority updated.');
+    } catch (e) {
+        alert('Network error');
+    }
+}
+
+async function adminEscalateSeminarApplication(appId) {
+    const note = prompt(
+        'Escalate to higher authority — describe the issue for senior/authority reviewers:',
+        ''
+    );
+    if (note === null) return;
+    if (!String(note).trim()) return alert('Please enter a note explaining why this needs higher authority.');
+    const admin = getStoredAdminUser();
+    if (!admin || !admin.id) return alert('Admin session required.');
+    try {
+        const res = await fetch('/api/admin/applications/' + appId + '/escalate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ note: String(note).trim(), actingAdminId: admin.id })
+        });
+        const data = await res.json();
+        if (!res.ok) return alert(data.error || 'Escalation failed');
+        alert(data.message || 'Escalated to higher authority.');
+        await loadApplications();
+        const idx = (globalAdminApps || []).findIndex((x) => Number(x.id) === Number(appId));
+        if (idx >= 0) viewFullApplication(idx);
+    } catch (e) {
+        alert('Network error');
+    }
+}
+
 async function adminRecheckNcism(appId) {
     if (!appId) return;
     try {
@@ -9792,6 +9940,47 @@ function viewFullApplication(index) {
         docReview = a && a.doc_review_json ? JSON.parse(a.doc_review_json) : null;
     } catch (_) {}
     const autoConfirmed = !!(docReview && (docReview.auto_confirmed || docReview.decision === 'auto_confirm'));
+    const reviewLv = parseInt(a.review_required_level, 10) || 1;
+    const escData = adminParseApplicationEscalation(a);
+    const escHistoryHtml = (escData.history || []).length
+        ? '<ul style="margin:8px 0 0;padding-left:18px;font-size:0.85rem;">' +
+          escData.history
+              .slice()
+              .reverse()
+              .map(
+                  (h) =>
+                      '<li>' +
+                      escAdmin((h.at || '').slice(0, 16).replace('T', ' ')) +
+                      ' — ' +
+                      escAdmin(h.by_name || 'Reviewer') +
+                      ' → L' +
+                      escAdmin(String(h.to_level || '')) +
+                      (h.note ? ': ' + escAdmin(h.note) : '') +
+                      '</li>'
+              )
+              .join('') +
+          '</ul>'
+        : '';
+    const canEscalateReview =
+        reviewLv < 3 &&
+        ['submitted', 'pending_approval', 'waitlisted', 'revision_required', 'documents_requested'].includes(st);
+    const escalationBlock =
+        '<div style="margin:12px 0;padding:12px;border-radius:8px;border:1px solid #c7d2fe;background:#eef2ff;">' +
+        '<p style="margin:0 0 6px;"><strong>Review authority:</strong> ' +
+        adminApplicationReviewLevelBadge(reviewLv) +
+        (a.review_escalated_at
+            ? ' <span style="font-size:0.82rem;color:#64748b;">(escalated ' +
+              escAdmin(String(a.review_escalated_at).slice(0, 16).replace('T', ' ')) +
+              ')</span>'
+            : '') +
+        '</p>' +
+        escHistoryHtml +
+        (canEscalateReview
+            ? '<button type="button" class="btn-primary" style="margin-top:10px;background:#4338ca;" onclick="adminEscalateSeminarApplication(' +
+              a.id +
+              ')">Escalate to higher authority</button>'
+            : '') +
+        '</div>';
     const canVerify = st === 'submitted' || st === 'pending_approval' || st === 'waitlisted';
     const canPostApproveDocActions = ['approved_pending_payment', 'completed', 'e_ticket_issued'].includes(st);
     const docChecks = needsDocs
@@ -9868,6 +10057,7 @@ function viewFullApplication(index) {
     content.innerHTML = `
         <p><strong>App No:</strong> ${escAdmin(a.application_no)}</p>
         <p><strong>Status:</strong> ${escAdmin(String(a.status || '').toUpperCase())}</p>
+        ${escalationBlock}
         <p><strong>Seminar:</strong> ${escAdmin(a.seminar_title || '—')}${a.seminar_price != null ? ' · Fee ₹' + escAdmin(String(adminSeminarFeeAmount(a))) : ''}</p>
         <p><strong>Portal ID:</strong> ${escAdmin(a.user_id_string || '')}</p>
         ${renderAdminApplicationPaymentHtml(a)}

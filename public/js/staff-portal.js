@@ -7,6 +7,8 @@
     let staffSections = {};
     let staffSectionList = [];
     let activeStaffTab = null;
+    let staffReviewAuthority = 1;
+    let staffReviewAuthorityLabel = 'Frontline (L1)';
 
     const APP_STATUS_OPTS = [
         'submitted',
@@ -415,6 +417,40 @@
         }
     };
 
+    function staffReviewLevelBadge(level, label) {
+        const lv = parseInt(level, 10) || 1;
+        const colors = { 1: '#0369a1', 2: '#b45309', 3: '#7c3aed' };
+        const bg = colors[lv] || '#64748b';
+        return (
+            '<span style="display:inline-block;padding:2px 8px;border-radius:999px;font-size:0.72rem;font-weight:700;color:#fff;background:' +
+            bg +
+            ';">' +
+            esc(label || 'L' + lv) +
+            '</span>'
+        );
+    }
+
+    window.staffEscalateApplication = async function (applicationId) {
+        const note = prompt(
+            'Escalate to higher authority — describe the issue (required for senior/authority reviewers):',
+            ''
+        );
+        if (note === null) return;
+        if (!String(note).trim()) return alert('Please enter a note explaining why this needs higher authority.');
+        try {
+            const { res, data } = await apiJson('/api/staff/applications/' + applicationId + '/escalate', {
+                method: 'POST',
+                headers: headers(),
+                body: JSON.stringify(body({ note: String(note).trim() }))
+            });
+            if (!res.ok) return alert(data.error || 'Escalation failed');
+            alert(data.message || 'Escalated to higher authority.');
+            staffLoadApplications();
+        } catch (e) {
+            alert(e.message);
+        }
+    };
+
     window.staffLoadApplications = async function () {
         const root = document.getElementById('staff-applications-root');
         if (!root || !hasStaffSection('applications')) return;
@@ -426,12 +462,17 @@
                 return;
             }
             const rows = Array.isArray(data) ? data : [];
+            const intro =
+                '<p style="font-size:0.85rem;color:#475569;margin:0 0 12px;">Your review level: <strong>' +
+                esc(staffReviewAuthorityLabel) +
+                '</strong>. Escalate when you find an issue that needs senior or authority approval.</p>';
             if (!rows.length) {
-                root.innerHTML = '<p style="color:#64748b;">No applications.</p>';
+                root.innerHTML = intro + '<p style="color:#64748b;">No applications.</p>';
                 return;
             }
             let html =
-                '<table class="data-table"><thead><tr><th>App no.</th><th>Name</th><th>Status</th><th>Submitted</th><th>Update</th></tr></thead><tbody>';
+                intro +
+                '<table class="data-table"><thead><tr><th>App no.</th><th>Applicant</th><th>Seminar</th><th>Status</th><th>Review level</th><th>Submitted</th><th>Actions</th></tr></thead><tbody>';
             rows.forEach((a) => {
                 const name = [a.first_name, a.last_name].filter(Boolean).join(' ') || '—';
                 const opts = APP_STATUS_OPTS.map(
@@ -444,6 +485,15 @@
                         st +
                         '</option>'
                 ).join('');
+                const levelBadge = staffReviewLevelBadge(a.review_required_level, a.review_required_label);
+                const actWarn = a.can_act
+                    ? ''
+                    : '<br><small style="color:#b45309;">Needs higher authority</small>';
+                const escBtn = a.can_escalate
+                    ? '<button type="button" class="btn btn-muted" style="padding:4px 8px;font-size:0.75rem;margin-top:4px;" onclick="staffEscalateApplication(' +
+                      a.id +
+                      ')">Escalate</button>'
+                    : '';
                 html +=
                     '<tr><td><strong>' +
                     esc(a.application_no) +
@@ -452,16 +502,23 @@
                     '<br><small>' +
                     esc(a.user_id_string || '') +
                     '</small></td><td>' +
+                    esc(a.seminar_title || '—') +
+                    '</td><td>' +
                     esc(a.status) +
+                    actWarn +
+                    '</td><td>' +
+                    levelBadge +
                     '</td><td>' +
                     esc((a.created_at || '').slice(0, 10)) +
                     '</td><td><select id="staff-app-st-' +
                     a.id +
-                    '" style="padding:4px;font-size:0.8rem;">' +
+                    '" style="padding:4px;font-size:0.8rem;max-width:140px;">' +
                     opts +
                     '</select> <button type="button" class="btn btn-primary" style="padding:4px 8px;font-size:0.75rem;" onclick="staffSaveApplicationStatus(' +
                     a.id +
-                    ')">Save</button></td></tr>';
+                    ')">Save</button>' +
+                    escBtn +
+                    '</td></tr>';
             });
             html += '</tbody></table>';
             root.innerHTML = html;
@@ -669,6 +726,8 @@
             const sess = await refreshSession();
             staffSections = sess.sections || staffSections;
             staffSectionList = sess.sectionList || staffSectionList;
+            staffReviewAuthority = parseInt(sess.applicationReviewAuthority, 10) || 1;
+            staffReviewAuthorityLabel = sess.applicationReviewAuthorityLabel || 'Frontline (L1)';
         } catch (e) {
             alert(e.message || 'Session error');
             staffLogout();
