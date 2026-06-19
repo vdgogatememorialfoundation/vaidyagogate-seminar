@@ -18367,8 +18367,13 @@ async function saveAdminSiteCms() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ cms })
         });
-        const data = await res.json();
-        if (data.success) {
+        let data = {};
+        try {
+            data = await res.json();
+        } catch (_) {
+            data = {};
+        }
+        if (res.ok && data.success) {
             if (msg) {
                 msg.style.color = '#15803d';
                 msg.innerText = 'Website and portal content saved.';
@@ -18376,7 +18381,7 @@ async function saveAdminSiteCms() {
             await loadAdminSiteCms();
         } else if (msg) {
             msg.style.color = '#b91c1c';
-            msg.innerText = data.error || 'Save failed';
+            msg.innerText = data.error || `Save failed (${res.status})`;
         }
     } catch (e) {
         console.error(e);
