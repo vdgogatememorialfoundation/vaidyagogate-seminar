@@ -7,7 +7,7 @@
     <title>Super Admin CMS | Vaidya Gogate Memorial Foundation National Seminar</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="/css/responsive-portals.css?v=20260608mobile1">
+    <link rel="stylesheet" href="/css/responsive-portals.css?v=20260620desktopform1">
     <link rel="stylesheet" href="/css/vgmf-portal-bright.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -56,6 +56,58 @@
         #auth-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(135deg, rgba(224,242,254,0.95), rgba(240,253,250,0.98)); z-index: 9999; display: flex; align-items: center; justify-content: center; }
         #auth-overlay > div { background: #fff; border: 1px solid #bae6fd; border-radius: 20px; box-shadow: 0 24px 60px rgba(14,116,144,0.15); }
         #auth-overlay h2 { color: #0d9488 !important; }
+        .admin-modal-overlay {
+            position: fixed;
+            inset: 0;
+            z-index: 10000;
+            display: flex;
+            align-items: flex-start;
+            justify-content: center;
+            padding: max(20px, env(safe-area-inset-top, 0px)) 16px 32px;
+            background: rgba(0, 0, 0, 0.5);
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        .admin-modal-panel {
+            background: #fff;
+            padding: 24px 28px 28px;
+            border-radius: 16px;
+            width: min(560px, 100%);
+            max-height: min(90vh, calc(100dvh - 48px));
+            overflow-y: auto;
+            position: relative;
+            margin: auto 0;
+            box-shadow: 0 24px 60px rgba(14, 116, 144, 0.15);
+        }
+        .admin-modal-panel--wide { width: min(920px, 100%); }
+        .admin-modal-panel--medium { width: min(640px, 100%); }
+        .admin-modal-close {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            cursor: pointer;
+            line-height: 1;
+            color: #64748b;
+        }
+        .admin-form-hint-details {
+            font-size: 0.85rem;
+            color: #64748b;
+            background: #f8fafc;
+            padding: 8px 12px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
+        .admin-form-hint-details summary {
+            cursor: pointer;
+            font-weight: 600;
+            color: #0f766e;
+            list-style: none;
+        }
+        .admin-form-hint-details summary::-webkit-details-marker { display: none; }
+        .admin-form-hint-details[open] summary { margin-bottom: 8px; }
     </style>
 </head>
 <body class="portal-bright">
@@ -2845,10 +2897,10 @@
     </div>
 
     <!-- Create User Modal -->
-    <div id="admin-create-user-modal" class="hidden" style="position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 10000; display: flex; align-items: center; justify-content: center;">
-        <div style="background: white; padding: 30px; border-radius: 12px; width: 500px; position: relative;">
-            <button onclick="document.getElementById('admin-create-user-modal').classList.add('hidden');" style="position: absolute; top: 20px; right: 20px; background: none; border: none; font-size: 1.5rem; cursor: pointer;">&times;</button>
-            <h2 style="color: #1a237e; margin-bottom: 20px;">Register New User</h2>
+    <div id="admin-create-user-modal" class="hidden admin-modal-overlay">
+        <div class="admin-modal-panel admin-modal-panel--medium">
+            <button type="button" class="admin-modal-close" onclick="document.getElementById('admin-create-user-modal').classList.add('hidden');" aria-label="Close">&times;</button>
+            <h2 style="color: #1a237e; margin-bottom: 16px; padding-right: 28px;">Register New User</h2>
             <div style="display: grid; gap: 10px;">
                 <input type="text" id="newuser-first" placeholder="First Name (no Dr./Vd. titles)" required>
                 <input type="text" id="newuser-middle" placeholder="Middle Name (optional)">
@@ -2884,7 +2936,7 @@
                 </label>
                 <label id="newuser-is-demo-wrap" style="display:flex;align-items:flex-start;gap:8px;font-size:0.88rem;padding:10px 12px;background:#f5f3ff;border:1px solid #c4b5fd;border-radius:8px;">
                     <input type="checkbox" id="newuser-is-demo" style="margin-top:3px;">
-                    <span><strong>Dummy account</strong> — for testing on live: login and registration accept <em>any</em> OTP code (e.g. 0000, 1234). Real SMS/email OTP is optional.</span>
+                    <span><strong>Dummy account</strong> — testing on live: any OTP code works (e.g. 0000).</span>
                 </label>
                 <div id="newuser-pass-wrap" style="display:none;">
                     <input type="password" id="newuser-pass" placeholder="Custom password" style="width:100%;">
@@ -2895,16 +2947,15 @@
                     <button type="button" style="margin-left:8px;font-size:0.8rem;" onclick="copyNewUserGeneratedPassword()">Copy</button>
                 </div>
                 <p id="newuser-staff-dup-hint" style="display:none;font-size: 0.85rem; color: #0f766e; margin-top: 4px; background: #ecfdf5; padding: 10px; border-radius: 4px;border:1px solid #a7f3d0;">
-                    <strong>Staff testing:</strong> You may use the same email as an existing doctor account (e.g. Nitin). Each staff login needs its own <strong>12-digit portal ID</strong>; sign in with portal ID + password on scanner/judge/admin portals.
+                    <strong>Staff testing:</strong> Same email as a doctor account is OK. Each staff login needs its own <strong>portal ID</strong>.
                 </p>
-                <p style="font-size: 0.85rem; color: #64748b; margin-top: 4px; background: #f0f4ff; padding: 10px; border-radius: 4px;">
-                    Each role signs in at its own URL:
-                    <strong>Doctor</strong> &rarr; /doctor &middot; <strong>Staff / Co-admin operations</strong> &rarr; /staff/login
-                    &middot; <strong>Co-admin (full CRM)</strong> &rarr; /admin &middot;
-                    <strong>Support agent</strong> &rarr; /support &middot;
-                    <strong>Judge/Reviewer</strong> &rarr; /judge &middot; <strong>Scanner</strong> &rarr; /scanner
-                    &middot; <strong>Super admin</strong> can use admin credentials on all staff portals.
-                </p>
+                <details class="admin-form-hint-details">
+                    <summary>Portal login URLs by role</summary>
+                    <p style="margin:0;line-height:1.55;">
+                    <strong>Doctor</strong> → /doctor · <strong>Staff / Co-admin</strong> → /staff/login · <strong>Co-admin CRM</strong> → /admin ·
+                    <strong>Support</strong> → /support · <strong>Judge</strong> → /judge · <strong>Scanner</strong> → /scanner
+                    </p>
+                </details>
                 <div id="newuser-admin-otp-wrap" style="display:none;padding:12px;border:1px solid #fed7aa;border-radius:8px;background:#fffbeb;margin-top:8px;">
                     <strong style="display:block;margin-bottom:8px;color:#9a3412;font-size:0.9rem;">Confirm it is you (email + WhatsApp)</strong>
                     <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px;">
@@ -3289,6 +3340,6 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
-    <script src="/js/admin.js?v=20260616welcomeemail1"></script>
+    <script src="/js/admin.js?v=20260620desktopform1"></script>
 </body>
 </html>

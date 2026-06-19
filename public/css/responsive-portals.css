@@ -146,6 +146,39 @@ body.doctor-nav-open {
     font-size: 0.82rem;
 }
 
+/* Registration / multi-column form grids — fit desktop without horizontal zoom */
+.reg-form-grid {
+    display: grid;
+    gap: 12px 16px;
+}
+.reg-form-grid--3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.reg-form-grid--2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (max-width: 1100px) {
+    .reg-form-grid--3 {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+@media (max-width: 720px) {
+    .reg-form-grid--3,
+    .reg-form-grid--2 {
+        grid-template-columns: 1fr;
+    }
+}
+#multi-step-form {
+    max-width: 100%;
+    overflow-x: hidden;
+}
+#multi-step-form .step-indicator {
+    justify-content: flex-start;
+}
+#multi-step-form .step {
+    white-space: nowrap;
+}
+
 @media (max-width: 768px) {
     .doctor-menu-toggle,
     .admin-menu-toggle {
