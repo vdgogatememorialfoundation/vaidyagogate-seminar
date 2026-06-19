@@ -2169,7 +2169,13 @@
             <!-- E-tickets: lookup, generate, send -->
             <div id="tab-etickets" class="tab-pane hidden">
                 <h2 style="margin-bottom: 12px;">E-tickets</h2>
-                <p style="color:#64748b;margin-bottom:18px;max-width:900px;">Look up a doctor’s e-ticket by <strong>12-digit ticket ID</strong>, <strong>application ID</strong>, <strong>email</strong>, or <strong>phone</strong>. Generate if missing, preview the printable ticket, then send via email and/or WhatsApp.</p>
+                <p style="color:#64748b;margin-bottom:18px;max-width:900px;">Look up a doctor’s e-ticket by <strong>12-digit ticket ID</strong>, <strong>application ID</strong>, <strong>email</strong>, or <strong>phone</strong>. Generate if missing, preview the printable ticket, then <strong>resend</strong> via email (with attachment) and/or WhatsApp.</p>
+                <div class="card" style="margin-bottom:16px;border-left:4px solid #0369a1;">
+                    <h3 style="margin:0 0 8px;color:#1e40af;font-size:1rem;">Missing ticket emails</h3>
+                    <p id="eticket-missing-status" style="font-size:0.88rem;color:#64748b;margin:0 0 10px;">Loading…</p>
+                    <button type="button" class="btn-primary" style="background:#1d4ed8;" onclick="adminEticketResendAllMissing()">Resend all missing (up to 25)</button>
+                    <button type="button" class="btn-primary" style="background:#64748b;margin-left:8px;" onclick="adminEticketLoadMissingCount()">Refresh count</button>
+                </div>
                 <div class="card" style="margin-bottom:16px;">
                     <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;">
                         <div style="flex:1;min-width:220px;">
@@ -2186,9 +2192,9 @@
                         <div id="eticket-detail-panel" style="font-size:0.9rem;line-height:1.6;"></div>
                         <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:16px;">
                             <button type="button" class="btn-primary" style="background:#15803d;" onclick="adminEticketGenerate()">Generate / refresh ticket</button>
-                            <button type="button" class="btn-primary" onclick="adminEticketSend(true, false)">Send email</button>
-                            <button type="button" class="btn-primary" style="background:#0d9488;" onclick="adminEticketSend(false, true)">Send WhatsApp</button>
-                            <button type="button" class="btn-primary" style="background:#7c3aed;" onclick="adminEticketSend(true, true)">Send both</button>
+                            <button type="button" class="btn-primary" onclick="adminEticketSend(true, false)">Resend ticket email</button>
+                            <button type="button" class="btn-primary" style="background:#0d9488;" onclick="adminEticketSend(false, true)">Resend WhatsApp</button>
+                            <button type="button" class="btn-primary" style="background:#7c3aed;" onclick="adminEticketSend(true, true)">Resend both</button>
                             <a id="eticket-preview-link" class="btn-primary" style="background:#64748b;text-decoration:none;display:inline-flex;align-items:center;" href="#" target="_blank" rel="noopener">Preview ticket</a>
                         </div>
                         <p id="eticket-action-status" style="margin-top:12px;font-weight:600;font-size:0.88rem;"></p>
@@ -3282,6 +3288,6 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
-    <script src="/js/admin.js?v=20260616paylink1"></script>
+    <script src="/js/admin.js?v=20260619resendticket1"></script>
 </body>
 </html>

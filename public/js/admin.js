@@ -7596,6 +7596,7 @@ function initAdminEticketsTab() {
     const wrap = document.getElementById('eticket-results-wrap');
     if (wrap) wrap.classList.add('hidden');
     __adminEticketSelection = null;
+    adminEticketLoadMissingCount();
 }
 
 function renderAdminEticketDetail(row) {
@@ -7636,6 +7637,20 @@ function renderAdminEticketDetail(row) {
             ? '<br><strong style="color:#b91c1c;">Expired</strong> — seminar date passed (scanner blocked). Use Applications → Check in for manual override.'
             : '') +
         '</p>' +
+        (function () {
+            const st = String(row.ticketEmailStatus || 'never').toLowerCase();
+            const label =
+                st === 'sent'
+                    ? '<span style="color:#15803d;">Sent</span>' +
+                      (row.ticketEmailSentAt ? ' · ' + escAdmin(String(row.ticketEmailSentAt).slice(0, 16).replace('T', ' ')) : '')
+                    : st === 'failed'
+                      ? '<span style="color:#b91c1c;">Failed</span>' +
+                        (row.ticketEmailError ? ' — ' + escAdmin(row.ticketEmailError) : '')
+                      : st === 'never'
+                        ? '<span style="color:#b45309;">Never sent</span>'
+                        : escAdmin(st);
+            return '<p><strong>Ticket email:</strong> ' + label + '</p>';
+        })() +
         (row.ticketExpired && row.registrationId
             ? '<p><button type="button" class="btn-primary" style="background:#0f766e;padding:6px 10px;font-size:0.85rem;" onclick="adminManualCheckinRegistration(' +
               row.registrationId +
@@ -7745,6 +7760,55 @@ async function adminEticketGenerate() {
     }
 }
 
+async function adminResendTicketEmail(registrationId, ticketIdString, sendEmail, sendWhatsapp) {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return alert('Not logged in.');
+    const regId = parseInt(registrationId, 10);
+    if (!regId) return alert('Registration not found.');
+    const ticket = String(ticketIdString || '').trim();
+    if (!ticket) return alert('No e-ticket on file. Generate the ticket first (E-tickets tab or waive/issue payment).');
+    const doEmail = sendEmail !== false;
+    const doWa = !!sendWhatsapp;
+    if (
+        !confirm(
+            'Resend e-ticket' +
+                (doEmail ? ' email (with HTML attachment)' : '') +
+                (doEmail && doWa ? ' and' : '') +
+                (doWa ? ' WhatsApp' : '') +
+                ' for ticket ' +
+                ticket +
+                '?'
+        )
+    ) {
+        return false;
+    }
+    try {
+        const res = await fetch('/api/admin/e-tickets/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                registrationId: regId,
+                ticketIdString: ticket,
+                sendEmail: doEmail,
+                sendWhatsapp: doWa,
+                actingAdminId: adm.id
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            alert(data.error || 'Could not resend ticket email.');
+            return false;
+        }
+        alert(data.message || 'Ticket email resent.');
+        return true;
+    } catch (e) {
+        console.error(e);
+        alert('Network error.');
+        return false;
+    }
+}
+window.adminResendTicketEmail = adminResendTicketEmail;
+
 async function adminEticketSend(sendEmail, sendWhatsapp) {
     const adm = getStoredAdminUser();
     if (!adm || !adm.id) return alert('Not logged in.');
@@ -7758,36 +7822,85 @@ async function adminEticketSend(sendEmail, sendWhatsapp) {
         actSt.style.color = '#64748b';
         actSt.textContent = 'Sending…';
     }
+    const ok = await adminResendTicketEmail(row.registrationId, row.ticketIdString, !!sendEmail, !!sendWhatsapp);
+    if (actSt) {
+        if (ok) {
+            actSt.style.color = '#059669';
+            actSt.textContent = 'Sent.';
+            await adminEticketLookup();
+        } else {
+            actSt.style.color = '#b91c1c';
+            actSt.textContent = 'Send failed.';
+        }
+    }
+}
+
+async function adminEticketLoadMissingCount() {
+    const adm = getStoredAdminUser();
+    const el = document.getElementById('eticket-missing-status');
+    if (!adm?.id || !el) return;
     try {
-        const res = await fetch('/api/admin/e-tickets/send', {
+        const res = await fetch(
+            '/api/admin/e-tickets/missing-email?actingAdminId=' + encodeURIComponent(adm.id) + '&limit=200'
+        );
+        const data = await res.json();
+        if (!res.ok) {
+            el.style.color = '#b91c1c';
+            el.textContent = data.error || 'Could not load missing list.';
+            return;
+        }
+        const n = Number(data.count) || 0;
+        el.style.color = n ? '#b45309' : '#059669';
+        el.textContent = n
+            ? n + ' paid registration(s) have an e-ticket but no successful ticket email on record.'
+            : 'All e-tickets with payment have a sent ticket email on record.';
+    } catch (e) {
+        if (el) {
+            el.style.color = '#b91c1c';
+            el.textContent = 'Network error loading missing list.';
+        }
+    }
+}
+
+async function adminEticketResendAllMissing() {
+    const adm = getStoredAdminUser();
+    if (!adm?.id) return alert('Not logged in.');
+    const actSt = document.getElementById('eticket-missing-status');
+    if (
+        !confirm(
+            'Resend ticket emails (with attachment) to all doctors who have an e-ticket but no successful TICKET_ISSUED email?\n\nProcesses up to 25 at a time.'
+        )
+    ) {
+        return;
+    }
+    if (actSt) {
+        actSt.style.color = '#64748b';
+        actSt.textContent = 'Resending missing ticket emails…';
+    }
+    try {
+        const res = await fetch('/api/admin/e-tickets/resend-missing', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                registrationId: row.registrationId,
-                ticketIdString: row.ticketIdString,
-                sendEmail: !!sendEmail,
-                sendWhatsapp: !!sendWhatsapp,
-                actingAdminId: adm.id
-            })
+            body: JSON.stringify({ actingAdminId: adm.id, limit: 25, sendWhatsapp: false })
         });
         const data = await res.json();
         if (!res.ok) {
             if (actSt) {
                 actSt.style.color = '#b91c1c';
-                actSt.textContent = data.error || 'Send failed.';
+                actSt.textContent = data.error || 'Bulk resend failed.';
             }
-            return;
+            return alert(data.error || 'Bulk resend failed.');
         }
         if (actSt) {
-            actSt.style.color = '#059669';
-            actSt.textContent = data.message || 'Sent.';
+            actSt.style.color = data.failed ? '#b45309' : '#059669';
+            actSt.textContent = data.message || 'Done.';
         }
+        alert(data.message || 'Bulk resend complete.');
+        adminEticketLoadMissingCount();
     } catch (e) {
         console.error(e);
-        if (actSt) {
-            actSt.style.color = '#b91c1c';
-            actSt.textContent = 'Network error.';
-        }
+        if (actSt) actSt.textContent = 'Network error.';
+        alert('Network error.');
     }
 }
 
@@ -9004,6 +9117,21 @@ function renderAdminApplicationPaymentHtml(app) {
             '<div style="margin-top:10px;"><button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.78rem;" onclick="openAdminOrderReceipt(' +
             orderDbId +
             ')"><i class="fas fa-receipt"></i> View receipt</button></div>';
+    }
+    if (ticketId && app.id) {
+        html +=
+            '<div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;">' +
+            '<button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.78rem;background:#0369a1;" onclick="adminResendTicketEmail(' +
+            parseInt(app.id, 10) +
+            ', ' +
+            JSON.stringify(String(ticketId)) +
+            ', true, false)"><i class="fas fa-envelope"></i> Resend ticket email</button>' +
+            '<button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.78rem;background:#0d9488;" onclick="adminResendTicketEmail(' +
+            parseInt(app.id, 10) +
+            ', ' +
+            JSON.stringify(String(ticketId)) +
+            ', true, true)"><i class="fas fa-paper-plane"></i> Resend email + WhatsApp</button>' +
+            '</div>';
     }
     html += '</div>';
     return html;
@@ -18543,6 +18671,14 @@ async function loadAdminUserPaymentsPanel(userId, bodyEl) {
                         '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;background:#7c3aed;border:none;" onclick="adminWaiveAndTicket(' +
                         o.registration_id +
                         ')">Waive</button>';
+                }
+                if (o.registration_id && o.e_ticket_id && o.status === 'success') {
+                    acts +=
+                        ' <button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;background:#0369a1;border:none;" onclick="adminResendTicketEmail(' +
+                        o.registration_id +
+                        ', ' +
+                        JSON.stringify(String(o.e_ticket_id)) +
+                        ', true, false)">Resend ticket</button>';
                 }
                 html +=
                     '<tr><td>' +

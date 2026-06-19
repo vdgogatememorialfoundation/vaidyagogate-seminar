@@ -14145,6 +14145,177 @@ app.post('/api/support-ticket/:ticketId/reply', (req, res) => {
     });
 });
 
+function adminDeliverEticketNotification(userId, registrationId, ticketId, opts, cb) {
+    const sendEmail = !!(opts && opts.sendEmail);
+    const sendWhatsapp = !!(opts && opts.sendWhatsapp);
+    const immediate = !opts || opts.immediate !== false;
+    if (!sendEmail && !sendWhatsapp) {
+        return cb && cb(null, { error: 'Select at least one channel: email or WhatsApp' });
+    }
+    if (!userId || !registrationId || !ticketId) {
+        return cb && cb(null, { error: 'userId, registrationId, and ticketId are required' });
+    }
+
+    const base = integrationSettings.getPublicBaseUrl() || notifEngine.publicBaseUrl() || '';
+    const vars = {
+        ticket_id: ticketId,
+        qr_code_url: base + '/doctor#tab-tickets',
+        ticket_pdf_url: ticketDocumentUrl(String(ticketId), userId),
+        payment_status: 'PAID'
+    };
+
+    db.get(
+        `SELECT r.seminar_id, r.application_no, r.user_id,
+                t.qr_code_data, t.ticket_id_string, t.is_scanned, t.scan_time,
+                IFNULL(t.is_valid, 1) AS is_valid, o.status AS payment_status,
+                s.title AS seminar_title, s.event_date, s.location_url, s.portal_year,
+                u.first_name, u.last_name
+         FROM registrations r
+         JOIN orders o ON o.registration_id = r.id
+         JOIN tickets t ON t.order_id = o.id
+         JOIN seminars s ON s.id = r.seminar_id
+         JOIN users u ON u.id = r.user_id
+         WHERE r.id = ? AND TRIM(t.ticket_id_string) = TRIM(?)
+         ORDER BY o.id DESC, t.id DESC
+         LIMIT 1`,
+        [registrationId, String(ticketId)],
+        (e, row) => {
+            if (e) return cb && cb(e);
+            let pending = 0;
+            let emailSent = false;
+            let whatsappQueued = false;
+            let lastErr = null;
+
+            const finish = () => {
+                if (pending > 0) return;
+                if (immediate) {
+                    try {
+                        if (notifEngine.drainNotificationQueue) {
+                            notifEngine.drainNotificationQueue(db, 5).catch(() => {});
+                        } else {
+                            notifEngine.processQueueOnce(db);
+                        }
+                    } catch (_) {}
+                }
+                if (lastErr) return cb && cb(lastErr);
+                cb &&
+                    cb(null, {
+                        ticketId,
+                        emailSent,
+                        whatsappQueued
+                    });
+            };
+
+            if (sendEmail) {
+                pending++;
+                notifEngine.sendTicketIssuedEmail(
+                    db,
+                    {
+                        userId,
+                        registrationId,
+                        ticketId,
+                        ticketRow: row,
+                        vars,
+                        immediate
+                    },
+                    (mailErr, mailOut) => {
+                        if (mailErr) lastErr = mailErr;
+                        else emailSent = !(mailOut && mailOut.skipped);
+                        pending--;
+                        finish();
+                    }
+                );
+            }
+            if (sendWhatsapp) {
+                pending++;
+                notifEngine.notify(
+                    db,
+                    'TICKET_ISSUED',
+                    {
+                        userId,
+                        seminarId: row && row.seminar_id,
+                        registrationId,
+                        vars,
+                        immediate,
+                        skipEmail: true
+                    },
+                    (waErr) => {
+                        if (waErr) lastErr = waErr;
+                        else whatsappQueued = true;
+                        pending--;
+                        finish();
+                    }
+                );
+            }
+            if (!pending) finish();
+        }
+    );
+}
+
+function adminListEticketsMissingEmail(db, opts, cb) {
+    const seminarId =
+        opts && opts.seminarId != null && !Number.isNaN(parseInt(opts.seminarId, 10))
+            ? parseInt(opts.seminarId, 10)
+            : null;
+    const limit = Math.min(500, Math.max(1, parseInt((opts && opts.limit) || '200', 10) || 200));
+    const params = [];
+    let seminarClause = '';
+    if (seminarId) {
+        seminarClause = ' AND r.seminar_id = ?';
+        params.push(seminarId);
+    }
+    params.push(limit);
+    db.all(
+        `SELECT DISTINCT r.id AS registration_id, r.application_no, r.user_id, u.email, u.phone,
+                u.first_name, u.last_name, t.ticket_id_string, s.id AS seminar_id, s.title AS seminar_title
+         FROM registrations r
+         JOIN users u ON u.id = r.user_id
+         JOIN seminars s ON s.id = r.seminar_id
+         JOIN orders o ON o.registration_id = r.id AND LOWER(TRIM(o.status)) = 'success'
+         JOIN tickets t ON t.order_id = o.id AND TRIM(COALESCE(t.ticket_id_string, '')) != ''
+         WHERE NOT EXISTS (
+             SELECT 1 FROM notification_logs nl
+             WHERE nl.event_key = 'TICKET_ISSUED'
+               AND nl.channel = 'email'
+               AND nl.status = 'sent'
+               AND nl.user_id = r.user_id
+         )${seminarClause}
+         ORDER BY r.id DESC
+         LIMIT ?`,
+        params,
+        cb
+    );
+}
+
+function enrichEticketRowsWithEmailStatus(db, rows, cb) {
+    const list = rows || [];
+    if (!list.length) return cb && cb(null, []);
+    let left = list.length;
+    const out = list.map((row) => Object.assign({}, row));
+    out.forEach((item, idx) => {
+        const uid = item.userId != null ? item.userId : item.user_id;
+        if (!uid) {
+            out[idx].ticketEmailStatus = 'unknown';
+            left--;
+            if (left === 0) cb(null, out);
+            return;
+        }
+        db.get(
+            `SELECT status, created_at, error FROM notification_logs
+             WHERE event_key = 'TICKET_ISSUED' AND channel = 'email' AND user_id = ?
+             ORDER BY id DESC LIMIT 1`,
+            [uid],
+            (e, log) => {
+                out[idx].ticketEmailStatus = log && log.status ? log.status : 'never';
+                out[idx].ticketEmailSentAt = log && log.created_at ? log.created_at : null;
+                out[idx].ticketEmailError = log && log.error ? log.error : null;
+                left--;
+                if (left === 0) cb(null, out);
+            }
+        );
+    });
+}
+
 // ==================== ADMIN E-TICKETS (lookup / generate / send) ====================
 
 const ADMIN_ETICKET_LOOKUP_SQL = `
@@ -14225,7 +14396,10 @@ app.get('/api/admin/e-tickets/lookup', (req, res) => {
                         ? ticketDocumentUrl(row.ticket_id_string, row.user_id)
                         : null
             }));
-            res.json({ success: true, results: list });
+            enrichEticketRowsWithEmailStatus(db, list, (e2, enriched) => {
+                if (e2) return res.status(500).json({ error: e2.message });
+                res.json({ success: true, results: enriched || list });
+            });
         });
     });
 });
@@ -14345,27 +14519,33 @@ app.post('/api/admin/e-tickets/send', (req, res) => {
             if (!ticketId) {
                 return res.status(400).json({ error: 'No e-ticket ID on file. Click Generate ticket first.' });
             }
-            notifyTicketIssued(userId, regId, ticketId, {
-                email: sendEmail,
-                whatsapp: sendWhatsapp,
-                templateNotify: sendEmail || sendWhatsapp
-            });
-            flushNotificationQueue();
-            activityLog.logActivity(db, {
-                user_id: actingAdminId,
-                action: 'eticket.send',
-                resource_type: 'registration',
-                resource_id: String(regId),
-                meta: { ticketId, sendEmail, sendWhatsapp }
-            });
-            const parts = [];
-            if (sendEmail) parts.push('email');
-            if (sendWhatsapp) parts.push('WhatsApp');
-            res.json({
-                success: true,
-                message: 'E-ticket sent via ' + parts.join(' and ') + '.',
-                ticketId
-            });
+            adminDeliverEticketNotification(
+                userId,
+                regId,
+                ticketId,
+                { sendEmail, sendWhatsapp, immediate: true },
+                (delErr, out) => {
+                    if (delErr) return res.status(500).json({ error: delErr.message });
+                    if (out && out.error) return res.status(400).json(out);
+                    activityLog.logActivity(db, {
+                        user_id: actingAdminId,
+                        action: 'eticket.send',
+                        resource_type: 'registration',
+                        resource_id: String(regId),
+                        meta: { ticketId, sendEmail, sendWhatsapp, emailSent: out && out.emailSent }
+                    });
+                    const parts = [];
+                    if (sendEmail) parts.push(out && out.emailSent ? 'email (with attachment)' : 'email');
+                    if (sendWhatsapp) parts.push('WhatsApp');
+                    res.json({
+                        success: true,
+                        message: 'E-ticket resent via ' + parts.join(' and ') + '.',
+                        ticketId,
+                        emailSent: !!(out && out.emailSent),
+                        whatsappQueued: !!(out && out.whatsappQueued)
+                    });
+                }
+            );
         };
         if (ticketIdString) {
             db.get(
@@ -14396,6 +14576,114 @@ app.post('/api/admin/e-tickets/send', (req, res) => {
                 if (e) return res.status(500).json({ error: e.message });
                 if (!row) return res.status(404).json({ error: 'Registration not found' });
                 finishSend(row.user_id, registrationId, row.ticket_id_string);
+            }
+        );
+    });
+});
+
+app.get('/api/admin/e-tickets/missing-email', (req, res) => {
+    const actingAdminId = parseInt(req.query.actingAdminId, 10);
+    const seminarId = parseInt(req.query.seminarId, 10);
+    assertAdminPortalActor(actingAdminId, (eAct) => {
+        if (eAct) return res.status(eAct.message === 'FORBIDDEN' ? 403 : 500).json({ error: 'Admin access required' });
+        adminListEticketsMissingEmail(
+            db,
+            {
+                seminarId: Number.isInteger(seminarId) && seminarId > 0 ? seminarId : null,
+                limit: parseInt(req.query.limit, 10) || 200
+            },
+            (err, rows) => {
+                if (err) return res.status(500).json({ error: err.message });
+                const list = (rows || []).map((row) => ({
+                    registrationId: row.registration_id,
+                    applicationNo: row.application_no,
+                    userId: row.user_id,
+                    doctorName: [row.first_name, row.last_name].filter(Boolean).join(' ').trim(),
+                    email: row.email,
+                    phone: row.phone,
+                    ticketIdString: row.ticket_id_string,
+                    seminarId: row.seminar_id,
+                    seminarTitle: row.seminar_title
+                }));
+                res.json({ success: true, count: list.length, results: list });
+            }
+        );
+    });
+});
+
+app.post('/api/admin/e-tickets/resend-missing', (req, res) => {
+    const actingAdminId = parseInt((req.body && req.body.actingAdminId) || '', 10);
+    const seminarId = parseInt((req.body && req.body.seminarId) || '', 10);
+    const sendWhatsapp = !!(req.body && req.body.sendWhatsapp);
+    const limit = Math.min(50, Math.max(1, parseInt((req.body && req.body.limit) || '25', 10) || 25));
+    assertAdminPortalActor(actingAdminId, (eAct) => {
+        if (eAct) return res.status(eAct.message === 'FORBIDDEN' ? 403 : 500).json({ error: 'Admin access required' });
+        adminListEticketsMissingEmail(
+            db,
+            {
+                seminarId: Number.isInteger(seminarId) && seminarId > 0 ? seminarId : null,
+                limit
+            },
+            (err, rows) => {
+                if (err) return res.status(500).json({ error: err.message });
+                const targets = rows || [];
+                if (!targets.length) {
+                    return res.json({
+                        success: true,
+                        sent: 0,
+                        failed: 0,
+                        message: 'No missing ticket emails found — everyone with an e-ticket has a sent record.'
+                    });
+                }
+                let sent = 0;
+                let failed = 0;
+                const errors = [];
+                let idx = 0;
+                const next = () => {
+                    if (idx >= targets.length) {
+                        activityLog.logActivity(db, {
+                            user_id: actingAdminId,
+                            action: 'eticket.resend_missing',
+                            resource_type: 'bulk',
+                            resource_id: 'missing-email',
+                            meta: { sent, failed, total: targets.length, seminarId: seminarId || null }
+                        });
+                        return res.json({
+                            success: true,
+                            sent,
+                            failed,
+                            total: targets.length,
+                            errors: errors.slice(0, 10),
+                            message:
+                                'Resent ' +
+                                sent +
+                                ' ticket email(s)' +
+                                (failed ? '; ' + failed + ' failed' : '') +
+                                '.'
+                        });
+                    }
+                    const row = targets[idx++];
+                    adminDeliverEticketNotification(
+                        row.user_id,
+                        row.registration_id,
+                        row.ticket_id_string,
+                        { sendEmail: true, sendWhatsapp, immediate: true },
+                        (delErr, out) => {
+                            if (delErr || (out && out.error) || !(out && out.emailSent)) {
+                                failed++;
+                                errors.push({
+                                    applicationNo: row.application_no,
+                                    email: row.email,
+                                    error: delErr ? delErr.message : out && out.error ? out.error : 'not sent'
+                                });
+                            } else {
+                                sent++;
+                            }
+                            setTimeout(next, 400);
+                        }
+                    );
+                };
+                next();
             }
         );
     });
