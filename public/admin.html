@@ -3093,6 +3093,22 @@
                     <div><label>Capacity</label><input type="number" id="seminar-capacity" required></div>
                     <div style="grid-column:1/-1;"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="seminar-show-seats-public" checked> Show seat count publicly on registration</label></div>
                 </div>
+                <div style="grid-column:1/-1;margin-top:4px;padding:14px;background:#fffbeb;border:1px solid #fcd34d;border-radius:10px;">
+                    <h4 style="margin:0 0 8px;color:#92400e;">Previous seminar alumni invitations</h4>
+                    <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px;">Link one or more past seminars (e.g. 2025 + 2026 when opening 2027). Paid participants from those events receive email and WhatsApp inviting them to register. Each person is notified once per new seminar.</p>
+                    <div id="seminar-alumni-sources-list" style="max-height:180px;overflow-y:auto;border:1px solid #fde68a;border-radius:8px;padding:10px;background:#fff;"></div>
+                    <label style="display:flex;align-items:flex-start;gap:8px;margin-top:10px;font-weight:600;color:#92400e;">
+                        <input type="checkbox" id="seminar-alumni-notify-auto">
+                        Automatically send when registration opens
+                    </label>
+                    <p id="seminar-alumni-notify-meta" style="font-size:0.8rem;color:#64748b;margin:8px 0 0;"></p>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
+                        <button type="button" class="btn-secondary btn-sm" onclick="previewSeminarAlumniNotify()">Preview recipients</button>
+                        <button type="button" class="btn-primary btn-sm" style="background:#d97706;" onclick="sendSeminarAlumniNotify(false)">Send invitations now</button>
+                        <button type="button" class="btn-secondary btn-sm" onclick="sendSeminarAlumniNotify(true)">Force resend (everyone linked)</button>
+                    </div>
+                    <p id="seminar-alumni-notify-status" style="font-size:0.82rem;margin:8px 0 0;font-weight:600;"></p>
+                </div>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
                     <div><label>Base fee (&#8377;) — added to each selected session</label><input type="number" id="seminar-price" step="0.01" value="0" required></div>
                     <div><label>Is Active?</label><select id="seminar-active"><option value="1">Yes</option><option value="0">No</option></select></div>
@@ -3103,7 +3119,11 @@
                     <div id="seminar-sub-events-list"></div>
                     <button type="button" id="seminar-add-sub-event-btn" class="btn-primary" style="margin-top:8px;background:#0d9488;cursor:pointer;">+ Add session</button>
                 </div>
-                <div><label>Google Maps Embed URL</label><input type="text" id="seminar-location-url" placeholder="https://www.google.com/maps/embed?..."></div>
+                <div style="grid-column:1/-1;">
+                    <label>Event venue / location</label>
+                    <input type="text" id="seminar-location-text" placeholder="e.g. Smt Shakuntala Shetty Auditorium, Pune — or TBD">
+                    <p style="font-size:0.8rem;color:#64748b;margin:4px 0 0;">Doctors see this on a map when set. Enter <strong>TBD</strong> if the venue is not final yet. Requires <code>GOOGLE_MAPS_API_KEY</code> (Maps Embed API) on the server.</p>
+                </div>
                 <div><label>Terms and Conditions</label><textarea id="seminar-terms" rows="3"></textarea></div>
                 <div style="background: #eff6ff; padding: 15px; border: 1px solid #bfdbfe; border-radius: 12px;">
                     <h4 style="margin-bottom: 10px; color:#1e40af;">Per-seminar links, policy &amp; form override</h4>
@@ -3404,6 +3424,6 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
-    <script src="/js/admin.js?v=20260620cmsfix1"></script>
+    <script src="/js/admin.js?v=20260620alumni1"></script>
 </body>
 </html>

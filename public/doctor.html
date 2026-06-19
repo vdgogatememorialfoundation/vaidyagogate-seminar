@@ -61,6 +61,7 @@
         
         .notification-bar { background: linear-gradient(90deg, #fffbeb, #fef9c3); border-left: 4px solid #d97706; padding: 10px 22px; color: #92400e; font-weight: 600; display: flex; align-items: center; gap: 10px; }
         .announcements-box { background: #fff; margin: 20px 28px 0; padding: 18px 22px; border-radius: 14px; box-shadow: 0 8px 30px rgba(15, 118, 110, 0.06); border: 1px solid #ccfbf1; }
+        .content-area.content-compact-top { padding-top: 16px; }
         
         .content-area { padding: 28px; overflow-y: auto; flex: 1; }
         .section-title { font-size: 1.45rem; color: var(--doctor-primary); margin-bottom: 18px; padding-bottom: 12px; border-bottom: 2px solid #99f6e4; font-weight: 800; letter-spacing: -0.02em; }
@@ -186,6 +187,8 @@
         .sat-icon-spin { animation: sat-spin 2.5s linear infinite; }
         @keyframes sat-spin { to { transform: rotate(360deg); } }
         .sat-step-upcoming { color: #94a3b8 !important; font-style: italic; font-weight: 500 !important; }
+        .seminar-map-embed iframe { min-height: 160px; }
+        @media (max-width: 640px) { .seminar-map-embed iframe { height: 160px !important; } }
         .sat-progress-animate { transition: width 0.8s cubic-bezier(.4,0,.2,1); }
         .sat-app-card .vtrk-steps { border-left: none; border-right: none; }
 
@@ -413,6 +416,8 @@
                             <span class="step" id="ind-step-4">4. College</span>
                             <span class="step" id="ind-step-5">5. Preview</span>
                         </div>
+
+                        <div id="reg-seminar-venue-panel" class="hidden" style="margin-bottom:16px;"></div>
 
                         <div id="reg-seminar-events-panel" class="hidden" style="margin-bottom:16px;padding:14px;background:#ecfdf5;border:1px solid #a7f3d0;border-radius:8px;"></div>
 
@@ -949,6 +954,6 @@
     <script src="/js/live-chat-client-info.js?v=20260610chat1"></script>
     <script src="/js/doctor-live-chat-widget.js?v=20260615live2"></script>
     <script src="/js/site-visitor-beacon.js?v=20260613radar6"></script>
-    <script src="/js/doctor.js?v=20260619ticketfix1"></script>
+    <script src="/js/doctor.js?v=20260620maps1"></script>
 </body>
 </html>

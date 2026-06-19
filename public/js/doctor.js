@@ -3394,6 +3394,7 @@ function renderSeminarGridCard(s, readOnlyPast, alreadyRegistered, draftApp) {
         '<p style="font-size:0.85rem;"><strong>Event:</strong> ' +
         escapeHtml(eventLabel) +
         '</p>' +
+        seminarVenueMapHtml(s, { compact: true }) +
         (s.portal_year
             ? '<p style="font-size:0.8rem;color:#64748b;">Year ' + escapeHtml(String(s.portal_year)) + '</p>'
             : '') +
@@ -3667,6 +3668,7 @@ async function startRegistration(seminarId, opts) {
     if (step0) step0.classList.toggle('hidden', !hasTerms && !window.__seminarCancellationSummary);
     if (ind0) ind0.style.display = hasTerms || window.__seminarCancellationSummary ? '' : 'none';
     await loadRegistrationFormConfigAndApply(seminarId);
+    renderRegSeminarVenuePanel(s);
     renderSeminarEventPicker(s);
     const emailEl = document.getElementById('reg-email');
     const phoneEl = document.getElementById('reg-phone');
@@ -3751,6 +3753,15 @@ function cancelRegistration() {
     syncLiveActivity({ kind: 'browse_seminars', seminarId: null, seminarTitle: null, stepNumber: null, stepLabel: null, formProgress: 0 });
 }
 
+function syncDoctorUpdatesPanel(tabId) {
+    const box = document.querySelector('.announcements-box');
+    const content = document.querySelector('.content-area');
+    const show =
+        tabId === 'tab-dashboard' || tabId === 'tab-profile' || tabId === 'tab-seminars';
+    if (box) box.classList.toggle('hidden', !show);
+    if (content) content.classList.toggle('content-compact-top', !show);
+}
+
 function switchTab(tabId, menuEl) {
     if (!tabId) return;
     if (__doctorAllowedTabs && !__doctorAllowedTabs.has(tabId)) {
@@ -3779,6 +3790,7 @@ function switchTab(tabId, menuEl) {
     }
     const content = document.querySelector('.content-area');
     if (content) content.scrollTop = 0;
+    syncDoctorUpdatesPanel(tabId);
     if (tabId === 'tab-dashboard') {
         loadDoctorDashboardStats();
     }
@@ -6147,6 +6159,65 @@ async function verifyNcism() {
     }
 }
 
+function seminarVenueDisplayName(s) {
+    if (!s) return 'TBD';
+    if (s.venue_tbd || s.venueTbd) return 'TBD';
+    const label = String(s.venue_label || s.venueLabel || '').trim();
+    const text = String(s.location_text || s.locationText || '').trim();
+    return label || text || 'TBD';
+}
+
+function seminarVenueMapHtml(s, opts) {
+    opts = opts || {};
+    const compact = !!opts.compact;
+    const locText = seminarVenueDisplayName(s);
+    const tbd = locText === 'TBD';
+    const embed = (s && (s.maps_embed_url || s.mapsEmbedUrl)) || '';
+
+    if (tbd && !embed) {
+        return (
+            '<div class="seminar-venue-block seminar-venue-tbd" style="margin-top:10px;padding:10px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;">' +
+            '<p style="margin:0;font-size:0.88rem;"><i class="fas fa-map-marker-alt" style="color:#64748b;"></i> <strong>Venue:</strong> TBD</p>' +
+            '<p style="font-size:0.8rem;color:#64748b;margin:6px 0 0;">The venue will be announced before the event.</p></div>'
+        );
+    }
+
+    let html =
+        '<div class="seminar-venue-block" style="margin-top:10px;padding:10px 12px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;">' +
+        '<p style="margin:0;font-size:0.88rem;"><i class="fas fa-map-marker-alt" style="color:#0369a1;"></i> <strong>Venue:</strong> ' +
+        escapeHtml(locText) +
+        '</p>';
+    if (embed && !compact) {
+        html +=
+            '<div class="seminar-map-embed" style="margin-top:10px;border-radius:8px;overflow:hidden;border:1px solid #cbd5e1;">' +
+            '<iframe title="Event location map" src="' +
+            escapeHtml(embed) +
+            '" width="100%" height="180" style="border:0;display:block;" loading="lazy" referrerpolicy="no-referrer-when-downgrade" allowfullscreen></iframe></div>';
+    }
+    const mapsSearch = encodeURIComponent(s.location_text || s.locationText || locText);
+    if (!tbd && mapsSearch) {
+        html +=
+            '<p style="font-size:0.78rem;margin:8px 0 0;"><a href="https://www.google.com/maps/search/?api=1&query=' +
+            mapsSearch +
+            '" target="_blank" rel="noopener noreferrer">Open in Google Maps</a></p>';
+    }
+    html += '</div>';
+    return html;
+}
+
+function renderRegSeminarVenuePanel(seminar) {
+    const panel = document.getElementById('reg-seminar-venue-panel');
+    if (!panel) return;
+    const events = (seminar && (seminar.sub_events || seminar.subEvents)) || [];
+    if (events.length) {
+        panel.classList.add('hidden');
+        panel.innerHTML = '';
+        return;
+    }
+    panel.innerHTML = seminarVenueMapHtml(seminar, { compact: false });
+    panel.classList.remove('hidden');
+}
+
 function seminarFeeLabelHtml(s) {
     const evs = (s && (s.sub_events || s.subEvents)) || [];
     if (!evs.length) {
@@ -6161,13 +6232,14 @@ function seminarFeeLabelHtml(s) {
     html += '<ul style="margin:8px 0 0;padding-left:18px;line-height:1.5;">';
     evs.forEach(function (ev) {
         const when = ev.eventDate || ev.event_date ? formatEventDate(ev.eventDate || ev.event_date) : '';
-        const loc = ev.locationText || ev.location_text || '';
+        const loc = ev.venueTbd || ev.venue_tbd ? 'TBD' : ev.locationText || ev.location_text || '';
         html +=
             '<li><strong>' +
             escapeHtml(ev.title) +
             '</strong>' +
             (when ? ' · ' + escapeHtml(when) : '') +
-            (loc ? ' · ' + escapeHtml(loc) : '') +
+            ' · <i class="fas fa-map-marker-alt"></i> ' +
+            escapeHtml(loc || 'TBD') +
             ' — ₹' +
             (Number(ev.price) || 0) +
             '</li>';
@@ -6190,7 +6262,8 @@ function renderSeminarEventPicker(seminar) {
         '<p style="font-size:0.84rem;color:#64748b;margin:0 0 12px;">Select one or both. Payment is the base seminar fee plus the sum of selected sessions. Each session has its own e-ticket, scanner check-in, and certificate.</p>';
     events.forEach(function (ev) {
         const dt = ev.eventDate || ev.event_date;
-        const loc = ev.locationText || ev.location_text || '';
+        const loc = ev.venueTbd || ev.venue_tbd ? 'TBD' : ev.locationText || ev.location_text || '';
+        const embed = ev.mapsEmbedUrl || ev.maps_embed_url || '';
         const desc = ev.description || '';
         html +=
             '<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;padding:10px;background:#fff;border:1px solid #bbf7d0;border-radius:8px;cursor:pointer;">' +
@@ -6201,7 +6274,16 @@ function renderSeminarEventPicker(seminar) {
             escapeHtml(ev.title) +
             '</strong>' +
             (dt ? '<br><span style="font-size:0.82rem;color:#64748b;">' + escapeHtml(formatEventDate(dt)) + '</span>' : '') +
-            (loc ? '<br><span style="font-size:0.82rem;color:#64748b;"><i class="fas fa-map-marker-alt"></i> ' + escapeHtml(loc) + '</span>' : '') +
+            '<br><span style="font-size:0.82rem;color:#64748b;"><i class="fas fa-map-marker-alt"></i> ' +
+            escapeHtml(loc || 'TBD') +
+            '</span>' +
+            (embed
+                ? '<div class="seminar-map-embed" style="margin-top:8px;border-radius:8px;overflow:hidden;border:1px solid #cbd5e1;max-width:320px;"><iframe title="Session location" src="' +
+                  escapeHtml(embed) +
+                  '" width="100%" height="140" style="border:0;display:block;" loading="lazy" referrerpolicy="no-referrer-when-downgrade" allowfullscreen></iframe></div>'
+                : loc === 'TBD'
+                  ? '<br><span style="font-size:0.78rem;color:#94a3b8;">Venue to be announced</span>'
+                  : '') +
             (desc ? '<br><span style="font-size:0.82rem;color:#475569;">' + escapeHtml(desc) + '</span>' : '') +
             '<br><span style="font-size:0.9rem;color:#047857;font-weight:700;">₹' +
             (Number(ev.price) || 0) +
@@ -7583,10 +7665,20 @@ window.processPayment = processPayment;
 async function downloadDoctorCertificate(downloadUrl, seminarTitle) {
     const url = String(downloadUrl || '');
     if (!url || url === '#') return;
-    const safeTitle = String(seminarTitle || 'Seminar').replace(/[^\w.-]+/g, '_');
+    const safeTitle = String(seminarTitle || 'certificate').replace(/[^\w.-]+/g, '_');
     const filename = 'VGMF_Certificate_' + safeTitle + '.html';
+
+    if (isDesktopEticketDownload()) {
+        triggerEticketFileDownload(url, filename);
+        return;
+    }
+
+    void downloadDoctorCertificateAsync(url, filename);
+}
+
+async function downloadDoctorCertificateAsync(url, filename) {
     try {
-        const res = await fetch(url, { credentials: 'same-origin' });
+        const res = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
         if (!res.ok) throw new Error('download failed');
         const blob = await res.blob();
         const file = new File([blob], filename, { type: 'text/html;charset=utf-8' });
@@ -7594,23 +7686,14 @@ async function downloadDoctorCertificate(downloadUrl, seminarTitle) {
             await navigator.share({ files: [file], title: 'VGMF Certificate' });
             return;
         }
-        const objectUrl = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = objectUrl;
-        a.download = filename;
-        a.rel = 'noopener';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(objectUrl), 8000);
+        triggerEticketFileDownload(URL.createObjectURL(blob), filename);
         if (typeof alert === 'function') alert('Certificate saved to your device.');
-        return;
     } catch (shareErr) {
         console.warn('certificate download', shareErr);
+        const printUrl = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'print=1';
+        const w = window.open(printUrl, '_blank');
+        if (!w) alert('Could not download. Try Open, then Print → Save as PDF.');
     }
-    const printUrl = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'print=1';
-    const w = window.open(printUrl, '_blank');
-    if (!w) alert('Could not download. Try Open, then Print → Save as PDF.');
 }
 
 async function loadDoctorCertificateTracking(quiet) {
@@ -7961,30 +8044,56 @@ function eticketViewUrl(t) {
     );
 }
 
-async function downloadEticketPdf(t) {
-    if (!t || !t.ticket_id_string) {
-        if (typeof t === 'string' && window.__eticketRows && window.__eticketRows[t]) {
-            t = window.__eticketRows[t];
-        } else {
-            return alert('Ticket not found.');
-        }
+function resolveEticketRow(t) {
+    if (t && t.ticket_id_string) return t;
+    if (typeof t === 'string' && window.__eticketRows && window.__eticketRows[t]) {
+        return window.__eticketRows[t];
     }
-    const ticketId = String(t.ticket_id_string || '').trim();
+    return null;
+}
+
+function triggerEticketFileDownload(url, filename) {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.style.display = 'none';
+    document.body.appendChild(link);
+    link.click();
+    setTimeout(() => {
+        if (String(url).startsWith('blob:')) {
+            try {
+                URL.revokeObjectURL(url);
+            } catch (_) {}
+        }
+        link.remove();
+    }, 4000);
+}
+
+function isDesktopEticketDownload() {
+    if (typeof window.matchMedia !== 'function') return window.innerWidth >= 768;
+    return window.matchMedia('(pointer: fine)').matches && window.innerWidth >= 640;
+}
+
+function downloadEticketPdf(t) {
+    const row = resolveEticketRow(t);
+    if (!row || !row.ticket_id_string) {
+        return alert('Ticket not found.');
+    }
+    const ticketId = String(row.ticket_id_string || '').trim();
     const filename = 'e-ticket-' + ticketId.replace(/[^\w-]+/g, '-') + '.pdf';
+    const htmlFilename = filename.replace(/\.pdf$/i, '.html');
+    const base = eticketViewUrl(row);
+    const serverUrl = base + (base.indexOf('?') >= 0 ? '&' : '?') + 'download=1';
 
-    const downloadBlob = (blob, name) => {
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = name;
-        link.style.display = 'none';
-        document.body.appendChild(link);
-        link.click();
-        setTimeout(() => {
-            URL.revokeObjectURL(link.href);
-            link.remove();
-        }, 4000);
-    };
+    if (isDesktopEticketDownload()) {
+        triggerEticketFileDownload(serverUrl, htmlFilename);
+        return;
+    }
 
+    void downloadEticketPdfAsync(row, filename, htmlFilename, serverUrl);
+}
+
+async function downloadEticketPdfAsync(t, filename, htmlFilename, serverUrl) {
     const openPrintFallback = () => {
         const url = eticketViewUrl(t);
         const w = window.open(url, '_blank', 'noopener');
@@ -7994,22 +8103,15 @@ async function downloadEticketPdf(t) {
         }
     };
 
-    const saveServerTicketHtml = async () => {
-        const base = eticketViewUrl(t);
-        const url = base + (base.indexOf('?') >= 0 ? '&' : '?') + 'download=1';
-        const res = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
-        if (!res.ok) throw new Error('Could not download ticket');
-        const blob = await res.blob();
-        const htmlName = filename.replace(/\.pdf$/i, '.html');
-        downloadBlob(blob, htmlName);
-        if (typeof alert === 'function') {
-            alert('Ticket saved to your device. Open the file and use Print → Save as PDF for a PDF copy.');
-        }
-    };
-
     if (!window.jspdf || !window.jspdf.jsPDF) {
         try {
-            await saveServerTicketHtml();
+            const res = await fetch(serverUrl, { credentials: 'same-origin', cache: 'no-store' });
+            if (!res.ok) throw new Error('Could not download ticket');
+            const blob = await res.blob();
+            triggerEticketFileDownload(URL.createObjectURL(blob), htmlFilename);
+            if (typeof alert === 'function') {
+                alert('Ticket saved to your device. Open the file and use Print → Save as PDF for a PDF copy.');
+            }
         } catch (_) {
             openPrintFallback();
         }
@@ -8069,11 +8171,17 @@ async function downloadEticketPdf(t) {
         doc.text('Issued to: ' + holder, 14, 282);
         doc.text('Non-transferable · Do not share this QR or PDF', 14, 288);
         const blob = doc.output('blob');
-        downloadBlob(blob, filename);
+        triggerEticketFileDownload(URL.createObjectURL(blob), filename);
     } catch (e) {
         console.error('[eticket-pdf]', e);
         try {
-            await saveServerTicketHtml();
+            const res = await fetch(serverUrl, { credentials: 'same-origin', cache: 'no-store' });
+            if (!res.ok) throw new Error('Could not download ticket');
+            const blob = await res.blob();
+            triggerEticketFileDownload(URL.createObjectURL(blob), htmlFilename);
+            if (typeof alert === 'function') {
+                alert('Ticket saved to your device. Open the file and use Print → Save as PDF for a PDF copy.');
+            }
         } catch (_) {
             openPrintFallback();
         }

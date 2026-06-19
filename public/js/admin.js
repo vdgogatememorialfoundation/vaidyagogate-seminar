@@ -13627,6 +13627,196 @@ function syncSeminarPreregUi() {
     wrap.style.pointerEvents = on ? 'auto' : 'none';
 }
 
+function parseSeminarAlumniSourceIds(raw) {
+    if (Array.isArray(raw)) return raw.map((x) => parseInt(x, 10)).filter((n) => Number.isInteger(n) && n > 0);
+    if (raw == null || raw === '') return [];
+    try {
+        const parsed = JSON.parse(String(raw));
+        return Array.isArray(parsed) ? parsed.map((x) => parseInt(x, 10)).filter((n) => Number.isInteger(n) && n > 0) : [];
+    } catch (_) {
+        return [];
+    }
+}
+
+async function ensureAllSeminarsForAlumni() {
+    if (window.__adminSeminarsAll && window.__adminSeminarsAll.length) return window.__adminSeminarsAll;
+    try {
+        const res = await fetch('/api/admin/seminars/all', { cache: 'no-store' });
+        const rows = await res.json();
+        window.__adminSeminarsAll = Array.isArray(rows) ? rows : [];
+    } catch (_) {
+        window.__adminSeminarsAll = globalSeminars || [];
+    }
+    return window.__adminSeminarsAll;
+}
+
+async function renderSeminarAlumniSourcePicker(selectedIds, currentSeminarId) {
+    const box = document.getElementById('seminar-alumni-sources-list');
+    if (!box) return;
+    const cur = parseInt(currentSeminarId, 10);
+    const selected = new Set((selectedIds || []).map((x) => parseInt(x, 10)));
+    const all = await ensureAllSeminarsForAlumni();
+    const past = (all || [])
+        .filter((s) => !Number.isInteger(cur) || Number(s.id) !== cur)
+        .sort((a, b) => {
+            const ya = Number(b.portal_year) || 0;
+            const yb = Number(a.portal_year) || 0;
+            if (ya !== yb) return ya - yb;
+            return Number(b.id) - Number(a.id);
+        });
+    if (!past.length) {
+        box.innerHTML = '<p style="margin:0;font-size:0.85rem;color:#64748b;">No other seminars found yet. Save this seminar first; link past years after you have previous seminars.</p>';
+        return;
+    }
+    box.innerHTML = past
+        .map((s) => {
+            const yr = s.portal_year ? ' (' + s.portal_year + ')' : '';
+            const active = Number(s.is_active) ? '' : ' · inactive';
+            return (
+                '<label style="display:flex;align-items:flex-start;gap:8px;margin:6px 0;font-size:0.88rem;cursor:pointer;">' +
+                '<input type="checkbox" class="seminar-alumni-source-cb" value="' +
+                s.id +
+                '"' +
+                (selected.has(Number(s.id)) ? ' checked' : '') +
+                '> <span><strong>' +
+                escAdmin(s.title || 'Seminar #' + s.id) +
+                '</strong>' +
+                yr +
+                active +
+                '</span></label>'
+            );
+        })
+        .join('');
+}
+
+function collectSeminarAlumniSourceIdsFromDom() {
+    return Array.from(document.querySelectorAll('.seminar-alumni-source-cb:checked'))
+        .map((el) => parseInt(el.value, 10))
+        .filter((n) => Number.isInteger(n) && n > 0);
+}
+
+function syncSeminarAlumniNotifyMeta(seminar) {
+    const meta = document.getElementById('seminar-alumni-notify-meta');
+    if (!meta) return;
+    if (!seminar || !seminar.alumni_notify_sent_at) {
+        meta.textContent = 'Invitations not sent yet for this seminar (or save linked past seminars first).';
+        return;
+    }
+    meta.textContent =
+        'Last alumni invitation batch: ' +
+        String(seminar.alumni_notify_sent_at).slice(0, 19).replace('T', ' ') +
+        ' IST approx. Change linked seminars to allow a new automatic batch.';
+}
+
+async function previewSeminarAlumniNotify() {
+    const st = document.getElementById('seminar-alumni-notify-status');
+    const sid = parseInt((document.getElementById('seminar-id') || {}).value, 10);
+    const sourceIds = collectSeminarAlumniSourceIdsFromDom();
+    if (!sourceIds.length) {
+        if (st) {
+            st.style.color = '#b91c1c';
+            st.textContent = 'Select at least one past seminar to link.';
+        }
+        return;
+    }
+    if (!Number.isInteger(sid) || sid < 1) {
+        if (st) {
+            st.style.color = '#b91c1c';
+            st.textContent = 'Save this seminar first, then preview recipients.';
+        }
+        return;
+    }
+    if (st) {
+        st.style.color = '#64748b';
+        st.textContent = 'Counting recipients…';
+    }
+    try {
+        const q = 'sourceIds=' + encodeURIComponent(sourceIds.join(','));
+        const res = await fetch('/api/admin/seminars/' + sid + '/alumni-notify/preview?' + q);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Preview failed');
+        const names = (data.sourceSeminars || []).map((s) => s.title).join('; ');
+        if (st) {
+            st.style.color = '#15803d';
+            st.textContent =
+                (data.count || 0) +
+                ' eligible past participant(s) from: ' +
+                (names || sourceIds.join(', ')) +
+                '. (Excludes anyone already registered for this seminar or already notified.)';
+        }
+    } catch (e) {
+        if (st) {
+            st.style.color = '#b91c1c';
+            st.textContent = e.message || String(e);
+        }
+    }
+}
+window.previewSeminarAlumniNotify = previewSeminarAlumniNotify;
+
+async function sendSeminarAlumniNotify(forceResend) {
+    const st = document.getElementById('seminar-alumni-notify-status');
+    const sid = parseInt((document.getElementById('seminar-id') || {}).value, 10);
+    const sourceIds = collectSeminarAlumniSourceIdsFromDom();
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) {
+        alert('Admin session required.');
+        return;
+    }
+    if (!sourceIds.length) {
+        alert('Select at least one past seminar to link.');
+        return;
+    }
+    if (!Number.isInteger(sid) || sid < 1) {
+        alert('Save this seminar first, then send invitations.');
+        return;
+    }
+    if (
+        forceResend &&
+        !confirm('Resend to everyone linked (including people already notified)? Only use if the template or message changed.')
+    ) {
+        return;
+    }
+    if (
+        !forceResend &&
+        !confirm('Send alumni invitations to eligible past participants who have not registered for this seminar yet?')
+    ) {
+        return;
+    }
+    if (st) {
+        st.style.color = '#64748b';
+        st.textContent = 'Queueing invitations…';
+    }
+    try {
+        const res = await fetch('/api/admin/seminars/' + sid + '/alumni-notify/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                actingAdminId: adm.id,
+                sourceSeminarIds: sourceIds,
+                forceResend: !!forceResend
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Send failed');
+        if (st) {
+            st.style.color = '#15803d';
+            st.textContent =
+                'Queued ' +
+                (data.sent || 0) +
+                ' invitation(s) for ' +
+                (data.recipients || 0) +
+                ' recipient(s).';
+        }
+        loadSeminars();
+    } catch (e) {
+        if (st) {
+            st.style.color = '#b91c1c';
+            st.textContent = e.message || String(e);
+        }
+    }
+}
+window.sendSeminarAlumniNotify = sendSeminarAlumniNotify;
+
 function openCreateSeminarModal() {
     document.getElementById('admin-seminar-modal').classList.remove('hidden');
     document.getElementById('seminar-form').reset();
@@ -13646,6 +13836,12 @@ function openCreateSeminarModal() {
     const preregCh = document.getElementById('seminar-prereg-enabled');
     if (preregCh) preregCh.checked = false;
     syncSeminarPreregUi();
+    const alumniAuto = document.getElementById('seminar-alumni-notify-auto');
+    if (alumniAuto) alumniAuto.checked = false;
+    const alumniSt = document.getElementById('seminar-alumni-notify-status');
+    if (alumniSt) alumniSt.textContent = '';
+    renderSeminarAlumniSourcePicker([], null);
+    syncSeminarAlumniNotifyMeta(null);
 }
 
 async function loadAdminPortalYear() {
@@ -13740,10 +13936,8 @@ function addSeminarSubEventRow(prefill) {
         '</textarea></div>' +
         '<div><label style="font-size:0.78rem;">Venue / location</label><input type="text" class="se-location" value="' +
         escAdmin(p.location_text || p.locationText || '') +
-        '" placeholder="e.g. Auditorium A, Pune"></div>' +
-        '<div><label style="font-size:0.78rem;">Google Maps embed URL</label><input type="text" class="se-location-url" value="' +
-        escAdmin(p.location_url || p.locationUrl || '') +
-        '" placeholder="https://www.google.com/maps/embed?..."></div>' +
+        '" placeholder="e.g. Auditorium A, Pune — or TBD"></div>' +
+        '<p style="font-size:0.72rem;color:#64748b;margin:-4px 0 0;">Map is generated automatically from the address when saved.</p>' +
         '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
         '<div><label style="font-size:0.78rem;">Event date (IST)</label><input type="datetime-local" class="se-date" value="' +
         escAdmin(fmtDt(p.event_date || p.eventDate)) +
@@ -13789,7 +13983,6 @@ function collectSeminarSubEventsFromUi() {
             title,
             description: row.querySelector('.se-desc')?.value.trim() || null,
             location_text: row.querySelector('.se-location')?.value.trim() || null,
-            location_url: row.querySelector('.se-location-url')?.value.trim() || null,
             event_date,
             checkin_date: row.querySelector('.se-checkin')?.value || null,
             price: parseFloat(row.querySelector('.se-price')?.value) || 0,
@@ -13844,6 +14037,12 @@ function editSeminar(index) {
     document.getElementById('seminar-event-date').value = formatDt(s.event_date);
     const py = document.getElementById('seminar-portal-year');
     if (py) py.value = s.portal_year || adminPortalYear || new Date().getFullYear();
+    const alumniAuto = document.getElementById('seminar-alumni-notify-auto');
+    if (alumniAuto) alumniAuto.checked = Number(s.alumni_notify_auto) === 1;
+    renderSeminarAlumniSourcePicker(parseSeminarAlumniSourceIds(s.alumni_source_seminar_ids), s.id);
+    syncSeminarAlumniNotifyMeta(s);
+    const alumniSt = document.getElementById('seminar-alumni-notify-status');
+    if (alumniSt) alumniSt.textContent = '';
     
     document.getElementById('seminar-capacity').value = s.capacity || 0;
     const showSeatsEl = document.getElementById('seminar-show-seats-public');
@@ -13864,7 +14063,13 @@ function editSeminar(index) {
     document.getElementById('seminar-checkin-date').value = checkinYmd;
     const ple = document.getElementById('seminar-public-list-enabled');
     if (ple) ple.value = s.public_list_enabled ? '1' : '0';
-    document.getElementById('seminar-location-url').value = s.location_url || '';
+    const locTextEl = document.getElementById('seminar-location-text');
+    if (locTextEl) {
+        locTextEl.value = s.location_text || '';
+        if (!locTextEl.value && s.location_url && !/^https?:\/\/(www\.)?google\.[a-z.]+\/maps\/embed/i.test(String(s.location_url))) {
+            locTextEl.value = s.location_url;
+        }
+    }
     document.getElementById('seminar-terms').value = s.terms_conditions || '';
     const wh = document.getElementById('seminar-whatsapp');
     if (wh) wh.value = s.whatsapp_group_url || '';
@@ -13954,7 +14159,7 @@ async function saveSeminar(e) {
         })(),
         public_list_enabled: document.getElementById('seminar-public-list-enabled')?.value === '1',
         cert_scans_required: parseInt(document.getElementById('seminar-cert-scans-required')?.value || '1', 10) === 2 ? 2 : 1,
-        location_url: document.getElementById('seminar-location-url').value || null,
+        location_text: (document.getElementById('seminar-location-text') || {}).value?.trim() || null,
         terms_conditions: document.getElementById('seminar-terms').value || null,
         hero_image_path: (document.getElementById('seminar-hero-image') || {}).value || null,
         flyer_path: (document.getElementById('seminar-flyer') || {}).value || null,
@@ -13970,7 +14175,9 @@ async function saveSeminar(e) {
         cancellation_policy_json: cancelPol,
         registration_form_json: regFormOverride,
         sub_events: collectSeminarSubEventsFromUi(),
-        portal_year: parseInt((document.getElementById('seminar-portal-year') || {}).value, 10) || adminPortalYear
+        portal_year: parseInt((document.getElementById('seminar-portal-year') || {}).value, 10) || adminPortalYear,
+        alumni_source_seminar_ids: collectSeminarAlumniSourceIdsFromDom(),
+        alumni_notify_auto: document.getElementById('seminar-alumni-notify-auto')?.checked === true
     };
     if (data.portal_year !== adminPortalYear) {
         const ok = confirm(

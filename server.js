@@ -77,6 +77,8 @@ const liveRadarHub = require('./lib/live-radar-hub');
 const paymentAttempts = require('./lib/payment-attempts');
 const emailDeliveryFlags = require('./lib/email-delivery-flags');
 const seminarEventOps = require('./lib/seminar-event-ops');
+const seminarAlumniNotify = require('./lib/seminar-alumni-notify');
+const googleMaps = require('./lib/google-maps');
 
 function volunteerTicketDeps() {
     return {
@@ -1176,6 +1178,19 @@ function ensurePortalSchema(next) {
                                                 ignoreSchemaMigrationErr(h7ae);
                                             db.run(`ALTER TABLE seminars ADD COLUMN auto_confirm_registration INTEGER DEFAULT 0`, (h7ac) => {
                                                 ignoreSchemaMigrationErr(h7ac);
+                                            db.run(`ALTER TABLE seminars ADD COLUMN alumni_source_seminar_ids TEXT`, (h7al1) => {
+                                                ignoreSchemaMigrationErr(h7al1);
+                                            db.run(`ALTER TABLE seminars ADD COLUMN alumni_notify_auto INTEGER DEFAULT 0`, (h7al2) => {
+                                                ignoreSchemaMigrationErr(h7al2);
+                                            db.run(`ALTER TABLE seminars ADD COLUMN alumni_notify_sent_at TEXT`, (h7al3) => {
+                                                ignoreSchemaMigrationErr(h7al3);
+                                            db.run(`ALTER TABLE seminars ADD COLUMN location_text TEXT`, (h7loc) => {
+                                                ignoreSchemaMigrationErr(h7loc);
+                                            seminarAlumniNotify.ensureSchema(db, () => {});
+                                            });
+                                            });
+                                            });
+                                            });
                                             });
                                             });
                                         });
@@ -4333,7 +4348,8 @@ app.get('/api/seminars', (req, res) => {
         if (err) return res.status(500).json({ error: err.message });
             seminarEvents.attachEventsToSeminarRows(db, rows || [], (eEv, withEvents) => {
                 if (eEv) return res.status(500).json({ error: eEv.message });
-                const payload = { portalYear: activeYear, bucket, seminars: withEvents || [] };
+                const enriched = googleMaps.enrichSeminarRows(withEvents || []);
+                const payload = { portalYear: activeYear, bucket, seminars: enriched };
                 cacheSet(cacheKey, payload, 60000);
                 setEdgeCache(res, 60);
                 res.json(payload);
@@ -6173,6 +6189,69 @@ app.post('/api/admin/seminars/:id/event-reminders', (req, res) => {
     seminarEventOps.sendEventDayReminders(db, notifEngine, sid, type, (err, result) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ success: true, ...result });
+    });
+});
+
+app.get('/api/admin/seminars/:id/alumni-notify/preview', (req, res) => {
+    const sid = parseInt(req.params.id, 10);
+    if (!sid) return res.status(400).json({ error: 'Invalid seminar id' });
+    db.get(`SELECT alumni_source_seminar_ids FROM seminars WHERE id = ?`, [sid], (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!row) return res.status(404).json({ error: 'Seminar not found' });
+        let sourceIds = row.alumni_source_seminar_ids;
+        const q = req.query && req.query.sourceIds;
+        if (q) {
+            sourceIds = String(q)
+                .split(',')
+                .map((x) => parseInt(x, 10))
+                .filter((n) => Number.isInteger(n) && n > 0);
+        }
+        seminarAlumniNotify.countRecipients(db, sid, sourceIds, false, (e2, out) => {
+            if (e2) return res.status(500).json({ error: e2.message });
+            seminarAlumniNotify.loadSourceSeminarTitles(db, out.sourceIds || [], (e3, titles) => {
+                if (e3) return res.status(500).json({ error: e3.message });
+                res.json({
+                    success: true,
+                    count: out.count,
+                    sourceSeminarIds: out.sourceIds || [],
+                    sourceSeminars: titles || [],
+                    sample: out.sample || []
+                });
+            });
+        });
+    });
+});
+
+app.post('/api/admin/seminars/:id/alumni-notify/send', (req, res) => {
+    const sid = parseInt(req.params.id, 10);
+    const { actingAdminId, forceResend } = req.body || {};
+    const aid = parseInt(actingAdminId, 10);
+    if (!sid) return res.status(400).json({ error: 'Invalid seminar id' });
+    if (!Number.isInteger(aid) || aid < 1) return res.status(400).json({ error: 'actingAdminId is required' });
+    assertAdminPortalActor(aid, (e, adm) => {
+        if (e && e.message === 'BAD_ACTOR') return res.status(400).json({ error: 'actingAdminId is required' });
+        if (e && e.message === 'FORBIDDEN') return res.status(403).json({ error: 'Administrator access required' });
+        if (e) return res.status(500).json({ error: e.message });
+        if (!adm) return res.status(403).json({ error: 'Invalid administrator' });
+        db.get(`SELECT alumni_source_seminar_ids FROM seminars WHERE id = ?`, [sid], (err, row) => {
+            if (err) return res.status(500).json({ error: err.message });
+            if (!row) return res.status(404).json({ error: 'Seminar not found' });
+            let sourceIds = row.alumni_source_seminar_ids;
+            if (Array.isArray(req.body && req.body.sourceSeminarIds)) {
+                sourceIds = req.body.sourceSeminarIds;
+            }
+            seminarAlumniNotify.sendAlumniNotifications(
+                db,
+                notifEngine,
+                sid,
+                sourceIds,
+                { markSent: true, forceResend: !!forceResend },
+                (e2, result) => {
+                    if (e2) return res.status(500).json({ error: e2.message });
+                    res.json({ success: true, ...(result || {}) });
+                }
+            );
+        });
     });
 });
 
@@ -8103,6 +8182,7 @@ app.post('/api/admin/seminars', (req, res) => {
         checkin_enabled,
         checkin_date,
         location_url,
+        location_text,
         terms_conditions,
         hero_image_path,
         flyer_path,
@@ -8150,18 +8230,25 @@ app.post('/api/admin/seminars', (req, res) => {
         auto_confirm_registration === true || auto_confirm_registration === 1 || auto_confirm_registration === '1'
             ? 1
             : 0;
+    const alumniSourceJson = seminarAlumniNotify.serializeSourceIds(req.body && req.body.alumni_source_seminar_ids);
+    const alumniNotifyAuto =
+        req.body &&
+        (req.body.alumni_notify_auto === true || req.body.alumni_notify_auto === 1 || req.body.alumni_notify_auto === '1')
+            ? 1
+            : 0;
     const regStart = seminarDt.normalizeSeminarDateTimeForStorage(registration_start);
     const regEnd = seminarDt.normalizeSeminarRegistrationEndForStorage(registration_end);
     const eventDt = seminarDt.normalizeSeminarDateTimeForStorage(event_date);
     const preregStart = seminarDt.normalizeSeminarDateTimeForStorage(preregistration_start);
     const preregEnd = seminarDt.normalizeSeminarRegistrationEndForStorage(preregistration_end);
+    const locFields = googleMaps.normalizeLocationOnSave({ location_text, location_url });
     const bodyYear = req.body && req.body.portal_year != null ? parseInt(req.body.portal_year, 10) : null;
     portalTracking.getPortalYear(db, (ePy, defaultYear) => {
         const portalYear =
             Number.isInteger(bodyYear) && bodyYear > 2000 ? bodyYear : defaultYear;
         db.run(
-            `INSERT INTO seminars (title, description, registration_start, registration_end, event_date, capacity, price, checkin_enabled, checkin_date, location_url, terms_conditions, hero_image_path, flyer_path, gallery_paths, registration_form_json, cancellation_policy_json, whatsapp_group_url, otp_on_application, otp_on_step1, otp_on_submit, public_list_enabled, cert_scans_required, portal_year, is_active, show_seats_public, preregistration_enabled, preregistration_start, preregistration_end, waiting_list_enabled, allow_application_edit, auto_confirm_registration) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO seminars (title, description, registration_start, registration_end, event_date, capacity, price, checkin_enabled, checkin_date, location_text, location_url, terms_conditions, hero_image_path, flyer_path, gallery_paths, registration_form_json, cancellation_policy_json, whatsapp_group_url, otp_on_application, otp_on_step1, otp_on_submit, public_list_enabled, cert_scans_required, portal_year, is_active, show_seats_public, preregistration_enabled, preregistration_start, preregistration_end, waiting_list_enabled, allow_application_edit, auto_confirm_registration, alumni_source_seminar_ids, alumni_notify_auto) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 title,
                 description,
@@ -8172,7 +8259,8 @@ app.post('/api/admin/seminars', (req, res) => {
                 price || 0,
                 checkin_enabled ? 1 : 0,
                 normalizeCheckinDateForStorage(checkin_date),
-                location_url || null,
+                locFields.location_text,
+                locFields.location_url,
                 terms_conditions || null,
                 hero_image_path || null,
                 flyer_path || null,
@@ -8193,7 +8281,9 @@ app.post('/api/admin/seminars', (req, res) => {
                 preregEnd,
                 waitListEnabled,
                 allowAppEdit,
-                autoConfirmReg
+                autoConfirmReg,
+                alumniSourceJson,
+                alumniNotifyAuto
             ],
             function (err) {
             if (err) return res.status(500).json({ error: err.message });
@@ -8202,6 +8292,9 @@ app.post('/api/admin/seminars', (req, res) => {
                 seminarEvents.replaceForSeminar(db, newId, subEvents, (evErr) => {
                     if (evErr) console.warn('[seminar-events] save:', evErr.message);
                     announceSeminarRegistrationOnCreate(newId, () => {});
+                    seminarAlumniNotify.maybeTriggerAutoAlumniNotify(db, notifEngine, newId, (eAl) => {
+                        if (eAl) console.warn('[alumni-notify] create:', eAl.message);
+                    });
                     cacheInvalidatePrefix('api:seminars:');
                     cacheInvalidatePrefix('api:public:announcements');
                     res.json({ success: true, seminarId: newId });
@@ -8225,6 +8318,7 @@ app.put('/api/admin/seminars/:id', (req, res) => {
         checkin_date,
         is_active,
         location_url,
+        location_text,
         terms_conditions,
         hero_image_path,
         flyer_path,
@@ -8271,6 +8365,16 @@ app.put('/api/admin/seminars/:id', (req, res) => {
         auto_confirm_registration === true || auto_confirm_registration === 1 || auto_confirm_registration === '1'
             ? 1
             : 0;
+    const sid = parseInt(req.params.id, 10);
+    const alumniSourceJson = seminarAlumniNotify.serializeSourceIds(
+        req.body && req.body.alumni_source_seminar_ids,
+        sid
+    );
+    const alumniNotifyAuto =
+        req.body &&
+        (req.body.alumni_notify_auto === true || req.body.alumni_notify_auto === 1 || req.body.alumni_notify_auto === '1')
+            ? 1
+            : 0;
     const py = portal_year != null ? parseInt(portal_year, 10) : null;
     const regStart = seminarDt.normalizeSeminarDateTimeForStorage(registration_start);
     const regEnd = seminarDt.normalizeSeminarRegistrationEndForStorage(registration_end);
@@ -8280,8 +8384,24 @@ app.put('/api/admin/seminars/:id', (req, res) => {
     portalTracking.getPortalYear(db, (ePy, defaultYear) => {
         if (ePy) return res.status(500).json({ error: ePy.message });
         const finalPortalYear = Number.isInteger(py) && py > 2000 ? py : defaultYear;
+        db.get(`SELECT alumni_source_seminar_ids, location_text, location_url FROM seminars WHERE id = ?`, [sid], (eOld, oldRow) => {
+            if (eOld) return res.status(500).json({ error: eOld.message });
+            const resetSent = String((oldRow && oldRow.alumni_source_seminar_ids) || '[]') !== alumniSourceJson;
+            let locFields = googleMaps.normalizeLocationOnSave({ location_text, location_url });
+            if (
+                !locFields.location_text &&
+                !googleMaps.isVenueTbd(location_text) &&
+                oldRow &&
+                oldRow.location_url
+            ) {
+                locFields.location_url = oldRow.location_url;
+            }
+            const sql =
+                `UPDATE seminars SET title=?, description=?, registration_start=?, registration_end=?, event_date=?, capacity=?, price=?, checkin_enabled=?, checkin_date=?, is_active=?, location_text=?, location_url=?, terms_conditions=?, hero_image_path=?, flyer_path=?, gallery_paths=?, registration_form_json=?, cancellation_policy_json=?, whatsapp_group_url=?, otp_on_application=?, otp_on_step1=?, otp_on_submit=?, public_list_enabled=?, cert_scans_required=?, portal_year=?, show_seats_public=?, preregistration_enabled=?, preregistration_start=?, preregistration_end=?, waiting_list_enabled=?, allow_application_edit=?, auto_confirm_registration=?, alumni_source_seminar_ids=?, alumni_notify_auto=?` +
+                (resetSent ? `, alumni_notify_sent_at=NULL` : '') +
+                ` WHERE id=?`;
         db.run(
-            `UPDATE seminars SET title=?, description=?, registration_start=?, registration_end=?, event_date=?, capacity=?, price=?, checkin_enabled=?, checkin_date=?, is_active=?, location_url=?, terms_conditions=?, hero_image_path=?, flyer_path=?, gallery_paths=?, registration_form_json=?, cancellation_policy_json=?, whatsapp_group_url=?, otp_on_application=?, otp_on_step1=?, otp_on_submit=?, public_list_enabled=?, cert_scans_required=?, portal_year=?, show_seats_public=?, preregistration_enabled=?, preregistration_start=?, preregistration_end=?, waiting_list_enabled=?, allow_application_edit=?, auto_confirm_registration=? WHERE id=?`,
+            sql,
             [
                 title,
                 description,
@@ -8293,7 +8413,8 @@ app.put('/api/admin/seminars/:id', (req, res) => {
                 checkin_enabled ? 1 : 0,
                 normalizeCheckinDateForStorage(checkin_date),
                 is_active ? 1 : 0,
-                location_url || null,
+                locFields.location_text,
+                locFields.location_url,
                 terms_conditions || null,
                 hero_image_path != null ? hero_image_path : null,
                 flyer_path != null ? flyer_path : null,
@@ -8314,14 +8435,18 @@ app.put('/api/admin/seminars/:id', (req, res) => {
                 waitListEnabled,
                 allowAppEdit,
                 autoConfirmReg,
-                req.params.id
+                alumniSourceJson,
+                alumniNotifyAuto,
+                sid
             ],
             function (err) {
             if (err) return res.status(500).json({ error: err.message });
-                const sid = parseInt(req.params.id, 10);
                 const subEvents = req.body && req.body.sub_events;
                 seminarEvents.replaceForSeminar(db, sid, subEvents, (evErr) => {
                     if (evErr) console.warn('[seminar-events] save:', evErr.message);
+                    seminarAlumniNotify.maybeTriggerAutoAlumniNotify(db, notifEngine, sid, (eAl) => {
+                        if (eAl) console.warn('[alumni-notify] update:', eAl.message);
+                    });
                     cacheInvalidatePrefix('api:seminars:');
                     cacheInvalidatePrefix('api:public:announcements');
                     if (!is_active) {
@@ -8331,6 +8456,7 @@ app.put('/api/admin/seminars/:id', (req, res) => {
                 });
             }
         );
+        });
     });
 });
 
