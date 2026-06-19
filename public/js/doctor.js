@@ -1977,7 +1977,7 @@ async function bootDoctorDashboard(user) {
     }
     setTimeout(() => {
         handleDirectApplicationPaymentLink();
-    }, 80);
+    }, 350);
 }
 
 function handleEasebuzzPaymentReturnQuery() {
@@ -2028,21 +2028,83 @@ function handleEasebuzzPaymentReturnQuery() {
 
 async function handleDirectApplicationPaymentLink() {
     try {
-        const p = new URLSearchParams(window.location.search);
+        let p = new URLSearchParams(window.location.search);
+        const stored = sessionStorage.getItem('doctor_pay_link');
+        if ((!p.get('pay_registration') && !p.get('pay_app')) && stored) {
+            p = new URLSearchParams(String(stored).replace(/^\?/, ''));
+        }
         const regId = parseInt(p.get('pay_registration') || '', 10);
         const appNo = String(p.get('pay_app') || '').trim();
         const methodId = String(p.get('pay_method') || '').trim();
+        const payUser = String(p.get('pay_user') || '').trim();
         if (!regId && !appNo) return;
+
+        sessionStorage.removeItem('doctor_pay_link');
         switchTab('tab-payments');
+
+        const uid = doctorNumericUserId();
+        if (!uid) return;
+
+        const rq = new URLSearchParams({
+            registrationId: String(regId || ''),
+            userId: String(uid)
+        });
+        if (payUser) rq.set('payUser', payUser);
+        const resolveRes = await fetch('/api/doctor/payment-link-resolve?' + rq.toString(), {
+            cache: 'no-store'
+        });
+        const resolve = await resolveRes.json().catch(() => ({}));
+
+        if (!resolveRes.ok) {
+            alert(
+                resolve.message ||
+                    resolve.error ||
+                    'This payment link is not available. Sign in with the doctor account used on the application.'
+            );
+            return;
+        }
+        if (resolve.alreadyPaid) {
+            alert(
+                resolve.message ||
+                    'This application is already paid. Your e-ticket is under Participant tickets.'
+            );
+            return;
+        }
+        if (!resolve.payable) {
+            alert(resolve.message || 'This payment link is not available yet.');
+            return;
+        }
+
+        const targetId = regId || Number(resolve.registrationId) || 0;
+        try {
+            const res = await fetch('/api/applications/' + encodeURIComponent(uid), { cache: 'no-store' });
+            const payload = await res.json().catch(() => ({}));
+            if (res.ok) userApplications = Array.isArray(payload) ? payload : payload.applications || [];
+        } catch (_) {}
+
         await loadDoctorSeminarPaymentsPanel();
+
         const pending = (userApplications || []).filter(
             (a) => String(a.status || '').toLowerCase() === 'approved_pending_payment'
         );
         const target =
-            pending.find((a) => Number(a.id) === regId) ||
-            pending.find((a) => String(a.application_no || '').toLowerCase() === appNo.toLowerCase());
+            pending.find((a) => Number(a.id) === targetId) ||
+            pending.find((a) => String(a.application_no || '').toLowerCase() === appNo.toLowerCase()) ||
+            (resolve.payable
+                ? {
+                      id: targetId,
+                      application_no: resolve.applicationNo || appNo,
+                      payment_amount: resolve.amount,
+                      seminar_price: resolve.amount,
+                      seminar_title: resolve.seminarTitle
+                  }
+                : null);
         if (!target) {
-            alert('This payment link is not available or this application is already paid.');
+            alert(
+                'Payment is due but could not load checkout. Open Make payments and pay for application ' +
+                    (resolve.applicationNo || appNo || targetId) +
+                    '.'
+            );
             return;
         }
         const btn = document.querySelector('.doctor-pay-btn[data-reg-id="' + String(target.id) + '"]');
@@ -2058,7 +2120,9 @@ async function handleDirectApplicationPaymentLink() {
             const payAmt =
                 target.payment_amount != null && Number.isFinite(Number(target.payment_amount))
                     ? Number(target.payment_amount)
-                    : Number(target.seminar_price) || 0;
+                    : resolve.amount != null
+                      ? Number(resolve.amount)
+                      : Number(target.seminar_price) || 0;
             processPayment(target.id, payAmt, target.application_no || '', methodId || null, false);
         }
         const clean = window.location.pathname + (window.location.hash || '');
@@ -2067,6 +2131,12 @@ async function handleDirectApplicationPaymentLink() {
 }
 
 window.onload = () => {
+    try {
+        const p = new URLSearchParams(window.location.search);
+        if (p.get('pay_registration') || p.get('pay_app')) {
+            sessionStorage.setItem('doctor_pay_link', window.location.search);
+        }
+    } catch (_) {}
     const existing = typeof PortalAuth !== 'undefined' ? PortalAuth.getUser('doctor') : null;
     if (existing) {
         bootDoctorDashboard(existing);
@@ -7892,7 +7962,29 @@ function eticketViewUrl(t) {
 }
 
 async function downloadEticketPdf(t) {
-    if (!t || !t.ticket_id_string) return alert('Ticket not found.');
+    if (!t || !t.ticket_id_string) {
+        if (typeof t === 'string' && window.__eticketRows && window.__eticketRows[t]) {
+            t = window.__eticketRows[t];
+        } else {
+            return alert('Ticket not found.');
+        }
+    }
+    const ticketId = String(t.ticket_id_string || '').trim();
+    const filename = 'e-ticket-' + ticketId.replace(/[^\w-]+/g, '-') + '.pdf';
+
+    const downloadBlob = (blob, name) => {
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = name;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
+            URL.revokeObjectURL(link.href);
+            link.remove();
+        }, 4000);
+    };
+
     const openPrintFallback = () => {
         const url = eticketViewUrl(t);
         const w = window.open(url, '_blank', 'noopener');
@@ -7901,10 +7993,29 @@ async function downloadEticketPdf(t) {
             window.location.href = url;
         }
     };
+
+    const saveServerTicketHtml = async () => {
+        const base = eticketViewUrl(t);
+        const url = base + (base.indexOf('?') >= 0 ? '&' : '?') + 'download=1';
+        const res = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
+        if (!res.ok) throw new Error('Could not download ticket');
+        const blob = await res.blob();
+        const htmlName = filename.replace(/\.pdf$/i, '.html');
+        downloadBlob(blob, htmlName);
+        if (typeof alert === 'function') {
+            alert('Ticket saved to your device. Open the file and use Print → Save as PDF for a PDF copy.');
+        }
+    };
+
     if (!window.jspdf || !window.jspdf.jsPDF) {
-        openPrintFallback();
+        try {
+            await saveServerTicketHtml();
+        } catch (_) {
+            openPrintFallback();
+        }
         return;
     }
+
     try {
         await preloadSiteLogoForPdf();
         const { jsPDF } = window.jspdf;
@@ -7934,48 +8045,41 @@ async function downloadEticketPdf(t) {
         y = pdfCongressSectionTitle(doc, y + 4, 'Entry QR', accent, ink);
         const qrUrl = ticketQrImageUrl(t);
         if (qrUrl) {
-            await new Promise(function (resolve) {
-                const img = new Image();
-                img.crossOrigin = 'anonymous';
-                img.onload = function () {
-                    try {
-                        pdfAddQrCode(doc, img, 18, y + 2, 42);
-                    } catch (qrErr) {
-                        console.warn('[eticket-pdf] QR embed failed', qrErr);
-                    }
-                    resolve();
-                };
-                img.onerror = function () {
-                    resolve();
-                };
-                img.src = qrUrl;
-            });
+            try {
+                const qrRes = await fetch(qrUrl, { credentials: 'same-origin', cache: 'no-store' });
+                if (qrRes.ok) {
+                    const qrBlob = await qrRes.blob();
+                    const qrDataUrl = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(reader.result);
+                        reader.onerror = () => reject(reader.error);
+                        reader.readAsDataURL(qrBlob);
+                    });
+                    doc.addImage(qrDataUrl, 'PNG', 18, y + 2, 42, 42);
+                    doc.setDrawColor(203, 213, 225);
+                    doc.setLineWidth(0.3);
+                    doc.rect(18, y + 2, 42, 42, 'S');
+                }
+            } catch (qrErr) {
+                console.warn('[eticket-pdf] QR fetch failed', qrErr);
+            }
         }
         doc.setFontSize(8);
         doc.setTextColor(100, 116, 139);
         doc.text('Issued to: ' + holder, 14, 282);
         doc.text('Non-transferable · Do not share this QR or PDF', 14, 288);
-        const filename = 'e-ticket-' + String(t.ticket_id_string).replace(/[^\w-]+/g, '-') + '.pdf';
-        try {
-            doc.save(filename);
-        } catch (saveErr) {
-            console.warn('[eticket-pdf] save failed', saveErr);
-            const blob = doc.output('blob');
-            const link = document.createElement('a');
-            link.href = URL.createObjectURL(blob);
-            link.download = filename;
-            document.body.appendChild(link);
-            link.click();
-            setTimeout(() => {
-                URL.revokeObjectURL(link.href);
-                link.remove();
-            }, 2000);
-        }
+        const blob = doc.output('blob');
+        downloadBlob(blob, filename);
     } catch (e) {
         console.error('[eticket-pdf]', e);
-        openPrintFallback();
+        try {
+            await saveServerTicketHtml();
+        } catch (_) {
+            openPrintFallback();
+        }
     }
 }
+window.downloadEticketPdf = downloadEticketPdf;
 
 async function loadDoctorEventTickets() {
     const box = document.getElementById('tickets-container');
@@ -8039,7 +8143,7 @@ async function loadDoctorEventTickets() {
                     ${
                         !invalid && t.ticket_id_string
                             ? `<div style="margin:12px 0 0;display:flex;flex-wrap:wrap;gap:8px;">
-                                <button type="button" class="btn-primary" style="padding:8px 14px;font-size:0.88rem;" onclick="downloadEticketPdf(window.__eticketRows[${JSON.stringify(String(t.ticket_id_string))}])"><i class="fas fa-download"></i> Save PDF to device</button>
+                                <button type="button" class="btn-primary" style="padding:8px 14px;font-size:0.88rem;" onclick="downloadEticketPdf(${JSON.stringify(String(t.ticket_id_string))})"><i class="fas fa-download"></i> Save PDF to device</button>
                                 <a href="${escapeHtml(eticketViewUrl(t))}" target="_blank" rel="noopener" class="btn-primary" style="display:inline-block;padding:8px 14px;text-decoration:none;font-size:0.88rem;background:#475569;"><i class="fas fa-print"></i> Print view</a>
                                </div>`
                             : ''

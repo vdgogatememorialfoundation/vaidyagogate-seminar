@@ -2103,33 +2103,39 @@ function notifyTicketIssued(userId, registrationId, ticketId, channelOpts) {
 function runNotifyTicketIssued(userId, registrationId, ticketId, opts) {
     const sendEmail = opts.sendEmail;
     const sendWhatsapp = opts.sendWhatsapp;
-    const sendTemplateNotify = opts.sendTemplateNotify;
     const drainImmediate = opts.drainImmediate;
+    const base = integrationSettings.getPublicBaseUrl() || notifEngine.publicBaseUrl() || '';
+    const pdfUrl = ticketDocumentUrl(String(ticketId), userId);
+    const vars = {
+        ticket_id: ticketId,
+        qr_code_url: base + '/doctor#tab-tickets',
+        ticket_pdf_url: pdfUrl,
+        payment_status: 'PAID'
+    };
+
     db.get(
-        `SELECT r.seminar_id, r.application_no, t.qr_code_data, t.ticket_id_string, t.is_scanned, t.scan_time,
+        `SELECT r.seminar_id, r.application_no, r.user_id,
+                t.qr_code_data, t.ticket_id_string, t.is_scanned, t.scan_time,
                 IFNULL(t.is_valid, 1) AS is_valid, o.status AS payment_status,
                 s.title AS seminar_title, s.event_date, s.location_url, s.portal_year,
-                u.first_name, u.last_name
+                u.first_name, u.last_name, u.email, u.phone
          FROM registrations r
-         JOIN tickets t ON t.order_id IN (SELECT id FROM orders WHERE registration_id = r.id)
-         JOIN orders o ON o.id = t.order_id
+         JOIN orders o ON o.registration_id = r.id
+         JOIN tickets t ON t.order_id = o.id
          JOIN seminars s ON s.id = r.seminar_id
          JOIN users u ON u.id = r.user_id
-         WHERE r.id = ? AND TRIM(t.ticket_id_string) = TRIM(?)`,
+         WHERE r.id = ? AND TRIM(t.ticket_id_string) = TRIM(?)
+         ORDER BY o.id DESC, t.id DESC
+         LIMIT 1`,
         [registrationId, String(ticketId)],
         (e, row) => {
             if (e) {
-                console.warn('[ticket-issue] lookup failed, using link-only fallback:', e.message);
+                console.warn('[ticket-issue] lookup failed:', e.message);
             }
             const seminarId = row && row.seminar_id;
-            const pdfUrl = ticketDocumentUrl(String(ticketId), userId);
-            const vars = {
-                ticket_id: ticketId,
-                qr_code_url: base + '/doctor#tab-tickets',
-                ticket_pdf_url: pdfUrl,
-                payment_status: 'PAID'
-            };
-            if (sendTemplateNotify) {
+
+            const finish = () => {
+                if (!sendWhatsapp) return;
                 notifEngine.notify(
                     db,
                     'TICKET_ISSUED',
@@ -2139,98 +2145,42 @@ function runNotifyTicketIssued(userId, registrationId, ticketId, opts) {
                         registrationId,
                         vars,
                         immediate: drainImmediate,
-                        skipWhatsapp: !sendWhatsapp
+                        skipEmail: true,
+                        skipWhatsapp: false
                     },
                     () => {
                         if (!drainImmediate) return;
                         try {
-                            notifEngine.drainNotificationQueue(db, 1);
+                            notifEngine.drainNotificationQueue(db, 2);
                         } catch (_) {}
                     }
                 );
+            };
+
+            if (!sendEmail) {
+                finish();
+                return;
             }
-            db.get(`SELECT email, phone FROM users WHERE id = ?`, [userId], (eu, u) => {
-                if (eu || !u) return;
-                const waLine =
-                    'Your e-ticket for ' +
-                    (row && row.seminar_title ? row.seminar_title : 'the seminar') +
-                    ' is ready.\nTicket ID: ' +
-                    ticketId +
-                    '\nDownload / print: ' +
-                    pdfUrl;
-                const sendTicketEmail = (attachments) => {
-                    if (!sendEmail || !u.email) return;
-                    notifEngine.enqueueDirectMessage(
-                        db,
-                        {
-                            channel: 'email',
-                            destination: u.email,
-                            subject: 'Your e-ticket (printable)',
-                            html:
-                                '<p>Your e-ticket is ready. Download / print: <a href="' +
-                                pdfUrl +
-                                '">' +
-                                pdfUrl +
-                                '</a></p>',
-                            text: 'E-ticket: ' + pdfUrl,
-                            attachments: Array.isArray(attachments) ? attachments : undefined,
-                            event_key: 'TICKET_ISSUED',
-                            immediate: drainImmediate,
-                            priority: true
-                        },
-                        () => {}
-                    );
-                };
-                if (sendWhatsapp && u.phone) {
-                    notifEngine.enqueueDirectMessage(
-                        db,
-                        {
-                            channel: 'whatsapp',
-                            destination: u.phone,
-                            body: waLine,
-                            event_key: 'TICKET_ISSUED',
-                            immediate: drainImmediate,
-                            userId
-                        },
-                        () => {}
-                    );
+
+            notifEngine.sendTicketIssuedEmail(
+                db,
+                {
+                    userId,
+                    registrationId,
+                    ticketId,
+                    ticketRow: row,
+                    vars,
+                    immediate: drainImmediate
+                },
+                (mailErr, mailOut) => {
+                    if (mailErr) {
+                        console.warn('[ticket-issue] email failed:', mailErr.message);
+                    } else if (mailOut && mailOut.skipped) {
+                        console.warn('[ticket-issue] email skipped:', mailOut.reason || 'unknown');
+                    }
+                    finish();
                 }
-                if (!(row && row.qr_code_data)) {
-                    sendTicketEmail(null);
-                    return;
-                }
-                ticketHtml
-                    .buildTicketHtmlFromRow(
-                        {
-                            ticket_id_string: row.ticket_id_string || ticketId,
-                            application_no: row.application_no,
-                            seminar_title: row.seminar_title,
-                            event_date: row.event_date,
-                            location_url: row.location_url,
-                            portal_year: row.portal_year,
-                            display_name: [row.first_name, row.last_name].filter(Boolean).join(' '),
-                            qr_code_data: row.qr_code_data,
-                            payment_status: row.payment_status || 'success',
-                            is_scanned: row.is_scanned,
-                            scan_time: row.scan_time,
-                            is_valid: row.is_valid
-                        },
-                        db
-                    )
-                    .then((html) => {
-                        sendTicketEmail([
-                            {
-                                filename: 'E-Ticket-' + String(ticketId).replace(/\W/g, '') + '.html',
-                                content: html,
-                                contentType: 'text/html'
-                            }
-                        ]);
-                    })
-                    .catch(() => {
-                        // Fallback to link-only email so delivery logs still show ticket mail trace.
-                        sendTicketEmail(null);
-                    });
-            });
+            );
         }
     );
 }

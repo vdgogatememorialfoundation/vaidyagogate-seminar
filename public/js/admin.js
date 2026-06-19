@@ -3365,34 +3365,90 @@ async function behalfMarkUpiPaid() {
     }
 }
 
-async function copyApplicationPaymentLink(registrationId, applicationNo, methodId) {
+async function fetchApplicationPaymentLink(registrationId, methodId) {
     const adm = getStoredAdminUser();
     const regId = parseInt(registrationId, 10);
-    if (!adm?.id || !regId) return alert('Save/select an application first.');
+    if (!adm?.id || !regId) throw new Error('Save/select an application first.');
+    const q = new URLSearchParams({
+        actingAdminId: String(adm.id),
+        registrationId: String(regId)
+    });
+    if (methodId) q.set('methodId', String(methodId));
+    const res = await fetch('/api/admin/payments/application-link?' + q.toString(), {
+        cache: 'no-store'
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || !data.paymentLink) {
+        throw new Error(data.error || 'Could not create payment link');
+    }
+    return data;
+}
+
+async function copyApplicationPaymentLink(registrationId, applicationNo, methodId) {
     try {
-        const q = new URLSearchParams({
-            actingAdminId: String(adm.id),
-            registrationId: String(regId)
-        });
-        if (methodId) q.set('methodId', String(methodId));
-        const res = await fetch('/api/admin/payments/application-link?' + q.toString(), {
-            cache: 'no-store'
-        });
-        const data = await res.json().catch(() => ({}));
-        if (!res.ok || !data.paymentLink) throw new Error(data.error || 'Could not create payment link');
+        const data = await fetchApplicationPaymentLink(registrationId, methodId);
         const link = data.paymentLink;
+        const label = applicationNo || data.applicationNo || 'Reg #' + (data.registrationId || registrationId);
         if (navigator.clipboard && navigator.clipboard.writeText) {
             await navigator.clipboard.writeText(link);
             alert(
                 'Payment link copied for ' +
-                    (applicationNo || data.applicationNo || ('Reg #' + regId)) +
-                    '. Share it with the doctor.'
+                    label +
+                    (data.amount != null ? ' (₹' + data.amount + ')' : '') +
+                    '.\n\nApplicant: ' +
+                    (data.applicantName || '—') +
+                    (data.applicantEmail ? ' · ' + data.applicantEmail : '') +
+                    '\nShare this link or use Email payment link.'
             );
         } else {
             prompt('Copy and share this payment link:', link);
         }
     } catch (e) {
         alert(e.message || 'Could not create payment link');
+    }
+}
+
+async function emailApplicationPaymentLink(registrationId, applicationNo, methodId) {
+    const adm = getStoredAdminUser();
+    const regId = parseInt(registrationId, 10);
+    if (!adm?.id || !regId) return alert('Save/select an application first.');
+    try {
+        const preview = await fetchApplicationPaymentLink(registrationId, methodId);
+        if (!preview.applicantEmail) {
+            return alert(
+                'No email on file for this applicant. Use Copy payment link and share via WhatsApp or SMS.'
+            );
+        }
+        const label = applicationNo || preview.applicationNo || 'application';
+        if (
+            !confirm(
+                'Email payment link (₹' +
+                    (preview.amount != null ? preview.amount : '—') +
+                    ') to ' +
+                    preview.applicantName +
+                    ' at ' +
+                    preview.applicantEmail +
+                    '?\n\nApplication: ' +
+                    label
+            )
+        ) {
+            return;
+        }
+        const res = await fetch('/api/admin/payments/send-application-link', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                registrationId: regId,
+                actingAdminId: adm.id,
+                methodId: methodId || '',
+                channel: 'both'
+            })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return alert(data.error || 'Could not send payment link');
+        alert(data.message || 'Payment link sent.');
+    } catch (e) {
+        alert(e.message || 'Could not send payment link');
     }
 }
 

@@ -797,6 +797,7 @@
                         <div id="behalf-payment-methods" style="display:flex;flex-direction:column;gap:8px;margin-bottom:10px;"></div>
                         <button type="button" class="btn-primary" onclick="behalfInitiatePayment()">Start payment</button>
                         <button type="button" class="btn-primary" style="background:#1d4ed8;margin-left:8px;" onclick="copyApplicationPaymentLink(__behalfRegId, __behalfRegApplicationNo, __behalfSelectedMethodId || '')">Copy payment link</button>
+                        <button type="button" class="btn-primary" style="background:#0369a1;margin-left:8px;" onclick="emailApplicationPaymentLink(__behalfRegId, __behalfRegApplicationNo, __behalfSelectedMethodId || '')">Email payment link</button>
                         <button type="button" class="btn-primary hidden" id="behalf-mark-upi-btn" style="background:#64748b;margin-left:8px;" onclick="behalfMarkUpiPaid()">Mark UPI received</button>
                         <button type="button" class="btn-primary" style="background:#15803d;margin-left:8px;" onclick="behalfPollPayment()">Check status</button>
                         <div id="behalf-qr-block" class="hidden" style="margin-top:12px;text-align:center;"><img id="behalf-qr-img" alt="QR" style="max-width:220px;"><p id="behalf-qr-amount" style="font-weight:600;"></p></div>
@@ -3124,6 +3125,7 @@
                 <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px;">
                     <button type="button" class="btn-primary" style="background:#0f766e;" onclick="proxyInitiatePayment()">Start payment</button>
                     <button type="button" class="btn-primary" style="background:#1d4ed8;" onclick="copyApplicationPaymentLink(__proxyLastRegId, '', __proxySelectedMethodId || '')">Copy payment link</button>
+                    <button type="button" class="btn-primary" style="background:#0369a1;" onclick="emailApplicationPaymentLink(__proxyLastRegId, '', __proxySelectedMethodId || '')">Email payment link</button>
                     <button type="button" class="btn-primary" style="background:#64748b;" onclick="proxyWaivePayment()">Waive fee &amp; issue ticket</button>
                     <button type="button" class="btn-outline hidden" id="proxy-mark-upi-btn" onclick="proxyMarkUpiPaid()">Mark UPI received</button>
                 </div>
@@ -3280,6 +3282,6 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
-    <script src="/js/admin.js?v=20260619behalf1"></script>
+    <script src="/js/admin.js?v=20260616paylink1"></script>
 </body>
 </html>
