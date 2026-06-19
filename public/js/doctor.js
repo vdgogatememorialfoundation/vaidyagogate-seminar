@@ -3755,11 +3755,23 @@ function cancelRegistration() {
 
 function syncDoctorUpdatesPanel(tabId) {
     const box = document.querySelector('.announcements-box');
-    const content = document.querySelector('.content-area');
+    const holder = document.getElementById('doctor-updates-holder');
     const show =
         tabId === 'tab-dashboard' || tabId === 'tab-profile' || tabId === 'tab-seminars';
-    if (box) box.classList.toggle('hidden', !show);
-    if (content) content.classList.toggle('content-compact-top', !show);
+    if (!box) return;
+    if (!show || !holder) {
+        box.classList.add('hidden');
+        if (holder && box.parentElement !== holder) holder.appendChild(box);
+        return;
+    }
+    const pane = document.getElementById(tabId);
+    const anchor = pane && pane.querySelector('[data-doctor-updates-anchor]');
+    if (anchor) {
+        anchor.insertAdjacentElement('afterend', box);
+    } else if (pane) {
+        pane.prepend(box);
+    }
+    box.classList.remove('hidden');
 }
 
 function switchTab(tabId, menuEl) {
@@ -8348,7 +8360,7 @@ async function loadDashboardFeedbackSeminars() {
         });
         if (!seminars.length) {
             msgEl.textContent =
-                'No seminars are open for feedback yet. Feedback is available after a seminar you registered for has ended, and only once per seminar.';
+                'No seminars are open for feedback yet. Feedback unlocks after venue check-in (e-ticket scan) for a seminar you attended, and only once per seminar.';
         }
     } catch (e) {
         console.error(e);
@@ -8740,7 +8752,13 @@ function isDoctorProfileComplete(profile) {
 function updateProfileCompleteBanner(profile) {
     const bar = document.getElementById('profile-complete-banner');
     if (!bar) return;
-    bar.style.display = isDoctorProfileComplete(profile) ? 'none' : '';
+    if (isDoctorProfileComplete(profile)) {
+        bar.classList.add('hidden');
+        bar.style.display = 'none';
+    } else {
+        bar.classList.remove('hidden');
+        bar.style.display = '';
+    }
 }
 
 function updateDoctorProfilePhotoUi(profile) {

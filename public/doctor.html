@@ -60,10 +60,11 @@
         .header-link:hover { text-decoration: underline; }
         
         .notification-bar { background: linear-gradient(90deg, #fffbeb, #fef9c3); border-left: 4px solid #d97706; padding: 10px 22px; color: #92400e; font-weight: 600; display: flex; align-items: center; gap: 10px; }
-        .announcements-box { background: #fff; margin: 20px 28px 0; padding: 18px 22px; border-radius: 14px; box-shadow: 0 8px 30px rgba(15, 118, 110, 0.06); border: 1px solid #ccfbf1; }
+        .announcements-box { background: #fff; margin: 0 0 16px; padding: 18px 22px; border-radius: 14px; box-shadow: 0 8px 30px rgba(15, 118, 110, 0.06); border: 1px solid #ccfbf1; }
+        #doctor-updates-holder { display: none !important; }
         .content-area.content-compact-top { padding-top: 16px; }
         
-        .content-area { padding: 28px; overflow-y: auto; flex: 1; }
+        .content-area { padding: 16px 28px 28px; overflow-y: auto; flex: 1; }
         .section-title { font-size: 1.45rem; color: var(--doctor-primary); margin-bottom: 18px; padding-bottom: 12px; border-bottom: 2px solid #99f6e4; font-weight: 800; letter-spacing: -0.02em; }
         .card { background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 10px 40px rgba(15, 118, 110, 0.07); margin-bottom: 22px; border: 1px solid #e2e8f0; }
         
@@ -340,19 +341,22 @@
                 </div>
             </header>
 
-            <div class="notification-bar" id="profile-complete-banner"><i class="fas fa-info-circle"></i> <span data-i18n="doctor.completeProfile">Complete your profile before registering for seminars.</span></div>
+            <div class="notification-bar hidden" id="profile-complete-banner"><i class="fas fa-info-circle"></i> <span data-i18n="doctor.completeProfile">Complete your profile before registering for seminars.</span></div>
 
-            <div class="announcements-box">
-                <h4 style="color: #0f766e; margin-bottom: 10px;"><i class="fas fa-bullhorn"></i> <span data-i18n="doctor.updates">Updates</span></h4>
-                <ul id="doctor-updates-list" style="list-style-position: inside; color: #64748b; font-size: 0.9rem;">
-                    <li style="color:#94a3b8;">Loading…</li>
-                </ul>
+            <div id="doctor-updates-holder" class="hidden" aria-hidden="true">
+                <div class="announcements-box hidden">
+                    <h4 style="color: #0f766e; margin-bottom: 10px;"><i class="fas fa-bullhorn"></i> <span data-i18n="doctor.updates">Updates</span></h4>
+                    <ul id="doctor-updates-list" style="list-style-position: inside; color: #64748b; font-size: 0.9rem;">
+                        <li style="color:#94a3b8;">Loading…</li>
+                    </ul>
+                </div>
             </div>
 
-            <div class="content-area">
+            <div class="content-area content-compact-top">
 
                 <div id="tab-dashboard" class="tab-pane">
                     <h2 class="section-title" data-i18n="doctor.section.dashboard">Dashboard</h2>
+                    <div data-doctor-updates-anchor></div>
                     <p style="color: #64748b; margin: -10px 0 20px;">Overview of your seminar activity. Use <strong>Seminar feedback</strong> and <strong>Support tickets</strong> in the menu. Live chat is the chat button at the bottom right.</p>
                     <div class="stat-grid">
                         <div class="stat-card"><h4 id="stat-registered">—</h4><p>Registered seminars</p></div>
@@ -376,6 +380,7 @@
 
                 <div id="tab-profile" class="tab-pane hidden">
                     <h2 class="section-title">My profile</h2>
+                    <div data-doctor-updates-anchor></div>
                     <div class="card" style="margin-bottom:16px;padding:14px 18px;background:#f8fafc;border:1px solid #e2e8f0;">
                         <h3 style="margin:0 0 10px;font-size:1rem;color:#0f766e;">Account</h3>
                         <p style="margin:0 0 6px;font-size:0.9rem;"><strong>Created:</strong> <span id="profile-account-created">—</span></p>
@@ -403,6 +408,7 @@
 
                 <div id="tab-seminars" class="tab-pane hidden">
                     <h2 class="section-title" id="seminars-title">Available seminars</h2>
+                    <div data-doctor-updates-anchor></div>
                     <p style="color:#64748b;margin:-10px 0 20px;">Register for open seminars. You must accept seminar terms before completing the application.</p>
                     <div id="seminars-grid-container" class="seminars-grid"></div>
 
@@ -684,7 +690,7 @@
 
                 <div id="tab-feedback" class="tab-pane hidden">
                     <h2 class="section-title">Seminar feedback</h2>
-                    <p class="tab-intro-feedback" style="color:#64748b;margin:-10px 0 20px;">Share your experience after attending a seminar.</p>
+                    <p class="tab-intro-feedback" style="color:#64748b;margin:-10px 0 20px;">Share your experience after venue check-in at a seminar you attended.</p>
                     <div class="card">
                         <form id="dash-feedback-form" onsubmit="submitDashboardFeedback(event)">
                             <div class="form-group"><label>Seminar attended</label><select id="dfb-seminar" required></select></div>
@@ -954,6 +960,6 @@
     <script src="/js/live-chat-client-info.js?v=20260610chat1"></script>
     <script src="/js/doctor-live-chat-widget.js?v=20260615live2"></script>
     <script src="/js/site-visitor-beacon.js?v=20260613radar6"></script>
-    <script src="/js/doctor.js?v=20260620maps1"></script>
+    <script src="/js/doctor.js?v=20260620layout2"></script>
 </body>
 </html>
