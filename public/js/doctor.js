@@ -2867,6 +2867,8 @@ async function loadDoctorPortalUpdatesFromCms() {
         console.error(e);
         box.innerHTML = '<li style="color:#b91c1c;">Could not load updates.</li>';
     }
+    const activePane = document.querySelector('.content-area > .tab-pane:not(.hidden)');
+    if (activePane) syncDoctorUpdatesPanel(activePane.id);
 }
 
 let activeSeminars = [];
@@ -3761,6 +3763,8 @@ function syncDoctorUpdatesPanel(tabId) {
     if (!box) return;
     if (!show || !holder) {
         box.classList.add('hidden');
+        box.removeAttribute('data-doctor-updates-visible');
+        box.style.display = 'none';
         if (holder && box.parentElement !== holder) holder.appendChild(box);
         return;
     }
@@ -3772,6 +3776,8 @@ function syncDoctorUpdatesPanel(tabId) {
         pane.prepend(box);
     }
     box.classList.remove('hidden');
+    box.setAttribute('data-doctor-updates-visible', '1');
+    box.style.display = '';
 }
 
 function switchTab(tabId, menuEl) {
@@ -3786,9 +3792,15 @@ function switchTab(tabId, menuEl) {
         return;
     }
     if (typeof closeDoctorMobileNav === 'function') closeDoctorMobileNav();
-    document.querySelectorAll('.tab-pane').forEach((t) => t.classList.add('hidden'));
+    document.querySelectorAll('.content-area > .tab-pane').forEach((t) => {
+        t.classList.add('hidden');
+        t.setAttribute('hidden', 'hidden');
+        t.setAttribute('aria-hidden', 'true');
+    });
     document.querySelectorAll('.menu-item').forEach((m) => m.classList.remove('active'));
     pane.classList.remove('hidden');
+    pane.removeAttribute('hidden');
+    pane.setAttribute('aria-hidden', 'false');
     if (menuEl) {
         menuEl.classList.add('active');
     } else if (typeof event !== 'undefined' && event && event.currentTarget) {
@@ -3801,7 +3813,12 @@ function switchTab(tabId, menuEl) {
         });
     }
     const content = document.querySelector('.content-area');
-    if (content) content.scrollTop = 0;
+    if (content) {
+        content.scrollTop = 0;
+        requestAnimationFrame(() => {
+            content.scrollTop = 0;
+        });
+    }
     syncDoctorUpdatesPanel(tabId);
     if (tabId === 'tab-dashboard') {
         loadDoctorDashboardStats();
