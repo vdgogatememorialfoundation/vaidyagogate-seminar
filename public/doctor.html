@@ -11,7 +11,7 @@
     <title>Doctor's Portal | VGMF National Seminar</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="/css/responsive-portals.css?v=20260620layout3">
+    <link rel="stylesheet" href="/css/responsive-portals.css?v=20260620layout4">
     <link rel="stylesheet" href="/css/vgmf-portal-bright.css?v=20260620theme1">
     <link rel="stylesheet" href="/css/vgmf-mobile-portal.css">
     <style>
@@ -61,14 +61,10 @@
         
         .notification-bar { background: linear-gradient(90deg, #fffbeb, #fef9c3); border-left: 4px solid #d97706; padding: 10px 22px; color: #92400e; font-weight: 600; display: flex; align-items: center; gap: 10px; }
         .announcements-box { background: #fff; margin: 0 0 16px; padding: 18px 22px; border-radius: 14px; box-shadow: 0 8px 30px rgba(15, 118, 110, 0.06); border: 1px solid #ccfbf1; }
-        .announcements-box:not([data-doctor-updates-visible="1"]) { display: none !important; }
         #doctor-updates-holder { display: none !important; }
-        .content-area.content-compact-top { padding-top: 16px; }
+        #doctor-tab-store { display: none !important; }
         
-        .content-area { padding: 16px 28px 28px; overflow-y: auto; flex: 1; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; }
-        .content-area > .tab-pane { grid-row: 1; grid-column: 1; min-width: 0; }
-        .content-area > .tab-pane.hidden { display: none !important; visibility: hidden !important; height: 0 !important; overflow: hidden !important; margin: 0 !important; padding: 0 !important; pointer-events: none !important; }
-        .content-area > .tab-pane:not(.hidden) { display: block !important; visibility: visible !important; height: auto !important; overflow: visible !important; pointer-events: auto !important; }
+        .content-area { padding: 28px; overflow-y: auto; flex: 1; }
         .section-title { font-size: 1.45rem; color: var(--doctor-primary); margin-bottom: 18px; padding-bottom: 12px; border-bottom: 2px solid #99f6e4; font-weight: 800; letter-spacing: -0.02em; }
         .card { background: #fff; border-radius: 16px; padding: 24px; box-shadow: 0 10px 40px rgba(15, 118, 110, 0.07); margin-bottom: 22px; border: 1px solid #e2e8f0; }
         
@@ -356,9 +352,11 @@
                 </div>
             </div>
 
-            <div class="content-area content-compact-top">
+            <div class="content-area">
+                <div id="doctor-tab-viewport"></div>
+                <div id="doctor-tab-store" aria-hidden="true">
 
-                <div id="tab-dashboard" class="tab-pane">
+                <div id="tab-dashboard" class="tab-pane hidden">
                     <h2 class="section-title" data-i18n="doctor.section.dashboard">Dashboard</h2>
                     <div data-doctor-updates-anchor></div>
                     <p style="color: #64748b; margin: -10px 0 20px;">Overview of your seminar activity. Use <strong>Seminar feedback</strong> and <strong>Support tickets</strong> in the menu. Live chat is the chat button at the bottom right.</p>
@@ -850,6 +848,7 @@
                     </div>
                 </div>
 
+                </div>
             </div>
         </div>
     </div>
@@ -964,6 +963,6 @@
     <script src="/js/live-chat-client-info.js?v=20260610chat1"></script>
     <script src="/js/doctor-live-chat-widget.js?v=20260615live2"></script>
     <script src="/js/site-visitor-beacon.js?v=20260613radar6"></script>
-    <script src="/js/doctor.js?v=20260620layout3"></script>
+    <script src="/js/doctor.js?v=20260620layout4"></script>
 </body>
 </html>

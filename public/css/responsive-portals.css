@@ -299,30 +299,9 @@ body.doctor-nav-open {
     .content-area {
         padding: 14px !important;
         pointer-events: auto !important;
-        display: grid !important;
-        grid-template-columns: minmax(0, 1fr) !important;
-        align-content: start !important;
     }
-    .content-area > .tab-pane {
-        grid-row: 1;
-        grid-column: 1;
-        min-width: 0;
+    .tab-pane {
         pointer-events: auto;
-    }
-    .content-area > .tab-pane.hidden {
-        display: none !important;
-        visibility: hidden !important;
-        height: 0 !important;
-        overflow: hidden !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        pointer-events: none !important;
-    }
-    .content-area > .tab-pane:not(.hidden) {
-        display: block !important;
-        visibility: visible !important;
-        height: auto !important;
-        overflow: visible !important;
     }
     .data-table { font-size: 0.82rem; display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
     .stat-grid { grid-template-columns: 1fr 1fr !important; }
