@@ -985,19 +985,35 @@
                 </div>
                 <div class="card" style="margin-bottom:18px;border:1px solid #ddd6fe;background:#f5f3ff;">
                     <h3 style="margin:0 0 10px;color:#5b21b6;font-size:1.05rem;">Portal themes (main site, doctor, judge)</h3>
-                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:12px;">Primary colours and accents for each portal. Doctors and judges see changes after refresh.</p>
-                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;">
-                        <div><strong style="font-size:0.85rem;color:#0f766e;">Public site</strong>
-                            <label style="font-size:0.78rem;display:block;margin-top:8px;">Primary</label><input type="color" id="pt-public-primary" value="#0f766e" style="width:100%;height:36px;">
-                            <label style="font-size:0.78rem;display:block;margin-top:6px;">Accent (gold)</label><input type="color" id="pt-public-accent" value="#c9a227" style="width:100%;height:36px;">
+                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:12px;">Colours, text, sidebar, and fonts for each portal. Save here, then hard-refresh the public site / doctor / judge page to see changes.</p>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;">
+                        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px;">
+                            <strong style="font-size:0.85rem;color:#0f766e;">Public website</strong>
+                            <label style="font-size:0.78rem;display:block;margin-top:10px;">Primary (green)</label><input type="color" id="pt-public-primary" value="#0f766e" style="width:100%;height:36px;">
+                            <label style="font-size:0.78rem;display:block;margin-top:8px;">Accent (gold)</label><input type="color" id="pt-public-accent" value="#c9a227" style="width:100%;height:36px;">
+                            <label style="font-size:0.78rem;display:block;margin-top:8px;">Text colour</label><input type="color" id="pt-public-text" value="#0f172a" style="width:100%;height:36px;">
+                            <label style="font-size:0.78rem;display:block;margin-top:8px;">Page background</label><input type="color" id="pt-public-bg" value="#fafbfc" style="width:100%;height:36px;">
+                            <label style="font-size:0.78rem;display:block;margin-top:8px;">Body font</label><select id="pt-public-font" style="width:100%;padding:8px;margin-top:4px;"></select>
+                            <label style="font-size:0.78rem;display:block;margin-top:8px;">Heading font</label><select id="pt-public-font-display" style="width:100%;padding:8px;margin-top:4px;"></select>
                         </div>
-                        <div><strong style="font-size:0.85rem;color:#0f766e;">Doctor portal</strong>
-                            <label style="font-size:0.78rem;display:block;margin-top:8px;">Primary / sidebar</label><input type="color" id="pt-doctor-primary" value="#0f766e" style="width:100%;height:36px;">
-                            <label style="font-size:0.78rem;display:block;margin-top:6px;">Accent</label><input type="color" id="pt-doctor-accent" value="#fbbf24" style="width:100%;height:36px;">
+                        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px;">
+                            <strong style="font-size:0.85rem;color:#0f766e;">Doctor portal</strong>
+                            <label style="font-size:0.78rem;display:block;margin-top:10px;">Primary (buttons, titles)</label><input type="color" id="pt-doctor-primary" value="#0f766e" style="width:100%;height:36px;">
+                            <label style="font-size:0.78rem;display:block;margin-top:8px;">Sidebar background</label><input type="color" id="pt-doctor-sidebar" value="#0f766e" style="width:100%;height:36px;">
+                            <label style="font-size:0.78rem;display:block;margin-top:8px;">Sidebar text</label><input type="color" id="pt-doctor-sidebar-text" value="#ccfbf1" style="width:100%;height:36px;">
+                            <label style="font-size:0.78rem;display:block;margin-top:8px;">Accent (active menu)</label><input type="color" id="pt-doctor-accent" value="#fbbf24" style="width:100%;height:36px;">
+                            <label style="font-size:0.78rem;display:block;margin-top:8px;">Body text colour</label><input type="color" id="pt-doctor-text" value="#134e4a" style="width:100%;height:36px;">
+                            <label style="font-size:0.78rem;display:block;margin-top:8px;">Page background</label><input type="color" id="pt-doctor-bg" value="#f8fafc" style="width:100%;height:36px;">
+                            <label style="font-size:0.78rem;display:block;margin-top:8px;">Font</label><select id="pt-doctor-font" style="width:100%;padding:8px;margin-top:4px;"></select>
                         </div>
-                        <div><strong style="font-size:0.85rem;color:#5b21b6;">Judge portal</strong>
-                            <label style="font-size:0.78rem;display:block;margin-top:8px;">Primary</label><input type="color" id="pt-judge-primary" value="#7c3aed" style="width:100%;height:36px;">
-                            <label style="font-size:0.78rem;display:block;margin-top:6px;">Accent</label><input type="color" id="pt-judge-accent" value="#a78bfa" style="width:100%;height:36px;">
+                        <div style="background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px;">
+                            <strong style="font-size:0.85rem;color:#5b21b6;">Judge portal</strong>
+                            <label style="font-size:0.78rem;display:block;margin-top:10px;">Primary</label><input type="color" id="pt-judge-primary" value="#7c3aed" style="width:100%;height:36px;">
+                            <label style="font-size:0.78rem;display:block;margin-top:8px;">Accent</label><input type="color" id="pt-judge-accent" value="#a78bfa" style="width:100%;height:36px;">
+                            <label style="font-size:0.78rem;display:block;margin-top:8px;">Text colour</label><input type="color" id="pt-judge-text" value="#1e1b4b" style="width:100%;height:36px;">
+                            <label style="font-size:0.78rem;display:block;margin-top:8px;">Page background</label><input type="color" id="pt-judge-bg" value="#faf5ff" style="width:100%;height:36px;">
+                            <label style="font-size:0.78rem;display:block;margin-top:8px;">Body font</label><select id="pt-judge-font" style="width:100%;padding:8px;margin-top:4px;"></select>
+                            <label style="font-size:0.78rem;display:block;margin-top:8px;">Heading font</label><select id="pt-judge-font-display" style="width:100%;padding:8px;margin-top:4px;"></select>
                         </div>
                     </div>
                     <button type="button" class="btn-primary" style="margin-top:12px;background:#5b21b6;" onclick="savePortalThemesAdmin()">Save portal themes</button>
@@ -3388,6 +3404,6 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
-    <script src="/js/admin.js?v=20260620createsuccess1"></script>
+    <script src="/js/admin.js?v=20260620theme1"></script>
 </body>
 </html>

@@ -17563,19 +17563,75 @@ function themeColorInput(id, theme, key) {
     if (v && /^#[0-9a-f]{3,8}$/i.test(v)) el.value = v;
 }
 
+const PORTAL_THEME_FONT_OPTIONS = [
+    { value: "'Plus Jakarta Sans', system-ui, sans-serif", label: 'Plus Jakarta Sans' },
+    { value: "'Inter', system-ui, sans-serif", label: 'Inter' },
+    { value: "'DM Sans', system-ui, sans-serif", label: 'DM Sans' },
+    { value: "Georgia, 'Times New Roman', serif", label: 'Georgia (serif)' },
+    { value: "'Libre Baskerville', Georgia, serif", label: 'Libre Baskerville' },
+    { value: "'Fraunces', Georgia, serif", label: 'Fraunces' },
+    { value: 'system-ui, sans-serif', label: 'System UI' }
+];
+
+function initPortalThemeFontSelects() {
+    const ids = [
+        'pt-public-font',
+        'pt-public-font-display',
+        'pt-doctor-font',
+        'pt-judge-font',
+        'pt-judge-font-display'
+    ];
+    ids.forEach((id) => {
+        const sel = document.getElementById(id);
+        if (!sel || sel.options.length) return;
+        PORTAL_THEME_FONT_OPTIONS.forEach((opt) => {
+            const o = document.createElement('option');
+            o.value = opt.value;
+            o.textContent = opt.label;
+            sel.appendChild(o);
+        });
+    });
+}
+
+function themeFontSelect(id, theme, key) {
+    const el = document.getElementById(id);
+    if (!el || !theme) return;
+    const v = theme[key];
+    if (!v) return;
+    const match = Array.from(el.options).find((o) => o.value === v);
+    if (match) el.value = v;
+}
+
 async function loadPortalThemesAdminForm() {
+    initPortalThemeFontSelects();
     const adm = getStoredAdminUser();
     if (!adm || !adm.id) return;
     try {
         const res = await fetch(`/api/admin/portal-themes?actingAdminId=${encodeURIComponent(adm.id)}`);
         const d = await res.json();
         if (!d.success || !d.themes) return;
-        themeColorInput('pt-public-primary', d.themes.public, 'primary');
-        themeColorInput('pt-public-accent', d.themes.public, 'accent');
-        themeColorInput('pt-doctor-primary', d.themes.doctor, 'primary');
-        themeColorInput('pt-doctor-accent', d.themes.doctor, 'accent');
-        themeColorInput('pt-judge-primary', d.themes.judge, 'primary');
-        themeColorInput('pt-judge-accent', d.themes.judge, 'accent');
+        const pub = d.themes.public || {};
+        const doc = d.themes.doctor || {};
+        const jud = d.themes.judge || {};
+        themeColorInput('pt-public-primary', pub, 'primary');
+        themeColorInput('pt-public-accent', pub, 'accent');
+        themeColorInput('pt-public-text', pub, 'text');
+        themeColorInput('pt-public-bg', pub, 'background');
+        themeFontSelect('pt-public-font', pub, 'fontFamily');
+        themeFontSelect('pt-public-font-display', pub, 'fontDisplay');
+        themeColorInput('pt-doctor-primary', doc, 'primary');
+        themeColorInput('pt-doctor-sidebar', doc, 'sidebar');
+        themeColorInput('pt-doctor-sidebar-text', doc, 'sidebarText');
+        themeColorInput('pt-doctor-accent', doc, 'accent');
+        themeColorInput('pt-doctor-text', doc, 'text');
+        themeColorInput('pt-doctor-bg', doc, 'background');
+        themeFontSelect('pt-doctor-font', doc, 'fontFamily');
+        themeColorInput('pt-judge-primary', jud, 'primary');
+        themeColorInput('pt-judge-accent', jud, 'accent');
+        themeColorInput('pt-judge-text', jud, 'text');
+        themeColorInput('pt-judge-bg', jud, 'background');
+        themeFontSelect('pt-judge-font', jud, 'fontFamily');
+        themeFontSelect('pt-judge-font-display', jud, 'fontDisplay');
     } catch (_) {}
 }
 
@@ -17585,9 +17641,39 @@ async function savePortalThemesAdmin() {
     if (!adm || !adm.id) return;
     const pick = (id) => (document.getElementById(id) || {}).value || '';
     const themes = {
-        public: { primary: pick('pt-public-primary'), accent: pick('pt-public-accent') },
-        doctor: { primary: pick('pt-doctor-primary'), accent: pick('pt-doctor-accent'), sidebar: pick('pt-doctor-primary') },
-        judge: { primary: pick('pt-judge-primary'), accent: pick('pt-judge-accent'), primaryMid: pick('pt-judge-primary') }
+        public: {
+            primary: pick('pt-public-primary'),
+            primaryMid: pick('pt-public-primary'),
+            primaryDark: pick('pt-public-primary'),
+            accent: pick('pt-public-accent'),
+            text: pick('pt-public-text'),
+            background: pick('pt-public-bg'),
+            fontFamily: pick('pt-public-font'),
+            fontDisplay: pick('pt-public-font-display')
+        },
+        doctor: {
+            primary: pick('pt-doctor-primary'),
+            primaryDark: pick('pt-doctor-primary'),
+            sidebar: pick('pt-doctor-sidebar'),
+            sidebarDeep: pick('pt-doctor-sidebar'),
+            sidebarText: pick('pt-doctor-sidebar-text'),
+            sidebarTextMuted: pick('pt-doctor-sidebar-text'),
+            sidebarHeading: pick('pt-doctor-sidebar-text'),
+            accent: pick('pt-doctor-accent'),
+            text: pick('pt-doctor-text'),
+            background: pick('pt-doctor-bg'),
+            fontFamily: pick('pt-doctor-font')
+        },
+        judge: {
+            primary: pick('pt-judge-primary'),
+            primaryMid: pick('pt-judge-primary'),
+            primaryDark: pick('pt-judge-primary'),
+            accent: pick('pt-judge-accent'),
+            text: pick('pt-judge-text'),
+            background: pick('pt-judge-bg'),
+            fontFamily: pick('pt-judge-font'),
+            fontDisplay: pick('pt-judge-font-display')
+        }
     };
     try {
         const res = await fetch('/api/admin/portal-themes', {
@@ -17598,7 +17684,9 @@ async function savePortalThemesAdmin() {
         const data = await res.json();
         if (msg) {
             msg.style.color = data.success ? '#15803d' : '#b91c1c';
-            msg.textContent = data.success ? 'Portal themes saved.' : data.error || 'Save failed.';
+            msg.textContent = data.success
+                ? 'Portal themes saved. Hard-refresh the public site, doctor portal, and judge portal to see changes.'
+                : data.error || 'Save failed.';
         }
     } catch (e) {
         if (msg) {

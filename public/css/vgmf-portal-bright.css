@@ -1,4 +1,4 @@
-/* Bright portal theme — white headers, high-contrast accents */
+/* Bright portal theme — white headers, high-contrast accents (uses admin theme variables) */
 .portal-bright .top-header,
 .portal-bright .cg-header {
     background: #ffffff !important;
@@ -8,11 +8,11 @@
 
 .portal-bright .header-title,
 .portal-bright .top-header h2 {
-    color: #0f766e !important;
+    color: var(--doctor-primary, #0f766e) !important;
 }
 
 .portal-bright .btn-primary {
-    background: linear-gradient(135deg, #059669, #0d9488) !important;
+    background: linear-gradient(135deg, var(--doctor-primary, #059669), var(--doctor-primary-dark, #0d9488)) !important;
     color: #ffffff !important;
     border: none !important;
     box-shadow: 0 6px 18px rgba(13, 148, 136, 0.35) !important;
@@ -23,7 +23,7 @@
 }
 
 .portal-bright .section-title {
-    color: #0f766e !important;
+    color: var(--doctor-primary, #0f766e) !important;
     border-bottom-color: #5eead4 !important;
 }
 
@@ -32,15 +32,24 @@
 }
 
 .portal-bright .stat-card h4 {
-    color: #0f766e !important;
+    color: var(--doctor-primary, #0f766e) !important;
     font-weight: 800 !important;
 }
 
 .portal-bright .data-table th {
     background: #ecfdf5 !important;
-    color: #065f46 !important;
+    color: var(--doctor-primary-dark, #065f46) !important;
 }
 
 .portal-bright .data-table tr:hover td {
     background: #f0fdfa !important;
+}
+
+.portal-bright body,
+.portal-bright .content-area {
+    color: var(--doctor-text, #134e4a);
+}
+
+.portal-bright .hi-user {
+    color: var(--doctor-text, #134e4a) !important;
 }

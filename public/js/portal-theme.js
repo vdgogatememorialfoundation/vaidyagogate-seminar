@@ -4,20 +4,28 @@
 (function () {
     const MAP = {
         public: {
-            '--cg-green': 'primary',
+            '--cg-green': 'primaryDark',
             '--cg-green-mid': 'primaryMid',
             '--cg-green-dark': 'primaryDark',
             '--cg-gold': 'accent',
             '--cg-text': 'text',
-            '--cg-bg': 'background'
+            '--cg-ink': 'text',
+            '--cg-bg': 'background',
+            '--cg-font': 'fontFamily',
+            '--cg-display': 'fontDisplay'
         },
         doctor: {
             '--doctor-primary': 'primary',
             '--doctor-primary-dark': 'primaryDark',
             '--doctor-accent': 'accent',
             '--doctor-sidebar': 'sidebar',
+            '--doctor-sidebar-deep': 'sidebarDeep',
+            '--doctor-sidebar-text': 'sidebarText',
+            '--doctor-sidebar-text-muted': 'sidebarTextMuted',
+            '--doctor-sidebar-heading': 'sidebarHeading',
             '--doctor-bg': 'background',
-            '--doctor-text': 'text'
+            '--doctor-text': 'text',
+            '--doctor-font': 'fontFamily'
         },
         judge: {
             '--judge-primary': 'primary',
@@ -25,8 +33,24 @@
             '--judge-primary-dark': 'primaryDark',
             '--judge-accent': 'accent',
             '--judge-bg': 'background',
-            '--judge-text': 'text'
+            '--judge-text': 'text',
+            '--judge-font': 'fontFamily',
+            '--judge-font-display': 'fontDisplay'
         }
+    };
+
+    const JUDGE_BRIDGE = {
+        '--jp-emerald': 'primary',
+        '--jp-emerald-dark': 'primaryDark',
+        '--jp-emerald-deep': 'primaryDark',
+        '--jp-emerald-muted': 'primaryMid',
+        '--jp-gold': 'accent',
+        '--jp-bg': 'background',
+        '--jp-bg-accent': 'background',
+        '--jp-text': 'text',
+        '--jp-text-soft': 'text',
+        '--jp-font': 'fontFamily',
+        '--jp-display': 'fontDisplay'
     };
 
     function detectPortal() {
@@ -38,25 +62,45 @@
         return 'public';
     }
 
-    function applyTheme(portal, theme) {
-        const map = MAP[portal] || MAP.public;
-        const root = document.documentElement;
+    function setVars(root, theme, map) {
+        if (!theme) return;
         Object.keys(map).forEach((cssVar) => {
             const key = map[cssVar];
-            const val = theme && theme[key];
+            const val = theme[key];
             if (val) root.style.setProperty(cssVar, val);
         });
-        if (portal === 'doctor' && theme && theme.sidebar) {
-            const side = document.querySelector('.sidebar');
-            if (side) side.style.background = theme.sidebar;
+    }
+
+    function applyTheme(portal, theme) {
+        if (!theme) return;
+        const root = document.documentElement;
+        const body = document.body;
+        setVars(root, theme, MAP[portal] || MAP.public);
+
+        if (portal === 'public') {
+            if (theme.fontFamily && body) body.style.fontFamily = theme.fontFamily;
+            if (theme.text && body) body.style.color = theme.text;
+            if (theme.background && body) body.style.background = theme.background;
         }
-        if (portal === 'judge' && theme) {
-            if (theme.background) document.body.style.background = theme.background;
+
+        if (portal === 'doctor') {
+            setVars(root, theme, MAP.doctor);
+            if (theme.fontFamily && body) body.style.fontFamily = theme.fontFamily;
+            if (theme.text && body) body.style.color = theme.text;
             if (theme.primary) {
-                document.querySelectorAll('.btn-primary, .btn-submit').forEach((el) => {
-                    el.style.background = `linear-gradient(135deg, ${theme.primary}, ${theme.primaryMid || theme.primary})`;
-                });
+                root.style.setProperty('--doctor-primary', theme.primary);
             }
+            if (theme.sidebar) {
+                root.style.setProperty('--doctor-sidebar', theme.sidebar);
+            }
+        }
+
+        if (portal === 'judge') {
+            setVars(root, theme, MAP.judge);
+            setVars(root, theme, JUDGE_BRIDGE);
+            if (theme.fontFamily && body) body.style.fontFamily = theme.fontFamily;
+            if (theme.background && body) body.style.background = theme.background;
+            if (theme.text && body) body.style.color = theme.text;
         }
     }
 
