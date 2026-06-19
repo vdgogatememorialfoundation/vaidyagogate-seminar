@@ -15054,12 +15054,12 @@ function startBackgroundWorkers() {
         });
         db.get(`SELECT value FROM global_settings WHERE key = ?`, ['notification_templates_sync_v'], (eSync, row) => {
             if (eSync) return;
-            if (row && row.value === '20260528zeptoonly') return;
+            if (row && row.value === '20260619portallinks') return;
             notifEngine.syncDefaultNotificationTemplates(db, (syncErr) => {
                 if (syncErr) console.warn('[notifications] template sync failed:', syncErr.message);
                 else {
-                    upsertGlobalSetting('notification_templates_sync_v', '20260528zeptoonly', () => {
-                        console.log('[notifications] email templates synced (ZeptoMail-only routing)');
+                    upsertGlobalSetting('notification_templates_sync_v', '20260619portallinks', () => {
+                        console.log('[notifications] email templates synced (role-based portal links)');
                     });
                 }
             });
