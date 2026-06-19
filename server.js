@@ -9418,7 +9418,7 @@ app.get('/api/admin/users/:userId/detail', (req, res) => {
 
                         db.all(
                             `SELECT o.id, o.order_id_string, o.amount, o.status, o.payment_date, o.payment_gateway,
-                                    r.application_no, s.title AS seminar_title,
+                                    r.id AS registration_id, r.application_no, s.title AS seminar_title,
                                     t.ticket_id_string, t.is_scanned, t.scan_time,
                                     su.first_name AS scanned_by_first, su.last_name AS scanned_by_last, su.user_id_string AS scanned_by_id
                              FROM orders o
@@ -9453,6 +9453,16 @@ app.get('/api/admin/users/:userId/detail', (req, res) => {
                                                     if (certErr) {
                                                         console.warn('[admin] user_certificates:', certErr.message);
                                                     }
+                                                    db.get(
+                                                        `SELECT status, created_at, error, destination
+                                                         FROM notification_logs
+                                                         WHERE user_id = ? AND event_key = 'ACCOUNT_CREATED' AND channel = 'email'
+                                                         ORDER BY id DESC LIMIT 1`,
+                                                        [uid],
+                                                        (eWelLog, lastWelcomeEmail) => {
+                                                            if (eWelLog) {
+                                                                console.warn('[admin] welcome email log:', eWelLog.message);
+                                                            }
                                                     userClientTelemetry.getUserClientTelemetry(db, uid, (telErr, telemetry) => {
                                                         if (telErr) {
                                                             console.warn('[admin] user_client_telemetry:', telErr.message);
@@ -9469,6 +9479,7 @@ app.get('/api/admin/users/:userId/detail', (req, res) => {
                                                             clientTelemetry: (telemetry && telemetry.latest) || null,
                                                             clientTelemetryHistory:
                                                                 (telemetry && telemetry.history) || [],
+                                                            lastWelcomeEmail: lastWelcomeEmail || null,
                                                             certificatesError:
                                                                 certErr &&
                                                                 /user_certificates|certificate_templates/i.test(
@@ -9478,6 +9489,8 @@ app.get('/api/admin/users/:userId/detail', (req, res) => {
                                                                     : undefined
                                                         });
                                                     });
+                                                        }
+                                                    );
                                                 };
                                                 db.all(
                                                     `SELECT uc.*, s.title AS seminar_title, ct.file_path AS template_path
@@ -9530,7 +9543,7 @@ app.get('/api/admin/users/:userId/detail', (req, res) => {
 // Admin: set / reset user password
 app.post('/api/admin/users/:userId/password', (req, res) => {
     const uid = parseInt(req.params.userId, 10);
-    const { password, generate } = req.body || {};
+    const { password, generate, sendEmail, sendWhatsapp } = req.body || {};
     if (!Number.isInteger(uid) || uid < 1) return res.status(400).json({ error: 'Invalid user id' });
 
     let newPass = password != null ? String(password) : '';
@@ -9541,22 +9554,103 @@ app.post('/api/admin/users/:userId/password', (req, res) => {
     }
     if (newPass.length < 4) return res.status(400).json({ error: 'Password must be at least 4 characters' });
 
+    const emailRequested = sendEmail !== false;
+    const whatsappRequested = sendWhatsapp !== false;
+
     db.run(`UPDATE users SET password = ? WHERE id = ?`, [newPass, uid], function (err) {
         if (err) return res.status(500).json({ error: err.message });
         if (this.changes === 0) return res.status(404).json({ error: 'User not found' });
-        notifEngine.notify(
+        if (!emailRequested && !whatsappRequested) {
+            return res.json({ success: true, password: newPass });
+        }
+        notifEngine.sendAccountWelcomeEmail(
             db,
-            'ACCOUNT_CREATED',
             {
                 userId: uid,
-                vars: { temporary_password: newPass },
-                immediate: true
+                temporary_password: newPass,
+                sendWhatsapp: whatsappRequested,
+                skipEmail: !emailRequested
             },
-            () => {
-                flushNotificationQueue();
+            (welErr, welOut) => {
+                if (welErr) {
+                    return res.status(500).json({ error: welErr.message, password: newPass });
+                }
+                res.json({
+                    success: true,
+                    password: newPass,
+                    welcomeEmail: welOut && welOut.email,
+                    welcomeWhatsapp: welOut && welOut.whatsapp
+                });
             }
         );
-        res.json({ success: true, password: newPass });
+    });
+});
+
+// Admin: resend account welcome email (credentials + portal link)
+app.post('/api/admin/users/:userId/resend-welcome', (req, res) => {
+    const uid = parseInt(req.params.userId, 10);
+    const { sendWhatsapp, sendEmail, temporary_password } = req.body || {};
+    if (!Number.isInteger(uid) || uid < 1) return res.status(400).json({ error: 'Invalid user id' });
+
+    notifEngine.sendAccountWelcomeEmail(
+        db,
+        {
+            userId: uid,
+            temporary_password:
+                temporary_password != null && String(temporary_password).trim()
+                    ? String(temporary_password).trim()
+                    : undefined,
+            sendWhatsapp: sendWhatsapp !== false,
+            skipEmail: sendEmail === false
+        },
+        (err, out) => {
+            if (err) return res.status(500).json({ error: err.message });
+            const email = out && out.email;
+            const wa = out && out.whatsapp;
+            if (email && email.skipped && email.reason === 'no_valid_email') {
+                return res.status(400).json({
+                    error: email.message,
+                    email,
+                    whatsapp: wa
+                });
+            }
+            const ok = !!(email && email.ok) || !!(wa && (wa.ok || wa.queued));
+            res.json({
+                success: ok,
+                message:
+                    (email && email.message) ||
+                    (wa && wa.message) ||
+                    (out && out.message) ||
+                    'Done',
+                email,
+                whatsapp: wa
+            });
+        }
+    );
+});
+
+// Admin: resend email verification link
+app.post('/api/admin/users/:userId/resend-verification', (req, res) => {
+    const uid = parseInt(req.params.userId, 10);
+    if (!Number.isInteger(uid) || uid < 1) return res.status(400).json({ error: 'Invalid user id' });
+
+    queuePortalEmailVerification(db, uid, (err, out) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (out && out.skipped) {
+            const reason = out.reason || 'skipped';
+            let message = 'Verification email was not sent.';
+            if (reason === 'no_public_base_url') {
+                message = 'Public site URL is not configured — cannot build verification link.';
+            }
+            return res.json({
+                success: false,
+                skipped: true,
+                reason,
+                message
+            });
+        }
+        flushNotificationQueue();
+        res.json({ success: true, message: 'Verification email sent or queued.' });
     });
 });
 
@@ -10937,32 +11031,12 @@ app.post('/api/admin/users/create', (req, res) => {
                                         );
                                     }
                                 };
-                                applyMods();
-                                notifEngine.notify(
-                                    db,
-                                    'ACCOUNT_CREATED',
-                                    {
-                                        userId: newId,
-                                        vars: { temporary_password: finalPassword },
-                                        immediate: true
-                                    },
-                                    () => {
-                                        flushNotificationQueue();
-                                    }
-                                );
-                                designatedNotify.notifyDesignatedAccountCreated(
-                                    db,
-                                    newId,
-                                    { source: 'admin create user', temporary_password: finalPassword },
-                                    () => {
-                                        flushNotificationQueue();
-                                    }
-                                );
                                 const supportDeptId = parseInt(
                                     (req.body && req.body.supportDepartmentId) || '',
                                     10
                                 );
-                                const finishCreateResponse = () => {
+                                applyMods();
+                                const finishCreateResponse = (welcomeDelivery) => {
                                 res.json({
                                     success: true,
                                     verified: true,
@@ -10977,12 +11051,26 @@ app.post('/api/admin/users/create', (req, res) => {
                                         : 'staff',
                                     generatedPassword: finalPassword,
                                     isDemo: !!demoFlag,
+                                    welcomeEmail: welcomeDelivery && welcomeDelivery.email,
+                                    welcomeWhatsapp: welcomeDelivery && welcomeDelivery.whatsapp,
                                     loginHint:
                                         createKind === 'staff'
                                             ? 'Staff login: use this portal ID + password (same email as another account is allowed for testing).'
                                             : undefined
                                 });
                                 };
+                                const afterWelcomeEmail = (welErr, welOut) => {
+                                    if (welErr) {
+                                        console.warn('[admin create user] welcome email:', welErr.message);
+                                    }
+                                    designatedNotify.notifyDesignatedAccountCreated(
+                                        db,
+                                        newId,
+                                        { source: 'admin create user', temporary_password: finalPassword },
+                                        () => {
+                                            flushNotificationQueue();
+                                        }
+                                    );
                                 if (
                                     Number.isInteger(supportDeptId) &&
                                     ['support_agent', 'staff_user', 'co_admin'].includes(String(userRole).toLowerCase())
@@ -10993,7 +11081,7 @@ app.post('/api/admin/users/create', (req, res) => {
                                             `SELECT user_id FROM support_agent_profiles WHERE user_id = ?`,
                                             [newId],
                                             (pErr, pRow) => {
-                                                if (pErr) return finishCreateResponse();
+                                                if (pErr) return finishCreateResponse(welOut);
                                                 const saveProfile = pRow
                                                     ? db.run.bind(
                                                           db,
@@ -11005,12 +11093,22 @@ app.post('/api/admin/users/create', (req, res) => {
                                                           `INSERT INTO support_agent_profiles (user_id, department_id, is_available, live_chat_enabled, updated_at) VALUES (?, ?, 1, 1, CURRENT_TIMESTAMP)`,
                                                           [newId, supportDeptId]
                                                       );
-                                                saveProfile(() => finishCreateResponse());
+                                                saveProfile(() => finishCreateResponse(welOut));
                                             }
                                         );
                                     });
                                 }
-                                finishCreateResponse();
+                                finishCreateResponse(welOut);
+                                };
+                                notifEngine.sendAccountWelcomeEmail(
+                                    db,
+                                    {
+                                        userId: newId,
+                                        temporary_password: finalPassword,
+                                        sendWhatsapp: true
+                                    },
+                                    afterWelcomeEmail
+                                );
                             }
                         );
                     }

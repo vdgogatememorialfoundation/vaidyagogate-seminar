@@ -3787,7 +3787,6 @@ async function adminCreateUser() {
                 if (el) el.textContent = '';
             });
             const finalPassword = result.generatedPassword || customPass;
-            await sendCredentialsToNewUser(email, phone, firstName, result.user_id_string, finalPassword);
 
             const prev = document.getElementById('newuser-generated-preview');
             const prevText = document.getElementById('newuser-generated-text');
@@ -3825,8 +3824,17 @@ async function adminCreateUser() {
                             '\n\nPlease create the user again. If this repeats, check Render → DATABASE_URL (Neon).'
                     );
                 } else {
+                    let emailNote = '';
+                    if (result.welcomeEmail) {
+                        emailNote =
+                            '\n\nWelcome email: ' +
+                            (result.welcomeEmail.message ||
+                                (result.welcomeEmail.ok ? 'sent' : 'not sent'));
+                    } else if (result.welcomeWhatsapp && result.welcomeWhatsapp.ok) {
+                        emailNote = '\n\nWhatsApp welcome message sent.';
+                    }
                     alert(
-                        `User saved to database.\n\nPortal ID: ${verify.user.user_id_string}\nPassword: ${finalPassword}\nRole: ${userRole}\n\nListed under “${listName}”.`
+                        `User saved to database.\n\nPortal ID: ${verify.user.user_id_string}\nPassword: ${finalPassword}\nRole: ${userRole}\n\nListed under “${listName}”.${emailNote}`
                     );
                     adminApplyLookupMatch(verify.user, verify.accountList);
                 }
@@ -4249,6 +4257,52 @@ function renderAdminUserDetailTab() {
         return;
     }
 
+    if (__adminUserDetailTab === 'emails') {
+        const last = d.lastWelcomeEmail;
+        let lastLine = 'No welcome email logged yet.';
+        if (last) {
+            const when = last.created_at ? escAdmin(last.created_at) : '—';
+            const st = escAdmin(last.status || 'unknown');
+            const err = last.error ? ' — ' + escAdmin(last.error) : '';
+            lastLine = `Last welcome email: <strong>${st}</strong> to ${escAdmin(last.destination || u.email || '—')} at ${when}${err}`;
+        }
+        const emailOk = u.email && String(u.email).includes('@') && !/@pending\.local$/i.test(u.email);
+        const ticketOrders = (d.orders || []).filter((o) => o.ticket_id_string && String(o.status || '').toLowerCase() === 'success');
+        let ticketBtns = '';
+        ticketOrders.forEach((o) => {
+            ticketBtns +=
+                '<p style="margin:8px 0;"><span style="color:#64748b;font-size:0.88rem;">Ticket ' +
+                escAdmin(o.ticket_id_string) +
+                ' (' +
+                escAdmin(o.application_no || '') +
+                ')</span> ' +
+                '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.78rem;background:#0369a1;" onclick="adminResendTicketEmail(' +
+                o.registration_id +
+                ", '" +
+                String(o.ticket_id_string || '').replace(/'/g, "\\'") +
+                "', true, false)\">Resend ticket email</button> " +
+                '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.78rem;background:#0d9488;" onclick="adminResendTicketEmail(' +
+                o.registration_id +
+                ", '" +
+                String(o.ticket_id_string || '').replace(/'/g, "\\'") +
+                "', true, true)\">Email + WhatsApp</button></p>";
+        });
+        const unverified = Number(u.email_verified) !== 1;
+        body.innerHTML = `
+            <p style="margin-bottom:12px;color:#64748b;">Resend portal login details, verification links, and related messages.</p>
+            <p style="margin-bottom:16px;font-size:0.9rem;">${lastLine}</p>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+                <button type="button" class="btn-primary" ${emailOk ? '' : 'disabled title="No valid email on account"'} onclick="adminResendWelcomeEmail(${u.id}, true, false)">Resend welcome email</button>
+                <button type="button" class="btn-primary" style="background:#0d9488;" onclick="adminResendWelcomeEmail(${u.id}, true, true)">Welcome email + WhatsApp</button>
+                ${unverified ? `<button type="button" class="btn-primary" style="background:#7c3aed;" ${emailOk ? '' : 'disabled'} onclick="adminResendUserVerification(${u.id})">Resend email verification</button>` : ''}
+            </div>
+            <p id="admin-user-email-status" style="margin:12px 0;font-weight:600;"></p>
+            ${ticketOrders.length ? '<h4 style="margin:16px 0 8px;color:#0c4a6e;">E-ticket emails</h4>' + ticketBtns : ''}
+            <p style="margin-top:16px;font-size:0.85rem;color:#64748b;">Welcome emails include portal ID, password, and the correct login link for this role. Use the Password tab to set a new password and optionally email it.</p>
+        `;
+        return;
+    }
+
     if (__adminUserDetailTab === 'password') {
         body.innerHTML = `
             <p style="margin-bottom:12px;color:#64748b;">Set a custom password or generate a new one. The new value is shown once after save.</p>
@@ -4256,27 +4310,115 @@ function renderAdminUserDetailTab() {
             <div id="admin-pw-custom-wrap" style="display:none;margin:12px 0;">
                 <input type="text" id="admin-pw-custom" placeholder="Custom password" style="width:100%;max-width:320px;">
             </div>
+            <label style="display:block;margin:12px 0;"><input type="checkbox" id="admin-pw-send-email" checked> Email new password to user (welcome email)</label>
+            <label style="display:block;margin:0 0 12px;"><input type="checkbox" id="admin-pw-send-whatsapp" checked> Also send WhatsApp with login details</label>
             <button type="button" class="btn-primary" onclick="adminResetUserPassword(${u.id})">Save password</button>
             <p id="admin-pw-result" style="margin-top:12px;font-weight:600;"></p>
         `;
     }
 }
 
+async function adminResendWelcomeEmail(userId, sendEmail, sendWhatsapp) {
+    const statusEl =
+        document.getElementById('admin-user-email-status') ||
+        document.getElementById('admin-pw-result');
+    if (statusEl) {
+        statusEl.style.color = '#64748b';
+        statusEl.textContent = 'Sending welcome email…';
+    }
+    try {
+        const res = await fetch(`/api/admin/users/${userId}/resend-welcome`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sendEmail: !!sendEmail, sendWhatsapp: !!sendWhatsapp })
+        });
+        const data = await res.json();
+        const msg =
+            (data.email && data.email.message) ||
+            data.message ||
+            data.error ||
+            (data.success ? 'Sent.' : 'Could not send.');
+        if (statusEl) {
+            statusEl.style.color = data.success || (data.email && data.email.ok) ? '#15803d' : '#b91c1c';
+            statusEl.textContent = msg;
+        } else {
+            alert(msg);
+        }
+        if ((data.success || (data.email && data.email.ok)) && __adminUserDetailCache) {
+            __adminUserDetailCache.lastWelcomeEmail = {
+                status: 'sent',
+                created_at: new Date().toISOString(),
+                destination: data.email && data.email.destination
+            };
+        }
+    } catch (e) {
+        console.error(e);
+        if (statusEl) {
+            statusEl.style.color = '#b91c1c';
+            statusEl.textContent = 'Network error';
+        } else {
+            alert('Network error');
+        }
+    }
+}
+
+async function adminResendUserVerification(userId) {
+    const statusEl = document.getElementById('admin-user-email-status');
+    if (statusEl) {
+        statusEl.style.color = '#64748b';
+        statusEl.textContent = 'Sending verification email…';
+    }
+    try {
+        const res = await fetch(`/api/admin/users/${userId}/resend-verification`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+        const data = await res.json();
+        const msg = data.message || data.error || (data.success ? 'Sent.' : 'Not sent.');
+        if (statusEl) {
+            statusEl.style.color = data.success ? '#15803d' : '#b45309';
+            statusEl.textContent = msg;
+        } else {
+            alert(msg);
+        }
+    } catch (e) {
+        console.error(e);
+        if (statusEl) statusEl.textContent = 'Network error';
+        else alert('Network error');
+    }
+}
+
+window.adminResendWelcomeEmail = adminResendWelcomeEmail;
+window.adminResendUserVerification = adminResendUserVerification;
+
 async function adminResetUserPassword(userId) {
     const generate = document.getElementById('admin-pw-generate')?.checked;
     const custom = document.getElementById('admin-pw-custom')?.value || '';
+    const sendEmail = document.getElementById('admin-pw-send-email')?.checked !== false;
+    const sendWhatsapp = document.getElementById('admin-pw-send-whatsapp')?.checked !== false;
     try {
         const res = await fetch(`/api/admin/users/${userId}/password`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(generate ? { generate: true } : { password: custom })
+            body: JSON.stringify(
+                generate
+                    ? { generate: true, sendEmail, sendWhatsapp }
+                    : { password: custom, sendEmail, sendWhatsapp }
+            )
         });
         const data = await res.json();
         const el = document.getElementById('admin-pw-result');
         if (data.success) {
+            let extra = '';
+            if (data.welcomeEmail && data.welcomeEmail.message) {
+                extra = ' ' + data.welcomeEmail.message;
+            } else if (data.welcomeWhatsapp && data.welcomeWhatsapp.message) {
+                extra = ' ' + data.welcomeWhatsapp.message;
+            }
             if (el) {
                 el.style.color = '#15803d';
-                el.textContent = `New password: ${data.password}`;
+                el.textContent = `New password: ${data.password}${extra ? ' —' + extra : ''}`;
             }
             if (__adminUserDetailCache && __adminUserDetailCache.user) {
                 __adminUserDetailCache.user.password = data.password;
