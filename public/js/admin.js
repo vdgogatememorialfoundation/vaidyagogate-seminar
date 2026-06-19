@@ -2677,6 +2677,32 @@ let __behalfFormFields = [];
 let __behalfSelectedMethodId = '';
 let __behalfOrderDbId = null;
 let __behalfPollTimer = null;
+let __behalfCertPath = '';
+
+function adminBehalfDoctorFullName(u) {
+    if (!u) return 'Doctor';
+    return [u.first_name, u.middle_name, u.last_name].filter((x) => x != null && String(x).trim()).join(' ').trim() || 'Doctor';
+}
+
+function adminBehalfDoctorOptionLabel(u) {
+    const name = adminBehalfDoctorFullName(u);
+    const email = u.email ? String(u.email).trim() : '';
+    const portal = u.user_id_string ? String(u.user_id_string).trim() : '';
+    let label = name;
+    if (email) label += ' — ' + email;
+    if (portal) label += ' (' + portal + ')';
+    return label;
+}
+
+function adminBehalfCertificateHintHtml(path) {
+    if (!path) return '<span style="color:#64748b;">PDF or image (JPG, PNG). Required for PG / Practicing Vaidya / Practitioner.</span>';
+    const href = typeof publicFileHref === 'function' ? publicFileHref(path) : path;
+    return (
+        '<span style="color:#059669;">Certificate on file: <a href="' +
+        escAdmin(href) +
+        '" target="_blank" rel="noopener">View uploaded file</a></span>'
+    );
+}
 
 const ADMIN_BEHALF_FIELD_DEFAULTS = [
     { key: 'fname', label: 'First name', type: 'text', enabled: true, required: true },
@@ -2748,20 +2774,24 @@ function adminQualFromRegistrationFormData(raw) {
     }
 }
 
-function renderAdminBehalfFormFields() {
+function renderAdminBehalfFormFields(preservedData) {
     const host = document.getElementById('behalf-form-fields');
     if (!host) return;
+    const preserved = preservedData || collectAdminBehalfFormData();
+    if (preserved.certificate_path) __behalfCertPath = String(preserved.certificate_path);
     const fields = (__behalfFormFields || []).filter((f) => f.enabled !== false);
     if (!fields.length) {
         host.innerHTML = '<p class="muted" style="grid-column:1/-1;">No fields configured. Set them under Seminar registration form.</p>';
         return;
     }
-    const adv = adminBehalfNeedsAdvancedQual();
+    const qualVal = preserved.qual != null ? String(preserved.qual) : '';
+    const adv =
+        qualVal === 'PG' || qualVal === 'Practicing Vaidya' || qualVal === 'Practitioner' || adminBehalfNeedsAdvancedQual();
     let html = '';
     fields.forEach((f) => {
         if (f.key === 'certificate') return;
         if (f.onlyWhenAdvancedQual && !adv) return;
-        if (f.onlyWhenPgCollege && !adminQualIsPg((document.getElementById('behalf-f-qual') || {}).value)) return;
+        if (f.onlyWhenPgCollege && !adminQualIsPg(qualVal || preserved.qual)) return;
         const id = 'behalf-f-' + f.key;
         const req = f.required ? ' *' : '';
         const t = String(f.type || 'text').toLowerCase();
@@ -2794,9 +2824,40 @@ function renderAdminBehalfFormFields() {
         }
         html += '</div>';
     });
+    if (adv) {
+        html +=
+            '<div class="form-group" id="behalf-cert-wrap" style="grid-column:1/-1;"><label for="behalf-cert-file">Certificate upload (PDF or image) *</label>' +
+            '<input type="file" id="behalf-cert-file" accept=".pdf,.jpg,.jpeg,.png,.webp,image/*,application/pdf" style="width:100%;padding:8px;">' +
+            '<p id="behalf-cert-hint" style="font-size:0.82rem;margin-top:6px;">' +
+            adminBehalfCertificateHintHtml(__behalfCertPath) +
+            '</p></div>';
+    }
     host.innerHTML = html;
+    Object.keys(preserved || {}).forEach((k) => {
+        const el = document.getElementById('behalf-f-' + k);
+        if (!el || preserved[k] == null) return;
+        const t = el.type || '';
+        if (t === 'checkbox') {
+            el.checked = preserved[k] === true || preserved[k] === 1 || preserved[k] === '1';
+        } else {
+            el.value = preserved[k];
+        }
+    });
+    applyBehalfSelectedEvents(preserved);
     const qualEl = document.getElementById('behalf-f-qual');
-    if (qualEl) qualEl.addEventListener('change', () => renderAdminBehalfFormFields());
+    if (qualEl) {
+        qualEl.addEventListener('change', () => renderAdminBehalfFormFields(collectAdminBehalfFormData()));
+    }
+    const certInput = document.getElementById('behalf-cert-file');
+    if (certInput) {
+        certInput.addEventListener('change', () => {
+            const hint = document.getElementById('behalf-cert-hint');
+            if (hint && certInput.files && certInput.files[0]) {
+                hint.innerHTML =
+                    '<span style="color:#0369a1;">Selected: ' + escAdmin(certInput.files[0].name) + ' (uploads when you save)</span>';
+            }
+        });
+    }
     ['pin', 'cpin'].forEach((pk) => {
         const pel = document.getElementById('behalf-f-' + pk);
         if (pel) pel.addEventListener('blur', () => adminPincodeAutofill('behalf-f-', pk));
@@ -2870,9 +2931,11 @@ function applyBehalfSelectedEvents(formData) {
 function collectAdminBehalfFormData() {
     const o = { country: 'India' };
     const qual = (document.getElementById('behalf-f-qual') || {}).value;
+    const adv = adminBehalfNeedsAdvancedQual();
     const isPg = adminQualIsPg(qual);
     (__behalfFormFields || ADMIN_BEHALF_FIELD_DEFAULTS).forEach((f) => {
         if (f.key === 'certificate' || f.enabled === false) return;
+        if (f.onlyWhenAdvancedQual && !adv) return;
         if (f.onlyWhenPgCollege && !isPg) return;
         const el = document.getElementById('behalf-f-' + f.key);
         if (!el) return;
@@ -2883,6 +2946,7 @@ function collectAdminBehalfFormData() {
             o[f.key] = el.value;
         }
     });
+    if (__behalfCertPath) o.certificate_path = __behalfCertPath;
     const eventIds = getSelectedBehalfEventIds();
     if (eventIds.length) o.selected_event_ids = eventIds;
     return o;
@@ -3018,21 +3082,9 @@ async function onAdminBehalfDoctorOrSeminarChange() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Lookup failed');
         if (data.found && data.registration && data.registration.formData) {
-            (__behalfFormFields || []).forEach((f) => {
-                const el = document.getElementById('behalf-f-' + f.key);
-                if (el && data.registration.formData[f.key] != null) {
-                    const t = String(f.type || 'text').toLowerCase();
-                    if (t === 'boolean' || t === 'checkbox' || el.type === 'checkbox') {
-                        el.checked =
-                            data.registration.formData[f.key] === true ||
-                            data.registration.formData[f.key] === 1 ||
-                            data.registration.formData[f.key] === '1';
-                    } else {
-                        el.value = data.registration.formData[f.key];
-                    }
-                }
-            });
-            applyBehalfSelectedEvents(data.registration.formData);
+            const merged = Object.assign({}, data.registration.formData);
+            __behalfCertPath = merged.certificate_path ? String(merged.certificate_path) : '';
+            renderAdminBehalfFormFields(merged);
             syncBehalfJsonFromForm();
         } else if (Number.isInteger(docId) && docId > 0) {
             try {
@@ -3044,23 +3096,22 @@ async function onAdminBehalfDoctorOrSeminarChange() {
                 );
                 const pre = await preRes.json();
                 if (pre && pre.formData) {
+                    const merged = collectAdminBehalfFormData();
                     (__behalfFormFields || []).forEach((f) => {
-                        const el = document.getElementById('behalf-f-' + f.key);
-                        if (!el || pre.formData[f.key] == null || String(pre.formData[f.key]).trim() === '') return;
-                        if (String(el.value || '').trim()) return;
-                        const t = String(f.type || 'text').toLowerCase();
-                        if (t === 'boolean' || t === 'checkbox' || el.type === 'checkbox') {
-                            el.checked =
-                                pre.formData[f.key] === true ||
-                                pre.formData[f.key] === 1 ||
-                                pre.formData[f.key] === '1';
-                        } else {
-                            el.value = pre.formData[f.key];
-                        }
+                        if (pre.formData[f.key] == null || String(pre.formData[f.key]).trim() === '') return;
+                        if (merged[f.key] != null && String(merged[f.key]).trim() !== '') return;
+                        merged[f.key] = pre.formData[f.key];
                     });
+                    if (pre.formData.certificate_path) {
+                        merged.certificate_path = pre.formData.certificate_path;
+                        __behalfCertPath = String(pre.formData.certificate_path);
+                    }
+                    renderAdminBehalfFormFields(merged);
                     syncBehalfJsonFromForm();
                 }
             } catch (_) {}
+        } else {
+            __behalfCertPath = '';
         }
         refreshAdminBehalfWorkflow(data);
         if (summary) {
@@ -3082,11 +3133,7 @@ function chooseBehalfDoctorFromLookup(id) {
         const u = window.__adminUsersById[id];
         opt = document.createElement('option');
         opt.value = String(id);
-        opt.textContent =
-            [u.first_name || '', u.last_name || ''].join(' ').trim() +
-            ' (' +
-            (u.user_id_string || u.email || '#' + id) +
-            ')';
+        opt.textContent = adminBehalfDoctorOptionLabel(u);
         sel.appendChild(opt);
     }
     sel.value = val;
@@ -3127,20 +3174,23 @@ async function lookupBehalfDoctor() {
         }
         if (box) {
             box.innerHTML = docs
-                .map(
-                    (u) =>
-                        '<button type="button" class="btn-secondary" style="display:block;width:100%;text-align:left;margin:4px 0;padding:8px 10px;" onclick="chooseBehalfDoctorFromLookup(' +
+                .map((u) => {
+                    const name = adminBehalfDoctorFullName(u);
+                    const email = u.email ? String(u.email).trim() : '';
+                    const portal = u.user_id_string ? String(u.user_id_string).trim() : '';
+                    const phone = u.phone ? String(u.phone).trim() : '';
+                    return (
+                        '<button type="button" class="btn-secondary" style="display:block;width:100%;text-align:left;margin:4px 0;padding:10px 12px;" onclick="chooseBehalfDoctorFromLookup(' +
                         Number(u.id) +
-                        ')">' +
-                        escAdmin(
-                            [u.first_name || '', u.last_name || ''].join(' ').trim() +
-                                ' · ' +
-                                (u.user_id_string || '') +
-                                (u.email ? ' · ' + u.email : '') +
-                                (u.phone ? ' · ' + u.phone : '')
-                        ) +
-                        '</button>'
-                )
+                        ')"><strong>' +
+                        escAdmin(name) +
+                        '</strong><br><span style="font-size:0.82rem;color:#475569;">' +
+                        escAdmin(email || 'No email on file') +
+                        (portal ? ' · Portal ID ' + escAdmin(portal) : '') +
+                        (phone ? ' · ' + escAdmin(phone) : '') +
+                        '</span></button>'
+                    );
+                })
                 .join('');
         }
     } catch (e) {
@@ -3440,6 +3490,32 @@ async function flushBehalfRegistrationSave(manual) {
         if (manual) return alert('Verify applicant phone and email OTP before saving.');
         return;
     }
+    const certInput = document.getElementById('behalf-cert-file');
+    const certFile = certInput && certInput.files && certInput.files[0];
+    if (certFile && adminBehalfNeedsAdvancedQual()) {
+        const fd = new FormData();
+        fd.append('certificate', certFile);
+        fd.append('adminUserId', String(adm.id));
+        try {
+            const upRes = await fetch('/api/admin/registrations/certificate-upload', { method: 'POST', body: fd });
+            const upData = await upRes.json().catch(() => ({}));
+            if (!upRes.ok) {
+                if (st) st.textContent = upData.error || 'Certificate upload failed.';
+                if (manual) return alert(upData.error || 'Certificate upload failed.');
+                return;
+            }
+            if (upData.certificate_path) {
+                __behalfCertPath = upData.certificate_path;
+                formData.certificate_path = upData.certificate_path;
+            }
+        } catch (e) {
+            if (st) st.textContent = 'Certificate upload failed.';
+            if (manual) return alert('Certificate upload failed.');
+            return;
+        }
+    } else if (__behalfCertPath) {
+        formData.certificate_path = __behalfCertPath;
+    }
     if (st) st.textContent = 'Saving…';
     try {
         const res = await fetch('/api/admin/registrations/upsert', {
@@ -3471,7 +3547,12 @@ async function flushBehalfRegistrationSave(manual) {
                 if (!opt) {
                     opt = document.createElement('option');
                     opt.value = String(data.userId);
-                    opt.textContent = (data.userName || 'Doctor') + ' (' + data.userIdString + ')';
+                    opt.textContent = adminBehalfDoctorOptionLabel({
+                        first_name: (data.userName || '').split(' ')[0],
+                        last_name: (data.userName || '').split(' ').slice(1).join(' '),
+                        email: data.userEmail || '',
+                        user_id_string: data.userIdString
+                    });
                     sel.appendChild(opt);
                 }
                 sel.value = String(data.userId);
@@ -3496,9 +3577,13 @@ function initAdminBehalfRegTab() {
     Object.values(window.__adminUsersById || {}).forEach((u) => {
         const ur = String(u.user_role || '').toLowerCase();
         const r = String(u.role || '').toLowerCase();
-        if (ur === 'co_admin' || ur === 'judge_user' || ur === 'scanner_portal_user' || ur === 'venue_gate_user' || ur === 'reviewer') return;
-        if (r === 'admin' && ur !== 'doctor') return;
-        ds.innerHTML += `<option value="${u.id}">${u.first_name} ${u.last_name} (${u.user_id_string})</option>`;
+        if (ur !== 'doctor' && r !== 'doctor') return;
+        ds.innerHTML +=
+            '<option value="' +
+            u.id +
+            '">' +
+            escAdmin(adminBehalfDoctorOptionLabel(u)) +
+            '</option>';
     });
     if (prevDoc) ds.value = prevDoc;
     ss.innerHTML = '<option value="">— Select seminar —</option>';
@@ -9532,7 +9617,8 @@ function renderAdminDynamicFormFields(hostId, fields, prefix, existingData) {
     if (!host) return;
     __adminEditFormPrefix = prefix;
     __adminEditFormFields = fields || [];
-    const qual = String((existingData && existingData.qual) || '').trim();
+    const preserved = existingData || collectAdminDynamicFormData(prefix);
+    const qual = String((preserved && preserved.qual) || '').trim();
     const adv = seminarNeedsDocReview(qual);
     const isPg = adminQualIsPg(qual);
     const list = (__adminEditFormFields || []).filter((f) => f.enabled !== false);
@@ -9576,11 +9662,11 @@ function renderAdminDynamicFormFields(hostId, fields, prefix, existingData) {
     });
     html += '</div>';
     host.innerHTML = html;
-    list.forEach((f) => {
-        const el = document.getElementById(prefix + f.key);
-        if (!el || !existingData) return;
-        if (el.type === 'checkbox') el.checked = !!existingData[f.key] && existingData[f.key] !== '0';
-        else if (existingData[f.key] != null) el.value = existingData[f.key];
+    Object.keys(preserved || {}).forEach((k) => {
+        const el = document.getElementById(prefix + k);
+        if (!el || preserved[k] == null) return;
+        if (el.type === 'checkbox') el.checked = !!preserved[k] && preserved[k] !== '0';
+        else el.value = preserved[k];
     });
     const qualEl = document.getElementById(prefix + 'qual');
     if (qualEl) {
@@ -9598,9 +9684,10 @@ function collectAdminDynamicFormData(prefix) {
     const o = { country: 'India' };
     const qualEl = document.getElementById(prefix + 'qual');
     const qual = qualEl ? qualEl.value : '';
+    const adv = seminarNeedsDocReview(qual);
     (__adminEditFormFields || ADMIN_BEHALF_FIELD_DEFAULTS).forEach((f) => {
         if (f.key === 'certificate' || f.enabled === false) return;
-        if (f.onlyWhenAdvancedQual && !seminarNeedsDocReview(qual)) return;
+        if (f.onlyWhenAdvancedQual && !adv) return;
         if (f.onlyWhenPgCollege && !adminQualIsPg(qual)) return;
         const el = document.getElementById(prefix + f.key);
         if (!el) return;

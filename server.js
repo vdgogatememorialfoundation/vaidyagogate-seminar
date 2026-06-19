@@ -12263,6 +12263,24 @@ function resolveOrCreateBehalfDoctorUser(db, targetUserId, formData, cb) {
 }
 
 // Admin: create or update a registration on behalf of a doctor (admin-edited; distinct from doctor self-edit API)
+app.post('/api/admin/registrations/certificate-upload', withApplicationDocUpload, (req, res) => {
+    const aid = parseInt(req.body && req.body.adminUserId, 10);
+    if (!Number.isInteger(aid) || aid < 1) {
+        return res.status(400).json({ error: 'adminUserId is required' });
+    }
+    adminLiveEdit.assertAdminAccess(db, aid, (eAdm, admResult) => {
+        if (eAdm) return res.status(500).json({ error: eAdm.message });
+        if (!admResult || !admResult.ok) {
+            return res.status(403).json({ error: (admResult && admResult.error) || 'Forbidden' });
+        }
+        persistUploadedCertificate(req, (certErr, certPath) => {
+            if (certErr) return res.status(500).json({ error: certErr.message });
+            if (!certPath) return res.status(400).json({ error: 'No certificate file received.' });
+            res.json({ success: true, certificate_path: certPath });
+        });
+    });
+});
+
 app.post('/api/admin/registrations/upsert', (req, res) => {
     const {
         targetUserId,
