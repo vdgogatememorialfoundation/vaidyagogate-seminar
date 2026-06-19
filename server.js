@@ -8642,7 +8642,7 @@ app.get('/api/admin/seminars/:id/applications', (req, res) => {
 });
 
 // Admin: Get all applications
-app.get('/api/admin/applications', (req, res) => {
+app.get('/api/admin/applications', withApplicationReviewSchema, (req, res) => {
     db.all(`
         SELECT a.id, a.application_no, a.status, a.form_data, a.doc_review_json, a.created_at, a.seminar_id,
                a.review_required_level, a.review_escalated_at, a.review_escalated_by, a.review_escalation_json,
@@ -8831,8 +8831,16 @@ app.post('/api/admin/applications/:applicationId/document-verify', (req, res) =>
 
 const appEscalation = require('./lib/application-escalation');
 const appAuthority = require('./lib/application-authority');
+const appReviewerSchema = require('./lib/application-reviewer-schema');
 
-app.post('/api/admin/applications/:applicationId/escalate', (req, res) => {
+function withApplicationReviewSchema(req, res, next) {
+    appReviewerSchema.ensureApplicationReviewerSchema(db, ignoreSchemaMigrationErr, (err) => {
+        if (err) console.warn('[application-review-schema]', err.message);
+        next();
+    });
+}
+
+app.post('/api/admin/applications/:applicationId/escalate', withApplicationReviewSchema, (req, res) => {
     const note = String((req.body && req.body.note) || '').trim();
     const actingAdminId =
         req.body && req.body.actingAdminId != null ? parseInt(req.body.actingAdminId, 10) : null;
@@ -8868,14 +8876,14 @@ app.post('/api/admin/applications/:applicationId/escalate', (req, res) => {
     );
 });
 
-app.get('/api/admin/application-reviewers', (req, res) => {
+app.get('/api/admin/application-reviewers', withApplicationReviewSchema, (req, res) => {
     appEscalation.listApplicationReviewers(db, (err, reviewers) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ reviewers: reviewers || [] });
     });
 });
 
-app.post('/api/admin/application-reviewers/:userId', (req, res) => {
+app.post('/api/admin/application-reviewers/:userId', withApplicationReviewSchema, (req, res) => {
     const uid = parseInt(req.params.userId, 10);
     if (!Number.isInteger(uid) || uid < 1) return res.status(400).json({ error: 'Invalid user id' });
     appEscalation.saveApplicationReviewerProfile(db, uid, req.body || {}, (err, result) => {
