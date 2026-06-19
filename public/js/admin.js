@@ -3676,6 +3676,273 @@ function copyNewUserGeneratedPassword() {
     navigator.clipboard.writeText(t).then(() => alert('Password copied.')).catch(() => alert(t));
 }
 
+const ADMIN_CREATED_ROLE_LABELS = {
+    doctor: 'Doctor / medical professional',
+    judge_user: 'Judge',
+    co_admin: 'Co-administrator',
+    scanner_portal_user: 'Scanner portal',
+    scanner_dashboard_user: 'Live scanner dashboard',
+    venue_gate_user: 'Venue gate',
+    book_sales_staff: 'Book sales staff',
+    staff_user: 'Staff user',
+    reviewer: 'Reviewer',
+    support_agent: 'Support agent'
+};
+
+function adminCreatedRoleLabel(role) {
+    const k = String(role || '').trim().toLowerCase();
+    return ADMIN_CREATED_ROLE_LABELS[k] || k || 'User';
+}
+
+function resolveAdminCreatedUserPortal(userRole) {
+    const ur = String(userRole || 'doctor').trim().toLowerCase();
+    const base = String(window.location.origin || '').replace(/\/$/, '');
+    const staff = {
+        path: '/staff/login',
+        name: 'Staff portal',
+        hint: 'Sign in with portal ID and password, then change password after first login.'
+    };
+    const map = {
+        doctor: {
+            path: '/doctor',
+            name: 'Doctor portal',
+            hint: 'Sign in with email and password. Seminar registration and payments are in the doctor portal.'
+        },
+        judge_user: {
+            path: '/judge',
+            name: 'Judge portal',
+            hint: 'Sign in to review and score case presentations assigned to this judge.'
+        },
+        reviewer: {
+            path: '/judge',
+            name: 'Judge portal',
+            hint: 'Sign in at the judge portal to review assigned cases.'
+        },
+        scanner_portal_user: {
+            path: '/scanner',
+            name: 'Scanner portal',
+            hint: 'Sign in to scan e-tickets and manage venue check-in.'
+        },
+        scanner_dashboard_user: {
+            path: '/scanner',
+            name: 'Scanner portal',
+            hint: 'Sign in for the live scanner dashboard.'
+        },
+        venue_gate_user: {
+            path: '/scanner',
+            name: 'Scanner portal',
+            hint: 'Sign in for venue gate check-in.'
+        },
+        co_admin: {
+            path: '/staff/login',
+            name: 'Staff portal (co-admin)',
+            hint: 'Co-admins sign in at the staff portal. Open Staff CRM after login for full administration.'
+        },
+        book_sales_staff: {
+            path: '/staff/login',
+            name: 'Staff portal (book sales)',
+            hint: 'Sign in to manage book inventory and orders.'
+        },
+        staff_user: staff,
+        support_agent: {
+            path: '/support',
+            name: 'Support portal',
+            hint: 'Sign in to handle support tickets and live chat.'
+        }
+    };
+    const p = map[ur] || map.doctor;
+    return { ...p, url: base + p.path };
+}
+
+function adminDeliveryStatusHtml(label, status) {
+    if (!status) return '';
+    const ok = !!(status.ok || status.sent);
+    const skipped = !!status.skipped;
+    const color = ok ? '#15803d' : skipped ? '#b45309' : '#b91c1c';
+    const icon = ok ? 'fa-check-circle' : skipped ? 'fa-info-circle' : 'fa-exclamation-circle';
+    const msg =
+        status.message ||
+        (ok ? 'Sent successfully.' : skipped ? 'Skipped.' : 'Not sent.');
+    return (
+        '<p style="margin:0 0 8px;font-size:0.88rem;color:' +
+        color +
+        ';display:flex;align-items:flex-start;gap:8px;line-height:1.45;">' +
+        '<i class="fas ' +
+        icon +
+        '" style="margin-top:2px;"></i><span><strong>' +
+        escAdmin(label) +
+        ':</strong> ' +
+        escAdmin(msg) +
+        '</span></p>'
+    );
+}
+
+let __adminLastCreatedUser = null;
+
+function showAdminCreateUserSuccessModal(payload) {
+    __adminLastCreatedUser = payload || null;
+    const modal = document.getElementById('admin-create-user-success-modal');
+    if (!modal || !payload) return;
+
+    const portal = resolveAdminCreatedUserPortal(payload.userRole);
+    const isWarning = payload.variant === 'warning';
+    const icon = document.getElementById('acus-icon');
+    if (icon) {
+        icon.style.background = isWarning ? '#fffbeb' : '#ecfdf5';
+        icon.style.color = isWarning ? '#b45309' : '#059669';
+        icon.innerHTML = isWarning
+            ? '<i class="fas fa-exclamation-triangle" aria-hidden="true"></i>'
+            : '<i class="fas fa-check" aria-hidden="true"></i>';
+    }
+
+    const title = document.getElementById('acus-title');
+    if (title) title.textContent = isWarning ? 'Account saved — please verify' : 'Account created';
+
+    const sub = document.getElementById('acus-subtitle');
+    if (sub) {
+        const name = [payload.firstName, payload.lastName].filter(Boolean).join(' ').trim();
+        sub.textContent = isWarning
+            ? payload.warningMessage ||
+              'The account was created but could not be confirmed in the database. Save these credentials before closing.'
+            : name
+              ? name + ' can now sign in to the ' + portal.name.toLowerCase() + '.'
+              : 'The new account is ready. Share login details with the user.';
+    }
+
+    const setText = (id, val) => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = val != null && val !== '' ? String(val) : '—';
+    };
+    setText('acus-portal-id', payload.portalId);
+    setText('acus-email', payload.email);
+    setText('acus-password', payload.password);
+    setText('acus-role', adminCreatedRoleLabel(payload.userRole));
+
+    const link = document.getElementById('acus-portal-link');
+    if (link) {
+        link.href = portal.url;
+        link.textContent = portal.name + ' → ' + portal.path;
+    }
+    const hint = document.getElementById('acus-portal-hint');
+    if (hint) hint.textContent = portal.hint;
+
+    const listLine = document.getElementById('acus-list-line');
+    if (listLine) {
+        listLine.textContent = payload.listName
+            ? 'Listed under “' + payload.listName + '” in admin.'
+            : '';
+    }
+
+    const delivery = document.getElementById('acus-delivery-wrap');
+    if (delivery) {
+        let html = '';
+        if (payload.welcomeEmail) html += adminDeliveryStatusHtml('Welcome email', payload.welcomeEmail);
+        if (payload.welcomeWhatsapp) html += adminDeliveryStatusHtml('WhatsApp', payload.welcomeWhatsapp);
+        if (!html && !isWarning) {
+            html =
+                '<p style="margin:0;font-size:0.85rem;color:#64748b;">Welcome message delivery status was not returned by the server.</p>';
+        }
+        delivery.innerHTML = html;
+    }
+
+    const resendBtn = document.getElementById('acus-resend-btn');
+    if (resendBtn) {
+        const emailFailed =
+            payload.welcomeEmail &&
+            !payload.welcomeEmail.ok &&
+            !payload.welcomeEmail.skipped;
+        const noEmail =
+            payload.welcomeEmail &&
+            payload.welcomeEmail.skipped &&
+            payload.welcomeEmail.reason === 'no_valid_email';
+        resendBtn.style.display = payload.userId && !noEmail ? '' : 'none';
+        resendBtn.textContent = emailFailed ? 'Retry welcome email' : 'Resend welcome email';
+    }
+
+    modal.classList.remove('hidden');
+}
+
+function closeAdminCreateUserSuccessModal() {
+    const modal = document.getElementById('admin-create-user-success-modal');
+    if (modal) modal.classList.add('hidden');
+}
+
+function adminCopyCreatedUserField(field) {
+    const p = __adminLastCreatedUser;
+    if (!p) return;
+    let text = '';
+    if (field === 'portalId') text = p.portalId || '';
+    else if (field === 'password') text = p.password || '';
+    if (!text) return;
+    navigator.clipboard.writeText(text).catch(() => alert(text));
+}
+
+function adminCopyCreatedUserCredentials() {
+    const p = __adminLastCreatedUser;
+    if (!p) return;
+    const portal = resolveAdminCreatedUserPortal(p.userRole);
+    const block =
+        'Portal user ID: ' +
+        (p.portalId || '—') +
+        '\nEmail: ' +
+        (p.email || '—') +
+        '\nPassword: ' +
+        (p.password || '—') +
+        '\nRole: ' +
+        adminCreatedRoleLabel(p.userRole) +
+        '\nLogin: ' +
+        portal.url;
+    navigator.clipboard.writeText(block).then(() => alert('Credentials copied to clipboard.')).catch(() => alert(block));
+}
+
+function adminOpenCreatedUserDetail() {
+    const p = __adminLastCreatedUser;
+    closeAdminCreateUserSuccessModal();
+    if (p && p.userId) openAdminUserDetail(p.userId);
+}
+
+async function adminResendWelcomeFromSuccessModal() {
+    const p = __adminLastCreatedUser;
+    if (!p || !p.userId) return;
+    const btn = document.getElementById('acus-resend-btn');
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Sending…';
+    }
+    try {
+        const res = await fetch('/api/admin/users/' + p.userId + '/resend-welcome', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sendEmail: true, sendWhatsapp: true })
+        });
+        const data = await res.json();
+        if (data.email) p.welcomeEmail = data.email;
+        if (data.whatsapp) p.welcomeWhatsapp = data.whatsapp;
+        const delivery = document.getElementById('acus-delivery-wrap');
+        if (delivery) {
+            let html = '';
+            if (p.welcomeEmail) html += adminDeliveryStatusHtml('Welcome email', p.welcomeEmail);
+            if (p.welcomeWhatsapp) html += adminDeliveryStatusHtml('WhatsApp', p.welcomeWhatsapp);
+            delivery.innerHTML = html;
+        }
+        if (!res.ok && data.error) alert(data.error);
+    } catch (e) {
+        console.error(e);
+        alert('Could not resend welcome email.');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = 'Resend welcome email';
+        }
+    }
+}
+
+window.closeAdminCreateUserSuccessModal = closeAdminCreateUserSuccessModal;
+window.adminCopyCreatedUserField = adminCopyCreatedUserField;
+window.adminCopyCreatedUserCredentials = adminCopyCreatedUserCredentials;
+window.adminOpenCreatedUserDetail = adminOpenCreatedUserDetail;
+window.adminResendWelcomeFromSuccessModal = adminResendWelcomeFromSuccessModal;
+
 async function adminCreateUser() {
     const firstName = document.getElementById('newuser-first').value.trim();
     const lastName = document.getElementById('newuser-last').value.trim();
@@ -3755,6 +4022,13 @@ async function adminCreateUser() {
         if (Number.isInteger(deptId)) data.supportDepartmentId = deptId;
     }
 
+    const submitBtn = document.getElementById('newuser-submit-btn');
+    const submitBtnLabel = submitBtn ? submitBtn.textContent : '';
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Creating account…';
+    }
+
     try {
         const res = await fetch('/api/admin/users/create', {
             method: 'POST',
@@ -3790,10 +4064,8 @@ async function adminCreateUser() {
 
             const prev = document.getElementById('newuser-generated-preview');
             const prevText = document.getElementById('newuser-generated-text');
-            if (prev && prevText) {
-                prevText.textContent = finalPassword;
-                prev.style.display = 'block';
-            }
+            if (prev) prev.style.display = 'none';
+            if (prevText) prevText.textContent = '';
 
             const staffAccount =
                 result.accountList === 'staff' || isStaffUserRoleClient(userRole);
@@ -3810,41 +4082,54 @@ async function adminCreateUser() {
             document.getElementById('newuser-email').value = '';
             document.getElementById('newuser-phone').value = '';
             if (document.getElementById('newuser-pass')) document.getElementById('newuser-pass').value = '';
+            const demoChk = document.getElementById('newuser-is-demo');
+            if (demoChk) demoChk.checked = false;
             await loadUsers();
+
+            const successPayload = {
+                userId: result.userId,
+                portalId: result.user_id_string || '',
+                email,
+                phone,
+                password: finalPassword,
+                userRole,
+                firstName,
+                lastName,
+                listName,
+                welcomeEmail: result.welcomeEmail,
+                welcomeWhatsapp: result.welcomeWhatsapp
+            };
+
             try {
                 const verifyRes = await fetch(
                     '/api/admin/users/lookup?q=' + encodeURIComponent(result.user_id_string || '')
                 );
                 const verify = await verifyRes.json();
                 if (!verify.found) {
-                    alert(
-                        'Warning: The server could not confirm this account in the database.\n\n' +
-                            'Portal ID: ' +
-                            (result.user_id_string || '—') +
-                            '\n\nPlease create the user again. If this repeats, check Render → DATABASE_URL (Neon).'
+                    showAdminCreateUserSuccessModal(
+                        Object.assign({}, successPayload, {
+                            variant: 'warning',
+                            warningMessage:
+                                'Account may not be visible in the list yet. Save these credentials. If this repeats, check DATABASE_URL on Render (Neon).'
+                        })
                     );
                 } else {
-                    let emailNote = '';
-                    if (result.welcomeEmail) {
-                        emailNote =
-                            '\n\nWelcome email: ' +
-                            (result.welcomeEmail.message ||
-                                (result.welcomeEmail.ok ? 'sent' : 'not sent'));
-                    } else if (result.welcomeWhatsapp && result.welcomeWhatsapp.ok) {
-                        emailNote = '\n\nWhatsApp welcome message sent.';
-                    }
-                    alert(
-                        `User saved to database.\n\nPortal ID: ${verify.user.user_id_string}\nPassword: ${finalPassword}\nRole: ${userRole}\n\nListed under “${listName}”.${emailNote}`
-                    );
+                    successPayload.portalId = verify.user.user_id_string || successPayload.portalId;
+                    successPayload.userId = verify.user.id || successPayload.userId;
+                    showAdminCreateUserSuccessModal(successPayload);
                     adminApplyLookupMatch(verify.user, verify.accountList);
                 }
             } catch (_) {
-                alert(
-                    `User created (unverified).\n\nPortal ID: ${result.user_id_string}\nPassword: ${finalPassword}`
+                showAdminCreateUserSuccessModal(
+                    Object.assign({}, successPayload, {
+                        variant: 'warning',
+                        warningMessage:
+                            'Account created but could not be verified over the network. Save these credentials.'
+                    })
                 );
                 switchTab(staffAccount ? 'tab-staff-users' : 'tab-doctors');
                 window.__highlightAdminUserId = result.userId;
-            loadUsers();
+                loadUsers();
             }
         } else {
             alert('Error: ' + result.error);
@@ -3852,6 +4137,11 @@ async function adminCreateUser() {
     } catch (err) {
         console.error(err);
         alert('Error creating user');
+    } finally {
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = submitBtnLabel || 'Create Account & Send Credentials';
+        }
     }
 }
 

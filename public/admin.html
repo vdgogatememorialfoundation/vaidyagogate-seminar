@@ -2973,7 +2973,55 @@
                         <span id="cau-sens-phone-ok" style="font-size:0.78rem;color:#059669;"></span>
                     </div>
                 </div>
-                <button class="btn-primary" style="margin-top: 15px;" onclick="adminCreateUser()">Create Account &amp; Send Credentials</button>
+                <button type="button" id="newuser-submit-btn" class="btn-primary" style="margin-top: 15px;" onclick="adminCreateUser()">Create Account &amp; Send Credentials</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin: account created success -->
+    <div id="admin-create-user-success-modal" class="hidden admin-modal-overlay" style="z-index:10005;">
+        <div class="admin-modal-panel admin-modal-panel--medium" style="text-align:center;">
+            <div id="acus-icon" style="width:56px;height:56px;margin:0 auto 14px;border-radius:50%;background:#ecfdf5;color:#059669;display:flex;align-items:center;justify-content:center;font-size:1.45rem;">
+                <i class="fas fa-check" aria-hidden="true"></i>
+            </div>
+            <h2 id="acus-title" style="color:#0c4a6e;margin-bottom:6px;font-size:1.25rem;">Account created</h2>
+            <p id="acus-subtitle" style="color:#64748b;font-size:0.9rem;line-height:1.5;margin-bottom:16px;"></p>
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px;text-align:left;font-size:0.9rem;margin-bottom:14px;">
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px;">
+                    <div style="min-width:0;">
+                        <span style="display:block;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:#64748b;">Portal user ID</span>
+                        <strong id="acus-portal-id" style="color:#0f172a;word-break:break-all;"></strong>
+                    </div>
+                    <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.75rem;background:#64748b;flex-shrink:0;" onclick="adminCopyCreatedUserField('portalId')">Copy</button>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <span style="display:block;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:#64748b;">Email</span>
+                    <span id="acus-email" style="color:#0f172a;word-break:break-all;"></span>
+                </div>
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:12px;">
+                    <div style="min-width:0;">
+                        <span style="display:block;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:#64748b;">Temporary password</span>
+                        <code id="acus-password" style="color:#0f172a;font-size:0.95rem;word-break:break-all;"></code>
+                    </div>
+                    <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.75rem;background:#64748b;flex-shrink:0;" onclick="adminCopyCreatedUserField('password')">Copy</button>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <span style="display:block;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:#64748b;">Role</span>
+                    <span id="acus-role" style="color:#0f172a;"></span>
+                </div>
+                <div>
+                    <span style="display:block;font-size:0.72rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:#64748b;">Login portal</span>
+                    <a id="acus-portal-link" href="#" target="_blank" rel="noopener" style="color:#0d9488;font-weight:700;word-break:break-all;"></a>
+                    <p id="acus-portal-hint" style="font-size:0.82rem;color:#64748b;margin:6px 0 0;line-height:1.45;"></p>
+                </div>
+            </div>
+            <p id="acus-list-line" style="font-size:0.85rem;color:#475569;margin-bottom:10px;"></p>
+            <div id="acus-delivery-wrap" style="text-align:left;margin-bottom:16px;"></div>
+            <div style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;">
+                <button type="button" class="btn-primary" style="background:#64748b;" onclick="adminCopyCreatedUserCredentials()">Copy all credentials</button>
+                <button type="button" class="btn-primary" style="background:#0369a1;" onclick="adminOpenCreatedUserDetail()">View account</button>
+                <button type="button" id="acus-resend-btn" class="btn-primary" style="background:#0d9488;" onclick="adminResendWelcomeFromSuccessModal()">Resend welcome email</button>
+                <button type="button" class="btn-primary" onclick="closeAdminCreateUserSuccessModal()">Done</button>
             </div>
         </div>
     </div>
@@ -3340,6 +3388,6 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
-    <script src="/js/admin.js?v=20260620desktopform1"></script>
+    <script src="/js/admin.js?v=20260620createsuccess1"></script>
 </body>
 </html>
