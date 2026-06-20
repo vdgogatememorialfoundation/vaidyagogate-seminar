@@ -7715,6 +7715,65 @@ async function processPayment(appId, amount, appNo, paymentOption, cancelPending
 
 window.processPayment = processPayment;
 
+async function downloadDoctorCertificatePdfFromTemplateHtml(downloadUrl, filename) {
+    const res = await fetch(downloadUrl, { credentials: 'same-origin', cache: 'no-store' });
+    if (!res.ok) throw new Error('Could not load certificate template');
+    const html = await res.text();
+    if (!html || html.indexOf('cert-page') < 0) throw new Error('Invalid certificate HTML');
+
+    const host = document.createElement('div');
+    host.setAttribute('aria-hidden', 'true');
+    host.style.cssText =
+        'position:fixed;left:-12000px;top:0;width:1123px;height:794px;overflow:hidden;pointer-events:none;opacity:1;z-index:-1;';
+    const iframe = document.createElement('iframe');
+    iframe.setAttribute('title', 'Certificate PDF render');
+    iframe.style.cssText = 'width:1123px;height:794px;border:0;background:#fff;';
+    host.appendChild(iframe);
+    document.body.appendChild(host);
+
+    try {
+        await new Promise((resolve, reject) => {
+            const timer = setTimeout(resolve, 1800);
+            iframe.onload = async () => {
+                try {
+                    const idoc = iframe.contentDocument;
+                    if (idoc && idoc.fonts && idoc.fonts.ready) await idoc.fonts.ready;
+                } catch (_) {}
+                clearTimeout(timer);
+                setTimeout(resolve, 500);
+            };
+            iframe.onerror = () => {
+                clearTimeout(timer);
+                reject(new Error('Certificate render frame failed'));
+            };
+            iframe.srcdoc = html;
+        });
+
+        const idoc = iframe.contentDocument;
+        const target = (idoc && (idoc.querySelector('.cert-page') || idoc.body)) || null;
+        if (!target) throw new Error('Certificate layout not found');
+        if (typeof html2canvas !== 'function') throw new Error('PDF renderer unavailable');
+
+        const canvas = await html2canvas(target, {
+            scale: 2,
+            useCORS: true,
+            allowTaint: true,
+            backgroundColor: '#ffffff',
+            logging: false,
+            width: target.scrollWidth || target.offsetWidth || 1123,
+            height: target.scrollHeight || target.offsetHeight || 794
+        });
+
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+        const imgData = canvas.toDataURL('image/jpeg', 0.94);
+        pdf.addImage(imgData, 'JPEG', 0, 0, 297, 210);
+        triggerEticketFileDownload(pdf.output('bloburl'), filename);
+    } finally {
+        host.remove();
+    }
+}
+
 async function downloadDoctorCertificate(downloadUrl, seminarTitle) {
     const uid = await ensureDoctorInternalUserId();
     if (!uid) return alert('Please sign in again.');
@@ -7730,6 +7789,16 @@ async function downloadDoctorCertificate(downloadUrl, seminarTitle) {
 
     if (!window.jspdf || !window.jspdf.jsPDF) {
         return alert('PDF tools are still loading. Please refresh the page and try again.');
+    }
+
+    const filename =
+        'VGMF_Certificate_' + String(seminarTitle || 'certificate').replace(/[^\w.-]+/g, '_') + '.pdf';
+
+    try {
+        await downloadDoctorCertificatePdfFromTemplateHtml(downloadUrl, filename);
+        return;
+    } catch (captureErr) {
+        console.warn('[certificate-pdf] template capture failed, using vector fallback', captureErr);
     }
 
     try {
@@ -7748,10 +7817,7 @@ async function downloadDoctorCertificate(downloadUrl, seminarTitle) {
         const { jsPDF } = window.jspdf;
         const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
         renderDoctorCertificatePdf(doc, data);
-        const filename =
-            data.filename ||
-            'VGMF_Certificate_' + String(seminarTitle || 'certificate').replace(/[^\w.-]+/g, '_') + '.pdf';
-        triggerEticketFileDownload(doc.output('bloburl'), filename);
+        triggerEticketFileDownload(doc.output('bloburl'), data.filename || filename);
     } catch (e) {
         console.error('[certificate-pdf]', e);
         const printUrl = String(downloadUrl) + (String(downloadUrl).indexOf('?') >= 0 ? '&' : '?') + 'print=1';
