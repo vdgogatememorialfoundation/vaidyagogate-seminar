@@ -7744,6 +7744,9 @@ function certHtmlToPlainText(html) {
         .trim();
 }
 
+const CERT_PDF_WIDTH_PX = 1123;
+const CERT_PDF_HEIGHT_PX = 794;
+
 function findDoctorCertificatePreviewFrame(downloadUrl) {
     let parsed;
     try {
@@ -7758,26 +7761,58 @@ function findDoctorCertificatePreviewFrame(downloadUrl) {
     for (const frame of frames) {
         const src = String(frame.getAttribute('src') || '');
         if (!src) continue;
-        if (uc && src.indexOf('uc=' + encodeURIComponent(uc)) >= 0) return frame;
-        if (vc && src.indexOf('vc=' + encodeURIComponent(vc)) >= 0) return frame;
+        const matches =
+            (uc && src.indexOf('uc=' + encodeURIComponent(uc)) >= 0) ||
+            (vc && src.indexOf('vc=' + encodeURIComponent(vc)) >= 0);
+        if (!matches) continue;
+        if (frame.offsetWidth < 1000) return null;
+        try {
+            const idoc = frame.contentDocument;
+            const page = idoc && idoc.querySelector('.cert-page');
+            if (!page || page.offsetWidth < 1000 || page.offsetHeight < 700) return null;
+        } catch (_) {
+            return null;
+        }
+        return frame;
     }
     return null;
 }
 
+function applyCertPdfCaptureLayout(doc) {
+    if (!doc || !doc.body) return;
+    doc.body.classList.add('cert-print-body--capture');
+    const page = doc.querySelector('.cert-page');
+    if (page) {
+        page.style.width = CERT_PDF_WIDTH_PX + 'px';
+        page.style.maxWidth = 'none';
+        page.style.minHeight = CERT_PDF_HEIGHT_PX + 'px';
+        page.style.height = CERT_PDF_HEIGHT_PX + 'px';
+    }
+    doc.documentElement.style.width = CERT_PDF_WIDTH_PX + 'px';
+    doc.body.style.width = CERT_PDF_WIDTH_PX + 'px';
+    doc.body.style.margin = '0';
+    doc.body.style.padding = '0';
+    doc.body.style.background = '#fff';
+}
+
 async function certCanvasFromTarget(target) {
     if (!target || typeof html2canvas !== 'function') throw new Error('PDF renderer unavailable');
+    const idoc = target.ownerDocument;
+    applyCertPdfCaptureLayout(idoc);
     try {
-        const idoc = target.ownerDocument;
         if (idoc && idoc.fonts && idoc.fonts.ready) await idoc.fonts.ready;
     } catch (_) {}
+    await new Promise((r) => setTimeout(r, 300));
     return html2canvas(target, {
         scale: 2,
         useCORS: true,
         allowTaint: true,
         backgroundColor: '#ffffff',
         logging: false,
-        width: target.scrollWidth || target.offsetWidth || 1123,
-        height: target.scrollHeight || target.offsetHeight || 794
+        width: CERT_PDF_WIDTH_PX,
+        height: CERT_PDF_HEIGHT_PX,
+        windowWidth: CERT_PDF_WIDTH_PX,
+        windowHeight: CERT_PDF_HEIGHT_PX
     });
 }
 
@@ -7813,23 +7848,29 @@ async function downloadDoctorCertificatePdfFromTemplateHtml(downloadUrl, filenam
     const host = document.createElement('div');
     host.setAttribute('aria-hidden', 'true');
     host.style.cssText =
-        'position:fixed;left:-12000px;top:0;width:1123px;height:794px;overflow:hidden;pointer-events:none;opacity:1;z-index:-1;';
+        'position:fixed;left:-12000px;top:0;width:' +
+        CERT_PDF_WIDTH_PX +
+        'px;height:' +
+        CERT_PDF_HEIGHT_PX +
+        'px;overflow:hidden;pointer-events:none;opacity:1;z-index:-1;';
     const iframe = document.createElement('iframe');
     iframe.setAttribute('title', 'Certificate PDF render');
-    iframe.style.cssText = 'width:1123px;height:794px;border:0;background:#fff;';
+    iframe.style.cssText =
+        'width:' + CERT_PDF_WIDTH_PX + 'px;height:' + CERT_PDF_HEIGHT_PX + 'px;border:0;background:#fff;';
     host.appendChild(iframe);
     document.body.appendChild(host);
 
     try {
         await new Promise((resolve, reject) => {
-            const timer = setTimeout(resolve, 2200);
+            const timer = setTimeout(resolve, 3200);
             iframe.onload = async () => {
                 try {
                     const idoc = iframe.contentDocument;
+                    applyCertPdfCaptureLayout(idoc);
                     if (idoc && idoc.fonts && idoc.fonts.ready) await idoc.fonts.ready;
                 } catch (_) {}
                 clearTimeout(timer);
-                setTimeout(resolve, 600);
+                setTimeout(resolve, 800);
             };
             iframe.onerror = () => {
                 clearTimeout(timer);
@@ -7870,7 +7911,17 @@ async function downloadDoctorCertificate(downloadUrl, seminarTitle) {
         await downloadDoctorCertificatePdfFromTemplateHtml(downloadUrl, filename);
         return;
     } catch (captureErr) {
-        console.warn('[certificate-pdf] template capture failed, using vector fallback', captureErr);
+        console.warn('[certificate-pdf] template capture failed', captureErr);
+        const printUrl = String(downloadUrl) + (String(downloadUrl).indexOf('?') >= 0 ? '&' : '?') + 'print=1';
+        if (!isDesktopEticketDownload()) {
+            const w = window.open(printUrl, '_blank');
+            if (w) {
+                alert(
+                    'Could not build PDF on this device. Use the browser menu → Print or Share → Save as PDF — the layout will match the preview.'
+                );
+                return;
+            }
+        }
     }
 
     const uid = await ensureDoctorInternalUserId();
