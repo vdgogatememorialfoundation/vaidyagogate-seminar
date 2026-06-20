@@ -6704,7 +6704,29 @@ function summaryCancellationPolicy(raw) {
     }
 }
 
-function evaluateDoctorCancellationClient(policy, eventDate) {
+function registrationHasVenueCheckinClient(app) {
+    if (!app) return false;
+    if (app.venue_checkin_complete) return true;
+    const st = String(app.status || '').toLowerCase();
+    if (st === 'checked_in' || st === 'certificate_issued') return true;
+    if (Number(app.is_scanned) === 1) return true;
+    if (Number(app.scan_count || 0) > 0) return true;
+    const tl = app.timeline;
+    if (tl && Array.isArray(tl.steps)) {
+        const step = tl.steps.find((s) => s.key === 'checked_in');
+        if (step && step.state === 'completed') return true;
+    }
+    return false;
+}
+
+function evaluateDoctorCancellationClient(policy, eventDate, app) {
+    if (registrationHasVenueCheckinClient(app)) {
+        return {
+            allowed: false,
+            reason:
+                'You have checked in at the venue. Cancellation is no longer available for this registration.'
+        };
+    }
     const p = parseCancellationPolicyClient(policy);
     if (p.enabled === false) {
         return { allowed: false, reason: 'Self-cancellation is not enabled for this seminar.' };
@@ -6819,7 +6841,8 @@ function doctorCanCancelApplication(app) {
     if (['rejected', 'cancelled'].includes(st)) return false;
     const gate = evaluateDoctorCancellationClient(
         app && app.cancellation_policy_json,
-        app && app.seminar_event_date
+        app && app.seminar_event_date,
+        app
     );
     return gate.allowed;
 }
@@ -6867,7 +6890,7 @@ async function openCancelRequestModal(applicationId) {
     const app = (userApplications || []).find((a) => Number(a.id) === Number(applicationId));
     if (!app) return;
     if (!doctorCanCancelApplication(app)) {
-        const gate = evaluateDoctorCancellationClient(app.cancellation_policy_json, app.seminar_event_date);
+        const gate = evaluateDoctorCancellationClient(app.cancellation_policy_json, app.seminar_event_date, app);
         alert(gate.reason || 'Cancellation request is not available.');
         return;
     }
