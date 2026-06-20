@@ -431,6 +431,10 @@
                 setUser(portal, data.user);
                 phoneOtpToken = null;
                 emailOtpToken = null;
+                if (portal === 'doctor') {
+                    document.getElementById('auth-overlay')?.classList.add('hidden');
+                    document.getElementById('dashboard-main')?.classList.remove('hidden');
+                }
                 opts.onSuccess(data.user);
             } catch (err) {
                 console.error(err);

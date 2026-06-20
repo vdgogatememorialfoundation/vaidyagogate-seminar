@@ -1929,12 +1929,12 @@ function updateDoctorHeaderId() {
 
 async function bootDoctorDashboard(user) {
     currentUser = user;
+    document.getElementById('auth-overlay')?.classList.add('hidden');
+    document.getElementById('dashboard-main')?.classList.remove('hidden');
+
     bindDoctorPayButtonDelegation();
     window.__doctorResolvedInternalId = doctorNumericUserId();
     initDoctorPortalAccessRefreshOnVisible();
-
-    document.getElementById('auth-overlay').classList.add('hidden');
-    document.getElementById('dashboard-main').classList.remove('hidden');
     initDoctorMobileNav();
     document.getElementById('header-name').innerText = `Hi, Dr. ${currentUser.first_name || ''} ${currentUser.last_name || ''}`;
     updateDoctorHeaderId();
@@ -1943,11 +1943,8 @@ async function bootDoctorDashboard(user) {
     }
 
     const hashTab = String(window.location.hash || '').replace(/^#/, '').toLowerCase();
-    if (hashTab === 'refunds') {
-        switchTab('tab-refunds');
-    } else {
-        switchTab('tab-dashboard');
-    }
+    const initialTab = hashTab === 'refunds' ? 'tab-refunds' : 'tab-dashboard';
+    requestAnimationFrame(() => switchTab(initialTab));
 
     void (async () => {
         const resolved = await ensureDoctorInternalUserId();
@@ -2149,14 +2146,19 @@ async function handleDirectApplicationPaymentLink() {
     } catch (_) {}
 }
 
-window.onload = () => {
+function initDoctorPortalEntry() {
+    if (window.__doctorPortalEntryInited) return;
+    window.__doctorPortalEntryInited = true;
     try {
         const p = new URLSearchParams(window.location.search);
         if (p.get('pay_registration') || p.get('pay_app')) {
             sessionStorage.setItem('doctor_pay_link', window.location.search);
         }
     } catch (_) {}
-    const existing = typeof PortalAuth !== 'undefined' ? PortalAuth.getUser('doctor') : null;
+    const existing =
+        (typeof PortalAuth !== 'undefined' && PortalAuth.getUser('doctor')) ||
+        window.__doctorPendingSession ||
+        null;
     if (existing) {
         bootDoctorDashboard(existing);
         return;
@@ -2182,7 +2184,13 @@ window.onload = () => {
             }
         });
     }
-};
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', initDoctorPortalEntry);
+} else {
+    initDoctorPortalEntry();
+}
 
 const REGISTRATION_FIELD_IDS = {
     fname: 'reg-fname',
@@ -5494,7 +5502,9 @@ async function loadDoctorCertificates() {
     if (!wrap || !currentUser) return;
     wrap.innerHTML = '<p style="color:#64748b;text-align:center;">Loading…</p>';
     try {
-        const uid = await ensureDoctorInternalUserId();
+        let uid = doctorNumericUserId();
+        if (!uid && _ensureDoctorInternalIdPromise) uid = await _ensureDoctorInternalIdPromise;
+        if (!uid) uid = await ensureDoctorInternalUserId();
         if (!uid) {
             wrap.innerHTML = '<p style="color:#b91c1c;">Please sign out and sign in again.</p>';
             return;
@@ -7715,7 +7725,86 @@ async function processPayment(appId, amount, appNo, paymentOption, cancelPending
 
 window.processPayment = processPayment;
 
+function certHtmlToPlainText(html) {
+    return String(html || '')
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/p>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&ldquo;/g, '\u201C')
+        .replace(/&rdquo;/g, '\u201D')
+        .replace(/&lsquo;/g, '\u2018')
+        .replace(/&rsquo;/g, '\u2019')
+        .replace(/&mdash;/g, '\u2014')
+        .replace(/&ndash;/g, '\u2013')
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function findDoctorCertificatePreviewFrame(downloadUrl) {
+    let parsed;
+    try {
+        parsed = new URL(downloadUrl, window.location.origin);
+    } catch (_) {
+        return null;
+    }
+    const uc = parsed.searchParams.get('uc');
+    const vc = parsed.searchParams.get('vc');
+    if (!uc && !vc) return null;
+    const frames = document.querySelectorAll('#doctor-certificates-wrap iframe');
+    for (const frame of frames) {
+        const src = String(frame.getAttribute('src') || '');
+        if (!src) continue;
+        if (uc && src.indexOf('uc=' + encodeURIComponent(uc)) >= 0) return frame;
+        if (vc && src.indexOf('vc=' + encodeURIComponent(vc)) >= 0) return frame;
+    }
+    return null;
+}
+
+async function certCanvasFromTarget(target) {
+    if (!target || typeof html2canvas !== 'function') throw new Error('PDF renderer unavailable');
+    try {
+        const idoc = target.ownerDocument;
+        if (idoc && idoc.fonts && idoc.fonts.ready) await idoc.fonts.ready;
+    } catch (_) {}
+    return html2canvas(target, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#ffffff',
+        logging: false,
+        width: target.scrollWidth || target.offsetWidth || 1123,
+        height: target.scrollHeight || target.offsetHeight || 794
+    });
+}
+
+async function certPdfFromCanvas(canvas, filename) {
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const imgData = canvas.toDataURL('image/jpeg', 0.94);
+    pdf.addImage(imgData, 'JPEG', 0, 0, 297, 210);
+    triggerEticketFileDownload(pdf.output('bloburl'), filename);
+}
+
 async function downloadDoctorCertificatePdfFromTemplateHtml(downloadUrl, filename) {
+    const previewFrame = findDoctorCertificatePreviewFrame(downloadUrl);
+    if (previewFrame) {
+        try {
+            const idoc = previewFrame.contentDocument;
+            const target = (idoc && (idoc.querySelector('.cert-page') || idoc.body)) || null;
+            if (target) {
+                const canvas = await certCanvasFromTarget(target);
+                await certPdfFromCanvas(canvas, filename);
+                return;
+            }
+        } catch (previewErr) {
+            console.warn('[certificate-pdf] preview iframe capture failed', previewErr);
+        }
+    }
+
     const res = await fetch(downloadUrl, { credentials: 'same-origin', cache: 'no-store' });
     if (!res.ok) throw new Error('Could not load certificate template');
     const html = await res.text();
@@ -7733,14 +7822,14 @@ async function downloadDoctorCertificatePdfFromTemplateHtml(downloadUrl, filenam
 
     try {
         await new Promise((resolve, reject) => {
-            const timer = setTimeout(resolve, 1800);
+            const timer = setTimeout(resolve, 2200);
             iframe.onload = async () => {
                 try {
                     const idoc = iframe.contentDocument;
                     if (idoc && idoc.fonts && idoc.fonts.ready) await idoc.fonts.ready;
                 } catch (_) {}
                 clearTimeout(timer);
-                setTimeout(resolve, 500);
+                setTimeout(resolve, 600);
             };
             iframe.onerror = () => {
                 clearTimeout(timer);
@@ -7752,31 +7841,14 @@ async function downloadDoctorCertificatePdfFromTemplateHtml(downloadUrl, filenam
         const idoc = iframe.contentDocument;
         const target = (idoc && (idoc.querySelector('.cert-page') || idoc.body)) || null;
         if (!target) throw new Error('Certificate layout not found');
-        if (typeof html2canvas !== 'function') throw new Error('PDF renderer unavailable');
-
-        const canvas = await html2canvas(target, {
-            scale: 2,
-            useCORS: true,
-            allowTaint: true,
-            backgroundColor: '#ffffff',
-            logging: false,
-            width: target.scrollWidth || target.offsetWidth || 1123,
-            height: target.scrollHeight || target.offsetHeight || 794
-        });
-
-        const { jsPDF } = window.jspdf;
-        const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-        const imgData = canvas.toDataURL('image/jpeg', 0.94);
-        pdf.addImage(imgData, 'JPEG', 0, 0, 297, 210);
-        triggerEticketFileDownload(pdf.output('bloburl'), filename);
+        const canvas = await certCanvasFromTarget(target);
+        await certPdfFromCanvas(canvas, filename);
     } finally {
         host.remove();
     }
 }
 
 async function downloadDoctorCertificate(downloadUrl, seminarTitle) {
-    const uid = await ensureDoctorInternalUserId();
-    if (!uid) return alert('Please sign in again.');
     let parsed;
     try {
         parsed = new URL(downloadUrl, window.location.origin);
@@ -7800,6 +7872,9 @@ async function downloadDoctorCertificate(downloadUrl, seminarTitle) {
     } catch (captureErr) {
         console.warn('[certificate-pdf] template capture failed, using vector fallback', captureErr);
     }
+
+    const uid = await ensureDoctorInternalUserId();
+    if (!uid) return alert('Please sign in again.');
 
     try {
         const idQ = doctorUserIdQuerySuffix();
@@ -7898,7 +7973,7 @@ function renderDoctorCertificatePdf(doc, data) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(11.5);
     doc.setTextColor(...ink);
-    const bodyLines = doc.splitTextToSize(String(d.bodyLine || ''), W - 70);
+    const bodyLines = doc.splitTextToSize(certHtmlToPlainText(d.bodyLine || ''), W - 70);
     doc.text(bodyLines, cx, y, { align: 'center' });
     y += bodyLines.length * 5.5 + 6;
 

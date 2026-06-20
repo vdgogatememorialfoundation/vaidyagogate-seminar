@@ -951,7 +951,7 @@
     <script src="/js/site-branding.js"></script>
     <script src="/js/otp-ui.js"></script>
     <script src="/js/http-json.js"></script>
-    <script src="/js/portal-auth.js?v=20260620loginfast1"></script>
+    <script src="/js/portal-auth.js?v=20260620loginfast2"></script>
     <script src="/js/name-validation.js"></script>
     <script src="/js/contact-validation.js"></script>
     <script src="/js/doctor-auth-ui.js?v=20260616fixes1"></script>
@@ -964,6 +964,28 @@
     <script src="/js/doctor-live-chat-widget.js?v=20260615live2"></script>
     <script src="/js/site-visitor-beacon.js?v=20260613radar6"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="/js/doctor.js?v=20260620certtpl1"></script>
+    <script>
+    (function () {
+        function revealDoctorDashboardShell() {
+            try {
+                var raw = localStorage.getItem('seminar_doctor_user');
+                if (!raw) return;
+                var u = JSON.parse(raw);
+                if (!u || (!u.email && !u.user_id_string && u.id == null)) return;
+                window.__doctorPendingSession = u;
+                var ov = document.getElementById('auth-overlay');
+                var dash = document.getElementById('dashboard-main');
+                if (ov) ov.classList.add('hidden');
+                if (dash) dash.classList.remove('hidden');
+            } catch (_) {}
+        }
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', revealDoctorDashboardShell);
+        } else {
+            revealDoctorDashboardShell();
+        }
+    })();
+    </script>
+    <script src="/js/doctor.js?v=20260620loginfast2"></script>
 </body>
 </html>
