@@ -554,6 +554,10 @@ app.get('/certificate/download', (req, res) => {
     certRender.handleDownloadRequest(db, req, res);
 });
 
+app.get('/certificate/download.pdf', (req, res) => {
+    certRender.handlePdfDownloadRequest(db, req, res);
+});
+
 siteSeoMod.registerFaviconRoutes(app, { db });
 
 registerProtectedJsDelivery(app, publicDir);
