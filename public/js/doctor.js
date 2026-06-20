@@ -7875,7 +7875,7 @@ function openDoctorCertificateDownload(certId, seminarId) {
     const uid = doctorNumericUserId();
     if (!uid) return alert('Please sign in again.');
     const dlUrl =
-        '/certificate/download?uc=' +
+        '/certificate/download.pdf?uc=' +
         encodeURIComponent(String(certId)) +
         '&uid=' +
         encodeURIComponent(String(uid));
