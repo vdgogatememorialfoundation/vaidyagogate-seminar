@@ -62,6 +62,7 @@ const requestGuard = require('./lib/request-guard');
 const ticketScanEvents = require('./lib/ticket-scan-events');
 const scannerIdCapture = require('./lib/scanner-id-capture');
 const feedbackFormConfig = require('./lib/feedback-form-config');
+const feedbackEligibility = require('./lib/feedback-eligibility');
 const { registerLiveScannerRoutes } = require('./lib/routes-live-scanner');
 const { registerPosRoutes } = require('./lib/pos-onspot');
 const siteSeoMod = require('./lib/site-seo');
@@ -10329,7 +10330,6 @@ app.post('/api/public/certificate-verify/confirm', (req, res) => {
     );
 });
 
-// Doctor: certificate eligibility for logged-in user
 app.get('/api/doctor/certificates/:userId', (req, res) => {
     resolveDoctorApiUserId(req, res, (uid) => {
         const year = req.query.year != null ? parseInt(req.query.year, 10) : null;
@@ -10387,6 +10387,22 @@ app.get('/api/doctor/certificate-years/:userId', (req, res) => {
                 });
             }
         );
+    });
+});
+
+app.get('/api/doctor/certificate-pdf-data/:userId', (req, res) => {
+    resolveDoctorApiUserId(req, res, (uid) => {
+        const fakeReq = {
+            query: {
+                uid: String(uid),
+                uc: req.query.uc,
+                vc: req.query.vc
+            }
+        };
+        certRender.buildPdfPayload(db, fakeReq, (err, payload) => {
+            if (err) return res.status(err.status || 500).json({ error: err.message || 'Could not build certificate PDF data' });
+            res.json(payload);
+        });
     });
 });
 
@@ -13145,20 +13161,6 @@ app.delete('/api/admin/event-schedules/:id', (req, res) => {
 
 // ==================== SEMINAR FEEDBACK ENDPOINTS ====================
 
-const FEEDBACK_ELIGIBLE_STATUSES = new Set([
-    'completed',
-    'e_ticket_issued',
-    'checked_in',
-    'approved_pending_payment'
-]);
-
-function isFeedbackEligibleRegistration(row) {
-    if (!row) return false;
-    if (isSeminarEnded(row.event_date)) return true;
-    const st = String(row.status || '').toLowerCase();
-    return FEEDBACK_ELIGIBLE_STATUSES.has(st);
-}
-
 // Submit Seminar Feedback
 app.post('/api/feedback/submit', (req, res) => {
     const { userId, seminarId, registrationId, answers } = req.body;
@@ -13176,7 +13178,10 @@ app.post('/api/feedback/submit', (req, res) => {
             if (err) return res.status(500).json({ error: err.message });
         if (!sem) return res.status(400).json({ error: 'Seminar not found' });
         db.get(
-            `SELECT id, status FROM registrations WHERE user_id = ? AND seminar_id = ? ORDER BY id DESC LIMIT 1`,
+            `SELECT r.id, r.status, (${feedbackEligibility.HAS_CHECKIN_SQL}) AS has_checkin
+             FROM registrations r
+             WHERE r.user_id = ? AND r.seminar_id = ?
+             ORDER BY r.id DESC LIMIT 1`,
             [uid, sid],
             (regErr, reg) => {
                 if (regErr) return res.status(500).json({ error: regErr.message });
@@ -13185,15 +13190,10 @@ app.post('/api/feedback/submit', (req, res) => {
                         error: 'You must be registered for this seminar before submitting feedback.'
                     });
                 }
-                if (
-                    !isFeedbackEligibleRegistration({
-                        event_date: sem.event_date,
-                        status: reg.status
-                    })
-                ) {
+                if (!feedbackEligibility.isFeedbackEligibleRegistration(reg)) {
                     return res.status(400).json({
                         error:
-                            'Feedback is available after the seminar ends, or once your registration is approved or completed.'
+                            'Feedback is available after venue check-in for this seminar. Show your e-ticket at the entrance scanner, or ask the foundation desk if you checked in manually.'
                     });
                 }
 
@@ -13270,7 +13270,8 @@ app.get('/api/feedback/eligible-seminars/:userId', (req, res) => {
     const uid = parsePositiveUserId(req.params.userId);
     if (!uid) return res.status(400).json({ error: 'Invalid user id' });
     db.all(
-        `SELECT s.id, s.title, s.event_date, r.id AS registration_id, r.status
+        `SELECT s.id, s.title, s.event_date, r.id AS registration_id, r.status,
+                (${feedbackEligibility.HAS_CHECKIN_SQL}) AS has_checkin
          FROM registrations r
          JOIN seminars s ON s.id = r.seminar_id
          WHERE r.user_id = ?
@@ -13283,7 +13284,7 @@ app.get('/api/feedback/eligible-seminars/:userId', (req, res) => {
         [uid],
         (err, rows) => {
             if (err) return res.status(500).json({ error: err.message });
-            const eligible = (rows || []).filter(isFeedbackEligibleRegistration);
+            const eligible = (rows || []).filter(feedbackEligibility.isFeedbackEligibleRegistration);
             res.json(eligible);
         }
     );

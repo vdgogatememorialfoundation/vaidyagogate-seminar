@@ -5554,7 +5554,7 @@ async function loadDoctorCertificates() {
                     `<div style="border:2px solid #e8d48a;border-radius:10px;overflow:hidden;"><iframe src="${viewUrl}" style="width:100%;min-height:420px;border:0;"></iframe></div>` +
                     `<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">` +
                     `<a href="${viewUrl}" target="_blank" class="btn-primary" style="text-decoration:none;background:linear-gradient(135deg,#c9a227,#a67c00);padding:8px 14px;">${escapeHtml(i18nT('common.open'))}</a>` +
-                    `<button type="button" class="btn-primary" style="background:#15803d;padding:8px 14px;" onclick="downloadDoctorCertificate('${dlUrl}', '${dlTitle}')"><i class="fas fa-download"></i> Download certificate</button>` +
+                    `<button type="button" class="btn-primary" style="background:#15803d;padding:8px 14px;" onclick="downloadDoctorCertificate('${dlUrl}', '${dlTitle}')"><i class="fas fa-download"></i> Download PDF</button>` +
                     `<button type="button" class="btn-primary" style="background:#475569;padding:8px 14px;" onclick="var w=window.open('${viewUrl}');if(w)w.print();">${escapeHtml(i18nT('common.print'))}</button></div>`;
                 wrap.appendChild(card);
                 return;
@@ -7699,37 +7699,175 @@ async function processPayment(appId, amount, appNo, paymentOption, cancelPending
 window.processPayment = processPayment;
 
 async function downloadDoctorCertificate(downloadUrl, seminarTitle) {
-    const url = String(downloadUrl || '');
-    if (!url || url === '#') return;
-    const safeTitle = String(seminarTitle || 'certificate').replace(/[^\w.-]+/g, '_');
-    const filename = 'VGMF_Certificate_' + safeTitle + '.html';
-
-    if (isDesktopEticketDownload()) {
-        triggerEticketFileDownload(url, filename);
+    const uid = await ensureDoctorInternalUserId();
+    if (!uid) return alert('Please sign in again.');
+    let parsed;
+    try {
+        parsed = new URL(downloadUrl, window.location.origin);
+    } catch (_) {
         return;
     }
+    const uc = parsed.searchParams.get('uc');
+    const vc = parsed.searchParams.get('vc');
+    if (!uc && !vc) return;
 
-    void downloadDoctorCertificateAsync(url, filename);
+    if (!window.jspdf || !window.jspdf.jsPDF) {
+        return alert('PDF tools are still loading. Please refresh the page and try again.');
+    }
+
+    try {
+        const idQ = doctorUserIdQuerySuffix();
+        const q =
+            (uc ? 'uc=' + encodeURIComponent(uc) : 'vc=' + encodeURIComponent(vc)) +
+            (idQ ? (idQ.startsWith('?') ? '&' + idQ.slice(1) : '&' + idQ) : '');
+        const res = await fetch('/api/doctor/certificate-pdf-data/' + uid + '?' + q, {
+            credentials: 'same-origin',
+            cache: 'no-store'
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Could not load certificate data');
+
+        await preloadSiteLogoForPdf();
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+        renderDoctorCertificatePdf(doc, data);
+        const filename =
+            data.filename ||
+            'VGMF_Certificate_' + String(seminarTitle || 'certificate').replace(/[^\w.-]+/g, '_') + '.pdf';
+        triggerEticketFileDownload(doc.output('bloburl'), filename);
+    } catch (e) {
+        console.error('[certificate-pdf]', e);
+        const printUrl = String(downloadUrl) + (String(downloadUrl).indexOf('?') >= 0 ? '&' : '?') + 'print=1';
+        const w = window.open(printUrl, '_blank');
+        if (!w) alert(e.message || 'Could not download PDF. Try Open, then Print → Save as PDF.');
+    }
 }
 
-async function downloadDoctorCertificateAsync(url, filename) {
+function certPdfHexRgb(hex, fallback) {
+    const h = String(hex || '')
+        .replace('#', '')
+        .trim();
+    if (!/^[0-9a-f]{6}$/i.test(h)) return fallback || [201, 162, 39];
+    return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+
+function certPdfAddImageSafe(doc, dataUrl, x, y, w, h) {
+    if (!dataUrl || !String(dataUrl).startsWith('data:image')) return false;
+    const fmt = String(dataUrl).includes('image/jpeg') ? 'JPEG' : 'PNG';
     try {
-        const res = await fetch(url, { credentials: 'same-origin', cache: 'no-store' });
-        if (!res.ok) throw new Error('download failed');
-        const blob = await res.blob();
-        const file = new File([blob], filename, { type: 'text/html;charset=utf-8' });
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-            await navigator.share({ files: [file], title: 'VGMF Certificate' });
-            return;
-        }
-        triggerEticketFileDownload(URL.createObjectURL(blob), filename);
-        if (typeof alert === 'function') alert('Certificate saved to your device.');
-    } catch (shareErr) {
-        console.warn('certificate download', shareErr);
-        const printUrl = url + (url.indexOf('?') >= 0 ? '&' : '?') + 'print=1';
-        const w = window.open(printUrl, '_blank');
-        if (!w) alert('Could not download. Try Open, then Print → Save as PDF.');
+        doc.addImage(dataUrl, fmt, x, y, w, h);
+        return true;
+    } catch (_) {
+        return false;
     }
+}
+
+function renderDoctorCertificatePdf(doc, data) {
+    const d = data || {};
+    const W = 297;
+    const H = 210;
+    const gold = certPdfHexRgb(d.goldColor, [201, 162, 39]);
+    const nameRgb = certPdfHexRgb(d.nameColor, [196, 92, 38]);
+    const ink = certPdfHexRgb(d.charcoalColor, [74, 74, 74]);
+    const bg = certPdfHexRgb(d.bgColor, [250, 248, 243]);
+
+    doc.setFillColor(...bg);
+    doc.rect(0, 0, W, H, 'F');
+
+    doc.setDrawColor(...gold);
+    doc.setLineWidth(1.3);
+    doc.rect(10, 10, W - 20, H - 20, 'S');
+    doc.setLineWidth(0.35);
+    doc.rect(14, 14, W - 28, H - 28, 'S');
+
+    certPdfAddImageSafe(doc, d.logoDataUrl, W - 36, 16, 20, 20);
+
+    let y = 34;
+    const cx = W / 2;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.setTextColor(30, 58, 95);
+    doc.text(String(d.orgName || 'VGMF'), cx, y, { align: 'center' });
+    y += 10;
+
+    doc.setFontSize(28);
+    doc.setTextColor(...gold);
+    doc.text(String(d.title || 'Certificate of Appreciation'), cx, y, { align: 'center' });
+    y += 9;
+
+    doc.setFontSize(12);
+    doc.setTextColor(...ink);
+    doc.setFont('helvetica', 'normal');
+    doc.text(String(d.subtitle || 'of Participation'), cx, y, { align: 'center' });
+    y += 10;
+
+    doc.setFontSize(11);
+    doc.text(String(d.leadText || ''), cx, y, { align: 'center' });
+    y += 12;
+
+    doc.setFont('times', 'bolditalic');
+    doc.setFontSize(30);
+    doc.setTextColor(...nameRgb);
+    doc.text(String(d.recipientName || ''), cx, y, { align: 'center' });
+    y += 10;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(11.5);
+    doc.setTextColor(...ink);
+    const bodyLines = doc.splitTextToSize(String(d.bodyLine || ''), W - 70);
+    doc.text(bodyLines, cx, y, { align: 'center' });
+    y += bodyLines.length * 5.5 + 6;
+
+    doc.setFontSize(10.5);
+    doc.text(`${d.venueLabel || 'Venue'}: ${d.venue || '—'}`, cx, y, { align: 'center' });
+    y += 6;
+    doc.text(`${d.dateLabel || 'Date'}: ${d.eventDate || '—'}`, cx, y, { align: 'center' });
+
+    const idsX = 22;
+    let idsY = H - 42;
+    doc.setFontSize(9.5);
+    doc.setFont('helvetica', 'bold');
+    doc.text('PRN No.', idsX, idsY);
+    doc.setFont('helvetica', 'normal');
+    doc.text(String(d.prnNo || '—'), idsX + 28, idsY);
+    idsY += 6;
+    doc.setFont('helvetica', 'bold');
+    doc.text('Application No.', idsX, idsY);
+    doc.setFont('helvetica', 'normal');
+    doc.text(String(d.applicationNo || '—'), idsX + 38, idsY);
+    idsY += 6;
+    doc.setFont('helvetica', 'bold');
+    doc.text('Certificate ID', idsX, idsY);
+    doc.setFont('helvetica', 'normal');
+    doc.text(String(d.certificateId || '—'), idsX + 34, idsY);
+
+    if (d.qrDataUrl) {
+        certPdfAddImageSafe(doc, d.qrDataUrl, W - 48, H - 58, 30, 30);
+        doc.setFontSize(8);
+        doc.setTextColor(100, 116, 139);
+        doc.text('Scan to verify', W - 33, H - 24, { align: 'center' });
+    }
+
+    const sigY = H - 34;
+    doc.setFontSize(9);
+    doc.setTextColor(...ink);
+    if (d.sigLeftDataUrl) certPdfAddImageSafe(doc, d.sigLeftDataUrl, 42, sigY - 14, 36, 12);
+    else {
+        doc.setDrawColor(...gold);
+        doc.line(42, sigY, 92, sigY);
+    }
+    doc.text(String(d.sigLeftTitle || ''), 67, sigY + 5, { align: 'center' });
+
+    if (d.sigRightDataUrl) certPdfAddImageSafe(doc, d.sigRightDataUrl, W - 92, sigY - 14, 36, 12);
+    else {
+        doc.setDrawColor(...gold);
+        doc.line(W - 92, sigY, W - 42, sigY);
+    }
+    doc.setFont('helvetica', 'bold');
+    doc.text(String(d.sigRightName || ''), W - 67, sigY + 4, { align: 'center' });
+    doc.setFont('helvetica', 'normal');
+    doc.text(String(d.sigRightTitle || ''), W - 67, sigY + 9, { align: 'center' });
 }
 
 async function loadDoctorCertificateTracking(quiet) {
