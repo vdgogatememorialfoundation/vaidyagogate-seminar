@@ -1919,30 +1919,53 @@ function scheduleDoctorClientTelemetry() {
     window.__doctorTelemetryTimer = setInterval(sendDoctorClientTelemetry, 5 * 60 * 1000);
 }
 
+function updateDoctorHeaderId() {
+    const el = document.getElementById('header-id');
+    if (!el || !currentUser) return;
+    el.innerText =
+        `ID: ${currentUser.user_id_string || '---'}` +
+        (window.__allowDemoAccounts !== false && Number(currentUser.is_demo) === 1 ? ' · Dummy' : '');
+}
+
 async function bootDoctorDashboard(user) {
     currentUser = user;
     bindDoctorPayButtonDelegation();
     window.__doctorResolvedInternalId = doctorNumericUserId();
     initDoctorPortalAccessRefreshOnVisible();
-    const resolved = await ensureDoctorInternalUserId();
-    if (resolved) window.__doctorResolvedInternalId = resolved;
-    await refreshDoctorPortalAccess().catch(() => {});
-    await applyDoctorModuleAccessFromUser(currentUser);
-    try {
-        const u = await fetch('/api/public/portal-urls').then((r) => r.json());
-        window.__doctorProductionSite = !!(u && u.production);
-        window.__allowDemoAccounts = u && u.allowDemoAccounts !== false;
-    } catch (_) {}
+
     document.getElementById('auth-overlay').classList.add('hidden');
     document.getElementById('dashboard-main').classList.remove('hidden');
     initDoctorMobileNav();
     document.getElementById('header-name').innerText = `Hi, Dr. ${currentUser.first_name || ''} ${currentUser.last_name || ''}`;
-    document.getElementById('header-id').innerText =
-        `ID: ${currentUser.user_id_string || '---'}` +
-        (window.__allowDemoAccounts !== false && Number(currentUser.is_demo) === 1 ? ' · Dummy' : '');
+    updateDoctorHeaderId();
     if (typeof PortalAuth !== 'undefined' && PortalAuth.renderLoginTime) {
         PortalAuth.renderLoginTime('header-login-time', currentUser);
     }
+
+    const hashTab = String(window.location.hash || '').replace(/^#/, '').toLowerCase();
+    if (hashTab === 'refunds') {
+        switchTab('tab-refunds');
+    } else {
+        switchTab('tab-dashboard');
+    }
+
+    void (async () => {
+        const resolved = await ensureDoctorInternalUserId();
+        if (resolved) window.__doctorResolvedInternalId = resolved;
+        await refreshDoctorPortalAccess().catch(() => {});
+        await applyDoctorModuleAccessFromUser(currentUser);
+        try {
+            const u = await fetch('/api/public/portal-urls').then((r) => r.json());
+            window.__doctorProductionSite = !!(u && u.production);
+            window.__allowDemoAccounts = u && u.allowDemoAccounts !== false;
+            updateDoctorHeaderId();
+        } catch (_) {}
+        if (hashTab === 'refunds' && (!__doctorAllowedTabs || __doctorAllowedTabs.has('tab-refunds'))) {
+            switchTab('tab-refunds');
+        } else if (hashTab !== 'refunds') {
+            switchTab('tab-dashboard');
+        }
+    })();
     loadProfile();
     loadDoctorPaymentOptions().then(() => {
         loadDoctorPortalYear().then(() => {
@@ -1960,12 +1983,6 @@ async function bootDoctorDashboard(user) {
         .catch(() => {});
     scheduleDoctorModuleReapply();
     handleEasebuzzPaymentReturnQuery();
-    const hashTab = String(window.location.hash || '').replace(/^#/, '').toLowerCase();
-    if (hashTab === 'refunds' && (!__doctorAllowedTabs || __doctorAllowedTabs.has('tab-refunds'))) {
-        switchTab('tab-refunds');
-    } else {
-        switchTab('tab-dashboard');
-    }
     if (window.DoctorLiveChatWidget && typeof DoctorLiveChatWidget.boot === 'function') {
         DoctorLiveChatWidget.boot({
             getUserId: doctorNumericUserId,

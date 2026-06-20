@@ -366,6 +366,13 @@
                 body.phoneOtpToken = phoneOtpToken;
                 body.emailOtpToken = emailOtpToken;
             }
+            const submitBtn = form.querySelector('button[type="submit"]');
+            const submitLabel = submitBtn ? submitBtn.innerHTML : '';
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.setAttribute('aria-busy', 'true');
+                submitBtn.textContent = 'Signing in…';
+            }
             try {
                 const res = await fetch('/api/auth/login', {
                     method: 'POST',
@@ -430,6 +437,12 @@
                 const msg = 'Could not reach the server.';
                 if (opts.onError) opts.onError(msg);
                 else alert(msg);
+            } finally {
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.removeAttribute('aria-busy');
+                    submitBtn.innerHTML = submitLabel;
+                }
             }
         });
     }
