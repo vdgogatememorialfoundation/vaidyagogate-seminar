@@ -3419,13 +3419,51 @@ app.get('/api/auth/login-otp-required', withIntegrationSettingsLoaded, (req, res
 });
 
 /** Signup/login: detect existing account (optional password match → suggest login). */
+app.post('/api/auth/phone-check', (req, res) => {
+    const phoneV = contactValidation.validatePhone((req.body && req.body.phone) || '');
+    if (!phoneV.valid) return res.status(400).json({ error: phoneV.message });
+    authUsers.findUserByPhone(db, phoneV.cleanedPhone, (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!row) {
+            return res.json({ registered: false, available: true });
+        }
+        res.json({
+            registered: true,
+            needsLogin: true,
+            loginEmail: row.email || null,
+            message: 'This mobile number is already registered. Please sign in with your existing account.'
+        });
+    });
+});
+
+/** Signup/login: detect existing account (optional password match → suggest login). */
 app.post('/api/auth/account-check', (req, res) => {
     const emailNormRaw = authUsers.normalizeEmail((req.body && req.body.email) || '');
     const password = req.body && req.body.password != null ? String(req.body.password) : '';
     const phoneRaw = (req.body && req.body.phone) || '';
-    const acEmailV = contactValidation.validateEmail(emailNormRaw);
-    if (!acEmailV.valid) return res.status(400).json({ error: acEmailV.message });
-    const emailNorm = acEmailV.cleanedEmail;
+    const phoneTrim = String(phoneRaw || '').trim();
+    let emailNorm = '';
+    if (emailNormRaw) {
+        const acEmailV = contactValidation.validateEmail(emailNormRaw);
+        if (!acEmailV.valid) return res.status(400).json({ error: acEmailV.message });
+        emailNorm = acEmailV.cleanedEmail;
+    }
+
+    function respondPhoneTaken(phoneRow) {
+        const passwordMatch = !!(password && phoneRow.password === password);
+        res.json({
+            exists: true,
+            available: false,
+            passwordMatch,
+            needsLogin: true,
+            phoneTaken: true,
+            emailTaken: false,
+            loginEmail: phoneRow.email || null,
+            message: passwordMatch
+                ? 'This mobile number is already registered. Sign in with your password below.'
+                : 'This mobile number is already registered. Sign in with your existing account (use Forgot password if needed).'
+        });
+    }
 
     function respondEmail(row) {
         if (!row) {
@@ -3446,6 +3484,7 @@ app.post('/api/auth/account-check', (req, res) => {
             needsLogin: true,
             phoneTaken: false,
             emailTaken: true,
+            loginEmail: row.email || null,
             message: passwordMatch
                 ? 'An account with this email already exists. Please sign in with your password.'
                 : 'This email is already registered. Please sign in or use Forgot password.'
@@ -3453,32 +3492,44 @@ app.post('/api/auth/account-check', (req, res) => {
     }
 
     function checkEmail() {
+        if (!emailNorm) {
+            return res.json({
+                exists: false,
+                available: true,
+                passwordMatch: false,
+                needsLogin: false,
+                phoneTaken: false,
+                emailTaken: false
+            });
+        }
         authUsers.findUserByEmail(db, emailNorm, (err, row) => {
             if (err) return res.status(500).json({ error: err.message });
             respondEmail(row);
         });
     }
 
-    const phoneTrim = String(phoneRaw || '').trim();
-    if (!phoneTrim) return checkEmail();
-    const acPhoneV = contactValidation.validatePhone(phoneTrim);
-    if (!acPhoneV.valid) return res.status(400).json({ error: acPhoneV.message });
-    authUsers.findUserByPhone(db, acPhoneV.cleanedPhone, (pErr, phoneRow) => {
-        if (pErr) return res.status(500).json({ error: pErr.message });
-        if (phoneRow) {
-            return res.json({
-                exists: true,
-                available: false,
-                passwordMatch: false,
-                needsLogin: true,
-                phoneTaken: true,
-                emailTaken: false,
-                message:
-                    'This mobile number is already registered. Sign in with that account or use a different number (email can be new, but phone cannot be reused).'
-            });
-        }
-        checkEmail();
-    });
+    if (phoneTrim) {
+        const acPhoneV = contactValidation.validatePhone(phoneTrim);
+        if (!acPhoneV.valid) return res.status(400).json({ error: acPhoneV.message });
+        authUsers.findUserByPhone(db, acPhoneV.cleanedPhone, (pErr, phoneRow) => {
+            if (pErr) return res.status(500).json({ error: pErr.message });
+            if (phoneRow) return respondPhoneTaken(phoneRow);
+            checkEmail();
+        });
+        return;
+    }
+
+    if (!emailNorm) {
+        return res.json({
+            exists: false,
+            available: true,
+            passwordMatch: false,
+            needsLogin: false,
+            phoneTaken: false,
+            emailTaken: false
+        });
+    }
+    checkEmail();
 });
 
 app.get('/api/auth/email-available', (req, res) => {
@@ -3943,9 +3994,10 @@ app.post('/api/auth/signup', (req, res) => {
                 if (phoneExisting) {
                     return res.status(409).json({
                         error:
-                            'This mobile number is already registered to another account. Sign in with that account or use a different number.',
+                            'This mobile number is already registered to another account. Please sign in with your existing account.',
                         needsLogin: true,
-                        phoneTaken: true
+                        phoneTaken: true,
+                        loginEmail: phoneExisting.email || null
                     });
                 }
                 const usersEmailPolicy = require('./lib/users-email-policy');

@@ -1495,14 +1495,43 @@
             return { ok: res.ok, ...data };
         }
 
-        function redirectToLoginTab(email, password, message) {
-            if (message && !confirm(message + '\n\nSwitch to Sign in now?')) return;
+        function redirectToLoginTab(email, password, message, skipConfirm) {
+            if (message && !skipConfirm && !confirm(message + '\n\nSwitch to Sign in now?')) return;
             switchAuthTab('login');
             const le = document.getElementById('login_email');
             const lp = document.getElementById('login_password');
             if (le && email) le.value = email;
             if (lp && password) lp.value = password;
             openAuthModal('login');
+            if (message && skipConfirm) alert(message);
+        }
+
+        async function checkHomeSignupPhoneRegistered() {
+            const phoneRaw = String((document.getElementById('signup_phone') || {}).value || '').trim();
+            if (!phoneRaw) return;
+            let phone = phoneRaw;
+            if (typeof validatePhoneClient === 'function') {
+                const pv = validatePhoneClient(phoneRaw, 'Phone');
+                if (!pv.valid) return;
+                phone = pv.cleanedPhone;
+            }
+            try {
+                const res = await fetch('/api/auth/phone-check', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ phone })
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || !data.registered) return;
+                const password = (document.getElementById('signup_password') || {}).value || '';
+                redirectToLoginTab(
+                    data.loginEmail || '',
+                    password,
+                    data.message ||
+                        'This mobile number is already registered. Sign in with your existing account.',
+                    true
+                );
+            } catch (_) {}
         }
 
         async function handleLogin(e) {
@@ -1597,29 +1626,20 @@
             try {
                 const check = await accountCheck(email, password, phone);
                 if (!check.ok && check.error) return alert(check.error);
-                if (check.phoneTaken) {
-                    alert(
+                if (check.phoneTaken || (check.exists && check.needsLogin)) {
+                    redirectToLoginTab(
+                        check.loginEmail || email,
+                        check.passwordMatch ? password : '',
                         check.message ||
-                            'This mobile number is already registered. Sign in with that account or use a different number.'
+                            (check.phoneTaken
+                                ? 'This mobile number is already registered. Please sign in.'
+                                : 'This email is already registered. Please sign in.'),
+                        true
                     );
-                    switchAuthTab('login');
                     return;
                 }
                 if (check.exists) {
-                    if (check.passwordMatch) {
-                        redirectToLoginTab(
-                            email,
-                            password,
-                            check.message ||
-                                'An account with this email already exists. Sign in with your password.'
-                        );
-                        return;
-                    }
-                    alert(check.message || 'This email is already registered. Please sign in.');
-                    switchAuthTab('login');
-                    const le = document.getElementById('login_email');
-                    if (le) le.value = email;
-                    openAuthModal('login');
+                    redirectToLoginTab(check.loginEmail || email, '', check.message || 'Please sign in.', true);
                     return;
                 }
             } catch (availErr) {
@@ -1656,15 +1676,12 @@
                 });
                 showSignupSuccessModal(data, email);
             } else if (data.needsLogin) {
-                if (data.passwordMatch) {
-                    redirectToLoginTab(email, password, data.error);
-                } else {
-                    alert(data.error || 'Email already registered. Please sign in.');
-                switchAuthTab('login');
-                    const le = document.getElementById('login_email');
-                    if (le) le.value = email;
-                    openAuthModal('login');
-                }
+                redirectToLoginTab(
+                    data.loginEmail || email,
+                    data.passwordMatch ? password : '',
+                    data.error || 'An account already exists. Please sign in.',
+                    true
+                );
             } else {
                 alert(data.error || HttpJson.apiErrorMessage(res, data, false));
             }
@@ -2038,6 +2055,12 @@
                     window.history.replaceState({}, '', window.location.pathname);
                 }
             });
+        const homeSignupPhone = document.getElementById('signup_phone');
+        if (homeSignupPhone) {
+            homeSignupPhone.addEventListener('blur', () => {
+                checkHomeSignupPhoneRegistered().catch(() => {});
+            });
+        }
         if (typeof applyPortalUrls === 'function') applyPortalUrls();
         if (typeof loadOpenSeminarsStrip === 'function') loadOpenSeminarsStrip();
         loadTimerAndSeminars();

@@ -43,6 +43,71 @@
         }
         const title = document.getElementById('doctor-auth-title');
         if (title) title.textContent = showLogin ? "Doctor's Portal Sign In" : 'Create doctor account';
+        if (showLogin) {
+            const signupErr = document.getElementById('doctor-signup-err');
+            if (signupErr) {
+                signupErr.textContent = '';
+                signupErr.classList.add('hidden');
+            }
+        } else {
+            const loginErr = document.getElementById('doctor-login-err');
+            if (loginErr) {
+                loginErr.textContent = '';
+                loginErr.classList.add('hidden');
+            }
+        }
+    }
+
+    function redirectDoctorSignupToLogin(email, password, message) {
+        switchDoctorAuthTab('login');
+        const le = document.getElementById('doctor-login-email');
+        const lp = document.getElementById('doctor-login-password');
+        const loginErr = document.getElementById('doctor-login-err');
+        const signupErr = document.getElementById('doctor-signup-err');
+        if (signupErr) {
+            signupErr.textContent = '';
+            signupErr.classList.add('hidden');
+        }
+        const loginEmail = String(email || '').trim();
+        if (le && loginEmail) le.value = loginEmail;
+        if (lp && password) lp.value = password;
+        if (loginErr && message) {
+            loginErr.textContent = message;
+            loginErr.classList.remove('hidden');
+        }
+        if (le) {
+            le.focus();
+            try {
+                le.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            } catch (_) {}
+        }
+    }
+
+    async function checkDoctorSignupPhoneRegistered() {
+        const phoneRaw = String((document.getElementById('doctor-signup-phone') || {}).value || '').trim();
+        if (!phoneRaw) return;
+        let phone = phoneRaw;
+        if (typeof validatePhoneClient === 'function') {
+            const pv = validatePhoneClient(phoneRaw, 'Phone');
+            if (!pv.valid) return;
+            phone = pv.cleanedPhone;
+        }
+        try {
+            const res = await fetch('/api/auth/phone-check', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ phone })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data.registered) return;
+            const password = (document.getElementById('doctor-signup-password') || {}).value || '';
+            redirectDoctorSignupToLogin(
+                data.loginEmail || '',
+                password,
+                data.message ||
+                    'This mobile number is already registered. Sign in with your existing account.'
+            );
+        } catch (_) {}
     }
 
     function signupOtpDest(channel) {
@@ -202,33 +267,19 @@
 
         try {
             const check = await accountCheck(email, password, phone);
-            if (check.phoneTaken) {
-                alert(
+            if (check.phoneTaken || (check.exists && check.needsLogin)) {
+                redirectDoctorSignupToLogin(
+                    check.loginEmail || email,
+                    check.passwordMatch ? password : '',
                     check.message ||
-                        'This mobile number is already registered. Sign in with that account or use a different number.'
+                        (check.phoneTaken
+                            ? 'This mobile number is already registered. Please sign in.'
+                            : 'This email is already registered. Please sign in.')
                 );
-                switchDoctorAuthTab('login');
                 return;
             }
             if (check.exists) {
-                if (check.passwordMatch) {
-                    if (
-                        confirm(
-                            (check.message || 'Account exists.') + '\n\nSwitch to Sign in?'
-                        )
-                    ) {
-                        switchDoctorAuthTab('login');
-                        const le = document.getElementById('doctor-login-email');
-                        const lp = document.getElementById('doctor-login-password');
-                        if (le) le.value = email;
-                        if (lp) lp.value = password;
-                    }
-                    return;
-                }
-                alert(check.message || 'Email already registered. Please sign in.');
-                switchDoctorAuthTab('login');
-                const le = document.getElementById('doctor-login-email');
-                if (le) le.value = email;
+                redirectDoctorSignupToLogin(check.loginEmail || email, '', check.message || 'Please sign in.');
                 return;
             }
         } catch (_) {
@@ -280,8 +331,11 @@
                 return;
             }
             if (data.needsLogin) {
-                alert(data.error || 'Please sign in.');
-                switchDoctorAuthTab('login');
+                redirectDoctorSignupToLogin(
+                    data.loginEmail || email,
+                    data.passwordMatch ? password : '',
+                    data.error || 'An account already exists. Please sign in.'
+                );
                 return;
             }
             const failMsg =
@@ -502,6 +556,12 @@
             wireForgotPasswordUi();
             const signupForm = document.getElementById('doctor-signup-form');
             if (signupForm) signupForm.addEventListener('submit', handleDoctorSignup);
+            const signupPhone = document.getElementById('doctor-signup-phone');
+            if (signupPhone) {
+                signupPhone.addEventListener('blur', () => {
+                    checkDoctorSignupPhoneRegistered().catch(() => {});
+                });
+            }
             if (isStandaloneDoctorApp()) switchDoctorAuthTab('login');
             const params = new URLSearchParams(window.location.search);
             if (params.get('register') === '1' || params.get('signup') === '1') {
