@@ -4087,10 +4087,10 @@ app.post('/api/auth/signup', (req, res) => {
         }
 
         if (signupOtpRequired()) {
-            if (!phoneOtpToken || !emailOtpToken) {
-                return res.status(400).json({ error: 'Phone and email OTP verification is required before signup.' });
+            if (!emailOtpToken) {
+                return res.status(400).json({ error: 'Email OTP verification is required before signup.' });
             }
-            otpLib.validateSignupOtpTokens(db, { phoneToken: phoneOtpToken, emailToken: emailOtpToken }, (verr, vr) => {
+            otpLib.validateSignupOtpTokens(db, { emailToken: emailOtpToken }, (verr, vr) => {
                 if (verr) return res.status(500).json({ error: verr.message });
                 if (!vr || !vr.ok) return res.status(400).json({ error: (vr && vr.error) || 'Invalid OTP verification' });
                 insertUser();

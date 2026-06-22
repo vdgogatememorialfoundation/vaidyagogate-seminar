@@ -289,10 +289,9 @@
         const body = { firstName, lastName, email, phone, password, role: 'doctor' };
         const otpPanel = document.getElementById('doctor-signup-otp-panel');
         if (otpPanel && otpPanel.style.display !== 'none') {
-            if (!signupPhoneOtpToken || !signupEmailOtpToken) {
-                return alert('Verify email and WhatsApp OTP before creating your account.');
+            if (!signupEmailOtpToken) {
+                return alert('Verify email OTP before creating your account.');
             }
-            body.phoneOtpToken = signupPhoneOtpToken;
             body.emailOtpToken = signupEmailOtpToken;
         }
 
@@ -320,7 +319,6 @@
                 return;
             }
             if (data.success) {
-                signupPhoneOtpToken = null;
                 signupEmailOtpToken = null;
                 document.getElementById('doctor-signup-form')?.reset();
                 showDoctorSignupSuccessModal(data, email);
@@ -352,7 +350,7 @@
     }
 
     function wireSignupOtpButtons() {
-        ['email', 'phone'].forEach((ch) => {
+        ['email'].forEach((ch) => {
             const send = document.getElementById('doctor-signup-send-otp-' + ch);
             const resend = document.getElementById('doctor-signup-resend-otp-' + ch);
             const verify = document.getElementById('doctor-signup-verify-otp-' + ch);
