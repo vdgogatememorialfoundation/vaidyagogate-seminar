@@ -4690,7 +4690,7 @@ async function saveCaseDraft() {
                 (data.applicationNo || '') +
                 '). Submit while applications are open.';
         }
-        loadCaseApplications();
+        loadCaseApplicationsTracker();
     } catch (e) {
         if (statusEl) {
             statusEl.style.color = '#b91c1c';
