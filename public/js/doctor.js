@@ -4701,6 +4701,9 @@ async function saveCaseDraft() {
 
 window.saveCaseDraft = saveCaseDraft;
 
+const CASE_SUBMIT_MAX_RETRIES = 2;
+const CASE_SUBMIT_RETRY_DELAY = 1000;
+
 async function submitCasePresentation() {
     const validated = await validateCaseFormBeforePreviewOrSubmit();
     if (!validated) return;
@@ -4827,34 +4830,56 @@ async function submitCasePresentation() {
     if (uploadedFileIds.length) {
         fd.append('uploadedFileIds', JSON.stringify(uploadedFileIds));
     }
-    try {
-        const res = await fetch('/api/case/submit', { method: 'POST', body: fd });
-        const text = await res.text();
-        let data = {};
+
+    let lastError = null;
+    for (let attempt = 0; attempt <= CASE_SUBMIT_MAX_RETRIES; attempt++) {
+        if (attempt > 0) {
+            console.log('[DEBUG] Case submit retry ' + attempt + '/' + CASE_SUBMIT_MAX_RETRIES);
+            setProgress('Retrying submission…');
+            await new Promise((r) => setTimeout(r, CASE_SUBMIT_RETRY_DELAY * attempt));
+        }
         try {
-            data = text ? JSON.parse(text) : {};
-        } catch (_) {
-            return alert('Server error (' + res.status + '). Restart the server after updates.');
+            const res = await fetch('/api/case/submit', { method: 'POST', body: fd });
+            const text = await res.text();
+            let data = {};
+            try {
+                data = text ? JSON.parse(text) : {};
+            } catch (_) {
+                lastError = 'Server error (' + res.status + '): ' + (text || 'Invalid response');
+                console.warn('[DEBUG] Case submit parse error:', lastError);
+                if (attempt === CASE_SUBMIT_MAX_RETRIES) {
+                    return alert('Server error (' + res.status + '). Please try again in a moment.');
+                }
+                continue;
+            }
+            if (data.success) {
+                updateCaseFilesSuccessUi('Case presentation submitted successfully.');
+                alert(
+                    'Application submitted. Your application ID is ' +
+                        (data.applicationNo || data.submissionId) +
+                        '. Track status under Track case applications.'
+                );
+                cancelCaseApplication();
+                loadCaseApplicationsTracker();
+                switchTab('tab-case-track');
+                return;
+            } else {
+                updateCaseFilesSuccessUi('');
+                alert(data.error || 'Submit failed');
+                return;
+            }
+        } catch (e) {
+            console.error(e);
+            lastError = e.message || 'Network error';
+            if (attempt === CASE_SUBMIT_MAX_RETRIES) {
+                updateCaseFilesSuccessUi('');
+                alert('Network error: ' + lastError);
+                return;
+            }
         }
-        if (data.success) {
-            updateCaseFilesSuccessUi('Case presentation submitted successfully.');
-            alert(
-                'Application submitted. Your application ID is ' +
-                    (data.applicationNo || data.submissionId) +
-                    '. Track status under Track case applications.'
-            );
-            cancelCaseApplication();
-            loadCaseApplicationsTracker();
-            switchTab('tab-case-track');
-        } else {
-            updateCaseFilesSuccessUi('');
-            alert(data.error || 'Submit failed');
-        }
-    } catch (e) {
-        console.error(e);
-        updateCaseFilesSuccessUi('');
-        alert('Network error: ' + (e.message || 'Could not reach server'));
     }
+    updateCaseFilesSuccessUi('');
+    alert('Submission failed after retries. Please try again.');
 }
 
 function caseApplicationStatusLabel(st) {

@@ -4,6 +4,58 @@
 (function (global) {
     let cachedConfig = null;
 
+    const COMPLETE_RETRY_MAX = 3;
+    const COMPLETE_RETRY_DELAY_BASE = 500;
+
+    async function sleep(ms) {
+        return new Promise((r) => setTimeout(r, ms));
+    }
+
+    async function fetchWithRetry(url, options, maxRetries, delayBase) {
+        let lastError;
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            if (attempt > 0) {
+                const delay = delayBase * Math.pow(2, attempt - 1);
+                console.log('[R2 DEBUG] Retry ' + attempt + '/' + maxRetries + ' after ' + delay + 'ms');
+                await sleep(delay);
+            }
+            try {
+                const res = await fetch(url, options);
+                const text = await res.text();
+                let data = {};
+                try {
+                    data = text ? JSON.parse(text) : {};
+                } catch (_) {
+                    if (attempt === maxRetries) {
+                        throw new Error('Server error (' + res.status + '): ' + (text || 'Invalid response'));
+                    }
+                    lastError = new Error('Server error (' + res.status + '): ' + (text || 'Invalid response'));
+                    continue;
+                }
+                if (!res.ok) {
+                    const errMsg = data.error || 'Request failed (HTTP ' + res.status + ')';
+                    if (attempt === maxRetries) {
+                        throw new Error(errMsg);
+                    }
+                    lastError = new Error(errMsg);
+                    if (res.status >= 400 && res.status < 500 && res.status !== 503) {
+                        throw lastError;
+                    }
+                    continue;
+                }
+                return data;
+            } catch (err) {
+                lastError = err;
+                if (err.message && (err.message.includes('Server error') || err.message.includes('Request failed'))) {
+                    if (attempt === maxRetries) throw err;
+                    continue;
+                }
+                if (attempt === maxRetries) throw err;
+            }
+        }
+        throw lastError || new Error('Request failed after ' + maxRetries + ' retries');
+    }
+
     function formatBytes(n) {
         const b = Number(n) || 0;
         if (b < 1024) return b + ' B';
@@ -143,7 +195,8 @@
                     uploaded += chunk.size;
                     if (onProgress) onProgress(Math.round((uploaded / file.size) * 100), uploaded, file.size);
                 }
-                const completeRes = await fetch('/api/case/uploads/complete', {
+                console.log('[R2 DEBUG] Calling complete for multipart upload:', init.uploadId);
+                const complete = await fetchWithRetry('/api/case/uploads/complete', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -151,9 +204,7 @@
                         userId,
                         parts: completedParts
                     })
-                });
-                const complete = await completeRes.json().catch(() => ({}));
-                if (!completeRes.ok) throw new Error(complete.error || 'Upload complete failed');
+                }, COMPLETE_RETRY_MAX, COMPLETE_RETRY_DELAY_BASE);
                 return init.uploadId;
             });
         }
@@ -162,13 +213,12 @@
         if (!part || !part.url) throw new Error('No upload URL returned');
         return tryDirectThenServer(async () => {
             await xhrPutWithProgress(part.url, file, file.type, onProgress);
-            const completeRes = await fetch('/api/case/uploads/complete', {
+            console.log('[R2 DEBUG] Calling complete for single-part upload:', init.uploadId);
+            const complete = await fetchWithRetry('/api/case/uploads/complete', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ uploadId: init.uploadId, userId })
-            });
-            const complete = await completeRes.json().catch(() => ({}));
-            if (!completeRes.ok) throw new Error(complete.error || 'Upload complete failed');
+            }, COMPLETE_RETRY_MAX, COMPLETE_RETRY_DELAY_BASE);
             return init.uploadId;
         });
     }
