@@ -4756,6 +4756,23 @@ async function submitCasePresentation() {
         window.__caseStagedUploadIds && window.__caseStagedUploadIds.length
             ? window.__caseStagedUploadIds.slice()
             : [];
+    // Restore field mappings from __caseStagedUploadIds if needed
+    if (uploadedFileIds.length && (!window.__caseFieldUploadIds || Object.keys(window.__caseFieldUploadIds).length === 0)) {
+        window.__caseFieldUploadIds = {};
+        const enabledFields = getCaseEnabledFormFields(activeCaseProgram) || [];
+        const fileFields = enabledFields.filter((f) => normalizeCaseFieldType(f.type) === 'file');
+        let idIndex = 0;
+        for (const f of fileFields) {
+            if (idIndex < uploadedFileIds.length) {
+                window.__caseFieldUploadIds[f.key] = uploadedFileIds[idIndex];
+                const fileInput = document.getElementById(caseFieldElId(f.key));
+                if (fileInput) {
+                    fileInput.dataset.uploadId = uploadedFileIds[idIndex];
+                }
+                idIndex++;
+            }
+        }
+    }
     if (!uploadedFileIds.length && allFiles.length) {
         for (let i = 0; i < allFiles.length; i++) {
             const raw = allFiles[i];
@@ -4793,6 +4810,22 @@ async function submitCasePresentation() {
                         );
                     }
                 });
+                // Map uploaded file IDs to form field keys (same logic as goToCasePreview)
+                window.__caseFieldUploadIds = {};
+                const enabledFields = getCaseEnabledFormFields(activeCaseProgram) || [];
+                const fileFields = enabledFields.filter((f) => normalizeCaseFieldType(f.type) === 'file');
+                let idIndex = 0;
+                for (const f of fileFields) {
+                    if (idIndex < uploadedFileIds.length) {
+                        window.__caseFieldUploadIds[f.key] = uploadedFileIds[idIndex];
+                        const fileInput = document.getElementById(caseFieldElId(f.key));
+                        if (fileInput) {
+                            fileInput.dataset.uploadId = uploadedFileIds[idIndex];
+                            fileInput.dataset.uploadedName = allFiles[idIndex] ? allFiles[idIndex].name : '';
+                        }
+                        idIndex++;
+                    }
+                }
                 updateCaseFilesSuccessUi(
                     'All ' +
                         uploadedFileIds.length +
