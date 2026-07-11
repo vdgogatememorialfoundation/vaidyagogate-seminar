@@ -85,29 +85,48 @@ function updateCaseFilesSuccessUi(message) {
 }
 
 function showFileFieldUploaded(fieldKey, fileName) {
-    // Update the file input wrapper to show success
+    // Update the file input to show success right next to it
     const fileInput = document.getElementById(caseFieldElId(fieldKey));
-    if (!fileInput) return;
+    if (!fileInput) {
+        console.log('[DEBUG] File input not found for:', fieldKey);
+        return;
+    }
     
-    // Find the field group
-    const fieldGroup = fileInput.closest('.case-form-group');
-    if (!fieldGroup) return;
+    // Find the parent container (usually the field group or input wrapper)
+    let container = fileInput.parentElement;
     
-    // Remove any existing success indicator
-    const existing = fieldGroup.querySelector('.case-file-uploaded');
+    // Remove any existing success indicator for this field
+    const existing = container.querySelector('.case-file-uploaded-' + fieldKey);
     if (existing) existing.remove();
     
-    // Add success indicator
-    const success = document.createElement('div');
-    success.className = 'case-file-uploaded';
-    success.style.cssText = 'color: #16a34a; font-size: 0.85rem; margin-top: 4px; display: flex; align-items: center; gap: 4px;';
-    success.innerHTML = '<i class="fas fa-check-circle"></i> Uploaded: ' + (fileName || 'file');
+    // Also check file input's parent for any existing indicators
+    const parentExisting = container.parentElement?.querySelector('.case-file-uploaded-' + fieldKey);
+    if (parentExisting) parentExisting.remove();
     
-    // Insert after the file input
-    fileInput.parentNode.insertBefore(success, fileInput.nextSibling);
+    // Create success indicator
+    const success = document.createElement('span');
+    success.className = 'case-file-uploaded-' + fieldKey;
+    success.style.cssText = 'color: #16a34a; font-size: 0.8rem; margin-left: 10px; font-weight: 500; vertical-align: middle;';
+    success.innerHTML = '<i class="fas fa-check-circle" style="margin-right:4px;"></i>Uploaded: ' + (fileName || 'file');
     
-    // Also add uploaded class to input for styling
+    // Try to insert after the file input
+    if (fileInput.nextSibling) {
+        container.insertBefore(success, fileInput.nextSibling);
+    } else {
+        container.appendChild(success);
+    }
+    
+    // Add visual indicator to the file input itself
+    fileInput.style.borderColor = '#16a34a';
     fileInput.classList.add('case-file-uploaded-input');
+    
+    // Also hide the file input label if it shows "No file chosen"
+    const label = container.querySelector('label');
+    if (label) {
+        label.style.color = '#16a34a';
+    }
+    
+    console.log('[DEBUG] ShowFileFieldUploaded:', fieldKey, fileName);
 }
 
 function regCertStatusLabel() {
