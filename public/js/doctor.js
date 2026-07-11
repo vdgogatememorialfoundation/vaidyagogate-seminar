@@ -8,6 +8,8 @@ const UPLOAD_HOST_CAP_MB = 4;
 /** Case presentation (CV, video) when R2 is not used. */
 const CASE_UPLOAD_HOST_CAP_MB = 50;
 let __caseUploadConfig = null;
+/** Maps file field key -> upload ID from R2 (e.g., 'upload_cv' -> 'abc123') */
+window.__caseFieldUploadIds = window.__caseFieldUploadIds || {};
 
 async function ensureCaseUploadConfig(programId) {
     if (!window.CaseR2Upload) return null;
@@ -437,8 +439,14 @@ async function validateCaseFormBeforePreviewOrSubmit() {
         }
         if (t === 'file') {
             const el = document.getElementById(caseFieldElId(field.key));
-            if (field.required !== false && !(el && el.files && el.files.length)) {
+            const hasFileInput = el && el.files && el.files.length;
+            const hasR2Upload = el && el.dataset && el.dataset.uploadId;
+            if (field.required !== false && !hasFileInput && !hasR2Upload) {
                 return alert('Please upload: ' + (field.label || field.key)), null;
+            }
+            // Include upload ID in form data if R2 upload exists
+            if (hasR2Upload) {
+                form[field.key + '_uploadId'] = el.dataset.uploadId;
             }
             continue;
         }
@@ -512,6 +520,23 @@ async function goToCasePreview() {
                         setProgress('Uploading ' + (idx + 1) + '/' + total + ': ' + name + ' - ' + pct + '%');
                     }
                 });
+                // Map uploaded file IDs to form field keys based on file type
+                window.__caseFieldUploadIds = {};
+                const enabledFields = getCaseEnabledFormFields(activeCaseProgram) || [];
+                const fileFields = enabledFields.filter((f) => normalizeCaseFieldType(f.type) === 'file');
+                let idIndex = 0;
+                for (const f of fileFields) {
+                    if (idIndex < window.__caseStagedUploadIds.length) {
+                        window.__caseFieldUploadIds[f.key] = window.__caseStagedUploadIds[idIndex];
+                        // Also update the file input's data attributes for validation
+                        const fileInput = document.getElementById(caseFieldElId(f.key));
+                        if (fileInput) {
+                            fileInput.dataset.uploadId = window.__caseStagedUploadIds[idIndex];
+                            fileInput.dataset.uploadedName = allFiles[idIndex] ? allFiles[idIndex].name : '';
+                        }
+                        idIndex++;
+                    }
+                }
                 window.__caseStagedFileMeta = allFiles.map((f) => ({
                     name: f.name,
                     size: f.size
@@ -4829,6 +4854,15 @@ async function submitCasePresentation() {
     if (activeCaseDraftId) fd.append('draftSubmissionId', String(activeCaseDraftId));
     if (uploadedFileIds.length) {
         fd.append('uploadedFileIds', JSON.stringify(uploadedFileIds));
+    }
+    // Also send field-specific upload IDs (from R2 uploads mapped to form fields)
+    if (window.__caseFieldUploadIds) {
+        for (const [fieldKey, uploadId] of Object.entries(window.__caseFieldUploadIds)) {
+            if (uploadId) {
+                fd.append(fieldKey + '_uploadId', uploadId);
+                console.log('[DEBUG] Sending field upload ID:', fieldKey + '_uploadId', '=', uploadId);
+            }
+        }
     }
 
     let lastError = null;
