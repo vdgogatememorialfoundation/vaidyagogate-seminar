@@ -4885,17 +4885,20 @@ async function submitCasePresentation() {
     fd.append('caseProgramId', String(activeCaseProgramId));
     fd.append('formData', JSON.stringify(form));
     if (activeCaseDraftId) fd.append('draftSubmissionId', String(activeCaseDraftId));
-    if (uploadedFileIds.length) {
-        fd.append('uploadedFileIds', JSON.stringify(uploadedFileIds));
-    }
-    // Also send field-specific upload IDs (from R2 uploads mapped to form fields)
+    
+    // Build complete list of upload IDs (from both staged uploads and field-specific uploads)
+    const allUploadIds = uploadedFileIds ? uploadedFileIds.slice() : [];
     if (window.__caseFieldUploadIds) {
         for (const [fieldKey, uploadId] of Object.entries(window.__caseFieldUploadIds)) {
-            if (uploadId) {
-                fd.append(fieldKey + '_uploadId', uploadId);
-                console.log('[DEBUG] Sending field upload ID:', fieldKey + '_uploadId', '=', uploadId);
+            if (uploadId && !allUploadIds.includes(uploadId)) {
+                allUploadIds.push(uploadId);
             }
         }
+    }
+    
+    if (allUploadIds.length) {
+        fd.append('uploadedFileIds', JSON.stringify(allUploadIds));
+        console.log('[DEBUG] Sending uploadedFileIds:', allUploadIds);
     }
 
     let lastError = null;
