@@ -84,6 +84,32 @@ function updateCaseFilesSuccessUi(message) {
     setInlineUploadSuccess(el, text, message || '', !!message);
 }
 
+function showFileFieldUploaded(fieldKey, fileName) {
+    // Update the file input wrapper to show success
+    const fileInput = document.getElementById(caseFieldElId(fieldKey));
+    if (!fileInput) return;
+    
+    // Find the field group
+    const fieldGroup = fileInput.closest('.case-form-group');
+    if (!fieldGroup) return;
+    
+    // Remove any existing success indicator
+    const existing = fieldGroup.querySelector('.case-file-uploaded');
+    if (existing) existing.remove();
+    
+    // Add success indicator
+    const success = document.createElement('div');
+    success.className = 'case-file-uploaded';
+    success.style.cssText = 'color: #16a34a; font-size: 0.85rem; margin-top: 4px; display: flex; align-items: center; gap: 4px;';
+    success.innerHTML = '<i class="fas fa-check-circle"></i> Uploaded: ' + (fileName || 'file');
+    
+    // Insert after the file input
+    fileInput.parentNode.insertBefore(success, fileInput.nextSibling);
+    
+    // Also add uploaded class to input for styling
+    fileInput.classList.add('case-file-uploaded-input');
+}
+
 function regCertStatusLabel() {
     const name = getRegCertFileLabel();
     if (!name) return '';
@@ -534,6 +560,8 @@ async function goToCasePreview() {
                             fileInput.dataset.uploadId = window.__caseStagedUploadIds[idIndex];
                             fileInput.dataset.uploadedName = allFiles[idIndex] ? allFiles[idIndex].name : '';
                         }
+                        // Show "Uploaded" status for this file field
+                        showFileFieldUploaded(f.key, allFiles[idIndex] ? allFiles[idIndex].name : '');
                         idIndex++;
                     }
                 }
@@ -4762,13 +4790,18 @@ async function submitCasePresentation() {
         const enabledFields = getCaseEnabledFormFields(activeCaseProgram) || [];
         const fileFields = enabledFields.filter((f) => normalizeCaseFieldType(f.type) === 'file');
         let idIndex = 0;
+        // Get file names from staged file meta
+        const stagedMeta = window.__caseStagedFileMeta || [];
         for (const f of fileFields) {
             if (idIndex < uploadedFileIds.length) {
                 window.__caseFieldUploadIds[f.key] = uploadedFileIds[idIndex];
                 const fileInput = document.getElementById(caseFieldElId(f.key));
                 if (fileInput) {
                     fileInput.dataset.uploadId = uploadedFileIds[idIndex];
+                    fileInput.dataset.uploadedName = stagedMeta[idIndex] ? stagedMeta[idIndex].name : '';
                 }
+                // Show "Uploaded" status for this file field
+                showFileFieldUploaded(f.key, stagedMeta[idIndex] ? stagedMeta[idIndex].name : '');
                 idIndex++;
             }
         }
@@ -4823,6 +4856,8 @@ async function submitCasePresentation() {
                             fileInput.dataset.uploadId = uploadedFileIds[idIndex];
                             fileInput.dataset.uploadedName = allFiles[idIndex] ? allFiles[idIndex].name : '';
                         }
+                        // Show "Uploaded" status for this file field
+                        showFileFieldUploaded(f.key, allFiles[idIndex] ? allFiles[idIndex].name : '');
                         idIndex++;
                     }
                 }
