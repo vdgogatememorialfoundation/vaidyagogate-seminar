@@ -3167,6 +3167,11 @@
                         <div id="seminar-qual-options-wrap" style="margin-top:10px;padding:10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;display:none;">
                             <label style="font-weight:700;font-size:0.88rem;color:#166534;">Qualification choices for this seminar</label>
                             <div id="seminar-qual-options" style="display:flex;flex-wrap:wrap;gap:12px;margin-top:8px;font-size:0.88rem;"></div>
+                            <div style="margin-top:10px;display:flex;gap:8px;align-items:center;">
+                                <input type="text" id="seminar-qual-new-option" placeholder="Add new qualification option" style="flex:1;padding:6px;font-size:0.85rem;border:1px solid #bbf7d0;border-radius:6px;">
+                                <button type="button" class="btn-primary" style="padding:6px 12px;font-size:0.82rem;background:#166534;" onclick="addSeminarQualOption()">Add</button>
+                            </div>
+                            <p id="seminar-qual-custom-note" style="margin:6px 0 0;font-size:0.78rem;color:#64748b;">Custom options are only for this seminar.</p>
                         </div>
                         <div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:480px;">
                             <div><label style="font-size:0.8rem;">Earliest birth year (override)</label><input type="number" id="seminar-birth-year-min" min="1900" max="2100" placeholder="Global default" style="width:100%;padding:6px;" oninput="updateSeminarPolicyPreviews()"></div>
