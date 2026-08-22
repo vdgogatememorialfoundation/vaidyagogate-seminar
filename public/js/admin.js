@@ -14011,6 +14011,7 @@ function addSeminarDayRow(prefill) {
     if (!list) return;
     const row = document.createElement('div');
     row.className = 'seminar-day-row';
+    if (prefill && prefill.id) row.dataset.dayId = String(prefill.id);
     row.style.cssText =
         'position:relative;margin-bottom:12px;padding:14px;background:#fff;border:1px solid #bfdbfe;border-radius:10px;';
     const p = prefill || {};
@@ -14050,14 +14051,17 @@ function collectSeminarDaysFromUi() {
     rows.forEach((row, idx) => {
         const title = row.querySelector('.day-title')?.value.trim() || '';
         if (!title) return;
-        out.push({
+        const item = {
             title,
             day_date: row.querySelector('.day-date')?.value || null,
             checkin_date: row.querySelector('.day-checkin')?.value || null,
             sort_order: idx,
             checkin_enabled: row.querySelector('.day-checkin-enabled')?.checked !== false,
             is_active: true
-        });
+        };
+        const did = parseInt(row.dataset.dayId, 10);
+        if (Number.isInteger(did) && did > 0) item.id = did;
+        out.push(item);
     });
     return out;
 }
