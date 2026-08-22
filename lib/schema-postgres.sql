@@ -1,15 +1,3 @@
-CREATE TABLE seminar_days (
-            id SERIAL PRIMARY KEY,
-            seminar_id INTEGER NOT NULL,
-            title TEXT NOT NULL,
-            day_date TEXT,
-            checkin_date TEXT,
-            sort_order INTEGER DEFAULT 0,
-            checkin_enabled INTEGER DEFAULT 1,
-            is_active INTEGER DEFAULT 1,
-            created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
-        )
-
 -- Auto-generated from SQLite schema — Neon / Render
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
@@ -414,6 +402,17 @@ CREATE TABLE IF NOT EXISTS homepage_banners (
             sort_order INTEGER DEFAULT 0,
             enabled INTEGER DEFAULT 1,
             created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        );
+CREATE TABLE IF NOT EXISTS seminar_days (
+            id SERIAL PRIMARY KEY,
+            seminar_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            day_date TEXT,
+            checkin_date TEXT,
+            sort_order INTEGER DEFAULT 0,
+            checkin_enabled INTEGER DEFAULT 1,
+            is_active INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
 
 INSERT INTO payment_gateways (name, is_active, config) VALUES

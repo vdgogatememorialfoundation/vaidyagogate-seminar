@@ -548,15 +548,21 @@ app.get(['/staff/crm', '/staff/crm/'], (req, res) => {
 
 
 app.get('/certificate/view', (req, res) => {
-    certRender.handleViewRequest(db, req, res);
+    releaseScheduledCertsForUserQuiet(parseInt(req.query.uid, 10) || null, () =>
+        certRender.handleViewRequest(db, req, res)
+    );
 });
 
 app.get('/certificate/download', (req, res) => {
-    certRender.handleDownloadRequest(db, req, res);
+    releaseScheduledCertsForUserQuiet(parseInt(req.query.uid, 10) || null, () =>
+        certRender.handleDownloadRequest(db, req, res)
+    );
 });
 
 app.get('/certificate/download.pdf', (req, res) => {
-    certRender.handlePdfDownloadRequest(db, req, res);
+    releaseScheduledCertsForUserQuiet(parseInt(req.query.uid, 10) || null, () =>
+        certRender.handlePdfDownloadRequest(db, req, res)
+    );
 });
 
 siteSeoMod.registerFaviconRoutes(app, { db });
@@ -6758,7 +6764,10 @@ function queryDoctorCertificateTracking(uid, res, sql, retried) {
 // Doctor certificate tracking (live check-in + approval status per seminar) — Certificates tab only
 app.get('/api/doctor/certificate-tracking/:userId', withAuxiliaryTables, (req, res) => {
     resolveDoctorApiUserId(req, res, (uid) => {
-        const runQuery = () => queryDoctorCertificateTracking(uid, res, DOCTOR_CERT_TRACKING_SQL, false);
+        const runQuery = () =>
+            releaseScheduledCertsForUserQuiet(uid, () =>
+                queryDoctorCertificateTracking(uid, res, DOCTOR_CERT_TRACKING_SQL, false)
+            );
         if (process.env.DATABASE_URL) {
             return runQuery();
         }
@@ -10258,6 +10267,7 @@ app.post('/api/admin/certificates/template', withMemoryAwareUpload('templateFile
 });
 
 app.get('/api/admin/certificates/status', (req, res) => {
+    releaseScheduledCertsForAllQuiet(() => {
     const seminarId = req.query.seminarId ? parseInt(req.query.seminarId, 10) : null;
     let sql = `
         SELECT uc.*, u.user_id_string, u.first_name, u.last_name, u.email,
@@ -10277,6 +10287,7 @@ app.get('/api/admin/certificates/status', (req, res) => {
     db.all(sql, params, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(rows || []);
+    });
     });
 });
 
@@ -10558,8 +10569,36 @@ app.post('/api/public/certificate-verify/confirm', (req, res) => {
     );
 });
 
+function releaseScheduledCertsForUserQuiet(uid, done) {
+    const finish = typeof done === 'function' ? done : () => {};
+    try {
+        certVerify.releaseScheduledCertificatesForUser(
+            db,
+            uid,
+            { notifEngine, portalTracking, promoteRegistrationToCertificateIssued },
+            () => finish()
+        );
+    } catch (_) {
+        finish();
+    }
+}
+
+function releaseScheduledCertsForAllQuiet(done) {
+    const finish = typeof done === 'function' ? done : () => {};
+    try {
+        certVerify.releaseScheduledCertificatesForAll(
+            db,
+            { notifEngine, portalTracking, promoteRegistrationToCertificateIssued },
+            () => finish()
+        );
+    } catch (_) {
+        finish();
+    }
+}
+
 app.get('/api/doctor/certificates/:userId', (req, res) => {
     resolveDoctorApiUserId(req, res, (uid) => {
+        releaseScheduledCertsForUserQuiet(uid, () => {
         const year = req.query.year != null ? parseInt(req.query.year, 10) : null;
         let sql = `SELECT uc.*, s.title AS seminar_title, s.portal_year, s.event_date, ct.file_path AS template_path, ct.mime_type
              FROM user_certificates uc
@@ -10576,11 +10615,13 @@ app.get('/api/doctor/certificates/:userId', (req, res) => {
             if (err) return res.status(500).json({ error: err.message });
             res.json(rows || []);
         });
+        });
     });
 });
 
 app.get('/api/doctor/certificate-years/:userId', (req, res) => {
     resolveDoctorApiUserId(req, res, (uid) => {
+        releaseScheduledCertsForUserQuiet(uid, () => {
         db.all(
             `SELECT DISTINCT COALESCE(s.portal_year, CAST(strftime('%Y', s.event_date) AS INTEGER)) AS year,
                     s.id AS seminar_id, s.title, s.event_date, uc.id AS cert_id,
@@ -10615,6 +10656,7 @@ app.get('/api/doctor/certificate-years/:userId', (req, res) => {
                 });
             }
         );
+        });
     });
 });
 

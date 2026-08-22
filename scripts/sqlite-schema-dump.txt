@@ -412,3 +412,15 @@ CREATE TABLE homepage_banners (
             enabled INTEGER DEFAULT 1,
             created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
+
+CREATE TABLE seminar_days (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            seminar_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            day_date TEXT,
+            checkin_date TEXT,
+            sort_order INTEGER DEFAULT 0,
+            checkin_enabled INTEGER DEFAULT 1,
+            is_active INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )

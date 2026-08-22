@@ -18,7 +18,7 @@
     margin: 0;
     padding: 16px;
     background: #e5e5e5;
-    font-family: 'Playfair Display', Georgia, serif;
+    font-family: 'Roboto', Arial, sans-serif;
     color: var(--cert-ink);
 }
 
@@ -88,7 +88,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    font-family: 'Montserrat', sans-serif;
+    font-family: 'Roboto', Arial, sans-serif;
     margin-bottom: 12px;
 }
 
@@ -109,7 +109,7 @@
 }
 
 .cert-title {
-    font-family: 'Playfair Display', serif;
+    font-family: 'Roboto', Arial, sans-serif;
     font-size: 3.5rem;
     font-weight: 700;
     color: var(--cert-navy);
@@ -123,7 +123,7 @@
     display: block;
     margin: 12px auto 20px;
     color: var(--cert-gold-deep);
-    font-family: 'Montserrat', sans-serif;
+    font-family: 'Roboto', Arial, sans-serif;
     font-size: 1.1rem;
     font-weight: 600;
     letter-spacing: 0.25em;
@@ -138,8 +138,9 @@
 }
 
 .cert-name {
-    font-family: 'Pinyon Script', cursive;
-    font-size: 4rem;
+    font-family: 'Roboto', Arial, sans-serif;
+    font-weight: 700;
+    font-size: 3.6rem;
     color: var(--cert-name);
     margin: 0 0 20px;
     line-height: 1.1;
@@ -171,7 +172,7 @@
 }
 
 .cert-meta {
-    font-family: 'Montserrat', sans-serif;
+    font-family: 'Roboto', Arial, sans-serif;
     font-size: 0.95rem;
     margin: 0;
     color: var(--cert-charcoal);
@@ -220,7 +221,7 @@
 }
 
 .cert-sig-name {
-    font-family: 'Montserrat', sans-serif;
+    font-family: 'Roboto', Arial, sans-serif;
     font-weight: 700;
     margin: 0;
     font-size: 0.95rem;
@@ -229,7 +230,7 @@
 }
 
 .cert-sig-title {
-    font-family: 'Montserrat', sans-serif;
+    font-family: 'Roboto', Arial, sans-serif;
     margin: 4px 0 0;
     font-size: 0.85rem;
     color: var(--cert-charcoal);
@@ -262,13 +263,13 @@
     font-size: 0.75rem;
     color: var(--cert-charcoal);
     margin: 6px 0 0;
-    font-family: 'Montserrat', sans-serif;
+    font-family: 'Roboto', Arial, sans-serif;
     text-transform: uppercase;
     letter-spacing: 0.05em;
 }
 
 .cert-id-missing {
-    font-family: 'Montserrat', sans-serif;
+    font-family: 'Roboto', Arial, sans-serif;
     font-size: 0.8rem;
     color: #b45309;
 }
@@ -289,7 +290,7 @@
     font-size: 0.85rem;
     color: #64748b;
     margin-top: 16px;
-    font-family: 'Montserrat', sans-serif;
+    font-family: 'Roboto', Arial, sans-serif;
 }
 
 @media print {
