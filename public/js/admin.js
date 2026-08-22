@@ -13398,6 +13398,20 @@ async function loadSeminarFormOverrideUi(overrideJson) {
             : qualGlobal && Array.isArray(qualGlobal.options)
               ? qualGlobal.options.map((o) => o.value)
               : ADMIN_QUAL_OPTION_DEFS.map((o) => o.value);
+
+    // Reset custom options for this seminar
+    __seminarCustomQualOptions = [];
+
+    // Detect and load custom options (those not in ADMIN_QUAL_OPTION_DEFS)
+    if (qualOv.options != null && Array.isArray(qualOv.options)) {
+        qualOv.options.forEach((o) => {
+            const val = o.value || o;
+            if (!ADMIN_QUAL_OPTION_DEFS.some((def) => def.value === val)) {
+                __seminarCustomQualOptions.push({ value: val, label: o.label || val });
+            }
+        });
+    }
+
     const qualWrap = document.getElementById('seminar-qual-options-wrap');
     if (qualWrap) {
         qualWrap.style.display = globalFields.some((f) => f.key === 'qual') ? 'block' : 'none';
@@ -15545,13 +15559,19 @@ const ADMIN_QUAL_OPTION_DEFS = [
     { value: 'PG', label: 'PG' }
 ];
 
+let __seminarCustomQualOptions = [];
+
 function renderQualOptionCheckboxes(containerId, selectedValues) {
     const root = document.getElementById(containerId);
     if (!root) return;
     const sel = new Set((selectedValues || []).map((v) => String(v)));
     if (!sel.size) ADMIN_QUAL_OPTION_DEFS.forEach((o) => sel.add(o.value));
-    root.innerHTML = ADMIN_QUAL_OPTION_DEFS.map((o) => {
+
+    const renderCheckbox = (o, isCustom) => {
         const id = containerId + '-q-' + o.value.replace(/\s+/g, '-');
+        const deleteBtn = isCustom
+            ? `<button type="button" onclick="removeSeminarQualOption('${o.value.replace(/'/g, "\\'")}')" style="background:none;border:none;cursor:pointer;color:#dc2626;font-size:0.75rem;padding:0 2px;margin-left:4px;" title="Remove option">×</button>`
+            : '';
         return (
             '<label style="display:inline-flex;align-items:center;gap:6px;"><input type="checkbox" class="qual-opt-cb" data-container="' +
             containerId +
@@ -15563,9 +15583,14 @@ function renderQualOptionCheckboxes(containerId, selectedValues) {
             (sel.has(o.value) ? 'checked' : '') +
             ' onchange="updateSeminarPolicyPreviews()"> ' +
             o.label +
+            deleteBtn +
             '</label>'
         );
-    }).join('');
+    };
+
+    const defaultHtml = ADMIN_QUAL_OPTION_DEFS.map((o) => renderCheckbox(o, false)).join('');
+    const customHtml = __seminarCustomQualOptions.map((o) => renderCheckbox(o, true)).join('');
+    root.innerHTML = defaultHtml + customHtml;
 }
 
 function collectQualOptionsFromContainer(containerId) {
@@ -15579,6 +15604,44 @@ function collectQualOptionsFromContainer(containerId) {
         out.push({ value: v, label: def ? def.label : v });
     });
     return out;
+}
+
+function addSeminarQualOption() {
+    const input = document.getElementById('seminar-qual-new-option');
+    if (!input) return;
+    const val = String(input.value || '').trim();
+    if (!val) return alert('Enter a qualification option name.');
+    if (ADMIN_QUAL_OPTION_DEFS.some((o) => o.value === val) || __seminarCustomQualOptions.some((o) => o.value === val)) {
+        return alert('This option already exists.');
+    }
+    __seminarCustomQualOptions.push({ value: val, label: val });
+    input.value = '';
+    renderQualOptionCheckboxes('seminar-qual-options', getSelectedQualOptions());
+    updateSeminarPolicyPreviews();
+}
+
+function removeSeminarQualOption(value) {
+    __seminarCustomQualOptions = __seminarCustomQualOptions.filter((o) => o.value !== value);
+    renderQualOptionCheckboxes('seminar-qual-options', getSelectedQualOptions());
+    updateSeminarPolicyPreviews();
+}
+
+function getSelectedQualOptions() {
+    const container = document.getElementById('seminar-qual-options');
+    if (!container) return [];
+    const selected = [];
+    container.querySelectorAll('.qual-opt-cb:checked').forEach((cb) => {
+        selected.push(cb.value);
+    });
+    return selected;
+}
+
+function saveSeminarCustomQualOptions() {
+    const allSelected = [];
+    document.querySelectorAll('#seminar-qual-options .qual-opt-cb:checked').forEach((cb) => {
+        allSelected.push(cb.value);
+    });
+    return allSelected;
 }
 
 function adminRegFieldTypeOptions(selected) {
