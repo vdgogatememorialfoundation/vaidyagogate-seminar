@@ -42,6 +42,7 @@ const adminManualCheckin = require('./lib/admin-manual-checkin');
 const refundTracking = require('./lib/refund-tracking');
 const reregistrationEligibility = require('./lib/reregistration-eligibility');
 const seminarEvents = require('./lib/seminar-events');
+const seminarDays = require('./lib/seminar-days');
 const seminarDt = require('./lib/seminar-datetime');
 const cancelPolicy = require('./lib/cancellation-policy');
 const siteMarketing = require('./lib/site-marketing');
@@ -1201,8 +1202,10 @@ function ensurePortalSchema(next) {
                                         });
                                             ticketScanEvents.ensureTicketScanEventsTable(db, () => {
                                                 seminarEvents.ensureSchema(db, ignoreSchemaMigrationErr, () => {
+                                                seminarDays.ensureSchema(db, ignoreSchemaMigrationErr, () => {
                                                 scannerIdCapture.ensureSchema(db, () => {
                                                     adminMailThreads.ensureSchema(db, () => {});
+                                                });
                                                 });
                                                 });
                                             });
@@ -2138,11 +2141,13 @@ function runNotifyTicketIssued(userId, registrationId, ticketId, opts) {
                 t.qr_code_data, t.ticket_id_string, t.is_scanned, t.scan_time,
                 IFNULL(t.is_valid, 1) AS is_valid, o.status AS payment_status,
                 s.title AS seminar_title, s.event_date, s.location_url, s.portal_year,
+                sday.title AS day_title, sday.day_date AS day_date,
                 u.first_name, u.last_name, u.email, u.phone
          FROM registrations r
          JOIN orders o ON o.registration_id = r.id
          JOIN tickets t ON t.order_id = o.id
          JOIN seminars s ON s.id = r.seminar_id
+         LEFT JOIN seminar_days sday ON sday.id = t.day_id
          JOIN users u ON u.id = r.user_id
          WHERE r.id = ? AND TRIM(t.ticket_id_string) = TRIM(?)
          ORDER BY o.id DESC, t.id DESC
@@ -2205,10 +2210,22 @@ function runNotifyTicketIssued(userId, registrationId, ticketId, opts) {
     );
 }
 
-function insertParticipantTicket(orderDbId, userId, orderIdStr, registrationId, applicationNo, cb, eventIdOpt) {
+/** Attach sub-events and event days to seminar rows (both are needed by public/admin/scanner payloads). */
+function attachEventsAndDaysToSeminarRows(rows, cb) {
+    seminarEvents.attachEventsToSeminarRows(db, rows || [], (eEv, withEvents) => {
+        if (eEv) return cb(eEv);
+        seminarDays.attachDaysToSeminarRows(db, withEvents || [], cb);
+    });
+}
+
+function insertParticipantTicket(orderDbId, userId, orderIdStr, registrationId, applicationNo, cb, eventIdOpt, dayIdOpt) {
     const eventId =
         eventIdOpt != null && eventIdOpt !== '' && Number.isInteger(parseInt(eventIdOpt, 10))
             ? parseInt(eventIdOpt, 10)
+            : null;
+    const dayId =
+        dayIdOpt != null && dayIdOpt !== '' && Number.isInteger(parseInt(dayIdOpt, 10))
+            ? parseInt(dayIdOpt, 10)
             : null;
     db.get(`SELECT status FROM registrations WHERE id = ?`, [registrationId], (eReg, regRow) => {
         if (eReg) return cb && cb(eReg);
@@ -2231,6 +2248,7 @@ function insertParticipantTicket(orderDbId, userId, orderIdStr, registrationId, 
                     applicationNo: applicationNo || null,
                     userId,
                     eventId: eventId || null,
+                    dayId: dayId || null,
                     ts: Date.now()
                 });
                 const runInsert = (sql, params) => {
@@ -2252,15 +2270,15 @@ function insertParticipantTicket(orderDbId, userId, orderIdStr, registrationId, 
                     });
                 };
                 runInsert(
-                    `INSERT INTO tickets (order_id, user_id, qr_code_data, ticket_id_string, event_id) VALUES (?, ?, ?, ?, ?)`,
-                    [orderDbId, userId, qrData, etk, eventId]
+                    `INSERT INTO tickets (order_id, user_id, qr_code_data, ticket_id_string, event_id, day_id) VALUES (?, ?, ?, ?, ?, ?)`,
+                    [orderDbId, userId, qrData, etk, eventId, dayId]
                 );
             });
         }
 
         db.get(
-            `SELECT id, ticket_id_string, qr_code_data FROM tickets WHERE order_id = ? AND IFNULL(event_id, 0) = ?`,
-            [orderDbId, eventId || 0],
+            `SELECT id, ticket_id_string, qr_code_data FROM tickets WHERE order_id = ? AND IFNULL(event_id, 0) = ? AND IFNULL(day_id, 0) = ?`,
+            [orderDbId, eventId || 0, dayId || 0],
             (eExist, existing) => {
             if (eExist) return cb && cb(eExist);
             if (existing) {
@@ -2287,41 +2305,54 @@ function insertParticipantTicket(orderDbId, userId, orderIdStr, registrationId, 
 function insertParticipantTicketsForRegistration(orderDbId, userId, orderIdStr, registrationId, applicationNo, cb) {
     seminarEvents.getEventIdsForTicketIssue(db, registrationId, (err, eventIds) => {
         if (err) return cb && cb(err);
-        if (!eventIds || !eventIds.length) {
-            return insertParticipantTicket(
-                orderDbId,
-                userId,
-                orderIdStr,
-                registrationId,
-                applicationNo,
-                cb,
-                null
-            );
-        }
-        const issued = [];
-        let left = eventIds.length;
-        let firstId = null;
-        let hadErr = null;
-        eventIds.forEach((eid) => {
-            insertParticipantTicket(
-                orderDbId,
-                userId,
-                orderIdStr,
-                registrationId,
-                applicationNo,
-                (eT, etk, qr, meta) => {
-                    if (eT && !hadErr) hadErr = eT;
-                    if (etk) {
-                        issued.push({ eventId: eid, ticketId: etk });
-                        if (!firstId) firstId = etk;
-                    }
-                    if (--left === 0) {
-                        if (hadErr) return cb && cb(hadErr);
-                        cb && cb(null, firstId, null, { tickets: issued, multi: true, skipped: meta && meta.skipped });
-                    }
-                },
-                eid
-            );
+        seminarDays.getDayIdsForTicketIssue(db, registrationId, (dErr, dayIds) => {
+            if (dErr) return cb && cb(dErr);
+            const evList = eventIds && eventIds.length ? eventIds : [null];
+            const dayList = dayIds && dayIds.length ? dayIds : [null];
+            if (!evList[0] && !dayList[0]) {
+                return insertParticipantTicket(
+                    orderDbId,
+                    userId,
+                    orderIdStr,
+                    registrationId,
+                    applicationNo,
+                    cb,
+                    null,
+                    null
+                );
+            }
+            const units = [];
+            dayList.forEach((did) => {
+                evList.forEach((eid) => {
+                    units.push({ eventId: eid, dayId: did });
+                });
+            });
+            const issued = [];
+            let left = units.length;
+            let firstId = null;
+            let hadErr = null;
+            units.forEach((u) => {
+                insertParticipantTicket(
+                    orderDbId,
+                    userId,
+                    orderIdStr,
+                    registrationId,
+                    applicationNo,
+                    (eT, etk, qr, meta) => {
+                        if (eT && !hadErr) hadErr = eT;
+                        if (etk) {
+                            issued.push({ eventId: u.eventId, dayId: u.dayId, ticketId: etk });
+                            if (!firstId) firstId = etk;
+                        }
+                        if (--left === 0) {
+                            if (hadErr) return cb && cb(hadErr);
+                            cb && cb(null, firstId, null, { tickets: issued, multi: units.length > 1, skipped: meta && meta.skipped });
+                        }
+                    },
+                    u.eventId,
+                    u.dayId
+                );
+            });
         });
     });
 }
@@ -2438,8 +2469,9 @@ function ensureParticipantTicketForRegistration(registrationId, options, cb) {
                         [orderIdStr, registrationId, opts.amount != null ? opts.amount : 1500],
                         function (insErr) {
                             if (insErr) return cb2(insErr);
-                            insertParticipantTicket(
-                                this.lastID,
+                            const newOrderId = this.lastID;
+                            insertParticipantTicketsForRegistration(
+                                newOrderId,
                                 reg.user_id,
                                 orderIdStr,
                                 registrationId,
@@ -2447,7 +2479,7 @@ function ensureParticipantTicketForRegistration(registrationId, options, cb) {
                                 (eT, etk, qr, meta) => {
                                     if (eT) return cb2(eT);
                                     cb2(null, {
-                                        orderId: this.lastID,
+                                        orderId: newOrderId,
                                         orderIdString: orderIdStr,
                                         ticketId: etk,
                                         skipped: meta && meta.skipped
@@ -2457,7 +2489,7 @@ function ensureParticipantTicketForRegistration(registrationId, options, cb) {
                         }
                     );
                 }
-                insertParticipantTicket(
+                insertParticipantTicketsForRegistration(
                     orderRow.id,
                     reg.user_id,
                     orderRow.order_id_string || '',
@@ -4403,7 +4435,7 @@ app.get('/api/seminars', (req, res) => {
         }
         db.all(sql, params, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-            seminarEvents.attachEventsToSeminarRows(db, rows || [], (eEv, withEvents) => {
+            attachEventsAndDaysToSeminarRows(rows || [], (eEv, withEvents) => {
                 if (eEv) return res.status(500).json({ error: eEv.message });
                 const enriched = googleMaps.enrichSeminarRows(withEvents || []);
                 const payload = { portalYear: activeYear, bucket, seminars: enriched };
@@ -5044,7 +5076,7 @@ app.get('/api/admin/orders', (req, res) => {
 app.get('/api/admin/seminars/all', (req, res) => {
     db.all(`SELECT * FROM seminars ORDER BY created_at DESC`, [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        seminarEvents.attachEventsToSeminarRows(db, rows || [], (eEv, out) => {
+        attachEventsAndDaysToSeminarRows(rows || [], (eEv, out) => {
             if (eEv) return res.status(500).json({ error: eEv.message });
             res.json(out || []);
         });
@@ -5058,7 +5090,7 @@ app.get('/api/admin/seminars', (req, res) => {
         [],
         (err, rows) => {
             if (err) return res.status(500).json({ error: err.message });
-            seminarEvents.attachEventsToSeminarRows(db, rows || [], (eEv, out) => {
+            attachEventsAndDaysToSeminarRows(rows || [], (eEv, out) => {
                 if (eEv) return res.status(500).json({ error: eEv.message });
                 res.json(out || []);
             });
@@ -5070,6 +5102,15 @@ app.get('/api/admin/seminars/:id/sub-events', (req, res) => {
     const sid = parseInt(req.params.id, 10);
     if (!sid) return res.status(400).json({ error: 'Invalid seminar id' });
     seminarEvents.listForSeminar(db, sid, false, (err, rows) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(rows || []);
+    });
+});
+
+app.get('/api/admin/seminars/:id/days', (req, res) => {
+    const sid = parseInt(req.params.id, 10);
+    if (!sid) return res.status(400).json({ error: 'Invalid seminar id' });
+    seminarDays.listForSeminar(db, sid, false, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(rows || []);
     });
@@ -5541,7 +5582,26 @@ app.post('/api/applications/submit', requestGuard.registrationSubmitLimit, withC
                                     return res.status(400).json({ error: 'Invalid event selection. Refresh and try again.' });
                                 }
                             }
-                            nextFn();
+                            seminarDays.listForSeminar(db, seminarId, true, (dErr, days) => {
+                                if (dErr) return res.status(500).json({ error: dErr.message });
+                                if (
+                                    days &&
+                                    days.length &&
+                                    seminarDays.normalizeDaySelectionMode(sem && sem.day_selection_mode) === 'optional'
+                                ) {
+                                    const selectedDays = seminarDays.parseSelectedDayIds(formData);
+                                    if (!selectedDays.length) {
+                                        return res.status(400).json({
+                                            error: 'Select at least one day to attend. Each day has its own QR e-ticket.'
+                                        });
+                                    }
+                                    const okDays = selectedDays.every((id) => days.some((d) => d.id === id));
+                                    if (!okDays) {
+                                        return res.status(400).json({ error: 'Invalid day selection. Refresh and try again.' });
+                                    }
+                                }
+                                nextFn();
+                            });
                         });
                     }
 
@@ -6793,11 +6853,13 @@ app.get('/api/doctor/event-tickets/:userId', (req, res) => {
         `SELECT t.id as ticket_row_id, t.ticket_id_string, t.qr_code_data, t.is_scanned, t.scan_time,
                 IFNULL(t.scan_count, 0) AS scan_count, IFNULL(t.is_valid, 1) AS is_valid,
                 o.order_id_string, o.amount, o.status as order_status, o.payment_date,
-                r.application_no, r.status as registration_status, s.title as seminar_title, s.id as seminar_id, s.event_date
+                r.application_no, r.status as registration_status, s.title as seminar_title, s.id as seminar_id, s.event_date,
+                sday.title AS day_title, sday.day_date AS day_date
          FROM tickets t
          JOIN orders o ON t.order_id = o.id
          JOIN registrations r ON o.registration_id = r.id
          LEFT JOIN seminars s ON r.seminar_id = s.id
+         LEFT JOIN seminar_days sday ON sday.id = t.day_id
          WHERE r.user_id = ?
          ORDER BY t.id DESC`,
         [uid],
@@ -6807,15 +6869,16 @@ app.get('/api/doctor/event-tickets/:userId', (req, res) => {
                 const scanned = Number(row.is_scanned) === 1 || Number(row.scan_count || 0) > 0;
                 const regSt = String(row.registration_status || '').toLowerCase();
                 const adminCheckedIn = regSt === 'checked_in' || regSt === 'certificate_issued';
+                const ticketDate = row.day_date || row.event_date;
                 const expired =
-                    isTicketExpiredForSeminar(row.event_date) &&
+                    isTicketExpiredForSeminar(ticketDate) &&
                     !scanned &&
                     !adminCheckedIn;
                 return {
                     ...row,
                     download_token: ticketAccess.createTicketAccessToken(row.ticket_id_string, uid, 900000),
-                    seminar_ended: isSeminarEnded(row.event_date),
-                    ticket_expires_on: ticketExpiryStartsYmd(row.event_date) || null,
+                    seminar_ended: isSeminarEnded(ticketDate),
+                    ticket_expires_on: ticketExpiryStartsYmd(ticketDate) || null,
                     ticket_expired: expired,
                     no_valid_ticket: expired
                 };
@@ -6839,11 +6902,13 @@ app.get('/api/doctor/ticket-document/:ticketId', (req, res) => {
         `SELECT t.ticket_id_string, t.qr_code_data, t.is_scanned, t.scan_time, IFNULL(t.is_valid, 1) AS is_valid,
                 r.application_no, r.user_id, o.status AS payment_status,
                 s.title AS seminar_title, s.event_date, s.location_url, s.portal_year,
+                sday.title AS day_title, sday.day_date AS day_date,
                 u.first_name, u.last_name
          FROM tickets t
          JOIN orders o ON t.order_id = o.id
          JOIN registrations r ON o.registration_id = r.id
          JOIN seminars s ON r.seminar_id = s.id
+         LEFT JOIN seminar_days sday ON sday.id = t.day_id
          JOIN users u ON u.id = r.user_id
          ${whereClause}`,
         params,
@@ -6871,8 +6936,10 @@ app.get('/api/doctor/ticket-document/:ticketId', (req, res) => {
                     {
                         ticket_id_string: row.ticket_id_string,
                         application_no: row.application_no,
-                        seminar_title: row.seminar_title,
-                        event_date: row.event_date,
+                        seminar_title: row.day_title
+                            ? row.seminar_title + ' — ' + row.day_title
+                            : row.seminar_title,
+                        event_date: row.day_date || row.event_date,
                         location_url: row.location_url,
                         portal_year: row.portal_year,
                         display_name: displayName,
@@ -7339,17 +7406,26 @@ const SCANNER_TICKET_LOOKUP_SQL = `
                CASE WHEN t.scan_count IS NULL THEN 0 ELSE CAST(t.scan_count AS INTEGER) END AS scan_count,
                t.ticket_id_string,
                CASE WHEN t.is_valid IS NULL THEN 1 ELSE CAST(t.is_valid AS INTEGER) END AS is_valid,
-               t.qr_code_data, t.event_id,
+               t.qr_code_data, t.event_id, t.day_id,
                s.id AS seminar_id,
                CASE
+                   WHEN sd.checkin_enabled IS NOT NULL THEN CAST(sd.checkin_enabled AS INTEGER)
                    WHEN se.checkin_enabled IS NOT NULL THEN CAST(se.checkin_enabled AS INTEGER)
                    WHEN LOWER(TRIM(CAST(s.checkin_enabled AS TEXT))) IN ('1', 'true', 't', 'yes') THEN 1
                    ELSE 0
                END AS checkin_enabled,
-               CASE WHEN se.checkin_date IS NOT NULL THEN se.checkin_date ELSE s.checkin_date END AS checkin_date,
+               CASE
+                   WHEN sd.id IS NOT NULL THEN COALESCE(sd.checkin_date, sd.day_date)
+                   WHEN se.checkin_date IS NOT NULL THEN se.checkin_date
+                   ELSE s.checkin_date
+               END AS checkin_date,
                s.title AS seminar_title,
-               CASE WHEN se.title IS NOT NULL THEN se.title ELSE s.title END AS scan_event_title,
-               CASE WHEN se.event_date IS NOT NULL THEN se.event_date ELSE s.event_date END AS event_date,
+               CASE WHEN sd.title IS NOT NULL THEN sd.title WHEN se.title IS NOT NULL THEN se.title ELSE s.title END AS scan_event_title,
+               CASE
+                   WHEN sd.id IS NOT NULL THEN COALESCE(sd.day_date, s.event_date)
+                   WHEN se.event_date IS NOT NULL THEN se.event_date
+                   ELSE s.event_date
+               END AS event_date,
                CASE
                    WHEN se.cert_scans_required IS NOT NULL THEN CAST(se.cert_scans_required AS INTEGER)
                    WHEN s.cert_scans_required IS NOT NULL THEN CAST(s.cert_scans_required AS INTEGER)
@@ -7367,6 +7443,7 @@ const SCANNER_TICKET_LOOKUP_SQL = `
         JOIN registrations r ON o.registration_id = r.id
         JOIN seminars s ON r.seminar_id = s.id
         LEFT JOIN seminar_events se ON se.id = t.event_id
+        LEFT JOIN seminar_days sd ON sd.id = t.day_id
         JOIN users u ON t.user_id = u.id
         LEFT JOIN doctor_profile dp ON dp.user_id = u.id`;
 
@@ -7453,12 +7530,14 @@ function lookupTicketForScan(qrData, cb) {
             if (err) {
                 const fallbackSql = `
                         SELECT t.id AS ticket_id, t.is_scanned, t.scan_count, t.ticket_id_string, t.is_valid,
-                               t.qr_code_data, t.event_id,
+                               t.qr_code_data, t.event_id, t.day_id,
                                s.id AS seminar_id, s.checkin_enabled AS seminar_checkin_enabled,
                                se.checkin_enabled AS event_checkin_enabled,
+                               sd.checkin_enabled AS day_checkin_enabled,
                                se.checkin_date AS event_checkin_date, s.checkin_date AS seminar_checkin_date,
+                               sd.checkin_date AS day_checkin_date, sd.day_date AS day_day_date,
                                s.title AS seminar_title,
-                               se.title AS scan_event_title,
+                               CASE WHEN sd.title IS NOT NULL THEN sd.title ELSE se.title END AS scan_event_title,
                                se.event_date AS event_event_date, s.event_date AS seminar_event_date,
                                se.cert_scans_required AS event_cert_scans_required, s.cert_scans_required AS seminar_cert_scans_required,
                                u.id AS doctor_user_id, u.user_id_string AS doctor_user_id_string,
@@ -7471,6 +7550,7 @@ function lookupTicketForScan(qrData, cb) {
                         JOIN registrations r ON o.registration_id = r.id
                         JOIN seminars s ON r.seminar_id = s.id
                         LEFT JOIN seminar_events se ON se.id = t.event_id
+                        LEFT JOIN seminar_days sd ON sd.id = t.day_id
                         JOIN users u ON t.user_id = u.id
                         LEFT JOIN doctor_profile dp ON dp.user_id = u.id
                         WHERE ${clause}
@@ -7492,12 +7572,19 @@ function lookupTicketForScan(qrData, cb) {
                         scan_count: raw.scan_count == null ? 0 : parseInt(raw.scan_count, 10) || 0,
                         is_valid: raw.is_valid == null ? 1 : toInt(raw.is_valid, 1),
                         checkin_enabled:
-                            raw.event_checkin_enabled != null
-                                ? toInt(raw.event_checkin_enabled, 0)
-                                : toInt(raw.seminar_checkin_enabled, 0),
-                        checkin_date: raw.event_checkin_date || raw.seminar_checkin_date || null,
+                            raw.day_checkin_enabled != null
+                                ? toInt(raw.day_checkin_enabled, 0)
+                                : raw.event_checkin_enabled != null
+                                  ? toInt(raw.event_checkin_enabled, 0)
+                                  : toInt(raw.seminar_checkin_enabled, 0),
+                        checkin_date:
+                            raw.day_checkin_date ||
+                            raw.day_day_date ||
+                            raw.event_checkin_date ||
+                            raw.seminar_checkin_date ||
+                            null,
                         scan_event_title: raw.scan_event_title || raw.seminar_title,
-                        event_date: raw.event_event_date || raw.seminar_event_date || null,
+                        event_date: raw.day_day_date || raw.event_event_date || raw.seminar_event_date || null,
                         cert_scans_required:
                             raw.event_cert_scans_required != null
                                 ? parseInt(raw.event_cert_scans_required, 10) || 1
@@ -7621,17 +7708,31 @@ function registrationRowToTicketScanShape(row) {
     };
 }
 
-function resolveScanRowFromApplicationId(qrData, selectedSeminarId, cb) {
+function resolveScanRowFromApplicationId(qrData, selectedSeminarId, cb, selectedDayId) {
+    const dayId = Number.isInteger(parseInt(selectedDayId, 10)) && parseInt(selectedDayId, 10) > 0 ? parseInt(selectedDayId, 10) : null;
     lookupRegistrationForScan(qrData, (eReg, regRow) => {
         if (eReg) return cb(eReg);
         if (!regRow) return cb(null, null);
         const payOk = String(regRow.payment_status || '').toLowerCase() === 'success';
         if (!payOk) return cb(null, { error: 'unpaid', regRow });
         if (regRow.ticket_id) {
-            return lookupTicketForScan(regRow.ticket_id_string || qrData, (e2, tRow) => {
-                if (e2) return cb(e2);
-                cb(null, tRow || registrationRowToTicketScanShape(regRow));
-            });
+            const returnTicket = (ticketStr) =>
+                lookupTicketForScan(ticketStr || qrData, (e2, tRow) => {
+                    if (e2) return cb(e2);
+                    cb(null, tRow || registrationRowToTicketScanShape(regRow));
+                });
+            if (dayId && regRow.order_db_id) {
+                // Multi-day seminar: prefer the ticket issued for the day selected in the scanner.
+                return db.get(
+                    `SELECT ticket_id_string FROM tickets WHERE order_id = ? AND IFNULL(day_id, 0) = ? ORDER BY id DESC LIMIT 1`,
+                    [regRow.order_db_id, dayId],
+                    (eDay, dayTix) => {
+                        if (eDay) return cb(eDay);
+                        returnTicket((dayTix && dayTix.ticket_id_string) || regRow.ticket_id_string);
+                    }
+                );
+            }
+            return returnTicket(regRow.ticket_id_string);
         }
         if (!regRow.order_db_id) {
             return cb(null, { error: 'no_order', regRow });
@@ -7645,7 +7746,9 @@ function resolveScanRowFromApplicationId(qrData, selectedSeminarId, cb) {
             (eIns, etk) => {
                 if (eIns) return cb(eIns);
                 lookupTicketForScan(etk || qrData, (e3, tRow) => cb(e3, tRow));
-            }
+            },
+            null,
+            dayId
         );
     });
 }
@@ -7665,7 +7768,10 @@ function scannerVerifyJsonFromRow(row, extras) {
             invalid: ticketLookupInvalid(row),
             expired: isTicketExpiredForSeminar(row.event_date) && !row.is_scanned,
             checkinEnabled: !!row.checkin_enabled,
-            checkinDate: row.checkin_date
+            checkinDate: row.checkin_date,
+            eventId: row.event_id || null,
+            dayId: row.day_id || null,
+            eventTitle: row.scan_event_title || null
         },
         extras || {}
     );
@@ -7729,12 +7835,13 @@ app.get('/api/scanner/checkin-seminars', (req, res) => {
         (err, rows) => {
             if (err) return res.status(500).json({ error: err.message });
             const todayYmd = localDateYmd();
-            seminarEvents.attachEventsToSeminarRows(db, rows || [], (eEv, withEv) => {
+            attachEventsAndDaysToSeminarRows(rows || [], (eEv, withEv) => {
                 if (eEv) return res.status(500).json({ error: eEv.message });
                 res.json(
                     (withEv || []).map((r) => {
                         const checkinYmd = normalizeCheckinDateYmd(r.checkin_date);
                         const subEvents = (r.sub_events || []).filter((ev) => ev.checkinEnabled !== false);
+                        const days = (r.days || []).filter((d) => d.checkinEnabled !== false);
                         return {
                             id: r.id,
                             title: r.title,
@@ -7748,7 +7855,20 @@ app.get('/api/scanner/checkin-seminars', (req, res) => {
                                 checkinDate: ev.checkinDate,
                                 checkinEnabled: ev.checkinEnabled
                             })),
-                            hasSubEvents: subEvents.length > 0
+                            hasSubEvents: subEvents.length > 0,
+                            days: days.map((d) => ({
+                                id: d.id,
+                                title: d.title,
+                                dayDate: d.dayDate,
+                                checkinDate: d.checkinDate || d.dayDate,
+                                checkinEnabled: d.checkinEnabled,
+                                checkinOpenToday: isCheckinOpenForSeminar({
+                                    checkin_enabled: d.checkinEnabled ? 1 : 0,
+                                    checkin_date: d.checkinDate || d.dayDate,
+                                    event_date: d.dayDate
+                                })
+                            })),
+                            hasDays: days.length > 0
                         };
                     })
                 );
@@ -7759,10 +7879,12 @@ app.get('/api/scanner/checkin-seminars', (req, res) => {
 
 // 8. Scanner: Mark Attendance (requires scanner or admin user id)
 app.post('/api/scanner/mark', (req, res) => {
-    const { qrData, volunteerId, scannerUserId, seminarId, eventId } = req.body || {};
+    const { qrData, volunteerId, scannerUserId, seminarId, eventId, dayId } = req.body || {};
     const selectedSeminarId = parseInt(seminarId, 10);
     const selectedEventId =
         eventId != null && String(eventId).trim() !== '' ? parseInt(eventId, 10) : null;
+    const selectedDayId =
+        dayId != null && String(dayId).trim() !== '' ? parseInt(dayId, 10) : null;
     const staffId = parseInt(scannerUserId != null ? scannerUserId : volunteerId, 10);
     if (!Number.isInteger(staffId) || staffId < 1) {
         return res.status(401).json({
@@ -7988,6 +8110,43 @@ app.post('/api/scanner/mark', (req, res) => {
                     });
                 }
 
+                const ticketDayId = row.day_id != null ? parseInt(row.day_id, 10) : null;
+                if (ticketDayId && Number.isInteger(selectedDayId) && selectedDayId > 0) {
+                    if (ticketDayId !== selectedDayId) {
+                        logScanDashboard(
+                            selectedSeminarId,
+                            staffId,
+                            'wrong_day',
+                            'Ticket is for ' + (row.scan_event_title || 'another day'),
+                            row
+                        );
+                        return res.status(403).json({
+                            success: false,
+                            error:
+                                'Wrong day selected. This ticket is for "' +
+                                (row.scan_event_title || 'another day') +
+                                '". Choose that day in the scanner, then scan again.',
+                            sound: 'wrong_event',
+                            doctor: doctorPayloadFromScanRow(row, {
+                                ticketId: row.ticket_id_string,
+                                eventTitle: row.scan_event_title
+                            })
+                        });
+                    }
+                } else if (ticketDayId && (!selectedDayId || selectedDayId < 1)) {
+                    return res.status(400).json({
+                        success: false,
+                        error:
+                            'Select the day "' +
+                            (row.scan_event_title || 'for this ticket') +
+                            '" in the scanner before scanning.',
+                        sound: 'error',
+                        requiresDaySelection: true,
+                        dayId: ticketDayId,
+                        dayTitle: row.scan_event_title
+                    });
+                }
+
                 const checkinOn =
                     row.checkin_enabled === true ||
                     row.checkin_enabled === 1 ||
@@ -8187,7 +8346,7 @@ app.post('/api/scanner/mark', (req, res) => {
                     if (e2) return res.status(500).json({ success: false, error: e2.message });
                     if (row2 && row2.error) return proceedWithScanRow(null, row2);
                     proceedWithScanRow(null, row2);
-                });
+                }, selectedDayId);
             });
         }
     );
@@ -8300,12 +8459,13 @@ app.post('/api/admin/seminars', (req, res) => {
     const preregEnd = seminarDt.normalizeSeminarRegistrationEndForStorage(preregistration_end);
     const locFields = googleMaps.normalizeLocationOnSave({ location_text, location_url });
     const bodyYear = req.body && req.body.portal_year != null ? parseInt(req.body.portal_year, 10) : null;
+    const daySelectionMode = seminarDays.normalizeDaySelectionMode(req.body && req.body.day_selection_mode);
     portalTracking.getPortalYear(db, (ePy, defaultYear) => {
         const portalYear =
             Number.isInteger(bodyYear) && bodyYear > 2000 ? bodyYear : defaultYear;
         db.run(
-            `INSERT INTO seminars (title, description, registration_start, registration_end, event_date, capacity, price, checkin_enabled, checkin_date, location_text, location_url, terms_conditions, hero_image_path, flyer_path, gallery_paths, registration_form_json, cancellation_policy_json, whatsapp_group_url, otp_on_application, otp_on_step1, otp_on_submit, public_list_enabled, cert_scans_required, portal_year, is_active, show_seats_public, preregistration_enabled, preregistration_start, preregistration_end, waiting_list_enabled, allow_application_edit, auto_confirm_registration, alumni_source_seminar_ids, alumni_notify_auto) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO seminars (title, description, registration_start, registration_end, event_date, capacity, price, checkin_enabled, checkin_date, location_text, location_url, terms_conditions, hero_image_path, flyer_path, gallery_paths, registration_form_json, cancellation_policy_json, whatsapp_group_url, otp_on_application, otp_on_step1, otp_on_submit, public_list_enabled, cert_scans_required, portal_year, is_active, show_seats_public, preregistration_enabled, preregistration_start, preregistration_end, waiting_list_enabled, allow_application_edit, auto_confirm_registration, alumni_source_seminar_ids, alumni_notify_auto, day_selection_mode)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 title,
                 description,
@@ -8340,7 +8500,8 @@ app.post('/api/admin/seminars', (req, res) => {
                 allowAppEdit,
                 autoConfirmReg,
                 alumniSourceJson,
-                alumniNotifyAuto
+                alumniNotifyAuto,
+                daySelectionMode
             ],
             function (err) {
             if (err) return res.status(500).json({ error: err.message });
@@ -8348,13 +8509,16 @@ app.post('/api/admin/seminars', (req, res) => {
                 const subEvents = req.body && req.body.sub_events;
                 seminarEvents.replaceForSeminar(db, newId, subEvents, (evErr) => {
                     if (evErr) console.warn('[seminar-events] save:', evErr.message);
-                    announceSeminarRegistrationOnCreate(newId, () => {});
-                    seminarAlumniNotify.maybeTriggerAutoAlumniNotify(db, notifEngine, newId, (eAl) => {
-                        if (eAl) console.warn('[alumni-notify] create:', eAl.message);
+                    seminarDays.replaceForSeminar(db, newId, req.body && req.body.days, (dErr) => {
+                        if (dErr) console.warn('[seminar-days] save:', dErr.message);
+                        announceSeminarRegistrationOnCreate(newId, () => {});
+                        seminarAlumniNotify.maybeTriggerAutoAlumniNotify(db, notifEngine, newId, (eAl) => {
+                            if (eAl) console.warn('[alumni-notify] create:', eAl.message);
+                        });
+                        cacheInvalidatePrefix('api:seminars:');
+                        cacheInvalidatePrefix('api:public:announcements');
+                        res.json({ success: true, seminarId: newId });
                     });
-                    cacheInvalidatePrefix('api:seminars:');
-                    cacheInvalidatePrefix('api:public:announcements');
-                    res.json({ success: true, seminarId: newId });
                 });
             }
         );
@@ -8453,8 +8617,12 @@ app.put('/api/admin/seminars/:id', (req, res) => {
             ) {
                 locFields.location_url = oldRow.location_url;
             }
+            const daySelectionMode =
+                req.body && req.body.day_selection_mode != null
+                    ? seminarDays.normalizeDaySelectionMode(req.body.day_selection_mode)
+                    : null;
             const sql =
-                `UPDATE seminars SET title=?, description=?, registration_start=?, registration_end=?, event_date=?, capacity=?, price=?, checkin_enabled=?, checkin_date=?, is_active=?, location_text=?, location_url=?, terms_conditions=?, hero_image_path=?, flyer_path=?, gallery_paths=?, registration_form_json=?, cancellation_policy_json=?, whatsapp_group_url=?, otp_on_application=?, otp_on_step1=?, otp_on_submit=?, public_list_enabled=?, cert_scans_required=?, portal_year=?, show_seats_public=?, preregistration_enabled=?, preregistration_start=?, preregistration_end=?, waiting_list_enabled=?, allow_application_edit=?, auto_confirm_registration=?, alumni_source_seminar_ids=?, alumni_notify_auto=?` +
+                `UPDATE seminars SET title=?, description=?, registration_start=?, registration_end=?, event_date=?, capacity=?, price=?, checkin_enabled=?, checkin_date=?, is_active=?, location_text=?, location_url=?, terms_conditions=?, hero_image_path=?, flyer_path=?, gallery_paths=?, registration_form_json=?, cancellation_policy_json=?, whatsapp_group_url=?, otp_on_application=?, otp_on_step1=?, otp_on_submit=?, public_list_enabled=?, cert_scans_required=?, portal_year=?, show_seats_public=?, preregistration_enabled=?, preregistration_start=?, preregistration_end=?, waiting_list_enabled=?, allow_application_edit=?, auto_confirm_registration=?, alumni_source_seminar_ids=?, alumni_notify_auto=?, day_selection_mode=COALESCE(?, day_selection_mode)` +
                 (resetSent ? `, alumni_notify_sent_at=NULL` : '') +
                 ` WHERE id=?`;
         db.run(
@@ -8494,6 +8662,7 @@ app.put('/api/admin/seminars/:id', (req, res) => {
                 autoConfirmReg,
                 alumniSourceJson,
                 alumniNotifyAuto,
+                daySelectionMode,
                 sid
             ],
             function (err) {
@@ -8501,15 +8670,18 @@ app.put('/api/admin/seminars/:id', (req, res) => {
                 const subEvents = req.body && req.body.sub_events;
                 seminarEvents.replaceForSeminar(db, sid, subEvents, (evErr) => {
                     if (evErr) console.warn('[seminar-events] save:', evErr.message);
-                    seminarAlumniNotify.maybeTriggerAutoAlumniNotify(db, notifEngine, sid, (eAl) => {
-                        if (eAl) console.warn('[alumni-notify] update:', eAl.message);
+                    seminarDays.replaceForSeminar(db, sid, req.body && req.body.days, (dErr) => {
+                        if (dErr) console.warn('[seminar-days] save:', dErr.message);
+                        seminarAlumniNotify.maybeTriggerAutoAlumniNotify(db, notifEngine, sid, (eAl) => {
+                            if (eAl) console.warn('[alumni-notify] update:', eAl.message);
+                        });
+                        cacheInvalidatePrefix('api:seminars:');
+                        cacheInvalidatePrefix('api:public:announcements');
+                        if (!is_active) {
+                            removeSeminarScrollingAnnouncement(sid, () => {});
+                        }
+                        res.json({ success: true, portalYear: finalPortalYear });
                     });
-                    cacheInvalidatePrefix('api:seminars:');
-                    cacheInvalidatePrefix('api:public:announcements');
-                    if (!is_active) {
-                        removeSeminarScrollingAnnouncement(sid, () => {});
-                    }
-                    res.json({ success: true, portalYear: finalPortalYear });
                 });
             }
         );
@@ -12339,6 +12511,34 @@ function runAdminRegistrationUpsertBody(req, res, tid, sid, aid, formData, resol
                     return res.status(400).json({ error: 'Invalid session selection. Refresh and try again.' });
                 }
             }
+            seminarDays.listForSeminar(db, sid, true, (dErr, days) => {
+                if (dErr) return res.status(500).json({ error: dErr.message });
+                if (days && days.length) {
+                    db.get(`SELECT day_selection_mode FROM seminars WHERE id = ?`, [sid], (mErr, semModeRow) => {
+                        if (mErr) return res.status(500).json({ error: mErr.message });
+                        if (seminarDays.normalizeDaySelectionMode(semModeRow && semModeRow.day_selection_mode) !== 'optional') {
+                            return proceedAdminUpsert();
+                        }
+                        const selectedDays = seminarDays.parseSelectedDayIds(stored);
+                        if (!selectedDays.length) {
+                            return res.status(400).json({
+                                error: 'Select at least one day to attend. Each day has its own QR e-ticket.'
+                            });
+                        }
+                        const okDays = selectedDays.every((id) => days.some((d) => d.id === id));
+                        if (!okDays) {
+                            return res.status(400).json({ error: 'Invalid day selection. Refresh and try again.' });
+                        }
+                        proceedAdminUpsert();
+                    });
+                    return;
+                }
+                proceedAdminUpsert();
+            });
+        });
+    });
+
+    function proceedAdminUpsert() {
 
         db.get(`SELECT id, form_data FROM registrations WHERE user_id = ? AND seminar_id = ?`, [tid, sid], (e2, reg) => {
             if (e2) return res.status(500).json({ error: e2.message });
@@ -12418,8 +12618,7 @@ function runAdminRegistrationUpsertBody(req, res, tid, sid, aid, formData, resol
                 );
             });
         });
-        });
-    });
+    }
 }
 
 function resolveOrCreateBehalfDoctorUser(db, targetUserId, formData, cb) {

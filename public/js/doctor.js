@@ -2435,6 +2435,8 @@ function collectRegistrationFormData() {
     o.agree_terms = registrationAgreeTermsChecked() ? '1' : '';
     const eventIds = getSelectedSeminarEventIds();
     if (eventIds.length) o.selected_event_ids = eventIds;
+    const dayIds = getSelectedSeminarDayIds();
+    if (dayIds.length) o.selected_day_ids = dayIds;
     return o;
 }
 
@@ -3669,11 +3671,20 @@ function validateSeminarEventSelectionOrAlert() {
         return Number(x.id) === sid;
     });
     const events = (s && (s.sub_events || s.subEvents)) || [];
-    if (!events.length) return true;
-    const ids = getSelectedSeminarEventIds();
-    if (!ids.length) {
-        alert('Select at least one session to attend (you can choose one or both).');
-        return false;
+    if (events.length) {
+        const ids = getSelectedSeminarEventIds();
+        if (!ids.length) {
+            alert('Select at least one session to attend (you can choose one or both).');
+            return false;
+        }
+    }
+    const days = (s && s.days) || [];
+    if (days.length && s.day_selection_mode === 'optional') {
+        const dayIds = getSelectedSeminarDayIds();
+        if (!dayIds.length) {
+            alert('Select at least one day to attend. Each day has its own QR e-ticket.');
+            return false;
+        }
     }
     return true;
 }
@@ -6464,50 +6475,104 @@ function renderSeminarEventPicker(seminar) {
     const panel = document.getElementById('reg-seminar-events-panel');
     if (!panel) return;
     const events = (seminar && (seminar.sub_events || seminar.subEvents)) || [];
-    if (!events.length) {
+    const days = (seminar && seminar.days) || [];
+    const dayMode = (seminar && seminar.day_selection_mode) === 'optional' ? 'optional' : 'required';
+    if (!events.length && !days.length) {
         panel.classList.add('hidden');
         panel.innerHTML = '';
         return;
     }
-    let html =
-        '<p style="font-weight:700;color:#047857;margin:0 0 10px;"><i class="fas fa-calendar-day"></i> Choose session(s) to attend</p>' +
-        '<p style="font-size:0.84rem;color:#64748b;margin:0 0 12px;">Select one or both. Payment is the base seminar fee plus the sum of selected sessions. Each session has its own e-ticket, scanner check-in, and certificate.</p>';
-    events.forEach(function (ev) {
-        const dt = ev.eventDate || ev.event_date;
-        const loc = ev.venueTbd || ev.venue_tbd ? 'TBD' : ev.locationText || ev.location_text || '';
-        const embed = ev.mapsEmbedUrl || ev.maps_embed_url || '';
-        const desc = ev.description || '';
+    let html = '';
+    if (events.length) {
         html +=
-            '<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;padding:10px;background:#fff;border:1px solid #bbf7d0;border-radius:8px;cursor:pointer;">' +
-            '<input type="checkbox" class="reg-event-cb" value="' +
-            Number(ev.id) +
-            '" style="margin-top:4px;">' +
-            '<span><strong>' +
-            escapeHtml(ev.title) +
-            '</strong>' +
-            (dt ? '<br><span style="font-size:0.82rem;color:#64748b;">' + escapeHtml(formatEventDate(dt)) + '</span>' : '') +
-            '<br><span style="font-size:0.82rem;color:#64748b;"><i class="fas fa-map-marker-alt"></i> ' +
-            escapeHtml(loc || 'TBD') +
-            '</span>' +
-            (embed
-                ? '<div class="seminar-map-embed" style="margin-top:8px;border-radius:8px;overflow:hidden;border:1px solid #cbd5e1;max-width:320px;"><iframe title="Session location" src="' +
-                  escapeHtml(embed) +
-                  '" width="100%" height="140" style="border:0;display:block;" loading="lazy" referrerpolicy="no-referrer-when-downgrade" allowfullscreen></iframe></div>'
-                : loc === 'TBD'
-                  ? '<br><span style="font-size:0.78rem;color:#94a3b8;">Venue to be announced</span>'
-                  : '') +
-            (desc ? '<br><span style="font-size:0.82rem;color:#475569;">' + escapeHtml(desc) + '</span>' : '') +
-            '<br><span style="font-size:0.9rem;color:#047857;font-weight:700;">₹' +
-            (Number(ev.price) || 0) +
-            '</span></span></label>';
-    });
+            '<p style="font-weight:700;color:#047857;margin:0 0 10px;"><i class="fas fa-calendar-day"></i> Choose session(s) to attend</p>' +
+            '<p style="font-size:0.84rem;color:#64748b;margin:0 0 12px;">Select one or both. Payment is the base seminar fee plus the sum of selected sessions. Each session has its own e-ticket, scanner check-in, and certificate.</p>';
+        events.forEach(function (ev) {
+            const dt = ev.eventDate || ev.event_date;
+            const loc = ev.venueTbd || ev.venue_tbd ? 'TBD' : ev.locationText || ev.location_text || '';
+            const embed = ev.mapsEmbedUrl || ev.maps_embed_url || '';
+            const desc = ev.description || '';
+            html +=
+                '<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;padding:10px;background:#fff;border:1px solid #bbf7d0;border-radius:8px;cursor:pointer;">' +
+                '<input type="checkbox" class="reg-event-cb" value="' +
+                Number(ev.id) +
+                '" style="margin-top:4px;">' +
+                '<span><strong>' +
+                escapeHtml(ev.title) +
+                '</strong>' +
+                (dt ? '<br><span style="font-size:0.82rem;color:#64748b;">' + escapeHtml(formatEventDate(dt)) + '</span>' : '') +
+                '<br><span style="font-size:0.82rem;color:#64748b;"><i class="fas fa-map-marker-alt"></i> ' +
+                escapeHtml(loc || 'TBD') +
+                '</span>' +
+                (embed
+                    ? '<div class="seminar-map-embed" style="margin-top:8px;border-radius:8px;overflow:hidden;border:1px solid #cbd5e1;max-width:320px;"><iframe title="Session location" src="' +
+                      escapeHtml(embed) +
+                      '" width="100%" height="140" style="border:0;display:block;" loading="lazy" referrerpolicy="no-referrer-when-downgrade" allowfullscreen></iframe></div>'
+                    : loc === 'TBD'
+                      ? '<br><span style="font-size:0.78rem;color:#94a3b8;">Venue to be announced</span>'
+                      : '') +
+                (desc ? '<br><span style="font-size:0.82rem;color:#475569;">' + escapeHtml(desc) + '</span>' : '') +
+                '<br><span style="font-size:0.9rem;color:#047857;font-weight:700;">₹' +
+                (Number(ev.price) || 0) +
+                '</span></span></label>';
+        });
+    }
+    if (days.length) {
+        html +=
+            '<p style="font-weight:700;color:#047857;margin:12px 0 10px;"><i class="fas fa-calendar-week"></i> Event day(s)</p>';
+        if (dayMode === 'required') {
+            html +=
+                '<p style="font-size:0.84rem;color:#64748b;margin:0 0 12px;">This event runs over ' +
+                days.length +
+                ' day(s). All days are required — you get one QR e-ticket per day.</p>';
+        } else {
+            html +=
+                '<p style="font-size:0.84rem;color:#64748b;margin:0 0 12px;">Choose which day(s) you will attend (pick at least one). The seminar fee covers the whole event; each selected day has its own QR e-ticket.</p>';
+        }
+        days.forEach(function (d) {
+            const dt = d.dayDate || d.day_date;
+            const checkinDt = d.checkinDate || d.checkin_date || dt;
+            html +=
+                '<label style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;padding:10px;background:#fff;border:1px solid #bfdbfe;border-radius:8px;cursor:' +
+                (dayMode === 'required' ? 'default' : 'pointer') +
+                ';">' +
+                '<input type="checkbox" class="reg-day-cb" value="' +
+                Number(d.id) +
+                '" style="margin-top:4px;"' +
+                (dayMode === 'required' ? ' checked disabled' : '') +
+                '>' +
+                '<span><strong>' +
+                escapeHtml(d.title) +
+                '</strong>' +
+                (dt ? '<br><span style="font-size:0.82rem;color:#64748b;">' + escapeHtml(formatEventDate(dt)) + '</span>' : '') +
+                (checkinDt
+                    ? '<br><span style="font-size:0.78rem;color:#475569;">Check-in allowed date: ' +
+                      escapeHtml(formatEventDate(checkinDt)) +
+                      '</span>'
+                    : '') +
+                '</span></label>';
+        });
+    }
     html += '<p id="reg-events-total" style="margin:8px 0 0;font-weight:700;color:#334155;"></p>';
     panel.innerHTML = html;
     panel.classList.remove('hidden');
     panel.querySelectorAll('.reg-event-cb').forEach(function (cb) {
         cb.addEventListener('change', updateRegEventTotal);
     });
+    panel.querySelectorAll('.reg-day-cb').forEach(function (cb) {
+        cb.addEventListener('change', updateRegEventTotal);
+    });
     updateRegEventTotal();
+}
+
+function getSelectedSeminarDayIds() {
+    return Array.from(document.querySelectorAll('.reg-day-cb:checked'))
+        .map(function (el) {
+            return parseInt(el.value, 10);
+        })
+        .filter(function (n) {
+            return Number.isInteger(n) && n > 0;
+        });
 }
 
 function getSelectedSeminarEventIds() {
@@ -6528,23 +6593,33 @@ function updateRegEventTotal() {
         return Number(x.id) === sid;
     });
     const events = (s && (s.sub_events || s.subEvents)) || [];
+    const days = (s && s.days) || [];
     const ids = getSelectedSeminarEventIds();
+    const dayIds = getSelectedSeminarDayIds();
     const base = Number(s && s.price) || 0;
     let sessionsTotal = 0;
     events.forEach(function (ev) {
         if (ids.indexOf(Number(ev.id)) >= 0) sessionsTotal += Number(ev.price) || 0;
     });
     const total = base + sessionsTotal;
-    if (!ids.length) {
+    if (!ids.length && events.length) {
         el.textContent = 'Select at least one session';
         return;
     }
+    if (!dayIds.length && days.length && (s.day_selection_mode === 'optional')) {
+        el.textContent = 'Select at least one day';
+        return;
+    }
+    let dayNote = '';
+    if (days.length) {
+        dayNote = ' · ' + (s.day_selection_mode === 'optional' ? dayIds.length : days.length) + ' day(s), one QR per day';
+    }
     if (base > 0 && sessionsTotal > 0) {
-        el.textContent = 'Selected total: ₹' + total + ' (base ₹' + base + ' + sessions ₹' + sessionsTotal + ')';
+        el.textContent = 'Selected total: ₹' + total + ' (base ₹' + base + ' + sessions ₹' + sessionsTotal + ')' + dayNote;
     } else if (base > 0) {
-        el.textContent = 'Selected total: ₹' + total + ' (base fee ₹' + base + ')';
+        el.textContent = 'Selected total: ₹' + total + ' (seminar fee ₹' + base + ')' + dayNote;
     } else {
-        el.textContent = 'Selected total: ₹' + total;
+        el.textContent = 'Selected total: ₹' + total + dayNote;
     }
 }
 
@@ -8490,7 +8565,7 @@ async function loadDoctorEventTickets() {
                     ${qr ? `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;font-size:0.52rem;font-weight:800;color:rgba(15,118,110,0.18);text-align:center;line-height:1.15;padding:6px;transform:rotate(-18deg);">${holder}</div>` : ''}
                 </div>
                 <div>
-                    <h4 style="margin:0 0 8px;color:#1a237e;">${escapeHtml(t.seminar_title || 'Seminar')}</h4>
+                    <h4 style="margin:0 0 8px;color:#1a237e;">${escapeHtml(t.seminar_title || 'Seminar')}${t.day_title ? ` — ${escapeHtml(t.day_title)}` : ''}${t.day_date ? ` <span style="font-size:0.8rem;color:#64748b;font-weight:400;">(${escapeHtml(formatEventDate(t.day_date))})</span>` : ''}</h4>
                     <p style="margin:0 0 6px;font-size:0.9rem;"><strong>E‑ticket ID:</strong> <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px;">${escapeHtml(t.ticket_id_string || '—')}</code></p>
                     <p style="margin:4px 0;font-size:0.9rem;"><strong>Order:</strong> ${escapeHtml(String(t.order_id_string || '—'))} · <strong>Application:</strong> ${escapeHtml(String(t.application_no || '—'))}</p>
                     <p style="margin:4px 0;font-size:0.9rem;"><strong>Registration:</strong> ${escapeHtml(t.registration_status || '—')} · <strong>Payment:</strong> ${escapeHtml(t.order_status || '—')}</p>

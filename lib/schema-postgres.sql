@@ -1,3 +1,15 @@
+CREATE TABLE seminar_days (
+            id SERIAL PRIMARY KEY,
+            seminar_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            day_date TEXT,
+            checkin_date TEXT,
+            sort_order INTEGER DEFAULT 0,
+            checkin_enabled INTEGER DEFAULT 1,
+            is_active INTEGER DEFAULT 1,
+            created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+        )
+
 -- Auto-generated from SQLite schema — Neon / Render
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 

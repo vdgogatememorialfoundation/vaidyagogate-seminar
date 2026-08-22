@@ -13833,6 +13833,9 @@ function openCreateSeminarModal() {
     if (typeof loadSeminarCancellationUi === 'function') loadSeminarCancellationUi('');
     if (typeof loadSeminarFormOverrideUi === 'function') loadSeminarFormOverrideUi('');
     loadSeminarSubEventsUi([]);
+    loadSeminarDaysUi([]);
+    const dayModeEl = document.getElementById('seminar-day-selection-mode');
+    if (dayModeEl) dayModeEl.value = 'required';
     const preregCh = document.getElementById('seminar-prereg-enabled');
     if (preregCh) preregCh.checked = false;
     syncSeminarPreregUi();
@@ -14003,6 +14006,69 @@ function loadSeminarSubEventsUi(events) {
     (events || []).forEach((ev) => addSeminarSubEventRow(ev));
 }
 
+function addSeminarDayRow(prefill) {
+    const list = document.getElementById('seminar-days-list');
+    if (!list) return;
+    const row = document.createElement('div');
+    row.className = 'seminar-day-row';
+    row.style.cssText =
+        'position:relative;margin-bottom:12px;padding:14px;background:#fff;border:1px solid #bfdbfe;border-radius:10px;';
+    const p = prefill || {};
+    const dayVal = String(p.day_date || p.dayDate || '').slice(0, 10);
+    const checkinVal = String(p.checkin_date || p.checkinDate || '').slice(0, 10);
+    const checkinOn =
+        p.checkin_enabled !== false &&
+        p.checkinEnabled !== false &&
+        p.checkin_enabled !== 0 &&
+        p.checkinEnabled !== 0;
+    row.innerHTML =
+        '<button type="button" class="day-remove btn-primary" style="position:absolute;top:10px;right:10px;background:#b91c1c;padding:4px 10px;font-size:0.78rem;">Remove</button>' +
+        '<div style="display:grid;gap:10px;padding-right:72px;">' +
+        '<div><label style="font-size:0.78rem;">Day name</label><input type="text" class="day-title" value="' +
+        escAdmin(p.title || '') +
+        '" placeholder="e.g. Day 1 — Inauguration & lectures"></div>' +
+        '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">' +
+        '<div><label style="font-size:0.78rem;">Day date</label><input type="date" class="day-date" value="' +
+        escAdmin(dayVal) +
+        '"></div>' +
+        '<div><label style="font-size:0.78rem;">Check-in allowed date (blank = day date)</label><input type="date" class="day-checkin" value="' +
+        escAdmin(checkinVal) +
+        '"></div></div>' +
+        '<label style="display:flex;align-items:center;gap:8px;font-size:0.84rem;color:#334155;">' +
+        '<input type="checkbox" class="day-checkin-enabled"' +
+        (checkinOn ? ' checked' : '') +
+        '> Enable scanner check-in for this day</label></div>';
+    row.querySelector('.day-remove').addEventListener('click', function () {
+        row.remove();
+    });
+    list.appendChild(row);
+}
+
+function collectSeminarDaysFromUi() {
+    const rows = document.querySelectorAll('#seminar-days-list .seminar-day-row');
+    const out = [];
+    rows.forEach((row, idx) => {
+        const title = row.querySelector('.day-title')?.value.trim() || '';
+        if (!title) return;
+        out.push({
+            title,
+            day_date: row.querySelector('.day-date')?.value || null,
+            checkin_date: row.querySelector('.day-checkin')?.value || null,
+            sort_order: idx,
+            checkin_enabled: row.querySelector('.day-checkin-enabled')?.checked !== false,
+            is_active: true
+        });
+    });
+    return out;
+}
+
+function loadSeminarDaysUi(days) {
+    const list = document.getElementById('seminar-days-list');
+    if (!list) return;
+    list.innerHTML = '';
+    (days || []).forEach((d) => addSeminarDayRow(d));
+}
+
 function editSeminar(index) {
     if (!adminCanAccessTab('tab-seminars')) {
         alert('You do not have access to seminar management.');
@@ -14096,6 +14162,9 @@ function editSeminar(index) {
         }
     }
     loadSeminarSubEventsUi(s.sub_events || s.subEvents || []);
+    loadSeminarDaysUi(s.days || []);
+    const dayModeEl = document.getElementById('seminar-day-selection-mode');
+    if (dayModeEl) dayModeEl.value = s.day_selection_mode === 'optional' ? 'optional' : 'required';
 
     document.getElementById('admin-seminar-modal').classList.remove('hidden');
 }
@@ -14175,6 +14244,8 @@ async function saveSeminar(e) {
         cancellation_policy_json: cancelPol,
         registration_form_json: regFormOverride,
         sub_events: collectSeminarSubEventsFromUi(),
+        days: collectSeminarDaysFromUi(),
+        day_selection_mode: (document.getElementById('seminar-day-selection-mode') || {}).value || 'required',
         portal_year: parseInt((document.getElementById('seminar-portal-year') || {}).value, 10) || adminPortalYear,
         alumni_source_seminar_ids: collectSeminarAlumniSourceIdsFromDom(),
         alumni_notify_auto: document.getElementById('seminar-alumni-notify-auto')?.checked === true
@@ -22316,6 +22387,21 @@ window.addSeminarSubEventRow = addSeminarSubEventRow;
         btn.addEventListener('click', function (ev) {
             ev.preventDefault();
             addSeminarSubEventRow();
+        });
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
+    else bind();
+})();
+
+window.addSeminarDayRow = addSeminarDayRow;
+(function wireSeminarDayAddBtn() {
+    function bind() {
+        const btn = document.getElementById('seminar-add-day-btn');
+        if (!btn || btn.dataset.bound) return;
+        btn.dataset.bound = '1';
+        btn.addEventListener('click', function (ev) {
+            ev.preventDefault();
+            addSeminarDayRow();
         });
     }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);

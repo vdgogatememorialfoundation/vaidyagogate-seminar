@@ -3119,6 +3119,19 @@
                     <div id="seminar-sub-events-list"></div>
                     <button type="button" id="seminar-add-sub-event-btn" class="btn-primary" style="margin-top:8px;background:#0d9488;cursor:pointer;">+ Add session</button>
                 </div>
+                <div style="grid-column:1/-1;margin-top:8px;padding:14px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;">
+                    <h4 style="margin:0 0 8px;color:#1e40af;">Event days (multi-day event)</h4>
+                    <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px;">Split the seminar into Day 1, Day 2, … The <strong>base fee above is the full price</strong> — days never add charges. Each day gets its <strong>own QR e-ticket</strong> and its own check-in allowed date.</p>
+                    <div style="margin-bottom:10px;max-width:420px;">
+                        <label style="font-size:0.85rem;">Day attendance rule</label>
+                        <select id="seminar-day-selection-mode">
+                            <option value="required">Required — all days are mandatory (everyone gets every day’s QR)</option>
+                            <option value="optional">Optional — doctors choose any one (or more) days to attend</option>
+                        </select>
+                    </div>
+                    <div id="seminar-days-list"></div>
+                    <button type="button" id="seminar-add-day-btn" class="btn-primary" style="margin-top:8px;background:#1d4ed8;cursor:pointer;">+ Add day</button>
+                </div>
                 <div style="grid-column:1/-1;">
                     <label>Event venue / location</label>
                     <input type="text" id="seminar-location-text" placeholder="e.g. Smt Shakuntala Shetty Auditorium, Pune — or TBD">
@@ -3424,6 +3437,6 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
-    <script src="/js/admin.js?v=20260620alumni1"></script>
+    <script src="/js/admin.js?v=20260822days1"></script>
 </body>
 </html>

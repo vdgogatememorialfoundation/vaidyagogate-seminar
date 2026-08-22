@@ -250,23 +250,47 @@
     function populateScannerEventSelect(seminar) {
         const wrap = document.getElementById('scanner-event-wrap');
         const evSel = document.getElementById('scanner-event-select');
-        if (!wrap || !evSel) return;
-        const events = (seminar && seminar.subEvents) || [];
-        if (!events.length) {
-            wrap.classList.add('hidden');
-            evSel.innerHTML = '';
-            return;
+        const dayWrap = document.getElementById('scanner-day-wrap');
+        const daySel = document.getElementById('scanner-day-select');
+        if (wrap && evSel) {
+            const events = (seminar && seminar.subEvents) || [];
+            if (!events.length) {
+                wrap.classList.add('hidden');
+                evSel.innerHTML = '';
+            } else {
+                wrap.classList.remove('hidden');
+                evSel.innerHTML = '<option value="">— Select session —</option>';
+                events.forEach((ev) => {
+                    const opt = document.createElement('option');
+                    opt.value = String(ev.id);
+                    opt.textContent =
+                        ev.title + (ev.checkinDate ? ' · check-in ' + String(ev.checkinDate).slice(0, 10) : '');
+                    evSel.appendChild(opt);
+                });
+                if (events.length === 1) evSel.value = String(events[0].id);
+            }
         }
-        wrap.classList.remove('hidden');
-        evSel.innerHTML = '<option value="">— Select session —</option>';
-        events.forEach((ev) => {
-            const opt = document.createElement('option');
-            opt.value = String(ev.id);
-            opt.textContent =
-                ev.title + (ev.checkinDate ? ' · check-in ' + String(ev.checkinDate).slice(0, 10) : '');
-            evSel.appendChild(opt);
-        });
-        if (events.length === 1) evSel.value = String(events[0].id);
+        if (dayWrap && daySel) {
+            const days = (seminar && seminar.days) || [];
+            if (!days.length) {
+                dayWrap.classList.add('hidden');
+                daySel.innerHTML = '';
+            } else {
+                dayWrap.classList.remove('hidden');
+                daySel.innerHTML = '<option value="">— Select day —</option>';
+                days.forEach((d) => {
+                    const opt = document.createElement('option');
+                    opt.value = String(d.id);
+                    opt.textContent =
+                        d.title +
+                        (d.checkinDate || d.dayDate
+                            ? ' · check-in ' + String(d.checkinDate || d.dayDate).slice(0, 10)
+                            : '');
+                    daySel.appendChild(opt);
+                });
+                if (days.length === 1) daySel.value = String(days[0].id);
+            }
+        }
     }
 
     async function loadCheckinSeminars() {
@@ -301,6 +325,8 @@
                     if (s.checkinOpenToday === false) {
                         const cfg = s.checkinDate ? String(s.checkinDate).slice(0, 10) : 'not set';
                         hint.textContent = 'Check-in date is ' + cfg + '. Check-in is not allowed today for this seminar.';
+                    } else if (s.hasDays) {
+                        hint.textContent = 'Select the event day, then scan the matching e-ticket (each day has its own QR).';
                     } else if (s.hasSubEvents) {
                         hint.textContent = 'Select the session, then scan the matching e-ticket.';
                     } else {
@@ -744,9 +770,16 @@
         }
         const evSel = document.getElementById('scanner-event-select');
         const eventId = evSel && evSel.value ? parseInt(evSel.value, 10) : null;
+        const daySel = document.getElementById('scanner-day-select');
+        const dayId = daySel && daySel.value ? parseInt(daySel.value, 10) : null;
         const sem = checkinSeminarsCache.find((x) => Number(x.id) === Number(sid));
         if (sem && sem.hasSubEvents && (!eventId || eventId < 1)) {
             alert('Select the session/event before scanning.');
+            scanBusy = false;
+            return;
+        }
+        if (sem && sem.hasDays && (!dayId || dayId < 1)) {
+            alert('Select the event day before scanning — each day has its own QR.');
             scanBusy = false;
             return;
         }
@@ -765,7 +798,8 @@
                     qrData: decodedText,
                     scannerUserId: Number(user.id),
                     seminarId: sid,
-                    eventId: eventId || undefined
+                    eventId: eventId || undefined,
+                    dayId: dayId || undefined
                 })
             });
             let result = {};
