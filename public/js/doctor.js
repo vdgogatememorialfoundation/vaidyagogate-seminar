@@ -140,7 +140,7 @@ function regCertStatusLabel() {
 
 function updateRegistrationPreviewCertificate() {
     const qual = document.getElementById('reg-qual') && document.getElementById('reg-qual').value;
-    const needsCert = qual === 'PG' || qual === 'Practicing Vaidya' || qual === 'Practitioner';
+    const needsCert = qual === 'PG' || qual === 'PG Student' || qual === 'Practicing Vaidya' || qual === 'Practitioner' || qual === 'Faculty';
     const certName = getRegCertFileLabel();
     const certBox = document.getElementById('prev-cert-box');
     const certVal = document.getElementById('prev-cert-val');
@@ -2327,10 +2327,15 @@ const DEFAULT_REGISTRATION_FALLBACK_FIELDS = [
         options: [
             { value: 'Practicing Vaidya', label: 'Practicing Vaidya' },
             { value: 'Practitioner', label: 'Practitioner' },
-            { value: 'PG', label: 'PG' }
+            { value: 'PG', label: 'PG' },
+            { value: 'PG Student', label: 'PG Student' },
+            { value: 'Faculty', label: 'Faculty' },
+            { value: 'UG Student', label: 'UG Student' }
         ]
     },
-    { key: 'ncism', label: 'Medical registration / NCISM', type: 'text', step: 3, enabled: true, required: true, onlyWhenAdvancedQual: true },
+    { key: 'ncism', label: 'Registration council no.', type: 'text', step: 3, enabled: true, required: true, onlyWhenAdvancedQual: true },
+    { key: 'certificate_applicable', label: 'Certificate applicable', type: 'select', step: 3, enabled: true, required: false, options: [{ value: 'Yes', label: 'Yes' }, { value: 'No', label: 'No' }] },
+    { key: 'certificate_no', label: 'Certificate no.', type: 'text', step: 3, enabled: true, required: false },
     { key: 'certificate', label: 'Certificate upload', type: 'file', step: 3, enabled: true, required: true, onlyWhenAdvancedQual: true },
     { key: 'cpin', label: 'College PIN code', type: 'text', step: 4, enabled: true, required: true, onlyWhenPgCollege: true },
     { key: 'college', label: 'College name', type: 'text', step: 4, enabled: true, required: true, onlyWhenPgCollege: true },
@@ -2380,7 +2385,7 @@ function syncLiveActivity(partial) {
 
 function needsAdvancedQualDoctor() {
     const q = (document.getElementById('reg-qual') || {}).value || '';
-    return q === 'PG' || q === 'Practicing Vaidya' || q === 'Practitioner';
+    return q === 'PG' || q === 'PG Student' || q === 'Practicing Vaidya' || q === 'Practitioner' || q === 'Faculty';
 }
 
 function updateRegistrationDobHint() {
@@ -2701,16 +2706,6 @@ function validateRegistrationAgainstConfigForSteps(upToStepInclusive) {
             if ((f.onlyWhenPgCollege || REGISTRATION_COLLEGE_KEYS.has(f.key)) && !registrationQualIsPg()) continue;
             const fk = String(f.key || '');
             if (fk === 'phone_otp' || fk === 'email_otp' || (f.type || '').toLowerCase() === 'otp') {
-                if (f.enabled && f.required) {
-                    const channelKey = fk === 'phone_otp' ? 'phone' : fk === 'email_otp' ? 'email' : fk;
-                    const ok =
-                        channelKey === 'phone'
-                            ? registrationPhoneVerified()
-                            : channelKey === 'email'
-                              ? registrationEmailVerified()
-                              : !!(window.__fieldOtpTokens || {})[channelKey];
-                    if (!ok) return `Please verify OTP for: ${f.label || f.key}`;
-                }
                 continue;
             }
             if (f.key === 'certificate') {
@@ -2749,37 +2744,6 @@ function validateRegistrationAgainstConfigForSteps(upToStepInclusive) {
                 if (!ok) return `Invalid choice for: ${f.label || f.key}`;
             }
         }
-        for (const f of fields) {
-            if (!f.verifyOtp || !f.enabled || f.required === false) continue;
-            const fStep = f.step != null ? parseInt(f.step, 10) : 1;
-            if (Number.isNaN(fStep) || fStep !== sn) continue;
-            if (f.type !== 'email' && f.type !== 'tel') continue;
-            if (f.key === 'email' || f.key === 'phone') {
-                if (f.key === 'email' && window.__otpOnApplication && !window.__otpRequiresEmail && !window.__emailConfigured) {
-                    continue;
-                }
-                if (f.key === 'phone' && window.__otpOnApplication && !window.__otpRequiresPhone && !window.__whatsappConfigured) {
-                    continue;
-                }
-                if (f.key === 'email' && !window.__emailConfigured && !window.__otpOnApplication) continue;
-                if (f.key === 'phone' && !window.__whatsappConfigured && !window.__otpOnApplication) continue;
-                const ok = f.key === 'phone' ? registrationPhoneVerified() : registrationEmailVerified();
-                if (!ok) return `Please verify OTP for: ${f.label || f.key}`;
-                continue;
-            }
-            const tok = (window.__fieldOtpTokens || {})[f.key];
-            if (!tok) return `Please verify OTP for: ${f.label || f.key}`;
-        }
-        if (sn === 1 && window.__otpOnStep1) {
-            const needE = window.__otpRequiresEmail !== false;
-            const needP = !!window.__otpRequiresPhone;
-            if (needE && !registrationEmailVerified()) {
-                return 'Please verify your email with the code sent to your inbox before continuing.';
-            }
-            if (needP && !registrationPhoneVerified()) {
-                return 'Please verify your phone with the WhatsApp code before continuing.';
-            }
-        }
         if (sn === 1 && typeof validateRegistrationNamesClient === 'function') {
             const nameErr = validateRegistrationNamesClient(fd);
             if (nameErr) return nameErr;
@@ -2805,12 +2769,12 @@ async function loadRegistrationFormConfigAndApply(seminarIdOpt) {
         window.__registrationBirthYearMin = data.birthYearMin != null ? data.birthYearMin : null;
         window.__registrationBirthYearMax = data.birthYearMax != null ? data.birthYearMax : null;
         updateRegistrationDobHint();
-        window.__otpOnApplication = !!data.otpOnApplication;
-        window.__otpOnStep1 = !!data.otpOnStep1;
-        window.__otpOnSubmit = !!data.otpOnSubmit;
-        window.__submitOtpRequired = !!data.submitOtpRequired;
-        window.__otpRequiresEmail = !!data.otpRequiresEmail;
-        window.__otpRequiresPhone = !!data.otpRequiresPhone;
+        window.__otpOnApplication = false;
+        window.__otpOnStep1 = false;
+        window.__otpOnSubmit = false;
+        window.__submitOtpRequired = false;
+        window.__otpRequiresEmail = false;
+        window.__otpRequiresPhone = false;
         window.__emailConfigured = !!data.emailConfigured;
         window.__whatsappConfigured = !!data.whatsappConfigured;
         syncRegistrationOtpUi();
@@ -5843,7 +5807,7 @@ async function nextStep(step) {
                 ? qualEl.options[qualEl.selectedIndex].text
                 : qual;
         document.getElementById('prev-qual').innerText = qualLabel;
-        if(qual === 'PG' || qual === 'Practicing Vaidya' || qual === 'Practitioner') {
+        if(needsAdvancedQualDoctor()) {
             document.getElementById('prev-ncism-box').classList.remove('hidden');
             document.getElementById('prev-ncism').innerText = document.getElementById('reg-ncism').value;
             updateRegistrationPreviewCertificate();
@@ -6038,14 +6002,14 @@ function generatePdfBlob(qrImgElement) {
     drawSection('Professional & college');
     drawTableRow('Qualification', document.getElementById('reg-qual').value);
     const qual = document.getElementById('reg-qual').value;
-    if (qual === 'PG' || qual === 'Practicing Vaidya' || qual === 'Practitioner') {
+    if (needsAdvancedQualDoctor()) {
         drawTableRow('Registration ID', document.getElementById('reg-ncism').value);
     }
     drawTableRow('College', document.getElementById('reg-college').value);
     drawTableRow('College city / state', `${document.getElementById('reg-ccity').value}, ${document.getElementById('reg-cstate').value}`);
     drawSection('Documents uploaded');
     const certDoc = regCertStatusLabel();
-    if (qual === 'PG' || qual === 'Practicing Vaidya' || qual === 'Practitioner') {
+    if (needsAdvancedQualDoctor()) {
         drawTableRow('NCISM certificate', certDoc || 'Not attached');
     } else {
         drawTableRow('NCISM certificate', 'Not required for this qualification');
@@ -6200,7 +6164,7 @@ async function autofillAddress() {
 
 function toggleRegBlock() {
     const qual = document.getElementById('reg-qual').value;
-    if(qual === 'PG' || qual === 'Practicing Vaidya' || qual === 'Practitioner') {
+    if(needsAdvancedQualDoctor()) {
         document.getElementById('reg-block').classList.remove('hidden');
     } else {
         document.getElementById('reg-block').classList.add('hidden');
@@ -7546,7 +7510,7 @@ function downloadViewedAppPdf() {
     doc.text('Education & college', 18, y + 6.5);
     y += 14;
     row('Qualification', formData.qual || '');
-    if (formData.qual === 'PG' || formData.qual === 'Practicing Vaidya' || formData.qual === 'Practitioner') {
+    if (['PG', 'PG Student', 'Practicing Vaidya', 'Practitioner', 'Faculty'].includes(formData.qual)) {
         row('Registration / NCISM ID', formData.ncism || '');
     }
     row('College', formData.college || '');
@@ -9488,7 +9452,7 @@ async function editApplication(index) {
 
 function seminarResubmitNeedsCertificate(qual) {
     const q = String(qual || '').trim();
-    return q === 'PG' || q === 'Practicing Vaidya' || q === 'Practitioner';
+    return q === 'PG' || q === 'PG Student' || q === 'Practicing Vaidya' || q === 'Practitioner' || q === 'Faculty';
 }
 
 function closeSeminarDocumentResubmitModal() {
@@ -9717,4 +9681,3 @@ if (document.readyState === 'loading') {
     initRegistrationAddressUi();
     initDoctorUploadHints();
 }
-

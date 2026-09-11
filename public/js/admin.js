@@ -932,7 +932,19 @@ async function loadApplications(silentRefresh) {
     try {
         const res = await fetch('/api/admin/applications');
         const apps = await res.json();
-        const list = Array.isArray(apps) ? apps : [];
+        const grouped = new Map();
+        (Array.isArray(apps) ? apps : []).forEach((row) => {
+            const key = String(row && row.id != null ? row.id : row && row.application_no);
+            const existing = grouped.get(key);
+            if (!existing) {
+                grouped.set(key, { ...row, ticket_id_string: row.ticket_id_string || '' });
+                return;
+            }
+            const ids = new Set(String(existing.ticket_id_string || '').split(',').map((v) => v.trim()).filter(Boolean));
+            if (row.ticket_id_string) ids.add(String(row.ticket_id_string).trim());
+            existing.ticket_id_string = Array.from(ids).join(', ');
+        });
+        const list = Array.from(grouped.values());
         const fp = list
             .map((a) =>
                 [a.id, a.status, a.application_no, a.review_required_level, a.review_escalated_at, a.updated_at || ''].join(
@@ -2724,7 +2736,10 @@ const ADMIN_BEHALF_FIELD_DEFAULTS = [
         options: [
             { value: 'Practicing Vaidya', label: 'Practicing Vaidya' },
             { value: 'Practitioner', label: 'Practitioner' },
-            { value: 'PG', label: 'PG' }
+            { value: 'PG', label: 'PG' },
+            { value: 'PG Student', label: 'PG Student' },
+            { value: 'Faculty', label: 'Faculty' },
+            { value: 'UG Student', label: 'UG Student' }
         ]
     },
     { key: 'ncism', label: 'NCISM / Reg. no.', type: 'text', enabled: true, required: true, onlyWhenAdvancedQual: true },
@@ -8528,12 +8543,12 @@ function renderApplicationsTable() {
     tbody.innerHTML = '';
     if (!apps.length) {
         tbody.innerHTML =
-            '<tr><td colspan="6" style="text-align:center;">No applications yet.</td></tr>';
+            '<tr><td colspan="7" style="text-align:center;">No applications yet.</td></tr>';
         return;
     }
     if (!filtered.length) {
         tbody.innerHTML =
-            '<tr><td colspan="6" style="text-align:center;">No applications match your filters.</td></tr>';
+            '<tr><td colspan="7" style="text-align:center;">No applications match your filters.</td></tr>';
         return;
     }
     filtered.forEach((a) => {
@@ -8564,6 +8579,7 @@ function renderApplicationsTable() {
                     <td>${a.user_id_string}</td>
                     <td>${candidateName}${fileLink}${dupBadge}</td>
                     <td>${reviewBadge}</td>
+                    <td><code>${escAdmin(a.ticket_id_string || '—')}</code></td>
                     <td>
                         <select onchange="onApplicationStatusChange(${a.id}, this, ${index})" style="width: auto; min-width: 200px;">
                             ${adminRegistrationStatusOptionsHtml(a.status)}
@@ -15542,7 +15558,10 @@ const ADMIN_REG_FIELD_TYPES = ['text', 'textarea', 'email', 'tel', 'number', 'da
 const ADMIN_QUAL_OPTION_DEFS = [
     { value: 'Practicing Vaidya', label: 'Practicing Vaidya' },
     { value: 'Practitioner', label: 'Practitioner' },
-    { value: 'PG', label: 'PG' }
+    { value: 'PG', label: 'PG' },
+    { value: 'PG Student', label: 'PG Student' },
+    { value: 'Faculty', label: 'Faculty' },
+    { value: 'UG Student', label: 'UG Student' }
 ];
 
 function renderQualOptionCheckboxes(containerId, selectedValues) {
@@ -15629,11 +15648,26 @@ async function loadAdminRegistrationFormConfig(skipFetch) {
         tbody.innerHTML = '<tr><td colspan="7">Loading…</td></tr>';
     }
     try {
+        const selector = document.getElementById('admin-reg-event-selector');
+        const seminarId = selector ? String(selector.value || '') : '';
+        if (selector && !selector.dataset.loaded) {
+            try {
+                const seminarsRes = await fetch('/api/admin/seminars/all');
+                const seminars = await seminarsRes.json();
+                (Array.isArray(seminars) ? seminars : []).forEach((s) => {
+                    const opt = document.createElement('option');
+                    opt.value = String(s.id);
+                    opt.textContent = (s.title || 'Untitled event') + ' (ID ' + s.id + ')';
+                    selector.appendChild(opt);
+                });
+                selector.dataset.loaded = '1';
+            } catch (_) {}
+        }
         let fields;
         if (skipFetch && window.__adminRegFieldRowsCache) {
             fields = window.__adminRegFieldRowsCache;
         } else {
-            const res = await fetch('/api/registration-form-config');
+            const res = await fetch('/api/registration-form-config' + (seminarId ? '?seminarId=' + encodeURIComponent(seminarId) : ''));
             const data = await res.json();
             fields = data.fields || [];
             window.__adminRegFieldRowsCache = fields;
@@ -15699,7 +15733,8 @@ async function saveAdminRegistrationFormConfig() {
             body: JSON.stringify({
                 fields,
                 birthYearMin: Number.isInteger(birthYearMin) ? birthYearMin : null,
-                birthYearMax: Number.isInteger(birthYearMax) ? birthYearMax : null
+                birthYearMax: Number.isInteger(birthYearMax) ? birthYearMax : null,
+                seminarId: (document.getElementById('admin-reg-event-selector') || {}).value || null
             })
         });
         const data = await res.json();
