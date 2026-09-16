@@ -1,4 +1,5 @@
 const express = require('express');
+const compression = require('compression');
 const db = require('./lib/db');
 const { isPostgresConfigured, validateDatabaseUrl, publicDatabaseHint, sanitizeDbError } = require('./lib/env-db');
 const pgDb = isPostgresConfigured() ? require('./lib/db-pg') : null;
@@ -121,8 +122,9 @@ const {
     isCheckinDateToday,
     isCheckinOpenForSeminar,
     isSeminarEnded,
-    isTicketExpiredForSeminar,
-    ticketExpiryStartsYmd,
+    isTicketExpired,
+    ticketExpiryMs,
+    formatTicketExpiry,
     localDateYmd,
     normalizeCheckinDateYmd,
     normalizeCheckinDateForStorage
@@ -138,6 +140,16 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.set('trust proxy', 1);
+app.use(
+    compression({
+        threshold: 1024,
+        filter: (req, res) => {
+            if (/text\/event-stream/i.test(String(res.getHeader('Content-Type') || ''))) return false;
+            if (/text\/event-stream/i.test(String(req.headers.accept || ''))) return false;
+            return compression.filter(req, res);
+        }
+    })
+);
 app.use(cors());
 app.use(
     express.json({
@@ -2156,27 +2168,40 @@ function runNotifyTicketIssued(userId, registrationId, ticketId, opts) {
         payment_status: 'PAID'
     };
 
-    db.get(
+    // All tickets on the same order as the issued ticket (multi-day / multi-session events issue several QR tickets).
+    db.all(
         `SELECT r.seminar_id, r.application_no, r.user_id,
                 t.qr_code_data, t.ticket_id_string, t.is_scanned, t.scan_time,
                 IFNULL(t.is_valid, 1) AS is_valid, o.status AS payment_status,
-                s.title AS seminar_title, s.event_date, s.location_url, s.portal_year,
-                sday.title AS day_title, sday.day_date AS day_date,
+                s.title AS seminar_title, s.event_date, s.event_end_date, s.ticket_expires_at, s.location_url, s.portal_year,
+                sday.title AS day_title, sday.day_date AS day_date, sday.sort_order AS day_sort,
+                sev.title AS event_title, sev.event_date AS sub_event_date,
                 u.first_name, u.last_name, u.email, u.phone
          FROM registrations r
          JOIN orders o ON o.registration_id = r.id
          JOIN tickets t ON t.order_id = o.id
          JOIN seminars s ON s.id = r.seminar_id
          LEFT JOIN seminar_days sday ON sday.id = t.day_id
+         LEFT JOIN seminar_events sev ON sev.id = t.event_id
          JOIN users u ON u.id = r.user_id
-         WHERE r.id = ? AND TRIM(t.ticket_id_string) = TRIM(?)
-         ORDER BY o.id DESC, t.id DESC
-         LIMIT 1`,
+         WHERE r.id = ?
+           AND o.id = (
+               SELECT o2.id FROM orders o2 JOIN tickets t2 ON t2.order_id = o2.id
+               WHERE o2.registration_id = r.id AND TRIM(t2.ticket_id_string) = TRIM(?)
+               ORDER BY o2.id DESC LIMIT 1
+           )
+           AND IFNULL(t.is_valid, 1) = 1
+         ORDER BY sday.sort_order ASC, sday.day_date ASC, sev.event_date ASC, t.id ASC`,
         [registrationId, String(ticketId)],
-        (e, row) => {
+        (e, rows) => {
             if (e) {
                 console.warn('[ticket-issue] lookup failed:', e.message);
             }
+            const allRows = Array.isArray(rows) ? rows : [];
+            const row =
+                allRows.find((r) => String(r.ticket_id_string || '').trim() === String(ticketId).trim()) ||
+                allRows[0] ||
+                null;
             const seminarId = row && row.seminar_id;
 
             const finish = () => {
@@ -2214,6 +2239,7 @@ function runNotifyTicketIssued(userId, registrationId, ticketId, opts) {
                     registrationId,
                     ticketId,
                     ticketRow: row,
+                    ticketRows: allRows,
                     vars,
                     immediate: drainImmediate
                 },
@@ -2234,7 +2260,16 @@ function runNotifyTicketIssued(userId, registrationId, ticketId, opts) {
 function attachEventsAndDaysToSeminarRows(rows, cb) {
     seminarEvents.attachEventsToSeminarRows(db, rows || [], (eEv, withEvents) => {
         if (eEv) return cb(eEv);
-        seminarDays.attachDaysToSeminarRows(db, withEvents || [], cb);
+        seminarDays.attachDaysToSeminarRows(db, withEvents || [], (eD, out) => {
+            if (eD) return cb(eD);
+            (out || []).forEach((s) => {
+                if (!s) return;
+                s.schedule_label = seminarDt.formatSeminarSchedule(s);
+                s.schedule_dates = seminarDt.seminarDateList(s);
+                s.is_multi_day = s.schedule_dates.length > 1;
+            });
+            cb(null, out);
+        });
     });
 }
 
@@ -6865,6 +6900,7 @@ app.get('/api/doctor/event-tickets/:userId', (req, res) => {
                 IFNULL(t.scan_count, 0) AS scan_count, IFNULL(t.is_valid, 1) AS is_valid,
                 o.order_id_string, o.amount, o.status as order_status, o.payment_date,
                 r.application_no, r.status as registration_status, s.title as seminar_title, s.id as seminar_id, s.event_date,
+                s.event_end_date, s.ticket_expires_at,
                 sday.title AS day_title, sday.day_date AS day_date
          FROM tickets t
          JOIN orders o ON t.order_id = o.id
@@ -6881,15 +6917,19 @@ app.get('/api/doctor/event-tickets/:userId', (req, res) => {
                 const regSt = String(row.registration_status || '').toLowerCase();
                 const adminCheckedIn = regSt === 'checked_in' || regSt === 'certificate_issued';
                 const ticketDate = row.day_date || row.event_date;
-                const expired =
-                    isTicketExpiredForSeminar(ticketDate) &&
-                    !scanned &&
-                    !adminCheckedIn;
+                const expiryRow = {
+                    ticket_expires_at: row.ticket_expires_at,
+                    event_date: ticketDate,
+                    event_end_date: row.day_date ? null : row.event_end_date
+                };
+                const expired = isTicketExpired(expiryRow) && !scanned && !adminCheckedIn;
+                const expMs = ticketExpiryMs(expiryRow);
                 return {
                     ...row,
                     download_token: ticketAccess.createTicketAccessToken(row.ticket_id_string, uid, 900000),
-                    seminar_ended: isSeminarEnded(ticketDate),
-                    ticket_expires_on: ticketExpiryStartsYmd(ticketDate) || null,
+                    seminar_ended: isSeminarEnded(row.event_end_date || ticketDate),
+                    ticket_expires_on: expMs != null ? new Date(expMs).toISOString() : null,
+                    ticket_expires_label: formatTicketExpiry(expiryRow) || null,
                     ticket_expired: expired,
                     no_valid_ticket: expired
                 };
@@ -6912,7 +6952,7 @@ app.get('/api/doctor/ticket-document/:ticketId', (req, res) => {
     db.get(
         `SELECT t.ticket_id_string, t.qr_code_data, t.is_scanned, t.scan_time, IFNULL(t.is_valid, 1) AS is_valid,
                 r.application_no, r.user_id, o.status AS payment_status,
-                s.title AS seminar_title, s.event_date, s.location_url, s.portal_year,
+                s.title AS seminar_title, s.event_date, s.event_end_date, s.ticket_expires_at, s.location_url, s.portal_year,
                 sday.title AS day_title, sday.day_date AS day_date,
                 u.first_name, u.last_name
          FROM tickets t
@@ -6951,6 +6991,8 @@ app.get('/api/doctor/ticket-document/:ticketId', (req, res) => {
                             ? row.seminar_title + ' — ' + row.day_title
                             : row.seminar_title,
                         event_date: row.day_date || row.event_date,
+                        event_end_date: row.day_date ? null : row.event_end_date,
+                        ticket_expires_at: row.ticket_expires_at,
                         location_url: row.location_url,
                         portal_year: row.portal_year,
                         display_name: displayName,
@@ -7437,6 +7479,8 @@ const SCANNER_TICKET_LOOKUP_SQL = `
                    WHEN se.event_date IS NOT NULL THEN se.event_date
                    ELSE s.event_date
                END AS event_date,
+               CASE WHEN sd.id IS NULL AND se.id IS NULL THEN s.event_end_date ELSE NULL END AS event_end_date,
+               s.ticket_expires_at,
                CASE
                    WHEN se.cert_scans_required IS NOT NULL THEN CAST(se.cert_scans_required AS INTEGER)
                    WHEN s.cert_scans_required IS NOT NULL THEN CAST(s.cert_scans_required AS INTEGER)
@@ -7463,8 +7507,8 @@ function ticketLookupInvalid(row) {
     if (Number(row.is_valid) === 0 || row.is_valid === false) return true;
     const regSt = String(row.registration_status || '').toLowerCase();
     if (regSt === 'cancelled' || regSt === 'rejected') return true;
-    if (isTicketExpiredForSeminar(row.event_date) && !row.is_scanned && Number(row.scan_count || 0) < 1) {
-        const regSt = String(row.registration_status || '').toLowerCase();
+    if (regSt === 'expired') return true;
+    if (isTicketExpired(row) && !row.is_scanned && Number(row.scan_count || 0) < 1) {
         if (regSt !== 'checked_in' && regSt !== 'certificate_issued') return true;
     }
     return false;
@@ -7777,7 +7821,8 @@ function scannerVerifyJsonFromRow(row, extras) {
             registrationStatus: row.registration_status,
             isScanned: !!row.is_scanned,
             invalid: ticketLookupInvalid(row),
-            expired: isTicketExpiredForSeminar(row.event_date) && !row.is_scanned,
+            expired: isTicketExpired(row) && !row.is_scanned,
+            expiresAt: formatTicketExpiry(row) || null,
             checkinEnabled: !!row.checkin_enabled,
             checkinDate: row.checkin_date,
             eventId: row.event_id || null,
@@ -8018,20 +8063,20 @@ app.post('/api/scanner/mark', (req, res) => {
                 }
                 const scansRequired = certVerify.normalizeCertScansRequired(row.cert_scans_required);
                 const currentScanCount = Number(row.scan_count) || (row.is_scanned ? 1 : 0);
-                if (isTicketExpiredForSeminar(row.event_date) && currentScanCount < 1) {
+                if (isTicketExpired(row) && currentScanCount < 1) {
                     logScanDashboard(
                         selectedSeminarId,
                         staffId,
                         'expired',
-                        'Ticket expired after event day',
+                        'Ticket expired',
                         row
                     );
                     return res.status(403).json({
                         success: false,
                         error:
-                            'No valid ticket — expired after event day (' +
-                            (ticketExpiryStartsYmd(row.event_date) || 'next day') +
-                            ' 00:00 IST). Admin can manual check-in if attended.',
+                            'No valid ticket — QR expired on ' +
+                            (formatTicketExpiry(row) || 'the day after the event') +
+                            '. Admin can manual check-in if attended.',
                         sound: 'error',
                         expired: true,
                         doctor: doctorPayloadFromScanRow(row)
@@ -8471,12 +8516,14 @@ app.post('/api/admin/seminars', (req, res) => {
     const locFields = googleMaps.normalizeLocationOnSave({ location_text, location_url });
     const bodyYear = req.body && req.body.portal_year != null ? parseInt(req.body.portal_year, 10) : null;
     const daySelectionMode = seminarDays.normalizeDaySelectionMode(req.body && req.body.day_selection_mode);
+    const eventEndDt = normalizeSeminarEventEnd(eventDt, req.body && req.body.event_end_date);
+    const ticketExpiresAt = seminarDt.normalizeSeminarDateTimeForStorage(req.body && req.body.ticket_expires_at);
     portalTracking.getPortalYear(db, (ePy, defaultYear) => {
         const portalYear =
             Number.isInteger(bodyYear) && bodyYear > 2000 ? bodyYear : defaultYear;
         db.run(
-            `INSERT INTO seminars (title, description, registration_start, registration_end, event_date, capacity, price, checkin_enabled, checkin_date, location_text, location_url, terms_conditions, hero_image_path, flyer_path, gallery_paths, registration_form_json, cancellation_policy_json, whatsapp_group_url, otp_on_application, otp_on_step1, otp_on_submit, public_list_enabled, cert_scans_required, portal_year, is_active, show_seats_public, preregistration_enabled, preregistration_start, preregistration_end, waiting_list_enabled, allow_application_edit, auto_confirm_registration, alumni_source_seminar_ids, alumni_notify_auto, day_selection_mode)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO seminars (title, description, registration_start, registration_end, event_date, capacity, price, checkin_enabled, checkin_date, location_text, location_url, terms_conditions, hero_image_path, flyer_path, gallery_paths, registration_form_json, cancellation_policy_json, whatsapp_group_url, otp_on_application, otp_on_step1, otp_on_submit, public_list_enabled, cert_scans_required, portal_year, is_active, show_seats_public, preregistration_enabled, preregistration_start, preregistration_end, waiting_list_enabled, allow_application_edit, auto_confirm_registration, alumni_source_seminar_ids, alumni_notify_auto, day_selection_mode, event_end_date, ticket_expires_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 title,
                 description,
@@ -8512,7 +8559,9 @@ app.post('/api/admin/seminars', (req, res) => {
                 autoConfirmReg,
                 alumniSourceJson,
                 alumniNotifyAuto,
-                daySelectionMode
+                daySelectionMode,
+                eventEndDt,
+                ticketExpiresAt
             ],
             function (err) {
             if (err) return res.status(500).json({ error: err.message });
@@ -8535,6 +8584,16 @@ app.post('/api/admin/seminars', (req, res) => {
         );
         });
 });
+
+/** Event end must be after start; blank/invalid end means single-day (null). */
+function normalizeSeminarEventEnd(eventStartStored, rawEnd) {
+    const endStored = seminarDt.normalizeSeminarDateTimeForStorage(rawEnd);
+    if (!endStored) return null;
+    const startMs = seminarDt.parseSeminarMs(eventStartStored);
+    const endMs = seminarDt.parseSeminarMs(endStored);
+    if (startMs != null && endMs != null && endMs <= startMs) return null;
+    return endStored;
+}
 
 // Admin: Update Seminar
 app.put('/api/admin/seminars/:id', (req, res) => {
@@ -8632,8 +8691,10 @@ app.put('/api/admin/seminars/:id', (req, res) => {
                 req.body && req.body.day_selection_mode != null
                     ? seminarDays.normalizeDaySelectionMode(req.body.day_selection_mode)
                     : null;
+            const eventEndDt = normalizeSeminarEventEnd(eventDt, req.body && req.body.event_end_date);
+            const ticketExpiresAt = seminarDt.normalizeSeminarDateTimeForStorage(req.body && req.body.ticket_expires_at);
             const sql =
-                `UPDATE seminars SET title=?, description=?, registration_start=?, registration_end=?, event_date=?, capacity=?, price=?, checkin_enabled=?, checkin_date=?, is_active=?, location_text=?, location_url=?, terms_conditions=?, hero_image_path=?, flyer_path=?, gallery_paths=?, registration_form_json=?, cancellation_policy_json=?, whatsapp_group_url=?, otp_on_application=?, otp_on_step1=?, otp_on_submit=?, public_list_enabled=?, cert_scans_required=?, portal_year=?, show_seats_public=?, preregistration_enabled=?, preregistration_start=?, preregistration_end=?, waiting_list_enabled=?, allow_application_edit=?, auto_confirm_registration=?, alumni_source_seminar_ids=?, alumni_notify_auto=?, day_selection_mode=COALESCE(?, day_selection_mode)` +
+                `UPDATE seminars SET title=?, description=?, registration_start=?, registration_end=?, event_date=?, capacity=?, price=?, checkin_enabled=?, checkin_date=?, is_active=?, location_text=?, location_url=?, terms_conditions=?, hero_image_path=?, flyer_path=?, gallery_paths=?, registration_form_json=?, cancellation_policy_json=?, whatsapp_group_url=?, otp_on_application=?, otp_on_step1=?, otp_on_submit=?, public_list_enabled=?, cert_scans_required=?, portal_year=?, show_seats_public=?, preregistration_enabled=?, preregistration_start=?, preregistration_end=?, waiting_list_enabled=?, allow_application_edit=?, auto_confirm_registration=?, alumni_source_seminar_ids=?, alumni_notify_auto=?, day_selection_mode=COALESCE(?, day_selection_mode), event_end_date=?, ticket_expires_at=?` +
                 (resetSent ? `, alumni_notify_sent_at=NULL` : '') +
                 ` WHERE id=?`;
         db.run(
@@ -8674,6 +8735,8 @@ app.put('/api/admin/seminars/:id', (req, res) => {
                 alumniSourceJson,
                 alumniNotifyAuto,
                 daySelectionMode,
+                eventEndDt,
+                ticketExpiresAt,
                 sid
             ],
             function (err) {
@@ -9017,6 +9080,7 @@ const ALLOWED_REGISTRATION_STATUSES = new Set([
     'e_ticket_issued',
     'certificate_issued',
     'checked_in',
+    'expired',
     'rejected',
     'cancelled'
 ]);
@@ -14866,7 +14930,7 @@ function enrichEticketRowsWithEmailStatus(db, rows, cb) {
 const ADMIN_ETICKET_LOOKUP_SQL = `
         SELECT r.id AS registration_id, r.application_no, r.status AS registration_status,
                u.id AS user_id, u.first_name, u.last_name, u.email, u.phone,
-               s.id AS seminar_id, s.title AS seminar_title, s.event_date, s.price AS seminar_price,
+               s.id AS seminar_id, s.title AS seminar_title, s.event_date, s.event_end_date, s.ticket_expires_at, s.price AS seminar_price,
                o.id AS order_db_id, o.order_id_string, o.status AS payment_status, o.payment_date,
                t.id AS ticket_row_id, t.ticket_id_string, t.is_scanned, IFNULL(t.scan_count, 0) AS scan_count,
                t.scan_time, IFNULL(t.is_valid, 1) AS is_valid, t.qr_code_data
@@ -14931,8 +14995,9 @@ app.get('/api/admin/e-tickets/lookup', (req, res) => {
                 scanTime: row.scan_time,
                 isValid: row.is_valid !== 0 && row.is_valid !== false,
                 eventDate: row.event_date,
+                ticketExpiresAt: formatTicketExpiry(row) || null,
                 ticketExpired:
-                    isTicketExpiredForSeminar(row.event_date) &&
+                    isTicketExpired(row) &&
                     !Number(row.is_scanned) &&
                     Number(row.scan_count || 0) < 1,
                 hasTicket: !!row.ticket_id_string,

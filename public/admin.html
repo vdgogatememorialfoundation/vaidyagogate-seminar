@@ -3095,7 +3095,13 @@
                     </div>
                 </div>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                    <div><label>Event Date (Main) <span style="font-weight:normal;color:#64748b;">(IST)</span></label><input type="datetime-local" id="seminar-event-date" required></div>
+                    <div><label>Event starts <span style="font-weight:normal;color:#64748b;">(date &amp; time, IST)</span></label><input type="datetime-local" id="seminar-event-date" required></div>
+                    <div><label>Event ends <span style="font-weight:normal;color:#64748b;">(date &amp; time, IST — optional)</span></label><input type="datetime-local" id="seminar-event-end-date"><p style="font-size:0.78rem;color:#64748b;margin:4px 0 0;">Leave blank for a single-day event. Doctors see one date for 1-day events and all dates for multi-day events (same in emails).</p></div>
+                    <div style="grid-column:1/-1;background:#fef2f2;border:1px solid #fecaca;border-radius:10px;padding:12px;">
+                        <label style="color:#991b1b;">QR e-ticket expiry <span style="font-weight:normal;color:#64748b;">(date &amp; time, IST — optional)</span></label>
+                        <input type="datetime-local" id="seminar-ticket-expires-at" style="max-width:320px;">
+                        <p style="font-size:0.78rem;color:#64748b;margin:6px 0 0;">After this moment every unscanned QR for this seminar becomes invalid and registrations still at <strong>E-ticket issued</strong> are moved to <strong>Ticket expired</strong>. Blank = midnight (IST) after the event end date.</p>
+                    </div>
                     <div><label>Portal year</label><input type="number" id="seminar-portal-year" min="2000" max="2100" placeholder="e.g. 2027"></div>
                     <div><label>Capacity</label><input type="number" id="seminar-capacity" required></div>
                     <div style="grid-column:1/-1;"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="seminar-show-seats-public" checked> Show seat count publicly on registration</label></div>
