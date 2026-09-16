@@ -293,8 +293,8 @@
                         <p id="applications-search-count" style="margin:6px 0 0;font-size:0.82rem;color:#64748b;"></p>
                     </div>
                     <table class="data-table">
-                        <thead><tr><th>App ID (Barcode)</th><th>Doctor ID</th><th>Doctor Name</th><th>Review level</th><th>Current Status</th><th>Action</th></tr></thead>
-                        <tbody id="applications-list"><tr><td colspan="6" style="text-align: center;">Loading applications...</td></tr></tbody>
+                        <thead><tr><th>App ID (Barcode)</th><th>Doctor ID</th><th>Doctor Name</th><th>Review level</th><th>E-ticket ID(s)</th><th>Current Status</th><th>Action</th></tr></thead>
+                        <tbody id="applications-list"><tr><td colspan="7" style="text-align: center;">Loading applications...</td></tr></tbody>
                     </table>
                 </div>
             </div>
@@ -861,7 +861,14 @@
             <!-- Registration form (seminar application) field configuration -->
             <div id="tab-reg-form" class="tab-pane hidden">
                 <h2 style="margin-bottom: 16px;">Seminar registration form</h2>
-                <p style="color:#64748b;margin-bottom:16px;">Toggle which fields appear for doctors and whether each is required. Changes apply to new submissions and edits.</p>
+                <p style="color:#64748b;margin-bottom:16px;">Choose an event to view and customize its effective registration fields. With <strong>Global form</strong> selected, changes apply to events without an override.</p>
+                    <div class="card" style="margin-bottom:14px;background:#eff6ff;border:1px solid #bfdbfe;">
+                        <label for="admin-reg-event-selector" style="font-weight:700;color:#1e40af;">Event selector</label>
+                        <select id="admin-reg-event-selector" style="max-width:620px;margin-top:6px;" onchange="loadAdminRegistrationFormConfig()">
+                            <option value="">Global form (default for all events)</option>
+                        </select>
+                        <p id="admin-reg-event-help" style="font-size:0.82rem;color:#64748b;margin:7px 0 0;">Select an event to edit its event-specific registration form. You can also reach the same override from Seminar Management → Edit event.</p>
+                    </div>
                     <div class="card">
                     <table class="data-table">
                         <thead><tr><th>Field key</th><th>Label (shown to doctor)</th><th>Type</th><th>Step</th><th>Enabled</th><th>Required</th><th></th></tr></thead>
@@ -3437,6 +3444,6 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
-    <script src="/js/admin.js?v=20260822days2"></script>
+    <script src="/js/admin.js?v=20260911ticketdedupe2"></script>
 </body>
 </html>

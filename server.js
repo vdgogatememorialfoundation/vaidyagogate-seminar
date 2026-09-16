@@ -843,10 +843,15 @@ const DEFAULT_REGISTRATION_FORM_CONFIG = {
             options: [
                 { value: 'Practicing Vaidya', label: 'Practicing Vaidya' },
                 { value: 'Practitioner', label: 'Practitioner' },
-                { value: 'PG', label: 'PG' }
+                { value: 'PG', label: 'PG' },
+                { value: 'PG Student', label: 'PG Student' },
+                { value: 'Faculty', label: 'Faculty' },
+                { value: 'UG Student', label: 'UG Student' }
             ]
         },
-        { key: 'ncism', label: 'Medical registration / NCISM', type: 'text', step: 3, enabled: true, required: true, onlyWhenAdvancedQual: true },
+        { key: 'ncism', label: 'Registration council no.', type: 'text', step: 3, enabled: true, required: true, onlyWhenAdvancedQual: true },
+        { key: 'certificate_applicable', label: 'Certificate applicable', type: 'select', step: 3, enabled: true, required: false, options: [{ value: 'Yes', label: 'Yes' }, { value: 'No', label: 'No' }] },
+        { key: 'certificate_no', label: 'Certificate no.', type: 'text', step: 3, enabled: true, required: false },
         { key: 'certificate', label: 'Certificate upload', type: 'file', step: 3, enabled: true, required: true, onlyWhenAdvancedQual: true },
         { key: 'cpin', label: 'College PIN code', type: 'text', step: 4, enabled: true, required: true, onlyWhenPgCollege: true },
         { key: 'college', label: 'College name', type: 'text', step: 4, enabled: true, required: true, onlyWhenPgCollege: true },
@@ -1472,7 +1477,16 @@ function loadGlobalRegistrationFormConfig(callback) {
             if (!parsed.fields.length) {
                 parsed.fields = DEFAULT_REGISTRATION_FORM_CONFIG.fields;
             }
-            callback(null, regFormCfg.buildConfigPayload(parsed.fields, parsed));
+            const fields = regFormCfg.mergeRegistrationFields(DEFAULT_REGISTRATION_FORM_CONFIG.fields, parsed.fields);
+            const defaultQual = DEFAULT_REGISTRATION_FORM_CONFIG.fields.find((f) => f.key === 'qual');
+            const storedQual = fields.find((f) => f.key === 'qual');
+            if (defaultQual && storedQual && Array.isArray(defaultQual.options)) {
+                const seen = new Set((storedQual.options || []).map((o) => String(o.value)));
+                storedQual.options = (storedQual.options || []).concat(
+                    defaultQual.options.filter((o) => !seen.has(String(o.value)))
+                );
+            }
+            callback(null, regFormCfg.buildConfigPayload(fields, parsed));
         } catch (_) {
             callback(null, regFormCfg.buildConfigPayload(DEFAULT_REGISTRATION_FORM_CONFIG.fields, {}));
         }
@@ -4478,6 +4492,8 @@ app.get('/api/registration-form-config', (req, res) => {
                 birthYearMin: cfg && cfg.birthYearMin != null ? cfg.birthYearMin : null,
                 birthYearMax: cfg && cfg.birthYearMax != null ? cfg.birthYearMax : null,
                 otpOnApplication: false,
+                otpOnStep1: false,
+                otpOnSubmit: false,
                 submitOtpRequired: false,
                 ...flags
             };
@@ -4487,9 +4503,9 @@ app.get('/api/registration-form-config', (req, res) => {
                     [sid],
                     (e2, row) => {
                     if (e2) return res.status(500).json({ error: e2.message });
-                    const otpOn = !!(row && Number(row.otp_on_application) === 1);
-                    const otpStep1 = otpOn && row && Number(row.otp_on_step1) !== 0;
-                    const otpSubmit = otpOn && row && Number(row.otp_on_submit) !== 0;
+                    const otpOn = false;
+                    const otpStep1 = false;
+                    const otpSubmit = false;
                     res.json({
                         ...base,
                         otpOnApplication: otpOn,
@@ -5036,6 +5052,7 @@ app.get('/api/assets/:key', fileStore.serveAssetHandler(db));
 
 app.post('/api/admin/registration-form-config', (req, res) => {
     const { fields, birthYearMin, birthYearMax } = req.body;
+    const seminarId = req.body && req.body.seminarId != null ? parseInt(req.body.seminarId, 10) : null;
     if (!Array.isArray(fields)) return res.status(400).json({ error: 'fields must be an array' });
     const normalized = sanitizeRegistrationFormFields(
         fields.map((f) => ({
@@ -5050,6 +5067,17 @@ app.post('/api/admin/registration-form-config', (req, res) => {
     const payload = JSON.stringify(
         regFormCfg.buildConfigPayload(normalized, { birthYearMin, birthYearMax })
     );
+    if (Number.isInteger(seminarId) && seminarId > 0) {
+        return db.run(
+            `UPDATE seminars SET registration_form_json = ? WHERE id = ?`,
+            [payload, seminarId],
+            function (e) {
+                if (e) return res.status(500).json({ error: e.message });
+                if (!this.changes) return res.status(404).json({ error: 'Event not found' });
+                res.json({ success: true, seminarId });
+            }
+        );
+    }
     upsertGlobalSetting('registration_form_config', payload, (e) => {
         if (e) return res.status(500).json({ error: e.message });
         res.json({ success: true });
@@ -5568,10 +5596,10 @@ app.post('/api/applications/submit', requestGuard.registrationSubmitLimit, withC
                     }
 
                     const sidNum = parseInt(seminarId, 10);
-                    const otpApp = !!(sem && Number(sem.otp_on_application) === 1);
-                    const otpStep1 = otpApp && sem && Number(sem.otp_on_step1) !== 0;
-                    const otpSubmit = otpApp && sem && Number(sem.otp_on_submit) !== 0;
-                    const skipFieldKeys = otpStep1 ? ['email', 'phone'] : [];
+                    const otpApp = false;
+                    const otpStep1 = false;
+                    const otpSubmit = false;
+                    const skipFieldKeys = ['email', 'phone'];
 
                     function proceedAfterEventCheck(nextFn) {
                         seminarEvents.listForSeminar(db, seminarId, true, (evErr, events) => {
@@ -5612,20 +5640,7 @@ app.post('/api/applications/submit', requestGuard.registrationSubmitLimit, withC
                     }
 
                     function runFieldOtpsThenInsert() {
-                        otpLib.validateAllFieldOtpTokens(
-                            db,
-                            sidNum,
-                            fieldOtpTokensObj,
-                            list,
-                            (ferr, fv) => {
-                                if (ferr) return res.status(500).json({ error: ferr.message });
-                                if (!fv || !fv.ok) {
-                                    return res.status(400).json({ error: (fv && fv.error) || 'Field OTP verification failed' });
-                                }
-                                insertRegistration();
-                            },
-                            { skipFieldKeys }
-                        );
+                        insertRegistration();
                     }
 
                     function insertRegistration() {
@@ -6059,7 +6074,7 @@ app.put('/api/applications/:applicationId', withCertificateUpload, (req, res) =>
                 }
 
                 const sidNum = parseInt(row.seminar_id, 10);
-                const otpApp = !!Number(row.otp_on_application);
+                const otpApp = false;
                 const skipFieldKeys = otpApp ? ['email', 'phone'] : [];
 
                 function persistUpdate() {
@@ -6089,20 +6104,7 @@ app.put('/api/applications/:applicationId', withCertificateUpload, (req, res) =>
                 }
 
                 function runFieldOtps() {
-                    otpLib.validateAllFieldOtpTokens(
-                        db,
-                        sidNum,
-                        fieldOtpTokensObj,
-                        list,
-                        (ferr, fv) => {
-                            if (ferr) return res.status(500).json({ error: ferr.message });
-                            if (!fv || !fv.ok) {
-                                return res.status(400).json({ error: (fv && fv.error) || 'Field OTP verification failed' });
-                            }
-                            persistUpdate();
-                        },
-                        { skipFieldKeys }
-                    );
+                    persistUpdate();
                 }
 
                 if (otpApp) {
@@ -8976,7 +8978,28 @@ app.get('/api/admin/applications', withApplicationReviewSchema, (req, res) => {
         ORDER BY a.created_at DESC
     `, [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
-        seminarEvents.attachPaymentAmountsToRegistrations(db, rows || [], (ePay, withPay) => {
+        const grouped = new Map();
+        (rows || []).forEach((row) => {
+            const key = String(row.id);
+            const existing = grouped.get(key);
+            if (!existing) {
+                grouped.set(key, { ...row, ticket_id_string: row.ticket_id_string || '' });
+                return;
+            }
+            const ticketIds = new Set(
+                String(existing.ticket_id_string || '')
+                    .split(',')
+                    .map((value) => value.trim())
+                    .filter(Boolean)
+            );
+            if (row.ticket_id_string) ticketIds.add(String(row.ticket_id_string).trim());
+            existing.ticket_id_string = Array.from(ticketIds).join(', ');
+            existing.is_scanned = Number(existing.is_scanned) === 1 || Number(row.is_scanned) === 1 ? 1 : 0;
+            if (row.scan_time && (!existing.scan_time || String(row.scan_time) > String(existing.scan_time))) {
+                existing.scan_time = row.scan_time;
+            }
+        });
+        seminarEvents.attachPaymentAmountsToRegistrations(db, Array.from(grouped.values()), (ePay, withPay) => {
             if (ePay) return res.status(500).json({ error: ePay.message });
             res.json(withPay || []);
         });
