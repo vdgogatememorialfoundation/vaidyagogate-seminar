@@ -504,6 +504,194 @@
     color: #64748b;
 }
 
+/* Applicant list (right-side panel) */
+.ls-layout {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+    align-items: flex-start;
+}
+
+.ls-layout .kiosk-main {
+    flex: 1 1 520px;
+    min-width: 0;
+}
+
+.ls-applist {
+    position: fixed;
+    top: 100px;
+    right: 16px;
+    width: 340px;
+    max-height: calc(100vh - 130px);
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    box-shadow: 0 18px 50px rgba(10, 20, 40, 0.22);
+    overflow: hidden;
+    z-index: 30;
+}
+
+.ls-applist-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    border-bottom: 1px solid #e2e8f0;
+    background: linear-gradient(135deg, #0d9488, #0891b2);
+}
+
+.ls-applist-head h2 {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #fff;
+}
+
+.ls-applist-count {
+    min-width: 26px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.25);
+    color: #fff;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-align: center;
+}
+
+.ls-applist-body {
+    max-height: 70vh;
+    overflow-y: auto;
+    padding: 8px;
+}
+
+.ls-applist-empty {
+    margin: 12px;
+    font-size: 0.84rem;
+    color: #64748b;
+    text-align: center;
+}
+
+.ls-app-item {
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    margin-bottom: 8px;
+    background: #f8fafc;
+}
+
+.ls-app-head {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.ls-app-head strong {
+    font-size: 0.88rem;
+    color: #0f172a;
+}
+
+.ls-app-otp-btn {
+    margin-left: auto;
+    align-self: flex-start;
+    padding: 4px 9px;
+    border: 1px solid #0d9488;
+    border-radius: 6px;
+    background: #fff;
+    color: #0d9488;
+    font-size: 0.72rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: background 0.15s ease;
+}
+
+.ls-app-otp-btn:hover {
+    background: #0d9488;
+    color: #fff;
+}
+
+.ls-app-head code {
+    font-size: 0.72rem;
+    color: #64748b;
+}
+
+.ls-app-days {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.ls-app-day {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 600;
+}
+
+.ls-app-day.is-in {
+    background: #dcfce7;
+    color: #166534;
+}
+
+.ls-app-day.is-out {
+    background: #fee2e2;
+    color: #b91c1c;
+}
+
+@media (max-width: 900px) {
+    .ls-applist {
+        flex: 1 1 100%;
+        width: 100%;
+    }
+    .ls-applist-body {
+        max-height: none;
+    }
+}
+
+.ls-applist-search { padding: 8px 12px; border-bottom: 1px solid #e2e8f0; background: #f8fafc; }
+.ls-applist-search input { width: 100%; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 0.85rem; }
+.ls-app-item { cursor: pointer; user-select: none; transition: background 0.15s ease, box-shadow 0.15s ease; }
+.ls-app-item:hover { background: #ecfeff; box-shadow: 0 2px 8px rgba(13, 148, 136, 0.15); }
+
+.ls-modal { position: fixed; inset: 0; background: rgba(10, 15, 30, 0.55); display: flex; align-items: center; justify-content: center; z-index: 100; }
+.ls-modal.hidden { display: none; }
+.ls-modal-card { background: #fff; border-radius: 14px; padding: 22px; width: min(420px, 92vw); box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+.ls-modal-card h3 { margin: 0 0 4px; font-size: 1.05rem; color: #0d9488; }
+.ls-modal-who { margin: 0 0 14px; font-size: 0.88rem; color: #334155; }
+.ls-modal-card label { display: block; font-size: 0.84rem; color: #64748b; margin-bottom: 6px; }
+.ls-modal-card input { width: 100%; padding: 12px; font-size: 1.6rem; letter-spacing: 10px; text-align: center; border: 1px solid #cbd5e1; border-radius: 10px; font-weight: 700; color: #0d9488; }
+.ls-modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+.ls-modal-actions .btn-primary {
+    padding: 10px 18px;
+    border: none;
+    border-radius: 8px;
+    background: #0d9488;
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+}
+.ls-modal-actions .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+.ls-modal-actions .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.ls-modal-msg { margin: 8px 0 0; font-size: 0.88rem; font-weight: 600; min-height: 1em; }
+
+@media (max-width: 900px) {
+    .ls-applist {
+        position: static;
+        top: auto;
+        right: auto;
+        width: 100%;
+        max-height: none;
+        margin: 12px 0;
+    }
+    .ls-applist-body { max-height: none;    }
+}
+
+
 @media (max-width: 640px) {
     .kiosk-topbar {
         flex-direction: column;

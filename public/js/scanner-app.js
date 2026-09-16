@@ -111,6 +111,9 @@
     const loginErr = document.getElementById('login-err');
     const resultBox = document.getElementById('result-box');
     const historyEl = document.getElementById('scan-history');
+    const otpTicketInput = document.getElementById('otp-ticket');
+    const otpCodeInput = document.getElementById('otp-code');
+    const otpCheckinBtn = document.getElementById('btn-otp-checkin');
     let user = PortalAuth.getUser('scanner');
     let html5QrCode = null;
     let selectedSeminarId = null;
@@ -1122,6 +1125,81 @@
     document.getElementById('btn-manual')?.addEventListener('click', () => {
         const v = document.getElementById('manual-qr')?.value?.trim();
         if (v) processScan(v);
+    });
+
+    async function submitOtpCheckin() {
+        const raw = otpTicketInput ? otpTicketInput.value.trim() : '';
+        const code = otpCodeInput ? otpCodeInput.value.trim() : '';
+        if (!raw) {
+            renderResult(false, 'Enter a ticket ID or registration ID.', 'warn');
+            return;
+        }
+        if (!code) {
+            renderResult(false, 'Enter the 6-digit OTP code.', 'warn');
+            return;
+        }
+        const daySel = document.getElementById('scanner-day-select');
+        const dayId = daySel && daySel.value ? parseInt(daySel.value, 10) : null;
+        const numericId = /^\d+$/.test(raw);
+        renderResult(false, '<i class="fas fa-spinner fa-spin"></i> Verifying OTP…', 'warn');
+        try {
+            const res = await fetch('/api/checkin/otp/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    registrationId: numericId ? raw : undefined,
+                    ticketId: numericId ? undefined : raw,
+                    dayId: dayId || undefined,
+                    code,
+                    scannerUserId: user && user.id ? Number(user.id) : undefined
+                })
+            });
+            let out = {};
+            try {
+                out = await res.json();
+            } catch (_) {
+                out = {};
+            }
+            const label = String(out.ticketId || raw).replace(/</g, '&lt;');
+            if (res.ok && out.ok) {
+                playTone('success');
+                stats.ok++;
+                updateStats();
+                renderResult(
+                    true,
+                    '<div class="scan-result-top"><div class="scan-result-body"><strong><i class="fas fa-check-circle"></i> Checked in via OTP</strong>' +
+                        '<div style="margin-top:6px;font-size:0.9rem;">Ticket: ' + label + '</div></div></div>',
+                    'ok'
+                );
+                pushHistory('OTP check-in · ' + label, true);
+            } else {
+                const err = String(out.error || 'OTP verification failed').replace(/</g, '&lt;');
+                const isDup = /already scanned/i.test(err);
+                playTone(isDup ? 'duplicate' : 'error');
+                if (isDup) stats.dup++;
+                else stats.err++;
+                updateStats();
+                renderResult(
+                    false,
+                    '<strong><i class="fas fa-times-circle"></i> ' + err + '</strong>',
+                    isDup ? 'warn' : 'bad'
+                );
+                pushHistory(err.slice(0, 60), false);
+            }
+            if (otpCodeInput) otpCodeInput.value = '';
+        } catch (e) {
+            stats.err++;
+            updateStats();
+            renderResult(false, 'Network error', 'bad');
+        }
+    }
+
+    otpCheckinBtn?.addEventListener('click', submitOtpCheckin);
+    otpTicketInput?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') submitOtpCheckin();
+    });
+    otpCodeInput?.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') submitOtpCheckin();
     });
 
     document.getElementById('btn-switch-cam')?.addEventListener('click', () => {

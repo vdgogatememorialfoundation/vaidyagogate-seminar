@@ -4,6 +4,12 @@
     let pollTimer = null;
     let clockTimer = null;
     let actor = null;
+
+    /** Resolved admin actor id for OTP/scanner APIs (null until init resolves). */
+    function actorCtxId() {
+        const s = getStoredAdminUser();
+        return (s && s.id) || (actor && actor.id) || null;
+    }
     let soundEnabled = true;
     let audioCtx = null;
 
@@ -52,7 +58,7 @@
         return d.innerHTML;
     }
 
-    function getActor() {
+    function getStoredAdminUser() {
         try {
             const raw =
                 localStorage.getItem('admin_user') ||
@@ -64,6 +70,21 @@
         } catch (_) {
             return null;
         }
+    }
+
+    // Only the super administrator sees the back-to-admin button.
+    // Super admin = role 'admin' AND user_role either unset or an admin-family value
+    // ('admin', 'super_admin'). All staff roles (co_admin, *_user variants) are excluded.
+    function isSuperAdminActor(u) {
+        const role = String((u && u.role) || '').toLowerCase();
+        const userRole = String((u && u.user_role) || '').toLowerCase();
+        return role === 'admin' && (userRole === '' || userRole === 'admin' || userRole === 'super_admin');
+    }
+
+    // Hidden by default in CSS; shown only after the actor resolves as super admin.
+    function applyBackVisibility(u) {
+        const btn = document.getElementById('live-scanner-back');
+        if (btn) btn.style.display = isSuperAdminActor(u) ? 'inline-flex' : 'none';
     }
 
     async function api(path) {
@@ -193,6 +214,11 @@
             '<span class="scan-card-time">' +
             esc(formatCardTime(ev.createdAt)) +
             '</span></div>' +
+            (ev.dayTitle
+                ? '<div style="margin:4px 0 0;"><span class="scan-outcome-badge" style="background:#e0e7ff;color:#3730a3;">' +
+                  esc(ev.dayTitle) +
+                  '</span></div>'
+                : '') +
             '<div class="scan-card-ids">' +
             '<div><span class="lbl">E-ticket</span><code>' +
             esc(ev.ticketId || '—') +
@@ -209,10 +235,216 @@
         updateEmptyState();
     }
 
+    function selectedDayId() {
+        const el = document.getElementById('live-scanner-day');
+        const v = el ? el.value : '';
+        return v ? parseInt(v, 10) : null;
+    }
+
+    function renderApplicants(rows) {
+        const body = document.getElementById('ls-applist-body');
+        const countEl = document.getElementById('ls-applist-count');
+        if (!body) return;
+        const groups = new Map();
+        (rows || []).forEach((r) => {
+            let g = groups.get(r.registrationId);
+            if (!g) {
+                g = { registrationId: r.registrationId, name: r.name, applicationNo: r.applicationNo, days: [] };
+                groups.set(r.registrationId, g);
+            }
+            if (r.dayId != null || r.dayTitle) {
+                g.days.push({ id: r.dayId || null, title: r.dayTitle || 'Entry', checkedIn: !!r.checkedIn });
+            } else if (r.ticketId) {
+                g.days.push({ id: null, title: 'Entry', checkedIn: !!r.checkedIn });
+            }
+        });
+        const did = selectedDayId();
+        // When a day filter is active, count only registrations with that day.
+        const shownGroups = [...groups.values()].filter((g) => !did || g.days.some((d2) => d2.id === did));
+        if (countEl) {
+            countEl.textContent = String(shownGroups.length);
+            const daySel = document.getElementById('live-scanner-day');
+            const opt = daySel && daySel.options[daySel.selectedIndex];
+            countEl.title = did && opt ? 'Filtered by ' + opt.textContent : '';
+        }
+        body.innerHTML = '';
+        if (!groups.size) {
+            body.innerHTML =
+                '<p class="ls-applist-empty" id="ls-applist-empty">No registrations yet for this event.</p>';
+            return;
+        }
+        if (!shownGroups.length) {
+            body.innerHTML =
+                '<p class="ls-applist-empty" id="ls-applist-empty">No applicants for this day.</p>';
+            return;
+        }
+        const frag = document.createDocumentFragment();
+        groups.forEach((g) => {
+            if (did) {
+                const hasDay = g.days.some((d) => d.id === did);
+                if (!hasDay) return;
+            }
+            const item = document.createElement('div');
+            item.className = 'ls-app-item';
+            item.dataset.regId = g.registrationId;
+            let dayChips = '';
+            g.days.forEach((d) => {
+                dayChips +=
+                    '<span class="ls-app-day ' +
+                    (d.checkedIn ? 'is-in' : 'is-out') +
+                    '" title="' +
+                    esc(d.title) +
+                    (d.checkedIn ? ' — checked in' : ' — not checked in') +
+                    '">' +
+                    '<i class="fas ' +
+                    (d.checkedIn ? 'fa-check' : 'fa-xmark') +
+                    '" aria-hidden="true"></i> ' +
+                    esc(d.title) +
+                    '</span>';
+            });
+            item.innerHTML =
+                '<div class="ls-app-head"><strong>' +
+                esc(g.name || 'Unnamed applicant') +
+                '</strong><code>' +
+                esc(g.applicationNo || '—') +
+                '</code>' +
+                '<button type="button" class="ls-app-otp-btn" title="Send check-in OTP by email"><i class="fas fa-key"></i> OTP</button>' +
+                '</div>' +
+                (dayChips ? '<div class="ls-app-days">' + dayChips + '</div>' : '');
+            const firstDayId = g.days && g.days[0] ? g.days[0].id : null;
+            item.querySelector('.ls-app-otp-btn').addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                lsOtpSend({
+                    registrationId: g.registrationId,
+                    dayId: selectedDayId() || firstDayId || null,
+                    name: g.name,
+                    applicationNo: g.applicationNo
+                });
+            });
+            item.addEventListener('click', () => {
+                openLsOtpModal({
+                    registrationId: Number(item.dataset.regId),
+                    name: g.name,
+                    applicationNo: g.applicationNo,
+                    dayId: selectedDayId() || firstDayId || null
+                });
+            });
+            frag.appendChild(item);
+        });
+        body.appendChild(frag);
+    }
+
+    function openLsOtpModal(ctx) {
+        const modal = document.getElementById('ls-otp-modal');
+        if (!modal) return;
+        modal.dataset.regId = ctx.registrationId;
+        modal.dataset.dayId = ctx.dayId || '';
+        modal.dataset.name = ctx.name || '';
+        modal.dataset.appNo = ctx.applicationNo || '';
+        const who = document.getElementById('ls-otp-who');
+        if (who) who.innerHTML = '<strong>' + esc(ctx.name || 'Applicant') + '</strong> — <code>' + esc(ctx.applicationNo || '') + '</code>';
+        const code = document.getElementById('ls-otp-code');
+        if (code) code.value = '';
+        const msg = document.getElementById('ls-otp-msg');
+        if (msg) msg.textContent = '';
+        modal.classList.remove('hidden');
+        if (code) code.focus();
+    }
+    function closeLsOtpModal() {
+        const modal = document.getElementById('ls-otp-modal');
+        if (modal) modal.classList.add('hidden');
+    }
+
+    async function lsOtpSend(ctx) {
+        const modal = document.getElementById('ls-otp-modal');
+        const msg = document.getElementById('ls-otp-msg');
+        const regId = ctx && ctx.registrationId ? Number(ctx.registrationId) : parseInt((modal && modal.dataset.regId) || '', 10);
+        const dayId = ctx && ctx.dayId ? Number(ctx.dayId) : (modal && modal.dataset.dayId ? parseInt(modal.dataset.dayId, 10) : null);
+        if (msg) { msg.style.color = '#64748b'; msg.textContent = 'Sending OTP…'; }
+        try {
+            const actor = actorCtxId();
+            let url = '/api/admin/checkin/otp/resend?registrationId=' + encodeURIComponent(regId);
+            if (dayId) url += '&dayId=' + encodeURIComponent(dayId);
+            if (actor) url += '&actingAdminId=' + encodeURIComponent(actor);
+            const data = await api(url);
+            if (msg) {
+                msg.style.color = '#166534';
+                msg.textContent = 'OTP sent' + (data.deliveredTo ? ' to ' + data.deliveredTo : '') + '.';
+            }
+        } catch (e) {
+            if (msg) { msg.style.color = '#b91c1c'; msg.textContent = e.message || 'Could not send OTP'; }
+        }
+    }
+
+    async function lsOtpConfirm() {
+        const modal = document.getElementById('ls-otp-modal');
+        const code = (document.getElementById('ls-otp-code')?.value || '').trim();
+        const msg = document.getElementById('ls-otp-msg');
+        if (!/^\d{6}$/.test(code)) {
+            if (msg) { msg.style.color = '#b91c1c'; msg.textContent = 'Enter the 6-digit OTP.'; }
+            return;
+        }
+        if (msg) { msg.style.color = '#64748b'; msg.textContent = 'Verifying…'; }
+        try {
+            const data = await apiPost('/api/checkin/otp/verify', {
+                registrationId: parseInt(modal.dataset.regId, 10),
+                dayId: modal.dataset.dayId ? parseInt(modal.dataset.dayId, 10) : undefined,
+                code,
+                scannerUserId: actorCtxId()
+            });
+            if (msg) { msg.style.color = '#166534'; msg.textContent = 'Checked in successfully.'; }
+            setTimeout(closeLsOtpModal, 700);
+            loadApplicants();
+            refreshStats();
+        } catch (e) {
+            if (msg) { msg.style.color = '#b91c1c'; msg.textContent = e.message || 'OTP verification failed'; }
+        }
+    }
+
+    async function apiPost(path, body) {
+        const res = await fetch(path, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body || {})
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Request failed (HTTP ' + res.status + ')');
+        return data;
+    }
+
+    async function loadApplicants() {
+        const body = document.getElementById('ls-applist-body');
+        const countEl = document.getElementById('ls-applist-count');
+        if (!body) return;
+        const sid = document.getElementById('live-scanner-seminar').value;
+        if (!sid) {
+            if (countEl) countEl.textContent = '0';
+            body.innerHTML =
+                '<p class="ls-applist-empty" id="ls-applist-empty">Select an event to list applicants.</p>';
+            return;
+        }
+        const did = selectedDayId();
+        try {
+            const data = await api(
+                '/api/admin/live-scanner/registrations?seminarId=' +
+                    encodeURIComponent(sid) +
+                    (did ? '&dayId=' + encodeURIComponent(did) : '')
+            );
+            renderApplicants(data.registrations || []);
+        } catch (e) {
+            console.warn('[live-scanner] applicants:', e.message);
+        }
+    }
+
     async function refreshStats() {
         const sid = document.getElementById('live-scanner-seminar').value;
         if (!sid) return;
-        const stats = await api('/api/admin/live-scanner/stats?seminarId=' + encodeURIComponent(sid));
+        const did = selectedDayId();
+        const stats = await api(
+            '/api/admin/live-scanner/stats?seminarId=' +
+                encodeURIComponent(sid) +
+                (did ? '&dayId=' + encodeURIComponent(did) : '')
+        );
         document.getElementById('ls-stat-ok').textContent = stats.successCount || 0;
         document.getElementById('ls-stat-dup').textContent = stats.duplicateCount || 0;
         document.getElementById('ls-stat-fail').textContent = stats.failedCount || 0;
@@ -230,13 +462,15 @@
                     '&sinceId=' +
                     encodeURIComponent(lastEventId)
             );
+            const did = selectedDayId();
             (data.events || []).forEach((ev) => {
-                if (ev.id > lastEventId) {
-                    lastEventId = ev.id;
-                    prependCard(ev);
-                    playScanSound(ev.outcome);
-                }
+                if (ev.id > lastEventId) lastEventId = ev.id;
+                if (did && ev.dayId != null && Number(ev.dayId) !== did) return;
+                if (did && ev.dayId == null) return;
+                prependCard(ev);
+                playScanSound(ev.outcome);
             });
+            if ((data.events || []).length) loadApplicants();
             await refreshStats();
             setLiveState(true, 'Live · updating');
         } catch (e) {
@@ -263,11 +497,12 @@
     }
 
     async function init() {
-        actor = getActor();
+        actor = getStoredAdminUser();
         if (!actor || !actor.id) {
             window.location.href = '/admin';
             return;
         }
+        applyBackVisibility(actor);
         tickClock();
         clockTimer = setInterval(tickClock, 1000);
         const seminars = await api('/api/admin/live-scanner/seminars');
@@ -283,13 +518,69 @@
         if ((seminars || []).length === 1) {
             sel.value = String(seminars[0].id);
             startPoll();
+            loadApplicants();
         }
-        sel.addEventListener('change', () => {
+        const dayWrap = document.getElementById('live-scanner-day-wrap');
+        const daySel = document.getElementById('live-scanner-day');
+
+        async function loadLiveScannerDays(sid) {
+            if (!dayWrap || !daySel) return;
+            daySel.innerHTML = '<option value="">All days</option>';
+            if (!sid) {
+                dayWrap.classList.add('hidden');
+                return;
+            }
+            try {
+                const days = await api('/api/admin/live-scanner/days?seminarId=' + encodeURIComponent(sid));
+                (days || []).forEach((d) => {
+                    const o = document.createElement('option');
+                    o.value = d.id;
+                    const dt = d.day_date || d.checkin_date;
+                    o.textContent = d.title + (dt ? ' · ' + String(dt).slice(0, 10) : '');
+                    daySel.appendChild(o);
+                });
+                dayWrap.classList.toggle('hidden', !(days && days.length));
+                // Default to the day whose check-in/day date is today (IST).
+                if (days && days.length) {
+                    const todayIst = new Intl.DateTimeFormat('en-CA', {
+                        timeZone: 'Asia/Kolkata',
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit'
+                    }).format(new Date());
+                    const todayDay = days.find((d) => String(d.day_date || d.checkin_date || '').slice(0, 10) === todayIst);
+                    if (todayDay) daySel.value = String(todayDay.id);
+                }
+            } catch (e) {
+                console.warn('[live-scanner] days:', e.message);
+                dayWrap.classList.add('hidden');
+            }
+        }
+
+        sel.addEventListener('change', async () => {
             ensureAudio();
+            await loadLiveScannerDays(sel.value);
             if (sel.value) startPoll();
             else stopPoll();
+            loadApplicants();
             updateEmptyState();
         });
+        if (daySel) {
+            daySel.addEventListener('change', () => {
+                if (sel.value) startPoll();
+                loadApplicants();
+            });
+        }
+        const searchEl = document.getElementById('ls-applist-search');
+        if (searchEl) searchEl.addEventListener('input', loadApplicants);
+        const otpCancel = document.getElementById('ls-otp-cancel');
+        if (otpCancel) otpCancel.addEventListener('click', closeLsOtpModal);
+        const otpConfirm = document.getElementById('ls-otp-confirm');
+        if (otpConfirm) otpConfirm.addEventListener('click', lsOtpConfirm);
+        const otpSend = document.getElementById('ls-otp-send');
+        if (otpSend) otpSend.addEventListener('click', lsOtpSend);
+        const lsModal = document.getElementById('ls-otp-modal');
+        if (lsModal) lsModal.addEventListener('click', (e) => { if (e.target === lsModal) closeLsOtpModal(); });
         const soundBtn = document.getElementById('kiosk-sound-toggle');
         if (soundBtn) {
             soundBtn.addEventListener('click', () => {
