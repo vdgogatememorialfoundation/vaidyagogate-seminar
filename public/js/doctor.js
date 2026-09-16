@@ -1123,6 +1123,49 @@ function formatPortalDt(iso) {
     return iso ? String(iso) : '';
 }
 
+/**
+ * Event schedule for a seminar card: one date for a 1-day event, every date for multi-day
+ * (explicit seminar days, or start..end from the seminar form). Server supplies `schedule_label`
+ * / `schedule_dates`; falls back to event_date when they are missing.
+ */
+function seminarScheduleHtml(s, opts) {
+    const o = opts || {};
+    if (!s) return '';
+    const days = Array.isArray(s.days) ? s.days.filter((d) => d && (d.dayDate || d.day_date)) : [];
+    const dates = Array.isArray(s.schedule_dates) ? s.schedule_dates : [];
+    const multi = days.length > 1 || dates.length > 1;
+    if (!multi) {
+        const single = s.schedule_label || (s.event_date ? formatEventDate(s.event_date) : '—');
+        return (
+            '<p class="sem-schedule sem-schedule-single" style="font-size:0.85rem;"><strong><i class="fas fa-calendar-day"></i> Event:</strong> ' +
+            escapeHtml(single) +
+            '</p>'
+        );
+    }
+    let items;
+    if (days.length > 1) {
+        items = days.map((d) => {
+            const label = d.title ? escapeHtml(String(d.title)) + ': ' : '';
+            return '<li>' + label + escapeHtml(formatEventDate(d.dayDate || d.day_date)) + '</li>';
+        });
+    } else {
+        items = dates.map((ymd, i) => {
+            const dt = i === 0 && s.event_date ? s.event_date : i === dates.length - 1 && s.event_end_date ? s.event_end_date : ymd + 'T00:00:00+05:30';
+            const label = i === 0 || i === dates.length - 1 ? formatEventDate(dt) : formatEventDate(ymd + 'T00:00:00+05:30').replace(/,?\s*12:00\s*am.*$/i, '');
+            return '<li>Day ' + (i + 1) + ': ' + escapeHtml(label) + '</li>';
+        });
+    }
+    return (
+        '<div class="sem-schedule sem-schedule-multi" style="font-size:0.85rem;margin-bottom:8px;"><strong><i class="fas fa-calendar-alt"></i> Event dates (' +
+        items.length +
+        ' days):</strong>' +
+        (o.compact && s.schedule_label
+            ? '<div style="color:#334155;margin-top:2px;">' + escapeHtml(s.schedule_label) + '</div>'
+            : '<ul style="margin:4px 0 0 18px;padding:0;color:#334155;">' + items.join('') + '</ul>') +
+        '</div>'
+    );
+}
+
 window.__doctorPaymentOptions = [];
 
 async function loadDoctorPaymentOptions() {
@@ -3357,7 +3400,6 @@ function renderSeminarGridCard(s, readOnlyPast, alreadyRegistered, draftApp) {
         ? formatTrackDateTime(s.registration_start)
         : '';
     const regEndLabel = s.registration_end ? formatTrackDateTime(s.registration_end) : '';
-    const eventLabel = s.event_date ? formatEventDate(s.event_date) : '—';
     let actionBlock = '';
     if (draftApp && !alreadyRegistered) {
         const closedNote =
@@ -3458,9 +3500,7 @@ function renderSeminarGridCard(s, readOnlyPast, alreadyRegistered, draftApp) {
         '<p style="color:#64748b;font-size:0.9rem;margin-bottom:12px;">' +
         escapeHtml(s.description || '') +
         '</p>' +
-        '<p style="font-size:0.85rem;"><strong>Event:</strong> ' +
-        escapeHtml(eventLabel) +
-        '</p>' +
+        seminarScheduleHtml(s) +
         seminarVenueMapHtml(s, { compact: true }) +
         (s.portal_year
             ? '<p style="font-size:0.8rem;color:#64748b;">Year ' + escapeHtml(String(s.portal_year)) + '</p>'
@@ -8501,21 +8541,24 @@ async function loadDoctorEventTickets() {
             const adminOverride =
                 regSt === 'checked_in' || regSt === 'certificate_issued' || Number(t.scan_count || 0) > 0 || t.is_scanned;
             const invalid =
-                regSt === 'cancelled' || regSt === 'rejected' || t.is_valid === 0 || (expired && !adminOverride);
+                regSt === 'cancelled' ||
+                regSt === 'rejected' ||
+                regSt === 'expired' ||
+                t.is_valid === 0 ||
+                (expired && !adminOverride);
             const qrPayload = ticketQrScanPayload(t);
             const showQr = !invalid && !t.is_scanned && qrPayload;
             const qr = showQr ? ticketQrImageUrl(t) : '';
             const scanned = t.is_scanned
                 ? `Checked in · ${t.scan_time ? formatScanDateTime(t.scan_time) : 'venue'}`
                 : 'Not scanned yet — show this QR at entry';
-            const expiryNote = t.ticket_expires_on
-                ? ' (valid through event day; expires ' + t.ticket_expires_on + ' 00:00 IST)'
-                : '';
+            const expiryLabel = t.ticket_expires_label || (t.ticket_expires_on ? formatEventDate(t.ticket_expires_on) : '');
+            const expiryNote = expiryLabel ? ' (QR valid until ' + expiryLabel + ')' : '';
             const statusLine = invalid
                 ? `<p style="margin:8px 0 0;font-size:0.9rem;color:#b91c1c;font-weight:600;">${
-                      expired && !adminOverride
-                          ? 'No valid ticket — expired after event day' +
-                            expiryNote +
+                      (expired && !adminOverride) || regSt === 'expired'
+                          ? 'No valid ticket — this QR expired' +
+                            (expiryLabel ? ' on ' + expiryLabel : ' after the event') +
                             '. Only participants scanned at the venue receive certificates. Contact admin if you attended.'
                           : 'Invalid — registration ' +
                             (regSt === 'cancelled' ? 'cancelled' : regSt === 'rejected' ? 'rejected' : 'no longer active') +

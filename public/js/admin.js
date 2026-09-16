@@ -18,6 +18,7 @@ const ADMIN_REGISTRATION_STATUSES = [
     { value: 'e_ticket_issued', label: 'E-ticket issued' },
     { value: 'certificate_issued', label: 'Certificate issued' },
     { value: 'checked_in', label: 'Checked in' },
+    { value: 'expired', label: 'Ticket expired (event over, not scanned)' },
     { value: 'rejected', label: 'Rejected' },
     { value: 'cancelled', label: 'Cancelled' }
 ];
@@ -1289,7 +1290,7 @@ function renderStaffUsersTable(staffList) {
                 : '</td></tr>');
         return;
     }
-    staffBody.innerHTML = '';
+    const staffRowsHtml = [];
     rows.forEach((u) => {
         const hi =
             window.__highlightAdminUserId && Number(u.id) === Number(window.__highlightAdminUserId)
@@ -1310,7 +1311,7 @@ function renderStaffUsersTable(staffList) {
         const applyJobBtn = isSuperAdminUser()
             ? `<button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-left:6px;background:#4338ca;" onclick="openApplyJobRoleModal(${u.id})">Apply job role</button>`
                         : '';
-                staffBody.innerHTML += `
+                staffRowsHtml.push(`
                 <tr${hi}>
                     <td><strong>${u.user_id_string}</strong></td>
                     <td>${escAdmin(u.first_name)} ${escAdmin(u.last_name)}</td>
@@ -1344,8 +1345,9 @@ function renderStaffUsersTable(staffList) {
                                 : ''
                         }
                     </td>
-                </tr>`;
+                </tr>`);
             });
+    staffBody.innerHTML = staffRowsHtml.join('');
         }
 
 function adminFilterStaffUsersList() {
@@ -8551,8 +8553,10 @@ function renderApplicationsTable() {
             '<tr><td colspan="7" style="text-align:center;">No applications match your filters.</td></tr>';
         return;
     }
+    const indexById = new Map(apps.map((a, i) => [a, i]));
+    const rowsHtml = [];
     filtered.forEach((a) => {
-        const index = apps.indexOf(a);
+        const index = indexById.get(a);
         let formData = {};
         try {
             formData = JSON.parse(a.form_data || '{}');
@@ -8570,11 +8574,11 @@ function renderApplicationsTable() {
         const reviewLv = parseInt(a.review_required_level, 10) || 1;
         const reviewBadge = adminApplicationReviewLevelBadge(reviewLv);
 
-            tbody.innerHTML += `
+            rowsHtml.push(`
                 <tr>
                     <td>
                         <strong>${a.application_no}</strong>
-                        <div style="margin-top: 5px;"><img src="/api/qrcode/${a.application_no}" style="width: 40px; height: 40px;"></div>
+                        <div style="margin-top: 5px;"><img src="/api/qrcode/${a.application_no}" loading="lazy" decoding="async" width="40" height="40" style="width: 40px; height: 40px;"></div>
                     </td>
                     <td>${a.user_id_string}</td>
                     <td>${candidateName}${fileLink}${dupBadge}</td>
@@ -8591,8 +8595,9 @@ function renderApplicationsTable() {
                         <button type="button" class="btn-primary" style="margin-left:6px;background:#b91c1c;padding:4px 8px;font-size:0.8rem;" onclick="deleteAdminRegistration(${a.id}, '${String(a.application_no || '').replace(/'/g, "\\'")}')">Delete</button>
                     </td>
                 </tr>
-            `;
+            `);
         });
+    tbody.innerHTML = rowsHtml.join('');
 }
 
 function adminFilterApplicationsList() {
@@ -8652,9 +8657,8 @@ function renderDoctorsUsersTable() {
             '<tr><td colspan="11" style="text-align:center;">No doctors match your search.</td></tr>';
         return;
     }
-    if (proxySelect) {
-        proxySelect.innerHTML = '<option value="">Select a user...</option>';
-    }
+    const doctorRowsHtml = [];
+    const proxyOptsHtml = ['<option value="">Select a user...</option>'];
     rows.forEach((u) => {
         const hi =
             window.__highlightAdminUserId && Number(u.id) === Number(window.__highlightAdminUserId)
@@ -8662,7 +8666,7 @@ function renderDoctorsUsersTable() {
                 : '';
         const cat = String(u.doctor_category || 'regular').toLowerCase() === 'volunteer' ? 'volunteer' : 'regular';
         const tel = adminClientTelemetryShort(u.id);
-        doctorsBody.innerHTML += `
+        doctorRowsHtml.push(`
                 <tr${hi}>
                     <td><strong>${u.user_id_string}</strong></td>
                     <td>${escAdmin(u.first_name)} ${escAdmin(u.last_name)}</td>
@@ -8688,11 +8692,11 @@ function renderDoctorsUsersTable() {
                                 : ''
                         }
                     </td>
-                </tr>`;
-        if (proxySelect) {
-            proxySelect.innerHTML += `<option value="${u.id}">${u.first_name} ${u.last_name} (${u.user_id_string})</option>`;
-        }
+                </tr>`);
+        proxyOptsHtml.push(`<option value="${u.id}">${u.first_name} ${u.last_name} (${u.user_id_string})</option>`);
     });
+    doctorsBody.innerHTML = doctorRowsHtml.join('');
+    if (proxySelect) proxySelect.innerHTML = proxyOptsHtml.join('');
 }
 
 function renderAdminCertificateCandidatesTable() {
@@ -9011,6 +9015,7 @@ function renderAdminEnrichedOrdersTable() {
             '<tr><td colspan="9" style="text-align:center;color:#94a3b8;">No orders match your search.</td></tr>';
         return;
     }
+    const orderRowsHtml = [];
     rows.forEach((o) => {
         const doc = escAdmin((o.first_name || '') + ' ' + (o.last_name || '') + ' (' + (o.user_id_string || o.user_id || '') + ')');
         const refunded = Number(o.refunded_amount) || 0;
@@ -9072,7 +9077,7 @@ function renderAdminEnrichedOrdersTable() {
                     '</code></span>'
             );
         }
-        tbody.innerHTML +=
+        orderRowsHtml.push(
             '<tr><td><strong>' +
             escAdmin(o.order_id_string || o.id) +
             '</strong></td><td>' +
@@ -9092,8 +9097,10 @@ function renderAdminEnrichedOrdersTable() {
             escAdmin(o.status) +
             '</td><td>' +
             (actions.join('') || '—') +
-            '</td></tr>';
+            '</td></tr>'
+        );
     });
+    tbody.innerHTML = orderRowsHtml.join('');
 }
 
 function renderAdminSupplementalPaymentsTable() {
@@ -9809,20 +9816,30 @@ function renderAdminCancellationRequestsTable() {
         updateAdminCancellationReviewStats();
         return;
     }
+    const cancelRowsHtml = [];
     rows.forEach((r) => {
         const doc = escAdmin((r.first_name || '') + ' ' + (r.last_name || '') + ' (' + (r.user_id_string || '') + ')');
         const when = r.requested_at
             ? new Date(r.requested_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
             : '—';
         const pol = '₹' + (r.refund_amount || 0) + ' (' + (r.refund_percent || 0) + '%)';
+        const actionType = String(r.action_type || r.actionType || '').toLowerCase();
+        const typeBadge =
+            actionType === 'refund_only'
+                ? '<br><span style="display:inline-block;margin-top:4px;background:#ede9fe;color:#5b21b6;padding:2px 8px;border-radius:6px;font-size:0.72rem;font-weight:700;">REFUND ONLY (admin)</span>'
+                : actionType === 'cancel_only'
+                  ? '<br><span style="display:inline-block;margin-top:4px;background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:6px;font-size:0.72rem;font-weight:700;">CANCEL, NO REFUND (admin)</span>'
+                  : actionType === 'cancel_refund'
+                    ? '<br><span style="display:inline-block;margin-top:4px;background:#ffedd5;color:#9a3412;padding:2px 8px;border-radius:6px;font-size:0.72rem;font-weight:700;">CANCEL + REFUND (admin)</span>'
+                    : '';
         const statusBadge =
-            r.status === 'pending'
+            (r.status === 'pending'
                 ? '<span style="background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:6px;font-weight:600;">PENDING</span>'
                 : r.status === 'approved'
                   ? '<span style="background:#d1fae5;color:#047857;padding:2px 8px;border-radius:6px;font-weight:600;">APPROVED</span>'
                   : '<span style="background:#f1f5f9;color:#64748b;padding:2px 8px;border-radius:6px;font-weight:600;">' +
                     escAdmin(String(r.status || '').toUpperCase()) +
-                    '</span>';
+                    '</span>') + typeBadge;
         const refundTrack =
             '<div style="font-size:0.82rem;line-height:1.45;margin-bottom:6px;">' +
             escAdmin(r.refundStatusLabel || r.refund_status || '—') +
@@ -9854,7 +9871,7 @@ function renderAdminCancellationRequestsTable() {
                 r.id +
                 ')"><i class="fas fa-sync"></i></button>';
         }
-        tbody.innerHTML +=
+        cancelRowsHtml.push(
             '<tr><td>' +
             escAdmin(when) +
             '</td><td>' +
@@ -9878,8 +9895,10 @@ function renderAdminCancellationRequestsTable() {
             refundTrack +
             '</td><td style="white-space:nowrap;">' +
             actions +
-            '</td></tr>';
+            '</td></tr>'
+        );
     });
+    tbody.innerHTML = cancelRowsHtml.join('');
     updateAdminCancellationReviewStats();
 }
 
@@ -10798,6 +10817,7 @@ function viewFullApplication(index) {
         ${formatAdminApplicationDetailsHtml(formData, certLink)}
         ${needsDocs ? formatNcismCertificateCheckHtml(Object.assign({}, formData.ncism_certificate_check || {}, { _appId: a.id })) : ''}
         ${verifyBlock}
+        ${renderAdminCancelRefundBlockHtml(a)}
         <hr style="margin:16px 0;">
         <h4 style="margin:0 0 8px;">Edit registration form (live)</h4>
         <p class="muted" style="font-size:0.85rem;margin-bottom:8px;">Changes save to this application immediately. Admin OTP may be required.</p>
@@ -10811,6 +10831,85 @@ function viewFullApplication(index) {
     modal.style.display = 'flex';
     if (a.seminar_id) {
         loadAdminSeminarFormFieldsForEdit(a.seminar_id, 'admin-app-edit-fields', 'appedit-f-', formData);
+    }
+}
+
+function renderAdminCancelRefundBlockHtml(a) {
+    if (!a || !a.id) return '';
+    const st = String(a.status || '').toLowerCase();
+    const closed = st === 'cancelled' || st === 'rejected';
+    const paid = String(a.order_status || '').toLowerCase() === 'success';
+    const amt = a.order_amount != null ? Number(a.order_amount) : 0;
+    const refunded = a.order_refunded_amount != null ? Number(a.order_refunded_amount) : 0;
+    const maxRefundable = Math.max(0, amt - refunded);
+    const canRefund = paid && maxRefundable > 0.009;
+    if (closed && !canRefund) return '';
+    const btn = (action, label, color, disabled, title) =>
+        '<button type="button" class="btn-primary" style="background:' +
+        color +
+        ';" ' +
+        (disabled ? 'disabled title="' + escAdmin(title || '') + '" ' : '') +
+        'onclick="adminCancelRefundRegistration(' +
+        a.id +
+        ",'" +
+        action +
+        "')\">" +
+        label +
+        '</button>';
+    return `<hr style="margin:16px 0;">
+        <h4 style="margin:0 0 8px;"><i class="fas fa-undo"></i> Cancel / refund</h4>
+        <p class="muted" style="font-size:0.85rem;margin-bottom:8px;">${
+            paid
+                ? 'Paid ₹' + escAdmin(String(amt)) + (refunded > 0 ? ' · already refunded ₹' + escAdmin(String(refunded)) : '') + ' · refundable now ₹' + escAdmin(String(maxRefundable)) + '.'
+                : 'No successful payment on this registration — only cancellation without refund is possible.'
+        } Every action here is recorded in <strong>Cancellation & refund requests</strong> and on the doctor's tracking timeline (including refund-only).</p>
+        <div class="form-group"><label>Refund amount (₹, blank = full refundable)</label>
+        <input type="number" id="admin-cr-refund-amount" min="0" step="0.01" style="width:100%;max-width:240px;padding:8px;" placeholder="${escAdmin(String(maxRefundable))}" ${canRefund ? '' : 'disabled'}></div>
+        <div class="form-group" style="margin-top:8px;"><label>Note to doctor (optional)</label>
+        <textarea id="admin-cr-note" rows="2" style="width:100%;" placeholder="e.g. Event postponed; fee refunded in full"></textarea></div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
+        ${closed ? '' : btn('cancel_only', 'Cancel registration (no refund)', '#b91c1c')}
+        ${closed ? '' : btn('cancel_refund', 'Cancel & refund', '#c2410c', !canRefund, 'No refundable payment')}
+        ${btn('refund_only', 'Refund only (keep registration)', '#6d28d9', !canRefund, 'No refundable payment')}
+        </div>`;
+}
+
+async function adminCancelRefundRegistration(appId, action) {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return alert('Not logged in.');
+    const amtRaw = String((document.getElementById('admin-cr-refund-amount') || {}).value || '').trim();
+    const note = String((document.getElementById('admin-cr-note') || {}).value || '').trim();
+    const wantsRefund = action !== 'cancel_only';
+    const refundAmount = wantsRefund && amtRaw !== '' ? Number(amtRaw) : null;
+    if (wantsRefund && amtRaw !== '' && (Number.isNaN(refundAmount) || refundAmount <= 0)) {
+        return alert('Enter a valid refund amount or leave it blank for the full refundable amount.');
+    }
+    const confirmMsg =
+        action === 'cancel_only'
+            ? 'Cancel this registration WITHOUT refund? Tickets become invalid and the doctor is notified.'
+            : action === 'cancel_refund'
+              ? 'Cancel this registration AND refund ' + (refundAmount != null ? '₹' + refundAmount : 'the full refundable amount') + '?'
+              : 'Refund ' + (refundAmount != null ? '₹' + refundAmount : 'the full refundable amount') + ' but KEEP the registration and ticket active?';
+    if (!confirm(confirmMsg)) return;
+    try {
+        const res = await fetch('/api/admin/registrations/' + appId + '/cancel-refund', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action, refundAmount, adminNotes: note, actingAdminId: adm.id })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return alert(data.error || 'Action failed');
+        alert(data.message || 'Done.');
+        const modal = document.getElementById('admin-view-modal');
+        if (modal) {
+            modal.classList.add('hidden');
+            modal.style.display = 'none';
+        }
+        if (typeof loadApplications === 'function') loadApplications();
+        if (typeof loadAdminCancellationRequests === 'function') loadAdminCancellationRequests();
+    } catch (e) {
+        console.error(e);
+        alert('Network error.');
     }
 }
 
@@ -14121,6 +14220,10 @@ function editSeminar(index) {
     const autoConfirmCh = document.getElementById('seminar-auto-confirm-enabled');
     if (autoConfirmCh) autoConfirmCh.checked = Number(s.auto_confirm_registration) === 1;
     document.getElementById('seminar-event-date').value = formatDt(s.event_date);
+    const evEndEl = document.getElementById('seminar-event-end-date');
+    if (evEndEl) evEndEl.value = formatDt(s.event_end_date);
+    const tkExpEl = document.getElementById('seminar-ticket-expires-at');
+    if (tkExpEl) tkExpEl.value = formatDt(s.ticket_expires_at);
     const py = document.getElementById('seminar-portal-year');
     if (py) py.value = s.portal_year || adminPortalYear || new Date().getFullYear();
     const alumniAuto = document.getElementById('seminar-alumni-notify-auto');
@@ -14233,6 +14336,16 @@ async function saveSeminar(e) {
         event_date: window.PortalDateTime
             ? window.PortalDateTime.fromDatetimeLocal(document.getElementById('seminar-event-date').value)
             : document.getElementById('seminar-event-date').value,
+        event_end_date: (() => {
+            const v = (document.getElementById('seminar-event-end-date') || {}).value || '';
+            if (!v) return null;
+            return window.PortalDateTime ? window.PortalDateTime.fromDatetimeLocal(v) : v;
+        })(),
+        ticket_expires_at: (() => {
+            const v = (document.getElementById('seminar-ticket-expires-at') || {}).value || '';
+            if (!v) return null;
+            return window.PortalDateTime ? window.PortalDateTime.fromDatetimeLocal(v) : v;
+        })(),
         capacity: parseInt(document.getElementById('seminar-capacity').value) || 0,
         show_seats_public: document.getElementById('seminar-show-seats-public')?.checked === true,
         price: parseFloat(document.getElementById('seminar-price').value) || 0,
