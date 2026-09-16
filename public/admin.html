@@ -181,7 +181,7 @@
                 <a class="menu-item" data-admin-module="tab-etickets" onclick="switchTab('tab-etickets'); initAdminEticketsTab();"><i class="fas fa-ticket-alt"></i> E-tickets</a>
                 <a class="menu-item" data-admin-module="tab-scanner-logs" onclick="switchTab('tab-scanner-logs'); initAdminScannerLogsTab();"><i class="fas fa-qrcode"></i> Scanner Activity</a>
                 <a class="menu-item" data-admin-module="tab-live-scanner" onclick="openAdminLiveScannerBoard();"><i class="fas fa-tv"></i> Live check-in board</a>
-                <a class="menu-item" data-admin-module="tab-pos" onclick="switchTab('tab-pos'); initAdminPosTab();"><i class="fas fa-cash-register"></i> On-spot POS</a>
+                <a class="menu-item" data-admin-module="tab-pos" onclick="switchTab('tab-pos'); initAdminPosTab(); if(window.staffPosInit)window.staffPosInit();"><i class="fas fa-cash-register"></i> On-spot POS</a>
                 <a class="menu-item" data-admin-module="tab-feedback-form" onclick="switchTab('tab-feedback-form'); loadAdminFeedbackFormConfig();"><i class="fas fa-edit"></i> Feedback form editor</a>
                 <a class="menu-item" data-admin-module="tab-activity-logs" onclick="switchTab('tab-activity-logs'); initAdminActivityLogsTab();"><i class="fas fa-history"></i> User &amp; doctor activity</a>
                 <a class="menu-item" data-admin-module="tab-notifications" onclick="switchTab('tab-notifications'); initAdminNotificationsTab();"><i class="fas fa-bell"></i> Notifications</a>
@@ -2280,6 +2280,31 @@
             <div id="tab-pos" class="tab-pane hidden">
                 <h2 style="margin-bottom:12px;">On-spot POS registration</h2>
                 <p style="color:#64748b;margin-bottom:16px;">Register a doctor at the venue. Record <strong>cash</strong> or collect via <strong>Razorpay Checkout</strong> / other integrated payment gateways. E-ticket is issued immediately for cash, or automatically when the gateway confirms payment.</p>
+                <div class="card" style="max-width:720px;margin-bottom:16px;">
+                    <h3 style="margin:0 0 6px;font-size:1rem;">Find registered participant</h3>
+                    <p style="color:#64748b;font-size:0.85rem;margin:0 0 10px;">Type a phone number, name, email, doctor ID or application no. Matching accounts and their seminar registrations appear below.</p>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+                        <input type="search" id="staff-pos-q" placeholder="Phone / name / email / doctor ID…" style="flex:1;min-width:200px;padding:8px;" onkeydown="if(event.key==='Enter'){event.preventDefault();staffPosSearch();}">
+                        <button type="button" class="btn-primary" onclick="staffPosSearch()">Search</button>
+                    </div>
+                    <div id="staff-pos-results"><p style="color:#64748b;">Enter a search term above.</p></div>
+                </div>
+                <div class="card" style="max-width:720px;margin-bottom:16px;">
+                    <h3 style="margin:0 0 6px;font-size:1rem;">Private on-spot link (1 hour)</h3>
+                    <p style="color:#64748b;font-size:0.85rem;margin:0 0 10px;">Emails the participant a personal link to register and pay online. The link expires after 1 hour.</p>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                        <div><label>Seminar</label><select id="staff-pos-seminar" style="width:100%;padding:8px;"><option value="">Select seminar</option></select></div>
+                        <div><label>Amount (₹, blank = seminar fee)</label><input type="number" id="staff-pos-amount" min="0" step="1" style="width:100%;padding:8px;"></div>
+                        <div><label>First name</label><input type="text" id="staff-pos-first" style="width:100%;padding:8px;"></div>
+                        <div><label>Last name</label><input type="text" id="staff-pos-last" style="width:100%;padding:8px;"></div>
+                        <div><label>Phone</label><input type="tel" id="staff-pos-phone" style="width:100%;padding:8px;"></div>
+                        <div><label>Email (link is sent here)</label><input type="email" id="staff-pos-email" style="width:100%;padding:8px;"></div>
+                    </div>
+                    <input type="hidden" id="staff-pos-user-id">
+                    <button type="button" class="btn-primary" style="margin-top:12px;" onclick="staffPosCreateLink()">Create &amp; email 1-hour link</button>
+                    <div id="staff-pos-link-out" style="margin-top:10px;"></div>
+                </div>
+                <h3 style="margin:0 0 8px;font-size:1rem;">Register &amp; collect payment now</h3>
                 <div class="card" style="max-width:720px;">
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
                         <div><label>Seminar</label><select id="pos-seminar" style="width:100%;padding:8px;"></select></div>
@@ -3450,6 +3475,7 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
-    <script src="/js/admin.js?v=20260911ticketdedupe2"></script>
+    <script src="/js/admin.js?v=20260916pos"></script>
+    <script src="/js/pos-onspot-ui.js?v=20260916a"></script>
 </body>
 </html>

@@ -1731,7 +1731,8 @@ const CO_ADMIN_STAFF_PORTAL_TAB_DEFS = [
     ['tab-applications', 'Review applications → Staff: Applications'],
     ['tab-support-tickets', 'Support tickets → Staff: Support tickets'],
     ['tab-admin-payments', 'Payments → Staff: Payments & orders'],
-    ['tab-etickets', 'E-tickets → Staff: E-tickets lookup']
+    ['tab-etickets', 'E-tickets → Staff: E-tickets lookup'],
+    ['tab-pos', 'On-spot POS → Staff: On-spot POS']
 ];
 
 const CO_ADMIN_STAFF_PORTAL_TAB_IDS = new Set(CO_ADMIN_STAFF_PORTAL_TAB_DEFS.map(([id]) => id));
@@ -2303,7 +2304,8 @@ const STAFF_PORTAL_MODULE_DEFS = [
     ['applications', 'Review applications'],
     ['support-tickets', 'Support tickets'],
     ['etickets', 'E-tickets lookup'],
-    ['payments', 'Payments & seminar orders']
+    ['payments', 'Payments & seminar orders'],
+    ['pos', 'On-spot POS (search, private pay links)']
 ];
 
 function parseStaffModulesObject(str) {
@@ -9950,7 +9952,7 @@ function renderSeminarsTable() {
                 <tr style="${pastRow ? 'opacity:0.85;background:#f8fafc;' : ''}">
                     <td>${s.id}</td>
                     <td><strong>${s.title}</strong> ${activeStatus}${preregTag} ${yearTag}</td>
-                    <td>${s.event_date ? (window.PortalDateTime && window.PortalDateTime.formatEvent ? window.PortalDateTime.formatEvent(s.event_date) : window.PortalDateTime ? window.PortalDateTime.format(s.event_date) : new Date(s.event_date).toLocaleString()) : '—'}</td>
+                    <td>${s.schedule_label ? escAdmin(s.schedule_label) : s.event_date ? (window.PortalDateTime && window.PortalDateTime.formatEvent ? window.PortalDateTime.formatEvent(s.event_date) : window.PortalDateTime ? window.PortalDateTime.format(s.event_date) : new Date(s.event_date).toLocaleString()) : '—'}</td>
                     <td>₹${s.price || 0}</td>
                     <td>${checkinStatus}</td>
                     <td>${pastRow ? '<em>Past year</em>' : 'Current'}</td>
@@ -19954,7 +19956,7 @@ async function loadAdminHeroSeminarPreview() {
             const imgNote = img
                 ? '<span style="color:#15803d;">✓ image</span>'
                 : '<span style="color:#b45309;">no hero image yet</span>';
-            const when = s.event_date ? String(s.event_date).slice(0, 10) : 'date TBA';
+            const when = s.schedule_label || (s.event_date ? String(s.event_date).slice(0, 10) : 'date TBA');
             return (
                 '<li style="margin:4px 0;"><strong>' +
                 escapeHtml(s.title || 'Seminar') +

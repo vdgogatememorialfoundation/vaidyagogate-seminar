@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>On-spot registration — Vaidya Gogate Memorial Foundation</title>
+    <style>
+        * { box-sizing: border-box; }
+        body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; background: #ffffff; color: #0f172a; }
+        .wrap { max-width: 560px; margin: 0 auto; padding: 24px 16px 48px; }
+        .brand { font-size: 0.85rem; letter-spacing: 0.04em; text-transform: uppercase; color: #475569; margin-bottom: 6px; }
+        h1 { font-size: 1.4rem; margin: 0 0 4px; }
+        .card { border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px; margin-top: 16px; background: #fff; }
+        .muted { color: #475569; font-size: 0.9rem; }
+        .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        @media (max-width: 480px) { .row { grid-template-columns: 1fr; } }
+        label { display: block; font-size: 0.82rem; font-weight: 600; margin: 10px 0 4px; color: #1e293b; }
+        input, select { width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 1rem; background: #fff; color: #0f172a; }
+        input:disabled { background: #f1f5f9; }
+        .btn { display: inline-block; width: 100%; padding: 13px 16px; border-radius: 8px; border: 1px solid #0f766e; background: #0f766e; color: #fff; font-weight: 600; font-size: 1rem; cursor: pointer; margin-top: 16px; }
+        .btn:disabled { opacity: 0.6; cursor: default; }
+        .btn-secondary { background: #fff; color: #0f766e; }
+        .badge { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 0.78rem; font-weight: 600; background: #f1f5f9; color: #334155; }
+        .badge.ok { background: #dcfce7; color: #166534; }
+        .badge.warn { background: #fef3c7; color: #92400e; }
+        .badge.err { background: #fee2e2; color: #991b1b; }
+        .amount { font-size: 1.6rem; font-weight: 700; margin: 6px 0; }
+        .schedule { margin: 8px 0 0; padding-left: 18px; }
+        .schedule li { margin: 2px 0; }
+        .err-text { color: #b91c1c; font-size: 0.9rem; margin-top: 8px; }
+        .ok-text { color: #166534; font-size: 0.95rem; margin-top: 8px; }
+        #qr-block img { max-width: 240px; border: 1px solid #cbd5e1; border-radius: 8px; }
+        .center { text-align: center; }
+        .timer { font-variant-numeric: tabular-nums; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="brand">Vaidya Gogate Memorial Foundation</div>
+    <h1>On-spot registration</h1>
+    <p class="muted">This is a personal link. <span id="expiry-line"></span></p>
+
+    <div id="loading" class="card">Loading…</div>
+
+    <div id="state-bad" class="card" style="display:none;">
+        <span class="badge err" id="bad-badge">Link unavailable</span>
+        <p id="bad-msg" style="margin:10px 0 0;"></p>
+    </div>
+
+    <div id="state-paid" class="card" style="display:none;">
+        <span class="badge ok">Payment received</span>
+        <p style="margin:10px 0 0;">Your registration is complete. Your e-ticket has been emailed to you and is available in the doctor portal.</p>
+        <a class="btn" href="/doctor" style="text-decoration:none;text-align:center;">Open doctor portal</a>
+    </div>
+
+    <div id="state-active" style="display:none;">
+        <div class="card">
+            <div class="muted">Seminar</div>
+            <div id="sem-title" style="font-weight:700;font-size:1.1rem;"></div>
+            <ul class="schedule muted" id="sem-schedule"></ul>
+            <div class="muted" style="margin-top:10px;">Registration fee</div>
+            <div class="amount" id="sem-amount"></div>
+        </div>
+
+        <div class="card" id="form-card">
+            <div class="muted">Your details</div>
+            <div class="row">
+                <div><label>First name</label><input id="f-first" autocomplete="given-name"></div>
+                <div><label>Last name</label><input id="f-last" autocomplete="family-name"></div>
+            </div>
+            <label>Phone</label><input id="f-phone" type="tel" autocomplete="tel">
+            <label>Email</label><input id="f-email" type="email" autocomplete="email">
+            <div id="pay-method-wrap" style="display:none;">
+                <label>Payment method</label>
+                <select id="f-method"></select>
+            </div>
+            <button class="btn" id="pay-btn" type="button">Register &amp; pay</button>
+            <div class="err-text" id="form-err"></div>
+        </div>
+
+        <div class="card center" id="qr-block" style="display:none;">
+            <div class="muted">Scan to pay</div>
+            <div class="amount" id="qr-amount"></div>
+            <img id="qr-img" alt="Payment QR">
+            <p class="muted" id="poll-status">Waiting for payment confirmation…</p>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    const token = location.pathname.split('/').filter(Boolean).pop();
+    const $ = (id) => document.getElementById(id);
+    let link = null;
+    let regInfo = null;
+    let pollTimer = null;
+    let countdownTimer = null;
+
+    function show(id) {
+        ['loading', 'state-bad', 'state-paid', 'state-active'].forEach((k) => ($(k).style.display = k === id ? '' : 'none'));
+    }
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+    }
+    function money(n) {
+        return n == null || !Number.isFinite(Number(n)) ? '—' : '₹' + Number(n).toLocaleString('en-IN');
+    }
+    async function api(url, opts) {
+        const res = await fetch(url, Object.assign({ cache: 'no-store', credentials: 'same-origin' }, opts || {}));
+        let data = {};
+        try { data = await res.json(); } catch (_) {}
+        return { res, data };
+    }
+
+    function startCountdown(expiresAt) {
+        const end = new Date(expiresAt).getTime();
+        const el = $('expiry-line');
+        const tick = () => {
+            const left = end - Date.now();
+            if (left <= 0) {
+                el.textContent = 'This link has expired.';
+                clearInterval(countdownTimer);
+                if (!(regInfo && regInfo.paid)) {
+                    showBad('Link expired', 'This link has expired. Please ask the registration desk for a new one.');
+                }
+                return;
+            }
+            const m = Math.floor(left / 60000), s = Math.floor((left % 60000) / 1000);
+            el.innerHTML = 'Valid for <span class="timer">' + m + ':' + String(s).padStart(2, '0') + '</span> more.';
+        };
+        tick();
+        countdownTimer = setInterval(tick, 1000);
+    }
+
+    function showBad(title, msg) {
+        $('bad-badge').textContent = title;
+        $('bad-msg').textContent = msg;
+        show('state-bad');
+    }
+
+    function renderActive() {
+        const sem = link.seminar || {};
+        $('sem-title').textContent = sem.title || 'Seminar';
+        const ul = $('sem-schedule');
+        ul.innerHTML = '';
+        const fmt = (ymd) => {
+            const d = new Date(String(ymd) + 'T00:00:00');
+            return isNaN(d) ? String(ymd) : d.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+        };
+        const dates = Array.isArray(sem.scheduleDates) ? sem.scheduleDates : [];
+        if (dates.length > 1) {
+            dates.forEach((d, i) => {
+                const li = document.createElement('li');
+                li.textContent = 'Day ' + (i + 1) + ': ' + fmt(d);
+                ul.appendChild(li);
+            });
+        }
+        if (sem.schedule) {
+            const li = document.createElement('li');
+            li.style.listStyle = 'none';
+            li.style.marginLeft = '-18px';
+            li.textContent = sem.schedule;
+            ul.appendChild(li);
+        }
+        $('sem-amount').textContent = money(link.amount);
+        const p = link.person || {};
+        $('f-first').value = p.firstName || '';
+        $('f-last').value = p.lastName || '';
+        $('f-phone').value = p.phone || '';
+        $('f-email').value = p.email || '';
+        if (p.locked) {
+            ['f-first', 'f-last', 'f-phone', 'f-email'].forEach((id) => ($(id).disabled = true));
+        }
+        show('state-active');
+    }
+
+    async function load() {
+        const { res, data } = await api('/api/onspot/' + encodeURIComponent(token));
+        if (!res.ok) return showBad('Invalid link', data.error || 'This link is not valid.');
+        link = data;
+        if (data.expiresAt) startCountdown(data.expiresAt);
+        if (data.state === 'paid') return show('state-paid');
+        if (data.state === 'expired') return showBad('Link expired', 'This link has expired. Please ask the registration desk for a new one.');
+        renderActive();
+    }
+
+    async function markPaidAndFinish() {
+        await api('/api/onspot/' + encodeURIComponent(token) + '/paid', { method: 'POST' });
+        if (pollTimer) clearInterval(pollTimer);
+        if (regInfo) regInfo.paid = true;
+        show('state-paid');
+    }
+
+    function startPoll() {
+        if (pollTimer || !regInfo) return;
+        pollTimer = setInterval(async () => {
+            const { data } = await api(
+                '/api/payments/status?registrationId=' + encodeURIComponent(regInfo.registrationId) + '&userId=' + encodeURIComponent(regInfo.userId)
+            );
+            if (data && data.paid) markPaidAndFinish();
+        }, 4000);
+    }
+
+    function loadRazorpay() {
+        return new Promise((resolve, reject) => {
+            if (typeof Razorpay !== 'undefined') return resolve();
+            const s = document.createElement('script');
+            s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+            s.onload = () => resolve();
+            s.onerror = () => reject(new Error('Could not load payment checkout. Check your connection.'));
+            document.head.appendChild(s);
+        });
+    }
+
+    function openRazorpay(result) {
+        const order = result.razorpayOrder || result.order || {};
+        const rz = new Razorpay({
+            key: result.keyId || result.key_id,
+            amount: order.amount || result.amount,
+            currency: order.currency || 'INR',
+            name: 'Vaidya Gogate Memorial Foundation National Seminar',
+            description: 'On-spot seminar registration',
+            order_id: order.id || result.order_id,
+            prefill: { name: ($('f-first').value + ' ' + $('f-last').value).trim(), email: $('f-email').value, contact: $('f-phone').value },
+            theme: { color: '#0f766e' },
+            handler: function (response) {
+                fetch('/api/verify-payment', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        registrationId: regInfo.registrationId,
+                        userId: regInfo.userId,
+                        paymentOption: 'razorpay',
+                        razorpay_order_id: response.razorpay_order_id,
+                        razorpay_payment_id: response.razorpay_payment_id,
+                        razorpay_signature: response.razorpay_signature
+                    })
+                })
+                    .then((r) => r.json())
+                    .then((v) => {
+                        if (v.success) markPaidAndFinish();
+                        else $('form-err').textContent = v.error || 'Payment verification failed. Contact the desk.';
+                    })
+                    .catch(() => ($('form-err').textContent = 'Payment verification failed. Contact the desk with your receipt.'));
+            }
+        });
+        rz.open();
+        startPoll();
+    }
+
+    function submitFormPost(fp) {
+        const form = document.createElement('form');
+        form.method = fp.method || 'POST';
+        form.action = fp.action;
+        Object.keys(fp.fields || {}).forEach((k) => {
+            const i = document.createElement('input');
+            i.type = 'hidden'; i.name = k; i.value = fp.fields[k];
+            form.appendChild(i);
+        });
+        document.body.appendChild(form);
+        form.submit();
+    }
+
+    async function startPayment(methodId) {
+        const { res, data } = await api('/api/payments/process', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ registrationId: regInfo.registrationId, userId: regInfo.userId, methodId: methodId || undefined, cancelPending: true })
+        });
+        if (!res.ok || !data.success) {
+            if (data.options && data.options.length) {
+                const sel = $('f-method');
+                sel.innerHTML = '';
+                data.options.forEach((o) => {
+                    const op = document.createElement('option');
+                    op.value = o.id; op.textContent = o.label;
+                    sel.appendChild(op);
+                });
+                $('pay-method-wrap').style.display = '';
+                $('form-err').textContent = 'Choose a payment method and tap Pay again.';
+                return;
+            }
+            $('form-err').textContent = data.error || 'Payment could not be started.';
+            return;
+        }
+        if (data.paid) return markPaidAndFinish();
+        if (data.paymentType === 'dqr' && data.qrImageUrl) {
+            $('qr-img').src = data.qrImageUrl;
+            $('qr-amount').textContent = money(link.amount);
+            $('qr-block').style.display = '';
+            startPoll();
+            return;
+        }
+        if (data.paymentType === 'razorpay_checkout' || data.gateway === 'razorpay') {
+            await loadRazorpay();
+            openRazorpay(data);
+            return;
+        }
+        if (data.formPost && data.formPost.action) { startPoll(); return submitFormPost(data.formPost); }
+        if (data.paymentUrl) { startPoll(); location.href = data.paymentUrl; return; }
+        if (data.easebuzzAccessKey) { startPoll(); location.href = 'https://pay.easebuzz.in/pay/' + encodeURIComponent(data.easebuzzAccessKey); return; }
+        $('poll-status').textContent = data.message || 'Payment request recorded. Waiting for confirmation…';
+        $('qr-block').style.display = '';
+        startPoll();
+    }
+
+    $('pay-btn').addEventListener('click', async () => {
+        const btn = $('pay-btn');
+        $('form-err').textContent = '';
+        btn.disabled = true;
+        try {
+            if (!regInfo) {
+                const { res, data } = await api('/api/onspot/' + encodeURIComponent(token) + '/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        firstName: $('f-first').value.trim(),
+                        lastName: $('f-last').value.trim(),
+                        phone: $('f-phone').value.trim(),
+                        email: $('f-email').value.trim()
+                    })
+                });
+                if (!res.ok || !data.success) {
+                    $('form-err').textContent = data.error || 'Registration could not be created.';
+                    return;
+                }
+                regInfo = data;
+                if (data.alreadyPaid) return markPaidAndFinish();
+                ['f-first', 'f-last', 'f-phone', 'f-email'].forEach((id) => ($(id).disabled = true));
+                if (data.paymentOptions && data.paymentOptions.length > 1) {
+                    const sel = $('f-method');
+                    sel.innerHTML = '';
+                    data.paymentOptions.forEach((o) => {
+                        const op = document.createElement('option');
+                        op.value = o.id; op.textContent = o.label;
+                        sel.appendChild(op);
+                    });
+                    $('pay-method-wrap').style.display = '';
+                    btn.textContent = 'Pay ' + money(link.amount);
+                    $('form-err').textContent = 'Choose a payment method and tap Pay.';
+                    return;
+                }
+            }
+            const methodEl = $('f-method');
+            const methodId = $('pay-method-wrap').style.display !== 'none' && methodEl.value ? methodEl.value : '';
+            await startPayment(methodId);
+        } catch (e) {
+            $('form-err').textContent = e.message || 'Something went wrong.';
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    load();
+})();
+</script>
+</body>
+</html>

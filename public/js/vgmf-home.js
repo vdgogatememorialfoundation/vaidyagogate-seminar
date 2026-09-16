@@ -531,8 +531,9 @@
             }
             wrap.innerHTML = list
                 .map((s) => {
-                    const ed =
-                        s.event_date && window.PortalDateTime && window.PortalDateTime.formatEvent
+                    const ed = s.schedule_label
+                        ? s.schedule_label
+                        : s.event_date && window.PortalDateTime && window.PortalDateTime.formatEvent
                             ? window.PortalDateTime.formatEvent(s.event_date)
                             : s.event_date
                               ? String(s.event_date)

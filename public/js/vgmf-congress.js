@@ -184,7 +184,7 @@
             .map((s) => {
                 const image = seminarHeroImagePath(s);
                 if (!image) return null;
-                const when = formatSeminarHeroDate(s.event_date);
+                const when = s.schedule_label || formatSeminarHeroDate(s.event_date);
                 const venue = s.venue ? String(s.venue).trim() : '';
                 const meta = [when, venue].filter(Boolean);
                 const desc = s.description ? String(s.description).trim().slice(0, 140) : '';
