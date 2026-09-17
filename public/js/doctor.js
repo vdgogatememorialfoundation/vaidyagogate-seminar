@@ -3020,7 +3020,7 @@ function buildDoctorSliderSlides(seminars, marketingBanners, cmsSlides) {
         push({
             src,
             title: s.title || 'National Seminar',
-            subtitle: s.event_date ? formatEventDate(s.event_date) : '',
+            subtitle: s.schedule_label || (s.event_date ? formatEventDate(s.event_date) : ''),
             seminarId: s.id
         });
     });
@@ -8410,14 +8410,32 @@ function downloadEticketPdf(t) {
     const filename = 'e-ticket-' + ticketId.replace(/[^\w-]+/g, '-') + '.pdf';
     const htmlFilename = filename.replace(/\.pdf$/i, '.html');
     const base = eticketViewUrl(row);
-    const serverUrl = base + (base.indexOf('?') >= 0 ? '&' : '?') + 'download=1';
+    const sep = base.indexOf('?') >= 0 ? '&' : '?';
+    const serverUrl = base + sep + 'download=1';
+    const pdfUrl = base + sep + 'format=pdf&download=1';
 
+    void downloadEticketServerPdf(row, filename, htmlFilename, serverUrl, pdfUrl);
+}
+
+async function downloadEticketServerPdf(row, filename, htmlFilename, serverUrl, pdfUrl) {
+    try {
+        const res = await fetch(pdfUrl, { credentials: 'same-origin', cache: 'no-store' });
+        if (!res.ok) throw new Error('Could not download ticket');
+        const blob = await res.blob();
+        const isPdf = /pdf/i.test(res.headers.get('content-type') || '') || blob.type === 'application/pdf';
+        if (isPdf) {
+            triggerEticketFileDownload(URL.createObjectURL(blob), filename);
+            return;
+        }
+        throw new Error('PDF unavailable');
+    } catch (e) {
+        console.warn('[eticket-pdf] server PDF failed, falling back', e);
+    }
     if (isDesktopEticketDownload()) {
         triggerEticketFileDownload(serverUrl, htmlFilename);
         return;
     }
-
-    void downloadEticketPdfAsync(row, filename, htmlFilename, serverUrl);
+    await downloadEticketPdfAsync(row, filename, htmlFilename, serverUrl);
 }
 
 async function downloadEticketPdfAsync(t, filename, htmlFilename, serverUrl) {

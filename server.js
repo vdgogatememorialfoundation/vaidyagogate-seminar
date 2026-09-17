@@ -25,6 +25,7 @@ const countriesList = require('./lib/countries');
 const designatedNotify = require('./lib/designated-notify');
 const ticketHtml = require('./lib/ticket-html');
 const ticketAccess = require('./lib/ticket-access');
+const ticketPdfServer = require('./lib/certificate-pdf-server');
 const {
     validateDynamicForm,
     normalizeFields,
@@ -67,6 +68,7 @@ const feedbackFormConfig = require('./lib/feedback-form-config');
 const feedbackEligibility = require('./lib/feedback-eligibility');
 const { registerLiveScannerRoutes } = require('./lib/routes-live-scanner');
 const { registerPosRoutes } = require('./lib/pos-onspot');
+const onspotLinks = require('./lib/onspot-links');
 const siteSeoMod = require('./lib/site-seo');
 const emailDeliveryPolicy = require('./lib/email-delivery-policy');
 const httpTransport = require('./lib/email-http-transport');
@@ -1228,6 +1230,7 @@ function ensurePortalSchema(next) {
                                                 seminarDays.ensureSchema(db, ignoreSchemaMigrationErr, () => {
                                                 scannerIdCapture.ensureSchema(db, () => {
                                                     adminMailThreads.ensureSchema(db, () => {});
+                                                    onspotLinks.ensureOnspotLinkSchema(db, () => {});
                                                 });
                                                 });
                                                 });
@@ -7005,15 +7008,29 @@ app.get('/api/doctor/ticket-document/:ticketId', (req, res) => {
                     },
                     db
                 )
-                .then((html) => {
-                    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+                .then(async (html) => {
+                    const safeName = 'e-ticket-' + String(row.ticket_id_string || ticketId).replace(/[^\w-]+/g, '_');
                     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
                     res.setHeader('Pragma', 'no-cache');
+                    if (String(req.query.format || '').toLowerCase() === 'pdf') {
+                        try {
+                            const pdf = await ticketPdfServer.htmlToPdfBuffer(html, {
+                                landscape: false,
+                                margin: { top: '10mm', right: '10mm', bottom: '10mm', left: '10mm' }
+                            });
+                            res.setHeader('Content-Type', 'application/pdf');
+                            res.setHeader(
+                                'Content-Disposition',
+                                (req.query.download === '1' ? 'attachment' : 'inline') + '; filename="' + safeName + '.pdf"'
+                            );
+                            return res.send(pdf);
+                        } catch (pdfErr) {
+                            console.warn('[ticket-document] PDF render failed, sending HTML:', pdfErr.message);
+                        }
+                    }
+                    res.setHeader('Content-Type', 'text/html; charset=utf-8');
                     if (req.query.download === '1') {
-                        res.setHeader(
-                            'Content-Disposition',
-                            'attachment; filename="e-ticket-' + String(row.ticket_id_string || ticketId).replace(/[^\w-]+/g, '_') + '.html"'
-                        );
+                        res.setHeader('Content-Disposition', 'attachment; filename="' + safeName + '.html"');
                     }
                     res.send(html);
                 })
@@ -10813,6 +10830,18 @@ registerPosRoutes(app, {
     paymentDeps: doctorPaymentDeps(),
     notifEngine,
     flushNotificationQueue
+});
+onspotLinks.registerOnspotRoutes(app, {
+    db,
+    generateId,
+    notifEngine,
+    activityLog,
+    seminarCapacity,
+    listDoctorPaymentOptions
+});
+app.get('/onspot/:token', (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.sendFile(path.join(__dirname, 'public', 'onspot.html'));
 });
 
 app.get('/api/public/feedback-form', (req, res) => {

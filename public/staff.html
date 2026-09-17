@@ -111,6 +111,27 @@
                 </div>
                 <div id="staff-etickets-root"><p style="color:#64748b;">Enter a search term above.</p></div>
             </div>
+
+            <div id="staff-panel-pos" class="card hidden">
+                <p style="color:#64748b;font-size:0.88rem;margin:0 0 12px;">On-spot registration: search by phone, name, email, doctor ID or application no. Registered participants appear below. Send a private payment link (valid 1 hour) to the participant's email.</p>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
+                    <input type="search" id="staff-pos-q" placeholder="Phone / name / email / doctor ID…" style="flex:1;min-width:200px;">
+                    <button type="button" class="btn btn-primary" onclick="staffPosSearch()">Search</button>
+                </div>
+                <div id="staff-pos-results" style="margin-bottom:16px;"><p style="color:#64748b;">Enter a search term above.</p></div>
+                <h3 style="font-size:1rem;margin:0 0 8px;">Send private on-spot link</h3>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-bottom:8px;">
+                    <select id="staff-pos-seminar"><option value="">Select seminar</option></select>
+                    <input type="number" id="staff-pos-amount" placeholder="Amount (₹, blank = seminar fee)" min="0" step="1">
+                    <input type="text" id="staff-pos-first" placeholder="First name">
+                    <input type="text" id="staff-pos-last" placeholder="Last name">
+                    <input type="tel" id="staff-pos-phone" placeholder="Phone">
+                    <input type="email" id="staff-pos-email" placeholder="Email (link is sent here)">
+                </div>
+                <input type="hidden" id="staff-pos-user-id">
+                <button type="button" class="btn btn-primary" onclick="staffPosCreateLink()">Create &amp; email 1-hour link</button>
+                <div id="staff-pos-link-out" style="margin-top:10px;"></div>
+            </div>
         </div>
     </div>
 
@@ -127,6 +148,7 @@
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-auth.js?v=20260527b"></script>
     <script src="/js/book-tracking-ui.js?v=20260530d"></script>
-    <script src="/js/staff-portal.js?v=20260616escalate"></script>
+    <script src="/js/staff-portal.js?v=20260916pos"></script>
+    <script src="/js/pos-onspot-ui.js?v=20260916a"></script>
 </body>
 </html>

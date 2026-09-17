@@ -149,7 +149,8 @@
             'applications',
             'support-tickets',
             'payments',
-            'etickets'
+            'etickets',
+            'pos'
         ];
         panelIds.forEach((id) => {
             const panel = document.getElementById('staff-panel-' + id);
@@ -163,6 +164,7 @@
         if (tab === 'applications') staffLoadApplications();
         if (tab === 'support-tickets') staffLoadSupportTickets();
         if (tab === 'payments') staffLoadSeminarOrders();
+        if (tab === 'pos' && window.staffPosInit) window.staffPosInit();
     };
 
     async function staffLoadInventory() {

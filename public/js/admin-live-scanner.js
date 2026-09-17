@@ -511,7 +511,7 @@
         (seminars || []).forEach((s) => {
             const o = document.createElement('option');
             o.value = s.id;
-            const date = s.event_date ? String(s.event_date).slice(0, 10) : '';
+            const date = s.schedule_label || (s.event_date ? String(s.event_date).slice(0, 10) : '');
             o.textContent = (s.title || 'Event') + (date ? ' · ' + date : '');
             sel.appendChild(o);
         });

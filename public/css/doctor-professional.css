@@ -1,0 +1,342 @@
+/* Doctor portal — professional theme: white surfaces, neutral greys, one dark accent, no gradients or motion. */
+.doctor-professional {
+    --dp-accent: #0f4c81;
+    --dp-accent-dark: #0b3a63;
+    --dp-ink: #0f172a;
+    --dp-muted: #475569;
+    --dp-line: #e2e8f0;
+    --dp-surface: #ffffff;
+    --dp-page: #ffffff;
+    --dp-ok: #15803d;
+    --dp-warn: #b45309;
+    --dp-danger: #b91c1c;
+    --doctor-primary: var(--dp-accent);
+    --doctor-primary-dark: var(--dp-accent-dark);
+    --doctor-accent: var(--dp-accent);
+    --doctor-text: var(--dp-ink);
+    --doctor-bg: var(--dp-page);
+    background: var(--dp-page) !important;
+    color: var(--dp-ink);
+}
+
+.doctor-professional *,
+.doctor-professional *::before,
+.doctor-professional *::after {
+    animation: none !important;
+    text-shadow: none !important;
+}
+
+/* ---------- Sign-in ---------- */
+.doctor-professional #auth-overlay {
+    background: #f8fafc !important;
+}
+.doctor-professional .doctor-auth-card {
+    background: var(--dp-surface) !important;
+    border: 1px solid var(--dp-line) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08) !important;
+}
+.doctor-professional #doctor-auth-title {
+    color: var(--dp-ink) !important;
+    background: none !important;
+    -webkit-text-fill-color: initial !important;
+}
+
+/* ---------- Sidebar ---------- */
+.doctor-professional .sidebar {
+    background: var(--dp-surface) !important;
+    color: var(--dp-ink) !important;
+    border-right: 1px solid var(--dp-line) !important;
+    box-shadow: none !important;
+}
+.doctor-professional .sidebar-header {
+    border-bottom: 1px solid var(--dp-line) !important;
+}
+.doctor-professional .sidebar-header h2 {
+    color: var(--dp-ink) !important;
+}
+.doctor-professional .sidebar-header p {
+    color: var(--dp-muted) !important;
+}
+.doctor-professional .doctor-sidebar-photo {
+    border-color: var(--dp-line) !important;
+}
+.doctor-professional .menu-item {
+    color: var(--dp-ink) !important;
+    border-radius: 6px !important;
+    margin: 0 10px !important;
+    width: auto !important;
+    border-left: 3px solid transparent !important;
+}
+.doctor-professional .menu-item i {
+    color: var(--dp-muted) !important;
+    opacity: 1 !important;
+}
+.doctor-professional .menu-item:hover {
+    background: #f1f5f9 !important;
+    color: var(--dp-ink) !important;
+}
+.doctor-professional .menu-item.active {
+    background: #e8f0f8 !important;
+    color: var(--dp-accent-dark) !important;
+    border-left-color: var(--dp-accent) !important;
+}
+.doctor-professional .menu-item.active i {
+    color: var(--dp-accent) !important;
+}
+
+/* ---------- Header ---------- */
+.doctor-professional .top-header {
+    background: var(--dp-surface) !important;
+    border-bottom: 1px solid var(--dp-line) !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+}
+.doctor-professional .header-title {
+    color: var(--dp-ink) !important;
+    background: none !important;
+    -webkit-text-fill-color: initial !important;
+}
+.doctor-professional .hi-user {
+    color: var(--dp-ink) !important;
+}
+.doctor-professional .user-id {
+    background: #f1f5f9 !important;
+    color: var(--dp-ink) !important;
+    border: 1px solid var(--dp-line) !important;
+}
+.doctor-professional .portal-login-time,
+.doctor-professional .header-link {
+    color: var(--dp-accent) !important;
+}
+.doctor-professional .doctor-header-photo {
+    border-color: var(--dp-line) !important;
+    background: #f1f5f9 !important;
+}
+.doctor-professional .doctor-menu-toggle {
+    background: var(--dp-surface) !important;
+    color: var(--dp-ink) !important;
+    border: 1px solid var(--dp-line) !important;
+    box-shadow: none !important;
+}
+
+/* ---------- Content ---------- */
+.doctor-professional .content-area {
+    background: var(--dp-page) !important;
+    color: var(--dp-ink) !important;
+}
+.doctor-professional .section-title {
+    color: var(--dp-ink) !important;
+    border-bottom: 1px solid var(--dp-line) !important;
+    padding-bottom: 10px !important;
+}
+.doctor-professional .section-title::after {
+    display: none !important;
+}
+.doctor-professional .card,
+.doctor-professional .announcements-box,
+.doctor-professional .notification-bar {
+    background: var(--dp-surface) !important;
+    border: 1px solid var(--dp-line) !important;
+    border-radius: 10px !important;
+    box-shadow: none !important;
+    color: var(--dp-ink) !important;
+    transform: none !important;
+}
+.doctor-professional .card::before {
+    display: none !important;
+}
+.doctor-professional .card:hover {
+    transform: none !important;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08) !important;
+}
+
+/* Stat cards */
+.doctor-professional .stat-card {
+    background: var(--dp-surface) !important;
+    color: var(--dp-ink) !important;
+    border: 1px solid var(--dp-line) !important;
+    border-top: 3px solid var(--dp-accent) !important;
+    border-radius: 10px !important;
+    box-shadow: none !important;
+    transform: none !important;
+}
+.doctor-professional .stat-card::after,
+.doctor-professional .stat-card::before {
+    display: none !important;
+}
+.doctor-professional .stat-card h3,
+.doctor-professional .stat-card h4 {
+    color: var(--dp-ink) !important;
+    background: none !important;
+    -webkit-text-fill-color: initial !important;
+}
+.doctor-professional .stat-card p {
+    color: var(--dp-muted) !important;
+}
+
+/* Buttons — solid, high contrast, always visible */
+.doctor-professional .btn-primary,
+.doctor-professional button.btn-primary,
+.doctor-professional a.btn-primary {
+    background: var(--dp-accent) !important;
+    color: #ffffff !important;
+    border: 1px solid var(--dp-accent) !important;
+    border-radius: 6px !important;
+    box-shadow: none !important;
+    font-weight: 600 !important;
+    transform: none !important;
+    filter: none !important;
+}
+.doctor-professional .btn-primary:hover {
+    background: var(--dp-accent-dark) !important;
+    border-color: var(--dp-accent-dark) !important;
+    filter: none !important;
+    transform: none !important;
+}
+.doctor-professional .btn-primary:disabled {
+    background: #94a3b8 !important;
+    border-color: #94a3b8 !important;
+    color: #ffffff !important;
+}
+.doctor-professional .btn-success {
+    background: var(--dp-ok) !important;
+    color: #ffffff !important;
+    border: 1px solid var(--dp-ok) !important;
+    border-radius: 6px !important;
+    box-shadow: none !important;
+}
+.doctor-professional .btn-danger {
+    background: var(--dp-danger) !important;
+    color: #ffffff !important;
+    border: 1px solid var(--dp-danger) !important;
+    border-radius: 6px !important;
+}
+.doctor-professional .btn-secondary,
+.doctor-professional .btn-muted,
+.doctor-professional .btn-outline {
+    background: var(--dp-surface) !important;
+    color: var(--dp-ink) !important;
+    border: 1px solid #94a3b8 !important;
+    border-radius: 6px !important;
+    box-shadow: none !important;
+}
+.doctor-professional .btn-secondary:hover,
+.doctor-professional .btn-muted:hover,
+.doctor-professional .btn-outline:hover {
+    background: #f1f5f9 !important;
+}
+
+/* Forms */
+.doctor-professional input,
+.doctor-professional select,
+.doctor-professional textarea {
+    background: var(--dp-surface) !important;
+    color: var(--dp-ink) !important;
+    border: 1px solid #94a3b8 !important;
+    border-radius: 6px !important;
+    box-shadow: none !important;
+}
+.doctor-professional input:focus,
+.doctor-professional select:focus,
+.doctor-professional textarea:focus {
+    outline: 2px solid var(--dp-accent) !important;
+    outline-offset: 0 !important;
+    border-color: var(--dp-accent) !important;
+}
+.doctor-professional label {
+    color: var(--dp-ink) !important;
+}
+
+/* Tables */
+.doctor-professional .data-table {
+    border: 1px solid var(--dp-line) !important;
+    border-radius: 8px !important;
+    overflow: hidden !important;
+}
+.doctor-professional .data-table th {
+    background: #f8fafc !important;
+    color: var(--dp-ink) !important;
+    border-bottom: 1px solid var(--dp-line) !important;
+    font-weight: 600 !important;
+}
+.doctor-professional .data-table td {
+    border-bottom: 1px solid var(--dp-line) !important;
+    color: var(--dp-ink) !important;
+}
+.doctor-professional .data-table tr:hover td {
+    background: #f8fafc !important;
+}
+
+/* Steps / progress */
+.doctor-professional .step-indicator {
+    background: var(--dp-surface) !important;
+    border: 1px solid var(--dp-line) !important;
+}
+.doctor-professional .step.active {
+    background: var(--dp-accent) !important;
+    color: #ffffff !important;
+}
+.doctor-professional .vtrk-header {
+    background: #f8fafc !important;
+    color: var(--dp-ink) !important;
+    border: 1px solid var(--dp-line) !important;
+}
+.doctor-professional .vtrk-progress-bar {
+    background: var(--dp-accent) !important;
+}
+.doctor-professional .vtrk-step-circle.done {
+    background: var(--dp-ok) !important;
+    color: #ffffff !important;
+}
+
+/* Seminar cards */
+.doctor-professional #seminars-grid-container > div,
+.doctor-professional .dv-seminar-card {
+    background: var(--dp-surface) !important;
+    border: 1px solid var(--dp-line) !important;
+    border-radius: 10px !important;
+    box-shadow: none !important;
+    transform: none !important;
+    color: var(--dp-ink) !important;
+}
+.doctor-professional #seminars-grid-container > div::before {
+    display: none !important;
+}
+.doctor-professional #seminars-grid-container > div:hover {
+    transform: none !important;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08) !important;
+}
+.doctor-professional .dv-chip {
+    background: #f1f5f9 !important;
+    color: var(--dp-ink) !important;
+    border: 1px solid var(--dp-line) !important;
+    border-radius: 6px !important;
+    font-weight: 600 !important;
+}
+.doctor-professional .dv-chip.is-multi {
+    background: #e8f0f8 !important;
+    color: var(--dp-accent-dark) !important;
+}
+
+/* Status colours: text only, on white */
+.doctor-professional .status-badge,
+.doctor-professional .badge {
+    background: #f1f5f9 !important;
+    color: var(--dp-ink) !important;
+    border: 1px solid var(--dp-line) !important;
+    border-radius: 6px !important;
+}
+
+/* Scrollbars */
+.doctor-professional .menu-items::-webkit-scrollbar-thumb,
+.doctor-professional .content-area::-webkit-scrollbar-thumb {
+    background: #cbd5e1 !important;
+}
+
+/* Mobile */
+@media (max-width: 900px) {
+    .doctor-professional .sidebar {
+        background: var(--dp-surface) !important;
+    }
+}
