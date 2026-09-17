@@ -34,6 +34,19 @@
         return h;
     }
 
+    function appNoHtml(no) {
+        const str = String(no == null ? '' : no).replace(/^APP_/i, '');
+        if (!str) return '';
+        if (str.length <= 4) return '<strong>' + esc(str) + '</strong>';
+        return (
+            '<span style="font-family:ui-monospace,monospace;">' +
+            esc(str.slice(0, -4)) +
+            '<strong style="background:#fef3c7;color:#92400e;padding:0 3px;border-radius:3px;">' +
+            esc(str.slice(-4)) +
+            '</strong></span>'
+        );
+    }
+
     async function api(url, opts) {
         const res = await fetch(url, Object.assign({ credentials: 'same-origin' }, opts || {}));
         let data = {};
@@ -96,7 +109,7 @@
                         '<div style="font-size:0.82rem;margin-bottom:4px;"><strong>' +
                         esc(r.seminarTitle || 'Seminar') +
                         '</strong><br>' +
-                        esc(r.applicationNo || '') +
+                        appNoHtml(r.applicationNo || '') +
                         ' · ' +
                         esc(r.status || '') +
                         (r.ticketId ? ' · Ticket ' + esc(r.ticketId) : '') +

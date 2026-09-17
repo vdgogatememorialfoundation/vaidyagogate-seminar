@@ -1142,11 +1142,24 @@ function seminarScheduleHtml(s, opts) {
             '</p>'
         );
     }
+    const clock = (t) => {
+        const m = String(t || '').match(/^(\d{1,2}):(\d{2})/);
+        if (!m) return '';
+        const hh = parseInt(m[1], 10);
+        return (hh % 12 || 12) + ':' + m[2] + ' ' + (hh >= 12 ? 'pm' : 'am');
+    };
+    const dayTimes = (d) => {
+        const a = clock(d.startTime || d.start_time);
+        const b = clock(d.endTime || d.end_time);
+        if (a && b) return ' · ' + a + ' – ' + b + ' IST';
+        if (a || b) return ' · ' + (a || b) + ' IST';
+        return '';
+    };
     let items;
     if (days.length > 1) {
         items = days.map((d) => {
             const label = d.title ? escapeHtml(String(d.title)) + ': ' : '';
-            return '<li>' + label + escapeHtml(formatEventDate(d.dayDate || d.day_date)) + '</li>';
+            return '<li>' + label + escapeHtml(formatEventDate(String(d.dayDate || d.day_date).slice(0, 10)) + dayTimes(d)) + '</li>';
         });
     } else {
         items = dates.map((ymd, i) => {
@@ -1155,10 +1168,22 @@ function seminarScheduleHtml(s, opts) {
             return '<li>Day ' + (i + 1) + ': ' + escapeHtml(label) + '</li>';
         });
     }
+    const allYmd = days.length > 1 ? days.map((d) => String(d.dayDate || d.day_date).slice(0, 10)) : dates;
+    const firstYmd = allYmd[0];
+    const lastYmd = allYmd[allYmd.length - 1];
+    const rangeLine =
+        firstYmd && lastYmd && firstYmd !== lastYmd
+            ? '<div class="sem-schedule-range" style="margin:2px 0 4px;"><strong>Start:</strong> ' +
+              escapeHtml(formatEventDate(firstYmd)) +
+              ' &nbsp;·&nbsp; <strong>End:</strong> ' +
+              escapeHtml(formatEventDate(lastYmd)) +
+              '</div>'
+            : '';
     return (
         '<div class="sem-schedule sem-schedule-multi" style="font-size:0.85rem;margin-bottom:8px;"><strong><i class="fas fa-calendar-alt"></i> Event dates (' +
         items.length +
         ' days):</strong>' +
+        rangeLine +
         (o.compact && s.schedule_label
             ? '<div style="color:#334155;margin-top:2px;">' + escapeHtml(s.schedule_label) + '</div>'
             : '<ul style="margin:4px 0 0 18px;padding:0;color:#334155;">' + items.join('') + '</ul>') +
@@ -1320,102 +1345,139 @@ function renderTrackerStepsHtml(timeline) {
             ? 'All steps completed for this application.'
             : 'Live updates every few seconds while this page is open.';
 
+    const statusCls = timeline.cancelled
+        ? 'is-cancelled'
+        : !activeStep && completed >= steps.length
+          ? 'is-complete'
+          : 'is-live';
+    const liveLabel = timeline.cancelled
+        ? timeline.cancellationLivePending
+            ? 'Live refund tracking'
+            : 'Cancelled'
+        : statusCls === 'is-complete'
+          ? 'Completed'
+          : 'Live tracking';
     let html =
-        '<div class="sat-live-track sat-live-track--enter">' +
-        '<div class="vtrk-header ' +
-        (timeline.cancelled ? 'cancelled' : 'live') +
+        '<div class="fk-track sat-live-track--enter ' +
+        statusCls +
         '">' +
-        (timeline.cancelled || timeline.cancellationLivePending
-            ? '<span class="vtrk-live"><span class="vtrk-dot"></span>' +
-              (timeline.cancellationLivePending ? 'Live refund tracking' : 'Cancelled') +
-              '</span>'
-            : '<span class="vtrk-live"><span class="vtrk-dot"></span>Live tracking</span>') +
-        '<div class="vtrk-headline">' +
+        '<div class="fk-track-head">' +
+        '<div class="fk-track-head-main">' +
+        '<span class="fk-track-live"><span class="vtrk-dot"></span>' +
+        escapeHtml(liveLabel) +
+        '</span>' +
+        '<div class="fk-track-headline">' +
         escapeHtml(headline) +
         '</div>' +
-        '<div class="vtrk-subheadline">' +
+        '<div class="fk-track-sub">' +
         escapeHtml(subheadline) +
-        '</div>' +
-        '<div class="vtrk-progress-wrap"><div class="vtrk-progress-bar sat-progress-animate" style="width:' +
+        '</div></div>' +
+        '<div class="fk-track-pct"><span class="fk-track-pct-num">' +
         progressPct +
-        '%"></div></div>' +
-        '<div class="sat-progress-label">' +
-        progressPct +
-        '% complete · ' +
+        '%</span><span class="fk-track-pct-lbl">' +
         completed +
         ' of ' +
         steps.length +
-        ' milestones</div>' +
+        ' steps</span></div>' +
         '</div>';
     if (timeline.cancellationLivePending) {
         html +=
-            '<div style="margin:0 0 10px;padding:8px 12px;background:linear-gradient(135deg,#fff7ed,#f8fafc);border:1px solid #fed7aa;border-radius:8px;font-size:0.82rem;color:#b45309;">' +
+            '<div class="fk-track-note fk-track-note--warn">' +
             '<strong><i class="fas fa-undo-alt"></i> Cancellation &amp; Razorpay refund</strong> — live updates below</div>';
     }
     const ct = timeline.cancellationTracking;
     if (ct && ct.razorpayLive && (ct.razorpayLive.providerRefundId || ct.razorpayLive.providerStatus)) {
         const rz = ct.razorpayLive;
         html +=
-            '<div style="margin:0 0 10px;padding:8px 10px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;font-size:0.82rem;color:#0c4a6e;">' +
+            '<div class="fk-track-note fk-track-note--info">' +
             '<strong>Razorpay:</strong> ' +
             escapeHtml(ct.refundStatusLabel || '') +
             (rz.providerRefundId ? ' · ' + escapeHtml(rz.providerRefundId) : '') +
             (rz.providerStatus ? ' · ' + escapeHtml(String(rz.providerStatus).toUpperCase()) : '') +
             '</div>';
     }
-    html += '<div class="vtrk-steps">';
 
+    /* Horizontal pipeline (Flipkart-style): dots joined by a rail that fills up to the current step. */
+    const doneCount = steps.filter(function (s) {
+        return s.state === 'completed' || s.state === 'cancelled';
+    }).length;
+    const reachedIdx = activeStep ? steps.indexOf(activeStep) : doneCount - 1;
+    const railPct =
+        steps.length > 1 ? Math.max(0, Math.min(100, Math.round((reachedIdx / (steps.length - 1)) * 100))) : doneCount ? 100 : 0;
+    html += '<div class="fk-pipe-scroll" data-hscroll="1"><div class="fk-pipe" style="--fk-steps:' + steps.length + '">';
+    html += '<div class="fk-pipe-rail"><div class="fk-pipe-rail-fill" style="width:' + Math.max(0, railPct) + '%"></div></div>';
+    html += '<div class="fk-pipe-steps">';
     steps.forEach(function (step, idx) {
-        const isLast = idx === steps.length - 1;
-        const cls =
-            step.state === 'completed'
-                ? 'vtrk-step done sat-step-pop'
-                : step.state === 'cancelled'
-                  ? 'vtrk-step done sat-step-pop'
-                  : step.state === 'active'
-                    ? 'vtrk-step active sat-step-pop sat-step-active-glow'
-                    : 'vtrk-step upcoming';
-        const whenHtml =
-            step.at && step.state !== 'upcoming'
-                ? '<span class="vtrk-step-when"><i class="fas fa-clock"></i> ' +
-                  escapeHtml(formatTrackDateTime(step.at)) +
-                  '</span>'
-                : step.state === 'upcoming'
-                  ? '<span class="vtrk-step-when sat-step-upcoming"><i class="fas fa-hourglass-half"></i> Upcoming</span>'
-                  : '';
-        const iconHtml =
+        const st =
+            step.state === 'completed' || step.state === 'cancelled'
+                ? 'done'
+                : step.state === 'active'
+                  ? 'active'
+                  : 'upcoming';
+        const icon =
             step.state === 'completed'
                 ? '<i class="fas fa-check"></i>'
                 : step.state === 'cancelled'
-                  ? '<i class="fas fa-times" style="color:#b91c1c;"></i>'
+                  ? '<i class="fas fa-times"></i>'
                   : step.state === 'active'
-                    ? '<i class="fas ' + escapeHtml(step.icon || 'fa-circle-notch') + ' sat-icon-spin"></i>'
-                    : '<i class="fas ' + escapeHtml(step.icon || 'fa-circle') + '"></i>';
-
+                    ? '<i class="fas ' + escapeHtml(step.icon || 'fa-circle-notch') + '"></i>'
+                    : '<span class="fk-pipe-num">' + (idx + 1) + '</span>';
         html +=
-            '<div class="' +
-            cls +
+            '<div class="fk-pipe-step ' +
+            st +
+            (step.state === 'cancelled' ? ' is-cancelled' : '') +
             '" style="animation-delay:' +
-            idx * 0.07 +
+            idx * 0.06 +
             's">' +
-            '<div class="vtrk-step-left"><div class="vtrk-step-circle">' +
-            iconHtml +
+            '<div class="fk-pipe-dot">' +
+            icon +
             '</div>' +
-            (isLast ? '' : '<div class="vtrk-step-line"></div>') +
-            '</div><div class="vtrk-step-body"><div class="vtrk-step-title">' +
+            '<div class="fk-pipe-label">' +
             escapeHtml(step.title || '') +
-            '</div><div class="vtrk-step-sub">' +
-            escapeHtml(step.desc || '') +
             '</div>' +
+            (step.at && step.state !== 'upcoming'
+                ? '<div class="fk-pipe-when">' + escapeHtml(formatTrackDateTime(step.at)) + '</div>'
+                : '<div class="fk-pipe-when is-pending">' + (step.state === 'active' ? 'In progress' : 'Pending') + '</div>') +
+            '</div>';
+    });
+    html += '</div></div></div>';
+
+    /* Detailed vertical timeline */
+    html += '<div class="fk-timeline">';
+    steps.forEach(function (step, idx) {
+        const isLast = idx === steps.length - 1;
+        const st =
+            step.state === 'completed' || step.state === 'cancelled'
+                ? 'done'
+                : step.state === 'active'
+                  ? 'active'
+                  : 'upcoming';
+        const whenHtml =
+            step.at && step.state !== 'upcoming'
+                ? '<span class="fk-tl-when"><i class="far fa-clock"></i> ' + escapeHtml(formatTrackDateTime(step.at)) + '</span>'
+                : step.state === 'upcoming'
+                  ? '<span class="fk-tl-when is-pending"><i class="fas fa-hourglass-half"></i> Upcoming</span>'
+                  : '';
+        html +=
+            '<div class="fk-tl-item ' +
+            st +
+            (step.state === 'cancelled' ? ' is-cancelled' : '') +
+            '">' +
+            '<div class="fk-tl-rail"><span class="fk-tl-dot"></span>' +
+            (isLast ? '' : '<span class="fk-tl-line"></span>') +
+            '</div>' +
+            '<div class="fk-tl-body"><div class="fk-tl-title">' +
+            escapeHtml(step.title || '') +
+            '</div>' +
+            (step.desc ? '<div class="fk-tl-desc">' + escapeHtml(step.desc) + '</div>' : '') +
             whenHtml +
             '</div></div>';
     });
-
     html += '</div></div>';
     if (timeline.hasCancellationTracking || timeline.cancelled) {
         html +=
             '<p style="margin:12px 0 0;text-align:center;">' +
-            '<button type="button" class="btn-primary" style="background:#0f766e;border:none;font-size:0.88rem;padding:10px 18px;" ' +
+            '<button type="button" class="btn-primary" style="font-size:0.88rem;padding:10px 18px;" ' +
             'onclick="openDoctorRefundModule()">Open Refund tracking</button></p>';
     }
     return html;
@@ -8406,36 +8468,26 @@ function downloadEticketPdf(t) {
     if (!row || !row.ticket_id_string) {
         return alert('Ticket not found.');
     }
-    const ticketId = String(row.ticket_id_string || '').trim();
-    const filename = 'e-ticket-' + ticketId.replace(/[^\w-]+/g, '-') + '.pdf';
-    const htmlFilename = filename.replace(/\.pdf$/i, '.html');
     const base = eticketViewUrl(row);
     const sep = base.indexOf('?') >= 0 ? '&' : '?';
-    const serverUrl = base + sep + 'download=1';
-    const pdfUrl = base + sep + 'format=pdf&download=1';
-
-    void downloadEticketServerPdf(row, filename, htmlFilename, serverUrl, pdfUrl);
+    const pdfUrl = base + sep + 'format=pdf&download=1&_=' + Date.now();
+    // Direct navigation: the server answers with Content-Disposition: attachment, which every
+    // mobile browser (iOS Safari, Android Chrome, in-app webviews) handles as a file download.
+    window.location.href = pdfUrl;
+    const note = document.getElementById('eticket-download-note');
+    if (note) {
+        note.textContent = 'Preparing your PDF… it will save to your Downloads in a few seconds.';
+        note.classList.remove('hidden');
+        setTimeout(() => note.classList.add('hidden'), 8000);
+    }
 }
 
-async function downloadEticketServerPdf(row, filename, htmlFilename, serverUrl, pdfUrl) {
-    try {
-        const res = await fetch(pdfUrl, { credentials: 'same-origin', cache: 'no-store' });
-        if (!res.ok) throw new Error('Could not download ticket');
-        const blob = await res.blob();
-        const isPdf = /pdf/i.test(res.headers.get('content-type') || '') || blob.type === 'application/pdf';
-        if (isPdf) {
-            triggerEticketFileDownload(URL.createObjectURL(blob), filename);
-            return;
-        }
-        throw new Error('PDF unavailable');
-    } catch (e) {
-        console.warn('[eticket-pdf] server PDF failed, falling back', e);
-    }
-    if (isDesktopEticketDownload()) {
-        triggerEticketFileDownload(serverUrl, htmlFilename);
-        return;
-    }
-    await downloadEticketPdfAsync(row, filename, htmlFilename, serverUrl);
+function openEticketPdf(t) {
+    const row = resolveEticketRow(t);
+    if (!row || !row.ticket_id_string) return alert('Ticket not found.');
+    const base = eticketViewUrl(row);
+    const sep = base.indexOf('?') >= 0 ? '&' : '?';
+    window.open(base + sep + 'format=pdf', '_blank', 'noopener');
 }
 
 async function downloadEticketPdfAsync(t, filename, htmlFilename, serverUrl) {
@@ -8600,6 +8652,7 @@ async function loadDoctorEventTickets() {
                         !invalid && t.ticket_id_string
                             ? `<div style="margin:12px 0 0;display:flex;flex-wrap:wrap;gap:8px;">
                                 <button type="button" class="btn-primary" style="padding:8px 14px;font-size:0.88rem;" onclick="downloadEticketPdf(${JSON.stringify(String(t.ticket_id_string))})"><i class="fas fa-download"></i> Save PDF to device</button>
+                                <button type="button" class="btn-secondary" style="padding:8px 14px;font-size:0.88rem;" onclick="openEticketPdf(${JSON.stringify(String(t.ticket_id_string))})"><i class="fas fa-file-pdf"></i> Open PDF</button>
                                 <a href="${escapeHtml(eticketViewUrl(t))}" target="_blank" rel="noopener" class="btn-primary" style="display:inline-block;padding:8px 14px;text-decoration:none;font-size:0.88rem;background:#475569;"><i class="fas fa-print"></i> Print view</a>
                                </div>`
                             : ''
@@ -9742,3 +9795,78 @@ if (document.readyState === 'loading') {
     initRegistrationAddressUi();
     initDoctorUploadHints();
 }
+
+
+/* ---------- Horizontal scroll enhancer: wraps wide tables / pipelines so they can be
+   moved left-right by swipe, a visible scrollbar, or arrow buttons on every device. ---------- */
+(function () {
+    const SELECTOR = 'table.data-table, [data-hscroll]';
+    function update(wrap) {
+        const inner = wrap.querySelector('.dp-hscroll-inner');
+        if (!inner) return;
+        const max = inner.scrollWidth - inner.clientWidth;
+        wrap.classList.toggle('can-left', inner.scrollLeft > 4);
+        wrap.classList.toggle('can-right', max > 4 && inner.scrollLeft < max - 4);
+    }
+    function enhance(el) {
+        if (!el || el.__dpHscroll) return;
+        if (el.closest('.dp-hscroll-inner')) {
+            el.__dpHscroll = true;
+            return;
+        }
+        el.__dpHscroll = true;
+        let inner;
+        if (el.matches('[data-hscroll]')) {
+            inner = el;
+            inner.classList.add('dp-hscroll-inner');
+        } else {
+            inner = document.createElement('div');
+            inner.className = 'dp-hscroll-inner';
+            el.parentNode.insertBefore(inner, el);
+            inner.appendChild(el);
+        }
+        const wrap = document.createElement('div');
+        wrap.className = 'dp-hscroll';
+        inner.parentNode.insertBefore(wrap, inner);
+        wrap.appendChild(inner);
+        const prev = document.createElement('button');
+        prev.type = 'button';
+        prev.className = 'dp-hscroll-btn dp-hscroll-prev';
+        prev.setAttribute('aria-label', 'Scroll left');
+        prev.innerHTML = '<i class="fas fa-chevron-left"></i>';
+        const next = document.createElement('button');
+        next.type = 'button';
+        next.className = 'dp-hscroll-btn dp-hscroll-next';
+        next.setAttribute('aria-label', 'Scroll right');
+        next.innerHTML = '<i class="fas fa-chevron-right"></i>';
+        wrap.appendChild(prev);
+        wrap.appendChild(next);
+        const step = () => Math.max(120, Math.round(inner.clientWidth * 0.7));
+        prev.addEventListener('click', () => inner.scrollBy({ left: -step(), behavior: 'smooth' }));
+        next.addEventListener('click', () => inner.scrollBy({ left: step(), behavior: 'smooth' }));
+        inner.addEventListener('scroll', () => update(wrap), { passive: true });
+        if (window.ResizeObserver) {
+            new ResizeObserver(() => update(wrap)).observe(inner);
+        }
+        update(wrap);
+    }
+    function scan(root) {
+        if (!root || !root.querySelectorAll) return;
+        if (root.matches && root.matches(SELECTOR)) enhance(root);
+        root.querySelectorAll(SELECTOR).forEach(enhance);
+    }
+    function refreshAll() {
+        document.querySelectorAll('.dp-hscroll').forEach(update);
+    }
+    function init() {
+        scan(document.body);
+        const mo = new MutationObserver((muts) => {
+            muts.forEach((m) => m.addedNodes.forEach((n) => n.nodeType === 1 && scan(n)));
+            refreshAll();
+        });
+        mo.observe(document.body, { childList: true, subtree: true });
+        window.addEventListener('resize', refreshAll);
+    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+    else init();
+})();
