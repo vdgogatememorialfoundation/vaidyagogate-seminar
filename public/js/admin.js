@@ -1996,6 +1996,20 @@ async function lookupPosUser() {
     }
 }
 
+
+/** Application numbers are digits only; the last 4 are highlighted so the desk can read them out quickly. */
+function posAppNoHtml(no) {
+    const str = String(no == null ? '' : no).replace(/^APP_/i, '');
+    if (str.length <= 4) return '<strong class="pos-appno-tail">' + escapeHtml(str) + '</strong>';
+    return (
+        '<span class="pos-appno" style="font-family:ui-monospace,monospace;letter-spacing:0.04em;">' +
+        escapeHtml(str.slice(0, -4)) +
+        '<strong class="pos-appno-tail" style="background:#fef3c7;color:#92400e;padding:0 4px;border-radius:4px;">' +
+        escapeHtml(str.slice(-4)) +
+        '</strong></span>'
+    );
+}
+
 async function submitAdminPosRegistration() {
     const actor = getStoredAdminUser();
     if (!actor) return alert('Sign in as admin first.');
@@ -2030,28 +2044,33 @@ async function submitAdminPosRegistration() {
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || data.message || 'Registration failed (HTTP ' + res.status + ')');
+        const capNote = data.capacityNote
+            ? ' <span style="color:#b45309;">(Seminar was full — added as on-spot override.)</span>'
+            : '';
         if (data.paid) {
             let note =
                 (data.isNewUser && data.userIdString
-                    ? 'New ID ' + data.userIdString + ' — login emailed. '
+                    ? 'New ID ' + escapeHtml(data.userIdString) + ' — login emailed. '
                     : data.userIdString
-                      ? 'Doctor ' + data.userIdString + '. '
+                      ? 'Doctor ' + escapeHtml(data.userIdString) + '. '
                       : '') +
+                (data.applicationNo ? 'Application ' + posAppNoHtml(data.applicationNo) + ' · ' : '') +
                 'Ticket ' +
-                (data.ticketId || '—') +
+                escapeHtml(data.ticketId || '—') +
                 ' — doctor must complete profile in portal.';
-            if (data.emailNote) note += ' ' + data.emailNote;
-            status.textContent = note;
+            if (data.emailNote) note += ' ' + escapeHtml(data.emailNote);
+            status.innerHTML = note + capNote;
             status.style.color = '#059669';
             return;
         }
         if (data.paymentPending && data.payment) {
             const pay = data.payment;
             __posOrderDbId = pay.orderDbId;
-            status.textContent =
-                'Registration saved for ' +
-                (data.applicationNo || data.registrationId) +
-                '. Waiting for payment…';
+            status.innerHTML =
+                'Registration saved for application ' +
+                posAppNoHtml(data.applicationNo || data.registrationId) +
+                '. Waiting for payment…' +
+                capNote;
             status.style.color = '#b45309';
             if (qrAmt) {
                 qrAmt.textContent =

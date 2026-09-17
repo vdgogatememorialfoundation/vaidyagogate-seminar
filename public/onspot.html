@@ -50,6 +50,7 @@
 
     <div id="state-paid" class="card" style="display:none;">
         <span class="badge ok">Payment received</span>
+        <p id="paid-appno" style="margin:10px 0 0;font-size:0.95rem;"></p>
         <p style="margin:10px 0 0;">Your registration is complete. Your e-ticket has been emailed to you and is available in the doctor portal.</p>
         <a class="btn" href="/doctor" style="text-decoration:none;text-align:center;">Open doctor portal</a>
     </div>
@@ -189,6 +190,15 @@
         await api('/api/onspot/' + encodeURIComponent(token) + '/paid', { method: 'POST' });
         if (pollTimer) clearInterval(pollTimer);
         if (regInfo) regInfo.paid = true;
+        const appNo = String((regInfo && regInfo.applicationNo) || '').replace(/^APP_/i, '');
+        if (appNo) {
+            $('paid-appno').innerHTML =
+                'Application no. <span style="font-family:ui-monospace,monospace;">' +
+                esc(appNo.slice(0, -4)) +
+                '<strong style="background:#fef3c7;color:#92400e;padding:0 4px;border-radius:4px;">' +
+                esc(appNo.slice(-4)) +
+                '</strong></span>';
+        }
         show('state-paid');
     }
 

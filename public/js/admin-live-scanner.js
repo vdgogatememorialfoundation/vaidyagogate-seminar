@@ -228,7 +228,8 @@
                 '/api/admin/live-scanner/events?seminarId=' +
                     encodeURIComponent(sid) +
                     '&sinceId=' +
-                    encodeURIComponent(lastEventId)
+                    encodeURIComponent(lastEventId) +
+                    (((document.getElementById('live-scanner-filter') || {}).value || 'issued') === 'all' ? '&all=1' : '')
             );
             (data.events || []).forEach((ev) => {
                 if (ev.id > lastEventId) {
@@ -290,6 +291,12 @@
             else stopPoll();
             updateEmptyState();
         });
+        const filterSel = document.getElementById('live-scanner-filter');
+        if (filterSel) {
+            filterSel.addEventListener('change', () => {
+                if (sel.value) startPoll();
+            });
+        }
         const soundBtn = document.getElementById('kiosk-sound-toggle');
         if (soundBtn) {
             soundBtn.addEventListener('click', () => {

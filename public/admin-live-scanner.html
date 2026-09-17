@@ -28,6 +28,13 @@
                 <span class="kiosk-live-dot"></span>
                 <span id="kiosk-live-label">Select event</span>
             </div>
+            <label class="kiosk-select-wrap" title="By default only scans of participants holding an issued e-ticket are listed">
+                <span class="kiosk-select-label">Show</span>
+                <select id="live-scanner-filter" class="kiosk-select">
+                    <option value="issued">E-ticket holders only</option>
+                    <option value="all">All scan attempts</option>
+                </select>
+            </label>
             <time id="kiosk-clock" class="kiosk-clock"></time>
             <button type="button" id="kiosk-sound-toggle" class="kiosk-sound-toggle is-on" title="Scan sounds on/off">
                 <i class="fas fa-volume-high"></i> Sounds on
