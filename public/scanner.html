@@ -109,6 +109,15 @@
             </div>
         </div>
 
+        <div class="scan-card" id="otp-checkin-card">
+            <label for="otp-ticket"><i class="fas fa-key"></i> OTP check-in</label>
+            <div class="manual-row">
+                <input type="text" id="otp-ticket" placeholder="Ticket ID or Registration ID" autocomplete="off" spellcheck="false">
+                <input type="text" id="otp-code" placeholder="6-digit OTP" inputmode="numeric" autocomplete="off" maxlength="6" style="max-width:130px;">
+                <button type="button" class="tool-btn primary" id="btn-otp-checkin">Check in</button>
+            </div>
+        </div>
+
         <div class="scan-card scan-card-compact">
             <label><i class="fas fa-history"></i> Recent scans</label>
             <ul class="history-list" id="scan-history"></ul>
@@ -122,6 +131,6 @@
     <script src="/js/portal-datetime.js"></script>
     <script src="/js/site-branding.js"></script>
     <script src="/js/portal-auth.js"></script>
-    <script src="/js/scanner-app.js?v=20260822days1"></script>
+    <script src="/js/scanner-app.js?v=20260826otp2"></script>
 </body>
 </html>

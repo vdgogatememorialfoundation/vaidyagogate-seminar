@@ -106,13 +106,12 @@
     }
 
     function formatEventDisplay(iso) {
+        // Always render date-only: event dates are day-level, times never shown.
         const local = toDatetimeLocal(iso);
         if (!local) return iso ? String(iso).trim() : '';
-        const parts = local.split('T');
-        const datePart = parts[0];
-        const timePart = parts[1] || '00:00';
+        const datePart = String(local).split('T')[0];
         const anchor = parsePortalDateTime(datePart + 'T12:00:00' + IST_OFFSET);
-        const dateLine = anchor
+        return anchor
             ? anchor.toLocaleDateString('en-IN', {
                   timeZone: PORTAL_DISPLAY_TZ,
                   day: 'numeric',
@@ -120,16 +119,6 @@
                   year: 'numeric'
               })
             : datePart;
-        const hm = timePart.split(':');
-        const hh = parseInt(hm[0], 10) || 0;
-        const mm = parseInt(hm[1], 10) || 0;
-        if (hh === 0 && mm === 0) return dateLine;
-        const raw = String(iso).trim();
-        const storedAsUtc = /Z$/i.test(raw) || /[+-]00:00$/i.test(raw);
-        if (storedAsUtc && hh > 0 && hh < 3) return dateLine;
-        const h12 = hh % 12 || 12;
-        const ampm = hh >= 12 ? 'pm' : 'am';
-        return dateLine + ', ' + h12 + ':' + String(mm).padStart(2, '0') + ' ' + ampm;
     }
 
     function parseMs(iso) {
