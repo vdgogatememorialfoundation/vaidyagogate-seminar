@@ -8067,6 +8067,8 @@ function initAdminEticketsTab() {
     if (wrap) wrap.classList.add('hidden');
     __adminEticketSelection = null;
     adminEticketLoadMissingCount();
+    adminEticketFillResendAllSeminars();
+    adminEticketPollResendAll();
 }
 
 function renderAdminEticketDetail(row) {
@@ -8331,6 +8333,99 @@ async function adminEticketLoadMissingCount() {
         }
     }
 }
+
+let adminEticketResendAllTimer = null;
+
+async function adminEticketFillResendAllSeminars() {
+    const sel = document.getElementById('eticket-resend-all-seminar');
+    if (!sel || sel.options.length > 1) return;
+    try {
+        const res = await fetch('/api/admin/seminars');
+        const list = await res.json();
+        (Array.isArray(list) ? list : list.seminars || []).forEach((s) => {
+            const o = document.createElement('option');
+            o.value = s.id;
+            o.textContent = s.title;
+            sel.appendChild(o);
+        });
+    } catch (_) {}
+}
+
+async function adminEticketPollResendAll() {
+    const adm = getStoredAdminUser();
+    const st = document.getElementById('eticket-resend-all-status');
+    if (!adm?.id || !st) return;
+    try {
+        const res = await fetch('/api/admin/e-tickets/resend-all/status?actingAdminId=' + encodeURIComponent(adm.id));
+        const j = await res.json();
+        if (!res.ok) throw new Error(j.error || 'status failed');
+        const done = (j.sent || 0) + (j.failed || 0);
+        st.style.color = j.running ? '#1d4ed8' : j.failed ? '#b45309' : '#059669';
+        st.textContent =
+            (j.running ? 'Sending… ' : 'Finished: ') +
+            done +
+            ' of ' +
+            (j.total || 0) +
+            ' · ' +
+            (j.sent || 0) +
+            ' sent' +
+            (j.failed ? ', ' + j.failed + ' failed' : '') +
+            (j.errors && j.errors.length ? ' — first failure: ' + (j.errors[0].email || j.errors[0].applicationNo) + ' (' + j.errors[0].error + ')' : '');
+        if (!j.running && adminEticketResendAllTimer) {
+            clearInterval(adminEticketResendAllTimer);
+            adminEticketResendAllTimer = null;
+        }
+    } catch (e) {
+        st.textContent = 'Could not read progress.';
+    }
+}
+
+async function adminEticketResendAllIssued() {
+    const adm = getStoredAdminUser();
+    if (!adm?.id) return alert('Not logged in.');
+    const sel = document.getElementById('eticket-resend-all-seminar');
+    const seminarId = sel && sel.value ? parseInt(sel.value, 10) : null;
+    const st = document.getElementById('eticket-resend-all-status');
+    if (
+        !confirm(
+            'Email the PDF e-ticket(s) again to EVERY participant with status "e-ticket issued" and a successful payment' +
+                (seminarId ? ' for the selected seminar' : ' across all seminars') +
+                '?\n\nThis runs in the background and may take several minutes.'
+        )
+    ) {
+        return;
+    }
+    if (st) {
+        st.style.color = '#64748b';
+        st.textContent = 'Starting…';
+    }
+    try {
+        const res = await fetch('/api/admin/e-tickets/resend-all', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: adm.id, seminarId, sendWhatsapp: false })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            if (st) {
+                st.style.color = '#b91c1c';
+                st.textContent = data.error || 'Could not start bulk resend.';
+            }
+            return alert(data.error || 'Could not start bulk resend.');
+        }
+        if (st) st.textContent = data.message || 'Started.';
+        if (data.started) {
+            if (adminEticketResendAllTimer) clearInterval(adminEticketResendAllTimer);
+            adminEticketResendAllTimer = setInterval(adminEticketPollResendAll, 3000);
+            adminEticketPollResendAll();
+        }
+    } catch (e) {
+        console.error(e);
+        if (st) st.textContent = 'Network error.';
+        alert('Network error.');
+    }
+}
+window.adminEticketResendAllIssued = adminEticketResendAllIssued;
 
 async function adminEticketResendAllMissing() {
     const adm = getStoredAdminUser();

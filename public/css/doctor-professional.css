@@ -383,37 +383,21 @@
 .fk-track-note--warn { background: #fff7ed; border: 1px solid #fed7aa; color: #b45309; }
 .fk-track-note--info { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e3a8a; }
 
-.fk-pipe-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: thin; padding: 22px 18px 14px; }
-.fk-pipe { position: relative; min-width: max(100%, calc(var(--fk-steps, 4) * 120px)); }
-.fk-pipe-rail { position: absolute; left: 14px; right: 14px; top: 15px; height: 4px; background: #e2e8f0; border-radius: 999px; }
-.fk-pipe-rail-fill { height: 100%; background: #26a541; border-radius: 999px; transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1); }
-.fk-track.is-cancelled .fk-pipe-rail-fill { background: #b91c1c; }
-.fk-pipe-steps { position: relative; display: flex; justify-content: space-between; }
-.fk-pipe-step { flex: 1 1 0; min-width: 96px; text-align: center; padding: 0 4px; animation: sat-step-in 0.4s ease both; }
-.fk-pipe-dot {
-    width: 34px; height: 34px; border-radius: 50%; margin: 0 auto 8px;
-    display: flex; align-items: center; justify-content: center;
-    background: #fff; border: 3px solid #cbd5e1; color: #94a3b8; font-size: 0.78rem; font-weight: 700;
-    box-shadow: 0 0 0 4px #fff;
-}
-.fk-pipe-step.done .fk-pipe-dot { background: #26a541; border-color: #26a541; color: #fff; }
-.fk-pipe-step.done.is-cancelled .fk-pipe-dot { background: #b91c1c; border-color: #b91c1c; }
-.fk-pipe-step.active .fk-pipe-dot { background: #fff; border-color: #2874f0; color: #2874f0; animation: fk-pulse 1.6s ease-in-out infinite; }
-@keyframes fk-pulse { 0%,100% { box-shadow: 0 0 0 4px #fff, 0 0 0 6px rgba(40,116,240,0.25); } 50% { box-shadow: 0 0 0 4px #fff, 0 0 0 10px rgba(40,116,240,0.08); } }
-.fk-pipe-label { font-size: 0.74rem; font-weight: 700; color: #94a3b8; line-height: 1.25; }
-.fk-pipe-step.done .fk-pipe-label { color: var(--dp-ink); }
-.fk-pipe-step.active .fk-pipe-label { color: #2874f0; }
-.fk-pipe-when { font-size: 0.66rem; color: #64748b; margin-top: 3px; font-weight: 600; }
-.fk-pipe-when.is-pending { color: #b0b8c4; font-style: italic; }
-
-.fk-timeline { padding: 6px 18px 16px; border-top: 1px dashed var(--dp-line); }
-.fk-tl-item { display: grid; grid-template-columns: 22px 1fr; gap: 0 12px; }
+.fk-timeline { padding: 18px 18px 16px; }
+.fk-tl-item { display: grid; grid-template-columns: 22px 1fr; gap: 0 12px; animation: fk-tl-in 0.45s ease both; }
+@keyframes fk-tl-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 .fk-tl-rail { position: relative; display: flex; flex-direction: column; align-items: center; }
 .fk-tl-dot { width: 12px; height: 12px; border-radius: 50%; margin-top: 6px; background: #fff; border: 3px solid #cbd5e1; flex-shrink: 0; }
-.fk-tl-line { flex: 1; width: 2px; background: #e2e8f0; margin: 2px 0; }
-.fk-tl-item.done .fk-tl-dot { background: #26a541; border-color: #26a541; }
-.fk-tl-item.done .fk-tl-line { background: #26a541; }
-.fk-tl-item.done.is-cancelled .fk-tl-dot, .fk-tl-item.done.is-cancelled .fk-tl-line { background: #b91c1c; border-color: #b91c1c; }
+.fk-tl-line { flex: 1; width: 3px; background: #e2e8f0; margin: 2px 0; border-radius: 999px; position: relative; overflow: hidden; }
+.fk-tl-line-fill { position: absolute; left: 0; top: 0; width: 100%; height: 0; background: #26a541; border-radius: 999px; }
+.fk-tl-item.done .fk-tl-line-fill { animation: fk-line-down 0.7s ease-out forwards; }
+.fk-tl-item.active .fk-tl-line-fill { background: linear-gradient(180deg, #26a541, rgba(38,165,65,0)); animation: fk-line-flow 1.8s ease-in-out infinite; }
+@keyframes fk-line-down { from { height: 0; } to { height: 100%; } }
+@keyframes fk-line-flow { 0% { height: 0; opacity: 1; } 70% { height: 100%; opacity: 0.9; } 100% { height: 100%; opacity: 0; } }
+.fk-tl-item.done .fk-tl-dot { background: #26a541; border-color: #26a541; animation: fk-dot-pop 0.35s ease both; }
+@keyframes fk-dot-pop { from { transform: scale(0.4); } to { transform: scale(1); } }
+.fk-tl-item.done.is-cancelled .fk-tl-dot { background: #b91c1c; border-color: #b91c1c; }
+.fk-tl-item.is-cancelled .fk-tl-line-fill { background: #b91c1c; }
 .fk-tl-item.active .fk-tl-dot { border-color: #2874f0; box-shadow: 0 0 0 4px rgba(40,116,240,0.15); }
 .fk-tl-body { padding: 4px 0 16px; }
 .fk-tl-item:last-child .fk-tl-body { padding-bottom: 4px; }

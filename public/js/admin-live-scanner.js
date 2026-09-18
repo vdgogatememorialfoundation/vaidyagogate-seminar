@@ -246,9 +246,200 @@
         }
     }
 
+    // ---- Roster: every e-ticket-issued participant and their per-day check-in state ----
+    let rosterRows = [];
+    let rosterTimer = null;
+    let rosterCheckin = null;
+    let rosterDayAutoApplied = '';
+
+    function formatYmdLabel(ymd) {
+        if (!ymd) return '';
+        const d = new Date(ymd + 'T00:00:00');
+        if (Number.isNaN(d.getTime())) return ymd;
+        return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+
+    function formatDayLabel(t) {
+        if (t.dayTitle) return t.dayTitle;
+        if (t.dayDate) {
+            const d = new Date(t.dayDate + 'T00:00:00');
+            if (!Number.isNaN(d.getTime())) {
+                return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+            }
+            return t.dayDate;
+        }
+        return 'Event';
+    }
+
+    function renderRoster() {
+        const body = document.getElementById('kiosk-roster-body');
+        const summary = document.getElementById('kiosk-roster-summary');
+        if (!body) return;
+        const q = String((document.getElementById('kiosk-roster-search') || {}).value || '').trim().toLowerCase();
+        const dayFilter = String((document.getElementById('kiosk-roster-day') || {}).value || '');
+        const stateFilter = String((document.getElementById('kiosk-roster-state') || {}).value || '');
+        const rows = rosterRows.filter((r) => {
+            if (q) {
+                const hay = [r.name, r.applicationNo, r.phone, r.email]
+                    .concat(r.tickets.map((t) => t.ticketId))
+                    .join(' ')
+                    .toLowerCase();
+                if (!hay.includes(q)) return false;
+            }
+            const tix = dayFilter ? r.tickets.filter((t) => String(t.dayId || '') === dayFilter) : r.tickets;
+            if (dayFilter && !tix.length) return false;
+            const isIn = tix.some((t) => t.scanned);
+            if (stateFilter === 'in' && !isIn) return false;
+            if (stateFilter === 'out' && isIn) return false;
+            return true;
+        });
+        const totalIn = rosterRows.filter((r) => r.tickets.some((t) => t.scanned)).length;
+        if (summary) {
+            let checkinLabel = '';
+            if (rosterCheckin) {
+                checkinLabel = 'Check-in date: ' + formatYmdLabel(rosterCheckin.effectiveDate);
+                if (rosterCheckin.activeDayTitle) checkinLabel += ' · ' + rosterCheckin.activeDayTitle;
+                else if (rosterCheckin.days && rosterCheckin.days.length) checkinLabel += ' · no seminar day on this date';
+                if (rosterCheckin.overrideDate && rosterCheckin.overrideDate !== rosterCheckin.today) {
+                    checkinLabel += ' (set in admin; today is ' + formatYmdLabel(rosterCheckin.today) + ')';
+                }
+                checkinLabel += ' — ';
+            }
+            summary.textContent =
+                checkinLabel +
+                rosterRows.length +
+                ' e-ticket issued · ' +
+                totalIn +
+                ' checked in · ' +
+                (rosterRows.length - totalIn) +
+                ' pending' +
+                (rows.length !== rosterRows.length ? ' · showing ' + rows.length : '');
+        }
+        body.innerHTML = rows
+            .map((r, i) => {
+                const isIn = r.tickets.some((t) => t.scanned);
+                const days = r.tickets.length
+                    ? r.tickets
+                          .map(
+                              (t) =>
+                                  '<span class="roster-day ' +
+                                  (t.scanned ? 'is-in' : '') +
+                                  (!t.valid && !t.scanned ? ' is-expired' : '') +
+                                  '" title="' +
+                                  esc(t.ticketId) +
+                                  (t.scanTime ? ' · ' + esc(formatCardTime(t.scanTime)) : '') +
+                                  '"><i class="fas ' +
+                                  (t.scanned ? 'fa-circle-check' : 'fa-clock') +
+                                  '"></i> ' +
+                                  esc(formatDayLabel(t)) +
+                                  (t.dayTitle && t.dayDate ? ' (' + esc(formatDayLabel({ dayDate: t.dayDate })) + ')' : '') +
+                                  '</span>'
+                          )
+                          .join('')
+                    : '<span class="roster-contact">No ticket generated</span>';
+                return (
+                    '<tr class="' +
+                    (isIn ? 'is-in' : '') +
+                    '"><td>' +
+                    (i + 1) +
+                    '</td><td><strong>' +
+                    esc(r.name) +
+                    '</strong></td><td><code>' +
+                    esc(r.applicationNo || '—') +
+                    '</code></td><td class="roster-contact">' +
+                    esc(r.phone || '') +
+                    (r.phone && r.email ? '<br>' : '') +
+                    esc(r.email || '') +
+                    '</td><td>' +
+                    days +
+                    '</td></tr>'
+                );
+            })
+            .join('');
+        if (!rows.length) {
+            body.innerHTML =
+                '<tr><td colspan="5" class="roster-contact" style="text-align:center;padding:24px;">' +
+                (rosterRows.length ? 'No participants match this filter.' : 'No e-ticket issued participants yet.') +
+                '</td></tr>';
+        }
+    }
+
+    function fillRosterDays() {
+        const sel = document.getElementById('kiosk-roster-day');
+        if (!sel) return;
+        const prev = sel.value;
+        const days = new Map();
+        rosterRows.forEach((r) =>
+            r.tickets.forEach((t) => {
+                if (t.dayId && !days.has(String(t.dayId))) days.set(String(t.dayId), t);
+            })
+        );
+        const opts = ['<option value="">All days</option>'].concat(
+            Array.from(days.entries())
+                .sort((a, b) => String(a[1].dayDate || '').localeCompare(String(b[1].dayDate || '')))
+                .map(
+                    ([id, t]) =>
+                        '<option value="' +
+                        esc(id) +
+                        '">' +
+                        esc(formatDayLabel(t)) +
+                        (t.dayTitle && t.dayDate ? ' · ' + esc(formatDayLabel({ dayDate: t.dayDate })) : '') +
+                        '</option>'
+                )
+        );
+        const html = opts.join('');
+        if (sel.innerHTML !== html) {
+            sel.innerHTML = html;
+            sel.value = prev;
+            if (sel.value !== prev) sel.value = '';
+        }
+        const activeId = rosterCheckin && rosterCheckin.activeDayId ? String(rosterCheckin.activeDayId) : '';
+        if (activeId && activeId !== rosterDayAutoApplied && days.has(activeId)) {
+            sel.value = activeId;
+            rosterDayAutoApplied = activeId;
+        }
+    }
+
+    async function refreshRoster() {
+        const sid = document.getElementById('live-scanner-seminar').value;
+        const section = document.getElementById('kiosk-roster');
+        if (!section) return;
+        if (!sid || !actor) {
+            section.classList.add('hidden');
+            return;
+        }
+        try {
+            const data = await api('/api/admin/live-scanner/roster?seminarId=' + encodeURIComponent(sid));
+            rosterRows = data.roster || [];
+            rosterCheckin = data.checkin || null;
+            section.classList.remove('hidden');
+            fillRosterDays();
+            renderRoster();
+        } catch (e) {
+            console.warn('[live-scanner roster]', e.message);
+        }
+    }
+
+    function stopRoster() {
+        if (rosterTimer) clearInterval(rosterTimer);
+        rosterTimer = null;
+        rosterRows = [];
+        rosterCheckin = null;
+        rosterDayAutoApplied = '';
+        const section = document.getElementById('kiosk-roster');
+        if (section) section.classList.add('hidden');
+    }
+
+    function startRoster() {
+        stopRoster();
+        refreshRoster();
+        rosterTimer = setInterval(refreshRoster, 5000);
+    }
+
     function stopPoll() {
         if (pollTimer) clearInterval(pollTimer);
         pollTimer = null;
+        stopRoster();
         setLiveState(false, 'Select event');
     }
 
@@ -261,6 +452,7 @@
         setLiveState(true, 'Connecting…');
         pollEvents();
         pollTimer = setInterval(pollEvents, pollMs);
+        startRoster();
     }
 
     async function init() {
@@ -290,6 +482,12 @@
             if (sel.value) startPoll();
             else stopPoll();
             updateEmptyState();
+        });
+        ['kiosk-roster-search', 'kiosk-roster-day', 'kiosk-roster-state'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.addEventListener('input', renderRoster);
+            el.addEventListener('change', renderRoster);
         });
         const filterSel = document.getElementById('live-scanner-filter');
         if (filterSel) {

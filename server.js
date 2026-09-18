@@ -7504,9 +7504,9 @@ const SCANNER_TICKET_LOOKUP_SQL = `
                    ELSE 0
                END AS checkin_enabled,
                CASE
+                   WHEN s.checkin_date IS NOT NULL THEN CAST(s.checkin_date AS TEXT)
                    WHEN sd.id IS NOT NULL THEN COALESCE(sd.checkin_date, sd.day_date)
-                   WHEN se.checkin_date IS NOT NULL THEN se.checkin_date
-                   ELSE s.checkin_date
+                   ELSE CAST(se.checkin_date AS TEXT)
                END AS checkin_date,
                s.title AS seminar_title,
                CASE WHEN sd.title IS NOT NULL THEN sd.title WHEN se.title IS NOT NULL THEN se.title ELSE s.title END AS scan_event_title,
@@ -7669,10 +7669,10 @@ function lookupTicketForScan(qrData, cb) {
                                   ? toInt(raw.event_checkin_enabled, 0)
                                   : toInt(raw.seminar_checkin_enabled, 0),
                         checkin_date:
+                            raw.seminar_checkin_date ||
                             raw.day_checkin_date ||
                             raw.day_day_date ||
                             raw.event_checkin_date ||
-                            raw.seminar_checkin_date ||
                             null,
                         scan_event_title: raw.scan_event_title || raw.seminar_title,
                         event_date: raw.day_day_date || raw.event_event_date || raw.seminar_event_date || null,
@@ -14943,6 +14943,124 @@ function adminListEticketsMissingEmail(db, opts, cb) {
         cb
     );
 }
+
+function adminListEticketsIssued(db, opts, cb) {
+    const seminarId =
+        opts && opts.seminarId != null && !Number.isNaN(parseInt(opts.seminarId, 10))
+            ? parseInt(opts.seminarId, 10)
+            : null;
+    const params = [];
+    let seminarClause = '';
+    if (seminarId) {
+        seminarClause = ' AND r.seminar_id = ?';
+        params.push(seminarId);
+    }
+    db.all(
+        `SELECT r.id AS registration_id, r.application_no, r.user_id, u.email,
+                u.first_name, u.last_name, s.id AS seminar_id, s.title AS seminar_title,
+                (SELECT t.ticket_id_string FROM tickets t
+                   JOIN orders o2 ON o2.id = t.order_id
+                  WHERE o2.registration_id = r.id AND TRIM(COALESCE(t.ticket_id_string, '')) != ''
+                  ORDER BY t.id ASC LIMIT 1) AS ticket_id_string
+         FROM registrations r
+         JOIN users u ON u.id = r.user_id
+         JOIN seminars s ON s.id = r.seminar_id
+         WHERE LOWER(TRIM(r.status)) = 'e_ticket_issued'
+           AND EXISTS (SELECT 1 FROM orders o WHERE o.registration_id = r.id AND LOWER(TRIM(o.status)) = 'success')
+           AND TRIM(COALESCE(u.email, '')) != ''${seminarClause}
+         ORDER BY r.id ASC`,
+        params,
+        (err, rows) => {
+            if (err) return cb(err);
+            cb(null, (rows || []).filter((r) => r.ticket_id_string));
+        }
+    );
+}
+
+/* Bulk "resend every ticket" runs in the background; progress is polled by the admin UI. */
+const eticketResendAllJob = { running: false, total: 0, sent: 0, failed: 0, startedAt: null, finishedAt: null, seminarId: null, errors: [] };
+
+app.get('/api/admin/e-tickets/resend-all/status', (req, res) => {
+    const actingAdminId = parseInt(req.query.actingAdminId, 10);
+    assertAdminPortalActor(actingAdminId, (eAct) => {
+        if (eAct) return res.status(eAct.message === 'FORBIDDEN' ? 403 : 500).json({ error: 'Admin access required' });
+        res.json(Object.assign({ success: true }, eticketResendAllJob, { errors: eticketResendAllJob.errors.slice(0, 10) }));
+    });
+});
+
+app.post('/api/admin/e-tickets/resend-all', (req, res) => {
+    const actingAdminId = parseInt((req.body && req.body.actingAdminId) || '', 10);
+    const seminarId = parseInt((req.body && req.body.seminarId) || '', 10);
+    const sendWhatsapp = !!(req.body && req.body.sendWhatsapp);
+    assertAdminPortalActor(actingAdminId, (eAct) => {
+        if (eAct) return res.status(eAct.message === 'FORBIDDEN' ? 403 : 500).json({ error: 'Admin access required' });
+        if (eticketResendAllJob.running) {
+            return res.status(409).json({ error: 'A bulk resend is already running.', job: eticketResendAllJob });
+        }
+        adminListEticketsIssued(
+            db,
+            { seminarId: Number.isInteger(seminarId) && seminarId > 0 ? seminarId : null },
+            (err, targets) => {
+                if (err) return res.status(500).json({ error: err.message });
+                if (!targets.length) {
+                    return res.json({ success: true, total: 0, message: 'No e-ticket-issued registrations with a paid order found.' });
+                }
+                Object.assign(eticketResendAllJob, {
+                    running: true,
+                    total: targets.length,
+                    sent: 0,
+                    failed: 0,
+                    startedAt: new Date().toISOString(),
+                    finishedAt: null,
+                    seminarId: seminarId || null,
+                    errors: []
+                });
+                let idx = 0;
+                const next = () => {
+                    if (idx >= targets.length) {
+                        eticketResendAllJob.running = false;
+                        eticketResendAllJob.finishedAt = new Date().toISOString();
+                        activityLog.logActivity(db, {
+                            user_id: actingAdminId,
+                            action: 'eticket.resend_all',
+                            resource_type: 'bulk',
+                            resource_id: 'resend-all',
+                            meta: { sent: eticketResendAllJob.sent, failed: eticketResendAllJob.failed, total: targets.length, seminarId: seminarId || null }
+                        });
+                        return;
+                    }
+                    const row = targets[idx++];
+                    adminDeliverEticketNotification(
+                        row.user_id,
+                        row.registration_id,
+                        row.ticket_id_string,
+                        { sendEmail: true, sendWhatsapp, immediate: true },
+                        (delErr, out) => {
+                            if (delErr || (out && out.error) || !(out && out.emailSent)) {
+                                eticketResendAllJob.failed++;
+                                eticketResendAllJob.errors.push({
+                                    applicationNo: row.application_no,
+                                    email: row.email,
+                                    error: (delErr && delErr.message) || (out && out.error) || 'Email not sent'
+                                });
+                            } else {
+                                eticketResendAllJob.sent++;
+                            }
+                            setTimeout(next, 250);
+                        }
+                    );
+                };
+                setImmediate(next);
+                res.json({
+                    success: true,
+                    started: true,
+                    total: targets.length,
+                    message: 'Resending tickets to ' + targets.length + ' participant(s) in the background.'
+                });
+            }
+        );
+    });
+});
 
 function enrichEticketRowsWithEmailStatus(db, rows, cb) {
     const list = rows || [];
