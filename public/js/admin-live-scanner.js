@@ -249,6 +249,15 @@
     // ---- Roster: every e-ticket-issued participant and their per-day check-in state ----
     let rosterRows = [];
     let rosterTimer = null;
+    let rosterCheckin = null;
+    let rosterDayAutoApplied = '';
+
+    function formatYmdLabel(ymd) {
+        if (!ymd) return '';
+        const d = new Date(ymd + 'T00:00:00');
+        if (Number.isNaN(d.getTime())) return ymd;
+        return d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    }
 
     function formatDayLabel(t) {
         if (t.dayTitle) return t.dayTitle;
@@ -286,7 +295,18 @@
         });
         const totalIn = rosterRows.filter((r) => r.tickets.some((t) => t.scanned)).length;
         if (summary) {
+            let checkinLabel = '';
+            if (rosterCheckin) {
+                checkinLabel = 'Check-in date: ' + formatYmdLabel(rosterCheckin.effectiveDate);
+                if (rosterCheckin.activeDayTitle) checkinLabel += ' · ' + rosterCheckin.activeDayTitle;
+                else if (rosterCheckin.days && rosterCheckin.days.length) checkinLabel += ' · no seminar day on this date';
+                if (rosterCheckin.overrideDate && rosterCheckin.overrideDate !== rosterCheckin.today) {
+                    checkinLabel += ' (set in admin; today is ' + formatYmdLabel(rosterCheckin.today) + ')';
+                }
+                checkinLabel += ' — ';
+            }
             summary.textContent =
+                checkinLabel +
                 rosterRows.length +
                 ' e-ticket issued · ' +
                 totalIn +
@@ -373,6 +393,11 @@
             sel.value = prev;
             if (sel.value !== prev) sel.value = '';
         }
+        const activeId = rosterCheckin && rosterCheckin.activeDayId ? String(rosterCheckin.activeDayId) : '';
+        if (activeId && activeId !== rosterDayAutoApplied && days.has(activeId)) {
+            sel.value = activeId;
+            rosterDayAutoApplied = activeId;
+        }
     }
 
     async function refreshRoster() {
@@ -386,6 +411,7 @@
         try {
             const data = await api('/api/admin/live-scanner/roster?seminarId=' + encodeURIComponent(sid));
             rosterRows = data.roster || [];
+            rosterCheckin = data.checkin || null;
             section.classList.remove('hidden');
             fillRosterDays();
             renderRoster();
@@ -398,6 +424,8 @@
         if (rosterTimer) clearInterval(rosterTimer);
         rosterTimer = null;
         rosterRows = [];
+        rosterCheckin = null;
+        rosterDayAutoApplied = '';
         const section = document.getElementById('kiosk-roster');
         if (section) section.classList.add('hidden');
     }
