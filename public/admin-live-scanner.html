@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,500;0,9..40,700;1,9..40,600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="/css/admin-live-scanner.css">
+    <link rel="stylesheet" href="/css/admin-live-scanner.css?v=20260918roster">
 </head>
 <body class="live-scanner-page">
     <header class="kiosk-topbar">
@@ -86,7 +86,35 @@
             <p>Choose an event above. New check-ins appear here in real time as volunteers scan QR codes.</p>
         </div>
         <div id="live-scan-grid" class="live-scanner-grid" aria-live="polite"></div>
+
+        <section id="kiosk-roster" class="kiosk-roster hidden" aria-label="E-ticket holders">
+            <div class="kiosk-roster-head">
+                <div>
+                    <h2>E-ticket issued participants</h2>
+                    <p id="kiosk-roster-summary">—</p>
+                </div>
+                <div class="kiosk-roster-tools">
+                    <input type="search" id="kiosk-roster-search" class="kiosk-select" placeholder="Search name / application / phone / email">
+                    <select id="kiosk-roster-day" class="kiosk-select">
+                        <option value="">All days</option>
+                    </select>
+                    <select id="kiosk-roster-state" class="kiosk-select">
+                        <option value="">Everyone</option>
+                        <option value="in">Checked in</option>
+                        <option value="out">Not yet checked in</option>
+                    </select>
+                </div>
+            </div>
+            <div class="kiosk-roster-table-wrap">
+                <table class="kiosk-roster-table">
+                    <thead>
+                        <tr><th>#</th><th>Participant</th><th>Application</th><th>Contact</th><th>Day tickets &amp; check-in</th></tr>
+                    </thead>
+                    <tbody id="kiosk-roster-body"></tbody>
+                </table>
+            </div>
+        </section>
     </main>
-    <script src="/js/admin-live-scanner.js"></script>
+    <script src="/js/admin-live-scanner.js?v=20260918roster"></script>
 </body>
 </html>

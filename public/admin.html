@@ -2251,6 +2251,15 @@
                     <button type="button" class="btn-primary" style="background:#1d4ed8;" onclick="adminEticketResendAllMissing()">Resend all missing (up to 25)</button>
                     <button type="button" class="btn-primary" style="background:#64748b;margin-left:8px;" onclick="adminEticketLoadMissingCount()">Refresh count</button>
                 </div>
+                <div class="card" style="margin-bottom:16px;border-left:4px solid #15803d;">
+                    <h3 style="margin:0 0 8px;color:#166534;font-size:1rem;">Resend all tickets</h3>
+                    <p style="font-size:0.88rem;color:#64748b;margin:0 0 10px;">Emails the PDF e-ticket(s) again to <strong>everyone</strong> whose registration is <em>e-ticket issued</em> and payment is done — optionally for one seminar only. Runs in the background.</p>
+                    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+                        <select id="eticket-resend-all-seminar" style="min-width:220px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;"><option value="">All seminars</option></select>
+                        <button type="button" class="btn-primary" style="background:#15803d;" onclick="adminEticketResendAllIssued()">Resend all tickets by email</button>
+                    </div>
+                    <p id="eticket-resend-all-status" style="font-size:0.88rem;color:#64748b;margin:10px 0 0;"></p>
+                </div>
                 <div class="card" style="margin-bottom:16px;">
                     <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;">
                         <div style="flex:1;min-width:220px;">
@@ -3475,7 +3484,7 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
-    <script src="/js/admin.js?v=20260916pos"></script>
+    <script src="/js/admin.js?v=20260918a"></script>
     <script src="/js/pos-onspot-ui.js?v=20260916a"></script>
 </body>
 </html>

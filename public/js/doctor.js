@@ -1397,51 +1397,6 @@ function renderTrackerStepsHtml(timeline) {
             '</div>';
     }
 
-    /* Horizontal pipeline (Flipkart-style): dots joined by a rail that fills up to the current step. */
-    const doneCount = steps.filter(function (s) {
-        return s.state === 'completed' || s.state === 'cancelled';
-    }).length;
-    const reachedIdx = activeStep ? steps.indexOf(activeStep) : doneCount - 1;
-    const railPct =
-        steps.length > 1 ? Math.max(0, Math.min(100, Math.round((reachedIdx / (steps.length - 1)) * 100))) : doneCount ? 100 : 0;
-    html += '<div class="fk-pipe-scroll" data-hscroll="1"><div class="fk-pipe" style="--fk-steps:' + steps.length + '">';
-    html += '<div class="fk-pipe-rail"><div class="fk-pipe-rail-fill" style="width:' + Math.max(0, railPct) + '%"></div></div>';
-    html += '<div class="fk-pipe-steps">';
-    steps.forEach(function (step, idx) {
-        const st =
-            step.state === 'completed' || step.state === 'cancelled'
-                ? 'done'
-                : step.state === 'active'
-                  ? 'active'
-                  : 'upcoming';
-        const icon =
-            step.state === 'completed'
-                ? '<i class="fas fa-check"></i>'
-                : step.state === 'cancelled'
-                  ? '<i class="fas fa-times"></i>'
-                  : step.state === 'active'
-                    ? '<i class="fas ' + escapeHtml(step.icon || 'fa-circle-notch') + '"></i>'
-                    : '<span class="fk-pipe-num">' + (idx + 1) + '</span>';
-        html +=
-            '<div class="fk-pipe-step ' +
-            st +
-            (step.state === 'cancelled' ? ' is-cancelled' : '') +
-            '" style="animation-delay:' +
-            idx * 0.06 +
-            's">' +
-            '<div class="fk-pipe-dot">' +
-            icon +
-            '</div>' +
-            '<div class="fk-pipe-label">' +
-            escapeHtml(step.title || '') +
-            '</div>' +
-            (step.at && step.state !== 'upcoming'
-                ? '<div class="fk-pipe-when">' + escapeHtml(formatTrackDateTime(step.at)) + '</div>'
-                : '<div class="fk-pipe-when is-pending">' + (step.state === 'active' ? 'In progress' : 'Pending') + '</div>') +
-            '</div>';
-    });
-    html += '</div></div></div>';
-
     /* Detailed vertical timeline */
     html += '<div class="fk-timeline">';
     steps.forEach(function (step, idx) {
@@ -1462,9 +1417,11 @@ function renderTrackerStepsHtml(timeline) {
             '<div class="fk-tl-item ' +
             st +
             (step.state === 'cancelled' ? ' is-cancelled' : '') +
-            '">' +
+            '" style="animation-delay:' +
+            (idx * 0.35) +
+            's">' +
             '<div class="fk-tl-rail"><span class="fk-tl-dot"></span>' +
-            (isLast ? '' : '<span class="fk-tl-line"></span>') +
+            (isLast ? '' : '<span class="fk-tl-line"><span class="fk-tl-line-fill" style="animation-delay:' + (idx * 0.35 + 0.2) + 's"></span></span>') +
             '</div>' +
             '<div class="fk-tl-body"><div class="fk-tl-title">' +
             escapeHtml(step.title || '') +
@@ -8471,15 +8428,31 @@ function downloadEticketPdf(t) {
     const base = eticketViewUrl(row);
     const sep = base.indexOf('?') >= 0 ? '&' : '?';
     const pdfUrl = base + sep + 'format=pdf&download=1&_=' + Date.now();
-    // Direct navigation: the server answers with Content-Disposition: attachment, which every
-    // mobile browser (iOS Safari, Android Chrome, in-app webviews) handles as a file download.
-    window.location.href = pdfUrl;
+    const filename = 'e-ticket-' + String(row.ticket_id_string).replace(/[^A-Za-z0-9_-]+/g, '') + '.pdf';
     const note = document.getElementById('eticket-download-note');
-    if (note) {
-        note.textContent = 'Preparing your PDF… it will save to your Downloads in a few seconds.';
+    const showNote = (msg) => {
+        if (!note) return;
+        note.textContent = msg;
         note.classList.remove('hidden');
         setTimeout(() => note.classList.add('hidden'), 8000);
+    };
+    showNote('Preparing your PDF… it will save to your Downloads in a few seconds.');
+    if (!isDesktopEticketDownload() || typeof fetch !== 'function' || typeof Blob === 'undefined') {
+        window.location.href = pdfUrl;
+        return;
     }
+    fetch(pdfUrl, { credentials: 'same-origin', cache: 'no-store' })
+        .then((res) => {
+            const ct = String(res.headers.get('content-type') || '').toLowerCase();
+            if (!res.ok || ct.indexOf('application/pdf') < 0) throw new Error('not-pdf');
+            return res.blob();
+        })
+        .then((blob) => {
+            triggerEticketFileDownload(URL.createObjectURL(blob), filename);
+        })
+        .catch(() => {
+            window.location.href = pdfUrl;
+        });
 }
 
 function openEticketPdf(t) {
@@ -8487,7 +8460,14 @@ function openEticketPdf(t) {
     if (!row || !row.ticket_id_string) return alert('Ticket not found.');
     const base = eticketViewUrl(row);
     const sep = base.indexOf('?') >= 0 ? '&' : '?';
-    window.open(base + sep + 'format=pdf', '_blank', 'noopener');
+    const url = base + sep + 'format=pdf&_=' + Date.now();
+    let w = null;
+    try {
+        w = window.open(url, '_blank');
+    } catch (_) {
+        w = null;
+    }
+    if (!w) window.location.href = url;
 }
 
 async function downloadEticketPdfAsync(t, filename, htmlFilename, serverUrl) {
@@ -8651,8 +8631,8 @@ async function loadDoctorEventTickets() {
                     ${
                         !invalid && t.ticket_id_string
                             ? `<div style="margin:12px 0 0;display:flex;flex-wrap:wrap;gap:8px;">
-                                <button type="button" class="btn-primary" style="padding:8px 14px;font-size:0.88rem;" onclick="downloadEticketPdf(${JSON.stringify(String(t.ticket_id_string))})"><i class="fas fa-download"></i> Save PDF to device</button>
-                                <button type="button" class="btn-secondary" style="padding:8px 14px;font-size:0.88rem;" onclick="openEticketPdf(${JSON.stringify(String(t.ticket_id_string))})"><i class="fas fa-file-pdf"></i> Open PDF</button>
+                                <button type="button" class="btn-primary" style="padding:8px 14px;font-size:0.88rem;" data-eticket-dl="${escapeHtml(String(t.ticket_id_string))}"><i class="fas fa-download"></i> Save PDF to device</button>
+                                <button type="button" class="btn-secondary" style="padding:8px 14px;font-size:0.88rem;" data-eticket-open="${escapeHtml(String(t.ticket_id_string))}"><i class="fas fa-file-pdf"></i> Open PDF</button>
                                 <a href="${escapeHtml(eticketViewUrl(t))}" target="_blank" rel="noopener" class="btn-primary" style="display:inline-block;padding:8px 14px;text-decoration:none;font-size:0.88rem;background:#475569;"><i class="fas fa-print"></i> Print view</a>
                                </div>`
                             : ''
@@ -8662,6 +8642,12 @@ async function loadDoctorEventTickets() {
         });
         html += '</div>';
         box.innerHTML = html;
+        box.querySelectorAll('[data-eticket-dl]').forEach((b) => {
+            b.addEventListener('click', () => downloadEticketPdf(b.getAttribute('data-eticket-dl')));
+        });
+        box.querySelectorAll('[data-eticket-open]').forEach((b) => {
+            b.addEventListener('click', () => openEticketPdf(b.getAttribute('data-eticket-open')));
+        });
     } catch (e) {
         console.error(e);
         box.innerHTML = '<p style="color:#b91c1c;">Could not load tickets.</p>';
