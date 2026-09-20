@@ -1753,6 +1753,24 @@
                         <button type="button" class="btn-primary" style="background:#15803d;margin-left:8px;" onclick="pollAdminCreateOrderPayment()">Check status</button>
                     </div>
                 </div>
+                <div class="card" id="rzp-match-card" style="margin-bottom:16px;border:1px solid #bfdbfe;background:#f8fbff;">
+                    <h3 style="margin:0 0 10px;color:#1d4ed8;">Match Razorpay payment to an application</h3>
+                    <p style="font-size:0.88rem;color:#64748b;margin:0 0 12px;">Doctor paid on Razorpay but the site still shows unpaid? Paste the Razorpay Payment ID (pay_…) from the Razorpay dashboard or the doctor's receipt. The payment is verified with Razorpay, then the application is marked paid and the e-ticket issued and emailed.</p>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                        <input type="text" id="rzp-match-payment-id" placeholder="pay_XXXXXXXXXXXXXX" style="flex:1;min-width:240px;max-width:360px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;font-family:monospace;">
+                        <button type="button" class="btn-primary" onclick="lookupRazorpayPaymentForMatch()">Fetch payment</button>
+                    </div>
+                    <div id="rzp-match-payment" style="margin-top:12px;font-size:0.9rem;"></div>
+                    <div id="rzp-match-pick" class="hidden" style="margin-top:12px;padding-top:12px;border-top:1px solid #cbd5e1;">
+                        <label style="font-weight:600;font-size:0.9rem;">Find the application to match (application no, phone, email, user ID or name)</label>
+                        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px;">
+                            <input type="search" id="rzp-match-q" placeholder="e.g. 1029 / 98xxxxxxx / doctor@email.com" style="flex:1;min-width:240px;max-width:420px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;">
+                            <button type="button" class="btn-primary" style="background:#64748b;" onclick="searchRegistrationsForRzpMatch()">Search</button>
+                        </div>
+                        <div id="rzp-match-results" style="margin-top:10px;overflow-x:auto;"></div>
+                        <p id="rzp-match-msg" style="margin:10px 0 0;font-weight:600;"></p>
+                    </div>
+                </div>
                 <div id="admin-payments-panel-orders" class="card">
                     <button type="button" class="btn-primary" style="margin-bottom:12px;background:#64748b;" onclick="loadAdminEnrichedOrders()">Refresh orders</button>
                     <div style="margin-bottom:12px;">
@@ -2250,6 +2268,15 @@
                     <p id="eticket-missing-status" style="font-size:0.88rem;color:#64748b;margin:0 0 10px;">Loading…</p>
                     <button type="button" class="btn-primary" style="background:#1d4ed8;" onclick="adminEticketResendAllMissing()">Resend all missing (up to 25)</button>
                     <button type="button" class="btn-primary" style="background:#64748b;margin-left:8px;" onclick="adminEticketLoadMissingCount()">Refresh count</button>
+                </div>
+                <div class="card" style="margin-bottom:16px;border-left:4px solid #15803d;">
+                    <h3 style="margin:0 0 8px;color:#166534;font-size:1rem;">Resend all tickets</h3>
+                    <p style="font-size:0.88rem;color:#64748b;margin:0 0 10px;">Emails the PDF e-ticket(s) again to <strong>everyone</strong> whose registration is <em>e-ticket issued</em> and payment is done — optionally for one seminar only. Runs in the background.</p>
+                    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+                        <select id="eticket-resend-all-seminar" style="min-width:220px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;"><option value="">All seminars</option></select>
+                        <button type="button" class="btn-primary" style="background:#15803d;" onclick="adminEticketResendAllIssued()">Resend all tickets by email</button>
+                    </div>
+                    <p id="eticket-resend-all-status" style="font-size:0.88rem;color:#64748b;margin:10px 0 0;"></p>
                 </div>
                 <div class="card" style="margin-bottom:16px;">
                     <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;">
@@ -3475,7 +3502,7 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
-    <script src="/js/admin.js?v=20260916pos"></script>
+    <script src="/js/admin.js?v=20260920a"></script>
     <script src="/js/pos-onspot-ui.js?v=20260916a"></script>
 </body>
 </html>
