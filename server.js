@@ -7508,6 +7508,8 @@ const SCANNER_TICKET_LOOKUP_SQL = `
                    WHEN sd.id IS NOT NULL THEN COALESCE(sd.checkin_date, sd.day_date)
                    ELSE CAST(se.checkin_date AS TEXT)
                END AS checkin_date,
+               CAST(s.checkin_date AS TEXT) AS seminar_checkin_date,
+               CASE WHEN sd.id IS NOT NULL THEN COALESCE(sd.checkin_date, sd.day_date) ELSE NULL END AS day_checkin_date,
                s.title AS seminar_title,
                CASE WHEN sd.title IS NOT NULL THEN sd.title WHEN se.title IS NOT NULL THEN se.title ELSE s.title END AS scan_event_title,
                CASE
@@ -7674,6 +7676,7 @@ function lookupTicketForScan(qrData, cb) {
                             raw.day_day_date ||
                             raw.event_checkin_date ||
                             null,
+                        day_checkin_date: raw.day_checkin_date || raw.day_day_date || null,
                         scan_event_title: raw.scan_event_title || raw.seminar_title,
                         event_date: raw.day_day_date || raw.event_event_date || raw.seminar_event_date || null,
                         cert_scans_required:
@@ -7933,7 +7936,11 @@ app.get('/api/scanner/checkin-seminars', (req, res) => {
                     (withEv || []).map((r) => {
                         const checkinYmd = normalizeCheckinDateYmd(r.checkin_date);
                         const subEvents = (r.sub_events || []).filter((ev) => ev.checkinEnabled !== false);
-                        const days = (r.days || []).filter((d) => d.checkinEnabled !== false);
+                        const days = (r.days || []).filter(
+                            (d) =>
+                                d.checkinEnabled !== false &&
+                                (!checkinYmd || normalizeCheckinDateYmd(d.checkinDate || d.dayDate) === checkinYmd)
+                        );
                         return {
                             id: r.id,
                             title: r.title,
@@ -8254,6 +8261,23 @@ app.post('/api/scanner/mark', (req, res) => {
 
                 const allowAnyCheckinDate =
                     process.env.SCANNER_ALLOW_ANY_CHECKIN_DATE === '1' || r === 'admin';
+                const openDayYmd = normalizeCheckinDateYmd(row.seminar_checkin_date);
+                const ticketDayYmd = normalizeCheckinDateYmd(row.day_checkin_date);
+                if (ticketDayId && openDayYmd && ticketDayYmd && openDayYmd !== ticketDayYmd) {
+                    const msg = `Check-in is open only for ${openDayYmd}; this ticket is for ${row.scan_event_title || ticketDayYmd}`;
+                    logScanDashboard(selectedSeminarId, staffId, 'wrong_day', msg, row);
+                    return res.status(403).json({
+                        success: false,
+                        error:
+                            msg +
+                            '. Change "Check-in allowed date" in Admin → Seminars to open that day.',
+                        sound: 'wrong_event',
+                        doctor: doctorPayloadFromScanRow(row, {
+                            ticketId: row.ticket_id_string,
+                            eventTitle: row.scan_event_title
+                        })
+                    });
+                }
                 const seminarForDate = {
                     checkin_enabled: row.checkin_enabled,
                     checkin_date: row.checkin_date,

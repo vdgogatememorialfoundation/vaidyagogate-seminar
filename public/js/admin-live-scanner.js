@@ -298,7 +298,7 @@
             let checkinLabel = '';
             if (rosterCheckin) {
                 checkinLabel = 'Check-in date: ' + formatYmdLabel(rosterCheckin.effectiveDate);
-                if (rosterCheckin.activeDayTitle) checkinLabel += ' · ' + rosterCheckin.activeDayTitle;
+                if (rosterCheckin.activeDayTitle) checkinLabel += ' · ' + rosterCheckin.activeDayTitle + ' only';
                 else if (rosterCheckin.days && rosterCheckin.days.length) checkinLabel += ' · no seminar day on this date';
                 if (rosterCheckin.overrideDate && rosterCheckin.overrideDate !== rosterCheckin.today) {
                     checkinLabel += ' (set in admin; today is ' + formatYmdLabel(rosterCheckin.today) + ')';
@@ -374,7 +374,8 @@
                 if (t.dayId && !days.has(String(t.dayId))) days.set(String(t.dayId), t);
             })
         );
-        const opts = ['<option value="">All days</option>'].concat(
+        const locked = !!(rosterCheckin && rosterCheckin.lockedToDay);
+        const opts = (locked ? [] : ['<option value="">All days</option>']).concat(
             Array.from(days.entries())
                 .sort((a, b) => String(a[1].dayDate || '').localeCompare(String(b[1].dayDate || '')))
                 .map(
@@ -398,6 +399,8 @@
             sel.value = activeId;
             rosterDayAutoApplied = activeId;
         }
+        sel.disabled = locked;
+        if (locked && activeId && sel.value !== activeId && days.has(activeId)) sel.value = activeId;
     }
 
     async function refreshRoster() {

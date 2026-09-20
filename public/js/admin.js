@@ -19033,6 +19033,196 @@ function syncSeminarOtpOptionsUi() {
     if (sub) sub.disabled = !master;
 }
 
+let __rzpMatchPaymentId = '';
+
+function renderRzpMatchRegRows(rows, heading) {
+    const box = document.getElementById('rzp-match-results');
+    if (!box) return;
+    if (!rows || !rows.length) {
+        box.innerHTML = '<p style="color:#64748b;">' + escAdmin(heading || 'No applications found.') + '</p>';
+        return;
+    }
+    box.innerHTML =
+        (heading ? '<p style="margin:0 0 6px;font-weight:600;">' + escAdmin(heading) + '</p>' : '') +
+        '<table class="data-table"><thead><tr><th>App no</th><th>Doctor</th><th>Seminar</th><th>Status</th><th>Fee</th><th></th></tr></thead><tbody>' +
+        rows
+            .map((r) => {
+                const fee = r.lastOrderAmount != null ? r.lastOrderAmount : r.seminarPrice;
+                return (
+                    '<tr><td><code>' +
+                    escAdmin(r.applicationNo || '—') +
+                    '</code></td><td><strong>' +
+                    escAdmin(r.name || 'Guest') +
+                    '</strong><br><span style="color:#64748b;font-size:0.82rem;">' +
+                    escAdmin([r.phone, r.email].filter(Boolean).join(' · ')) +
+                    '</span></td><td>' +
+                    escAdmin(r.seminarTitle || '') +
+                    '</td><td>' +
+                    escAdmin(r.status || '') +
+                    (r.paid ? ' <span style="color:#15803d;">(paid)</span>' : ' <span style="color:#b45309;">(unpaid)</span>') +
+                    '</td><td>' +
+                    (fee != null ? '₹' + escAdmin(String(fee)) : '—') +
+                    '</td><td>' +
+                    (r.paid
+                        ? '<span style="color:#64748b;">Already paid</span>'
+                        : '<button type="button" class="btn-primary" style="background:#15803d;" onclick="matchRazorpayPaymentToRegistration(' +
+                          Number(r.registrationId) +
+                          ')">Match &amp; issue ticket</button>') +
+                    '</td></tr>'
+                );
+            })
+            .join('') +
+        '</tbody></table>';
+}
+
+async function lookupRazorpayPaymentForMatch() {
+    const adm = getStoredAdminUser();
+    const pid = (document.getElementById('rzp-match-payment-id')?.value || '').trim();
+    const box = document.getElementById('rzp-match-payment');
+    const pick = document.getElementById('rzp-match-pick');
+    const msg = document.getElementById('rzp-match-msg');
+    if (msg) msg.textContent = '';
+    if (!adm?.id) return alert('Admin login required.');
+    if (!/^pay_[A-Za-z0-9]{10,}$/.test(pid)) return alert('Enter a Razorpay payment id like pay_XXXXXXXXXXXXXX.');
+    __rzpMatchPaymentId = pid;
+    if (box) box.innerHTML = 'Fetching payment from Razorpay…';
+    if (pick) pick.classList.add('hidden');
+    try {
+        const res = await fetch(
+            '/api/admin/payments/razorpay/lookup?actingAdminId=' +
+                encodeURIComponent(adm.id) +
+                '&paymentId=' +
+                encodeURIComponent(pid)
+        );
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Lookup failed');
+        const p = data.payment;
+        const statusColor = p.captured ? '#15803d' : '#b45309';
+        let html =
+            '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px 16px;">' +
+            '<div><span style="color:#64748b;">Amount</span><br><strong>₹' +
+            escAdmin(String(p.amount)) +
+            '</strong></div>' +
+            '<div><span style="color:#64748b;">Status</span><br><strong style="color:' +
+            statusColor +
+            ';">' +
+            escAdmin(p.status) +
+            '</strong></div>' +
+            '<div><span style="color:#64748b;">Method</span><br>' +
+            escAdmin(p.method || '—') +
+            '</div>' +
+            '<div><span style="color:#64748b;">Paid at</span><br>' +
+            escAdmin(p.createdAt ? new Date(p.createdAt).toLocaleString('en-IN') : '—') +
+            '</div>' +
+            '<div><span style="color:#64748b;">Payer email</span><br>' +
+            escAdmin(p.email || '—') +
+            '</div>' +
+            '<div><span style="color:#64748b;">Payer phone</span><br>' +
+            escAdmin(p.contact || '—') +
+            '</div>' +
+            '<div><span style="color:#64748b;">Razorpay order</span><br><code>' +
+            escAdmin(p.orderId || '—') +
+            '</code></div></div>';
+        if (data.alreadyMatched) {
+            const m = data.alreadyMatched;
+            html +=
+                '<p style="margin:10px 0 0;color:#15803d;font-weight:600;">Already matched to application ' +
+                escAdmin(m.applicationNo || m.registrationId) +
+                ' — ' +
+                escAdmin(m.name || '') +
+                ' (' +
+                escAdmin(m.seminarTitle || '') +
+                ', status ' +
+                escAdmin(m.status || '') +
+                ').</p>';
+        } else if (!p.captured) {
+            html +=
+                '<p style="margin:10px 0 0;color:#b45309;">Payment is not captured yet (status "' +
+                escAdmin(p.status) +
+                '"). Authorized payments will be captured when matched; failed/refunded payments cannot be matched.</p>';
+        }
+        if (box) box.innerHTML = html;
+        if (!data.alreadyMatched && pick) {
+            pick.classList.remove('hidden');
+            const q = document.getElementById('rzp-match-q');
+            if (q && !q.value) q.value = p.contact ? String(p.contact).replace(/^\+?91/, '') : p.email || '';
+            renderRzpMatchRegRows(
+                data.suggestions,
+                data.suggestions && data.suggestions.length
+                    ? 'Suggested applications (same Razorpay order, email or phone):'
+                    : 'No automatic suggestions — search for the application below.'
+            );
+        }
+    } catch (e) {
+        if (box) box.innerHTML = '<p style="color:#b91c1c;">' + escAdmin(e.message) + '</p>';
+    }
+}
+
+async function searchRegistrationsForRzpMatch() {
+    const adm = getStoredAdminUser();
+    const q = (document.getElementById('rzp-match-q')?.value || '').trim();
+    if (!adm?.id) return alert('Admin login required.');
+    if (!q) return alert('Type an application no, phone, email, user ID or name.');
+    const box = document.getElementById('rzp-match-results');
+    if (box) box.innerHTML = 'Searching…';
+    try {
+        const res = await fetch(
+            '/api/admin/payments/razorpay/search-registrations?actingAdminId=' +
+                encodeURIComponent(adm.id) +
+                '&q=' +
+                encodeURIComponent(q)
+        );
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Search failed');
+        renderRzpMatchRegRows(data.results, data.results.length ? 'Search results:' : 'No applications match "' + q + '".');
+    } catch (e) {
+        if (box) box.innerHTML = '<p style="color:#b91c1c;">' + escAdmin(e.message) + '</p>';
+    }
+}
+
+async function matchRazorpayPaymentToRegistration(registrationId) {
+    const adm = getStoredAdminUser();
+    const msg = document.getElementById('rzp-match-msg');
+    if (!adm?.id || !__rzpMatchPaymentId || !registrationId) return;
+    if (
+        !confirm(
+            'Match Razorpay payment ' +
+                __rzpMatchPaymentId +
+                ' to this application? It will be marked paid and the e-ticket issued and emailed.'
+        )
+    )
+        return;
+    if (msg) {
+        msg.style.color = '#64748b';
+        msg.textContent = 'Verifying with Razorpay and issuing ticket…';
+    }
+    try {
+        const res = await fetch('/api/admin/payments/razorpay/match', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: adm.id, paymentId: __rzpMatchPaymentId, registrationId })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Match failed');
+        if (msg) {
+            msg.style.color = '#15803d';
+            msg.textContent =
+                'Matched: ₹' +
+                data.amount +
+                ' recorded for application ' +
+                (data.registration.applicationNo || registrationId) +
+                (data.ticketId ? ' · e-ticket ' + data.ticketId + ' issued and emailed.' : ' · marked paid.');
+        }
+        lookupRazorpayPaymentForMatch();
+        loadAdminEnrichedOrders();
+    } catch (e) {
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = e.message;
+        }
+    }
+}
+
 let __coLookup = null;
 let __coRegId = null;
 let __coOrderDbId = null;
