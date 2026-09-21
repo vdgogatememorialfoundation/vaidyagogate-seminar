@@ -294,14 +294,18 @@
             return true;
         });
         const totalIn = rosterRows.filter((r) => r.tickets.some((t) => t.scanned)).length;
+        if (rosterCheckin && !rosterCheckin.seminarCheckinEnabled) {
+            if (summary) summary.textContent = 'Check-in is OFF for this event. Enable it and set the check-in date in Admin → Seminars to see that day\'s e-ticket holders.';
+            body.innerHTML =
+                '<tr><td colspan="5" class="roster-contact" style="text-align:center;padding:24px;">Check-in is disabled — nothing to show.</td></tr>';
+            return;
+        }
         if (summary) {
             let checkinLabel = '';
-            if (rosterCheckin && !rosterCheckin.seminarCheckinEnabled) {
-                checkinLabel = 'Check-in is OFF (enable it in Admin → Seminars) — ';
-            } else if (rosterCheckin) {
+            if (rosterCheckin) {
                 checkinLabel = 'Check-in date: ' + formatYmdLabel(rosterCheckin.effectiveDate);
                 if (rosterCheckin.activeDayTitle) checkinLabel += ' · ' + rosterCheckin.activeDayTitle + ' only';
-                else if (rosterCheckin.days && rosterCheckin.days.length) checkinLabel += ' · no seminar day on this date';
+                else if (rosterCheckin.noDayForDate) checkinLabel += ' · no seminar day is scheduled on this date (set the check-in date to an event day)';
                 if (rosterCheckin.overrideDate && rosterCheckin.overrideDate !== rosterCheckin.today) {
                     checkinLabel += ' (set in admin; today is ' + formatYmdLabel(rosterCheckin.today) + ')';
                 }
@@ -361,7 +365,11 @@
         if (!rows.length) {
             body.innerHTML =
                 '<tr><td colspan="5" class="roster-contact" style="text-align:center;padding:24px;">' +
-                (rosterRows.length ? 'No participants match this filter.' : 'No e-ticket issued participants yet.') +
+                (rosterRows.length
+                    ? 'No participants match this filter.'
+                    : rosterCheckin && rosterCheckin.noDayForDate
+                      ? 'No seminar day falls on the check-in date — nothing to show.'
+                      : 'No e-ticket issued participants yet.') +
                 '</td></tr>';
         }
     }

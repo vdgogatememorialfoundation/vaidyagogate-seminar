@@ -8998,19 +8998,30 @@ app.get('/api/admin/seminars/:id/stats', (req, res) => {
         });
 
         db.all(`
-            SELECT o.status, o.amount 
+            SELECT o.registration_id, o.status, o.amount, o.refunded_amount, r.status AS reg_status
             FROM orders o 
             JOIN registrations r ON o.registration_id = r.id 
             WHERE r.seminar_id = ?
         `, [seminarId], (err, orders) => {
             if (err) return res.status(500).json({ error: err.message });
+            const paidRegs = new Set();
             orders.forEach(o => {
-                if (o.status === 'pending') stats.pending_payments++;
-                if (o.status === 'success') {
+                if (String(o.status || '').trim().toLowerCase() === 'success') paidRegs.add(o.registration_id);
+            });
+            const pendingRegs = new Set();
+            orders.forEach(o => {
+                const st = String(o.status || '').trim().toLowerCase();
+                const regSt = String(o.reg_status || '').trim().toLowerCase();
+                if (st === 'pending' && !paidRegs.has(o.registration_id) && regSt !== 'cancelled' && regSt !== 'rejected') {
+                    pendingRegs.add(o.registration_id);
+                }
+                if (st === 'success') {
                     stats.completed_payments++;
-                    stats.total_revenue += (o.amount || 0);
+                    stats.total_revenue += (Number(o.amount) || 0) - (Number(o.refunded_amount) || 0);
                 }
             });
+            stats.pending_payments = pendingRegs.size;
+            stats.total_revenue = Math.round(stats.total_revenue * 100) / 100;
             seminarCapacity.getSeminarCapacity(db, seminarId, (eCap, cap) => {
                 if (!eCap && cap) {
                     stats.capacity = cap.capacity;
@@ -10895,7 +10906,8 @@ onspotLinks.registerOnspotRoutes(app, {
     notifEngine,
     activityLog,
     seminarCapacity,
-    listDoctorPaymentOptions
+    listDoctorPaymentOptions,
+    loadRegistrationFormConfig
 });
 app.get('/onspot/:token', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');

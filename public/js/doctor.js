@@ -1398,7 +1398,7 @@ function renderTrackerStepsHtml(timeline) {
     }
 
     /* Detailed vertical timeline */
-    html += '<div class="fk-timeline">';
+    html += '<div class="fk-timeline"><div class="fk-tl-track"><div class="fk-tl-track-fill"></div></div>';
     steps.forEach(function (step, idx) {
         const isLast = idx === steps.length - 1;
         const st =
@@ -1439,6 +1439,74 @@ function renderTrackerStepsHtml(timeline) {
     }
     return html;
 }
+
+/* Continuous vertical rail behind the timeline dots; the green fill grows slowly down to the current step. */
+function layoutFkTimelines(root) {
+    const scope = root && root.querySelectorAll ? root : document;
+    scope.querySelectorAll('.fk-timeline').forEach(function (tl) {
+        const track = tl.querySelector('.fk-tl-track');
+        const dots = tl.querySelectorAll('.fk-tl-item .fk-tl-dot');
+        if (!track || dots.length < 2) {
+            if (track) track.style.display = 'none';
+            return;
+        }
+        const base = tl.getBoundingClientRect();
+        const first = dots[0].getBoundingClientRect();
+        const last = dots[dots.length - 1].getBoundingClientRect();
+        const top = first.top - base.top + first.height / 2;
+        const bottom = last.top - base.top + last.height / 2;
+        track.style.display = '';
+        track.style.top = top + 'px';
+        track.style.height = Math.max(0, bottom - top) + 'px';
+        const items = tl.querySelectorAll('.fk-tl-item');
+        let target = null;
+        items.forEach(function (it) {
+            if (it.classList.contains('done') || it.classList.contains('active')) target = it;
+        });
+        let fillH = 0;
+        if (target) {
+            const d = target.querySelector('.fk-tl-dot').getBoundingClientRect();
+            fillH = d.top - base.top + d.height / 2 - top;
+            if (target.classList.contains('done') && target === items[items.length - 1]) fillH = bottom - top;
+        }
+        const fill = track.querySelector('.fk-tl-track-fill');
+        if (!fill) return;
+        fill.style.setProperty('--fk-fill-h', Math.max(0, fillH) + 'px');
+        if (!fill.dataset.laidOut) {
+            fill.dataset.laidOut = '1';
+            fill.style.height = '0px';
+            requestAnimationFrame(function () {
+                fill.style.height = Math.max(0, fillH) + 'px';
+            });
+        } else {
+            fill.style.height = Math.max(0, fillH) + 'px';
+        }
+    });
+}
+window.layoutFkTimelines = layoutFkTimelines;
+(function watchFkTimelines() {
+    if (typeof MutationObserver === 'undefined' || !document.body) return;
+    let queued = false;
+    const schedule = function () {
+        if (queued) return;
+        queued = true;
+        requestAnimationFrame(function () {
+            queued = false;
+            layoutFkTimelines(document);
+            setTimeout(function () { layoutFkTimelines(document); }, 2600);
+        });
+    };
+    new MutationObserver(function (muts) {
+        for (let i = 0; i < muts.length; i++) {
+            const t = muts[i].target;
+            if (t && t.querySelector && (t.querySelector('.fk-timeline') || (t.closest && t.closest('.fk-timeline')))) {
+                schedule();
+                return;
+            }
+        }
+    }).observe(document.body, { childList: true, subtree: true });
+    window.addEventListener('resize', schedule);
+})();
 
 function doctorNormalizeQualOptions(options) {
     const canon = {

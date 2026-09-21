@@ -6452,11 +6452,11 @@ function downloadCaseMarksheet(format) {
     const programId = document.getElementById('case-results-program')?.value || '';
     const q = programId ? '?programId=' + encodeURIComponent(programId) + '&' : '?';
     const fmt = format || 'xlsx';
-    if (fmt === 'pdf') {
-        window.open('/api/admin/case/marksheet' + (programId ? '?programId=' + encodeURIComponent(programId) : '') + '&format=pdf', '_blank');
+    if (fmt === 'html') {
+        window.open('/api/admin/case/marksheet' + q + 'format=html', '_blank');
         return;
     }
-    window.location.href = '/api/admin/case/marksheet' + (programId ? '?programId=' + encodeURIComponent(programId) + '&' : '?') + 'format=xlsx';
+    window.location.href = '/api/admin/case/marksheet' + q + 'format=' + (fmt === 'pdf' ? 'pdf' : 'xlsx');
 }
 
 async function loadAdminCaseMarksheetPreview() {
@@ -6523,7 +6523,7 @@ async function loadAdminCaseResults() {
         let html =
             '<table class="data-table"><thead><tr><th>Rank</th><th>App</th><th>Doctor</th><th>Topic</th><th>Avg / ' +
             escAdmin(String(totalMax)) +
-            '</th><th>Judges</th><th>Auto eligibility</th><th>Status</th></tr></thead><tbody>';
+            '</th><th>Judges</th><th>Auto eligibility</th><th>Status</th><th>e-Marksheet</th></tr></thead><tbody>';
         rows.forEach((r, idx) => {
             const avg = r.avg_score != null ? Number(r.avg_score) : null;
             const isTop = avg != null && topScore != null && avg === topScore && (r.judges_scored || 0) > 0;
@@ -6553,6 +6553,13 @@ async function loadAdminCaseResults() {
                 escAdmin(elig) +
                 '</td><td>' +
                 escAdmin(r.status || '—') +
+                '</td><td style="white-space:nowrap;">' +
+                '<a class="btn-muted" style="padding:4px 8px;font-size:0.78rem;" href="/api/admin/case/marksheet/candidate/' +
+                encodeURIComponent(r.id) +
+                '?format=pdf" title="Download individual e-marksheet (judge marks &amp; remarks)"><i class="fas fa-file-pdf"></i> PDF</a> ' +
+                '<a class="btn-muted" style="padding:4px 8px;font-size:0.78rem;" href="/api/admin/case/marksheet/candidate/' +
+                encodeURIComponent(r.id) +
+                '?format=html" target="_blank" rel="noopener" title="Preview e-marksheet"><i class="fas fa-eye"></i></a>' +
                 '</td></tr>';
         });
         html += '</tbody></table>';
@@ -9706,8 +9713,182 @@ function renderAdminApplicationPaymentHtml(app) {
             ', true, true)"><i class="fas fa-paper-plane"></i> Resend email + WhatsApp</button>' +
             '</div>';
     }
+    html += renderAdminApplicationRazorpayHtml(app, orderStatus, txnId);
     html += '</div>';
     return html;
+}
+
+/* Razorpay block under an applicant's payment details: shows the matched payment (fetched live from
+   Razorpay) or, for unpaid applications, lets admin paste a pay_ id and match it to this application. */
+function renderAdminApplicationRazorpayHtml(app, orderStatus, txnId) {
+    const rid = parseInt(app && app.id, 10);
+    if (!rid) return '';
+    const st = String(app.status || '').toLowerCase();
+    const pid = txnId && /^pay_[A-Za-z0-9]{10,}$/.test(String(txnId)) ? String(txnId) : null;
+    const boxId = 'rzp-app-details-' + rid;
+    if (pid) {
+        setTimeout(function () {
+            adminLoadRazorpayPaymentDetails(rid, pid, boxId);
+        }, 0);
+        return (
+            '<div style="margin-top:12px;padding-top:10px;border-top:1px dashed #bbf7d0;font-size:0.85rem;">' +
+            '<strong style="color:#166534;"><i class="fas fa-link"></i> Razorpay payment</strong> <code>' +
+            escAdmin(pid) +
+            '</code>' +
+            (String(app.payment_gateway || '') === 'razorpay_manual'
+                ? ' <span style="color:#0369a1;">(matched manually)</span>'
+                : '') +
+            '<div id="' +
+            boxId +
+            '" class="muted" style="margin-top:6px;">Fetching from Razorpay…</div></div>'
+        );
+    }
+    if (orderStatus === 'success' || st === 'cancelled' || st === 'rejected') return '';
+    return (
+        '<div style="margin-top:12px;padding-top:10px;border-top:1px dashed #bbf7d0;font-size:0.85rem;">' +
+        '<strong style="color:#166534;"><i class="fas fa-link"></i> Match a Razorpay payment to this application</strong>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;align-items:center;">' +
+        '<input type="text" id="rzp-app-pid-' +
+        rid +
+        '" placeholder="pay_XXXXXXXXXXXXXX" style="flex:1;min-width:200px;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-family:monospace;">' +
+        '<button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;background:#15803d;" onclick="adminMatchRazorpayToApplication(' +
+        rid +
+        ')"><i class="fas fa-search-dollar"></i> Fetch &amp; match</button></div>' +
+        '<div id="' +
+        boxId +
+        '" class="muted" style="margin-top:6px;font-size:0.82rem;">Paste the payment id from the Razorpay dashboard; details are fetched from Razorpay before matching.</div></div>'
+    );
+}
+
+function adminRazorpayPaymentSummaryHtml(p) {
+    const statusColor = p.captured ? '#15803d' : '#b45309';
+    return (
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px 14px;">' +
+        '<div><span class="muted">Amount</span><br><strong>₹' +
+        escAdmin(String(p.amount)) +
+        '</strong></div>' +
+        '<div><span class="muted">Razorpay status</span><br><strong style="color:' +
+        statusColor +
+        ';">' +
+        escAdmin(p.status || '—') +
+        '</strong></div>' +
+        '<div><span class="muted">Method</span><br>' +
+        escAdmin(p.method || '—') +
+        '</div>' +
+        '<div><span class="muted">Paid at</span><br>' +
+        escAdmin(p.createdAt ? new Date(p.createdAt).toLocaleString('en-IN') : '—') +
+        '</div>' +
+        '<div><span class="muted">Payer email</span><br>' +
+        escAdmin(p.email || '—') +
+        '</div>' +
+        '<div><span class="muted">Payer phone</span><br>' +
+        escAdmin(p.contact || '—') +
+        '</div>' +
+        '<div><span class="muted">Razorpay order</span><br><code>' +
+        escAdmin(p.orderId || '—') +
+        '</code></div></div>'
+    );
+}
+
+async function adminLoadRazorpayPaymentDetails(rid, pid, boxId) {
+    const adm = getStoredAdminUser();
+    const box = document.getElementById(boxId);
+    if (!box) return;
+    if (!adm?.id) {
+        box.textContent = 'Admin login required to fetch Razorpay details.';
+        return;
+    }
+    try {
+        const res = await fetch(
+            '/api/admin/payments/razorpay/lookup?actingAdminId=' +
+                encodeURIComponent(adm.id) +
+                '&paymentId=' +
+                encodeURIComponent(pid)
+        );
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Lookup failed');
+        box.classList.remove('muted');
+        box.innerHTML = adminRazorpayPaymentSummaryHtml(data.payment);
+    } catch (e) {
+        box.innerHTML = '<span style="color:#b91c1c;">Could not fetch from Razorpay: ' + escAdmin(e.message) + '</span>';
+    }
+}
+
+async function adminMatchRazorpayToApplication(rid) {
+    const adm = getStoredAdminUser();
+    const input = document.getElementById('rzp-app-pid-' + rid);
+    const box = document.getElementById('rzp-app-details-' + rid);
+    const pid = (input?.value || '').trim();
+    if (!adm?.id) return alert('Admin login required.');
+    if (!/^pay_[A-Za-z0-9]{10,}$/.test(pid)) return alert('Enter a Razorpay payment id like pay_XXXXXXXXXXXXXX.');
+    if (box) {
+        box.style.color = '#64748b';
+        box.textContent = 'Fetching payment from Razorpay…';
+    }
+    try {
+        const lookupRes = await fetch(
+            '/api/admin/payments/razorpay/lookup?actingAdminId=' +
+                encodeURIComponent(adm.id) +
+                '&paymentId=' +
+                encodeURIComponent(pid)
+        );
+        const lookup = await lookupRes.json();
+        if (!lookupRes.ok) throw new Error(lookup.error || 'Lookup failed');
+        const p = lookup.payment;
+        if (lookup.alreadyMatched) {
+            const m = lookup.alreadyMatched;
+            if (box) {
+                box.innerHTML =
+                    adminRazorpayPaymentSummaryHtml(p) +
+                    '<p style="margin:8px 0 0;color:#b45309;font-weight:600;">This payment is already matched to application ' +
+                    escAdmin(m.applicationNo || m.registrationId) +
+                    ' (' +
+                    escAdmin(m.name || '') +
+                    ').</p>';
+            }
+            return;
+        }
+        if (box) box.innerHTML = adminRazorpayPaymentSummaryHtml(p);
+        if (
+            !confirm(
+                'Match Razorpay payment ' +
+                    pid +
+                    ' (₹' +
+                    p.amount +
+                    ', ' +
+                    p.status +
+                    ') to this application? It will be marked paid and the e-ticket issued and emailed.'
+            )
+        )
+            return;
+        const res = await fetch('/api/admin/payments/razorpay/match', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: adm.id, paymentId: pid, registrationId: rid })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Match failed');
+        if (box) {
+            box.innerHTML +=
+                '<p style="margin:8px 0 0;color:#15803d;font-weight:600;">Matched: ₹' +
+                escAdmin(String(data.amount)) +
+                ' recorded' +
+                (data.ticketId ? ' · e-ticket ' + escAdmin(String(data.ticketId)) + ' issued and emailed.' : ' · marked paid.') +
+                '</p>';
+        }
+        try {
+            const r2 = await fetch('/api/admin/applications');
+            const rows = await r2.json();
+            if (Array.isArray(rows)) {
+                globalAdminApps = rows;
+                const idx = globalAdminApps.findIndex((a) => Number(a.id) === Number(rid));
+                if (idx >= 0) setTimeout(() => viewFullApplication(idx), 1200);
+            }
+        } catch (_) {}
+        if (typeof loadAdminEnrichedOrders === 'function') loadAdminEnrichedOrders();
+    } catch (e) {
+        if (box) box.innerHTML = '<span style="color:#b91c1c;">' + escAdmin(e.message) + '</span>';
+    }
 }
 
 function populateAdminCancellationReviewModal(row) {

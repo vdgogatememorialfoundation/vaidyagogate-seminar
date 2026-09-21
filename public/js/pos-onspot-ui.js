@@ -56,6 +56,26 @@
         return { res, data };
     }
 
+    /* Staff portal uses staff-pos-* ids; the admin portal shares one form (pos-*) between
+       "register now" and "send link". */
+    const ID_ALIASES = {
+        'staff-pos-seminar': ['staff-pos-seminar', 'pos-seminar'],
+        'staff-pos-amount': ['staff-pos-amount', 'pos-amount'],
+        'staff-pos-first': ['staff-pos-first', 'pos-fname'],
+        'staff-pos-middle': ['staff-pos-middle', 'pos-mname'],
+        'staff-pos-last': ['staff-pos-last', 'pos-lname'],
+        'staff-pos-phone': ['staff-pos-phone', 'pos-phone'],
+        'staff-pos-email': ['staff-pos-email', 'pos-email']
+    };
+    function el(id) {
+        const ids = ID_ALIASES[id] || [id];
+        for (const i of ids) {
+            const e = document.getElementById(i);
+            if (e) return e;
+        }
+        return null;
+    }
+
     let seminarsLoaded = false;
     async function ensureSeminars() {
         const sel = document.getElementById('staff-pos-seminar');
@@ -138,14 +158,17 @@
                 const u = users[Number(btn.getAttribute('data-pos-pick'))];
                 if (!u) return;
                 const set = (id, v) => {
-                    const el = document.getElementById(id);
-                    if (el) el.value = v || '';
+                    const e = el(id);
+                    if (e) e.value = v || '';
                 };
                 set('staff-pos-user-id', u.id);
                 set('staff-pos-first', u.firstName);
+                set('staff-pos-middle', u.middleName);
                 set('staff-pos-last', u.lastName);
                 set('staff-pos-phone', u.phone);
                 set('staff-pos-email', u.email);
+                const hint = document.getElementById('pos-user-hint');
+                if (hint) hint.textContent = 'Selected ' + (u.name || '') + (u.userIdString ? ' (' + u.userIdString + ')' : '') + '.';
                 const out = document.getElementById('staff-pos-link-out');
                 if (out) out.innerHTML = '<p style="color:#0f766e;">Selected ' + esc(u.email || u.phone || '') + '.</p>';
             });
@@ -154,11 +177,12 @@
 
     window.staffPosCreateLink = async function () {
         const out = document.getElementById('staff-pos-link-out');
-        const v = (id) => ((document.getElementById(id) || {}).value || '').trim();
+        const v = (id) => ((el(id) || {}).value || '').trim();
         const payload = {
             seminarId: v('staff-pos-seminar'),
             amount: v('staff-pos-amount'),
             firstName: v('staff-pos-first'),
+            middleName: v('staff-pos-middle'),
             lastName: v('staff-pos-last'),
             phone: v('staff-pos-phone'),
             email: v('staff-pos-email'),
