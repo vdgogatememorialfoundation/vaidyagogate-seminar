@@ -67,6 +67,7 @@ const scannerIdCapture = require('./lib/scanner-id-capture');
 const feedbackFormConfig = require('./lib/feedback-form-config');
 const feedbackEligibility = require('./lib/feedback-eligibility');
 const { registerLiveScannerRoutes } = require('./lib/routes-live-scanner');
+const { registerWhatsAppRoutes } = require('./lib/routes-whatsapp');
 const { registerPosRoutes } = require('./lib/pos-onspot');
 const onspotLinks = require('./lib/onspot-links');
 const siteSeoMod = require('./lib/site-seo');
@@ -8578,12 +8579,13 @@ app.post('/api/admin/seminars', (req, res) => {
     const daySelectionMode = seminarDays.normalizeDaySelectionMode(req.body && req.body.day_selection_mode);
     const eventEndDt = normalizeSeminarEventEnd(eventDt, req.body && req.body.event_end_date);
     const ticketExpiresAt = seminarDt.normalizeSeminarDateTimeForStorage(req.body && req.body.ticket_expires_at);
+    const introVideoUrl = normalizeIntroVideoUrl(req.body && req.body.intro_video_url);
     portalTracking.getPortalYear(db, (ePy, defaultYear) => {
         const portalYear =
             Number.isInteger(bodyYear) && bodyYear > 2000 ? bodyYear : defaultYear;
         db.run(
-            `INSERT INTO seminars (title, description, registration_start, registration_end, event_date, capacity, price, checkin_enabled, checkin_date, location_text, location_url, terms_conditions, hero_image_path, flyer_path, gallery_paths, registration_form_json, cancellation_policy_json, whatsapp_group_url, otp_on_application, otp_on_step1, otp_on_submit, public_list_enabled, cert_scans_required, portal_year, is_active, show_seats_public, preregistration_enabled, preregistration_start, preregistration_end, waiting_list_enabled, allow_application_edit, auto_confirm_registration, alumni_source_seminar_ids, alumni_notify_auto, day_selection_mode, event_end_date, ticket_expires_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO seminars (title, description, registration_start, registration_end, event_date, capacity, price, checkin_enabled, checkin_date, location_text, location_url, terms_conditions, hero_image_path, flyer_path, gallery_paths, registration_form_json, cancellation_policy_json, whatsapp_group_url, otp_on_application, otp_on_step1, otp_on_submit, public_list_enabled, cert_scans_required, portal_year, is_active, show_seats_public, preregistration_enabled, preregistration_start, preregistration_end, waiting_list_enabled, allow_application_edit, auto_confirm_registration, alumni_source_seminar_ids, alumni_notify_auto, day_selection_mode, event_end_date, ticket_expires_at, intro_video_url)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 title,
                 description,
@@ -8621,7 +8623,8 @@ app.post('/api/admin/seminars', (req, res) => {
                 alumniNotifyAuto,
                 daySelectionMode,
                 eventEndDt,
-                ticketExpiresAt
+                ticketExpiresAt,
+                introVideoUrl
             ],
             function (err) {
             if (err) return res.status(500).json({ error: err.message });
@@ -8653,6 +8656,15 @@ function normalizeSeminarEventEnd(eventStartStored, rawEnd) {
     const endMs = seminarDt.parseSeminarMs(endStored);
     if (startMs != null && endMs != null && endMs <= startMs) return null;
     return endStored;
+}
+
+/** Intro/how-to-register video: an http(s) URL (YouTube, Drive, Vimeo…) or an uploaded site-relative path. */
+function normalizeIntroVideoUrl(raw) {
+    const v = String(raw == null ? '' : raw).trim();
+    if (!v) return null;
+    if (/^\/[\w./-]+$/i.test(v)) return v;
+    if (/^https?:\/\/\S+$/i.test(v)) return v.slice(0, 2000);
+    return null;
 }
 
 // Admin: Update Seminar
@@ -8753,8 +8765,9 @@ app.put('/api/admin/seminars/:id', (req, res) => {
                     : null;
             const eventEndDt = normalizeSeminarEventEnd(eventDt, req.body && req.body.event_end_date);
             const ticketExpiresAt = seminarDt.normalizeSeminarDateTimeForStorage(req.body && req.body.ticket_expires_at);
+            const introVideoUrl = normalizeIntroVideoUrl(req.body && req.body.intro_video_url);
             const sql =
-                `UPDATE seminars SET title=?, description=?, registration_start=?, registration_end=?, event_date=?, capacity=?, price=?, checkin_enabled=?, checkin_date=?, is_active=?, location_text=?, location_url=?, terms_conditions=?, hero_image_path=?, flyer_path=?, gallery_paths=?, registration_form_json=?, cancellation_policy_json=?, whatsapp_group_url=?, otp_on_application=?, otp_on_step1=?, otp_on_submit=?, public_list_enabled=?, cert_scans_required=?, portal_year=?, show_seats_public=?, preregistration_enabled=?, preregistration_start=?, preregistration_end=?, waiting_list_enabled=?, allow_application_edit=?, auto_confirm_registration=?, alumni_source_seminar_ids=?, alumni_notify_auto=?, day_selection_mode=COALESCE(?, day_selection_mode), event_end_date=?, ticket_expires_at=?` +
+                `UPDATE seminars SET title=?, description=?, registration_start=?, registration_end=?, event_date=?, capacity=?, price=?, checkin_enabled=?, checkin_date=?, is_active=?, location_text=?, location_url=?, terms_conditions=?, hero_image_path=?, flyer_path=?, gallery_paths=?, registration_form_json=?, cancellation_policy_json=?, whatsapp_group_url=?, otp_on_application=?, otp_on_step1=?, otp_on_submit=?, public_list_enabled=?, cert_scans_required=?, portal_year=?, show_seats_public=?, preregistration_enabled=?, preregistration_start=?, preregistration_end=?, waiting_list_enabled=?, allow_application_edit=?, auto_confirm_registration=?, alumni_source_seminar_ids=?, alumni_notify_auto=?, day_selection_mode=COALESCE(?, day_selection_mode), event_end_date=?, ticket_expires_at=?, intro_video_url=?` +
                 (resetSent ? `, alumni_notify_sent_at=NULL` : '') +
                 ` WHERE id=?`;
         db.run(
@@ -8797,6 +8810,7 @@ app.put('/api/admin/seminars/:id', (req, res) => {
                 daySelectionMode,
                 eventEndDt,
                 ticketExpiresAt,
+                introVideoUrl,
                 sid
             ],
             function (err) {
@@ -10859,6 +10873,7 @@ function requireAdminActor(req, res, next) {
 }
 
 registerLiveScannerRoutes(app, { db, requireAdminActor });
+registerWhatsAppRoutes(app, { db, requireAdminActor, generateId, getOrCreatePendingOrder });
 registerPosRoutes(app, {
     db,
     generateId,

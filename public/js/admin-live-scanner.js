@@ -296,7 +296,9 @@
         const totalIn = rosterRows.filter((r) => r.tickets.some((t) => t.scanned)).length;
         if (summary) {
             let checkinLabel = '';
-            if (rosterCheckin) {
+            if (rosterCheckin && !rosterCheckin.seminarCheckinEnabled) {
+                checkinLabel = 'Check-in is OFF (enable it in Admin → Seminars) — ';
+            } else if (rosterCheckin) {
                 checkinLabel = 'Check-in date: ' + formatYmdLabel(rosterCheckin.effectiveDate);
                 if (rosterCheckin.activeDayTitle) checkinLabel += ' · ' + rosterCheckin.activeDayTitle + ' only';
                 else if (rosterCheckin.days && rosterCheckin.days.length) checkinLabel += ' · no seminar day on this date';

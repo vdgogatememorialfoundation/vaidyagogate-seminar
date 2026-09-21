@@ -3507,7 +3507,12 @@ function renderSeminarGridCard(s, readOnlyPast, alreadyRegistered, draftApp) {
                   : '') +
             '<button type="button" class="btn-primary" onclick="startRegistration(' +
             s.id +
-            ')" style="width:100%;">Register now</button>';
+            ')" style="width:100%;">Register now</button>' +
+            (s.intro_video_url
+                ? '<button type="button" class="btn-secondary" onclick="showSeminarIntroVideo(' +
+                  s.id +
+                  ')" style="width:100%;margin-top:8px;"><i class="fas fa-play-circle"></i> Watch: how to register</button>'
+                : '');
     }
     return (
         '<div style="background:white;border-radius:12px;padding:25px;box-shadow:0 4px 15px rgba(0,0,0,0.03);border-top:4px solid ' +
@@ -3712,6 +3717,67 @@ function validateSeminarEventSelectionOrAlert() {
     return true;
 }
 
+/** Turn a pasted YouTube / Drive / Vimeo / direct-file link into an embeddable player. */
+function introVideoEmbedHtml(url) {
+    const u = String(url || '').trim();
+    let m;
+    if ((m = u.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|embed\/|live\/)|youtu\.be\/)([\w-]{6,})/i))) {
+        return '<iframe src="https://www.youtube-nocookie.com/embed/' + m[1] + '?rel=0" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>';
+    }
+    if ((m = u.match(/drive\.google\.com\/file\/d\/([\w-]+)/i))) {
+        return '<iframe src="https://drive.google.com/file/d/' + m[1] + '/preview" allow="autoplay; fullscreen" allowfullscreen></iframe>';
+    }
+    if ((m = u.match(/vimeo\.com\/(?:video\/)?(\d+)/i))) {
+        return '<iframe src="https://player.vimeo.com/video/' + m[1] + '" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen></iframe>';
+    }
+    if (/^\//.test(u) || /\.(mp4|webm|m4v|mov)(\?|$)/i.test(u)) {
+        return '<video src="' + escapeHtml(u) + '" controls playsinline preload="metadata"></video>';
+    }
+    return '<iframe src="' + escapeHtml(u) + '" allow="autoplay; fullscreen" allowfullscreen></iframe>';
+}
+
+/** Admin-configured "how to register" video, shown before the registration form (onContinue) or on demand. */
+function showSeminarIntroVideo(seminarOrId, onContinue) {
+    const s = typeof seminarOrId === 'object' ? seminarOrId : activeSeminars.find((x) => Number(x.id) === Number(seminarOrId));
+    if (!s || !s.intro_video_url) {
+        if (onContinue) onContinue();
+        return;
+    }
+    let modal = document.getElementById('seminar-intro-video-modal');
+    if (modal) modal.remove();
+    modal = document.createElement('div');
+    modal.id = 'seminar-intro-video-modal';
+    modal.style.cssText = 'position:fixed;inset:0;z-index:12000;background:rgba(15,23,42,0.72);display:flex;align-items:center;justify-content:center;padding:16px;';
+    modal.innerHTML =
+        '<div style="background:#fff;border-radius:14px;max-width:760px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.3);overflow:hidden;">' +
+        '<div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #e2e8f0;">' +
+        '<h3 style="margin:0;font-size:1.05rem;color:#0f172a;"><i class="fas fa-play-circle" style="color:#1a237e;"></i> How to register — ' +
+        escapeHtml(s.title || 'Seminar') +
+        '</h3>' +
+        '<button type="button" id="seminar-intro-video-close" aria-label="Close" style="border:none;background:none;font-size:1.4rem;color:#64748b;cursor:pointer;">&times;</button></div>' +
+        '<div class="intro-video-frame" style="position:relative;width:100%;aspect-ratio:16/9;background:#000;">' +
+        introVideoEmbedHtml(s.intro_video_url) +
+        '</div>' +
+        '<div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;padding:14px 18px;">' +
+        '<button type="button" class="btn-secondary" id="seminar-intro-video-cancel">Close</button>' +
+        (onContinue ? '<button type="button" class="btn-primary" id="seminar-intro-video-continue">Continue to registration <i class="fas fa-arrow-right"></i></button>' : '') +
+        '</div></div>';
+    const frame = modal.querySelector('.intro-video-frame');
+    const media = frame && frame.firstElementChild;
+    if (media) media.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:0;';
+    document.body.appendChild(modal);
+    const close = () => modal.remove();
+    modal.querySelector('#seminar-intro-video-close').onclick = close;
+    modal.querySelector('#seminar-intro-video-cancel').onclick = close;
+    const cont = modal.querySelector('#seminar-intro-video-continue');
+    if (cont) {
+        cont.onclick = () => {
+            close();
+            onContinue();
+        };
+    }
+}
+
 async function startRegistration(seminarId, opts) {
     opts = opts || {};
     await refreshRegistrationOverrides();
@@ -3750,6 +3816,10 @@ async function startRegistration(seminarId, opts) {
     }
     if (waitlistMode && s && win.state !== 'waitlist') {
         alert('Waiting list is not open for this seminar.');
+        return;
+    }
+    if (s && s.intro_video_url && !opts.skipIntro && !editMode && !draftResume) {
+        showSeminarIntroVideo(s, () => startRegistration(seminarId, Object.assign({}, opts, { skipIntro: true })));
         return;
     }
     activeSeminarIdForReg = seminarId;
