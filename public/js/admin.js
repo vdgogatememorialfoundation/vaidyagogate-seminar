@@ -617,6 +617,7 @@ function mergeAdminEnabledPagesPolicy(stored) {
     if (restrict) {
         if (!('tab-book-sales' in pages)) pages['tab-book-sales'] = true;
         if (!('tab-cancellation-review' in pages)) pages['tab-cancellation-review'] = true;
+        if (!('tab-whatsapp' in pages)) pages['tab-whatsapp'] = true;
     }
     return pages;
 }
@@ -1720,6 +1721,7 @@ const ADMIN_MODULE_TAB_DEFS = [
     ['tab-feedback-form', 'Feedback form editor'],
     ['tab-activity-logs', 'User & doctor activity'],
     ['tab-notifications', 'Notifications'],
+    ['tab-whatsapp', 'WhatsApp'],
     ['tab-live-radar', 'Application Radar'],
     ['tab-system-platform', 'System health'],
     ['tab-system-users', 'User health'],
@@ -14378,6 +14380,8 @@ function editSeminar(index) {
     document.getElementById('seminar-terms').value = s.terms_conditions || '';
     const wh = document.getElementById('seminar-whatsapp');
     if (wh) wh.value = s.whatsapp_group_url || '';
+    const iv = document.getElementById('seminar-intro-video');
+    if (iv) iv.value = s.intro_video_url || '';
     const otp = document.getElementById('seminar-otp-app');
     if (otp) otp.checked = !!Number(s.otp_on_application);
     const otpS1 = document.getElementById('seminar-otp-step1');
@@ -14483,6 +14487,7 @@ async function saveSeminar(e) {
         flyer_path: (document.getElementById('seminar-flyer') || {}).value || null,
         gallery_paths: galleryVal,
         whatsapp_group_url: (document.getElementById('seminar-whatsapp') || {}).value || null,
+        intro_video_url: (document.getElementById('seminar-intro-video') || {}).value || null,
         otp_on_application: !!(document.getElementById('seminar-otp-app') || {}).checked,
         otp_on_step1:
             !!(document.getElementById('seminar-otp-app') || {}).checked &&
@@ -18970,6 +18975,19 @@ async function uploadSeminarGalleryBatch() {
     albums.sort((a, b) => String(b.year).localeCompare(String(a.year)));
     ta.value = JSON.stringify(albums, null, 2);
     if (yearInp && !yearInp.value) yearInp.value = year;
+}
+
+async function uploadSeminarIntroVideo() {
+    const el = document.getElementById('seminar-intro-video-file');
+    const msg = document.getElementById('seminar-intro-video-msg');
+    if (!el || !window.PortalUpload) return;
+    if (msg) msg.textContent = 'Uploading…';
+    const path = await window.PortalUpload.uploadAdminReelFromInput(el, 'video');
+    el.value = '';
+    if (msg) msg.textContent = path ? 'Uploaded — click Save seminar to publish.' : '';
+    if (!path) return;
+    const t = document.getElementById('seminar-intro-video');
+    if (t) t.value = path;
 }
 
 async function uploadSeminarHeroOrFlyer(kind) {

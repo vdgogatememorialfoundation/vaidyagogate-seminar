@@ -185,6 +185,7 @@
                 <a class="menu-item" data-admin-module="tab-feedback-form" onclick="switchTab('tab-feedback-form'); loadAdminFeedbackFormConfig();"><i class="fas fa-edit"></i> Feedback form editor</a>
                 <a class="menu-item" data-admin-module="tab-activity-logs" onclick="switchTab('tab-activity-logs'); initAdminActivityLogsTab();"><i class="fas fa-history"></i> User &amp; doctor activity</a>
                 <a class="menu-item" data-admin-module="tab-notifications" onclick="switchTab('tab-notifications'); initAdminNotificationsTab();"><i class="fas fa-bell"></i> Notifications</a>
+                <a class="menu-item" data-admin-module="tab-whatsapp" onclick="switchTab('tab-whatsapp'); if (window.AdminWhatsApp) AdminWhatsApp.init();"><i class="fab fa-whatsapp"></i> WhatsApp</a>
                 <a class="menu-item" data-admin-module="tab-live-radar" onclick="switchTab('tab-live-radar'); initAdminLiveRadar();"><i class="fas fa-satellite-dish"></i> Application Radar</a>
                 <a class="menu-item" data-admin-module="tab-system-platform" onclick="switchTab('tab-system-platform'); initAdminSystemHealth('platform');"><i class="fas fa-server"></i> System health</a>
                 <a class="menu-item" data-admin-module="tab-system-users" onclick="switchTab('tab-system-users'); initAdminSystemHealth('users');"><i class="fas fa-users-cog"></i> User health</a>
@@ -2403,6 +2404,29 @@
             </div>
 
             <!-- Notification templates -->
+            <div id="tab-whatsapp" class="tab-pane hidden">
+                <div style="display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px;">
+                    <h2 style="margin:0;"><i class="fab fa-whatsapp" style="color:#16a34a;"></i> WhatsApp</h2>
+                    <span id="wa-config-badge" class="badge" style="font-size:0.8rem;"></span>
+                </div>
+                <p style="color: var(--muted); margin-bottom: 14px; font-size: 0.9rem;">Central WhatsApp communication: one reusable service for e-tickets, payment reminders, campaigns, Flows and message tracking. Credentials stay in Integrations &rarr; WhatsApp.</p>
+                <div class="wa-subnav" id="wa-subnav">
+                    <button type="button" class="wa-subnav-btn active" data-wa-section="dashboard">Dashboard</button>
+                    <button type="button" class="wa-subnav-btn" data-wa-section="send">Send Message</button>
+                    <button type="button" class="wa-subnav-btn" data-wa-section="campaigns">Campaigns</button>
+                    <button type="button" class="wa-subnav-btn" data-wa-section="templates">Templates</button>
+                    <button type="button" class="wa-subnav-btn" data-wa-section="flows">Flows</button>
+                    <button type="button" class="wa-subnav-btn" data-wa-section="logs">Message Logs</button>
+                    <button type="button" class="wa-subnav-btn" data-wa-section="settings">Settings</button>
+                </div>
+                <div id="wa-section-dashboard" class="wa-section"></div>
+                <div id="wa-section-send" class="wa-section hidden"></div>
+                <div id="wa-section-campaigns" class="wa-section hidden"></div>
+                <div id="wa-section-templates" class="wa-section hidden"></div>
+                <div id="wa-section-flows" class="wa-section hidden"></div>
+                <div id="wa-section-logs" class="wa-section hidden"></div>
+                <div id="wa-section-settings" class="wa-section hidden"></div>
+            </div>
             <div id="tab-notifications" class="tab-pane hidden">
                 <h2 style="margin-bottom: 8px;">Notification templates</h2>
                 <p style="color: var(--muted); margin-bottom: 20px; font-size: 0.9rem;">Email (Zoho SMTP) and WhatsApp (Meta Cloud API). Placeholders: <code>{{full_name}}</code>, <code>{{seminar_name}}</code>, <code>{{ticket_id}}</code>, etc.</p>
@@ -3207,6 +3231,7 @@
                     <h4 style="margin-bottom: 10px; color:#1e40af;">Per-seminar links, policy &amp; form override</h4>
                     <p style="color:#64748b;font-size:0.85rem;margin-bottom:10px;">WhatsApp link appears to doctors after approval. Cancellation policy is shown to doctors in plain language. Form override adjusts labels and which fields appear for this seminar only.</p>
                     <div><label>WhatsApp group / invite URL</label><input type="text" id="seminar-whatsapp" placeholder="https://chat.whatsapp.com/..."></div>
+                    <div style="margin-top:10px;"><label>"How to register" video (shown to doctors before they register)</label><input type="text" id="seminar-intro-video" placeholder="YouTube / Drive / Vimeo link, or upload an MP4 below"><input type="file" id="seminar-intro-video-file" accept="video/mp4,video/webm" style="margin-top:8px;"><button type="button" class="btn-primary" style="margin-top:8px;padding:6px 12px;font-size:0.85rem;" onclick="uploadSeminarIntroVideo()">Upload video</button><span id="seminar-intro-video-msg" style="margin-left:8px;font-size:0.85rem;color:#64748b;"></span></div>
                     <div style="margin-top:10px;"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="seminar-otp-app" checked onchange="syncSeminarOtpOptionsUi()"> Enable application OTP verification</label></div>
                     <div id="seminar-otp-subopts" style="margin:8px 0 0 22px;display:grid;gap:6px;">
                         <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="seminar-otp-step1" checked> Step 1 — personal details (email + WhatsApp codes)</label>
@@ -3502,7 +3527,8 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
-    <script src="/js/admin.js?v=20260920a"></script>
+    <script src="/js/admin.js?v=20260921a"></script>
     <script src="/js/pos-onspot-ui.js?v=20260916a"></script>
+    <script src="/js/admin-whatsapp.js?v=20260921a"></script>
 </body>
 </html>
