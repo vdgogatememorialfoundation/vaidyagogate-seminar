@@ -14,7 +14,7 @@
     <link rel="stylesheet" href="/css/responsive-portals.css?v=20260620layout4">
     <link rel="stylesheet" href="/css/vgmf-portal-bright.css?v=20260620theme1">
     <link rel="stylesheet" href="/css/vgmf-mobile-portal.css">
-    <link rel="stylesheet" href="/css/doctor-professional.css?v=20260918a">
+    <link rel="stylesheet" href="/css/doctor-professional.css?v=20260922b">
     <style>
         :root {
             --doctor-primary: #0f766e;
@@ -358,6 +358,8 @@
                 <div id="tab-dashboard" class="tab-pane hidden">
                     <h2 class="section-title" data-i18n="doctor.section.dashboard">Dashboard</h2>
                     <div data-doctor-updates-anchor></div>
+                    <div id="dash-pending-fields" class="hidden"></div>
+                    <div id="dash-payment-due" class="hidden"></div>
                     <p style="color: #64748b; margin: -10px 0 20px;">Overview of your seminar activity. Use <strong>Seminar feedback</strong> and <strong>Support tickets</strong> in the menu. Live chat is the chat button at the bottom right.</p>
                     <div class="stat-grid">
                         <div class="stat-card"><h4 id="stat-registered">—</h4><p>Registered seminars</p></div>
@@ -808,6 +810,20 @@
     </div>
 
     
+    <div id="pending-fields-modal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2100;display:flex;justify-content:center;align-items:center;padding:20px;">
+        <div class="card" style="max-width:520px;width:100%;max-height:90vh;overflow:auto;">
+            <h3 style="margin-top:0;color:#92400e;">Complete your details</h3>
+            <p id="pending-fields-label" style="font-size:0.9rem;color:#64748b;"></p>
+            <p style="font-size:0.85rem;color:#78350f;">These details were left for you to fill in when the seminar office registered you.</p>
+            <div id="pending-fields-body"></div>
+            <p id="pending-fields-msg" style="font-size:0.85rem;color:#b91c1c;min-height:1.2em;margin:8px 0 0;"></p>
+            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;">
+                <button type="button" class="btn-secondary" onclick="closePendingFieldsModal()">Cancel</button>
+                <button type="button" class="btn-primary" onclick="submitPendingFields()">Save details</button>
+            </div>
+        </div>
+    </div>
+
     <div id="seminar-doc-resubmit-modal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2100;display:flex;justify-content:center;align-items:center;padding:20px;">
         <div class="card" style="max-width:520px;width:100%;max-height:90vh;overflow:auto;">
             <h3 style="margin-top:0;color:#9a3412;">Re-upload documents</h3>
@@ -939,6 +955,6 @@
         }
     })();
     </script>
-    <script src="/js/doctor.js?v=20260921a"></script>
+    <script src="/js/doctor.js?v=20260922d"></script>
 </body>
 </html>

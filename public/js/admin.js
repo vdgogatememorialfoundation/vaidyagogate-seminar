@@ -2112,6 +2112,24 @@ function adminActorId() {
     return u && u.id ? u.id : null;
 }
 
+function downloadAdminApplicationForm(appId, format) {
+    const aid = adminActorId();
+    if (!aid) return alert('Please sign in again.');
+    window.open(
+        '/api/admin/applications/' + encodeURIComponent(appId) + '/form-export?format=' + (format === 'png' ? 'png' : 'pdf') + '&actingAdminId=' + encodeURIComponent(aid),
+        '_blank'
+    );
+}
+
+function downloadAdminSeminarBlankForm(seminarId, format) {
+    const aid = adminActorId();
+    if (!aid) return alert('Please sign in again.');
+    window.open(
+        '/api/admin/seminars/' + encodeURIComponent(seminarId) + '/form-export?format=' + (format === 'png' ? 'png' : 'pdf') + '&actingAdminId=' + encodeURIComponent(aid),
+        '_blank'
+    );
+}
+
 async function loadAdminFeedbackFormConfig() {
     const aid = adminActorId();
     if (!aid) return;
@@ -2858,9 +2876,17 @@ function renderAdminBehalfFormFields(preservedData) {
                 html += '<option value="' + escAdmin(String(v)) + '">' + escAdmin(o.label || v) + '</option>';
             });
             html += '</select>';
+        } else if (t === 'date') {
+            html += '<input type="date" id="' + id + '" style="width:100%;padding:8px;">';
         } else {
-            const ty = f.type === 'email' ? 'email' : f.type === 'tel' ? 'tel' : 'text';
-            html += '<input type="' + ty + '" id="' + id + '" style="width:100%;padding:8px;">';
+            const ty = t === 'email' ? 'email' : t === 'tel' ? 'tel' : t === 'number' ? 'number' : 'text';
+            const pinAttr = f.key === 'pin' || f.key === 'cpin' ? ' maxlength="6" inputmode="numeric"' : '';
+            html += '<input type="' + ty + '" id="' + id + '" style="width:100%;padding:8px;"' + pinAttr + '>';
+        }
+        if (adminBehalfFieldDeferrable(f)) {
+            html +=
+                '<label style="display:flex;align-items:center;gap:6px;font-size:0.78rem;color:#64748b;margin-top:4px;font-weight:500;cursor:pointer;">' +
+                '<input type="checkbox" id="behalf-later-' + f.key + '" class="behalf-later-cb" data-key="' + escAdmin(f.key) + '" style="width:auto;margin:0;"> Applicant will add later</label>';
         }
         html += '</div>';
     });
@@ -2870,7 +2896,10 @@ function renderAdminBehalfFormFields(preservedData) {
             '<input type="file" id="behalf-cert-file" accept=".pdf,.jpg,.jpeg,.png,.webp,image/*,application/pdf" style="width:100%;padding:8px;">' +
             '<p id="behalf-cert-hint" style="font-size:0.82rem;margin-top:6px;">' +
             adminBehalfCertificateHintHtml(__behalfCertPath) +
-            '</p></div>';
+            '</p>' +
+            '<label style="display:flex;align-items:center;gap:6px;font-size:0.78rem;color:#64748b;margin-top:4px;font-weight:500;cursor:pointer;">' +
+            '<input type="checkbox" id="behalf-later-certificate" class="behalf-later-cb" data-key="certificate" data-target="behalf-cert-file" style="width:auto;margin:0;"> Applicant will upload later</label>' +
+            '</div>';
     }
     host.innerHTML = html;
     Object.keys(preserved || {}).forEach((k) => {
@@ -2882,6 +2911,22 @@ function renderAdminBehalfFormFields(preservedData) {
         } else {
             el.value = preserved[k];
         }
+    });
+    const pendingKeys = Array.isArray(preserved.pending_fields) ? preserved.pending_fields : [];
+    pendingKeys.forEach((k) => {
+        const cb = document.getElementById('behalf-later-' + k);
+        if (cb) cb.checked = true;
+    });
+    host.querySelectorAll('.behalf-later-cb').forEach((cb) => {
+        const sync = () => {
+            const inp = document.getElementById(cb.dataset.target || 'behalf-f-' + cb.dataset.key);
+            if (!inp) return;
+            inp.disabled = cb.checked;
+            inp.style.opacity = cb.checked ? '0.55' : '';
+            if (cb.checked) inp.type === 'checkbox' ? (inp.checked = false) : (inp.value = '');
+        };
+        cb.addEventListener('change', sync);
+        sync();
     });
     applyBehalfSelectedEvents(preserved);
     const qualEl = document.getElementById('behalf-f-qual');
@@ -2968,6 +3013,14 @@ function applyBehalfSelectedEvents(formData) {
     });
 }
 
+const ADMIN_BEHALF_NON_DEFERRABLE = ['fname', 'lname', 'email', 'phone', 'qual'];
+function adminBehalfFieldDeferrable(f) {
+    if (!f || !f.key) return false;
+    if (ADMIN_BEHALF_NON_DEFERRABLE.includes(String(f.key))) return false;
+    const t = String(f.type || 'text').toLowerCase();
+    return t !== 'otp' && t !== 'terms' && t !== 'boolean' && t !== 'checkbox';
+}
+
 function collectAdminBehalfFormData() {
     const o = { country: 'India' };
     const qual = (document.getElementById('behalf-f-qual') || {}).value;
@@ -2986,6 +3039,11 @@ function collectAdminBehalfFormData() {
             o[f.key] = el.value;
         }
     });
+    const later = [];
+    document.querySelectorAll('#behalf-form-fields .behalf-later-cb').forEach((cb) => {
+        if (cb.checked && cb.dataset.key) later.push(cb.dataset.key);
+    });
+    if (later.length) o.pending_fields = later;
     if (__behalfCertPath) o.certificate_path = __behalfCertPath;
     const eventIds = getSelectedBehalfEventIds();
     if (eventIds.length) o.selected_event_ids = eventIds;
@@ -3535,6 +3593,23 @@ async function openAdminBehalfForVolunteer(userId, seminarId) {
     await onAdminBehalfDoctorOrSeminarChange();
 }
 window.openAdminBehalfForVolunteer = openAdminBehalfForVolunteer;
+
+async function removeVolunteerAssignment(assignId, hasTicket) {
+    const warn = hasTicket
+        ? 'Remove this volunteer assignment? The free (₹0) volunteer ticket and volunteer certificates will be cancelled.'
+        : 'Remove this volunteer assignment?';
+    if (!confirm(warn)) return;
+    try {
+        const res = await fetch('/api/admin/volunteers/' + assignId, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) refreshVolunteerAdminPanels();
+        else alert(data.error || 'Could not remove assignment');
+    } catch (e) {
+        console.error(e);
+        alert('Network error');
+    }
+}
+window.removeVolunteerAssignment = removeVolunteerAssignment;
 
 async function editVolunteerDuties(assignId, currentDuties) {
     const duties = prompt('Volunteer duties (e.g. Registration desk, Scanner hall)', currentDuties || '');
@@ -5351,14 +5426,23 @@ function renderAdminVolunteerAssignmentsTable() {
         } else if (!hasTicket) {
             actions += '<span style="font-size:0.8rem;color:#64748b;">Waiting for registration</span>';
         } else {
-            actions += '<span style="font-size:0.8rem;color:#059669;">Ticket issued</span>';
+            actions +=
+                '<span style="font-size:0.8rem;color:#059669;">Ticket issued</span>' +
+                '<button type="button" style="padding:4px 8px;font-size:0.8rem;margin-left:4px;" title="Issue any missing per-day tickets" onclick="approveAdminVolunteer(' +
+                assignId +
+                ')">Check day tickets</button>';
         }
         actions +=
             '<button type="button" style="padding:4px 8px;font-size:0.8rem;margin-left:4px;" onclick="editVolunteerDuties(' +
             assignId +
             ',' +
             JSON.stringify(String(v.duties || '')) +
-            ')">Duties</button>';
+            ')">Duties</button>' +
+            '<button type="button" style="padding:4px 8px;font-size:0.8rem;margin-left:4px;color:#b91c1c;border-color:#fca5a5;" onclick="removeVolunteerAssignment(' +
+            assignId +
+            ',' +
+            (hasTicket ? 'true' : 'false') +
+            ')">Remove</button>';
         const eventLine = v.event_date
             ? '<div class="muted" style="font-size:0.78rem;">' + escAdmin(String(v.event_date).slice(0, 10)) + '</div>'
             : '';
@@ -5745,7 +5829,7 @@ function adminPromptFeeChoice(app, title, onConfirm) {
 
 async function approveAdminVolunteer(volId) {
     const admin = getStoredAdminUser();
-    if (!confirm('Issue free volunteer ticket (₹0)? Doctor must have completed seminar registration first.')) return;
+    if (!confirm('Issue free volunteer ticket (₹0) — one per allotted seminar day? Doctor must have completed seminar registration first. Missing day tickets are added if some already exist.')) return;
     try {
         const res = await fetch(`/api/admin/volunteers/${volId}/approve`, {
             method: 'POST',
@@ -6452,11 +6536,11 @@ function downloadCaseMarksheet(format) {
     const programId = document.getElementById('case-results-program')?.value || '';
     const q = programId ? '?programId=' + encodeURIComponent(programId) + '&' : '?';
     const fmt = format || 'xlsx';
-    if (fmt === 'pdf') {
-        window.open('/api/admin/case/marksheet' + (programId ? '?programId=' + encodeURIComponent(programId) : '') + '&format=pdf', '_blank');
+    if (fmt === 'html') {
+        window.open('/api/admin/case/marksheet' + q + 'format=html', '_blank');
         return;
     }
-    window.location.href = '/api/admin/case/marksheet' + (programId ? '?programId=' + encodeURIComponent(programId) + '&' : '?') + 'format=xlsx';
+    window.location.href = '/api/admin/case/marksheet' + q + 'format=' + (fmt === 'pdf' ? 'pdf' : 'xlsx');
 }
 
 async function loadAdminCaseMarksheetPreview() {
@@ -6523,7 +6607,7 @@ async function loadAdminCaseResults() {
         let html =
             '<table class="data-table"><thead><tr><th>Rank</th><th>App</th><th>Doctor</th><th>Topic</th><th>Avg / ' +
             escAdmin(String(totalMax)) +
-            '</th><th>Judges</th><th>Auto eligibility</th><th>Status</th></tr></thead><tbody>';
+            '</th><th>Judges</th><th>Auto eligibility</th><th>Status</th><th>e-Marksheet</th></tr></thead><tbody>';
         rows.forEach((r, idx) => {
             const avg = r.avg_score != null ? Number(r.avg_score) : null;
             const isTop = avg != null && topScore != null && avg === topScore && (r.judges_scored || 0) > 0;
@@ -6553,6 +6637,13 @@ async function loadAdminCaseResults() {
                 escAdmin(elig) +
                 '</td><td>' +
                 escAdmin(r.status || '—') +
+                '</td><td style="white-space:nowrap;">' +
+                '<a class="btn-muted" style="padding:4px 8px;font-size:0.78rem;" href="/api/admin/case/marksheet/candidate/' +
+                encodeURIComponent(r.id) +
+                '?format=pdf" title="Download individual e-marksheet (judge marks &amp; remarks)"><i class="fas fa-file-pdf"></i> PDF</a> ' +
+                '<a class="btn-muted" style="padding:4px 8px;font-size:0.78rem;" href="/api/admin/case/marksheet/candidate/' +
+                encodeURIComponent(r.id) +
+                '?format=html" target="_blank" rel="noopener" title="Preview e-marksheet"><i class="fas fa-eye"></i></a>' +
                 '</td></tr>';
         });
         html += '</tbody></table>';
@@ -9706,8 +9797,182 @@ function renderAdminApplicationPaymentHtml(app) {
             ', true, true)"><i class="fas fa-paper-plane"></i> Resend email + WhatsApp</button>' +
             '</div>';
     }
+    html += renderAdminApplicationRazorpayHtml(app, orderStatus, txnId);
     html += '</div>';
     return html;
+}
+
+/* Razorpay block under an applicant's payment details: shows the matched payment (fetched live from
+   Razorpay) or, for unpaid applications, lets admin paste a pay_ id and match it to this application. */
+function renderAdminApplicationRazorpayHtml(app, orderStatus, txnId) {
+    const rid = parseInt(app && app.id, 10);
+    if (!rid) return '';
+    const st = String(app.status || '').toLowerCase();
+    const pid = txnId && /^pay_[A-Za-z0-9]{10,}$/.test(String(txnId)) ? String(txnId) : null;
+    const boxId = 'rzp-app-details-' + rid;
+    if (pid) {
+        setTimeout(function () {
+            adminLoadRazorpayPaymentDetails(rid, pid, boxId);
+        }, 0);
+        return (
+            '<div style="margin-top:12px;padding-top:10px;border-top:1px dashed #bbf7d0;font-size:0.85rem;">' +
+            '<strong style="color:#166534;"><i class="fas fa-link"></i> Razorpay payment</strong> <code>' +
+            escAdmin(pid) +
+            '</code>' +
+            (String(app.payment_gateway || '') === 'razorpay_manual'
+                ? ' <span style="color:#0369a1;">(matched manually)</span>'
+                : '') +
+            '<div id="' +
+            boxId +
+            '" class="muted" style="margin-top:6px;">Fetching from Razorpay…</div></div>'
+        );
+    }
+    if (orderStatus === 'success' || st === 'cancelled' || st === 'rejected') return '';
+    return (
+        '<div style="margin-top:12px;padding-top:10px;border-top:1px dashed #bbf7d0;font-size:0.85rem;">' +
+        '<strong style="color:#166534;"><i class="fas fa-link"></i> Match a Razorpay payment to this application</strong>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;align-items:center;">' +
+        '<input type="text" id="rzp-app-pid-' +
+        rid +
+        '" placeholder="pay_XXXXXXXXXXXXXX" style="flex:1;min-width:200px;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-family:monospace;">' +
+        '<button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;background:#15803d;" onclick="adminMatchRazorpayToApplication(' +
+        rid +
+        ')"><i class="fas fa-search-dollar"></i> Fetch &amp; match</button></div>' +
+        '<div id="' +
+        boxId +
+        '" class="muted" style="margin-top:6px;font-size:0.82rem;">Paste the payment id from the Razorpay dashboard; details are fetched from Razorpay before matching.</div></div>'
+    );
+}
+
+function adminRazorpayPaymentSummaryHtml(p) {
+    const statusColor = p.captured ? '#15803d' : '#b45309';
+    return (
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px 14px;">' +
+        '<div><span class="muted">Amount</span><br><strong>₹' +
+        escAdmin(String(p.amount)) +
+        '</strong></div>' +
+        '<div><span class="muted">Razorpay status</span><br><strong style="color:' +
+        statusColor +
+        ';">' +
+        escAdmin(p.status || '—') +
+        '</strong></div>' +
+        '<div><span class="muted">Method</span><br>' +
+        escAdmin(p.method || '—') +
+        '</div>' +
+        '<div><span class="muted">Paid at</span><br>' +
+        escAdmin(p.createdAt ? new Date(p.createdAt).toLocaleString('en-IN') : '—') +
+        '</div>' +
+        '<div><span class="muted">Payer email</span><br>' +
+        escAdmin(p.email || '—') +
+        '</div>' +
+        '<div><span class="muted">Payer phone</span><br>' +
+        escAdmin(p.contact || '—') +
+        '</div>' +
+        '<div><span class="muted">Razorpay order</span><br><code>' +
+        escAdmin(p.orderId || '—') +
+        '</code></div></div>'
+    );
+}
+
+async function adminLoadRazorpayPaymentDetails(rid, pid, boxId) {
+    const adm = getStoredAdminUser();
+    const box = document.getElementById(boxId);
+    if (!box) return;
+    if (!adm?.id) {
+        box.textContent = 'Admin login required to fetch Razorpay details.';
+        return;
+    }
+    try {
+        const res = await fetch(
+            '/api/admin/payments/razorpay/lookup?actingAdminId=' +
+                encodeURIComponent(adm.id) +
+                '&paymentId=' +
+                encodeURIComponent(pid)
+        );
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Lookup failed');
+        box.classList.remove('muted');
+        box.innerHTML = adminRazorpayPaymentSummaryHtml(data.payment);
+    } catch (e) {
+        box.innerHTML = '<span style="color:#b91c1c;">Could not fetch from Razorpay: ' + escAdmin(e.message) + '</span>';
+    }
+}
+
+async function adminMatchRazorpayToApplication(rid) {
+    const adm = getStoredAdminUser();
+    const input = document.getElementById('rzp-app-pid-' + rid);
+    const box = document.getElementById('rzp-app-details-' + rid);
+    const pid = (input?.value || '').trim();
+    if (!adm?.id) return alert('Admin login required.');
+    if (!/^pay_[A-Za-z0-9]{10,}$/.test(pid)) return alert('Enter a Razorpay payment id like pay_XXXXXXXXXXXXXX.');
+    if (box) {
+        box.style.color = '#64748b';
+        box.textContent = 'Fetching payment from Razorpay…';
+    }
+    try {
+        const lookupRes = await fetch(
+            '/api/admin/payments/razorpay/lookup?actingAdminId=' +
+                encodeURIComponent(adm.id) +
+                '&paymentId=' +
+                encodeURIComponent(pid)
+        );
+        const lookup = await lookupRes.json();
+        if (!lookupRes.ok) throw new Error(lookup.error || 'Lookup failed');
+        const p = lookup.payment;
+        if (lookup.alreadyMatched) {
+            const m = lookup.alreadyMatched;
+            if (box) {
+                box.innerHTML =
+                    adminRazorpayPaymentSummaryHtml(p) +
+                    '<p style="margin:8px 0 0;color:#b45309;font-weight:600;">This payment is already matched to application ' +
+                    escAdmin(m.applicationNo || m.registrationId) +
+                    ' (' +
+                    escAdmin(m.name || '') +
+                    ').</p>';
+            }
+            return;
+        }
+        if (box) box.innerHTML = adminRazorpayPaymentSummaryHtml(p);
+        if (
+            !confirm(
+                'Match Razorpay payment ' +
+                    pid +
+                    ' (₹' +
+                    p.amount +
+                    ', ' +
+                    p.status +
+                    ') to this application? It will be marked paid and the e-ticket issued and emailed.'
+            )
+        )
+            return;
+        const res = await fetch('/api/admin/payments/razorpay/match', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: adm.id, paymentId: pid, registrationId: rid })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Match failed');
+        if (box) {
+            box.innerHTML +=
+                '<p style="margin:8px 0 0;color:#15803d;font-weight:600;">Matched: ₹' +
+                escAdmin(String(data.amount)) +
+                ' recorded' +
+                (data.ticketId ? ' · e-ticket ' + escAdmin(String(data.ticketId)) + ' issued and emailed.' : ' · marked paid.') +
+                '</p>';
+        }
+        try {
+            const r2 = await fetch('/api/admin/applications');
+            const rows = await r2.json();
+            if (Array.isArray(rows)) {
+                globalAdminApps = rows;
+                const idx = globalAdminApps.findIndex((a) => Number(a.id) === Number(rid));
+                if (idx >= 0) setTimeout(() => viewFullApplication(idx), 1200);
+            }
+        } catch (_) {}
+        if (typeof loadAdminEnrichedOrders === 'function') loadAdminEnrichedOrders();
+    } catch (e) {
+        if (box) box.innerHTML = '<span style="color:#b91c1c;">' + escAdmin(e.message) + '</span>';
+    }
 }
 
 function populateAdminCancellationReviewModal(row) {
@@ -10076,6 +10341,8 @@ function renderSeminarsTable() {
                         <button class="btn-success" style="padding: 5px 10px; font-size: 0.85rem;" onclick="manageSeminar(${s.id}, '${String(s.title).replace(/'/g, "\\'")}')">Manage</button>
                         <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.85rem;background:#0d9488;margin-left:4px;" onclick="openEventScheduleModalForSeminar(${s.id}, '${String(s.title).replace(/'/g, "\\'")}')">Schedule</button>
                         <button class="btn-primary" style="padding: 5px 10px; font-size: 0.85rem;" onclick="editSeminar(${idx})">Edit</button>
+                        <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.85rem;background:#b91c1c;margin-left:4px;" title="Download blank registration form (PDF)" onclick="downloadAdminSeminarBlankForm(${s.id}, 'pdf')"><i class="fas fa-file-pdf"></i> Form</button>
+                        <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.85rem;background:#0369a1;margin-left:4px;" title="Download blank registration form (image)" onclick="downloadAdminSeminarBlankForm(${s.id}, 'png')"><i class="fas fa-image"></i> Form</button>
                         <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.85rem;background:#7c3aed;margin-left:4px;" onclick="purgeAdminSeminarTestData(${s.id}, '${String(s.title).replace(/'/g, "\\'")}')">Purge test data</button>
                         <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.85rem;background:#b91c1c;margin-left:4px;" onclick="deleteAdminSeminar(${s.id}, '${String(s.title).replace(/'/g, "\\'")}')">Delete</button>
                     </td>
@@ -10913,6 +11180,17 @@ function viewFullApplication(index) {
         ${escalationBlock}
         <p><strong>Seminar:</strong> ${escAdmin(a.seminar_title || '—')}${a.seminar_price != null ? ' · Fee ₹' + escAdmin(String(adminSeminarFeeAmount(a))) : ''}</p>
         <p><strong>Portal ID:</strong> ${escAdmin(a.user_id_string || '')}</p>
+        ${
+            Array.isArray(formData.pending_fields) && formData.pending_fields.length
+                ? '<p style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:8px 10px;"><strong>Pending from applicant:</strong> ' +
+                  escAdmin(formData.pending_fields.join(', ')) +
+                  ' <span class="muted">(marked "Applicant will add later" — doctor completes these in the portal)</span></p>'
+                : ''
+        }
+        <p style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;"><strong>Application form:</strong>
+            <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;background:#b91c1c;" onclick="downloadAdminApplicationForm(${a.id}, 'pdf')"><i class="fas fa-file-pdf"></i> PDF</button>
+            <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;background:#0369a1;" onclick="downloadAdminApplicationForm(${a.id}, 'png')"><i class="fas fa-image"></i> Image</button>
+        </p>
         ${renderAdminApplicationPaymentHtml(a)}
         ${
             dupReview
@@ -14471,14 +14749,7 @@ async function saveSeminar(e) {
         price: parseFloat(document.getElementById('seminar-price').value) || 0,
         is_active: document.getElementById('seminar-active').value === '1',
         checkin_enabled: document.getElementById('seminar-checkin-enabled').value === '1',
-        checkin_date: (() => {
-            const enabled = document.getElementById('seminar-checkin-enabled').value === '1';
-            let d = document.getElementById('seminar-checkin-date').value || '';
-            if (enabled && !d) {
-                d = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-            }
-            return d || null;
-        })(),
+        checkin_date: document.getElementById('seminar-checkin-date').value || null,
         public_list_enabled: document.getElementById('seminar-public-list-enabled')?.value === '1',
         cert_scans_required: parseInt(document.getElementById('seminar-cert-scans-required')?.value || '1', 10) === 2 ? 2 : 1,
         location_text: (document.getElementById('seminar-location-text') || {}).value?.trim() || null,
@@ -19081,11 +19352,11 @@ function renderRzpMatchRegRows(rows, heading) {
                     '</td><td>' +
                     (fee != null ? '₹' + escAdmin(String(fee)) : '—') +
                     '</td><td>' +
-                    (r.paid
-                        ? '<span style="color:#64748b;">Already paid</span>'
-                        : '<button type="button" class="btn-primary" style="background:#15803d;" onclick="matchRazorpayPaymentToRegistration(' +
-                          Number(r.registrationId) +
-                          ')">Match &amp; issue ticket</button>') +
+                    '<button type="button" class="btn-primary" style="background:#15803d;" onclick="matchRazorpayPaymentToRegistration(' +
+                        Number(r.registrationId) +
+                        ')">' +
+                        (r.paid ? 'Link payment' : 'Match &amp; issue ticket') +
+                        '</button>' +
                     '</td></tr>'
                 );
             })
@@ -19206,7 +19477,7 @@ async function matchRazorpayPaymentToRegistration(registrationId) {
         !confirm(
             'Match Razorpay payment ' +
                 __rzpMatchPaymentId +
-                ' to this application? It will be marked paid and the e-ticket issued and emailed.'
+                ' to this application? If unpaid it will be marked paid and the e-ticket issued and emailed; if already paid the payment is linked to the existing order.'
         )
     )
         return;
@@ -19229,7 +19500,11 @@ async function matchRazorpayPaymentToRegistration(registrationId) {
                 data.amount +
                 ' recorded for application ' +
                 (data.registration.applicationNo || registrationId) +
-                (data.ticketId ? ' · e-ticket ' + data.ticketId + ' issued and emailed.' : ' · marked paid.');
+                (data.alreadyPaid
+                    ? ' · linked to the existing paid order.'
+                    : data.ticketId
+                      ? ' · e-ticket ' + data.ticketId + ' issued and emailed.'
+                      : ' · marked paid.');
         }
         lookupRazorpayPaymentForMatch();
         loadAdminEnrichedOrders();

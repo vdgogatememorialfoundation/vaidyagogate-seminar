@@ -2087,7 +2087,8 @@
                     </select>
                     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
                         <button type="button" class="btn-primary" style="background:#0f766e;" onclick="downloadCaseMarksheet('xlsx')"><i class="fas fa-file-excel"></i> Download Excel marksheet</button>
-                        <button type="button" class="btn-primary" style="background:#1e40af;" onclick="downloadCaseMarksheet('pdf')"><i class="fas fa-file-pdf"></i> Download PDF / print</button>
+                        <button type="button" class="btn-primary" style="background:#1e40af;" onclick="downloadCaseMarksheet('pdf')"><i class="fas fa-file-pdf"></i> Download group PDF marksheet</button>
+                        <button type="button" class="btn-muted" onclick="downloadCaseMarksheet('html')"><i class="fas fa-print"></i> Preview / print</button>
                     </div>
                     <p style="font-size:0.82rem;color:#64748b;margin-bottom:10px;">Marksheet includes each judge’s criteria scores, totals, doctor &amp; judge IDs, and auto eligibility (≥60% of max by default).</p>
                     <div id="case-results-panel"><p style="color:#64748b;">Loading results…</p></div>
@@ -2306,50 +2307,39 @@
             </div>
 
             <div id="tab-pos" class="tab-pane hidden">
-                <h2 style="margin-bottom:12px;">On-spot POS registration</h2>
-                <p style="color:#64748b;margin-bottom:16px;">Register a doctor at the venue. Record <strong>cash</strong> or collect via <strong>Razorpay Checkout</strong> / other integrated payment gateways. E-ticket is issued immediately for cash, or automatically when the gateway confirms payment.</p>
-                <div class="card" style="max-width:720px;margin-bottom:16px;">
-                    <h3 style="margin:0 0 6px;font-size:1rem;">Find registered participant</h3>
-                    <p style="color:#64748b;font-size:0.85rem;margin:0 0 10px;">Type a phone number, name, email, doctor ID or application no. Matching accounts and their seminar registrations appear below.</p>
+                <h2 style="margin-bottom:12px;">On-spot registration</h2>
+                <p style="color:#64748b;margin-bottom:16px;">One place for the venue desk: search the participant (or type a new one), then either <strong>register &amp; collect payment now</strong> (cash / Razorpay / other gateway) or <strong>email a private 1-hour link</strong> so they register and pay on their own phone with the seminar's full registration form.</p>
+                <div class="card" style="max-width:760px;">
+                    <h3 style="margin:0 0 6px;font-size:1rem;">1. Find participant</h3>
+                    <p style="color:#64748b;font-size:0.85rem;margin:0 0 10px;">Phone, name, email, doctor ID or application no. Click <strong>Use</strong> to fill the form below; skip this for a brand-new participant.</p>
                     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
-                        <input type="search" id="staff-pos-q" placeholder="Phone / name / email / doctor ID…" style="flex:1;min-width:200px;padding:8px;" onkeydown="if(event.key==='Enter'){event.preventDefault();staffPosSearch();}">
+                        <input type="search" id="staff-pos-q" placeholder="Phone / name / email / doctor ID / application no…" style="flex:1;min-width:200px;padding:8px;" onkeydown="if(event.key==='Enter'){event.preventDefault();staffPosSearch();}">
                         <button type="button" class="btn-primary" onclick="staffPosSearch()">Search</button>
                     </div>
-                    <div id="staff-pos-results"><p style="color:#64748b;">Enter a search term above.</p></div>
-                </div>
-                <div class="card" style="max-width:720px;margin-bottom:16px;">
-                    <h3 style="margin:0 0 6px;font-size:1rem;">Private on-spot link (1 hour)</h3>
-                    <p style="color:#64748b;font-size:0.85rem;margin:0 0 10px;">Emails the participant a personal link to register and pay online. The link expires after 1 hour.</p>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-                        <div><label>Seminar</label><select id="staff-pos-seminar" style="width:100%;padding:8px;"><option value="">Select seminar</option></select></div>
-                        <div><label>Amount (₹, blank = seminar fee)</label><input type="number" id="staff-pos-amount" min="0" step="1" style="width:100%;padding:8px;"></div>
-                        <div><label>First name</label><input type="text" id="staff-pos-first" style="width:100%;padding:8px;"></div>
-                        <div><label>Last name</label><input type="text" id="staff-pos-last" style="width:100%;padding:8px;"></div>
-                        <div><label>Phone</label><input type="tel" id="staff-pos-phone" style="width:100%;padding:8px;"></div>
-                        <div><label>Email (link is sent here)</label><input type="email" id="staff-pos-email" style="width:100%;padding:8px;"></div>
-                    </div>
-                    <input type="hidden" id="staff-pos-user-id">
-                    <button type="button" class="btn-primary" style="margin-top:12px;" onclick="staffPosCreateLink()">Create &amp; email 1-hour link</button>
-                    <div id="staff-pos-link-out" style="margin-top:10px;"></div>
-                </div>
-                <h3 style="margin:0 0 8px;font-size:1rem;">Register &amp; collect payment now</h3>
-                <div class="card" style="max-width:720px;">
+                    <div id="staff-pos-results" style="margin-bottom:16px;"><p style="color:#64748b;">Enter a search term above.</p></div>
+
+                    <h3 style="margin:0 0 6px;font-size:1rem;">2. Participant &amp; seminar</h3>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
                         <div><label>Seminar</label><select id="pos-seminar" style="width:100%;padding:8px;"></select></div>
-                        <div><label>Amount (₹)</label><input type="number" id="pos-amount" min="0" step="1" style="width:100%;padding:8px;"></div>
-                        <div style="grid-column:1/-1;"><label>Payment method</label><select id="pos-payment-method" style="width:100%;padding:8px;"><option value="cash">Cash</option></select><p id="pos-method-desc" style="font-size:0.8rem;color:#64748b;margin:6px 0 0;"></p></div>
+                        <div><label>Amount (₹, blank = seminar fee)</label><input type="number" id="pos-amount" min="0" step="1" style="width:100%;padding:8px;"></div>
                         <div><label>First name</label><input type="text" id="pos-fname" style="width:100%;padding:8px;"></div>
                         <div><label>Middle name <span style="font-weight:400;color:#64748b;">(optional)</span></label><input type="text" id="pos-mname" style="width:100%;padding:8px;"></div>
                         <div><label>Last name</label><input type="text" id="pos-lname" style="width:100%;padding:8px;"></div>
                         <div><label>Phone</label><input type="text" id="pos-phone" style="width:100%;padding:8px;" oninput="schedulePosUserLookup()" onblur="lookupPosUser()"></div>
-                        <div><label>Email (optional)</label><input type="email" id="pos-email" style="width:100%;padding:8px;" oninput="schedulePosUserLookup()" onblur="lookupPosUser()"></div>
+                        <div style="grid-column:1/-1;"><label>Email <span style="font-weight:400;color:#64748b;">(required for the private link — it is sent here)</span></label><input type="email" id="pos-email" style="width:100%;padding:8px;" oninput="schedulePosUserLookup()" onblur="lookupPosUser()"></div>
                     </div>
+                    <input type="hidden" id="staff-pos-user-id">
                     <p id="pos-user-hint" style="margin:8px 0 0;font-size:0.85rem;color:#64748b;min-height:1.2em;"></p>
-                    <label style="display:flex;align-items:flex-start;gap:8px;margin-top:14px;font-size:0.88rem;color:#475569;max-width:560px;">
+
+                    <h3 style="margin:18px 0 6px;font-size:1rem;">3a. Register &amp; collect payment now</h3>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                        <div style="grid-column:1/-1;"><label>Payment method</label><select id="pos-payment-method" style="width:100%;padding:8px;"><option value="cash">Cash</option></select><p id="pos-method-desc" style="font-size:0.8rem;color:#64748b;margin:6px 0 0;"></p></div>
+                    </div>
+                    <label style="display:flex;align-items:flex-start;gap:8px;margin-top:12px;font-size:0.88rem;color:#475569;max-width:560px;">
                         <input type="checkbox" id="pos-send-ticket-email" style="margin-top:3px;">
                         <span>Queue ticket email after registration (off by default — use printed QR at venue; avoids Zoho rate limits)</span>
                     </label>
-                    <button type="button" class="btn-primary" style="margin-top:16px;" onclick="submitAdminPosRegistration()">Register &amp; collect payment</button>
+                    <button type="button" class="btn-primary" style="margin-top:12px;" onclick="submitAdminPosRegistration()">Register &amp; collect payment</button>
                     <p id="pos-poll-status" style="margin-top:10px;font-size:0.88rem;color:#0f766e;"></p>
                     <div id="pos-qr-block" class="hidden" style="text-align:center;margin-top:12px;padding:14px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:10px;">
                         <p id="pos-qr-amount" style="font-weight:700;color:#0f766e;margin-bottom:8px;"></p>
@@ -2358,6 +2348,11 @@
                         <button type="button" class="btn-primary hidden" id="pos-mark-upi-btn" style="margin-top:10px;background:#64748b;" onclick="posMarkUpiPaid()">Mark UPI received</button>
                     </div>
                     <p id="pos-status" style="margin-top:12px;font-weight:600;"></p>
+
+                    <h3 style="margin:18px 0 6px;font-size:1rem;">3b. Or email a private 1-hour registration link</h3>
+                    <p style="color:#64748b;font-size:0.85rem;margin:0 0 10px;">The participant gets a personal link (expires in 1 hour) to complete the seminar's registration form and pay online. Uses the seminar, amount and details entered above.</p>
+                    <button type="button" class="btn-primary" style="background:#0369a1;" onclick="staffPosCreateLink()">Create &amp; email 1-hour link</button>
+                    <div id="staff-pos-link-out" style="margin-top:10px;"></div>
                 </div>
             </div>
 
@@ -3527,8 +3522,8 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
-    <script src="/js/admin.js?v=20260921a"></script>
-    <script src="/js/pos-onspot-ui.js?v=20260916a"></script>
+    <script src="/js/admin.js?v=20260922f"></script>
+    <script src="/js/pos-onspot-ui.js?v=20260922b"></script>
     <script src="/js/admin-whatsapp.js?v=20260921a"></script>
 </body>
 </html>

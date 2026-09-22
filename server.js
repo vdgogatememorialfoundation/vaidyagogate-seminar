@@ -67,6 +67,7 @@ const scannerIdCapture = require('./lib/scanner-id-capture');
 const feedbackFormConfig = require('./lib/feedback-form-config');
 const feedbackEligibility = require('./lib/feedback-eligibility');
 const { registerLiveScannerRoutes } = require('./lib/routes-live-scanner');
+const { registerApplicationFormExportRoutes } = require('./lib/application-form-export');
 const { registerWhatsAppRoutes } = require('./lib/routes-whatsapp');
 const { registerPosRoutes } = require('./lib/pos-onspot');
 const onspotLinks = require('./lib/onspot-links');
@@ -90,6 +91,7 @@ function volunteerTicketDeps() {
     return {
         generateId,
         insertParticipantTicket,
+        insertParticipantTicketsForRegistration,
         syncCertificateEligibilityForTicket,
         certVerify,
         notifEngine,
@@ -1481,6 +1483,7 @@ function migrateLegacyRegistrationFormConfig(done) {
 }
 
 const regFormCfg = require('./lib/registration-form-config');
+const deferredFields = require('./lib/deferred-fields');
 
 function loadGlobalRegistrationFormConfig(callback) {
     db.get(`SELECT value FROM global_settings WHERE key = 'registration_form_config'`, [], (err, row) => {
@@ -1735,9 +1738,10 @@ function validateFormDataAgainstRegistrationConfig(formData, hasCertificateFile,
     }
     const nameErr = validateRegistrationPersonNames(formData);
     if (nameErr) return nameErr;
-    const contactErr = contactValidation.validateFormContactFields(formData, fields);
+    const effFields = deferredFields.relaxFieldsForPending(fields, fd);
+    const contactErr = contactValidation.validateFormContactFields(formData, effFields);
     if (contactErr) return contactErr;
-    return regFormCfg.validateFormWithPolicy(formData, hasCertificateFile, fields, qualOverride, policy);
+    return regFormCfg.validateFormWithPolicy(formData, hasCertificateFile, effFields, qualOverride, policy);
 }
 
 function parseMaybeJson(val) {
@@ -5346,7 +5350,7 @@ function parseApplicationFormBody(body) {
             formData = JSON.parse(formData);
         } catch (_) {}
     }
-    return formData || {};
+    return deferredFields.stripPending(formData || {});
 }
 
 function seminarRegistrationWindowOpen(sem, userId, seminarId, cb) {
@@ -6046,6 +6050,81 @@ app.get('/api/applications/:userId', (req, res) => {
     const yearFilter = req.query && req.query.year != null ? parseInt(req.query.year, 10) : null;
     respondApplicationsList(uid, yearFilter, res);
 });
+// 5b2. Pending fields the applicant must still complete (admin-filled registrations)
+app.get('/api/applications/:applicationId/pending-fields', (req, res) => {
+    const rid = parseInt(req.params.applicationId, 10);
+    const uid = parsePositiveUserId(req.query && req.query.userId);
+    if (!Number.isInteger(rid) || rid < 1 || !uid) return res.status(400).json({ error: 'Invalid request' });
+    db.get(`SELECT user_id, seminar_id, form_data FROM registrations WHERE id = ?`, [rid], (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!row || Number(row.user_id) !== uid) return res.status(404).json({ error: 'Application not found' });
+        loadRegistrationFormConfig(row.seminar_id, (cfgErr, regCfg) => {
+            if (cfgErr) return res.status(500).json({ error: cfgErr.message });
+            res.json({
+                fields: deferredFields.pendingFieldDefs(row.form_data, (regCfg && regCfg.fields) || [])
+            });
+        });
+    });
+});
+
+// 5b3. Applicant completes fields deferred by admin ("Applicant will add later")
+app.put('/api/applications/:applicationId/pending-fields', withApplicationDocUpload, (req, res) => {
+    const rid = parseInt(req.params.applicationId, 10);
+    const body = req.body || {};
+    const uid = parsePositiveUserId(body.userId);
+    let values = body.values;
+    if (typeof values === 'string') {
+        try {
+            values = JSON.parse(values);
+        } catch (_) {
+            values = {};
+        }
+    }
+    values = values && typeof values === 'object' ? values : {};
+    if (!Number.isInteger(rid) || rid < 1 || !uid) return res.status(400).json({ error: 'Invalid request' });
+    db.get(`SELECT user_id, seminar_id, status, form_data FROM registrations WHERE id = ?`, [rid], (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!row || Number(row.user_id) !== uid) return res.status(404).json({ error: 'Application not found' });
+        const st = String(row.status || '').toLowerCase();
+        if (st === 'cancelled' || st === 'rejected' || st === 'expired') {
+            return res.status(400).json({ error: 'This application can no longer be updated.' });
+        }
+        const prev = deferredFields.parseFormData(row.form_data);
+        const pend = deferredFields.pendingKeys(prev);
+        if (!pend.length) return res.status(400).json({ error: 'Nothing pending for this application.' });
+        const merged = { ...prev };
+        pend.forEach((k) => {
+            if (k === 'certificate') return;
+            if (values[k] != null && String(values[k]).trim() !== '') merged[k] = String(values[k]).trim();
+        });
+        persistUploadedCertificate(req, (certErr, certPath) => {
+            if (certErr) return res.status(500).json({ error: certErr.message });
+            if (certPath && pend.includes('certificate')) merged.certificate_path = certPath;
+            const settled = deferredFields.settlePending(merged);
+            loadRegistrationFormConfig(row.seminar_id, (cfgErr, regCfg) => {
+                if (cfgErr) return res.status(500).json({ error: cfgErr.message });
+                const fields = (regCfg && regCfg.fields) || [];
+                const validationError = validateFormDataAgainstRegistrationConfig(
+                    settled,
+                    !!settled.certificate_path,
+                    fields,
+                    null,
+                    regCfg
+                );
+                if (validationError) return res.status(400).json({ error: validationError });
+                const stored = sanitizeFormDataForStorage(settled);
+                db.run(`UPDATE registrations SET form_data = ? WHERE id = ?`, [JSON.stringify(stored), rid], (uErr) => {
+                    if (uErr) return res.status(500).json({ error: uErr.message });
+                    res.json({
+                        success: true,
+                        pending: deferredFields.pendingFieldDefs(stored, fields)
+                    });
+                });
+            });
+        });
+    });
+});
+
 // 5c. Edit Application
 app.put('/api/applications/:applicationId', withCertificateUpload, (req, res) => {
     let { formData, phoneOtpToken, emailOtpToken, fieldOtpTokens } = req.body;
@@ -8998,19 +9077,30 @@ app.get('/api/admin/seminars/:id/stats', (req, res) => {
         });
 
         db.all(`
-            SELECT o.status, o.amount 
+            SELECT o.registration_id, o.status, o.amount, o.refunded_amount, r.status AS reg_status
             FROM orders o 
             JOIN registrations r ON o.registration_id = r.id 
             WHERE r.seminar_id = ?
         `, [seminarId], (err, orders) => {
             if (err) return res.status(500).json({ error: err.message });
+            const paidRegs = new Set();
             orders.forEach(o => {
-                if (o.status === 'pending') stats.pending_payments++;
-                if (o.status === 'success') {
+                if (String(o.status || '').trim().toLowerCase() === 'success') paidRegs.add(o.registration_id);
+            });
+            const pendingRegs = new Set();
+            orders.forEach(o => {
+                const st = String(o.status || '').trim().toLowerCase();
+                const regSt = String(o.reg_status || '').trim().toLowerCase();
+                if (st === 'pending' && !paidRegs.has(o.registration_id) && regSt !== 'cancelled' && regSt !== 'rejected') {
+                    pendingRegs.add(o.registration_id);
+                }
+                if (st === 'success') {
                     stats.completed_payments++;
-                    stats.total_revenue += (o.amount || 0);
+                    stats.total_revenue += (Number(o.amount) || 0) - (Number(o.refunded_amount) || 0);
                 }
             });
+            stats.pending_payments = pendingRegs.size;
+            stats.total_revenue = Math.round(stats.total_revenue * 100) / 100;
             seminarCapacity.getSeminarCapacity(db, seminarId, (eCap, cap) => {
                 if (!eCap && cap) {
                     stats.capacity = cap.capacity;
@@ -10873,6 +10963,7 @@ function requireAdminActor(req, res, next) {
 }
 
 registerLiveScannerRoutes(app, { db, requireAdminActor });
+registerApplicationFormExportRoutes(app, { db, requireAdminActor, loadRegistrationFormConfig });
 registerWhatsAppRoutes(app, { db, requireAdminActor, generateId, getOrCreatePendingOrder });
 registerPosRoutes(app, {
     db,
@@ -10895,7 +10986,8 @@ onspotLinks.registerOnspotRoutes(app, {
     notifEngine,
     activityLog,
     seminarCapacity,
-    listDoctorPaymentOptions
+    listDoctorPaymentOptions,
+    loadRegistrationFormConfig
 });
 app.get('/onspot/:token', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -15771,11 +15863,11 @@ function startBackgroundWorkers() {
         });
         db.get(`SELECT value FROM global_settings WHERE key = ?`, ['notification_templates_sync_v'], (eSync, row) => {
             if (eSync) return;
-            if (row && row.value === '20260619portallinks') return;
+            if (row && row.value === '20260922paylinks') return;
             notifEngine.syncDefaultNotificationTemplates(db, (syncErr) => {
                 if (syncErr) console.warn('[notifications] template sync failed:', syncErr.message);
                 else {
-                    upsertGlobalSetting('notification_templates_sync_v', '20260619portallinks', () => {
+                    upsertGlobalSetting('notification_templates_sync_v', '20260922paylinks', () => {
                         console.log('[notifications] email templates synced (role-based portal links)');
                     });
                 }

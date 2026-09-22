@@ -16,8 +16,8 @@
         .row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
         @media (max-width: 480px) { .row { grid-template-columns: 1fr; } }
         label { display: block; font-size: 0.82rem; font-weight: 600; margin: 10px 0 4px; color: #1e293b; }
-        input, select { width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 1rem; background: #fff; color: #0f172a; }
-        input:disabled { background: #f1f5f9; }
+        input, select, textarea { width: 100%; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font-size: 1rem; background: #fff; color: #0f172a; }
+        input:disabled, select:disabled, textarea:disabled { background: #f1f5f9; }
         .btn { display: inline-block; width: 100%; padding: 13px 16px; border-radius: 8px; border: 1px solid #0f766e; background: #0f766e; color: #fff; font-weight: 600; font-size: 1rem; cursor: pointer; margin-top: 16px; }
         .btn:disabled { opacity: 0.6; cursor: default; }
         .btn-secondary { background: #fff; color: #0f766e; }
@@ -72,6 +72,7 @@
             </div>
             <label>Phone</label><input id="f-phone" type="tel" autocomplete="tel">
             <label>Email</label><input id="f-email" type="email" autocomplete="email">
+            <div id="dyn-fields"></div>
             <div id="pay-method-wrap" style="display:none;">
                 <label>Payment method</label>
                 <select id="f-method"></select>
@@ -173,7 +174,65 @@
         if (p.locked) {
             ['f-first', 'f-last', 'f-phone', 'f-email'].forEach((id) => ($(id).disabled = true));
         }
+        renderDynamicFields(link.formFields || []);
         show('state-active');
+    }
+
+    function esc(v) {
+        return String(v == null ? '' : v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+    }
+
+    function fieldOptions(f) {
+        const raw = Array.isArray(f.options) ? f.options : typeof f.options === 'string' ? f.options.split(/\r?\n|,/) : [];
+        return raw
+            .map((o) => (o && typeof o === 'object' ? { value: o.value, label: o.label || o.value } : { value: String(o).trim(), label: String(o).trim() }))
+            .filter((o) => o.value !== '' && o.value != null);
+    }
+
+    function renderDynamicFields(fields) {
+        const wrap = $('dyn-fields');
+        wrap.innerHTML = '';
+        fields.forEach((f) => {
+            const id = 'dyn-' + f.key;
+            const t = String(f.type || 'text').toLowerCase();
+            const req = f.required !== false ? ' <span style="color:#b91c1c;">*</span>' : '';
+            let html = '<label for="' + id + '">' + esc(f.label || f.key) + req + '</label>';
+            if (t === 'select' || t === 'radio') {
+                html += '<select id="' + id + '" data-dyn-key="' + esc(f.key) + '"><option value="">Select…</option>' +
+                    fieldOptions(f).map((o) => '<option value="' + esc(o.value) + '">' + esc(o.label) + '</option>').join('') + '</select>';
+            } else if (t === 'textarea') {
+                html += '<textarea id="' + id + '" data-dyn-key="' + esc(f.key) + '" rows="3"></textarea>';
+            } else if (t === 'checkbox' || t === 'boolean') {
+                html = '<label for="' + id + '" style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="' + id + '" data-dyn-key="' + esc(f.key) + '" style="width:auto;margin:0;"> ' + esc(f.label || f.key) + req + '</label>';
+            } else {
+                const type = ['email', 'tel', 'number', 'date'].includes(t) ? t : 'text';
+                html += '<input id="' + id + '" type="' + type + '" data-dyn-key="' + esc(f.key) + '"' + (f.placeholder ? ' placeholder="' + esc(f.placeholder) + '"' : '') + '>';
+            }
+            const div = document.createElement('div');
+            div.dataset.dynWrap = f.key;
+            if (f.onlyWhenPgCollege || ['cpin', 'college', 'ccity', 'cstate'].includes(f.key)) div.dataset.pgOnly = '1';
+            div.innerHTML = html;
+            wrap.appendChild(div);
+        });
+        const qual = wrap.querySelector('[data-dyn-key="qual"]');
+        const togglePg = () => {
+            const isPg = qual && String(qual.value || '').trim() === 'PG';
+            wrap.querySelectorAll('[data-pg-only]').forEach((d) => (d.style.display = qual ? (isPg ? '' : 'none') : ''));
+        };
+        if (qual) qual.addEventListener('change', togglePg);
+        togglePg();
+    }
+
+    function collectDynamicFields() {
+        const out = {};
+        document.querySelectorAll('#dyn-fields [data-dyn-key]').forEach((el) => {
+            const wrap = el.closest('[data-dyn-wrap]');
+            if (wrap && wrap.style.display === 'none') return;
+            const k = el.getAttribute('data-dyn-key');
+            if (el.type === 'checkbox') out[k] = el.checked ? '1' : '';
+            else out[k] = String(el.value || '').trim();
+        });
+        return out;
     }
 
     async function load() {
@@ -328,7 +387,8 @@
                         firstName: $('f-first').value.trim(),
                         lastName: $('f-last').value.trim(),
                         phone: $('f-phone').value.trim(),
-                        email: $('f-email').value.trim()
+                        email: $('f-email').value.trim(),
+                        formData: collectDynamicFields()
                     })
                 });
                 if (!res.ok || !data.success) {
@@ -338,6 +398,7 @@
                 regInfo = data;
                 if (data.alreadyPaid) return markPaidAndFinish();
                 ['f-first', 'f-last', 'f-phone', 'f-email'].forEach((id) => ($(id).disabled = true));
+                document.querySelectorAll('#dyn-fields [data-dyn-key]').forEach((el) => (el.disabled = true));
                 if (data.paymentOptions && data.paymentOptions.length > 1) {
                     const sel = $('f-method');
                     sel.innerHTML = '';
