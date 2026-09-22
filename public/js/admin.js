@@ -2896,7 +2896,10 @@ function renderAdminBehalfFormFields(preservedData) {
             '<input type="file" id="behalf-cert-file" accept=".pdf,.jpg,.jpeg,.png,.webp,image/*,application/pdf" style="width:100%;padding:8px;">' +
             '<p id="behalf-cert-hint" style="font-size:0.82rem;margin-top:6px;">' +
             adminBehalfCertificateHintHtml(__behalfCertPath) +
-            '</p></div>';
+            '</p>' +
+            '<label style="display:flex;align-items:center;gap:6px;font-size:0.78rem;color:#64748b;margin-top:4px;font-weight:500;cursor:pointer;">' +
+            '<input type="checkbox" id="behalf-later-certificate" class="behalf-later-cb" data-key="certificate" data-target="behalf-cert-file" style="width:auto;margin:0;"> Applicant will upload later</label>' +
+            '</div>';
     }
     host.innerHTML = html;
     Object.keys(preserved || {}).forEach((k) => {
@@ -2916,7 +2919,7 @@ function renderAdminBehalfFormFields(preservedData) {
     });
     host.querySelectorAll('.behalf-later-cb').forEach((cb) => {
         const sync = () => {
-            const inp = document.getElementById('behalf-f-' + cb.dataset.key);
+            const inp = document.getElementById(cb.dataset.target || 'behalf-f-' + cb.dataset.key);
             if (!inp) return;
             inp.disabled = cb.checked;
             inp.style.opacity = cb.checked ? '0.55' : '';
@@ -3010,7 +3013,7 @@ function applyBehalfSelectedEvents(formData) {
     });
 }
 
-const ADMIN_BEHALF_NON_DEFERRABLE = ['fname', 'lname', 'email', 'phone', 'qual', 'certificate'];
+const ADMIN_BEHALF_NON_DEFERRABLE = ['fname', 'lname', 'email', 'phone', 'qual'];
 function adminBehalfFieldDeferrable(f) {
     if (!f || !f.key) return false;
     if (ADMIN_BEHALF_NON_DEFERRABLE.includes(String(f.key))) return false;

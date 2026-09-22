@@ -7567,7 +7567,11 @@ async function openPendingFieldsModal(appId) {
                 const id = 'pending-f-' + f.key;
                 const t = String(f.type || 'text').toLowerCase();
                 let input;
-                if (t === 'textarea') {
+                if (t === 'file') {
+                    input =
+                        '<input type="file" id="' + id + '" data-file-key="' + escapeHtml(f.key) + '" accept=".pdf,.jpg,.jpeg,.png,.webp,image/*,application/pdf" style="width:100%;padding:8px;">' +
+                        '<p class="muted" style="font-size:0.8rem;margin:4px 0 0;">PDF or image, max 4 MB.</p>';
+                } else if (t === 'textarea') {
                     input = '<textarea id="' + id + '" rows="2" style="width:100%;padding:8px;"></textarea>';
                 } else if (t === 'select' && Array.isArray(f.options)) {
                     input =
@@ -7607,8 +7611,18 @@ async function submitPendingFields() {
     if (!uid || !appId || !body) return;
     const keys = String(body.dataset.keys || '').split(',').filter(Boolean);
     const values = {};
+    const fd = new FormData();
     for (const k of keys) {
         const el = document.getElementById('pending-f-' + k);
+        if (el && el.type === 'file') {
+            const file = el.files && el.files[0];
+            if (!file) {
+                if (msg) msg.textContent = 'Please choose a file to upload.';
+                return;
+            }
+            fd.append(k, file);
+            continue;
+        }
         const v = el ? String(el.value || '').trim() : '';
         if (!v) {
             if (msg) msg.textContent = 'Please fill in all the fields.';
@@ -7616,12 +7630,13 @@ async function submitPendingFields() {
         }
         values[k] = v;
     }
+    fd.append('userId', String(uid));
+    fd.append('values', JSON.stringify(values));
     if (msg) msg.textContent = 'Saving…';
     try {
         const res = await fetch('/api/applications/' + encodeURIComponent(appId) + '/pending-fields', {
             method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: uid, values })
+            body: fd
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || 'Save failed.');

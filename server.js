@@ -6067,11 +6067,19 @@ app.get('/api/applications/:applicationId/pending-fields', (req, res) => {
 });
 
 // 5b3. Applicant completes fields deferred by admin ("Applicant will add later")
-app.put('/api/applications/:applicationId/pending-fields', (req, res) => {
+app.put('/api/applications/:applicationId/pending-fields', withApplicationDocUpload, (req, res) => {
     const rid = parseInt(req.params.applicationId, 10);
     const body = req.body || {};
     const uid = parsePositiveUserId(body.userId);
-    const values = body.values && typeof body.values === 'object' ? body.values : {};
+    let values = body.values;
+    if (typeof values === 'string') {
+        try {
+            values = JSON.parse(values);
+        } catch (_) {
+            values = {};
+        }
+    }
+    values = values && typeof values === 'object' ? values : {};
     if (!Number.isInteger(rid) || rid < 1 || !uid) return res.status(400).json({ error: 'Invalid request' });
     db.get(`SELECT user_id, seminar_id, status, form_data FROM registrations WHERE id = ?`, [rid], (err, row) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -6085,26 +6093,31 @@ app.put('/api/applications/:applicationId/pending-fields', (req, res) => {
         if (!pend.length) return res.status(400).json({ error: 'Nothing pending for this application.' });
         const merged = { ...prev };
         pend.forEach((k) => {
+            if (k === 'certificate') return;
             if (values[k] != null && String(values[k]).trim() !== '') merged[k] = String(values[k]).trim();
         });
-        const settled = deferredFields.settlePending(merged);
-        loadRegistrationFormConfig(row.seminar_id, (cfgErr, regCfg) => {
-            if (cfgErr) return res.status(500).json({ error: cfgErr.message });
-            const fields = (regCfg && regCfg.fields) || [];
-            const validationError = validateFormDataAgainstRegistrationConfig(
-                settled,
-                !!settled.certificate_path,
-                fields,
-                null,
-                regCfg
-            );
-            if (validationError) return res.status(400).json({ error: validationError });
-            const stored = sanitizeFormDataForStorage(settled);
-            db.run(`UPDATE registrations SET form_data = ? WHERE id = ?`, [JSON.stringify(stored), rid], (uErr) => {
-                if (uErr) return res.status(500).json({ error: uErr.message });
-                res.json({
-                    success: true,
-                    pending: deferredFields.pendingFieldDefs(stored, fields)
+        persistUploadedCertificate(req, (certErr, certPath) => {
+            if (certErr) return res.status(500).json({ error: certErr.message });
+            if (certPath && pend.includes('certificate')) merged.certificate_path = certPath;
+            const settled = deferredFields.settlePending(merged);
+            loadRegistrationFormConfig(row.seminar_id, (cfgErr, regCfg) => {
+                if (cfgErr) return res.status(500).json({ error: cfgErr.message });
+                const fields = (regCfg && regCfg.fields) || [];
+                const validationError = validateFormDataAgainstRegistrationConfig(
+                    settled,
+                    !!settled.certificate_path,
+                    fields,
+                    null,
+                    regCfg
+                );
+                if (validationError) return res.status(400).json({ error: validationError });
+                const stored = sanitizeFormDataForStorage(settled);
+                db.run(`UPDATE registrations SET form_data = ? WHERE id = ?`, [JSON.stringify(stored), rid], (uErr) => {
+                    if (uErr) return res.status(500).json({ error: uErr.message });
+                    res.json({
+                        success: true,
+                        pending: deferredFields.pendingFieldDefs(stored, fields)
+                    });
                 });
             });
         });
