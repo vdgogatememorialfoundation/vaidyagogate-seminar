@@ -2112,6 +2112,24 @@ function adminActorId() {
     return u && u.id ? u.id : null;
 }
 
+function downloadAdminApplicationForm(appId, format) {
+    const aid = adminActorId();
+    if (!aid) return alert('Please sign in again.');
+    window.open(
+        '/api/admin/applications/' + encodeURIComponent(appId) + '/form-export?format=' + (format === 'png' ? 'png' : 'pdf') + '&actingAdminId=' + encodeURIComponent(aid),
+        '_blank'
+    );
+}
+
+function downloadAdminSeminarBlankForm(seminarId, format) {
+    const aid = adminActorId();
+    if (!aid) return alert('Please sign in again.');
+    window.open(
+        '/api/admin/seminars/' + encodeURIComponent(seminarId) + '/form-export?format=' + (format === 'png' ? 'png' : 'pdf') + '&actingAdminId=' + encodeURIComponent(aid),
+        '_blank'
+    );
+}
+
 async function loadAdminFeedbackFormConfig() {
     const aid = adminActorId();
     if (!aid) return;
@@ -10260,6 +10278,8 @@ function renderSeminarsTable() {
                         <button class="btn-success" style="padding: 5px 10px; font-size: 0.85rem;" onclick="manageSeminar(${s.id}, '${String(s.title).replace(/'/g, "\\'")}')">Manage</button>
                         <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.85rem;background:#0d9488;margin-left:4px;" onclick="openEventScheduleModalForSeminar(${s.id}, '${String(s.title).replace(/'/g, "\\'")}')">Schedule</button>
                         <button class="btn-primary" style="padding: 5px 10px; font-size: 0.85rem;" onclick="editSeminar(${idx})">Edit</button>
+                        <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.85rem;background:#b91c1c;margin-left:4px;" title="Download blank registration form (PDF)" onclick="downloadAdminSeminarBlankForm(${s.id}, 'pdf')"><i class="fas fa-file-pdf"></i> Form</button>
+                        <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.85rem;background:#0369a1;margin-left:4px;" title="Download blank registration form (image)" onclick="downloadAdminSeminarBlankForm(${s.id}, 'png')"><i class="fas fa-image"></i> Form</button>
                         <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.85rem;background:#7c3aed;margin-left:4px;" onclick="purgeAdminSeminarTestData(${s.id}, '${String(s.title).replace(/'/g, "\\'")}')">Purge test data</button>
                         <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.85rem;background:#b91c1c;margin-left:4px;" onclick="deleteAdminSeminar(${s.id}, '${String(s.title).replace(/'/g, "\\'")}')">Delete</button>
                     </td>
@@ -11097,6 +11117,10 @@ function viewFullApplication(index) {
         ${escalationBlock}
         <p><strong>Seminar:</strong> ${escAdmin(a.seminar_title || '—')}${a.seminar_price != null ? ' · Fee ₹' + escAdmin(String(adminSeminarFeeAmount(a))) : ''}</p>
         <p><strong>Portal ID:</strong> ${escAdmin(a.user_id_string || '')}</p>
+        <p style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;"><strong>Application form:</strong>
+            <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;background:#b91c1c;" onclick="downloadAdminApplicationForm(${a.id}, 'pdf')"><i class="fas fa-file-pdf"></i> PDF</button>
+            <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;background:#0369a1;" onclick="downloadAdminApplicationForm(${a.id}, 'png')"><i class="fas fa-image"></i> Image</button>
+        </p>
         ${renderAdminApplicationPaymentHtml(a)}
         ${
             dupReview
