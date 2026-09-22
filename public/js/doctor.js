@@ -7460,6 +7460,10 @@ async function loadApplications(silentPoll) {
             const resubmitBtn = needsResubmit
                 ? `<button class="btn-warning" style="padding: 5px 10px; margin-right: 5px;" onclick="openSeminarDocumentResubmitByIndex(${index})">${st === 'documents_requested' ? 'Upload docs' : 'Re-upload docs'}</button>`
                 : '';
+            const pendingKeys = doctorPendingFieldKeys(a);
+            const pendingBtn = pendingKeys.length
+                ? `<button class="btn-warning" style="padding: 5px 10px; margin-right: 5px; background:#b45309; color:#fff; border:none;" onclick="openPendingFieldsModal(${a.id})">Complete details (${pendingKeys.length})</button>`
+                : '';
             const cancelStatus = doctorCancelRequestStatus(a.id);
             const canRequestCancel = doctorCanCancelApplication(a) && cancelStatus !== 'Cancellation pending review';
             let cancelBtn = '';
@@ -7474,7 +7478,7 @@ async function loadApplications(silentPoll) {
                 <tr>
                     <td><strong>${a.application_no}</strong></td>
                     <td><span style="background: ${a.status === 'rejected' ? '#fee2e2' : isDraft ? '#e0f2fe' : st === 'waitlisted' ? '#fffbeb' : '#fef3c7'}; padding: 5px; border-radius: 5px;">${isDraft ? 'DRAFT' : st === 'waitlisted' ? 'WAITLISTED' : st === 'submitted' ? 'SUBMITTED' : a.status.toUpperCase()}</span></td>
-                    <td>${draftBtn}${editBtn}${resubmitBtn}${cancelBtn}<button class="btn-primary" style="padding: 5px 10px;" onclick="viewApplication(${index})">View Details</button></td>
+                    <td>${pendingBtn}${draftBtn}${editBtn}${resubmitBtn}${cancelBtn}<button class="btn-primary" style="padding: 5px 10px;" onclick="viewApplication(${index})">View Details</button></td>
                 </tr>
             `;
             }
@@ -7496,6 +7500,140 @@ async function loadApplications(silentPoll) {
         console.error(err);
     }
 }
+
+function doctorPendingFieldKeys(app) {
+    if (!app) return [];
+    const st = String(app.status || '').toLowerCase();
+    if (st === 'cancelled' || st === 'rejected' || st === 'expired') return [];
+    let fd = {};
+    try {
+        fd = typeof app.form_data === 'string' ? JSON.parse(app.form_data || '{}') : app.form_data || {};
+    } catch (_) {
+        fd = {};
+    }
+    return Array.isArray(fd.pending_fields) ? fd.pending_fields.filter(Boolean) : [];
+}
+
+function renderDashboardPendingFields() {
+    const host = document.getElementById('dash-pending-fields');
+    if (!host) return;
+    const apps = (userApplications || []).filter((a) => doctorPendingFieldKeys(a).length);
+    if (!apps.length) {
+        host.classList.add('hidden');
+        host.innerHTML = '';
+        return;
+    }
+    host.classList.remove('hidden');
+    host.innerHTML =
+        '<div class="card" style="border:1px solid #fcd34d;background:#fffbeb;margin-bottom:16px;">' +
+        '<h3 style="margin:0 0 6px;color:#92400e;"><i class="fas fa-pen"></i> Details pending from you</h3>' +
+        '<p style="margin:0 0 10px;color:#78350f;font-size:0.9rem;">The seminar office registered you but some details are still missing. Please complete them.</p>' +
+        apps
+            .map(
+                (a) =>
+                    '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid #fde68a;">' +
+                    '<span><strong>' + escapeHtml(String(a.application_no || a.id)) + '</strong> · ' + escapeHtml(a.seminar_title || 'Seminar') +
+                    ' <span style="color:#92400e;font-size:0.85rem;">(' + doctorPendingFieldKeys(a).length + ' field(s))</span></span>' +
+                    '<button type="button" class="btn-primary" style="background:#b45309;border:none;padding:6px 12px;" onclick="openPendingFieldsModal(' + a.id + ')">Complete now</button></div>'
+            )
+            .join('') +
+        '</div>';
+}
+
+async function openPendingFieldsModal(appId) {
+    const uid = doctorNumericUserId();
+    const modal = document.getElementById('pending-fields-modal');
+    const body = document.getElementById('pending-fields-body');
+    const label = document.getElementById('pending-fields-label');
+    const msg = document.getElementById('pending-fields-msg');
+    if (!uid || !modal || !body) return alert('Please sign in again.');
+    const app = (userApplications || []).find((x) => Number(x.id) === Number(appId));
+    window.__pendingFieldsAppId = appId;
+    if (label) label.textContent = 'Application ' + ((app && app.application_no) || appId) + (app && app.seminar_title ? ' — ' + app.seminar_title : '');
+    if (msg) msg.textContent = '';
+    body.innerHTML = '<p class="muted">Loading…</p>';
+    modal.classList.remove('hidden');
+    try {
+        const res = await fetch('/api/applications/' + encodeURIComponent(appId) + '/pending-fields?userId=' + encodeURIComponent(uid), { cache: 'no-store' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Could not load pending fields.');
+        const fields = Array.isArray(data.fields) ? data.fields : [];
+        if (!fields.length) {
+            body.innerHTML = '<p class="muted">Nothing pending — all details are complete.</p>';
+            return;
+        }
+        body.innerHTML = fields
+            .map((f) => {
+                const id = 'pending-f-' + f.key;
+                const t = String(f.type || 'text').toLowerCase();
+                let input;
+                if (t === 'textarea') {
+                    input = '<textarea id="' + id + '" rows="2" style="width:100%;padding:8px;"></textarea>';
+                } else if (t === 'select' && Array.isArray(f.options)) {
+                    input =
+                        '<select id="' + id + '" style="width:100%;padding:8px;"><option value="">Select</option>' +
+                        f.options
+                            .map((o) => {
+                                const v = o.value != null ? o.value : o.label;
+                                return '<option value="' + escapeHtml(String(v)) + '">' + escapeHtml(String(o.label || v)) + '</option>';
+                            })
+                            .join('') +
+                        '</select>';
+                } else {
+                    const ty = t === 'date' ? 'date' : t === 'email' ? 'email' : t === 'tel' ? 'tel' : t === 'number' ? 'number' : 'text';
+                    input = '<input type="' + ty + '" id="' + id + '" style="width:100%;padding:8px;">';
+                }
+                return '<div class="form-group" style="margin-top:10px;"><label for="' + id + '" style="font-weight:600;">' + escapeHtml(f.label || f.key) + ' *</label>' + input + '</div>';
+            })
+            .join('');
+        body.dataset.keys = fields.map((f) => f.key).join(',');
+    } catch (e) {
+        body.innerHTML = '<p style="color:#b91c1c;">' + escapeHtml(e.message) + '</p>';
+    }
+}
+window.openPendingFieldsModal = openPendingFieldsModal;
+
+function closePendingFieldsModal() {
+    const modal = document.getElementById('pending-fields-modal');
+    if (modal) modal.classList.add('hidden');
+}
+window.closePendingFieldsModal = closePendingFieldsModal;
+
+async function submitPendingFields() {
+    const uid = doctorNumericUserId();
+    const appId = window.__pendingFieldsAppId;
+    const body = document.getElementById('pending-fields-body');
+    const msg = document.getElementById('pending-fields-msg');
+    if (!uid || !appId || !body) return;
+    const keys = String(body.dataset.keys || '').split(',').filter(Boolean);
+    const values = {};
+    for (const k of keys) {
+        const el = document.getElementById('pending-f-' + k);
+        const v = el ? String(el.value || '').trim() : '';
+        if (!v) {
+            if (msg) msg.textContent = 'Please fill in all the fields.';
+            return;
+        }
+        values[k] = v;
+    }
+    if (msg) msg.textContent = 'Saving…';
+    try {
+        const res = await fetch('/api/applications/' + encodeURIComponent(appId) + '/pending-fields', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: uid, values })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Save failed.');
+        closePendingFieldsModal();
+        await loadApplications();
+        renderDashboardPendingFields();
+        alert('Thank you — your details have been saved.');
+    } catch (e) {
+        if (msg) msg.textContent = e.message;
+    }
+}
+window.submitPendingFields = submitPendingFields;
 
 let _doctorPayPollTimer = null;
 
@@ -8336,6 +8474,8 @@ async function renderDashboardPaymentDue() {
             apps = [];
         }
     }
+    if ((!userApplications || !userApplications.length) && apps && apps.length) userApplications = apps;
+    renderDashboardPendingFields();
     const due = (apps || []).filter((a) => String(a.status || '').toLowerCase() === 'approved_pending_payment');
     if (!due.length) {
         host.innerHTML = '';

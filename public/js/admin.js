@@ -2883,6 +2883,11 @@ function renderAdminBehalfFormFields(preservedData) {
             const pinAttr = f.key === 'pin' || f.key === 'cpin' ? ' maxlength="6" inputmode="numeric"' : '';
             html += '<input type="' + ty + '" id="' + id + '" style="width:100%;padding:8px;"' + pinAttr + '>';
         }
+        if (adminBehalfFieldDeferrable(f)) {
+            html +=
+                '<label style="display:flex;align-items:center;gap:6px;font-size:0.78rem;color:#64748b;margin-top:4px;font-weight:500;cursor:pointer;">' +
+                '<input type="checkbox" id="behalf-later-' + f.key + '" class="behalf-later-cb" data-key="' + escAdmin(f.key) + '" style="width:auto;margin:0;"> Applicant will add later</label>';
+        }
         html += '</div>';
     });
     if (adv) {
@@ -2903,6 +2908,22 @@ function renderAdminBehalfFormFields(preservedData) {
         } else {
             el.value = preserved[k];
         }
+    });
+    const pendingKeys = Array.isArray(preserved.pending_fields) ? preserved.pending_fields : [];
+    pendingKeys.forEach((k) => {
+        const cb = document.getElementById('behalf-later-' + k);
+        if (cb) cb.checked = true;
+    });
+    host.querySelectorAll('.behalf-later-cb').forEach((cb) => {
+        const sync = () => {
+            const inp = document.getElementById('behalf-f-' + cb.dataset.key);
+            if (!inp) return;
+            inp.disabled = cb.checked;
+            inp.style.opacity = cb.checked ? '0.55' : '';
+            if (cb.checked) inp.type === 'checkbox' ? (inp.checked = false) : (inp.value = '');
+        };
+        cb.addEventListener('change', sync);
+        sync();
     });
     applyBehalfSelectedEvents(preserved);
     const qualEl = document.getElementById('behalf-f-qual');
@@ -2989,6 +3010,14 @@ function applyBehalfSelectedEvents(formData) {
     });
 }
 
+const ADMIN_BEHALF_NON_DEFERRABLE = ['fname', 'lname', 'email', 'phone', 'qual', 'certificate'];
+function adminBehalfFieldDeferrable(f) {
+    if (!f || !f.key) return false;
+    if (ADMIN_BEHALF_NON_DEFERRABLE.includes(String(f.key))) return false;
+    const t = String(f.type || 'text').toLowerCase();
+    return t !== 'otp' && t !== 'terms' && t !== 'boolean' && t !== 'checkbox';
+}
+
 function collectAdminBehalfFormData() {
     const o = { country: 'India' };
     const qual = (document.getElementById('behalf-f-qual') || {}).value;
@@ -3007,6 +3036,11 @@ function collectAdminBehalfFormData() {
             o[f.key] = el.value;
         }
     });
+    const later = [];
+    document.querySelectorAll('#behalf-form-fields .behalf-later-cb').forEach((cb) => {
+        if (cb.checked && cb.dataset.key) later.push(cb.dataset.key);
+    });
+    if (later.length) o.pending_fields = later;
     if (__behalfCertPath) o.certificate_path = __behalfCertPath;
     const eventIds = getSelectedBehalfEventIds();
     if (eventIds.length) o.selected_event_ids = eventIds;
@@ -11117,6 +11151,13 @@ function viewFullApplication(index) {
         ${escalationBlock}
         <p><strong>Seminar:</strong> ${escAdmin(a.seminar_title || '—')}${a.seminar_price != null ? ' · Fee ₹' + escAdmin(String(adminSeminarFeeAmount(a))) : ''}</p>
         <p><strong>Portal ID:</strong> ${escAdmin(a.user_id_string || '')}</p>
+        ${
+            Array.isArray(formData.pending_fields) && formData.pending_fields.length
+                ? '<p style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:8px 10px;"><strong>Pending from applicant:</strong> ' +
+                  escAdmin(formData.pending_fields.join(', ')) +
+                  ' <span class="muted">(marked "Applicant will add later" — doctor completes these in the portal)</span></p>'
+                : ''
+        }
         <p style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;"><strong>Application form:</strong>
             <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;background:#b91c1c;" onclick="downloadAdminApplicationForm(${a.id}, 'pdf')"><i class="fas fa-file-pdf"></i> PDF</button>
             <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;background:#0369a1;" onclick="downloadAdminApplicationForm(${a.id}, 'png')"><i class="fas fa-image"></i> Image</button>

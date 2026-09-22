@@ -1482,6 +1482,7 @@ function migrateLegacyRegistrationFormConfig(done) {
 }
 
 const regFormCfg = require('./lib/registration-form-config');
+const deferredFields = require('./lib/deferred-fields');
 
 function loadGlobalRegistrationFormConfig(callback) {
     db.get(`SELECT value FROM global_settings WHERE key = 'registration_form_config'`, [], (err, row) => {
@@ -1736,9 +1737,10 @@ function validateFormDataAgainstRegistrationConfig(formData, hasCertificateFile,
     }
     const nameErr = validateRegistrationPersonNames(formData);
     if (nameErr) return nameErr;
-    const contactErr = contactValidation.validateFormContactFields(formData, fields);
+    const effFields = deferredFields.relaxFieldsForPending(fields, fd);
+    const contactErr = contactValidation.validateFormContactFields(formData, effFields);
     if (contactErr) return contactErr;
-    return regFormCfg.validateFormWithPolicy(formData, hasCertificateFile, fields, qualOverride, policy);
+    return regFormCfg.validateFormWithPolicy(formData, hasCertificateFile, effFields, qualOverride, policy);
 }
 
 function parseMaybeJson(val) {
@@ -5347,7 +5349,7 @@ function parseApplicationFormBody(body) {
             formData = JSON.parse(formData);
         } catch (_) {}
     }
-    return formData || {};
+    return deferredFields.stripPending(formData || {});
 }
 
 function seminarRegistrationWindowOpen(sem, userId, seminarId, cb) {
@@ -6047,6 +6049,68 @@ app.get('/api/applications/:userId', (req, res) => {
     const yearFilter = req.query && req.query.year != null ? parseInt(req.query.year, 10) : null;
     respondApplicationsList(uid, yearFilter, res);
 });
+// 5b2. Pending fields the applicant must still complete (admin-filled registrations)
+app.get('/api/applications/:applicationId/pending-fields', (req, res) => {
+    const rid = parseInt(req.params.applicationId, 10);
+    const uid = parsePositiveUserId(req.query && req.query.userId);
+    if (!Number.isInteger(rid) || rid < 1 || !uid) return res.status(400).json({ error: 'Invalid request' });
+    db.get(`SELECT user_id, seminar_id, form_data FROM registrations WHERE id = ?`, [rid], (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!row || Number(row.user_id) !== uid) return res.status(404).json({ error: 'Application not found' });
+        loadRegistrationFormConfig(row.seminar_id, (cfgErr, regCfg) => {
+            if (cfgErr) return res.status(500).json({ error: cfgErr.message });
+            res.json({
+                fields: deferredFields.pendingFieldDefs(row.form_data, (regCfg && regCfg.fields) || [])
+            });
+        });
+    });
+});
+
+// 5b3. Applicant completes fields deferred by admin ("Applicant will add later")
+app.put('/api/applications/:applicationId/pending-fields', (req, res) => {
+    const rid = parseInt(req.params.applicationId, 10);
+    const body = req.body || {};
+    const uid = parsePositiveUserId(body.userId);
+    const values = body.values && typeof body.values === 'object' ? body.values : {};
+    if (!Number.isInteger(rid) || rid < 1 || !uid) return res.status(400).json({ error: 'Invalid request' });
+    db.get(`SELECT user_id, seminar_id, status, form_data FROM registrations WHERE id = ?`, [rid], (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!row || Number(row.user_id) !== uid) return res.status(404).json({ error: 'Application not found' });
+        const st = String(row.status || '').toLowerCase();
+        if (st === 'cancelled' || st === 'rejected' || st === 'expired') {
+            return res.status(400).json({ error: 'This application can no longer be updated.' });
+        }
+        const prev = deferredFields.parseFormData(row.form_data);
+        const pend = deferredFields.pendingKeys(prev);
+        if (!pend.length) return res.status(400).json({ error: 'Nothing pending for this application.' });
+        const merged = { ...prev };
+        pend.forEach((k) => {
+            if (values[k] != null && String(values[k]).trim() !== '') merged[k] = String(values[k]).trim();
+        });
+        const settled = deferredFields.settlePending(merged);
+        loadRegistrationFormConfig(row.seminar_id, (cfgErr, regCfg) => {
+            if (cfgErr) return res.status(500).json({ error: cfgErr.message });
+            const fields = (regCfg && regCfg.fields) || [];
+            const validationError = validateFormDataAgainstRegistrationConfig(
+                settled,
+                !!settled.certificate_path,
+                fields,
+                null,
+                regCfg
+            );
+            if (validationError) return res.status(400).json({ error: validationError });
+            const stored = sanitizeFormDataForStorage(settled);
+            db.run(`UPDATE registrations SET form_data = ? WHERE id = ?`, [JSON.stringify(stored), rid], (uErr) => {
+                if (uErr) return res.status(500).json({ error: uErr.message });
+                res.json({
+                    success: true,
+                    pending: deferredFields.pendingFieldDefs(stored, fields)
+                });
+            });
+        });
+    });
+});
+
 // 5c. Edit Application
 app.put('/api/applications/:applicationId', withCertificateUpload, (req, res) => {
     let { formData, phoneOtpToken, emailOtpToken, fieldOtpTokens } = req.body;
