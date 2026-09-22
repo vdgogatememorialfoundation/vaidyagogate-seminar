@@ -67,6 +67,7 @@ const scannerIdCapture = require('./lib/scanner-id-capture');
 const feedbackFormConfig = require('./lib/feedback-form-config');
 const feedbackEligibility = require('./lib/feedback-eligibility');
 const { registerLiveScannerRoutes } = require('./lib/routes-live-scanner');
+const { registerApplicationFormExportRoutes } = require('./lib/application-form-export');
 const { registerWhatsAppRoutes } = require('./lib/routes-whatsapp');
 const { registerPosRoutes } = require('./lib/pos-onspot');
 const onspotLinks = require('./lib/onspot-links');
@@ -10884,6 +10885,7 @@ function requireAdminActor(req, res, next) {
 }
 
 registerLiveScannerRoutes(app, { db, requireAdminActor });
+registerApplicationFormExportRoutes(app, { db, requireAdminActor, loadRegistrationFormConfig });
 registerWhatsAppRoutes(app, { db, requireAdminActor, generateId, getOrCreatePendingOrder });
 registerPosRoutes(app, {
     db,
@@ -15783,11 +15785,11 @@ function startBackgroundWorkers() {
         });
         db.get(`SELECT value FROM global_settings WHERE key = ?`, ['notification_templates_sync_v'], (eSync, row) => {
             if (eSync) return;
-            if (row && row.value === '20260619portallinks') return;
+            if (row && row.value === '20260922paylinks') return;
             notifEngine.syncDefaultNotificationTemplates(db, (syncErr) => {
                 if (syncErr) console.warn('[notifications] template sync failed:', syncErr.message);
                 else {
-                    upsertGlobalSetting('notification_templates_sync_v', '20260619portallinks', () => {
+                    upsertGlobalSetting('notification_templates_sync_v', '20260922paylinks', () => {
                         console.log('[notifications] email templates synced (role-based portal links)');
                     });
                 }

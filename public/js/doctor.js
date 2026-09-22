@@ -2145,7 +2145,9 @@ async function bootDoctorDashboard(user) {
     }
 
     const hashTab = String(window.location.hash || '').replace(/^#/, '').toLowerCase();
-    const initialTab = hashTab === 'refunds' ? 'tab-refunds' : 'tab-dashboard';
+    const HASH_TABS = { refunds: 'tab-refunds', payments: 'tab-payments', pay: 'tab-payments' };
+    const hashTarget = HASH_TABS[hashTab] || null;
+    const initialTab = hashTarget || 'tab-dashboard';
     requestAnimationFrame(() => switchTab(initialTab));
 
     void (async () => {
@@ -2159,9 +2161,9 @@ async function bootDoctorDashboard(user) {
             window.__allowDemoAccounts = u && u.allowDemoAccounts !== false;
             updateDoctorHeaderId();
         } catch (_) {}
-        if (hashTab === 'refunds' && (!__doctorAllowedTabs || __doctorAllowedTabs.has('tab-refunds'))) {
-            switchTab('tab-refunds');
-        } else if (hashTab !== 'refunds') {
+        if (hashTarget && (!__doctorAllowedTabs || __doctorAllowedTabs.has(hashTarget))) {
+            switchTab(hashTarget);
+        } else if (!hashTarget) {
             switchTab('tab-dashboard');
         }
     })();
@@ -8316,6 +8318,60 @@ async function loadDoctorDashboardStats() {
     } catch (e) {
         console.error(e);
     }
+    renderDashboardPaymentDue().catch(() => {});
+}
+
+async function renderDashboardPaymentDue() {
+    const host = document.getElementById('dash-payment-due');
+    if (!host) return;
+    const uid = doctorNumericUserId();
+    if (!uid) return;
+    let apps = userApplications;
+    if (!apps || !apps.length) {
+        try {
+            const res = await fetch('/api/applications/' + encodeURIComponent(uid), { cache: 'no-store' });
+            const payload = await res.json().catch(() => ({}));
+            if (res.ok) apps = Array.isArray(payload) ? payload : payload.applications || [];
+        } catch (_) {
+            apps = [];
+        }
+    }
+    const due = (apps || []).filter((a) => String(a.status || '').toLowerCase() === 'approved_pending_payment');
+    if (!due.length) {
+        host.innerHTML = '';
+        host.classList.add('hidden');
+        return;
+    }
+    const amountOf = (a) =>
+        a.payment_amount != null && Number.isFinite(Number(a.payment_amount)) && Number(a.payment_amount) >= 0
+            ? Number(a.payment_amount)
+            : Number(a.seminar_price) > 0
+              ? Number(a.seminar_price)
+              : null;
+    host.classList.remove('hidden');
+    host.innerHTML =
+        '<div class="card" style="border:1px solid #fcd34d;background:#fffbeb;margin-bottom:16px;">' +
+        '<h3 style="color:#92400e;margin:0 0 8px;font-size:1rem;"><i class="fas fa-triangle-exclamation"></i> Payment due (' +
+        due.length +
+        ')</h3>' +
+        '<p style="font-size:0.88rem;color:#78350f;margin:0 0 10px;">Your application is approved. Complete payment to confirm your seat and receive the e-ticket.</p>' +
+        due
+            .map((a) => {
+                const amt = amountOf(a);
+                return (
+                    '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding:8px 0;border-top:1px solid #fde68a;">' +
+                    '<span><strong>' +
+                    escapeHtml(a.application_no || '') +
+                    '</strong>' +
+                    (a.seminar_title ? ' · ' + escapeHtml(a.seminar_title) : '') +
+                    (amt != null ? ' · <strong>₹' + escapeHtml(String(amt)) + '</strong>' : '') +
+                    '</span>' +
+                    '<button type="button" class="btn-success" style="padding:8px 14px;" data-doctor-tab="tab-payments" onclick="switchTab(\'tab-payments\')">Pay now</button>' +
+                    '</div>'
+                );
+            })
+            .join('') +
+        '</div>';
 }
 
 let doctorOrdersCache = [];
