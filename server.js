@@ -91,6 +91,7 @@ function volunteerTicketDeps() {
     return {
         generateId,
         insertParticipantTicket,
+        insertParticipantTicketsForRegistration,
         syncCertificateEligibilityForTicket,
         certVerify,
         notifEngine,

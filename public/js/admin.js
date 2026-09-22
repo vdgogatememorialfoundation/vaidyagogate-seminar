@@ -3594,6 +3594,23 @@ async function openAdminBehalfForVolunteer(userId, seminarId) {
 }
 window.openAdminBehalfForVolunteer = openAdminBehalfForVolunteer;
 
+async function removeVolunteerAssignment(assignId, hasTicket) {
+    const warn = hasTicket
+        ? 'Remove this volunteer assignment? The free (₹0) volunteer ticket and volunteer certificates will be cancelled.'
+        : 'Remove this volunteer assignment?';
+    if (!confirm(warn)) return;
+    try {
+        const res = await fetch('/api/admin/volunteers/' + assignId, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) refreshVolunteerAdminPanels();
+        else alert(data.error || 'Could not remove assignment');
+    } catch (e) {
+        console.error(e);
+        alert('Network error');
+    }
+}
+window.removeVolunteerAssignment = removeVolunteerAssignment;
+
 async function editVolunteerDuties(assignId, currentDuties) {
     const duties = prompt('Volunteer duties (e.g. Registration desk, Scanner hall)', currentDuties || '');
     if (duties === null) return;
@@ -5416,7 +5433,12 @@ function renderAdminVolunteerAssignmentsTable() {
             assignId +
             ',' +
             JSON.stringify(String(v.duties || '')) +
-            ')">Duties</button>';
+            ')">Duties</button>' +
+            '<button type="button" style="padding:4px 8px;font-size:0.8rem;margin-left:4px;color:#b91c1c;border-color:#fca5a5;" onclick="removeVolunteerAssignment(' +
+            assignId +
+            ',' +
+            (hasTicket ? 'true' : 'false') +
+            ')">Remove</button>';
         const eventLine = v.event_date
             ? '<div class="muted" style="font-size:0.78rem;">' + escAdmin(String(v.event_date).slice(0, 10)) + '</div>'
             : '';
@@ -19326,11 +19348,11 @@ function renderRzpMatchRegRows(rows, heading) {
                     '</td><td>' +
                     (fee != null ? '₹' + escAdmin(String(fee)) : '—') +
                     '</td><td>' +
-                    (r.paid
-                        ? '<span style="color:#64748b;">Already paid</span>'
-                        : '<button type="button" class="btn-primary" style="background:#15803d;" onclick="matchRazorpayPaymentToRegistration(' +
-                          Number(r.registrationId) +
-                          ')">Match &amp; issue ticket</button>') +
+                    '<button type="button" class="btn-primary" style="background:#15803d;" onclick="matchRazorpayPaymentToRegistration(' +
+                        Number(r.registrationId) +
+                        ')">' +
+                        (r.paid ? 'Link payment' : 'Match &amp; issue ticket') +
+                        '</button>' +
                     '</td></tr>'
                 );
             })
@@ -19451,7 +19473,7 @@ async function matchRazorpayPaymentToRegistration(registrationId) {
         !confirm(
             'Match Razorpay payment ' +
                 __rzpMatchPaymentId +
-                ' to this application? It will be marked paid and the e-ticket issued and emailed.'
+                ' to this application? If unpaid it will be marked paid and the e-ticket issued and emailed; if already paid the payment is linked to the existing order.'
         )
     )
         return;
@@ -19474,7 +19496,11 @@ async function matchRazorpayPaymentToRegistration(registrationId) {
                 data.amount +
                 ' recorded for application ' +
                 (data.registration.applicationNo || registrationId) +
-                (data.ticketId ? ' · e-ticket ' + data.ticketId + ' issued and emailed.' : ' · marked paid.');
+                (data.alreadyPaid
+                    ? ' · linked to the existing paid order.'
+                    : data.ticketId
+                      ? ' · e-ticket ' + data.ticketId + ' issued and emailed.'
+                      : ' · marked paid.');
         }
         lookupRazorpayPaymentForMatch();
         loadAdminEnrichedOrders();
