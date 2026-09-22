@@ -2858,9 +2858,12 @@ function renderAdminBehalfFormFields(preservedData) {
                 html += '<option value="' + escAdmin(String(v)) + '">' + escAdmin(o.label || v) + '</option>';
             });
             html += '</select>';
+        } else if (t === 'date') {
+            html += '<input type="date" id="' + id + '" style="width:100%;padding:8px;">';
         } else {
-            const ty = f.type === 'email' ? 'email' : f.type === 'tel' ? 'tel' : 'text';
-            html += '<input type="' + ty + '" id="' + id + '" style="width:100%;padding:8px;">';
+            const ty = t === 'email' ? 'email' : t === 'tel' ? 'tel' : t === 'number' ? 'number' : 'text';
+            const pinAttr = f.key === 'pin' || f.key === 'cpin' ? ' maxlength="6" inputmode="numeric"' : '';
+            html += '<input type="' + ty + '" id="' + id + '" style="width:100%;padding:8px;"' + pinAttr + '>';
         }
         html += '</div>';
     });
@@ -14652,14 +14655,7 @@ async function saveSeminar(e) {
         price: parseFloat(document.getElementById('seminar-price').value) || 0,
         is_active: document.getElementById('seminar-active').value === '1',
         checkin_enabled: document.getElementById('seminar-checkin-enabled').value === '1',
-        checkin_date: (() => {
-            const enabled = document.getElementById('seminar-checkin-enabled').value === '1';
-            let d = document.getElementById('seminar-checkin-date').value || '';
-            if (enabled && !d) {
-                d = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-            }
-            return d || null;
-        })(),
+        checkin_date: document.getElementById('seminar-checkin-date').value || null,
         public_list_enabled: document.getElementById('seminar-public-list-enabled')?.value === '1',
         cert_scans_required: parseInt(document.getElementById('seminar-cert-scans-required')?.value || '1', 10) === 2 ? 2 : 1,
         location_text: (document.getElementById('seminar-location-text') || {}).value?.trim() || null,

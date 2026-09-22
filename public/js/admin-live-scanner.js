@@ -300,6 +300,12 @@
                 '<tr><td colspan="5" class="roster-contact" style="text-align:center;padding:24px;">Check-in is disabled — nothing to show.</td></tr>';
             return;
         }
+        if (rosterCheckin && rosterCheckin.noDateSet) {
+            if (summary) summary.textContent = 'No check-in date set for this event. Set the check-in date in Admin → Seminars to see that day\'s e-ticket holders.';
+            body.innerHTML =
+                '<tr><td colspan="5" class="roster-contact" style="text-align:center;padding:24px;">Check-in date not set — nothing to show.</td></tr>';
+            return;
+        }
         if (summary) {
             let checkinLabel = '';
             if (rosterCheckin) {
@@ -482,8 +488,12 @@
         (seminars || []).forEach((s) => {
             const o = document.createElement('option');
             o.value = s.id;
-            const date = s.schedule_label || (s.event_date ? String(s.event_date).slice(0, 10) : '');
-            o.textContent = (s.title || 'Event') + (date ? ' · ' + date : '');
+            const tag = !s.checkin_enabled
+                ? 'check-in off'
+                : s.checkin_date
+                  ? 'check-in ' + formatYmdLabel(s.checkin_date)
+                  : 'check-in date not set';
+            o.textContent = (s.title || 'Event') + ' · ' + tag;
             sel.appendChild(o);
         });
         if ((seminars || []).length === 1) {
