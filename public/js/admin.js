@@ -5426,7 +5426,11 @@ function renderAdminVolunteerAssignmentsTable() {
         } else if (!hasTicket) {
             actions += '<span style="font-size:0.8rem;color:#64748b;">Waiting for registration</span>';
         } else {
-            actions += '<span style="font-size:0.8rem;color:#059669;">Ticket issued</span>';
+            actions +=
+                '<span style="font-size:0.8rem;color:#059669;">Ticket issued</span>' +
+                '<button type="button" style="padding:4px 8px;font-size:0.8rem;margin-left:4px;" title="Issue any missing per-day tickets" onclick="approveAdminVolunteer(' +
+                assignId +
+                ')">Check day tickets</button>';
         }
         actions +=
             '<button type="button" style="padding:4px 8px;font-size:0.8rem;margin-left:4px;" onclick="editVolunteerDuties(' +
@@ -5825,7 +5829,7 @@ function adminPromptFeeChoice(app, title, onConfirm) {
 
 async function approveAdminVolunteer(volId) {
     const admin = getStoredAdminUser();
-    if (!confirm('Issue free volunteer ticket (₹0)? Doctor must have completed seminar registration first.')) return;
+    if (!confirm('Issue free volunteer ticket (₹0) — one per allotted seminar day? Doctor must have completed seminar registration first. Missing day tickets are added if some already exist.')) return;
     try {
         const res = await fetch(`/api/admin/volunteers/${volId}/approve`, {
             method: 'POST',
