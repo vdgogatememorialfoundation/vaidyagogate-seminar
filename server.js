@@ -2209,6 +2209,30 @@ function runNotifyTicketIssued(userId, registrationId, ticketId, opts) {
                 null;
             const seminarId = row && row.seminar_id;
 
+            // Build a WhatsApp-safe summary containing every ticket for this order.
+            // Do not expose ticket PDF/access URLs in WhatsApp.
+            const ticketSummary = allRows.length
+                ? allRows.map((r, index) => {
+                    const dayTitle = String(r.day_title || r.event_title || ('Day ' + (index + 1))).trim();
+                    const rawDate = String(r.day_date || r.sub_event_date || r.event_date || '').trim();
+                    let formattedDate = rawDate ? rawDate.slice(0, 10) : '';
+                    if (/^\\d{4}-\\d{2}-\\d{2}$/.test(formattedDate)) {
+                        const parts = formattedDate.split('-');
+                        const d = new Date(Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])));
+                        formattedDate = d.toLocaleDateString('en-IN', {
+                            day: 'numeric',
+                            month: 'long',
+                            year: 'numeric',
+                            timeZone: 'UTC'
+                        });
+                    }
+                    const label = formattedDate ? `${dayTitle} — ${formattedDate}` : dayTitle;
+                    return `📅 ${label}\\n🎫 Ticket ID: ${String(r.ticket_id_string || '').trim()}`;
+                }).join('\\n\\n')
+                : `🎫 Ticket ID: ${String(ticketId).trim()}`;
+
+            vars.ticket_summary = ticketSummary;
+
             const finish = () => {
                 if (!sendWhatsapp) return;
                 notifEngine.notify(
