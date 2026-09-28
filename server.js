@@ -6381,6 +6381,11 @@ app.get('/api/admin/site-visitors/live', (req, res) => {
     });
 });
 
+// Admin: Live Radar — Google Maps browser key (from Integrations or env)
+app.get('/api/admin/live-radar/maps-key', (req, res) => {
+    res.json({ success: true, key: googleMaps.getApiKey() });
+});
+
 // Admin: Live Radar snapshot (realtime seminar application tracking)
 app.get('/api/admin/live-radar', (req, res) => {
     siteVisitors.getLiveRadarSnapshot(db, { minutes: req.query.minutes }, (err, data) => {
