@@ -8,6 +8,8 @@
         if (iso instanceof Date) return Number.isNaN(iso.getTime()) ? null : iso;
         const s = String(iso).trim();
         if (!s) return null;
+        // Calendar date only (seminar day rows): midnight IST, never UTC.
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return new Date(s + 'T00:00:00' + IST_OFFSET);
         if (/Z$|[+-]\d{2}(:?\d{2})?$/i.test(s)) return new Date(s);
         let norm = s.includes('T') ? s : s.replace(' ', 'T');
         if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(norm)) norm += ':00';
@@ -127,6 +129,7 @@
         const raw = String(iso).trim();
         const storedAsUtc = /Z$/i.test(raw) || /[+-]00:00$/i.test(raw);
         if (storedAsUtc && hh > 0 && hh < 3) return dateLine;
+        if (storedAsUtc && hh === 5 && mm === 30) return dateLine;
         const h12 = hh % 12 || 12;
         const ampm = hh >= 12 ? 'pm' : 'am';
         return dateLine + ', ' + h12 + ':' + String(mm).padStart(2, '0') + ' ' + ampm;

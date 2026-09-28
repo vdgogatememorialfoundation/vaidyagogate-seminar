@@ -2178,6 +2178,7 @@ function runNotifyTicketIssued(userId, registrationId, ticketId, opts) {
                 IFNULL(t.is_valid, 1) AS is_valid, o.status AS payment_status,
                 s.title AS seminar_title, s.event_date, s.event_end_date, s.ticket_expires_at, s.location_url, s.portal_year,
                 sday.title AS day_title, sday.day_date AS day_date, sday.sort_order AS day_sort,
+                sday.start_time AS day_start_time, sday.end_time AS day_end_time,
                 sev.title AS event_title, sev.event_date AS sub_event_date,
                 u.first_name, u.last_name, u.email, u.phone
          FROM registrations r
@@ -6954,9 +6955,10 @@ app.get('/api/doctor/ticket-document/:ticketId', (req, res) => {
     const params = internalRowId ? [ticketId, internalRowId] : [ticketId];
     db.get(
         `SELECT t.ticket_id_string, t.qr_code_data, t.is_scanned, t.scan_time, IFNULL(t.is_valid, 1) AS is_valid,
-                r.application_no, r.user_id, o.status AS payment_status,
+                r.application_no, r.user_id, r.seminar_id, o.status AS payment_status,
                 s.title AS seminar_title, s.event_date, s.event_end_date, s.ticket_expires_at, s.location_url, s.portal_year,
                 sday.title AS day_title, sday.day_date AS day_date,
+                sday.start_time AS day_start_time, sday.end_time AS day_end_time,
                 u.first_name, u.last_name
          FROM tickets t
          JOIN orders o ON t.order_id = o.id
@@ -6985,6 +6987,7 @@ app.get('/api/doctor/ticket-document/:ticketId', (req, res) => {
             }
             if (!authorized) return res.status(403).send('Sign in to the doctor portal to view this ticket.');
             const displayName = [row.first_name, row.last_name].filter(Boolean).join(' ');
+            const renderTicket = (scheduleFmt) =>
             ticketHtml
                 .buildTicketHtmlFromRow(
                     {
@@ -6995,6 +6998,13 @@ app.get('/api/doctor/ticket-document/:ticketId', (req, res) => {
                             : row.seminar_title,
                         event_date: row.day_date || row.event_date,
                         event_end_date: row.day_date ? null : row.event_end_date,
+                        event_date_fmt: row.day_date
+                            ? seminarDt.formatSeminarDayLine({
+                                  day_date: row.day_date,
+                                  start_time: row.day_start_time,
+                                  end_time: row.day_end_time
+                              })
+                            : scheduleFmt,
                         ticket_expires_at: row.ticket_expires_at,
                         location_url: row.location_url,
                         portal_year: row.portal_year,
@@ -7035,6 +7045,15 @@ app.get('/api/doctor/ticket-document/:ticketId', (req, res) => {
                     res.send(html);
                 })
                 .catch((e) => res.status(500).send(e.message));
+            if (row.day_date) return renderTicket('');
+            db.all(
+                `SELECT id, title, day_date, start_time, end_time, is_active FROM seminar_days
+                  WHERE seminar_id = ? AND IFNULL(is_active, 1) = 1 ORDER BY sort_order ASC, day_date ASC`,
+                [row.seminar_id],
+                (dErr, days) => {
+                    renderTicket(dErr ? '' : seminarDt.formatSeminarSchedule(row, days || []) || '');
+                }
+            );
         }
     );
 });
