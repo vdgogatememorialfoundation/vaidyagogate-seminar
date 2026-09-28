@@ -135,6 +135,16 @@
         </div>
     </div>
 
+    <div id="staff-contact-modal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:51;padding:16px;">
+        <div class="card" style="width:760px;max-width:100%;max-height:90vh;overflow-y:auto;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                <h2 style="margin:0;font-size:1.1rem;">Contact Applicant</h2>
+                <button type="button" class="btn btn-muted" style="padding:4px 10px;" onclick="staffCloseContactModal()">×</button>
+            </div>
+            <div id="staff-contact-modal-body">Loading…</div>
+        </div>
+    </div>
+
     <div id="staff-order-modal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:50;padding:16px;">
         <div class="card" style="width:560px;max-width:100%;max-height:90vh;overflow-y:auto;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
@@ -144,6 +154,16 @@
             <div id="staff-order-modal-body"></div>
         </div>
     </div>
+
+<section id="staff-panel-contact-center" class="staff-panel hidden">
+  <div class="staff-card">
+    <div class="staff-card-header">
+      <h2>Contact Center</h2>
+      <button type="button" onclick="loadStaffContactCenter()">Refresh</button>
+    </div>
+    <div id="staff-contact-center-list">Loading assigned applicants...</div>
+  </div>
+</section>
 
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-auth.js?v=20260527b"></script>

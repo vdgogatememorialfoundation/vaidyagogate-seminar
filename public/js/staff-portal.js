@@ -150,6 +150,7 @@
             'support-tickets',
             'payments',
             'etickets',
+            'contact-center',
             'pos'
         ];
         panelIds.forEach((id) => {
@@ -164,6 +165,7 @@
         if (tab === 'applications') staffLoadApplications();
         if (tab === 'support-tickets') staffLoadSupportTickets();
         if (tab === 'payments') staffLoadSeminarOrders();
+        if (tab === 'contact-center') loadStaffContactCenter();
         if (tab === 'pos' && window.staffPosInit) window.staffPosInit();
     };
 
@@ -814,3 +816,101 @@
         }
     });
 })();
+
+/* VGMF STAFF CONTACT CENTER */
+async function loadStaffContactCenter(){
+  const el=document.getElementById('staff-contact-center-list');
+  if(!el) return;
+  el.innerHTML='Loading...';
+  try{
+    const r=await fetch('/api/staff/contact-center',{credentials:'same-origin'});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Unable to load contacts');
+    const rows=d.contacts||[];
+    if(!rows.length){el.innerHTML='<div class="empty-state">No assigned applicants.</div>';return;}
+    el.innerHTML='<div class="table-responsive"><table class="admin-table"><thead><tr><th>Applicant</th><th>Seminar</th><th>Phone</th><th>Status</th><th>Follow-up</th><th>Action</th></tr></thead><tbody>'+
+      rows.map((x,i)=>'<tr><td>'+escStaff(x.first_name||'')+' '+escStaff(x.last_name||'')+'<br><small>'+escStaff(x.application_no||x.user_id_string||'')+'</small></td><td>'+escStaff(x.seminar_title||'')+'</td><td>'+escStaff(x.phone||x.whatsapp_no||'')+'</td><td>'+escStaff(x.contact_status||'not_contacted')+'</td><td>'+escStaff(x.follow_up_at||'')+'</td><td><button type="button" onclick="staffContactApplicant('+Number(x.registration_id)+')">Manage</button></td></tr>').join('')+
+      '</tbody></table></div>';
+  }catch(e){el.innerHTML='<div class="error">'+escStaff(e.message)+'</div>';}
+}
+function escStaff(v){return String(v==null?'':v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+async function staffContactApplicant(id){
+  const modal=document.getElementById('staff-contact-modal');
+  const body=document.getElementById('staff-contact-modal-body');
+  if(!modal||!body) return;
+  modal.classList.remove('hidden');
+  modal.style.display='flex';
+  modal.style.alignItems='center';
+  modal.style.justifyContent='center';
+  body.innerHTML='<p>Loading contact history…</p>';
+  try{
+    const r=await fetch('/api/staff/contact-center/'+id+'/history',{credentials:'same-origin'});
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Unable to load contact history');
+    const rows=d.history||[];
+    const current=rows[0]||{};
+    const statuses=['not_contacted','called','answered','not_answered','call_back_requested','payment_link_sent','payment_completed','not_interested','wrong_number','other'];
+    let history='';
+    if(rows.length){
+      history='<div style="margin:16px 0;"><h3 style="margin:0 0 8px;">Contact History</h3><div class="table-responsive"><table class="data-table"><thead><tr><th>Date</th><th>Status</th><th>Reason</th><th>Notes</th><th>Follow-up</th></tr></thead><tbody>'+
+        rows.map(x=>'<tr><td>'+escStaff(x.created_at||'')+'</td><td>'+escStaff(x.status||'')+'</td><td>'+escStaff(x.reason||'')+'</td><td>'+escStaff(x.notes||'')+'</td><td>'+escStaff(x.follow_up_at||'')+'</td></tr>').join('')+
+        '</tbody></table></div></div>';
+    }else{
+      history='<div style="margin:16px 0;color:#64748b;">No contact history yet.</div>';
+    }
+    body.innerHTML=
+      '<form id="staff-contact-form" onsubmit="return staffSaveContact(event,'+Number(id)+')">'+
+      '<div class="staff-card" style="margin-bottom:16px;">'+
+      '<h3 style="margin-top:0;">Contact details</h3>'+
+      '<div><strong>Current status:</strong> '+escStaff(current.status||'not_contacted')+'</div>'+
+      '<div style="margin-top:6px;"><strong>Last contact:</strong> '+escStaff(current.created_at||'—')+'</div>'+
+      '</div>'+
+      '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">'+
+      '<label>Status<select id="staff-contact-status" class="form-control" required>'+statuses.map(x=>'<option value="'+x+'" '+(x===(current.status||'not_contacted')?'selected':'')+'>'+x.replaceAll('_',' ')+'</option>').join('')+'</select></label>'+
+      '<label>Follow-up date/time<input id="staff-contact-followup" class="form-control" type="datetime-local" value="'+escStaff(current.follow_up_at?String(current.follow_up_at).slice(0,16):'')+'"></label>'+
+      '</div>'+
+      '<label style="display:block;margin-top:12px;">Reason<input id="staff-contact-reason" class="form-control" type="text" value="'+escStaff(current.reason||'')+'" placeholder="Reason for current status"></label>'+
+      '<label style="display:block;margin-top:12px;">Notes<textarea id="staff-contact-notes" class="form-control" rows="4" placeholder="Call notes / applicant response / next action">'+escStaff(current.notes||'')+'</textarea></label>'+
+      '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;">'+
+      '<button type="button" class="btn btn-muted" onclick="staffCloseContactModal()">Cancel</button>'+
+      '<button type="submit" class="btn btn-primary">Save Contact Update</button>'+
+      '</div></form>'+
+      history;
+  }catch(e){
+    body.innerHTML='<div style="color:#b91c1c;">'+escStaff(e.message)+'</div>';
+  }
+}
+async function staffSaveContact(event,id){
+  event.preventDefault();
+  const body=document.getElementById('staff-contact-modal-body');
+  const payload={
+    status:document.getElementById('staff-contact-status').value,
+    reason:document.getElementById('staff-contact-reason').value.trim(),
+    notes:document.getElementById('staff-contact-notes').value.trim(),
+    followUpAt:document.getElementById('staff-contact-followup').value||null
+  };
+  try{
+    const r=await fetch('/api/staff/contact-center/'+id,{
+      method:'POST',
+      credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    });
+    const d=await r.json();
+    if(!r.ok) throw new Error(d.error||'Save failed');
+    staffCloseContactModal();
+    await loadStaffContactCenter();
+  }catch(e){
+    if(body) body.insertAdjacentHTML('afterbegin','<div style="color:#b91c1c;margin-bottom:10px;">'+escStaff(e.message)+'</div>');
+  }
+}
+function staffCloseContactModal(){
+  const modal=document.getElementById('staff-contact-modal');
+  if(!modal) return;
+  modal.classList.add('hidden');
+  modal.style.display='none';
+}
+window.loadStaffContactCenter=loadStaffContactCenter;
+window.staffContactApplicant=staffContactApplicant;
+window.staffSaveContact=staffSaveContact;
+window.staffCloseContactModal=staffCloseContactModal;

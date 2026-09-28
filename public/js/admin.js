@@ -2344,7 +2344,8 @@ const STAFF_PORTAL_MODULE_DEFS = [
     ['support-tickets', 'Support tickets'],
     ['etickets', 'E-tickets lookup'],
     ['payments', 'Payments & seminar orders'],
-    ['pos', 'On-spot POS (search, private pay links)']
+    ['pos', 'On-spot POS (search, private pay links)'],
+    ['contact-center', 'Contact Center (assigned applicant follow-up)']
 ];
 
 function parseStaffModulesObject(str) {
@@ -11799,6 +11800,39 @@ function renderIntegrationSecretStatus(s) {
         waHint.style.color = waSaved ? '#15803d' : '#64748b';
     }
 
+    const googleMapsSaved = !!settings.google_maps_api_key_saved;
+    window.__integrationGoogleMapsKeySaved = googleMapsSaved;
+
+    const googleMapsBadge = document.getElementById('int-google-maps-key-saved-badge');
+    if (googleMapsBadge) {
+        if (googleMapsSaved) {
+            googleMapsBadge.textContent = '✓ Google Maps API key saved on server';
+            googleMapsBadge.style.background = '#ecfdf5';
+            googleMapsBadge.style.borderColor = '#a7f3d0';
+            googleMapsBadge.style.color = '#15803d';
+        } else {
+            googleMapsBadge.textContent = 'Google Maps API key not saved yet';
+            googleMapsBadge.style.background = '#f8fafc';
+            googleMapsBadge.style.borderColor = '#e2e8f0';
+            googleMapsBadge.style.color = '#64748b';
+        }
+    }
+
+    const googleMapsNew = document.getElementById('int-google-maps-key-new');
+    if (googleMapsNew) {
+        googleMapsNew.placeholder = googleMapsSaved
+            ? 'Leave empty to keep saved key — paste here only to replace it'
+            : 'Paste Google Maps API key here, then Save API keys & messaging';
+    }
+
+    const googleMapsHint = document.getElementById('int-google-maps-key-hint');
+    if (googleMapsHint) {
+        googleMapsHint.textContent = googleMapsSaved
+            ? 'Saved key stays on the server until you paste a replacement and save.'
+            : 'Paste your Google Maps API key, then save.';
+        googleMapsHint.style.color = googleMapsSaved ? '#15803d' : '#64748b';
+    }
+
     const msg91Saved = !!(settings.msg91_configured || settings.msg91_auth_key_saved);
     window.__integrationMsg91KeySaved = msg91Saved;
     const msg91Badge = document.getElementById('int-msg91-key-saved-badge');
@@ -11855,7 +11889,10 @@ function applySavedIntegrationSecrets(data) {
         whatsapp_configured: !!(data && data.whatsapp_configured) || !!settings.whatsapp_token_saved,
         whatsapp_token_saved: !!settings.whatsapp_token_saved || !!(data && data.whatsapp_configured),
         msg91_configured: !!(data && data.msg91_configured) || !!settings.msg91_auth_key_saved,
-        msg91_auth_key_saved: !!settings.msg91_auth_key_saved || !!(data && data.msg91_configured)
+        msg91_auth_key_saved: !!settings.msg91_auth_key_saved || !!(data && data.msg91_configured),
+        google_maps_api_key_saved:
+            !!settings.google_maps_api_key_saved ||
+            !!(data && data.google_maps_api_key_saved)
     });
 }
 
@@ -12067,7 +12104,10 @@ async function saveIntegrationSettings() {
         msg91_flow_message_var: (document.getElementById('int-msg91-flow-var') || {}).value.trim() || 'VAR1'
     };
     const newMsg91Key = ((document.getElementById('int-msg91-key-new') || {}).value || '').trim();
+    const newGoogleMapsKey = ((document.getElementById('int-google-maps-key-new') || {}).value || '').trim();
+
     if (newMsg91Key) body.msg91_auth_key = newMsg91Key;
+    if (newGoogleMapsKey) body.google_maps_api_key = newGoogleMapsKey;
     if (newZohoPass) body.zoho_pass = newZohoPass;
     if (newEmailApiKey) body.email_api_key = newEmailApiKey;
     if (newEmailFallbackKey) body.email_api_fallback_key = newEmailFallbackKey;
@@ -12093,6 +12133,10 @@ async function saveIntegrationSettings() {
         if (waNewEl) waNewEl.value = '';
         const msg91NewEl = document.getElementById('int-msg91-key-new');
         if (msg91NewEl) msg91NewEl.value = '';
+
+        const googleMapsNewEl = document.getElementById('int-google-maps-key-new');
+        if (googleMapsNewEl) googleMapsNewEl.value = '';
+
         applySavedIntegrationSecrets(data);
         await loadIntegrationSettings();
         const st = data.email_status;

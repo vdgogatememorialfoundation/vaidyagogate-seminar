@@ -69,6 +69,9 @@ const feedbackEligibility = require('./lib/feedback-eligibility');
 const { registerLiveScannerRoutes } = require('./lib/routes-live-scanner');
 const { registerApplicationFormExportRoutes } = require('./lib/application-form-export');
 const { registerWhatsAppRoutes } = require('./lib/routes-whatsapp');
+const { registerApplicationContactRoutes } = require('./lib/routes-application-contact');
+const { registerSeminarVideoRoutes } = require('./lib/routes-seminar-video');
+const { registerWhatsAppGroupAccessRoutes } = require('./lib/routes-whatsapp-group-access');
 const { registerPosRoutes } = require('./lib/pos-onspot');
 const onspotLinks = require('./lib/onspot-links');
 const siteSeoMod = require('./lib/site-seo');
@@ -158,6 +161,7 @@ app.use(
 app.use(cors());
 app.use(
     express.json({
+          limit: '10mb',
         verify: (req, res, buf) => {
             req.rawBody = buf;
         }
@@ -247,6 +251,9 @@ function mountPaymentsRoutes() {
         volunteerTicketFlow,
         volunteerTicketDeps
     });
+    registerApplicationContactRoutes(app, { db, assertAdminPortalActor });
+    registerSeminarVideoRoutes(app, { db, assertAdminPortalActor });
+    registerWhatsAppGroupAccessRoutes(app, { db, assertAdminPortalActor });
 }
 
 function bootstrapApp(done) {
@@ -2937,6 +2944,9 @@ function integrationSettingsJson(data) {
     );
     masked.zeptomail_api_region = raw.zeptomail_api_region || process.env.ZEPTOMAIL_API_REGION || 'in';
     masked.whatsapp_token_saved = !!(raw.whatsapp_token && String(raw.whatsapp_token).trim());
+    masked.google_maps_api_key_saved = !!(
+        raw.google_maps_api_key && String(raw.google_maps_api_key).trim()
+    );
     masked.whatsapp_verify_token_saved = !!(
         raw.whatsapp_verify_token && String(raw.whatsapp_verify_token).trim()
     );
@@ -3078,22 +3088,29 @@ app.post('/api/admin/integrations/whatsapp-event-templates', withIntegrationSett
 
 app.post('/api/admin/integrations', withIntegrationSettingsLoaded, (req, res) => {
     const body = req.body || {};
+
+    console.log(
+        '[integrations-debug] google_maps_api_key incoming:',
+        !!(body.google_maps_api_key && String(body.google_maps_api_key).trim()),
+        'length:',
+        body.google_maps_api_key ? String(body.google_maps_api_key).trim().length : 0
+    );
+
     const passwordUpdateAttempted =
         body.zoho_pass != null &&
         String(body.zoho_pass).trim() &&
         !integrationSettings.isMaskedSecretValue(body.zoho_pass);
+
     integrationSettings.loadFromDb(db, (loadErr, existing) => {
         if (loadErr) return res.status(500).json({ error: loadErr.message });
         const ex = existing || {};
         const nextProvider = String(body.email_api_provider || ex.email_api_provider || '').toLowerCase();
-        const nextFallback = String(
-            body.email_api_fallback_provider || ex.email_api_fallback_provider || 'sender'
-        ).toLowerCase();
+        const nextFallback = String(body.email_api_fallback_provider || ex.email_api_fallback_provider || 'sender').toLowerCase();
+
         if (
             nextProvider === 'zeptomail' &&
             nextFallback === 'sender' &&
             !body.email_api_fallback_key &&
-            !integrationSettings.isMaskedSecretValue(body.email_api_fallback_key) &&
             ex.email_api_provider === 'sender' &&
             ex.email_api_key &&
             !ex.email_api_fallback_key
@@ -3101,66 +3118,78 @@ app.post('/api/admin/integrations', withIntegrationSettingsLoaded, (req, res) =>
             body.email_api_fallback_provider = 'sender';
             body.email_api_fallback_key = ex.email_api_key;
         }
+
         const emailProv = require('./lib/email-provider-settings');
         const incomingZepto =
             (body.email_provider_keys && body.email_provider_keys.zeptomail) ||
             (nextProvider === 'zeptomail' && body.email_api_key);
+
         if (incomingZepto && !integrationSettings.isMaskedSecretValue(incomingZepto)) {
             const zeptoCheck = emailProv.validateZeptoMailToken(incomingZepto);
-            if (zeptoCheck.wrong) {
-                return res.status(400).json({ error: zeptoCheck.reason });
-            }
+            if (zeptoCheck.wrong) return res.status(400).json({ error: zeptoCheck.reason });
         }
+
         const mergedKeys = emailProv.mergeProviderKeys(ex, body);
         const payload = {
             ...body,
             email_provider_keys: mergedKeys,
             email_primary_enabled:
-                body.email_primary_enabled === false ||
-                body.email_primary_enabled === 0 ||
-                body.email_primary_enabled === '0'
-                    ? 0
-                    : 1,
+                body.email_primary_enabled === false || body.email_primary_enabled === 0 || body.email_primary_enabled === '0' ? 0 : 1,
             email_fallback_enabled:
-                body.email_fallback_enabled === false ||
-                body.email_fallback_enabled === 0 ||
-                body.email_fallback_enabled === '0'
-                    ? 0
-                    : 1,
+                body.email_fallback_enabled === false || body.email_fallback_enabled === 0 || body.email_fallback_enabled === '0' ? 0 : 1,
             email_smtp_standby_enabled:
-                body.email_smtp_standby_enabled === false ||
-                body.email_smtp_standby_enabled === 0 ||
-                body.email_smtp_standby_enabled === '0'
-                    ? 0
-                    : 1
+                body.email_smtp_standby_enabled === false || body.email_smtp_standby_enabled === 0 || body.email_smtp_standby_enabled === '0' ? 0 : 1
         };
+
         const synced = emailProv.syncActiveEmailCredentials({ ...ex, ...payload });
+
         integrationSettings.saveToDb(db, synced, (err, merged) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (body.public_base_url) {
-            upsertGlobalSetting('domain', String(body.public_base_url).replace(/^https?:\/\//, ''), () => {});
-        }
-        const emailConfigured = integrationSettings.isEmailConfiguredFromSettings();
-        const emailStatus = integrationSettings.getEmailConfigStatus();
-        let smtpWarning = null;
-        if (!emailConfigured && (body.zoho_host || body.zoho_user)) {
-            smtpWarning =
-                passwordUpdateAttempted && !(merged && merged.zoho_pass)
-                    ? 'App password could not be saved — paste it again and click Save.'
-                    : 'Paste your Zoho app-specific password and click Save API keys & messaging.';
-        }
-        notifEngine.syncOtpNotificationDefaults(db, body, () => {
-            res.json({
-                success: true,
-                settings: integrationSettingsJson(merged),
-                email_configured: emailConfigured,
-                email_status: emailStatus,
-                whatsapp_configured: integrationSettings.isWhatsAppConfiguredFromSettings(),
-                password_saved: !!(merged && merged.zoho_pass && String(merged.zoho_pass).trim()),
-                password_update_attempted: !!passwordUpdateAttempted,
-                smtp_warning: smtpWarning
-            });
-        });
+            if (err) return res.status(500).json({ error: err.message });
+
+            const waMirror = [
+                ['whatsapp_phone_number_id', body.whatsapp_phone_number_id],
+                ['whatsapp_business_account_id', body.whatsapp_business_account_id],
+                ['whatsapp_verify_token', body.whatsapp_verify_token],
+                ['whatsapp_template_lang', body.whatsapp_template_lang],
+                ['whatsapp_otp_template_name', body.whatsapp_otp_template_name]
+            ].filter(x => x[1] !== undefined && x[1] !== null && String(x[1]).trim() !== '');
+
+            const saveMirror = (idx) => {
+                if (idx >= waMirror.length) return finish();
+                upsertGlobalSetting(waMirror[idx][0], String(waMirror[idx][1]), () => saveMirror(idx + 1));
+            };
+
+            saveMirror(0);
+
+            function finish() {
+                if (body.public_base_url) {
+                    upsertGlobalSetting('domain', String(body.public_base_url).replace(/^https?:\/\//, ''), () => {});
+                }
+
+                const emailConfigured = integrationSettings.isEmailConfiguredFromSettings();
+                const emailStatus = integrationSettings.getEmailConfigStatus();
+                let smtpWarning = null;
+
+                if (!emailConfigured && (body.zoho_host || body.zoho_user)) {
+                    smtpWarning =
+                        passwordUpdateAttempted && !(merged && merged.zoho_pass)
+                            ? 'App password could not be saved — paste it again and click Save.'
+                            : 'Paste your Zoho app-specific password and click Save API keys & messaging.';
+                }
+
+                notifEngine.syncOtpNotificationDefaults(db, body, () => {
+                    res.json({
+                        success: true,
+                        settings: integrationSettingsJson(merged),
+                        email_configured: emailConfigured,
+                        email_status: emailStatus,
+                        whatsapp_configured: integrationSettings.isWhatsAppConfiguredFromSettings(),
+                        password_saved: !!(merged && merged.zoho_pass && String(merged.zoho_pass).trim()),
+                        password_update_attempted: !!passwordUpdateAttempted,
+                        smtp_warning: smtpWarning
+                    });
+                });
+            }
         });
     });
 });
@@ -9725,7 +9754,35 @@ app.post('/api/admin/applications/status', (req, res) => {
             );
         }
 
-    db.run(`UPDATE registrations SET status = ? WHERE id = ?`, [status, applicationId], function(err) {
+    const persistApprovalFee =
+        newSt === 'approved_pending_payment' &&
+        feeTypeNorm !== 'volunteer' &&
+        Number.isFinite(feeAmountNum) &&
+        feeAmountNum >= 0;
+
+    const updateRegistrationSql = persistApprovalFee
+        ? `UPDATE registrations
+           SET status = ?,
+               doc_review_json = (
+                   COALESCE(doc_review_json::jsonb, '{}'::jsonb)
+                   || jsonb_build_object(
+                       'fee_type', 'regular',
+                       'fee_amount', ?::numeric,
+                       'decision', 'approve',
+                       'reviewed_at', COALESCE(
+                           doc_review_json::jsonb->>'reviewed_at',
+                           to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+                       )
+                   )
+               )::text
+           WHERE id = ?`
+        : `UPDATE registrations SET status = ? WHERE id = ?`;
+
+    const updateRegistrationParams = persistApprovalFee
+        ? [status, feeAmountNum, applicationId]
+        : [status, applicationId];
+
+    db.run(updateRegistrationSql, updateRegistrationParams, function(err) {
         if (err) return res.status(500).json({ error: err.message });
         
             const logEntries = portalTracking.registrationStatusToLog(newSt, prevStatus);
