@@ -11087,6 +11087,10 @@ function requireAdminActor(req, res, next) {
     });
 }
 
+app.get('/api/admin/certificates/:kind/:id/download.pdf', (req, res) => {
+    requireAdminActor(req, res, () => certRender.handleAdminPdfDownload(db, req, res));
+});
+
 registerLiveScannerRoutes(app, { db, requireAdminActor });
 registerApplicationFormExportRoutes(app, { db, requireAdminActor, loadRegistrationFormConfig });
 registerWhatsAppRoutes(app, { db, requireAdminActor, generateId, getOrCreatePendingOrder });

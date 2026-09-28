@@ -8982,6 +8982,10 @@ function renderAdminCertificateCandidatesTable() {
         const prnCell = r.user_id_string
             ? escAdmin(r.user_id_string)
             : '<span style="color:#b91c1c;">Missing PRN</span>';
+        const dl =
+            r.cert_enabled && r.certificate_id
+                ? ` <a href="${adminCertificateDownloadUrl(certType, r.certificate_id)}" target="_blank" rel="noopener" title="Download certificate PDF" style="margin-left:6px;color:#0369a1;font-size:0.82rem;white-space:nowrap;"><i class="fas fa-file-pdf"></i> PDF</a>`
+                : '';
         tbody.innerHTML += `<tr>
                 <td><input type="checkbox" class="cert-cand-cb" data-user-id="${r.user_id}" value="${r.user_id}"></td>
                 <td>${prnCell}</td>
@@ -8991,9 +8995,22 @@ function renderAdminCertificateCandidatesTable() {
                 <td>${paid}</td>
                 <td>${checked}</td>
                 <td><code>${escAdmin(r.ticket_id_string || '—')}</code></td>
-                <td title="${escAdmin(certLabel)}">${cert}</td>
+                <td title="${escAdmin(certLabel)}">${cert}${dl}</td>
             </tr>`;
     });
+}
+
+function adminCertificateDownloadUrl(certType, certificateId) {
+    const admin = getStoredAdminUser();
+    const kind = certType === 'volunteer' ? 'volunteer' : 'participant';
+    return (
+        '/api/admin/certificates/' +
+        kind +
+        '/' +
+        encodeURIComponent(certificateId) +
+        '/download.pdf?actingAdminId=' +
+        encodeURIComponent((admin && admin.id) || '')
+    );
 }
 
 function renderAdminVolunteersTable() {
@@ -15536,7 +15553,6 @@ async function sendContactInquiryEmail() {
 async function initAdminEmailComposeTab() {
     await fillAdminSeminarSelect('mail-bulk-seminar', false);
     onMailBulkAudienceChange();
-    loadMailBulkSeminarDoctors();
     loadAdminMailInboundStatus();
     loadAdminMailThreads();
 }
@@ -15565,19 +15581,31 @@ async function loadAdminMailInboundStatus() {
 }
 
 let __adminMailThreadId = null;
+let __adminMailThreadsReq = 0;
+let __adminMailSearchTimer = null;
 
-async function loadAdminMailThreads() {
+function scheduleAdminMailThreadsSearch() {
+    clearTimeout(__adminMailSearchTimer);
+    __adminMailSearchTimer = setTimeout(() => loadAdminMailThreads(), 350);
+}
+
+async function loadAdminMailThreads(opts) {
     const admin = getStoredAdminUser();
     const listEl = document.getElementById('mail-thread-list');
     if (!admin?.id || !listEl) return;
+    const reopen = !(opts && opts.skipOpen);
     const q = String((document.getElementById('mail-thread-search') || {}).value || '').trim();
-    listEl.innerHTML = '<p style="padding:12px;color:#64748b;">Loading…</p>';
+    const reqId = ++__adminMailThreadsReq;
+    if (!listEl.querySelector('button')) {
+        listEl.innerHTML = '<p style="padding:12px;color:#64748b;">Loading…</p>';
+    }
     try {
         let url = '/api/admin/mail/threads?actingAdminId=' + encodeURIComponent(admin.id);
         if (q) url += '&q=' + encodeURIComponent(q);
         const res = await fetch(url);
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed');
+        if (reqId !== __adminMailThreadsReq) return;
         const rows = data.threads || [];
         if (!rows.length) {
             listEl.innerHTML = '<p style="padding:12px;color:#64748b;">No conversations yet. Send email with reply tracking enabled.</p>';
@@ -15604,8 +15632,11 @@ async function loadAdminMailThreads() {
                 );
             })
             .join('');
-        if (__adminMailThreadId) openAdminMailThread(__adminMailThreadId);
+        if (reopen && __adminMailThreadId && !document.getElementById('mail-thread-reply-body')) {
+            openAdminMailThread(__adminMailThreadId);
+        }
     } catch (e) {
+        if (reqId !== __adminMailThreadsReq) return;
         listEl.innerHTML = '<p style="padding:12px;color:#b91c1c;">' + escAdmin(e.message || 'Error') + '</p>';
     }
 }
@@ -15615,7 +15646,9 @@ async function openAdminMailThread(threadId) {
     const panel = document.getElementById('mail-thread-detail');
     if (!admin?.id || !panel) return;
     __adminMailThreadId = threadId;
-    panel.innerHTML = '<p style="color:#64748b;">Loading…</p>';
+    if (!document.getElementById('mail-thread-reply-body')) {
+        panel.innerHTML = '<p style="color:#64748b;">Loading…</p>';
+    }
     try {
         const res = await fetch(
             '/api/admin/mail/threads/' + threadId + '?actingAdminId=' + encodeURIComponent(admin.id)
@@ -15655,7 +15688,7 @@ async function openAdminMailThread(threadId) {
             ')">Send reply</button>' +
             '<p id="mail-thread-reply-msg" style="font-size:0.85rem;margin-top:8px;"></p>';
         panel.innerHTML = html;
-        loadAdminMailThreads();
+        loadAdminMailThreads({ skipOpen: true });
     } catch (e) {
         panel.innerHTML = '<p style="color:#b91c1c;">' + escAdmin(e.message || 'Error') + '</p>';
     }
