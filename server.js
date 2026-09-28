@@ -2954,6 +2954,12 @@ function integrationSettingsJson(data) {
     masked.email_status = integrationSettings.getEmailConfigStatus();
     masked.whatsapp_configured = integrationSettings.isWhatsAppConfiguredFromSettings();
     masked.whatsapp_status = integrationSettings.getWhatsAppConfigStatus();
+    masked.whatsapp_provider = integrationSettings.getAisensyConfig().provider;
+    masked.aisensy_api_key_saved = !!(raw.aisensy_api_key && String(raw.aisensy_api_key).trim());
+    masked.aisensy_project_api_pwd_saved = !!(
+        raw.aisensy_project_api_pwd && String(raw.aisensy_project_api_pwd).trim()
+    );
+    masked.aisensy_status = require('./lib/aisensy-service').getAisensyStatus();
     masked.msg91_auth_key_saved = !!(raw.msg91_auth_key && String(raw.msg91_auth_key).trim());
     masked.msg91_configured = integrationSettings.isMsg91ConfiguredFromSettings();
     masked.msg91_status = integrationSettings.getMsg91ConfigStatus();
@@ -3417,6 +3423,56 @@ app.post('/api/admin/integrations/test-whatsapp', withIntegrationSettingsLoaded,
             to +
             ' as test recipient in development mode.'
     });
+});
+
+// AiSensy: send a test campaign message (uses OTP campaign with code 123456, else text campaign)
+app.post('/api/admin/integrations/test-aisensy', withIntegrationSettingsLoaded, async (req, res) => {
+    const aisensy = require('./lib/aisensy-service');
+    const phone = String((req.body && req.body.phone) || '').trim();
+    const campaignName = String((req.body && req.body.campaignName) || '').trim();
+    if (!phone) return res.status(400).json({ error: 'phone required' });
+    if (!aisensy.isAisensyConfigured()) {
+        return res.status(503).json({ error: 'AiSensy not configured — save the AiSensy API key first.' });
+    }
+    const st = aisensy.getAisensyStatus();
+    let r;
+    let method;
+    if (campaignName) {
+        method = 'campaign:' + campaignName;
+        const params = Array.isArray(req.body.templateParams) ? req.body.templateParams : [];
+        r = await aisensy.sendAisensyCampaign({ phone, campaignName, userName: 'Admin test', templateParams: params });
+    } else if (st.otpCampaign) {
+        method = 'otp_campaign:' + st.otpCampaign;
+        r = await aisensy.sendAisensyCampaign({ phone, campaignName: st.otpCampaign, userName: 'Admin test', templateParams: ['123456'] });
+    } else if (st.textCampaign) {
+        method = 'text_campaign:' + st.textCampaign;
+        r = await aisensy.sendAisensyText(phone, 'VGMF Seminar Portal: AiSensy test message from admin.', { userName: 'Admin test' });
+    } else {
+        return res.status(400).json({ error: 'Set an OTP campaign or Text campaign (or pass a campaign name) to test.' });
+    }
+    notifEngine.logNotification(
+        db,
+        {
+            event_key: 'INTEGRATION_TEST_AISENSY',
+            channel: 'whatsapp',
+            destination: aisensy.toDestination(phone),
+            status: r.ok ? 'accepted' : 'failed',
+            provider_message_id: r.messageId || null,
+            subject: 'Admin AiSensy test',
+            body_preview: method + (r.messageId ? ' id=' + r.messageId : ''),
+            error: r.ok ? null : String(r.error || '').slice(0, 900)
+        },
+        () => {}
+    );
+    if (!r.ok) return res.status(502).json({ error: r.error, method });
+    res.json({ success: true, method, messageId: r.messageId || null, destination: r.destination, response: r.raw || null });
+});
+
+app.get('/api/admin/integrations/aisensy-campaigns', withIntegrationSettingsLoaded, async (req, res) => {
+    const aisensy = require('./lib/aisensy-service');
+    const r = await aisensy.listAisensyApiCampaigns();
+    if (!r.ok) return res.status(502).json({ error: r.error });
+    res.json({ success: true, campaigns: r.campaigns });
 });
 
 app.post('/api/admin/integrations/test-msg91', withIntegrationSettingsLoaded, async (req, res) => {

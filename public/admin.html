@@ -2746,7 +2746,49 @@
                             <button type="button" class="btn-secondary btn-sm" style="margin-top:8px;margin-left:6px;" onclick="switchTab('tab-notifications');if(typeof initAdminNotificationsTab==='function')initAdminNotificationsTab();">Open notification bodies</button>
                         </div>
 
-                        <div style="display:flex;gap:8px;align-items:flex-end;"><input type="text" id="int-test-phone" placeholder="10-digit mobile (no leading 0)" style="flex:1"><button type="button" class="btn-primary" style="background:#64748b;padding:8px 12px;" onclick="testIntegrationWhatsApp()">Test WhatsApp</button></div>
+                        <div style="display:flex;gap:8px;align-items:flex-end;"><input type="text" id="int-test-phone" placeholder="Mobile: 10-digit Indian or +country code" style="flex:1"><button type="button" class="btn-primary" style="background:#64748b;padding:8px 12px;" onclick="testIntegrationWhatsApp()">Test WhatsApp</button></div>
+
+                        <!-- AiSensy -->
+                        <div style="grid-column:1/-1;margin-top:18px;padding-top:18px;border-top:1px solid #e2e8f0;">
+                            <h4 style="margin:0 0 8px;color:#0c4a6e;">AiSensy WhatsApp</h4>
+                            <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px;line-height:1.5;">
+                                Send all WhatsApp messages (OTP, tickets, reminders, campaigns) through <a href="https://aisensy.com" target="_blank" rel="noopener">AiSensy</a> instead of Meta directly.
+                                Create a <strong>live API campaign</strong> in AiSensy for each template (Campaigns → Launch → API Campaign); the campaign name is used below.
+                                API key: AiSensy → Manage → API Key. Numbers outside India are sent as +country code automatically.
+                            </p>
+                        </div>
+                        <div><label>Outbound WhatsApp provider</label>
+                            <select id="int-wa-provider" style="width:100%">
+                                <option value="meta">Meta Cloud API (direct)</option>
+                                <option value="aisensy">AiSensy</option>
+                            </select></div>
+                        <div><label>Lead source label (optional)</label><input type="text" id="int-aisensy-source" placeholder="VGMF Seminar Portal" style="width:100%"></div>
+                        <div style="grid-column:1/-1;">
+                            <label>AiSensy API key</label>
+                            <div id="int-aisensy-key-saved-badge" style="margin:6px 0 8px;padding:8px 12px;border-radius:8px;background:#f8fafc;border:1px solid #e2e8f0;font-size:0.88rem;font-weight:600;color:#64748b;">AiSensy API key not saved yet</div>
+                            <input type="password" id="int-aisensy-key-new" placeholder="Paste AiSensy API key here, then Save" style="width:100%;" autocomplete="off" spellcheck="false">
+                        </div>
+                        <div><label>OTP campaign name</label><input type="text" id="int-aisensy-otp-campaign" placeholder="API campaign whose template has {{1}} = OTP code" style="width:100%"></div>
+                        <div><label>Text campaign name</label><input type="text" id="int-aisensy-text-campaign" placeholder="Template with a single {{1}} body variable (plain messages)" style="width:100%"></div>
+                        <div><label>Media campaign name</label><input type="text" id="int-aisensy-media-campaign" placeholder="Template with document/image header + {{1}} (e-ticket PDFs)" style="width:100%"></div>
+                        <div><label>Project ID (optional, Project API)</label><input type="text" id="int-aisensy-project-id" placeholder="AiSensy project id" style="width:100%" autocomplete="off"></div>
+                        <div style="grid-column:1/-1;">
+                            <label>Project API password (optional — lists your API campaigns)</label>
+                            <div id="int-aisensy-pwd-saved-badge" style="margin:6px 0 8px;padding:8px 12px;border-radius:8px;background:#f8fafc;border:1px solid #e2e8f0;font-size:0.88rem;font-weight:600;color:#64748b;">Project API password not saved</div>
+                            <input type="password" id="int-aisensy-pwd-new" placeholder="Paste Project API password, then Save" style="width:100%;" autocomplete="off" spellcheck="false">
+                        </div>
+                        <div style="grid-column:1/-1;">
+                            <label>Template → campaign map (one per line: <code>meta_template_name=AiSensy campaign name</code>; unmapped templates use the same name)</label>
+                            <textarea id="int-aisensy-campaign-map" rows="4" style="width:100%;font-family:ui-monospace,monospace;font-size:0.85rem;" placeholder="vgmf_otp_auth=OTP Login&#10;ticket_issued=E-ticket issued"></textarea>
+                        </div>
+                        <div style="grid-column:1/-1;display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+                            <input type="text" id="int-aisensy-test-phone" placeholder="Test mobile (10-digit Indian or +country code)" style="flex:1;min-width:220px;">
+                            <input type="text" id="int-aisensy-test-campaign" placeholder="Campaign name (optional; default OTP/Text campaign)" style="flex:1;min-width:220px;">
+                            <button type="button" class="btn-primary" style="background:#64748b;padding:8px 12px;" onclick="testIntegrationAisensy()">Test AiSensy</button>
+                            <button type="button" class="btn-secondary btn-sm" onclick="listAisensyCampaigns()">List API campaigns</button>
+                        </div>
+                        <p id="int-aisensy-hint" style="grid-column:1/-1;font-size:0.8rem;color:#64748b;margin:4px 0 0;">Save settings first. Test sends the OTP campaign with code 123456 (or the text campaign).</p>
+                        <div id="int-aisensy-campaigns" style="grid-column:1/-1;"></div>
 
                         
                     <!-- Google Maps -->
@@ -3563,7 +3605,7 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
-    <script src="/js/admin.js?v=20260928a"></script>
+    <script src="/js/admin.js?v=20260928b"></script>
     <script src="/js/pos-onspot-ui.js?v=20260922b"></script>
     <script src="/js/admin-whatsapp.js?v=20260921a"></script>
     <script src="/js/admin-payment-followup.js?v=20260925b"></script>

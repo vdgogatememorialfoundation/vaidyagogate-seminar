@@ -11968,6 +11968,15 @@ async function loadIntegrationSettings() {
         set('int-wa-lang', s.whatsapp_template_lang || 'en');
         set('int-wa-otp-template', s.whatsapp_otp_template_name);
         set('int-otp-email-subject', s.otp_email_subject);
+        set('int-wa-provider', s.whatsapp_provider || 'meta');
+        set('int-aisensy-source', s.aisensy_source);
+        set('int-aisensy-otp-campaign', s.aisensy_otp_campaign);
+        set('int-aisensy-text-campaign', s.aisensy_text_campaign);
+        set('int-aisensy-media-campaign', s.aisensy_media_campaign);
+        set('int-aisensy-project-id', s.aisensy_project_id);
+        set('int-aisensy-campaign-map', s.aisensy_campaign_map);
+        setIntegrationSavedBadge('int-aisensy-key-saved-badge', !!s.aisensy_api_key_saved, 'AiSensy API key saved on server', 'AiSensy API key not saved yet');
+        setIntegrationSavedBadge('int-aisensy-pwd-saved-badge', !!s.aisensy_project_api_pwd_saved, 'Project API password saved on server', 'Project API password not saved');
         setIntegrationCheckbox('int-msg91-enabled', s.msg91_sms_enabled !== false && s.msg91_sms_enabled !== 0 && s.msg91_sms_enabled !== '0');
         set('int-msg91-sender', s.msg91_sender_id);
         set('int-msg91-route', s.msg91_route || '4');
@@ -12136,6 +12145,13 @@ async function saveIntegrationSettings() {
         whatsapp_template_lang: (document.getElementById('int-wa-lang') || {}).value.trim() || 'en',
         whatsapp_otp_template_name: (document.getElementById('int-wa-otp-template') || {}).value.trim(),
         otp_email_subject: (document.getElementById('int-otp-email-subject') || {}).value.trim(),
+        whatsapp_provider: (document.getElementById('int-wa-provider') || {}).value || 'meta',
+        aisensy_source: ((document.getElementById('int-aisensy-source') || {}).value || '').trim(),
+        aisensy_otp_campaign: ((document.getElementById('int-aisensy-otp-campaign') || {}).value || '').trim(),
+        aisensy_text_campaign: ((document.getElementById('int-aisensy-text-campaign') || {}).value || '').trim(),
+        aisensy_media_campaign: ((document.getElementById('int-aisensy-media-campaign') || {}).value || '').trim(),
+        aisensy_project_id: ((document.getElementById('int-aisensy-project-id') || {}).value || '').trim(),
+        aisensy_campaign_map: ((document.getElementById('int-aisensy-campaign-map') || {}).value || '').trim(),
         msg91_sms_enabled: (document.getElementById('int-msg91-enabled') || {}).checked !== false,
         msg91_sender_id: (document.getElementById('int-msg91-sender') || {}).value.trim(),
         msg91_route: (document.getElementById('int-msg91-route') || {}).value.trim() || '4',
@@ -12147,6 +12163,10 @@ async function saveIntegrationSettings() {
 
     if (newMsg91Key) body.msg91_auth_key = newMsg91Key;
     if (newGoogleMapsKey) body.google_maps_api_key = newGoogleMapsKey;
+    const newAisensyKey = ((document.getElementById('int-aisensy-key-new') || {}).value || '').trim();
+    const newAisensyPwd = ((document.getElementById('int-aisensy-pwd-new') || {}).value || '').trim();
+    if (newAisensyKey) body.aisensy_api_key = newAisensyKey;
+    if (newAisensyPwd) body.aisensy_project_api_pwd = newAisensyPwd;
     if (newZohoPass) body.zoho_pass = newZohoPass;
     if (newEmailApiKey) body.email_api_key = newEmailApiKey;
     if (newEmailFallbackKey) body.email_api_fallback_key = newEmailFallbackKey;
@@ -12175,6 +12195,10 @@ async function saveIntegrationSettings() {
 
         const googleMapsNewEl = document.getElementById('int-google-maps-key-new');
         if (googleMapsNewEl) googleMapsNewEl.value = '';
+        ['int-aisensy-key-new', 'int-aisensy-pwd-new'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
 
         applySavedIntegrationSecrets(data);
         await loadIntegrationSettings();
@@ -12381,6 +12405,74 @@ async function saveWhatsAppEventTemplates() {
         await loadIntegrationSettings();
     } catch (e) {
         alert('Save failed');
+    }
+}
+
+function setIntegrationSavedBadge(id, saved, onText, offText) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = saved ? onText : offText;
+    el.style.background = saved ? '#ecfdf5' : '#f8fafc';
+    el.style.borderColor = saved ? '#a7f3d0' : '#e2e8f0';
+    el.style.color = saved ? '#047857' : '#64748b';
+}
+
+async function testIntegrationAisensy() {
+    const phone = ((document.getElementById('int-aisensy-test-phone') || {}).value || '').trim();
+    const campaignName = ((document.getElementById('int-aisensy-test-campaign') || {}).value || '').trim();
+    const hint = document.getElementById('int-aisensy-hint');
+    if (!phone) {
+        if (hint) hint.textContent = 'Enter a test mobile number first.';
+        return;
+    }
+    if (hint) hint.textContent = 'Sending via AiSensy…';
+    try {
+        const res = await fetch('/api/admin/integrations/test-aisensy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone, campaignName })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            if (hint) hint.textContent = 'AiSensy test failed: ' + (data.error || 'HTTP ' + res.status) + (data.method ? ' [' + data.method + ']' : '');
+            return;
+        }
+        if (hint) {
+            hint.textContent =
+                'AiSensy accepted (' + data.method + ') → ' + (data.destination || phone) + (data.messageId ? ' · id ' + data.messageId : '') + '. Check WhatsApp Logs for delivery.';
+        }
+    } catch (e) {
+        if (hint) hint.textContent = 'AiSensy test failed: ' + (e.message || e);
+    }
+}
+
+async function listAisensyCampaigns() {
+    const box = document.getElementById('int-aisensy-campaigns');
+    if (!box) return;
+    box.innerHTML = '<p style="font-size:0.85rem;color:#64748b;">Loading campaigns…</p>';
+    try {
+        const res = await fetch('/api/admin/integrations/aisensy-campaigns');
+        const data = await res.json();
+        if (!res.ok) {
+            box.innerHTML = '<p style="font-size:0.85rem;color:#b91c1c;">' + escAdmin(data.error || 'HTTP ' + res.status) + '</p>';
+            return;
+        }
+        const list = data.campaigns || [];
+        if (!list.length) {
+            box.innerHTML = '<p style="font-size:0.85rem;color:#64748b;">No API campaigns found in this AiSensy project.</p>';
+            return;
+        }
+        box.innerHTML =
+            '<div style="overflow-x:auto;max-height:260px;border:1px solid #e2e8f0;border-radius:8px;margin-top:6px;"><table class="data-table" style="width:100%;font-size:0.85rem;"><thead><tr><th>Campaign</th><th>Status</th><th>Type</th><th>Template</th></tr></thead><tbody>' +
+            list
+                .map(
+                    (c) =>
+                        '<tr><td><code>' + escAdmin(c.name) + '</code></td><td>' + escAdmin(c.status) + '</td><td>' + escAdmin(c.type) + '</td><td>' + escAdmin(c.template) + '</td></tr>'
+                )
+                .join('') +
+            '</tbody></table></div>';
+    } catch (e) {
+        box.innerHTML = '<p style="font-size:0.85rem;color:#b91c1c;">' + escAdmin(e.message || String(e)) + '</p>';
     }
 }
 
