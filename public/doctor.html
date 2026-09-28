@@ -463,20 +463,20 @@
                             </div>
                             <div class="form-group">
                                 <label>Phone</label>
-                                <input type="tel" id="reg-phone" autocomplete="tel">
+                                <input type="tel" id="reg-phone" autocomplete="tel" placeholder="10-digit mobile, or +country code for other countries">
                             </div>
                             <div class="reg-step-actions"><button type="button" class="btn-primary reg-back-btn" onclick="nextStep(0)"><i class="fas fa-arrow-left"></i> Back</button><button type="button" class="btn-primary reg-next-btn" onclick="nextStep(2)">Continue <i class="fas fa-arrow-right"></i></button></div>
                         </div>
 
                         <div id="step-2" class="form-step hidden">
                             <div class="form-group"><label>Address</label><textarea id="reg-addr" rows="2"></textarea></div>
+                            <div class="form-group"><label>Country</label><select id="reg-country" onchange="applyRegCountryMode()"><option value="">Select country</option></select></div>
                             <div class="reg-form-grid reg-form-grid--3">
-                                <div class="form-group"><label>PIN code</label><input type="text" id="reg-pin" inputmode="numeric" maxlength="6" placeholder="6-digit PIN" onblur="autofillAddress()"></div>
+                                <div class="form-group"><label id="reg-pin-label">PIN code</label><input type="text" id="reg-pin" inputmode="numeric" maxlength="6" placeholder="6-digit PIN" onblur="autofillAddress()"></div>
                                 <div class="form-group"><label>City</label><select id="reg-city"><option value="">Select city</option></select></div>
-                                <div class="form-group"><label>State</label><select id="reg-state"><option value="">Select state</option></select></div>
+                                <div class="form-group"><label id="reg-state-label">State</label><select id="reg-state"><option value="">Select state</option></select></div>
                             </div>
                             <p id="reg-pin-hint" class="hidden" style="font-size:0.85rem;color:#64748b;margin:-4px 0 8px;"></p>
-                            <div class="form-group"><label>Country</label><select id="reg-country"><option value="">Select country</option></select></div>
                             <div class="reg-step-actions"><button type="button" class="btn-primary reg-back-btn" onclick="nextStep(1)"><i class="fas fa-arrow-left"></i> Back</button><button type="button" class="btn-primary reg-next-btn" onclick="nextStep(3)">Continue <i class="fas fa-arrow-right"></i></button></div>
                         </div>
 
@@ -923,7 +923,7 @@
     <script src="/js/http-json.js"></script>
     <script src="/js/portal-auth.js?v=20260620loginfast2"></script>
     <script src="/js/name-validation.js"></script>
-    <script src="/js/contact-validation.js"></script>
+    <script src="/js/contact-validation.js?v=20260928a"></script>
     <script src="/js/doctor-auth-ui.js?v=20260620signupredirect1"></script>
     <script src="/js/portal-upload.js?v=20260523"></script>
     <script src="/js/case-r2-upload.js?v=20260608case2"></script>
@@ -955,6 +955,6 @@
         }
     })();
     </script>
-    <script src="/js/doctor.js?v=20260922d"></script>
+    <script src="/js/doctor.js?v=20260928a"></script>
 </body>
 </html>

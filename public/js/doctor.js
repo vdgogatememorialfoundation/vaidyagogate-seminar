@@ -6255,6 +6255,10 @@ let __regPinLookupTimer = null;
 
 function fillRegSelectOptions(sel, options, placeholder) {
     if (!sel) return;
+    if (sel.tagName !== 'SELECT') {
+        if ((options || []).length === 1) sel.value = options[0];
+        return;
+    }
     const prev = sel.value;
     sel.innerHTML = '';
     const opt0 = document.createElement('option');
@@ -6288,6 +6292,7 @@ function clearPinDerivedAddress() {
 function onRegPinInput() {
     const pinEl = document.getElementById('reg-pin');
     if (!pinEl) return;
+    if (!regCountryIsIndia()) return;
     const pin = String(pinEl.value || '').replace(/\D/g, '').slice(0, 6);
     if (pinEl.value !== pin) pinEl.value = pin;
     clearTimeout(__regPinLookupTimer);
@@ -6297,6 +6302,94 @@ function onRegPinInput() {
         clearPinDerivedAddress();
     }
 }
+
+function regCountryIsIndia() {
+    const sel = document.getElementById('reg-country');
+    const v = sel ? String(sel.value || '').trim() : '';
+    return !v || v.toLowerCase() === 'india';
+}
+
+function swapRegFieldTag(id, toTag, placeholder) {
+    const el = document.getElementById(id);
+    if (!el || el.tagName === toTag) return el;
+    const prev = String(el.value || '');
+    let repl;
+    if (toTag === 'INPUT') {
+        repl = document.createElement('input');
+        repl.type = 'text';
+        repl.placeholder = placeholder || '';
+        repl.autocomplete = 'off';
+    } else {
+        repl = document.createElement('select');
+        const o = document.createElement('option');
+        o.value = '';
+        o.textContent = placeholder || 'Select';
+        repl.appendChild(o);
+    }
+    repl.id = id;
+    repl.className = el.className;
+    if (el.required) repl.required = true;
+    el.parentNode.replaceChild(repl, el);
+    if (prev) {
+        if (toTag === 'INPUT') repl.value = prev;
+        else fillRegSelectOptions(repl, [prev], placeholder);
+    }
+    return repl;
+}
+
+function applyRegCountryMode() {
+    const india = regCountryIsIndia();
+    const pinEl = document.getElementById('reg-pin');
+    const pinLabel = document.getElementById('reg-pin-label');
+    const stateLabel = document.getElementById('reg-state-label');
+    if (india) {
+        swapRegFieldTag('reg-city', 'SELECT', 'Select city');
+        swapRegFieldTag('reg-state', 'SELECT', 'Select state');
+        if (pinEl) {
+            pinEl.setAttribute('inputmode', 'numeric');
+            pinEl.setAttribute('maxlength', '6');
+            pinEl.placeholder = '6-digit PIN';
+            const d = String(pinEl.value || '').replace(/\D/g, '').slice(0, 6);
+            if (pinEl.value !== d) pinEl.value = d;
+            if (d.length === 6) autofillAddress();
+        }
+        if (pinLabel) pinLabel.textContent = 'PIN code';
+        if (stateLabel) stateLabel.textContent = 'State';
+    } else {
+        swapRegFieldTag('reg-city', 'INPUT', 'City / town');
+        swapRegFieldTag('reg-state', 'INPUT', 'State / province / region');
+        if (pinEl) {
+            pinEl.removeAttribute('inputmode');
+            pinEl.setAttribute('maxlength', '12');
+            pinEl.placeholder = 'Postal / ZIP code';
+        }
+        if (pinLabel) pinLabel.textContent = 'Postal / ZIP code';
+        if (stateLabel) stateLabel.textContent = 'State / province';
+        setRegPinHint('');
+    }
+    const collegeIndia = india;
+    const cpinEl = document.getElementById('reg-cpin');
+    if (collegeIndia) {
+        swapRegFieldTag('reg-ccity', 'SELECT', 'Select city');
+        swapRegFieldTag('reg-cstate', 'SELECT', 'Select state');
+        if (cpinEl) {
+            cpinEl.setAttribute('inputmode', 'numeric');
+            cpinEl.setAttribute('maxlength', '6');
+            cpinEl.placeholder = '6-digit PIN';
+        }
+    } else {
+        swapRegFieldTag('reg-ccity', 'INPUT', 'College city');
+        swapRegFieldTag('reg-cstate', 'INPUT', 'College state / province');
+        if (cpinEl) {
+            cpinEl.removeAttribute('inputmode');
+            cpinEl.setAttribute('maxlength', '12');
+            cpinEl.placeholder = 'Postal / ZIP code';
+        }
+        setRegCpinHint('');
+    }
+    if (typeof refreshRegistrationRequiredAttributes === 'function') refreshRegistrationRequiredAttributes();
+}
+window.applyRegCountryMode = applyRegCountryMode;
 
 async function populateRegistrationCountrySelect() {
     const sel = document.getElementById('reg-country');
@@ -6325,11 +6418,13 @@ async function initRegistrationAddressUi() {
         cpinEl.dataset.bound = '1';
         cpinEl.addEventListener('input', onRegCpinInput);
     }
+    applyRegCountryMode();
 }
 
 async function autofillAddress() {
     const pinEl = document.getElementById('reg-pin');
     if (!pinEl) return;
+    if (!regCountryIsIndia()) return;
     const pin = String(pinEl.value || '').replace(/\D/g, '');
     if (pin.length !== 6) {
         if (pin.length) setRegPinHint('Enter a valid 6-digit PIN code', true);
@@ -6423,6 +6518,7 @@ function clearCollegePinDerived() {
 
 async function autofillCollegeAddress() {
     if (!registrationQualIsPg()) return;
+    if (!regCountryIsIndia()) return;
     const pinEl = document.getElementById('reg-cpin');
     if (!pinEl) return;
     const pin = String(pinEl.value || '').replace(/\D/g, '');
@@ -6455,6 +6551,7 @@ async function autofillCollegeAddress() {
 function onRegCpinInput() {
     const pinEl = document.getElementById('reg-cpin');
     if (!pinEl) return;
+    if (!regCountryIsIndia()) return;
     const pin = String(pinEl.value || '').replace(/\D/g, '').slice(0, 6);
     if (pinEl.value !== pin) pinEl.value = pin;
     clearTimeout(__regCpinLookupTimer);
@@ -9807,8 +9904,22 @@ async function applyRegistrationFormData(formData, opts) {
         if (typeof toggleRegBlock === 'function') toggleRegBlock();
         if (typeof toggleCollegeStep === 'function') toggleCollegeStep();
     }
+    applyRegCountryMode();
     const pin = String(formData.pin || '').replace(/\D/g, '');
-    if (pin.length === 6) {
+    if (!regCountryIsIndia()) {
+        const pinEl = document.getElementById('reg-pin');
+        if (pinEl && formData.pin) pinEl.value = String(formData.pin);
+        const cityEl = document.getElementById('reg-city');
+        if (cityEl && formData.city) cityEl.value = formData.city;
+        const stateEl = document.getElementById('reg-state');
+        if (stateEl && formData.state) stateEl.value = formData.state;
+        const cpinEl = document.getElementById('reg-cpin');
+        if (cpinEl && formData.cpin) cpinEl.value = String(formData.cpin);
+        const ccityEl = document.getElementById('reg-ccity');
+        if (ccityEl && formData.ccity) ccityEl.value = formData.ccity;
+        const cstateEl = document.getElementById('reg-cstate');
+        if (cstateEl && formData.cstate) cstateEl.value = formData.cstate;
+    } else if (pin.length === 6) {
         const pinEl = document.getElementById('reg-pin');
         if (pinEl) pinEl.value = pin;
         await autofillAddress();
@@ -9828,7 +9939,7 @@ async function applyRegistrationFormData(formData, opts) {
         }
     }
     const cpin = String(formData.cpin || '').replace(/\D/g, '');
-    if (cpin.length === 6 && registrationQualIsPg()) {
+    if (regCountryIsIndia() && cpin.length === 6 && registrationQualIsPg()) {
         const cpinEl = document.getElementById('reg-cpin');
         if (cpinEl) cpinEl.value = cpin;
         await autofillCollegeAddress();

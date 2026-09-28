@@ -2881,7 +2881,14 @@ function renderAdminBehalfFormFields(preservedData) {
             html += '<input type="date" id="' + id + '" style="width:100%;padding:8px;">';
         } else {
             const ty = t === 'email' ? 'email' : t === 'tel' ? 'tel' : t === 'number' ? 'number' : 'text';
-            const pinAttr = f.key === 'pin' || f.key === 'cpin' ? ' maxlength="6" inputmode="numeric"' : '';
+            const pinAttr =
+                f.key === 'pin' || f.key === 'cpin'
+                    ? ' maxlength="12" placeholder="PIN / postal code (6-digit Indian PIN auto-fills city & state)"'
+                    : f.key === 'phone'
+                      ? ' placeholder="10-digit mobile, or +country code for other countries"'
+                      : f.key === 'country'
+                        ? ' list="admin-country-datalist" placeholder="India"'
+                        : '';
             html += '<input type="' + ty + '" id="' + id + '" style="width:100%;padding:8px;"' + pinAttr + '>';
         }
         if (adminBehalfFieldDeferrable(f)) {
@@ -2944,6 +2951,7 @@ function renderAdminBehalfFormFields(preservedData) {
             }
         });
     }
+    ensureAdminCountryDatalist();
     ['pin', 'cpin'].forEach((pk) => {
         const pel = document.getElementById('behalf-f-' + pk);
         if (pel) pel.addEventListener('blur', () => adminPincodeAutofill('behalf-f-', pk));
@@ -10587,11 +10595,34 @@ async function adminLiveEditOtpPayload(targetUserId) {
 let __adminEditFormFields = [];
 let __adminEditFormPrefix = 'appedit-f-';
 
+let __adminCountryDatalistReady = false;
+async function ensureAdminCountryDatalist() {
+    if (__adminCountryDatalistReady || document.getElementById('admin-country-datalist')) return;
+    __adminCountryDatalistReady = true;
+    try {
+        const r = await fetch('/api/public/countries');
+        const data = await r.json();
+        const dl = document.createElement('datalist');
+        dl.id = 'admin-country-datalist';
+        ((data && data.countries) || []).forEach((c) => {
+            const o = document.createElement('option');
+            o.value = c;
+            dl.appendChild(o);
+        });
+        document.body.appendChild(dl);
+    } catch (_) {
+        __adminCountryDatalistReady = false;
+    }
+}
+
 async function adminPincodeAutofill(prefix, pinKey) {
     const pinEl = document.getElementById(prefix + pinKey);
     if (!pinEl) return;
     const pin = String(pinEl.value || '').replace(/\D/g, '');
-    if (pin.length !== 6) return;
+    if (pin.length !== 6 || pin.length !== String(pinEl.value || '').trim().length) return;
+    const countryNow = document.getElementById(prefix + 'country');
+    const cv = countryNow ? String(countryNow.value || '').trim().toLowerCase() : '';
+    if (cv && cv !== 'india') return;
     try {
         const r = await fetch('/api/public/pincode-lookup?pin=' + encodeURIComponent(pin));
         const data = await r.json();
@@ -10692,7 +10723,14 @@ function renderAdminDynamicFormFields(hostId, fields, prefix, existingData) {
                 '</label>';
         } else {
             const ty = f.type === 'email' ? 'email' : f.type === 'tel' ? 'tel' : 'text';
-            const pinAttr = f.key === 'pin' || f.key === 'cpin' ? ' maxlength="6" inputmode="numeric"' : '';
+            const pinAttr =
+                f.key === 'pin' || f.key === 'cpin'
+                    ? ' maxlength="12" placeholder="PIN / postal code (6-digit Indian PIN auto-fills city & state)"'
+                    : f.key === 'phone'
+                      ? ' placeholder="10-digit mobile, or +country code for other countries"'
+                      : f.key === 'country'
+                        ? ' list="admin-country-datalist" placeholder="India"'
+                        : '';
             html += '<input type="' + ty + '" id="' + id + '" style="width:100%;padding:8px;"' + pinAttr + '>';
         }
         html += '</div>';
@@ -10711,6 +10749,7 @@ function renderAdminDynamicFormFields(hostId, fields, prefix, existingData) {
             renderAdminDynamicFormFields(hostId, __adminEditFormFields, prefix, collectAdminDynamicFormData(prefix))
         );
     }
+    ensureAdminCountryDatalist();
     ['pin', 'cpin'].forEach((pk) => {
         const pel = document.getElementById(prefix + pk);
         if (pel) pel.addEventListener('blur', () => adminPincodeAutofill(prefix, pk));
