@@ -4616,6 +4616,10 @@ function renderAdminUserDetailTab() {
                     <button type="button" class="btn-primary" style="margin-top:12px;" onclick="adminSaveDoctorProfileEdit(${u.id})">Save doctor profile</button>
                 </div>
             </div>
+            <div style="margin-top:14px;padding:12px;border:1px solid #bbf7d0;border-radius:8px;background:#f0fdf4;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+                <button type="button" class="btn-primary" style="background:#15803d;" onclick="adminSaveUserAllEdits(${u.id})">Save all changes (account + doctor profile)</button>
+                <span id="admin-edit-save-status" style="font-size:0.85rem;color:#166534;">Saves the account fields (name, email, phone, qualification) and the doctor profile together. The name on tickets, certificates and emails follows the account name.</span>
+            </div>
             ${
                 formRows
                     ? `<h4 style="margin-top:16px;">Latest registration form fields</h4><table class="data-table"><thead><tr><th>Field</th><th>Value</th></tr></thead><tbody>${formRows}</tbody></table>`
@@ -10808,6 +10812,63 @@ async function adminSaveApplicationFormEdit(applicationId) {
         loadApplications();
     } catch (e) {
         console.error(e);
+        if (st) st.textContent = 'Network error';
+        alert('Network error');
+    }
+}
+
+function adminAccountEditBody() {
+    return {
+        firstName: document.getElementById('admin-edit-first')?.value,
+        middleName: document.getElementById('admin-edit-middle')?.value,
+        lastName: document.getElementById('admin-edit-last')?.value,
+        email: document.getElementById('admin-edit-email')?.value,
+        phone: document.getElementById('admin-edit-phone')?.value,
+        whatsapp: document.getElementById('admin-edit-whatsapp')?.value,
+        qualification: document.getElementById('admin-edit-qual')?.value
+    };
+}
+
+function adminDoctorProfileEditBody() {
+    return {
+        specialization: document.getElementById('admin-edit-spec')?.value,
+        registration_no: document.getElementById('admin-edit-regno')?.value,
+        qualifications: document.getElementById('admin-edit-quals')?.value,
+        experience_years: document.getElementById('admin-edit-exp')?.value,
+        hospital_name: document.getElementById('admin-edit-hospital')?.value,
+        contact_number: document.getElementById('admin-edit-contact')?.value,
+        bio: document.getElementById('admin-edit-bio')?.value
+    };
+}
+
+async function adminSaveUserAllEdits(userId) {
+    const otp = await adminLiveEditOtpPayload(userId);
+    if (!otp) return;
+    const st = document.getElementById('admin-edit-save-status');
+    if (st) st.textContent = 'Saving…';
+    const put = (url, body) =>
+        fetch(url, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...body, ...otp })
+        }).then(async (r) => ({ ok: r.ok, data: await r.json().catch(() => ({})) }));
+    try {
+        const acc = await put('/api/admin/users/' + userId + '/account', adminAccountEditBody());
+        if (!acc.ok) {
+            if (st) st.textContent = acc.data.error || 'Account save failed';
+            return alert(acc.data.error || 'Account save failed');
+        }
+        const prof = await put('/api/admin/users/' + userId + '/doctor-profile', adminDoctorProfileEditBody());
+        if (!prof.ok) {
+            if (st) st.textContent = 'Account saved, doctor profile failed: ' + (prof.data.error || '');
+            return alert('Account saved, but doctor profile failed: ' + (prof.data.error || 'Save failed'));
+        }
+        if (st) st.textContent = 'Saved at ' + new Date().toLocaleTimeString();
+        alert('Account and doctor profile updated.');
+        await openAdminUserDetail(userId);
+        loadUsers();
+        if (typeof loadApplications === 'function') loadApplications();
+    } catch (e) {
         if (st) st.textContent = 'Network error';
         alert('Network error');
     }

@@ -24,6 +24,7 @@ const pincodeLookup = require('./lib/pincode-lookup');
 const countriesList = require('./lib/countries');
 const designatedNotify = require('./lib/designated-notify');
 const ticketHtml = require('./lib/ticket-html');
+const userNameSync = require('./lib/user-name-sync');
 const ticketAccess = require('./lib/ticket-access');
 const ticketPdfServer = require('./lib/certificate-pdf-server');
 const {
@@ -5833,6 +5834,9 @@ app.post('/api/applications/submit', requestGuard.registrationSubmitLimit, withC
                             const regStatus = isWaitlistSubmit ? 'waitlisted' : 'submitted';
                             const afterRegInserted = (newId, err3) => {
                                 if (err3) return res.status(500).json({ error: err3.message });
+                                userNameSync.syncUserNameFromFormData(db, userId, stored, (nErr) => {
+                                    if (nErr) console.warn('[name-sync] submit:', nErr.message);
+                                });
                                 portalTracking.logRegistrationEvent(
                                     db,
                                     newId,
@@ -6302,7 +6306,10 @@ app.put('/api/applications/:applicationId', withCertificateUpload, (req, res) =>
                         [JSON.stringify(mergedStored), req.params.applicationId],
                         function (err2) {
                             if (err2) return res.status(500).json({ error: err2.message });
-                res.json({ success: true, message: 'Application updated successfully' });
+                            userNameSync.syncUserNameFromFormData(db, row.user_id, mergedStored, (nErr) => {
+                                if (nErr) console.warn('[name-sync] doctor edit:', nErr.message);
+                                res.json({ success: true, message: 'Application updated successfully' });
+                            });
                         }
                     );
                 }
@@ -13247,6 +13254,10 @@ app.put('/api/admin/applications/:applicationId/form-data', (req, res) => {
                                 formData: result.formData
                             };
                             if (eMeta || !regMeta) return res.json(payload);
+                            userNameSync.syncUserNameFromFormData(db, regMeta.user_id, result.formData, (nErr, nRes) => {
+                                if (nErr) console.warn('[name-sync] admin form edit:', nErr.message);
+                                if (nRes && nRes.changed) payload.nameSynced = true;
+                            });
                             volunteerTicketFlow.tryFulfillVolunteerAfterRegistration(
                                 db,
                                 volunteerTicketDeps(),
