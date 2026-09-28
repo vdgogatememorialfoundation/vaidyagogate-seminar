@@ -4602,7 +4602,7 @@ function renderAdminUserDetailTab() {
                     <button type="button" class="btn-primary" style="margin-top:10px;background:#7c3aed;" onclick="toggleAdminUserDemo(${u.id}, ${Number(u.is_demo) === 1 ? 'false' : 'true'})">${Number(u.is_demo) === 1 ? 'Remove dummy account' : 'Mark as dummy account (any OTP)'}</button>`
                             : ''
                     }
-                    <button type="button" class="btn-primary" style="margin-top:12px;" onclick="adminSaveUserAccountEdit(${u.id})">Save account</button>
+                    <button type="button" class="btn-primary" style="margin-top:12px;" onclick="adminSaveUserAllEdits(${u.id})">Save changes</button>
                 </div>
                 <div>
                     <h4>Doctor profile (editable)</h4>
@@ -4613,7 +4613,7 @@ function renderAdminUserDetailTab() {
                     <div class="form-group"><label>Hospital</label><input type="text" id="admin-edit-hospital" value="${escAdmin((p && p.hospital_name) || '')}" style="width:100%;padding:8px;"></div>
                     <div class="form-group"><label>Contact</label><input type="tel" id="admin-edit-contact" value="${escAdmin((p && p.contact_number) || '')}" style="width:100%;padding:8px;"></div>
                     <div class="form-group"><label>Bio</label><textarea id="admin-edit-bio" rows="3" style="width:100%;padding:8px;">${escAdmin((p && p.bio) || '')}</textarea></div>
-                    <button type="button" class="btn-primary" style="margin-top:12px;" onclick="adminSaveDoctorProfileEdit(${u.id})">Save doctor profile</button>
+                    <button type="button" class="btn-primary" style="margin-top:12px;" onclick="adminSaveUserAllEdits(${u.id})">Save changes</button>
                 </div>
             </div>
             <div style="margin-top:14px;padding:12px;border:1px solid #bbf7d0;border-radius:8px;background:#f0fdf4;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
@@ -10891,61 +10891,12 @@ async function adminSaveUserAllEdits(userId) {
     }
 }
 
-async function adminSaveUserAccountEdit(userId) {
-    const otp = await adminLiveEditOtpPayload(userId);
-    if (!otp) return;
-    const body = {
-        firstName: document.getElementById('admin-edit-first')?.value,
-        middleName: document.getElementById('admin-edit-middle')?.value,
-        lastName: document.getElementById('admin-edit-last')?.value,
-        email: document.getElementById('admin-edit-email')?.value,
-        phone: document.getElementById('admin-edit-phone')?.value,
-        whatsapp: document.getElementById('admin-edit-whatsapp')?.value,
-        qualification: document.getElementById('admin-edit-qual')?.value,
-        ...otp
-    };
-    try {
-        const res = await fetch('/api/admin/users/' + userId + '/account', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        });
-        const data = await res.json();
-        if (!res.ok) return alert(data.error || 'Save failed');
-        alert('Account updated.');
-        openAdminUserDetail(userId);
-        loadUsers();
-    } catch (e) {
-        alert('Network error');
-    }
+function adminSaveUserAccountEdit(userId) {
+    return adminSaveUserAllEdits(userId);
 }
 
-async function adminSaveDoctorProfileEdit(userId) {
-    const otp = await adminLiveEditOtpPayload();
-    if (!otp) return;
-    const body = {
-        specialization: document.getElementById('admin-edit-spec')?.value,
-        registration_no: document.getElementById('admin-edit-regno')?.value,
-        qualifications: document.getElementById('admin-edit-quals')?.value,
-        experience_years: document.getElementById('admin-edit-exp')?.value,
-        hospital_name: document.getElementById('admin-edit-hospital')?.value,
-        contact_number: document.getElementById('admin-edit-contact')?.value,
-        bio: document.getElementById('admin-edit-bio')?.value,
-        ...otp
-    };
-    try {
-        const res = await fetch('/api/admin/users/' + userId + '/doctor-profile', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        });
-        const data = await res.json();
-        if (!res.ok) return alert(data.error || 'Save failed');
-        alert('Doctor profile updated.');
-        openAdminUserDetail(userId);
-    } catch (e) {
-        alert('Network error');
-    }
+function adminSaveDoctorProfileEdit(userId) {
+    return adminSaveUserAllEdits(userId);
 }
 
 async function adminSaveCaseSubmissionEdit(subId) {
