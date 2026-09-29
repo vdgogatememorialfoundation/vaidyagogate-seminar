@@ -618,6 +618,7 @@ function mergeAdminEnabledPagesPolicy(stored) {
         if (!('tab-book-sales' in pages)) pages['tab-book-sales'] = true;
         if (!('tab-cancellation-review' in pages)) pages['tab-cancellation-review'] = true;
         if (!('tab-whatsapp' in pages)) pages['tab-whatsapp'] = true;
+        if (!('tab-payment-followup' in pages)) pages['tab-payment-followup'] = pages['tab-admin-payments'] === true;
     }
     return pages;
 }
@@ -658,6 +659,7 @@ function adminCanAccessTab(tabId) {
     if (!isCo) {
         if (tabId === 'tab-cancellation-review' && globalAdminTabAllowed('tab-admin-payments')) return true;
         if (tabId === 'tab-refund-tracking' && globalAdminTabAllowed('tab-admin-payments')) return true;
+        if (tabId === 'tab-payment-followup' && globalAdminTabAllowed('tab-admin-payments')) return true;
         return globalAdminTabAllowed(checkId);
     }
     const { unset, mods } = coAdminModulesState(u);
@@ -669,6 +671,7 @@ function adminCanAccessTab(tabId) {
     if (!Object.keys(mods).length) return false;
     if (tabId === 'tab-cancellation-review' && mods['tab-admin-payments'] === true) return true;
     if (tabId === 'tab-refund-tracking' && mods['tab-admin-payments'] === true) return true;
+    if (tabId === 'tab-payment-followup' && mods['tab-admin-payments'] === true) return true;
     return mods[checkId] === true;
 }
 
@@ -1706,6 +1709,7 @@ const ADMIN_MODULE_TAB_DEFS = [
     ['tab-site-cms', 'Website & doctor updates'],
     ['tab-book-sales', 'Book sales'],
     ['tab-admin-payments', 'Payments'],
+    ['tab-payment-followup', 'Payment follow-up'],
     ['tab-cancellation-review', 'Cancellation review & refunds'],
     ['tab-refund-tracking', 'Refund tracking'],
     ['tab-certificates', 'Certificate management'],
@@ -1915,15 +1919,23 @@ function startPosPaymentPoll() {
     __posPollTimer = setInterval(posPollPaymentOnce, 4000);
 }
 
+/** Ask the desk for the UPI UTR / reference; returns '' when skipped, null when cancelled. */
+function promptUpiUtr() {
+    const v = prompt('UPI payment received?\nEnter the UPI transaction ID / UTR from the payer\'s app (or leave blank), then OK to confirm.', '');
+    if (v === null) return null;
+    return String(v).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
+}
+
 async function posMarkUpiPaid() {
     const adm = getStoredAdminUser();
     if (!adm?.id || !__posOrderDbId) return alert('No pending UPI order.');
-    if (!confirm('Confirm that UPI payment was received in the bank?')) return;
+    const __utr = promptUpiUtr();
+    if (__utr === null) return;
     try {
         const res = await fetch('/api/admin/payments/mark-upi-paid', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ orderDbId: __posOrderDbId, adminUserId: adm.id })
+            body: JSON.stringify({ orderDbId: __posOrderDbId, adminUserId: adm.id, utr: __utr })
         });
         const data = await res.json();
         if (!res.ok) return alert(data.error || 'Could not mark paid');
@@ -3456,12 +3468,13 @@ async function behalfInitiatePayment() {
 async function behalfMarkUpiPaid() {
     const adm = getStoredAdminUser();
     if (!adm?.id || !__behalfOrderDbId) return alert('Start payment first.');
-    if (!confirm('Confirm UPI received?')) return;
+    const __utr = promptUpiUtr();
+    if (__utr === null) return;
     try {
         const res = await fetch('/api/admin/payments/mark-upi-paid', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ orderDbId: __behalfOrderDbId, adminUserId: adm.id })
+            body: JSON.stringify({ orderDbId: __behalfOrderDbId, adminUserId: adm.id, utr: __utr })
         });
         const data = await res.json();
         if (!res.ok) return alert(data.error || 'Failed');
@@ -3580,6 +3593,30 @@ async function behalfPollPayment() {
     } catch (e) {
         console.error(e);
     }
+}
+
+function clearAdminBehalfForm() {
+    if (!confirm('Clear this form and start a new application? (Saved applications are not deleted.)')) return;
+    stopBehalfPaymentPoll();
+    __behalfRegId = null;
+    __behalfRegApplicationNo = '';
+    __behalfCertPath = '';
+    __behalfOrderDbId = null;
+    resetBehalfApplicantOtpTokens();
+    const docSel = document.getElementById('behalf-doctor-select');
+    if (docSel) docSel.value = '';
+    const q = document.getElementById('behalf-doctor-search');
+    if (q) q.value = '';
+    const results = document.getElementById('behalf-doctor-search-results');
+    if (results) results.innerHTML = '';
+    document.getElementById('behalf-events-panel')?.classList.add('hidden');
+    renderAdminBehalfFormFields({});
+    syncBehalfJsonFromForm();
+    refreshAdminBehalfWorkflow({ found: false, registration: null, order: null, ticket: null });
+    const summary = document.getElementById('behalf-app-summary');
+    if (summary) summary.textContent = 'Form cleared — select a doctor (or use form details) to start a new application.';
+    const st = document.getElementById('behalf-save-status');
+    if (st) st.textContent = '';
 }
 
 function scheduleBehalfRegSave() {
@@ -12006,6 +12043,24 @@ async function loadIntegrationSettings() {
         set('int-aisensy-campaign-map', s.aisensy_campaign_map);
         setIntegrationSavedBadge('int-aisensy-key-saved-badge', !!s.aisensy_api_key_saved, 'AiSensy API key saved on server', 'AiSensy API key not saved yet');
         setIntegrationSavedBadge('int-aisensy-pwd-saved-badge', !!s.aisensy_project_api_pwd_saved, 'Project API password saved on server', 'Project API password not saved');
+        set('int-upi-vpa', s.upi_vpa);
+        set('int-upi-payee-name', s.upi_payee_name);
+        set('int-slice-enabled', s.slice_enabled === true || s.slice_enabled === 1 || s.slice_enabled === '1' ? '1' : '0');
+        set('int-slice-env', s.slice_env === 'uat' ? 'uat' : 'prod');
+        set('int-slice-client-id', s.slice_client_id);
+        set('int-slice-partner-id', s.slice_partner_id);
+        set('int-slice-enc-version', s.slice_encryption_key_version || '1');
+        set('int-slice-base-url', s.slice_base_url);
+        setIntegrationSavedBadge('int-slice-secret-saved-badge', !!s.slice_secret_key_saved, 'Slice secret saved on server', 'Slice secret not saved yet');
+        const sliceSt = document.getElementById('int-slice-status');
+        if (sliceSt && s.slice_status) {
+            sliceSt.style.color = s.slice_status.active ? '#15803d' : '#b45309';
+            sliceSt.textContent = s.slice_status.active
+                ? 'UPI (Slice) is active (' + s.slice_status.env + ').'
+                : 'UPI (Slice) inactive' +
+                  (s.slice_status.missing && s.slice_status.missing.length ? ' — missing: ' + s.slice_status.missing.join(', ') : ' — switch "Slice enabled" on') +
+                  '. UPI (manual) still works.';
+        }
         setIntegrationCheckbox('int-msg91-enabled', s.msg91_sms_enabled !== false && s.msg91_sms_enabled !== 0 && s.msg91_sms_enabled !== '0');
         set('int-msg91-sender', s.msg91_sender_id);
         set('int-msg91-route', s.msg91_route || '4');
@@ -12181,6 +12236,14 @@ async function saveIntegrationSettings() {
         aisensy_media_campaign: ((document.getElementById('int-aisensy-media-campaign') || {}).value || '').trim(),
         aisensy_project_id: ((document.getElementById('int-aisensy-project-id') || {}).value || '').trim(),
         aisensy_campaign_map: ((document.getElementById('int-aisensy-campaign-map') || {}).value || '').trim(),
+        upi_vpa: ((document.getElementById('int-upi-vpa') || {}).value || '').trim(),
+        upi_payee_name: ((document.getElementById('int-upi-payee-name') || {}).value || '').trim(),
+        slice_enabled: ((document.getElementById('int-slice-enabled') || {}).value || '0') === '1' ? '1' : '0',
+        slice_env: ((document.getElementById('int-slice-env') || {}).value || 'prod').trim(),
+        slice_client_id: ((document.getElementById('int-slice-client-id') || {}).value || '').trim(),
+        slice_partner_id: ((document.getElementById('int-slice-partner-id') || {}).value || '').trim(),
+        slice_encryption_key_version: ((document.getElementById('int-slice-enc-version') || {}).value || '1').trim(),
+        slice_base_url: ((document.getElementById('int-slice-base-url') || {}).value || '').trim(),
         msg91_sms_enabled: (document.getElementById('int-msg91-enabled') || {}).checked !== false,
         msg91_sender_id: (document.getElementById('int-msg91-sender') || {}).value.trim(),
         msg91_route: (document.getElementById('int-msg91-route') || {}).value.trim() || '4',
@@ -12196,6 +12259,8 @@ async function saveIntegrationSettings() {
     const newAisensyPwd = ((document.getElementById('int-aisensy-pwd-new') || {}).value || '').trim();
     if (newAisensyKey) body.aisensy_api_key = newAisensyKey;
     if (newAisensyPwd) body.aisensy_project_api_pwd = newAisensyPwd;
+    const newSliceSecret = ((document.getElementById('int-slice-secret-new') || {}).value || '').trim();
+    if (newSliceSecret) body.slice_secret_key = newSliceSecret;
     if (newZohoPass) body.zoho_pass = newZohoPass;
     if (newEmailApiKey) body.email_api_key = newEmailApiKey;
     if (newEmailFallbackKey) body.email_api_fallback_key = newEmailFallbackKey;
@@ -12224,7 +12289,7 @@ async function saveIntegrationSettings() {
 
         const googleMapsNewEl = document.getElementById('int-google-maps-key-new');
         if (googleMapsNewEl) googleMapsNewEl.value = '';
-        ['int-aisensy-key-new', 'int-aisensy-pwd-new'].forEach((id) => {
+        ['int-aisensy-key-new', 'int-aisensy-pwd-new', 'int-slice-secret-new'].forEach((id) => {
             const el = document.getElementById(id);
             if (el) el.value = '';
         });
@@ -13643,12 +13708,13 @@ function openProxyRazorpayCheckout(data) {
 async function proxyMarkUpiPaid() {
     const adm = getStoredAdminUser();
     if (!adm || !adm.id || !__proxyLastOrderDbId) return alert('Create a UPI payment request first.');
-    if (!confirm('Confirm that UPI payment was received in your bank account?')) return;
+    const __utr = promptUpiUtr();
+    if (__utr === null) return;
     try {
         const res = await fetch('/api/admin/payments/mark-upi-paid', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ orderDbId: __proxyLastOrderDbId, adminUserId: adm.id })
+            body: JSON.stringify({ orderDbId: __proxyLastOrderDbId, adminUserId: adm.id, utr: __utr })
         });
         const data = await res.json();
         if (!res.ok) return alert(data.error || 'Could not confirm.');
@@ -19980,12 +20046,13 @@ async function initiateAdminCreateOrderPayment() {
 async function markAdminCreateOrderUpiPaid() {
     const adm = getStoredAdminUser();
     if (!adm?.id || !__coOrderDbId) return alert('Start UPI payment first.');
-    if (!confirm('Confirm UPI payment received?')) return;
+    const __utr = promptUpiUtr();
+    if (__utr === null) return;
     try {
         const res = await fetch('/api/admin/payments/mark-upi-paid', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ orderDbId: __coOrderDbId, adminUserId: adm.id })
+            body: JSON.stringify({ orderDbId: __coOrderDbId, adminUserId: adm.id, utr: __utr })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed');

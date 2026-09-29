@@ -838,6 +838,7 @@
                     <div id="behalf-form-fields" style="display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;"></div>
                     <div style="margin-top:16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
                         <button type="button" class="btn-primary" onclick="flushBehalfRegistrationSave(true)">Save application</button>
+                        <button type="button" class="btn-primary" style="background:#b91c1c;" onclick="clearAdminBehalfForm()">Clear / new application</button>
                         <span id="behalf-save-status" style="font-weight:600;color:#0d9488;font-size:0.9rem;"></span>
                     </div>
                     <details style="margin-top:16px;">
@@ -2754,7 +2755,7 @@
                             <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px;line-height:1.5;">
                                 Send all WhatsApp messages (OTP, tickets, reminders, campaigns) through <a href="https://aisensy.com" target="_blank" rel="noopener">AiSensy</a> instead of Meta directly.
                                 Create a <strong>live API campaign</strong> in AiSensy for each template (Campaigns → Launch → API Campaign); the campaign name is used below.
-                                API key: AiSensy → Manage → API Key. Numbers outside India are sent as +country code automatically.
+                                Only the <strong>campaign API key</strong> is needed (AiSensy → Manage → API Key); no project or webhook key is required. Numbers outside India are sent as +country code automatically.
                             </p>
                         </div>
                         <div><label>Outbound WhatsApp provider</label>
@@ -2771,12 +2772,17 @@
                         <div><label>OTP campaign name</label><input type="text" id="int-aisensy-otp-campaign" placeholder="API campaign whose template has {{1}} = OTP code" style="width:100%"></div>
                         <div><label>Text campaign name</label><input type="text" id="int-aisensy-text-campaign" placeholder="Template with a single {{1}} body variable (plain messages)" style="width:100%"></div>
                         <div><label>Media campaign name</label><input type="text" id="int-aisensy-media-campaign" placeholder="Template with document/image header + {{1}} (e-ticket PDFs)" style="width:100%"></div>
-                        <div><label>Project ID (optional, Project API)</label><input type="text" id="int-aisensy-project-id" placeholder="AiSensy project id" style="width:100%" autocomplete="off"></div>
+                        <details style="grid-column:1/-1;">
+                            <summary style="cursor:pointer;font-size:0.88rem;color:#64748b;">Advanced (not required): Project API — only for the "List API campaigns" helper. Sending works with the campaign API key alone.</summary>
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px;">
+                        <div><label>Project ID (optional)</label><input type="text" id="int-aisensy-project-id" placeholder="AiSensy project id" style="width:100%" autocomplete="off"></div>
                         <div style="grid-column:1/-1;">
-                            <label>Project API password (optional — lists your API campaigns)</label>
+                            <label>Project API password (optional — only lists your API campaigns)</label>
                             <div id="int-aisensy-pwd-saved-badge" style="margin:6px 0 8px;padding:8px 12px;border-radius:8px;background:#f8fafc;border:1px solid #e2e8f0;font-size:0.88rem;font-weight:600;color:#64748b;">Project API password not saved</div>
                             <input type="password" id="int-aisensy-pwd-new" placeholder="Paste Project API password, then Save" style="width:100%;" autocomplete="off" spellcheck="false">
                         </div>
+                            </div>
+                        </details>
                         <div style="grid-column:1/-1;">
                             <label>Template → campaign map (one per line: <code>meta_template_name=AiSensy campaign name</code>; unmapped templates use the same name)</label>
                             <textarea id="int-aisensy-campaign-map" rows="4" style="width:100%;font-family:ui-monospace,monospace;font-size:0.85rem;" placeholder="vgmf_otp_auth=OTP Login&#10;ticket_issued=E-ticket issued"></textarea>
@@ -2790,7 +2796,62 @@
                         <p id="int-aisensy-hint" style="grid-column:1/-1;font-size:0.8rem;color:#64748b;margin:4px 0 0;">Save settings first. Test sends the OTP campaign with code 123456 (or the text campaign).</p>
                         <div id="int-aisensy-campaigns" style="grid-column:1/-1;"></div>
 
-                        
+                    <!-- UPI (admin desk) & Slice -->
+                    <div style="grid-column:1/-1;margin-top:18px;padding-top:18px;border-top:1px solid #e2e8f0;">
+                        <h4 style="margin:0 0 8px;color:#0c4a6e;">UPI at the admin desk (manual &amp; Slice)</h4>
+                        <p style="font-size:0.82rem;color:#64748b;margin:0 0 12px;line-height:1.5;">
+                            Admin-only payment options — doctors always see Razorpay only.
+                            <strong>UPI (manual)</strong>: shows a static QR for the UPI ID below (or none), you confirm with the UTR.
+                            <strong>UPI (Slice)</strong>: dynamic QR / intent link via <a href="https://developer.slicebank.com/" target="_blank" rel="noopener">Slice merchant API</a>; confirms automatically.
+                            Webhook URL for Slice: <code>/api/payments/slice/webhook</code>.
+                            <span id="int-slice-status" style="display:block;margin-top:4px;"></span>
+                        </p>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                            <div>
+                                <label>Desk UPI ID (VPA) for UPI (manual) QR</label>
+                                <input type="text" id="int-upi-vpa" placeholder="e.g. vgmf@upi (optional)" style="width:100%;">
+                            </div>
+                            <div>
+                                <label>Payee name shown in UPI apps</label>
+                                <input type="text" id="int-upi-payee-name" placeholder="VGMF Seminar" style="width:100%;">
+                            </div>
+                            <div>
+                                <label>Slice enabled</label>
+                                <select id="int-slice-enabled" style="width:100%;">
+                                    <option value="0">Off</option>
+                                    <option value="1">On</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label>Slice environment</label>
+                                <select id="int-slice-env" style="width:100%;">
+                                    <option value="prod">Production (api.slice.bank.in)</option>
+                                    <option value="uat">UAT / sandbox (api.uat-slice.bank.in)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label>Slice Client ID</label>
+                                <input type="text" id="int-slice-client-id" placeholder="client-id from Slice" style="width:100%;" autocomplete="off">
+                            </div>
+                            <div>
+                                <label>Slice Partner ID</label>
+                                <input type="text" id="int-slice-partner-id" placeholder="partnerId from Slice" style="width:100%;" autocomplete="off">
+                            </div>
+                            <div>
+                                <label>Slice Secret key (for s-access-token HMAC) <span id="int-slice-secret-saved-badge"></span></label>
+                                <input type="password" id="int-slice-secret-new" placeholder="Paste secret key here, then Save" style="width:100%;" autocomplete="off" spellcheck="false">
+                            </div>
+                            <div>
+                                <label>Encryption key version (x-encryption-key-version)</label>
+                                <input type="text" id="int-slice-enc-version" placeholder="1" style="width:100%;">
+                            </div>
+                            <div style="grid-column:1/-1;">
+                                <label>Base URL override (optional)</label>
+                                <input type="text" id="int-slice-base-url" placeholder="Leave blank to use the environment default" style="width:100%;">
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Google Maps -->
                     <div style="grid-column:1/-1;margin-top:18px;padding-top:18px;border-top:1px solid #e2e8f0;">
                         <h4 style="margin:0 0 8px;color:#0c4a6e;">Google Maps</h4>
@@ -3605,7 +3666,7 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
-    <script src="/js/admin.js?v=20260928e"></script>
+    <script src="/js/admin.js?v=20260929a"></script>
     <script src="/js/pos-onspot-ui.js?v=20260922b"></script>
     <script src="/js/admin-whatsapp.js?v=20260921a"></script>
     <script src="/js/admin-payment-followup.js?v=20260925b"></script>

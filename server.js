@@ -2961,6 +2961,8 @@ function integrationSettingsJson(data) {
         raw.aisensy_project_api_pwd && String(raw.aisensy_project_api_pwd).trim()
     );
     masked.aisensy_status = require('./lib/aisensy-service').getAisensyStatus();
+    masked.slice_secret_key_saved = !!(raw.slice_secret_key && String(raw.slice_secret_key).trim());
+    masked.slice_status = require('./lib/slice-payments').getStatus();
     masked.msg91_auth_key_saved = !!(raw.msg91_auth_key && String(raw.msg91_auth_key).trim());
     masked.msg91_configured = integrationSettings.isMsg91ConfiguredFromSettings();
     masked.msg91_status = integrationSettings.getMsg91ConfigStatus();
@@ -7080,7 +7082,7 @@ app.get('/api/doctor/event-tickets/:userId', (req, res) => {
         `SELECT t.id as ticket_row_id, t.ticket_id_string, t.qr_code_data, t.is_scanned, t.scan_time,
                 IFNULL(t.scan_count, 0) AS scan_count, IFNULL(t.is_valid, 1) AS is_valid,
                 o.order_id_string, o.amount, o.status as order_status, o.payment_date,
-                r.application_no, r.status as registration_status, s.title as seminar_title, s.id as seminar_id, s.event_date,
+                r.application_no, r.status as registration_status, r.form_data, s.title as seminar_title, s.id as seminar_id, s.event_date,
                 s.event_end_date, s.ticket_expires_at,
                 sday.title AS day_title, sday.day_date AS day_date
          FROM tickets t
@@ -7105,8 +7107,11 @@ app.get('/api/doctor/event-tickets/:userId', (req, res) => {
                 };
                 const expired = isTicketExpired(expiryRow) && !scanned && !adminCheckedIn;
                 const expMs = ticketExpiryMs(expiryRow);
+                const holderName = ticketHtml.nameFromFormData(row.form_data);
+                delete row.form_data;
                 return {
                     ...row,
+                    holder_name: holderName || null,
                     download_token: ticketAccess.createTicketAccessToken(row.ticket_id_string, uid, 900000),
                     seminar_ended: isSeminarEnded(row.event_end_date || ticketDate),
                     ticket_expires_on: expMs != null ? new Date(expMs).toISOString() : null,
@@ -15358,7 +15363,7 @@ function enrichEticketRowsWithEmailStatus(db, rows, cb) {
 // ==================== ADMIN E-TICKETS (lookup / generate / send) ====================
 
 const ADMIN_ETICKET_LOOKUP_SQL = `
-        SELECT r.id AS registration_id, r.application_no, r.status AS registration_status,
+        SELECT r.id AS registration_id, r.application_no, r.status AS registration_status, r.form_data,
                u.id AS user_id, u.first_name, u.last_name, u.email, u.phone,
                s.id AS seminar_id, s.title AS seminar_title, s.event_date, s.event_end_date, s.ticket_expires_at, s.price AS seminar_price,
                o.id AS order_db_id, o.order_id_string, o.status AS payment_status, o.payment_date,
@@ -15411,7 +15416,9 @@ app.get('/api/admin/e-tickets/lookup', (req, res) => {
                 applicationNo: row.application_no,
                 registrationStatus: row.registration_status,
                 userId: row.user_id,
-                doctorName: [row.first_name, row.last_name].filter(Boolean).join(' ').trim(),
+                doctorName:
+                    ticketHtml.nameFromFormData(row.form_data) ||
+                    [row.first_name, row.last_name].filter(Boolean).join(' ').trim(),
                 email: row.email,
                 phone: row.phone,
                 seminarId: row.seminar_id,

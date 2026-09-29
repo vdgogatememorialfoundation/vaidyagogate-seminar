@@ -4003,7 +4003,33 @@ async function startRegistrationVolunteerFlow(seminarId) {
     await startRegistration(sid, { volunteerBypass: true });
 }
 
+function resetRegistrationFormFields() {
+    const form = document.getElementById('multi-step-form');
+    if (!form) return;
+    form.querySelectorAll('input, select, textarea').forEach((el) => {
+        if (el.type === 'button' || el.type === 'submit' || el.type === 'hidden') return;
+        if (el.type === 'checkbox' || el.type === 'radio') el.checked = false;
+        else if (el.tagName === 'SELECT') el.selectedIndex = 0;
+        else el.value = '';
+    });
+    window.__regCertServerUploaded = false;
+    if (typeof updateRegCertUploadUi === 'function') updateRegCertUploadUi({});
+    const successEl = document.getElementById('reg-cert-success');
+    if (successEl) successEl.classList.add('hidden');
+}
+
+function clearRegistrationForm() {
+    if (!confirm('Clear all fields on this form?')) return;
+    resetRegistrationFormFields();
+    const emailEl = document.getElementById('reg-email');
+    const phoneEl = document.getElementById('reg-phone');
+    if (emailEl && currentUser && currentUser.email) emailEl.value = currentUser.email;
+    if (phoneEl && currentUser && currentUser.phone) phoneEl.value = currentUser.phone;
+    nextStep(1);
+}
+
 function cancelRegistration() {
+    resetRegistrationFormFields();
     activeSeminarIdForReg = null;
     window.editingApplicationId = null;
     window.__registrationJoinWaitlist = false;
@@ -8948,7 +8974,7 @@ async function downloadEticketPdfAsync(t, filename, htmlFilename, serverUrl) {
         const accent = [15, 118, 110];
         const ink = [15, 23, 42];
         const muted = [71, 85, 105];
-        const holder = doctorDisplayName();
+        const holder = (t && t.holder_name) || doctorDisplayName();
         let y = pdfCongressHeader(doc, 'E-Ticket — venue entry pass');
         y = pdfCongressSectionTitle(doc, y + 2, 'Participant', accent, ink);
         const drawRow = (label, value) => {
@@ -9061,7 +9087,7 @@ async function loadDoctorEventTickets() {
                             '. Do not use this QR for entry.'
                   }</p>`
                 : `<p style="margin:8px 0 0;font-size:0.85rem;color:#64748b;">${escapeHtml(scanned)}${escapeHtml(expiryNote)}</p>`;
-            const holder = escapeHtml(doctorDisplayName());
+            const holder = escapeHtml(t.holder_name || doctorDisplayName());
             html += `<div style="border:1px solid ${invalid ? '#fecaca' : '#e2e8f0'};border-radius:12px;padding:16px;display:grid;grid-template-columns:128px 1fr;gap:16px;align-items:start;${invalid ? 'opacity:0.85;background:#fef2f2;' : ''}">
                 <div style="position:relative;width:128px;-webkit-touch-callout:none;user-select:none;">
                     ${qr ? `<img src="${qr}" alt="QR code" draggable="false" style="width:128px;height:128px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;-webkit-user-drag:none;pointer-events:none;">` : (t.is_scanned ? '<span style="color:#059669;font-size:0.85rem;font-weight:700;"><i class="fas fa-check-circle"></i> QR used at entry</span>' : '<span style="color:#94a3b8;font-size:0.85rem;">QR unavailable</span>')}
