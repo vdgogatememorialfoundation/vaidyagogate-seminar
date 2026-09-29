@@ -4,6 +4,125 @@
     var rows = [];
     var historyRows = [];
     var selected = null;
+    var staffList = [];
+    var waTemplates = [];
+    var waTemplateMap = {};
+    var STATUS_LABELS = {
+        not_contacted: 'Not Contacted',
+        called: 'Called',
+        answered: 'Answered',
+        not_answered: 'Not Answered (didn\'t pick up)',
+        call_back_requested: 'Call Back Requested',
+        payment_link_sent: 'Payment Link Sent',
+        payment_completed: 'Payment Completed',
+        not_interested: 'Not Interested',
+        wrong_number: 'Wrong Number',
+        other: 'Other'
+    };
+
+    async function loadStaffAndTemplates() {
+        var id = adminId();
+        try {
+            var r1 = await fetch('/api/admin/application-contact/staff?actingAdminId=' + encodeURIComponent(id), { cache: 'no-store' });
+            var d1 = await r1.json();
+            staffList = r1.ok && Array.isArray(d1) ? d1 : [];
+        } catch (e) { staffList = []; }
+        try {
+            var r2 = await fetch('/api/admin/whatsapp/templates', { cache: 'no-store' });
+            var d2 = await r2.json();
+            waTemplates = r2.ok && Array.isArray(d2.templates) ? d2.templates.filter(function (t) { return Number(t.is_active) === 1; }) : [];
+        } catch (e) { waTemplates = []; }
+        try {
+            var r3 = await fetch('/api/admin/application-contact/wa-template-map?actingAdminId=' + encodeURIComponent(id), { cache: 'no-store' });
+            var d3 = await r3.json();
+            waTemplateMap = r3.ok && d3 && typeof d3 === 'object' ? d3 : {};
+        } catch (e) { waTemplateMap = {}; }
+    }
+
+    function staffName(s) {
+        return [s.first_name, s.last_name].filter(Boolean).join(' ') || s.email || ('#' + s.id);
+    }
+
+    function staffSelectHtml(r, i) {
+        var h = '<select onchange="assignAdminPaymentFollowup(' + i + ', this.value)" style="padding:6px;border:1px solid #cbd5e1;border-radius:6px;max-width:170px">';
+        h += '<option value="">— Unassigned —</option>';
+        staffList.forEach(function (s) {
+            h += '<option value="' + Number(s.id) + '"' + (Number(r.assigned_staff_id) === Number(s.id) ? ' selected' : '') + '>' + esc(staffName(s)) + '</option>';
+        });
+        h += '</select>';
+        return h;
+    }
+
+    async function assignAdminPaymentFollowup(index, staffUserId) {
+        var r = rows[index];
+        if (!r) return;
+        var url = staffUserId ? '/api/admin/application-contact/assign' : '/api/admin/application-contact/unassign';
+        try {
+            var response = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ actingAdminId: adminId(), registrationId: r.registration_id, staffUserId: Number(staffUserId) || undefined })
+            });
+            var data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Unable to assign');
+            r.assigned_staff_id = staffUserId ? Number(staffUserId) : null;
+            var s = staffList.find(function (x) { return Number(x.id) === Number(staffUserId); });
+            r.assigned_staff_name = s ? staffName(s) : '';
+        } catch (e) {
+            alert(e.message || 'Unable to assign');
+            render();
+        }
+    }
+
+    function defaultTemplateFor(status) {
+        var s = status || 'not_contacted';
+        var byMap = waTemplateMap[s] || waTemplateMap.default;
+        var t = byMap && waTemplates.find(function (x) { return x.meta_name === byMap || String(x.id) === String(byMap); });
+        if (t) return t;
+        if (s === 'not_answered') {
+            t = waTemplates.find(function (x) { return /not.?answer|missed|no.?answer|unreach|didnt|didn_t|pick/i.test((x.meta_name || '') + ' ' + (x.name || '') + ' ' + (x.category || '')); });
+            if (t) return t;
+        }
+        return waTemplates.find(function (x) { return String(x.category || '').toLowerCase() === 'payment_reminder'; }) || null;
+    }
+
+    function templateOptionsHtml(selectedT) {
+        var h = '<option value="">— choose a template —</option>';
+        waTemplates.forEach(function (t) {
+            h += '<option value="' + esc(t.meta_name) + '"' + (selectedT && selectedT.meta_name === t.meta_name ? ' selected' : '') + '>' + esc(t.name || t.meta_name) + ' (' + esc(t.language || 'en') + (t.category ? ', ' + esc(t.category) : '') + ')</option>';
+        });
+        return h;
+    }
+
+    function openTemplateDefaults() {
+        var modal = document.getElementById('payment-followup-modal');
+        if (!modal) return;
+        var h = '<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px">' +
+            '<div style="background:white;width:min(650px,100%);max-height:90vh;overflow:auto;border-radius:12px;padding:22px">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">WhatsApp template per status</h3><button class="btn" onclick="closeAdminPaymentFollowup()">Close</button></div><hr>' +
+            '<p style="color:#475569;font-size:.9rem">Pick which approved Meta template is sent for each call outcome (e.g. the "didn\'t pick up" template for Not Answered). Leave blank to use the default payment reminder.</p>';
+        Object.keys(STATUS_LABELS).forEach(function (k) {
+            var cur = waTemplates.find(function (x) { return x.meta_name === waTemplateMap[k]; });
+            h += '<label style="display:block;margin-top:8px">' + esc(STATUS_LABELS[k]) + '</label><select data-status="' + k + '" class="pf-tpl-map" style="width:100%;padding:8px">' + templateOptionsHtml(cur) + '</select>';
+        });
+        h += '<div style="margin-top:14px"><button class="btn btn-primary" onclick="saveAdminPaymentFollowupTemplateMap()">Save</button></div><div id="pf-message" style="margin-top:10px"></div></div></div>';
+        modal.innerHTML = h;
+    }
+
+    async function saveAdminPaymentFollowupTemplateMap() {
+        var map = {};
+        document.querySelectorAll('.pf-tpl-map').forEach(function (sel) { if (sel.value) map[sel.getAttribute('data-status')] = sel.value; });
+        try {
+            var response = await fetch('/api/admin/application-contact/wa-template-map', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ actingAdminId: adminId(), map: map })
+            });
+            var data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Unable to save');
+            waTemplateMap = data.map || map;
+            closeAdminPaymentFollowup();
+        } catch (e) { alert(e.message || 'Unable to save'); }
+    }
 
     function adminId() {
         try {
@@ -50,6 +169,7 @@
             var data = await response.json();
             if (!response.ok) throw new Error(data.error || 'Unable to load');
             rows = Array.isArray(data) ? data : [];
+            await loadStaffAndTemplates();
             render();
         } catch (e) {
             root.innerHTML = '<p style="color:#b91c1c">' + esc(e.message) + '</p>';
@@ -75,6 +195,7 @@
         h += '<strong>Approved but Pending Payment: ' + rows.length + '</strong>';
         h += '<button class="btn btn-primary" onclick="loadAdminPaymentFollowup()">Refresh</button>';
         h += '<button class="btn" onclick="exportAdminPaymentFollowupCsv()">Export CSV</button>';
+        h += '<button class="btn" onclick="openAdminPaymentFollowupTemplateDefaults()">WhatsApp templates</button>';
         h += '<input id="payment-followup-search" oninput="filterAdminPaymentFollowup()" placeholder="Search name, application or mobile" style="min-width:280px;padding:8px;border:1px solid #cbd5e1;border-radius:6px">';
         h += '</div>';
 
@@ -90,15 +211,15 @@
         h += '<table style="width:100%;min-width:1250px;border-collapse:collapse">';
         h += '<thead><tr>';
         h += '<th>Application</th><th>Applicant</th><th>Mobile</th><th>Seminar</th><th>Amount</th>';
-        h += '<th>Contact Status</th><th>Last Contact</th><th>Follow-up</th><th>Actions</th>';
+        h += '<th>Contact Status</th><th>Assigned staff</th><th>Last Contact</th><th>Follow-up</th><th>Actions</th>';
         h += '</tr></thead><tbody>';
 
         if (!rows.length) {
-            h += '<tr><td colspan="9" style="padding:20px;text-align:center">No pending payment applications found.</td></tr>';
+            h += '<tr><td colspan="10" style="padding:20px;text-align:center">No pending payment applications found.</td></tr>';
         } else {
             rows.forEach(function (r, i) {
                 h += '<tr class="payment-followup-row" data-search="' +
-                    esc((r.application_no || '') + ' ' + nameOf(r) + ' ' + (r.phone || '')).toLowerCase() + '">';
+                    esc((r.application_no || '') + ' ' + nameOf(r) + ' ' + (r.phone || '') + ' ' + (r.assigned_staff_name || '')).toLowerCase() + '">';
 
                 h += '<td>' + esc(r.application_no || '-') + '</td>';
                 h += '<td><strong>' + esc(nameOf(r)) + '</strong><br><small>' + esc(r.email || '') + '</small></td>';
@@ -106,6 +227,7 @@
                 h += '<td>' + esc(r.seminar_title || '-') + '</td>';
                 h += '<td>' + money(r.order_amount || r.seminar_price) + '</td>';
                 h += '<td>' + esc(statusLabel(r.contact_status)) + '</td>';
+                h += '<td>' + staffSelectHtml(r, i) + '</td>';
                 h += '<td>' + esc(r.last_contact_at || '-') + '</td>';
                 h += '<td>' + esc(r.next_follow_up_at || '-') + '</td>';
 
@@ -124,18 +246,32 @@
         root.innerHTML = h;
     }
 
-    async function sendAdminPaymentFollowupWhatsApp(index) {
+    function sendAdminPaymentFollowupWhatsApp(index) {
         var r = rows[index];
         if (!r || !r.registration_id) return;
+        var modal = document.getElementById('payment-followup-modal');
+        if (!modal) return;
+        if (!waTemplates.length) { alert('No active WhatsApp templates. Sync templates under WhatsApp → Templates first.'); return; }
+        var def = defaultTemplateFor(r.contact_status);
+        modal.innerHTML = '<div style="position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px">' +
+            '<div style="background:white;width:min(560px,100%);border-radius:12px;padding:22px">' +
+            '<div style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">Send WhatsApp</h3><button class="btn" onclick="closeAdminPaymentFollowup()">Close</button></div><hr>' +
+            '<p><strong>' + esc(nameOf(r)) + '</strong> · ' + esc(r.phone || '') + '<br><small>Status: ' + esc(statusLabel(r.contact_status)) + '</small></p>' +
+            '<label>Meta template</label><select id="pf-wa-template" style="width:100%;padding:9px;margin:5px 0 12px">' + templateOptionsHtml(def) + '</select>' +
+            '<div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="sendAdminPaymentFollowupWhatsAppNow(' + index + ')">Send</button></div>' +
+            '<div id="pf-message" style="margin-top:10px"></div></div></div>';
+    }
+
+    async function sendAdminPaymentFollowupWhatsAppNow(index, templateName) {
+        var r = rows[index];
+        if (!r || !r.registration_id) return;
+        var sel = document.getElementById('pf-wa-template');
+        var name = templateName || (sel && sel.value) || '';
+        var t = waTemplates.find(function (x) { return x.meta_name === name; });
+        if (!t) { alert('Choose a template first.'); return; }
+        var msg = document.getElementById('pf-message');
+        if (msg) msg.textContent = 'Sending…';
         try {
-            var tplResponse = await fetch('/api/admin/whatsapp/templates', { cache: 'no-store' });
-            var tplData = await tplResponse.json();
-            if (!tplResponse.ok) throw new Error(tplData.error || 'Unable to load WhatsApp templates');
-            var templates = Array.isArray(tplData.templates) ? tplData.templates : [];
-            var t = templates.find(function (x) {
-                return Number(x.is_active) === 1 && String(x.category || '').toLowerCase() === 'payment_reminder';
-            });
-            if (!t) throw new Error('No active payment reminder WhatsApp template is configured.');
             var body = {
                 kind: 'template',
                 registration_id: r.registration_id,
@@ -143,7 +279,7 @@
                 template_lang: t.language,
                 variable_count: Number(t.variable_count) || 0,
                 variable_map: Array.isArray(t.variables) ? t.variables : [],
-                message_type: 'payment_reminder'
+                message_type: r.contact_status === 'not_answered' ? 'payment_followup_not_answered' : 'payment_reminder'
             };
             var response = await fetch('/api/admin/whatsapp/send', {
                 method: 'POST',
@@ -152,9 +288,13 @@
             });
             var data = await response.json();
             if (!response.ok) throw new Error(data.error || 'WhatsApp send failed');
-            alert('WhatsApp payment reminder sent successfully.');
+            if (msg) { msg.style.color = '#166534'; msg.textContent = 'WhatsApp sent (' + t.meta_name + ').'; }
+            else alert('WhatsApp sent.');
+            return true;
         } catch (e) {
-            alert(e.message || 'WhatsApp send failed');
+            if (msg) { msg.style.color = '#b91c1c'; msg.textContent = e.message || 'WhatsApp send failed'; }
+            else alert(e.message || 'WhatsApp send failed');
+            return false;
         }
     }
 
@@ -208,7 +348,14 @@
             '<textarea id="pf-notes" rows="4" style="width:100%;padding:9px;margin:5px 0 12px" placeholder="Add call or follow-up notes"></textarea>' +
 
             '<label>Follow-up Date / Time</label>' +
-            '<input id="pf-followup" type="datetime-local" style="width:100%;padding:9px;margin:5px 0 15px">' +
+            '<input id="pf-followup" type="datetime-local" style="width:100%;padding:9px;margin:5px 0 12px">' +
+
+            '<label>Assigned staff</label>' +
+            '<select id="pf-assign" style="width:100%;padding:9px;margin:5px 0 12px"><option value="">— Unassigned —</option>' +
+            staffList.map(function (s) { return '<option value="' + Number(s.id) + '"' + (Number(selected.assigned_staff_id) === Number(s.id) ? ' selected' : '') + '>' + esc(staffName(s)) + '</option>'; }).join('') +
+            '</select>' +
+
+            (selected.phone ? '<label style="display:flex;gap:8px;align-items:center;margin:0 0 15px"><input type="checkbox" id="pf-send-wa"> Also send WhatsApp template for this status: <span id="pf-wa-name" style="font-weight:600"></span></label>' : '') +
 
             '<div style="display:flex;gap:8px;flex-wrap:wrap">' +
             '<button class="btn btn-primary" onclick="saveAdminPaymentFollowup()">Save Follow-up</button>' +
@@ -219,7 +366,16 @@
 
         var s = selected.contact_status || 'not_contacted';
         var select = document.getElementById('pf-status');
-        if (select) select.value = s;
+        if (select) {
+            select.value = s;
+            var syncWaName = function () {
+                var t = defaultTemplateFor(select.value);
+                var el = document.getElementById('pf-wa-name');
+                if (el) el.textContent = t ? t.meta_name : '(none configured)';
+            };
+            select.addEventListener('change', syncWaName);
+            syncWaName();
+        }
         var reason = document.getElementById('pf-reason');
         var notes = document.getElementById('pf-notes');
         var follow = document.getElementById('pf-followup');
@@ -256,9 +412,22 @@
             });
             var data = await response.json();
             if (!response.ok) throw new Error(data.error || 'Unable to save');
+            var assignSel = document.getElementById('pf-assign');
+            if (assignSel && String(assignSel.value || '') !== String(selected.assigned_staff_id || '')) {
+                await assignAdminPaymentFollowup(rows.indexOf(selected), assignSel.value);
+            }
+            var waCk = document.getElementById('pf-send-wa');
+            var waNote = '';
+            if (waCk && waCk.checked) {
+                var t = defaultTemplateFor(payload.status);
+                if (t) {
+                    var ok = await sendAdminPaymentFollowupWhatsAppNow(rows.indexOf(selected), t.meta_name);
+                    waNote = ok ? ' WhatsApp sent (' + t.meta_name + ').' : ' WhatsApp failed — see message above.';
+                } else waNote = ' No WhatsApp template configured for this status.';
+            }
             if (msg) {
                 msg.style.color = '#166534';
-                msg.textContent = 'Follow-up saved successfully.';
+                msg.textContent = 'Follow-up saved successfully.' + waNote;
             }
             await load();
             setTimeout(closeAdminPaymentFollowup, 500);
@@ -312,7 +481,7 @@
     }
 
     function exportAdminPaymentFollowupCsv() {
-        var header = ['Application', 'Applicant', 'Email', 'Mobile', 'Seminar', 'Amount', 'Contact Status', 'Reason', 'Notes', 'Follow-up', 'Last Contact'];
+        var header = ['Application', 'Applicant', 'Email', 'Mobile', 'Seminar', 'Amount', 'Contact Status', 'Assigned staff', 'Reason', 'Notes', 'Follow-up', 'Last Contact'];
         var lines = [header];
 
         rows.forEach(function (r) {
@@ -324,6 +493,7 @@
                 r.seminar_title || '',
                 r.order_amount || r.seminar_price || '',
                 r.contact_status || 'not_contacted',
+                r.assigned_staff_name || '',
                 r.contact_reason || '',
                 r.contact_notes || '',
                 r.next_follow_up_at || '',
@@ -351,6 +521,10 @@
     window.loadAdminPaymentFollowup = load;
     window.initAdminPaymentFollowupTab = load;
     window.sendAdminPaymentFollowupWhatsApp = sendAdminPaymentFollowupWhatsApp;
+    window.sendAdminPaymentFollowupWhatsAppNow = sendAdminPaymentFollowupWhatsAppNow;
+    window.assignAdminPaymentFollowup = assignAdminPaymentFollowup;
+    window.openAdminPaymentFollowupTemplateDefaults = openTemplateDefaults;
+    window.saveAdminPaymentFollowupTemplateMap = saveAdminPaymentFollowupTemplateMap;
     window.filterAdminPaymentFollowup = filterAdminPaymentFollowup;
     window.openAdminPaymentFollowup = openAdminPaymentFollowup;
     window.closeAdminPaymentFollowup = closeAdminPaymentFollowup;
