@@ -719,9 +719,9 @@ function adminCanAccessTab(tabId) {
         return globalAdminTabAllowed(checkId);
     }
     if (!Object.keys(mods).length) return false;
-    if (tabId === 'tab-cancellation-review' && mods['tab-admin-payments'] === true) return true;
-    if (tabId === 'tab-refund-tracking' && mods['tab-admin-payments'] === true) return true;
-    if (tabId === 'tab-payment-followup' && mods['tab-admin-payments'] === true) return true;
+    if (!isStaffCrmUserClient(u) && mods['tab-admin-payments'] === true) {
+        if (tabId === 'tab-cancellation-review' || tabId === 'tab-refund-tracking' || tabId === 'tab-payment-followup') return true;
+    }
     return mods[checkId] === true;
 }
 
@@ -732,6 +732,15 @@ function applyCoAdminSidebarVisibility() {
         if (!adminCanAccessTab(m)) el.classList.add('hidden');
         else el.classList.remove('hidden');
     });
+    if (isSuperAdminUser()) return;
+    const visible = Array.from(document.querySelectorAll('.tab-pane')).filter((p) => !p.classList.contains('hidden'));
+    const blocked = visible.filter((p) => !adminCanAccessTab(p.id));
+    if (!blocked.length) return;
+    blocked.forEach((p) => p.classList.add('hidden'));
+    if (visible.length === blocked.length) {
+        const first = document.querySelector('.menu-item[data-admin-module]:not(.hidden)');
+        if (first) first.click();
+    }
 }
 
 async function refreshAdminLoginOtpPanel() {
@@ -1203,6 +1212,7 @@ async function refreshCoAdminSessionFromServer() {
 }
 
 async function loadUsers() {
+    if (!adminCanAccessTab('tab-staff-users') && !adminCanAccessTab('tab-doctors')) return;
     try {
         const res = await fetch('/api/admin/users');
         const users = await res.json();
@@ -2112,7 +2122,7 @@ async function submitAdminPosRegistration() {
                 email: document.getElementById('pos-email').value,
                 amount: document.getElementById('pos-amount').value,
                 paymentMethod: methodId,
-                sendTicketEmail: !!(document.getElementById('pos-send-ticket-email') || {}).checked
+                sendTicketEmail: true
             })
         });
         const data = await res.json().catch(() => ({}));

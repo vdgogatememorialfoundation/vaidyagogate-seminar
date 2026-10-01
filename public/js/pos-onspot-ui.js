@@ -341,7 +341,7 @@
                 email: val('staff-pos-email'),
                 amount: val('staff-pos-amount'),
                 paymentMethod: val('staff-pos-payment-method') || 'cash',
-                sendTicketEmail: !!(el('staff-pos-send-ticket-email') && el('staff-pos-send-ticket-email').checked)
+                sendTicketEmail: true
             })
         });
         if (!res.ok) return setStatus(esc(data.error || data.message || 'Registration failed (HTTP ' + res.status + ')'), '#b91c1c');
