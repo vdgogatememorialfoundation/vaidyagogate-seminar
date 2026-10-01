@@ -3152,6 +3152,10 @@
                 <input type="text" id="newuser-portal-id" placeholder="Portal User ID (optional, 10+ digits; auto-generated if blank)" inputmode="numeric" pattern="[0-9]*">
                 <input type="email" id="newuser-email" placeholder="Email Address" required>
                 <input type="tel" id="newuser-phone" placeholder="Phone Number" required>
+                <select id="newuser-account-category" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;margin-bottom:8px;">
+                    <option value="">Category: Doctor / medical professional (default)</option>
+                    <option value="general">Category: General account (non-doctor)</option>
+                </select>
                 <select id="newuser-job-role" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;margin-bottom:8px;" onchange="onNewUserJobRoleChange()">
                     <option value="">-- Job role template (recommended) --</option>
                 </select>
@@ -3674,7 +3678,7 @@
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
     <script src="/js/admin-module-defs.js?v=20261001a"></script>
-    <script src="/js/admin.js?v=20261001f"></script>
+    <script src="/js/admin.js?v=20261001g"></script>
     <script src="/js/pos-onspot-ui.js?v=20261001c"></script>
     <script src="/js/admin-whatsapp.js?v=20260921a"></script>
     <script src="/js/admin-payment-followup.js?v=20260929a"></script>

@@ -1156,7 +1156,9 @@ function openAdminCreateUserModal(kind) {
         }
     }
     const title = modal.querySelector('h2');
-    if (title) title.textContent = kind === 'doctor' ? 'Register new doctor' : 'Register new staff user';
+    if (title) title.textContent = kind === 'doctor' ? 'Register new doctor / general account' : 'Register new staff user';
+    const catSel = document.getElementById('newuser-account-category');
+    if (catSel) catSel.value = '';
     populateNewUserJobRoles(kind);
     if (kind === 'staff') {
         loadSupportDeskDepartmentsForForms();
@@ -2956,12 +2958,7 @@ function renderAdminBehalfFormFields(preservedData) {
         if (f.type === 'textarea') {
             html += '<textarea id="' + id + '" rows="2" style="width:100%;padding:8px;"></textarea>';
         } else if (f.type === 'select' && Array.isArray(f.options)) {
-            html += '<select id="' + id + '" style="width:100%;padding:8px;"><option value="">Select</option>';
-            f.options.forEach((o) => {
-                const v = o.value != null ? o.value : o.label;
-                html += '<option value="' + escAdmin(String(v)) + '">' + escAdmin(o.label || v) + '</option>';
-            });
-            html += '</select>';
+            html += '<select id="' + id + '" style="width:100%;padding:8px;"><option value="">Select</option>' + adminSelectOptionsHtml(f) + '</select>';
         } else if (t === 'date') {
             html += '<input type="date" id="' + id + '" style="width:100%;padding:8px;">';
         } else {
@@ -2979,7 +2976,11 @@ function renderAdminBehalfFormFields(preservedData) {
         if (adminBehalfFieldDeferrable(f)) {
             html +=
                 '<label style="display:flex;align-items:center;gap:6px;font-size:0.78rem;color:#64748b;margin-top:4px;font-weight:500;cursor:pointer;">' +
-                '<input type="checkbox" id="behalf-later-' + f.key + '" class="behalf-later-cb" data-key="' + escAdmin(f.key) + '" style="width:auto;margin:0;"> Applicant will add later</label>';
+                '<input type="checkbox" id="behalf-later-' + f.key + '" class="behalf-later-cb" data-key="' + escAdmin(f.key) + '" style="width:auto;margin:0;"> Applicant will add later</label>' +
+                (t !== 'select'
+                    ? '<label style="display:flex;align-items:center;gap:6px;font-size:0.78rem;color:#64748b;margin-top:2px;font-weight:500;cursor:pointer;">' +
+                      '<input type="checkbox" id="behalf-na-' + f.key + '" class="behalf-na-cb" data-key="' + escAdmin(f.key) + '" style="width:auto;margin:0;"> Not applicable</label>'
+                    : '');
         }
         html += '</div>';
     });
@@ -3010,13 +3011,43 @@ function renderAdminBehalfFormFields(preservedData) {
         const cb = document.getElementById('behalf-later-' + k);
         if (cb) cb.checked = true;
     });
+    Object.keys(preserved || {}).forEach((k) => {
+        if (preserved[k] !== ADMIN_NOT_APPLICABLE) return;
+        const cb = document.getElementById('behalf-na-' + k);
+        if (cb) cb.checked = true;
+    });
     host.querySelectorAll('.behalf-later-cb').forEach((cb) => {
         const sync = () => {
             const inp = document.getElementById(cb.dataset.target || 'behalf-f-' + cb.dataset.key);
             if (!inp) return;
-            inp.disabled = cb.checked;
-            inp.style.opacity = cb.checked ? '0.55' : '';
+            const na = document.getElementById('behalf-na-' + cb.dataset.key);
+            if (cb.checked && na && na.checked) {
+                na.checked = false;
+            }
+            inp.disabled = cb.checked || !!(na && na.checked);
+            inp.style.opacity = inp.disabled ? '0.55' : '';
             if (cb.checked) inp.type === 'checkbox' ? (inp.checked = false) : (inp.value = '');
+        };
+        cb.addEventListener('change', sync);
+        sync();
+    });
+    host.querySelectorAll('.behalf-na-cb').forEach((cb) => {
+        const sync = () => {
+            const inp = document.getElementById('behalf-f-' + cb.dataset.key);
+            if (!inp) return;
+            const later = document.getElementById('behalf-later-' + cb.dataset.key);
+            if (cb.checked && later && later.checked) later.checked = false;
+            if (cb.checked) {
+                inp.value = ADMIN_NOT_APPLICABLE;
+                inp.disabled = true;
+                inp.style.opacity = '0.55';
+            } else if (!(later && later.checked)) {
+                if (inp.value === ADMIN_NOT_APPLICABLE) inp.value = '';
+                inp.disabled = false;
+                inp.style.opacity = '';
+            }
+            syncBehalfJsonFromForm();
+            scheduleBehalfRegSave();
         };
         cb.addEventListener('change', sync);
         sync();
@@ -3108,6 +3139,31 @@ function applyBehalfSelectedEvents(formData) {
 }
 
 const ADMIN_BEHALF_NON_DEFERRABLE = ['fname', 'lname', 'email', 'phone', 'qual'];
+const ADMIN_ONLY_QUAL_OPTIONS = [{ value: 'General account', label: 'General account (non-doctor)' }];
+const ADMIN_NOT_APPLICABLE = 'Not applicable';
+function adminIsStaffEnd() {
+    return isStaffCrmRoute();
+}
+function adminSelectOptionsHtml(f) {
+    let html = '';
+    const seen = new Set();
+    (Array.isArray(f.options) ? f.options : []).forEach((o) => {
+        const v = String(o.value != null ? o.value : o.label);
+        seen.add(v);
+        html += '<option value="' + escAdmin(v) + '">' + escAdmin(o.label || v) + '</option>';
+    });
+    if (f.key === 'qual' && !adminIsStaffEnd()) {
+        ADMIN_ONLY_QUAL_OPTIONS.forEach((o) => {
+            if (seen.has(o.value)) return;
+            html += '<option value="' + escAdmin(o.value) + '">' + escAdmin(o.label) + '</option>';
+        });
+    }
+    if (f.key !== 'qual' && !seen.has(ADMIN_NOT_APPLICABLE)) {
+        html += '<option value="' + ADMIN_NOT_APPLICABLE + '">' + ADMIN_NOT_APPLICABLE + '</option>';
+    }
+    return html;
+}
+
 function adminBehalfFieldDeferrable(f) {
     if (!f || !f.key) return false;
     if (ADMIN_BEHALF_NON_DEFERRABLE.includes(String(f.key))) return false;
@@ -4244,6 +4300,7 @@ async function adminCreateUser() {
         email,
         phone,
         role: userRole,
+        accountCategory: String((document.getElementById('newuser-account-category') || {}).value || '').trim() || undefined,
         createKind,
         allowStaffTestDuplicate: createKind === 'staff',
         actingAdminId: adm && adm.id,
@@ -5547,7 +5604,8 @@ function renderAdminVolunteerAssignmentsTable() {
             ',' +
             Number(v.seminar_id) +
             ')">Fill application</button>';
-        if (!hasTicket && regSt === 'submitted') {
+        const regReady = ['submitted', 'waitlisted', 'pending_approval', 'approved', 'approved_pending_payment', 'completed', 'checked_in', 'e_ticket_issued', 'certificate_issued', 'revision_required', 'documents_requested'].includes(regSt);
+        if (!hasTicket && regReady) {
             actions +=
                 '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.8rem;margin-right:4px;" onclick="approveAdminVolunteer(' +
                 assignId +
@@ -10958,12 +11016,7 @@ function renderAdminDynamicFormFields(hostId, fields, prefix, existingData) {
         if (f.type === 'textarea') {
             html += '<textarea id="' + id + '" rows="2" style="width:100%;padding:8px;"></textarea>';
         } else if (f.type === 'select' && Array.isArray(f.options)) {
-            html += '<select id="' + id + '" style="width:100%;padding:8px;"><option value="">Select</option>';
-            f.options.forEach((o) => {
-                const v = o.value != null ? o.value : o.label;
-                html += '<option value="' + escAdmin(String(v)) + '">' + escAdmin(o.label || v) + '</option>';
-            });
-            html += '</select>';
+            html += '<select id="' + id + '" style="width:100%;padding:8px;"><option value="">Select</option>' + adminSelectOptionsHtml(f) + '</select>';
         } else if (f.type === 'date') {
             html += '<input type="date" id="' + id + '" style="width:100%;padding:8px;">';
         } else if (f.type === 'checkbox' || f.type === 'boolean') {

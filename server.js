@@ -11813,6 +11813,9 @@ app.post('/api/admin/users/create', (req, res) => {
                                 }
                                 const newId = saved.id || insertedId;
                                 userAccountLifecycle.stampAccountActivated(db, newId, () => {});
+                                if (String((req.body && req.body.accountCategory) || '').toLowerCase() === 'general') {
+                                    db.run(`UPDATE users SET qualification = 'General account' WHERE id = ?`, [newId], () => {});
+                                }
                                 const applyMods = () => {
                                     if (jobRoleApply && (jobRoleApply.staff_modules || jobRoleApply.admin_modules)) {
                                         const sets = [];

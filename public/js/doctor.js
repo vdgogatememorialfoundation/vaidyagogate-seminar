@@ -1519,7 +1519,7 @@ function doctorNormalizeQualOptions(options) {
     options.forEach((o) => {
         if (!o) return;
         const v = String(o.value != null ? o.value : o.label || '').trim();
-        if (!v || v.toLowerCase() === 'new') return;
+        if (!v || v.toLowerCase() === 'new' || v === 'General account' || v === 'Not applicable') return;
         if (canon[v]) out.push(canon[v]);
         else if (v.length > 1) out.push({ value: v, label: String(o.label || v).trim() || v });
     });
