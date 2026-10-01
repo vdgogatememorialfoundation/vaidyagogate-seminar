@@ -283,7 +283,9 @@ function staffModulesToAdminTabs(raw) {
     }
     const out = {};
     Object.keys(mods || {}).forEach((k) => {
-        if (mods[k] === true && STAFF_MODULE_TO_ADMIN_TAB[k]) out[STAFF_MODULE_TO_ADMIN_TAB[k]] = true;
+        if (mods[k] !== true) return;
+        if (STAFF_MODULE_TO_ADMIN_TAB[k]) out[STAFF_MODULE_TO_ADMIN_TAB[k]] = true;
+        else if (k.indexOf('tab-') === 0) out[k] = true;
     });
     return out;
 }
@@ -758,6 +760,14 @@ window.onload = async () => {
     if (localStorage.getItem('admin_auth')) {
         showAdminDashboard();
         await refreshCoAdminSessionFromServer();
+        if (isStaffCrmRoute() && /^#tab-/.test(window.location.hash || '')) {
+            const want = decodeURIComponent(window.location.hash.slice(1));
+            if (adminCanAccessTab(want)) {
+                const mi = document.querySelector('.menu-item[data-admin-module="' + want + '"]');
+                if (mi) mi.click();
+                else switchTab(want);
+            }
+        }
         loadAllData();
         loadPortalAuthAdminForm()
             .then(() => applyCoAdminSidebarVisibility())
@@ -2401,13 +2411,17 @@ async function saveAdminModulesForTarget() {
 const STAFF_PORTAL_MODULE_DEFS = [
     ['book-inventory', 'Stock inventory'],
     ['book-orders', 'Book orders'],
-    ['applications', 'Review applications'],
+    ['applications', 'Doctor applications (staff review)'],
     ['support-tickets', 'Support tickets'],
     ['etickets', 'E-tickets lookup'],
     ['payments', 'Payments & seminar orders'],
-    ['pos', 'On-spot POS (search, private pay links)'],
+    ['pos', 'On-spot POS (register & collect, private pay links)'],
     ['contact-center', 'Contact Center (assigned applicant follow-up)']
-];
+].concat(
+    (window.ADMIN_MODULE_DEFS || [])
+        .filter((d) => !Object.values(STAFF_MODULE_TO_ADMIN_TAB).includes(d.id))
+        .map((d) => [d.id, 'Admin: ' + d.label])
+);
 
 function parseStaffModulesObject(str) {
     if (str == null || !String(str).trim()) return {};

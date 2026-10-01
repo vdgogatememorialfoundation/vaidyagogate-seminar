@@ -142,6 +142,10 @@
     }
 
     window.staffSwitchTab = function (tab) {
+        if (String(tab).indexOf('tab-') === 0) {
+            window.location.href = '/staff/crm#' + encodeURIComponent(tab);
+            return;
+        }
         activeStaffTab = tab;
         const panelIds = [
             'inventory',
