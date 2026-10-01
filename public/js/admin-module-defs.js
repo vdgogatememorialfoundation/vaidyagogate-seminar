@@ -17,6 +17,7 @@
         { id: 'tab-email-compose', label: 'Send email' },
         { id: 'tab-transfer', label: 'Transfer Applications' },
         { id: 'tab-behalf-reg', label: 'Doctor applications (admin)' },
+        { id: 'tab-volunteer-app', label: 'Volunteer applications (admin)' },
         { id: 'tab-reg-form', label: 'Registration Form Fields' },
         { id: 'tab-site-cms', label: 'Website & doctor updates' },
         { id: 'tab-admin-payments', label: 'Payments' },

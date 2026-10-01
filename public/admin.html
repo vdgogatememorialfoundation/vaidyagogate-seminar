@@ -166,7 +166,8 @@
                 <a class="menu-item" data-admin-module="tab-contact-inquiries" onclick="switchTab('tab-contact-inquiries'); loadContactInquiries();"><i class="fas fa-envelope-open-text"></i> Website contact</a>
                 <a class="menu-item" data-admin-module="tab-email-compose" onclick="switchTab('tab-email-compose'); initAdminEmailComposeTab();"><i class="fas fa-paper-plane"></i> Send email</a>
                 <a class="menu-item" data-admin-module="tab-transfer" onclick="switchTab('tab-transfer')"><i class="fas fa-exchange-alt"></i> Transfer Applications</a>
-                <a class="menu-item" data-admin-module="tab-behalf-reg" onclick="switchTab('tab-behalf-reg'); initAdminBehalfRegTab();"><i class="fas fa-user-md"></i> Doctor applications (admin)</a>
+                <a class="menu-item" data-admin-module="tab-behalf-reg" onclick="openAdminBehalfMode('doctor');"><i class="fas fa-user-md"></i> Doctor applications (admin)</a>
+                <a class="menu-item" data-admin-module="tab-volunteer-app" onclick="openAdminBehalfMode('volunteer');"><i class="fas fa-hands-helping"></i> Volunteer applications (admin)</a>
                 <a class="menu-item" data-admin-module="tab-reg-form" onclick="switchTab('tab-reg-form'); loadAdminRegistrationFormConfig();"><i class="fas fa-list-alt"></i> Registration Form Fields</a>
                 <a class="menu-item" data-admin-module="tab-site-cms" onclick="switchTab('tab-site-cms'); loadAdminSiteCms();"><i class="fas fa-globe"></i> Website &amp; doctor updates</a>
                 <a class="menu-item" data-admin-module="tab-admin-payments" onclick="switchTab('tab-admin-payments'); loadAdminPaymentsModule();"><i class="fas fa-file-invoice-dollar"></i> Payments</a>
@@ -798,8 +799,9 @@
 
             <!-- Admin: seminar application on behalf of doctor (live save) -->
             <div id="tab-behalf-reg" class="tab-pane hidden">
-                <h2 style="margin-bottom: 12px;">Doctor seminar applications (admin workspace)</h2>
+                <h2 style="margin-bottom: 12px;">Doctor registration applications (admin)</h2>
                 <p style="color:#64748b;margin-bottom:18px;max-width:920px;">Register a doctor using the <strong>same fields as the doctor portal</strong> (from <em>Seminar registration form</em> settings). Data is stored in <code>registrations.form_data</code> as JSON — that is what the old JSON box was for. After saving, use <strong>Process application</strong> below for verify → payment → e-ticket QR.</p>
+            <div id="behalf-workspace">
                 <div id="behalf-applicant-otp-wrap" class="card" style="margin-bottom:16px;padding:14px;border:1px solid #bfdbfe;background:#eff6ff;">
                     <strong style="display:block;margin-bottom:8px;color:#1e40af;">OTP to the doctor (phone &amp; email on the form below)</strong>
                     <p style="font-size:0.85rem;color:#475569;margin:0 0 10px;">Send codes to the applicant — not your admin login. Verify both before saving.</p>
@@ -876,6 +878,13 @@
                         <p id="behalf-poll-status" style="margin-top:8px;font-size:0.85rem;"></p>
                     </div>
                 </div>
+            </div>
+            </div>
+
+            <div id="tab-volunteer-app" class="tab-pane hidden">
+                <h2 style="margin-bottom: 12px;">Volunteer applications (admin)</h2>
+                <p style="color:#64748b;margin-bottom:18px;max-width:920px;">Fill the seminar application <strong>for a volunteer</strong>. Saving assigns the person as a volunteer for the selected seminar (if not already) and issues the free (₹0) volunteer e-ticket for every event day — no payment step. Fields that do not apply can be marked <em>Not applicable</em>.</p>
+                <div id="volunteer-app-host"></div>
             </div>
 
             <!-- Registration form (seminar application) field configuration -->
@@ -3677,8 +3686,8 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
-    <script src="/js/admin-module-defs.js?v=20261001a"></script>
-    <script src="/js/admin.js?v=20261001g"></script>
+    <script src="/js/admin-module-defs.js?v=20261001b"></script>
+    <script src="/js/admin.js?v=20261001h"></script>
     <script src="/js/pos-onspot-ui.js?v=20261001c"></script>
     <script src="/js/admin-whatsapp.js?v=20260921a"></script>
     <script src="/js/admin-payment-followup.js?v=20260929a"></script>

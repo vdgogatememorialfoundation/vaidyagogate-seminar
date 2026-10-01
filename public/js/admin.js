@@ -964,7 +964,7 @@ function switchTab(tabId) {
     const menuMatch = document.querySelector('.menu-item[data-admin-module="' + tabId + '"]');
     if (menuMatch) menuMatch.classList.add('active');
     else if (typeof event !== 'undefined' && event && event.currentTarget) event.currentTarget.classList.add('active');
-    if (tabId === 'tab-behalf-reg' || tabId === 'tab-site-cms') {
+    if (tabId === 'tab-behalf-reg' || tabId === 'tab-volunteer-app' || tabId === 'tab-site-cms') {
         refreshAdminSensitiveOtpRequirement();
     }
     if (tabId === 'tab-site-cms' && typeof loadAdminSiteCms === 'function') {
@@ -1776,6 +1776,7 @@ const ADMIN_MODULE_TAB_DEFS = [
     ['tab-email-compose', 'Send email'],
     ['tab-transfer', 'Transfer applications'],
     ['tab-behalf-reg', 'Doctor applications (admin workspace)'],
+    ['tab-volunteer-app', 'Volunteer applications (admin workspace)'],
     ['tab-reg-form', 'Registration form fields'],
     ['tab-site-cms', 'Website & doctor updates'],
     ['tab-book-sales', 'Book sales'],
@@ -3276,7 +3277,7 @@ function refreshAdminBehalfWorkflow(data) {
     st.innerHTML = lines.join('<br>');
     if (payWrap) {
         const paid = data.order && String(data.order.status).toLowerCase() === 'success';
-        if (paid) payWrap.classList.add('hidden');
+        if (paid || adminBehalfIsVolunteerMode()) payWrap.classList.add('hidden');
         else {
             payWrap.classList.remove('hidden');
             const ps = document.getElementById('behalf-payment-status');
@@ -3757,9 +3758,58 @@ function scheduleBehalfRegSave() {
     }
 }
 
-async function openAdminBehalfForVolunteer(userId, seminarId) {
-    switchTab('tab-behalf-reg');
+let __behalfMode = 'doctor';
+function adminBehalfIsVolunteerMode() {
+    return __behalfMode === 'volunteer';
+}
+function openAdminBehalfMode(mode) {
+    __behalfMode = mode === 'volunteer' ? 'volunteer' : 'doctor';
+    const ws = document.getElementById('behalf-workspace');
+    const host = document.getElementById(__behalfMode === 'volunteer' ? 'volunteer-app-host' : 'tab-behalf-reg');
+    if (ws && host && ws.parentNode !== host) {
+        if (__behalfMode === 'volunteer') host.appendChild(ws);
+        else {
+            const h2 = host.querySelector('h2');
+            const intro = h2 && h2.nextElementSibling;
+            if (intro && intro.nextSibling) host.insertBefore(ws, intro.nextSibling);
+            else host.appendChild(ws);
+        }
+    }
+    const payWrap = document.getElementById('behalf-payment-wrap');
+    if (payWrap && __behalfMode === 'volunteer') payWrap.classList.add('hidden');
+    switchTab(__behalfMode === 'volunteer' ? 'tab-volunteer-app' : 'tab-behalf-reg');
     initAdminBehalfRegTab();
+}
+window.openAdminBehalfMode = openAdminBehalfMode;
+
+async function ensureVolunteerAssignedAfterBehalfSave(userId, seminarId, st) {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id || !Number.isInteger(userId) || !Number.isInteger(seminarId)) return;
+    try {
+        const res = await fetch('/api/admin/volunteers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ seminarId, userId, actingAdminId: adm.id, adminUserId: adm.id })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            if (st) st.textContent += ' — volunteer assignment failed: ' + (data.error || res.status);
+            return;
+        }
+        if (st) {
+            st.textContent +=
+                data.volunteerTicketIssued || data.ticketId || data.volunteerTicketId
+                    ? ' — volunteer ticket (₹0) issued' + (data.ticketId || data.volunteerTicketId ? ': ' + (data.ticketId || data.volunteerTicketId) : '')
+                    : ' — assigned as volunteer' + (data.message ? ' (' + data.message + ')' : '');
+        }
+        if (typeof loadAdminVolunteerAssignments === 'function') loadAdminVolunteerAssignments().catch(() => {});
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function openAdminBehalfForVolunteer(userId, seminarId) {
+    openAdminBehalfMode('volunteer');
     const ds = document.getElementById('behalf-doctor-select');
     const ss = document.getElementById('behalf-seminar-select');
     if (ds) ds.value = String(userId);
@@ -3886,6 +3936,14 @@ async function flushBehalfRegistrationSave(manual) {
             st.textContent = `Saved ${data.created ? '(new application)' : '(updated)'} at ${new Date().toLocaleTimeString()}`;
         __behalfRegId = data.registrationId || __behalfRegId;
         if (data.applicationNo) __behalfRegApplicationNo = data.applicationNo;
+        if (adminBehalfIsVolunteerMode()) {
+            if (data.volunteerTicketIssued) {
+                if (st) st.textContent += ' — volunteer ticket (₹0) issued' + (data.volunteerTicketId ? ': ' + data.volunteerTicketId : '');
+            } else {
+                const uid = parseInt(data.userId != null ? data.userId : docId, 10);
+                await ensureVolunteerAssignedAfterBehalfSave(uid, sid, st);
+            }
+        }
         if (data.userId && data.userIdString) {
             const sel = document.getElementById('behalf-doctor-select');
             if (sel) {
