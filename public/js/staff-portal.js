@@ -136,6 +136,11 @@
             staffSectionList.length <= 2 &&
             staffSectionList.every((s) => s.id === 'inventory' || s.id === 'book-orders');
         title.textContent = bookOnly ? 'Staff — Book operations' : 'Staff portal';
+        const crmBtn = document.getElementById('staff-open-crm-btn');
+        if (crmBtn) {
+            const crmEligible = staffSectionList.some((s) => s.id === 'pos' || s.id === 'applications');
+            crmBtn.classList.toggle('hidden', !crmEligible);
+        }
         if (hint) {
             hint.textContent = staffSectionList.map((s) => s.label).join(' · ');
         }

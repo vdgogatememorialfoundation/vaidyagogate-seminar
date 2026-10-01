@@ -256,14 +256,56 @@ function readStaffPortalUser() {
     }
 }
 
+const STAFF_MODULE_TO_ADMIN_TAB = {
+    applications: 'tab-applications',
+    pos: 'tab-pos',
+    etickets: 'tab-etickets',
+    payments: 'tab-admin-payments',
+    'support-tickets': 'tab-support-tickets',
+    'contact-center': 'tab-contact-center',
+    'book-inventory': 'tab-book-sales',
+    'book-orders': 'tab-book-sales'
+};
+
+function isStaffCrmUserClient(u) {
+    const ur = String((u && u.user_role) || '').toLowerCase();
+    const r = String((u && u.role) || '').toLowerCase();
+    return r !== 'admin' && (ur === 'staff_user' || ur === 'book_sales_staff');
+}
+
+/** admin_modules (tab ids) derived from a staff user's staff_modules. */
+function staffModulesToAdminTabs(raw) {
+    let mods = {};
+    try {
+        mods = typeof raw === 'string' ? JSON.parse(raw || '{}') : raw || {};
+    } catch (_) {
+        mods = {};
+    }
+    const out = {};
+    Object.keys(mods || {}).forEach((k) => {
+        if (mods[k] === true && STAFF_MODULE_TO_ADMIN_TAB[k]) out[STAFF_MODULE_TO_ADMIN_TAB[k]] = true;
+    });
+    return out;
+}
+
+function withStaffCrmModules(u) {
+    if (!isStaffCrmUserClient(u)) return u;
+    return Object.assign({}, u, { admin_modules: staffModulesToAdminTabs(u.staff_modules) });
+}
+
+function usesCoAdminModuleGating(u) {
+    return String((u && u.user_role) || '').toLowerCase() === 'co_admin' || isStaffCrmUserClient(u);
+}
+
 function tryBootstrapStaffCrmAuth() {
     if (!isStaffCrmRoute()) return false;
     const staffUser = readStaffPortalUser();
-    if (!staffUser || String(staffUser.user_role || '').toLowerCase() !== 'co_admin') {
-        return false;
-    }
+    if (!staffUser) return false;
+    const isCo = String(staffUser.user_role || '').toLowerCase() === 'co_admin';
+    const isStaff = isStaffCrmUserClient(staffUser) && Object.keys(staffModulesToAdminTabs(staffUser.staff_modules)).length > 0;
+    if (!isCo && !isStaff) return false;
     localStorage.setItem('admin_auth', 'true');
-    localStorage.setItem('admin_user', JSON.stringify(staffUser));
+    localStorage.setItem('admin_user', JSON.stringify(withStaffCrmModules(staffUser)));
     return true;
 }
 
@@ -273,7 +315,7 @@ function applyStaffCrmChrome() {
     const loginHint = document.querySelector('#auth-overlay p');
     if (loginHint) {
         loginHint.textContent =
-            'Co-admin session required. Sign in at /staff/login first, then open /staff/crm.';
+            'Staff session required. Sign in at /staff/login first, then open /staff/crm.';
     }
 }
 
@@ -655,7 +697,7 @@ function adminCanAccessTab(tabId) {
     if (checkId === 'tab-users') checkId = 'tab-staff-users';
     if (isSuperAdminUser()) return true;
     const u = getStoredAdminUser();
-    const isCo = String(u && u.user_role || '').toLowerCase() === 'co_admin';
+    const isCo = usesCoAdminModuleGating(u);
     if (!isCo) {
         if (tabId === 'tab-cancellation-review' && globalAdminTabAllowed('tab-admin-payments')) return true;
         if (tabId === 'tab-refund-tracking' && globalAdminTabAllowed('tab-admin-payments')) return true;
@@ -1118,25 +1160,25 @@ function adminAccountActivationLabel(u) {
 
 function refreshCoAdminModulesFromServer(users) {
     const u = getStoredAdminUser();
-    if (!u || String(u.user_role || '').toLowerCase() !== 'co_admin') return;
+    if (!u || !usesCoAdminModuleGating(u)) return;
     const fresh = (users || []).find((row) => Number(row.id) === Number(u.id));
     if (!fresh) return;
-    const next = Object.assign({}, u, {
+    const next = withStaffCrmModules(Object.assign({}, u, {
         admin_modules: fresh.admin_modules,
         staff_modules: fresh.staff_modules
-    });
+    }));
     localStorage.setItem('admin_user', JSON.stringify(next));
     applyCoAdminSidebarVisibility();
 }
 
 async function refreshCoAdminSessionFromServer() {
     const u = getStoredAdminUser();
-    if (!u || !u.id || String(u.user_role || '').toLowerCase() !== 'co_admin') return;
+    if (!u || !u.id || !usesCoAdminModuleGating(u)) return;
     try {
         const res = await fetch(`/api/admin/session?actingAdminId=${encodeURIComponent(u.id)}`);
         const data = await res.json();
         if (!res.ok || !data.user) return;
-        const next = Object.assign({}, u, data.user);
+        const next = withStaffCrmModules(Object.assign({}, u, data.user));
         localStorage.setItem('admin_user', JSON.stringify(next));
         applyCoAdminSidebarVisibility();
     } catch (_) {

@@ -11061,16 +11061,18 @@ function assertAdminPortalActor(adminId, cb) {
     const aid = parseInt(adminId, 10);
     if (!Number.isInteger(aid) || aid < 1) return cb(new Error('BAD_ACTOR'), null);
     db.get(
-        `SELECT id, role, user_role FROM users WHERE id = ? AND COALESCE(CAST(is_disabled AS INTEGER), 0) = 0`,
+        `SELECT id, role, user_role, staff_modules FROM users WHERE id = ? AND COALESCE(CAST(is_disabled AS INTEGER), 0) = 0`,
         [aid],
         (e, adm) => {
             if (e) return cb(e, null);
             if (!adm) return cb(new Error('FORBIDDEN'), null);
             const ur = String(adm.user_role || '').toLowerCase();
+            const coAdminAccess = require('./lib/co-admin-access');
             const ok =
                 String(adm.role || '').toLowerCase() === 'admin' ||
                 ur === 'co_admin' ||
-                ur === 'scanner_dashboard_user';
+                ur === 'scanner_dashboard_user' ||
+                coAdminAccess.staffCrmAllowedTabIds(adm).length > 0;
             if (!ok) return cb(new Error('FORBIDDEN'), null);
             cb(null, adm);
         }
@@ -11176,6 +11178,7 @@ app.get('/api/admin/session', (req, res) => {
                 res.json({
                     user: row,
                     isCoAdmin: String(row.user_role || '').toLowerCase() === 'co_admin',
+                    isStaffCrm: coAdminAccess.isStaffCrmUser(row),
                     allowedTabIds,
                     unrestricted: allowedTabIds == null
                 });

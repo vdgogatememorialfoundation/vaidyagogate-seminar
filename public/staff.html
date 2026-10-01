@@ -57,6 +57,7 @@
                     <p class="sub" id="staff-page-hint" style="margin-top:4px;font-size:0.82rem;"></p>
                 </div>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <button type="button" class="btn btn-primary hidden" id="staff-open-crm-btn" onclick="window.location.href='/staff/crm'">Open admin modules (On-spot POS / Doctor applications)</button>
                     <button type="button" class="btn btn-muted" onclick="staffLogout()">Sign out</button>
                 </div>
             </div>
@@ -113,7 +114,7 @@
             </div>
 
             <div id="staff-panel-pos" class="card hidden">
-                <p style="color:#64748b;font-size:0.88rem;margin:0 0 12px;">On-spot registration: search by phone, name, email, doctor ID or application no. Registered participants appear below. Send a private payment link (valid 1 hour) to the participant's email.</p>
+                <p style="color:#64748b;font-size:0.88rem;margin:0 0 12px;">On-spot registration: search by phone, name, email, doctor ID or application no. To <strong>register &amp; collect payment now</strong> (cash / UPI / Razorpay, no link) use <a href="/staff/crm" style="color:#0369a1;font-weight:600;">Open admin modules → On-spot POS</a>. Below you can send a private payment link (valid 1 hour) to the participant's email.</p>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
                     <input type="search" id="staff-pos-q" placeholder="Phone / name / email / doctor ID…" style="flex:1;min-width:200px;">
                     <button type="button" class="btn btn-primary" onclick="staffPosSearch()">Search</button>
@@ -168,7 +169,7 @@
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-auth.js?v=20261001a"></script>
     <script src="/js/book-tracking-ui.js?v=20260530d"></script>
-    <script src="/js/staff-portal.js?v=20260916pos"></script>
+    <script src="/js/staff-portal.js?v=20261001a"></script>
     <script src="/js/pos-onspot-ui.js?v=20260916a"></script>
 </body>
 </html>
