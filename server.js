@@ -12663,11 +12663,6 @@ app.post('/api/admin/users/:userId/staff-modules', (req, res) => {
                     error: 'Co-admins are configured under Admin modules, not Portal access.'
                 });
             }
-            if (ur === 'desk_staff') {
-                return res.status(400).json({
-                    error: 'Desk staff always have Applications, On-spot POS and E-tickets; change the role to Staff user to customise.'
-                });
-            }
             const staffMods = staff_modules && typeof staff_modules === 'object' ? staff_modules : {};
             const payload = JSON.stringify(staffMods);
             db.run(`UPDATE users SET staff_modules = ? WHERE id = ?`, [payload, targetId], function (err3) {

@@ -222,4 +222,179 @@
         const uid = document.getElementById('staff-pos-user-id');
         if (uid) uid.value = '';
     };
+
+    /* ---------- Register & collect payment now (staff portal) ---------- */
+    let orderDbId = null;
+    let pollTimer = null;
+    let methods = [];
+
+    function el(id) {
+        return document.getElementById(id);
+    }
+    function stopPoll() {
+        if (pollTimer) clearInterval(pollTimer);
+        pollTimer = null;
+    }
+    function setStatus(html, color) {
+        const st = el('staff-pos-status');
+        if (!st) return;
+        st.innerHTML = html;
+        st.style.color = color || '#0f172a';
+    }
+
+    window.staffPosLoadMethods = async function () {
+        const sel = el('staff-pos-payment-method');
+        const id = actorId();
+        if (!sel || !id) return;
+        const { res, data } = await api('/api/admin/payments/methods?actingAdminId=' + encodeURIComponent(id));
+        if (!res.ok) return;
+        methods = data.methods || data || [];
+        if (!Array.isArray(methods) || !methods.length) return;
+        sel.innerHTML = methods
+            .map((m) => '<option value="' + esc(m.id) + '"' + (m.disabled ? ' disabled' : '') + '>' + esc(m.label || m.id) + '</option>')
+            .join('');
+        sel.onchange = () => {
+            const m = methods.find((x) => x.id === sel.value);
+            const hint = el('staff-pos-method-desc');
+            if (hint) hint.textContent = (m && m.description) || '';
+        };
+        sel.onchange();
+    };
+
+    async function pollOnce() {
+        const id = actorId();
+        if (!id || !orderDbId) return;
+        const pollSt = el('staff-pos-poll-status');
+        const { res, data } = await api(
+            '/api/admin/payments/poll/' + encodeURIComponent(orderDbId) + '?actingAdminId=' + encodeURIComponent(id)
+        );
+        if (!res.ok) return;
+        if (data.paid) {
+            stopPoll();
+            setStatus('Payment received — ticket ' + esc(data.ticketId || 'issued') + '. Doctor must complete profile in portal.', '#059669');
+            if (pollSt) {
+                pollSt.style.color = '#15803d';
+                pollSt.textContent = data.message || 'Payment complete. E-ticket issued.';
+            }
+            return;
+        }
+        if (pollSt && data.message) pollSt.textContent = data.message;
+    }
+    function startPoll() {
+        stopPoll();
+        pollOnce();
+        pollTimer = setInterval(pollOnce, 4000);
+    }
+
+    function openRazorpay(pay) {
+        const rzOrder = pay.razorpayOrder || pay.order;
+        if (!rzOrder || !rzOrder.id || !pay.keyId) {
+            alert('Razorpay checkout could not start. Ask admin to re-save gateway keys.');
+            return;
+        }
+        if (typeof Razorpay === 'undefined') {
+            alert('Razorpay checkout script not loaded. Refresh the page.');
+            return;
+        }
+        const rzp = new Razorpay({
+            key: pay.keyId,
+            amount: rzOrder.amount,
+            currency: rzOrder.currency || 'INR',
+            name: 'VGMF Seminar',
+            description: 'Registration ' + (pay.applicationNo || ''),
+            order_id: rzOrder.id,
+            handler: function () {
+                startPoll();
+            },
+            modal: {
+                ondismiss: function () {
+                    const p = el('staff-pos-poll-status');
+                    if (p) p.textContent = 'Payment window closed — payment is still being checked.';
+                }
+            }
+        });
+        rzp.on('payment.failed', function (resp) {
+            alert((resp.error && resp.error.description) || 'Payment failed or was cancelled.');
+        });
+        rzp.open();
+    }
+
+    window.staffPosRegisterNow = async function () {
+        const id = actorId();
+        if (!id) return alert('Sign in first.');
+        stopPoll();
+        orderDbId = null;
+        ['staff-pos-qr-block', 'staff-pos-mark-upi-btn'].forEach((k) => el(k) && el(k).classList.add('hidden'));
+        if (el('staff-pos-poll-status')) el('staff-pos-poll-status').textContent = '';
+        setStatus('Registering…', '#64748b');
+        const val = (k) => (el(k) ? el(k).value : '');
+        const { res, data } = await api('/api/admin/pos/register', {
+            method: 'POST',
+            headers: headers(),
+            body: JSON.stringify({
+                actingAdminId: id,
+                seminarId: val('staff-pos-seminar'),
+                firstName: val('staff-pos-first'),
+                middleName: val('staff-pos-middle'),
+                lastName: val('staff-pos-last'),
+                phone: val('staff-pos-phone'),
+                email: val('staff-pos-email'),
+                amount: val('staff-pos-amount'),
+                paymentMethod: val('staff-pos-payment-method') || 'cash',
+                sendTicketEmail: !!(el('staff-pos-send-ticket-email') && el('staff-pos-send-ticket-email').checked)
+            })
+        });
+        if (!res.ok) return setStatus(esc(data.error || data.message || 'Registration failed (HTTP ' + res.status + ')'), '#b91c1c');
+        const capNote = data.capacityNote ? ' <span style="color:#b45309;">(Seminar was full — added as on-spot override.)</span>' : '';
+        if (data.paid) {
+            setStatus(
+                (data.userIdString ? (data.isNewUser ? 'New ID ' : 'Doctor ') + esc(data.userIdString) + ' · ' : '') +
+                    (data.applicationNo ? 'Application ' + appNoHtml(data.applicationNo) + ' · ' : '') +
+                    'Ticket ' + esc(data.ticketId || '—') + (data.emailNote ? ' ' + esc(data.emailNote) : '') + capNote,
+                '#059669'
+            );
+            return;
+        }
+        if (data.paymentPending && data.payment) {
+            const pay = data.payment;
+            orderDbId = pay.orderDbId;
+            setStatus('Registration saved for application ' + appNoHtml(data.applicationNo || data.registrationId) + '. Waiting for payment…' + capNote, '#b45309');
+            if (el('staff-pos-qr-amount')) el('staff-pos-qr-amount').textContent = 'Amount: ₹' + (pay.amount || '') + ' — Order ' + (pay.orderIdString || '');
+            if (pay.qrImageUrl && el('staff-pos-qr-img')) {
+                el('staff-pos-qr-img').src = pay.qrImageUrl;
+                el('staff-pos-qr-block').classList.remove('hidden');
+            }
+            if (pay.manualConfirm && el('staff-pos-mark-upi-btn')) el('staff-pos-mark-upi-btn').classList.remove('hidden');
+            if (pay.paymentType === 'razorpay_checkout') openRazorpay(pay);
+            else if (pay.paymentUrl) window.open(pay.paymentUrl, '_blank', 'noopener');
+            if (pay.pollRequired) {
+                if (el('staff-pos-poll-status')) el('staff-pos-poll-status').textContent = pay.message || 'Waiting for payment confirmation…';
+                startPoll();
+            } else if (el('staff-pos-poll-status')) el('staff-pos-poll-status').textContent = pay.message || '';
+            return;
+        }
+        setStatus(esc(data.message || 'Registration saved.'), '#059669');
+    };
+
+    window.staffPosMarkUpiPaid = async function () {
+        const id = actorId();
+        if (!id || !orderDbId) return alert('No pending UPI order.');
+        const v = prompt('UPI payment received?\nEnter the UPI transaction ID / UTR (or leave blank), then OK to confirm.', '');
+        if (v === null) return;
+        const utr = String(v).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
+        const { res, data } = await api('/api/admin/payments/mark-upi-paid', {
+            method: 'POST',
+            headers: headers(),
+            body: JSON.stringify({ orderDbId: orderDbId, adminUserId: id, utr: utr })
+        });
+        if (!res.ok) return alert(data.error || 'Could not mark paid');
+        stopPoll();
+        setStatus(esc(data.message || 'Marked paid.'), '#059669');
+    };
+
+    const prevInit = window.staffPosInit;
+    window.staffPosInit = function () {
+        if (typeof prevInit === 'function') prevInit.apply(this, arguments);
+        window.staffPosLoadMethods();
+    };
 })();

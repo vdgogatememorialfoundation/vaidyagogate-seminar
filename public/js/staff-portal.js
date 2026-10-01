@@ -136,11 +136,6 @@
             staffSectionList.length <= 2 &&
             staffSectionList.every((s) => s.id === 'inventory' || s.id === 'book-orders');
         title.textContent = bookOnly ? 'Staff — Book operations' : 'Staff portal';
-        const crmBtn = document.getElementById('staff-open-crm-btn');
-        if (crmBtn) {
-            const crmEligible = staffSectionList.some((s) => s.id === 'pos' || s.id === 'applications');
-            crmBtn.classList.toggle('hidden', !crmEligible);
-        }
         if (hint) {
             hint.textContent = staffSectionList.map((s) => s.label).join(' · ');
         }
@@ -171,7 +166,12 @@
         if (tab === 'support-tickets') staffLoadSupportTickets();
         if (tab === 'payments') staffLoadSeminarOrders();
         if (tab === 'contact-center') loadStaffContactCenter();
-        if (tab === 'pos' && window.staffPosInit) window.staffPosInit();
+        if (tab === 'pos' && window.staffPosInit) {
+            window.staffPosInit();
+            const linkSec = document.getElementById('staff-pos-link-section');
+            const ur = String((staffUser && staffUser.user_role) || '').toLowerCase();
+            if (linkSec) linkSec.classList.toggle('hidden', ur === 'desk_staff');
+        }
     };
 
     async function staffLoadInventory() {
