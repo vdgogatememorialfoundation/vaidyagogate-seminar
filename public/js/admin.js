@@ -270,7 +270,7 @@ const STAFF_MODULE_TO_ADMIN_TAB = {
 function isStaffCrmUserClient(u) {
     const ur = String((u && u.user_role) || '').toLowerCase();
     const r = String((u && u.role) || '').toLowerCase();
-    return r !== 'admin' && (ur === 'staff_user' || ur === 'book_sales_staff');
+    return r !== 'admin' && (ur === 'staff_user' || ur === 'book_sales_staff' || ur === 'desk_staff');
 }
 
 /** admin_modules (tab ids) derived from a staff user's staff_modules. */
@@ -288,9 +288,12 @@ function staffModulesToAdminTabs(raw) {
     return out;
 }
 
+const DESK_STAFF_MODULES = { applications: true, pos: true, etickets: true };
+
 function withStaffCrmModules(u) {
     if (!isStaffCrmUserClient(u)) return u;
-    return Object.assign({}, u, { admin_modules: staffModulesToAdminTabs(u.staff_modules) });
+    const isDesk = String(u.user_role || '').toLowerCase() === 'desk_staff';
+    return Object.assign({}, u, { admin_modules: staffModulesToAdminTabs(isDesk ? DESK_STAFF_MODULES : u.staff_modules) });
 }
 
 function usesCoAdminModuleGating(u) {
@@ -302,7 +305,9 @@ function tryBootstrapStaffCrmAuth() {
     const staffUser = readStaffPortalUser();
     if (!staffUser) return false;
     const isCo = String(staffUser.user_role || '').toLowerCase() === 'co_admin';
-    const isStaff = isStaffCrmUserClient(staffUser) && Object.keys(staffModulesToAdminTabs(staffUser.staff_modules)).length > 0;
+    const isStaff =
+        isStaffCrmUserClient(staffUser) &&
+        Object.keys(staffModulesToAdminTabs(String(staffUser.user_role || '').toLowerCase() === 'desk_staff' ? DESK_STAFF_MODULES : staffUser.staff_modules)).length > 0;
     if (!isCo && !isStaff) return false;
     localStorage.setItem('admin_auth', 'true');
     localStorage.setItem('admin_user', JSON.stringify(withStaffCrmModules(staffUser)));
@@ -1343,7 +1348,7 @@ function renderStaffUsersTable(staffList) {
                 ? ' style="background:#ecfdf5;"'
                 : '';
         const userRole = adminStaffUserRoleValue(u);
-        const staffPortalRoles = ['co_admin', 'book_sales_staff', 'staff_user'];
+        const staffPortalRoles = ['co_admin', 'book_sales_staff', 'staff_user', 'desk_staff'];
                 const modulesBtn =
                     isSuperAdminUser() && String(userRole).toLowerCase() === 'co_admin'
                 ? `<button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-left:6px;background:#0d9488;" onclick="openAdminModulesModal(${u.id})">Admin modules</button>`
@@ -1374,6 +1379,7 @@ function renderStaffUsersTable(staffList) {
                             <option value="reviewer" ${userRole === 'reviewer' ? 'selected' : ''}>Reviewer</option>
                             <option value="book_sales_staff" ${userRole === 'book_sales_staff' ? 'selected' : ''}>Book sales staff</option>
                             <option value="staff_user" ${userRole === 'staff_user' ? 'selected' : ''}>Staff user</option>
+                            <option value="desk_staff" ${userRole === 'desk_staff' ? 'selected' : ''}>Desk staff (Applications + On-spot POS + E-tickets)</option>
                             <option value="support_agent" ${userRole === 'support_agent' ? 'selected' : ''}>Support agent</option>
                             <option value="doctor" ${userRole === 'doctor' ? 'selected' : ''}>Doctor (doctor portal)</option>
                         </select>
@@ -2422,6 +2428,9 @@ function openStaffModulesModal(userId) {
     const ur = String(u.user_role || '').toLowerCase();
     if (ur === 'co_admin') {
         return openAdminModulesModal(userId);
+    }
+    if (ur === 'desk_staff') {
+        return alert('Desk staff always have Applications, On-spot POS and E-tickets. Change the role to Staff user to customise.');
     }
     if (!['book_sales_staff', 'staff_user'].includes(ur)) {
         return alert('Portal access applies to staff portal users only. Co-admins use Admin modules.');
@@ -3888,6 +3897,7 @@ const ADMIN_CREATED_ROLE_LABELS = {
     venue_gate_user: 'Venue gate',
     book_sales_staff: 'Book sales staff',
     staff_user: 'Staff user',
+    desk_staff: 'Desk staff (Applications, POS, E-tickets)',
     reviewer: 'Reviewer',
     support_agent: 'Support agent'
 };
@@ -3947,6 +3957,11 @@ function resolveAdminCreatedUserPortal(userRole) {
             hint: 'Sign in to manage book inventory and orders.'
         },
         staff_user: staff,
+        desk_staff: {
+            path: '/staff/login',
+            name: 'Staff portal (desk)',
+            hint: 'Sign in, then open admin modules for Doctor applications, On-spot POS and E-tickets.'
+        },
         support_agent: {
             path: '/support',
             name: 'Support portal',

@@ -11832,6 +11832,12 @@ app.post('/api/admin/users/create', (req, res) => {
                                                 () => {}
                                             );
                                         }
+                                    } else if (userRole === 'desk_staff') {
+                                        db.run(
+                                            `UPDATE users SET staff_modules = ? WHERE id = ?`,
+                                            [JSON.stringify(require('./lib/user-roles').DESK_STAFF_MODULES), newId],
+                                            () => {}
+                                        );
                                     } else if (userRole === 'book_sales_staff') {
                                         db.run(
                                             `UPDATE users SET staff_modules = ? WHERE id = ?`,
@@ -12021,9 +12027,12 @@ app.post('/api/admin/users/:userId/role', (req, res) => {
     }
 
     const roleCol = userRoles.roleColumnForUserRole(user_role);
+    const deskMods = user_role === 'desk_staff' ? JSON.stringify(userRoles.DESK_STAFF_MODULES) : null;
     db.run(
-        `UPDATE users SET user_role = ?, role = ? WHERE id = ?`,
-        [user_role, roleCol, req.params.userId],
+        deskMods
+            ? `UPDATE users SET user_role = ?, role = ?, staff_modules = ? WHERE id = ?`
+            : `UPDATE users SET user_role = ?, role = ? WHERE id = ?`,
+        deskMods ? [user_role, roleCol, deskMods, req.params.userId] : [user_role, roleCol, req.params.userId],
         function (err) {
             if (err) return res.status(500).json({ error: err.message });
             res.json({ success: true, message: `User role updated to ${user_role}` });
@@ -12652,6 +12661,11 @@ app.post('/api/admin/users/:userId/staff-modules', (req, res) => {
             if (ur === 'co_admin') {
                 return res.status(400).json({
                     error: 'Co-admins are configured under Admin modules, not Portal access.'
+                });
+            }
+            if (ur === 'desk_staff') {
+                return res.status(400).json({
+                    error: 'Desk staff always have Applications, On-spot POS and E-tickets; change the role to Staff user to customise.'
                 });
             }
             const staffMods = staff_modules && typeof staff_modules === 'object' ? staff_modules : {};
