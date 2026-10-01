@@ -2028,6 +2028,17 @@
                         <tbody id="vol-mgmt-list"><tr><td colspan="5" style="text-align:center;">Select a seminar</td></tr></tbody>
                     </table>
                 </div>
+                <div class="card" style="margin-top:16px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                        <h3 style="margin:0;">Volunteer applications (VOL_ tickets)</h3>
+                        <button type="button" class="btn-primary" style="padding:6px 12px;font-size:0.8rem;" onclick="loadAdminVolunteerApplications()">Refresh</button>
+                    </div>
+                    <p style="font-size:0.85rem;color:#64748b;margin:0 0 10px;">Applications of assigned volunteers are listed here only — they are kept out of <em>Review applications</em>.</p>
+                    <table class="data-table">
+                        <thead><tr><th>Volunteer</th><th>Seminar</th><th>Application</th><th>Status</th><th>Volunteer tickets</th><th></th></tr></thead>
+                        <tbody id="vol-apps-list"><tr><td colspan="6" style="text-align:center;color:#64748b;">Loading…</td></tr></tbody>
+                    </table>
+                </div>
             </div>
 
             <div id="tab-case-mgmt" class="tab-pane hidden">
@@ -3687,7 +3698,7 @@
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
     <script src="/js/admin-module-defs.js?v=20261001b"></script>
-    <script src="/js/admin.js?v=20261001h"></script>
+    <script src="/js/admin.js?v=20261001i"></script>
     <script src="/js/pos-onspot-ui.js?v=20261001c"></script>
     <script src="/js/admin-whatsapp.js?v=20260921a"></script>
     <script src="/js/admin-payment-followup.js?v=20260929a"></script>

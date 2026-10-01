@@ -5728,7 +5728,42 @@ async function initAdminVolunteersTab() {
         inp.addEventListener('input', scheduleVolunteerDoctorLookup);
     }
     await loadAdminVolunteers();
+    loadAdminVolunteerApplications().catch(console.error);
 }
+
+async function loadAdminVolunteerApplications() {
+    const tb = document.getElementById('vol-apps-list');
+    if (!tb) return;
+    try {
+        const res = await fetch('/api/admin/applications?scope=volunteer');
+        const rows = await res.json();
+        const list = Array.isArray(rows) ? rows : [];
+        if (!list.length) {
+            tb.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#64748b;">No volunteer applications yet.</td></tr>';
+            return;
+        }
+        tb.innerHTML = list
+            .map((a) => {
+                const name = ((a.first_name || '') + ' ' + (a.last_name || '')).trim() || a.user_id_string || '';
+                const tickets = String(a.ticket_id_string || a.volunteer_ticket_id_string || '')
+                    .split(',')
+                    .map((v) => v.trim())
+                    .filter(Boolean);
+                return (
+                    '<tr><td>' + escAdmin(name) + '</td><td>' + escAdmin(a.seminar_title || '') +
+                    '</td><td>' + escAdmin(a.application_no || a.id) + '</td><td>' + escAdmin(a.status || '') +
+                    '</td><td>' + (tickets.length ? tickets.map(escAdmin).join('<br>') : '<span style="color:#94a3b8;">not issued</span>') +
+                    '</td><td><button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;background:#2563eb;border:none;" onclick="adminOpenApplicationInView(' +
+                    Number(a.id) + ')">Open</button></td></tr>'
+                );
+            })
+            .join('');
+    } catch (e) {
+        console.error(e);
+        tb.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#b91c1c;">Could not load volunteer applications.</td></tr>';
+    }
+}
+window.loadAdminVolunteerApplications = loadAdminVolunteerApplications;
 
 async function loadAdminVolunteers() {
     const sid = document.getElementById('vol-mgmt-seminar')?.value;
@@ -10059,7 +10094,7 @@ async function adminOpenApplicationInView(registrationId) {
     let idx = (globalAdminApps || []).findIndex((a) => Number(a.id) === rid);
     if (idx < 0) {
         try {
-            const res = await fetch('/api/admin/applications');
+            const res = await fetch('/api/admin/applications?scope=all');
             const rows = await res.json();
             globalAdminApps = Array.isArray(rows) ? rows : [];
             idx = globalAdminApps.findIndex((a) => Number(a.id) === rid);
@@ -10338,7 +10373,7 @@ async function adminMatchRazorpayToApplication(rid) {
                 '</p>';
         }
         try {
-            const r2 = await fetch('/api/admin/applications');
+            const r2 = await fetch('/api/admin/applications?scope=all');
             const rows = await r2.json();
             if (Array.isArray(rows)) {
                 globalAdminApps = rows;

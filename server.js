@@ -9297,7 +9297,8 @@ app.get('/api/admin/applications', withApplicationReviewSchema, (req, res) => {
                o.id AS order_id, o.order_id_string, o.amount AS order_amount, o.status AS order_status,
                o.payment_gateway, o.payment_date, o.provider_transaction_id,
                o.refund_status AS order_refund_status, o.refunded_amount AS order_refunded_amount,
-               t.ticket_id_string, t.is_scanned, t.scan_time
+               t.ticket_id_string, t.is_scanned, t.scan_time,
+               sv.id AS volunteer_assignment_id, sv.status AS volunteer_status, sv.volunteer_ticket_id_string
         FROM registrations a
         JOIN users u ON a.user_id = u.id
         LEFT JOIN seminars s ON s.id = a.seminar_id
@@ -9305,17 +9306,25 @@ app.get('/api/admin/applications', withApplicationReviewSchema, (req, res) => {
             SELECT id FROM orders WHERE registration_id = a.id ORDER BY id DESC LIMIT 1
         )
         LEFT JOIN tickets t ON t.order_id = o.id
+        LEFT JOIN seminar_volunteers sv ON sv.seminar_id = a.seminar_id AND sv.user_id = a.user_id
         ORDER BY a.created_at DESC
     `, [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
+        const scope = String((req.query && req.query.scope) || 'doctor').toLowerCase();
+        const isVolunteerRow = (row) =>
+            (row.volunteer_assignment_id != null && String(row.volunteer_status || '').toLowerCase() !== 'removed') ||
+            String(row.volunteer_ticket_id_string || '').startsWith('VOL_') ||
+            String(row.ticket_id_string || '').startsWith('VOL_') ||
+            String(row.order_id_string || '').startsWith('ORD_VOL_');
         const grouped = new Map();
         (rows || []).forEach((row) => {
             const key = String(row.id);
             const existing = grouped.get(key);
             if (!existing) {
-                grouped.set(key, { ...row, ticket_id_string: row.ticket_id_string || '' });
+                grouped.set(key, { ...row, ticket_id_string: row.ticket_id_string || '', is_volunteer: isVolunteerRow(row) ? 1 : 0 });
                 return;
             }
+            if (isVolunteerRow(row)) existing.is_volunteer = 1;
             const ticketIds = new Set(
                 String(existing.ticket_id_string || '')
                     .split(',')
@@ -9329,7 +9338,10 @@ app.get('/api/admin/applications', withApplicationReviewSchema, (req, res) => {
                 existing.scan_time = row.scan_time;
             }
         });
-        seminarEvents.attachPaymentAmountsToRegistrations(db, Array.from(grouped.values()), (ePay, withPay) => {
+        const scoped = Array.from(grouped.values()).filter((r) =>
+            scope === 'all' ? true : scope === 'volunteer' ? r.is_volunteer === 1 : r.is_volunteer !== 1
+        );
+        seminarEvents.attachPaymentAmountsToRegistrations(db, scoped, (ePay, withPay) => {
             if (ePay) return res.status(500).json({ error: ePay.message });
             res.json(withPay || []);
         });
