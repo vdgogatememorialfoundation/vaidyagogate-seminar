@@ -15388,12 +15388,14 @@ const ADMIN_ETICKET_LOOKUP_SQL = `
                s.id AS seminar_id, s.title AS seminar_title, s.event_date, s.event_end_date, s.ticket_expires_at, s.price AS seminar_price,
                o.id AS order_db_id, o.order_id_string, o.status AS payment_status, o.payment_date,
                t.id AS ticket_row_id, t.ticket_id_string, t.is_scanned, IFNULL(t.scan_count, 0) AS scan_count,
-               t.scan_time, IFNULL(t.is_valid, 1) AS is_valid, t.qr_code_data
+               t.scan_time, IFNULL(t.is_valid, 1) AS is_valid, t.qr_code_data,
+               sd.title AS day_title, sd.day_date, sd.sort_order AS day_sort_order
         FROM registrations r
         JOIN users u ON u.id = r.user_id
         JOIN seminars s ON s.id = r.seminar_id
         LEFT JOIN orders o ON o.registration_id = r.id AND LOWER(TRIM(o.status)) = 'success'
-        LEFT JOIN tickets t ON t.order_id = o.id`;
+        LEFT JOIN tickets t ON t.order_id = o.id
+        LEFT JOIN seminar_days sd ON sd.id = t.day_id`;
 
 function adminLookupEtickets(db, q, cb) {
     const raw = String(q || '').trim();
@@ -15458,14 +15460,55 @@ app.get('/api/admin/e-tickets/lookup', (req, res) => {
                     !Number(row.is_scanned) &&
                     Number(row.scan_count || 0) < 1,
                 hasTicket: !!row.ticket_id_string,
+                dayTitle: row.day_title ? seminarDt.shortDayTitle(row.day_title, row.seminar_title) : null,
+                dayDate: row.day_date || null,
+                daySortOrder: row.day_sort_order,
                 ticketPreviewUrl:
                     row.ticket_id_string && row.user_id
                         ? ticketDocumentUrl(row.ticket_id_string, row.user_id)
                         : null
             }));
-            enrichEticketRowsWithEmailStatus(db, list, (e2, enriched) => {
+            // One entry per registration, carrying every event-day ticket in `tickets`.
+            const byReg = new Map();
+            list.forEach((item) => {
+                const key = item.registrationId;
+                if (!byReg.has(key)) byReg.set(key, Object.assign({}, item, { tickets: [] }));
+                const group = byReg.get(key);
+                if (item.ticketIdString) {
+                    group.tickets.push({
+                        ticketIdString: item.ticketIdString,
+                        ticketRowId: item.ticketRowId,
+                        dayTitle: item.dayTitle,
+                        dayDate: item.dayDate,
+                        daySortOrder: item.daySortOrder,
+                        isScanned: item.isScanned,
+                        scanCount: item.scanCount,
+                        scanTime: item.scanTime,
+                        ticketExpired: item.ticketExpired,
+                        ticketPreviewUrl: item.ticketPreviewUrl
+                    });
+                }
+            });
+            const grouped = Array.from(byReg.values()).map((g) => {
+                g.tickets.sort((a, b) => (Number(a.daySortOrder) || 0) - (Number(b.daySortOrder) || 0) || String(a.dayDate || '').localeCompare(String(b.dayDate || '')));
+                if (g.tickets.length) {
+                    const first = g.tickets[0];
+                    Object.assign(g, {
+                        ticketIdString: first.ticketIdString,
+                        ticketRowId: first.ticketRowId,
+                        isScanned: first.isScanned,
+                        scanCount: first.scanCount,
+                        scanTime: first.scanTime,
+                        ticketExpired: first.ticketExpired,
+                        ticketPreviewUrl: first.ticketPreviewUrl,
+                        hasTicket: true
+                    });
+                }
+                return g;
+            });
+            enrichEticketRowsWithEmailStatus(db, grouped, (e2, enriched) => {
                 if (e2) return res.status(500).json({ error: e2.message });
-                res.json({ success: true, results: enriched || list });
+                res.json({ success: true, results: enriched || grouped });
             });
         });
     });

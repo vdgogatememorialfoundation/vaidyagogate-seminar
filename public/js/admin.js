@@ -8322,11 +8322,31 @@ function renderAdminEticketDetail(row) {
         escAdmin(pay) +
         (row.orderIdString ? ' · Order <code>' + escAdmin(row.orderIdString) + '</code>' : '') +
         '</p>' +
-        '<p><strong>E-ticket ID:</strong> ' +
-        (row.ticketIdString ? '<code>' + escAdmin(row.ticketIdString) + '</code>' : '<span style="color:#b45309;">Not generated yet</span>') +
-        '<br><strong>Scanned:</strong> ' +
-        (row.isScanned ? 'Yes' + (row.scanTime ? ' (' + escAdmin(row.scanTime) + ')' : '') : 'No') +
-        (row.scanCount > 0 ? ' · scans: ' + row.scanCount : '') +
+        (Array.isArray(row.tickets) && row.tickets.length > 1
+            ? '<p><strong>E-tickets (' + row.tickets.length + ' event days):</strong></p><ul style="margin:0 0 8px 18px;padding:0;">' +
+              row.tickets
+                  .map(function (t) {
+                      const day = t.dayTitle || (t.dayDate ? String(t.dayDate).slice(0, 10) : '');
+                      const dateTxt = t.dayDate ? new Date(String(t.dayDate).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : '';
+                      return (
+                          '<li>' +
+                          (day ? '<strong>' + escAdmin(day) + '</strong>' + (dateTxt ? ' (' + escAdmin(dateTxt) + ')' : '') + ' — ' : '') +
+                          '<code>' + escAdmin(t.ticketIdString) + '</code> · Scanned: ' +
+                          (t.isScanned ? 'Yes' + (t.scanTime ? ' (' + escAdmin(t.scanTime) + ')' : '') : 'No') +
+                          (t.ticketExpired ? ' · <span style="color:#b91c1c;">Expired</span>' : '') +
+                          (t.ticketPreviewUrl ? ' · <a href="' + escAdmin(t.ticketPreviewUrl) + '" target="_blank" rel="noopener">View</a>' : '') +
+                          '</li>'
+                      );
+                  })
+                  .join('') +
+              '</ul>'
+            : '<p><strong>E-ticket ID:</strong> ' +
+              (row.ticketIdString ? '<code>' + escAdmin(row.ticketIdString) + '</code>' : '<span style="color:#b45309;">Not generated yet</span>') +
+              (row.dayTitle ? ' · ' + escAdmin(row.dayTitle) : '') +
+              '<br><strong>Scanned:</strong> ' +
+              (row.isScanned ? 'Yes' + (row.scanTime ? ' (' + escAdmin(row.scanTime) + ')' : '') : 'No') +
+              (row.scanCount > 0 ? ' · scans: ' + row.scanCount : '') + '</p>') +
+        '<p>' +
         (row.ticketExpired
             ? '<br><strong style="color:#b91c1c;">Expired</strong> — seminar date passed (scanner blocked). Use Applications → Check in for manual override.'
             : '') +
