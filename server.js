@@ -15102,9 +15102,9 @@ function adminDeliverEticketNotification(userId, registrationId, ticketId, opts,
         payment_status: 'PAID'
     };
 
-    db.get(
+    db.all(
         `SELECT r.seminar_id, r.application_no, r.user_id,
-                t.qr_code_data, t.ticket_id_string, t.is_scanned, t.scan_time,
+                o.id AS order_id, t.qr_code_data, t.ticket_id_string, t.is_scanned, t.scan_time,
                 IFNULL(t.is_valid, 1) AS is_valid, o.status AS payment_status,
                 s.title AS seminar_title, s.event_date, s.location_url, s.portal_year,
                 u.first_name, u.last_name
@@ -15113,12 +15113,18 @@ function adminDeliverEticketNotification(userId, registrationId, ticketId, opts,
          JOIN tickets t ON t.order_id = o.id
          JOIN seminars s ON s.id = r.seminar_id
          JOIN users u ON u.id = r.user_id
-         WHERE r.id = ? AND TRIM(t.ticket_id_string) = TRIM(?)
-         ORDER BY o.id DESC, t.id DESC
-         LIMIT 1`,
-        [registrationId, String(ticketId)],
-        (e, row) => {
+         WHERE r.id = ?
+         ORDER BY o.id DESC, t.id ASC`,
+        [registrationId],
+        (e, allRows) => {
             if (e) return cb && cb(e);
+            allRows = Array.isArray(allRows) ? allRows : [];
+            const wanted = String(ticketId || '').trim();
+            const match = allRows.find((r) => String(r.ticket_id_string || '').trim() === wanted) || null;
+            const anchor = match || allRows[0] || null;
+            const orderRows = anchor ? allRows.filter((r) => r.order_id === anchor.order_id) : [];
+            const row = anchor;
+            const ticketRows = orderRows.filter((r) => r && r.qr_code_data);
             let pending = 0;
             let emailSent = false;
             let whatsappQueued = false;
@@ -15153,6 +15159,7 @@ function adminDeliverEticketNotification(userId, registrationId, ticketId, opts,
                         registrationId,
                         ticketId,
                         ticketRow: row,
+                        ticketRows,
                         vars,
                         immediate
                     },

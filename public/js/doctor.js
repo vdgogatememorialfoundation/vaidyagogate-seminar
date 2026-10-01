@@ -8500,44 +8500,7 @@ async function loadDoctorCertificateTracking(quiet) {
                 '<p style="color:#64748b;text-align:center;">No seminar registrations yet. Register and complete payment to track certificate status here.</p>';
         } else {
             window.__doctorCertTrackingRows = rows;
-            let html =
-                '<table class="data-table" style="font-size:0.88rem;"><thead><tr><th>Seminar</th><th>Application No.</th><th>Scans</th><th>Status</th></tr></thead><tbody>';
-            rows.forEach((r) => {
-                const scanLbl = (r.scanCount || 0) + ' / ' + (r.scansRequired || 1);
-                let statusColor = '#64748b';
-                if (r.certStatus === 'issued') statusColor = '#15803d';
-                else if (r.certStatus === 'not_attended') statusColor = '#991b1b';
-                else if (r.certStatus === 'awaiting_checkin') statusColor = '#b45309';
-                else if (r.certStatus === 'awaiting_approval') statusColor = '#7c3aed';
-                else if (r.certStatus === 'scheduled_release') statusColor = '#0369a1';
-                const countdownHint =
-                    r.certCountdown && !r.canViewCertificate
-                        ? ' <span style="font-size:0.75rem;color:#92400e;">(scheduled release)</span>'
-                        : '';
-                html +=
-                    '<tr><td>' +
-                    escapeHtml(r.seminarTitle || '—') +
-                    '</td><td><code>' +
-                    escapeHtml(r.applicationNo || '—') +
-                    '</code></td><td>' +
-                    escapeHtml(scanLbl) +
-                    (r.scansRequired === 2 ? ' <span style="font-size:0.72rem;color:#64748b;">entry+exit</span>' : '') +
-                    '</td><td style="font-weight:600;color:' +
-                    statusColor +
-                    ';">' +
-                    escapeHtml(r.certStatusLabel || '—') +
-                    countdownHint +
-                    (r.canViewCertificate && r.certId
-                        ? ' <button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.78rem;margin-left:6px;" onclick="openDoctorCertificateDownload(' +
-                          Number(r.certId) +
-                          ',' +
-                          Number(r.seminarId) +
-                          ');return false;">Download</button>'
-                        : '') +
-                    '</td></tr>';
-            });
-            html += '</tbody></table>';
-            wrap.innerHTML = html;
+            wrap.innerHTML = rows.map((r) => renderDoctorCertPipelineCard(r)).join('');
             if (rows.some((r) => r.certCountdown && !r.canViewCertificate)) startDoctorCertCountdownTimer();
         }
         if (live) {
@@ -8554,6 +8517,61 @@ async function loadDoctorCertificateTracking(quiet) {
         }
         if (live) live.textContent = 'Update failed';
     }
+}
+
+function buildDoctorCertPipelineSteps(r) {
+    const st = r.certStatus || 'not_applicable';
+    const order = ['awaiting_payment', 'awaiting_checkin', 'checked_in', 'awaiting_approval', 'approved_pending_design', 'scheduled_release', 'issued'];
+    const rank = (k) => order.indexOf(k);
+    const cur = st === 'not_attended' ? rank('awaiting_checkin') : rank(st);
+    const scansLbl = (r.scanCount || 0) + ' / ' + (r.scansRequired || 1) + (r.scansRequired === 2 ? ' (entry + exit)' : '');
+    const defs = [
+        { key: 'registered', title: 'Registered', icon: 'fa-file-signature', minRank: 0, done: true, desc: 'Application ' + (r.applicationNo || '') },
+        { key: 'paid', title: 'Payment confirmed', icon: 'fa-wallet', minRank: rank('awaiting_checkin'), activeDesc: 'Complete payment to become eligible for the e-certificate.', desc: 'Payment received · e-ticket ' + (r.ticketId || '') },
+        { key: 'checkin', title: 'Venue check-in', icon: 'fa-qrcode', minRank: rank('checked_in'), activeDesc: 'Scan your e-ticket at the venue. Scans: ' + scansLbl, desc: 'Checked in at the venue · scans ' + scansLbl, at: r.scanTime },
+        { key: 'approval', title: 'Certificate approval', icon: 'fa-user-check', minRank: rank('approved_pending_design'), activeDesc: 'Attendance verified. Waiting for the organiser to approve certificates.', desc: 'Approved by organiser' },
+        { key: 'prepare', title: 'Certificate prepared', icon: 'fa-file-pdf', minRank: rank('scheduled_release'), activeDesc: 'Approved — your certificate design is being prepared.', desc: 'Certificate generated' },
+        { key: 'ready', title: 'E-certificate ready', icon: 'fa-certificate', minRank: rank('issued'), activeDesc: 'Approved — releases on schedule.', desc: 'Download your e-certificate below.' }
+    ];
+    let activeSet = false;
+    return defs.map((d) => {
+        let state = 'upcoming';
+        if (d.done || cur >= d.minRank) state = 'completed';
+        else if (!activeSet) {
+            state = 'active';
+            activeSet = true;
+        }
+        if (st === 'not_attended' && d.key === 'checkin' && state === 'active') {
+            return { key: d.key, title: d.title, icon: d.icon, state: 'cancelled', desc: 'Not attended — no venue check-in recorded.' };
+        }
+        return {
+            key: d.key,
+            title: d.title,
+            icon: d.icon,
+            state,
+            at: state === 'completed' ? d.at || null : null,
+            desc: state === 'active' ? d.activeDesc || d.desc : d.desc
+        };
+    });
+}
+
+function renderDoctorCertPipelineCard(r) {
+    const steps = buildDoctorCertPipelineSteps(r);
+    const dl =
+        r.canViewCertificate && r.certId
+            ? '<button type="button" class="btn-primary" style="padding:6px 14px;font-size:0.85rem;" onclick="openDoctorCertificateDownload(' +
+              Number(r.certId) + ',' + Number(r.seminarId) + ');return false;"><i class="fas fa-download"></i> Download e-certificate</button>'
+            : '';
+    const hint = r.certCountdown && !r.canViewCertificate ? '<span style="font-size:0.78rem;color:#92400e;">Scheduled release</span>' : '';
+    return (
+        '<div class="card" style="margin-bottom:14px;">' +
+        '<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">' +
+        '<div><strong>' + escapeHtml(r.seminarTitle || '—') + '</strong> <code style="font-size:0.8rem;">' + escapeHtml(r.applicationNo || '') + '</code></div>' +
+        '<div style="display:flex;gap:10px;align-items:center;">' + hint + dl + '</div></div>' +
+        '<p style="margin:0 0 8px;font-size:0.85rem;color:#475569;">' + escapeHtml(r.certStatusLabel || '') + '</p>' +
+        renderTrackerStepsHtml({ steps }) +
+        '</div>'
+    );
 }
 
 function openDoctorCertificateDownload(certId, seminarId) {

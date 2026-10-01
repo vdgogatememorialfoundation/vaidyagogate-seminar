@@ -8558,6 +8558,91 @@ async function adminEticketLoadMissingCount() {
 
 let adminEticketResendAllTimer = null;
 
+async function adminAppsFillTicketSeminars() {
+    const sel = document.getElementById('apps-send-all-seminar');
+    if (!sel || sel.options.length > 1) return;
+    try {
+        const res = await fetch('/api/admin/seminars');
+        const list = await res.json();
+        (Array.isArray(list) ? list : list.seminars || []).forEach((s) => {
+            const o = document.createElement('option');
+            o.value = s.id;
+            o.textContent = s.title;
+            sel.appendChild(o);
+        });
+    } catch (_) {}
+}
+
+let adminAppsSendAllTimer = null;
+
+async function adminAppsPollSendAll() {
+    const adm = getStoredAdminUser();
+    const st = document.getElementById('apps-send-all-status');
+    if (!adm || !st) return;
+    try {
+        const res = await fetch('/api/admin/e-tickets/resend-all/status?actingAdminId=' + encodeURIComponent(adm.id));
+        const j = await res.json();
+        if (!res.ok) throw new Error(j.error || 'Status failed');
+        const sent = j.sent != null ? j.sent : j.emailed != null ? j.emailed : 0;
+        const failed = j.failed != null ? j.failed : 0;
+        const total = j.total != null ? j.total : 0;
+        const done = sent + failed;
+        if (!j.lastError && Array.isArray(j.errors) && j.errors.length) j.lastError = String(j.errors[j.errors.length - 1].error || j.errors[j.errors.length - 1]);
+        st.textContent =
+            (j.running ? 'Sending… ' : 'Finished. ') +
+            done + ' / ' + total + ' participants · emailed ' + sent + ' · failed ' + failed +
+            (j.lastError ? ' · last error: ' + j.lastError : '');
+        st.style.color = j.running ? '#92400e' : failed ? '#b91c1c' : '#15803d';
+        if (!j.running && adminAppsSendAllTimer) {
+            clearInterval(adminAppsSendAllTimer);
+            adminAppsSendAllTimer = null;
+            if (typeof loadApplications === 'function') loadApplications(true);
+        }
+    } catch (e) {
+        st.textContent = e.message || 'Could not read progress';
+        st.style.color = '#b91c1c';
+    }
+}
+
+async function adminAppsSendAllIssuedTickets() {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return alert('Not logged in.');
+    const sel = document.getElementById('apps-send-all-seminar');
+    const seminarId = sel && sel.value ? parseInt(sel.value, 10) : null;
+    const st = document.getElementById('apps-send-all-status');
+    const semLabel = seminarId && sel ? sel.options[sel.selectedIndex].textContent : 'ALL seminars';
+    if (
+        !confirm(
+            'Email e-tickets (every event day, PDF attached) to EVERY applicant with status "E-ticket issued" in ' +
+                semLabel +
+                '?\n\nThis runs in the background; progress is shown below.'
+        )
+    )
+        return;
+    if (st) {
+        st.textContent = 'Starting…';
+        st.style.color = '#92400e';
+    }
+    try {
+        const res = await fetch('/api/admin/e-tickets/resend-all', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: adm.id, seminarId, sendWhatsapp: false })
+        });
+        const j = await res.json();
+        if (!res.ok) throw new Error(j.error || 'Could not start');
+        if (st) st.textContent = 'Started for ' + (j.total != null ? j.total : '…') + ' participants…';
+        if (adminAppsSendAllTimer) clearInterval(adminAppsSendAllTimer);
+        adminAppsSendAllTimer = setInterval(adminAppsPollSendAll, 3000);
+        adminAppsPollSendAll();
+    } catch (e) {
+        if (st) {
+            st.textContent = e.message || 'Failed';
+            st.style.color = '#b91c1c';
+        }
+    }
+}
+
 async function adminEticketFillResendAllSeminars() {
     const sel = document.getElementById('eticket-resend-all-seminar');
     if (!sel || sel.options.length > 1) return;
@@ -8851,6 +8936,7 @@ function adminApplicationSearchBlob(a) {
 
 function renderApplicationsTable() {
     const tbody = document.getElementById('applications-list');
+    adminAppsFillTicketSeminars();
     if (!tbody) return;
     const q = String((document.getElementById('applications-search') || {}).value || '')
         .trim()
@@ -8929,6 +9015,7 @@ function renderApplicationsTable() {
                     </td>
                     <td>
                         <button class="btn-primary" onclick="viewFullApplication(${index})">View</button>
+                        ${a.ticket_id_string ? `<button type="button" class="btn-primary" style="margin-left:6px;background:#0369a1;padding:4px 8px;font-size:0.8rem;" onclick="adminResendTicketEmail(${a.id}, '${String(a.ticket_id_string).replace(/'/g, "\\'")}', true, false)" title="Email all e-tickets (every event day) to this applicant">Send ticket</button>` : ''}
                         <button type="button" class="btn-primary" style="margin-left:6px;background:#0f766e;padding:4px 8px;font-size:0.8rem;" onclick="adminManualCheckinRegistration(${a.id}, '${String(a.application_no || '').replace(/'/g, "\\'")}')" title="Mark venue check-in without scanner">Check in</button>
                         <button type="button" class="btn-primary" style="margin-left:6px;background:#b91c1c;padding:4px 8px;font-size:0.8rem;" onclick="deleteAdminRegistration(${a.id}, '${String(a.application_no || '').replace(/'/g, "\\'")}')">Delete</button>
                     </td>

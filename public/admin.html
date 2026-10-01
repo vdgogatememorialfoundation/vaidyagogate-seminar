@@ -287,6 +287,15 @@
                     <p style="margin:0 0 12px;font-size:0.88rem;color:#475569;">Staff with <strong>Review applications</strong> module can escalate issues to senior (L2) or authority (L3). Set each reviewer’s level below — separate from support desk authority.</p>
                     <div id="application-reviewers-root"><p style="color:#64748b;">Loading reviewers…</p></div>
                 </div>
+                <div class="card" style="margin-bottom:16px;border:1px solid #bae6fd;background:#f0f9ff;">
+                    <h3 style="margin:0 0 6px;color:#0c4a6e;">Email e-tickets</h3>
+                    <p style="margin:0 0 10px;font-size:0.85rem;color:#475569;">Each applicant row has a <strong>Send ticket</strong> button (one person, all event-day tickets). Use the button below to email <strong>everyone</strong> whose status is <em>E-ticket issued</em>.</p>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+                        <select id="apps-send-all-seminar" style="padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;min-width:220px;"><option value="">All seminars</option></select>
+                        <button type="button" class="btn-primary" style="background:#0369a1;" onclick="adminAppsSendAllIssuedTickets()"><i class="fas fa-paper-plane"></i> Send tickets to all e-ticket-issued</button>
+                        <span id="apps-send-all-status" style="font-size:0.85rem;color:#64748b;"></span>
+                    </div>
+                </div>
                 <div class="card">
                     <div id="applications-status-bar" style="margin-bottom:14px;"></div>
                     <div style="margin-bottom:12px;">
