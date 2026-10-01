@@ -7109,6 +7109,7 @@ app.get('/api/doctor/event-tickets/:userId', (req, res) => {
                 const expMs = ticketExpiryMs(expiryRow);
                 const holderName = ticketHtml.nameFromFormData(row.form_data);
                 delete row.form_data;
+                if (row.day_title) row.day_title = seminarDt.shortDayTitle(row.day_title, row.seminar_title);
                 return {
                     ...row,
                     holder_name: holderName || null,
@@ -7176,7 +7177,7 @@ app.get('/api/doctor/ticket-document/:ticketId', (req, res) => {
                         ticket_id_string: row.ticket_id_string,
                         application_no: row.application_no,
                         seminar_title: row.day_title
-                            ? row.seminar_title + ' — ' + row.day_title
+                            ? row.seminar_title + ' — ' + seminarDt.shortDayTitle(row.day_title, row.seminar_title)
                             : row.seminar_title,
                         event_date: row.day_date || row.event_date,
                         event_end_date: row.day_date ? null : row.event_end_date,
