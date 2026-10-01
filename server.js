@@ -15373,8 +15373,18 @@ function enrichEticketRowsWithEmailStatus(db, rows, cb) {
                 out[idx].ticketEmailStatus = log && log.status ? log.status : 'never';
                 out[idx].ticketEmailSentAt = log && log.created_at ? log.created_at : null;
                 out[idx].ticketEmailError = log && log.error ? log.error : null;
-                left--;
-                if (left === 0) cb(null, out);
+                db.get(
+                    `SELECT status, created_at, error FROM notification_logs
+                     WHERE event_key = 'TICKET_ISSUED' AND channel = 'whatsapp' AND user_id = ?
+                     ORDER BY id DESC LIMIT 1`,
+                    [uid],
+                    (e3, wa) => {
+                        out[idx].ticketWhatsappStatus = wa && wa.status ? wa.status : 'never';
+                        out[idx].ticketWhatsappSentAt = wa && wa.created_at ? wa.created_at : null;
+                        left--;
+                        if (left === 0) cb(null, out);
+                    }
+                );
             }
         );
     });

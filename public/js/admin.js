@@ -8363,7 +8363,15 @@ function renderAdminEticketDetail(row) {
                       : st === 'never'
                         ? '<span style="color:#b45309;">Never sent</span>'
                         : escAdmin(st);
-            return '<p><strong>Ticket email:</strong> ' + label + '</p>';
+            const wa = String(row.ticketWhatsappStatus || 'never').toLowerCase();
+            const waLabel =
+                wa === 'sent'
+                    ? '<span style="color:#15803d;">Sent</span>' +
+                      (row.ticketWhatsappSentAt ? ' · ' + escAdmin(String(row.ticketWhatsappSentAt).slice(0, 16).replace('T', ' ')) : '')
+                    : wa === 'never'
+                      ? '<span style="color:#b45309;">Never sent</span>'
+                      : escAdmin(wa);
+            return '<p><strong>Ticket email:</strong> ' + label + '<br><strong>Ticket WhatsApp:</strong> ' + waLabel + '</p>';
         })() +
         (row.ticketExpired && row.registrationId
             ? '<p><button type="button" class="btn-primary" style="background:#0f766e;padding:6px 10px;font-size:0.85rem;" onclick="adminManualCheckinRegistration(' +
