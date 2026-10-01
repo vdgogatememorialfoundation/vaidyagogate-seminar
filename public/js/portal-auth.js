@@ -21,6 +21,7 @@
         if (!user) return false;
         if (isAdminPortalUser(user) || isJudgeUser(user) || isScannerUser(user)) return false;
         const { ur, r } = normRole(user);
+        if (ur && ur !== 'doctor' && ur !== 'event_attendee') return false;
         return ur === 'doctor' || r === 'doctor' || ur === 'event_attendee';
     }
 
