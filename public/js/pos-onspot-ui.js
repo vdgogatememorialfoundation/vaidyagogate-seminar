@@ -91,6 +91,22 @@
                 sel.appendChild(o);
             });
             seminarsLoaded = list.length > 0;
+            const daySel = document.getElementById('staff-pos-day');
+            const fillDays = () => {
+                if (!daySel) return;
+                const sem = list.find((x) => String(x.id) === String(sel.value));
+                const days = (sem && sem.days) || [];
+                daySel.innerHTML = '<option value="">All days</option>';
+                days.forEach((d, i) => {
+                    const o = document.createElement('option');
+                    o.value = d.id;
+                    o.textContent = (d.title || 'Day ' + (i + 1)) + (d.day_date ? ' — ' + d.day_date : '') + ' only';
+                    daySel.appendChild(o);
+                });
+                daySel.style.display = days.length > 1 ? '' : 'none';
+            };
+            sel.addEventListener('change', fillDays);
+            fillDays();
         } catch (_) {}
     }
 
@@ -341,6 +357,7 @@
                 email: val('staff-pos-email'),
                 amount: val('staff-pos-amount'),
                 paymentMethod: val('staff-pos-payment-method') || 'cash',
+                selectedDayIds: val('staff-pos-day') ? [val('staff-pos-day')] : [],
                 sendTicketEmail: true
             })
         });

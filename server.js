@@ -13196,6 +13196,37 @@ app.post('/api/admin/registrations/certificate-upload', withApplicationDocUpload
     });
 });
 
+app.post('/api/admin/registrations/:id/paid-mark', (req, res) => {
+    requireAdminActor(req, res, (actor) => {
+        const rid = parseInt(req.params.id, 10);
+        if (!Number.isInteger(rid) || rid < 1) return res.status(400).json({ error: 'Invalid registration id' });
+        const paid = req.body && (req.body.paid === true || req.body.paid === 1 || req.body.paid === '1' || req.body.paid === 'true');
+        db.get(`SELECT id, form_data FROM registrations WHERE id = ?`, [rid], (err, row) => {
+            if (err) return res.status(500).json({ error: err.message });
+            if (!row) return res.status(404).json({ error: 'Registration not found' });
+            let fd = {};
+            try {
+                fd = row.form_data ? JSON.parse(row.form_data) : {};
+            } catch (_) {
+                fd = {};
+            }
+            if (paid) {
+                fd.admin_paid_mark = true;
+                fd.admin_paid_mark_at = new Date().toISOString();
+                fd.admin_paid_mark_by = actor.id;
+            } else {
+                delete fd.admin_paid_mark;
+                delete fd.admin_paid_mark_at;
+                delete fd.admin_paid_mark_by;
+            }
+            db.run(`UPDATE registrations SET form_data = ? WHERE id = ?`, [JSON.stringify(fd), rid], (uErr) => {
+                if (uErr) return res.status(500).json({ error: uErr.message });
+                res.json({ success: true, paid: !!paid, markedAt: fd.admin_paid_mark_at || null });
+            });
+        });
+    });
+});
+
 app.post('/api/admin/registrations/upsert', (req, res) => {
     const {
         targetUserId,

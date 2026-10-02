@@ -1887,11 +1887,27 @@ async function initAdminPosTab() {
             if (s.price) o.dataset.price = s.price;
             sel.appendChild(o);
         });
+        const daySel = document.getElementById('pos-day');
+        const fillPosDays = () => {
+            if (!daySel) return;
+            const sem = list.find((x) => String(x.id) === String(sel.value));
+            const days = (sem && sem.days) || [];
+            daySel.innerHTML = '<option value="">All days</option>';
+            days.forEach((d, i) => {
+                const o = document.createElement('option');
+                o.value = d.id;
+                o.textContent = (d.title || 'Day ' + (i + 1)) + (d.day_date ? ' — ' + d.day_date : '') + ' only';
+                daySel.appendChild(o);
+            });
+            daySel.disabled = days.length < 2;
+        };
         sel.onchange = () => {
             const opt = sel.selectedOptions[0];
             const priceEl = document.getElementById('pos-amount');
             if (priceEl && opt && opt.dataset.price) priceEl.value = opt.dataset.price;
+            fillPosDays();
         };
+        fillPosDays();
         await loadPosPaymentMethods();
     } catch (e) {
         console.warn(e);
@@ -2125,6 +2141,9 @@ async function submitAdminPosRegistration() {
                 email: document.getElementById('pos-email').value,
                 amount: document.getElementById('pos-amount').value,
                 paymentMethod: methodId,
+                selectedDayIds: (document.getElementById('pos-day') || {}).value
+                    ? [document.getElementById('pos-day').value]
+                    : [],
                 sendTicketEmail: true
             })
         });
@@ -3054,6 +3073,7 @@ function renderAdminBehalfFormFields(preservedData) {
         sync();
     });
     applyBehalfSelectedEvents(preserved);
+    applyBehalfSelectedDays(preserved);
     const qualEl = document.getElementById('behalf-f-qual');
     if (qualEl) {
         qualEl.addEventListener('change', () => renderAdminBehalfFormFields(collectAdminBehalfFormData()));
@@ -3130,6 +3150,56 @@ function renderAdminBehalfEventPicker(seminar) {
     });
 }
 
+function getSelectedBehalfDayIds() {
+    const sel = document.getElementById('behalf-day-select');
+    if (!sel || !sel.value) return [];
+    const n = parseInt(sel.value, 10);
+    return Number.isInteger(n) && n > 0 ? [n] : [];
+}
+
+function renderAdminBehalfDayPicker(seminar) {
+    const panel = document.getElementById('behalf-days-panel');
+    if (!panel) return;
+    const days = (seminar && seminar.days) || [];
+    if (days.length < 2) {
+        panel.classList.add('hidden');
+        panel.innerHTML = '';
+        return;
+    }
+    let html =
+        '<p style="font-weight:700;color:#1d4ed8;margin:0 0 10px;"><i class="fas fa-ticket-alt"></i> Ticket days</p>' +
+        '<p style="font-size:0.84rem;color:#64748b;margin:0 0 10px;">Choose a single day to issue only that day\'s ticket, or all days.</p>' +
+        '<select id="behalf-day-select" style="width:100%;max-width:420px;padding:8px;"><option value="">All days (' +
+        days.length +
+        ' tickets)</option>';
+    days.forEach((d, i) => {
+        html +=
+            '<option value="' +
+            Number(d.id) +
+            '">' +
+            escAdmin((d.title || 'Day ' + (i + 1)) + (d.day_date ? ' — ' + d.day_date : '')) +
+            ' only</option>';
+    });
+    html += '</select>';
+    panel.innerHTML = html;
+    panel.classList.remove('hidden');
+    const sel = document.getElementById('behalf-day-select');
+    if (sel) {
+        sel.addEventListener('change', () => {
+            syncBehalfJsonFromForm();
+            scheduleBehalfRegSave();
+        });
+    }
+}
+
+function applyBehalfSelectedDays(formData) {
+    const sel = document.getElementById('behalf-day-select');
+    if (!sel) return;
+    const ids = (formData && (formData.selected_day_ids || formData.selectedDayIds)) || [];
+    const adminPick = formData && (formData.day_selection_admin === true || formData.day_selection_admin === 1 || formData.day_selection_admin === '1');
+    sel.value = adminPick && Array.isArray(ids) && ids.length === 1 ? String(ids[0]) : '';
+}
+
 function applyBehalfSelectedEvents(formData) {
     const ids = (formData && (formData.selected_event_ids || formData.selectedEventIds)) || [];
     if (!Array.isArray(ids) || !ids.length) return;
@@ -3198,6 +3268,11 @@ function collectAdminBehalfFormData() {
     if (__behalfCertPath) o.certificate_path = __behalfCertPath;
     const eventIds = getSelectedBehalfEventIds();
     if (eventIds.length) o.selected_event_ids = eventIds;
+    const dayIds = getSelectedBehalfDayIds();
+    if (dayIds.length) {
+        o.selected_day_ids = dayIds;
+        o.day_selection_admin = true;
+    }
     return o;
 }
 
@@ -3225,6 +3300,7 @@ function syncBehalfFormFromJson() {
             }
         });
         applyBehalfSelectedEvents(fd);
+        applyBehalfSelectedDays(fd);
     } catch (_) {}
 }
 
@@ -3302,6 +3378,7 @@ async function onAdminBehalfDoctorOrSeminarChange() {
     await loadAdminBehalfFormConfig(sid);
     const semRow = (globalSeminars || []).find((s) => Number(s.id) === Number(sid));
     renderAdminBehalfEventPicker(semRow);
+    renderAdminBehalfDayPicker(semRow);
     if (Number.isInteger(docId) && docId > 0) {
         const u = window.__adminUsersById && window.__adminUsersById[docId];
         if (u) {
@@ -3740,6 +3817,7 @@ function clearAdminBehalfForm() {
     const results = document.getElementById('behalf-doctor-search-results');
     if (results) results.innerHTML = '';
     document.getElementById('behalf-events-panel')?.classList.add('hidden');
+    document.getElementById('behalf-days-panel')?.classList.add('hidden');
     renderAdminBehalfFormFields({});
     syncBehalfJsonFromForm();
     refreshAdminBehalfWorkflow({ found: false, registration: null, order: null, ticket: null });
@@ -9293,6 +9371,9 @@ function renderApplicationsTable() {
                         <select onchange="onApplicationStatusChange(${a.id}, this, ${index})" style="width: auto; min-width: 200px;">
                             ${adminRegistrationStatusOptionsHtml(a.status)}
                         </select>
+                        <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:0.8rem;color:#065f46;cursor:pointer;" title="Record-keeping tick only — does not change status or payment">
+                            <input type="checkbox" ${formData.admin_paid_mark ? 'checked' : ''} onchange="adminTogglePaidMark(${a.id}, this)"> Applicant paid${formData.admin_paid_mark_at ? ' <span style="color:#64748b;">(' + escAdmin(adminFmtDateTimeIst(formData.admin_paid_mark_at)) + ')</span>' : ''}
+                        </label>
                     </td>
                     <td>
                         <button class="btn-primary" onclick="viewFullApplication(${index})">View</button>
@@ -9304,6 +9385,43 @@ function renderApplicationsTable() {
             `);
         });
     tbody.innerHTML = rowsHtml.join('');
+}
+
+async function adminTogglePaidMark(regId, cb) {
+    const aid = adminActorId();
+    if (!aid) return alert('Sign in as admin first.');
+    const paid = !!cb.checked;
+    cb.disabled = true;
+    try {
+        const res = await fetch('/api/admin/registrations/' + regId + '/paid-mark', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: aid, paid })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Could not save');
+        const row = (globalAdminApps || []).find((a) => Number(a.id) === Number(regId));
+        if (row) {
+            let fd = {};
+            try {
+                fd = JSON.parse(row.form_data || '{}');
+            } catch (_) {}
+            if (paid) {
+                fd.admin_paid_mark = true;
+                fd.admin_paid_mark_at = data.markedAt || new Date().toISOString();
+            } else {
+                delete fd.admin_paid_mark;
+                delete fd.admin_paid_mark_at;
+            }
+            row.form_data = JSON.stringify(fd);
+        }
+        renderApplicationsTable();
+    } catch (e) {
+        cb.checked = !paid;
+        alert(e.message || 'Could not save paid mark');
+    } finally {
+        cb.disabled = false;
+    }
 }
 
 function adminFilterApplicationsList() {
