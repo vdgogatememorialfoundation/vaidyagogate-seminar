@@ -15408,7 +15408,7 @@ function enrichEticketRowsWithEmailStatus(db, rows, cb) {
 // ==================== ADMIN E-TICKETS (lookup / generate / send) ====================
 
 const ADMIN_ETICKET_LOOKUP_SQL = `
-        SELECT r.id AS registration_id, r.application_no, r.status AS registration_status, r.form_data,
+        SELECT r.id AS registration_id, r.application_no, r.status AS registration_status, r.form_data, r.created_at AS registered_at,
                u.id AS user_id, u.first_name, u.last_name, u.email, u.phone,
                s.id AS seminar_id, s.title AS seminar_title, s.event_date, s.event_end_date, s.ticket_expires_at, s.price AS seminar_price,
                o.id AS order_db_id, o.order_id_string, o.status AS payment_status, o.payment_date,
@@ -15479,6 +15479,8 @@ app.get('/api/admin/e-tickets/lookup', (req, res) => {
                 scanTime: row.scan_time,
                 isValid: row.is_valid !== 0 && row.is_valid !== false,
                 eventDate: row.event_date,
+                registeredAt: row.registered_at || null,
+                paymentDate: row.payment_date || null,
                 ticketExpiresAt: formatTicketExpiry(row) || null,
                 ticketExpired:
                     isTicketExpired(row) &&

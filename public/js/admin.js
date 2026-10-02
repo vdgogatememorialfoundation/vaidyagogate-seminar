@@ -8472,6 +8472,8 @@ function renderAdminEticketDetail(row) {
         escAdmin(row.applicationNo) +
         '</code> · <strong>Status:</strong> ' +
         escAdmin(row.registrationStatus) +
+        (row.registeredAt ? '<br><strong>Applied on:</strong> ' + escAdmin(adminFmtDateTimeIst(row.registeredAt)) : '') +
+        (row.paymentDate ? ' · <strong>Paid on:</strong> ' + escAdmin(adminFmtDateTimeIst(row.paymentDate)) : '') +
         '</p>' +
         '<p><strong>Payment:</strong> ' +
         escAdmin(pay) +
@@ -9159,6 +9161,51 @@ function adminAppsFillEventFilter(apps) {
     sel.value = __adminAppEventFilter;
     if (sel.value !== __adminAppEventFilter) __adminAppEventFilter = '';
 }
+let __adminAppDateFrom = '';
+let __adminAppDateTo = '';
+function adminIstDateKey(v) {
+    const raw = String(v || '');
+    if (!raw) return '';
+    const dt = /T|\s\d{2}:\d{2}/.test(raw) ? new Date(raw.replace(' ', 'T')) : new Date(raw.slice(0, 10) + 'T00:00:00');
+    if (isNaN(dt)) return raw.slice(0, 10);
+    const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(dt);
+    return parts;
+}
+function adminFmtDateTimeIst(v) {
+    const raw = String(v || '');
+    if (!raw) return '';
+    const dt = /T|\s\d{2}:\d{2}/.test(raw) ? new Date(raw.replace(' ', 'T')) : new Date(raw.slice(0, 10) + 'T00:00:00');
+    return isNaN(dt)
+        ? raw
+        : dt.toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' });
+}
+function adminAppDatesLabel(a) {
+    const bits = [];
+    if (a.created_at) bits.push('Applied: ' + adminFmtDateTimeIst(a.created_at));
+    if (a.payment_date && String(a.order_status || '').toLowerCase() === 'success') bits.push('Paid: ' + adminFmtDateTimeIst(a.payment_date));
+    if (a.scan_time) bits.push('Scanned: ' + adminFmtDateTimeIst(a.scan_time));
+    return bits.join(' · ');
+}
+function adminAppInDateRange(a) {
+    if (!__adminAppDateFrom && !__adminAppDateTo) return true;
+    const k = adminIstDateKey(a.created_at);
+    if (!k) return false;
+    if (__adminAppDateFrom && k < __adminAppDateFrom) return false;
+    if (__adminAppDateTo && k > __adminAppDateTo) return false;
+    return true;
+}
+function adminSetApplicationDateFilter() {
+    __adminAppDateFrom = String((document.getElementById('applications-date-from') || {}).value || '');
+    __adminAppDateTo = String((document.getElementById('applications-date-to') || {}).value || '');
+    renderApplicationsTable();
+}
+function adminClearApplicationDateFilter() {
+    const f = document.getElementById('applications-date-from');
+    const t = document.getElementById('applications-date-to');
+    if (f) f.value = '';
+    if (t) t.value = '';
+    adminSetApplicationDateFilter();
+}
 function adminSetApplicationEventFilter(v) {
     __adminAppEventFilter = String(v || '');
     renderApplicationsTable();
@@ -9174,9 +9221,9 @@ function renderApplicationsTable() {
     adminAppsFillEventFilter(apps);
     const statusFilter = String(__adminAppStatusFilter || '').toLowerCase();
     const eventFilter = String(__adminAppEventFilter || '');
-    const eventFiltered = eventFilter
+    const eventFiltered = (eventFilter
         ? apps.filter((a) => String(a.seminar_id || '') === eventFilter)
-        : apps;
+        : apps).filter(adminAppInDateRange);
     const statusFiltered = statusFilter
         ? eventFiltered.filter((a) => String(a.status || '').toLowerCase() === statusFilter)
         : eventFiltered;
@@ -9241,7 +9288,7 @@ function renderApplicationsTable() {
                     <td>${a.user_id_string}</td>
                     <td>${candidateName}${fileLink}${dupBadge}</td>
                     <td>${reviewBadge}</td>
-                    <td><code>${escAdmin(a.ticket_id_string || '—')}</code><div style="margin-top:4px;font-size:0.78rem;color:#475569;">${escAdmin(adminAppEventLabel(a))}</div></td>
+                    <td><code>${escAdmin(a.ticket_id_string || '—')}</code><div style="margin-top:4px;font-size:0.78rem;color:#475569;">${escAdmin(adminAppEventLabel(a))}</div><div style="margin-top:2px;font-size:0.78rem;color:#1e293b;">${escAdmin(adminAppDatesLabel(a))}</div></td>
                     <td>
                         <select onchange="onApplicationStatusChange(${a.id}, this, ${index})" style="width: auto; min-width: 200px;">
                             ${adminRegistrationStatusOptionsHtml(a.status)}
