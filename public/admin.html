@@ -158,6 +158,7 @@
                 <a class="menu-item" data-admin-module="tab-seminars" onclick="switchTab('tab-seminars')"><i class="fas fa-calendar-alt"></i> Seminar Management</a>
                 <a class="menu-item" data-admin-module="tab-event-schedules" onclick="switchTab('tab-event-schedules'); loadEventSchedules();"><i class="fas fa-clock"></i> Event Schedules</a>
                 <a class="menu-item" data-admin-module="tab-applications" onclick="switchTab('tab-applications')"><i class="fas fa-folder-open"></i> Review Applications</a>
+                <a class="menu-item" data-admin-module="tab-payment-followup" onclick="switchTab('tab-payment-followup'); initAdminPaymentFollowupTab();"><i class="fas fa-phone-volume"></i> Payment Follow-up</a>
                 <a class="menu-item" data-admin-module="tab-case-applications" onclick="switchTab('tab-case-applications'); initAdminCaseApplicationsTab();"><i class="fas fa-file-medical"></i> Review case applications</a>
                 <a class="menu-item" data-admin-module="tab-feedback" onclick="switchTab('tab-feedback')"><i class="fas fa-comments"></i> Seminar Feedback</a>
                 <a class="menu-item" data-admin-module="tab-support-tickets" onclick="switchTab('tab-support-tickets')"><i class="fas fa-ticket-alt"></i> Support Tickets</a>
@@ -165,7 +166,8 @@
                 <a class="menu-item" data-admin-module="tab-contact-inquiries" onclick="switchTab('tab-contact-inquiries'); loadContactInquiries();"><i class="fas fa-envelope-open-text"></i> Website contact</a>
                 <a class="menu-item" data-admin-module="tab-email-compose" onclick="switchTab('tab-email-compose'); initAdminEmailComposeTab();"><i class="fas fa-paper-plane"></i> Send email</a>
                 <a class="menu-item" data-admin-module="tab-transfer" onclick="switchTab('tab-transfer')"><i class="fas fa-exchange-alt"></i> Transfer Applications</a>
-                <a class="menu-item" data-admin-module="tab-behalf-reg" onclick="switchTab('tab-behalf-reg'); initAdminBehalfRegTab();"><i class="fas fa-user-md"></i> Doctor applications (admin)</a>
+                <a class="menu-item" data-admin-module="tab-behalf-reg" onclick="openAdminBehalfMode('doctor');"><i class="fas fa-user-md"></i> Doctor applications (admin)</a>
+                <a class="menu-item" data-admin-module="tab-volunteer-app" onclick="openAdminBehalfMode('volunteer');"><i class="fas fa-hands-helping"></i> Volunteer applications (admin)</a>
                 <a class="menu-item" data-admin-module="tab-reg-form" onclick="switchTab('tab-reg-form'); loadAdminRegistrationFormConfig();"><i class="fas fa-list-alt"></i> Registration Form Fields</a>
                 <a class="menu-item" data-admin-module="tab-site-cms" onclick="switchTab('tab-site-cms'); loadAdminSiteCms();"><i class="fas fa-globe"></i> Website &amp; doctor updates</a>
                 <a class="menu-item" data-admin-module="tab-admin-payments" onclick="switchTab('tab-admin-payments'); loadAdminPaymentsModule();"><i class="fas fa-file-invoice-dollar"></i> Payments</a>
@@ -286,21 +288,47 @@
                     <p style="margin:0 0 12px;font-size:0.88rem;color:#475569;">Staff with <strong>Review applications</strong> module can escalate issues to senior (L2) or authority (L3). Set each reviewer’s level below — separate from support desk authority.</p>
                     <div id="application-reviewers-root"><p style="color:#64748b;">Loading reviewers…</p></div>
                 </div>
+                <div class="card" style="margin-bottom:16px;border:1px solid #bae6fd;background:#f0f9ff;">
+                    <h3 style="margin:0 0 6px;color:#0c4a6e;">Email e-tickets</h3>
+                    <p style="margin:0 0 10px;font-size:0.85rem;color:#475569;">Each applicant row has a <strong>Send ticket</strong> button (one person, all event-day tickets). Use the button below to email <strong>everyone</strong> whose status is <em>E-ticket issued</em>.</p>
+                    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+                        <select id="apps-send-all-seminar" style="padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;min-width:220px;"><option value="">All seminars</option></select>
+                        <button type="button" class="btn-primary" style="background:#0369a1;" onclick="adminAppsSendAllIssuedTickets()"><i class="fas fa-paper-plane"></i> Send tickets to all e-ticket-issued</button>
+                        <span id="apps-send-all-status" style="font-size:0.85rem;color:#64748b;"></span>
+                    </div>
+                </div>
                 <div class="card">
                     <div id="applications-status-bar" style="margin-bottom:14px;"></div>
                     <div style="margin-bottom:12px;">
                         <label for="applications-search" style="font-weight:600;font-size:0.9rem;">Search applications</label>
                         <input type="search" id="applications-search" placeholder="Application no., doctor ID, name, email, phone, or status…" oninput="adminFilterApplicationsList()" style="width:100%;max-width:560px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;margin-top:6px;">
+                        <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                            <label for="applications-event-filter" style="font-weight:600;font-size:0.9rem;">Event / date</label>
+                            <select id="applications-event-filter" onchange="adminSetApplicationEventFilter(this.value)" style="padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;min-width:260px;"><option value="">All events</option></select>
+                            <label for="applications-date-from" style="font-weight:600;font-size:0.9rem;margin-left:8px;">Applied from</label>
+                            <input type="date" id="applications-date-from" onchange="adminSetApplicationDateFilter()" style="padding:7px 10px;border:1px solid #cbd5e1;border-radius:8px;">
+                            <label for="applications-date-to" style="font-weight:600;font-size:0.9rem;">to</label>
+                            <input type="date" id="applications-date-to" onchange="adminSetApplicationDateFilter()" style="padding:7px 10px;border:1px solid #cbd5e1;border-radius:8px;">
+                            <button type="button" class="btn-secondary" style="padding:7px 10px;font-size:0.82rem;" onclick="adminClearApplicationDateFilter()">Clear dates</button>
+                        </div>
                         <p id="applications-search-count" style="margin:6px 0 0;font-size:0.82rem;color:#64748b;"></p>
                     </div>
                     <table class="data-table">
-                        <thead><tr><th>App ID (Barcode)</th><th>Doctor ID</th><th>Doctor Name</th><th>Review level</th><th>E-ticket ID(s)</th><th>Current Status</th><th>Action</th></tr></thead>
+                        <thead><tr><th>App ID (Barcode)</th><th>Doctor ID</th><th>Doctor Name</th><th>Review level</th><th>E-ticket ID(s) · Dates</th><th>Current Status</th><th>Action</th></tr></thead>
                         <tbody id="applications-list"><tr><td colspan="7" style="text-align: center;">Loading applications...</td></tr></tbody>
                     </table>
                 </div>
             </div>
 
             <!-- Review case applications (case presentation submissions) -->
+            <div id="tab-payment-followup" class="tab-pane hidden">
+                <h2 style="margin-bottom:8px;"><i class="fas fa-phone-volume"></i> Payment Follow-up</h2>
+                <p style="color:#64748b;font-size:0.88rem;margin:0 0 18px;">Contact approved applicants whose payment is still pending, record call outcomes, send payment reminders, and export follow-up reports.</p>
+                <div id="payment-followup-root">
+                    <div style="padding:24px;text-align:center;color:#64748b;">Open this module to load pending payment follow-ups.</div>
+                </div>
+            </div>
+
             <div id="tab-case-applications" class="tab-pane hidden">
                 <h2 style="margin-bottom: 20px;">Review case applications</h2>
                 <div class="card" style="margin-bottom:16px;background:#f0fdf4;border:1px solid #bbf7d0;">
@@ -574,7 +602,7 @@
                 <div class="card" style="margin-bottom:16px;">
                     <h3 style="margin:0 0 12px;">Conversations</h3>
                     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
-                        <input type="search" id="mail-thread-search" placeholder="Search email, name, subject…" style="flex:1;min-width:200px;padding:8px;" oninput="loadAdminMailThreads()">
+                        <input type="search" id="mail-thread-search" placeholder="Search email, name, subject…" style="flex:1;min-width:200px;padding:8px;" oninput="scheduleAdminMailThreadsSearch()">
                         <button type="button" class="btn-primary" style="background:#64748b;" onclick="loadAdminMailThreads()"><i class="fas fa-sync"></i> Refresh</button>
                     </div>
                     <div style="display:grid;grid-template-columns:minmax(220px,1fr) minmax(280px,2fr);gap:12px;align-items:start;">
@@ -780,8 +808,9 @@
 
             <!-- Admin: seminar application on behalf of doctor (live save) -->
             <div id="tab-behalf-reg" class="tab-pane hidden">
-                <h2 style="margin-bottom: 12px;">Doctor seminar applications (admin workspace)</h2>
+                <h2 style="margin-bottom: 12px;">Doctor registration applications (admin)</h2>
                 <p style="color:#64748b;margin-bottom:18px;max-width:920px;">Register a doctor using the <strong>same fields as the doctor portal</strong> (from <em>Seminar registration form</em> settings). Data is stored in <code>registrations.form_data</code> as JSON — that is what the old JSON box was for. After saving, use <strong>Process application</strong> below for verify → payment → e-ticket QR.</p>
+            <div id="behalf-workspace">
                 <div id="behalf-applicant-otp-wrap" class="card" style="margin-bottom:16px;padding:14px;border:1px solid #bfdbfe;background:#eff6ff;">
                     <strong style="display:block;margin-bottom:8px;color:#1e40af;">OTP to the doctor (phone &amp; email on the form below)</strong>
                     <p style="font-size:0.85rem;color:#475569;margin:0 0 10px;">Send codes to the applicant — not your admin login. Verify both before saving.</p>
@@ -823,12 +852,14 @@
                     <p id="behalf-app-summary" style="margin-top:12px;font-size:0.9rem;color:#475569;">Select a doctor and seminar to load or create an application.</p>
                 </div>
                 <div id="behalf-events-panel" class="card hidden" style="margin-bottom:16px;padding:14px;border:1px solid #a7f3d0;background:#ecfdf5;"></div>
+                <div id="behalf-days-panel" class="card hidden" style="margin-bottom:16px;padding:14px;border:1px solid #bfdbfe;background:#eff6ff;"></div>
                 <div class="card" style="margin-bottom:16px;">
                     <h3 style="margin:0 0 12px;color:#1a237e;">Application form</h3>
                     <p style="font-size:0.85rem;color:#64748b;margin:0 0 12px;">Rendered from seminar registration form config. Certificate: use Applications tab after save.</p>
                     <div id="behalf-form-fields" style="display:grid;grid-template-columns:1fr 1fr;gap:12px 16px;"></div>
                     <div style="margin-top:16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
                         <button type="button" class="btn-primary" onclick="flushBehalfRegistrationSave(true)">Save application</button>
+                        <button type="button" class="btn-primary" style="background:#b91c1c;" onclick="clearAdminBehalfForm()">Clear / new application</button>
                         <span id="behalf-save-status" style="font-weight:600;color:#0d9488;font-size:0.9rem;"></span>
                     </div>
                     <details style="margin-top:16px;">
@@ -857,6 +888,13 @@
                         <p id="behalf-poll-status" style="margin-top:8px;font-size:0.85rem;"></p>
                     </div>
                 </div>
+            </div>
+            </div>
+
+            <div id="tab-volunteer-app" class="tab-pane hidden">
+                <h2 style="margin-bottom: 12px;">Volunteer applications (admin)</h2>
+                <p style="color:#64748b;margin-bottom:18px;max-width:920px;">Fill the seminar application <strong>for a volunteer</strong>. Saving assigns the person as a volunteer for the selected seminar (if not already) and issues the free (₹0) volunteer e-ticket for every event day — no payment step. Fields that do not apply can be marked <em>Not applicable</em>.</p>
+                <div id="volunteer-app-host"></div>
             </div>
 
             <!-- Registration form (seminar application) field configuration -->
@@ -1826,7 +1864,7 @@
                         <p id="cancellation-requests-search-count" style="margin:6px 0 0;font-size:0.82rem;color:#64748b;"></p>
                     </div>
                     <table class="data-table">
-                        <thead><tr><th>Requested</th><th>Doctor</th><th>Seminar</th><th>Application</th><th>Reason</th><th>Policy refund</th><th>Status</th><th>Tracking</th><th>Actions</th></tr></thead>
+                        <thead><tr><th>Requested / Cancelled</th><th>Doctor</th><th>Seminar</th><th>Application</th><th>Reason</th><th>Policy refund</th><th>Status</th><th>Tracking</th><th>Actions</th></tr></thead>
                         <tbody id="admin-cancel-req-tbody"><tr><td colspan="9" style="text-align:center;">Open this tab or click Refresh</td></tr></tbody>
                     </table>
                 </div>
@@ -2000,6 +2038,17 @@
                         <tbody id="vol-mgmt-list"><tr><td colspan="5" style="text-align:center;">Select a seminar</td></tr></tbody>
                     </table>
                 </div>
+                <div class="card" style="margin-top:16px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                        <h3 style="margin:0;">Volunteer applications (VOL_ tickets)</h3>
+                        <button type="button" class="btn-primary" style="padding:6px 12px;font-size:0.8rem;" onclick="loadAdminVolunteerApplications()">Refresh</button>
+                    </div>
+                    <p style="font-size:0.85rem;color:#64748b;margin:0 0 10px;">Applications of assigned volunteers are listed here only — they are kept out of <em>Review applications</em>.</p>
+                    <table class="data-table">
+                        <thead><tr><th>Volunteer</th><th>Seminar</th><th>Application</th><th>Status</th><th>Volunteer tickets</th><th></th></tr></thead>
+                        <tbody id="vol-apps-list"><tr><td colspan="6" style="text-align:center;color:#64748b;">Loading…</td></tr></tbody>
+                    </table>
+                </div>
             </div>
 
             <div id="tab-case-mgmt" class="tab-pane hidden">
@@ -2087,7 +2136,8 @@
                     </select>
                     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
                         <button type="button" class="btn-primary" style="background:#0f766e;" onclick="downloadCaseMarksheet('xlsx')"><i class="fas fa-file-excel"></i> Download Excel marksheet</button>
-                        <button type="button" class="btn-primary" style="background:#1e40af;" onclick="downloadCaseMarksheet('pdf')"><i class="fas fa-file-pdf"></i> Download PDF / print</button>
+                        <button type="button" class="btn-primary" style="background:#1e40af;" onclick="downloadCaseMarksheet('pdf')"><i class="fas fa-file-pdf"></i> Download group PDF marksheet</button>
+                        <button type="button" class="btn-muted" onclick="downloadCaseMarksheet('html')"><i class="fas fa-print"></i> Preview / print</button>
                     </div>
                     <p style="font-size:0.82rem;color:#64748b;margin-bottom:10px;">Marksheet includes each judge’s criteria scores, totals, doctor &amp; judge IDs, and auto eligibility (≥60% of max by default).</p>
                     <div id="case-results-panel"><p style="color:#64748b;">Loading results…</p></div>
@@ -2110,7 +2160,7 @@
                 <div class="card">
                     <label>Seminar</label>
                     <select id="report-seminar" style="width:100%;max-width:400px;padding:8px;margin:8px 0 16px;"></select>
-                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:10px;">Exports include all registration form fields. Confirmed = approved + paid + verified. Pick Excel, CSV, or PDF (printable HTML).</p>
+                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:10px;">Exports include all registration form fields. Multi-day tickets are listed in one row per applicant (see <em>all_tickets</em> column); the E-tickets list has one row per day ticket. Confirmed = approved + paid + verified. Pick Excel, CSV, or PDF (printable HTML).</p>
                     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
                         <button type="button" class="btn-primary" style="background:#334155;" onclick="window.__reportFmt='xlsx'">Excel (.xlsx)</button>
                         <button type="button" class="btn-primary" style="background:#475569;" onclick="window.__reportFmt='csv'">CSV</button>
@@ -2123,6 +2173,8 @@
                         <button type="button" class="btn-primary" style="background:#7c3aed;" onclick="downloadAdminReport('checked_in', window.__reportFmt||'xlsx')">Checked in</button>
                         <button type="button" class="btn-primary" style="background:#0d9488;" onclick="downloadAdminReport('cert_eligible', window.__reportFmt||'xlsx')">Certificate eligible</button>
                         <button type="button" class="btn-primary" style="background:#1e40af;" onclick="downloadAdminReport('all_participants', window.__reportFmt||'xlsx')">All participants</button>
+                        <button type="button" class="btn-primary" style="background:#1d4ed8;" onclick="downloadAdminReport('e_tickets', window.__reportFmt||'xlsx')">E-tickets (main list)</button>
+                        <button type="button" class="btn-primary" style="background:#b91c1c;" onclick="downloadAdminReport('cancelled', window.__reportFmt||'xlsx')">Cancelled / refunds</button>
                         <button type="button" class="btn-primary" style="background:#0f766e;" onclick="downloadAdminReport('confirmed', window.__reportFmt||'xlsx')">Confirmed list</button>
                         <button type="button" class="btn-primary" style="background:#c2410c;" onclick="downloadAdminReport('pending_verification', window.__reportFmt||'xlsx')">Pending verification</button>
                         <button type="button" class="btn-primary" style="background:#6d28d9;" onclick="downloadAdminReport('attendance', window.__reportFmt||'xlsx')">Attendance sheet</button>
@@ -2306,50 +2358,36 @@
             </div>
 
             <div id="tab-pos" class="tab-pane hidden">
-                <h2 style="margin-bottom:12px;">On-spot POS registration</h2>
-                <p style="color:#64748b;margin-bottom:16px;">Register a doctor at the venue. Record <strong>cash</strong> or collect via <strong>Razorpay Checkout</strong> / other integrated payment gateways. E-ticket is issued immediately for cash, or automatically when the gateway confirms payment.</p>
-                <div class="card" style="max-width:720px;margin-bottom:16px;">
-                    <h3 style="margin:0 0 6px;font-size:1rem;">Find registered participant</h3>
-                    <p style="color:#64748b;font-size:0.85rem;margin:0 0 10px;">Type a phone number, name, email, doctor ID or application no. Matching accounts and their seminar registrations appear below.</p>
+                <h2 style="margin-bottom:12px;">On-spot registration</h2>
+                <p style="color:#64748b;margin-bottom:16px;">One place for the venue desk: search the participant (or type a new one), then either <strong>register &amp; collect payment now</strong> (cash / Razorpay / other gateway) or <strong>email a private 1-hour link</strong> so they register and pay on their own phone with the seminar's full registration form.</p>
+                <div class="card" style="max-width:760px;">
+                    <h3 style="margin:0 0 6px;font-size:1rem;">1. Find participant</h3>
+                    <p style="color:#64748b;font-size:0.85rem;margin:0 0 10px;">Phone, name, email, doctor ID or application no. Click <strong>Use</strong> to fill the form below; skip this for a brand-new participant.</p>
                     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
-                        <input type="search" id="staff-pos-q" placeholder="Phone / name / email / doctor ID…" style="flex:1;min-width:200px;padding:8px;" onkeydown="if(event.key==='Enter'){event.preventDefault();staffPosSearch();}">
+                        <input type="search" id="staff-pos-q" placeholder="Phone / name / email / doctor ID / application no…" style="flex:1;min-width:200px;padding:8px;" onkeydown="if(event.key==='Enter'){event.preventDefault();staffPosSearch();}">
                         <button type="button" class="btn-primary" onclick="staffPosSearch()">Search</button>
                     </div>
-                    <div id="staff-pos-results"><p style="color:#64748b;">Enter a search term above.</p></div>
-                </div>
-                <div class="card" style="max-width:720px;margin-bottom:16px;">
-                    <h3 style="margin:0 0 6px;font-size:1rem;">Private on-spot link (1 hour)</h3>
-                    <p style="color:#64748b;font-size:0.85rem;margin:0 0 10px;">Emails the participant a personal link to register and pay online. The link expires after 1 hour.</p>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
-                        <div><label>Seminar</label><select id="staff-pos-seminar" style="width:100%;padding:8px;"><option value="">Select seminar</option></select></div>
-                        <div><label>Amount (₹, blank = seminar fee)</label><input type="number" id="staff-pos-amount" min="0" step="1" style="width:100%;padding:8px;"></div>
-                        <div><label>First name</label><input type="text" id="staff-pos-first" style="width:100%;padding:8px;"></div>
-                        <div><label>Last name</label><input type="text" id="staff-pos-last" style="width:100%;padding:8px;"></div>
-                        <div><label>Phone</label><input type="tel" id="staff-pos-phone" style="width:100%;padding:8px;"></div>
-                        <div><label>Email (link is sent here)</label><input type="email" id="staff-pos-email" style="width:100%;padding:8px;"></div>
-                    </div>
-                    <input type="hidden" id="staff-pos-user-id">
-                    <button type="button" class="btn-primary" style="margin-top:12px;" onclick="staffPosCreateLink()">Create &amp; email 1-hour link</button>
-                    <div id="staff-pos-link-out" style="margin-top:10px;"></div>
-                </div>
-                <h3 style="margin:0 0 8px;font-size:1rem;">Register &amp; collect payment now</h3>
-                <div class="card" style="max-width:720px;">
+                    <div id="staff-pos-results" style="margin-bottom:16px;"><p style="color:#64748b;">Enter a search term above.</p></div>
+
+                    <h3 style="margin:0 0 6px;font-size:1rem;">2. Participant &amp; seminar</h3>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
                         <div><label>Seminar</label><select id="pos-seminar" style="width:100%;padding:8px;"></select></div>
-                        <div><label>Amount (₹)</label><input type="number" id="pos-amount" min="0" step="1" style="width:100%;padding:8px;"></div>
-                        <div style="grid-column:1/-1;"><label>Payment method</label><select id="pos-payment-method" style="width:100%;padding:8px;"><option value="cash">Cash</option></select><p id="pos-method-desc" style="font-size:0.8rem;color:#64748b;margin:6px 0 0;"></p></div>
+                        <div><label>Ticket days</label><select id="pos-day" style="width:100%;padding:8px;"><option value="">All days</option></select></div>
+                        <div><label>Amount (₹, blank = seminar fee)</label><input type="number" id="pos-amount" min="0" step="1" style="width:100%;padding:8px;"></div>
                         <div><label>First name</label><input type="text" id="pos-fname" style="width:100%;padding:8px;"></div>
                         <div><label>Middle name <span style="font-weight:400;color:#64748b;">(optional)</span></label><input type="text" id="pos-mname" style="width:100%;padding:8px;"></div>
                         <div><label>Last name</label><input type="text" id="pos-lname" style="width:100%;padding:8px;"></div>
                         <div><label>Phone</label><input type="text" id="pos-phone" style="width:100%;padding:8px;" oninput="schedulePosUserLookup()" onblur="lookupPosUser()"></div>
-                        <div><label>Email (optional)</label><input type="email" id="pos-email" style="width:100%;padding:8px;" oninput="schedulePosUserLookup()" onblur="lookupPosUser()"></div>
+                        <div style="grid-column:1/-1;"><label>Email <span style="font-weight:400;color:#64748b;">(required for the private link — it is sent here)</span></label><input type="email" id="pos-email" style="width:100%;padding:8px;" oninput="schedulePosUserLookup()" onblur="lookupPosUser()"></div>
                     </div>
+                    <input type="hidden" id="staff-pos-user-id">
                     <p id="pos-user-hint" style="margin:8px 0 0;font-size:0.85rem;color:#64748b;min-height:1.2em;"></p>
-                    <label style="display:flex;align-items:flex-start;gap:8px;margin-top:14px;font-size:0.88rem;color:#475569;max-width:560px;">
-                        <input type="checkbox" id="pos-send-ticket-email" style="margin-top:3px;">
-                        <span>Queue ticket email after registration (off by default — use printed QR at venue; avoids Zoho rate limits)</span>
-                    </label>
-                    <button type="button" class="btn-primary" style="margin-top:16px;" onclick="submitAdminPosRegistration()">Register &amp; collect payment</button>
+
+                    <h3 style="margin:18px 0 6px;font-size:1rem;">3a. Register &amp; collect payment now</h3>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                        <div style="grid-column:1/-1;"><label>Payment method</label><select id="pos-payment-method" style="width:100%;padding:8px;"><option value="cash">Cash</option></select><p id="pos-method-desc" style="font-size:0.8rem;color:#64748b;margin:6px 0 0;"></p></div>
+                    </div>
+                    <button type="button" class="btn-primary" style="margin-top:12px;" onclick="submitAdminPosRegistration()">Register &amp; collect payment</button>
                     <p id="pos-poll-status" style="margin-top:10px;font-size:0.88rem;color:#0f766e;"></p>
                     <div id="pos-qr-block" class="hidden" style="text-align:center;margin-top:12px;padding:14px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:10px;">
                         <p id="pos-qr-amount" style="font-weight:700;color:#0f766e;margin-bottom:8px;"></p>
@@ -2358,6 +2396,11 @@
                         <button type="button" class="btn-primary hidden" id="pos-mark-upi-btn" style="margin-top:10px;background:#64748b;" onclick="posMarkUpiPaid()">Mark UPI received</button>
                     </div>
                     <p id="pos-status" style="margin-top:12px;font-weight:600;"></p>
+
+                    <h3 style="margin:18px 0 6px;font-size:1rem;">3b. Or email a private 1-hour registration link</h3>
+                    <p style="color:#64748b;font-size:0.85rem;margin:0 0 10px;">The participant gets a personal link (expires in 1 hour) to complete the seminar's registration form and pay online. Uses the seminar, amount and details entered above.</p>
+                    <button type="button" class="btn-primary" style="background:#0369a1;" onclick="staffPosCreateLink()">Create &amp; email 1-hour link</button>
+                    <div id="staff-pos-link-out" style="margin-top:10px;"></div>
                 </div>
             </div>
 
@@ -2742,9 +2785,143 @@
                             <button type="button" class="btn-secondary btn-sm" style="margin-top:8px;margin-left:6px;" onclick="switchTab('tab-notifications');if(typeof initAdminNotificationsTab==='function')initAdminNotificationsTab();">Open notification bodies</button>
                         </div>
 
-                        <div style="display:flex;gap:8px;align-items:flex-end;"><input type="text" id="int-test-phone" placeholder="10-digit mobile (no leading 0)" style="flex:1"><button type="button" class="btn-primary" style="background:#64748b;padding:8px 12px;" onclick="testIntegrationWhatsApp()">Test WhatsApp</button></div>
+                        <div style="display:flex;gap:8px;align-items:flex-end;"><input type="text" id="int-test-phone" placeholder="Mobile: 10-digit Indian or +country code" style="flex:1"><button type="button" class="btn-primary" style="background:#64748b;padding:8px 12px;" onclick="testIntegrationWhatsApp()">Test WhatsApp</button></div>
 
-                        <div style="grid-column:1/-1;margin-top:18px;"><h4 style="margin:0 0 8px;color:#0c4a6e;">MSG91 SMS (status updates)</h4>
+                        <!-- AiSensy -->
+                        <div style="grid-column:1/-1;margin-top:18px;padding-top:18px;border-top:1px solid #e2e8f0;">
+                            <h4 style="margin:0 0 8px;color:#0c4a6e;">AiSensy WhatsApp</h4>
+                            <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px;line-height:1.5;">
+                                Send all WhatsApp messages (OTP, tickets, reminders, campaigns) through <a href="https://aisensy.com" target="_blank" rel="noopener">AiSensy</a> instead of Meta directly.
+                                Create a <strong>live API campaign</strong> in AiSensy for each template (Campaigns → Launch → API Campaign); the campaign name is used below.
+                                Only the <strong>campaign API key</strong> is needed (AiSensy → Manage → API Key); no project or webhook key is required. Numbers outside India are sent as +country code automatically.
+                            </p>
+                        </div>
+                        <div><label>Outbound WhatsApp provider</label>
+                            <select id="int-wa-provider" style="width:100%">
+                                <option value="meta">Meta Cloud API (direct)</option>
+                                <option value="aisensy">AiSensy</option>
+                            </select></div>
+                        <div><label>Lead source label (optional)</label><input type="text" id="int-aisensy-source" placeholder="VGMF Seminar Portal" style="width:100%"></div>
+                        <div style="grid-column:1/-1;">
+                            <label>AiSensy API key</label>
+                            <div id="int-aisensy-key-saved-badge" style="margin:6px 0 8px;padding:8px 12px;border-radius:8px;background:#f8fafc;border:1px solid #e2e8f0;font-size:0.88rem;font-weight:600;color:#64748b;">AiSensy API key not saved yet</div>
+                            <input type="password" id="int-aisensy-key-new" placeholder="Paste AiSensy API key here, then Save" style="width:100%;" autocomplete="off" spellcheck="false">
+                        </div>
+                        <div><label>OTP campaign name</label><input type="text" id="int-aisensy-otp-campaign" placeholder="API campaign whose template has {{1}} = OTP code" style="width:100%"></div>
+                        <div><label>Text campaign name</label><input type="text" id="int-aisensy-text-campaign" placeholder="Template with a single {{1}} body variable (plain messages)" style="width:100%"></div>
+                        <div><label>Media campaign name</label><input type="text" id="int-aisensy-media-campaign" placeholder="Template with document/image header + {{1}} (e-ticket PDFs)" style="width:100%"></div>
+                        <details style="grid-column:1/-1;">
+                            <summary style="cursor:pointer;font-size:0.88rem;color:#64748b;">Advanced (not required): Project API — only for the "List API campaigns" helper. Sending works with the campaign API key alone.</summary>
+                            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:10px;">
+                        <div><label>Project ID (optional)</label><input type="text" id="int-aisensy-project-id" placeholder="AiSensy project id" style="width:100%" autocomplete="off"></div>
+                        <div style="grid-column:1/-1;">
+                            <label>Project API password (optional — only lists your API campaigns)</label>
+                            <div id="int-aisensy-pwd-saved-badge" style="margin:6px 0 8px;padding:8px 12px;border-radius:8px;background:#f8fafc;border:1px solid #e2e8f0;font-size:0.88rem;font-weight:600;color:#64748b;">Project API password not saved</div>
+                            <input type="password" id="int-aisensy-pwd-new" placeholder="Paste Project API password, then Save" style="width:100%;" autocomplete="off" spellcheck="false">
+                        </div>
+                            </div>
+                        </details>
+                        <div style="grid-column:1/-1;">
+                            <label>Template → campaign map (one per line: <code>meta_template_name=AiSensy campaign name</code>; unmapped templates use the same name)</label>
+                            <textarea id="int-aisensy-campaign-map" rows="4" style="width:100%;font-family:ui-monospace,monospace;font-size:0.85rem;" placeholder="vgmf_otp_auth=OTP Login&#10;ticket_issued=E-ticket issued"></textarea>
+                        </div>
+                        <div style="grid-column:1/-1;display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;">
+                            <input type="text" id="int-aisensy-test-phone" placeholder="Test mobile (10-digit Indian or +country code)" style="flex:1;min-width:220px;">
+                            <input type="text" id="int-aisensy-test-campaign" placeholder="Campaign name (optional; default OTP/Text campaign)" style="flex:1;min-width:220px;">
+                            <button type="button" class="btn-primary" style="background:#64748b;padding:8px 12px;" onclick="testIntegrationAisensy()">Test AiSensy</button>
+                            <button type="button" class="btn-secondary btn-sm" onclick="listAisensyCampaigns()">List API campaigns</button>
+                        </div>
+                        <p id="int-aisensy-hint" style="grid-column:1/-1;font-size:0.8rem;color:#64748b;margin:4px 0 0;">Save settings first. Test sends the OTP campaign with code 123456 (or the text campaign).</p>
+                        <div id="int-aisensy-campaigns" style="grid-column:1/-1;"></div>
+
+                    <!-- UPI (admin desk) & Slice -->
+                    <div style="grid-column:1/-1;margin-top:18px;padding-top:18px;border-top:1px solid #e2e8f0;">
+                        <h4 style="margin:0 0 8px;color:#0c4a6e;">UPI at the admin desk (manual &amp; Slice)</h4>
+                        <p style="font-size:0.82rem;color:#64748b;margin:0 0 12px;line-height:1.5;">
+                            Admin-only payment options — doctors always see Razorpay only.
+                            <strong>UPI (manual)</strong>: shows a static QR for the UPI ID below (or none), you confirm with the UTR.
+                            <strong>UPI (Slice)</strong>: dynamic QR / intent link via <a href="https://developer.slicebank.com/" target="_blank" rel="noopener">Slice merchant API</a>; confirms automatically.
+                            Webhook URL for Slice: <code>/api/payments/slice/webhook</code>.
+                            <span id="int-slice-status" style="display:block;margin-top:4px;"></span>
+                        </p>
+                        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                            <div>
+                                <label>Desk UPI ID (VPA) for UPI (manual) QR</label>
+                                <input type="text" id="int-upi-vpa" placeholder="e.g. vgmf@upi (optional)" style="width:100%;">
+                            </div>
+                            <div>
+                                <label>Payee name shown in UPI apps</label>
+                                <input type="text" id="int-upi-payee-name" placeholder="VGMF Seminar" style="width:100%;">
+                            </div>
+                            <div>
+                                <label>Slice enabled</label>
+                                <select id="int-slice-enabled" style="width:100%;">
+                                    <option value="0">Off</option>
+                                    <option value="1">On</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label>Slice environment</label>
+                                <select id="int-slice-env" style="width:100%;">
+                                    <option value="prod">Production (api.slice.bank.in)</option>
+                                    <option value="uat">UAT / sandbox (api.uat-slice.bank.in)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label>Slice Client ID</label>
+                                <input type="text" id="int-slice-client-id" placeholder="client-id from Slice" style="width:100%;" autocomplete="off">
+                            </div>
+                            <div>
+                                <label>Slice Partner ID</label>
+                                <input type="text" id="int-slice-partner-id" placeholder="partnerId from Slice" style="width:100%;" autocomplete="off">
+                            </div>
+                            <div>
+                                <label>Slice Secret key (for s-access-token HMAC) <span id="int-slice-secret-saved-badge"></span></label>
+                                <input type="password" id="int-slice-secret-new" placeholder="Paste secret key here, then Save" style="width:100%;" autocomplete="off" spellcheck="false">
+                            </div>
+                            <div>
+                                <label>Encryption key version (x-encryption-key-version)</label>
+                                <input type="text" id="int-slice-enc-version" placeholder="1" style="width:100%;">
+                            </div>
+                            <div style="grid-column:1/-1;">
+                                <label>Base URL override (optional)</label>
+                                <input type="text" id="int-slice-base-url" placeholder="Leave blank to use the environment default" style="width:100%;">
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Google Maps -->
+                    <div style="grid-column:1/-1;margin-top:18px;padding-top:18px;border-top:1px solid #e2e8f0;">
+                        <h4 style="margin:0 0 8px;color:#0c4a6e;">Google Maps</h4>
+
+                        <p style="font-size:0.82rem;color:#64748b;margin:0 0 12px;line-height:1.5;">
+                            Used for seminar and sub-event venue maps and server-side reverse geocoding.
+                            The API key is stored securely with integration secrets and is not displayed again after saving.
+                        </p>
+
+                        <label>Google Maps API Key</label>
+
+                        <div id="int-google-maps-key-saved-badge"
+                             style="margin:6px 0 8px;padding:8px 12px;border-radius:8px;
+                                    background:#f8fafc;border:1px solid #e2e8f0;
+                                    font-size:0.88rem;font-weight:600;color:#64748b;">
+                            Google Maps API key not saved yet
+                        </div>
+
+                        <input type="password"
+                               id="int-google-maps-key-new"
+                               placeholder="Paste Google Maps API key here, then Save"
+                               style="width:100%;"
+                               autocomplete="off"
+                               spellcheck="false">
+
+                        <p id="int-google-maps-key-hint"
+                           style="font-size:0.78rem;color:#64748b;margin:6px 0 0;line-height:1.45;">
+                            Leave empty to keep the existing key. Paste a new key only to replace it.
+                        </p>
+                    </div>
+
+<div style="grid-column:1/-1;margin-top:18px;"><h4 style="margin:0 0 8px;color:#0c4a6e;">MSG91 SMS (status updates)</h4>
                         <p style="font-size:0.82rem;color:#64748b;margin:0 0 10px;line-height:1.5;">Sends SMS for <strong>event/status updates only</strong> (registration, payment, ticket, cancellation, case, books, support). Signup/login OTP stays on email and WhatsApp — not MSG91 SMS.</p></div>
                         <div style="grid-column:1/-1;">
                             <label style="display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:8px;">
@@ -2959,6 +3136,7 @@
             <label style="display:block;font-size:0.8rem;font-weight:700;margin-bottom:4px;">Account type (user_role)</label>
             <select id="job-role-user-role" style="width:100%;margin-bottom:12px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;">
                 <option value="staff_user">Staff user (operations)</option>
+                <option value="desk_staff">Desk staff (On-spot POS + Doctor applications + E-tickets)</option>
                 <option value="book_sales_staff">Book sales staff</option>
                 <option value="co_admin">Co-admin</option>
                 <option value="judge_user">Judge</option>
@@ -3007,6 +3185,10 @@
                 <input type="text" id="newuser-portal-id" placeholder="Portal User ID (optional, 10+ digits; auto-generated if blank)" inputmode="numeric" pattern="[0-9]*">
                 <input type="email" id="newuser-email" placeholder="Email Address" required>
                 <input type="tel" id="newuser-phone" placeholder="Phone Number" required>
+                <select id="newuser-account-category" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;margin-bottom:8px;">
+                    <option value="">Category: Doctor / medical professional (default)</option>
+                    <option value="general">Category: General account (non-doctor)</option>
+                </select>
                 <select id="newuser-job-role" style="padding: 8px; border: 1px solid #ddd; border-radius: 4px;margin-bottom:8px;" onchange="onNewUserJobRoleChange()">
                     <option value="">-- Job role template (recommended) --</option>
                 </select>
@@ -3019,6 +3201,7 @@
                     <option value="scanner_portal_user">Scanner Portal User</option>
                     <option value="scanner_dashboard_user">Live scanner dashboard</option>
                     <option value="book_sales_staff">Book sales staff</option>
+                    <option value="desk_staff">Desk staff (On-spot POS + Doctor applications + E-tickets)</option>
                     <option value="reviewer">Reviewer</option>
                     <option value="support_agent">Support agent</option>
                 </select>
@@ -3518,7 +3701,7 @@
     <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
     <link rel="stylesheet" href="/css/admin-live-radar.css?v=20260613radar6">
     <script src="/js/admin-system-health.js"></script>
-    <script src="/js/admin-live-radar.js?v=20260613radar7"></script>
+    <script src="/js/admin-live-radar.js?v=20260928a"></script>
     <script src="/js/otp-ui.js"></script>
     <script src="/js/portal-upload.js?v=20260613reels2"></script>
     <script src="/js/user-roles.js?v=20260522f"></script>
@@ -3527,8 +3710,10 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
-    <script src="/js/admin.js?v=20260921a"></script>
-    <script src="/js/pos-onspot-ui.js?v=20260916a"></script>
+    <script src="/js/admin-module-defs.js?v=20261001b"></script>
+    <script src="/js/admin.js?v=20261001n"></script>
+    <script src="/js/pos-onspot-ui.js?v=20261001m"></script>
     <script src="/js/admin-whatsapp.js?v=20260921a"></script>
+    <script src="/js/admin-payment-followup.js?v=20260929a"></script>
 </body>
 </html>

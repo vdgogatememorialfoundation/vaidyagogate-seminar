@@ -294,14 +294,24 @@
             return true;
         });
         const totalIn = rosterRows.filter((r) => r.tickets.some((t) => t.scanned)).length;
+        if (rosterCheckin && !rosterCheckin.seminarCheckinEnabled) {
+            if (summary) summary.textContent = 'Check-in is OFF for this event. Enable it and set the check-in date in Admin → Seminars to see that day\'s e-ticket holders.';
+            body.innerHTML =
+                '<tr><td colspan="5" class="roster-contact" style="text-align:center;padding:24px;">Check-in is disabled — nothing to show.</td></tr>';
+            return;
+        }
+        if (rosterCheckin && rosterCheckin.noDateSet) {
+            if (summary) summary.textContent = 'No check-in date set for this event. Set the check-in date in Admin → Seminars to see that day\'s e-ticket holders.';
+            body.innerHTML =
+                '<tr><td colspan="5" class="roster-contact" style="text-align:center;padding:24px;">Check-in date not set — nothing to show.</td></tr>';
+            return;
+        }
         if (summary) {
             let checkinLabel = '';
-            if (rosterCheckin && !rosterCheckin.seminarCheckinEnabled) {
-                checkinLabel = 'Check-in is OFF (enable it in Admin → Seminars) — ';
-            } else if (rosterCheckin) {
+            if (rosterCheckin) {
                 checkinLabel = 'Check-in date: ' + formatYmdLabel(rosterCheckin.effectiveDate);
                 if (rosterCheckin.activeDayTitle) checkinLabel += ' · ' + rosterCheckin.activeDayTitle + ' only';
-                else if (rosterCheckin.days && rosterCheckin.days.length) checkinLabel += ' · no seminar day on this date';
+                else if (rosterCheckin.noDayForDate) checkinLabel += ' · no seminar day is scheduled on this date (set the check-in date to an event day)';
                 if (rosterCheckin.overrideDate && rosterCheckin.overrideDate !== rosterCheckin.today) {
                     checkinLabel += ' (set in admin; today is ' + formatYmdLabel(rosterCheckin.today) + ')';
                 }
@@ -361,7 +371,11 @@
         if (!rows.length) {
             body.innerHTML =
                 '<tr><td colspan="5" class="roster-contact" style="text-align:center;padding:24px;">' +
-                (rosterRows.length ? 'No participants match this filter.' : 'No e-ticket issued participants yet.') +
+                (rosterRows.length
+                    ? 'No participants match this filter.'
+                    : rosterCheckin && rosterCheckin.noDayForDate
+                      ? 'No seminar day falls on the check-in date — nothing to show.'
+                      : 'No e-ticket issued participants yet.') +
                 '</td></tr>';
         }
     }
@@ -474,8 +488,12 @@
         (seminars || []).forEach((s) => {
             const o = document.createElement('option');
             o.value = s.id;
-            const date = s.schedule_label || (s.event_date ? String(s.event_date).slice(0, 10) : '');
-            o.textContent = (s.title || 'Event') + (date ? ' · ' + date : '');
+            const tag = !s.checkin_enabled
+                ? 'check-in off'
+                : s.checkin_date
+                  ? 'check-in ' + formatYmdLabel(s.checkin_date)
+                  : 'check-in date not set';
+            o.textContent = (s.title || 'Event') + ' · ' + tag;
             sel.appendChild(o);
         });
         if ((seminars || []).length === 1) {

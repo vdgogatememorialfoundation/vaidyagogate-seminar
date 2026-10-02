@@ -1398,7 +1398,7 @@ function renderTrackerStepsHtml(timeline) {
     }
 
     /* Detailed vertical timeline */
-    html += '<div class="fk-timeline">';
+    html += '<div class="fk-timeline"><div class="fk-tl-track"><div class="fk-tl-track-fill"></div></div>';
     steps.forEach(function (step, idx) {
         const isLast = idx === steps.length - 1;
         const st =
@@ -1440,6 +1440,74 @@ function renderTrackerStepsHtml(timeline) {
     return html;
 }
 
+/* Continuous vertical rail behind the timeline dots; the green fill grows slowly down to the current step. */
+function layoutFkTimelines(root) {
+    const scope = root && root.querySelectorAll ? root : document;
+    scope.querySelectorAll('.fk-timeline').forEach(function (tl) {
+        const track = tl.querySelector('.fk-tl-track');
+        const dots = tl.querySelectorAll('.fk-tl-item .fk-tl-dot');
+        if (!track || dots.length < 2) {
+            if (track) track.style.display = 'none';
+            return;
+        }
+        const base = tl.getBoundingClientRect();
+        const first = dots[0].getBoundingClientRect();
+        const last = dots[dots.length - 1].getBoundingClientRect();
+        const top = first.top - base.top + first.height / 2;
+        const bottom = last.top - base.top + last.height / 2;
+        track.style.display = '';
+        track.style.top = top + 'px';
+        track.style.height = Math.max(0, bottom - top) + 'px';
+        const items = tl.querySelectorAll('.fk-tl-item');
+        let target = null;
+        items.forEach(function (it) {
+            if (it.classList.contains('done') || it.classList.contains('active')) target = it;
+        });
+        let fillH = 0;
+        if (target) {
+            const d = target.querySelector('.fk-tl-dot').getBoundingClientRect();
+            fillH = d.top - base.top + d.height / 2 - top;
+            if (target.classList.contains('done') && target === items[items.length - 1]) fillH = bottom - top;
+        }
+        const fill = track.querySelector('.fk-tl-track-fill');
+        if (!fill) return;
+        fill.style.setProperty('--fk-fill-h', Math.max(0, fillH) + 'px');
+        if (!fill.dataset.laidOut) {
+            fill.dataset.laidOut = '1';
+            fill.style.height = '0px';
+            requestAnimationFrame(function () {
+                fill.style.height = Math.max(0, fillH) + 'px';
+            });
+        } else {
+            fill.style.height = Math.max(0, fillH) + 'px';
+        }
+    });
+}
+window.layoutFkTimelines = layoutFkTimelines;
+(function watchFkTimelines() {
+    if (typeof MutationObserver === 'undefined' || !document.body) return;
+    let queued = false;
+    const schedule = function () {
+        if (queued) return;
+        queued = true;
+        requestAnimationFrame(function () {
+            queued = false;
+            layoutFkTimelines(document);
+            setTimeout(function () { layoutFkTimelines(document); }, 2600);
+        });
+    };
+    new MutationObserver(function (muts) {
+        for (let i = 0; i < muts.length; i++) {
+            const t = muts[i].target;
+            if (t && t.querySelector && (t.querySelector('.fk-timeline') || (t.closest && t.closest('.fk-timeline')))) {
+                schedule();
+                return;
+            }
+        }
+    }).observe(document.body, { childList: true, subtree: true });
+    window.addEventListener('resize', schedule);
+})();
+
 function doctorNormalizeQualOptions(options) {
     const canon = {
         'Practicing Vaidya': { value: 'Practicing Vaidya', label: 'Practicing Vaidya' },
@@ -1451,7 +1519,7 @@ function doctorNormalizeQualOptions(options) {
     options.forEach((o) => {
         if (!o) return;
         const v = String(o.value != null ? o.value : o.label || '').trim();
-        if (!v || v.toLowerCase() === 'new') return;
+        if (!v || v.toLowerCase() === 'new' || v === 'General account' || v === 'Not applicable') return;
         if (canon[v]) out.push(canon[v]);
         else if (v.length > 1) out.push({ value: v, label: String(o.label || v).trim() || v });
     });
@@ -2077,7 +2145,9 @@ async function bootDoctorDashboard(user) {
     }
 
     const hashTab = String(window.location.hash || '').replace(/^#/, '').toLowerCase();
-    const initialTab = hashTab === 'refunds' ? 'tab-refunds' : 'tab-dashboard';
+    const HASH_TABS = { refunds: 'tab-refunds', payments: 'tab-payments', pay: 'tab-payments' };
+    const hashTarget = HASH_TABS[hashTab] || null;
+    const initialTab = hashTarget || 'tab-dashboard';
     requestAnimationFrame(() => switchTab(initialTab));
 
     void (async () => {
@@ -2091,9 +2161,9 @@ async function bootDoctorDashboard(user) {
             window.__allowDemoAccounts = u && u.allowDemoAccounts !== false;
             updateDoctorHeaderId();
         } catch (_) {}
-        if (hashTab === 'refunds' && (!__doctorAllowedTabs || __doctorAllowedTabs.has('tab-refunds'))) {
-            switchTab('tab-refunds');
-        } else if (hashTab !== 'refunds') {
+        if (hashTarget && (!__doctorAllowedTabs || __doctorAllowedTabs.has(hashTarget))) {
+            switchTab(hashTarget);
+        } else if (!hashTarget) {
             switchTab('tab-dashboard');
         }
     })();
@@ -3933,7 +4003,33 @@ async function startRegistrationVolunteerFlow(seminarId) {
     await startRegistration(sid, { volunteerBypass: true });
 }
 
+function resetRegistrationFormFields() {
+    const form = document.getElementById('multi-step-form');
+    if (!form) return;
+    form.querySelectorAll('input, select, textarea').forEach((el) => {
+        if (el.type === 'button' || el.type === 'submit' || el.type === 'hidden') return;
+        if (el.type === 'checkbox' || el.type === 'radio') el.checked = false;
+        else if (el.tagName === 'SELECT') el.selectedIndex = 0;
+        else el.value = '';
+    });
+    window.__regCertServerUploaded = false;
+    if (typeof updateRegCertUploadUi === 'function') updateRegCertUploadUi({});
+    const successEl = document.getElementById('reg-cert-success');
+    if (successEl) successEl.classList.add('hidden');
+}
+
+function clearRegistrationForm() {
+    if (!confirm('Clear all fields on this form?')) return;
+    resetRegistrationFormFields();
+    const emailEl = document.getElementById('reg-email');
+    const phoneEl = document.getElementById('reg-phone');
+    if (emailEl && currentUser && currentUser.email) emailEl.value = currentUser.email;
+    if (phoneEl && currentUser && currentUser.phone) phoneEl.value = currentUser.phone;
+    nextStep(1);
+}
+
 function cancelRegistration() {
+    resetRegistrationFormFields();
     activeSeminarIdForReg = null;
     window.editingApplicationId = null;
     window.__registrationJoinWaitlist = false;
@@ -6185,6 +6281,10 @@ let __regPinLookupTimer = null;
 
 function fillRegSelectOptions(sel, options, placeholder) {
     if (!sel) return;
+    if (sel.tagName !== 'SELECT') {
+        if ((options || []).length === 1) sel.value = options[0];
+        return;
+    }
     const prev = sel.value;
     sel.innerHTML = '';
     const opt0 = document.createElement('option');
@@ -6218,6 +6318,7 @@ function clearPinDerivedAddress() {
 function onRegPinInput() {
     const pinEl = document.getElementById('reg-pin');
     if (!pinEl) return;
+    if (!regCountryIsIndia()) return;
     const pin = String(pinEl.value || '').replace(/\D/g, '').slice(0, 6);
     if (pinEl.value !== pin) pinEl.value = pin;
     clearTimeout(__regPinLookupTimer);
@@ -6227,6 +6328,94 @@ function onRegPinInput() {
         clearPinDerivedAddress();
     }
 }
+
+function regCountryIsIndia() {
+    const sel = document.getElementById('reg-country');
+    const v = sel ? String(sel.value || '').trim() : '';
+    return !v || v.toLowerCase() === 'india';
+}
+
+function swapRegFieldTag(id, toTag, placeholder) {
+    const el = document.getElementById(id);
+    if (!el || el.tagName === toTag) return el;
+    const prev = String(el.value || '');
+    let repl;
+    if (toTag === 'INPUT') {
+        repl = document.createElement('input');
+        repl.type = 'text';
+        repl.placeholder = placeholder || '';
+        repl.autocomplete = 'off';
+    } else {
+        repl = document.createElement('select');
+        const o = document.createElement('option');
+        o.value = '';
+        o.textContent = placeholder || 'Select';
+        repl.appendChild(o);
+    }
+    repl.id = id;
+    repl.className = el.className;
+    if (el.required) repl.required = true;
+    el.parentNode.replaceChild(repl, el);
+    if (prev) {
+        if (toTag === 'INPUT') repl.value = prev;
+        else fillRegSelectOptions(repl, [prev], placeholder);
+    }
+    return repl;
+}
+
+function applyRegCountryMode() {
+    const india = regCountryIsIndia();
+    const pinEl = document.getElementById('reg-pin');
+    const pinLabel = document.getElementById('reg-pin-label');
+    const stateLabel = document.getElementById('reg-state-label');
+    if (india) {
+        swapRegFieldTag('reg-city', 'SELECT', 'Select city');
+        swapRegFieldTag('reg-state', 'SELECT', 'Select state');
+        if (pinEl) {
+            pinEl.setAttribute('inputmode', 'numeric');
+            pinEl.setAttribute('maxlength', '6');
+            pinEl.placeholder = '6-digit PIN';
+            const d = String(pinEl.value || '').replace(/\D/g, '').slice(0, 6);
+            if (pinEl.value !== d) pinEl.value = d;
+            if (d.length === 6) autofillAddress();
+        }
+        if (pinLabel) pinLabel.textContent = 'PIN code';
+        if (stateLabel) stateLabel.textContent = 'State';
+    } else {
+        swapRegFieldTag('reg-city', 'INPUT', 'City / town');
+        swapRegFieldTag('reg-state', 'INPUT', 'State / province / region');
+        if (pinEl) {
+            pinEl.removeAttribute('inputmode');
+            pinEl.setAttribute('maxlength', '12');
+            pinEl.placeholder = 'Postal / ZIP code';
+        }
+        if (pinLabel) pinLabel.textContent = 'Postal / ZIP code';
+        if (stateLabel) stateLabel.textContent = 'State / province';
+        setRegPinHint('');
+    }
+    const collegeIndia = india;
+    const cpinEl = document.getElementById('reg-cpin');
+    if (collegeIndia) {
+        swapRegFieldTag('reg-ccity', 'SELECT', 'Select city');
+        swapRegFieldTag('reg-cstate', 'SELECT', 'Select state');
+        if (cpinEl) {
+            cpinEl.setAttribute('inputmode', 'numeric');
+            cpinEl.setAttribute('maxlength', '6');
+            cpinEl.placeholder = '6-digit PIN';
+        }
+    } else {
+        swapRegFieldTag('reg-ccity', 'INPUT', 'College city');
+        swapRegFieldTag('reg-cstate', 'INPUT', 'College state / province');
+        if (cpinEl) {
+            cpinEl.removeAttribute('inputmode');
+            cpinEl.setAttribute('maxlength', '12');
+            cpinEl.placeholder = 'Postal / ZIP code';
+        }
+        setRegCpinHint('');
+    }
+    if (typeof refreshRegistrationRequiredAttributes === 'function') refreshRegistrationRequiredAttributes();
+}
+window.applyRegCountryMode = applyRegCountryMode;
 
 async function populateRegistrationCountrySelect() {
     const sel = document.getElementById('reg-country');
@@ -6255,11 +6444,13 @@ async function initRegistrationAddressUi() {
         cpinEl.dataset.bound = '1';
         cpinEl.addEventListener('input', onRegCpinInput);
     }
+    applyRegCountryMode();
 }
 
 async function autofillAddress() {
     const pinEl = document.getElementById('reg-pin');
     if (!pinEl) return;
+    if (!regCountryIsIndia()) return;
     const pin = String(pinEl.value || '').replace(/\D/g, '');
     if (pin.length !== 6) {
         if (pin.length) setRegPinHint('Enter a valid 6-digit PIN code', true);
@@ -6353,6 +6544,7 @@ function clearCollegePinDerived() {
 
 async function autofillCollegeAddress() {
     if (!registrationQualIsPg()) return;
+    if (!regCountryIsIndia()) return;
     const pinEl = document.getElementById('reg-cpin');
     if (!pinEl) return;
     const pin = String(pinEl.value || '').replace(/\D/g, '');
@@ -6385,6 +6577,7 @@ async function autofillCollegeAddress() {
 function onRegCpinInput() {
     const pinEl = document.getElementById('reg-cpin');
     if (!pinEl) return;
+    if (!regCountryIsIndia()) return;
     const pin = String(pinEl.value || '').replace(/\D/g, '').slice(0, 6);
     if (pinEl.value !== pin) pinEl.value = pin;
     clearTimeout(__regCpinLookupTimer);
@@ -7390,6 +7583,10 @@ async function loadApplications(silentPoll) {
             const resubmitBtn = needsResubmit
                 ? `<button class="btn-warning" style="padding: 5px 10px; margin-right: 5px;" onclick="openSeminarDocumentResubmitByIndex(${index})">${st === 'documents_requested' ? 'Upload docs' : 'Re-upload docs'}</button>`
                 : '';
+            const pendingKeys = doctorPendingFieldKeys(a);
+            const pendingBtn = pendingKeys.length
+                ? `<button class="btn-warning" style="padding: 5px 10px; margin-right: 5px; background:#b45309; color:#fff; border:none;" onclick="openPendingFieldsModal(${a.id})">Complete details (${pendingKeys.length})</button>`
+                : '';
             const cancelStatus = doctorCancelRequestStatus(a.id);
             const canRequestCancel = doctorCanCancelApplication(a) && cancelStatus !== 'Cancellation pending review';
             let cancelBtn = '';
@@ -7404,7 +7601,7 @@ async function loadApplications(silentPoll) {
                 <tr>
                     <td><strong>${a.application_no}</strong></td>
                     <td><span style="background: ${a.status === 'rejected' ? '#fee2e2' : isDraft ? '#e0f2fe' : st === 'waitlisted' ? '#fffbeb' : '#fef3c7'}; padding: 5px; border-radius: 5px;">${isDraft ? 'DRAFT' : st === 'waitlisted' ? 'WAITLISTED' : st === 'submitted' ? 'SUBMITTED' : a.status.toUpperCase()}</span></td>
-                    <td>${draftBtn}${editBtn}${resubmitBtn}${cancelBtn}<button class="btn-primary" style="padding: 5px 10px;" onclick="viewApplication(${index})">View Details</button></td>
+                    <td>${pendingBtn}${draftBtn}${editBtn}${resubmitBtn}${cancelBtn}<button class="btn-primary" style="padding: 5px 10px;" onclick="viewApplication(${index})">View Details</button></td>
                 </tr>
             `;
             }
@@ -7426,6 +7623,155 @@ async function loadApplications(silentPoll) {
         console.error(err);
     }
 }
+
+function doctorPendingFieldKeys(app) {
+    if (!app) return [];
+    const st = String(app.status || '').toLowerCase();
+    if (st === 'cancelled' || st === 'rejected' || st === 'expired') return [];
+    let fd = {};
+    try {
+        fd = typeof app.form_data === 'string' ? JSON.parse(app.form_data || '{}') : app.form_data || {};
+    } catch (_) {
+        fd = {};
+    }
+    return Array.isArray(fd.pending_fields) ? fd.pending_fields.filter(Boolean) : [];
+}
+
+function renderDashboardPendingFields() {
+    const host = document.getElementById('dash-pending-fields');
+    if (!host) return;
+    const apps = (userApplications || []).filter((a) => doctorPendingFieldKeys(a).length);
+    if (!apps.length) {
+        host.classList.add('hidden');
+        host.innerHTML = '';
+        return;
+    }
+    host.classList.remove('hidden');
+    host.innerHTML =
+        '<div class="card" style="border:1px solid #fcd34d;background:#fffbeb;margin-bottom:16px;">' +
+        '<h3 style="margin:0 0 6px;color:#92400e;"><i class="fas fa-pen"></i> Details pending from you</h3>' +
+        '<p style="margin:0 0 10px;color:#78350f;font-size:0.9rem;">The seminar office registered you but some details are still missing. Please complete them.</p>' +
+        apps
+            .map(
+                (a) =>
+                    '<div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between;padding:8px 0;border-top:1px solid #fde68a;">' +
+                    '<span><strong>' + escapeHtml(String(a.application_no || a.id)) + '</strong> · ' + escapeHtml(a.seminar_title || 'Seminar') +
+                    ' <span style="color:#92400e;font-size:0.85rem;">(' + doctorPendingFieldKeys(a).length + ' field(s))</span></span>' +
+                    '<button type="button" class="btn-primary" style="background:#b45309;border:none;padding:6px 12px;" onclick="openPendingFieldsModal(' + a.id + ')">Complete now</button></div>'
+            )
+            .join('') +
+        '</div>';
+}
+
+async function openPendingFieldsModal(appId) {
+    const uid = doctorNumericUserId();
+    const modal = document.getElementById('pending-fields-modal');
+    const body = document.getElementById('pending-fields-body');
+    const label = document.getElementById('pending-fields-label');
+    const msg = document.getElementById('pending-fields-msg');
+    if (!uid || !modal || !body) return alert('Please sign in again.');
+    const app = (userApplications || []).find((x) => Number(x.id) === Number(appId));
+    window.__pendingFieldsAppId = appId;
+    if (label) label.textContent = 'Application ' + ((app && app.application_no) || appId) + (app && app.seminar_title ? ' — ' + app.seminar_title : '');
+    if (msg) msg.textContent = '';
+    body.innerHTML = '<p class="muted">Loading…</p>';
+    modal.classList.remove('hidden');
+    try {
+        const res = await fetch('/api/applications/' + encodeURIComponent(appId) + '/pending-fields?userId=' + encodeURIComponent(uid), { cache: 'no-store' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Could not load pending fields.');
+        const fields = Array.isArray(data.fields) ? data.fields : [];
+        if (!fields.length) {
+            body.innerHTML = '<p class="muted">Nothing pending — all details are complete.</p>';
+            return;
+        }
+        body.innerHTML = fields
+            .map((f) => {
+                const id = 'pending-f-' + f.key;
+                const t = String(f.type || 'text').toLowerCase();
+                let input;
+                if (t === 'file') {
+                    input =
+                        '<input type="file" id="' + id + '" data-file-key="' + escapeHtml(f.key) + '" accept=".pdf,.jpg,.jpeg,.png,.webp,image/*,application/pdf" style="width:100%;padding:8px;">' +
+                        '<p class="muted" style="font-size:0.8rem;margin:4px 0 0;">PDF or image, max 4 MB.</p>';
+                } else if (t === 'textarea') {
+                    input = '<textarea id="' + id + '" rows="2" style="width:100%;padding:8px;"></textarea>';
+                } else if (t === 'select' && Array.isArray(f.options)) {
+                    input =
+                        '<select id="' + id + '" style="width:100%;padding:8px;"><option value="">Select</option>' +
+                        f.options
+                            .map((o) => {
+                                const v = o.value != null ? o.value : o.label;
+                                return '<option value="' + escapeHtml(String(v)) + '">' + escapeHtml(String(o.label || v)) + '</option>';
+                            })
+                            .join('') +
+                        '</select>';
+                } else {
+                    const ty = t === 'date' ? 'date' : t === 'email' ? 'email' : t === 'tel' ? 'tel' : t === 'number' ? 'number' : 'text';
+                    input = '<input type="' + ty + '" id="' + id + '" style="width:100%;padding:8px;">';
+                }
+                return '<div class="form-group" style="margin-top:10px;"><label for="' + id + '" style="font-weight:600;">' + escapeHtml(f.label || f.key) + ' *</label>' + input + '</div>';
+            })
+            .join('');
+        body.dataset.keys = fields.map((f) => f.key).join(',');
+    } catch (e) {
+        body.innerHTML = '<p style="color:#b91c1c;">' + escapeHtml(e.message) + '</p>';
+    }
+}
+window.openPendingFieldsModal = openPendingFieldsModal;
+
+function closePendingFieldsModal() {
+    const modal = document.getElementById('pending-fields-modal');
+    if (modal) modal.classList.add('hidden');
+}
+window.closePendingFieldsModal = closePendingFieldsModal;
+
+async function submitPendingFields() {
+    const uid = doctorNumericUserId();
+    const appId = window.__pendingFieldsAppId;
+    const body = document.getElementById('pending-fields-body');
+    const msg = document.getElementById('pending-fields-msg');
+    if (!uid || !appId || !body) return;
+    const keys = String(body.dataset.keys || '').split(',').filter(Boolean);
+    const values = {};
+    const fd = new FormData();
+    for (const k of keys) {
+        const el = document.getElementById('pending-f-' + k);
+        if (el && el.type === 'file') {
+            const file = el.files && el.files[0];
+            if (!file) {
+                if (msg) msg.textContent = 'Please choose a file to upload.';
+                return;
+            }
+            fd.append(k, file);
+            continue;
+        }
+        const v = el ? String(el.value || '').trim() : '';
+        if (!v) {
+            if (msg) msg.textContent = 'Please fill in all the fields.';
+            return;
+        }
+        values[k] = v;
+    }
+    fd.append('userId', String(uid));
+    fd.append('values', JSON.stringify(values));
+    if (msg) msg.textContent = 'Saving…';
+    try {
+        const res = await fetch('/api/applications/' + encodeURIComponent(appId) + '/pending-fields', {
+            method: 'PUT',
+            body: fd
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Save failed.');
+        closePendingFieldsModal();
+        await loadApplications();
+        renderDashboardPendingFields();
+        alert('Thank you — your details have been saved.');
+    } catch (e) {
+        if (msg) msg.textContent = e.message;
+    }
+}
+window.submitPendingFields = submitPendingFields;
 
 let _doctorPayPollTimer = null;
 
@@ -8154,44 +8500,7 @@ async function loadDoctorCertificateTracking(quiet) {
                 '<p style="color:#64748b;text-align:center;">No seminar registrations yet. Register and complete payment to track certificate status here.</p>';
         } else {
             window.__doctorCertTrackingRows = rows;
-            let html =
-                '<table class="data-table" style="font-size:0.88rem;"><thead><tr><th>Seminar</th><th>Application No.</th><th>Scans</th><th>Status</th></tr></thead><tbody>';
-            rows.forEach((r) => {
-                const scanLbl = (r.scanCount || 0) + ' / ' + (r.scansRequired || 1);
-                let statusColor = '#64748b';
-                if (r.certStatus === 'issued') statusColor = '#15803d';
-                else if (r.certStatus === 'not_attended') statusColor = '#991b1b';
-                else if (r.certStatus === 'awaiting_checkin') statusColor = '#b45309';
-                else if (r.certStatus === 'awaiting_approval') statusColor = '#7c3aed';
-                else if (r.certStatus === 'scheduled_release') statusColor = '#0369a1';
-                const countdownHint =
-                    r.certCountdown && !r.canViewCertificate
-                        ? ' <span style="font-size:0.75rem;color:#92400e;">(scheduled release)</span>'
-                        : '';
-                html +=
-                    '<tr><td>' +
-                    escapeHtml(r.seminarTitle || '—') +
-                    '</td><td><code>' +
-                    escapeHtml(r.applicationNo || '—') +
-                    '</code></td><td>' +
-                    escapeHtml(scanLbl) +
-                    (r.scansRequired === 2 ? ' <span style="font-size:0.72rem;color:#64748b;">entry+exit</span>' : '') +
-                    '</td><td style="font-weight:600;color:' +
-                    statusColor +
-                    ';">' +
-                    escapeHtml(r.certStatusLabel || '—') +
-                    countdownHint +
-                    (r.canViewCertificate && r.certId
-                        ? ' <button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.78rem;margin-left:6px;" onclick="openDoctorCertificateDownload(' +
-                          Number(r.certId) +
-                          ',' +
-                          Number(r.seminarId) +
-                          ');return false;">Download</button>'
-                        : '') +
-                    '</td></tr>';
-            });
-            html += '</tbody></table>';
-            wrap.innerHTML = html;
+            wrap.innerHTML = rows.map((r) => renderDoctorCertPipelineCard(r)).join('');
             if (rows.some((r) => r.certCountdown && !r.canViewCertificate)) startDoctorCertCountdownTimer();
         }
         if (live) {
@@ -8208,6 +8517,61 @@ async function loadDoctorCertificateTracking(quiet) {
         }
         if (live) live.textContent = 'Update failed';
     }
+}
+
+function buildDoctorCertPipelineSteps(r) {
+    const st = r.certStatus || 'not_applicable';
+    const order = ['awaiting_payment', 'awaiting_checkin', 'checked_in', 'awaiting_approval', 'approved_pending_design', 'scheduled_release', 'issued'];
+    const rank = (k) => order.indexOf(k);
+    const cur = st === 'not_attended' ? rank('awaiting_checkin') : rank(st);
+    const scansLbl = (r.scanCount || 0) + ' / ' + (r.scansRequired || 1) + (r.scansRequired === 2 ? ' (entry + exit)' : '');
+    const defs = [
+        { key: 'registered', title: 'Registered', icon: 'fa-file-signature', minRank: 0, done: true, desc: 'Application ' + (r.applicationNo || '') },
+        { key: 'paid', title: 'Payment confirmed', icon: 'fa-wallet', minRank: rank('awaiting_checkin'), activeDesc: 'Complete payment to become eligible for the e-certificate.', desc: 'Payment received · e-ticket ' + (r.ticketId || '') },
+        { key: 'checkin', title: 'Venue check-in', icon: 'fa-qrcode', minRank: rank('checked_in'), activeDesc: 'Scan your e-ticket at the venue. Scans: ' + scansLbl, desc: 'Checked in at the venue · scans ' + scansLbl, at: r.scanTime },
+        { key: 'approval', title: 'Certificate approval', icon: 'fa-user-check', minRank: rank('approved_pending_design'), activeDesc: 'Attendance verified. Waiting for the organiser to approve certificates.', desc: 'Approved by organiser' },
+        { key: 'prepare', title: 'Certificate prepared', icon: 'fa-file-pdf', minRank: rank('scheduled_release'), activeDesc: 'Approved — your certificate design is being prepared.', desc: 'Certificate generated' },
+        { key: 'ready', title: 'E-certificate ready', icon: 'fa-certificate', minRank: rank('issued'), activeDesc: 'Approved — releases on schedule.', desc: 'Download your e-certificate below.' }
+    ];
+    let activeSet = false;
+    return defs.map((d) => {
+        let state = 'upcoming';
+        if (d.done || cur >= d.minRank) state = 'completed';
+        else if (!activeSet) {
+            state = 'active';
+            activeSet = true;
+        }
+        if (st === 'not_attended' && d.key === 'checkin' && state === 'active') {
+            return { key: d.key, title: d.title, icon: d.icon, state: 'cancelled', desc: 'Not attended — no venue check-in recorded.' };
+        }
+        return {
+            key: d.key,
+            title: d.title,
+            icon: d.icon,
+            state,
+            at: state === 'completed' ? d.at || null : null,
+            desc: state === 'active' ? d.activeDesc || d.desc : d.desc
+        };
+    });
+}
+
+function renderDoctorCertPipelineCard(r) {
+    const steps = buildDoctorCertPipelineSteps(r);
+    const dl =
+        r.canViewCertificate && r.certId
+            ? '<button type="button" class="btn-primary" style="padding:6px 14px;font-size:0.85rem;" onclick="openDoctorCertificateDownload(' +
+              Number(r.certId) + ',' + Number(r.seminarId) + ');return false;"><i class="fas fa-download"></i> Download e-certificate</button>'
+            : '';
+    const hint = r.certCountdown && !r.canViewCertificate ? '<span style="font-size:0.78rem;color:#92400e;">Scheduled release</span>' : '';
+    return (
+        '<div class="card" style="margin-bottom:14px;">' +
+        '<div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">' +
+        '<div><strong>' + escapeHtml(r.seminarTitle || '—') + '</strong> <code style="font-size:0.8rem;">' + escapeHtml(r.applicationNo || '') + '</code></div>' +
+        '<div style="display:flex;gap:10px;align-items:center;">' + hint + dl + '</div></div>' +
+        '<p style="margin:0 0 8px;font-size:0.85rem;color:#475569;">' + escapeHtml(r.certStatusLabel || '') + '</p>' +
+        renderTrackerStepsHtml({ steps }) +
+        '</div>'
+    );
 }
 
 function openDoctorCertificateDownload(certId, seminarId) {
@@ -8248,6 +8612,62 @@ async function loadDoctorDashboardStats() {
     } catch (e) {
         console.error(e);
     }
+    renderDashboardPaymentDue().catch(() => {});
+}
+
+async function renderDashboardPaymentDue() {
+    const host = document.getElementById('dash-payment-due');
+    if (!host) return;
+    const uid = doctorNumericUserId();
+    if (!uid) return;
+    let apps = userApplications;
+    if (!apps || !apps.length) {
+        try {
+            const res = await fetch('/api/applications/' + encodeURIComponent(uid), { cache: 'no-store' });
+            const payload = await res.json().catch(() => ({}));
+            if (res.ok) apps = Array.isArray(payload) ? payload : payload.applications || [];
+        } catch (_) {
+            apps = [];
+        }
+    }
+    if ((!userApplications || !userApplications.length) && apps && apps.length) userApplications = apps;
+    renderDashboardPendingFields();
+    const due = (apps || []).filter((a) => String(a.status || '').toLowerCase() === 'approved_pending_payment');
+    if (!due.length) {
+        host.innerHTML = '';
+        host.classList.add('hidden');
+        return;
+    }
+    const amountOf = (a) =>
+        a.payment_amount != null && Number.isFinite(Number(a.payment_amount)) && Number(a.payment_amount) >= 0
+            ? Number(a.payment_amount)
+            : Number(a.seminar_price) > 0
+              ? Number(a.seminar_price)
+              : null;
+    host.classList.remove('hidden');
+    host.innerHTML =
+        '<div class="card" style="border:1px solid #fcd34d;background:#fffbeb;margin-bottom:16px;">' +
+        '<h3 style="color:#92400e;margin:0 0 8px;font-size:1rem;"><i class="fas fa-triangle-exclamation"></i> Payment due (' +
+        due.length +
+        ')</h3>' +
+        '<p style="font-size:0.88rem;color:#78350f;margin:0 0 10px;">Your application is approved. Complete payment to confirm your seat and receive the e-ticket.</p>' +
+        due
+            .map((a) => {
+                const amt = amountOf(a);
+                return (
+                    '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;padding:8px 0;border-top:1px solid #fde68a;">' +
+                    '<span><strong>' +
+                    escapeHtml(a.application_no || '') +
+                    '</strong>' +
+                    (a.seminar_title ? ' · ' + escapeHtml(a.seminar_title) : '') +
+                    (amt != null ? ' · <strong>₹' + escapeHtml(String(amt)) + '</strong>' : '') +
+                    '</span>' +
+                    '<button type="button" class="btn-success" style="padding:8px 14px;" data-doctor-tab="tab-payments" onclick="switchTab(\'tab-payments\')">Pay now</button>' +
+                    '</div>'
+                );
+            })
+            .join('') +
+        '</div>';
 }
 
 let doctorOrdersCache = [];
@@ -8572,7 +8992,7 @@ async function downloadEticketPdfAsync(t, filename, htmlFilename, serverUrl) {
         const accent = [15, 118, 110];
         const ink = [15, 23, 42];
         const muted = [71, 85, 105];
-        const holder = doctorDisplayName();
+        const holder = (t && t.holder_name) || doctorDisplayName();
         let y = pdfCongressHeader(doc, 'E-Ticket — venue entry pass');
         y = pdfCongressSectionTitle(doc, y + 2, 'Participant', accent, ink);
         const drawRow = (label, value) => {
@@ -8685,7 +9105,7 @@ async function loadDoctorEventTickets() {
                             '. Do not use this QR for entry.'
                   }</p>`
                 : `<p style="margin:8px 0 0;font-size:0.85rem;color:#64748b;">${escapeHtml(scanned)}${escapeHtml(expiryNote)}</p>`;
-            const holder = escapeHtml(doctorDisplayName());
+            const holder = escapeHtml(t.holder_name || doctorDisplayName());
             html += `<div style="border:1px solid ${invalid ? '#fecaca' : '#e2e8f0'};border-radius:12px;padding:16px;display:grid;grid-template-columns:128px 1fr;gap:16px;align-items:start;${invalid ? 'opacity:0.85;background:#fef2f2;' : ''}">
                 <div style="position:relative;width:128px;-webkit-touch-callout:none;user-select:none;">
                     ${qr ? `<img src="${qr}" alt="QR code" draggable="false" style="width:128px;height:128px;border:1px solid #cbd5e1;border-radius:8px;background:#fff;-webkit-user-drag:none;pointer-events:none;">` : (t.is_scanned ? '<span style="color:#059669;font-size:0.85rem;font-weight:700;"><i class="fas fa-check-circle"></i> QR used at entry</span>' : '<span style="color:#94a3b8;font-size:0.85rem;">QR unavailable</span>')}
@@ -9528,8 +9948,22 @@ async function applyRegistrationFormData(formData, opts) {
         if (typeof toggleRegBlock === 'function') toggleRegBlock();
         if (typeof toggleCollegeStep === 'function') toggleCollegeStep();
     }
+    applyRegCountryMode();
     const pin = String(formData.pin || '').replace(/\D/g, '');
-    if (pin.length === 6) {
+    if (!regCountryIsIndia()) {
+        const pinEl = document.getElementById('reg-pin');
+        if (pinEl && formData.pin) pinEl.value = String(formData.pin);
+        const cityEl = document.getElementById('reg-city');
+        if (cityEl && formData.city) cityEl.value = formData.city;
+        const stateEl = document.getElementById('reg-state');
+        if (stateEl && formData.state) stateEl.value = formData.state;
+        const cpinEl = document.getElementById('reg-cpin');
+        if (cpinEl && formData.cpin) cpinEl.value = String(formData.cpin);
+        const ccityEl = document.getElementById('reg-ccity');
+        if (ccityEl && formData.ccity) ccityEl.value = formData.ccity;
+        const cstateEl = document.getElementById('reg-cstate');
+        if (cstateEl && formData.cstate) cstateEl.value = formData.cstate;
+    } else if (pin.length === 6) {
         const pinEl = document.getElementById('reg-pin');
         if (pinEl) pinEl.value = pin;
         await autofillAddress();
@@ -9549,7 +9983,7 @@ async function applyRegistrationFormData(formData, opts) {
         }
     }
     const cpin = String(formData.cpin || '').replace(/\D/g, '');
-    if (cpin.length === 6 && registrationQualIsPg()) {
+    if (regCountryIsIndia() && cpin.length === 6 && registrationQualIsPg()) {
         const cpinEl = document.getElementById('reg-cpin');
         if (cpinEl) cpinEl.value = cpin;
         await autofillCollegeAddress();

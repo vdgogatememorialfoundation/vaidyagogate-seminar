@@ -78,17 +78,38 @@ function validatePhoneClient(phone, fieldLabel, options) {
         if (opts.required === false) return { valid: true, cleanedPhone: '' };
         return { valid: false, message: `${label} is required` };
     }
+    const intl = raw.replace(/[\s().-]/g, '');
+    if (/^\+/.test(intl) && !/^\+91/.test(intl)) {
+        const digits = intl.slice(1);
+        if (!/^[1-9]\d{6,14}$/.test(digits)) {
+            return {
+                valid: false,
+                message: `${label} must be a valid international number, e.g. +971501234567 (country code + number)`
+            };
+        }
+        return { valid: true, cleanedPhone: '+' + digits, international: true };
+    }
+    if (/^00[1-9]/.test(intl) && !/^0091/.test(intl)) {
+        const digits = intl.slice(2);
+        if (!/^[1-9]\d{6,14}$/.test(digits)) {
+            return {
+                valid: false,
+                message: `${label} must be a valid international number, e.g. +971501234567 (country code + number)`
+            };
+        }
+        return { valid: true, cleanedPhone: '+' + digits, international: true };
+    }
     const d = normalizeIndianPhoneDigitsClient(raw);
     if (d.length !== 10) {
         return {
             valid: false,
-            message: `${label} must be a valid 10-digit Indian mobile number`
+            message: `${label} must be a 10-digit Indian mobile number, or an international number with + country code`
         };
     }
     if (!/^[6-9]\d{9}$/.test(d)) {
         return {
             valid: false,
-            message: `${label} must be a valid Indian mobile number (10 digits, starting with 6–9)`
+            message: `${label} must be a valid Indian mobile number (10 digits, starting with 6–9) or start with + for other countries`
         };
     }
     return { valid: true, cleanedPhone: d };
