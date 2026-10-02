@@ -8464,6 +8464,10 @@ function renderAdminEticketDetail(row) {
         '</p>' +
         '<p><strong>Seminar:</strong> ' +
         escAdmin(row.seminarTitle) +
+        (row.eventDate ? ' · <strong>Event date:</strong> ' + escAdmin(adminAppEventDateText({ seminar_event_date: row.eventDate })) : '') +
+        (Array.isArray(row.tickets) && row.tickets.length === 1 && row.tickets[0].dayDate
+            ? ' (' + escAdmin(adminAppEventDateText({ seminar_event_date: row.tickets[0].dayDate })) + ')'
+            : '') +
         '<br><strong>Application:</strong> <code>' +
         escAdmin(row.applicationNo) +
         '</code> · <strong>Status:</strong> ' +
@@ -9113,6 +9117,50 @@ function adminApplicationSearchBlob(a) {
         .toLowerCase();
 }
 
+let __adminAppEventFilter = '';
+function adminAppEventDateText(a) {
+    const fmt = (v) => {
+        const d = String(v || '').slice(0, 10);
+        if (!d) return '';
+        const dt = new Date(d + 'T00:00:00');
+        return isNaN(dt) ? d : dt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    };
+    const start = fmt(a.seminar_event_date);
+    const end = fmt(a.seminar_event_end_date);
+    if (!start) return '';
+    return end && end !== start ? start + ' – ' + end : start;
+}
+function adminAppEventLabel(a) {
+    const title = a.seminar_title || '';
+    const date = adminAppEventDateText(a);
+    return [title, date].filter(Boolean).join(' · ') || '—';
+}
+function adminAppsFillEventFilter(apps) {
+    const sel = document.getElementById('applications-event-filter');
+    if (!sel) return;
+    const seen = new Map();
+    (apps || []).forEach((a) => {
+        if (a.seminar_id == null) return;
+        const k = String(a.seminar_id);
+        if (!seen.has(k)) seen.set(k, { label: adminAppEventLabel(a), date: String(a.seminar_event_date || '') });
+    });
+    const sig = Array.from(seen.keys()).sort().join(',');
+    if (sel.dataset.sig === sig) return;
+    sel.dataset.sig = sig;
+    const opts = ['<option value="">All events</option>'];
+    Array.from(seen.entries())
+        .sort((x, y) => (y[1].date > x[1].date ? 1 : y[1].date < x[1].date ? -1 : 0))
+        .forEach(([k, v]) => {
+            opts.push(`<option value="${escAdmin(k)}">${escAdmin(v.label)}</option>`);
+        });
+    sel.innerHTML = opts.join('');
+    sel.value = __adminAppEventFilter;
+    if (sel.value !== __adminAppEventFilter) __adminAppEventFilter = '';
+}
+function adminSetApplicationEventFilter(v) {
+    __adminAppEventFilter = String(v || '');
+    renderApplicationsTable();
+}
 function renderApplicationsTable() {
     const tbody = document.getElementById('applications-list');
     adminAppsFillTicketSeminars();
@@ -9121,10 +9169,15 @@ function renderApplicationsTable() {
         .trim()
         .toLowerCase();
     const apps = globalAdminApps || [];
+    adminAppsFillEventFilter(apps);
     const statusFilter = String(__adminAppStatusFilter || '').toLowerCase();
-    const statusFiltered = statusFilter
-        ? apps.filter((a) => String(a.status || '').toLowerCase() === statusFilter)
+    const eventFilter = String(__adminAppEventFilter || '');
+    const eventFiltered = eventFilter
+        ? apps.filter((a) => String(a.seminar_id || '') === eventFilter)
         : apps;
+    const statusFiltered = statusFilter
+        ? eventFiltered.filter((a) => String(a.status || '').toLowerCase() === statusFilter)
+        : eventFiltered;
     const filtered = q
         ? statusFiltered.filter((a) => adminApplicationSearchBlob(a).includes(q))
         : statusFiltered;
@@ -9186,7 +9239,7 @@ function renderApplicationsTable() {
                     <td>${a.user_id_string}</td>
                     <td>${candidateName}${fileLink}${dupBadge}</td>
                     <td>${reviewBadge}</td>
-                    <td><code>${escAdmin(a.ticket_id_string || '—')}</code></td>
+                    <td><code>${escAdmin(a.ticket_id_string || '—')}</code><div style="margin-top:4px;font-size:0.78rem;color:#475569;">${escAdmin(adminAppEventLabel(a))}</div></td>
                     <td>
                         <select onchange="onApplicationStatusChange(${a.id}, this, ${index})" style="width: auto; min-width: 200px;">
                             ${adminRegistrationStatusOptionsHtml(a.status)}

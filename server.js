@@ -9293,7 +9293,7 @@ app.get('/api/admin/applications', withApplicationReviewSchema, (req, res) => {
         SELECT a.id, a.application_no, a.status, a.form_data, a.doc_review_json, a.created_at, a.seminar_id,
                a.review_required_level, a.review_escalated_at, a.review_escalated_by, a.review_escalation_json,
                u.first_name, u.last_name, u.user_id_string, u.id AS user_id,
-               s.title AS seminar_title, s.price AS seminar_price, s.event_date AS seminar_event_date,
+               s.title AS seminar_title, s.price AS seminar_price, s.event_date AS seminar_event_date, s.event_end_date AS seminar_event_end_date,
                o.id AS order_id, o.order_id_string, o.amount AS order_amount, o.status AS order_status,
                o.payment_gateway, o.payment_date, o.provider_transaction_id,
                o.refund_status AS order_refund_status, o.refunded_amount AS order_refunded_amount,

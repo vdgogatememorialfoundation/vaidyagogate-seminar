@@ -302,10 +302,14 @@
                     <div style="margin-bottom:12px;">
                         <label for="applications-search" style="font-weight:600;font-size:0.9rem;">Search applications</label>
                         <input type="search" id="applications-search" placeholder="Application no., doctor ID, name, email, phone, or status…" oninput="adminFilterApplicationsList()" style="width:100%;max-width:560px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;margin-top:6px;">
+                        <div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                            <label for="applications-event-filter" style="font-weight:600;font-size:0.9rem;">Event / date</label>
+                            <select id="applications-event-filter" onchange="adminSetApplicationEventFilter(this.value)" style="padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;min-width:260px;"><option value="">All events</option></select>
+                        </div>
                         <p id="applications-search-count" style="margin:6px 0 0;font-size:0.82rem;color:#64748b;"></p>
                     </div>
                     <table class="data-table">
-                        <thead><tr><th>App ID (Barcode)</th><th>Doctor ID</th><th>Doctor Name</th><th>Review level</th><th>E-ticket ID(s)</th><th>Current Status</th><th>Action</th></tr></thead>
+                        <thead><tr><th>App ID (Barcode)</th><th>Doctor ID</th><th>Doctor Name</th><th>Review level</th><th>E-ticket ID(s) · Event date</th><th>Current Status</th><th>Action</th></tr></thead>
                         <tbody id="applications-list"><tr><td colspan="7" style="text-align: center;">Loading applications...</td></tr></tbody>
                     </table>
                 </div>
@@ -3700,7 +3704,7 @@
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
     <script src="/js/admin-module-defs.js?v=20261001b"></script>
-    <script src="/js/admin.js?v=20261001i"></script>
+    <script src="/js/admin.js?v=20261001j"></script>
     <script src="/js/pos-onspot-ui.js?v=20261001c"></script>
     <script src="/js/admin-whatsapp.js?v=20260921a"></script>
     <script src="/js/admin-payment-followup.js?v=20260929a"></script>
