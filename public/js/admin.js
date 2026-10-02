@@ -10643,6 +10643,12 @@ function populateAdminCancellationReviewModal(row) {
             '<p style="margin:0 0 6px;"><strong>Doctor reason:</strong> ' +
             escAdmin(row.reason || '—') +
             '</p>' +
+            '<p style="margin:0 0 6px;"><strong>Requested on:</strong> ' +
+            escAdmin(when) +
+            (adminCancellationDateLabel(row)
+                ? ' · <strong style="color:#b91c1c;">Cancelled on:</strong> ' + escAdmin(adminCancellationDateLabel(row))
+                : '') +
+            '</p>' +
             '<p style="margin:0 0 6px;"><strong>Request status:</strong> ' +
             escAdmin(row.status) +
             ' · <strong>Policy refund preview:</strong> ₹' +
@@ -10797,6 +10803,17 @@ function closeAdminCancellationReviewModal() {
     }
 }
 
+function adminCancellationDateLabel(r) {
+    const actionType = String(r.action_type || r.actionType || '').toLowerCase();
+    const regStatus = String(r.registration_status || '').toLowerCase();
+    const approved = String(r.status || '').toLowerCase() === 'approved';
+    const cancelled =
+        regStatus === 'cancelled' || (approved && actionType !== 'refund_only');
+    if (!cancelled) return '';
+    const at = r.reviewed_at || r.reviewedAt || r.requested_at || r.requestedAt;
+    return at ? new Date(at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : '';
+}
+
 function renderAdminCancellationRequestsTable() {
     const tbody = document.getElementById('admin-cancel-req-tbody');
     if (!tbody) return;
@@ -10837,6 +10854,7 @@ function renderAdminCancellationRequestsTable() {
         const when = r.requested_at
             ? new Date(r.requested_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
             : '—';
+        const cancelledOn = adminCancellationDateLabel(r);
         const pol = '₹' + (r.refund_amount || 0) + ' (' + (r.refund_percent || 0) + '%)';
         const actionType = String(r.action_type || r.actionType || '').toLowerCase();
         const typeBadge =
@@ -10889,6 +10907,9 @@ function renderAdminCancellationRequestsTable() {
         cancelRowsHtml.push(
             '<tr><td>' +
             escAdmin(when) +
+            (cancelledOn
+                ? '<br><span style="font-size:0.75rem;color:#b91c1c;font-weight:600;">Cancelled: ' + escAdmin(cancelledOn) + '</span>'
+                : '') +
             '</td><td>' +
             doc +
             '</td><td>' +
@@ -11842,6 +11863,7 @@ function viewFullApplication(index) {
     const content = document.getElementById('admin-view-content');
     content.innerHTML = `
         <p><strong>App No:</strong> ${escAdmin(a.application_no)}</p>
+        <p><strong>Applied on:</strong> ${a.created_at ? escAdmin(adminFmtDateTimeIst(a.created_at)) : '—'}</p>
         <p><strong>Status:</strong> ${escAdmin(String(a.status || '').toUpperCase())}</p>
         ${escalationBlock}
         <p><strong>Seminar:</strong> ${escAdmin(a.seminar_title || '—')}${a.seminar_price != null ? ' · Fee ₹' + escAdmin(String(adminSeminarFeeAmount(a))) : ''}</p>
