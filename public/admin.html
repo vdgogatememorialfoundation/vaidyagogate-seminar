@@ -2150,7 +2150,7 @@
                 <div class="card">
                     <label>Seminar</label>
                     <select id="report-seminar" style="width:100%;max-width:400px;padding:8px;margin:8px 0 16px;"></select>
-                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:10px;">Exports include all registration form fields. Confirmed = approved + paid + verified. Pick Excel, CSV, or PDF (printable HTML).</p>
+                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:10px;">Exports include all registration form fields. Multi-day tickets are listed in one row per applicant (see <em>all_tickets</em> column); the E-tickets list has one row per day ticket. Confirmed = approved + paid + verified. Pick Excel, CSV, or PDF (printable HTML).</p>
                     <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
                         <button type="button" class="btn-primary" style="background:#334155;" onclick="window.__reportFmt='xlsx'">Excel (.xlsx)</button>
                         <button type="button" class="btn-primary" style="background:#475569;" onclick="window.__reportFmt='csv'">CSV</button>
@@ -2163,6 +2163,8 @@
                         <button type="button" class="btn-primary" style="background:#7c3aed;" onclick="downloadAdminReport('checked_in', window.__reportFmt||'xlsx')">Checked in</button>
                         <button type="button" class="btn-primary" style="background:#0d9488;" onclick="downloadAdminReport('cert_eligible', window.__reportFmt||'xlsx')">Certificate eligible</button>
                         <button type="button" class="btn-primary" style="background:#1e40af;" onclick="downloadAdminReport('all_participants', window.__reportFmt||'xlsx')">All participants</button>
+                        <button type="button" class="btn-primary" style="background:#1d4ed8;" onclick="downloadAdminReport('e_tickets', window.__reportFmt||'xlsx')">E-tickets (main list)</button>
+                        <button type="button" class="btn-primary" style="background:#b91c1c;" onclick="downloadAdminReport('cancelled', window.__reportFmt||'xlsx')">Cancelled / refunds</button>
                         <button type="button" class="btn-primary" style="background:#0f766e;" onclick="downloadAdminReport('confirmed', window.__reportFmt||'xlsx')">Confirmed list</button>
                         <button type="button" class="btn-primary" style="background:#c2410c;" onclick="downloadAdminReport('pending_verification', window.__reportFmt||'xlsx')">Pending verification</button>
                         <button type="button" class="btn-primary" style="background:#6d28d9;" onclick="downloadAdminReport('attendance', window.__reportFmt||'xlsx')">Attendance sheet</button>
