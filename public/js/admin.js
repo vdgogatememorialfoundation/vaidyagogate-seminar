@@ -9120,10 +9120,12 @@ function adminApplicationSearchBlob(a) {
 let __adminAppEventFilter = '';
 function adminAppEventDateText(a) {
     const fmt = (v) => {
-        const d = String(v || '').slice(0, 10);
-        if (!d) return '';
-        const dt = new Date(d + 'T00:00:00');
-        return isNaN(dt) ? d : dt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+        const raw = String(v || '');
+        if (!raw) return '';
+        const dt = /T|\s\d{2}:\d{2}/.test(raw) ? new Date(raw.replace(' ', 'T')) : new Date(raw.slice(0, 10) + 'T00:00:00');
+        return isNaN(dt)
+            ? raw.slice(0, 10)
+            : dt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
     };
     const start = fmt(a.seminar_event_date);
     const end = fmt(a.seminar_event_end_date);
