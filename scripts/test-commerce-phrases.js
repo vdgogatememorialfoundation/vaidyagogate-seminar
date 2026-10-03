@@ -57,4 +57,8 @@ assert.strictEqual(cfg.shipday.apiKey, 'secret-ship');
 assert.strictEqual(cfg.mapsApiKey, 'mapkey');
 assert.strictEqual(cfg.storeName, 'Desk');
 
+assert.strictEqual(commerce.withinIstWindow('09:00', '18:00', 10 * 60), true);
+assert.strictEqual(commerce.withinIstWindow('09:00', '18:00', 8 * 60), false);
+assert.strictEqual(commerce.withinIstWindow('09:00', '18:00', 18 * 60), true);
+
 console.log('commerce phrase tests passed');

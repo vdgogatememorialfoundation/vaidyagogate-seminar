@@ -30,10 +30,11 @@ function loadCommerceAdmin() {
     if (!nav) return;
     const tabs = [
         ['desk', 'Order desk'],
-        ['book', 'Book shipment'],
+        ['book', 'Schedule pickup'],
         ['track', 'Shipment tracking'],
+        ['returns', 'Returns & replacements'],
         ['labels', 'Shipping labels'],
-        ['settings', 'Tookan & Shipday']
+        ['settings', 'Shop settings']
     ];
     nav.innerHTML = tabs
         .map(
@@ -54,6 +55,7 @@ function loadCommerceAdmin() {
             if (commercePanel === 'desk') renderCommerceDesk();
             else if (commercePanel === 'book') renderCommerceBook();
             else if (commercePanel === 'track') renderCommerceTrackList();
+            else if (commercePanel === 'returns') renderCommerceReturns();
             else renderCommerceLabels();
         })
         .catch((e) => {
@@ -159,6 +161,7 @@ function renderCommerceBook() {
         '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">' +
         '<label>Provider<select id="c-book-provider"><option value="tookan">Tookan</option><option value="shipday">Shipday</option></select></label>' +
         '<label>Mode<select id="c-book-mode"><option value="logistics">Logistics</option><option value="hyperlocal">Hyperlocal</option></select></label>' +
+        '<label>Pickup time (IST)<input id="c-book-when" type="datetime-local"></label>' +
         '</div>' +
         '<button type="button" class="btn-primary" style="margin-top:12px;" onclick="commerceBookShipment()">Book pickup</button>' +
         '<p id="commerce-book-msg" style="font-weight:600;"></p></div>';
@@ -174,6 +177,86 @@ function renderCommerceTrackList() {
             .join('') +
         '</select></label><div id="commerce-track-body" style="margin-top:12px;"></div></div>';
     if (commerceOrders.length) commerceLoadTrack();
+}
+
+function renderCommerceReturns() {
+    const panel = document.getElementById('commerce-panel');
+    const rows = commerceOrders
+        .filter((o) => o.returnStatus)
+        .map((o) => {
+            return (
+                '<tr><td><strong>' +
+                escCommerce(o.orderCode) +
+                '</strong><br>' +
+                escCommerce(o.returnKind || '') +
+                ' · ' +
+                escCommerce(o.returnReason || '') +
+                '</td><td>' +
+                escCommerce(o.returnStatus) +
+                (o.returnAgentPhone ? '<br>Agent ' + escCommerce(o.returnAgentPhone) : '') +
+                '<br>Pickup OTP ' +
+                escCommerce(o.returnPickupOtp || '—') +
+                '</td><td>' +
+                '<select id="ret-status-' +
+                o.id +
+                '">' +
+                ['requested', 'approved', 'rejected', 'pickup_scheduled', 'in_transit', 'received', 'refunded', 'replacement_preparing', 'replacement_sent', 'replacement_delivered']
+                    .map((s) => '<option value="' + s + '"' + (o.returnStatus === s ? ' selected' : '') + '>' + s + '</option>')
+                    .join('') +
+                '</select><br>' +
+                '<button type="button" class="btn-primary" style="margin-top:6px;" onclick="commerceSaveReturn(' +
+                o.id +
+                ')">Update status</button>' +
+                '<div style="margin-top:8px;"><select id="ret-provider-' +
+                o.id +
+                '"><option value="tookan">Tookan</option><option value="shipday">Shipday</option></select> ' +
+                '<select id="ret-mode-' +
+                o.id +
+                '"><option value="hyperlocal">Hyperlocal</option><option value="logistics">Logistics</option></select><br>' +
+                '<input id="ret-when-' +
+                o.id +
+                '" type="datetime-local" style="margin-top:6px;">' +
+                '<button type="button" class="btn-primary" style="margin-top:6px;background:#0f766e;" onclick="commerceScheduleReturn(' +
+                o.id +
+                ')">Schedule return pickup</button></div></td></tr>'
+            );
+        })
+        .join('');
+    panel.innerHTML =
+        '<p style="color:#64748b;">Customer return and replacement requests appear here. Update the status, then schedule a Tookan or Shipday pickup for the return shipment. The customer sees the same updates on the order tracking screen.</p>' +
+        '<table class="data-table" style="width:100%;"><thead><tr><th>Order</th><th>Status</th><th></th></tr></thead><tbody>' +
+        (rows || '<tr><td colspan="3">No return requests yet.</td></tr>') +
+        '</tbody></table>';
+}
+
+async function commerceSaveReturn(id) {
+    try {
+        await commerceFetch('/api/admin/commerce/orders/' + id + '/return', {
+            method: 'POST',
+            body: JSON.stringify({ actingAdminId: commerceActor(), status: val('ret-status-' + id) })
+        });
+        loadCommerceAdmin();
+    } catch (e) {
+        alert(e.message);
+    }
+}
+
+async function commerceScheduleReturn(id) {
+    try {
+        await commerceFetch('/api/admin/commerce/orders/' + id + '/return-pickup', {
+            method: 'POST',
+            body: JSON.stringify({
+                actingAdminId: commerceActor(),
+                provider: val('ret-provider-' + id),
+                mode: val('ret-mode-' + id),
+                pickupAt: val('ret-when-' + id)
+            })
+        });
+        alert('Return pickup scheduled.');
+        loadCommerceAdmin();
+    } catch (e) {
+        alert(e.message);
+    }
 }
 
 function renderCommerceLabels() {
@@ -235,12 +318,45 @@ async function renderCommerceSettings() {
             '> Shipday enabled</label>' +
             '<label>Default mode<select id="cs-mode"><option value="logistics">Logistics</option><option value="hyperlocal">Hyperlocal</option></select></label>' +
             '<label style="margin-left:8px;">Hyperlocal provider<select id="cs-hyper"><option value="shipday">Shipday</option><option value="tookan">Tookan</option></select></label>' +
+            '<h3 style="margin-top:18px;">Shop timings and checkout</h3>' +
+            '<p style="color:#64748b;font-size:0.86rem;">The shop is only at <strong>/shop</strong>. It is not shown on the website or the doctor portal. Customers sign in with the same portal account.</p>' +
+            '<label><input type="checkbox" id="cs-shop-on"> Shop link accepts orders</label>' +
+            '<label style="margin-left:10px;"><input type="checkbox" id="cs-rz"> Razorpay</label>' +
+            '<label style="margin-left:10px;"><input type="checkbox" id="cs-cod"> Cash on delivery</label>' +
+            '<label style="margin-left:10px;"><input type="checkbox" id="cs-pickup"> Store pickup</label>' +
+            '<label style="margin-left:10px;"><input type="checkbox" id="cs-delivery"> Home delivery</label>' +
+            '<label style="margin-left:10px;"><input type="checkbox" id="cs-returns"> Returns</label>' +
+            '<label style="margin-left:10px;"><input type="checkbox" id="cs-replace"> Replacements</label>' +
+            '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;margin-top:8px;">' +
+            field('cs-order-open', 'Order open IST', c.shop && c.shop.orderOpen) +
+            field('cs-order-close', 'Order close IST', c.shop && c.shop.orderClose) +
+            field('cs-pick-open', 'Pickup open', c.shop && c.shop.pickupOpen) +
+            field('cs-pick-close', 'Pickup close', c.shop && c.shop.pickupClose) +
+            field('cs-del-open', 'Delivery open', c.shop && c.shop.deliveryOpen) +
+            field('cs-del-close', 'Delivery close', c.shop && c.shop.deliveryClose) +
+            field('cs-lead', 'Pickup lead minutes', c.shop && c.shop.pickupLeadMinutes) +
+            field('cs-dlead', 'Delivery lead minutes', c.shop && c.shop.deliveryLeadMinutes) +
+            field('cs-window', 'Return window days', c.shop && c.shop.returnWindowDays) +
+            field('cs-cod-fee', 'COD extra charge', c.shop && c.shop.codExtraCharge) +
+            '</div>' +
             '<div><button type="button" class="btn-primary" style="margin-top:12px;" onclick="commerceSaveSettings()">Save</button></div>' +
             '<p id="commerce-settings-msg" style="font-weight:600;"></p></div>';
         const mode = document.getElementById('cs-mode');
         const hyper = document.getElementById('cs-hyper');
         if (mode) mode.value = c.defaultMode || 'logistics';
         if (hyper) hyper.value = c.defaultHyperlocalProvider || 'shipday';
+        const shop = c.shop || {};
+        const box = (id, on) => {
+            const el = document.getElementById(id);
+            if (el) el.checked = !!on;
+        };
+        box('cs-shop-on', shop.enabled !== false);
+        box('cs-rz', shop.razorpayEnabled !== false);
+        box('cs-cod', shop.codEnabled !== false);
+        box('cs-pickup', shop.storePickupEnabled !== false);
+        box('cs-delivery', shop.deliveryEnabled !== false);
+        box('cs-returns', shop.returnsEnabled !== false);
+        box('cs-replace', shop.replacementsEnabled !== false);
     } catch (e) {
         panel.innerHTML = '<p style="color:#b91c1c;">' + escCommerce(e.message) + '</p>';
     }
@@ -264,7 +380,26 @@ async function commerceSaveSettings() {
                     defaultMode: val('cs-mode'),
                     defaultHyperlocalProvider: val('cs-hyper'),
                     tookan: { enabled: document.getElementById('cs-tookan-on').checked, apiKey: val('cs-tookan'), sharedSecret: val('cs-secret') },
-                    shipday: { enabled: document.getElementById('cs-ship-on').checked, apiKey: val('cs-ship') }
+                    shipday: { enabled: document.getElementById('cs-ship-on').checked, apiKey: val('cs-ship') },
+                    shop: {
+                        enabled: document.getElementById('cs-shop-on').checked,
+                        razorpayEnabled: document.getElementById('cs-rz').checked,
+                        codEnabled: document.getElementById('cs-cod').checked,
+                        storePickupEnabled: document.getElementById('cs-pickup').checked,
+                        deliveryEnabled: document.getElementById('cs-delivery').checked,
+                        returnsEnabled: document.getElementById('cs-returns').checked,
+                        replacementsEnabled: document.getElementById('cs-replace').checked,
+                        orderOpen: val('cs-order-open'),
+                        orderClose: val('cs-order-close'),
+                        pickupOpen: val('cs-pick-open'),
+                        pickupClose: val('cs-pick-close'),
+                        deliveryOpen: val('cs-del-open'),
+                        deliveryClose: val('cs-del-close'),
+                        pickupLeadMinutes: val('cs-lead'),
+                        deliveryLeadMinutes: val('cs-dlead'),
+                        returnWindowDays: val('cs-window'),
+                        codExtraCharge: val('cs-cod-fee')
+                    }
                 }
             })
         });
@@ -326,7 +461,8 @@ async function commerceBookShipment() {
             body: JSON.stringify({
                 actingAdminId: commerceActor(),
                 provider: val('c-book-provider'),
-                mode: val('c-book-mode')
+                mode: val('c-book-mode'),
+                pickupAt: val('c-book-when')
             })
         });
         const o = data.order || {};

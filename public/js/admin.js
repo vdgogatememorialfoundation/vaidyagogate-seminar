@@ -654,6 +654,9 @@ function adminCanAccessTab(tabId) {
     if (checkId === 'tab-users') checkId = 'tab-staff-users';
     if (isSuperAdminUser()) return true;
     const u = getStoredAdminUser();
+    if ((tabId === 'tab-book-sales' || tabId === 'tab-commerce') && String((u && (u.user_role || u.role)) || '').toLowerCase() !== 'co_admin') {
+        return false;
+    }
     const isCo = String(u && u.user_role || '').toLowerCase() === 'co_admin';
     if (!isCo) {
         if (tabId === 'tab-cancellation-review' && globalAdminTabAllowed('tab-admin-payments')) return true;

@@ -238,6 +238,10 @@ function mountPaymentsRoutes() {
     require('./lib/commerce-routes').registerCommerceRoutes(app, db, {
         upsertGlobalSetting
     });
+    require('./lib/shop-routes').registerShopRoutes(app, db, {
+        listDoctorPaymentOptions,
+        parsePositiveUserId
+    });
     require('./lib/staff-portal-routes').registerStaffPortalRoutes(app, db, {
         portalTracking,
         notifEngine,
