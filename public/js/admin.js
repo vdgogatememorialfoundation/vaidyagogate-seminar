@@ -20701,7 +20701,15 @@ function renderBookSalesOrdersTable(rows) {
                 .filter(Boolean)
                 .join(' · ');
             const ftype = o.fulfillment_type || 'pickup';
-            const statusLabel = BS_STATUS_LABELS[o.status] || o.status;
+            let statusLabel = BS_STATUS_LABELS[o.status] || o.status;
+            if (o.commerce_provider && typeof commerceStageLabel === 'function') {
+                statusLabel +=
+                    '<br><small style="color:#0f766e;">' +
+                    e(o.commerce_provider === 'shipday' ? 'Shipday' : 'Tookan') +
+                    ' · ' +
+                    e(commerceStageLabel(o.commerce_stage)) +
+                    '</small>';
+            }
             let fulfillCell = '📦 Pickup';
             if (ftype === 'courier') {
                 if (
@@ -20746,6 +20754,11 @@ function renderBookSalesOrdersTable(rows) {
                         '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.81rem;background:#7c3aed;" onclick="openBsCourierModal(' +
                         o.id +
                         ',2)">Ship now</button> ';
+                } else if (ftype === 'courier' && o.commerce_provider) {
+                    actions +=
+                        '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.81rem;background:#0f766e;" onclick="bsViewOrderTracking(' +
+                        o.id +
+                        ')">Track courier</button> ';
                 } else {
                     actions +=
                         '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.81rem;background:#0d9488;" onclick="openBsCourierModal(' +
@@ -21627,6 +21640,40 @@ async function bsBookAggregator(aggregator) {
     }
 }
 
+async function bsBookCommerce(provider, mode) {
+    const msg = document.getElementById('bs-courier-msg');
+    const id = parseInt((document.getElementById('bs-courier-order-id') || {}).value, 10);
+    const whenEl = document.getElementById('bs-commerce-when');
+    const label = (provider === 'shipday' ? 'Shipday' : 'Tookan') + ' ' + mode;
+    if (!confirm('Ask ' + label + ' to pick up this parcel from the store?')) return;
+    if (msg) {
+        msg.style.color = '#0f766e';
+        msg.textContent = 'Requesting pickup…';
+    }
+    try {
+        const data = await commerceFetch('/api/admin/commerce/orders/' + id + '/book', {
+            method: 'POST',
+            body: JSON.stringify({
+                actingAdminId: commerceActor(),
+                provider,
+                mode,
+                pickupAt: whenEl && whenEl.value ? whenEl.value : ''
+            })
+        });
+        const o = data.order || {};
+        bsCloseCourierModal();
+        loadBsOrders(false);
+        alert(
+            'Pickup requested from ' + label + '.\nPickup OTP (store): ' + (o.pickupOtp || '—') + '\nDelivery OTP (customer, shown only when out for delivery): ' + (o.deliveryOtp || '—')
+        );
+    } catch (err) {
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = err.message || 'Booking failed';
+        }
+    }
+}
+
 async function bsPrintShippingLabel(id) {
     try {
         const res = await bsFetch('/api/admin/book-sales/orders/' + id + '/print-label', { method: 'POST' });
@@ -21833,6 +21880,7 @@ async function bsViewOrderTracking(id) {
     }
     body.innerHTML = '<p style="color:#64748b;">Loading…</p>';
     modal.style.display = 'flex';
+    window._bsTlSeen = false;
     const render = async (doRefresh) => {
         try {
             if (doRefresh) {
@@ -21907,12 +21955,28 @@ async function bsViewOrderTracking(id) {
             }
             html += '</div>';
 
+            let commerceData = null;
+            try {
+                commerceData = await commerceFetch('/api/admin/commerce/orders/' + id + '/track?actingAdminId=' + encodeURIComponent(commerceActor()));
+            } catch (_) {
+                commerceData = null;
+            }
+            if (commerceData && commerceData.order && commerceData.order.commerceProvider && window.TrackTimeline) {
+                const co = commerceData.order;
+                html +=
+                    '<div style="border:1px solid #99f6e4;background:#f0fdfa;border-radius:12px;padding:14px;margin-bottom:14px;">' +
+                    '<p style="margin:0 0 6px;font-weight:700;">' + e(co.commerceProvider === 'shipday' ? 'Shipday' : 'Tookan') + ' · ' + e(co.commerceMode || '') + '</p>' +
+                    '<p style="margin:0 0 8px;font-size:0.85rem;">Pickup OTP <strong>' + e(co.pickupOtp || '—') + '</strong> · Delivery OTP <strong>' + e(co.deliveryOtp || '—') + '</strong></p>' +
+                    TrackTimeline.render({ timeline: commerceData.timeline, live: commerceData.live, awbTrackUrl: co.tookanTrackingLink || co.shipdayTrackingLink || null, trackUrl: co.commerceTrackUrl }, { animate: !window._bsTlSeen }) +
+                    '</div>';
+                window._bsTlSeen = true;
+            }
             // New vertical tracker
-            if (o.deliveryJourney && window.BookTrackingUI) {
+            if (!(commerceData && commerceData.order && commerceData.order.commerceProvider) && o.deliveryJourney && window.BookTrackingUI) {
                 html += '<div style="border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;margin-bottom:14px;">';
                 html += window.BookTrackingUI.renderDoctorFullTracking(o.deliveryJourney, o, trackEvents);
                 html += '</div>';
-            } else {
+            } else if (!(commerceData && commerceData.order && commerceData.order.commerceProvider)) {
                 html += bsRenderCourierLiveTrackHtml(o, data);
                 html += bsRenderAdminTrackerHtml(data.timeline || o.timeline);
             }
@@ -21930,6 +21994,10 @@ async function bsViewOrderTracking(id) {
                 html += '</ul>';
             }
             body.innerHTML = html;
+            if (commerceData && commerceData.live && window.TrackTimeline) TrackTimeline.mount(commerceData.live);
+            if (o.commerce_provider || (commerceData && commerceData.order && commerceData.order.commerceProvider)) {
+                _bsTrackPollTimer = _bsTrackPollTimer || setInterval(() => render(false), 15000);
+            }
             if (o.fulfillmentType === 'courier' && (o.status === 'shipped' || (o.deliveryJourney && o.deliveryJourney.isLive))) {
                 _bsTrackPollTimer = setInterval(() => render(true), 12000);
             }

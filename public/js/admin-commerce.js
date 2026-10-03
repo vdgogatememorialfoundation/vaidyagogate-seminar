@@ -78,7 +78,7 @@ function commerceStageLabel(stage) {
         accepted: 'Accepted',
         preparing: 'Preparing',
         ready: 'Ready',
-        pickup_scheduled: 'Pickup scheduled',
+        pickup_scheduled: 'Pickup requested',
         in_transit: 'In transit',
         out_for_delivery: 'Out for delivery',
         delivered: 'Delivered'
@@ -475,16 +475,20 @@ async function commerceBookShipment() {
     }
 }
 
+let commerceTrackSeen = null;
+
 async function commerceLoadTrack() {
     const id = val('c-track-order');
     const body = document.getElementById('commerce-track-body');
     if (!id || !body) return;
     if (commerceTrackTimer) clearInterval(commerceTrackTimer);
+    commerceTrackSeen = null;
     const draw = async () => {
         try {
             const data = await commerceFetch('/api/admin/commerce/orders/' + id + '/track?actingAdminId=' + encodeURIComponent(commerceActor()));
-            body.innerHTML = renderCommerceShipment(data);
-            mountCommerceMap(data.order, data.mapsApiKey, data.events);
+            body.innerHTML = renderCommerceShipment(data, commerceTrackSeen !== id);
+            commerceTrackSeen = id;
+            if (window.TrackTimeline) TrackTimeline.mount(data.live);
         } catch (e) {
             body.innerHTML = '<p style="color:#b91c1c;">' + escCommerce(e.message) + '</p>';
         }
@@ -493,43 +497,30 @@ async function commerceLoadTrack() {
     commerceTrackTimer = setInterval(draw, 15000);
 }
 
-function renderCommerceShipment(data) {
+function renderCommerceShipment(data, animate) {
     const o = data.order || {};
-    const events = data.events || [];
-    const lines = events
-        .map((ev) => {
-            const when = formatCommerceWhen(ev.at);
-            return (
-                '<div style="padding:8px 0;border-top:1px solid #e2e8f0;"><strong>' +
-                escCommerce(ev.title || ev.description) +
-                '</strong><div style="color:#64748b;font-size:0.82rem;">' +
-                escCommerce(when) +
-                (ev.city ? ' · ' + escCommerce(ev.city) : '') +
-                (ev.detail ? ' · ' + escCommerce(ev.detail) : '') +
-                '</div></div>'
-            );
-        })
-        .join('');
     const hyper = o.commerceMode === 'hyperlocal';
     return (
         '<p><strong>' +
         escCommerce(o.orderCode) +
         '</strong> · ' +
-        escCommerce(commerceStageLabel(o.commerceStage)) +
-        ' · ' +
-        escCommerce(o.commerceProvider || '') +
+        escCommerce(o.commerceProvider || 'No courier booked yet') +
         ' ' +
         escCommerce(o.commerceMode || '') +
+        (hyper ? '' : '') +
         '</p>' +
         '<p>Pickup OTP <strong>' +
         escCommerce(data.pickupOtp || o.pickupOtp || '—') +
         '</strong> · Delivery OTP <strong>' +
         escCommerce(data.deliveryOtp || o.deliveryOtp || '—') +
         '</strong></p>' +
-        (o.agentPhone ? '<p>Agent ' + escCommerce(o.agentName || '') + ' · ' + escCommerce(o.agentPhone) + '</p>' : '') +
         (o.commerceTrackUrl ? '<p><a href="' + escCommerce(o.commerceTrackUrl) + '" target="_blank">Customer tracking link</a></p>' : '') +
-        (hyper ? '<div id="commerce-map" style="height:320px;border-radius:12px;background:#e2e8f0;margin:8px 0;"></div>' : '') +
-        (lines || '<p style="color:#64748b;">No carrier scans yet.</p>')
+        (window.TrackTimeline && data.timeline
+            ? TrackTimeline.render(
+                  { timeline: data.timeline, live: data.live, awbTrackUrl: o.tookanTrackingLink || o.shipdayTrackingLink || null, trackUrl: o.commerceTrackUrl },
+                  { animate: animate !== false }
+              )
+            : '<p style="color:#64748b;">No tracking yet.</p>')
     );
 }
 

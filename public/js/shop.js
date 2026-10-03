@@ -10,6 +10,7 @@ let checkoutState = { fulfillment: 'delivery', method: '', addressId: null, show
 let accountTab = 'orders';
 let orderFilter = 'all';
 let accountOrders = [];
+let shopTrackerSeen = false;
 
 const COVER_COLORS = [
     ['#0b3d2e', '#1f7a4d'],
@@ -694,71 +695,6 @@ function termOrder(data) {
     return t.cancelled || (t.steps && t.steps[t.steps.length - 1].state === 'done');
 }
 
-function updatesHtml(list) {
-    if (!list || !list.length) return '';
-    return (
-        '<ul class="t-sub">' +
-        list
-            .map(
-                (u) =>
-                    '<li><b>' + shopEsc(u.title) + '</b><span>' + shopEsc(when(u.at)) + (u.city ? ' · ' + shopEsc(u.city) : '') + (u.detail ? ' · ' + shopEsc(u.detail) : '') + '</span></li>'
-            )
-            .join('') +
-        '</ul>'
-    );
-}
-
-function stepExtra(step, data) {
-    const o = data.order;
-    let html = '';
-    if (step.key === 'shipped' && step.partner) {
-        const p = step.partner;
-        html +=
-            '<div class="carrier-card"><div><div class="lbl">Courier partner</div><div class="val">' + shopEsc(p.name) + '</div><div class="muted">' + shopEsc(p.service) + '</div></div>' +
-            (p.trackingNo ? '<div><div class="lbl">Tracking / AWB</div><div class="val">' + shopEsc(p.trackingNo) + '</div></div>' : '') +
-            (o.awbTrackUrl ? '<a href="' + shopEsc(o.awbTrackUrl) + '" target="_blank" rel="noopener">Track on courier site</a>' : '') +
-            '</div>';
-        if (!step.updates.length) html += '<p class="muted" style="margin:8px 0 0">Waiting for the first scan from the courier.</p>';
-    }
-    if (step.key === 'out_for_delivery' && step.agent) {
-        const a = step.agent;
-        html +=
-            '<div class="agent-card"><div><div class="lbl">Delivery agent</div><div class="val">' + shopEsc(a.name || 'Assigned shortly') + '</div></div>' +
-            '<div><div class="lbl">Agent phone</div><div class="val">' + (a.phone ? '<a href="tel:' + shopEsc(a.phone) + '">' + shopEsc(a.phone) + '</a>' : 'Not available yet') + '</div></div>' +
-            (a.phone ? '<a class="btn sm ghost" style="text-decoration:none" href="tel:' + shopEsc(a.phone) + '">Call agent</a>' : '') + '</div>' +
-            '<div class="otp-row">' +
-            (a.pincode ? '<div class="otp-box"><div class="lbl">Delivery PIN code</div><div class="code pin">' + shopEsc(a.pincode) + '</div></div>' : '') +
-            (step.deliveryOtp ? '<div class="otp-box"><div class="lbl">Delivery OTP</div><div class="code">' + shopEsc(step.deliveryOtp) + '</div></div>' : '') +
-            '</div>' +
-            (step.deliveryOtp ? '<div class="otp-note">Share this OTP with the delivery agent only when you receive your books.</div>' : '');
-        if (data.live) {
-            html += '<div class="live-tag">Live driver tracking</div><div id="shop-live-map-slot"></div>';
-        } else if (step.liveMapAvailable) {
-            html += '<div class="map-note">Live map is not available yet' + (o.trackUrl ? ' - <a href="' + shopEsc(o.trackUrl) + '" target="_blank" rel="noopener">open tracking page</a>' : '') + '.</div>';
-        }
-    }
-    return html;
-}
-
-function trackerHtml(data) {
-    const t = data.timeline;
-    return (
-        '<div class="tracker">' +
-        t.steps
-            .map(
-                (s) =>
-                    '<div class="t-step ' + s.state + '"><div class="t-dot">' + (s.state === 'done' ? '&#10003;' : '') + '</div>' +
-                    '<div class="t-title">' + shopEsc(s.title) + (s.at && s.state !== 'upcoming' ? '<span class="t-time">' + shopEsc(when(s.at)) + '</span>' : '') + '</div>' +
-                    (s.summary ? '<div class="t-sum">' + shopEsc(s.summary) + '</div>' : '') +
-                    stepExtra(s, data) +
-                    updatesHtml(s.updates) +
-                    '</div>'
-            )
-            .join('') +
-        '</div>'
-    );
-}
-
 function returnHtml(data) {
     const r = data.returnView;
     if (r) {
@@ -774,7 +710,7 @@ function returnHtml(data) {
                   (r.pickupOtp ? '<div class="otp-box"><div class="lbl">Return pickup OTP</div><div class="code">' + shopEsc(r.pickupOtp) + '</div></div>' : '') +
                   '</div>'
                 : '') +
-            updatesHtml(r.updates) + '</div>'
+            TrackTimeline.updates(r.updates) + '</div>'
         );
     }
     if (!data.canReturn) return '';
@@ -789,7 +725,6 @@ function returnHtml(data) {
 
 function renderOrderDetail(data) {
     const root = document.getElementById('view-order');
-    const keep = document.getElementById('shop-live-map');
     const o = data.order;
     const t = data.timeline;
     const lastStep = t.steps[t.steps.length - 1];
@@ -805,7 +740,7 @@ function renderOrderDetail(data) {
         '<div class="layout-2"><div><div class="box"><div class="track-head"><div><h1>Track package</h1><div class="muted">Order # ' + shopEsc(o.orderCode) + ' · Placed ' + shopEsc(when(o.createdAt, false)) + '</div></div>' +
         '<span class="eta-chip' + (tone ? ' ' + tone : '') + '">' + shopEsc(headline) + '</span></div>' +
         (o.status === 'pending_payment' ? '<p><button class="btn sm buy" type="button" onclick="payPending(' + o.id + ')">Complete payment</button></p>' : '') +
-        '<div style="height:14px"></div>' + trackerHtml(data) + '</div>' + returnHtml(data) + '</div>' +
+        '<div style="height:14px"></div>' + TrackTimeline.render({ timeline: data.timeline, live: data.live, awbTrackUrl: o.awbTrackUrl, trackUrl: o.trackUrl }, { animate: !shopTrackerSeen }) + '</div>' + returnHtml(data) + '</div>' +
         '<div><div class="box"><h3>Order summary</h3>' +
         (o.items || []).map((it) => '<div class="item-line">' + miniCover(it) + '<div style="flex:1"><b>' + shopEsc(it.title) + '</b><div class="muted" style="text-transform:capitalize">' + shopEsc(it.language) + ' · Qty ' + shopEsc(it.qty) + '</div></div><b>' + money(it.lineTotal) + '</b></div>').join('') +
         '<div class="sum-row total"><span>Total</span><span>' + money(o.totalAmount) + '</span></div><div class="muted">' + shopEsc(payLabel(o)) + '</div></div>' +
@@ -816,65 +751,8 @@ function renderOrderDetail(data) {
         '</div>' +
         (o.trackUrl ? '<div class="box"><a href="' + shopEsc(o.trackUrl) + '" target="_blank" rel="noopener">Shareable tracking link</a></div>' : '') +
         '</div></div>';
-    const slot = document.getElementById('shop-live-map-slot');
-    if (slot && data.live) {
-        if (keep) slot.replaceWith(keep);
-        else {
-            const div = document.createElement('div');
-            div.id = 'shop-live-map';
-            div.className = 'live-map';
-            slot.replaceWith(div);
-        }
-        drawLiveMap(data.live);
-    }
-}
-
-function drawLiveMap(live) {
-    const el = document.getElementById('shop-live-map');
-    if (!el) return;
-    if (!live.mapsApiKey) {
-        el.innerHTML = '<p style="padding:12px">Live map needs a Google Maps key in Commerce settings.</p>';
-        return;
-    }
-    const run = () => paintMap(el, live);
-    if (window.google && window.google.maps) return run();
-    window.__shopMapBoot = run;
-    if (document.getElementById('shop-maps-js')) return;
-    const s = document.createElement('script');
-    s.id = 'shop-maps-js';
-    s.async = true;
-    s.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(live.mapsApiKey) + '&callback=__shopMapBoot';
-    document.body.appendChild(s);
-}
-
-function paintMap(el, live) {
-    const center = live.agent || live.store || live.drop;
-    if (!center) {
-        el.innerHTML = '<p style="padding:12px">Waiting for the driver location...</p>';
-        return;
-    }
-    if (!el.__map) {
-        el.innerHTML = '';
-        el.__map = new google.maps.Map(el, { center, zoom: 14, mapTypeControl: false, streetViewControl: false });
-        el.__dir = new google.maps.DirectionsRenderer({ map: el.__map, suppressMarkers: true });
-        el.__markers = {};
-    }
-    const pin = (key, pos, title, label) => {
-        if (!pos) return;
-        if (!el.__markers[key]) el.__markers[key] = new google.maps.Marker({ map: el.__map, title, label });
-        el.__markers[key].setPosition(pos);
-    };
-    pin('store', live.store, 'Store', 'S');
-    pin('drop', live.drop, 'Your location', 'H');
-    pin('agent', live.agent, 'Delivery agent', 'D');
-    const origin = live.agent || live.store;
-    const key = JSON.stringify([origin, live.drop]);
-    if (origin && live.drop && el.__routeKey !== key) {
-        el.__routeKey = key;
-        new google.maps.DirectionsService().route({ origin, destination: live.drop, travelMode: 'DRIVING' }, (result, status) => {
-            if (status === 'OK') el.__dir.setDirections(result);
-        });
-    }
+    shopTrackerSeen = true;
+    TrackTimeline.mount(data.live);
 }
 
 async function fetchOrder(id) {
@@ -885,6 +763,7 @@ async function fetchOrder(id) {
 
 async function openShopOrder(id) {
     showView('order');
+    shopTrackerSeen = false;
     const root = document.getElementById('view-order');
     root.innerHTML = '<div class="box empty">Loading tracking...</div>';
     const { ok, data } = await fetchOrder(id);

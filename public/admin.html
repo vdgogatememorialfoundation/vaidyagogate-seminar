@@ -109,6 +109,7 @@
         .admin-form-hint-details summary::-webkit-details-marker { display: none; }
         .admin-form-hint-details[open] summary { margin-bottom: 8px; }
     </style>
+    <link rel="stylesheet" href="/css/track-timeline.css?v=20261003tl">
 </head>
 <body class="portal-bright">
 
@@ -1661,6 +1662,19 @@
                                     </button>
                                 </div>
                                 <p id="bs-agg-no-config" style="display:none;margin:8px 0 0;font-size:0.78rem;color:#92400e;background:#fef9c3;padding:6px 10px;border-radius:6px;"><i class="fas fa-exclamation-triangle"></i> Configure Shiprocket / Nimbuspost API credentials in Book sales → Settings → Logistics API first.</p>
+                            </div>
+
+                            <!-- Option: Tookan / Shipday courier partner pickup -->
+                            <div style="border:2px solid #0d9488;border-radius:12px;padding:16px;margin-bottom:16px;">
+                                <div style="font-weight:800;color:#0f766e;font-size:0.92rem;margin-bottom:4px;">Tookan / Shipday courier partner</div>
+                                <p style="font-size:0.78rem;color:#64748b;margin:0 0 10px;">Asks the courier partner to pick the parcel up from the store. The customer sees Packed, then Shipped once it is collected, then Out for delivery and Delivered, with the pickup and delivery OTPs kept separate.</p>
+                                <label style="display:block;font-size:0.75rem;font-weight:700;color:#374151;margin-bottom:4px;">Pickup time <span style="font-weight:400;color:#94a3b8;">(optional, default in 30 minutes)</span></label>
+                                <input type="datetime-local" id="bs-commerce-when" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:0.88rem;margin-bottom:10px;">
+                                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                    <button type="button" class="btn-primary" style="background:#0d9488;flex:1;min-width:150px;" onclick="bsBookCommerce('tookan','logistics')">Tookan logistics</button>
+                                    <button type="button" class="btn-primary" style="background:#0f766e;flex:1;min-width:150px;" onclick="bsBookCommerce('tookan','hyperlocal')">Tookan hyperlocal</button>
+                                    <button type="button" class="btn-primary" style="background:#0369a1;flex:1;min-width:150px;" onclick="bsBookCommerce('shipday','hyperlocal')">Shipday hyperlocal</button>
+                                </div>
                             </div>
 
                             <!-- Option B: Manual AWB -->
@@ -3466,7 +3480,8 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
-    <script src="/js/admin-commerce.js?v=20261003shop"></script>
-    <script src="/js/admin.js?v=20261003shop"></script>
+    <script src="/js/track-timeline.js?v=20261003tl"></script>
+    <script src="/js/admin-commerce.js?v=20261003tl"></script>
+    <script src="/js/admin.js?v=20261003tl"></script>
 </body>
 </html>
