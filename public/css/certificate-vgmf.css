@@ -337,21 +337,21 @@
 
 .cert-overlay-verify {
     position: absolute;
-    right: 4.0%;
-    top: 42%;
-    width: 24%;
+    right: 3.8%;
+    top: 40.5%;
+    width: 24.5%;
     display: flex;
     flex-direction: column;
     align-items: center;
 }
 
 .cert-overlay-qr {
-    width: 38%;
-    max-width: 86px;
+    width: 36%;
+    max-width: 82px;
     aspect-ratio: 1;
     object-fit: contain;
     background: #fff;
-    margin-top: 10%;
+    margin-top: 12%;
     display: block;
 }
 
@@ -361,17 +361,17 @@
 
 .cert-overlay-id-values {
     width: 94%;
-    margin-top: 18%;
+    margin-top: 22%;
     font-family: 'Roboto', Arial, sans-serif;
 }
 
 .cert-overlay-id-val {
-    margin: 0 0 0.85em;
-    padding: 0.1em 0.15em 0.1em 50%;
-    font-size: clamp(0.5rem, 0.9vw, 0.7rem);
+    margin: 0 0 1.05em;
+    padding: 0.08em 0.1em 0.08em 52%;
+    font-size: clamp(0.48rem, 0.88vw, 0.68rem);
     font-weight: 600;
     color: #1f2937;
-    line-height: 1.15;
+    line-height: 1.1;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
