@@ -3,6 +3,21 @@ let shopCatalog = null;
 let shopCart = [];
 let shopAddresses = [];
 let razorpayMethod = null;
+let shopSearchTerm = '';
+let shopPending = null;
+let orderPoll = null;
+let checkoutState = { fulfillment: 'delivery', method: '', addressId: null, showForm: false };
+let accountTab = 'orders';
+let orderFilter = 'all';
+let accountOrders = [];
+
+const COVER_COLORS = [
+    ['#0b3d2e', '#1f7a4d'],
+    ['#4a1d6a', '#8e44ad'],
+    ['#7a2e0e', '#d35400'],
+    ['#12355b', '#2b79c2'],
+    ['#5b1228', '#c0392b']
+];
 
 function shopEsc(s) {
     return String(s == null ? '' : s)
@@ -12,12 +27,142 @@ function shopEsc(s) {
         .replace(/"/g, '&quot;');
 }
 
+function money(n) {
+    return '₹' + Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+}
+
+function parseWhen(at) {
+    if (!at) return null;
+    let v = String(at);
+    if (/^\d{4}-\d\d-\d\d[ T]\d\d:\d\d(:\d\d(\.\d+)?)?$/.test(v)) v = v.replace(' ', 'T') + 'Z';
+    const d = new Date(v);
+    return isNaN(d.getTime()) ? null : d;
+}
+
+function when(at, withTime) {
+    const d = parseWhen(at);
+    if (!d) return at ? String(at) : '';
+    const opts = { timeZone: 'Asia/Kolkata', weekday: 'short', day: '2-digit', month: 'short', year: 'numeric' };
+    if (withTime !== false) {
+        opts.hour = '2-digit';
+        opts.minute = '2-digit';
+    }
+    return new Intl.DateTimeFormat('en-IN', opts).format(d);
+}
+
+function coverColors(id) {
+    let h = 0;
+    String(id || '').split('').forEach((c) => {
+        h = (h * 31 + c.charCodeAt(0)) >>> 0;
+    });
+    return COVER_COLORS[h % COVER_COLORS.length];
+}
+
+function coverBg(id) {
+    const c = coverColors(id);
+    return 'background:linear-gradient(135deg,' + c[0] + ',' + c[1] + ')';
+}
+
+function miniCover(item) {
+    return '<div class="mini" style="' + coverBg(item.bookId) + '">' + shopEsc(item.title) + '</div>';
+}
+
+function toast(text) {
+    const el = document.createElement('div');
+    el.className = 'toast';
+    el.textContent = text;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 2600);
+}
+
 function loadShopUser() {
     try {
         shopUser = JSON.parse(localStorage.getItem('seminar_doctor_user') || 'null');
     } catch (_) {
         shopUser = null;
     }
+    try {
+        shopCart = JSON.parse(localStorage.getItem('shop_cart') || '[]') || [];
+    } catch (_) {
+        shopCart = [];
+    }
+}
+
+function saveCart() {
+    localStorage.setItem('shop_cart', JSON.stringify(shopCart));
+    const n = shopCart.reduce((s, l) => s + l.qty, 0);
+    document.getElementById('cart-count').textContent = n;
+}
+
+function userQuery() {
+    return 'userId=' + encodeURIComponent(shopUser ? shopUser.id : '');
+}
+
+function updateHello() {
+    const name = shopUser ? shopUser.firstName || shopUser.first_name || shopUser.name || 'there' : null;
+    document.getElementById('hello-line').textContent = name ? 'Hello, ' + name : 'Hello, sign in';
+}
+
+/* ---------- routing ---------- */
+
+function shopGo(view, arg) {
+    let hash = '#/';
+    if (view === 'checkout') hash = '#/checkout';
+    else if (view === 'account') hash = '#/account/' + (arg || 'orders');
+    else if (view === 'order') hash = '#/order/' + arg;
+    if (location.hash === hash) route();
+    else location.hash = hash;
+}
+
+function stopPolling() {
+    if (orderPoll) clearInterval(orderPoll);
+    orderPoll = null;
+}
+
+function showView(name) {
+    ['home', 'checkout', 'login', 'account', 'order'].forEach((v) => {
+        document.getElementById('view-' + v).classList.toggle('hidden', v !== name);
+    });
+    window.scrollTo(0, 0);
+}
+
+function route() {
+    stopPolling();
+    closeCartDrawer();
+    const hash = location.hash || '#/';
+    const needsLogin = /^#\/(checkout|account|order)/.test(hash);
+    if (needsLogin && !shopUser) {
+        shopPending = hash;
+        renderLogin();
+        return;
+    }
+    let m;
+    if (hash === '#/checkout') return renderCheckout();
+    if ((m = hash.match(/^#\/account\/(\w+)/))) {
+        accountTab = m[1] === 'address' ? 'address' : 'orders';
+        return renderAccount();
+    }
+    if ((m = hash.match(/^#\/order\/(\d+)/))) return openShopOrder(parseInt(m[1], 10));
+    renderHome();
+}
+
+function shopSearch(e) {
+    e.preventDefault();
+    shopSearchTerm = document.getElementById('shop-search').value.trim().toLowerCase();
+    if (location.hash && location.hash !== '#/') location.hash = '#/';
+    else renderHome();
+}
+
+/* ---------- sign in ---------- */
+
+function renderLogin() {
+    showView('login');
+    document.getElementById('view-login').innerHTML =
+        '<div class="box signin"><h2>Sign in</h2>' +
+        '<p class="muted">Use your Vaidya Gogate portal account. Your orders, addresses and tracking are linked to it.</p>' +
+        '<label class="field">Email or portal ID<input id="login-email" autocomplete="username"></label>' +
+        '<label class="field">Password<input id="login-password" type="password" autocomplete="current-password" onkeydown="if(event.key===\'Enter\')shopLogin()"></label>' +
+        '<button class="btn" type="button" onclick="shopLogin()">Sign in</button><p id="login-msg" class="msg"></p></div>';
 }
 
 async function shopLogin() {
@@ -36,162 +181,337 @@ async function shopLogin() {
         if (!res.ok) throw new Error(data.error || 'Sign in failed');
         shopUser = data.user || data;
         localStorage.setItem('seminar_doctor_user', JSON.stringify(shopUser));
-        document.getElementById('shop-login').classList.add('hidden');
-        shopShow('catalog');
+        updateHello();
+        const target = shopPending || '#/';
+        shopPending = null;
+        if (location.hash === target) route();
+        else location.hash = target;
     } catch (e) {
         if (msg) msg.textContent = e.message;
     }
 }
 
-function shopShow(name) {
-    document.getElementById('view-catalog').classList.toggle('hidden', name !== 'catalog');
-    document.getElementById('view-account').classList.toggle('hidden', name !== 'account');
-    document.getElementById('view-order').classList.toggle('hidden', name !== 'order');
-    if (!shopUser && name !== 'catalog') {
-        document.getElementById('shop-login').classList.remove('hidden');
-        return;
-    }
-    document.getElementById('shop-login').classList.add('hidden');
-    if (name === 'account') renderAccount();
-    if (name === 'catalog') renderCatalog();
+function shopSignOut() {
+    localStorage.removeItem('seminar_doctor_user');
+    shopUser = null;
+    updateHello();
+    shopGo('home');
 }
+
+/* ---------- boot ---------- */
 
 async function bootShop() {
     loadShopUser();
+    updateHello();
+    saveCart();
     const res = await fetch('/api/shop/catalog');
     shopCatalog = await res.json();
-    const store = (shopCatalog && shopCatalog.store) || {};
+    const store = shopCatalog.store || {};
+    const s = shopCatalog.settings || {};
     document.getElementById('store-name').textContent = store.name || 'Book shop';
-    const settings = (shopCatalog && shopCatalog.settings) || {};
+    document.title = (store.name || 'Book shop') + ' - Online book shop';
     document.getElementById('shop-hours').textContent =
-        'Orders ' +
-        (settings.orderOpen || '') +
-        '–' +
-        (settings.orderClose || '') +
-        ' IST · Pickup ' +
-        (settings.pickupOpen || '') +
-        '–' +
-        (settings.pickupClose || '') +
-        ' · Delivery ' +
-        (settings.deliveryOpen || '') +
-        '–' +
-        (settings.deliveryClose || '') +
-        (shopCatalog && shopCatalog.open ? '' : ' · ' + (shopCatalog.closedMessage || 'Closed'));
-    const pay = await fetch('/api/shop/pay-options').then((r) => r.json());
-    razorpayMethod = pay.razorpay || null;
-    renderCatalog();
+        'Orders ' + (s.orderOpen || '') + ' - ' + (s.orderClose || '') + ' IST';
+    if (!shopCatalog.open) {
+        const b = document.getElementById('closed-banner');
+        b.textContent = shopCatalog.closedMessage || 'The shop is currently closed.';
+        b.classList.remove('hidden');
+    }
+    document.getElementById('shop-footer').innerHTML =
+        '<b>' + shopEsc(store.name || 'Book shop') + '</b><br>' +
+        shopEsc([store.address, store.city].filter(Boolean).join(', ')) +
+        (store.phone ? '<br>Call <a href="tel:' + shopEsc(store.phone) + '" style="color:#fff">' + shopEsc(store.phone) + '</a>' : '') +
+        '<br><span style="opacity:.7">Pickup ' + shopEsc(s.pickupOpen || '') + ' - ' + shopEsc(s.pickupClose || '') +
+        ' · Delivery ' + shopEsc(s.deliveryOpen || '') + ' - ' + shopEsc(s.deliveryClose || '') + '</span>';
+    try {
+        const pay = await fetch('/api/shop/pay-options').then((r) => r.json());
+        razorpayMethod = pay.razorpay || null;
+    } catch (_) {
+        razorpayMethod = null;
+    }
+    window.addEventListener('hashchange', route);
+    route();
 }
 
-function renderCatalog() {
-    const root = document.getElementById('view-catalog');
-    const books = (shopCatalog && shopCatalog.books) || [];
-    const langs = (shopCatalog && shopCatalog.languages) || ['english'];
-    root.innerHTML =
-        '<div class="grid">' +
-        books
-            .map(
-                (b) =>
-                    '<div class="card"><h3>' +
-                    shopEsc(b.title) +
-                    '</h3><p class="muted">' +
-                    shopEsc(b.author || '') +
-                    '</p><p><strong>₹' +
-                    shopEsc(b.price) +
-                    '</strong></p><label>Language<select id="lang-' +
-                    shopEsc(b.id) +
-                    '">' +
-                    langs.map((l) => '<option value="' + l + '">' + l + '</option>').join('') +
-                    '</select></label><button class="primary" style="margin-top:8px;" onclick="shopAdd(\'' +
-                    shopEsc(b.id) +
-                    '\')">Add to cart</button></div>'
-            )
-            .join('') +
-        '</div>' +
-        '<div class="card" style="margin-top:14px;"><h3>Cart</h3><div id="cart-body"></div></div>';
-    renderCart();
+/* ---------- home ---------- */
+
+function renderHome() {
+    showView('home');
+    const s = shopCatalog.settings || {};
+    const langs = shopCatalog.languages || ['english'];
+    let books = shopCatalog.books || [];
+    if (shopSearchTerm) {
+        books = books.filter((b) => (b.title + ' ' + (b.author || '')).toLowerCase().includes(shopSearchTerm));
+    }
+    const badges = [];
+    if (s.razorpayEnabled !== false) badges.push('Secure online payment');
+    if (s.codEnabled !== false) badges.push('Cash on delivery');
+    if (s.storePickupEnabled !== false) badges.push('Free store pickup');
+    if (s.returnsEnabled !== false) badges.push('Easy returns');
+    badges.push('Live order tracking');
+    document.getElementById('view-home').innerHTML =
+        '<div class="hero"><div><h1>Authentic Ayurveda texts</h1><p>Books by Dr. R.B. Gogate in English, Marathi, Hindi and Kannada, delivered to your door or ready for pickup.</p></div>' +
+        '<div class="hero-badges">' + badges.map((b) => '<span>' + shopEsc(b) + '</span>').join('') + '</div></div>' +
+        '<div class="section-title">' + (shopSearchTerm ? 'Results for "' + shopEsc(shopSearchTerm) + '"' : 'All books') + '</div>' +
+        (books.length
+            ? '<div class="product-grid">' +
+              books
+                  .map((b) => {
+                      const id = shopEsc(b.id);
+                      return (
+                          '<div class="product"><div class="cover" style="' + coverBg(b.id) + '">' +
+                          '<div class="c-title">' + shopEsc(b.title) + '</div><div class="c-author">' + shopEsc(b.author || '') + '</div><div class="c-mark">॥</div></div>' +
+                          '<h3>' + shopEsc(b.title) + '</h3><div class="by">by ' + shopEsc(b.author || '') + '</div>' +
+                          '<div class="price"><sup>₹</sup>' + shopEsc(Number(b.price).toLocaleString('en-IN')) + '</div>' +
+                          '<div>' +
+                          (s.storePickupEnabled !== false ? '<span class="badge">Store pickup</span>' : '') +
+                          (s.codEnabled !== false ? '<span class="badge">COD</span>' : '') +
+                          '</div>' +
+                          '<div class="pill-row" id="langs-' + id + '">' +
+                          langs.map((l, i) => '<button type="button" class="pill' + (i === 0 ? ' on' : '') + '" data-lang="' + shopEsc(l) + '" onclick="pickLang(\'' + id + '\',this)">' + shopEsc(l) + '</button>').join('') +
+                          '</div>' +
+                          '<div class="qty"><label class="muted" for="qty-' + id + '">Qty:</label><select id="qty-' + id + '">' +
+                          [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => '<option>' + n + '</option>').join('') + '</select></div>' +
+                          '<button class="btn" type="button" onclick="shopAdd(\'' + id + '\')">Add to cart</button>' +
+                          '<button class="btn buy" type="button" onclick="shopAdd(\'' + id + '\',true)">Buy now</button></div>'
+                      );
+                  })
+                  .join('') +
+              '</div>'
+            : '<div class="box empty">No books match your search.</div>');
 }
 
-function shopAdd(bookId) {
+function pickLang(bookId, btn) {
+    document.querySelectorAll('#langs-' + bookId + ' .pill').forEach((p) => p.classList.remove('on'));
+    btn.classList.add('on');
+}
+
+function shopAdd(bookId, buyNow) {
     const book = (shopCatalog.books || []).find((b) => b.id === bookId);
-    const lang = document.getElementById('lang-' + bookId).value;
-    shopCart.push({ bookId, language: lang, qty: 1, title: book.title, price: book.price });
-    renderCart();
+    if (!book) return;
+    const pill = document.querySelector('#langs-' + bookId + ' .pill.on');
+    const lang = pill ? pill.getAttribute('data-lang') : 'english';
+    const qty = parseInt(document.getElementById('qty-' + bookId).value, 10) || 1;
+    const hit = shopCart.find((l) => l.bookId === bookId && l.language === lang);
+    if (hit) hit.qty = Math.min(20, hit.qty + qty);
+    else shopCart.push({ bookId, language: lang, qty, title: book.title, price: book.price });
+    saveCart();
+    if (buyNow) return shopGo('checkout');
+    openCartDrawer();
 }
 
-function renderCart() {
-    const body = document.getElementById('cart-body');
-    if (!body) return;
+/* ---------- cart drawer ---------- */
+
+function cartTotal() {
+    return shopCart.reduce((sum, l) => sum + Number(l.price) * l.qty, 0);
+}
+
+function openCartDrawer() {
+    document.getElementById('drawer-mask').classList.remove('hidden');
+    document.getElementById('cart-drawer').classList.remove('hidden');
+    renderDrawer();
+}
+
+function closeCartDrawer() {
+    document.getElementById('drawer-mask').classList.add('hidden');
+    document.getElementById('cart-drawer').classList.add('hidden');
+}
+
+function cartQty(i, v) {
+    const qty = parseInt(v, 10);
+    if (qty <= 0) shopCart.splice(i, 1);
+    else shopCart[i].qty = qty;
+    saveCart();
+    renderDrawer();
+    if (location.hash === '#/checkout') renderCheckout();
+}
+
+function renderDrawer() {
+    const body = document.getElementById('drawer-body');
+    const foot = document.getElementById('drawer-foot');
     if (!shopCart.length) {
-        body.innerHTML = '<p class="muted">Your cart is empty.</p>';
+        body.innerHTML = '<div class="empty">Your cart is empty.<br><br><button class="btn sm" type="button" onclick="closeCartDrawer();shopGo(\'home\')">Browse books</button></div>';
+        foot.innerHTML = '';
         return;
     }
-    const total = shopCart.reduce((sum, line) => sum + Number(line.price) * line.qty, 0);
-    const settings = shopCatalog.settings || {};
-    body.innerHTML =
+    body.innerHTML = shopCart
+        .map(
+            (l, i) =>
+                '<div class="cart-line"><div class="mini" style="' + coverBg(l.bookId) + '">' + shopEsc(l.title) + '</div><div class="info"><b>' + shopEsc(l.title) +
+                '</b><div class="muted" style="text-transform:capitalize">' + shopEsc(l.language) + '</div><div><b>' + money(l.price) + '</b></div>' +
+                '<div class="qty" style="margin-top:6px"><select onchange="cartQty(' + i + ',this.value)">' +
+                [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => '<option value="' + n + '"' + (n === l.qty ? ' selected' : '') + '>' + (n === 0 ? '0 (remove)' : n) + '</option>').join('') +
+                '</select> <a onclick="cartQty(' + i + ',0)" style="cursor:pointer">Delete</a></div></div></div>'
+        )
+        .join('');
+    const count = shopCart.reduce((s, l) => s + l.qty, 0);
+    foot.innerHTML =
+        '<div class="sub-total"><span>Subtotal (' + count + ' item' + (count === 1 ? '' : 's') + ')</span><b>' + money(cartTotal()) + '</b></div>' +
+        '<button class="btn buy" type="button" onclick="closeCartDrawer();shopGo(\'checkout\')">Proceed to checkout</button>';
+}
+
+/* ---------- checkout ---------- */
+
+function paymentOptions() {
+    const s = shopCatalog.settings || {};
+    const out = [];
+    if (s.razorpayEnabled !== false) out.push({ id: 'razorpay', label: 'Pay online (Razorpay)', hint: 'UPI, cards, net banking, wallets' });
+    if (checkoutState.fulfillment === 'delivery' && s.codEnabled !== false) {
+        out.push({ id: 'cod', label: 'Cash on delivery', hint: Number(s.codExtraCharge) ? 'Extra charge ' + money(s.codExtraCharge) : 'Pay the delivery agent in cash' });
+    }
+    if (checkoutState.fulfillment === 'pickup') out.push({ id: 'store', label: 'Pay at store', hint: 'Pay when you collect your books' });
+    return out;
+}
+
+async function renderCheckout() {
+    showView('checkout');
+    const root = document.getElementById('view-checkout');
+    if (!shopCart.length) {
+        root.innerHTML = '<div class="box empty">Your cart is empty.<br><br><button class="btn sm" onclick="shopGo(\'home\')">Browse books</button></div>';
+        return;
+    }
+    const s = shopCatalog.settings || {};
+    if (checkoutState.fulfillment === 'pickup' && s.storePickupEnabled === false) checkoutState.fulfillment = 'delivery';
+    if (checkoutState.fulfillment === 'delivery' && s.deliveryEnabled === false) checkoutState.fulfillment = 'pickup';
+    const res = await fetch('/api/shop/addresses?' + userQuery());
+    shopAddresses = ((await res.json()).addresses || []);
+    if (!shopAddresses.find((a) => String(a.id) === String(checkoutState.addressId))) {
+        checkoutState.addressId = shopAddresses.length ? shopAddresses[0].id : null;
+    }
+    const opts = paymentOptions();
+    if (!opts.find((o) => o.id === checkoutState.method)) checkoutState.method = opts.length ? opts[0].id : '';
+    const delivery = checkoutState.fulfillment === 'delivery';
+    const cod = checkoutState.method === 'cod' ? Number(s.codExtraCharge) || 0 : 0;
+    const total = cartTotal() + cod;
+    const store = shopCatalog.store || {};
+
+    const fulfillBox =
+        '<div class="box"><div class="step-h"><i>1</i>How would you like to receive your books?</div>' +
+        (s.deliveryEnabled !== false
+            ? '<label class="choice' + (delivery ? ' on' : '') + '"><input type="radio" name="ful" ' + (delivery ? 'checked' : '') + ' onchange="setFulfillment(\'delivery\')"><div><b>Home delivery</b><div class="muted">Courier or hyperlocal delivery with live tracking</div></div></label>'
+            : '') +
+        (s.storePickupEnabled !== false
+            ? '<label class="choice' + (!delivery ? ' on' : '') + '"><input type="radio" name="ful" ' + (!delivery ? 'checked' : '') + ' onchange="setFulfillment(\'pickup\')"><div><b>Store pickup</b><div class="muted">' + shopEsc([store.address, store.city].filter(Boolean).join(', ') || 'Collect from the store counter') + '</div></div></label>'
+            : '') +
+        '</div>';
+
+    const addrBox = delivery
+        ? '<div class="box"><div class="step-h"><i>2</i>Delivery address</div>' +
+          shopAddresses
+              .map(
+                  (a) =>
+                      '<label class="choice' + (String(a.id) === String(checkoutState.addressId) ? ' on' : '') + '"><input type="radio" name="addr" ' + (String(a.id) === String(checkoutState.addressId) ? 'checked' : '') + ' onchange="setAddress(' + a.id + ')"><div><b>' + shopEsc(a.recipientName) + '</b> · ' + shopEsc(a.phone) +
+                      '<div class="muted">' + shopEsc(a.line1) + ', ' + shopEsc(a.city) + ', ' + shopEsc(a.state) + ' ' + shopEsc(a.pincode) + '</div></div></label>'
+              )
+              .join('') +
+          (checkoutState.showForm || !shopAddresses.length ? addressForm('checkout') : '<a style="cursor:pointer" onclick="checkoutState.showForm=true;renderCheckout()">+ Add a new address</a>') +
+          '</div>'
+        : '';
+
+    const payBox =
+        '<div class="box"><div class="step-h"><i>' + (delivery ? 3 : 2) + '</i>Payment method</div>' +
+        opts
+            .map(
+                (o) =>
+                    '<label class="choice' + (o.id === checkoutState.method ? ' on' : '') + '"><input type="radio" name="pay" ' + (o.id === checkoutState.method ? 'checked' : '') + ' onchange="setMethod(\'' + o.id + '\')"><div><b>' + shopEsc(o.label) + '</b><div class="muted">' + shopEsc(o.hint) + '</div></div></label>'
+            )
+            .join('') +
+        '</div>';
+
+    const reviewBox =
+        '<div class="box"><div class="step-h"><i>' + (delivery ? 4 : 3) + '</i>Review items</div>' +
         shopCart
             .map(
-                (line, i) =>
-                    '<p>' +
-                    shopEsc(line.title) +
-                    ' · ' +
-                    shopEsc(line.language) +
-                    ' · ₹' +
-                    shopEsc(line.price) +
-                    ' <button type="button" onclick="shopCart.splice(' +
-                    i +
-                    ',1);renderCart()">Remove</button></p>'
+                (l, i) =>
+                    '<div class="item-line"><div class="mini" style="' + coverBg(l.bookId) + '">' + shopEsc(l.title) + '</div><div style="flex:1"><b>' + shopEsc(l.title) + '</b><div class="muted" style="text-transform:capitalize">' + shopEsc(l.language) +
+                    '</div><div class="qty" style="margin-top:4px"><select onchange="cartQty(' + i + ',this.value)">' + [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => '<option value="' + n + '"' + (n === l.qty ? ' selected' : '') + '>' + (n === 0 ? '0 (remove)' : n) + '</option>').join('') + '</select></div></div><b>' + money(l.price * l.qty) + '</b></div>'
             )
             .join('') +
-        '<p><strong>₹' +
-        total.toFixed(0) +
-        '</strong></p>' +
-        '<label>How to receive<select id="cart-fulfillment"><option value="delivery">Home delivery</option>' +
-        (settings.storePickupEnabled !== false ? '<option value="pickup">Store pickup</option>' : '') +
-        '</select></label>' +
-        '<label>Payment<select id="cart-method">' +
-        (settings.razorpayEnabled !== false ? '<option value="razorpay">Razorpay</option>' : '') +
-        (settings.codEnabled !== false ? '<option value="cod">Cash on delivery</option>' : '') +
-        '<option value="store">Pay at store</option></select></label>' +
-        '<div id="cart-address"></div>' +
-        '<button class="primary" style="margin-top:10px;" onclick="shopCheckout()">Place order</button>' +
-        '<p id="checkout-msg"></p>';
-    loadAddressPicker();
+        '</div>';
+
+    const summary =
+        '<div class="box" style="position:sticky;top:76px"><button class="btn buy" id="place-btn" type="button" onclick="shopCheckout()"' + (shopCatalog.open ? '' : ' disabled') + '>Place your order</button>' +
+        '<h3 style="margin-top:14px">Order summary</h3>' +
+        '<div class="sum-row"><span>Items</span><span>' + money(cartTotal()) + '</span></div>' +
+        (cod ? '<div class="sum-row"><span>COD charge</span><span>' + money(cod) + '</span></div>' : '') +
+        '<div class="sum-row total"><span>Order total</span><span>' + money(total) + '</span></div>' +
+        '<p id="checkout-msg" class="msg"></p>' +
+        (shopCatalog.open ? '' : '<p class="msg">' + shopEsc(shopCatalog.closedMessage || 'The shop is closed.') + '</p>') +
+        '</div>';
+
+    root.innerHTML = '<div class="section-title">Checkout</div><div class="layout-2"><div>' + fulfillBox + addrBox + payBox + reviewBox + '</div><div>' + summary + '</div></div>';
 }
 
-async function loadAddressPicker() {
-    const box = document.getElementById('cart-address');
-    if (!box || !shopUser) {
-        if (box) box.innerHTML = '<p class="muted">Sign in from Account to choose an address.</p>';
+function addressForm(ctx) {
+    return (
+        '<div style="margin-top:12px;border-top:1px solid #eee;padding-top:12px"><b>New address</b>' +
+        '<div class="grid-2"><label class="field">Full name<input id="addr-name"></label><label class="field">Mobile number<input id="addr-phone" inputmode="tel"></label></div>' +
+        '<label class="field">Address (house, street, area)<input id="addr-line"></label>' +
+        '<div class="grid-2"><label class="field">City<input id="addr-city"></label><label class="field">State<input id="addr-state"></label></div>' +
+        '<label class="field" style="max-width:200px">PIN code<input id="addr-pin" inputmode="numeric" maxlength="6"></label>' +
+        '<button class="btn sm" type="button" onclick="shopSaveAddress(\'' + ctx + '\')">Save address</button> <span id="addr-msg" class="msg"></span></div>'
+    );
+}
+
+function setFulfillment(v) {
+    checkoutState.fulfillment = v;
+    renderCheckout();
+}
+function setAddress(id) {
+    checkoutState.addressId = id;
+    renderCheckout();
+}
+function setMethod(v) {
+    checkoutState.method = v;
+    renderCheckout();
+}
+
+async function shopSaveAddress(ctx) {
+    const get = (id) => document.getElementById(id).value;
+    const res = await fetch('/api/shop/addresses', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            userId: shopUser.id,
+            recipientName: get('addr-name'),
+            phone: get('addr-phone'),
+            line1: get('addr-line'),
+            city: get('addr-city'),
+            state: get('addr-state'),
+            pincode: get('addr-pin')
+        })
+    });
+    const data = await res.json();
+    if (!res.ok) {
+        document.getElementById('addr-msg').textContent = data.error || 'Could not save the address.';
         return;
     }
-    const res = await fetch('/api/shop/addresses?userId=' + encodeURIComponent(shopUser.id));
-    const data = await res.json();
-    shopAddresses = data.addresses || [];
-    box.innerHTML =
-        '<label>Delivery address<select id="cart-address-id">' +
-        shopAddresses
-            .map(
-                (a) =>
-                    '<option value="' +
-                    a.id +
-                    '">' +
-                    shopEsc(a.recipientName) +
-                    ', ' +
-                    shopEsc(a.line1) +
-                    ', ' +
-                    shopEsc(a.city) +
-                    '</option>'
-            )
-            .join('') +
-        '</select></label>';
+    toast('Address saved');
+    if (ctx === 'checkout') {
+        checkoutState.addressId = data.id;
+        checkoutState.showForm = false;
+        renderCheckout();
+    } else {
+        renderAccount();
+    }
+}
+
+async function shopDeleteAddress(id) {
+    if (!confirm('Delete this address?')) return;
+    await fetch('/api/shop/addresses/' + id + '?' + userQuery(), { method: 'DELETE' });
+    renderAccount();
 }
 
 async function shopCheckout() {
     const msg = document.getElementById('checkout-msg');
-    if (!shopUser) {
-        shopShow('account');
+    const btn = document.getElementById('place-btn');
+    msg.textContent = '';
+    const delivery = checkoutState.fulfillment === 'delivery';
+    if (delivery && !checkoutState.addressId) {
+        msg.textContent = 'Add a delivery address first.';
         return;
     }
+    btn.disabled = true;
     try {
         const res = await fetch('/api/shop/orders', {
             method: 'POST',
@@ -199,26 +519,34 @@ async function shopCheckout() {
             body: JSON.stringify({
                 userId: shopUser.id,
                 items: shopCart.map((l) => ({ bookId: l.bookId, language: l.language, qty: l.qty })),
-                fulfillment: document.getElementById('cart-fulfillment').value,
-                method: document.getElementById('cart-method').value,
-                addressId: document.getElementById('cart-address-id') ? document.getElementById('cart-address-id').value : null
+                fulfillment: checkoutState.fulfillment,
+                method: checkoutState.method,
+                addressId: delivery ? checkoutState.addressId : null
             })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Could not place the order');
-        if (data.needsPayment) {
-            await payRazorpay(data.bookOrderId);
-        }
         shopCart = [];
-        if (msg) msg.textContent = 'Order ' + data.orderCode + ' placed.';
-        openShopOrder(data.bookOrderId);
+        saveCart();
+        if (data.needsPayment) {
+            try {
+                await payRazorpay(data.bookOrderId);
+                toast('Payment received');
+            } catch (e) {
+                toast(e.message + ' You can complete the payment from your order.');
+            }
+        } else {
+            toast('Order ' + data.orderCode + ' placed');
+        }
+        shopGo('order', data.bookOrderId);
     } catch (e) {
-        if (msg) msg.textContent = e.message;
+        msg.textContent = e.message;
+        btn.disabled = false;
     }
 }
 
 async function payRazorpay(bookOrderId) {
-    if (!razorpayMethod) throw new Error('Razorpay is not configured in payment gateways.');
+    if (!razorpayMethod) throw new Error('Online payment is not configured.');
     const res = await fetch('/api/payments/process-book-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -228,7 +556,7 @@ async function payRazorpay(bookOrderId) {
     if (!res.ok) throw new Error(data.error || 'Payment could not start');
     if (data.paid) return;
     const rzOrder = data.razorpayOrder;
-    if (!rzOrder || !window.Razorpay) throw new Error(data.message || 'Razorpay checkout is unavailable');
+    if (!rzOrder || !window.Razorpay) throw new Error(data.message || 'Razorpay checkout is unavailable.');
     await new Promise((resolve, reject) => {
         const checkout = new Razorpay({
             key: data.keyId,
@@ -239,121 +567,348 @@ async function payRazorpay(bookOrderId) {
             handler: function () {
                 resolve();
             },
-            modal: { ondismiss: function () { reject(new Error('Payment was closed.')); } }
+            modal: {
+                ondismiss: function () {
+                    reject(new Error('Payment was not completed.'));
+                }
+            }
         });
         checkout.open();
     });
 }
 
+async function payPending(id) {
+    try {
+        await payRazorpay(id);
+        toast('Payment received');
+    } catch (e) {
+        toast(e.message);
+    }
+    openShopOrder(id);
+}
+
+/* ---------- account ---------- */
+
+function orderStatusText(o) {
+    if (o.status === 'cancelled') return { text: 'Cancelled', tone: 'red' };
+    if (o.status === 'pending_payment') return { text: 'Payment pending', tone: 'red' };
+    if (o.status === 'delivered' || o.status === 'fulfilled' || o.commerceStage === 'delivered') {
+        return { text: o.fulfillmentType === 'pickup' ? 'Collected' : 'Delivered', tone: 'green' };
+    }
+    const pickup = o.fulfillmentType === 'pickup';
+    const map = {
+        placed: 'Order placed',
+        accepted: 'Order accepted',
+        preparing: 'Preparing your order',
+        ready: pickup ? 'Ready for pickup' : 'Packed - ready to ship',
+        pickup_scheduled: 'Courier pickup scheduled',
+        in_transit: 'Shipped - in transit',
+        out_for_delivery: 'Out for delivery'
+    };
+    return { text: map[o.commerceStage] || 'Order placed', tone: '' };
+}
+
+function payLabel(o) {
+    if (o.paymentMode === 'cod') return 'Cash on delivery';
+    if (o.paymentMode === 'counter') return 'Pay at store';
+    return o.status === 'pending_payment' ? 'Online - unpaid' : 'Paid online';
+}
+
+function orderCardHtml(o) {
+    const st = orderStatusText(o);
+    const ret = o.returnStatus ? '<div class="badge warn" style="margin-top:6px">' + shopEsc(o.returnKind || 'return') + ': ' + shopEsc(String(o.returnStatus).replace(/_/g, ' ')) + '</div>' : '';
+    return (
+        '<div class="order-card" onclick="shopGo(\'order\',' + o.id + ')">' +
+        '<div class="order-head"><div>ORDER PLACED<b>' + shopEsc(when(o.createdAt, false)) + '</b></div><div>TOTAL<b>' + money(o.totalAmount) + '</b></div>' +
+        '<div>' + (o.fulfillmentType === 'pickup' ? 'COLLECT FROM' : 'SHIP TO') + '<b>' + shopEsc(o.fulfillmentType === 'pickup' ? 'Store' : o.shippingRecipientName || 'You') + '</b></div>' +
+        '<div class="right">ORDER # ' + shopEsc(o.orderCode) + '<b style="color:#007185">View order details</b></div></div>' +
+        '<div class="order-body"><div class="order-items"><div class="order-status ' + st.tone + '">' + shopEsc(st.text) + '</div>' +
+        (o.items || [])
+            .map((it) => '<div class="order-item">' + miniCover(it) + '<div><b>' + shopEsc(it.title) + '</b><div class="muted" style="text-transform:capitalize">' + shopEsc(it.language) + ' · Qty ' + shopEsc(it.qty) + '</div></div></div>')
+            .join('') +
+        ret + '</div><div class="order-actions" onclick="event.stopPropagation()">' +
+        (o.status === 'pending_payment'
+            ? '<button class="btn" type="button" onclick="payPending(' + o.id + ')">Complete payment</button>'
+            : '<button class="btn" type="button" onclick="shopGo(\'order\',' + o.id + ')">Track package</button>') +
+        '<button class="btn ghost" type="button" onclick="shopGo(\'order\',' + o.id + ')">View order details</button></div></div></div>'
+    );
+}
+
+function filterOrders(list) {
+    if (orderFilter === 'open') return list.filter((o) => !['cancelled'].includes(o.status) && !(o.status === 'delivered' || o.status === 'fulfilled' || o.commerceStage === 'delivered'));
+    if (orderFilter === 'delivered') return list.filter((o) => o.status === 'delivered' || o.status === 'fulfilled' || o.commerceStage === 'delivered');
+    if (orderFilter === 'returns') return list.filter((o) => o.returnStatus);
+    return list;
+}
+
+function setOrderFilter(f) {
+    orderFilter = f;
+    renderOrdersList();
+}
+
+function renderOrdersList() {
+    const el = document.getElementById('orders-list');
+    if (!el) return;
+    document.querySelectorAll('#order-filters .pill').forEach((p) => p.classList.toggle('on', p.getAttribute('data-f') === orderFilter));
+    const list = filterOrders(accountOrders);
+    el.innerHTML = list.length ? list.map(orderCardHtml).join('') : '<div class="box empty">No orders to show.</div>';
+}
+
 async function renderAccount() {
+    showView('account');
     const root = document.getElementById('view-account');
-    if (!shopUser) {
-        document.getElementById('shop-login').classList.remove('hidden');
-        root.innerHTML = '';
+    root.innerHTML = '<div class="box empty">Loading...</div>';
+    const [ordersRes, addrRes] = await Promise.all([
+        fetch('/api/shop/orders?' + userQuery()),
+        fetch('/api/shop/addresses?' + userQuery())
+    ]);
+    accountOrders = (await ordersRes.json()).orders || [];
+    shopAddresses = (await addrRes.json()).addresses || [];
+    const name = [shopUser.firstName || shopUser.first_name, shopUser.lastName || shopUser.last_name].filter(Boolean).join(' ') || shopUser.name || 'Your account';
+    root.innerHTML =
+        '<div class="track-head" style="margin-bottom:8px"><div class="section-title" style="margin:0">' + shopEsc(name) + '</div><button class="btn ghost sm" type="button" onclick="shopSignOut()">Sign out</button></div>' +
+        '<div class="tabs"><button type="button" class="' + (accountTab === 'orders' ? 'on' : '') + '" onclick="shopGo(\'account\',\'orders\')">Your orders</button>' +
+        '<button type="button" class="' + (accountTab === 'address' ? 'on' : '') + '" onclick="shopGo(\'account\',\'address\')">Your addresses</button></div>' +
+        (accountTab === 'orders'
+            ? '<div class="filter-row" id="order-filters">' +
+              [['all', 'All orders'], ['open', 'In progress'], ['delivered', 'Delivered'], ['returns', 'Returns & replacements']]
+                  .map((f) => '<button type="button" class="pill" data-f="' + f[0] + '" onclick="setOrderFilter(\'' + f[0] + '\')">' + f[1] + '</button>')
+                  .join('') +
+              '</div><div id="orders-list"></div>'
+            : '<div class="layout-2"><div>' +
+              (shopAddresses
+                  .map(
+                      (a) =>
+                          '<div class="box"><b>' + shopEsc(a.recipientName) + '</b><div>' + shopEsc(a.line1) + '</div><div>' + shopEsc(a.city) + ', ' + shopEsc(a.state) + ' ' + shopEsc(a.pincode) +
+                          '</div><div class="muted">Phone: ' + shopEsc(a.phone) + '</div><div style="margin-top:8px"><a style="cursor:pointer" onclick="shopDeleteAddress(' + a.id + ')">Delete</a></div></div>'
+                  )
+                  .join('') || '<div class="box empty">No saved addresses yet.</div>') +
+              '</div><div class="box"><h3>Add a new address</h3>' + addressForm('account') + '</div></div>');
+    if (accountTab === 'orders') renderOrdersList();
+}
+
+/* ---------- order tracking ---------- */
+
+function termOrder(data) {
+    const t = data.timeline || {};
+    return t.cancelled || (t.steps && t.steps[t.steps.length - 1].state === 'done');
+}
+
+function updatesHtml(list) {
+    if (!list || !list.length) return '';
+    return (
+        '<ul class="t-sub">' +
+        list
+            .map(
+                (u) =>
+                    '<li><b>' + shopEsc(u.title) + '</b><span>' + shopEsc(when(u.at)) + (u.city ? ' · ' + shopEsc(u.city) : '') + (u.detail ? ' · ' + shopEsc(u.detail) : '') + '</span></li>'
+            )
+            .join('') +
+        '</ul>'
+    );
+}
+
+function stepExtra(step, data) {
+    const o = data.order;
+    let html = '';
+    if (step.key === 'shipped' && step.partner) {
+        const p = step.partner;
+        html +=
+            '<div class="carrier-card"><div><div class="lbl">Courier partner</div><div class="val">' + shopEsc(p.name) + '</div><div class="muted">' + shopEsc(p.service) + '</div></div>' +
+            (p.trackingNo ? '<div><div class="lbl">Tracking / AWB</div><div class="val">' + shopEsc(p.trackingNo) + '</div></div>' : '') +
+            (o.awbTrackUrl ? '<a href="' + shopEsc(o.awbTrackUrl) + '" target="_blank" rel="noopener">Track on courier site</a>' : '') +
+            '</div>';
+        if (!step.updates.length) html += '<p class="muted" style="margin:8px 0 0">Waiting for the first scan from the courier.</p>';
+    }
+    if (step.key === 'out_for_delivery' && step.agent) {
+        const a = step.agent;
+        html +=
+            '<div class="agent-card"><div><div class="lbl">Delivery agent</div><div class="val">' + shopEsc(a.name || 'Assigned shortly') + '</div></div>' +
+            '<div><div class="lbl">Agent phone</div><div class="val">' + (a.phone ? '<a href="tel:' + shopEsc(a.phone) + '">' + shopEsc(a.phone) + '</a>' : 'Not available yet') + '</div></div>' +
+            (a.phone ? '<a class="btn sm ghost" style="text-decoration:none" href="tel:' + shopEsc(a.phone) + '">Call agent</a>' : '') + '</div>' +
+            '<div class="otp-row">' +
+            (a.pincode ? '<div class="otp-box"><div class="lbl">Delivery PIN code</div><div class="code pin">' + shopEsc(a.pincode) + '</div></div>' : '') +
+            (step.deliveryOtp ? '<div class="otp-box"><div class="lbl">Delivery OTP</div><div class="code">' + shopEsc(step.deliveryOtp) + '</div></div>' : '') +
+            '</div>' +
+            (step.deliveryOtp ? '<div class="otp-note">Share this OTP with the delivery agent only when you receive your books.</div>' : '');
+        if (data.live) {
+            html += '<div class="live-tag">Live driver tracking</div><div id="shop-live-map-slot"></div>';
+        } else if (step.liveMapAvailable) {
+            html += '<div class="map-note">Live map is not available yet' + (o.trackUrl ? ' - <a href="' + shopEsc(o.trackUrl) + '" target="_blank" rel="noopener">open tracking page</a>' : '') + '.</div>';
+        }
+    }
+    return html;
+}
+
+function trackerHtml(data) {
+    const t = data.timeline;
+    return (
+        '<div class="tracker">' +
+        t.steps
+            .map(
+                (s) =>
+                    '<div class="t-step ' + s.state + '"><div class="t-dot">' + (s.state === 'done' ? '&#10003;' : '') + '</div>' +
+                    '<div class="t-title">' + shopEsc(s.title) + (s.at && s.state !== 'upcoming' ? '<span class="t-time">' + shopEsc(when(s.at)) + '</span>' : '') + '</div>' +
+                    (s.summary ? '<div class="t-sum">' + shopEsc(s.summary) + '</div>' : '') +
+                    stepExtra(s, data) +
+                    updatesHtml(s.updates) +
+                    '</div>'
+            )
+            .join('') +
+        '</div>'
+    );
+}
+
+function returnHtml(data) {
+    const r = data.returnView;
+    if (r) {
+        return (
+            '<div class="box"><h3>' + (r.kind === 'replacement' ? 'Replacement' : 'Return') + ' tracking</h3>' +
+            '<div><span class="badge warn">' + shopEsc(r.statusLabel) + '</span>' + (r.reason ? ' <span class="muted">Reason: ' + shopEsc(r.reason) + '</span>' : '') + '</div>' +
+            (r.status === 'rejected'
+                ? '<p class="msg">This request was declined. Contact the store for help.</p>'
+                : '<div class="ret-steps">' + r.steps.map((s) => '<div class="ret-step ' + s.state + '">' + shopEsc(s.title) + '</div>').join('') + '</div>') +
+            (r.agent || r.pickupOtp
+                ? '<div class="agent-card">' +
+                  (r.agent ? '<div><div class="lbl">Pickup agent</div><div class="val">' + shopEsc(r.agent.name || '') + ' <a href="tel:' + shopEsc(r.agent.phone) + '">' + shopEsc(r.agent.phone) + '</a></div></div>' : '') +
+                  (r.pickupOtp ? '<div class="otp-box"><div class="lbl">Return pickup OTP</div><div class="code">' + shopEsc(r.pickupOtp) + '</div></div>' : '') +
+                  '</div>'
+                : '') +
+            updatesHtml(r.updates) + '</div>'
+        );
+    }
+    if (!data.canReturn) return '';
+    const opt = data.returnOptions;
+    return (
+        '<div class="box"><h3>Return or replace items</h3><p class="muted">Eligible within ' + shopEsc(opt.windowDays) + ' days of ordering. Progress will appear on this page.</p>' +
+        '<label class="field">Request<select id="return-kind">' + (opt.returns ? '<option value="return">Return for refund</option>' : '') + (opt.replacements ? '<option value="replacement">Replacement</option>' : '') + '</select></label>' +
+        '<label class="field">Reason<textarea id="return-reason" rows="3"></textarea></label>' +
+        '<button class="btn sm" type="button" onclick="shopRequestReturn(' + data.order.id + ')">Submit request</button><p id="return-msg" class="msg"></p></div>'
+    );
+}
+
+function renderOrderDetail(data) {
+    const root = document.getElementById('view-order');
+    const keep = document.getElementById('shop-live-map');
+    const o = data.order;
+    const t = data.timeline;
+    const lastStep = t.steps[t.steps.length - 1];
+    let headline;
+    if (t.cancelled) headline = 'Cancelled';
+    else if (o.status === 'pending_payment') headline = 'Payment pending';
+    else if (lastStep.state === 'done') headline = lastStep.title;
+    else headline = 'Next: ' + t.headline;
+    const tone = t.cancelled || o.status === 'pending_payment' ? 'red' : '';
+    const ship = o.shipTo || {};
+    root.innerHTML =
+        '<div class="crumb"><a onclick="shopGo(\'account\',\'orders\')">Your orders</a> &rsaquo; Order ' + shopEsc(o.orderCode) + '</div>' +
+        '<div class="layout-2"><div><div class="box"><div class="track-head"><div><h1>Track package</h1><div class="muted">Order # ' + shopEsc(o.orderCode) + ' · Placed ' + shopEsc(when(o.createdAt, false)) + '</div></div>' +
+        '<span class="eta-chip' + (tone ? ' ' + tone : '') + '">' + shopEsc(headline) + '</span></div>' +
+        (o.status === 'pending_payment' ? '<p><button class="btn sm buy" type="button" onclick="payPending(' + o.id + ')">Complete payment</button></p>' : '') +
+        '<div style="height:14px"></div>' + trackerHtml(data) + '</div>' + returnHtml(data) + '</div>' +
+        '<div><div class="box"><h3>Order summary</h3>' +
+        (o.items || []).map((it) => '<div class="item-line">' + miniCover(it) + '<div style="flex:1"><b>' + shopEsc(it.title) + '</b><div class="muted" style="text-transform:capitalize">' + shopEsc(it.language) + ' · Qty ' + shopEsc(it.qty) + '</div></div><b>' + money(it.lineTotal) + '</b></div>').join('') +
+        '<div class="sum-row total"><span>Total</span><span>' + money(o.totalAmount) + '</span></div><div class="muted">' + shopEsc(payLabel(o)) + '</div></div>' +
+        '<div class="box"><h3>' + (o.fulfillmentType === 'pickup' ? 'Pickup' : 'Shipping address') + '</h3>' +
+        (o.fulfillmentType === 'pickup'
+            ? '<div>' + shopEsc((shopCatalog.store || {}).name || 'Store') + '</div><div class="muted">' + shopEsc([(shopCatalog.store || {}).address, (shopCatalog.store || {}).city].filter(Boolean).join(', ')) + '</div>'
+            : '<b>' + shopEsc(ship.name || '') + '</b><div>' + shopEsc(ship.address || '') + '</div><div>' + shopEsc([ship.city, ship.state].filter(Boolean).join(', ')) + ' ' + shopEsc(ship.pincode || '') + '</div><div class="muted">Phone: ' + shopEsc(ship.phone || '') + '</div>') +
+        '</div>' +
+        (o.trackUrl ? '<div class="box"><a href="' + shopEsc(o.trackUrl) + '" target="_blank" rel="noopener">Shareable tracking link</a></div>' : '') +
+        '</div></div>';
+    const slot = document.getElementById('shop-live-map-slot');
+    if (slot && data.live) {
+        if (keep) slot.replaceWith(keep);
+        else {
+            const div = document.createElement('div');
+            div.id = 'shop-live-map';
+            div.className = 'live-map';
+            slot.replaceWith(div);
+        }
+        drawLiveMap(data.live);
+    }
+}
+
+function drawLiveMap(live) {
+    const el = document.getElementById('shop-live-map');
+    if (!el) return;
+    if (!live.mapsApiKey) {
+        el.innerHTML = '<p style="padding:12px">Live map needs a Google Maps key in Commerce settings.</p>';
         return;
     }
-    const [ordersRes, addrRes] = await Promise.all([
-        fetch('/api/shop/orders?userId=' + encodeURIComponent(shopUser.id)),
-        fetch('/api/shop/addresses?userId=' + encodeURIComponent(shopUser.id))
-    ]);
-    const orders = (await ordersRes.json()).orders || [];
-    const addresses = (await addrRes.json()).addresses || [];
-    root.innerHTML =
-        '<div class="nav"><button class="primary" type="button" onclick="shopAccountTab(\'orders\')">My orders</button><button class="primary" type="button" style="background:#0369a1;" onclick="shopAccountTab(\'address\')">Address</button></div>' +
-        '<div id="account-orders" class="card">' +
-        (orders
-            .map(
-                (o) =>
-                    '<p><button type="button" onclick="openShopOrder(' +
-                    o.id +
-                    ')">' +
-                    shopEsc(o.orderCode) +
-                    '</button> · ' +
-                    shopEsc(o.commerceStage || o.status) +
-                    (o.returnStatus ? ' · Return ' + shopEsc(o.returnStatus) : '') +
-                    '</p>'
-            )
-            .join('') || '<p class="muted">No orders yet.</p>') +
-        '</div>' +
-        '<div id="account-address" class="card hidden"><h3>Saved addresses</h3>' +
-        addresses
-            .map((a) => '<p>' + shopEsc(a.recipientName) + ', ' + shopEsc(a.line1) + ', ' + shopEsc(a.city) + ' ' + shopEsc(a.pincode) + '</p>')
-            .join('') +
-        '<h3>Add address</h3><label>Name<input id="addr-name"></label><label>Phone<input id="addr-phone"></label><label>Address<input id="addr-line"></label><label>City<input id="addr-city"></label><label>State<input id="addr-state"></label><label>Pincode<input id="addr-pin"></label><button class="primary" style="margin-top:8px;" onclick="shopSaveAddress()">Save address</button><p id="addr-msg"></p></div>';
+    const run = () => paintMap(el, live);
+    if (window.google && window.google.maps) return run();
+    window.__shopMapBoot = run;
+    if (document.getElementById('shop-maps-js')) return;
+    const s = document.createElement('script');
+    s.id = 'shop-maps-js';
+    s.async = true;
+    s.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(live.mapsApiKey) + '&callback=__shopMapBoot';
+    document.body.appendChild(s);
 }
 
-function shopAccountTab(name) {
-    document.getElementById('account-orders').classList.toggle('hidden', name !== 'orders');
-    document.getElementById('account-address').classList.toggle('hidden', name !== 'address');
+function paintMap(el, live) {
+    const center = live.agent || live.store || live.drop;
+    if (!center) {
+        el.innerHTML = '<p style="padding:12px">Waiting for the driver location...</p>';
+        return;
+    }
+    if (!el.__map) {
+        el.innerHTML = '';
+        el.__map = new google.maps.Map(el, { center, zoom: 14, mapTypeControl: false, streetViewControl: false });
+        el.__dir = new google.maps.DirectionsRenderer({ map: el.__map, suppressMarkers: true });
+        el.__markers = {};
+    }
+    const pin = (key, pos, title, label) => {
+        if (!pos) return;
+        if (!el.__markers[key]) el.__markers[key] = new google.maps.Marker({ map: el.__map, title, label });
+        el.__markers[key].setPosition(pos);
+    };
+    pin('store', live.store, 'Store', 'S');
+    pin('drop', live.drop, 'Your location', 'H');
+    pin('agent', live.agent, 'Delivery agent', 'D');
+    const origin = live.agent || live.store;
+    const key = JSON.stringify([origin, live.drop]);
+    if (origin && live.drop && el.__routeKey !== key) {
+        el.__routeKey = key;
+        new google.maps.DirectionsService().route({ origin, destination: live.drop, travelMode: 'DRIVING' }, (result, status) => {
+            if (status === 'OK') el.__dir.setDirections(result);
+        });
+    }
 }
 
-async function shopSaveAddress() {
-    const res = await fetch('/api/shop/addresses', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            userId: shopUser.id,
-            recipientName: document.getElementById('addr-name').value,
-            phone: document.getElementById('addr-phone').value,
-            line1: document.getElementById('addr-line').value,
-            city: document.getElementById('addr-city').value,
-            state: document.getElementById('addr-state').value,
-            pincode: document.getElementById('addr-pin').value
-        })
-    });
+async function fetchOrder(id) {
+    const res = await fetch('/api/shop/orders/' + id + '?' + userQuery());
     const data = await res.json();
-    document.getElementById('addr-msg').textContent = data.error || 'Address saved.';
-    if (res.ok) renderAccount();
+    return { ok: res.ok, data };
 }
 
 async function openShopOrder(id) {
-    shopShow('order');
+    showView('order');
     const root = document.getElementById('view-order');
-    const res = await fetch('/api/shop/orders/' + id + '?userId=' + encodeURIComponent(shopUser.id));
-    const data = await res.json();
-    if (!res.ok) {
-        root.innerHTML = '<p>' + shopEsc(data.error || 'Order not found') + '</p>';
+    root.innerHTML = '<div class="box empty">Loading tracking...</div>';
+    const { ok, data } = await fetchOrder(id);
+    if (!ok) {
+        root.innerHTML = '<div class="box empty">' + shopEsc(data.error || 'Order not found') + '</div>';
         return;
     }
-    const o = data.order;
-    const line = (ev) =>
-        '<div style="padding:8px 0;border-top:1px solid #e2e8f0;"><strong>' +
-        shopEsc(ev.title || ev.description) +
-        '</strong><div class="muted">' +
-        shopEsc(ev.at || '') +
-        (ev.city ? ' · ' + shopEsc(ev.city) : '') +
-        (ev.detail ? ' · ' + shopEsc(ev.detail) : '') +
-        '</div></div>';
-    root.innerHTML =
-        '<div class="card"><h2>' +
-        shopEsc(o.orderCode) +
-        '</h2><p>' +
-        shopEsc(o.commerceStage || o.status) +
-        ' · ' +
-        shopEsc(o.paymentMode) +
-        ' · ' +
-        shopEsc(o.fulfillmentType) +
-        '</p>' +
-        (o.deliveryOtp ? '<p>Delivery OTP <span class="otp">' + shopEsc(o.deliveryOtp) + '</span></p>' : '') +
-        (o.agentPhone ? '<p>Agent ' + shopEsc(o.agentName || '') + ' · ' + shopEsc(o.agentPhone) + '</p>' : '') +
-        (o.commerceTrackUrl ? '<p><a href="' + shopEsc(o.commerceTrackUrl) + '">Open live map tracking</a></p>' : '') +
-        '<h3>Shipment</h3>' +
-        ((data.events || []).map(line).join('') || '<p class="muted">Waiting for the first scan.</p>') +
-        '<h3>Return shipment</h3><p>' +
-        shopEsc(o.returnKind || 'No return') +
-        ' · ' +
-        shopEsc(o.returnStatus || '') +
-        (o.returnAgentPhone ? ' · Agent ' + shopEsc(o.returnAgentPhone) : '') +
-        '</p>' +
-        ((data.returnEvents || []).map(line).join('') || '<p class="muted">No return scans yet.</p>') +
-        '<label>Request<select id="return-kind"><option value="return">Return</option><option value="replacement">Replacement</option></select></label>' +
-        '<label>Reason<textarea id="return-reason"></textarea></label>' +
-        '<button class="primary" onclick="shopRequestReturn(' +
-        o.id +
-        ')">Submit return</button><p id="return-msg"></p></div>';
+    renderOrderDetail(data);
+    if (!termOrder(data) || data.returnView) {
+        orderPoll = setInterval(async () => {
+            if (document.getElementById('view-order').classList.contains('hidden')) return stopPolling();
+            try {
+                const r = await fetchOrder(id);
+                if (r.ok) {
+                    renderOrderDetail(r.data);
+                    if (termOrder(r.data) && !r.data.returnView) stopPolling();
+                }
+            } catch (_) {}
+        }, 15000);
+    }
 }
 
 async function shopRequestReturn(id) {
+    const msg = document.getElementById('return-msg');
     const res = await fetch('/api/shop/orders/' + id + '/return', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -364,8 +919,12 @@ async function shopRequestReturn(id) {
         })
     });
     const data = await res.json();
-    document.getElementById('return-msg').textContent = data.error || 'Return requested. Tracking updates will show on this screen.';
-    if (res.ok) setTimeout(() => openShopOrder(id), 400);
+    if (!res.ok) {
+        msg.textContent = data.error || 'Could not submit the request.';
+        return;
+    }
+    toast('Request submitted');
+    openShopOrder(id);
 }
 
 bootShop();

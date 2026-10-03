@@ -3,45 +3,46 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex,nofollow">
     <title>Book shop</title>
+    <link rel="stylesheet" href="/css/shop.css?v=20261003shop2">
     <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
-    <style>
-        body { margin: 0; font-family: Arial, sans-serif; background: #f8fafc; color: #0f172a; }
-        header { background: #14532d; color: #fff; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
-        header a, header button { color: #fff; background: transparent; border: 1px solid rgba(255,255,255,.4); border-radius: 999px; padding: 6px 12px; cursor: pointer; }
-        main { max-width: 980px; margin: 0 auto; padding: 18px; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
-        .card { background: #fff; border-radius: 14px; padding: 14px; box-shadow: 0 1px 3px rgba(15,23,42,.06); }
-        button.primary { background: #15803d; color: #fff; border: 0; border-radius: 8px; padding: 8px 12px; cursor: pointer; font-weight: 700; }
-        input, select, textarea { width: 100%; box-sizing: border-box; margin-top: 4px; padding: 8px; }
-        .muted { color: #64748b; font-size: 0.88rem; }
-        .nav { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
-        .hidden { display: none; }
-        .otp { font-size: 1.3rem; font-weight: 800; letter-spacing: 2px; }
-    </style>
 </head>
 <body>
-<header>
-    <strong id="store-name">Book shop</strong>
-    <div>
-        <button type="button" onclick="shopShow('catalog')">Shop</button>
-        <button type="button" onclick="shopShow('account')">Account</button>
-    </div>
-</header>
-<main>
-    <p class="muted" id="shop-hours"></p>
-    <div id="shop-login" class="card hidden">
-        <h2>Sign in</h2>
-        <p class="muted">Use the same portal account. This shop is not listed on the public website.</p>
-        <label>Email or portal ID<input id="login-email"></label>
-        <label>Password<input id="login-password" type="password"></label>
-        <button class="primary" style="margin-top:10px;" onclick="shopLogin()">Sign in</button>
-        <p id="login-msg"></p>
-    </div>
-    <div id="view-catalog"></div>
-    <div id="view-account" class="hidden"></div>
-    <div id="view-order" class="hidden"></div>
+<div class="topbar">
+    <button type="button" class="brand" onclick="shopGo('home')"><span id="store-name">Book shop</span><small>Books by Dr. R.B. Gogate</small></button>
+    <form class="searchbar" onsubmit="shopSearch(event)">
+        <input id="shop-search" type="search" placeholder="Search books" autocomplete="off">
+        <button type="submit">Search</button>
+    </form>
+    <button type="button" class="top-link" onclick="shopGo('account')"><span id="hello-line">Hello, sign in</span><strong>Account &amp; Orders</strong></button>
+    <button type="button" class="top-link cart-link" onclick="openCartDrawer()">Cart <span class="cart-count" id="cart-count">0</span></button>
+</div>
+<div class="subnav">
+    <button type="button" id="nav-home" onclick="shopGo('home')">All books</button>
+    <button type="button" id="nav-orders" onclick="shopGo('account','orders')">Your orders</button>
+    <button type="button" id="nav-addresses" onclick="shopGo('account','address')">Your addresses</button>
+    <span class="hours" id="shop-hours"></span>
+</div>
+<div id="closed-banner" class="closed-banner hidden"></div>
+
+<main class="wrap">
+    <section id="view-home"></section>
+    <section id="view-checkout" class="hidden"></section>
+    <section id="view-login" class="hidden"></section>
+    <section id="view-account" class="hidden"></section>
+    <section id="view-order" class="hidden"></section>
 </main>
-<script src="/js/shop.js?v=20261003shop"></script>
+
+<footer class="footer" id="shop-footer"></footer>
+
+<div id="drawer-mask" class="drawer-mask hidden" onclick="closeCartDrawer()"></div>
+<aside id="cart-drawer" class="drawer hidden" aria-label="Shopping cart">
+    <header>Shopping cart <button type="button" onclick="closeCartDrawer()" aria-label="Close">&times;</button></header>
+    <div class="drawer-body" id="drawer-body"></div>
+    <div class="drawer-foot" id="drawer-foot"></div>
+</aside>
+
+<script src="/js/shop.js?v=20261003shop2"></script>
 </body>
 </html>
