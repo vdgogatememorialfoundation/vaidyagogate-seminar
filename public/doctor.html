@@ -127,8 +127,10 @@
         .vtrk-step-circle { width: 32px; height: 32px; border-radius: 50%; background: #e2e8f0; color: #94a3b8; display: flex; align-items: center; justify-content: center; font-size: 0.78rem; border: 3px solid #f8fafc; z-index: 1; flex-shrink: 0; }
         .vtrk-step.done .vtrk-step-circle { background: #16a34a; color: #fff; border-color: #dcfce7; }
         .vtrk-step.active .vtrk-step-circle { background: #15803d; color: #fff; border-color: #bbf7d0; box-shadow: 0 0 0 4px rgba(22,163,74,0.18); }
-        .vtrk-step-line { flex: 1; width: 3px; background: #e2e8f0; margin: 2px 0; border-radius: 999px; }
-        .vtrk-step.done .vtrk-step-line { background: #4ade80; }
+        .vtrk-step-line { position: relative; flex: 1; width: 3px; background: #e2e8f0; margin: 2px 0; border-radius: 999px; overflow: hidden; }
+        .vtrk-step.done .vtrk-step-line::after { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 100%; background: #4ade80; }
+        .vtrk-step.done.vtrk-creep .vtrk-step-line::after { height: 0; animation: vtrk-line-creep 22s cubic-bezier(.22,.61,.36,1) forwards; }
+        @keyframes vtrk-line-creep { 0% { height: 6%; } 100% { height: 68%; } }
         .vtrk-step-body { flex: 1; padding: 6px 12px 14px 4px; }
         .vtrk-step-title { font-weight: 700; font-size: 0.92rem; color: #1e293b; }
         .vtrk-step.upcoming .vtrk-step-title { color: #94a3b8; font-weight: 600; }
@@ -939,6 +941,6 @@
         }
     })();
     </script>
-    <script src="/js/doctor.js?v=20261003day2green"></script>
+    <script src="/js/doctor.js?v=20261003creep"></script>
 </body>
 </html>

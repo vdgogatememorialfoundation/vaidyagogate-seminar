@@ -1365,16 +1365,28 @@ function renderTrackerStepsHtml(timeline) {
     }
     html += '<div class="vtrk-steps">';
 
+    let lastDoneIdx = -1;
+    steps.forEach(function (step, idx) {
+        if (step.state === 'completed' || step.state === 'cancelled') lastDoneIdx = idx;
+    });
+    const creepIdx =
+        lastDoneIdx >= 0 &&
+        lastDoneIdx < steps.length - 1 &&
+        steps[lastDoneIdx + 1].state !== 'completed' &&
+        steps[lastDoneIdx + 1].state !== 'cancelled'
+            ? lastDoneIdx
+            : -1;
+
     steps.forEach(function (step, idx) {
         const isLast = idx === steps.length - 1;
         const cls =
-            step.state === 'completed'
+            (step.state === 'completed'
                 ? 'vtrk-step done sat-step-pop'
                 : step.state === 'cancelled'
                   ? 'vtrk-step done sat-step-pop'
                   : step.state === 'active'
                     ? 'vtrk-step active sat-step-pop sat-step-active-glow'
-                    : 'vtrk-step upcoming';
+                    : 'vtrk-step upcoming') + (idx === creepIdx ? ' vtrk-creep' : '');
         const whenHtml =
             step.at && step.state !== 'upcoming'
                 ? '<span class="vtrk-step-when"><i class="fas fa-clock"></i> ' +
@@ -8161,16 +8173,31 @@ function buildDoctorCertPipelineTimeline(r) {
     return { steps: steps };
 }
 
+let _lastCertTrackFingerprint = '';
+
+function certTrackFingerprint(rows) {
+    return (rows || [])
+        .map(function (r) {
+            return [
+                r.registrationId,
+                r.certStatus,
+                r.paid ? 1 : 0,
+                r.certDayScanned ? 1 : 0,
+                r.earlierDayScanned ? 1 : 0,
+                r.canViewCertificate ? 1 : 0,
+                r.scanCount || 0,
+                r.certStatusLabel || ''
+            ].join(':');
+        })
+        .join('|');
+}
+
 async function loadDoctorCertificateTracking(quiet) {
     const wrap = document.getElementById('doctor-cert-tracking-wrap');
     const live = document.getElementById('cert-track-live');
     if (!wrap || !currentUser) return;
     if (!doctorTabVisible('tab-certificate')) return;
     if (!quiet) wrap.innerHTML = '<p style="color:#94a3b8;text-align:center;">Loading…</p>';
-    if (live) {
-        live.textContent = 'Updating…';
-        live.style.color = '#64748b';
-    }
     try {
         const uid = await ensureDoctorInternalUserId();
         if (!uid) {
@@ -8198,6 +8225,9 @@ async function loadDoctorCertificateTracking(quiet) {
             throw new Error(msg);
         }
         if (!Array.isArray(rows)) throw new Error('Unexpected response from server.');
+        const certFp = certTrackFingerprint(rows);
+        if (quiet && certFp === _lastCertTrackFingerprint) return;
+        _lastCertTrackFingerprint = certFp;
         if (!Array.isArray(rows) || !rows.length) {
             wrap.innerHTML =
                 '<p style="color:#64748b;text-align:center;">No seminar registrations yet. Register and complete payment to track certificate status here.</p>';

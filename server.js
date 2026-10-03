@@ -8381,10 +8381,10 @@ app.post('/api/scanner/mark', (req, res) => {
                                     }
                                 );
                             });
-                            notifEngine.notify(
-                                db,
-                                'CHECK_IN_SUCCESS',
-                                {
+                            seminarDays.getDayById(db, row.day_id, (dayErr, dayRow) => {
+                                if (dayErr) console.warn('[scanner] day email:', dayErr.message);
+                                const dayTitle = (dayRow && dayRow.title) || eventName;
+                                const notifyOpts = {
                                     userId: row.doctor_user_id,
                                     seminarId: row.seminar_id,
                                     registrationId: regId || null,
@@ -8393,16 +8393,29 @@ app.post('/api/scanner/mark', (req, res) => {
                                         ticket_id: row.ticket_id_string,
                                         event_name: eventName,
                                         scan_event_title: eventName,
+                                        day_title: dayTitle,
                                         payment_status:
                                             row.payment_status === 'success' ? 'PAID' : 'UNPAID',
                                         approval_status: 'checked_in',
                                         check_in_time: formatCheckInTimeForNotify(atIso)
                                     }
-                                },
-                                (nErr) => {
-                                    if (nErr) console.warn('[scanner] check-in notify:', nErr.message);
+                                };
+                                if (dayRow && dayRow.scanEmailEnabled === false) {
+                                    notifyOpts.skipEmail = true;
+                                } else if (
+                                    dayRow &&
+                                    (String(dayRow.scanEmailSubject || '').trim() ||
+                                        String(dayRow.scanEmailHtml || '').trim())
+                                ) {
+                                    notifyOpts.emailOverride = {
+                                        subject: String(dayRow.scanEmailSubject || '').trim(),
+                                        html: seminarDays.formatScanEmailHtml(dayRow.scanEmailHtml)
+                                    };
                                 }
-                            );
+                                notifEngine.notify(db, 'CHECK_IN_SUCCESS', notifyOpts, (nErr) => {
+                                    if (nErr) console.warn('[scanner] check-in notify:', nErr.message);
+                                });
+                            });
                             });
                         };
 

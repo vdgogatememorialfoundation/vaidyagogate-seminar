@@ -14153,7 +14153,21 @@ function addSeminarDayRow(prefill) {
         '<label style="display:flex;align-items:center;gap:8px;font-size:0.84rem;color:#334155;">' +
         '<input type="checkbox" class="day-checkin-enabled"' +
         (checkinOn ? ' checked' : '') +
-        '> Enable scanner check-in for this day</label></div>';
+        '> Enable scanner check-in for this day</label>' +
+        '<div style="margin-top:4px;padding:10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;">' +
+        '<label style="display:flex;align-items:center;gap:8px;font-size:0.84rem;color:#166534;font-weight:700;">' +
+        '<input type="checkbox" class="day-email-enabled"' +
+        (p.scanEmailEnabled === false || p.scan_email_enabled === 0 || p.scan_email_enabled === false ? '' : ' checked') +
+        '> Email this day when its e-ticket is scanned</label>' +
+        '<p style="font-size:0.75rem;color:#64748b;margin:6px 0;">Leave the subject and message blank to use the standard check-in email. Placeholders: {{full_name}}, {{first_name}}, {{event_name}}, {{day_title}}, {{check_in_time}}, {{application_no}}, {{ticket_id}}, {{user_id_string}}</p>' +
+        '<label style="font-size:0.78rem;">Email subject for this day</label>' +
+        '<input type="text" class="day-email-subject" maxlength="300" value="' +
+        escAdmin(p.scanEmailSubject || p.scan_email_subject || '') +
+        '" placeholder="e.g. Day 1 check-in confirmed — {{event_name}}">' +
+        '<label style="font-size:0.78rem;margin-top:8px;display:block;">Email message for this day</label>' +
+        '<textarea class="day-email-html" rows="4" maxlength="20000" placeholder="Dear {{full_name}}, your {{day_title}} check-in is recorded.">' +
+        escAdmin(p.scanEmailHtml || p.scan_email_html || '') +
+        '</textarea></div></div>';
     row.querySelector('.day-remove').addEventListener('click', function () {
         row.remove();
     });
@@ -14172,6 +14186,9 @@ function collectSeminarDaysFromUi() {
             checkin_date: row.querySelector('.day-checkin')?.value || null,
             sort_order: idx,
             checkin_enabled: row.querySelector('.day-checkin-enabled')?.checked !== false,
+            scan_email_enabled: row.querySelector('.day-email-enabled')?.checked !== false,
+            scan_email_subject: row.querySelector('.day-email-subject')?.value.trim() || '',
+            scan_email_html: row.querySelector('.day-email-html')?.value.trim() || '',
             is_active: true
         };
         const did = parseInt(row.dataset.dayId, 10);

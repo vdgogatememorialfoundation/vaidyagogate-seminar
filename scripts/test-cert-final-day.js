@@ -30,6 +30,13 @@ assert.ok(/not scanned yet/i.test(paidByKey.final_day_scan.desc));
 assert.notStrictEqual(paidByKey.certificate.state, 'active');
 assert.ok(String(paidByKey.checked_in.title).indexOf('Day 1') >= 0);
 
+const seminarDays = require('../lib/seminar-days');
+assert.strictEqual(
+    seminarDays.formatScanEmailHtml('Hello {{full_name}}\n\nSee you on {{day_title}}.'),
+    '<p>Hello {{full_name}}</p><p>See you on {{day_title}}.</p>'
+);
+assert.strictEqual(seminarDays.formatScanEmailHtml('<p>Keep</p>'), '<p>Keep</p>');
+
 const days = [
     { id: 10, title: 'Day 1', sort_order: 0, day_date: '2026-11-01', is_active: 1 },
     { id: 11, title: 'Day 2', sort_order: 1, day_date: '2026-11-02', is_active: 1 }
