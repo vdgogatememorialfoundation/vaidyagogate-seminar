@@ -285,6 +285,132 @@
     font-size: 0.85rem;
 }
 
+.cert-checked {
+    margin: 8px 0 0;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #166534;
+    font-family: 'Roboto', Arial, sans-serif;
+}
+
+/* —— Manas Roga / image-overlay layout (artwork provides static chrome) —— */
+.cert-page--overlay {
+    border: none;
+    padding: 0;
+    background-color: #fff;
+    background-repeat: no-repeat;
+    background-position: center center;
+    background-size: 100% 100%;
+    aspect-ratio: 1536 / 1024;
+    min-height: 0;
+    width: 297mm;
+    max-width: 100%;
+}
+
+.cert-page--overlay::before,
+.cert-page--overlay::after {
+    display: none;
+}
+
+.cert-overlay-layer {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+}
+
+.cert-overlay-name {
+    position: absolute;
+    left: 12%;
+    right: 34%;
+    top: 41.5%;
+    margin: 0;
+    text-align: center;
+    font-family: 'Cormorant Garamond', Georgia, serif;
+    font-size: clamp(1.35rem, 3.2vw, 2.15rem);
+    font-weight: 700;
+    color: #1a1a2e;
+    line-height: 1.15;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cert-overlay-verify {
+    position: absolute;
+    right: 5.8%;
+    top: 31%;
+    width: 22.5%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.cert-overlay-qr {
+    width: 58%;
+    max-width: 118px;
+    aspect-ratio: 1;
+    object-fit: contain;
+    background: #fff;
+    margin-top: 18%;
+    display: block;
+}
+
+.cert-overlay-qr--missing {
+    background: #d1d5db;
+}
+
+.cert-overlay-id-values {
+    width: 92%;
+    margin-top: 10%;
+    font-family: 'Roboto', Arial, sans-serif;
+}
+
+.cert-overlay-id-val {
+    margin: 0 0 0.55em;
+    padding: 0.18em 0.35em 0.18em 42%;
+    font-size: clamp(0.55rem, 1.05vw, 0.78rem);
+    font-weight: 600;
+    color: #1f2937;
+    line-height: 1.25;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cert-overlay-checked {
+    margin-top: 0.35rem;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    background: #166534;
+    color: #fff;
+    font-size: clamp(0.55rem, 1vw, 0.72rem);
+    font-weight: 700;
+    font-family: 'Roboto', Arial, sans-serif;
+    letter-spacing: 0.02em;
+}
+
+.cert-overlay-checked--pending {
+    background: #92400e;
+}
+
+.cert-overlay-sig {
+    position: absolute;
+    bottom: 14.5%;
+    max-height: 9.5%;
+    width: auto;
+    max-width: 18%;
+    object-fit: contain;
+    object-position: center bottom;
+}
+
+.cert-overlay-sig--left {
+    left: 14%;
+}
+
+.cert-overlay-sig--right {
+    right: 12%;
+}
+
 .cert-print-hint {
     text-align: center;
     font-size: 0.85rem;
