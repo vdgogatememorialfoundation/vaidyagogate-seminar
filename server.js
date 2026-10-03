@@ -6750,6 +6750,8 @@ function mapDoctorCertificateTrackingRows(rows) {
             templatePath: row.template_path,
             certStatus,
             certStatusLabel,
+            awaitingFinalDay: !!view.awaitingFinalDay,
+            certDayTitle: view.certDayTitle || null,
             canViewCertificate: view.canViewCertificate,
             certPhase: view.phase,
             certHiddenReason: view.hiddenReason,

@@ -8068,11 +8068,13 @@ async function loadDoctorCertificateTracking(quiet) {
             let html =
                 '<table class="data-table" style="font-size:0.88rem;"><thead><tr><th>Seminar</th><th>Application No.</th><th>Scans</th><th>Status</th></tr></thead><tbody>';
             rows.forEach((r) => {
-                const scanLbl = (r.scanCount || 0) + ' / ' + (r.scansRequired || 1);
+                const scanLbl = r.awaitingFinalDay
+                    ? (r.certDayTitle || 'Final day') + ' not scanned'
+                    : (r.scanCount || 0) + ' / ' + (r.scansRequired || 1);
                 let statusColor = '#64748b';
                 if (r.certStatus === 'issued') statusColor = '#15803d';
                 else if (r.certStatus === 'not_attended') statusColor = '#991b1b';
-                else if (r.certStatus === 'awaiting_checkin') statusColor = '#b45309';
+                else if (r.certStatus === 'awaiting_checkin' || r.certStatus === 'awaiting_final_day') statusColor = '#b45309';
                 else if (r.certStatus === 'awaiting_approval') statusColor = '#7c3aed';
                 else if (r.certStatus === 'scheduled_release') statusColor = '#0369a1';
                 const countdownHint =
