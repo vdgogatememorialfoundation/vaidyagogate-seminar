@@ -10551,11 +10551,8 @@ app.post('/api/public/certificate-verify/otp/send-both', withIntegrationSettings
             if (err) return res.status(500).json({ error: err.message });
             if (!out || !out.ok) return res.status(400).json(out || { ok: false, error: 'Lookup failed' });
             const email = String(out.cert.email || '').trim();
-            const phone = String(out.cert.phone || '').trim();
             const ev = contactValidation.validateEmail(email);
-            const pv = contactValidation.validatePhone(phone);
             if (!ev.valid) return res.status(400).json({ error: 'Certificate holder email is not on file.' });
-            if (!pv.valid) return res.status(400).json({ error: 'Certificate holder mobile is not on file.' });
             const meta = {
                 certId: out.cert.id,
                 certKind: out.cert.kind || 'participant',
@@ -10570,38 +10567,27 @@ app.post('/api/public/certificate-verify/otp/send-both', withIntegrationSettings
                 if (r1 && r1.deliverError) {
                     return res.status(503).json({ error: r1.deliverError, debugCode: r1.debugCode });
                 }
-                sendCertificateVerifyOtpChannel('phone', pv.cleanedPhone, meta, (e2, r2) => {
-                    if (e2) return res.status(500).json({ error: e2.message });
-                    if (r2 && r2.rateLimited) {
-                        return res.status(429).json({ error: 'Too many OTP requests. Try again later.' });
-                    }
-                    if (r2 && r2.deliverError) {
-                        return res.status(503).json({ error: r2.deliverError, debugCode: r2.debugCode });
-                    }
-                    const debug =
-                        process.env.OTP_RETURN_CODE === '1' || process.env.NODE_ENV === 'development';
-                    const payload = {
-                        success: true,
-                        ttlMinutes: otpLib.OTP_TTL_MIN,
-                        maskedEmail: certVerify.maskEmail(ev.cleanedEmail),
-                        maskedPhone: certVerify.maskPhone(pv.cleanedPhone),
-                        certId: out.cert.id
-                    };
-                    if (debug) {
-                        payload.debugEmailCode = r1 && r1.debugCode;
-                        payload.debugPhoneCode = r2 && r2.debugCode;
-                    }
-                    res.json(payload);
-                });
+                const debug =
+                    process.env.OTP_RETURN_CODE === '1' || process.env.NODE_ENV === 'development';
+                const payload = {
+                    success: true,
+                    ttlMinutes: otpLib.OTP_TTL_MIN,
+                    maskedEmail: certVerify.maskEmail(ev.cleanedEmail),
+                    certId: out.cert.id
+                };
+                if (debug) {
+                    payload.debugEmailCode = r1 && r1.debugCode;
+                }
+                res.json(payload);
             });
         }
     );
 });
 
 app.post('/api/public/certificate-verify/confirm', (req, res) => {
-    const { seminarId, applicationNo, prn, token, emailCode, phoneCode } = req.body || {};
-    if (!emailCode || !phoneCode) {
-        return res.status(400).json({ error: 'Email and WhatsApp OTP codes are both required.' });
+    const { seminarId, applicationNo, prn, token, emailCode } = req.body || {};
+    if (!emailCode) {
+        return res.status(400).json({ error: 'Email OTP code is required.' });
     }
     certVerify.resolveCertForPublicLookup(
         db,
@@ -10610,9 +10596,8 @@ app.post('/api/public/certificate-verify/confirm', (req, res) => {
             if (err) return res.status(500).json({ error: err.message });
             if (!out || !out.ok) return res.status(400).json(out || { ok: false, error: 'Lookup failed' });
             const ev = contactValidation.validateEmail(out.cert.email);
-            const pv = contactValidation.validatePhone(out.cert.phone);
-            if (!ev.valid || !pv.valid) {
-                return res.status(400).json({ error: 'Certificate contact details are incomplete.' });
+            if (!ev.valid) {
+                return res.status(400).json({ error: 'Certificate holder email is not on file.' });
             }
             const meta = {
                 certId: out.cert.id,
@@ -10638,51 +10623,29 @@ app.post('/api/public/certificate-verify/confirm', (req, res) => {
                             error: (r1 && r1.error) || 'Invalid or expired email OTP.'
                         });
                     }
-                    otpLib.verifyOtp(
+                    certVerify.validateCertificateEmailOtp(
                         db,
                         {
-                            channel: 'phone',
-                            destination: pv.cleanedPhone,
-                            purpose: 'certificate_verify',
-                            code: String(phoneCode).trim(),
-                            meta,
-                            userId: out.cert.userId,
-                            seminarId: out.seminar.id
+                            certId: out.cert.id,
+                            certKind: out.cert.kind || 'participant',
+                            emailToken: r1.token
                         },
-                        (e2, r2) => {
-                            if (e2) return res.status(500).json({ error: e2.message });
-                            if (!r2 || !r2.ok) {
-                                return res.status(400).json({
-                                    error: (r2 && r2.error) || 'Invalid or expired WhatsApp OTP.'
-                                });
+                        (e3, v) => {
+                            if (e3) return res.status(500).json({ error: e3.message });
+                            if (!v || !v.ok) {
+                                return res.status(400).json(v || { ok: false, error: 'OTP validation failed' });
                             }
-                            certVerify.validateBothOtpTokens(
-                                db,
-                                {
-                                    certId: out.cert.id,
-                                    certKind: out.cert.kind || 'participant',
-                                    emailToken: r1.token,
-                                    phoneToken: r2.token
-                                },
-                                (e3, v) => {
-                                    if (e3) return res.status(500).json({ error: e3.message });
-                                    if (!v || !v.ok) {
-                                        return res.status(400).json(
-                                            v || { ok: false, error: 'OTP validation failed' }
-                                        );
-                                    }
-                                    res.json({
-                                        ok: true,
-                                        valid: true,
-                                        seminarTitle: out.seminar.title,
-                                        displayName: out.cert.displayName,
-                                        applicationNo: out.cert.applicationNo,
-                                        prn: out.cert.prn,
-                                        message:
-                                            'This certificate is authentic and was issued by the Vaidya Gogate Memorial Foundation.'
-                                    });
-                                }
-                            );
+                            res.json({
+                                ok: true,
+                                valid: true,
+                                certKind: out.cert.kind || 'participant',
+                                seminarTitle: out.seminar.title,
+                                displayName: out.cert.displayName,
+                                applicationNo: out.cert.applicationNo,
+                                prn: out.cert.prn,
+                                message:
+                                    'This certificate is authentic and was issued by the Vaidya Gogate Memorial Foundation.'
+                            });
                         }
                     );
                 }
