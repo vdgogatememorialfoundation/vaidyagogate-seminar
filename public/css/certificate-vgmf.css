@@ -320,16 +320,16 @@
 
 .cert-overlay-name {
     position: absolute;
-    left: 12%;
-    right: 34%;
-    top: 41.5%;
+    left: 18%;
+    right: 30%;
+    top: 50.2%;
     margin: 0;
     text-align: center;
     font-family: 'Cormorant Garamond', Georgia, serif;
-    font-size: clamp(1.35rem, 3.2vw, 2.15rem);
+    font-size: clamp(1.2rem, 2.8vw, 1.85rem);
     font-weight: 700;
     color: #1a1a2e;
-    line-height: 1.15;
+    line-height: 1.1;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -337,21 +337,21 @@
 
 .cert-overlay-verify {
     position: absolute;
-    right: 5.8%;
-    top: 31%;
-    width: 22.5%;
+    right: 4.0%;
+    top: 42%;
+    width: 24%;
     display: flex;
     flex-direction: column;
     align-items: center;
 }
 
 .cert-overlay-qr {
-    width: 58%;
-    max-width: 118px;
+    width: 38%;
+    max-width: 86px;
     aspect-ratio: 1;
     object-fit: contain;
     background: #fff;
-    margin-top: 18%;
+    margin-top: 10%;
     display: block;
 }
 
@@ -360,26 +360,29 @@
 }
 
 .cert-overlay-id-values {
-    width: 92%;
-    margin-top: 10%;
+    width: 94%;
+    margin-top: 18%;
     font-family: 'Roboto', Arial, sans-serif;
 }
 
 .cert-overlay-id-val {
-    margin: 0 0 0.55em;
-    padding: 0.18em 0.35em 0.18em 42%;
-    font-size: clamp(0.55rem, 1.05vw, 0.78rem);
+    margin: 0 0 0.85em;
+    padding: 0.1em 0.15em 0.1em 50%;
+    font-size: clamp(0.5rem, 0.9vw, 0.7rem);
     font-weight: 600;
     color: #1f2937;
-    line-height: 1.25;
+    line-height: 1.15;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
 .cert-overlay-checked {
-    margin-top: 0.35rem;
-    padding: 0.2rem 0.55rem;
+    position: absolute;
+    right: 5.5%;
+    bottom: 19.5%;
+    margin-top: 0;
+    padding: 0.22rem 0.6rem;
     border-radius: 999px;
     background: #166534;
     color: #fff;
@@ -387,6 +390,7 @@
     font-weight: 700;
     font-family: 'Roboto', Arial, sans-serif;
     letter-spacing: 0.02em;
+    white-space: nowrap;
 }
 
 .cert-overlay-checked--pending {
@@ -395,20 +399,20 @@
 
 .cert-overlay-sig {
     position: absolute;
-    bottom: 14.5%;
-    max-height: 9.5%;
+    bottom: 11%;
+    max-height: 10.5%;
     width: auto;
-    max-width: 18%;
+    max-width: 16%;
     object-fit: contain;
     object-position: center bottom;
 }
 
 .cert-overlay-sig--left {
-    left: 14%;
+    left: 16.5%;
 }
 
 .cert-overlay-sig--right {
-    right: 12%;
+    right: 13.5%;
 }
 
 .cert-print-hint {
