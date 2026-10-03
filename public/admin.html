@@ -172,6 +172,12 @@
                 <a class="menu-item" data-admin-module="tab-cancellation-review" onclick="switchTab('tab-cancellation-review'); initAdminCancellationReviewTab();"><i class="fas fa-user-times"></i> Cancellation review <span id="admin-cancel-review-badge" style="display:none;margin-left:6px;background:#f59e0b;color:#fff;font-size:0.68rem;font-weight:700;padding:2px 7px;border-radius:999px;vertical-align:middle;"></span></a>
                 <a class="menu-item" data-admin-module="tab-refund-tracking" onclick="switchTab('tab-refund-tracking'); initAdminRefundTrackingTab();"><i class="fas fa-undo-alt"></i> Refund tracking</a>
                 <a class="menu-item" data-admin-module="tab-book-sales" onclick="switchTab('tab-book-sales'); loadBookSalesAdmin();"><i class="fas fa-book"></i> Book sales</a>
+                <div class="menu-item" data-admin-module="tab-commerce" style="margin:14px 16px 6px;font-size:0.68rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#64748b;pointer-events:none;">Commerce</div>
+                <a class="menu-item" data-admin-module="tab-commerce" onclick="openCommercePanel('desk')"><i class="fas fa-clipboard-list"></i> Order desk</a>
+                <a class="menu-item" data-admin-module="tab-commerce" onclick="openCommercePanel('book')"><i class="fas fa-truck"></i> Book shipment</a>
+                <a class="menu-item" data-admin-module="tab-commerce" onclick="openCommercePanel('track')"><i class="fas fa-map-marked-alt"></i> Shipment tracking</a>
+                <a class="menu-item" data-admin-module="tab-commerce" onclick="openCommercePanel('labels')"><i class="fas fa-tag"></i> Shipping labels</a>
+                <a class="menu-item" data-admin-module="tab-commerce" onclick="openCommercePanel('settings')"><i class="fas fa-key"></i> Tookan &amp; Shipday</a>
                 <a class="menu-item" data-admin-module="tab-certificates" onclick="switchTab('tab-certificates'); initAdminCertificatesTab();"><i class="fas fa-award"></i> Certificate Management</a>
                 <a class="menu-item" data-admin-module="tab-volunteers" onclick="switchTab('tab-volunteers'); initAdminVolunteersTab();"><i class="fas fa-hands-helping"></i> Volunteers</a>
                 <a class="menu-item" data-admin-module="tab-volunteer-assignments" onclick="switchTab('tab-volunteer-assignments'); initAdminVolunteerAssignmentsTab();"><i class="fas fa-clipboard-list"></i> Volunteer assignments</a>
@@ -1691,6 +1697,13 @@
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <div id="tab-commerce" class="tab-pane hidden">
+                <h2 style="margin-bottom:6px;">Commerce</h2>
+                <p style="color:#64748b;margin-bottom:14px;">Book orders placed by doctors show here even when the doctor book-order screen is closed. Accept, prepare, and mark ready to schedule pickup. Tookan covers logistics and hyperlocal. Shipday covers hyperlocal pickup and delivery.</p>
+                <div id="commerce-subnav" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;"></div>
+                <div id="commerce-panel"></div>
             </div>
 
             <!-- Payments module -->
@@ -3452,6 +3465,7 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
-    <script src="/js/admin.js?v=20261003dayemail"></script>
+    <script src="/js/admin-commerce.js?v=20261003commerce"></script>
+    <script src="/js/admin.js?v=20261003commerce"></script>
 </body>
 </html>

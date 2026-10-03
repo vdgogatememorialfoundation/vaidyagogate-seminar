@@ -616,6 +616,7 @@ function mergeAdminEnabledPagesPolicy(stored) {
     const restrict = keys.length && keys.some((k) => pages[k] === true);
     if (restrict) {
         if (!('tab-book-sales' in pages)) pages['tab-book-sales'] = true;
+        if (!('tab-commerce' in pages)) pages['tab-commerce'] = true;
         if (!('tab-cancellation-review' in pages)) pages['tab-cancellation-review'] = true;
     }
     return pages;
@@ -657,17 +658,20 @@ function adminCanAccessTab(tabId) {
     if (!isCo) {
         if (tabId === 'tab-cancellation-review' && globalAdminTabAllowed('tab-admin-payments')) return true;
         if (tabId === 'tab-refund-tracking' && globalAdminTabAllowed('tab-admin-payments')) return true;
+        if (tabId === 'tab-commerce' && globalAdminTabAllowed('tab-book-sales')) return true;
         return globalAdminTabAllowed(checkId);
     }
     const { unset, mods } = coAdminModulesState(u);
     if (unset) {
         if (tabId === 'tab-cancellation-review' && globalAdminTabAllowed('tab-admin-payments')) return true;
         if (tabId === 'tab-refund-tracking' && globalAdminTabAllowed('tab-admin-payments')) return true;
+        if (tabId === 'tab-commerce' && globalAdminTabAllowed('tab-book-sales')) return true;
         return globalAdminTabAllowed(checkId);
     }
     if (!Object.keys(mods).length) return false;
     if (tabId === 'tab-cancellation-review' && mods['tab-admin-payments'] === true) return true;
     if (tabId === 'tab-refund-tracking' && mods['tab-admin-payments'] === true) return true;
+    if (tabId === 'tab-commerce' && (mods['tab-commerce'] === true || mods['tab-book-sales'] === true)) return true;
     return mods[checkId] === true;
 }
 
@@ -907,6 +911,9 @@ function switchTab(tabId) {
     }
     if (tabId === 'tab-book-sales' && typeof loadBookSalesAdmin === 'function') {
         loadBookSalesAdmin();
+    }
+    if (tabId === 'tab-commerce' && typeof loadCommerceAdmin === 'function') {
+        loadCommerceAdmin();
     }
     if (tabId === 'tab-staff-users' || tabId === 'tab-doctors') {
         loadUsers();
@@ -1704,6 +1711,7 @@ const ADMIN_MODULE_TAB_DEFS = [
     ['tab-reg-form', 'Registration form fields'],
     ['tab-site-cms', 'Website & doctor updates'],
     ['tab-book-sales', 'Book sales'],
+    ['tab-commerce', 'Commerce'],
     ['tab-admin-payments', 'Payments'],
     ['tab-cancellation-review', 'Cancellation review & refunds'],
     ['tab-refund-tracking', 'Refund tracking'],

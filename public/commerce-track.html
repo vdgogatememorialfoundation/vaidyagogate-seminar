@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Shipment tracking</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; background: #f8fafc; color: #0f172a; }
+        main { max-width: 720px; margin: 0 auto; padding: 20px; }
+        h1 { font-size: 1.4rem; margin-bottom: 4px; }
+        .card { background: #fff; border-radius: 14px; padding: 16px; box-shadow: 0 1px 4px rgba(15,23,42,.06); margin-top: 12px; }
+        .muted { color: #64748b; font-size: 0.88rem; }
+        .otp { font-size: 1.4rem; letter-spacing: 2px; font-weight: 800; }
+        #map { height: 340px; border-radius: 12px; background: #e2e8f0; }
+        .ev { padding: 10px 0; border-top: 1px solid #e2e8f0; }
+        .ev strong { display: block; }
+    </style>
+</head>
+<body>
+<main>
+    <h1>Shipment tracking</h1>
+    <p class="muted" id="sub">Loading…</p>
+    <div class="card" id="summary"></div>
+    <div class="card" id="map-card" style="display:none;"><div id="map"></div></div>
+    <div class="card" id="events"></div>
+</main>
+<script src="/js/commerce-track.js?v=20261003commerce"></script>
+</body>
+</html>

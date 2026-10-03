@@ -235,6 +235,9 @@ function mountPaymentsRoutes() {
         parsePositiveUserId,
         upsertGlobalSetting
     });
+    require('./lib/commerce-routes').registerCommerceRoutes(app, db, {
+        upsertGlobalSetting
+    });
     require('./lib/staff-portal-routes').registerStaffPortalRoutes(app, db, {
         portalTracking,
         notifEngine,
