@@ -62,18 +62,15 @@
 
             <div id="cv-step-otp" class="cv-step">
                 <p class="cv-lead" id="cv-otp-hint"></p>
-                <p style="font-size:0.88rem;color:#64748b;">Enter both one-time password codes sent to the certificate holder.</p>
+                <dl class="cv-meta" id="cv-otp-meta"></dl>
+                <p style="font-size:0.88rem;color:#64748b;">Enter the email one-time password sent to the certificate holder. WhatsApp verification is not required.</p>
                 <div class="cv-otp-grid">
                     <div class="cv-field">
                         <label for="cv-email-otp">Email one-time password</label>
                         <input type="text" id="cv-email-otp" inputmode="numeric" maxlength="8" autocomplete="one-time-code">
                     </div>
-                    <div class="cv-field">
-                        <label for="cv-phone-otp">WhatsApp one-time password</label>
-                        <input type="text" id="cv-phone-otp" inputmode="numeric" maxlength="8" autocomplete="one-time-code">
-                    </div>
                 </div>
-                <button type="button" class="cv-btn cv-btn-primary" id="cv-send-otp-btn">Send one-time passwords to certificate holder</button>
+                <button type="button" class="cv-btn cv-btn-primary" id="cv-send-otp-btn">Send email one-time password</button>
                 <button type="button" class="cv-btn cv-btn-primary" id="cv-confirm-btn" style="display:none;">Verify certificate</button>
                 <button type="button" class="cv-btn cv-btn-secondary" id="cv-back-lookup-btn">Back</button>
                 <div id="cv-otp-msg" class="cv-msg" style="display:none;"></div>

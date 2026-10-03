@@ -616,6 +616,7 @@ function mergeAdminEnabledPagesPolicy(stored) {
     const restrict = keys.length && keys.some((k) => pages[k] === true);
     if (restrict) {
         if (!('tab-book-sales' in pages)) pages['tab-book-sales'] = true;
+        if (!('tab-commerce' in pages)) pages['tab-commerce'] = true;
         if (!('tab-cancellation-review' in pages)) pages['tab-cancellation-review'] = true;
     }
     return pages;
@@ -653,21 +654,27 @@ function adminCanAccessTab(tabId) {
     if (checkId === 'tab-users') checkId = 'tab-staff-users';
     if (isSuperAdminUser()) return true;
     const u = getStoredAdminUser();
+    if ((tabId === 'tab-book-sales' || tabId === 'tab-commerce') && String((u && (u.user_role || u.role)) || '').toLowerCase() !== 'co_admin') {
+        return false;
+    }
     const isCo = String(u && u.user_role || '').toLowerCase() === 'co_admin';
     if (!isCo) {
         if (tabId === 'tab-cancellation-review' && globalAdminTabAllowed('tab-admin-payments')) return true;
         if (tabId === 'tab-refund-tracking' && globalAdminTabAllowed('tab-admin-payments')) return true;
+        if (tabId === 'tab-commerce' && globalAdminTabAllowed('tab-book-sales')) return true;
         return globalAdminTabAllowed(checkId);
     }
     const { unset, mods } = coAdminModulesState(u);
     if (unset) {
         if (tabId === 'tab-cancellation-review' && globalAdminTabAllowed('tab-admin-payments')) return true;
         if (tabId === 'tab-refund-tracking' && globalAdminTabAllowed('tab-admin-payments')) return true;
+        if (tabId === 'tab-commerce' && globalAdminTabAllowed('tab-book-sales')) return true;
         return globalAdminTabAllowed(checkId);
     }
     if (!Object.keys(mods).length) return false;
     if (tabId === 'tab-cancellation-review' && mods['tab-admin-payments'] === true) return true;
     if (tabId === 'tab-refund-tracking' && mods['tab-admin-payments'] === true) return true;
+    if (tabId === 'tab-commerce' && (mods['tab-commerce'] === true || mods['tab-book-sales'] === true)) return true;
     return mods[checkId] === true;
 }
 
@@ -907,6 +914,9 @@ function switchTab(tabId) {
     }
     if (tabId === 'tab-book-sales' && typeof loadBookSalesAdmin === 'function') {
         loadBookSalesAdmin();
+    }
+    if (tabId === 'tab-commerce' && typeof loadCommerceAdmin === 'function') {
+        loadCommerceAdmin();
     }
     if (tabId === 'tab-staff-users' || tabId === 'tab-doctors') {
         loadUsers();
@@ -1704,6 +1714,7 @@ const ADMIN_MODULE_TAB_DEFS = [
     ['tab-reg-form', 'Registration form fields'],
     ['tab-site-cms', 'Website & doctor updates'],
     ['tab-book-sales', 'Book sales'],
+    ['tab-commerce', 'Commerce'],
     ['tab-admin-payments', 'Payments'],
     ['tab-cancellation-review', 'Cancellation review & refunds'],
     ['tab-refund-tracking', 'Refund tracking'],
@@ -14153,7 +14164,21 @@ function addSeminarDayRow(prefill) {
         '<label style="display:flex;align-items:center;gap:8px;font-size:0.84rem;color:#334155;">' +
         '<input type="checkbox" class="day-checkin-enabled"' +
         (checkinOn ? ' checked' : '') +
-        '> Enable scanner check-in for this day</label></div>';
+        '> Enable scanner check-in for this day</label>' +
+        '<div style="margin-top:4px;padding:10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;">' +
+        '<label style="display:flex;align-items:center;gap:8px;font-size:0.84rem;color:#166534;font-weight:700;">' +
+        '<input type="checkbox" class="day-email-enabled"' +
+        (p.scanEmailEnabled === false || p.scan_email_enabled === 0 || p.scan_email_enabled === false ? '' : ' checked') +
+        '> Email this day when its e-ticket is scanned</label>' +
+        '<p style="font-size:0.75rem;color:#64748b;margin:6px 0;">Leave the subject and message blank to use the standard check-in email. Placeholders: {{full_name}}, {{first_name}}, {{event_name}}, {{day_title}}, {{check_in_time}}, {{application_no}}, {{ticket_id}}, {{user_id_string}}</p>' +
+        '<label style="font-size:0.78rem;">Email subject for this day</label>' +
+        '<input type="text" class="day-email-subject" maxlength="300" value="' +
+        escAdmin(p.scanEmailSubject || p.scan_email_subject || '') +
+        '" placeholder="e.g. Day 1 check-in confirmed — {{event_name}}">' +
+        '<label style="font-size:0.78rem;margin-top:8px;display:block;">Email message for this day</label>' +
+        '<textarea class="day-email-html" rows="4" maxlength="20000" placeholder="Dear {{full_name}}, your {{day_title}} check-in is recorded.">' +
+        escAdmin(p.scanEmailHtml || p.scan_email_html || '') +
+        '</textarea></div></div>';
     row.querySelector('.day-remove').addEventListener('click', function () {
         row.remove();
     });
@@ -14172,6 +14197,9 @@ function collectSeminarDaysFromUi() {
             checkin_date: row.querySelector('.day-checkin')?.value || null,
             sort_order: idx,
             checkin_enabled: row.querySelector('.day-checkin-enabled')?.checked !== false,
+            scan_email_enabled: row.querySelector('.day-email-enabled')?.checked !== false,
+            scan_email_subject: row.querySelector('.day-email-subject')?.value.trim() || '',
+            scan_email_html: row.querySelector('.day-email-html')?.value.trim() || '',
             is_active: true
         };
         const did = parseInt(row.dataset.dayId, 10);
@@ -20673,7 +20701,15 @@ function renderBookSalesOrdersTable(rows) {
                 .filter(Boolean)
                 .join(' · ');
             const ftype = o.fulfillment_type || 'pickup';
-            const statusLabel = BS_STATUS_LABELS[o.status] || o.status;
+            let statusLabel = BS_STATUS_LABELS[o.status] || o.status;
+            if (o.commerce_provider && typeof commerceStageLabel === 'function') {
+                statusLabel +=
+                    '<br><small style="color:#0f766e;">' +
+                    e(o.commerce_provider === 'shipday' ? 'Shipday' : 'Tookan') +
+                    ' · ' +
+                    e(commerceStageLabel(o.commerce_stage)) +
+                    '</small>';
+            }
             let fulfillCell = '📦 Pickup';
             if (ftype === 'courier') {
                 if (
@@ -20718,6 +20754,11 @@ function renderBookSalesOrdersTable(rows) {
                         '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.81rem;background:#7c3aed;" onclick="openBsCourierModal(' +
                         o.id +
                         ',2)">Ship now</button> ';
+                } else if (ftype === 'courier' && o.commerce_provider) {
+                    actions +=
+                        '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.81rem;background:#0f766e;" onclick="bsViewOrderTracking(' +
+                        o.id +
+                        ')">Track courier</button> ';
                 } else {
                     actions +=
                         '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.81rem;background:#0d9488;" onclick="openBsCourierModal(' +
@@ -21599,6 +21640,40 @@ async function bsBookAggregator(aggregator) {
     }
 }
 
+async function bsBookCommerce(provider, mode) {
+    const msg = document.getElementById('bs-courier-msg');
+    const id = parseInt((document.getElementById('bs-courier-order-id') || {}).value, 10);
+    const whenEl = document.getElementById('bs-commerce-when');
+    const label = (provider === 'shipday' ? 'Shipday' : 'Tookan') + ' ' + mode;
+    if (!confirm('Ask ' + label + ' to pick up this parcel from the store?')) return;
+    if (msg) {
+        msg.style.color = '#0f766e';
+        msg.textContent = 'Requesting pickup…';
+    }
+    try {
+        const data = await commerceFetch('/api/admin/commerce/orders/' + id + '/book', {
+            method: 'POST',
+            body: JSON.stringify({
+                actingAdminId: commerceActor(),
+                provider,
+                mode,
+                pickupAt: whenEl && whenEl.value ? whenEl.value : ''
+            })
+        });
+        const o = data.order || {};
+        bsCloseCourierModal();
+        loadBsOrders(false);
+        alert(
+            'Pickup requested from ' + label + '.\nPickup OTP (store): ' + (o.pickupOtp || '—') + '\nDelivery OTP (customer, shown only when out for delivery): ' + (o.deliveryOtp || '—')
+        );
+    } catch (err) {
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = err.message || 'Booking failed';
+        }
+    }
+}
+
 async function bsPrintShippingLabel(id) {
     try {
         const res = await bsFetch('/api/admin/book-sales/orders/' + id + '/print-label', { method: 'POST' });
@@ -21805,6 +21880,7 @@ async function bsViewOrderTracking(id) {
     }
     body.innerHTML = '<p style="color:#64748b;">Loading…</p>';
     modal.style.display = 'flex';
+    window._bsTlSeen = false;
     const render = async (doRefresh) => {
         try {
             if (doRefresh) {
@@ -21879,12 +21955,28 @@ async function bsViewOrderTracking(id) {
             }
             html += '</div>';
 
+            let commerceData = null;
+            try {
+                commerceData = await commerceFetch('/api/admin/commerce/orders/' + id + '/track?actingAdminId=' + encodeURIComponent(commerceActor()));
+            } catch (_) {
+                commerceData = null;
+            }
+            if (commerceData && commerceData.order && commerceData.order.commerceProvider && window.TrackTimeline) {
+                const co = commerceData.order;
+                html +=
+                    '<div style="border:1px solid #99f6e4;background:#f0fdfa;border-radius:12px;padding:14px;margin-bottom:14px;">' +
+                    '<p style="margin:0 0 6px;font-weight:700;">' + e(co.commerceProvider === 'shipday' ? 'Shipday' : 'Tookan') + ' · ' + e(co.commerceMode || '') + '</p>' +
+                    '<p style="margin:0 0 8px;font-size:0.85rem;">Pickup OTP <strong>' + e(co.pickupOtp || '—') + '</strong> · Delivery OTP <strong>' + e(co.deliveryOtp || '—') + '</strong></p>' +
+                    TrackTimeline.render({ timeline: commerceData.timeline, live: commerceData.live, awbTrackUrl: co.tookanTrackingLink || co.shipdayTrackingLink || null, trackUrl: co.commerceTrackUrl }, { animate: !window._bsTlSeen }) +
+                    '</div>';
+                window._bsTlSeen = true;
+            }
             // New vertical tracker
-            if (o.deliveryJourney && window.BookTrackingUI) {
+            if (!(commerceData && commerceData.order && commerceData.order.commerceProvider) && o.deliveryJourney && window.BookTrackingUI) {
                 html += '<div style="border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;margin-bottom:14px;">';
                 html += window.BookTrackingUI.renderDoctorFullTracking(o.deliveryJourney, o, trackEvents);
                 html += '</div>';
-            } else {
+            } else if (!(commerceData && commerceData.order && commerceData.order.commerceProvider)) {
                 html += bsRenderCourierLiveTrackHtml(o, data);
                 html += bsRenderAdminTrackerHtml(data.timeline || o.timeline);
             }
@@ -21902,6 +21994,10 @@ async function bsViewOrderTracking(id) {
                 html += '</ul>';
             }
             body.innerHTML = html;
+            if (commerceData && commerceData.live && window.TrackTimeline) TrackTimeline.mount(commerceData.live);
+            if (o.commerce_provider || (commerceData && commerceData.order && commerceData.order.commerceProvider)) {
+                _bsTrackPollTimer = _bsTrackPollTimer || setInterval(() => render(false), 15000);
+            }
             if (o.fulfillmentType === 'courier' && (o.status === 'shipped' || (o.deliveryJourney && o.deliveryJourney.isLive))) {
                 _bsTrackPollTimer = setInterval(() => render(true), 12000);
             }

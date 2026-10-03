@@ -235,6 +235,13 @@ function mountPaymentsRoutes() {
         parsePositiveUserId,
         upsertGlobalSetting
     });
+    require('./lib/commerce-routes').registerCommerceRoutes(app, db, {
+        upsertGlobalSetting
+    });
+    require('./lib/shop-routes').registerShopRoutes(app, db, {
+        listDoctorPaymentOptions,
+        parsePositiveUserId
+    });
     require('./lib/staff-portal-routes').registerStaffPortalRoutes(app, db, {
         portalTracking,
         notifEngine,
@@ -2430,7 +2437,9 @@ function recordScanEventForDashboard(seminarId, staffId, payload, cb) {
             doctor_user_id: payload.doctor_user_id,
             doctor_name: payload.doctor_name,
             outcome: payload.outcome || 'failed',
-            message: payload.message || null
+            message: payload.message || null,
+            day_id: payload.day_id || null,
+            day_title: payload.day_title || null
         },
         cb || (() => {})
     );
@@ -6704,6 +6713,11 @@ function mapDoctorCertificateTrackingRows(rows) {
                 } else if (view.phase === 'not_attended') {
                     certStatus = 'not_attended';
                     certStatusLabel = 'Not attended — no venue check-in';
+                } else if (view.phase === 'awaiting_final_day') {
+                    certStatus = 'awaiting_final_day';
+                    certStatusLabel = view.certDayTitle
+                        ? `Checked in — certificate issues on ${view.certDayTitle} scan`
+                        : 'Checked in — certificate issues on the final day scan';
                 } else if (!checkinComplete) {
                     certStatus = 'awaiting_checkin';
                     certStatusLabel =
@@ -6743,6 +6757,15 @@ function mapDoctorCertificateTrackingRows(rows) {
             templatePath: row.template_path,
             certStatus,
             certStatusLabel,
+            awaitingFinalDay: !!view.awaitingFinalDay,
+            certDayTitle: view.certDayTitle || null,
+            firstDayTitle: row.first_day_title || null,
+            seminarDayCount: Number(row.seminar_day_count) || 0,
+            certDayScanned: Number(row.cert_day_scanned) === 1,
+            venueScanCount: Number(row.venue_scan_count) || 0,
+            earlierDayScanned:
+                !!view.awaitingFinalDay ||
+                (Number(row.venue_scan_count) || 0) > (Number(row.cert_day_scanned) === 1 ? 1 : 0),
             canViewCertificate: view.canViewCertificate,
             certPhase: view.phase,
             certHiddenReason: view.hiddenReason,
@@ -6757,6 +6780,7 @@ const DOCTOR_CERT_TRACKING_SQL = `SELECT r.id AS registration_id, r.application_
                 s.event_date, COALESCE(s.certificate_verify_enabled, 0) AS certificate_verify_enabled,
                 COALESCE(s.certificate_verify_manual, 0) AS certificate_verify_manual,
                 s.certificate_verify_go_live_at,
+                ${certVerify.certDayEligibilitySelectSql('s', 'r')},
                 o.status AS order_status,
                 t.id AS ticket_id, COALESCE(t.scan_count, 0) AS scan_count, COALESCE(t.is_scanned, 0) AS is_scanned,
                 t.scan_time, t.ticket_id_string,
@@ -6765,7 +6789,19 @@ const DOCTOR_CERT_TRACKING_SQL = `SELECT r.id AS registration_id, r.application_
          FROM registrations r
          JOIN seminars s ON s.id = r.seminar_id
          LEFT JOIN orders o ON o.registration_id = r.id AND lower(trim(o.status)) = 'success'
-         LEFT JOIN tickets t ON t.order_id = o.id
+         LEFT JOIN tickets t ON t.id = (
+             SELECT tpick.id FROM tickets tpick
+             WHERE tpick.order_id = o.id
+             ORDER BY CASE
+                 WHEN tpick.day_id = (
+                     SELECT sd_pick.id FROM seminar_days sd_pick
+                     WHERE sd_pick.seminar_id = s.id AND IFNULL(sd_pick.is_active, 1) = 1
+                     ORDER BY sd_pick.sort_order DESC, sd_pick.day_date DESC, sd_pick.id DESC LIMIT 1
+                 ) THEN 0 ELSE 1 END,
+                 IFNULL(tpick.scan_count, 0) DESC,
+                 tpick.id DESC
+             LIMIT 1
+         )
          LEFT JOIN user_certificates uc ON uc.user_id = r.user_id AND uc.seminar_id = r.seminar_id
          LEFT JOIN certificate_templates ct ON ct.id = uc.template_id AND COALESCE(ct.is_active, 1) = 1
          WHERE r.user_id = ? AND COALESCE(r.status, '') NOT IN ('rejected', 'cancelled')
@@ -8255,11 +8291,23 @@ app.post('/api/scanner/mark', (req, res) => {
                             const eventName =
                                 String(row.scan_event_title || row.seminar_title || '').trim() ||
                                 'National Seminar';
+                            certVerify.scanMayIssueCertificate(db, row.seminar_id, row.day_id, (gateErr, gate) => {
+                            if (gateErr) console.warn('[scanner] cert day:', gateErr.message);
+                            const issuesOnThisDay = !gate || gate.issuesCertificate !== false;
                             const certEligibleNow =
                                 String(row.payment_status || '').toLowerCase() === 'success' &&
-                                newScanCount >= scansRequired;
+                                newScanCount >= scansRequired &&
+                                issuesOnThisDay;
                             let scanMsg = 'Attendance marked. Doctor tracking updated.';
-                            if (scansRequired === 2) {
+                            if (gate && gate.multiDay && !issuesOnThisDay) {
+                                const thisDay = String(row.scan_event_title || 'This day').trim();
+                                const finalDay = gate.certDayTitle || 'the final day';
+                                scanMsg =
+                                    thisDay +
+                                    ' check-in recorded. The certificate is issued on the ' +
+                                    finalDay +
+                                    ' scan, not on this day.';
+                            } else if (scansRequired === 2) {
                                 if (newScanCount === 1) {
                                     scanMsg =
                                         'Entry scan recorded (1 of 2). Exit scan still required for certificate eligibility.';
@@ -8283,7 +8331,9 @@ app.post('/api/scanner/mark', (req, res) => {
                                     doctor_user_id: row.doctor_user_id,
                                     doctor_name: doctorName,
                                     outcome: 'success',
-                                    message: scanMsg
+                                    message: scanMsg,
+                                    day_id: row.day_id || null,
+                                    day_title: row.scan_event_title || null
                                 },
                                 (_evErr, scanEventId) => {
                                     res.json({
@@ -8338,10 +8388,10 @@ app.post('/api/scanner/mark', (req, res) => {
                                     }
                                 );
                             });
-                            notifEngine.notify(
-                                db,
-                                'CHECK_IN_SUCCESS',
-                                {
+                            seminarDays.getDayById(db, row.day_id, (dayErr, dayRow) => {
+                                if (dayErr) console.warn('[scanner] day email:', dayErr.message);
+                                const dayTitle = (dayRow && dayRow.title) || eventName;
+                                const notifyOpts = {
                                     userId: row.doctor_user_id,
                                     seminarId: row.seminar_id,
                                     registrationId: regId || null,
@@ -8350,16 +8400,30 @@ app.post('/api/scanner/mark', (req, res) => {
                                         ticket_id: row.ticket_id_string,
                                         event_name: eventName,
                                         scan_event_title: eventName,
+                                        day_title: dayTitle,
                                         payment_status:
                                             row.payment_status === 'success' ? 'PAID' : 'UNPAID',
                                         approval_status: 'checked_in',
                                         check_in_time: formatCheckInTimeForNotify(atIso)
                                     }
-                                },
-                                (nErr) => {
-                                    if (nErr) console.warn('[scanner] check-in notify:', nErr.message);
+                                };
+                                if (dayRow && dayRow.scanEmailEnabled === false) {
+                                    notifyOpts.skipEmail = true;
+                                } else if (
+                                    dayRow &&
+                                    (String(dayRow.scanEmailSubject || '').trim() ||
+                                        String(dayRow.scanEmailHtml || '').trim())
+                                ) {
+                                    notifyOpts.emailOverride = {
+                                        subject: String(dayRow.scanEmailSubject || '').trim(),
+                                        html: seminarDays.formatScanEmailHtml(dayRow.scanEmailHtml)
+                                    };
                                 }
-                            );
+                                notifEngine.notify(db, 'CHECK_IN_SUCCESS', notifyOpts, (nErr) => {
+                                    if (nErr) console.warn('[scanner] check-in notify:', nErr.message);
+                                });
+                            });
+                            });
                         };
 
                         if (!regId) return finishScanResponse(new Date().toISOString());
@@ -10516,11 +10580,8 @@ app.post('/api/public/certificate-verify/otp/send-both', withIntegrationSettings
             if (err) return res.status(500).json({ error: err.message });
             if (!out || !out.ok) return res.status(400).json(out || { ok: false, error: 'Lookup failed' });
             const email = String(out.cert.email || '').trim();
-            const phone = String(out.cert.phone || '').trim();
             const ev = contactValidation.validateEmail(email);
-            const pv = contactValidation.validatePhone(phone);
             if (!ev.valid) return res.status(400).json({ error: 'Certificate holder email is not on file.' });
-            if (!pv.valid) return res.status(400).json({ error: 'Certificate holder mobile is not on file.' });
             const meta = {
                 certId: out.cert.id,
                 certKind: out.cert.kind || 'participant',
@@ -10535,38 +10596,27 @@ app.post('/api/public/certificate-verify/otp/send-both', withIntegrationSettings
                 if (r1 && r1.deliverError) {
                     return res.status(503).json({ error: r1.deliverError, debugCode: r1.debugCode });
                 }
-                sendCertificateVerifyOtpChannel('phone', pv.cleanedPhone, meta, (e2, r2) => {
-                    if (e2) return res.status(500).json({ error: e2.message });
-                    if (r2 && r2.rateLimited) {
-                        return res.status(429).json({ error: 'Too many OTP requests. Try again later.' });
-                    }
-                    if (r2 && r2.deliverError) {
-                        return res.status(503).json({ error: r2.deliverError, debugCode: r2.debugCode });
-                    }
-                    const debug =
-                        process.env.OTP_RETURN_CODE === '1' || process.env.NODE_ENV === 'development';
-                    const payload = {
-                        success: true,
-                        ttlMinutes: otpLib.OTP_TTL_MIN,
-                        maskedEmail: certVerify.maskEmail(ev.cleanedEmail),
-                        maskedPhone: certVerify.maskPhone(pv.cleanedPhone),
-                        certId: out.cert.id
-                    };
-                    if (debug) {
-                        payload.debugEmailCode = r1 && r1.debugCode;
-                        payload.debugPhoneCode = r2 && r2.debugCode;
-                    }
-                    res.json(payload);
-                });
+                const debug =
+                    process.env.OTP_RETURN_CODE === '1' || process.env.NODE_ENV === 'development';
+                const payload = {
+                    success: true,
+                    ttlMinutes: otpLib.OTP_TTL_MIN,
+                    maskedEmail: certVerify.maskEmail(ev.cleanedEmail),
+                    certId: out.cert.id
+                };
+                if (debug) {
+                    payload.debugEmailCode = r1 && r1.debugCode;
+                }
+                res.json(payload);
             });
         }
     );
 });
 
 app.post('/api/public/certificate-verify/confirm', (req, res) => {
-    const { seminarId, applicationNo, prn, token, emailCode, phoneCode } = req.body || {};
-    if (!emailCode || !phoneCode) {
-        return res.status(400).json({ error: 'Email and WhatsApp OTP codes are both required.' });
+    const { seminarId, applicationNo, prn, token, emailCode } = req.body || {};
+    if (!emailCode) {
+        return res.status(400).json({ error: 'Email OTP code is required.' });
     }
     certVerify.resolveCertForPublicLookup(
         db,
@@ -10575,9 +10625,8 @@ app.post('/api/public/certificate-verify/confirm', (req, res) => {
             if (err) return res.status(500).json({ error: err.message });
             if (!out || !out.ok) return res.status(400).json(out || { ok: false, error: 'Lookup failed' });
             const ev = contactValidation.validateEmail(out.cert.email);
-            const pv = contactValidation.validatePhone(out.cert.phone);
-            if (!ev.valid || !pv.valid) {
-                return res.status(400).json({ error: 'Certificate contact details are incomplete.' });
+            if (!ev.valid) {
+                return res.status(400).json({ error: 'Certificate holder email is not on file.' });
             }
             const meta = {
                 certId: out.cert.id,
@@ -10603,51 +10652,29 @@ app.post('/api/public/certificate-verify/confirm', (req, res) => {
                             error: (r1 && r1.error) || 'Invalid or expired email OTP.'
                         });
                     }
-                    otpLib.verifyOtp(
+                    certVerify.validateCertificateEmailOtp(
                         db,
                         {
-                            channel: 'phone',
-                            destination: pv.cleanedPhone,
-                            purpose: 'certificate_verify',
-                            code: String(phoneCode).trim(),
-                            meta,
-                            userId: out.cert.userId,
-                            seminarId: out.seminar.id
+                            certId: out.cert.id,
+                            certKind: out.cert.kind || 'participant',
+                            emailToken: r1.token
                         },
-                        (e2, r2) => {
-                            if (e2) return res.status(500).json({ error: e2.message });
-                            if (!r2 || !r2.ok) {
-                                return res.status(400).json({
-                                    error: (r2 && r2.error) || 'Invalid or expired WhatsApp OTP.'
-                                });
+                        (e3, v) => {
+                            if (e3) return res.status(500).json({ error: e3.message });
+                            if (!v || !v.ok) {
+                                return res.status(400).json(v || { ok: false, error: 'OTP validation failed' });
                             }
-                            certVerify.validateBothOtpTokens(
-                                db,
-                                {
-                                    certId: out.cert.id,
-                                    certKind: out.cert.kind || 'participant',
-                                    emailToken: r1.token,
-                                    phoneToken: r2.token
-                                },
-                                (e3, v) => {
-                                    if (e3) return res.status(500).json({ error: e3.message });
-                                    if (!v || !v.ok) {
-                                        return res.status(400).json(
-                                            v || { ok: false, error: 'OTP validation failed' }
-                                        );
-                                    }
-                                    res.json({
-                                        ok: true,
-                                        valid: true,
-                                        seminarTitle: out.seminar.title,
-                                        displayName: out.cert.displayName,
-                                        applicationNo: out.cert.applicationNo,
-                                        prn: out.cert.prn,
-                                        message:
-                                            'This certificate is authentic and was issued by the Vaidya Gogate Memorial Foundation.'
-                                    });
-                                }
-                            );
+                            res.json({
+                                ok: true,
+                                valid: true,
+                                certKind: out.cert.kind || 'participant',
+                                seminarTitle: out.seminar.title,
+                                displayName: out.cert.displayName,
+                                applicationNo: out.cert.applicationNo,
+                                prn: out.cert.prn,
+                                message:
+                                    'This certificate is authentic and was issued by the Vaidya Gogate Memorial Foundation.'
+                            });
                         }
                     );
                 }
