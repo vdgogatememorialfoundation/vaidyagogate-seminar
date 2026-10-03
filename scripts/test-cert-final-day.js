@@ -4,6 +4,31 @@
 const assert = require('assert');
 const certVerify = require('../lib/certificate-verify');
 const volunteerCertFlow = require('../lib/volunteer-cert-flow');
+const portalTracking = require('../lib/portal-tracking');
+
+const paidDay1 = portalTracking.buildSeminarTimeline(
+    { status: 'completed', created_at: '2026-10-01' },
+    [{ step_key: 'completed', label: 'Payment confirmed', message: 'Payment received successfully.', created_at: '2026-10-01' }],
+    {
+        hasTicket: true,
+        multiDay: true,
+        awaitingFinalDay: true,
+        certDayScanned: false,
+        certDayTitle: 'Day 2 - Final Day Manas Rog 3',
+        firstDayTitle: 'Day 1',
+        checkedInAt: '2026-10-02'
+    }
+);
+const paidByKey = {};
+paidDay1.steps.forEach((step) => {
+    paidByKey[step.key] = step;
+});
+assert.strictEqual(paidByKey.completed.state, 'completed');
+assert.strictEqual(paidByKey.checked_in.state, 'completed');
+assert.strictEqual(paidByKey.final_day_scan.state, 'active');
+assert.ok(/not scanned yet/i.test(paidByKey.final_day_scan.desc));
+assert.notStrictEqual(paidByKey.certificate.state, 'active');
+assert.ok(String(paidByKey.checked_in.title).indexOf('Day 1') >= 0);
 
 const days = [
     { id: 10, title: 'Day 1', sort_order: 0, day_date: '2026-11-01', is_active: 1 },

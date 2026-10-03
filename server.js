@@ -6752,6 +6752,13 @@ function mapDoctorCertificateTrackingRows(rows) {
             certStatusLabel,
             awaitingFinalDay: !!view.awaitingFinalDay,
             certDayTitle: view.certDayTitle || null,
+            firstDayTitle: row.first_day_title || null,
+            seminarDayCount: Number(row.seminar_day_count) || 0,
+            certDayScanned: Number(row.cert_day_scanned) === 1,
+            venueScanCount: Number(row.venue_scan_count) || 0,
+            earlierDayScanned:
+                !!view.awaitingFinalDay ||
+                (Number(row.venue_scan_count) || 0) > (Number(row.cert_day_scanned) === 1 ? 1 : 0),
             canViewCertificate: view.canViewCertificate,
             certPhase: view.phase,
             certHiddenReason: view.hiddenReason,
