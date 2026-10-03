@@ -5536,7 +5536,7 @@ function renderDoctorCertWaitingBlock(track) {
     }
     if (t.certCountdown) {
         html += renderDoctorCertCountdownHtml(t.certCountdown, 'doctor-cert-cd-' + (t.seminarId || t.certId || 'x'));
-    } else if (t.certPhase === 'awaiting_scans' || t.certPhase === 'awaiting_approval') {
+    } else if (t.certPhase === 'awaiting_scans' || t.certPhase === 'awaiting_approval' || t.certPhase === 'awaiting_final_day') {
         html +=
             '<p style="margin:0;font-size:0.82rem;color:#94a3b8;"><i class="fas fa-hourglass-half"></i> Status updates automatically on this page.</p>';
     }

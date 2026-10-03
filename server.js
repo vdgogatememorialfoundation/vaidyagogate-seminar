@@ -2430,7 +2430,9 @@ function recordScanEventForDashboard(seminarId, staffId, payload, cb) {
             doctor_user_id: payload.doctor_user_id,
             doctor_name: payload.doctor_name,
             outcome: payload.outcome || 'failed',
-            message: payload.message || null
+            message: payload.message || null,
+            day_id: payload.day_id || null,
+            day_title: payload.day_title || null
         },
         cb || (() => {})
     );
@@ -6704,6 +6706,11 @@ function mapDoctorCertificateTrackingRows(rows) {
                 } else if (view.phase === 'not_attended') {
                     certStatus = 'not_attended';
                     certStatusLabel = 'Not attended — no venue check-in';
+                } else if (view.phase === 'awaiting_final_day') {
+                    certStatus = 'awaiting_final_day';
+                    certStatusLabel = view.certDayTitle
+                        ? `Checked in — certificate issues on ${view.certDayTitle} scan`
+                        : 'Checked in — certificate issues on the final day scan';
                 } else if (!checkinComplete) {
                     certStatus = 'awaiting_checkin';
                     certStatusLabel =
@@ -6757,6 +6764,7 @@ const DOCTOR_CERT_TRACKING_SQL = `SELECT r.id AS registration_id, r.application_
                 s.event_date, COALESCE(s.certificate_verify_enabled, 0) AS certificate_verify_enabled,
                 COALESCE(s.certificate_verify_manual, 0) AS certificate_verify_manual,
                 s.certificate_verify_go_live_at,
+                ${certVerify.certDayEligibilitySelectSql('s', 'r')},
                 o.status AS order_status,
                 t.id AS ticket_id, COALESCE(t.scan_count, 0) AS scan_count, COALESCE(t.is_scanned, 0) AS is_scanned,
                 t.scan_time, t.ticket_id_string,
@@ -6765,7 +6773,19 @@ const DOCTOR_CERT_TRACKING_SQL = `SELECT r.id AS registration_id, r.application_
          FROM registrations r
          JOIN seminars s ON s.id = r.seminar_id
          LEFT JOIN orders o ON o.registration_id = r.id AND lower(trim(o.status)) = 'success'
-         LEFT JOIN tickets t ON t.order_id = o.id
+         LEFT JOIN tickets t ON t.id = (
+             SELECT tpick.id FROM tickets tpick
+             WHERE tpick.order_id = o.id
+             ORDER BY CASE
+                 WHEN tpick.day_id = (
+                     SELECT sd_pick.id FROM seminar_days sd_pick
+                     WHERE sd_pick.seminar_id = s.id AND IFNULL(sd_pick.is_active, 1) = 1
+                     ORDER BY sd_pick.sort_order DESC, sd_pick.day_date DESC, sd_pick.id DESC LIMIT 1
+                 ) THEN 0 ELSE 1 END,
+                 IFNULL(tpick.scan_count, 0) DESC,
+                 tpick.id DESC
+             LIMIT 1
+         )
          LEFT JOIN user_certificates uc ON uc.user_id = r.user_id AND uc.seminar_id = r.seminar_id
          LEFT JOIN certificate_templates ct ON ct.id = uc.template_id AND COALESCE(ct.is_active, 1) = 1
          WHERE r.user_id = ? AND COALESCE(r.status, '') NOT IN ('rejected', 'cancelled')
@@ -8255,11 +8275,23 @@ app.post('/api/scanner/mark', (req, res) => {
                             const eventName =
                                 String(row.scan_event_title || row.seminar_title || '').trim() ||
                                 'National Seminar';
+                            certVerify.scanMayIssueCertificate(db, row.seminar_id, row.day_id, (gateErr, gate) => {
+                            if (gateErr) console.warn('[scanner] cert day:', gateErr.message);
+                            const issuesOnThisDay = !gate || gate.issuesCertificate !== false;
                             const certEligibleNow =
                                 String(row.payment_status || '').toLowerCase() === 'success' &&
-                                newScanCount >= scansRequired;
+                                newScanCount >= scansRequired &&
+                                issuesOnThisDay;
                             let scanMsg = 'Attendance marked. Doctor tracking updated.';
-                            if (scansRequired === 2) {
+                            if (gate && gate.multiDay && !issuesOnThisDay) {
+                                const thisDay = String(row.scan_event_title || 'This day').trim();
+                                const finalDay = gate.certDayTitle || 'the final day';
+                                scanMsg =
+                                    thisDay +
+                                    ' check-in recorded. The certificate is issued on the ' +
+                                    finalDay +
+                                    ' scan, not on this day.';
+                            } else if (scansRequired === 2) {
                                 if (newScanCount === 1) {
                                     scanMsg =
                                         'Entry scan recorded (1 of 2). Exit scan still required for certificate eligibility.';
@@ -8283,7 +8315,9 @@ app.post('/api/scanner/mark', (req, res) => {
                                     doctor_user_id: row.doctor_user_id,
                                     doctor_name: doctorName,
                                     outcome: 'success',
-                                    message: scanMsg
+                                    message: scanMsg,
+                                    day_id: row.day_id || null,
+                                    day_title: row.scan_event_title || null
                                 },
                                 (_evErr, scanEventId) => {
                                     res.json({
@@ -8360,6 +8394,7 @@ app.post('/api/scanner/mark', (req, res) => {
                                     if (nErr) console.warn('[scanner] check-in notify:', nErr.message);
                                 }
                             );
+                            });
                         };
 
                         if (!regId) return finishScanResponse(new Date().toISOString());
