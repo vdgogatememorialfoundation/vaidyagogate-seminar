@@ -346,10 +346,10 @@
 .cert-overlay-qr {
     position: absolute;
     left: 50%;
-    top: 28%;
+    top: 36%;
     transform: translateX(-50%);
-    width: 40%;
-    max-width: 84px;
+    width: 42%;
+    max-width: 88px;
     aspect-ratio: 1;
     object-fit: contain;
     background: #fff;
@@ -384,15 +384,15 @@
 }
 
 .cert-overlay-id-val--app {
-    top: 61%;
+    top: 74%;
 }
 
 .cert-overlay-id-val--portal {
-    top: 70.5%;
+    top: 83%;
 }
 
 .cert-overlay-id-val--cert {
-    top: 80%;
+    top: 92%;
 }
 
 .cert-overlay-checked {
