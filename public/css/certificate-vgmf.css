@@ -337,21 +337,22 @@
 
 .cert-overlay-verify {
     position: absolute;
-    right: 3.8%;
-    top: 40.5%;
-    width: 24.5%;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
+    right: 5.2%;
+    top: 33.5%;
+    width: 22%;
+    height: 42%;
 }
 
 .cert-overlay-qr {
-    width: 36%;
-    max-width: 82px;
+    position: absolute;
+    left: 50%;
+    top: 18%;
+    transform: translateX(-50%);
+    width: 38%;
+    max-width: 78px;
     aspect-ratio: 1;
     object-fit: contain;
     background: #fff;
-    margin-top: 12%;
     display: block;
 }
 
@@ -360,21 +361,38 @@
 }
 
 .cert-overlay-id-values {
-    width: 94%;
-    margin-top: 22%;
+    position: absolute;
+    inset: 0;
+    margin: 0;
     font-family: 'Roboto', Arial, sans-serif;
 }
 
 .cert-overlay-id-val {
-    margin: 0 0 1.05em;
-    padding: 0.08em 0.1em 0.08em 52%;
-    font-size: clamp(0.48rem, 0.88vw, 0.68rem);
+    position: absolute;
+    left: 48%;
+    right: 3%;
+    margin: 0;
+    padding: 0;
+    font-size: clamp(0.48rem, 0.85vw, 0.66rem);
     font-weight: 600;
     color: #1f2937;
     line-height: 1.1;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    text-align: left;
+}
+
+.cert-overlay-id-val--app {
+    top: 58%;
+}
+
+.cert-overlay-id-val--portal {
+    top: 68%;
+}
+
+.cert-overlay-id-val--cert {
+    top: 78%;
 }
 
 .cert-overlay-checked {
