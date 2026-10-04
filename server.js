@@ -6912,7 +6912,7 @@ app.get('/api/doctor/dashboard-stats/:userId', (req, res) => {
         const [sql, key] = steps[i];
         i++;
         db.get(sql, [uid], (err, row) => {
-            if (!err && row) out[key] = row.c != null ? row.c : row.count || 0;
+            if (!err && row) out[key] = Number(row.c != null ? row.c : row.count) || 0;
             next();
         });
     };
