@@ -109,6 +109,7 @@
         .admin-form-hint-details summary::-webkit-details-marker { display: none; }
         .admin-form-hint-details[open] summary { margin-bottom: 8px; }
     </style>
+    <link rel="stylesheet" href="/css/track-timeline.css?v=20261003tl">
 </head>
 <body class="portal-bright">
 
@@ -189,6 +190,13 @@
                 <a class="menu-item" data-admin-module="tab-system-platform" onclick="switchTab('tab-system-platform'); initAdminSystemHealth('platform');"><i class="fas fa-server"></i> System health</a>
                 <a class="menu-item" data-admin-module="tab-system-users" onclick="switchTab('tab-system-users'); initAdminSystemHealth('users');"><i class="fas fa-users-cog"></i> User health</a>
                 <a class="menu-item" data-admin-module="tab-settings" onclick="switchTab('tab-settings'); initAdminBrandingPreview();"><i class="fas fa-cogs"></i> Global Settings</a>
+                <div class="menu-item" data-admin-module="tab-commerce" style="margin:18px 12px 6px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:0.68rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#64748b;pointer-events:none;">Commerce</div>
+                <a class="menu-item" data-admin-module="tab-commerce" style="padding-left:28px;" onclick="openCommercePanel('desk')"><i class="fas fa-clipboard-list"></i> Order desk</a>
+                <a class="menu-item" data-admin-module="tab-commerce" style="padding-left:28px;" onclick="openCommercePanel('book')"><i class="fas fa-truck"></i> Schedule pickup</a>
+                <a class="menu-item" data-admin-module="tab-commerce" style="padding-left:28px;" onclick="openCommercePanel('track')"><i class="fas fa-map-marked-alt"></i> Shipment tracking</a>
+                <a class="menu-item" data-admin-module="tab-commerce" style="padding-left:28px;" onclick="openCommercePanel('returns')"><i class="fas fa-undo"></i> Returns &amp; replacements</a>
+                <a class="menu-item" data-admin-module="tab-commerce" style="padding-left:28px;" onclick="openCommercePanel('labels')"><i class="fas fa-tag"></i> Shipping labels</a>
+                <a class="menu-item" data-admin-module="tab-commerce" style="padding-left:28px;" onclick="openCommercePanel('settings')"><i class="fas fa-sliders-h"></i> Shop settings</a>
             </div>
         </aside>
 
@@ -466,6 +474,18 @@
                     <select id="feedback-seminar-filter" onchange="loadFeedbackForSeminar()" style="margin-bottom: 20px;">
                         <option value="">-- Select Seminar --</option>
                     </select>
+
+                    <div id="feedback-email-card" style="margin:0 0 20px;padding:16px;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;">
+                        <h3 style="margin:0 0 8px;color:#0369a1;">Email checked-in participants</h3>
+                        <p style="margin:0 0 12px;color:#475569;font-size:0.9rem;">Send one feedback email to every doctor who checked in on the days you select. Someone who attended only one day is included when that day is selected. Someone who attended both days receives a single email.</p>
+                        <div id="feedback-email-days" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px;"></div>
+                        <label for="feedback-email-subject" style="font-weight:600;">Subject</label>
+                        <input type="text" id="feedback-email-subject" style="width:100%;max-width:640px;padding:8px;margin:6px 0 12px;border:1px solid #cbd5e1;border-radius:8px;" placeholder="Select a seminar to prepare the email">
+                        <label for="feedback-email-body" style="font-weight:600;">Message</label>
+                        <textarea id="feedback-email-body" rows="6" style="width:100%;max-width:640px;padding:8px;margin-top:6px;border:1px solid #cbd5e1;border-radius:8px;" placeholder="Thank them and ask for feedback"></textarea>
+                        <p id="feedback-email-status" style="margin:8px 0;font-size:0.88rem;color:#475569;"></p>
+                        <button type="button" class="btn-primary" onclick="sendFeedbackEmailToCheckedIn()"><i class="fas fa-paper-plane"></i> Email checked-in participants</button>
+                    </div>
                     
                     <div id="feedback-stats" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; margin-bottom: 20px;">
                         <div class="card" style="margin-bottom: 0;">
@@ -1317,8 +1337,10 @@
                     .vtrk-step-circle{width:30px;height:30px;border-radius:50%;background:#e2e8f0;color:#94a3b8;display:flex;align-items:center;justify-content:center;font-size:.72rem;border:3px solid #f8fafc;z-index:1;flex-shrink:0}
                     .vtrk-step.done .vtrk-step-circle{background:#10b981;color:#fff;border-color:#d1fae5}
                     .vtrk-step.active .vtrk-step-circle{background:#0f766e;color:#fff;border-color:#ccfbf1;box-shadow:0 0 0 4px rgba(15,118,110,.12)}
-                    .vtrk-step-line{flex:1;width:3px;background:#e2e8f0;margin:2px 0;border-radius:999px}
-                    .vtrk-step.done .vtrk-step-line{background:#6ee7b7}
+                    .vtrk-step-line{position:relative;flex:1;width:3px;background:#e2e8f0;margin:2px 0;border-radius:999px;overflow:hidden}
+                    .vtrk-step.done .vtrk-step-line::after{content:'';position:absolute;left:0;right:0;top:0;height:100%;background:#4ade80}
+                    .vtrk-step.done.vtrk-creep .vtrk-step-line::after{height:0;animation:vtrk-line-creep 22s cubic-bezier(.22,.61,.36,1) forwards}
+                    @keyframes vtrk-line-creep{0%{height:6%}100%{height:68%}}
                     .vtrk-step-body{flex:1;padding:5px 10px 12px 2px}
                     .vtrk-step-title{font-weight:700;font-size:.88rem;color:#1e293b}
                     .vtrk-step.upcoming .vtrk-step-title{color:#94a3b8;font-weight:600}
@@ -1654,6 +1676,19 @@
                                 <p id="bs-agg-no-config" style="display:none;margin:8px 0 0;font-size:0.78rem;color:#92400e;background:#fef9c3;padding:6px 10px;border-radius:6px;"><i class="fas fa-exclamation-triangle"></i> Configure Shiprocket / Nimbuspost API credentials in Book sales → Settings → Logistics API first.</p>
                             </div>
 
+                            <!-- Option: Tookan / Shipday courier partner pickup -->
+                            <div style="border:2px solid #0d9488;border-radius:12px;padding:16px;margin-bottom:16px;">
+                                <div style="font-weight:800;color:#0f766e;font-size:0.92rem;margin-bottom:4px;">Tookan / Shipday courier partner</div>
+                                <p style="font-size:0.78rem;color:#64748b;margin:0 0 10px;">Asks the courier partner to pick the parcel up from the store. The customer sees Packed, then Shipped once it is collected, then Out for delivery and Delivered, with the pickup and delivery OTPs kept separate.</p>
+                                <label style="display:block;font-size:0.75rem;font-weight:700;color:#374151;margin-bottom:4px;">Pickup time <span style="font-weight:400;color:#94a3b8;">(optional, default in 30 minutes)</span></label>
+                                <input type="datetime-local" id="bs-commerce-when" style="width:100%;padding:8px 10px;border:1px solid #e2e8f0;border-radius:8px;font-size:0.88rem;margin-bottom:10px;">
+                                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                                    <button type="button" class="btn-primary" style="background:#0d9488;flex:1;min-width:150px;" onclick="bsBookCommerce('tookan','logistics')">Tookan logistics</button>
+                                    <button type="button" class="btn-primary" style="background:#0f766e;flex:1;min-width:150px;" onclick="bsBookCommerce('tookan','hyperlocal')">Tookan hyperlocal</button>
+                                    <button type="button" class="btn-primary" style="background:#0369a1;flex:1;min-width:150px;" onclick="bsBookCommerce('shipday','hyperlocal')">Shipday hyperlocal</button>
+                                </div>
+                            </div>
+
                             <!-- Option B: Manual AWB -->
                             <div style="border:1px solid #e2e8f0;border-radius:12px;padding:14px;">
                                 <p style="font-weight:700;color:#475569;font-size:0.88rem;margin:0 0 10px;"><i class="fas fa-keyboard" style="margin-right:6px;color:#64748b;"></i>Or enter AWB manually</p>
@@ -1689,6 +1724,13 @@
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <div id="tab-commerce" class="tab-pane hidden">
+                <h2 style="margin-bottom:6px;">Commerce</h2>
+                <p style="color:#64748b;margin-bottom:14px;">Book orders placed by doctors show here even when the doctor book-order screen is closed. Accept, prepare, and mark ready to schedule pickup. Tookan covers logistics and hyperlocal. Shipday covers hyperlocal pickup and delivery.</p>
+                <div id="commerce-subnav" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;"></div>
+                <div id="commerce-panel"></div>
             </div>
 
             <!-- Payments module -->
@@ -1892,7 +1934,7 @@
                 </div>
                 <div class="card cert-mgmt-card" style="margin-top:16px;">
                     <h3 style="margin:0 0 8px;color:#92400e;">Public verification &amp; dispatch</h3>
-                    <p style="font-size:0.85rem;color:#78716c;margin:0 0 12px;">Turn on the public certificate verification page at <code>/verify-certificate</code>. Visitors must pass <strong>email and WhatsApp one-time password</strong> to confirm authenticity. You may enable verification manually before the seminar ends, or schedule an opening date and time.</p>
+                    <p style="font-size:0.85rem;color:#78716c;margin:0 0 12px;">Turn on the public certificate verification page at <code>/verify-certificate</code>. Visitors who type an application number confirm with an <strong>email one-time password</strong>. Scanning the certificate QR opens the seminar and certificate details directly. WhatsApp OTP is not used. You may enable verification manually before the seminar ends, or schedule an opening date and time.</p>
                     <label style="display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:8px;">
                         <input type="checkbox" id="cert-verify-enabled" onchange="saveCertVerifyEnabled()">
                         Enable public certificate verification for this seminar
@@ -1908,6 +1950,8 @@
                     </div>
                     <p id="cert-verify-status" style="font-size:0.88rem;margin:10px 0 0;color:#64748b;"></p>
                     <button type="button" class="btn-primary cert-btn-gold" style="margin-top:12px;" onclick="dispatchAllAdminCertificates()"><i class="fas fa-paper-plane"></i> Dispatch all enabled certificates</button>
+                    <button type="button" class="btn-primary" style="margin-top:12px;margin-left:8px;background:#0f766e;" onclick="dispatchCompletedDayCertificates(false)"><i class="fas fa-calendar-check"></i> Send certificate issued (completed days)</button>
+                    <button type="button" class="btn-primary" style="margin-top:12px;margin-left:8px;background:#64748b;" onclick="dispatchCompletedDayCertificates(true)">Resend to completed days</button>
                     <p id="cert-dispatch-msg" style="font-size:0.88rem;margin-top:8px;"></p>
                 </div>
                 <div class="card" style="margin-top:20px;">
@@ -1924,8 +1968,8 @@
                         <p id="cert-candidates-search-count" style="margin:6px 0 0;font-size:0.82rem;color:#64748b;"></p>
                     </div>
                     <table class="data-table">
-                        <thead><tr><th><input type="checkbox" id="cert-cand-select-all" onchange="toggleAllCertCandidates(this.checked)"></th><th>PRN No.</th><th>Name</th><th>Application No.</th><th>Reg. status</th><th>Paid</th><th>Scans</th><th>Ticket</th><th>Certificate</th></tr></thead>
-                        <tbody id="cert-mgmt-list"><tr><td colspan="9" style="text-align:center;">Select a seminar</td></tr></tbody>
+                        <thead><tr><th><input type="checkbox" id="cert-cand-select-all" onchange="toggleAllCertCandidates(this.checked)"></th><th>PRN No.</th><th>Name</th><th>Application No.</th><th>Reg. status</th><th>Paid</th><th>Scans</th><th>Ticket</th><th>Certificate</th><th>Name on certificate</th></tr></thead>
+                        <tbody id="cert-mgmt-list"><tr><td colspan="10" style="text-align:center;">Select a seminar</td></tr></tbody>
                     </table>
                 </div>
             </div>
@@ -2334,18 +2378,27 @@
                     <div style="display:flex;gap:12px;align-items:end;margin-bottom:16px;flex-wrap:wrap;">
                         <div style="flex:1;min-width:200px;">
                             <label>Filter by seminar (optional)</label>
-                            <select id="scanner-log-seminar" style="width:100%;padding:8px;" onchange="loadAdminScannerLogs()"><option value="">All seminars</option></select>
+                            <select id="scanner-log-seminar" style="width:100%;padding:8px;" onchange="onAdminScannerSeminarChange()"><option value="">All seminars</option></select>
+                        </div>
+                        <div style="min-width:180px;">
+                            <label>Day</label>
+                            <select id="scanner-log-day" style="width:100%;padding:8px;" onchange="loadAdminScannerLogs()"><option value="">All days</option></select>
+                        </div>
+                        <div style="min-width:200px;">
+                            <label>Scanned by</label>
+                            <select id="scanner-log-scanner" style="width:100%;padding:8px;" onchange="loadAdminScannerLogs()"><option value="">All scanners</option></select>
                         </div>
                         <button type="button" class="btn-primary" onclick="loadAdminScannerLogs()"><i class="fas fa-sync"></i> Refresh</button>
                     </div>
+                    <div id="scanner-day-summary" style="display:none;margin-bottom:16px;"></div>
                     <div style="margin-bottom:12px;">
                         <label for="scanner-logs-search" style="font-weight:600;font-size:0.9rem;">Search scan logs</label>
                         <input type="search" id="scanner-logs-search" placeholder="Doctor ID, name, app no., ticket, scanner, or seminar…" oninput="renderAdminScannerLogsTable()" style="width:100%;max-width:560px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;margin-top:6px;">
                         <p id="scanner-logs-search-count" style="margin:6px 0 0;font-size:0.82rem;color:#64748b;"></p>
                     </div>
                     <table class="data-table">
-                        <thead><tr><th>Time</th><th>Doctor ID</th><th>Doctor name</th><th>App no.</th><th>Ticket</th><th>Scanned by (staff)</th><th>Seminar</th></tr></thead>
-                        <tbody id="scanner-logs-list"><tr><td colspan="7" style="text-align:center;">Loading…</td></tr></tbody>
+                        <thead><tr><th>Time</th><th>Day</th><th>Doctor ID</th><th>Doctor name</th><th>App no.</th><th>Ticket</th><th>Scanned by (staff)</th><th>Seminar / event</th></tr></thead>
+                        <tbody id="scanner-logs-list"><tr><td colspan="8" style="text-align:center;">Loading…</td></tr></tbody>
                     </table>
                 </div>
             </div>
@@ -3450,6 +3503,8 @@
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
-    <script src="/js/admin.js?v=20260911ticketdedupe2"></script>
+    <script src="/js/track-timeline.js?v=20261003tl"></script>
+    <script src="/js/admin-commerce.js?v=20261003tl"></script>
+    <script src="/js/admin.js?v=20261004attend"></script>
 </body>
 </html>

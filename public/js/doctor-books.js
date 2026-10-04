@@ -796,6 +796,20 @@
                 extra =
                     '<p style="margin:6px 0 0;font-size:0.88rem;color:#0f766e;font-weight:600;">' + esc(o.courierTrackLabel) + '</p>';
             }
+            if (o.commerceTrackUrl) {
+                extra +=
+                    '<p style="margin:8px 0 0;"><a href="' +
+                    esc(o.commerceTrackUrl) +
+                    '" target="_blank" rel="noopener" style="font-size:0.82rem;color:#0f766e;font-weight:700;">Live shipment tracker ↗</a></p>';
+                if (o.deliveryOtp) {
+                    extra +=
+                        '<p style="margin:4px 0 0;font-size:0.88rem;">Delivery OTP <strong>' +
+                        esc(o.deliveryOtp) +
+                        '</strong>' +
+                        (o.agentPhone ? ' · Agent ' + esc(o.agentPhone) : '') +
+                        '</p>';
+                }
+            }
             if (o.courierTrackingNo && o.orderCode) {
                 const pub =
                     '/track-shipment?order=' +

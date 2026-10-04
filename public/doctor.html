@@ -110,7 +110,7 @@
         .vtrk-header { padding: 16px; border-radius: 14px 14px 0 0; background: linear-gradient(135deg,#0f766e 0%,#0d9488 100%); color: #fff; }
         .vtrk-header.delivered { background: linear-gradient(135deg,#15803d 0%,#16a34a 100%); }
         .vtrk-header.cancelled { background: linear-gradient(135deg,#991b1b 0%,#b91c1c 100%); }
-        .vtrk-header.live { background: linear-gradient(135deg,#0f766e 0%,#0d9488 50%,#0284c7 100%); }
+        .vtrk-header.live { background: linear-gradient(135deg,#166534 0%,#15803d 55%,#22c55e 100%); }
         .vtrk-live { display: inline-flex; align-items: center; gap: 6px; font-size: 0.68rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.1em; background: rgba(255,255,255,0.2); border-radius: 999px; padding: 2px 10px; margin-bottom: 10px; }
         .vtrk-dot { width: 7px; height: 7px; border-radius: 50%; background: #fff; animation: vtrk-pulse 1.4s ease-out infinite; }
         @keyframes vtrk-pulse { 0%{box-shadow:0 0 0 0 rgba(255,255,255,.7)} 70%{box-shadow:0 0 0 7px rgba(255,255,255,0)} 100%{box-shadow:0 0 0 0 rgba(255,255,255,0)} }
@@ -125,18 +125,20 @@
         .vtrk-step { display: flex; gap: 0; min-height: 52px; }
         .vtrk-step-left { display: flex; flex-direction: column; align-items: center; width: 52px; flex-shrink: 0; }
         .vtrk-step-circle { width: 32px; height: 32px; border-radius: 50%; background: #e2e8f0; color: #94a3b8; display: flex; align-items: center; justify-content: center; font-size: 0.78rem; border: 3px solid #f8fafc; z-index: 1; flex-shrink: 0; }
-        .vtrk-step.done .vtrk-step-circle { background: #10b981; color: #fff; border-color: #d1fae5; }
-        .vtrk-step.active .vtrk-step-circle { background: #0f766e; color: #fff; border-color: #ccfbf1; box-shadow: 0 0 0 4px rgba(15,118,110,0.15); }
-        .vtrk-step-line { flex: 1; width: 3px; background: #e2e8f0; margin: 2px 0; border-radius: 999px; }
-        .vtrk-step.done .vtrk-step-line { background: #6ee7b7; }
+        .vtrk-step.done .vtrk-step-circle { background: #16a34a; color: #fff; border-color: #dcfce7; }
+        .vtrk-step.active .vtrk-step-circle { background: #15803d; color: #fff; border-color: #bbf7d0; box-shadow: 0 0 0 4px rgba(22,163,74,0.18); }
+        .vtrk-step-line { position: relative; flex: 1; width: 3px; background: #e2e8f0; margin: 2px 0; border-radius: 999px; overflow: hidden; }
+        .vtrk-step.done .vtrk-step-line::after { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 100%; background: #4ade80; }
+        .vtrk-step.done.vtrk-creep .vtrk-step-line::after { height: 0; animation: vtrk-line-creep 22s cubic-bezier(.22,.61,.36,1) forwards; }
+        @keyframes vtrk-line-creep { 0% { height: 6%; } 100% { height: 68%; } }
         .vtrk-step-body { flex: 1; padding: 6px 12px 14px 4px; }
         .vtrk-step-title { font-weight: 700; font-size: 0.92rem; color: #1e293b; }
         .vtrk-step.upcoming .vtrk-step-title { color: #94a3b8; font-weight: 600; }
-        .vtrk-step.done .vtrk-step-title { color: #059669; }
-        .vtrk-step.active .vtrk-step-title { color: #0f766e; }
+        .vtrk-step.done .vtrk-step-title { color: #15803d; }
+        .vtrk-step.active .vtrk-step-title { color: #166534; }
         .vtrk-step-sub { font-size: 0.78rem; color: #64748b; margin-top: 2px; }
         .vtrk-step.upcoming .vtrk-step-sub { color: #b0bec5; font-style: italic; }
-        .vtrk-step-when { display: flex; align-items: center; gap: 4px; font-size: 0.72rem; color: #0f766e; font-weight: 600; margin-top: 4px; }
+        .vtrk-step-when { display: flex; align-items: center; gap: 4px; font-size: 0.72rem; color: #15803d; font-weight: 600; margin-top: 4px; }
         /* Events */
         .vtrk-events { background: #f8fafc; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 14px 14px; padding: 12px 14px; }
         .vtrk-events-title { font-size: 0.78rem; font-weight: 800; color: #475569; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
@@ -191,7 +193,7 @@
         .sat-step-pop { animation: sat-step-in 0.4s ease both; }
         @keyframes sat-step-in { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: translateX(0); } }
         .sat-step-active-glow .vtrk-step-circle { animation: sat-active-glow 2s ease-in-out infinite; }
-        @keyframes sat-active-glow { 0%,100% { box-shadow: 0 0 0 4px rgba(15,118,110,0.15); } 50% { box-shadow: 0 0 0 8px rgba(15,118,110,0.28); } }
+        @keyframes sat-active-glow { 0%,100% { box-shadow: 0 0 0 4px rgba(22,163,74,0.18); } 50% { box-shadow: 0 0 0 8px rgba(22,163,74,0.32); } }
         .sat-icon-spin { animation: sat-spin 2.5s linear infinite; }
         @keyframes sat-spin { to { transform: rotate(360deg); } }
         .sat-step-upcoming { color: #94a3b8 !important; font-style: italic; font-weight: 500 !important; }
@@ -363,6 +365,7 @@
                         <div class="stat-card"><h4 id="stat-registered">—</h4><p>Registered seminars</p></div>
                         <div class="stat-card" style="border-top-color:#10b981;"><h4 id="stat-paid">—</h4><p>Paid / confirmed</p></div>
                         <div class="stat-card" style="border-top-color:#f59e0b;"><h4 id="stat-checked">—</h4><p>Checked in</p></div>
+                        <div class="stat-card" style="border-top-color:#c9a227;cursor:pointer;" onclick="switchTab('tab-certificate')" title="Open My certificates"><h4 id="stat-certs">—</h4><p>Certificates</p></div>
                         <div class="stat-card" style="border-top-color:#8b5cf6;"><h4 id="stat-feedback">—</h4><p>Feedback submitted</p></div>
                         <div class="stat-card" style="border-top-color:#0ea5e9;"><h4 id="stat-abstracts">—</h4><p>Case presentations</p></div>
                         <div class="stat-card" style="border-top-color:#ec4899;"><h4 id="stat-ptix">—</h4><p>Participant e‑tickets</p></div>
@@ -913,7 +916,7 @@
     <script src="/js/case-r2-upload.js?v=20260608case2"></script>
     <link rel="stylesheet" href="/css/book-track.css?v=20260529stg">
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
-    <script src="/js/doctor-books.js?v=20260610books2"></script>
+    <script src="/js/doctor-books.js?v=20261003commerce"></script>
     <script src="/js/live-chat-client-info.js?v=20260610chat1"></script>
     <script src="/js/doctor-live-chat-widget.js?v=20260615live2"></script>
     <script src="/js/site-visitor-beacon.js?v=20260613radar6"></script>
@@ -939,6 +942,6 @@
         }
     })();
     </script>
-    <script src="/js/doctor.js?v=20260911otpfix1"></script>
+    <script src="/js/doctor.js?v=20261004attend"></script>
 </body>
 </html>

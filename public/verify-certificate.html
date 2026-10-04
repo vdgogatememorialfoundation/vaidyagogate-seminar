@@ -55,25 +55,22 @@
                     <label for="cv-prn">Portal registration number (doctor identifier)</label>
                     <input type="text" id="cv-prn" placeholder="Portal doctor identifier" autocomplete="off">
                 </div>
-                <p style="font-size:0.82rem;color:#64748b;margin:0 0 12px;">Or open this page by scanning the QR code on the certificate.</p>
+                <p style="font-size:0.82rem;color:#64748b;margin:0 0 12px;">Or scan the QR code on the certificate. Scanning sends an email code to the certificate holder. <a href="/certificate-scanner">Open the certificate scanner</a>.</p>
                 <button type="button" class="cv-btn cv-btn-primary" id="cv-lookup-btn">Continue</button>
                 <div id="cv-lookup-msg" class="cv-msg" style="display:none;"></div>
             </div>
 
             <div id="cv-step-otp" class="cv-step">
                 <p class="cv-lead" id="cv-otp-hint"></p>
-                <p style="font-size:0.88rem;color:#64748b;">Enter both one-time password codes sent to the certificate holder.</p>
+                <dl class="cv-meta" id="cv-otp-meta"></dl>
+                <p style="font-size:0.88rem;color:#64748b;">Enter the email code sent to the certificate holder.</p>
                 <div class="cv-otp-grid">
                     <div class="cv-field">
                         <label for="cv-email-otp">Email one-time password</label>
                         <input type="text" id="cv-email-otp" inputmode="numeric" maxlength="8" autocomplete="one-time-code">
                     </div>
-                    <div class="cv-field">
-                        <label for="cv-phone-otp">WhatsApp one-time password</label>
-                        <input type="text" id="cv-phone-otp" inputmode="numeric" maxlength="8" autocomplete="one-time-code">
-                    </div>
                 </div>
-                <button type="button" class="cv-btn cv-btn-primary" id="cv-send-otp-btn">Send one-time passwords to certificate holder</button>
+                <button type="button" class="cv-btn cv-btn-primary" id="cv-send-otp-btn">Send email one-time password</button>
                 <button type="button" class="cv-btn cv-btn-primary" id="cv-confirm-btn" style="display:none;">Verify certificate</button>
                 <button type="button" class="cv-btn cv-btn-secondary" id="cv-back-lookup-btn">Back</button>
                 <div id="cv-otp-msg" class="cv-msg" style="display:none;"></div>
@@ -91,7 +88,7 @@
         </div>
     </div>
     <script src="/js/site-seo.js?v=20260608seo2"></script>
-    <script src="/js/verify-certificate.js"></script>
+    <script src="/js/verify-certificate.js?v=20261004certscan"></script>
     <script>document.addEventListener('contextmenu',function(e){e.preventDefault();});</script>
 </body>
 </html>

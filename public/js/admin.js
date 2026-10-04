@@ -616,6 +616,7 @@ function mergeAdminEnabledPagesPolicy(stored) {
     const restrict = keys.length && keys.some((k) => pages[k] === true);
     if (restrict) {
         if (!('tab-book-sales' in pages)) pages['tab-book-sales'] = true;
+        if (!('tab-commerce' in pages)) pages['tab-commerce'] = true;
         if (!('tab-cancellation-review' in pages)) pages['tab-cancellation-review'] = true;
     }
     return pages;
@@ -653,21 +654,27 @@ function adminCanAccessTab(tabId) {
     if (checkId === 'tab-users') checkId = 'tab-staff-users';
     if (isSuperAdminUser()) return true;
     const u = getStoredAdminUser();
+    if ((tabId === 'tab-book-sales' || tabId === 'tab-commerce') && String((u && (u.user_role || u.role)) || '').toLowerCase() !== 'co_admin') {
+        return false;
+    }
     const isCo = String(u && u.user_role || '').toLowerCase() === 'co_admin';
     if (!isCo) {
         if (tabId === 'tab-cancellation-review' && globalAdminTabAllowed('tab-admin-payments')) return true;
         if (tabId === 'tab-refund-tracking' && globalAdminTabAllowed('tab-admin-payments')) return true;
+        if (tabId === 'tab-commerce' && globalAdminTabAllowed('tab-book-sales')) return true;
         return globalAdminTabAllowed(checkId);
     }
     const { unset, mods } = coAdminModulesState(u);
     if (unset) {
         if (tabId === 'tab-cancellation-review' && globalAdminTabAllowed('tab-admin-payments')) return true;
         if (tabId === 'tab-refund-tracking' && globalAdminTabAllowed('tab-admin-payments')) return true;
+        if (tabId === 'tab-commerce' && globalAdminTabAllowed('tab-book-sales')) return true;
         return globalAdminTabAllowed(checkId);
     }
     if (!Object.keys(mods).length) return false;
     if (tabId === 'tab-cancellation-review' && mods['tab-admin-payments'] === true) return true;
     if (tabId === 'tab-refund-tracking' && mods['tab-admin-payments'] === true) return true;
+    if (tabId === 'tab-commerce' && (mods['tab-commerce'] === true || mods['tab-book-sales'] === true)) return true;
     return mods[checkId] === true;
 }
 
@@ -907,6 +914,9 @@ function switchTab(tabId) {
     }
     if (tabId === 'tab-book-sales' && typeof loadBookSalesAdmin === 'function') {
         loadBookSalesAdmin();
+    }
+    if (tabId === 'tab-commerce' && typeof loadCommerceAdmin === 'function') {
+        loadCommerceAdmin();
     }
     if (tabId === 'tab-staff-users' || tabId === 'tab-doctors') {
         loadUsers();
@@ -1704,6 +1714,7 @@ const ADMIN_MODULE_TAB_DEFS = [
     ['tab-reg-form', 'Registration form fields'],
     ['tab-site-cms', 'Website & doctor updates'],
     ['tab-book-sales', 'Book sales'],
+    ['tab-commerce', 'Commerce'],
     ['tab-admin-payments', 'Payments'],
     ['tab-cancellation-review', 'Cancellation review & refunds'],
     ['tab-refund-tracking', 'Refund tracking'],
@@ -4905,6 +4916,53 @@ async function dispatchAllAdminCertificates() {
     }
 }
 
+async function dispatchCompletedDayCertificates(resend) {
+    const sid = document.getElementById('cert-mgmt-seminar')?.value;
+    const msg = document.getElementById('cert-dispatch-msg');
+    if (!sid) return alert('Select a seminar');
+    const again = !!resend;
+    if (
+        !confirm(
+            again
+                ? 'Resend the certificate email and WhatsApp to doctors who checked in on any day, including people already emailed? One certificate names only the days they attended.'
+                : 'Send the certificate email and WhatsApp to doctors who checked in on any day and have not yet been emailed for that set of days? One day names that day only. Both days say they attended both days.'
+        )
+    ) {
+        return;
+    }
+    if (msg) {
+        msg.style.color = '#78716c';
+        msg.textContent = again ? 'Resending…' : 'Sending certificate issued emails…';
+    }
+    try {
+        const res = await fetch('/api/admin/certificates/dispatch-completed-days', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ seminarId: parseInt(sid, 10), resend: again })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Send failed');
+        if (msg) {
+            msg.style.color = '#15803d';
+            msg.textContent =
+                (data.issuingDay ? data.issuingDay + ': ' : '') +
+                'Sent ' +
+                (data.dispatched || 0) +
+                ', already sent ' +
+                (data.skipped || 0) +
+                ' of ' +
+                (data.eligible || 0) +
+                (data.errors && data.errors.length ? '. Some failed: ' + data.errors[0] : '.');
+        }
+    } catch (e) {
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = e.message || 'Send failed';
+        }
+        alert(e.message || 'Send failed');
+    }
+}
+
 function readCertConfigFromForm() {
     return {
         orgName: document.getElementById('cert-cfg-org')?.value || '',
@@ -4957,8 +5015,34 @@ function fillCertConfigForm(cfg) {
     window.__certSigRightPath = c.sigRightImagePath || '';
     const lp = document.getElementById('cert-sig-left-preview');
     const rp = document.getElementById('cert-sig-right-preview');
-    if (lp) lp.textContent = window.__certSigLeftPath ? 'Current: ' + window.__certSigLeftPath : 'No left signature image uploaded.';
-    if (rp) rp.textContent = window.__certSigRightPath ? 'Current: ' + window.__certSigRightPath : 'No right signature image uploaded.';
+    renderCertSigPreview(lp, window.__certSigLeftPath, 'left');
+    renderCertSigPreview(rp, window.__certSigRightPath, 'right');
+}
+
+function certSigBrowserUrl(p) {
+    const v = String(p || '').trim();
+    if (!v) return '';
+    const m = /^https?:\/\/[^/]+\.r2\.cloudflarestorage\.com\/[^/]+\/(.+?)(?:\?.*)?$/i.exec(v);
+    if (m) return '/uploads/' + m[1];
+    return v;
+}
+
+function renderCertSigPreview(el, p, side) {
+    if (!el) return;
+    el.textContent = '';
+    if (!p) {
+        el.textContent = 'No ' + side + ' signature image uploaded.';
+        return;
+    }
+    const img = document.createElement('img');
+    img.src = certSigBrowserUrl(p);
+    img.alt = 'Signature';
+    img.style.cssText = 'display:block;max-height:56px;max-width:220px;margin-top:4px;background:#fff;border:1px solid #e2e8f0;padding:2px;';
+    img.onerror = () => {
+        img.remove();
+        el.appendChild(document.createTextNode('Uploaded (preview unavailable): ' + p));
+    };
+    el.appendChild(img);
 }
 
 async function uploadCertSignatureImage(side) {
@@ -5089,10 +5173,10 @@ async function loadAdminCertificateCandidates() {
     const tbody = document.getElementById('cert-mgmt-list');
     if (!tbody) return;
     if (!sid) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Select a seminar</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;">Select a seminar</td></tr>';
         return;
     }
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Loading…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;">Loading…</td></tr>';
     try {
         const certType = document.getElementById('cert-mgmt-type')?.value || 'participant';
         const res = await fetch(
@@ -5103,8 +5187,107 @@ async function loadAdminCertificateCandidates() {
         renderAdminCertificateCandidatesTable();
     } catch (e) {
         console.error(e);
-        tbody.innerHTML = '<tr><td colspan="9">Error loading</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10">Error loading</td></tr>';
     }
+}
+
+const CERT_HONORIFIC_CHOICES = ['Dr.', 'Mr.', 'Ms.', 'Mrs.', 'Prof.', 'Vaidya', 'Shri', 'Smt.'];
+
+function openCertRecipientEditor(userId) {
+    const row = (__adminCertCandidatesCache || []).find((r) => Number(r.user_id) === Number(userId));
+    const sid = document.getElementById('cert-mgmt-seminar')?.value;
+    if (!row || !sid) return;
+    const certType = document.getElementById('cert-mgmt-type')?.value || 'participant';
+    const profileName = [row.first_name, row.last_name].filter(Boolean).join(' ');
+    const edited = Number(row.name_edited) === 1;
+    const startName = edited && row.display_name ? row.display_name : profileName || row.display_name || '';
+    const curHon = edited ? String(row.cert_honorific || '') : '';
+    const honIsCustom =
+        curHon && curHon.toLowerCase() !== 'none' && !CERT_HONORIFIC_CHOICES.includes(curHon);
+
+    document.getElementById('cert-recipient-modal')?.remove();
+    const wrap = document.createElement('div');
+    wrap.id = 'cert-recipient-modal';
+    wrap.style.cssText =
+        'position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;';
+    const opts = ['<option value="">Automatic (Dr. / Mr. / Ms. from profile)</option>', '<option value="none">No honorific</option>']
+        .concat(CERT_HONORIFIC_CHOICES.map((h) => `<option value="${escAdmin(h)}">${escAdmin(h)}</option>`))
+        .concat(['<option value="__custom">Other…</option>'])
+        .join('');
+    wrap.innerHTML = `
+        <div style="background:#fff;border-radius:12px;max-width:480px;width:100%;padding:20px 22px;box-shadow:0 20px 50px rgba(0,0,0,0.3);">
+            <h3 style="margin:0 0 4px;">Edit certificate name</h3>
+            <p style="margin:0 0 14px;font-size:0.85rem;color:#64748b;">${escAdmin(profileName || '—')} · PRN ${escAdmin(row.user_id_string || '—')} · ${escAdmin(certType)} certificate</p>
+            <label style="font-weight:600;font-size:0.85rem;">Honorific</label>
+            <select id="cert-rcp-hon" style="width:100%;padding:8px;margin:4px 0 8px;">${opts}</select>
+            <input id="cert-rcp-hon-custom" placeholder="e.g. Col." maxlength="20" style="display:none;width:100%;padding:8px;margin-bottom:8px;">
+            <label style="font-weight:600;font-size:0.85rem;">Name (as it should be printed)</label>
+            <input id="cert-rcp-name" maxlength="120" style="width:100%;padding:8px;margin:4px 0 12px;" value="${escAdmin(startName)}">
+            <div style="background:#fffbeb;border:1px solid #e8d48a;border-radius:8px;padding:10px 12px;font-size:0.9rem;">Will print as: <strong id="cert-rcp-preview"></strong></div>
+            <p id="cert-rcp-msg" style="font-size:0.85rem;min-height:1.2em;margin:10px 0 0;color:#b91c1c;"></p>
+            <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:6px;">
+                ${edited ? '<button type="button" id="cert-rcp-reset" class="btn-primary" style="background:#64748b;">Reset to automatic</button>' : ''}
+                <button type="button" id="cert-rcp-cancel" class="btn-primary" style="background:#94a3b8;">Cancel</button>
+                <button type="button" id="cert-rcp-save" class="btn-primary cert-btn-gold">Save</button>
+            </div>
+        </div>`;
+    document.body.appendChild(wrap);
+    const honSel = wrap.querySelector('#cert-rcp-hon');
+    const honCustom = wrap.querySelector('#cert-rcp-hon-custom');
+    const nameEl = wrap.querySelector('#cert-rcp-name');
+    const prev = wrap.querySelector('#cert-rcp-preview');
+    const msg = wrap.querySelector('#cert-rcp-msg');
+    if (honIsCustom) {
+        honSel.value = '__custom';
+        honCustom.value = curHon;
+        honCustom.style.display = '';
+    } else {
+        honSel.value = curHon.toLowerCase() === 'none' ? 'none' : curHon;
+    }
+    const currentHon = () => (honSel.value === '__custom' ? honCustom.value.trim() : honSel.value);
+    const refresh = () => {
+        honCustom.style.display = honSel.value === '__custom' ? '' : 'none';
+        const h = currentHon();
+        const n = nameEl.value.trim();
+        prev.textContent = h === 'none' ? n : h ? h + ' ' + n : 'Automatic prefix + ' + n;
+    };
+    honSel.addEventListener('change', refresh);
+    honCustom.addEventListener('input', refresh);
+    nameEl.addEventListener('input', refresh);
+    refresh();
+    const close = () => wrap.remove();
+    wrap.querySelector('#cert-rcp-cancel').onclick = close;
+    wrap.addEventListener('click', (ev) => {
+        if (ev.target === wrap) close();
+    });
+    const send = async (payload) => {
+        msg.style.color = '#64748b';
+        msg.textContent = 'Saving…';
+        try {
+            const res = await fetch('/api/admin/certificates/recipient', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ seminarId: parseInt(sid, 10), userId: row.user_id, certType, ...payload })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || 'Save failed');
+            close();
+            await loadAdminCertificateCandidates();
+        } catch (e) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = e.message || 'Save failed';
+        }
+    };
+    wrap.querySelector('#cert-rcp-save').onclick = () => {
+        if (!nameEl.value.trim()) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = 'Name is required';
+            return;
+        }
+        send({ displayName: nameEl.value.trim(), honorific: currentHon() });
+    };
+    const rs = wrap.querySelector('#cert-rcp-reset');
+    if (rs) rs.onclick = () => send({ reset: true });
 }
 
 function toggleAllCertCandidates(on) {
@@ -8020,20 +8203,122 @@ async function checkWhatsAppWebhookStatus() {
     }
 }
 
+function adminScanDayLabel(d, i) {
+    const dt = d.dayDate ? ' · ' + String(d.dayDate).slice(0, 10) : '';
+    return `Day ${i + 1} — ${d.title || ''}${dt}`;
+}
+
+async function onAdminScannerSeminarChange() {
+    const daySel = document.getElementById('scanner-log-day');
+    const scSel = document.getElementById('scanner-log-scanner');
+    if (daySel) daySel.innerHTML = '<option value="">All days</option>';
+    if (scSel) scSel.innerHTML = '<option value="">All scanners</option>';
+    await loadAdminScannerDaySummary();
+    await loadAdminScannerLogs();
+}
+
+async function loadAdminScannerDaySummary() {
+    const box = document.getElementById('scanner-day-summary');
+    const sid = document.getElementById('scanner-log-seminar')?.value || '';
+    if (!box) return;
+    if (!sid) {
+        box.style.display = 'none';
+        box.innerHTML = '';
+        return;
+    }
+    try {
+        const res = await fetch('/api/admin/scanner/day-summary?seminarId=' + encodeURIComponent(sid));
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed');
+        const days = data.days || [];
+        const daySel = document.getElementById('scanner-log-day');
+        const scSel = document.getElementById('scanner-log-scanner');
+        const keepDay = daySel ? daySel.value : '';
+        const keepSc = scSel ? scSel.value : '';
+        if (daySel) {
+            daySel.innerHTML =
+                '<option value="">All days</option>' +
+                days
+                    .map((d, i) => `<option value="${d.dayId}">${escAdmin(adminScanDayLabel(d, i))}</option>`)
+                    .join('');
+            daySel.value = keepDay;
+        }
+        const scanners = new Map();
+        days.concat(data.unassigned ? [data.unassigned] : []).forEach((d) =>
+            (d.scanners || []).forEach((x) => {
+                if (x.scannerId && !scanners.has(x.scannerId)) scanners.set(x.scannerId, x.name);
+            })
+        );
+        if (scSel) {
+            scSel.innerHTML =
+                '<option value="">All scanners</option>' +
+                [...scanners.entries()]
+                    .map(([id, name]) => `<option value="${id}">${escAdmin(name)}</option>`)
+                    .join('');
+            scSel.value = keepSc;
+        }
+        if (!days.length) {
+            box.style.display = 'none';
+            box.innerHTML = '';
+            return;
+        }
+        const rows = days
+            .map((d, i) => {
+                const by =
+                    (d.scanners || [])
+                        .filter((x) => x.successCount || x.duplicateCount || x.failedCount)
+                        .map(
+                            (x) =>
+                                `<span style="display:inline-block;margin:2px 6px 2px 0;padding:2px 8px;background:#f1f5f9;border-radius:999px;font-size:0.78rem;">${escAdmin(x.name)}: <strong>${x.successCount}</strong>${
+                                    x.duplicateCount || x.failedCount
+                                        ? ` <span style="color:#94a3b8;">(+${x.duplicateCount} dup, ${x.failedCount} rej)</span>`
+                                        : ''
+                                }</span>`
+                        )
+                        .join('') || '<span style="color:#94a3b8;">No scans</span>';
+                return `<tr>
+                    <td><strong>Day ${i + 1}</strong><br><span style="font-size:0.8rem;color:#64748b;">${escAdmin(d.title || '')}${d.dayDate ? ' · ' + escAdmin(String(d.dayDate).slice(0, 10)) : ''}</span></td>
+                    <td><strong style="font-size:1.2rem;color:#047857;">${d.successCount}</strong></td>
+                    <td>${d.duplicateCount}</td>
+                    <td>${d.failedCount}</td>
+                    <td>${d.ticketsScanned}${d.ticketsTotal ? ' / ' + d.ticketsTotal : ''}</td>
+                    <td>${by}</td>
+                </tr>`;
+            })
+            .join('');
+        const other = data.unassigned
+            ? `<tr><td><em>Day not recorded</em></td><td>${data.unassigned.successCount}</td><td>${data.unassigned.duplicateCount}</td><td>${data.unassigned.failedCount}</td><td>—</td><td style="color:#94a3b8;">Older scans without a day</td></tr>`
+            : '';
+        box.innerHTML = `<h3 style="margin:0 0 8px;font-size:1rem;">Day-wise scans</h3>
+            <table class="data-table"><thead><tr><th>Day</th><th>Checked in</th><th>Duplicate</th><th>Rejected</th><th>Tickets scanned / issued</th><th>By scanner</th></tr></thead><tbody>${rows}${other}</tbody></table>`;
+        box.style.display = '';
+    } catch (e) {
+        console.warn('scanner day summary', e);
+        box.style.display = 'none';
+    }
+}
+
 async function loadAdminScannerLogs() {
     const tbody = document.getElementById('scanner-logs-list');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Loading…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Loading…</td></tr>';
+    const qs = new URLSearchParams();
     const sid = document.getElementById('scanner-log-seminar')?.value || '';
-    const q = sid ? `?seminarId=${encodeURIComponent(sid)}` : '';
+    const did = document.getElementById('scanner-log-day')?.value || '';
+    const scid = document.getElementById('scanner-log-scanner')?.value || '';
+    if (sid) qs.set('seminarId', sid);
+    if (did) qs.set('dayId', did);
+    if (scid) qs.set('scannerId', scid);
+    const q = qs.toString() ? '?' + qs.toString() : '';
     try {
         const res = await fetch('/api/admin/scanner/logs' + q);
         const rows = await res.json();
         __adminScannerLogsCache = Array.isArray(rows) ? rows : [];
         renderAdminScannerLogsTable();
+        if (sid) loadAdminScannerDaySummary();
     } catch (e) {
         console.error(e);
-        tbody.innerHTML = '<tr><td colspan="7">Error</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8">Error</td></tr>';
     }
 }
 
@@ -8355,6 +8640,7 @@ async function adminEticketResendAllMissing() {
 
 async function initAdminScannerLogsTab() {
     await fillAdminSeminarSelect('scanner-log-seminar', true);
+    await loadAdminScannerDaySummary();
     await loadAdminScannerLogs();
 }
 
@@ -8704,7 +8990,7 @@ function renderAdminCertificateCandidatesTable() {
     if (!tbody) return;
     const sid = document.getElementById('cert-mgmt-seminar')?.value;
     if (!sid) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Select a seminar</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;">Select a seminar</td></tr>';
         return;
     }
     const certType = document.getElementById('cert-mgmt-type')?.value || 'participant';
@@ -8724,12 +9010,12 @@ function renderAdminCertificateCandidatesTable() {
             certType === 'volunteer'
                 ? 'No approved volunteers for this seminar yet.'
                 : 'No registrations for this seminar yet.';
-        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;">${emptyMsg}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;">${emptyMsg}</td></tr>`;
         return;
     }
     if (!rows.length) {
         tbody.innerHTML =
-            '<tr><td colspan="9" style="text-align:center;">No candidates match your search.</td></tr>';
+            '<tr><td colspan="10" style="text-align:center;">No candidates match your search.</td></tr>';
         return;
     }
     tbody.innerHTML = '';
@@ -8760,6 +9046,14 @@ function renderAdminCertificateCandidatesTable() {
         const prnCell = r.user_id_string
             ? escAdmin(r.user_id_string)
             : '<span style="color:#b91c1c;">Missing PRN</span>';
+        const edited = Number(r.name_edited) === 1;
+        const honTxt = String(r.cert_honorific || '').toLowerCase() === 'none' ? '' : r.cert_honorific || '';
+        const printed = edited ? [honTxt, r.display_name].filter(Boolean).join(' ') : '';
+        const certNameCell =
+            (edited
+                ? `<strong title="Edited by admin">${escAdmin(printed)}</strong>`
+                : '<span style="color:#64748b;">Automatic</span>') +
+            ` <button type="button" class="btn-primary" style="padding:3px 9px;font-size:0.76rem;margin-left:6px;" onclick="openCertRecipientEditor(${Number(r.user_id)})"><i class="fas fa-pen"></i> Edit</button>`;
         tbody.innerHTML += `<tr>
                 <td><input type="checkbox" class="cert-cand-cb" data-user-id="${r.user_id}" value="${r.user_id}"></td>
                 <td>${prnCell}</td>
@@ -8770,6 +9064,7 @@ function renderAdminCertificateCandidatesTable() {
                 <td>${checked}</td>
                 <td><code>${escAdmin(r.ticket_id_string || '—')}</code></td>
                 <td title="${escAdmin(certLabel)}">${cert}</td>
+                <td>${certNameCell}</td>
             </tr>`;
     });
 }
@@ -9517,13 +9812,25 @@ function renderAdminApplicationPaymentHtml(app) {
           escAdmin(amt != null ? amt : 0) +
           (txnId ? ' · Txn ' + escAdmin(txnId) : '')
         : 'No payment order yet';
-    const checkIn = ticketId
-        ? escAdmin(ticketId) +
-          ' · ' +
-          (isScanned
-              ? 'Checked in' + (scanTime ? ' · ' + escAdmin(adminFormatCancelReviewDateTime(scanTime)) : '')
-              : 'Not checked in')
-        : 'No e-ticket issued';
+    const dayScanLines = Array.isArray(app.day_scans) ? app.day_scans : [];
+    const checkIn =
+        dayScanLines.length >= 2
+            ? dayScanLines
+                  .map((d) => {
+                      const when =
+                          d.scanned && d.scanTime
+                              ? 'Checked in · ' + adminFormatCancelReviewDateTime(d.scanTime)
+                              : 'Not checked in';
+                      return escAdmin(d.title || 'Day') + ' — ' + escAdmin(when);
+                  })
+                  .join('<br>')
+            : ticketId
+              ? escAdmin(ticketId) +
+                ' · ' +
+                (isScanned
+                    ? 'Checked in' + (scanTime ? ' · ' + escAdmin(adminFormatCancelReviewDateTime(scanTime)) : '')
+                    : 'Not checked in')
+              : 'No e-ticket issued';
     let html =
         '<div style="margin:12px 0;padding:14px 16px;border:1px solid #bbf7d0;background:#f0fdf4;border-radius:10px;">' +
         '<h4 style="margin:0 0 10px;color:#166534;"><i class="fas fa-credit-card"></i> Payment details</h4>' +
@@ -10132,19 +10439,21 @@ function renderAdminScannerLogsTable() {
             s.application_no,
             s.ticket_id_string,
             staff,
-            s.seminar_title
+            s.seminar_title,
+            s.event_title,
+            s.day_title
         ]
             .join(' ')
             .toLowerCase();
     });
     adminSearchSetCount('scanner-logs-search-count', q, rows.length, all.length, 'scans');
     if (!all.length) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No scans yet</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">No scans yet</td></tr>';
         return;
     }
     if (!rows.length) {
         tbody.innerHTML =
-            '<tr><td colspan="7" style="text-align:center;">No scans match your search.</td></tr>';
+            '<tr><td colspan="8" style="text-align:center;">No scans match your search.</td></tr>';
         return;
     }
     tbody.innerHTML = '';
@@ -10156,12 +10465,13 @@ function renderAdminScannerLogsTable() {
             : '—';
         tbody.innerHTML += `<tr>
                 <td>${escAdmin(t)}</td>
+                <td>${escAdmin(s.day_title || '—')}${s.day_date ? '<br><span style="font-size:0.78rem;color:#64748b;">' + escAdmin(String(s.day_date).slice(0, 10)) + '</span>' : ''}</td>
                 <td><strong>${escAdmin(s.doctor_user_id_string)}</strong></td>
                 <td>${escAdmin(doc)}</td>
                 <td>${escAdmin(s.application_no)}</td>
                 <td>${escAdmin(s.ticket_id_string)}</td>
                 <td>${escAdmin(staff)}</td>
-                <td>${escAdmin(s.seminar_title)}</td>
+                <td>${escAdmin(s.seminar_title)}${s.event_title ? '<br><span style="font-size:0.78rem;color:#64748b;">' + escAdmin(s.event_title) + '</span>' : ''}</td>
             </tr>`;
     });
 }
@@ -14153,7 +14463,21 @@ function addSeminarDayRow(prefill) {
         '<label style="display:flex;align-items:center;gap:8px;font-size:0.84rem;color:#334155;">' +
         '<input type="checkbox" class="day-checkin-enabled"' +
         (checkinOn ? ' checked' : '') +
-        '> Enable scanner check-in for this day</label></div>';
+        '> Enable scanner check-in for this day</label>' +
+        '<div style="margin-top:4px;padding:10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;">' +
+        '<label style="display:flex;align-items:center;gap:8px;font-size:0.84rem;color:#166534;font-weight:700;">' +
+        '<input type="checkbox" class="day-email-enabled"' +
+        (p.scanEmailEnabled === false || p.scan_email_enabled === 0 || p.scan_email_enabled === false ? '' : ' checked') +
+        '> Email this day when its e-ticket is scanned</label>' +
+        '<p style="font-size:0.75rem;color:#64748b;margin:6px 0;">Leave the subject and message blank to use the standard check-in email. Placeholders: {{full_name}}, {{first_name}}, {{event_name}}, {{day_title}}, {{check_in_time}}, {{application_no}}, {{ticket_id}}, {{user_id_string}}</p>' +
+        '<label style="font-size:0.78rem;">Email subject for this day</label>' +
+        '<input type="text" class="day-email-subject" maxlength="300" value="' +
+        escAdmin(p.scanEmailSubject || p.scan_email_subject || '') +
+        '" placeholder="e.g. Day 1 check-in confirmed — {{event_name}}">' +
+        '<label style="font-size:0.78rem;margin-top:8px;display:block;">Email message for this day</label>' +
+        '<textarea class="day-email-html" rows="4" maxlength="20000" placeholder="Dear {{full_name}}, your {{day_title}} check-in is recorded.">' +
+        escAdmin(p.scanEmailHtml || p.scan_email_html || '') +
+        '</textarea></div></div>';
     row.querySelector('.day-remove').addEventListener('click', function () {
         row.remove();
     });
@@ -14172,6 +14496,9 @@ function collectSeminarDaysFromUi() {
             checkin_date: row.querySelector('.day-checkin')?.value || null,
             sort_order: idx,
             checkin_enabled: row.querySelector('.day-checkin-enabled')?.checked !== false,
+            scan_email_enabled: row.querySelector('.day-email-enabled')?.checked !== false,
+            scan_email_subject: row.querySelector('.day-email-subject')?.value.trim() || '',
+            scan_email_html: row.querySelector('.day-email-html')?.value.trim() || '',
             is_active: true
         };
         const did = parseInt(row.dataset.dayId, 10);
@@ -14766,6 +15093,7 @@ async function loadFeedbackForSeminar() {
     }
 
     currentFeedbackSeminarId = seminarId;
+    loadFeedbackEmailDays(seminarId);
     
     try {
         // Load statistics
@@ -14786,6 +15114,128 @@ async function loadFeedbackForSeminar() {
         __adminFeedbackCache = Array.isArray(feedbacks) ? feedbacks : [];
         renderFeedbackTable();
     } catch(err) { console.error(err); }
+}
+
+async function loadFeedbackEmailDays(seminarId) {
+    const box = document.getElementById('feedback-email-days');
+    const subject = document.getElementById('feedback-email-subject');
+    const body = document.getElementById('feedback-email-body');
+    const status = document.getElementById('feedback-email-status');
+    if (!box) return;
+    box.innerHTML = '';
+    if (status) status.textContent = '';
+    if (!seminarId) return;
+    let days = [];
+    let title = '';
+    try {
+        const sel = document.getElementById('feedback-seminar-filter');
+        title = sel && sel.selectedOptions && sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : '';
+        const res = await fetch('/api/admin/seminars/' + encodeURIComponent(seminarId) + '/days');
+        days = await res.json();
+        if (!Array.isArray(days)) days = [];
+    } catch (err) {
+        console.error(err);
+        days = [];
+    }
+    if (!days.length) {
+        box.innerHTML = '<p style="margin:0;color:#64748b;">No seminar days found. The email will go to everyone with a venue check-in.</p>';
+    } else {
+        days.forEach(function (d) {
+            const id = 'feedback-day-' + d.id;
+            const label = document.createElement('label');
+            label.style.cssText = 'display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:6px 10px;';
+            label.innerHTML =
+                '<input type="checkbox" class="feedback-email-day" value="' +
+                String(d.id) +
+                '" checked id="' +
+                id +
+                '"> ' +
+                escapeHtml(d.title || 'Day') +
+                (d.dayDate || d.day_date
+                    ? ' · ' + escapeHtml(String(d.dayDate || d.day_date).slice(0, 10))
+                    : '');
+            box.appendChild(label);
+        });
+    }
+    if (subject && !subject.dataset.edited) {
+        subject.value = 'Please share your feedback' + (title ? ' — ' + title : '');
+    }
+    if (body && !body.dataset.edited) {
+        body.value =
+            'Thank you for attending. Your feedback helps the Vaidya Gogate Memorial Foundation plan the next seminar.\n\nPlease open your doctor portal and complete the seminar feedback form:\n{{feedback_url}}';
+    }
+    if (subject && !subject.dataset.bound) {
+        subject.dataset.bound = '1';
+        subject.addEventListener('input', function () { subject.dataset.edited = '1'; });
+    }
+    if (body && !body.dataset.bound) {
+        body.dataset.bound = '1';
+        body.addEventListener('input', function () { body.dataset.edited = '1'; });
+    }
+}
+
+async function sendFeedbackEmailToCheckedIn() {
+    const seminarId = document.getElementById('feedback-seminar-filter') && document.getElementById('feedback-seminar-filter').value;
+    const status = document.getElementById('feedback-email-status');
+    const subject = (document.getElementById('feedback-email-subject') || {}).value || '';
+    const message = (document.getElementById('feedback-email-body') || {}).value || '';
+    if (!seminarId) return alert('Select a seminar');
+    const dayIds = Array.prototype.map.call(
+        document.querySelectorAll('.feedback-email-day:checked'),
+        function (el) { return parseInt(el.value, 10); }
+    ).filter(function (n) { return n > 0; });
+    const dayBoxes = document.querySelectorAll('.feedback-email-day');
+    if (dayBoxes.length && !dayIds.length) return alert('Select at least one day');
+    if (!String(subject).trim() || !String(message).trim()) return alert('Enter a subject and message');
+    if (status) {
+        status.style.color = '#475569';
+        status.textContent = 'Counting checked-in participants…';
+    }
+    try {
+        const previewRes = await fetch('/api/admin/feedback/email-checked-in', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ seminarId: parseInt(seminarId, 10), dayIds: dayIds, dryRun: true })
+        });
+        const preview = await previewRes.json();
+        if (!previewRes.ok) throw new Error(preview.error || 'Could not count recipients');
+        const n = Number(preview.recipients) || 0;
+        if (!n) {
+            if (status) {
+                status.style.color = '#b45309';
+                status.textContent = 'No checked-in participants with an email address for the selected days.';
+            }
+            return;
+        }
+        if (!confirm('Send this feedback email to ' + n + ' checked-in participant' + (n === 1 ? '' : 's') + '?')) {
+            if (status) status.textContent = 'Not sent.';
+            return;
+        }
+        if (status) status.textContent = 'Queueing emails…';
+        const res = await fetch('/api/admin/feedback/email-checked-in', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                seminarId: parseInt(seminarId, 10),
+                dayIds: dayIds,
+                subject: String(subject).trim(),
+                message: String(message).trim()
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Could not send feedback email');
+        if (status) {
+            status.style.color = '#15803d';
+            status.textContent = 'Queued ' + (data.queued || 0) + ' feedback email' + ((data.queued || 0) === 1 ? '' : 's') + '.';
+        }
+    } catch (err) {
+        console.error(err);
+        if (status) {
+            status.style.color = '#b91c1c';
+            status.textContent = err.message || 'Send failed';
+        }
+        alert(err.message || 'Send failed');
+    }
 }
 
 // ==================== CONTACT INQUIRIES (website) ====================
@@ -20673,7 +21123,15 @@ function renderBookSalesOrdersTable(rows) {
                 .filter(Boolean)
                 .join(' · ');
             const ftype = o.fulfillment_type || 'pickup';
-            const statusLabel = BS_STATUS_LABELS[o.status] || o.status;
+            let statusLabel = BS_STATUS_LABELS[o.status] || o.status;
+            if (o.commerce_provider && typeof commerceStageLabel === 'function') {
+                statusLabel +=
+                    '<br><small style="color:#0f766e;">' +
+                    e(o.commerce_provider === 'shipday' ? 'Shipday' : 'Tookan') +
+                    ' · ' +
+                    e(commerceStageLabel(o.commerce_stage)) +
+                    '</small>';
+            }
             let fulfillCell = '📦 Pickup';
             if (ftype === 'courier') {
                 if (
@@ -20718,6 +21176,11 @@ function renderBookSalesOrdersTable(rows) {
                         '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.81rem;background:#7c3aed;" onclick="openBsCourierModal(' +
                         o.id +
                         ',2)">Ship now</button> ';
+                } else if (ftype === 'courier' && o.commerce_provider) {
+                    actions +=
+                        '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.81rem;background:#0f766e;" onclick="bsViewOrderTracking(' +
+                        o.id +
+                        ')">Track courier</button> ';
                 } else {
                     actions +=
                         '<button type="button" class="btn-primary" style="padding:4px 10px;font-size:0.81rem;background:#0d9488;" onclick="openBsCourierModal(' +
@@ -21599,6 +22062,40 @@ async function bsBookAggregator(aggregator) {
     }
 }
 
+async function bsBookCommerce(provider, mode) {
+    const msg = document.getElementById('bs-courier-msg');
+    const id = parseInt((document.getElementById('bs-courier-order-id') || {}).value, 10);
+    const whenEl = document.getElementById('bs-commerce-when');
+    const label = (provider === 'shipday' ? 'Shipday' : 'Tookan') + ' ' + mode;
+    if (!confirm('Ask ' + label + ' to pick up this parcel from the store?')) return;
+    if (msg) {
+        msg.style.color = '#0f766e';
+        msg.textContent = 'Requesting pickup…';
+    }
+    try {
+        const data = await commerceFetch('/api/admin/commerce/orders/' + id + '/book', {
+            method: 'POST',
+            body: JSON.stringify({
+                actingAdminId: commerceActor(),
+                provider,
+                mode,
+                pickupAt: whenEl && whenEl.value ? whenEl.value : ''
+            })
+        });
+        const o = data.order || {};
+        bsCloseCourierModal();
+        loadBsOrders(false);
+        alert(
+            'Pickup requested from ' + label + '.\nPickup OTP (store): ' + (o.pickupOtp || '—') + '\nDelivery OTP (customer, shown only when out for delivery): ' + (o.deliveryOtp || '—')
+        );
+    } catch (err) {
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = err.message || 'Booking failed';
+        }
+    }
+}
+
 async function bsPrintShippingLabel(id) {
     try {
         const res = await bsFetch('/api/admin/book-sales/orders/' + id + '/print-label', { method: 'POST' });
@@ -21805,6 +22302,7 @@ async function bsViewOrderTracking(id) {
     }
     body.innerHTML = '<p style="color:#64748b;">Loading…</p>';
     modal.style.display = 'flex';
+    window._bsTlSeen = false;
     const render = async (doRefresh) => {
         try {
             if (doRefresh) {
@@ -21879,12 +22377,28 @@ async function bsViewOrderTracking(id) {
             }
             html += '</div>';
 
+            let commerceData = null;
+            try {
+                commerceData = await commerceFetch('/api/admin/commerce/orders/' + id + '/track?actingAdminId=' + encodeURIComponent(commerceActor()));
+            } catch (_) {
+                commerceData = null;
+            }
+            if (commerceData && commerceData.order && commerceData.order.commerceProvider && window.TrackTimeline) {
+                const co = commerceData.order;
+                html +=
+                    '<div style="border:1px solid #99f6e4;background:#f0fdfa;border-radius:12px;padding:14px;margin-bottom:14px;">' +
+                    '<p style="margin:0 0 6px;font-weight:700;">' + e(co.commerceProvider === 'shipday' ? 'Shipday' : 'Tookan') + ' · ' + e(co.commerceMode || '') + '</p>' +
+                    '<p style="margin:0 0 8px;font-size:0.85rem;">Pickup OTP <strong>' + e(co.pickupOtp || '—') + '</strong> · Delivery OTP <strong>' + e(co.deliveryOtp || '—') + '</strong></p>' +
+                    TrackTimeline.render({ timeline: commerceData.timeline, live: commerceData.live, awbTrackUrl: co.tookanTrackingLink || co.shipdayTrackingLink || null, trackUrl: co.commerceTrackUrl }, { animate: !window._bsTlSeen }) +
+                    '</div>';
+                window._bsTlSeen = true;
+            }
             // New vertical tracker
-            if (o.deliveryJourney && window.BookTrackingUI) {
+            if (!(commerceData && commerceData.order && commerceData.order.commerceProvider) && o.deliveryJourney && window.BookTrackingUI) {
                 html += '<div style="border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;margin-bottom:14px;">';
                 html += window.BookTrackingUI.renderDoctorFullTracking(o.deliveryJourney, o, trackEvents);
                 html += '</div>';
-            } else {
+            } else if (!(commerceData && commerceData.order && commerceData.order.commerceProvider)) {
                 html += bsRenderCourierLiveTrackHtml(o, data);
                 html += bsRenderAdminTrackerHtml(data.timeline || o.timeline);
             }
@@ -21902,6 +22416,10 @@ async function bsViewOrderTracking(id) {
                 html += '</ul>';
             }
             body.innerHTML = html;
+            if (commerceData && commerceData.live && window.TrackTimeline) TrackTimeline.mount(commerceData.live);
+            if (o.commerce_provider || (commerceData && commerceData.order && commerceData.order.commerceProvider)) {
+                _bsTrackPollTimer = _bsTrackPollTimer || setInterval(() => render(false), 15000);
+            }
             if (o.fulfillmentType === 'courier' && (o.status === 'shipped' || (o.deliveryJourney && o.deliveryJourney.isLive))) {
                 _bsTrackPollTimer = setInterval(() => render(true), 12000);
             }

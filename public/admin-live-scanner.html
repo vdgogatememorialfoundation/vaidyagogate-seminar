@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,500;0,9..40,700;1,9..40,600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="/css/admin-live-scanner.css?v=20260826otp2">
+    <link rel="stylesheet" href="/css/admin-live-scanner.css?v=20261003daywise3">
 </head>
 <body class="live-scanner-page">
     <header class="kiosk-topbar">
@@ -47,6 +47,8 @@
         </div>
     </header>
 
+    <section id="ls-daybar" class="ls-daybar hidden" aria-label="Day-wise scans"></section>
+    <p id="ls-stat-scope" class="ls-stat-scope"></p>
     <section class="kiosk-stats" aria-label="Check-in statistics">
         <article class="kiosk-stat kiosk-stat--ok">
             <div class="kiosk-stat-icon"><i class="fas fa-circle-check"></i></div>
@@ -67,6 +69,14 @@
             <div>
                 <span class="kiosk-stat-label">Rejected</span>
                 <strong id="ls-stat-fail" class="kiosk-stat-value">0</strong>
+            </div>
+        </article>
+        <article class="kiosk-stat kiosk-stat--left">
+            <div class="kiosk-stat-icon"><i class="fas fa-hourglass-half"></i></div>
+            <div>
+                <span class="kiosk-stat-label">Yet to check in</span>
+                <strong id="ls-stat-left" class="kiosk-stat-value">0</strong>
+                <span id="ls-stat-left-sub" class="kiosk-stat-sub"></span>
             </div>
         </article>
         <article class="kiosk-stat kiosk-stat--total">
@@ -118,6 +128,6 @@
             <p id="ls-otp-msg" class="ls-modal-msg"></p>
         </div>
     </div>
-    <script src="/js/admin-live-scanner.js?v=20260826dayfilter"></script>
+    <script src="/js/admin-live-scanner.js?v=20261003daywise3"></script>
 </body>
 </html>
