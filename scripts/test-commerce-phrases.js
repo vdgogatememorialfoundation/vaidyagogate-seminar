@@ -116,4 +116,58 @@ assert.ok(JSON.stringify(shipBody).indexOf('4321') === -1);
 assert.ok(JSON.stringify(shipBody).indexOf('8765') === -1);
 assert.ok(!/otp/i.test(shipBody.deliveryInstruction));
 
+const deliveredOrder = {
+    orderId: 20625,
+    orderNumber: 'BK9',
+    orderStatus: { incomplete: false, accepted: true, orderState: 'ALREADY_DELIVERED' },
+    assignedCarrier: { name: 'Ravi', phoneNumber: '+919800000000' },
+    activityLog: {
+        startTime: '2026-10-04T10:05:00',
+        pickedUpTime: '2026-10-04T10:20:00',
+        deliveryTime: '2026-10-04T10:40:00'
+    }
+};
+const deliveredUpdate = commerce.shipdayOrderToUpdate(deliveredOrder);
+assert.strictEqual(deliveredUpdate.kind, 'delivered');
+assert.strictEqual(deliveredUpdate.stage, 'delivered');
+assert.strictEqual(deliveredUpdate.title, 'Delivered');
+assert.strictEqual(deliveredUpdate.agentPhone, '+919800000000');
+assert.ok(deliveredUpdate.at && deliveredUpdate.at.indexOf('2026-10-04T10:40:00') === 0);
+assert.strictEqual(commerce.shipdayOrderToUpdate([]), null);
+
+const activePicked = commerce.shipdayOrderToUpdate({
+    orderStatus: { orderState: 'ACTIVE' },
+    activityLog: { startTime: '2026-10-04T10:05:00', pickedUpTime: '2026-10-04T10:20:00' },
+    assignedCarrier: { name: 'Ravi', phoneNumber: '9800000000' }
+});
+assert.strictEqual(activePicked.kind, 'out_for_delivery');
+assert.strictEqual(activePicked.stage, 'out_for_delivery');
+const activeIdle = commerce.shipdayOrderToUpdate({
+    orderStatus: { orderState: 'ACTIVE', incomplete: false },
+    activityLog: { placementTime: '2026-10-04T10:00:00' }
+});
+assert.strictEqual(activeIdle.kind, 'update');
+assert.strictEqual(activeIdle.stage, null);
+
+assert.strictEqual(commerce.selectShipdayOrder([], '54298088', 'BK9'), null);
+assert.strictEqual(commerce.selectShipdayOrder([{ orderId: 1, orderNumber: 'OTHER' }], '54298088', 'BK9'), null);
+const selected = commerce.selectShipdayOrder(
+    [{ orderId: 20625, orderNumber: 'BK9', orderStatus: { orderState: 'PICKED_UP' } }],
+    '20625',
+    'BK9'
+);
+assert.strictEqual(selected.orderNumber, 'BK9');
+assert.strictEqual(commerce.mapShipdayStatus({ orderState: 'STARTED' }), 'to_store');
+
+const nestedHook = commerce.parseShipdayWebhook({
+    event: 'ORDER_PIKEDUP',
+    order_status: 'PICKED_UP',
+    order: { id: 20625, order_number: 'BK2', delivery_time: 1684644196000 },
+    carrier: { name: 'Asha', phone: '9111111111' }
+});
+assert.strictEqual(nestedHook.kind, 'out_for_delivery');
+assert.strictEqual(nestedHook.shipdayOrderId, '20625');
+assert.strictEqual(nestedHook.orderCode, 'BK2');
+assert.ok(nestedHook.detail.indexOf('9111111111') !== -1);
+
 console.log('commerce phrase tests passed');
