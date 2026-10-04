@@ -8122,26 +8122,55 @@ function buildDoctorCertPipelineTimeline(r) {
         }
     ];
     if (multi) {
-        steps.push({
-            key: 'day1',
-            title: firstTitle + ' check-in',
-            icon: 'fa-qrcode',
-            state: !isPaid ? 'upcoming' : day1Scanned ? 'completed' : 'active',
-            desc: day1Scanned
-                ? firstTitle + ' scanned at the venue.'
-                : 'Scan the ' + firstTitle + ' e-ticket at the venue.',
-            at: day1Scanned ? row.scanTime : null
-        });
-        steps.push({
-            key: 'day2',
-            title: finalTitle + ' scan',
-            icon: 'fa-calendar-check',
-            state: !isPaid || !day1Scanned ? 'upcoming' : finalScanned ? 'completed' : 'active',
-            desc: finalScanned
-                ? finalTitle + ' scanned. Certificate eligibility is recorded from this scan.'
-                : finalTitle + ' not scanned yet. The e-certificate is issued on this scan.',
-            at: finalScanned ? row.scanTime : null
-        });
+        const dayScans = Array.isArray(row.dayScans) ? row.dayScans : [];
+        if (dayScans.length >= 2) {
+            let activeAssigned = false;
+            dayScans.forEach(function (d, idx) {
+                const isLast = idx === dayScans.length - 1;
+                let state = 'upcoming';
+                if (isPaid) {
+                    if (d.scanned) state = 'completed';
+                    else if (!activeAssigned) {
+                        state = 'active';
+                        activeAssigned = true;
+                    }
+                }
+                steps.push({
+                    key: 'day' + (idx + 1),
+                    title: d.title + (isLast ? ' scan' : ' check-in'),
+                    icon: isLast ? 'fa-calendar-check' : 'fa-qrcode',
+                    state: state,
+                    desc: d.scanned
+                        ? d.title + ' scanned at the venue.' +
+                          (isLast ? ' Certificate eligibility is recorded from this scan.' : '')
+                        : isLast
+                          ? d.title + ' not scanned yet. The e-certificate is issued on this scan.'
+                          : 'Scan the ' + d.title + ' e-ticket at the venue.',
+                    at: d.scanned ? d.scanTime : null
+                });
+            });
+        } else {
+            steps.push({
+                key: 'day1',
+                title: firstTitle + ' check-in',
+                icon: 'fa-qrcode',
+                state: !isPaid ? 'upcoming' : day1Scanned ? 'completed' : 'active',
+                desc: day1Scanned
+                    ? firstTitle + ' scanned at the venue.'
+                    : 'Scan the ' + firstTitle + ' e-ticket at the venue.',
+                at: day1Scanned && !finalScanned ? row.scanTime : null
+            });
+            steps.push({
+                key: 'day2',
+                title: finalTitle + ' scan',
+                icon: 'fa-calendar-check',
+                state: !isPaid || !day1Scanned ? 'upcoming' : finalScanned ? 'completed' : 'active',
+                desc: finalScanned
+                    ? finalTitle + ' scanned. Certificate eligibility is recorded from this scan.'
+                    : finalTitle + ' not scanned yet. The e-certificate is issued on this scan.',
+                at: finalScanned ? row.scanTime : null
+            });
+        }
     } else {
         const scansLbl = (row.scanCount || 0) + ' / ' + (row.scansRequired || 1);
         const venueDone = isPaid && scansDone;
@@ -8195,6 +8224,7 @@ function certTrackFingerprint(rows) {
                 r.earlierDayScanned ? 1 : 0,
                 r.canViewCertificate ? 1 : 0,
                 r.scanCount || 0,
+                (r.dayScans || []).map(function (d) { return d.scanned ? 1 : 0; }).join(''),
                 r.certStatusLabel || ''
             ].join(':');
         })

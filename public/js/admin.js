@@ -4916,6 +4916,53 @@ async function dispatchAllAdminCertificates() {
     }
 }
 
+async function dispatchCompletedDayCertificates(resend) {
+    const sid = document.getElementById('cert-mgmt-seminar')?.value;
+    const msg = document.getElementById('cert-dispatch-msg');
+    if (!sid) return alert('Select a seminar');
+    const again = !!resend;
+    if (
+        !confirm(
+            again
+                ? 'Resend the certificate email and WhatsApp to everyone who completed the issuing day, including people already emailed?'
+                : 'Send the certificate issued email and WhatsApp to everyone who completed the issuing day’s scan and has not been emailed for that day? The message lists each day they attended.'
+        )
+    ) {
+        return;
+    }
+    if (msg) {
+        msg.style.color = '#78716c';
+        msg.textContent = again ? 'Resending…' : 'Sending certificate issued emails…';
+    }
+    try {
+        const res = await fetch('/api/admin/certificates/dispatch-completed-days', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ seminarId: parseInt(sid, 10), resend: again })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Send failed');
+        if (msg) {
+            msg.style.color = '#15803d';
+            msg.textContent =
+                (data.issuingDay ? data.issuingDay + ': ' : '') +
+                'Sent ' +
+                (data.dispatched || 0) +
+                ', already sent ' +
+                (data.skipped || 0) +
+                ' of ' +
+                (data.eligible || 0) +
+                (data.errors && data.errors.length ? '. Some failed: ' + data.errors[0] : '.');
+        }
+    } catch (e) {
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = e.message || 'Send failed';
+        }
+        alert(e.message || 'Send failed');
+    }
+}
+
 function readCertConfigFromForm() {
     return {
         orgName: document.getElementById('cert-cfg-org')?.value || '',
@@ -9765,13 +9812,25 @@ function renderAdminApplicationPaymentHtml(app) {
           escAdmin(amt != null ? amt : 0) +
           (txnId ? ' · Txn ' + escAdmin(txnId) : '')
         : 'No payment order yet';
-    const checkIn = ticketId
-        ? escAdmin(ticketId) +
-          ' · ' +
-          (isScanned
-              ? 'Checked in' + (scanTime ? ' · ' + escAdmin(adminFormatCancelReviewDateTime(scanTime)) : '')
-              : 'Not checked in')
-        : 'No e-ticket issued';
+    const dayScanLines = Array.isArray(app.day_scans) ? app.day_scans : [];
+    const checkIn =
+        dayScanLines.length >= 2
+            ? dayScanLines
+                  .map((d) => {
+                      const when =
+                          d.scanned && d.scanTime
+                              ? 'Checked in · ' + adminFormatCancelReviewDateTime(d.scanTime)
+                              : 'Not checked in';
+                      return escAdmin(d.title || 'Day') + ' — ' + escAdmin(when);
+                  })
+                  .join('<br>')
+            : ticketId
+              ? escAdmin(ticketId) +
+                ' · ' +
+                (isScanned
+                    ? 'Checked in' + (scanTime ? ' · ' + escAdmin(adminFormatCancelReviewDateTime(scanTime)) : '')
+                    : 'Not checked in')
+              : 'No e-ticket issued';
     let html =
         '<div style="margin:12px 0;padding:14px 16px;border:1px solid #bbf7d0;background:#f0fdf4;border-radius:10px;">' +
         '<h4 style="margin:0 0 10px;color:#166534;"><i class="fas fa-credit-card"></i> Payment details</h4>' +

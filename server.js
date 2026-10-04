@@ -99,6 +99,7 @@ function volunteerTicketDeps() {
 const authUsers = require('./lib/auth-users');
 const authLoginOtp = require('./lib/auth-login-otp');
 const certRender = require('./lib/certificate-render');
+const registrationDayScans = require('./lib/registration-day-scans');
 const certTemplateCfg = require('./lib/certificate-template-config');
 const certVerify = require('./lib/certificate-verify');
 const docVerify = require('./lib/application-document-verify');
@@ -6831,7 +6832,9 @@ function queryDoctorCertificateTracking(uid, res, sql, retried) {
             return queryDoctorCertificateTracking(uid, res, DOCTOR_CERT_TRACKING_SQL_LEGACY, true);
         }
         if (err) return res.status(500).json({ error: err.message });
-        res.json(mapDoctorCertificateTrackingRows(rows));
+        registrationDayScans.attachDayScansToRows(db, mapDoctorCertificateTrackingRows(rows), (_e, mapped) =>
+            res.json(mapped)
+        );
     });
 }
 
@@ -9180,7 +9183,9 @@ app.get('/api/admin/applications', withApplicationReviewSchema, (req, res) => {
         });
         seminarEvents.attachPaymentAmountsToRegistrations(db, Array.from(grouped.values()), (ePay, withPay) => {
             if (ePay) return res.status(500).json({ error: ePay.message });
-            res.json(withPay || []);
+            registrationDayScans.attachDayScansByRegistrationId(db, withPay || [], 'id', () => {
+                res.json(withPay || []);
+            });
         });
     });
 });
