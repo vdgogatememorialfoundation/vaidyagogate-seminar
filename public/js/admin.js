@@ -8031,20 +8031,122 @@ async function checkWhatsAppWebhookStatus() {
     }
 }
 
+function adminScanDayLabel(d, i) {
+    const dt = d.dayDate ? ' · ' + String(d.dayDate).slice(0, 10) : '';
+    return `Day ${i + 1} — ${d.title || ''}${dt}`;
+}
+
+async function onAdminScannerSeminarChange() {
+    const daySel = document.getElementById('scanner-log-day');
+    const scSel = document.getElementById('scanner-log-scanner');
+    if (daySel) daySel.innerHTML = '<option value="">All days</option>';
+    if (scSel) scSel.innerHTML = '<option value="">All scanners</option>';
+    await loadAdminScannerDaySummary();
+    await loadAdminScannerLogs();
+}
+
+async function loadAdminScannerDaySummary() {
+    const box = document.getElementById('scanner-day-summary');
+    const sid = document.getElementById('scanner-log-seminar')?.value || '';
+    if (!box) return;
+    if (!sid) {
+        box.style.display = 'none';
+        box.innerHTML = '';
+        return;
+    }
+    try {
+        const res = await fetch('/api/admin/scanner/day-summary?seminarId=' + encodeURIComponent(sid));
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed');
+        const days = data.days || [];
+        const daySel = document.getElementById('scanner-log-day');
+        const scSel = document.getElementById('scanner-log-scanner');
+        const keepDay = daySel ? daySel.value : '';
+        const keepSc = scSel ? scSel.value : '';
+        if (daySel) {
+            daySel.innerHTML =
+                '<option value="">All days</option>' +
+                days
+                    .map((d, i) => `<option value="${d.dayId}">${escAdmin(adminScanDayLabel(d, i))}</option>`)
+                    .join('');
+            daySel.value = keepDay;
+        }
+        const scanners = new Map();
+        days.concat(data.unassigned ? [data.unassigned] : []).forEach((d) =>
+            (d.scanners || []).forEach((x) => {
+                if (x.scannerId && !scanners.has(x.scannerId)) scanners.set(x.scannerId, x.name);
+            })
+        );
+        if (scSel) {
+            scSel.innerHTML =
+                '<option value="">All scanners</option>' +
+                [...scanners.entries()]
+                    .map(([id, name]) => `<option value="${id}">${escAdmin(name)}</option>`)
+                    .join('');
+            scSel.value = keepSc;
+        }
+        if (!days.length) {
+            box.style.display = 'none';
+            box.innerHTML = '';
+            return;
+        }
+        const rows = days
+            .map((d, i) => {
+                const by =
+                    (d.scanners || [])
+                        .filter((x) => x.successCount || x.duplicateCount || x.failedCount)
+                        .map(
+                            (x) =>
+                                `<span style="display:inline-block;margin:2px 6px 2px 0;padding:2px 8px;background:#f1f5f9;border-radius:999px;font-size:0.78rem;">${escAdmin(x.name)}: <strong>${x.successCount}</strong>${
+                                    x.duplicateCount || x.failedCount
+                                        ? ` <span style="color:#94a3b8;">(+${x.duplicateCount} dup, ${x.failedCount} rej)</span>`
+                                        : ''
+                                }</span>`
+                        )
+                        .join('') || '<span style="color:#94a3b8;">No scans</span>';
+                return `<tr>
+                    <td><strong>Day ${i + 1}</strong><br><span style="font-size:0.8rem;color:#64748b;">${escAdmin(d.title || '')}${d.dayDate ? ' · ' + escAdmin(String(d.dayDate).slice(0, 10)) : ''}</span></td>
+                    <td><strong style="font-size:1.2rem;color:#047857;">${d.successCount}</strong></td>
+                    <td>${d.duplicateCount}</td>
+                    <td>${d.failedCount}</td>
+                    <td>${d.ticketsScanned}${d.ticketsTotal ? ' / ' + d.ticketsTotal : ''}</td>
+                    <td>${by}</td>
+                </tr>`;
+            })
+            .join('');
+        const other = data.unassigned
+            ? `<tr><td><em>Day not recorded</em></td><td>${data.unassigned.successCount}</td><td>${data.unassigned.duplicateCount}</td><td>${data.unassigned.failedCount}</td><td>—</td><td style="color:#94a3b8;">Older scans without a day</td></tr>`
+            : '';
+        box.innerHTML = `<h3 style="margin:0 0 8px;font-size:1rem;">Day-wise scans</h3>
+            <table class="data-table"><thead><tr><th>Day</th><th>Checked in</th><th>Duplicate</th><th>Rejected</th><th>Tickets scanned / issued</th><th>By scanner</th></tr></thead><tbody>${rows}${other}</tbody></table>`;
+        box.style.display = '';
+    } catch (e) {
+        console.warn('scanner day summary', e);
+        box.style.display = 'none';
+    }
+}
+
 async function loadAdminScannerLogs() {
     const tbody = document.getElementById('scanner-logs-list');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Loading…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Loading…</td></tr>';
+    const qs = new URLSearchParams();
     const sid = document.getElementById('scanner-log-seminar')?.value || '';
-    const q = sid ? `?seminarId=${encodeURIComponent(sid)}` : '';
+    const did = document.getElementById('scanner-log-day')?.value || '';
+    const scid = document.getElementById('scanner-log-scanner')?.value || '';
+    if (sid) qs.set('seminarId', sid);
+    if (did) qs.set('dayId', did);
+    if (scid) qs.set('scannerId', scid);
+    const q = qs.toString() ? '?' + qs.toString() : '';
     try {
         const res = await fetch('/api/admin/scanner/logs' + q);
         const rows = await res.json();
         __adminScannerLogsCache = Array.isArray(rows) ? rows : [];
         renderAdminScannerLogsTable();
+        if (sid) loadAdminScannerDaySummary();
     } catch (e) {
         console.error(e);
-        tbody.innerHTML = '<tr><td colspan="7">Error</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8">Error</td></tr>';
     }
 }
 
@@ -8366,6 +8468,7 @@ async function adminEticketResendAllMissing() {
 
 async function initAdminScannerLogsTab() {
     await fillAdminSeminarSelect('scanner-log-seminar', true);
+    await loadAdminScannerDaySummary();
     await loadAdminScannerLogs();
 }
 
@@ -10143,19 +10246,21 @@ function renderAdminScannerLogsTable() {
             s.application_no,
             s.ticket_id_string,
             staff,
-            s.seminar_title
+            s.seminar_title,
+            s.event_title,
+            s.day_title
         ]
             .join(' ')
             .toLowerCase();
     });
     adminSearchSetCount('scanner-logs-search-count', q, rows.length, all.length, 'scans');
     if (!all.length) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No scans yet</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">No scans yet</td></tr>';
         return;
     }
     if (!rows.length) {
         tbody.innerHTML =
-            '<tr><td colspan="7" style="text-align:center;">No scans match your search.</td></tr>';
+            '<tr><td colspan="8" style="text-align:center;">No scans match your search.</td></tr>';
         return;
     }
     tbody.innerHTML = '';
@@ -10167,12 +10272,13 @@ function renderAdminScannerLogsTable() {
             : '—';
         tbody.innerHTML += `<tr>
                 <td>${escAdmin(t)}</td>
+                <td>${escAdmin(s.day_title || '—')}${s.day_date ? '<br><span style="font-size:0.78rem;color:#64748b;">' + escAdmin(String(s.day_date).slice(0, 10)) + '</span>' : ''}</td>
                 <td><strong>${escAdmin(s.doctor_user_id_string)}</strong></td>
                 <td>${escAdmin(doc)}</td>
                 <td>${escAdmin(s.application_no)}</td>
                 <td>${escAdmin(s.ticket_id_string)}</td>
                 <td>${escAdmin(staff)}</td>
-                <td>${escAdmin(s.seminar_title)}</td>
+                <td>${escAdmin(s.seminar_title)}${s.event_title ? '<br><span style="font-size:0.78rem;color:#64748b;">' + escAdmin(s.event_title) + '</span>' : ''}</td>
             </tr>`;
     });
 }

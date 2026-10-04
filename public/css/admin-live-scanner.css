@@ -708,3 +708,35 @@
         text-align: left;
     }
 }
+
+.ls-daybar {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 14px;
+    padding: 16px clamp(16px, 3vw, 32px) 0;
+}
+.ls-daybar.hidden { display: none; }
+.ls-daycard {
+    text-align: left;
+    font: inherit;
+    color: inherit;
+    cursor: pointer;
+    padding: 14px 16px;
+    border-radius: 14px;
+    border: 2px solid #e2e8f0;
+    background: #fff;
+    box-shadow: 0 2px 12px rgba(15, 23, 42, 0.04);
+}
+.ls-daycard--muted { cursor: default; opacity: 0.8; }
+.ls-daycard.is-active { border-color: #0f766e; background: #f0fdfa; }
+.ls-daycard-head { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.ls-daycard-tag { background: #2563eb; color: #fff; border-radius: 999px; padding: 1px 8px; font-size: 0.68rem; }
+.ls-daycard-title { font-size: 0.85rem; opacity: 0.8; margin: 2px 0 8px; }
+.ls-daycard-count { font-size: 0.9rem; }
+.ls-daycard-count span { font-size: 2rem; font-weight: 800; line-height: 1; margin-right: 4px; }
+.ls-daycard-count em { font-style: normal; opacity: 0.7; font-size: 0.8rem; }
+.ls-daycard-sub { font-size: 0.78rem; opacity: 0.75; margin-top: 4px; }
+.ls-daycard-scanners { list-style: none; margin: 8px 0 0; padding: 8px 0 0; border-top: 1px dashed rgba(148, 163, 184, 0.4); font-size: 0.78rem; }
+.ls-daycard-scanners li { display: flex; justify-content: space-between; gap: 8px; }
+.ls-stat-scope { margin: 12px clamp(16px, 3vw, 32px) -6px; font-size: 0.82rem; font-weight: 600; opacity: 0.8; }
+.ls-stat-scope.is-all { color: #b45309; }

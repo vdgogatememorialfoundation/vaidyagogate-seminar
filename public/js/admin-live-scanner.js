@@ -450,6 +450,119 @@
         document.getElementById('ls-stat-fail').textContent = stats.failedCount || 0;
         document.getElementById('ls-stat-tix').textContent = stats.ticketsScanned || 0;
         if (stats.lastEventId > lastEventId) lastEventId = stats.lastEventId;
+        const scope = document.getElementById('ls-stat-scope');
+        if (scope) {
+            const daySel = document.getElementById('live-scanner-day');
+            const opt = daySel && daySel.options[daySel.selectedIndex];
+            scope.textContent = did
+                ? 'Showing ' + (opt ? opt.textContent : 'selected day') + ' only'
+                : 'Showing all days combined — pick a day to see its own count';
+            scope.classList.toggle('is-all', !did);
+        }
+    }
+
+    let dayStatsAt = 0;
+    let dayStatsData = null;
+
+    function istToday() {
+        return new Intl.DateTimeFormat('en-CA', {
+            timeZone: 'Asia/Kolkata',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        }).format(new Date());
+    }
+
+    function renderDayBar(data) {
+        const bar = document.getElementById('ls-daybar');
+        if (!bar) return;
+        const days = (data && data.days) || [];
+        if (!days.length) {
+            bar.classList.add('hidden');
+            bar.innerHTML = '';
+            return;
+        }
+        const did = selectedDayId();
+        const today = istToday();
+        let html = '';
+        days.forEach((d, i) => {
+            const isToday = String(d.dayDate || '').slice(0, 10) === today;
+            const scanners = (d.scanners || [])
+                .filter((x) => x.successCount || x.duplicateCount || x.failedCount)
+                .slice(0, 4)
+                .map(
+                    (x) =>
+                        '<li><span>' +
+                        esc(x.name) +
+                        '</span><b>' +
+                        x.successCount +
+                        '</b></li>'
+                )
+                .join('');
+            html +=
+                '<button type="button" class="ls-daycard' +
+                (did === d.dayId ? ' is-active' : '') +
+                (isToday ? ' is-today' : '') +
+                '" data-day-id="' +
+                d.dayId +
+                '">' +
+                '<div class="ls-daycard-head"><strong>Day ' +
+                (i + 1) +
+                '</strong>' +
+                (isToday ? '<span class="ls-daycard-tag">Today</span>' : '') +
+                '</div>' +
+                '<div class="ls-daycard-title">' +
+                esc(d.title) +
+                (d.dayDate ? ' · ' + esc(String(d.dayDate).slice(0, 10)) : '') +
+                '</div>' +
+                '<div class="ls-daycard-count"><span>' +
+                d.successCount +
+                '</span> checked in' +
+                (d.ticketsTotal ? ' <em>of ' + d.ticketsTotal + ' tickets</em>' : '') +
+                '</div>' +
+                '<div class="ls-daycard-sub">' +
+                d.duplicateCount +
+                ' duplicate · ' +
+                d.failedCount +
+                ' rejected · ' +
+                d.ticketsScanned +
+                ' unique tickets</div>' +
+                (scanners ? '<ul class="ls-daycard-scanners">' + scanners + '</ul>' : '') +
+                '</button>';
+        });
+        if (data.unassigned) {
+            const u = data.unassigned;
+            html +=
+                '<div class="ls-daycard ls-daycard--muted"><div class="ls-daycard-head"><strong>Day not recorded</strong></div>' +
+                '<div class="ls-daycard-count"><span>' +
+                u.successCount +
+                '</span> checked in</div>' +
+                '<div class="ls-daycard-sub">Older scans that could not be matched to a day</div></div>';
+        }
+        bar.innerHTML = html;
+        bar.classList.remove('hidden');
+        bar.querySelectorAll('.ls-daycard[data-day-id]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const daySel = document.getElementById('live-scanner-day');
+                if (!daySel) return;
+                const id = btn.dataset.dayId;
+                daySel.value = daySel.value === id ? '' : id;
+                daySel.dispatchEvent(new Event('change'));
+            });
+        });
+    }
+
+    async function refreshDayBar(force) {
+        const sid = document.getElementById('live-scanner-seminar').value;
+        if (!sid) return;
+        if (!force && Date.now() - dayStatsAt < 4000) return;
+        dayStatsAt = Date.now();
+        try {
+            dayStatsData = await api('/api/admin/live-scanner/day-stats?seminarId=' + encodeURIComponent(sid));
+            renderDayBar(dayStatsData);
+        } catch (e) {
+            console.warn('[live-scanner] day-stats:', e.message);
+        }
     }
 
     async function pollEvents() {
@@ -470,8 +583,10 @@
                 prependCard(ev);
                 playScanSound(ev.outcome);
             });
-            if ((data.events || []).length) loadApplicants();
+            const gotNew = (data.events || []).length > 0;
+            if (gotNew) loadApplicants();
             await refreshStats();
+            await refreshDayBar(gotNew);
             setLiveState(true, 'Live · updating');
         } catch (e) {
             console.warn('[live-scanner]', e.message);
@@ -488,6 +603,7 @@
     function startPoll() {
         stopPoll();
         lastEventId = 0;
+        dayStatsAt = 0;
         const grid = document.getElementById('live-scan-grid');
         if (grid) grid.innerHTML = '';
         updateEmptyState();
@@ -517,8 +633,6 @@
         });
         if ((seminars || []).length === 1) {
             sel.value = String(seminars[0].id);
-            startPoll();
-            loadApplicants();
         }
         const dayWrap = document.getElementById('live-scanner-day-wrap');
         const daySel = document.getElementById('live-scanner-day');
@@ -540,16 +654,21 @@
                     daySel.appendChild(o);
                 });
                 dayWrap.classList.toggle('hidden', !(days && days.length));
-                // Default to the day whose check-in/day date is today (IST).
+                // Default to today's day; otherwise the day with the latest scans; otherwise Day 1.
                 if (days && days.length) {
-                    const todayIst = new Intl.DateTimeFormat('en-CA', {
-                        timeZone: 'Asia/Kolkata',
-                        year: 'numeric',
-                        month: '2-digit',
-                        day: '2-digit'
-                    }).format(new Date());
-                    const todayDay = days.find((d) => String(d.day_date || d.checkin_date || '').slice(0, 10) === todayIst);
-                    if (todayDay) daySel.value = String(todayDay.id);
+                    const todayIst = istToday();
+                    let pick = days.find((d) => String(d.day_date || d.checkin_date || '').slice(0, 10) === todayIst);
+                    if (!pick) {
+                        try {
+                            const ds = await api('/api/admin/live-scanner/day-stats?seminarId=' + encodeURIComponent(sid));
+                            const latest = (ds.days || [])
+                                .filter((d) => d.totalEvents > 0)
+                                .sort((x, y) => y.lastEventId - x.lastEventId)[0];
+                            if (latest) pick = days.find((d) => d.id === latest.dayId);
+                        } catch (_) {}
+                    }
+                    if (!pick && days.length > 1) pick = days[0];
+                    if (pick) daySel.value = String(pick.id);
                 }
             } catch (e) {
                 console.warn('[live-scanner] days:', e.message);
@@ -557,11 +676,22 @@
             }
         }
 
+        if (sel.value) {
+            await loadLiveScannerDays(sel.value);
+            startPoll();
+            loadApplicants();
+        }
+
         sel.addEventListener('change', async () => {
             ensureAudio();
             await loadLiveScannerDays(sel.value);
             if (sel.value) startPoll();
-            else stopPoll();
+            else {
+                stopPoll();
+                renderDayBar(null);
+                const scope = document.getElementById('ls-stat-scope');
+                if (scope) scope.textContent = '';
+            }
             loadApplicants();
             updateEmptyState();
         });

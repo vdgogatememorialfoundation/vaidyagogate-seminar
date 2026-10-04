@@ -62,6 +62,7 @@ const { registerPaymentsRoutes } = require('./lib/routes-payments');
 const seminarCapacity = require('./lib/seminar-capacity');
 const requestGuard = require('./lib/request-guard');
 const ticketScanEvents = require('./lib/ticket-scan-events');
+const { dayWiseScanStats } = require('./lib/scan-day-stats');
 const scannerIdCapture = require('./lib/scanner-id-capture');
 const feedbackFormConfig = require('./lib/feedback-form-config');
 const feedbackEligibility = require('./lib/feedback-eligibility');
@@ -10172,15 +10173,22 @@ app.post('/api/admin/users/:userId/resend-verification', (req, res) => {
 // Admin: scanner check-in log (which doctor was scanned, by whom)
 app.get('/api/admin/scanner/logs', (req, res) => {
     const seminarId = req.query.seminarId ? parseInt(req.query.seminarId, 10) : null;
+    const dayId = req.query.dayId ? parseInt(req.query.dayId, 10) : null;
+    const scannerId = req.query.scannerId ? parseInt(req.query.scannerId, 10) : null;
     let sql = `
-        SELECT t.id, t.ticket_id_string, t.scan_time, t.is_scanned,
+        SELECT t.id, t.ticket_id_string, t.scan_time, t.is_scanned, t.day_id, t.event_id,
+               sday.title AS day_title, sday.day_date AS day_date,
+               sev.title AS event_title,
                doc.user_id_string AS doctor_user_id_string, doc.first_name AS doctor_first_name, doc.last_name AS doctor_last_name,
                doc.email AS doctor_email, doc.phone AS doctor_phone,
+               t.scanned_by AS scanner_id,
                scanner.first_name AS scanner_first_name, scanner.last_name AS scanner_last_name, scanner.user_id_string AS scanner_user_id_string,
                r.application_no, s.title AS seminar_title, s.id AS seminar_id
         FROM tickets t
         JOIN users doc ON doc.id = t.user_id
         LEFT JOIN users scanner ON scanner.id = t.scanned_by
+        LEFT JOIN seminar_days sday ON sday.id = t.day_id
+        LEFT JOIN seminar_events sev ON sev.id = t.event_id
         JOIN orders o ON o.id = t.order_id
         JOIN registrations r ON r.id = o.registration_id
         JOIN seminars s ON r.seminar_id = s.id
@@ -10191,10 +10199,30 @@ app.get('/api/admin/scanner/logs', (req, res) => {
         sql += ` AND s.id = ?`;
         params.push(seminarId);
     }
-    sql += ` ORDER BY t.scan_time DESC LIMIT 500`;
+    if (Number.isInteger(dayId) && dayId > 0) {
+        sql += ` AND t.day_id = ?`;
+        params.push(dayId);
+    }
+    if (Number.isInteger(scannerId) && scannerId > 0) {
+        sql += ` AND t.scanned_by = ?`;
+        params.push(scannerId);
+    }
+    sql += ` ORDER BY t.scan_time DESC LIMIT 2000`;
     db.all(sql, params, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(rows || []);
+    });
+});
+
+// Admin: day-wise scan counts (per day, per scanner) for one event
+app.get('/api/admin/scanner/day-summary', (req, res) => {
+    const seminarId = parseInt(req.query.seminarId, 10);
+    if (!Number.isInteger(seminarId) || seminarId < 1) {
+        return res.status(400).json({ error: 'seminarId required' });
+    }
+    dayWiseScanStats(db, seminarId, (err, out) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(out);
     });
 });
 
