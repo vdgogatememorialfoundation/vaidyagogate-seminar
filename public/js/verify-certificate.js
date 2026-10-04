@@ -213,22 +213,12 @@
                 prn: data.prn || state.prn
             });
             showMsg(msg, '', '');
-            if (state.token) {
-                showVerifiedResult({
-                    valid: true,
-                    certKind: data.certKind,
-                    displayName: data.displayName,
-                    seminarTitle: data.seminar && data.seminar.title,
-                    applicationNo: data.applicationNo || state.applicationNo,
-                    prn: data.prn || state.prn,
-                    message:
-                        'This certificate is authentic and was issued by the Vaidya Gogate Memorial Foundation.'
-                });
-                return;
-            }
             showStep('cv-step-otp');
             document.getElementById('cv-confirm-btn').style.display = 'none';
             document.getElementById('cv-send-otp-btn').style.display = 'block';
+            if (state.token) {
+                await sendOtps();
+            }
         } catch (e) {
             showMsg(msg, e.message || 'Lookup failed', 'err');
         } finally {

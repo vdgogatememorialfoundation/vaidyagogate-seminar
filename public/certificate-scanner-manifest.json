@@ -1,0 +1,11 @@
+{
+  "name": "VGMF Certificate Scanner",
+  "short_name": "Cert Scanner",
+  "description": "Scan a seminar certificate QR and confirm it is authentic",
+  "start_url": "/certificate-scanner",
+  "scope": "/certificate-scanner",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1e3a8a",
+  "orientation": "portrait"
+}

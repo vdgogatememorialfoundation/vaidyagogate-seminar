@@ -539,6 +539,7 @@ function requestNeedsBootstrap(req) {
     if (p === '/api/health') return false;
     if (p.startsWith('/api/branding/logo')) return false;
     if (p === '/scanner' || p === '/scanner/') return false;
+    if (p === '/certificate-scanner' || p === '/certificate-scanner/') return false;
     if (/\.(html?|css|js|ico|png|jpe?g|gif|webp|svg|woff2?|json|webmanifest|txt|map)$/i.test(p)) return false;
     if (p.startsWith('/css/') || p.startsWith('/js/') || p.startsWith('/uploads/')) return false;
     if (p.startsWith('/api/')) return true;
@@ -10654,14 +10655,13 @@ function sendCertificateVerifyOtpChannel(channel, destination, meta, cb) {
                     purpose: 'certificate_verify'
                 })
                 .then((results) => {
-                    const sent = channel === 'phone' ? results.whatsapp : results.email;
+                    const sent = channel === 'email' ? results.email : results.whatsapp;
                     const debug =
                         process.env.OTP_RETURN_CODE === '1' || process.env.NODE_ENV === 'development';
-                    if (!sent.ok && !sent.skipped) {
+                    if (!sent || !sent.ok) {
                         return cb(null, {
                             deliverError:
-                                sent.error ||
-                                'Could not deliver OTP. Configure Zoho email and/or WhatsApp API.',
+                                'The email code could not be sent. Please try again in a few minutes.',
                             debugCode: debug ? code : undefined
                         });
                     }
