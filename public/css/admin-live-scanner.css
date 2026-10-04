@@ -740,3 +740,7 @@
 .ls-daycard-scanners li { display: flex; justify-content: space-between; gap: 8px; }
 .ls-stat-scope { margin: 12px clamp(16px, 3vw, 32px) -6px; font-size: 0.82rem; font-weight: 600; opacity: 0.8; }
 .ls-stat-scope.is-all { color: #b45309; }
+
+.scan-card-prev { margin-top: 8px; padding: 6px 10px; border-radius: 8px; font-size: 0.8rem; font-weight: 600; }
+.scan-card-prev.is-yes { background: #d1fae5; color: #065f46; }
+.scan-card-prev.is-no { background: #fee2e2; color: #991b1b; }

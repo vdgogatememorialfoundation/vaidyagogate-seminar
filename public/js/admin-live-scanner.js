@@ -187,6 +187,26 @@
         });
     }
 
+    function prevDayLine(ev) {
+        const p = ev && ev.previousDay;
+        if (!p) return '';
+        const label = esc(p.title || 'Previous day');
+        if (p.attended) {
+            return (
+                '<div class="scan-card-prev is-yes"><i class="fas fa-circle-check"></i> Attended ' +
+                label +
+                (p.scanTime ? ' · checked in ' + esc(formatCardTime(p.scanTime)) : '') +
+                '</div>'
+            );
+        }
+        return (
+            '<div class="scan-card-prev is-no"><i class="fas fa-circle-xmark"></i> ' +
+            (p.hasTicket ? 'Did not attend ' : 'No ticket for ') +
+            label +
+            '</div>'
+        );
+    }
+
     function prependCard(ev) {
         const grid = document.getElementById('live-scan-grid');
         if (!grid) return;
@@ -219,6 +239,7 @@
                   esc(ev.dayTitle) +
                   '</span></div>'
                 : '') +
+            prevDayLine(ev) +
             '<div class="scan-card-ids">' +
             '<div><span class="lbl">E-ticket</span><code>' +
             esc(ev.ticketId || '—') +
