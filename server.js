@@ -9254,7 +9254,7 @@ function enableCertificateForRegistration(registrationId, cb) {
                          ON CONFLICT (user_id, seminar_id) DO UPDATE SET
                            enabled = 1,
                            registration_id = excluded.registration_id,
-                           display_name = excluded.display_name,
+                           display_name = CASE WHEN IFNULL(user_certificates.name_edited, 0) = 1 THEN user_certificates.display_name ELSE excluded.display_name END,
                            template_id = COALESCE(excluded.template_id, user_certificates.template_id),
                            updated_at = CURRENT_TIMESTAMP`,
                         [row.user_id, row.seminar_id, registrationId, displayName, tpl ? tpl.id : null],
@@ -10371,10 +10371,21 @@ app.post('/api/admin/certificates/signature-image', withMemoryAwareUpload('signa
     certRender.getActiveTemplate(db, seminarId, certType, (e, tpl) => {
         if (e) return res.status(500).json({ error: e.message });
         const applyPath = (templateId, cb) => {
-            db.run(`UPDATE certificate_templates SET ${col} = ? WHERE id = ?`, [relPath, templateId], (e2) => {
-                if (e2) return res.status(500).json({ error: e2.message });
-                cb(null, { templateId, path: relPath, side });
-            });
+            const cfgKey = side === 'left' ? 'sigLeftImagePath' : 'sigRightImagePath';
+            let nextConfigJson = null;
+            try {
+                const cfg = certTemplateCfg.parseConfig(tpl && tpl.config_json);
+                cfg[cfgKey] = relPath;
+                nextConfigJson = certTemplateCfg.stringifyConfig(cfg);
+            } catch (_) {}
+            db.run(
+                `UPDATE certificate_templates SET ${col} = ?, config_json = COALESCE(?, config_json) WHERE id = ?`,
+                [relPath, nextConfigJson, templateId],
+                (e2) => {
+                    if (e2) return res.status(500).json({ error: e2.message });
+                    cb(null, { templateId, path: relPath, side, previewUrl: fileStore.publicFileUrl(relPath) });
+                }
+            );
         };
         if (tpl && tpl.id) return applyPath(tpl.id, (e2, out) => res.json({ success: true, ...out }));
         certRender.applyBuiltinTemplate(

@@ -4968,8 +4968,34 @@ function fillCertConfigForm(cfg) {
     window.__certSigRightPath = c.sigRightImagePath || '';
     const lp = document.getElementById('cert-sig-left-preview');
     const rp = document.getElementById('cert-sig-right-preview');
-    if (lp) lp.textContent = window.__certSigLeftPath ? 'Current: ' + window.__certSigLeftPath : 'No left signature image uploaded.';
-    if (rp) rp.textContent = window.__certSigRightPath ? 'Current: ' + window.__certSigRightPath : 'No right signature image uploaded.';
+    renderCertSigPreview(lp, window.__certSigLeftPath, 'left');
+    renderCertSigPreview(rp, window.__certSigRightPath, 'right');
+}
+
+function certSigBrowserUrl(p) {
+    const v = String(p || '').trim();
+    if (!v) return '';
+    const m = /^https?:\/\/[^/]+\.r2\.cloudflarestorage\.com\/[^/]+\/(.+?)(?:\?.*)?$/i.exec(v);
+    if (m) return '/uploads/' + m[1];
+    return v;
+}
+
+function renderCertSigPreview(el, p, side) {
+    if (!el) return;
+    el.textContent = '';
+    if (!p) {
+        el.textContent = 'No ' + side + ' signature image uploaded.';
+        return;
+    }
+    const img = document.createElement('img');
+    img.src = certSigBrowserUrl(p);
+    img.alt = 'Signature';
+    img.style.cssText = 'display:block;max-height:56px;max-width:220px;margin-top:4px;background:#fff;border:1px solid #e2e8f0;padding:2px;';
+    img.onerror = () => {
+        img.remove();
+        el.appendChild(document.createTextNode('Uploaded (preview unavailable): ' + p));
+    };
+    el.appendChild(img);
 }
 
 async function uploadCertSignatureImage(side) {
@@ -5100,10 +5126,10 @@ async function loadAdminCertificateCandidates() {
     const tbody = document.getElementById('cert-mgmt-list');
     if (!tbody) return;
     if (!sid) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Select a seminar</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;">Select a seminar</td></tr>';
         return;
     }
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Loading…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;">Loading…</td></tr>';
     try {
         const certType = document.getElementById('cert-mgmt-type')?.value || 'participant';
         const res = await fetch(
@@ -5114,8 +5140,107 @@ async function loadAdminCertificateCandidates() {
         renderAdminCertificateCandidatesTable();
     } catch (e) {
         console.error(e);
-        tbody.innerHTML = '<tr><td colspan="9">Error loading</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10">Error loading</td></tr>';
     }
+}
+
+const CERT_HONORIFIC_CHOICES = ['Dr.', 'Mr.', 'Ms.', 'Mrs.', 'Prof.', 'Vaidya', 'Shri', 'Smt.'];
+
+function openCertRecipientEditor(userId) {
+    const row = (__adminCertCandidatesCache || []).find((r) => Number(r.user_id) === Number(userId));
+    const sid = document.getElementById('cert-mgmt-seminar')?.value;
+    if (!row || !sid) return;
+    const certType = document.getElementById('cert-mgmt-type')?.value || 'participant';
+    const profileName = [row.first_name, row.last_name].filter(Boolean).join(' ');
+    const edited = Number(row.name_edited) === 1;
+    const startName = edited && row.display_name ? row.display_name : profileName || row.display_name || '';
+    const curHon = edited ? String(row.cert_honorific || '') : '';
+    const honIsCustom =
+        curHon && curHon.toLowerCase() !== 'none' && !CERT_HONORIFIC_CHOICES.includes(curHon);
+
+    document.getElementById('cert-recipient-modal')?.remove();
+    const wrap = document.createElement('div');
+    wrap.id = 'cert-recipient-modal';
+    wrap.style.cssText =
+        'position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;';
+    const opts = ['<option value="">Automatic (Dr. / Mr. / Ms. from profile)</option>', '<option value="none">No honorific</option>']
+        .concat(CERT_HONORIFIC_CHOICES.map((h) => `<option value="${escAdmin(h)}">${escAdmin(h)}</option>`))
+        .concat(['<option value="__custom">Other…</option>'])
+        .join('');
+    wrap.innerHTML = `
+        <div style="background:#fff;border-radius:12px;max-width:480px;width:100%;padding:20px 22px;box-shadow:0 20px 50px rgba(0,0,0,0.3);">
+            <h3 style="margin:0 0 4px;">Edit certificate name</h3>
+            <p style="margin:0 0 14px;font-size:0.85rem;color:#64748b;">${escAdmin(profileName || '—')} · PRN ${escAdmin(row.user_id_string || '—')} · ${escAdmin(certType)} certificate</p>
+            <label style="font-weight:600;font-size:0.85rem;">Honorific</label>
+            <select id="cert-rcp-hon" style="width:100%;padding:8px;margin:4px 0 8px;">${opts}</select>
+            <input id="cert-rcp-hon-custom" placeholder="e.g. Col." maxlength="20" style="display:none;width:100%;padding:8px;margin-bottom:8px;">
+            <label style="font-weight:600;font-size:0.85rem;">Name (as it should be printed)</label>
+            <input id="cert-rcp-name" maxlength="120" style="width:100%;padding:8px;margin:4px 0 12px;" value="${escAdmin(startName)}">
+            <div style="background:#fffbeb;border:1px solid #e8d48a;border-radius:8px;padding:10px 12px;font-size:0.9rem;">Will print as: <strong id="cert-rcp-preview"></strong></div>
+            <p id="cert-rcp-msg" style="font-size:0.85rem;min-height:1.2em;margin:10px 0 0;color:#b91c1c;"></p>
+            <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:6px;">
+                ${edited ? '<button type="button" id="cert-rcp-reset" class="btn-primary" style="background:#64748b;">Reset to automatic</button>' : ''}
+                <button type="button" id="cert-rcp-cancel" class="btn-primary" style="background:#94a3b8;">Cancel</button>
+                <button type="button" id="cert-rcp-save" class="btn-primary cert-btn-gold">Save</button>
+            </div>
+        </div>`;
+    document.body.appendChild(wrap);
+    const honSel = wrap.querySelector('#cert-rcp-hon');
+    const honCustom = wrap.querySelector('#cert-rcp-hon-custom');
+    const nameEl = wrap.querySelector('#cert-rcp-name');
+    const prev = wrap.querySelector('#cert-rcp-preview');
+    const msg = wrap.querySelector('#cert-rcp-msg');
+    if (honIsCustom) {
+        honSel.value = '__custom';
+        honCustom.value = curHon;
+        honCustom.style.display = '';
+    } else {
+        honSel.value = curHon.toLowerCase() === 'none' ? 'none' : curHon;
+    }
+    const currentHon = () => (honSel.value === '__custom' ? honCustom.value.trim() : honSel.value);
+    const refresh = () => {
+        honCustom.style.display = honSel.value === '__custom' ? '' : 'none';
+        const h = currentHon();
+        const n = nameEl.value.trim();
+        prev.textContent = h === 'none' ? n : h ? h + ' ' + n : 'Automatic prefix + ' + n;
+    };
+    honSel.addEventListener('change', refresh);
+    honCustom.addEventListener('input', refresh);
+    nameEl.addEventListener('input', refresh);
+    refresh();
+    const close = () => wrap.remove();
+    wrap.querySelector('#cert-rcp-cancel').onclick = close;
+    wrap.addEventListener('click', (ev) => {
+        if (ev.target === wrap) close();
+    });
+    const send = async (payload) => {
+        msg.style.color = '#64748b';
+        msg.textContent = 'Saving…';
+        try {
+            const res = await fetch('/api/admin/certificates/recipient', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ seminarId: parseInt(sid, 10), userId: row.user_id, certType, ...payload })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || 'Save failed');
+            close();
+            await loadAdminCertificateCandidates();
+        } catch (e) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = e.message || 'Save failed';
+        }
+    };
+    wrap.querySelector('#cert-rcp-save').onclick = () => {
+        if (!nameEl.value.trim()) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = 'Name is required';
+            return;
+        }
+        send({ displayName: nameEl.value.trim(), honorific: currentHon() });
+    };
+    const rs = wrap.querySelector('#cert-rcp-reset');
+    if (rs) rs.onclick = () => send({ reset: true });
 }
 
 function toggleAllCertCandidates(on) {
@@ -8818,7 +8943,7 @@ function renderAdminCertificateCandidatesTable() {
     if (!tbody) return;
     const sid = document.getElementById('cert-mgmt-seminar')?.value;
     if (!sid) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Select a seminar</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;">Select a seminar</td></tr>';
         return;
     }
     const certType = document.getElementById('cert-mgmt-type')?.value || 'participant';
@@ -8838,12 +8963,12 @@ function renderAdminCertificateCandidatesTable() {
             certType === 'volunteer'
                 ? 'No approved volunteers for this seminar yet.'
                 : 'No registrations for this seminar yet.';
-        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;">${emptyMsg}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;">${emptyMsg}</td></tr>`;
         return;
     }
     if (!rows.length) {
         tbody.innerHTML =
-            '<tr><td colspan="9" style="text-align:center;">No candidates match your search.</td></tr>';
+            '<tr><td colspan="10" style="text-align:center;">No candidates match your search.</td></tr>';
         return;
     }
     tbody.innerHTML = '';
@@ -8874,6 +8999,14 @@ function renderAdminCertificateCandidatesTable() {
         const prnCell = r.user_id_string
             ? escAdmin(r.user_id_string)
             : '<span style="color:#b91c1c;">Missing PRN</span>';
+        const edited = Number(r.name_edited) === 1;
+        const honTxt = String(r.cert_honorific || '').toLowerCase() === 'none' ? '' : r.cert_honorific || '';
+        const printed = edited ? [honTxt, r.display_name].filter(Boolean).join(' ') : '';
+        const certNameCell =
+            (edited
+                ? `<strong title="Edited by admin">${escAdmin(printed)}</strong>`
+                : '<span style="color:#64748b;">Automatic</span>') +
+            ` <button type="button" class="btn-primary" style="padding:3px 9px;font-size:0.76rem;margin-left:6px;" onclick="openCertRecipientEditor(${Number(r.user_id)})"><i class="fas fa-pen"></i> Edit</button>`;
         tbody.innerHTML += `<tr>
                 <td><input type="checkbox" class="cert-cand-cb" data-user-id="${r.user_id}" value="${r.user_id}"></td>
                 <td>${prnCell}</td>
@@ -8884,6 +9017,7 @@ function renderAdminCertificateCandidatesTable() {
                 <td>${checked}</td>
                 <td><code>${escAdmin(r.ticket_id_string || '—')}</code></td>
                 <td title="${escAdmin(certLabel)}">${cert}</td>
+                <td>${certNameCell}</td>
             </tr>`;
     });
 }
