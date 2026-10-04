@@ -8971,7 +8971,8 @@ function renderDoctorsUsersTable() {
                             <option value="regular" ${cat === 'regular' ? 'selected' : ''}>Regular</option>
                             <option value="volunteer" ${cat === 'volunteer' ? 'selected' : ''}>Volunteer</option>
                         </select>
-                        <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-left:6px;background:#0f766e;" onclick="saveDoctorAccessFromList(${u.id})">Save access</button>
+                        <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-left:6px;background:#0f766e;" onclick="saveDoctorAccessFromList(${u.id})">Save category</button>
+                        <button type="button" data-doctor-mod-access="1" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-left:6px;background:#0369a1;" onclick="openDoctorModuleAccess(${u.id})">Module access</button>
                         ${
                             adminCanDeleteUsers()
                                 ? `<button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-left:6px;background:#b91c1c;" onclick="adminDeleteUserAccount(${u.id}, '${String((u.first_name || '') + ' ' + (u.last_name || '')).trim().replace(/'/g, "\\'")}', '${String(u.user_id_string || '').replace(/'/g, "\\'")}')">Delete</button>`

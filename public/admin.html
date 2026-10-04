@@ -262,7 +262,7 @@
                 <h2 style="margin-bottom: 20px;">Doctors</h2>
                 <div class="card" style="margin-bottom:16px;border:1px solid #99f6e4;background:#f0fdfa;">
                     <h3 style="margin:0 0 8px;color:#0f766e;font-size:1rem;">Doctor portal dashboard</h3>
-                    <p style="color:#64748b;font-size:0.88rem;margin:0 0 10px;">Control which sidebar modules all doctors see (global), or customize per doctor via <strong>View → Doctor access control</strong>.</p>
+                    <p style="color:#64748b;font-size:0.88rem;margin:0 0 10px;">Use <strong>Module access</strong> on a doctor to choose which portal sidebar modules that doctor can open. Global defaults for every doctor are still under Website content.</p>
                     <button type="button" class="btn-primary" style="background:#0f766e;" onclick="switchTab('tab-site-cms'); loadAdminSiteCms(); setTimeout(function(){ var el=document.getElementById('doctor-portal-modules-policy-card'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); }, 300);">Configure global doctor modules</button>
                 </div>
                 <div class="card">
@@ -3505,6 +3505,7 @@
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
     <script src="/js/track-timeline.js?v=20261004line"></script>
     <script src="/js/admin-commerce.js?v=20261004parcel"></script>
+    <script src="/js/doctor-module-access.js?v=20261004mod"></script>
     <script src="/js/admin.js?v=20261004attend"></script>
 </body>
 </html>
