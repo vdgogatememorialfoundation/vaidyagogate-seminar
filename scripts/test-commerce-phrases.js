@@ -91,15 +91,40 @@ const sampleOrder = {
     totalAmount: 100,
     items: []
 };
-const parcel = commerce.buildTookanTaskBody(sampleCfg, sampleOrder, 'logistics');
-assert.strictEqual(parcel.is_multiple_tasks, 0);
-assert.strictEqual(parcel.tags, 'parcel');
-assert.strictEqual(parcel.job_description, 'Parcel BK1');
-assert.strictEqual(parcel.job_pickup_name, 'Gogate Products');
-assert.strictEqual(parcel.has_pickup, 1);
-assert.strictEqual(parcel.has_delivery, 1);
+const parcel = commerce.buildTookanParcelBody(
+    Object.assign({}, sampleCfg, { storeLat: 18.5, storeLng: 73.85 }),
+    Object.assign({}, sampleOrder, { storeLat: 18.5, storeLng: 73.85, dropLat: 19.07, dropLng: 72.87 })
+);
+assert.strictEqual(parcel.timezone, -330);
+assert.strictEqual(parcel.has_pickup, undefined);
+assert.strictEqual(parcel.order_id, undefined);
+assert.strictEqual(parcel.pickups.length, 1);
+assert.strictEqual(parcel.deliveries.length, 1);
+assert.ok(parcel.pickups[0].name.indexOf('Gogate Products') === 0);
+assert.ok(parcel.pickups[0].name.indexOf('BK1') !== -1);
+assert.ok(parcel.deliveries[0].time > parcel.pickups[0].time);
 assert.ok(JSON.stringify(parcel).indexOf('4321') === -1);
 assert.ok(JSON.stringify(parcel).indexOf('8765') === -1);
+const hubs = [{ id: '1917', name: '1917 Swargate Hub - Pune' }];
+const now = Date.parse('2026-10-04T12:00:00Z');
+const hubJobs = [
+    { job_id: 1, job_type: 0, job_status: 2, job_time_utc: '2026-10-04T06:00:00.000Z', barcode: 'ABC' },
+    { job_id: 2, job_type: 1, job_status: 2, order_id: '1917', job_time_utc: '2026-10-04T08:00:00.000Z' },
+    { job_id: 3, job_type: 1, job_status: 6, order_id: '', job_time_utc: '2026-10-04T18:00:00.000Z' }
+];
+const hubJourney = commerce.parcelJourneyUpdate(hubJobs, hubs, now);
+assert.strictEqual(hubJourney.stage, 'in_transit');
+assert.notStrictEqual(hubJourney.stage, 'out_for_delivery');
+assert.ok(hubJourney.lineFill <= 0.88);
+assert.ok(hubJourney.lineFill >= 0.12);
+assert.ok(hubJourney.events.some((ev) => ev.kind === 'arrived_facility' && ev.city === 'Pune'));
+const ofdJobs = hubJobs.map((job, i) => (i === 2 ? Object.assign({}, job, { job_status: 1 }) : job));
+const ofdJourney = commerce.parcelJourneyUpdate(ofdJobs, hubs, now);
+assert.strictEqual(ofdJourney.stage, 'out_for_delivery');
+assert.ok(ofdJourney.lineFill <= 0.88);
+const deliveredJobs = hubJobs.map((job, i) => (i === 2 ? Object.assign({}, job, { job_status: 2 }) : job));
+assert.strictEqual(commerce.parcelJourneyUpdate(deliveredJobs, hubs, now).stage, 'delivered');
+assert.strictEqual(commerce.stageFromKind('hub_eta'), null);
 const hyper = commerce.buildTookanTaskBody(sampleCfg, sampleOrder, 'hyperlocal');
 assert.strictEqual(hyper.is_multiple_tasks, undefined);
 assert.strictEqual(hyper.tags, 'hyperlocal');
@@ -188,6 +213,7 @@ assert.strictEqual(placed.carrierId, '12');
 const shop = require('../lib/shop-timeline');
 const journey = require('../lib/book-tracking-journey');
 assert.strictEqual(journey.classifyScanStage('Pickup requested from courier partner', ''), 'ordered');
+assert.strictEqual(journey.classifyScanStage('Expected at Swargate Hub', ''), 'ordered');
 assert.strictEqual(journey.classifyScanStage('Shipment arrived at Courier Facility', ''), 'shipped');
 const onlyPickup = journey.buildAmazonStyleJourney({
     status: 'confirmed',
@@ -235,5 +261,27 @@ const done = shop.buildLiveView(Object.assign({}, assigned, { status: 'delivered
 assert.strictEqual(done.slot, 'delivered');
 assert.strictEqual(done.leg, 'done');
 assert.strictEqual(done.agent, null);
+
+const transitTl = shop.buildShopTimeline(
+    {
+        status: 'shipped',
+        commerceStage: 'in_transit',
+        commerceMode: 'logistics',
+        commerceProvider: 'tookan',
+        fulfillmentType: 'courier',
+        orderCode: 'BK1',
+        lineFill: 0.99
+    },
+    [
+        { title: 'Expected at Lonavala Hub', kind: 'hub_eta', city: 'Lonavala', at: '2026-10-05T06:00:00Z' },
+        { title: 'Shipment arrived at Courier Facility', kind: 'arrived_facility', city: 'Pune', at: '2026-10-04T08:00:00Z' }
+    ],
+    {}
+);
+const transitActive = transitTl.steps.find((s) => s.state === 'active');
+assert.strictEqual(transitActive.key, 'shipped');
+assert.ok(transitActive.lineFill <= 88);
+assert.strictEqual(transitTl.steps.find((s) => s.key === 'out_for_delivery').state, 'upcoming');
+assert.strictEqual(transitTl.steps.find((s) => s.key === 'delivered').state, 'upcoming');
 
 console.log('commerce phrase tests passed');

@@ -114,7 +114,9 @@
             t.steps
                 .map(
                     (s, i) =>
-                        '<div class="tl-step ' + s.state + '" style="--i:' + i + '"><div class="tl-dot">' + (s.state === 'done' ? '&#10003;' : '') + '</div>' +
+                        '<div class="tl-step ' + s.state + '"' +
+                        (s.lineUntil ? ' data-line-since="' + Number(s.lineSince) + '" data-line-until="' + Number(s.lineUntil) + '" data-line-floor="' + Number(s.lineFloor || 12) + '"' : '') +
+                        ' style="--i:' + i + (s.lineFill != null ? ';--line:' + Number(s.lineFill) : '') + '"><div class="tl-dot">' + (s.state === 'done' ? '&#10003;' : '') + '</div>' +
                         '<div class="tl-title">' + esc(s.title) + (s.at && s.state !== 'upcoming' ? '<span class="tl-time">' + esc(when(s.at)) + '</span>' : '') + '</div>' +
                         (s.summary ? '<div class="tl-sum">' + esc(s.summary) + '</div>' : '') +
                         extra(s, data) +
@@ -223,6 +225,21 @@
             });
         }
     }
+
+    function tickLines() {
+        const nodes = document.querySelectorAll('.tl-step.active[data-line-until]');
+        const now = Date.now();
+        nodes.forEach((el) => {
+            const since = Number(el.getAttribute('data-line-since'));
+            const until = Number(el.getAttribute('data-line-until'));
+            const floor = Number(el.getAttribute('data-line-floor')) || 12;
+            if (!until || until <= since) return;
+            const ratio = now <= since ? 0.12 : Math.min(1, (now - since) / (until - since));
+            const pct = Math.min(88, Math.max(floor, Math.round(ratio * 100)));
+            el.style.setProperty('--line', String(pct));
+        });
+    }
+    setInterval(tickLines, 2000);
 
     window.TrackTimeline = { render, mount, when, esc, updates };
 })();

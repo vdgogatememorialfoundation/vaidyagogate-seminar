@@ -5,6 +5,23 @@
 .tl-step::before { content: ""; position: absolute; left: 13px; top: 30px; bottom: -2px; width: 3px; background: var(--tl-line); border-radius: 2px; }
 .tl-step.done::before { background: var(--tl-green); }
 .tl-step:last-child::before { display: none; }
+.tl-step.active { --line: 12; }
+.tl-step.active::after {
+    content: "";
+    position: absolute;
+    left: 13px;
+    top: 30px;
+    bottom: -2px;
+    width: 3px;
+    background: var(--tl-green);
+    border-radius: 2px;
+    transform-origin: top center;
+    transform: scaleY(calc(min(0.88, var(--line) / 100)));
+    transition: transform 1.6s ease;
+    z-index: 0;
+    pointer-events: none;
+}
+.tl-step:last-child::after { display: none; }
 .tl-dot { position: absolute; left: 0; top: 0; width: 28px; height: 28px; border-radius: 50%; background: #fff; border: 3px solid #c7cccc; display: flex; align-items: center; justify-content: center; font-size: .8rem; color: #fff; z-index: 1; }
 .tl-step.done .tl-dot { background: var(--tl-green); border-color: var(--tl-green); }
 .tl-step.active .tl-dot { border-color: var(--tl-green); }
