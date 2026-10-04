@@ -90,7 +90,7 @@
                     : '');
         }
         if (data.live && data.live.slot === step.key) {
-            html += '<div class="tl-live">Live driver tracking</div><div id="tl-map-slot"></div>';
+            html += '<div class="tl-live">Live driver navigation</div><div class="tl-note">The map follows the driver from the store to the delivery location.</div><div id="tl-map-slot"></div>';
         } else if (step.key === 'out_for_delivery' && step.agent && step.liveMapAvailable && !data.live) {
             html += '<div class="tl-warn">Live map is not available yet' + (data.trackUrl ? ' - <a href="' + esc(data.trackUrl) + '" target="_blank" rel="noopener">open tracking page</a>' : '') + '.</div>';
         }
@@ -153,8 +153,26 @@
         }
         if (!el.__map) {
             el.textContent = '';
-            el.__map = new google.maps.Map(el, { center, zoom: 14, mapTypeControl: false, streetViewControl: false });
-            el.__dir = new google.maps.DirectionsRenderer({ map: el.__map, suppressMarkers: true });
+            el.__map = new google.maps.Map(el, {
+                center,
+                zoom: 14,
+                mapTypeControl: false,
+                streetViewControl: false,
+                fullscreenControl: true,
+                styles: [
+                    { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+                    { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+                    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#dbeafe' }] },
+                    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#e2e8f0' }] },
+                    { featureType: 'road.arterial', elementType: 'geometry', stylers: [{ color: '#99f6e4' }] },
+                    { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#f8fafc' }] }
+                ]
+            });
+            el.__dir = new google.maps.DirectionsRenderer({
+                map: el.__map,
+                suppressMarkers: true,
+                polylineOptions: { strokeColor: '#0f766e', strokeWeight: 5, strokeOpacity: 0.9 }
+            });
             el.__markers = {};
         }
         const pin = (key, pos, title, label) => {

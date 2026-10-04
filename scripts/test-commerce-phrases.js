@@ -21,7 +21,8 @@ assert.ok(out.detail.indexOf('Nashik') !== -1);
 assert.strictEqual(commerce.mapShipdayStatus('PICKED_UP'), 'out_for_delivery');
 assert.strictEqual(commerce.mapShipdayStatus('STARTED'), 'to_store');
 assert.strictEqual(commerce.mapShipdayStatus('ALREADY_DELIVERED'), 'delivered');
-assert.strictEqual(commerce.mapTookanStatus(2, 'Successful'), 'delivered');
+assert.strictEqual(commerce.mapTookanStatus(2, 'Successful', 'delivery'), 'delivered');
+assert.strictEqual(commerce.mapTookanStatus(2, 'Successful', 'pickup'), 'picked_up');
 assert.strictEqual(commerce.stageFromKind('arrived_facility', 'logistics'), 'in_transit');
 assert.strictEqual(commerce.liveLegFor('out_for_delivery', 'hyperlocal'), 'to_drop');
 assert.strictEqual(commerce.liveLegFor('to_store', 'hyperlocal'), 'to_store');
@@ -37,10 +38,18 @@ const tookan = commerce.parseTookanWebhook({
 assert.strictEqual(tookan.title, 'Shipment arrived at Courier Facility');
 assert.strictEqual(tookan.city, 'Thane');
 
-const ship = commerce.parseShipdayWebhook({
+const ready = commerce.parseShipdayWebhook({
     orderId: 9,
     orderNumber: 'BK2',
     orderStatus: 'READY_TO_DELIVER',
+    carrierPhone: '9111111111',
+    carrierName: 'Asha'
+});
+assert.strictEqual(ready.kind, 'ready_for_pickup');
+const ship = commerce.parseShipdayWebhook({
+    orderId: 9,
+    orderNumber: 'BK2',
+    orderStatus: 'PICKED_UP',
     carrierPhone: '9111111111',
     carrierName: 'Asha'
 });

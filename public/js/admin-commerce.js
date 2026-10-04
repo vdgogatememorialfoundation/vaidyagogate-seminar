@@ -569,9 +569,23 @@ function drawDriverMap(el, order) {
     const agent = order.agentLat != null ? { lat: Number(order.agentLat), lng: Number(order.agentLng) } : null;
     const center = agent || store || drop || { lat: 18.52, lng: 73.85 };
     if (!el.__map) {
-        el.__map = new google.maps.Map(el, { center, zoom: 13, mapTypeControl: false, streetViewControl: false });
+        el.__map = new google.maps.Map(el, {
+            center,
+            zoom: 13,
+            mapTypeControl: false,
+            streetViewControl: false,
+            styles: [
+                { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+                { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#dbeafe' }] },
+                { featureType: 'road.arterial', elementType: 'geometry', stylers: [{ color: '#99f6e4' }] }
+            ]
+        });
         el.__markers = {};
-        el.__dir = new google.maps.DirectionsRenderer({ map: el.__map, suppressMarkers: true });
+        el.__dir = new google.maps.DirectionsRenderer({
+            map: el.__map,
+            suppressMarkers: true,
+            polylineOptions: { strokeColor: '#0f766e', strokeWeight: 5 }
+        });
     }
     const map = el.__map;
     map.setCenter(center);
@@ -601,3 +615,271 @@ function placeMarker(el, key, pos, title) {
         el.__markers[key].setPosition(pos);
     }
 }
+
+function commerceKeyCardHtml(compact) {
+    const hint = compact
+        ? 'These are the same Tookan and Shipday keys used by Commerce. A POS order still appears on the Commerce desk when doctor book orders are closed.'
+        : 'Tookan covers logistics and hyperlocal pickup and delivery. Shipday covers hyperlocal. The Google Maps key draws the live driver route.';
+    return (
+        '<div id="bs-commerce-keys" class="card" style="padding:18px;margin:0 0 14px;border:1px solid #99f6e4;background:#f0fdfa;">' +
+        '<h3 style="margin:0 0 8px;color:#0f766e;">Tookan, Shipday and live map</h3>' +
+        '<p style="font-size:0.84rem;color:#64748b;margin:0 0 10px;">' +
+        hint +
+        '</p>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;">' +
+        field('bpos-store', 'Store name') +
+        field('bpos-phone', 'Store phone') +
+        field('bpos-addr', 'Store address') +
+        field('bpos-city', 'Store city') +
+        field('bpos-lat', 'Store latitude') +
+        field('bpos-lng', 'Store longitude') +
+        field('bpos-maps', 'Google Maps API key') +
+        field('bpos-tookan', 'Tookan API key') +
+        field('bpos-secret', 'Tookan webhook secret') +
+        field('bpos-ship', 'Shipday API key') +
+        '</div>' +
+        '<label style="display:block;margin-top:8px;"><input type="checkbox" id="bpos-tookan-on"> Tookan enabled (logistics and hyperlocal)</label>' +
+        '<label style="display:block;"><input type="checkbox" id="bpos-ship-on"> Shipday enabled (hyperlocal)</label>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">' +
+        '<label>Default<select id="bpos-mode"><option value="logistics">Tookan logistics</option><option value="hyperlocal">Hyperlocal</option></select></label>' +
+        '<label>Hyperlocal provider<select id="bpos-hyper"><option value="shipday">Shipday</option><option value="tookan">Tookan</option></select></label>' +
+        '</div>' +
+        '<p style="font-size:0.78rem;color:#64748b;margin:8px 0 0;">Webhooks: <code>/api/public/tookan/webhook</code> and <code>/api/public/shipday/webhook</code>. Public tracking links use <code>/track-commerce?token=…</code>.</p>' +
+        '<button type="button" class="btn-primary" style="margin-top:10px;background:#0f766e;" onclick="commerceSavePosKeys()">Save Tookan and Shipday</button>' +
+        '<p id="bpos-keys-msg" style="font-weight:600;margin:8px 0 0;"></p></div>'
+    );
+}
+
+function mountBookIntegrations() {
+    const config = document.getElementById('bs-panel-config');
+    if (config && !document.getElementById('bs-commerce-keys')) {
+        const card = document.createElement('div');
+        card.innerHTML = commerceKeyCardHtml(false);
+        const logisticsHeading = Array.from(config.querySelectorAll('h3')).find((h) => /Logistics API/i.test(h.textContent || ''));
+        const host = logisticsHeading && logisticsHeading.closest('.card');
+        if (host && host.parentNode) host.parentNode.insertBefore(card.firstChild, host.nextSibling);
+        else config.insertBefore(card.firstChild, config.firstChild);
+        commerceFillPosKeys();
+    }
+    const pos = document.getElementById('bs-panel-pos');
+    if (pos && !document.getElementById('bs-pos-commerce-note')) {
+        const note = document.createElement('div');
+        note.id = 'bs-pos-commerce-note';
+        note.style.cssText = 'grid-column:1/-1;padding:12px 14px;border:1px solid #99f6e4;background:#f0fdfa;border-radius:12px;margin-bottom:12px;font-size:0.86rem;color:#134e4a;';
+        note.innerHTML =
+            '<strong>Commerce integrations.</strong> Tookan and Shipday keys are saved with the book-sales logistics settings. ' +
+            'A POS order is listed in Commerce even when the doctor book-order screen is closed. ' +
+            '<button type="button" class="btn-primary" style="margin-left:8px;background:#0f766e;padding:4px 10px;" onclick="switchBsTab(\'config\')">Open integrations</button>';
+        pos.insertBefore(note, pos.firstChild);
+    }
+    const ship = document.getElementById('bs-courier-panel-ship');
+    if (ship && !document.getElementById('bs-tookan-book-box') && !ship.querySelector('[onclick*="bsBookCommerce"]')) {
+        const box = document.createElement('div');
+        box.id = 'bs-tookan-book-box';
+        box.style.cssText = 'border:2px solid #0f766e;border-radius:12px;padding:16px;margin:0 0 16px;';
+        box.innerHTML =
+            '<div style="font-weight:800;color:#0f766e;margin-bottom:6px;">Tookan / Shipday realtime pickup</div>' +
+            '<p style="font-size:0.8rem;color:#64748b;margin:0 0 10px;">Book logistics on Tookan, or hyperlocal pickup and delivery on Tookan or Shipday. Pickup and delivery OTPs are issued with the booking.</p>' +
+            '<label style="font-size:0.78rem;">Pickup time (IST)<input id="bs-commerce-when" type="datetime-local" style="width:100%;padding:8px;margin:4px 0 10px;"></label>' +
+            '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+            '<button type="button" class="btn-primary" style="background:#0d9488;flex:1;min-width:140px;" onclick="bsBookCommerce(\'tookan\',\'logistics\')">Tookan logistics</button>' +
+            '<button type="button" class="btn-primary" style="background:#0f766e;flex:1;min-width:140px;" onclick="bsBookCommerce(\'tookan\',\'hyperlocal\')">Tookan hyperlocal</button>' +
+            '<button type="button" class="btn-primary" style="background:#0369a1;flex:1;min-width:140px;" onclick="bsBookCommerce(\'shipday\',\'hyperlocal\')">Shipday hyperlocal</button>' +
+            '</div>' +
+            '<p id="bs-commerce-book-msg" style="font-weight:600;margin:8px 0 0;"></p>';
+        const manual = ship.querySelector('#bs-courier-tracking');
+        const manualBox = manual && manual.closest('div[style*="border:1px solid"]');
+        if (manualBox && manualBox.parentNode) manualBox.parentNode.insertBefore(box, manualBox);
+        else ship.appendChild(box);
+    }
+}
+
+async function commerceFillPosKeys() {
+    if (!document.getElementById('bpos-store')) return;
+    try {
+        const data = await commerceFetch('/api/admin/commerce/config?actingAdminId=' + encodeURIComponent(commerceActor()));
+        const c = data.config || {};
+        const set = (id, value) => {
+            const el = document.getElementById(id);
+            if (el && value != null) el.value = value;
+        };
+        set('bpos-store', c.storeName || '');
+        set('bpos-phone', c.storePhone || '');
+        set('bpos-addr', c.storeAddress || '');
+        set('bpos-city', c.storeCity || '');
+        set('bpos-lat', c.storeLat != null ? c.storeLat : '');
+        set('bpos-lng', c.storeLng != null ? c.storeLng : '');
+        const tookan = c.tookan || {};
+        const ship = c.shipday || {};
+        const tookanOn = document.getElementById('bpos-tookan-on');
+        const shipOn = document.getElementById('bpos-ship-on');
+        if (tookanOn) tookanOn.checked = !!tookan.enabled;
+        if (shipOn) shipOn.checked = !!ship.enabled;
+        const mode = document.getElementById('bpos-mode');
+        const hyper = document.getElementById('bpos-hyper');
+        if (mode) mode.value = c.defaultMode || 'logistics';
+        if (hyper) hyper.value = c.defaultHyperlocalProvider || 'shipday';
+        const msg = document.getElementById('bpos-keys-msg');
+        if (msg) {
+            msg.style.color = '#0f766e';
+            msg.textContent =
+                (tookan.configured ? 'Tookan key saved' : 'Tookan key not saved') +
+                (tookan.apiKeyHint ? ' (' + tookan.apiKeyHint + ')' : '') +
+                ' · ' +
+                (ship.configured ? 'Shipday key saved' : 'Shipday key not saved') +
+                (ship.apiKeyHint ? ' (' + ship.apiKeyHint + ')' : '') +
+                (c.mapsKeySet ? ' · Maps key saved' : ' · Maps key not saved');
+        }
+    } catch (e) {
+        const msg = document.getElementById('bpos-keys-msg');
+        if (msg) msg.textContent = e.message;
+    }
+}
+
+async function commerceSavePosKeys() {
+    const msg = document.getElementById('bpos-keys-msg');
+    try {
+        await commerceFetch('/api/admin/commerce/config', {
+            method: 'POST',
+            body: JSON.stringify({
+                actingAdminId: commerceActor(),
+                config: {
+                    storeName: val('bpos-store'),
+                    storePhone: val('bpos-phone'),
+                    storeAddress: val('bpos-addr'),
+                    storeCity: val('bpos-city'),
+                    storeLat: val('bpos-lat'),
+                    storeLng: val('bpos-lng'),
+                    mapsApiKey: val('bpos-maps'),
+                    defaultMode: val('bpos-mode'),
+                    defaultHyperlocalProvider: val('bpos-hyper'),
+                    tookan: {
+                        enabled: !!(document.getElementById('bpos-tookan-on') && document.getElementById('bpos-tookan-on').checked),
+                        apiKey: val('bpos-tookan'),
+                        sharedSecret: val('bpos-secret')
+                    },
+                    shipday: {
+                        enabled: !!(document.getElementById('bpos-ship-on') && document.getElementById('bpos-ship-on').checked),
+                        apiKey: val('bpos-ship')
+                    }
+                }
+            })
+        });
+        if (msg) {
+            msg.style.color = '#15803d';
+            msg.textContent = 'Tookan, Shipday, and map settings saved.';
+        }
+        commerceFillPosKeys();
+    } catch (e) {
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = e.message;
+        }
+    }
+}
+
+async function bsBookCommerce(provider, mode) {
+    const msg = document.getElementById('bs-commerce-book-msg');
+    const id = parseInt((document.getElementById('bs-courier-order-id') || {}).value, 10);
+    if (!id) {
+        if (msg) msg.textContent = 'Open an order before booking pickup.';
+        return;
+    }
+    if (msg) msg.textContent = 'Booking…';
+    try {
+        const data = await commerceFetch('/api/admin/commerce/orders/' + id + '/book', {
+            method: 'POST',
+            body: JSON.stringify({
+                actingAdminId: commerceActor(),
+                provider,
+                mode,
+                pickupAt: val('bs-commerce-when')
+            })
+        });
+        const o = data.order || {};
+        if (msg) {
+            msg.style.color = '#15803d';
+            msg.textContent =
+                'Booked with ' +
+                (provider === 'shipday' ? 'Shipday' : 'Tookan') +
+                '. Pickup OTP ' +
+                (o.pickupOtp || '—') +
+                ' · Delivery OTP ' +
+                (o.deliveryOtp || '—') +
+                (o.commerceTrackUrl ? ' · ' + o.commerceTrackUrl : '');
+        }
+        if (typeof bsViewOrderTracking === 'function') bsViewOrderTracking(id);
+    } catch (e) {
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = e.message;
+        }
+    }
+}
+
+async function appendCommerceTrackPanel(id) {
+    const body = document.getElementById('bs-tracking-body');
+    if (!body || body.querySelector('.tl') || body.querySelector('#bs-commerce-live')) return;
+    const data = await commerceFetch('/api/admin/commerce/orders/' + id + '/track?actingAdminId=' + encodeURIComponent(commerceActor()));
+    const co = data && data.order;
+    if (!co) return;
+    const box = document.createElement('div');
+    box.id = 'bs-commerce-live';
+    box.style.cssText = 'border:1px solid #99f6e4;background:#f0fdfa;border-radius:12px;padding:14px;margin-bottom:14px;';
+    let inner =
+        '<p style="margin:0 0 6px;font-weight:700;">' +
+        escCommerce(co.commerceProvider === 'shipday' ? 'Shipday' : co.commerceProvider === 'tookan' ? 'Tookan' : 'Shipment') +
+        (co.commerceMode ? ' · ' + escCommerce(co.commerceMode) : '') +
+        '</p>' +
+        '<p style="margin:0 0 8px;font-size:0.85rem;">Pickup OTP <strong>' +
+        escCommerce(co.pickupOtp || '—') +
+        '</strong> · Delivery OTP <strong>' +
+        escCommerce(co.deliveryOtp || '—') +
+        '</strong>' +
+        (co.agentPhone ? ' · Agent ' + escCommerce(co.agentPhone) : '') +
+        '</p>';
+    if (co.commerceTrackUrl) {
+        inner += '<p style="margin:0 0 8px;font-size:0.82rem;"><a href="' + escCommerce(co.commerceTrackUrl) + '" target="_blank" rel="noopener">Public tracking link</a></p>';
+    }
+    if (data.timeline && window.TrackTimeline) {
+        inner += window.TrackTimeline.render(
+            {
+                timeline: data.timeline,
+                live: data.live,
+                awbTrackUrl: co.tookanTrackingLink || co.shipdayTrackingLink || null,
+                trackUrl: co.commerceTrackUrl
+            },
+            { animate: false }
+        );
+    }
+    box.innerHTML = inner;
+    body.insertBefore(box, body.firstChild);
+    if (data.live && window.TrackTimeline) window.TrackTimeline.mount(data.live);
+}
+
+function installCommerceTrackingHook() {
+    if (typeof window.bsViewOrderTracking !== 'function') return false;
+    if (window.bsViewOrderTracking.__commerce) return true;
+    const orig = window.bsViewOrderTracking;
+    const wrapped = async function (id) {
+        const out = await orig.apply(this, arguments);
+        try {
+            await appendCommerceTrackPanel(id);
+        } catch (_) {}
+        return out;
+    };
+    wrapped.__commerce = true;
+    window.bsViewOrderTracking = wrapped;
+    return true;
+}
+
+function bootCommerceEmbeds() {
+    mountBookIntegrations();
+    installCommerceTrackingHook();
+}
+
+document.addEventListener('click', function () {
+    setTimeout(bootCommerceEmbeds, 40);
+});
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootCommerceEmbeds);
+else bootCommerceEmbeds();
