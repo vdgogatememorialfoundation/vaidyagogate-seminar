@@ -309,6 +309,7 @@
     max-width: 180px;
     margin: 0 auto 6px;
     object-fit: contain;
+    mix-blend-mode: multiply;
 }
 
 .cert-sig-name {
