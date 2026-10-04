@@ -6857,6 +6857,7 @@ app.get('/api/doctor/dashboard-stats/:userId', (req, res) => {
         registered_seminars: 0,
         paid_or_confirmed: 0,
         checked_in_seminars: 0,
+        checked_in_days: 0,
         feedback_submitted: 0,
         case_presentations: 0,
         support_tickets: 0,
@@ -6872,8 +6873,24 @@ app.get('/api/doctor/dashboard-stats/:userId', (req, res) => {
             'paid_or_confirmed'
         ],
         [
-            `SELECT COUNT(*) AS c FROM registrations WHERE user_id = ? AND status = 'checked_in'`,
+            `SELECT COUNT(DISTINCT r.id) AS c
+             FROM registrations r
+             LEFT JOIN orders o ON o.registration_id = r.id AND o.status = 'success'
+             LEFT JOIN tickets t ON t.order_id = o.id
+             WHERE r.user_id = ?
+               AND IFNULL(r.status,'') NOT IN ('rejected','cancelled','draft')
+               AND (r.status IN ('checked_in','certificate_issued')
+                    OR IFNULL(t.is_scanned, 0) = 1
+                    OR IFNULL(t.scan_count, 0) > 0)`,
             'checked_in_seminars'
+        ],
+        [
+            `SELECT COUNT(*) AS c
+             FROM tickets t
+             JOIN orders o ON o.id = t.order_id
+             JOIN registrations r ON r.id = o.registration_id
+             WHERE r.user_id = ? AND (IFNULL(t.is_scanned, 0) = 1 OR IFNULL(t.scan_count, 0) > 0)`,
+            'checked_in_days'
         ],
         [
             `SELECT COUNT(*) AS c FROM seminar_feedback WHERE user_id = ?`,

@@ -8304,6 +8304,11 @@ async function loadDoctorDashboardStats() {
         set('stat-registered', d.registered_seminars);
         set('stat-paid', d.paid_or_confirmed);
         set('stat-checked', d.checked_in_seminars);
+        const chkEl = document.getElementById('stat-checked');
+        if (chkEl && chkEl.parentElement) {
+            const days = Number(d.checked_in_days) || 0;
+            chkEl.parentElement.title = days ? days + ' day check-in' + (days === 1 ? '' : 's') + ' recorded' : '';
+        }
         set('stat-feedback', d.feedback_submitted);
         set('stat-abstracts', d.case_presentations != null ? d.case_presentations : d.abstracts_submitted);
         set('stat-ptix', d.participant_tickets);
