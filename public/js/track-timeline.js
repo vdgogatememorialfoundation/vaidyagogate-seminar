@@ -51,7 +51,6 @@
         return (
             '<div class="tl-card"><div><div class="lbl">' + esc(label || 'Courier partner') + '</div><div class="val">' + esc(p.name) + '</div><div class="tl-note" style="margin:0">' + esc(p.service) + '</div></div>' +
             (p.trackingNo ? '<div><div class="lbl">Tracking / AWB</div><div class="val">' + esc(p.trackingNo) + '</div></div>' : '') +
-            (awbUrl ? '<a href="' + esc(awbUrl) + '" target="_blank" rel="noopener">Track on courier site</a>' : '') +
             '</div>'
         );
     }
@@ -72,8 +71,8 @@
             }
         }
         if (step.key === 'shipped' && step.partner) {
-            html += partnerCard(step.partner, data.awbTrackUrl);
-            if (!step.updates.length) html += '<div class="tl-note">Waiting for the first scan from the courier.</div>';
+            html += partnerCard(step.partner, null);
+            if (!step.updates.length && step.state !== 'done') html += '<div class="tl-note">Shipped starts when the parcel is scanned at the local hub.</div>';
         }
         if (step.key === 'out_for_delivery' && step.agent) {
             const a = step.agent;
@@ -91,9 +90,16 @@
                     : '');
         }
         if (data.live && data.live.slot === step.key) {
-            html += '<div class="tl-live">Live driver navigation</div><div class="tl-note">The map follows the driver from the store to the delivery location.</div><div id="tl-map-slot"></div>';
+            const done = data.live.leg === 'done';
+            html +=
+                '<div class="tl-live">' + (done ? 'Delivery route' : 'Live driver map') + '</div>' +
+                '<div class="tl-note">' +
+                (done
+                    ? 'The route from the store to the delivery location is shown here.'
+                    : 'The driver and the route from the store to the delivery location stay on this map.') +
+                '</div><div id="tl-map-slot"></div>';
         } else if (step.key === 'out_for_delivery' && step.agent && step.liveMapAvailable && !data.live) {
-            html += '<div class="tl-warn">Live map is not available yet' + (data.trackUrl ? ' - <a href="' + esc(data.trackUrl) + '" target="_blank" rel="noopener">open tracking page</a>' : '') + '.</div>';
+            html += '<div class="tl-note">The driver map appears here when a location is available.</div>';
         }
         return html;
     }
@@ -174,25 +180,46 @@
             el.__dir = new google.maps.DirectionsRenderer({
                 map: el.__map,
                 suppressMarkers: true,
-                polylineOptions: { strokeColor: '#0f766e', strokeWeight: 5, strokeOpacity: 0.9 }
+                polylineOptions: { strokeColor: '#0f766e', strokeWeight: 5, strokeOpacity: 0.95 }
             });
             el.__markers = {};
         }
+        const bounds = new google.maps.LatLngBounds();
         const pin = (key, pos, title, label) => {
-            if (!pos) return;
+            if (!pos) {
+                if (el.__markers[key]) {
+                    el.__markers[key].setMap(null);
+                    delete el.__markers[key];
+                }
+                return;
+            }
+            bounds.extend(pos);
             if (!el.__markers[key]) el.__markers[key] = new google.maps.Marker({ map: el.__map, title, label });
+            el.__markers[key].setMap(el.__map);
             el.__markers[key].setPosition(pos);
+            el.__markers[key].setLabel(label);
         };
         pin('store', live.store, 'Store', 'S');
         pin('drop', live.drop, 'Delivery location', 'H');
-        pin('agent', live.agent, 'Delivery agent', 'D');
-        const target = live.leg === 'to_store' ? live.store : live.drop;
-        const origin = live.agent || (live.leg === 'to_store' ? null : live.store);
-        const key = JSON.stringify([origin, target]);
+        pin('agent', live.agent, 'Driver', 'D');
+        if (!bounds.isEmpty()) el.__map.fitBounds(bounds, 48);
+        let origin = null;
+        let target = null;
+        if (live.leg === 'done' || !live.agent) {
+            origin = live.store;
+            target = live.drop;
+        } else if (live.leg === 'to_store') {
+            origin = live.agent;
+            target = live.store || live.drop;
+        } else {
+            origin = live.agent;
+            target = live.drop || live.store;
+        }
+        const key = JSON.stringify([origin, target, live.leg]);
         if (origin && target && el.__routeKey !== key) {
             el.__routeKey = key;
             new google.maps.DirectionsService().route({ origin, destination: target, travelMode: 'DRIVING' }, (result, status) => {
-                if (status === 'OK') el.__dir.setDirections(result);
+                if (status === 'OK' && el.__dir) el.__dir.setDirections(result);
             });
         }
     }

@@ -170,4 +170,70 @@ assert.strictEqual(nestedHook.shipdayOrderId, '20625');
 assert.strictEqual(nestedHook.orderCode, 'BK2');
 assert.ok(nestedHook.detail.indexOf('9111111111') !== -1);
 
+assert.strictEqual(commerce.isDeskNoise('Created By API - Gogate Products - 884520'), true);
+assert.strictEqual(commerce.isDeskNoise('Deleted by 884520'), true);
+assert.strictEqual(commerce.isDeskNoise('Out for delivery'), false);
+
+const placed = commerce.shipdayOrderToUpdate({
+    orderStatus: { orderState: 'ORDER_ASSIGNED' },
+    restaurant: { latitude: 18.5, longitude: 73.8 },
+    customer: { latitude: 18.6, longitude: 73.9 },
+    assignedCarrier: { id: 12, name: 'Ravi' }
+});
+assert.strictEqual(placed.kind, 'agent_assigned');
+assert.strictEqual(placed.storeLat, 18.5);
+assert.strictEqual(placed.dropLng, 73.9);
+assert.strictEqual(placed.carrierId, '12');
+
+const shop = require('../lib/shop-timeline');
+const journey = require('../lib/book-tracking-journey');
+assert.strictEqual(journey.classifyScanStage('Pickup requested from courier partner', ''), 'ordered');
+assert.strictEqual(journey.classifyScanStage('Shipment arrived at Courier Facility', ''), 'shipped');
+const onlyPickup = journey.buildAmazonStyleJourney({
+    status: 'confirmed',
+    fulfillmentType: 'courier',
+    commerceProvider: 'shipday',
+    commerceStage: 'pickup_scheduled',
+    courierShipmentStatus: 'shipped',
+    courierTrackStatus: 'in_transit',
+    events: [{ type: 'pickup_scheduled', title: 'Pickup requested from courier partner', at: '2026-10-04T10:00:00Z' }],
+    courierTrackEvents: [{ description: 'Created By API - Gogate Products - 884520', at: '2026-10-04T10:00:00Z' }]
+});
+assert.strictEqual(onlyPickup.headline, 'Ordered');
+assert.strictEqual(onlyPickup.providerLabel, 'Gogate Products');
+assert.ok(!onlyPickup.updateTimeline.some((row) => /created by api/i.test(row.title)));
+
+const noiseOrder = {
+    status: 'confirmed',
+    commerceStage: 'pickup_scheduled',
+    commerceMode: 'hyperlocal',
+    commerceProvider: 'shipday',
+    fulfillmentType: 'courier',
+    orderCode: 'BK1'
+};
+const noiseEvents = [
+    { title: 'Created By API - Gogate Products - 884520', detail: 'Book desk', city: 'Book desk', kind: 'update', at: '2026-10-04T10:00:00Z' },
+    { title: 'Deleted by 884520', detail: 'Book desk', city: 'Book desk', kind: 'update', at: '2026-10-04T10:01:00Z' },
+    { title: 'Pickup requested from courier partner', kind: 'pickup_scheduled', at: '2026-10-04T10:02:00Z' }
+];
+const noiseTl = shop.buildShopTimeline(noiseOrder, noiseEvents, {});
+const shippedStep = noiseTl.steps.find((s) => s.key === 'shipped');
+assert.notStrictEqual(shippedStep.state, 'done');
+const packedStep = noiseTl.steps.find((s) => s.key === 'packed');
+assert.ok(!packedStep.updates.some((u) => /created by api|deleted by/i.test(u.title)));
+assert.strictEqual(shop.buildLiveView(noiseOrder, noiseTl, 'map-key'), null);
+
+const assigned = Object.assign({}, noiseOrder, { agentName: 'Ravi', agentPhone: '9800000000', storeLat: 18.5, storeLng: 73.8, dropLat: 18.6, dropLng: 73.9, agentLat: 18.52, agentLng: 73.85, liveLeg: 'to_store' });
+const assignedTl = shop.buildShopTimeline(assigned, noiseEvents, {});
+const live = shop.buildLiveView(assigned, assignedTl, 'map-key');
+assert.ok(live);
+assert.strictEqual(live.leg, 'to_store');
+assert.ok(live.agent && live.store && live.drop);
+
+const deliveredTl = shop.buildShopTimeline(Object.assign({}, assigned, { status: 'delivered', commerceStage: 'delivered' }), [], {});
+const done = shop.buildLiveView(Object.assign({}, assigned, { status: 'delivered', commerceStage: 'delivered' }), deliveredTl, 'map-key');
+assert.strictEqual(done.slot, 'delivered');
+assert.strictEqual(done.leg, 'done');
+assert.strictEqual(done.agent, null);
+
 console.log('commerce phrase tests passed');

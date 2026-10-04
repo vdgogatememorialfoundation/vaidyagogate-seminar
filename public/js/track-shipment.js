@@ -20,13 +20,24 @@
         return new URLSearchParams(window.location.search).get(name) || '';
     }
 
+    let lastCommerceSig = '';
+
     function renderResult(data) {
         const root = document.getElementById('track-shipment-result');
         const poll = document.getElementById('track-shipment-poll');
         if (!root || !data || !data.order) return;
         const o = data.order;
         root.classList.remove('hidden');
-        if (window.BookTrackingUI) {
+        if (o.commerceTimeline && window.TrackTimeline) {
+            const live = o.commerceLive || null;
+            const sig = JSON.stringify(o.commerceTimeline) + '|' + (live && live.slot ? live.slot : '') + '|' + (live && live.leg ? live.leg : '');
+            if (sig !== lastCommerceSig) {
+                lastCommerceSig = sig;
+                root.innerHTML = window.TrackTimeline.render({ timeline: o.commerceTimeline, live: live }, { animate: false });
+            }
+            window.TrackTimeline.mount(live);
+        } else if (window.BookTrackingUI) {
+            lastCommerceSig = '';
             root.innerHTML = window.BookTrackingUI.renderPackageTracker(o.deliveryJourney, o.courierTrackEvents || [], {
                 destination: o.destination
             });
@@ -54,13 +65,14 @@
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Could not track shipment');
         renderResult(data);
-        if (
+        const liveMap = data.order && data.order.commerceLive && data.order.commerceLive.leg && data.order.commerceLive.leg !== 'done';
+        const journeyLive =
             data.order &&
             data.order.deliveryJourney &&
             data.order.deliveryJourney.isLive &&
             !data.order.isCancelled &&
-            !data.order.shipmentCancelled
-        ) {
+            !data.order.shipmentCancelled;
+        if (liveMap || journeyLive) {
             startPoll(payload);
         } else {
             stopPoll();

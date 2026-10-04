@@ -13,7 +13,8 @@
             drawn = '';
             return;
         }
-        const sig = JSON.stringify(t) + '|' + (shipment.awbTrackUrl || '');
+        const live = shipment.live;
+        const sig = JSON.stringify(t) + '|' + (live && live.slot ? live.slot : '') + '|' + (live && live.leg ? live.leg : '');
         if (sig !== drawn) {
             drawn = sig;
             tracker.innerHTML = TrackTimeline.render(
