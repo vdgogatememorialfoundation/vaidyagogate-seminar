@@ -4924,8 +4924,8 @@ async function dispatchCompletedDayCertificates(resend) {
     if (
         !confirm(
             again
-                ? 'Resend the certificate email and WhatsApp to everyone who completed the issuing day, including people already emailed?'
-                : 'Send the certificate issued email and WhatsApp to everyone who completed the issuing day’s scan and has not been emailed for that day? The message lists each day they attended.'
+                ? 'Resend the certificate email and WhatsApp to doctors who checked in on any day, including people already emailed? One certificate names only the days they attended.'
+                : 'Send the certificate email and WhatsApp to doctors who checked in on any day and have not yet been emailed for that set of days? One day names that day only. Both days say they attended both days.'
         )
     ) {
         return;
@@ -15093,6 +15093,7 @@ async function loadFeedbackForSeminar() {
     }
 
     currentFeedbackSeminarId = seminarId;
+    loadFeedbackEmailDays(seminarId);
     
     try {
         // Load statistics
@@ -15113,6 +15114,128 @@ async function loadFeedbackForSeminar() {
         __adminFeedbackCache = Array.isArray(feedbacks) ? feedbacks : [];
         renderFeedbackTable();
     } catch(err) { console.error(err); }
+}
+
+async function loadFeedbackEmailDays(seminarId) {
+    const box = document.getElementById('feedback-email-days');
+    const subject = document.getElementById('feedback-email-subject');
+    const body = document.getElementById('feedback-email-body');
+    const status = document.getElementById('feedback-email-status');
+    if (!box) return;
+    box.innerHTML = '';
+    if (status) status.textContent = '';
+    if (!seminarId) return;
+    let days = [];
+    let title = '';
+    try {
+        const sel = document.getElementById('feedback-seminar-filter');
+        title = sel && sel.selectedOptions && sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : '';
+        const res = await fetch('/api/admin/seminars/' + encodeURIComponent(seminarId) + '/days');
+        days = await res.json();
+        if (!Array.isArray(days)) days = [];
+    } catch (err) {
+        console.error(err);
+        days = [];
+    }
+    if (!days.length) {
+        box.innerHTML = '<p style="margin:0;color:#64748b;">No seminar days found. The email will go to everyone with a venue check-in.</p>';
+    } else {
+        days.forEach(function (d) {
+            const id = 'feedback-day-' + d.id;
+            const label = document.createElement('label');
+            label.style.cssText = 'display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:6px 10px;';
+            label.innerHTML =
+                '<input type="checkbox" class="feedback-email-day" value="' +
+                String(d.id) +
+                '" checked id="' +
+                id +
+                '"> ' +
+                escapeHtml(d.title || 'Day') +
+                (d.dayDate || d.day_date
+                    ? ' · ' + escapeHtml(String(d.dayDate || d.day_date).slice(0, 10))
+                    : '');
+            box.appendChild(label);
+        });
+    }
+    if (subject && !subject.dataset.edited) {
+        subject.value = 'Please share your feedback' + (title ? ' — ' + title : '');
+    }
+    if (body && !body.dataset.edited) {
+        body.value =
+            'Thank you for attending. Your feedback helps the Vaidya Gogate Memorial Foundation plan the next seminar.\n\nPlease open your doctor portal and complete the seminar feedback form:\n{{feedback_url}}';
+    }
+    if (subject && !subject.dataset.bound) {
+        subject.dataset.bound = '1';
+        subject.addEventListener('input', function () { subject.dataset.edited = '1'; });
+    }
+    if (body && !body.dataset.bound) {
+        body.dataset.bound = '1';
+        body.addEventListener('input', function () { body.dataset.edited = '1'; });
+    }
+}
+
+async function sendFeedbackEmailToCheckedIn() {
+    const seminarId = document.getElementById('feedback-seminar-filter') && document.getElementById('feedback-seminar-filter').value;
+    const status = document.getElementById('feedback-email-status');
+    const subject = (document.getElementById('feedback-email-subject') || {}).value || '';
+    const message = (document.getElementById('feedback-email-body') || {}).value || '';
+    if (!seminarId) return alert('Select a seminar');
+    const dayIds = Array.prototype.map.call(
+        document.querySelectorAll('.feedback-email-day:checked'),
+        function (el) { return parseInt(el.value, 10); }
+    ).filter(function (n) { return n > 0; });
+    const dayBoxes = document.querySelectorAll('.feedback-email-day');
+    if (dayBoxes.length && !dayIds.length) return alert('Select at least one day');
+    if (!String(subject).trim() || !String(message).trim()) return alert('Enter a subject and message');
+    if (status) {
+        status.style.color = '#475569';
+        status.textContent = 'Counting checked-in participants…';
+    }
+    try {
+        const previewRes = await fetch('/api/admin/feedback/email-checked-in', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ seminarId: parseInt(seminarId, 10), dayIds: dayIds, dryRun: true })
+        });
+        const preview = await previewRes.json();
+        if (!previewRes.ok) throw new Error(preview.error || 'Could not count recipients');
+        const n = Number(preview.recipients) || 0;
+        if (!n) {
+            if (status) {
+                status.style.color = '#b45309';
+                status.textContent = 'No checked-in participants with an email address for the selected days.';
+            }
+            return;
+        }
+        if (!confirm('Send this feedback email to ' + n + ' checked-in participant' + (n === 1 ? '' : 's') + '?')) {
+            if (status) status.textContent = 'Not sent.';
+            return;
+        }
+        if (status) status.textContent = 'Queueing emails…';
+        const res = await fetch('/api/admin/feedback/email-checked-in', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                seminarId: parseInt(seminarId, 10),
+                dayIds: dayIds,
+                subject: String(subject).trim(),
+                message: String(message).trim()
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Could not send feedback email');
+        if (status) {
+            status.style.color = '#15803d';
+            status.textContent = 'Queued ' + (data.queued || 0) + ' feedback email' + ((data.queued || 0) === 1 ? '' : 's') + '.';
+        }
+    } catch (err) {
+        console.error(err);
+        if (status) {
+            status.style.color = '#b91c1c';
+            status.textContent = err.message || 'Send failed';
+        }
+        alert(err.message || 'Send failed');
+    }
 }
 
 // ==================== CONTACT INQUIRIES (website) ====================

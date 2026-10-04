@@ -240,6 +240,14 @@
     font-weight: 600;
 }
 
+.cert-attendance {
+    display: block;
+    margin-top: 10px;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: var(--cert-navy, #0b2046);
+}
+
 .cert-meta-container {
     display: flex;
     justify-content: center;

@@ -6739,7 +6739,10 @@ function mapDoctorCertificateTrackingRows(rows) {
                     certStatusLabel = 'Approved — releases on schedule';
                 } else {
                     certStatus = 'issued';
-                    certStatusLabel = 'Certificate issued — download available';
+                    certStatusLabel =
+                        Number(row.seminar_day_count) >= 2
+                            ? 'Certificate issued for the days you attended'
+                            : 'Certificate issued — download available';
                 }
         return {
             registrationId: row.registration_id,
@@ -8354,14 +8357,17 @@ app.post('/api/scanner/mark', (req, res) => {
                                 newScanCount >= scansRequired &&
                                 issuesOnThisDay;
                             let scanMsg = 'Attendance marked. Doctor tracking updated.';
-                            if (gate && gate.multiDay && !issuesOnThisDay) {
+                            if (gate && gate.multiDay && issuesOnThisDay && certEligibleNow) {
+                                scanMsg =
+                                    'Attendance marked. This day is on the doctor certificate. Checking in on another day updates the same certificate.';
+                            } else if (gate && gate.multiDay && !issuesOnThisDay) {
                                 const thisDay = String(row.scan_event_title || 'This day').trim();
                                 const finalDay = gate.certDayTitle || 'the final day';
                                 scanMsg =
                                     thisDay +
-                                    ' check-in recorded. The certificate is issued on the ' +
+                                    ' check-in recorded. The volunteer certificate is issued on the ' +
                                     finalDay +
-                                    ' scan, not on this day.';
+                                    ' scan.';
                             } else if (scansRequired === 2) {
                                 if (newScanCount === 1) {
                                     scanMsg =

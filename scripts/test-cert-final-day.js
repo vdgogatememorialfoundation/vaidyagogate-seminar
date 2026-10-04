@@ -1,5 +1,7 @@
 /**
- * Multi-day seminars issue the certificate on the final day scan only.
+ * Doctor certificates are issued for any attended day.
+ * One day names that day only. Both days stay on one certificate.
+ * Volunteer certificates still wait for the final day.
  */
 const assert = require('assert');
 const certVerify = require('../lib/certificate-verify');
@@ -43,8 +45,11 @@ const days = [
 ];
 
 assert.strictEqual(certVerify.certificateIssuingDay(days).id, 11);
-assert.strictEqual(certVerify.scanIssuesCertificate(10, days), false);
+assert.strictEqual(certVerify.scanIssuesCertificate(10, days), true);
 assert.strictEqual(certVerify.scanIssuesCertificate(11, days), true);
+assert.strictEqual(certVerify.scanIssuesCertificate(99, days), false);
+assert.strictEqual(certVerify.scanIssuesCertificate(10, days, { finalDayOnly: true }), false);
+assert.strictEqual(certVerify.scanIssuesCertificate(11, days, { finalDayOnly: true }), true);
 assert.strictEqual(
     certVerify.scanIssuesCertificate(null, [{ id: 1, title: 'Only day', sort_order: 0, is_active: 1 }]),
     true
@@ -66,8 +71,9 @@ const hidden = certVerify.doctorCertificateViewState({
     certificate_verify_manual: 1,
     event_date: '2099-01-01'
 });
-assert.strictEqual(hidden.phase, 'awaiting_final_day');
-assert.strictEqual(hidden.canViewCertificate, false);
+assert.strictEqual(hidden.phase, 'ready');
+assert.strictEqual(hidden.canViewCertificate, true);
+assert.strictEqual(hidden.awaitingFinalDay, false);
 
 const ready = certVerify.doctorCertificateViewState({
     cert_scans_required: 1,
@@ -179,8 +185,12 @@ async function main() {
     const gate = await new Promise((resolve, reject) => {
         certVerify.scanMayIssueCertificate(db, 1, 10, (err, out) => (err ? reject(err) : resolve(out)));
     });
-    assert.strictEqual(gate.issuesCertificate, false);
+    assert.strictEqual(gate.issuesCertificate, true);
     assert.strictEqual(gate.certDayTitle, 'Day 2');
+    const volunteerGate = await new Promise((resolve, reject) => {
+        certVerify.scanMayIssueVolunteerCertificate(db, 1, 10, (err, out) => (err ? reject(err) : resolve(out)));
+    });
+    assert.strictEqual(volunteerGate.issuesCertificate, false);
 
     const sync1 = await new Promise((resolve, reject) => {
         volunteerCertFlow.syncDualCertEligibilityFromTicketScan(db, certVerify, 100, (err, out) =>
@@ -191,22 +201,48 @@ async function main() {
     assert.strictEqual(db.state.certInserts, 0);
 
     const fin1 = await once(db, (d, id, cb) => certVerify.finalizeParticipantCertificateAfterScan(d, id, {}, cb), 100);
-    assert.strictEqual(fin1.reason, 'awaiting_final_day');
-    assert.strictEqual(db.state.certInserts, 0);
+    assert.notStrictEqual(fin1 && fin1.reason, 'awaiting_final_day');
+    assert.ok(fin1 && (fin1.scheduledRelease || fin1.issued || fin1.certId));
+    assert.ok(db.state.certInserts >= 1);
 
     await new Promise((resolve, reject) => {
         volunteerCertFlow.syncDualCertEligibilityFromTicketScan(db, certVerify, 101, (err) =>
             err ? reject(err) : resolve()
         );
     });
-    assert.strictEqual(db.state.certInserts, 1);
+    assert.ok(db.state.certInserts >= 1);
     assert.strictEqual(db.state.cert.scan_verified, 1);
 
     const fin2 = await once(db, (d, id, cb) => certVerify.finalizeParticipantCertificateAfterScan(d, id, {}, cb), 101);
     assert.notStrictEqual(fin2 && fin2.reason, 'awaiting_final_day');
     assert.ok(fin2 && (fin2.scheduledRelease || fin2.issued || fin2.certId));
 
-    console.log('cert final-day checks passed');
+    const dayLib = require('../lib/registration-day-scans');
+    const one = [
+        { dayId: 5, title: 'Day 1', dayDate: '2026-10-03', scanned: true },
+        { dayId: 6, title: 'Day 2', dayDate: '2026-10-04', scanned: false }
+    ];
+    const both = [
+        { dayId: 5, title: 'Day 1', dayDate: '2026-10-03', scanned: true },
+        { dayId: 6, title: 'Day 2', dayDate: '2026-10-04', scanned: true }
+    ];
+    assert.strictEqual(dayLib.attendanceKey(one), '5');
+    assert.strictEqual(dayLib.attendanceKey(both), '5,6');
+    assert.ok(/for Day 1 \(3 October 2026\) only/.test(dayLib.attendanceCertificateLine(one)));
+    assert.ok(/^Attended both days:/.test(dayLib.attendanceCertificateLine(both)));
+    assert.strictEqual(dayLib.attendanceCertificateLine([{ dayId: 1, title: 'Only', dayDate: '2026-10-03', scanned: true }]), '');
+    assert.strictEqual(
+        certVerify.attendanceAlreadyNotified('2026-10-03T09:51:23Z', '', one),
+        true
+    );
+    assert.strictEqual(
+        certVerify.attendanceAlreadyNotified('2026-10-03T09:51:23Z', '', both),
+        false
+    );
+    assert.strictEqual(certVerify.attendanceAlreadyNotified('2026-10-04T04:00:00Z', '5,6', both), true);
+    assert.strictEqual(certVerify.attendanceAlreadyNotified('2026-10-04T04:00:00Z', '5', both), false);
+
+    console.log('cert attendance-day checks passed');
 }
 
 main().catch((err) => {

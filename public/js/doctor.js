@@ -5566,7 +5566,7 @@ function renderDoctorCertWaitingBlock(track) {
             (day2Done ? 'fa-check-circle' : 'fa-circle') +
             '"></i> ' +
             escapeHtml(finalDay) +
-            (day2Done ? ' scanned' : ' not scanned — certificate issues on this scan') +
+            (day2Done ? ' scanned' : ' not scanned — attending adds this day to your certificate') +
             '</p>';
     }
     if (t.certCountdown) {
@@ -8094,7 +8094,11 @@ function buildDoctorCertPipelineTimeline(r) {
         !multi &&
         (!!row.checkinComplete ||
             ['checked_in', 'awaiting_approval', 'approved_pending_design', 'scheduled_release', 'issued'].indexOf(st) >= 0);
-    const scansDone = multi ? finalScanned : singleScansDone && st !== 'awaiting_checkin' && st !== 'not_attended';
+    const listedDayScanned =
+        Array.isArray(row.dayScans) && row.dayScans.some(function (d) { return d && d.scanned; });
+    const scansDone = multi
+        ? listedDayScanned || day1Scanned || finalScanned
+        : singleScansDone && st !== 'awaiting_checkin' && st !== 'not_attended';
     const approved =
         !row.awaitingFinalDay &&
         scansDone &&
@@ -8141,11 +8145,8 @@ function buildDoctorCertPipelineTimeline(r) {
                     icon: isLast ? 'fa-calendar-check' : 'fa-qrcode',
                     state: state,
                     desc: d.scanned
-                        ? d.title + ' scanned at the venue.' +
-                          (isLast ? ' Certificate eligibility is recorded from this scan.' : '')
-                        : isLast
-                          ? d.title + ' not scanned yet. The e-certificate is issued on this scan.'
-                          : 'Scan the ' + d.title + ' e-ticket at the venue.',
+                        ? d.title + ' scanned at the venue. This day is included on your certificate.'
+                        : 'Scan the ' + d.title + ' e-ticket at the venue. Attending adds this day to the same certificate.',
                     at: d.scanned ? d.scanTime : null
                 });
             });
@@ -8166,8 +8167,8 @@ function buildDoctorCertPipelineTimeline(r) {
                 icon: 'fa-calendar-check',
                 state: !isPaid || !day1Scanned ? 'upcoming' : finalScanned ? 'completed' : 'active',
                 desc: finalScanned
-                    ? finalTitle + ' scanned. Certificate eligibility is recorded from this scan.'
-                    : finalTitle + ' not scanned yet. The e-certificate is issued on this scan.',
+                    ? finalTitle + ' scanned. This day is included on your certificate.'
+                    : finalTitle + ' not scanned yet. Attending adds this day to the same certificate.',
                 at: finalScanned ? row.scanTime : null
             });
         }

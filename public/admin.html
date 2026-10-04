@@ -474,6 +474,18 @@
                     <select id="feedback-seminar-filter" onchange="loadFeedbackForSeminar()" style="margin-bottom: 20px;">
                         <option value="">-- Select Seminar --</option>
                     </select>
+
+                    <div id="feedback-email-card" style="margin:0 0 20px;padding:16px;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;">
+                        <h3 style="margin:0 0 8px;color:#0369a1;">Email checked-in participants</h3>
+                        <p style="margin:0 0 12px;color:#475569;font-size:0.9rem;">Send one feedback email to every doctor who checked in on the days you select. Someone who attended only one day is included when that day is selected. Someone who attended both days receives a single email.</p>
+                        <div id="feedback-email-days" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px;"></div>
+                        <label for="feedback-email-subject" style="font-weight:600;">Subject</label>
+                        <input type="text" id="feedback-email-subject" style="width:100%;max-width:640px;padding:8px;margin:6px 0 12px;border:1px solid #cbd5e1;border-radius:8px;" placeholder="Select a seminar to prepare the email">
+                        <label for="feedback-email-body" style="font-weight:600;">Message</label>
+                        <textarea id="feedback-email-body" rows="6" style="width:100%;max-width:640px;padding:8px;margin-top:6px;border:1px solid #cbd5e1;border-radius:8px;" placeholder="Thank them and ask for feedback"></textarea>
+                        <p id="feedback-email-status" style="margin:8px 0;font-size:0.88rem;color:#475569;"></p>
+                        <button type="button" class="btn-primary" onclick="sendFeedbackEmailToCheckedIn()"><i class="fas fa-paper-plane"></i> Email checked-in participants</button>
+                    </div>
                     
                     <div id="feedback-stats" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; margin-bottom: 20px;">
                         <div class="card" style="margin-bottom: 0;">
@@ -3493,6 +3505,6 @@
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
     <script src="/js/track-timeline.js?v=20261003tl"></script>
     <script src="/js/admin-commerce.js?v=20261003tl"></script>
-    <script src="/js/admin.js?v=20261004days"></script>
+    <script src="/js/admin.js?v=20261004attend"></script>
 </body>
 </html>
