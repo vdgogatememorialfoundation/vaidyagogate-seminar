@@ -720,11 +720,15 @@ function parseDoctorModulesMap(raw) {
 }
 
 function modulesMapToAllowedSetClient(modulesMap) {
-    const m = modulesMap && typeof modulesMap === 'object' ? modulesMap : {};
+    const m = modulesMap && typeof modulesMap === 'object' ? Object.assign({}, modulesMap) : {};
     const keys = Object.keys(m);
-    if (!keys.length) return null;
-    if (!keys.some((k) => m[k] === true)) return null;
-    return new Set(keys.filter((k) => m[k] === true));
+    if (keys.length && keys.some((k) => m[k] === true) && !Object.prototype.hasOwnProperty.call(m, 'tab-books')) {
+        m['tab-books'] = true;
+    }
+    const nextKeys = Object.keys(m);
+    if (!nextKeys.length) return null;
+    if (!nextKeys.some((k) => m[k] === true)) return null;
+    return new Set(nextKeys.filter((k) => m[k] === true));
 }
 
 function isLegacyVolunteerDefaultModulesClient(userModulesRaw) {

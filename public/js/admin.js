@@ -18951,12 +18951,12 @@ async function saveDoctorPortalModulesAdminConfig() {
     const doctorPortalModulesRegular = {};
     document.querySelectorAll('#doctor-portal-modules-regular input[data-doctor-global-mod]').forEach((inp) => {
         const id = inp.getAttribute('data-doctor-global-mod');
-        if (id && inp.checked) doctorPortalModulesRegular[id] = true;
+        if (id) doctorPortalModulesRegular[id] = !!inp.checked;
     });
     const doctorPortalModulesVolunteer = {};
     document.querySelectorAll('#doctor-portal-modules-volunteer input[data-doctor-global-mod]').forEach((inp) => {
         const id = inp.getAttribute('data-doctor-global-mod');
-        if (id && inp.checked) doctorPortalModulesVolunteer[id] = true;
+        if (id) doctorPortalModulesVolunteer[id] = !!inp.checked;
     });
     const config = Object.assign({}, base, {
         doctorPortalModulesRegular,
@@ -18970,7 +18970,7 @@ async function saveDoctorPortalModulesAdminConfig() {
         const res = await fetch('/api/admin/portal-auth-config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ actingAdminId: adm.id, config, resetAllDoctorModuleOverrides: true })
+            body: JSON.stringify({ actingAdminId: adm.id, config, resetAllDoctorModuleOverrides: false })
         });
         const data = await res.json();
         if (!res.ok || !data.success) {
@@ -19114,7 +19114,7 @@ async function savePortalAuthAdminConfig() {
     const doctorPortalModulesRegular = {};
     document.querySelectorAll('#doctor-portal-modules-regular input[data-doctor-global-mod]').forEach((inp) => {
         const id = inp.getAttribute('data-doctor-global-mod');
-        if (id && inp.checked) doctorPortalModulesRegular[id] = true;
+        if (id) doctorPortalModulesRegular[id] = !!inp.checked;
     });
     if (document.querySelectorAll('#doctor-portal-modules-regular input[data-doctor-global-mod]').length) {
         config.doctorPortalModulesRegular = doctorPortalModulesRegular;
@@ -19122,7 +19122,7 @@ async function savePortalAuthAdminConfig() {
     const doctorPortalModulesVolunteer = {};
     document.querySelectorAll('#doctor-portal-modules-volunteer input[data-doctor-global-mod]').forEach((inp) => {
         const id = inp.getAttribute('data-doctor-global-mod');
-        if (id && inp.checked) doctorPortalModulesVolunteer[id] = true;
+        if (id) doctorPortalModulesVolunteer[id] = !!inp.checked;
     });
     if (document.querySelectorAll('#doctor-portal-modules-volunteer input[data-doctor-global-mod]').length) {
         config.doctorPortalModulesVolunteer = doctorPortalModulesVolunteer;
