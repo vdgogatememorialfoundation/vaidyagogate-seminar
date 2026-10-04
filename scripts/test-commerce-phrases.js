@@ -70,4 +70,50 @@ assert.strictEqual(commerce.withinIstWindow('09:00', '18:00', 10 * 60), true);
 assert.strictEqual(commerce.withinIstWindow('09:00', '18:00', 8 * 60), false);
 assert.strictEqual(commerce.withinIstWindow('09:00', '18:00', 18 * 60), true);
 
+const sampleCfg = {
+    tookan: { apiKey: 'k', enabled: true },
+    shipday: { apiKey: 's', enabled: true },
+    storeName: 'Desk',
+    storePhone: '9000000000',
+    storeAddress: 'Clinic road',
+    storeCity: 'Pune'
+};
+const sampleOrder = {
+    orderCode: 'BK1',
+    buyerName: 'Asha',
+    buyerPhone: '9111111111',
+    deliveryAddress: 'Lane 2',
+    shippingCity: 'Nashik',
+    shippingState: 'MH',
+    shippingPincode: '422001',
+    pickupOtp: '4321',
+    deliveryOtp: '8765',
+    totalAmount: 100,
+    items: []
+};
+const parcel = commerce.buildTookanTaskBody(sampleCfg, sampleOrder, 'logistics');
+assert.strictEqual(parcel.is_multiple_tasks, 0);
+assert.strictEqual(parcel.tags, 'parcel');
+assert.strictEqual(parcel.job_description, 'Parcel BK1');
+assert.strictEqual(parcel.job_pickup_name, 'Gogate Products');
+assert.strictEqual(parcel.has_pickup, 1);
+assert.strictEqual(parcel.has_delivery, 1);
+assert.ok(JSON.stringify(parcel).indexOf('4321') === -1);
+assert.ok(JSON.stringify(parcel).indexOf('8765') === -1);
+const hyper = commerce.buildTookanTaskBody(sampleCfg, sampleOrder, 'hyperlocal');
+assert.strictEqual(hyper.is_multiple_tasks, undefined);
+assert.strictEqual(hyper.tags, 'hyperlocal');
+assert.ok(hyper.job_description.indexOf('Hyperlocal') === 0);
+const pickupJob = commerce.tookanOtpsFromJob({ job_type: 0, job_otp: '4321' });
+assert.strictEqual(pickupJob.pickupOtp, '4321');
+assert.strictEqual(pickupJob.deliveryOtp, '');
+const dropJob = commerce.tookanOtpsFromJob({ job_type: 1, job_validate_otp: '7788', pickup_job_validate_otp: '1100' });
+assert.strictEqual(dropJob.pickupOtp, '1100');
+assert.strictEqual(dropJob.deliveryOtp, '7788');
+const shipBody = commerce.buildShipdayOrderBody(sampleCfg, sampleOrder);
+assert.strictEqual(shipBody.restaurantName, 'Gogate Products');
+assert.ok(JSON.stringify(shipBody).indexOf('4321') === -1);
+assert.ok(JSON.stringify(shipBody).indexOf('8765') === -1);
+assert.ok(!/otp/i.test(shipBody.deliveryInstruction));
+
 console.log('commerce phrase tests passed');

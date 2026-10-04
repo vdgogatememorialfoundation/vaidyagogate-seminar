@@ -99,11 +99,11 @@ function renderCommerceDesk() {
                 escCommerce(o.buyerPhone || '') +
                 '</span></td><td>' +
                 escCommerce(commerceStageLabel(o.commerceStage)) +
-                '</td><td>Pickup <strong>' +
-                escCommerce(o.pickupOtp || '—') +
-                '</strong><br>Delivery <strong>' +
-                escCommerce(o.deliveryOtp || '—') +
-                '</strong></td><td>' +
+                '</td><td>' +
+                (o.commerceProvider === 'shipday'
+                    ? '—'
+                    : 'Pickup <strong>' + escCommerce(o.pickupOtp || '—') + '</strong><br>Delivery <strong>' + escCommerce(o.deliveryOtp || '—') + '</strong>') +
+                '</td><td>' +
                 '<button type="button" class="btn-primary" style="margin:2px;background:#0f766e;" onclick="commerceSetStage(' +
                 o.id +
                 ',\'accepted\')">Accept</button>' +
@@ -468,7 +468,9 @@ async function commerceBookShipment() {
         const o = data.order || {};
         if (msg) {
             msg.textContent =
-                'Booked. Pickup OTP ' + (o.pickupOtp || '—') + ' · Delivery OTP ' + (o.deliveryOtp || '—') + (o.commerceTrackUrl ? ' · ' + o.commerceTrackUrl : '');
+                'Booked with Gogate Products.' +
+                (o.commerceProvider === 'shipday' ? '' : ' Pickup OTP ' + (o.pickupOtp || '—') + ' · Delivery OTP ' + (o.deliveryOtp || '—')) +
+                (o.commerceTrackUrl ? ' · ' + o.commerceTrackUrl : '');
         }
     } catch (e) {
         if (msg) msg.textContent = e.message;
@@ -503,17 +505,17 @@ function renderCommerceShipment(data, animate) {
     return (
         '<p><strong>' +
         escCommerce(o.orderCode) +
-        '</strong> · ' +
-        escCommerce(o.commerceProvider || 'No courier booked yet') +
-        ' ' +
-        escCommerce(o.commerceMode || '') +
+        '</strong> · Gogate Products' +
+        (o.commerceMode ? ' · ' + escCommerce(o.commerceMode) : '') +
         (hyper ? '' : '') +
         '</p>' +
-        '<p>Pickup OTP <strong>' +
-        escCommerce(data.pickupOtp || o.pickupOtp || '—') +
-        '</strong> · Delivery OTP <strong>' +
-        escCommerce(data.deliveryOtp || o.deliveryOtp || '—') +
-        '</strong></p>' +
+        (o.commerceProvider === 'shipday'
+            ? ''
+            : '<p>Pickup OTP <strong>' +
+              escCommerce(data.pickupOtp || o.pickupOtp || '—') +
+              '</strong> · Delivery OTP <strong>' +
+              escCommerce(data.deliveryOtp || o.deliveryOtp || '—') +
+              '</strong></p>') +
         (o.commerceTrackUrl ? '<p><a href="' + escCommerce(o.commerceTrackUrl) + '" target="_blank">Customer tracking link</a></p>' : '') +
         (window.TrackTimeline && data.timeline
             ? TrackTimeline.render(
@@ -678,8 +680,8 @@ function mountBookIntegrations() {
         box.id = 'bs-tookan-book-box';
         box.style.cssText = 'border:2px solid #0f766e;border-radius:12px;padding:16px;margin:0 0 16px;';
         box.innerHTML =
-            '<div style="font-weight:800;color:#0f766e;margin-bottom:6px;">Tookan / Shipday realtime pickup</div>' +
-            '<p style="font-size:0.8rem;color:#64748b;margin:0 0 10px;">Book logistics on Tookan, or hyperlocal pickup and delivery on Tookan or Shipday. Pickup and delivery OTPs are issued with the booking.</p>' +
+            '<div style="font-weight:800;color:#0f766e;margin-bottom:6px;">Gogate Products</div>' +
+            '<p style="font-size:0.8rem;color:#64748b;margin:0 0 10px;">Customers see Gogate Products as the courier partner. Tookan logistics creates one parcel and uses the pickup and drop OTPs Tookan issues. Shipday does not use an OTP.</p>' +
             '<label style="font-size:0.78rem;">Pickup time (IST)<input id="bs-commerce-when" type="datetime-local" style="width:100%;padding:8px;margin:4px 0 10px;"></label>' +
             '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
             '<button type="button" class="btn-primary" style="background:#0d9488;flex:1;min-width:140px;" onclick="bsBookCommerce(\'tookan\',\'logistics\')">Tookan logistics</button>' +
@@ -800,12 +802,8 @@ async function bsBookCommerce(provider, mode) {
         if (msg) {
             msg.style.color = '#15803d';
             msg.textContent =
-                'Booked with ' +
-                (provider === 'shipday' ? 'Shipday' : 'Tookan') +
-                '. Pickup OTP ' +
-                (o.pickupOtp || '—') +
-                ' · Delivery OTP ' +
-                (o.deliveryOtp || '—') +
+                'Booked with Gogate Products.' +
+                (provider === 'shipday' ? '' : ' Pickup OTP ' + (o.pickupOtp || '—') + ' · Delivery OTP ' + (o.deliveryOtp || '—')) +
                 (o.commerceTrackUrl ? ' · ' + o.commerceTrackUrl : '');
         }
         if (typeof bsViewOrderTracking === 'function') bsViewOrderTracking(id);
@@ -828,16 +826,19 @@ async function appendCommerceTrackPanel(id) {
     box.style.cssText = 'border:1px solid #99f6e4;background:#f0fdfa;border-radius:12px;padding:14px;margin-bottom:14px;';
     let inner =
         '<p style="margin:0 0 6px;font-weight:700;">' +
-        escCommerce(co.commerceProvider === 'shipday' ? 'Shipday' : co.commerceProvider === 'tookan' ? 'Tookan' : 'Shipment') +
+        'Gogate Products' +
         (co.commerceMode ? ' · ' + escCommerce(co.commerceMode) : '') +
         '</p>' +
-        '<p style="margin:0 0 8px;font-size:0.85rem;">Pickup OTP <strong>' +
-        escCommerce(co.pickupOtp || '—') +
-        '</strong> · Delivery OTP <strong>' +
-        escCommerce(co.deliveryOtp || '—') +
-        '</strong>' +
-        (co.agentPhone ? ' · Agent ' + escCommerce(co.agentPhone) : '') +
-        '</p>';
+        (co.commerceProvider === 'shipday'
+            ? ''
+            : '<p style="margin:0 0 8px;font-size:0.85rem;">Pickup OTP <strong>' +
+              escCommerce(co.pickupOtp || '—') +
+              '</strong> · Delivery OTP <strong>' +
+              escCommerce(co.deliveryOtp || '—') +
+              '</strong>' +
+              (co.agentPhone ? ' · Agent ' + escCommerce(co.agentPhone) : '') +
+              '</p>') +
+        (co.commerceProvider === 'shipday' && co.agentPhone ? '<p style="margin:0 0 8px;font-size:0.85rem;">Agent ' + escCommerce(co.agentPhone) + '</p>' : '');
     if (co.commerceTrackUrl) {
         inner += '<p style="margin:0 0 8px;font-size:0.82rem;"><a href="' + escCommerce(co.commerceTrackUrl) + '" target="_blank" rel="noopener">Public tracking link</a></p>';
     }
