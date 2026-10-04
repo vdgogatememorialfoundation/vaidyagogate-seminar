@@ -470,6 +470,16 @@
         document.getElementById('ls-stat-dup').textContent = stats.duplicateCount || 0;
         document.getElementById('ls-stat-fail').textContent = stats.failedCount || 0;
         document.getElementById('ls-stat-tix').textContent = stats.ticketsScanned || 0;
+        const leftEl = document.getElementById('ls-stat-left');
+        if (leftEl) {
+            leftEl.textContent = stats.remaining || 0;
+            const sub = document.getElementById('ls-stat-left-sub');
+            if (sub) {
+                const total = stats.ticketsTotal || 0;
+                const pct = total ? Math.round(((stats.ticketsScanned || 0) / total) * 100) : 0;
+                sub.textContent = total ? 'of ' + total + ' tickets · ' + pct + '% in' : '';
+            }
+        }
         if (stats.lastEventId > lastEventId) lastEventId = stats.lastEventId;
         const scope = document.getElementById('ls-stat-scope');
         if (scope) {
@@ -548,6 +558,9 @@
                 ' rejected · ' +
                 d.ticketsScanned +
                 ' unique tickets</div>' +
+                '<div class="ls-daycard-left"><i class="fas fa-hourglass-half"></i> <b>' +
+                (d.remaining || 0) +
+                '</b> yet to check in</div>' +
                 (scanners ? '<ul class="ls-daycard-scanners">' + scanners + '</ul>' : '') +
                 '</button>';
         });

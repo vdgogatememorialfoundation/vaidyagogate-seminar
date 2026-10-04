@@ -744,3 +744,7 @@
 .scan-card-prev { margin-top: 8px; padding: 6px 10px; border-radius: 8px; font-size: 0.8rem; font-weight: 600; }
 .scan-card-prev.is-yes { background: #d1fae5; color: #065f46; }
 .scan-card-prev.is-no { background: #fee2e2; color: #991b1b; }
+
+.kiosk-stat--left .kiosk-stat-icon { background: #ffedd5; color: #c2410c; }
+.kiosk-stat-sub { display: block; font-size: 0.74rem; color: #64748b; margin-top: 2px; }
+.ls-daycard-left { margin-top: 6px; font-size: 0.82rem; color: #c2410c; font-weight: 600; }

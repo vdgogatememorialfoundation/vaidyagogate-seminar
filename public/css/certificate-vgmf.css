@@ -1,13 +1,18 @@
-/* VGMF certificate — traditional premium gold / navy theme (landscape A4) */
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap');
+
+/* VGMF certificate — formal navy / gold theme (landscape A4) */
 :root {
-    --cert-gold: #D4AF37;
-    --cert-gold-light: #F3E5AB;
-    --cert-gold-deep: #AA8022;
+    --cert-gold: #B8902F;
+    --cert-gold-light: #E9D9A6;
+    --cert-gold-deep: #8A6A1B;
     --cert-navy: #0B2046;
-    --cert-charcoal: #333333;
+    --cert-charcoal: #3A3A3A;
     --cert-ink: #111111;
     --cert-name: #0B2046;
-    --cert-bg: #FDFBF7;
+    --cert-bg: #FFFDF8;
+    --cert-serif: 'Playfair Display', 'Times New Roman', Georgia, serif;
+    --cert-body-serif: 'Cormorant Garamond', Georgia, 'Times New Roman', serif;
+    --cert-sans: 'Roboto', Arial, sans-serif;
 }
 
 * {
@@ -17,46 +22,61 @@
 .cert-print-body {
     margin: 0;
     padding: 16px;
-    background: #e5e5e5;
-    font-family: 'Roboto', Arial, sans-serif;
+    background: #dfe3ea;
+    font-family: var(--cert-sans);
     color: var(--cert-ink);
 }
 
+/* Page: navy outer frame, gold rule, ivory field with a soft vignette */
 .cert-page {
     position: relative;
     width: 297mm;
     max-width: 100%;
     min-height: 210mm;
     margin: 0 auto;
-    background: var(--cert-bg);
-    border: 12px solid var(--cert-gold);
-    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.15);
+    background:
+        radial-gradient(ellipse at 50% 42%, rgba(255, 255, 255, 0.9) 0%, rgba(255, 255, 255, 0) 62%),
+        linear-gradient(135deg, rgba(184, 144, 47, 0.07) 0%, rgba(184, 144, 47, 0) 35%, rgba(11, 32, 70, 0.05) 100%),
+        var(--cert-bg);
+    border: 9px solid var(--cert-navy);
+    box-shadow: 0 18px 50px rgba(11, 32, 70, 0.22);
     overflow: hidden;
-    padding: 8px;
+    padding: 7px;
 }
 
+/* Gold keyline just inside the navy frame */
 .cert-page::before {
     content: '';
     position: absolute;
-    inset: 8px;
-    border: 3px double var(--cert-gold-deep);
+    inset: 0;
+    border: 2px solid var(--cert-gold);
     pointer-events: none;
     z-index: 1;
 }
 
+/* Fine inner rule with corner brackets */
 .cert-page::after {
     content: '';
     position: absolute;
-    inset: 16px;
+    inset: 13px;
     border: 1px solid var(--cert-gold);
     pointer-events: none;
     z-index: 1;
+    background:
+        linear-gradient(var(--cert-gold), var(--cert-gold)) top left / 46px 3px no-repeat,
+        linear-gradient(var(--cert-gold), var(--cert-gold)) top left / 3px 46px no-repeat,
+        linear-gradient(var(--cert-gold), var(--cert-gold)) top right / 46px 3px no-repeat,
+        linear-gradient(var(--cert-gold), var(--cert-gold)) top right / 3px 46px no-repeat,
+        linear-gradient(var(--cert-gold), var(--cert-gold)) bottom left / 46px 3px no-repeat,
+        linear-gradient(var(--cert-gold), var(--cert-gold)) bottom left / 3px 46px no-repeat,
+        linear-gradient(var(--cert-gold), var(--cert-gold)) bottom right / 46px 3px no-repeat,
+        linear-gradient(var(--cert-gold), var(--cert-gold)) bottom right / 3px 46px no-repeat;
 }
 
 .cert-inner {
     position: relative;
     z-index: 2;
-    padding: 30px 60px;
+    padding: 26px 64px 24px;
     text-align: center;
     min-height: calc(210mm - 40px);
     display: flex;
@@ -64,123 +84,194 @@
     justify-content: center;
 }
 
+/* Faint monogram watermark behind the text */
+.cert-inner::before {
+    content: 'VGMF';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    font-family: var(--cert-serif);
+    font-weight: 700;
+    font-size: 15rem;
+    letter-spacing: 0.08em;
+    color: var(--cert-navy);
+    opacity: 0.035;
+    pointer-events: none;
+    z-index: -1;
+    white-space: nowrap;
+}
+
 .cert-header {
     display: flex;
     flex-direction: column;
     align-items: center;
-    margin-bottom: 20px;
+    margin-bottom: 6px;
 }
 
 .cert-logo-center {
-    max-height: 80px;
-    max-width: 80px;
-    margin-bottom: 12px;
+    max-height: 74px;
+    max-width: 74px;
+    margin-bottom: 8px;
 }
 
 .cert-logo-fallback {
-    width: 64px;
-    height: 64px;
+    width: 60px;
+    height: 60px;
     border-radius: 50%;
-    background: var(--cert-gold);
+    background: var(--cert-navy);
+    border: 3px solid var(--cert-gold);
     color: #fff;
     font-size: 0.75rem;
     font-weight: 700;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-family: 'Roboto', Arial, sans-serif;
-    margin-bottom: 12px;
+    font-family: var(--cert-sans);
+    margin-bottom: 8px;
 }
 
 .cert-org {
-    font-size: 1.25rem;
-    color: var(--cert-charcoal);
+    font-family: var(--cert-sans);
+    font-size: 1.05rem;
+    color: var(--cert-navy);
     margin: 0;
-    letter-spacing: 0.05em;
-    font-weight: 600;
+    letter-spacing: 0.22em;
+    font-weight: 700;
     text-transform: uppercase;
 }
 
+/* Ornamental divider: line — diamond — line */
 .cert-separator {
-    width: 150px;
-    height: 2px;
+    position: relative;
+    width: 260px;
+    height: 12px;
+    margin: 10px auto 8px;
+    background:
+        linear-gradient(90deg, rgba(184, 144, 47, 0), var(--cert-gold)) left center / calc(50% - 14px) 1px no-repeat,
+        linear-gradient(90deg, var(--cert-gold), rgba(184, 144, 47, 0)) right center / calc(50% - 14px) 1px no-repeat;
+}
+
+.cert-separator::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 8px;
+    height: 8px;
     background: var(--cert-gold);
-    margin: 16px auto;
+    transform: translate(-50%, -50%) rotate(45deg);
 }
 
 .cert-title {
-    font-family: 'Roboto', Arial, sans-serif;
-    font-size: 3.5rem;
+    font-family: var(--cert-serif);
+    font-size: 3.4rem;
     font-weight: 700;
     color: var(--cert-navy);
-    letter-spacing: 0.15em;
-    margin: 0;
-    line-height: 1;
+    letter-spacing: 0.18em;
+    margin: 4px 0 0;
+    line-height: 1.05;
     text-transform: uppercase;
 }
 
 .cert-of {
-    display: block;
-    margin: 12px auto 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin: 8px auto 16px;
     color: var(--cert-gold-deep);
-    font-family: 'Roboto', Arial, sans-serif;
-    font-size: 1.1rem;
-    font-weight: 600;
-    letter-spacing: 0.25em;
+    font-family: var(--cert-sans);
+    font-size: 0.95rem;
+    font-weight: 500;
+    letter-spacing: 0.34em;
     text-transform: uppercase;
 }
 
+.cert-of::before,
+.cert-of::after {
+    content: '';
+    width: 70px;
+    height: 1px;
+    background: var(--cert-gold);
+    opacity: 0.8;
+}
+
 .cert-lead {
-    font-size: 1.2rem;
+    font-family: var(--cert-body-serif);
+    font-size: 1.3rem;
     color: var(--cert-charcoal);
-    margin: 0 0 16px;
+    margin: 0 0 6px;
     font-style: italic;
 }
 
 .cert-name {
-    font-family: 'Roboto', Arial, sans-serif;
-    font-weight: 700;
-    font-size: 3.6rem;
+    font-family: var(--cert-serif);
+    font-style: italic;
+    font-weight: 600;
+    font-size: 3.2rem;
     color: var(--cert-name);
-    margin: 0 0 20px;
-    line-height: 1.1;
-    text-shadow: 1px 1px 2px rgba(0,0,0,0.05);
+    margin: 0 0 8px;
+    line-height: 1.15;
 }
 
+/* Gold underline that fades at both ends */
 .cert-name-underline {
-    width: 60%;
-    max-width: 500px;
-    height: 1px;
-    background: var(--cert-charcoal);
-    margin: -16px auto 20px;
-    opacity: 0.3;
+    width: 62%;
+    max-width: 560px;
+    height: 2px;
+    background: linear-gradient(90deg, rgba(184, 144, 47, 0), var(--cert-gold) 22%, var(--cert-gold) 78%, rgba(184, 144, 47, 0));
+    margin: 0 auto 16px;
+    opacity: 1;
 }
 
 .cert-body {
-    font-size: 1.2rem;
-    line-height: 1.6;
-    max-width: 700px;
-    margin: 0 auto 20px;
+    font-family: var(--cert-body-serif);
+    font-size: 1.32rem;
+    font-weight: 500;
+    line-height: 1.55;
+    max-width: 760px;
+    margin: 0 auto 16px;
     color: var(--cert-charcoal);
+}
+
+.cert-body strong {
+    color: var(--cert-navy);
+    font-weight: 600;
 }
 
 .cert-meta-container {
     display: flex;
     justify-content: center;
-    gap: 40px;
-    margin-bottom: 24px;
+    align-items: center;
+    gap: 0;
+    margin: 0 auto 18px;
+    padding: 8px 0;
+    border-top: 1px solid rgba(184, 144, 47, 0.45);
+    border-bottom: 1px solid rgba(184, 144, 47, 0.45);
+    max-width: 760px;
+    width: 100%;
 }
 
 .cert-meta {
-    font-family: 'Roboto', Arial, sans-serif;
-    font-size: 0.95rem;
+    font-family: var(--cert-sans);
+    font-size: 0.92rem;
     margin: 0;
     color: var(--cert-charcoal);
+    padding: 0 28px;
+}
+
+.cert-meta-container .cert-meta + .cert-meta {
+    border-left: 1px solid rgba(184, 144, 47, 0.55);
 }
 
 .cert-meta strong {
-    color: var(--cert-navy);
-    font-weight: 600;
+    color: var(--cert-gold-deep);
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    font-size: 0.74rem;
+    margin-right: 6px;
 }
 
 .cert-footer {
@@ -188,8 +279,8 @@
     justify-content: space-between;
     align-items: flex-end;
     margin-top: auto;
-    padding: 0 20px;
-    max-width: 900px;
+    padding: 0 10px;
+    max-width: 940px;
     width: 100%;
     margin-left: auto;
     margin-right: auto;
@@ -205,35 +296,37 @@
 }
 
 .cert-sig-line {
-    width: 200px;
+    width: 210px;
     height: 1px;
-    border-bottom: 1px solid var(--cert-charcoal);
+    border-bottom: 1px solid var(--cert-navy);
     margin: 0 auto 8px;
-    opacity: 0.6;
+    opacity: 0.7;
 }
 
 .cert-sig-img {
     display: block;
-    max-height: 60px;
+    max-height: 56px;
     max-width: 180px;
-    margin: 0 auto 8px;
+    margin: 0 auto 6px;
     object-fit: contain;
 }
 
 .cert-sig-name {
-    font-family: 'Roboto', Arial, sans-serif;
+    font-family: var(--cert-sans);
     font-weight: 700;
     margin: 0;
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     color: var(--cert-navy);
     text-transform: uppercase;
+    letter-spacing: 0.06em;
 }
 
 .cert-sig-title {
-    font-family: 'Roboto', Arial, sans-serif;
-    margin: 4px 0 0;
-    font-size: 0.85rem;
+    font-family: var(--cert-sans);
+    margin: 3px 0 0;
+    font-size: 0.8rem;
     color: var(--cert-charcoal);
+    letter-spacing: 0.04em;
 }
 
 .cert-footer-center {
@@ -246,43 +339,50 @@
 
 .cert-qr-wrap {
     text-align: center;
-    margin-bottom: 12px;
+    margin-bottom: 8px;
 }
 
 .cert-qr {
-    width: 90px;
-    height: 90px;
+    width: 84px;
+    height: 84px;
     display: block;
     margin: 0 auto;
     border: 2px solid var(--cert-gold);
+    outline: 1px solid var(--cert-navy);
+    outline-offset: 2px;
     padding: 4px;
     background: #fff;
 }
 
 .cert-qr-caption {
-    font-size: 0.75rem;
+    font-size: 0.68rem;
     color: var(--cert-charcoal);
-    margin: 6px 0 0;
-    font-family: 'Roboto', Arial, sans-serif;
+    margin: 7px 0 0;
+    font-family: var(--cert-sans);
     text-transform: uppercase;
-    letter-spacing: 0.05em;
+    letter-spacing: 0.14em;
 }
 
 .cert-id-missing {
-    font-family: 'Roboto', Arial, sans-serif;
+    font-family: var(--cert-sans);
     font-size: 0.8rem;
     color: #b45309;
 }
 
 .cert-ids-text {
     text-align: center;
-    border-top: 1px solid rgba(212, 175, 55, 0.3);
-    padding-top: 12px;
+    padding-top: 6px;
 }
 
 .cert-id-line {
-    margin: 2px 0;
-    font-size: 0.85rem;
+    margin: 1px 0;
+    font-size: 0.74rem;
+    padding: 0;
+    letter-spacing: 0.02em;
+}
+
+.cert-id-line strong {
+    font-size: 0.66rem;
 }
 
 .cert-print-hint {
@@ -290,7 +390,7 @@
     font-size: 0.85rem;
     color: #64748b;
     margin-top: 16px;
-    font-family: 'Roboto', Arial, sans-serif;
+    font-family: var(--cert-sans);
 }
 
 @media print {
@@ -307,6 +407,8 @@
         width: 100%;
         min-height: auto;
         page-break-inside: avoid;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
     }
 }
 

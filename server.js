@@ -6906,9 +6906,43 @@ app.get('/api/doctor/dashboard-stats/:userId', (req, res) => {
             'participant_tickets'
         ]
     ];
+    out.volunteer_certificates = 0;
+    out.participant_certificates = 0;
+    out.certificates = 0;
+    const countVolunteerCerts = (done) => {
+        db.all(
+            `SELECT id FROM volunteer_certificates WHERE user_id = ? AND IFNULL(enabled, 0) = 1`,
+            [uid],
+            (vErr, vRows) => {
+                if (vErr || !vRows || !vRows.length) return done();
+                let left = vRows.length;
+                vRows.forEach((v) => {
+                    certRender.canViewVolunteerCert(db, v.id, uid, (_e, ok) => {
+                        if (ok) out.volunteer_certificates += 1;
+                        if (--left === 0) done();
+                    });
+                });
+            }
+        );
+    };
+    const finish = () => countVolunteerCerts(() => {
+        db.all(DOCTOR_CERT_TRACKING_SQL, [uid], (cErr, cRows) => {
+            if (!cErr) {
+                try {
+                    const seen = new Set();
+                    mapDoctorCertificateTrackingRows(cRows).forEach((tr) => {
+                        if (tr.canViewCertificate && tr.certId != null) seen.add(tr.certId);
+                    });
+                    out.participant_certificates = seen.size;
+                } catch (_) {}
+            }
+            out.certificates = out.participant_certificates + out.volunteer_certificates;
+            res.json(out);
+        });
+    });
     let i = 0;
     const next = () => {
-        if (i >= steps.length) return res.json(out);
+        if (i >= steps.length) return finish();
         const [sql, key] = steps[i];
         i++;
         db.get(sql, [uid], (err, row) => {

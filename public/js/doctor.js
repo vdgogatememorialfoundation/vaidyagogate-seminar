@@ -5760,11 +5760,20 @@ async function loadDoctorCertificates() {
             const card = document.createElement('div');
             card.className = 'card';
             card.style.marginBottom = '16px';
-            const canView = track ? !!track.canViewCertificate : false;
+            // Volunteer certificates are independent of the participant certificate's day-wise status.
+            const canView = c._volunteer
+                ? c.can_view != null
+                    ? !!c.can_view
+                    : Number(c.enabled) === 1 && Number(c.scan_verified) === 1
+                : track
+                  ? !!track.canViewCertificate
+                  : false;
             if (!canView) {
                 renderWaitingCard(
                     title,
-                    track || { certHiddenReason: 'Your certificate is not available yet. Complete venue scans and wait for foundation approval.' }
+                    c._volunteer
+                        ? { certHiddenReason: 'Your volunteer certificate becomes available once your attendance for the final event day is recorded.' }
+                        : track || { certHiddenReason: 'Your certificate is not available yet. Complete venue scans and wait for foundation approval.' }
                 );
                 return;
             }
@@ -8308,6 +8317,13 @@ async function loadDoctorDashboardStats() {
         if (chkEl && chkEl.parentElement) {
             const days = Number(d.checked_in_days) || 0;
             chkEl.parentElement.title = days ? days + ' day check-in' + (days === 1 ? '' : 's') + ' recorded' : '';
+        }
+        set('stat-certs', d.certificates != null ? d.certificates : 0);
+        const certEl = document.getElementById('stat-certs');
+        if (certEl && certEl.parentElement) {
+            const vc = Number(d.volunteer_certificates) || 0;
+            const pc = Number(d.participant_certificates) || 0;
+            certEl.parentElement.title = pc + ' participant · ' + vc + ' volunteer';
         }
         set('stat-feedback', d.feedback_submitted);
         set('stat-abstracts', d.case_presentations != null ? d.case_presentations : d.abstracts_submitted);
