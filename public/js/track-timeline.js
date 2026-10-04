@@ -34,12 +34,13 @@
 
     function updates(list) {
         if (!list || !list.length) return '';
+        const ordered = list.slice().reverse();
         return (
             '<ul class="tl-sub">' +
-            list
+            ordered
                 .map(
-                    (u) =>
-                        '<li><b>' + esc(u.title) + '</b><span>' + esc(when(u.at)) + (u.city ? ' · ' + esc(u.city) : '') + (u.detail ? ' · ' + esc(u.detail) : '') + '</span></li>'
+                    (u, i) =>
+                        '<li' + (i === ordered.length - 1 ? ' class="tl-current"' : '') + '><b>' + esc(u.title) + '</b><span>' + esc(when(u.at)) + (u.city ? ' · ' + esc(u.city) : '') + (u.detail ? ' · ' + esc(u.detail) : '') + '</span></li>'
                 )
                 .join('') +
             '</ul>'
@@ -121,8 +122,10 @@
 
     /** Call after the rendered HTML is in the page. */
     function mount(live) {
+        if (!live) return;
+        if (mapEl && mapEl.isConnected && mapEl.__map) return paint(live);
         const slot = document.getElementById('tl-map-slot');
-        if (!slot || !live) return;
+        if (!slot) return;
         if (!mapEl) {
             mapEl = document.createElement('div');
             mapEl.className = 'tl-map';

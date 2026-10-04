@@ -3,20 +3,24 @@
     const token = params.get('token') || '';
     const sub = document.getElementById('sub');
     const tracker = document.getElementById('tracker');
-    let seen = false;
+    let drawn = '';
 
     function render(shipment) {
         const t = shipment.timeline;
         sub.textContent = shipment.orderCode + (t && t.cancelled ? ' · Cancelled' : '');
         if (!t) {
             tracker.textContent = 'No tracking yet.';
+            drawn = '';
             return;
         }
-        tracker.innerHTML = TrackTimeline.render(
-            { timeline: t, live: shipment.live, awbTrackUrl: shipment.awbTrackUrl },
-            { animate: !seen }
-        );
-        seen = true;
+        const sig = JSON.stringify(t) + '|' + (shipment.awbTrackUrl || '');
+        if (sig !== drawn) {
+            drawn = sig;
+            tracker.innerHTML = TrackTimeline.render(
+                { timeline: t, live: shipment.live, awbTrackUrl: shipment.awbTrackUrl },
+                { animate: false }
+            );
+        }
         TrackTimeline.mount(shipment.live);
     }
 
