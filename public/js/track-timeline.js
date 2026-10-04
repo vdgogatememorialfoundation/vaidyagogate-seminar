@@ -444,7 +444,7 @@
             new google.maps.DirectionsService().route({ origin, destination: target, travelMode: 'DRIVING' }, (result, status) => {
                 if (status !== 'OK') return;
                 const pts = routePoints(result);
-                if (!moving) {
+                if (!el.__agentLive) {
                     el.__path = null;
                     if (el.__remain) el.__remain.setPath(pts);
                     if (el.__doneLine) el.__doneLine.setPath([]);
