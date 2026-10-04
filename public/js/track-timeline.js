@@ -92,11 +92,11 @@
         if (data.live && data.live.slot === step.key) {
             const done = data.live.leg === 'done';
             html +=
-                '<div class="tl-live">' + (done ? 'Delivery route' : 'Live driver map') + '</div>' +
+                '<div class="tl-live">' + (done ? 'Delivery route' : 'Live delivery partner') + '</div>' +
                 '<div class="tl-note">' +
                 (done
                     ? 'The route from the store to the delivery location is shown here.'
-                    : 'The driver and the route from the store to the delivery location stay on this map.') +
+                    : 'The delivery partner moves along the route from the latest location.') +
                 '</div><div id="tl-map-slot"></div>';
         } else if (step.key === 'out_for_delivery' && step.agent && step.liveMapAvailable && !data.live) {
             html += '<div class="tl-note">The driver map appears here when a location is available.</div>';
@@ -154,22 +154,212 @@
         document.body.appendChild(s);
     }
 
+    function toRad(d) {
+        return (d * Math.PI) / 180;
+    }
+
+    function haversine(a, b) {
+        if (!a || !b) return 0;
+        const R = 6371000;
+        const dLat = toRad(b.lat - a.lat);
+        const dLng = toRad(b.lng - a.lng);
+        const s = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+        return 2 * R * Math.asin(Math.min(1, Math.sqrt(s)));
+    }
+
+    function bearingDeg(a, b) {
+        const y = Math.sin(toRad(b.lng - a.lng)) * Math.cos(toRad(b.lat));
+        const x = Math.cos(toRad(a.lat)) * Math.sin(toRad(b.lat)) - Math.sin(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.cos(toRad(b.lng - a.lng));
+        return (Math.atan2(y, x) * 180) / Math.PI + 360;
+    }
+
+    function buildCum(path) {
+        const cum = [0];
+        for (let i = 1; i < path.length; i++) cum.push(cum[i - 1] + haversine(path[i - 1], path[i]));
+        return cum;
+    }
+
+    function along(path, cum, meters) {
+        if (!path.length) return null;
+        if (meters <= 0) {
+            return { lat: path[0].lat, lng: path[0].lng, heading: path.length > 1 ? bearingDeg(path[0], path[1]) % 360 : 0 };
+        }
+        const total = cum[cum.length - 1];
+        if (meters >= total) {
+            const n = path.length - 1;
+            return { lat: path[n].lat, lng: path[n].lng, heading: n > 0 ? bearingDeg(path[n - 1], path[n]) % 360 : 0 };
+        }
+        let i = 1;
+        while (i < cum.length && cum[i] < meters) i++;
+        const span = cum[i] - cum[i - 1] || 1;
+        const t = (meters - cum[i - 1]) / span;
+        const a = path[i - 1];
+        const b = path[i];
+        return { lat: a.lat + (b.lat - a.lat) * t, lng: a.lng + (b.lng - a.lng) * t, heading: bearingDeg(a, b) % 360 };
+    }
+
+    function projectMeters(path, cum, point) {
+        let best = { meters: 0, dist: Infinity };
+        for (let i = 1; i < path.length; i++) {
+            const a = path[i - 1];
+            const b = path[i];
+            const abLat = b.lat - a.lat;
+            const abLng = b.lng - a.lng;
+            const denom = abLat * abLat + abLng * abLng;
+            let t = denom ? ((point.lat - a.lat) * abLat + (point.lng - a.lng) * abLng) / denom : 0;
+            t = Math.max(0, Math.min(1, t));
+            const p = { lat: a.lat + abLat * t, lng: a.lng + abLng * t };
+            const dist = haversine(point, p);
+            if (dist < best.dist) best = { meters: cum[i - 1] + haversine(a, p), dist: dist };
+        }
+        return best;
+    }
+
+    function tailPath(path, cum, meters) {
+        const start = along(path, cum, meters);
+        const out = [{ lat: start.lat, lng: start.lng }];
+        for (let i = 1; i < path.length; i++) if (cum[i] >= meters) out.push(path[i]);
+        return out;
+    }
+
+    function headPath(path, cum, meters) {
+        const end = along(path, cum, meters);
+        const out = [];
+        for (let i = 0; i < path.length; i++) {
+            if (cum[i] > meters) break;
+            out.push(path[i]);
+        }
+        out.push({ lat: end.lat, lng: end.lng });
+        return out;
+    }
+
+    function markerIcon(svg, w, h) {
+        return {
+            url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
+            scaledSize: new google.maps.Size(w, h),
+            anchor: new google.maps.Point(w / 2, h - 2)
+        };
+    }
+
+    const STORE_SVG =
+        '<svg xmlns="http://www.w3.org/2000/svg" width="42" height="52" viewBox="0 0 42 52"><path d="M21 50s16-14.2 16-28A16 16 0 1 0 5 22c0 13.8 16 28 16 28z" fill="#0f766e"/><circle cx="21" cy="21" r="11" fill="#fff"/><path d="M14 26V17h14v9M14 21h14M17 17v-2h8v2" fill="none" stroke="#0f766e" stroke-width="1.7" stroke-linejoin="round"/></svg>';
+    const HOME_SVG =
+        '<svg xmlns="http://www.w3.org/2000/svg" width="42" height="52" viewBox="0 0 42 52"><path d="M21 50s16-14.2 16-28A16 16 0 1 0 5 22c0 13.8 16 28 16 28z" fill="#0f1111"/><circle cx="21" cy="21" r="11" fill="#fff"/><path d="M14 25V19l7-5 7 5v6h-5v-4h-4v4z" fill="#0f1111"/></svg>';
+    const SCOOTER =
+        '<svg viewBox="0 0 64 64" width="40" height="40"><circle cx="32" cy="32" r="30" fill="#067d62"/><g fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="20" cy="42" r="5"/><circle cx="46" cy="42" r="5"/><path d="M20 42h12l7-14h9M30 28l5 14M40 16h7l5 12"/></g></svg>';
+
+    function ensureRider(el) {
+        if (el.__rider) return el.__rider;
+        function Rider() {
+            this.div = null;
+            this.pos = null;
+            this.heading = 0;
+            this.visible = false;
+        }
+        Rider.prototype = Object.create(google.maps.OverlayView.prototype);
+        Rider.prototype.onAdd = function () {
+            const div = document.createElement('div');
+            div.className = 'tl-rider';
+            div.innerHTML = '<div class="tl-rider-pulse"></div><div class="tl-rider-bike">' + SCOOTER + '</div>';
+            this.div = div;
+            this.getPanes().overlayMouseTarget.appendChild(div);
+        };
+        Rider.prototype.draw = function () {
+            if (!this.div || !this.pos || !this.getProjection()) return;
+            const pt = this.getProjection().fromLatLngToDivPixel(new google.maps.LatLng(this.pos.lat, this.pos.lng));
+            if (!pt) return;
+            this.div.style.left = pt.x + 'px';
+            this.div.style.top = pt.y + 'px';
+            this.div.style.display = this.visible ? 'block' : 'none';
+            const bike = this.div.querySelector('.tl-rider-bike');
+            if (bike) bike.style.transform = 'rotate(' + ((this.heading || 0) - 90) + 'deg)';
+        };
+        Rider.prototype.setRider = function (pos, heading, visible) {
+            this.pos = pos;
+            this.heading = heading || 0;
+            this.visible = !!visible && !!pos;
+            this.draw();
+        };
+        Rider.prototype.onRemove = function () {
+            if (this.div && this.div.parentNode) this.div.parentNode.removeChild(this.div);
+            this.div = null;
+        };
+        const rider = new Rider();
+        rider.setMap(el.__map);
+        el.__rider = rider;
+        return rider;
+    }
+
+    function ensureMotion(el) {
+        if (el.__raf) return;
+        let last = 0;
+        let lineAt = 0;
+        const step = (now) => {
+            el.__raf = requestAnimationFrame(step);
+            if (!last) last = now;
+            const dt = Math.min(0.05, (now - last) / 1000);
+            last = now;
+            const path = el.__path;
+            const cum = el.__cum;
+            if (!path || !cum || !el.__agentLive || !el.__rider) return;
+            const total = cum[cum.length - 1] || 0;
+            const gps = el.__gpsMeters || 0;
+            const cap = Math.min(total, gps + (el.__speed > 0 ? 70 : 0));
+            let m = el.__agentMeters || 0;
+            if (m < gps) m += (gps - m) * Math.min(1, dt * 1.8);
+            else if (m > cap) m += (cap - m) * Math.min(1, dt * 2.2);
+            else m = Math.min(cap, m + (el.__speed || 0) * dt);
+            el.__agentMeters = m;
+            const at = along(path, cum, m);
+            el.__rider.setRider(at, at.heading, true);
+            if (now - lineAt > 140) {
+                lineAt = now;
+                if (el.__remain) el.__remain.setPath(tailPath(path, cum, m));
+                if (el.__doneLine) el.__doneLine.setPath(headPath(path, cum, m));
+            }
+        };
+        el.__raf = requestAnimationFrame(step);
+    }
+
+    function applyPath(el, path) {
+        if (!path || path.length < 2) return;
+        el.__path = path;
+        el.__cum = buildCum(path);
+        const gps = el.__pendingGps;
+        const hit = gps ? projectMeters(path, el.__cum, gps) : { meters: 0, dist: 0 };
+        el.__gpsMeters = hit.meters;
+        if (el.__agentMeters == null || Math.abs(el.__agentMeters - hit.meters) > 400) el.__agentMeters = hit.meters;
+        if (el.__remain) el.__remain.setPath(tailPath(path, el.__cum, el.__agentMeters || 0));
+        if (el.__doneLine) el.__doneLine.setPath(headPath(path, el.__cum, el.__agentMeters || 0));
+    }
+
+    function routePoints(result) {
+        const pts = [];
+        const leg = result.routes && result.routes[0] && result.routes[0].legs && result.routes[0].legs[0];
+        if (!leg) return pts;
+        leg.steps.forEach((step) => {
+            (step.path || []).forEach((ll) => pts.push({ lat: ll.lat(), lng: ll.lng() }));
+        });
+        return pts;
+    }
+
     function paint(live) {
         const el = mapEl;
         if (!el) return;
         const center = live.agent || live.store || live.drop;
         if (!center) {
-            el.textContent = 'Waiting for the driver location...';
+            el.textContent = 'Waiting for the delivery partner location...';
             return;
         }
         if (!el.__map) {
             el.textContent = '';
             el.__map = new google.maps.Map(el, {
                 center,
-                zoom: 14,
+                zoom: 15,
                 mapTypeControl: false,
                 streetViewControl: false,
                 fullscreenControl: true,
+                gestureHandling: 'greedy',
                 styles: [
                     { featureType: 'poi', stylers: [{ visibility: 'off' }] },
                     { featureType: 'transit', stylers: [{ visibility: 'off' }] },
@@ -179,35 +369,35 @@
                     { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#f8fafc' }] }
                 ]
             });
-            el.__dir = new google.maps.DirectionsRenderer({
-                map: el.__map,
-                suppressMarkers: true,
-                polylineOptions: { strokeColor: '#0f766e', strokeWeight: 5, strokeOpacity: 0.95 }
+            el.__map.addListener('dragstart', () => {
+                el.__userMoved = true;
             });
+            el.__doneLine = new google.maps.Polyline({ map: el.__map, strokeColor: '#94a3b8', strokeWeight: 5, strokeOpacity: 0.85, zIndex: 1 });
+            el.__remain = new google.maps.Polyline({ map: el.__map, strokeColor: '#067d62', strokeWeight: 6, strokeOpacity: 1, zIndex: 2 });
             el.__markers = {};
+            ensureRider(el);
+            ensureMotion(el);
         }
-        const bounds = new google.maps.LatLngBounds();
-        const pin = (key, pos, title, label) => {
+        const place = (key, pos, title, svg) => {
             if (!pos) {
-                if (el.__markers[key]) {
-                    el.__markers[key].setMap(null);
-                    delete el.__markers[key];
-                }
+                if (el.__markers[key]) el.__markers[key].setMap(null);
                 return;
             }
-            bounds.extend(pos);
-            if (!el.__markers[key]) el.__markers[key] = new google.maps.Marker({ map: el.__map, title, label });
+            if (!el.__markers[key]) {
+                el.__markers[key] = new google.maps.Marker({ map: el.__map, title, icon: markerIcon(svg, 42, 52), zIndex: 3 });
+            }
             el.__markers[key].setMap(el.__map);
             el.__markers[key].setPosition(pos);
-            el.__markers[key].setLabel(label);
         };
-        pin('store', live.store, 'Store', 'S');
-        pin('drop', live.drop, 'Delivery location', 'H');
-        pin('agent', live.agent, 'Driver', 'D');
-        if (!bounds.isEmpty()) el.__map.fitBounds(bounds, 48);
+        place('store', live.store, 'Store', STORE_SVG);
+        place('drop', live.drop, 'Delivery location', HOME_SVG);
+        const moving = live.leg !== 'done' && !!live.agent;
+        el.__agentLive = moving;
+        el.__pendingGps = live.agent || null;
+        if (!moving && el.__rider) el.__rider.setRider(null, 0, false);
         let origin = null;
         let target = null;
-        if (live.leg === 'done' || !live.agent) {
+        if (!moving) {
             origin = live.store;
             target = live.drop;
         } else if (live.leg === 'to_store') {
@@ -217,12 +407,64 @@
             origin = live.agent;
             target = live.drop || live.store;
         }
-        const key = JSON.stringify([origin, target, live.leg]);
-        if (origin && target && el.__routeKey !== key) {
-            el.__routeKey = key;
+        if (moving && live.agent) {
+            const prev = el.__lastGps;
+            if (prev) {
+                const dist = haversine(prev, live.agent);
+                const secs = (Date.now() - (el.__lastGpsAt || Date.now())) / 1000;
+                if (dist < 12) el.__speed = 0;
+                else if (secs >= 2 && secs <= 90) el.__speed = Math.max(2, Math.min(14, dist / secs));
+            } else el.__speed = 3.2;
+            el.__lastGps = { lat: live.agent.lat, lng: live.agent.lng };
+            el.__lastGpsAt = Date.now();
+            if (!el.__path) {
+                const heading = target ? bearingDeg(live.agent, target) % 360 : 0;
+                el.__rider.setRider(live.agent, heading, true);
+                if (target && el.__remain) el.__remain.setPath([live.agent, target]);
+            } else {
+                const hit = projectMeters(el.__path, el.__cum, live.agent);
+                if (hit.dist > 350) el.__routeFrom = null;
+                else {
+                    el.__gpsMeters = hit.meters;
+                    if (el.__agentMeters == null) el.__agentMeters = hit.meters;
+                }
+            }
+        }
+        if (el.__fitLeg && el.__fitLeg !== live.leg) el.__routeFrom = null;
+        const sameRoute =
+            origin &&
+            target &&
+            el.__routeFrom &&
+            el.__routeTo &&
+            haversine(el.__routeFrom, origin) < 180 &&
+            haversine(el.__routeTo, target) < 40;
+        if (origin && target && !sameRoute) {
+            el.__routeFrom = { lat: origin.lat, lng: origin.lng };
+            el.__routeTo = { lat: target.lat, lng: target.lng };
             new google.maps.DirectionsService().route({ origin, destination: target, travelMode: 'DRIVING' }, (result, status) => {
-                if (status === 'OK' && el.__dir) el.__dir.setDirections(result);
+                if (status !== 'OK') return;
+                const pts = routePoints(result);
+                if (!moving) {
+                    el.__path = null;
+                    if (el.__remain) el.__remain.setPath(pts);
+                    if (el.__doneLine) el.__doneLine.setPath([]);
+                    return;
+                }
+                applyPath(el, pts);
             });
+        } else if (!moving && origin && target && el.__path) {
+            el.__path = null;
+            el.__agentLive = false;
+        }
+        if (!el.__fitted || el.__fitLeg !== live.leg) {
+            const bounds = new google.maps.LatLngBounds();
+            [live.store, live.drop, live.agent].forEach((pos) => pos && bounds.extend(pos));
+            if (!bounds.isEmpty()) el.__map.fitBounds(bounds, 64);
+            el.__fitted = true;
+            el.__fitLeg = live.leg;
+            el.__userMoved = false;
+        } else if (moving && live.agent && !el.__userMoved) {
+            el.__map.panTo(live.agent);
         }
     }
 

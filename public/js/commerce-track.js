@@ -44,5 +44,5 @@
     }
 
     poll();
-    setInterval(poll, 12000);
+    setInterval(poll, 8000);
 })();
