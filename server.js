@@ -240,7 +240,6 @@ function mountPaymentsRoutes() {
     require('./lib/commerce-routes').registerCommerceRoutes(app, db, {
         upsertGlobalSetting
     });
-    require('./lib/fleet-network-routes').registerFleetNetworkRoutes(app, db);
     require('./lib/shop-routes').registerShopRoutes(app, db, {
         listDoctorPaymentOptions,
         parsePositiveUserId

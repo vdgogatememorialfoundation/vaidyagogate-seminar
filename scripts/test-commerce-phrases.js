@@ -662,7 +662,8 @@ const hopped = commerce.buildFleetbaseOrderBody(fleetCfg, {
 });
 assert.deepStrictEqual(hopped.waypoints, ['Pune Hub, 12 Market Road, Pune, Maharashtra 411009']);
 assert.strictEqual(commerce.trackPath('abc123token', 'tookan'), '/track-commerce?token=abc123token');
-assert.strictEqual(commerce.trackPath('abc123token', 'fleetbase'), '/track-fleetbase?token=abc123token');
+assert.strictEqual(commerce.trackPath('abc123token', 'fleetbase'), '/fleetbase/track/?token=abc123token');
+assert.strictEqual(fleetBody.meta.fulfillment, 'logistics');
 assert.ok(!JSON.stringify(fleetBody).match(/"otp"/));
 assert.throws(() => commerce.buildFleetbaseOrderBody(fleetCfg, { orderCode: 'X' }), /delivery address/);
 const hubUpdate = commerce.fleetbaseOrderToUpdate(
@@ -688,6 +689,21 @@ assert.strictEqual(hubUpdate.trackingNo, 'FB-1001');
 assert.strictEqual(hubUpdate.agentLat, null);
 assert.strictEqual(hubUpdate.pickupOtp, '');
 assert.strictEqual(hubUpdate.deliveryOtp, '');
+const phraseUpdate = commerce.fleetbaseOrderToUpdate(
+    {
+        id: 'order_phrase',
+        status: 'created',
+        tracking_statuses: [
+            { status: 'Shipment Created', code: 'CREATED' },
+            { status: 'Shipment Received at Local Hub- Pune Maharashtra, India', code: 'HUB_RECEIVED', city: 'Pune' },
+            { status: 'Shipment Left Local Hub- Pune Maharashtra, India', code: 'HUB_LEFT', city: 'Pune' }
+        ]
+    },
+    'logistics'
+);
+assert.strictEqual(phraseUpdate.kind, 'pickup_scheduled');
+assert.ok(phraseUpdate.events.some((ev) => ev.title === 'Shipment Received at Local Hub- Pune Maharashtra, India'));
+assert.ok(phraseUpdate.events.some((ev) => ev.title === 'Shipment Left Local Hub- Pune Maharashtra, India' && ev.kind === 'left_facility'));
 assert.ok(!JSON.stringify(hubUpdate).includes('411009'));
 const fleetOtp = commerce.fleetbaseOrderToUpdate(
     {

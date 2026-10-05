@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Gogate Products Hub</title>
+    <link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header>
+    <div>
+        <h1>Gogate Products Hub</h1>
+        <p class="muted" style="color:#d1fae5;margin:4px 0 0;">Sorting hubs for Fleetbase. Agents keep using Fleetbase Navigator.</p>
+    </div>
+    <div class="row">
+        <a href="/fleetbase/fleet-ops/settings/navigator-app">Open Navigator</a>
+        <button type="button" id="sign-out" class="secondary hidden">Sign out</button>
+    </div>
+</header>
+<main>
+    <section id="login" class="card">
+        <h2>Hub sign in</h2>
+        <p class="muted">Use the same Fleetbase account that signs in to the console. This does not create a second navigator.</p>
+        <label>Email<input id="identity" autocomplete="username"></label>
+        <label>Password<input id="password" type="password" autocomplete="current-password"></label>
+        <button type="button" id="sign-in">Sign in</button>
+        <p id="login-msg" class="msg"></p>
+    </section>
+    <section id="app" class="hidden">
+        <div class="tabs" id="mode-tabs">
+            <button type="button" data-mode="logistics" aria-pressed="true">Logistics</button>
+            <button type="button" data-mode="hyperlocal" aria-pressed="false">Hyperlocal</button>
+        </div>
+        <div class="tabs" id="section-tabs">
+            <button type="button" data-section="scan" aria-pressed="true">Scan</button>
+            <button type="button" data-section="orders" aria-pressed="false">Orders</button>
+            <button type="button" data-section="hubs" aria-pressed="false">Hubs</button>
+            <button type="button" data-section="drivers" aria-pressed="false">Drivers</button>
+        </div>
+        <p id="work-msg" class="msg"></p>
+
+        <section class="card" data-panel="scan">
+            <h2>Receive or dispatch</h2>
+            <p class="muted">Scan the 12-digit AWB or the Fleetbase tracking number. The barcode has to match the shipment. Agents then open that job in Fleetbase Navigator.</p>
+            <div class="grid">
+                <label>Hub
+                    <select id="scan-hub"></select>
+                </label>
+                <label>Barcode
+                    <input id="barcode" inputmode="text" autocomplete="off">
+                </label>
+            </div>
+            <div class="row" style="margin-top:12px;">
+                <button type="button" id="receive">Shipment received</button>
+                <button type="button" id="leave" class="secondary">Shipment left</button>
+            </div>
+        </section>
+
+        <section class="card hidden" data-panel="orders">
+            <h2>Shipments</h2>
+            <p class="muted">A new seller shipment stays on status <strong>Shipment Created</strong> until Navigator moves it. Assigning a driver sends the job to Fleetbase Navigator.</p>
+            <div id="orders"></div>
+        </section>
+
+        <section class="card hidden" data-panel="hubs">
+            <h2>Sorting hubs</h2>
+            <p class="muted">A hub is a sorting place. It is not the store. Enter the hub’s own name and address.</p>
+            <div class="grid">
+                <label>Hub name<input id="hub-name"></label>
+                <label>Locality<input id="hub-locality"></label>
+                <label>City<input id="hub-city"></label>
+                <label>State<input id="hub-state"></label>
+                <label>Country<input id="hub-country"></label>
+                <label>PIN<input id="hub-pin"></label>
+                <label>Address<input id="hub-address"></label>
+                <label>Role
+                    <select id="hub-role">
+                        <option value="seller_local">Seller local hub</option>
+                        <option value="city_mother">City mother hub</option>
+                        <option value="transit">On-route hub</option>
+                        <option value="destination_city">Destination city hub</option>
+                        <option value="delivery_local">Delivery local hub</option>
+                    </select>
+                </label>
+            </div>
+            <button type="button" id="save-hub" style="margin-top:12px;">Save hub</button>
+            <div id="hubs"></div>
+        </section>
+
+        <section class="card hidden" data-panel="drivers">
+            <h2>Drivers</h2>
+            <p class="muted">Drivers sign in with Fleetbase Navigator. Block stops that login. Reset password here, then tell the driver the new password.</p>
+            <div class="grid">
+                <label>Name<input id="driver-name"></label>
+                <label>Phone<input id="driver-phone"></label>
+                <label>Email<input id="driver-email"></label>
+                <label>Password<input id="driver-password" type="password"></label>
+                <label>Hub<select id="driver-hub"></select></label>
+            </div>
+            <button type="button" id="save-driver" style="margin-top:12px;">Add driver</button>
+            <div id="drivers"></div>
+        </section>
+    </section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
