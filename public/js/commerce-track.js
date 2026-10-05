@@ -46,8 +46,11 @@
                       (track.shipment.trackingId ? ' · Tracking ID ' + esc(track.shipment.trackingId) : '') +
                       '</div></li>'
                     : '';
-                const grow = step.state === 'active' ? '0.55' : '1';
-                return '<li class="' + esc(step.state) + '" style="--i:' + i + ';--grow:' + grow + '"><span class="dot"></span><b>' + esc(step.title) + '</b>' +
+                const grow = step.state === 'active' ? (step.lineGrow != null ? step.lineGrow : '0.55') : '1';
+                const tick = step.state === 'active' && step.lineUntil
+                    ? ' data-line-since="' + Number(step.lineSince) + '" data-line-until="' + Number(step.lineUntil) + '"'
+                    : '';
+                return '<li class="' + esc(step.state) + '"' + tick + ' style="--i:' + i + ';--grow:' + grow + '"><span class="dot"></span><b>' + esc(step.title) + '</b>' +
                     (kids || shippedNote ? '<ul class="ship-kids">' + kids + shippedNote + '</ul>' : '') +
                     '</li>';
             })
@@ -56,6 +59,23 @@
 
     function progressHtml(track) {
         return '<h2 class="hl-progress-title">Order progress</h2><ol class="ship-pipe">' + pipeHtml(track) + '</ol>';
+    }
+
+    function deliveryHtml(track) {
+        return track && track.deliveryBy
+            ? '<div class="hl-drop"><div class="lbl">Delivery by</div><div class="val">' + esc(track.deliveryBy) + '</div></div>'
+            : '';
+    }
+
+    function tickPipe() {
+        document.querySelectorAll('.ship-pipe > li.active[data-line-until]').forEach((el) => {
+            const since = Number(el.getAttribute('data-line-since'));
+            const until = Number(el.getAttribute('data-line-until'));
+            if (!until || until <= since) return;
+            const now = Date.now();
+            const ratio = now <= since ? 0.12 : Math.min(1, (now - since) / (until - since));
+            el.style.setProperty('--grow', String(Math.min(0.55, Math.max(0.12, Math.round(ratio * 100) / 100))));
+        });
     }
 
     function otpHtml(label, code) {
@@ -98,6 +118,7 @@
             '</div></div>' +
             '<div class="hl-drop"><div class="lbl">Courier</div><div class="val">' + esc(courier) + '</div><div class="hl-note-hint">' + esc(mode) + '</div></div>' +
             tracking +
+            deliveryHtml(track) +
             failureHtml(track) +
             '</section><div class="hl-below">' +
             otpHtml('Pickup OTP', track.pickupOtp) + otpHtml('Delivery OTP', track.deliveryOtp) +
@@ -133,6 +154,7 @@
             (track.map.live ? '' : '<p class="hl-wait">The route stays dotted until a delivery partner location arrives.</p>') +
             '</div><div id="tl-eta" class="hl-eta" hidden></div></div>' +
             (track.dropLabel ? '<div class="hl-drop"><div class="lbl">Delivering to</div><div class="val">' + esc(track.dropLabel) + '</div></div>' : '') +
+            deliveryHtml(track) +
             '<div class="hl-note"><button type="button" class="hl-note-toggle" id="hl-note-toggle"><span class="hl-plus" aria-hidden="true">+</span><span><b>' +
             (note ? 'Delivery instructions' : 'Add delivery instructions') + '</b>' +
             (note ? '<span class="hl-note-text">' + esc(note) + '</span>' : '<span class="hl-note-hint">Saved with your order</span>') +
@@ -276,4 +298,5 @@
 
     poll();
     setInterval(poll, 8000);
+    setInterval(tickPipe, 2000);
 })();

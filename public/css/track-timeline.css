@@ -78,6 +78,11 @@
     animation-delay: calc(var(--i) * 0.2s);
     z-index: 0;
 }
+.ship-pipe > li.active[data-line-until]::after {
+    animation: shipDrawTo 0.6s ease;
+    transform: scaleY(var(--grow, 0.55));
+    transition: transform 1.6s ease;
+}
 .ship-pipe > li:last-child::after { display: none; }
 .ship-pipe > li > .dot { position: absolute; left: 0; top: 1px; width: 18px; height: 18px; border-radius: 50%; border: 2px solid #c7cccc; background: #fff; box-sizing: border-box; }
 .ship-pipe > li.done > .dot, .ship-pipe > li.active > .dot { background: #067d62; border-color: #067d62; }

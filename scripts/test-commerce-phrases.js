@@ -357,6 +357,52 @@ assert.strictEqual(pidgeHyper.pickupOtp, '');
 assert.strictEqual(pidgeHyper.deliveryOtp, '');
 assert.ok(!JSON.stringify(pidgeHyper).match(/otp":"[0-9]/i));
 
+const pidgeOtp = commerce.pidgePayloadToUpdate(
+    {
+        status: 'fulfilled',
+        fulfillment: {
+            status: 'OUT_FOR_DELIVERY',
+            track_code: 'AWB45',
+            pickup: { eta: '2026-10-06T04:30:00.000Z', pincode: '411001' },
+            drop: { eta: '2026-10-06T08:30:00.000Z', otp: '4455', pincode: '411009' }
+        }
+    },
+    'hyperlocal'
+);
+assert.strictEqual(pidgeOtp.deliveryOtp, '4455');
+assert.strictEqual(pidgeOtp.pickupOtp, '');
+assert.strictEqual(pidgeOtp.trackingNo, 'AWB45');
+assert.strictEqual(pidgeOtp.pickupAt, '2026-10-06T04:30:00.000Z');
+assert.strictEqual(pidgeOtp.deliveryAt, '2026-10-06T08:30:00.000Z');
+assert.ok(!JSON.stringify(pidgeOtp).includes('411009'));
+assert.ok(!JSON.stringify(pidgeOtp).includes('411001'));
+
+const pidgeGeneric = commerce.pidgePayloadToUpdate(
+    { status: 'fulfilled', fulfillment: { status: 'OUT_FOR_DELIVERY', otp: '7788' } },
+    'logistics'
+);
+assert.strictEqual(pidgeGeneric.deliveryOtp, '7788');
+assert.strictEqual(pidgeGeneric.pickupOtp, '');
+assert.strictEqual(pidgeGeneric.agentLat, null);
+
+const shipdayDated = commerce.shipdayOrderToUpdate({
+    orderNumber: 'BK1',
+    orderId: 9,
+    orderStatus: 'STARTED',
+    expectedDeliveryDate: '2026-10-06',
+    expectedDeliveryTime: '16:00:00',
+    expectedPickupTime: '14:00:00',
+    thirdPartyDeliveryOrder: { trackingId: 'AWB99' }
+});
+assert.strictEqual(shipdayDated.trackingNo, 'AWB99');
+assert.strictEqual(shipdayDated.deliveryOtp, '');
+assert.strictEqual(shipdayDated.pickupOtp, '');
+assert.ok(shipdayDated.pickupAt);
+assert.ok(shipdayDated.deliveryAt);
+assert.ok(shipdayDated.deliveryAt > shipdayDated.pickupAt);
+const shipdayOwn = commerce.shipdayOrderToUpdate({ orderNumber: 'BK1', orderId: 9, orderStatus: 'STARTED', trackingId: 'BK1' });
+assert.strictEqual(shipdayOwn.trackingNo, '');
+
 const pidgeLogistics = commerce.pidgePayloadToUpdate(
     {
         id: 'pidge-1',
@@ -540,11 +586,13 @@ assert.ok(tookanLabel.includes('https://seminar.vaidyagogate.org/track-commerce?
 assert.strictEqual((tookanLabel.match(/data-sym="order-barcode"/g) || []).length, 1);
 
 const bareLabel = commerce.labelHtml({ orderCode: 'ONLYCODE', commerceProvider: 'shipday', pickupOtp: '0000', items: [] }, labelCfg);
-assert.ok(bareLabel.includes('data-sym="order-qr"'));
-assert.ok(bareLabel.includes('data-sym="order-barcode"'));
-assert.ok(!bareLabel.includes('data-sym="track-qr"'));
-assert.ok(!bareLabel.includes('data-sym="courier-barcode"'));
+assert.ok(bareLabel.includes('assigns an AWB'));
+assert.ok(!bareLabel.includes('<svg'));
+assert.ok(!bareLabel.includes('window.print'));
 assert.ok(!bareLabel.includes('Pickup OTP'));
 assert.ok(!bareLabel.includes('Delivery OTP'));
+assert.strictEqual(commerce.awbFromUpdate({ trackingNo: 'AWB45' }), 'AWB45');
+assert.strictEqual(commerce.awbFromUpdate({ barcode: 'BAR1' }), 'BAR1');
+assert.strictEqual(commerce.awbFromUpdate(null), '');
 
 console.log('commerce phrase tests passed');

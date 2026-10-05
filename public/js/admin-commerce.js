@@ -6,7 +6,7 @@ let commercePanel = 'desk';
 let commerceTrackTimer = null;
 
 function commerceNoOtp(provider) {
-    return provider === 'shipday' || provider === 'pidge';
+    return provider === 'shipday';
 }
 
 function commerceActor() {
@@ -495,7 +495,9 @@ function commercePrintSelectedLabel() {
 function commerceBookedHtml(provider, order, id) {
     const o = order || {};
     let html = 'Booked with Gogate Products.';
-    if (!commerceNoOtp(provider)) {
+    if (provider === 'pidge') {
+        if (o.deliveryOtp) html += ' Delivery OTP ' + escCommerce(o.deliveryOtp);
+    } else if (!commerceNoOtp(provider)) {
         html += ' Pickup OTP ' + escCommerce(o.pickupOtp || '—') + ' · Delivery OTP ' + escCommerce(o.deliveryOtp || '—');
     }
     if (o.commerceTrackUrl) html += ' · ' + escCommerce(o.commerceTrackUrl);
@@ -680,7 +682,7 @@ function placeMarker(el, key, pos, title) {
 function commerceKeyCardHtml(compact) {
     const hint = compact
         ? 'These are the same Tookan, Shipday, and Pidge keys used by Commerce. A POS order still appears on the Commerce desk when doctor book orders are closed.'
-        : 'Tookan and Pidge cover logistics and hyperlocal. Shipday covers hyperlocal. The Google Maps key draws the live driver route. Shipday and Pidge do not use an OTP.';
+        : 'Tookan and Pidge cover logistics and hyperlocal. Shipday covers hyperlocal. The Google Maps key draws the live driver route. Shipday does not use an OTP. A Pidge delivery OTP is shown when Pidge sends one.';
     return (
         '<div id="bs-commerce-keys" class="card" style="padding:18px;margin:0 0 14px;border:1px solid #99f6e4;background:#f0fdfa;">' +
         '<h3 style="margin:0 0 8px;color:#0f766e;">Tookan, Shipday, Pidge and live map</h3>' +
@@ -747,7 +749,7 @@ function mountBookIntegrations() {
         box.style.cssText = 'border:2px solid #0f766e;border-radius:12px;padding:16px;margin:0 0 16px;';
         box.innerHTML =
             '<div style="font-weight:800;color:#0f766e;margin-bottom:6px;">Gogate Products</div>' +
-            '<p style="font-size:0.8rem;color:#64748b;margin:0 0 10px;">Customers see Gogate Products as the courier partner. Tookan logistics creates one parcel and uses the pickup and drop OTPs Tookan issues. Shipday and Pidge do not use an OTP.</p>' +
+            '<p style="font-size:0.8rem;color:#64748b;margin:0 0 10px;">Customers see Gogate Products as the courier partner. Tookan uses the pickup and delivery OTPs Tookan issues. Pidge shows a delivery OTP when Pidge sends one. Shipday does not use an OTP. The shipping label is created only after the courier API returns an AWB.</p>' +
             '<label style="font-size:0.78rem;">Pickup time (IST)<input id="bs-commerce-when" type="datetime-local" style="width:100%;padding:8px;margin:4px 0 10px;"></label>' +
             '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
             '<button type="button" class="btn-primary" style="background:#111;flex:1;min-width:140px;" onclick="bsPrintCommerceLabel()">Print shipping label</button>' +

@@ -122,6 +122,7 @@
         const animate = !opts || opts.animate !== false;
         return (
             '<div class="tl' + (animate ? '' : ' tl-static') + '">' +
+            (t.deliveryBy ? '<div class="tl-sum">Delivery by ' + esc(t.deliveryBy) + '</div>' : '') +
             t.steps
                 .map(
                     (s, i) =>

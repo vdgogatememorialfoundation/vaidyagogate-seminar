@@ -120,6 +120,49 @@ const shipday = engine.buildCustomerTracking(
 );
 assert.strictEqual(shipday.deliveryOtp, null);
 assert.strictEqual(shipday.pickupOtp, null);
+
+const pidgeTrack = engine.buildCustomerTracking(
+    {
+        orderCode: 'BKPIDGE',
+        commerceStage: 'out_for_delivery',
+        commerceMode: 'hyperlocal',
+        commerceProvider: 'pidge',
+        deliveryOtp: '4455',
+        pickupAt: '2026-10-05T06:00:00.000Z',
+        deliveryAt: '2026-10-05T10:00:00.000Z',
+        shippingPincode: '411009'
+    },
+    [],
+    { now: Date.parse('2026-10-05T08:00:00.000Z') }
+);
+assert.strictEqual(pidgeTrack.deliveryOtp, '4455');
+assert.strictEqual(pidgeTrack.pickupOtp, null);
+assert.ok(pidgeTrack.deliveryBy);
+assert.ok(!pidgeTrack.pickupBy);
+assert.ok(!JSON.stringify(pidgeTrack).includes('411009'));
+const pidgeOfd = pidgeTrack.pipeline.find((step) => step.key === 'OUT_FOR_DELIVERY');
+assert.ok(pidgeOfd.lineGrow <= 0.55);
+assert.ok(pidgeOfd.lineGrow >= 0.45);
+assert.ok(pidgeOfd.lineUntil > pidgeOfd.lineSince);
+
+const moving = engine.buildCustomerTracking(
+    {
+        orderCode: 'BKMOVE',
+        commerceStage: 'in_transit',
+        commerceMode: 'logistics',
+        commerceProvider: 'tookan',
+        pickupAt: '2026-10-05T06:00:00.000Z',
+        deliveryAt: '2026-10-05T10:00:00.000Z'
+    },
+    [],
+    { now: Date.parse('2026-10-05T07:00:00.000Z') }
+);
+const movingShipped = moving.pipeline.find((step) => step.key === 'SHIPPED');
+assert.strictEqual(movingShipped.state, 'active');
+assert.ok(movingShipped.lineGrow < 0.55);
+assert.ok(movingShipped.lineGrow > 0.12);
+assert.ok(moving.deliveryBy);
+assert.strictEqual(moving.pipeline.find((step) => step.key === 'OUT_FOR_DELIVERY').state, 'upcoming');
 assert.strictEqual(shipday.map.enabled, true);
 assert.strictEqual(shipday.map.live, false);
 assert.strictEqual(shipday.deliveryNote, '');
