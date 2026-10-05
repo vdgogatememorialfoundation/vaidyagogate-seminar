@@ -234,7 +234,9 @@
                           escapeHtml(when(meta.expected_pickup_at) ? 'Pickup ' + when(meta.expected_pickup_at) : '') +
                           '<div class="muted">' +
                           escapeHtml(when(meta.expected_delivery_at || order.scheduled_at)) +
-                          '</div></td><td><button type="button" class="secondary" data-assign="' +
+                          '</div></td><td class="row"><button type="button" class="secondary" data-schedule="' +
+                          id +
+                          '">Set delivery time</button><button type="button" class="secondary" data-assign="' +
                           id +
                           '">Assign to Navigator driver</button></td></tr>'
                       );
@@ -431,6 +433,28 @@
     });
 
     $('orders').addEventListener('click', async (event) => {
+        const schedule = event.target.closest('button[data-schedule]');
+        if (schedule) {
+            const orderId = schedule.getAttribute('data-schedule');
+            const value = window.prompt('Delivery time in IST, YYYY-MM-DD HH:MM');
+            if (!value) return;
+            const match = String(value).trim().match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/);
+            if (!match) {
+                say('work-msg', 'Use YYYY-MM-DD HH:MM in IST.');
+                return;
+            }
+            try {
+                await api('PATCH', '/orders/schedule', {
+                    order: orderId,
+                    scheduled_at: match[1] + 'T' + match[2] + ':00+05:30'
+                });
+                say('work-msg', 'Delivery time saved.', true);
+                await loadOrders();
+            } catch (err) {
+                say('work-msg', err.message || 'Could not save the delivery time.');
+            }
+            return;
+        }
         const button = event.target.closest('button[data-assign]');
         if (!button) return;
         const orderId = button.getAttribute('data-assign');
