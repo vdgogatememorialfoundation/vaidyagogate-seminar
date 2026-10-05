@@ -114,15 +114,18 @@
         const call = href
             ? '<a class="hl-call" href="' + esc(href) + '" aria-label="Call delivery partner"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M6.6 10.8a15.1 15.1 0 006.6 6.6l2.2-2.2a1 1 0 011-.25 11.4 11.4 0 003.6.57 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 4a1 1 0 011-1h3.5a1 1 0 011 1 11.4 11.4 0 00.57 3.6 1 1 0 01-.25 1L6.6 10.8z"/></svg></a>'
             : '';
+        const bike =
+            '<span class="hl-bike" aria-hidden="true"><svg viewBox="0 0 64 64" width="28" height="28"><circle cx="16" cy="44" r="8" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="48" cy="44" r="8" fill="none" stroke="currentColor" stroke-width="3"/><path d="M16 44h14l8-16h10M28 28l6 16M36 18h8l6 10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
         const partner = name || href
             ? '<div class="hl-partner">' +
+              bike +
               (name ? '<span class="hl-avatar" aria-hidden="true">' + esc(initial) + '</span><span class="hl-partner-name">' + esc(name) + '</span>' : '<span class="hl-partner-name">Delivery partner</span>') +
               call + '</div>'
-            : '';
+            : '<div class="hl-partner">' + bike + '<span class="hl-partner-name">Finding a delivery partner</span></div>';
         const map = shipment.live
             ? '<div class="hl-map"><div id="tl-map-slot"></div></div>'
             : '<div class="hl-map hl-map-empty">The map appears when the store and delivery locations are available.</div>';
-        return '<div class="hl">' + map +
+        return '<div class="hl hl-wide">' + map +
             '<section class="hl-sheet">' +
             '<div class="hl-kicker">Order #' + esc(track.orderId || shipment.orderCode || '') + '</div>' +
             '<div class="hl-top"><div><h1>' + esc(track.currentStatus || track.currentMessage) + '</h1>' +

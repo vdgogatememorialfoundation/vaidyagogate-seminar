@@ -308,7 +308,7 @@
     const HOME_SVG =
         '<svg xmlns="http://www.w3.org/2000/svg" width="42" height="52" viewBox="0 0 42 52"><path d="M21 50s16-14.2 16-28A16 16 0 1 0 5 22c0 13.8 16 28 16 28z" fill="#0f1111"/><circle cx="21" cy="21" r="11" fill="#fff"/><path d="M14 25V19l7-5 7 5v6h-5v-4h-4v4z" fill="#0f1111"/></svg>';
     const SCOOTER =
-        '<svg viewBox="0 0 64 64" width="40" height="40"><circle cx="32" cy="32" r="30" fill="#067d62"/><g fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="20" cy="42" r="5"/><circle cx="46" cy="42" r="5"/><path d="M20 42h12l7-14h9M30 28l5 14M40 16h7l5 12"/></g></svg>';
+        '<svg viewBox="0 0 64 64" width="48" height="48"><circle cx="32" cy="32" r="30" fill="#ea580c"/><g fill="none" stroke="#fff" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="44" r="6"/><circle cx="48" cy="44" r="6"/><path d="M18 44h16l8-16h10M32 28l6 16M42 14h8l6 14"/></g></svg>';
 
     function ensureRider(el) {
         if (el.__rider) return el.__rider;
@@ -451,18 +451,42 @@
         place('store', live.store, 'Store', STORE_SVG);
         place('drop', live.drop, 'Delivery location', HOME_SVG);
         const preview = live.leg !== 'done' && (live.route === 'dotted' || !live.agent);
-        if (preview) {
+            if (preview) {
             el.__agentLive = false;
             el.__path = null;
             if (el.__rider) el.__rider.setRider(null, 0, false);
             if (el.__doneLine) el.__doneLine.setPath([]);
             if (el.__remain && live.store && live.drop) {
-                el.__remain.setOptions({
-                    strokeColor: routeColor(),
-                    strokeOpacity: 0,
-                    icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 3 }, offset: '0', repeat: '14px' }]
-                });
-                el.__remain.setPath([live.store, live.drop]);
+                const straight = () => {
+                    el.__remain.setOptions({
+                        strokeColor: routeColor(),
+                        strokeOpacity: 0,
+                        icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 3 }, offset: '0', repeat: '14px' }]
+                    });
+                    el.__remain.setPath([live.store, live.drop]);
+                };
+                const samePreview =
+                    el.__previewFrom &&
+                    el.__previewTo &&
+                    haversine(el.__previewFrom, live.store) < 40 &&
+                    haversine(el.__previewTo, live.drop) < 40;
+                if (!samePreview) {
+                    el.__previewFrom = { lat: live.store.lat, lng: live.store.lng };
+                    el.__previewTo = { lat: live.drop.lat, lng: live.drop.lng };
+                    straight();
+                    new google.maps.DirectionsService().route(
+                        { origin: live.store, destination: live.drop, travelMode: 'DRIVING' },
+                        (result, status) => {
+                            if (!el.__remain || el.__agentLive) return;
+                            if (status !== 'OK') return straight();
+                            const pts = routePoints(result);
+                            if (pts.length > 1) {
+                                el.__remain.setOptions({ strokeColor: routeColor(), strokeOpacity: 1, icons: null });
+                                el.__remain.setPath(pts);
+                            }
+                        }
+                    );
+                }
             }
             if (!el.__fitted || el.__fitLeg !== live.leg) {
                 const bounds = new google.maps.LatLngBounds();
@@ -471,6 +495,7 @@
                 el.__fitted = true;
                 el.__fitLeg = live.leg;
             }
+            if (el.__map && window.google && google.maps.event) google.maps.event.trigger(el.__map, 'resize');
             return;
         }
         if (el.__remain) el.__remain.setOptions({ strokeColor: routeColor(), strokeOpacity: 1, icons: null });
@@ -560,6 +585,7 @@
         } else if (moving && live.agent && !el.__userMoved) {
             el.__map.panTo(live.agent);
         }
+        if (el.__map && window.google && google.maps.event) google.maps.event.trigger(el.__map, 'resize');
     }
 
     function routeColor() {
@@ -567,7 +593,7 @@
     }
 
     function mapPadding() {
-        return document.body.classList.contains('hl-page') ? { top: 48, right: 28, bottom: 120, left: 28 } : 64;
+        return document.body.classList.contains('hl-page') ? { top: 64, right: 64, bottom: 64, left: 64 } : 64;
     }
 
     function tickLines() {
