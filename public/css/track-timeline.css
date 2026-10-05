@@ -55,15 +55,22 @@
 .ship-head .kicker { color: #565959; font-size: .9rem; }
 .ship-head .expect { color: #565959; margin: 0; }
 .ship-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(240px, .8fr); gap: 16px; margin-top: 16px; }
-.ship-pipe, .ship-events { list-style: none; margin: 0; padding: 0; }
+.ship-pipe, .ship-events, .ship-kids { list-style: none; margin: 0; padding: 0; }
 .ship-pipe { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px 16px 4px; }
-.ship-pipe li { position: relative; padding: 0 0 22px 34px; color: #8d9096; }
-.ship-pipe li::before { content: ""; position: absolute; left: 8px; top: 18px; bottom: 0; width: 2px; background: #d5d9d9; }
-.ship-pipe li.done::before { background: #067d62; }
-.ship-pipe li:last-child::before { display: none; }
-.ship-pipe .dot { position: absolute; left: 0; top: 1px; width: 18px; height: 18px; border-radius: 50%; border: 2px solid #c7cccc; background: #fff; box-sizing: border-box; }
-.ship-pipe li.done .dot, .ship-pipe li.active .dot { background: #067d62; border-color: #067d62; }
-.ship-pipe li.done, .ship-pipe li.active { color: #0f1111; }
+.ship-pipe > li { position: relative; padding: 0 0 22px 34px; color: #8d9096; }
+.ship-pipe > li::before { content: ""; position: absolute; left: 8px; top: 18px; bottom: 0; width: 2px; background: #d5d9d9; }
+.ship-pipe > li.done::before { background: #067d62; }
+.ship-pipe > li:last-child::before { display: none; }
+.ship-pipe > li > .dot { position: absolute; left: 0; top: 1px; width: 18px; height: 18px; border-radius: 50%; border: 2px solid #c7cccc; background: #fff; box-sizing: border-box; }
+.ship-pipe > li.done > .dot, .ship-pipe > li.active > .dot { background: #067d62; border-color: #067d62; }
+.ship-pipe > li.done, .ship-pipe > li.active { color: #0f1111; }
+.ship-pipe > li > b { font-size: 1.05rem; }
+.ship-kids { margin: 8px 0 0; }
+.ship-kids > li { position: relative; padding: 0 0 12px 18px; color: #0f1111; font-size: .92rem; font-weight: 400; }
+.ship-kids > li::before { content: ""; position: absolute; left: 0; top: 6px; width: 8px; height: 8px; border-radius: 50%; background: #067d62; }
+.ship-kids > li.failed::before { background: #c2410c; }
+.ship-kids > li.failed > b { color: #9a3412; }
+.ship-kids .when, .ship-kids .where { color: #565959; font-size: .82rem; font-weight: 400; }
 .ship-events { margin-top: 8px; }
 .ship-events li { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px 14px; margin-top: 8px; }
 .ship-events .when, .ship-events .where, .ship .muted { color: #565959; font-size: .85rem; }

@@ -115,8 +115,8 @@ const failed = engine.buildCustomerTracking(
     },
     [
         { title: 'Out for delivery', kind: 'out_for_delivery', at: '2026-10-04T11:24:00Z' },
-        { title: 'Delivery agent reached the drop location', kind: 'out_for_delivery', at: '2026-10-04T11:26:00Z' },
-        { title: 'Delivery attempt failed', kind: 'failed', at: '2026-10-04T11:27:00Z' }
+        { title: 'Delivery agent reached the drop location', kind: 'out_for_delivery', city: 'PUNE, MAHARASHTRA, PIN 411009', detail: 'PUNE, MAHARASHTRA, PIN 411009', at: '2026-10-04T11:26:00Z' },
+        { title: 'Delivery attempt failed', kind: 'failed', city: 'PUNE, MAHARASHTRA, PIN 411009', detail: 'PUNE, MAHARASHTRA, PIN 411009', at: '2026-10-04T11:27:00Z' }
     ]
 );
 assert.strictEqual(failed.mainStatus, 'OUT_FOR_DELIVERY');
@@ -130,8 +130,12 @@ assert.strictEqual(failed.slots[0].source, 'store_delivery_hours');
 assert.ok(/Tomorrow/.test(failed.slots[0].label));
 assert.strictEqual(failed.pipeline.find((step) => step.key === 'OUT_FOR_DELIVERY').state, 'active');
 assert.strictEqual(failed.pipeline.length, 5);
-assert.ok(failed.timeline.some((row) => row.message === 'Delivery attempt was unsuccessful'));
+assert.ok(failed.timeline.some((row) => row.message === 'Delivery attempt unsuccessful' && row.parentStage === 'OUT_FOR_DELIVERY' && !row.location && !row.reason));
+assert.ok(failed.timeline.some((row) => row.message === 'Delivery partner reached your location' && !row.location));
+const ofd = failed.pipeline.find((step) => step.key === 'OUT_FOR_DELIVERY');
+assert.ok(ofd.events && ofd.events.length === 3);
 assert.ok(!JSON.stringify(failed).includes('411009'));
+assert.ok(!JSON.stringify(failed).includes('"Update"'));
 assert.ok(!JSON.stringify(failed).includes('Delivery PIN'));
 
 const again = engine.buildCustomerTracking(

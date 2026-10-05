@@ -13,10 +13,6 @@
         return window.TrackTimeline ? TrackTimeline.when(at) : '';
     }
 
-    function placeLine(ev) {
-        return [ev.facilityName, ev.city, ev.state, ev.country].filter(Boolean).join(', ');
-    }
-
     function render(shipment) {
         const track = shipment.track;
         if (!track || !track.pipeline) {
@@ -30,20 +26,6 @@
         const sig = JSON.stringify(track) + '|' + (live && live.slot ? live.slot : '') + '|' + (live && live.leg ? live.leg : '') + '|' + (live && live.route ? live.route : '');
         if (sig !== drawn) {
             drawn = sig;
-            const pipe = track.pipeline
-                .map((step) => '<li class="' + esc(step.state) + '"><span class="dot"></span><b>' + esc(step.title) + '</b></li>')
-                .join('');
-            const events = (track.timeline || [])
-                .map((ev) => {
-                    const where = placeLine(ev);
-                    return (
-                        '<li><b>' + esc(ev.heading) + '</b><div>' + esc(ev.message) + '</div>' +
-                        (ev.at ? '<div class="when">' + esc(when(ev.at)) + '</div>' : '') +
-                        (where ? '<div class="where">' + esc(where) + '</div>' : '') +
-                        '</li>'
-                    );
-                })
-                .join('');
             const partner = track.agent
                 ? '<div class="ship-card"><div class="lbl">Delivery partner</div><div class="val">' + esc(track.agent.name || 'Assigned') + '</div>' +
                   (track.agent.phone ? '<a class="call" href="tel:' + esc(track.agent.phone) + '">Call</a>' : '') +
@@ -60,21 +42,37 @@
                 )
                 .join('');
             const hours = track.deliveryHours ? 'Store delivery hours ' + esc(track.deliveryHours.open) + ' – ' + esc(track.deliveryHours.close) + '.' : '';
-            const partnerCall = track.contact && track.contact.phone
-                ? '<a class="call" href="tel:' + esc(track.contact.phone) + '">Contact delivery partner' + (track.contact.name ? ' · ' + esc(track.contact.name) : '') + '</a>'
-                : '';
             const failure = track.operationalStatus === 'DELIVERY_ATTEMPT_FAILED'
                 ? '<div class="ship-fail"><b>Delivery attempt unsuccessful</b><p>' + esc(track.currentDetail || '') + '</p>' +
                   (hours ? '<p class="muted">' + hours + '</p>' : '') +
                   (track.fulfillmentType === 'HYPERLOCAL' && slots
-                      ? '<form id="reschedule-form">' + slots +
+                      ? '<form id="reschedule-form"><p class="muted">Choose a new delivery time</p>' + slots +
                         '<label class="ship-slot"><input type="radio" name="slot" value="custom"> Choose another time</label>' +
                         '<div class="tl-custom" hidden><input type="date" name="date"><input type="time" name="start"><input type="time" name="end"></div>' +
                         '<button type="submit">Reschedule delivery</button><p class="form-msg" id="reschedule-msg"></p></form>'
                       : '') +
-                  partnerCall +
-                  '<a class="call" href="' + esc(track.supportUrl || '/support') + '">Contact support</a></div>'
+                  '<a class="call" href="' + esc(track.supportUrl || '/support') + '">Get help</a></div>'
                 : '';
+            const child = (ev) =>
+                '<li class="ship-sub' + (ev.tone ? ' ' + esc(ev.tone) : '') + '"><b>' + esc(ev.message) + '</b>' +
+                (ev.at ? '<div class="when">' + esc(when(ev.at)) + '</div>' : '') +
+                (ev.location ? '<div class="where">' + esc(ev.location) + '</div>' : '') +
+                (ev.reason ? '<div class="where">Reason: ' + esc(ev.reason) + '</div>' : '') +
+                '</li>';
+            const pipe = (track.pipeline || [])
+                .map((step) => {
+                    const kids = (step.events || []).map(child).join('');
+                    const shippedNote = step.key === 'SHIPPED' && step.state !== 'upcoming' && track.shipment
+                        ? '<li class="ship-sub"><b>' + esc(track.shipment.courier || 'Gogate Products') + '</b><div class="where">' +
+                          esc(track.fulfillmentType === 'HYPERLOCAL' ? 'Hyperlocal' : 'Logistics') +
+                          (track.shipment.trackingId ? ' · Tracking ID ' + esc(track.shipment.trackingId) : '') +
+                          '</div></li>'
+                        : '';
+                    return '<li class="' + esc(step.state) + '"><span class="dot"></span><b>' + esc(step.title) + '</b>' +
+                        (kids || shippedNote ? '<ul class="ship-kids">' + kids + shippedNote + '</ul>' : '') +
+                        '</li>';
+                })
+                .join('');
             const otp = (label, code) =>
                 code ? '<div class="ship-otp"><div class="lbl">' + esc(label) + '</div><div class="code">' + esc(code) + '</div></div>' : '';
             const tracking = track.shipment && track.shipment.trackingId
@@ -84,14 +82,17 @@
                 '<div class="ship">' +
                 '<div class="ship-head"><div class="kicker">Order #' + esc(track.orderId || shipment.orderCode || '') + '</div>' +
                 '<h1>' + esc(track.currentStatus || track.currentMessage) + '</h1>' +
-                '<p class="expect">' + esc(track.currentDetail || (track.expectedDelivery && track.expectedDelivery.label ? track.expectedDelivery.label : 'The delivery window appears when the courier sends one.')) + '</p></div>' +
+                (track.currentDetail || (track.expectedDelivery && track.expectedDelivery.label)
+                    ? '<p class="expect">' + esc(track.currentDetail || track.expectedDelivery.label) + '</p>'
+                    : '') +
+                '</div>' +
                 failure +
                 '<div class="ship-grid"><div>' +
                 '<ol class="ship-pipe">' + pipe + '</ol>' +
                 (track.map.enabled ? '<div class="ship-card"><div class="lbl">' + (track.map.live ? 'Live delivery tracking' : 'Store and delivery location') + '</div>' +
                   (track.map.live ? '<div id="tl-eta" class="muted">Delivery partner is on the way.</div>' : '<div class="muted">The route stays dotted until a delivery partner location arrives.</div>') +
                   '<div id="tl-map-slot"></div></div>' : '') +
-                '<h2>Updates</h2><ol class="ship-events">' + (events || '<li>No updates yet.</li>') + '</ol></div>' +
+                '</div>' +
                 '<aside>' +
                 '<div class="ship-card"><div class="lbl">Courier</div><div class="val">' + esc((track.shipment && track.shipment.courier) || 'Gogate Products') + '</div>' +
                 '<div class="muted">' + esc(track.fulfillmentType === 'HYPERLOCAL' ? 'Hyperlocal delivery' : 'Logistics') + '</div></div>' +

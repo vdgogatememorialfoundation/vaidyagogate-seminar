@@ -40,7 +40,9 @@
             ordered
                 .map((u, i) => {
                     const cls = u.tone === 'failed' ? 'tl-failed' : u.tone === 'rescheduled' ? 'tl-rescheduled' : i === ordered.length - 1 ? 'tl-current' : '';
-                    return '<li' + (cls ? ' class="' + cls + '"' : '') + '><b>' + esc(u.title) + '</b><span>' + esc(when(u.at)) + (u.city ? ' · ' + esc(u.city) : '') + (u.detail ? ' · ' + esc(u.detail) : '') + '</span></li>';
+                    const place = u.city ? '<div>' + esc(u.city) + '</div>' : '';
+                    const reason = u.tone === 'failed' && u.detail ? '<div>Reason: ' + esc(u.detail) + '</div>' : u.detail && u.tone !== 'failed' ? '<div>' + esc(u.detail) + '</div>' : '';
+                    return '<li' + (cls ? ' class="' + cls + '"' : '') + '><b>' + esc(u.title) + '</b><span>' + esc(when(u.at)) + '</span>' + place + reason + '</li>';
                 })
                 .join('') +
             '</ul>'
