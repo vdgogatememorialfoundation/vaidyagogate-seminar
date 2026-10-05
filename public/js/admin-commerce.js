@@ -349,7 +349,7 @@ async function renderCommerceSettings() {
             '<label style="display:block;"><input type="checkbox" id="cs-fleet-open" ' +
             (c.fleetbase && c.fleetbase.openBoxDelivery ? 'checked' : '') +
             '> Fleetbase open box delivery</label>' +
-            '<p style="color:#64748b;font-size:0.82rem;margin:8px 0;">Fleetbase pickup and delivery use the SMS proof method. Barcode scan and open-box photo are activities in the Fleetbase order flow. A hub line is included on a logistics order only when it has a name and an address. Tracking says Arrived at that hub name when Fleetbase reports the arrival. Webhook: <code>/api/public/fleetbase/webhook</code>.</p>' +
+            '<p style="color:#64748b;font-size:0.82rem;margin:8px 0;">Fleetbase accepts scan, signature, or photo as the order proof. An open-box order uses a photo. Other orders use a barcode scan. A hub line is included only when it has a name and an address. Tracking says Arrived at that hub name when Fleetbase reports the arrival. An OTP is shown only when Fleetbase sends a code. Webhook: <code>/api/public/fleetbase/webhook</code>.</p>' +
             '<label>Default mode<select id="cs-mode"><option value="logistics">Logistics</option><option value="hyperlocal">Hyperlocal</option></select></label>' +
             '<label style="margin-left:8px;">Hyperlocal provider<select id="cs-hyper"><option value="shipday">Shipday</option><option value="tookan">Tookan</option><option value="pidge">Pidge</option><option value="fleetbase">Fleetbase</option></select></label>' +
             '<h3 style="margin-top:18px;">Shop timings and checkout</h3>' +

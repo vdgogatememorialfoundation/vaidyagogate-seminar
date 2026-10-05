@@ -626,7 +626,25 @@ const fleetBody = commerce.buildFleetbaseOrderBody(fleetCfg, {
     dropAtMs: Date.parse('2026-10-06T12:30:00Z'),
     items: [{ title: 'Book', unitPrice: 100 }]
 });
-assert.strictEqual(fleetBody.pod_method, 'sms');
+assert.strictEqual(fleetBody.pod_method, 'photo');
+const scanCfg = commerce.normalizeCommerceConfig({
+    storeName: 'VGMF Book Desk',
+    storeAddress: '12 Main Road',
+    storeCity: 'Pune',
+    storeState: 'Maharashtra',
+    storePincode: '411001',
+    fleetbase: { enabled: true, apiHost: 'http://127.0.0.1:8095', secretKey: 'flb_test_secret' }
+});
+assert.strictEqual(
+    commerce.buildFleetbaseOrderBody(scanCfg, {
+        orderCode: 'BKFLEET2',
+        deliveryAddress: '44 Lake Road',
+        shippingCity: 'Pune',
+        shippingState: 'Maharashtra',
+        shippingPincode: '411009'
+    }).pod_method,
+    'scan'
+);
 assert.strictEqual(fleetBody.pod_required, true);
 assert.strictEqual(fleetBody.meta.open_box_delivery, true);
 assert.strictEqual(fleetBody.meta.barcode_scan, true);
