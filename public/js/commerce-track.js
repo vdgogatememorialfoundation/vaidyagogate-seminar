@@ -290,7 +290,14 @@
                 sub.textContent = data.error || 'Shipment not found.';
                 return;
             }
-            render(data.shipment || {});
+            const shipment = data.shipment || {};
+            if (document.body.getAttribute('data-track') === 'fleetbase' && shipment.commerceProvider !== 'fleetbase') {
+                document.body.classList.remove('hl-page');
+                sub.textContent = 'This Fleetbase tracking link does not match a Fleetbase shipment.';
+                tracker.innerHTML = '';
+                return;
+            }
+            render(shipment);
         } catch (e) {
             sub.textContent = 'Could not refresh tracking.';
         }

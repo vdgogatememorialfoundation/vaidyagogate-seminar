@@ -158,7 +158,7 @@ function renderCommerceBook() {
         .join('');
     panel.innerHTML =
         '<div class="card" style="padding:16px;"><h3 style="margin-top:0;">Book a shipment</h3>' +
-        '<p style="color:#64748b;font-size:0.88rem;">Logistics uses Tookan, Pidge, or Fleetbase. Hyperlocal can use Shipday, Tookan, Pidge, or Fleetbase. A Tookan parcel needs pickup and delivery coordinates. Fleetbase books from the address and can require an SMS code, a barcode scan, and an open-box photo in Fleetbase.</p>' +
+        '<p style="color:#64748b;font-size:0.88rem;">Logistics uses Tookan, Pidge, or Fleetbase. Hyperlocal can use Shipday, Tookan, Pidge, or Fleetbase. A Tookan parcel needs pickup and delivery coordinates. Fleetbase prints a 12-digit AWB when the shipment is ready, and hub staff track it from the hub portal.</p>' +
         '<label>Order<select id="c-book-order">' +
         opts +
         '</select></label>' +
@@ -167,6 +167,8 @@ function renderCommerceBook() {
         '<label>Mode<select id="c-book-mode"><option value="logistics">Logistics</option><option value="hyperlocal">Hyperlocal</option></select></label>' +
         '<label>Pickup time (IST)<input id="c-book-when" type="datetime-local"></label>' +
         '<label style="align-self:end;"><input id="c-book-openbox" type="checkbox"> Open box delivery</label>' +
+        '<label style="align-self:end;"><input id="c-book-fragile" type="checkbox"> Fragile</label>' +
+        '<label style="align-self:end;"><input id="c-book-heavy" type="checkbox"> Heavy</label>' +
         '</div>' +
         '<button type="button" class="btn-primary" style="margin-top:12px;" onclick="commerceBookShipment()">Book pickup</button>' +
         '<button type="button" class="btn-primary" style="margin:12px 0 0 8px;background:#111;" onclick="commercePrintSelectedLabel()">Print shipping label</button>' +
@@ -312,6 +314,7 @@ async function renderCommerceSettings() {
             '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;">' +
             field('cs-store', 'Store name', c.storeName) +
             field('cs-phone', 'Store phone', c.storePhone) +
+            field('cs-email', 'Store email for pickup codes', c.storeEmail) +
             field('cs-addr', 'Store address', c.storeAddress) +
             field('cs-city', 'Store city', c.storeCity) +
             field('cs-state', 'Store state', c.storeState) +
@@ -331,9 +334,7 @@ async function renderCommerceSettings() {
             field('cs-fleet-hook', 'Fleetbase webhook token', '') +
             field('cs-fleet-type', 'Fleetbase order type', (c.fleetbase && c.fleetbase.orderType) || '') +
             '</div>' +
-            '<label style="display:block;margin-top:8px;">Fleetbase hubs, one per line as Name | address<textarea id="cs-fleet-hubs" style="width:100%;min-height:72px;margin-top:4px;">' +
-            escCommerce((c.fleetbase && c.fleetbase.hubs) || '') +
-            '</textarea></label>' +
+            '<p style="font-size:0.84rem;margin:8px 0;">Hubs are sorting locations, not the store. Create them in the <a href="/hub">hub portal</a>. Agents use the <a href="/navigator">navigator</a>. Fleetbase tracking uses <code>/track-fleetbase</code>.</p>' +
             '<label style="display:block;margin-top:8px;"><input type="checkbox" id="cs-tookan-on" ' +
             (t.enabled ? 'checked' : '') +
             '> Tookan enabled</label>' +
@@ -374,7 +375,25 @@ async function renderCommerceSettings() {
             field('cs-cod-fee', 'COD extra charge', c.shop && c.shop.codExtraCharge) +
             '</div>' +
             '<div><button type="button" class="btn-primary" style="margin-top:12px;" onclick="commerceSaveSettings()">Save</button></div>' +
-            '<p id="commerce-settings-msg" style="font-weight:600;"></p></div>';
+            '<p id="commerce-settings-msg" style="font-weight:600;"></p></div>' +
+            '<div class="card" style="padding:16px;margin-top:12px;"><h3 style="margin-top:0;">First sorting hub</h3>' +
+            '<p style="color:#64748b;font-size:0.88rem;">This creates a hub and its manager. It does not use the store address. After this, the manager works in the <a href="/hub">hub portal</a> and agents use the <a href="/navigator">navigator</a>.</p>' +
+            '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;">' +
+            field('hub-name', 'Hub name', '') +
+            field('hub-locality', 'Locality', '') +
+            field('hub-city', 'City', '') +
+            field('hub-state', 'State', '') +
+            field('hub-country', 'Country', '') +
+            field('hub-pin', 'PIN', '') +
+            field('hub-address', 'Address', '') +
+            field('hub-mgr-name', 'Manager name', '') +
+            field('hub-mgr-email', 'Manager email', '') +
+            field('hub-mgr-pass', 'Manager password', '') +
+            '</div>' +
+            '<label>Role<select id="hub-role"><option value="seller_local">Seller local hub</option><option value="city_mother">City mother hub</option><option value="transit">On-route hub</option><option value="destination_city">Destination city hub</option><option value="delivery_local">Delivery local hub</option></select></label>' +
+            '<div class="row" style="display:flex;gap:8px;"><label>Leaves city<input id="hub-from"></label><label>Reaches city<input id="hub-to"></label></div>' +
+            '<button type="button" class="btn-primary" style="margin-top:12px;" onclick="commerceCreateHub()">Create hub</button>' +
+            '<p id="commerce-hub-msg" style="font-weight:600;"></p></div>';
         const mode = document.getElementById('cs-mode');
         const hyper = document.getElementById('cs-hyper');
         if (mode) mode.value = c.defaultMode || 'logistics';
@@ -396,6 +415,38 @@ async function renderCommerceSettings() {
     }
 }
 
+async function commerceCreateHub() {
+    const msg = document.getElementById('commerce-hub-msg');
+    try {
+        const data = await commerceFetch('/api/admin/commerce/hubs', {
+            method: 'POST',
+            body: JSON.stringify({
+                actingAdminId: commerceActor(),
+                name: val('hub-name'),
+                locality: val('hub-locality'),
+                city: val('hub-city'),
+                state: val('hub-state'),
+                country: val('hub-country'),
+                pincode: val('hub-pin'),
+                address: val('hub-address'),
+                role: val('hub-role'),
+                fromCity: val('hub-from'),
+                toCity: val('hub-to'),
+                manager: { name: val('hub-mgr-name'), email: val('hub-mgr-email'), password: val('hub-mgr-pass') }
+            })
+        });
+        if (msg) {
+            msg.style.color = '#15803d';
+            msg.textContent = 'Hub ' + (data.id || '') + ' saved. The manager can sign in at /hub.';
+        }
+    } catch (e) {
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = e.message;
+        }
+    }
+}
+
 async function commerceSaveSettings() {
     const msg = document.getElementById('commerce-settings-msg');
     try {
@@ -406,6 +457,7 @@ async function commerceSaveSettings() {
                 config: {
                     storeName: val('cs-store'),
                     storePhone: val('cs-phone'),
+                    storeEmail: val('cs-email'),
                     storeAddress: val('cs-addr'),
                     storeCity: val('cs-city'),
                     storeState: val('cs-state'),
@@ -430,7 +482,7 @@ async function commerceSaveSettings() {
                         secretKey: val('cs-fleet-key'),
                         webhookToken: val('cs-fleet-hook'),
                         orderType: val('cs-fleet-type'),
-                        hubs: (document.getElementById('cs-fleet-hubs') || {}).value || '',
+                        hubs: '',
                         openBoxDelivery: document.getElementById('cs-fleet-open').checked
                     },
                     shop: {
@@ -555,7 +607,9 @@ async function commerceBookShipment() {
                 provider: val('c-book-provider'),
                 mode: val('c-book-mode'),
                 pickupAt: val('c-book-when'),
-                openBox: !!(document.getElementById('c-book-openbox') && document.getElementById('c-book-openbox').checked)
+                openBox: !!(document.getElementById('c-book-openbox') && document.getElementById('c-book-openbox').checked),
+                fragile: !!(document.getElementById('c-book-fragile') && document.getElementById('c-book-fragile').checked),
+                heavy: !!(document.getElementById('c-book-heavy') && document.getElementById('c-book-heavy').checked)
             })
         });
         const o = data.order || {};
@@ -723,6 +777,7 @@ function commerceKeyCardHtml(compact) {
         '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;">' +
         field('bpos-store', 'Store name') +
         field('bpos-phone', 'Store phone') +
+        field('bpos-email', 'Store email for pickup codes') +
         field('bpos-addr', 'Store address') +
         field('bpos-city', 'Store city') +
         field('bpos-state', 'Store state') +
@@ -742,7 +797,7 @@ function commerceKeyCardHtml(compact) {
         field('bpos-fleet-hook', 'Fleetbase webhook token') +
         field('bpos-fleet-type', 'Fleetbase order type') +
         '</div>' +
-        '<label style="display:block;margin-top:8px;">Fleetbase hubs, one per line as Name | address<textarea id="bpos-fleet-hubs" style="width:100%;min-height:72px;margin-top:4px;"></textarea></label>' +
+        '<p style="font-size:0.78rem;color:#64748b;margin:8px 0 0;">The store is not a hub. Create sorting hubs, bags, trips, and drivers in the <a href="/hub">hub portal</a>. Agents scan from the <a href="/navigator">navigator</a>.</p>' +
         '<label style="display:block;margin-top:8px;"><input type="checkbox" id="bpos-tookan-on"> Tookan enabled (logistics and hyperlocal)</label>' +
         '<label style="display:block;"><input type="checkbox" id="bpos-ship-on"> Shipday enabled (hyperlocal)</label>' +
         '<label style="display:block;"><input type="checkbox" id="bpos-pidge-on"> Pidge enabled (logistics and hyperlocal)</label>' +
@@ -752,7 +807,7 @@ function commerceKeyCardHtml(compact) {
         '<label>Default<select id="bpos-mode"><option value="logistics">Logistics</option><option value="hyperlocal">Hyperlocal</option></select></label>' +
         '<label>Hyperlocal provider<select id="bpos-hyper"><option value="shipday">Shipday</option><option value="tookan">Tookan</option><option value="pidge">Pidge</option><option value="fleetbase">Fleetbase</option></select></label>' +
         '</div>' +
-        '<p style="font-size:0.78rem;color:#64748b;margin:8px 0 0;">Webhooks: <code>/api/public/tookan/webhook</code>, <code>/api/public/shipday/webhook</code>, <code>/api/public/pidge/webhook</code>, and <code>/api/public/fleetbase/webhook</code>. The self-hosted Fleetbase API is <code>http://127.0.0.1:8095</code>. Public tracking links use <code>/track-commerce?token=…</code>.</p>' +
+        '<p style="font-size:0.78rem;color:#64748b;margin:8px 0 0;">Webhooks: <code>/api/public/tookan/webhook</code>, <code>/api/public/shipday/webhook</code>, <code>/api/public/pidge/webhook</code>, and <code>/api/public/fleetbase/webhook</code>. Fleetbase shipments use <code>/track-fleetbase?token=…</code>. Other couriers stay on <code>/track-commerce?token=…</code>.</p>' +
         '<button type="button" class="btn-primary" style="margin-top:10px;background:#0f766e;" onclick="commerceSavePosKeys()">Save courier keys</button>' +
         '<p id="bpos-keys-msg" style="font-weight:600;margin:8px 0 0;"></p></div>'
     );
@@ -789,6 +844,8 @@ function mountBookIntegrations() {
             '<div style="font-weight:800;color:#0f766e;margin-bottom:6px;">Gogate Products</div>' +
             '<p style="font-size:0.8rem;color:#64748b;margin:0 0 10px;">Customers see Gogate Products as the courier partner. Tookan uses the pickup and delivery OTPs Tookan issues. Pidge and Fleetbase show a delivery OTP only when that courier sends one. Shipday does not use an OTP. A Tookan parcel needs pickup and delivery coordinates so the hub path can be calculated. The shipping label is created only after the courier API returns an AWB.</p>' +
             '<label style="font-size:0.78rem;display:block;margin-bottom:8px;"><input id="bs-commerce-openbox" type="checkbox"> Open box delivery</label>' +
+            '<label style="font-size:0.78rem;display:block;margin-bottom:8px;"><input id="bs-commerce-fragile" type="checkbox"> Fragile</label>' +
+            '<label style="font-size:0.78rem;display:block;margin-bottom:8px;"><input id="bs-commerce-heavy" type="checkbox"> Heavy</label>' +
             '<label style="font-size:0.78rem;">Pickup time (IST)<input id="bs-commerce-when" type="datetime-local" style="width:100%;padding:8px;margin:4px 0 10px;"></label>' +
             '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
             '<button type="button" class="btn-primary" style="background:#111;flex:1;min-width:140px;" onclick="bsPrintCommerceLabel()">Print shipping label</button>' +
@@ -819,6 +876,7 @@ async function commerceFillPosKeys() {
         };
         set('bpos-store', c.storeName || '');
         set('bpos-phone', c.storePhone || '');
+        set('bpos-email', c.storeEmail || '');
         set('bpos-addr', c.storeAddress || '');
         set('bpos-city', c.storeCity || '');
         set('bpos-state', c.storeState || '');
@@ -842,7 +900,6 @@ async function commerceFillPosKeys() {
         set('bpos-pidge-channel', pidge.channel || '');
         set('bpos-fleet-host', fleet.apiHost || '');
         set('bpos-fleet-type', fleet.orderType || '');
-        set('bpos-fleet-hubs', fleet.hubs || '');
         const mode = document.getElementById('bpos-mode');
         const hyper = document.getElementById('bpos-hyper');
         if (mode) mode.value = c.defaultMode || 'logistics';
@@ -881,6 +938,7 @@ async function commerceSavePosKeys() {
                 config: {
                     storeName: val('bpos-store'),
                     storePhone: val('bpos-phone'),
+                    storeEmail: val('bpos-email'),
                     storeAddress: val('bpos-addr'),
                     storeCity: val('bpos-city'),
                     storeState: val('bpos-state'),
@@ -912,7 +970,7 @@ async function commerceSavePosKeys() {
                         secretKey: val('bpos-fleet-key'),
                         webhookToken: val('bpos-fleet-hook'),
                         orderType: val('bpos-fleet-type'),
-                        hubs: val('bpos-fleet-hubs'),
+                        hubs: '',
                         openBoxDelivery: !!(document.getElementById('bpos-fleet-open') && document.getElementById('bpos-fleet-open').checked)
                     }
                 }
@@ -947,7 +1005,9 @@ async function bsBookCommerce(provider, mode) {
                 provider,
                 mode,
                 pickupAt: val('bs-commerce-when'),
-                openBox: !!(document.getElementById('bs-commerce-openbox') && document.getElementById('bs-commerce-openbox').checked)
+                openBox: !!(document.getElementById('bs-commerce-openbox') && document.getElementById('bs-commerce-openbox').checked),
+                fragile: !!(document.getElementById('bs-commerce-fragile') && document.getElementById('bs-commerce-fragile').checked),
+                heavy: !!(document.getElementById('bs-commerce-heavy') && document.getElementById('bs-commerce-heavy').checked)
             })
         });
         const o = data.order || {};

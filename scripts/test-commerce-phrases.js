@@ -650,7 +650,19 @@ assert.strictEqual(fleetBody.meta.open_box_delivery, true);
 assert.strictEqual(fleetBody.meta.barcode_scan, true);
 assert.ok(fleetBody.pickup.indexOf('12 Main Road') !== -1);
 assert.ok(fleetBody.dropoff.indexOf('44 Lake Road') !== -1);
-assert.deepStrictEqual(fleetBody.waypoints, ['Pune Hub, 12 Market Road, Pune, Maharashtra 411009']);
+assert.ok(!fleetBody.waypoints);
+const hopped = commerce.buildFleetbaseOrderBody(fleetCfg, {
+    orderCode: 'BKFLEET1',
+    shippingRecipientName: 'Asha',
+    deliveryAddress: '44 Lake Road',
+    shippingCity: 'Pune',
+    shippingState: 'Maharashtra',
+    shippingPincode: '411009',
+    networkWaypoints: [{ name: 'Pune Hub', address: '12 Market Road, Pune, Maharashtra 411009' }]
+});
+assert.deepStrictEqual(hopped.waypoints, ['Pune Hub, 12 Market Road, Pune, Maharashtra 411009']);
+assert.strictEqual(commerce.trackPath('abc123token', 'tookan'), '/track-commerce?token=abc123token');
+assert.strictEqual(commerce.trackPath('abc123token', 'fleetbase'), '/track-fleetbase?token=abc123token');
 assert.ok(!JSON.stringify(fleetBody).match(/"otp"/));
 assert.throws(() => commerce.buildFleetbaseOrderBody(fleetCfg, { orderCode: 'X' }), /delivery address/);
 const hubUpdate = commerce.fleetbaseOrderToUpdate(
@@ -704,6 +716,10 @@ assert.strictEqual(fleetOtp.deliveryAt, '2026-10-06T12:30:00.000Z');
 assert.ok(!JSON.stringify(fleetOtp).includes('411009'));
 assert.strictEqual(
     commerce.fleetbaseOrderToUpdate({ id: 'order_done', status: 'completed', tracking_number: { tracking_number: 'FB-9' } }, 'logistics').kind,
+    'arrived_facility'
+);
+assert.strictEqual(
+    commerce.fleetbaseOrderToUpdate({ id: 'order_done_hl', status: 'completed', tracking_number: { tracking_number: 'FB-9' } }, 'hyperlocal').kind,
     'delivered'
 );
 const fleetCancel = commerce.fleetbaseOrderToUpdate({ id: 'order_x', status: 'canceled' }, 'logistics');
@@ -723,7 +739,7 @@ const fleetLabel = commerce.labelHtml(
 );
 assert.ok(fleetLabel.includes('FB-1001'));
 assert.ok(fleetLabel.includes('Open box delivery'));
-assert.ok(fleetLabel.includes('4455'));
+assert.ok(!fleetLabel.includes('4455'));
 assert.ok(fleetLabel.includes('data-sym="courier-barcode"'));
 assert.ok(fleetLabel.includes('<svg'));
 

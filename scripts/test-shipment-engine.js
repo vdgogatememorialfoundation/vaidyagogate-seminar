@@ -57,6 +57,20 @@ assert.strictEqual(arrived.city, 'Pune');
 assert.strictEqual(arrived.state, null);
 assert.strictEqual(arrived.country, null);
 assert.strictEqual(arrived.facilityName, 'Swargate Hub');
+const hubCopy = engine.customerEvent({
+    title: 'Shipment Received at Local Hub- Pune Maharashtra, India',
+    kind: 'arrived_facility',
+    at: '2026-10-05T09:00:00Z'
+});
+assert.strictEqual(hubCopy.message, 'Shipment Received at Local Hub- Pune Maharashtra, India');
+assert.strictEqual(hubCopy.parentStage, 'SHIPPED');
+const leftCopy = engine.customerEvent({
+    title: 'Shipment Left Local Hub- Pune Maharashtra, India',
+    kind: 'left_facility',
+    at: '2026-10-05T10:00:00Z'
+});
+assert.strictEqual(leftCopy.message, 'Shipment Left Local Hub- Pune Maharashtra, India');
+assert.strictEqual(leftCopy.parentStage, 'SHIPPED');
 assert.strictEqual(logistics.pipeline.filter((step) => step.state === 'done').length, 2);
 assert.strictEqual(logistics.pipeline.find((step) => step.key === 'SHIPPED').state, 'active');
 assert.strictEqual(logistics.pipeline.find((step) => step.key === 'OUT_FOR_DELIVERY').state, 'upcoming');
