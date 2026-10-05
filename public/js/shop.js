@@ -731,6 +731,7 @@ function renderOrderDetail(data) {
     let headline;
     if (t.cancelled) headline = 'Cancelled';
     else if (o.status === 'pending_payment') headline = 'Payment pending';
+    else if (t.operational === 'DELIVERY_ATTEMPT_FAILED' || t.operational === 'RESCHEDULED') headline = t.headline;
     else if (lastStep.state === 'done') headline = lastStep.title;
     else headline = 'Next: ' + t.headline;
     const tone = t.cancelled || o.status === 'pending_payment' ? 'red' : '';

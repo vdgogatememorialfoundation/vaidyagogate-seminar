@@ -71,7 +71,8 @@ const hyper = engine.buildCustomerTracking(
         agentName: 'Asha',
         agentPhone: '9811111111',
         agentLat: 18.52,
-        agentLng: 73.85
+        agentLng: 73.85,
+        agentLocationAt: new Date().toISOString()
     },
     [{ title: 'Out for delivery', kind: 'out_for_delivery', at: '2026-10-05T09:00:00Z' }]
 );
@@ -100,6 +101,59 @@ const shipday = engine.buildCustomerTracking(
 assert.strictEqual(shipday.deliveryOtp, null);
 assert.strictEqual(shipday.pickupOtp, null);
 assert.strictEqual(shipday.map.enabled, true);
+
+const failed = engine.buildCustomerTracking(
+    {
+        orderCode: 'BK5',
+        commerceStage: 'out_for_delivery',
+        commerceMode: 'hyperlocal',
+        commerceProvider: 'tookan',
+        deliveryOtp: '2222',
+        agentName: 'Asha',
+        agentPhone: '9811111111',
+        shippingPincode: '411009'
+    },
+    [
+        { title: 'Out for delivery', kind: 'out_for_delivery', at: '2026-10-04T11:24:00Z' },
+        { title: 'Delivery agent reached the drop location', kind: 'out_for_delivery', at: '2026-10-04T11:26:00Z' },
+        { title: 'Delivery attempt failed', kind: 'failed', at: '2026-10-04T11:27:00Z' }
+    ]
+);
+assert.strictEqual(failed.mainStatus, 'OUT_FOR_DELIVERY');
+assert.strictEqual(failed.operationalStatus, 'DELIVERY_ATTEMPT_FAILED');
+assert.strictEqual(failed.currentStatus, 'Delivery attempt unsuccessful');
+assert.strictEqual(failed.map.enabled, false);
+assert.strictEqual(failed.deliveryOtp, null);
+assert.strictEqual(failed.agent, null);
+assert.ok(failed.slots.length > 0);
+assert.strictEqual(failed.slots[0].source, 'store_delivery_hours');
+assert.ok(/Tomorrow/.test(failed.slots[0].label));
+assert.strictEqual(failed.pipeline.find((step) => step.key === 'OUT_FOR_DELIVERY').state, 'active');
+assert.strictEqual(failed.pipeline.length, 5);
+assert.ok(failed.timeline.some((row) => row.message === 'Delivery attempt was unsuccessful'));
+assert.ok(!JSON.stringify(failed).includes('411009'));
+assert.ok(!JSON.stringify(failed).includes('Delivery PIN'));
+
+const again = engine.buildCustomerTracking(
+    {
+        orderCode: 'BK5',
+        commerceStage: 'out_for_delivery',
+        commerceMode: 'hyperlocal',
+        commerceProvider: 'tookan',
+        rescheduledForStart: '2026-10-05T08:30:00+05:30',
+        rescheduledForEnd: '2026-10-05T11:30:00+05:30'
+    },
+    [
+        { title: 'Delivery attempt failed', kind: 'failed', at: '2026-10-04T11:27:00Z' },
+        { title: 'Delivery has been rescheduled', kind: 'rescheduled', at: '2026-10-04T12:00:00Z' }
+    ]
+);
+assert.strictEqual(again.operationalStatus, 'RESCHEDULED');
+assert.strictEqual(again.mainStatus, 'SHIPPED');
+assert.strictEqual(again.pipeline.find((step) => step.key === 'SHIPPED').state, 'done');
+assert.strictEqual(again.pipeline.find((step) => step.key === 'OUT_FOR_DELIVERY').state, 'upcoming');
+assert.strictEqual(again.map.enabled, false);
+assert.ok(again.expectedDelivery && again.expectedDelivery.label);
 
 const packed = engine.buildCustomerTracking(
     {

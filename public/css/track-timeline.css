@@ -33,6 +33,8 @@
 .tl-sub { margin: 8px 0 0; padding: 0; list-style: none; }
 .tl-sub li { position: relative; padding: 0 0 10px 0; }
 .tl-sub li.tl-current b { color: var(--tl-green); }
+.tl-sub li.tl-failed b { color: #9a3412; }
+.tl-sub li.tl-rescheduled b { color: #0f766e; }
 .tl-sub b { display: block; font-weight: 600; }
 .tl-sub span { color: var(--tl-muted); font-size: .8rem; }
 .tl-card { margin-top: 10px; border: 1px solid var(--tl-line); border-radius: 8px; padding: 12px 14px; background: #fafbfb; display: flex; gap: 14px; flex-wrap: wrap; align-items: center; justify-content: space-between; }
@@ -72,6 +74,15 @@
 .ship-otp { border: 1px dashed #067d62; background: #f3faf7; border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
 .ship-otp .code { font-size: 1.5rem; font-weight: 800; letter-spacing: 4px; }
 .ship h2 { font-size: 1rem; margin: 18px 0 0; }
+.ship-fail { background: #fff7ed; border: 1px solid #fdba74; border-radius: 12px; padding: 16px; margin-top: 12px; }
+.ship-fail p { margin: 6px 0 12px; }
+.ship-slot { display: flex; gap: 8px; align-items: center; margin: 8px 0; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fff; }
+.ship-slot:has(input:checked) { border-color: #067d62; background: #f3faf7; }
+.tl-custom { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+.tl-custom input { padding: 8px; border: 1px solid #e5e7eb; border-radius: 8px; }
+.ship-fail button, .tl-warn button { background: #067d62; color: #fff; border: 0; border-radius: 8px; padding: 10px 14px; font-weight: 700; cursor: pointer; }
+.tl-warn .call, .ship-fail .call { display: inline-block; margin: 8px 12px 0 0; color: #067d62; font-weight: 700; }
+.ship-fail .form-msg { min-height: 1.2em; }
 @media (max-width: 800px) { .ship-grid { grid-template-columns: 1fr; } }
 .tl-rider { position: absolute; width: 56px; height: 56px; margin: -28px 0 0 -28px; z-index: 6; pointer-events: none; }
 .tl-rider-pulse { position: absolute; inset: 6px; border-radius: 50%; background: rgba(6, 125, 98, 0.22); animation: tlRiderPulse 2s ease-out infinite; }

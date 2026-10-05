@@ -258,9 +258,38 @@ assert.ok(live.agent && live.store && live.drop);
 
 const deliveredTl = shop.buildShopTimeline(Object.assign({}, assigned, { status: 'delivered', commerceStage: 'delivered' }), [], {});
 const done = shop.buildLiveView(Object.assign({}, assigned, { status: 'delivered', commerceStage: 'delivered' }), deliveredTl, 'map-key');
-assert.strictEqual(done.slot, 'delivered');
-assert.strictEqual(done.leg, 'done');
-assert.strictEqual(done.agent, null);
+assert.strictEqual(done, null);
+
+const failedOrder = {
+    status: 'shipped',
+    commerceStage: 'out_for_delivery',
+    commerceMode: 'hyperlocal',
+    commerceProvider: 'tookan',
+    fulfillmentType: 'courier',
+    orderCode: 'BK5',
+    shippingPincode: '411009',
+    agentName: '',
+    agentPhone: '',
+    storeLat: 18.5,
+    storeLng: 73.8,
+    dropLat: 18.6,
+    dropLng: 73.9
+};
+const failedTl = shop.buildShopTimeline(
+    failedOrder,
+    [
+        { title: 'Out for delivery', kind: 'out_for_delivery', at: '2026-10-04T11:24:00Z' },
+        { title: 'Delivery attempt failed', kind: 'failed', at: '2026-10-04T11:27:00Z' }
+    ],
+    {}
+);
+assert.strictEqual(failedTl.operational, 'DELIVERY_ATTEMPT_FAILED');
+assert.strictEqual(failedTl.headline, 'Delivery attempt unsuccessful');
+const failedStep = failedTl.steps.find((s) => s.key === 'out_for_delivery');
+assert.ok(failedStep.reschedule && failedStep.reschedule.slots.length > 0);
+assert.ok(!failedStep.agent);
+assert.ok(!JSON.stringify(failedStep).includes('411009'));
+assert.strictEqual(shop.buildLiveView(failedOrder, failedTl, 'map-key'), null);
 
 const transitTl = shop.buildShopTimeline(
     {

@@ -38,10 +38,10 @@
         return (
             '<ul class="tl-sub">' +
             ordered
-                .map(
-                    (u, i) =>
-                        '<li' + (i === ordered.length - 1 ? ' class="tl-current"' : '') + '><b>' + esc(u.title) + '</b><span>' + esc(when(u.at)) + (u.city ? ' · ' + esc(u.city) : '') + (u.detail ? ' · ' + esc(u.detail) : '') + '</span></li>'
-                )
+                .map((u, i) => {
+                    const cls = u.tone === 'failed' ? 'tl-failed' : u.tone === 'rescheduled' ? 'tl-rescheduled' : i === ordered.length - 1 ? 'tl-current' : '';
+                    return '<li' + (cls ? ' class="' + cls + '"' : '') + '><b>' + esc(u.title) + '</b><span>' + esc(when(u.at)) + (u.city ? ' · ' + esc(u.city) : '') + (u.detail ? ' · ' + esc(u.detail) : '') + '</span></li>';
+                })
                 .join('') +
             '</ul>'
         );
@@ -74,32 +74,41 @@
             html += partnerCard(step.partner, null);
             if (!step.updates.length && step.state !== 'done') html += '<div class="tl-note">Shipped starts when the parcel is scanned at the local hub.</div>';
         }
-        if (step.key === 'out_for_delivery' && step.agent) {
+        if (step.key === 'out_for_delivery' && step.operational === 'DELIVERY_ATTEMPT_FAILED') {
+            const slots = step.reschedule && step.reschedule.slots ? step.reschedule.slots : [];
+            html += '<div class="tl-warn"><b>Delivery attempt unsuccessful</b><div>We couldn\'t deliver your order today. Please choose a new delivery time.</div>';
+            if (step.reschedule && step.reschedule.token && slots.length) {
+                html += '<form id="tl-reschedule-form" data-token="' + esc(step.reschedule.token) + '">';
+                slots.forEach((slot, i) => {
+                    html +=
+                        '<label class="ship-slot"><input type="radio" name="slot" value="' + i + '"' + (i === 0 ? ' checked' : '') +
+                        ' data-date="' + esc(slot.date) + '" data-start="' + esc(slot.start) + '" data-end="' + esc(slot.end) + '"> ' +
+                        esc(slot.label || slot.start + ' – ' + slot.end) + '</label>';
+                });
+                html += '<label class="ship-slot"><input type="radio" name="slot" value="custom"> Choose another time</label>';
+                html += '<div class="tl-custom" hidden><input type="date" name="date" required><input type="time" name="start"><input type="time" name="end"></div>';
+                html += '<button type="submit">Reschedule delivery</button><p class="form-msg" id="tl-reschedule-msg"></p></form>';
+            }
+            if (step.contact && step.contact.phone) {
+                html += '<a class="call" href="tel:' + esc(step.contact.phone) + '">Contact delivery partner' + (step.contact.name ? ' · ' + esc(step.contact.name) : '') + '</a>';
+            }
+            html += '<div><a href="' + esc((step.reschedule && step.reschedule.supportUrl) || '/support') + '">Contact support</a></div></div>';
+        } else if (step.key === 'out_for_delivery' && step.agent && (step.agent.name || step.agent.phone)) {
             const a = step.agent;
             html +=
-                '<div class="tl-card"><div><div class="lbl">Delivery agent</div><div class="val">' + esc(a.name || 'Assigned shortly') + '</div></div>' +
-                '<div><div class="lbl">Agent phone</div><div class="val">' + (a.phone ? '<a href="tel:' + esc(a.phone) + '">' + esc(a.phone) + '</a>' : 'Not available yet') + '</div></div></div>' +
-                '<div class="tl-otps">' +
-                (a.pincode ? '<div class="tl-otp"><div class="lbl">Delivery PIN code</div><div class="code pin">' + esc(a.pincode) + '</div></div>' : '') +
-                (step.deliveryOtp ? '<div class="tl-otp"><div class="lbl">Delivery OTP</div><div class="code">' + esc(step.deliveryOtp) + '</div></div>' : '') +
+                '<div class="tl-card"><div><div class="lbl">Delivery partner</div><div class="val">' + esc(a.name || 'Assigned') + '</div></div>' +
+                (a.phone ? '<div><div class="lbl">Phone</div><div class="val"><a href="tel:' + esc(a.phone) + '">Call</a></div></div>' : '') +
                 '</div>' +
-                (step.deliveryOtp
-                    ? '<div class="tl-note">' +
-                      (step.otpEarly ? 'Not yet out for delivery. ' : '') +
-                      'The customer shares this OTP with the delivery agent only at handover.</div>'
-                    : '');
+                (step.deliveryOtp ? '<div class="tl-otps"><div class="tl-otp"><div class="lbl">Delivery OTP</div><div class="code">' + esc(step.deliveryOtp) + '</div></div></div>' : '');
+        } else if (step.key === 'out_for_delivery' && step.state === 'active' && step.operational !== 'RESCHEDULED') {
+            html += '<div class="tl-note">Finding a delivery partner.</div>';
         }
-        if (data.live && data.live.slot === step.key) {
-            const done = data.live.leg === 'done';
+        if (data.live && data.live.slot === step.key && data.live.leg !== 'done') {
+            const riding = !!(data.live.agent && data.live.route !== 'dotted');
             html +=
-                '<div class="tl-live">' + (done ? 'Delivery route' : 'Live delivery partner') + '</div>' +
-                '<div class="tl-note">' +
-                (done
-                    ? 'The route from the store to the delivery location is shown here.'
-                    : 'The delivery partner moves along the route from the latest location.') +
-                '</div><div id="tl-map-slot"></div>';
-        } else if (step.key === 'out_for_delivery' && step.agent && step.liveMapAvailable && !data.live) {
-            html += '<div class="tl-note">The driver map appears here when a location is available.</div>';
+                '<div class="tl-live">' + (riding ? 'Live delivery tracking' : 'Store and delivery location') + '</div>' +
+                (riding ? '<div id="tl-eta" class="tl-note">Delivery partner is on the way.</div>' : '<div class="tl-note">The route stays dotted until a delivery partner location arrives.</div>') +
+                '<div id="tl-map-slot"></div>';
         }
         return html;
     }
@@ -128,8 +137,59 @@
         );
     }
 
+    function bind(root) {
+        const scope = root && root.querySelector ? root : document;
+        const form = scope.querySelector('#tl-reschedule-form');
+        if (!form || form.dataset.bound) return;
+        form.dataset.bound = '1';
+        form.addEventListener('change', () => {
+            const custom = form.querySelector('input[value="custom"]');
+            const box = form.querySelector('.tl-custom');
+            if (box) box.hidden = !(custom && custom.checked);
+        });
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const msg = document.getElementById('tl-reschedule-msg');
+            const picked = form.querySelector('input[name="slot"]:checked');
+            let date = '';
+            let start = '';
+            let end = '';
+            if (picked && picked.value === 'custom') {
+                date = (form.querySelector('input[name="date"]') || {}).value || '';
+                start = (form.querySelector('input[name="start"]') || {}).value || '';
+                end = (form.querySelector('input[name="end"]') || {}).value || '';
+            } else if (picked) {
+                date = picked.getAttribute('data-date') || '';
+                start = picked.getAttribute('data-start') || '';
+                end = picked.getAttribute('data-end') || '';
+            }
+            if (!date || !start || !end) {
+                if (msg) msg.textContent = 'Choose a delivery time.';
+                return;
+            }
+            if (msg) msg.textContent = 'Updating the delivery…';
+            try {
+                const res = await fetch('/api/public/commerce/reschedule', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: form.getAttribute('data-token'), date, start, end })
+                });
+                const data = await res.json();
+                if (!res.ok) {
+                    if (msg) msg.textContent = data.error || 'Could not reschedule.';
+                    return;
+                }
+                if (msg) msg.textContent = 'Delivery rescheduled.';
+                setTimeout(() => location.reload(), 700);
+            } catch (err) {
+                if (msg) msg.textContent = 'Could not reschedule.';
+            }
+        });
+    }
+
     /** Call after the rendered HTML is in the page. */
     function mount(live) {
+        bind();
         if (!live) return;
         if (mapEl && mapEl.isConnected && mapEl.__map) return paint(live);
         const slot = document.getElementById('tl-map-slot');
@@ -466,6 +526,9 @@
                     return;
                 }
                 if (el.__remain) el.__remain.setOptions({ strokeOpacity: 1, icons: null });
+                const duration = result.routes && result.routes[0] && result.routes[0].legs && result.routes[0].legs[0] && result.routes[0].legs[0].duration;
+                const eta = document.getElementById('tl-eta');
+                if (eta && duration && duration.text && el.__agentLive) eta.textContent = 'Arriving in approximately ' + duration.text;
                 const pts = routePoints(result);
                 if (!el.__agentLive) {
                     el.__path = null;
@@ -506,5 +569,5 @@
     }
     setInterval(tickLines, 2000);
 
-    window.TrackTimeline = { render, mount, when, esc, updates };
+    window.TrackTimeline = { render, mount, bind, when, esc, updates };
 })();

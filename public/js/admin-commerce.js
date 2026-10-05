@@ -855,7 +855,10 @@ async function appendCommerceTrackPanel(id) {
     }
     box.innerHTML = inner;
     body.insertBefore(box, body.firstChild);
-    if (data.live && window.TrackTimeline) window.TrackTimeline.mount(data.live);
+    if (window.TrackTimeline) {
+        if (data.live) window.TrackTimeline.mount(data.live);
+        else if (window.TrackTimeline.bind) window.TrackTimeline.bind(box);
+    }
 }
 
 function installCommerceTrackingHook() {
