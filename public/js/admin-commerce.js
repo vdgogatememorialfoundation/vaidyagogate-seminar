@@ -1,9 +1,13 @@
 /**
- * Admin Commerce desk: order flow, Tookan / Shipday booking, tracking, labels.
+ * Admin Commerce desk: order flow, Tookan / Shipday / Pidge booking, tracking, labels.
  */
 let commerceOrders = [];
 let commercePanel = 'desk';
 let commerceTrackTimer = null;
+
+function commerceNoOtp(provider) {
+    return provider === 'shipday' || provider === 'pidge';
+}
 
 function commerceActor() {
     const u = typeof getStoredAdminUser === 'function' ? getStoredAdminUser() : {};
@@ -100,7 +104,7 @@ function renderCommerceDesk() {
                 '</span></td><td>' +
                 escCommerce(commerceStageLabel(o.commerceStage)) +
                 '</td><td>' +
-                (o.commerceProvider === 'shipday'
+                (commerceNoOtp(o.commerceProvider)
                     ? '—'
                     : 'Pickup <strong>' + escCommerce(o.pickupOtp || '—') + '</strong><br>Delivery <strong>' + escCommerce(o.deliveryOtp || '—') + '</strong>') +
                 '</td><td>' +
@@ -127,7 +131,7 @@ function renderCommerceDesk() {
         field('c-city', 'City') +
         field('c-item', 'Item', 'Book') +
         '<label>Mode<select id="c-mode"><option value="logistics">Tookan logistics</option><option value="hyperlocal">Hyperlocal pickup & delivery</option></select></label>' +
-        '<label>Hyperlocal provider<select id="c-provider"><option value="">Auto</option><option value="shipday">Shipday</option><option value="tookan">Tookan</option></select></label>' +
+        '<label>Hyperlocal provider<select id="c-provider"><option value="">Auto</option><option value="shipday">Shipday</option><option value="tookan">Tookan</option><option value="pidge">Pidge</option></select></label>' +
         '</div><button type="button" class="btn-primary" style="margin-top:12px;" onclick="commercePlaceOrder()">Save order</button>' +
         '<p id="commerce-place-msg" style="font-weight:600;"></p></div>' +
         '<table class="data-table" style="width:100%;"><thead><tr><th>Order</th><th>Stage</th><th>OTP</th><th></th></tr></thead><tbody>' +
@@ -154,12 +158,12 @@ function renderCommerceBook() {
         .join('');
     panel.innerHTML =
         '<div class="card" style="padding:16px;"><h3 style="margin-top:0;">Book a shipment</h3>' +
-        '<p style="color:#64748b;font-size:0.88rem;">Logistics uses Tookan. Hyperlocal can use Shipday or Tookan. Marking an order ready on the desk schedules this automatically when keys are saved.</p>' +
+        '<p style="color:#64748b;font-size:0.88rem;">Logistics uses Tookan or Pidge. Hyperlocal can use Shipday, Tookan, or Pidge. Marking an order ready on the desk schedules this automatically when keys are saved.</p>' +
         '<label>Order<select id="c-book-order">' +
         opts +
         '</select></label>' +
         '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">' +
-        '<label>Provider<select id="c-book-provider"><option value="tookan">Tookan</option><option value="shipday">Shipday</option></select></label>' +
+        '<label>Provider<select id="c-book-provider"><option value="tookan">Tookan</option><option value="shipday">Shipday</option><option value="pidge">Pidge</option></select></label>' +
         '<label>Mode<select id="c-book-mode"><option value="logistics">Logistics</option><option value="hyperlocal">Hyperlocal</option></select></label>' +
         '<label>Pickup time (IST)<input id="c-book-when" type="datetime-local"></label>' +
         '</div>' +
@@ -209,7 +213,7 @@ function renderCommerceReturns() {
                 ')">Update status</button>' +
                 '<div style="margin-top:8px;"><select id="ret-provider-' +
                 o.id +
-                '"><option value="tookan">Tookan</option><option value="shipday">Shipday</option></select> ' +
+                '"><option value="tookan">Tookan</option><option value="shipday">Shipday</option><option value="pidge">Pidge</option></select> ' +
                 '<select id="ret-mode-' +
                 o.id +
                 '"><option value="hyperlocal">Hyperlocal</option><option value="logistics">Logistics</option></select><br>' +
@@ -223,7 +227,7 @@ function renderCommerceReturns() {
         })
         .join('');
     panel.innerHTML =
-        '<p style="color:#64748b;">Customer return and replacement requests appear here. Update the status, then schedule a Tookan or Shipday pickup for the return shipment. The customer sees the same updates on the order tracking screen.</p>' +
+        '<p style="color:#64748b;">Customer return and replacement requests appear here. Update the status, then schedule a Tookan, Shipday, or Pidge pickup for the return shipment. The customer sees the same updates on the order tracking screen.</p>' +
         '<table class="data-table" style="width:100%;"><thead><tr><th>Order</th><th>Status</th><th></th></tr></thead><tbody>' +
         (rows || '<tr><td colspan="3">No return requests yet.</td></tr>') +
         '</tbody></table>';
@@ -291,12 +295,15 @@ async function renderCommerceSettings() {
         const c = data.config || {};
         const t = c.tookan || {};
         const s = c.shipday || {};
+        const p = c.pidge || {};
         panel.innerHTML =
             '<div class="card" style="padding:16px;"><h3 style="margin-top:0;">Store & keys</h3>' +
             '<p style="color:#64748b;font-size:0.86rem;">Leave a key blank to keep the saved value. Tookan key hint ' +
             escCommerce(t.apiKeyHint || 'not set') +
             '. Shipday key hint ' +
             escCommerce(s.apiKeyHint || 'not set') +
+            '. Pidge username hint ' +
+            escCommerce(p.usernameHint || 'not set') +
             '.</p>' +
             '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:8px;">' +
             field('cs-store', 'Store name', c.storeName) +
@@ -309,6 +316,10 @@ async function renderCommerceSettings() {
             field('cs-tookan', 'Tookan API key', '') +
             field('cs-secret', 'Tookan webhook secret', '') +
             field('cs-ship', 'Shipday API key', '') +
+            field('cs-pidge-user', 'Pidge username', '') +
+            field('cs-pidge-pass', 'Pidge password', '') +
+            field('cs-pidge-hook', 'Pidge webhook token', '') +
+            field('cs-pidge-channel', 'Pidge channel', p.channel || '') +
             '</div>' +
             '<label style="display:block;margin-top:8px;"><input type="checkbox" id="cs-tookan-on" ' +
             (t.enabled ? 'checked' : '') +
@@ -316,8 +327,11 @@ async function renderCommerceSettings() {
             '<label style="display:block;"><input type="checkbox" id="cs-ship-on" ' +
             (s.enabled ? 'checked' : '') +
             '> Shipday enabled</label>' +
+            '<label style="display:block;"><input type="checkbox" id="cs-pidge-on" ' +
+            (p.enabled ? 'checked' : '') +
+            '> Pidge enabled</label>' +
             '<label>Default mode<select id="cs-mode"><option value="logistics">Logistics</option><option value="hyperlocal">Hyperlocal</option></select></label>' +
-            '<label style="margin-left:8px;">Hyperlocal provider<select id="cs-hyper"><option value="shipday">Shipday</option><option value="tookan">Tookan</option></select></label>' +
+            '<label style="margin-left:8px;">Hyperlocal provider<select id="cs-hyper"><option value="shipday">Shipday</option><option value="tookan">Tookan</option><option value="pidge">Pidge</option></select></label>' +
             '<h3 style="margin-top:18px;">Shop timings and checkout</h3>' +
             '<p style="color:#64748b;font-size:0.86rem;">The shop is only at <strong>/shop</strong>. It is not shown on the website or the doctor portal. Customers sign in with the same portal account.</p>' +
             '<label><input type="checkbox" id="cs-shop-on"> Shop link accepts orders</label>' +
@@ -381,6 +395,13 @@ async function commerceSaveSettings() {
                     defaultHyperlocalProvider: val('cs-hyper'),
                     tookan: { enabled: document.getElementById('cs-tookan-on').checked, apiKey: val('cs-tookan'), sharedSecret: val('cs-secret') },
                     shipday: { enabled: document.getElementById('cs-ship-on').checked, apiKey: val('cs-ship') },
+                    pidge: {
+                        enabled: document.getElementById('cs-pidge-on').checked,
+                        username: val('cs-pidge-user'),
+                        password: val('cs-pidge-pass'),
+                        webhookToken: val('cs-pidge-hook'),
+                        channel: val('cs-pidge-channel')
+                    },
                     shop: {
                         enabled: document.getElementById('cs-shop-on').checked,
                         razorpayEnabled: document.getElementById('cs-rz').checked,
@@ -469,7 +490,7 @@ async function commerceBookShipment() {
         if (msg) {
             msg.textContent =
                 'Booked with Gogate Products.' +
-                (o.commerceProvider === 'shipday' ? '' : ' Pickup OTP ' + (o.pickupOtp || '—') + ' · Delivery OTP ' + (o.deliveryOtp || '—')) +
+                (commerceNoOtp(o.commerceProvider) ? '' : ' Pickup OTP ' + (o.pickupOtp || '—') + ' · Delivery OTP ' + (o.deliveryOtp || '—')) +
                 (o.commerceTrackUrl ? ' · ' + o.commerceTrackUrl : '');
         }
     } catch (e) {
@@ -509,7 +530,7 @@ function renderCommerceShipment(data, animate) {
         (o.commerceMode ? ' · ' + escCommerce(o.commerceMode) : '') +
         (hyper ? '' : '') +
         '</p>' +
-        (o.commerceProvider === 'shipday'
+        (commerceNoOtp(o.commerceProvider)
             ? ''
             : '<p>Pickup OTP <strong>' +
               escCommerce(data.pickupOtp || o.pickupOtp || '—') +
@@ -620,11 +641,11 @@ function placeMarker(el, key, pos, title) {
 
 function commerceKeyCardHtml(compact) {
     const hint = compact
-        ? 'These are the same Tookan and Shipday keys used by Commerce. A POS order still appears on the Commerce desk when doctor book orders are closed.'
-        : 'Tookan covers logistics and hyperlocal pickup and delivery. Shipday covers hyperlocal. The Google Maps key draws the live driver route.';
+        ? 'These are the same Tookan, Shipday, and Pidge keys used by Commerce. A POS order still appears on the Commerce desk when doctor book orders are closed.'
+        : 'Tookan and Pidge cover logistics and hyperlocal. Shipday covers hyperlocal. The Google Maps key draws the live driver route. Shipday and Pidge do not use an OTP.';
     return (
         '<div id="bs-commerce-keys" class="card" style="padding:18px;margin:0 0 14px;border:1px solid #99f6e4;background:#f0fdfa;">' +
-        '<h3 style="margin:0 0 8px;color:#0f766e;">Tookan, Shipday and live map</h3>' +
+        '<h3 style="margin:0 0 8px;color:#0f766e;">Tookan, Shipday, Pidge and live map</h3>' +
         '<p style="font-size:0.84rem;color:#64748b;margin:0 0 10px;">' +
         hint +
         '</p>' +
@@ -639,15 +660,20 @@ function commerceKeyCardHtml(compact) {
         field('bpos-tookan', 'Tookan API key') +
         field('bpos-secret', 'Tookan webhook secret') +
         field('bpos-ship', 'Shipday API key') +
+        field('bpos-pidge-user', 'Pidge username') +
+        field('bpos-pidge-pass', 'Pidge password') +
+        field('bpos-pidge-hook', 'Pidge webhook token') +
+        field('bpos-pidge-channel', 'Pidge channel') +
         '</div>' +
         '<label style="display:block;margin-top:8px;"><input type="checkbox" id="bpos-tookan-on"> Tookan enabled (logistics and hyperlocal)</label>' +
         '<label style="display:block;"><input type="checkbox" id="bpos-ship-on"> Shipday enabled (hyperlocal)</label>' +
+        '<label style="display:block;"><input type="checkbox" id="bpos-pidge-on"> Pidge enabled (logistics and hyperlocal)</label>' +
         '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">' +
-        '<label>Default<select id="bpos-mode"><option value="logistics">Tookan logistics</option><option value="hyperlocal">Hyperlocal</option></select></label>' +
-        '<label>Hyperlocal provider<select id="bpos-hyper"><option value="shipday">Shipday</option><option value="tookan">Tookan</option></select></label>' +
+        '<label>Default<select id="bpos-mode"><option value="logistics">Logistics</option><option value="hyperlocal">Hyperlocal</option></select></label>' +
+        '<label>Hyperlocal provider<select id="bpos-hyper"><option value="shipday">Shipday</option><option value="tookan">Tookan</option><option value="pidge">Pidge</option></select></label>' +
         '</div>' +
-        '<p style="font-size:0.78rem;color:#64748b;margin:8px 0 0;">Webhooks: <code>/api/public/tookan/webhook</code> and <code>/api/public/shipday/webhook</code>. Public tracking links use <code>/track-commerce?token=…</code>.</p>' +
-        '<button type="button" class="btn-primary" style="margin-top:10px;background:#0f766e;" onclick="commerceSavePosKeys()">Save Tookan and Shipday</button>' +
+        '<p style="font-size:0.78rem;color:#64748b;margin:8px 0 0;">Webhooks: <code>/api/public/tookan/webhook</code>, <code>/api/public/shipday/webhook</code>, and <code>/api/public/pidge/webhook</code>. Public tracking links use <code>/track-commerce?token=…</code>.</p>' +
+        '<button type="button" class="btn-primary" style="margin-top:10px;background:#0f766e;" onclick="commerceSavePosKeys()">Save courier keys</button>' +
         '<p id="bpos-keys-msg" style="font-weight:600;margin:8px 0 0;"></p></div>'
     );
 }
@@ -669,7 +695,7 @@ function mountBookIntegrations() {
         note.id = 'bs-pos-commerce-note';
         note.style.cssText = 'grid-column:1/-1;padding:12px 14px;border:1px solid #99f6e4;background:#f0fdfa;border-radius:12px;margin-bottom:12px;font-size:0.86rem;color:#134e4a;';
         note.innerHTML =
-            '<strong>Commerce integrations.</strong> Tookan and Shipday keys are saved with the book-sales logistics settings. ' +
+            '<strong>Commerce integrations.</strong> Tookan, Shipday, and Pidge keys are saved with the book-sales logistics settings. ' +
             'A POS order is listed in Commerce even when the doctor book-order screen is closed. ' +
             '<button type="button" class="btn-primary" style="margin-left:8px;background:#0f766e;padding:4px 10px;" onclick="switchBsTab(\'config\')">Open integrations</button>';
         pos.insertBefore(note, pos.firstChild);
@@ -681,12 +707,14 @@ function mountBookIntegrations() {
         box.style.cssText = 'border:2px solid #0f766e;border-radius:12px;padding:16px;margin:0 0 16px;';
         box.innerHTML =
             '<div style="font-weight:800;color:#0f766e;margin-bottom:6px;">Gogate Products</div>' +
-            '<p style="font-size:0.8rem;color:#64748b;margin:0 0 10px;">Customers see Gogate Products as the courier partner. Tookan logistics creates one parcel and uses the pickup and drop OTPs Tookan issues. Shipday does not use an OTP.</p>' +
+            '<p style="font-size:0.8rem;color:#64748b;margin:0 0 10px;">Customers see Gogate Products as the courier partner. Tookan logistics creates one parcel and uses the pickup and drop OTPs Tookan issues. Shipday and Pidge do not use an OTP.</p>' +
             '<label style="font-size:0.78rem;">Pickup time (IST)<input id="bs-commerce-when" type="datetime-local" style="width:100%;padding:8px;margin:4px 0 10px;"></label>' +
             '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
             '<button type="button" class="btn-primary" style="background:#0d9488;flex:1;min-width:140px;" onclick="bsBookCommerce(\'tookan\',\'logistics\')">Tookan logistics</button>' +
             '<button type="button" class="btn-primary" style="background:#0f766e;flex:1;min-width:140px;" onclick="bsBookCommerce(\'tookan\',\'hyperlocal\')">Tookan hyperlocal</button>' +
             '<button type="button" class="btn-primary" style="background:#0369a1;flex:1;min-width:140px;" onclick="bsBookCommerce(\'shipday\',\'hyperlocal\')">Shipday hyperlocal</button>' +
+            '<button type="button" class="btn-primary" style="background:#7c3aed;flex:1;min-width:140px;" onclick="bsBookCommerce(\'pidge\',\'logistics\')">Pidge logistics</button>' +
+            '<button type="button" class="btn-primary" style="background:#6d28d9;flex:1;min-width:140px;" onclick="bsBookCommerce(\'pidge\',\'hyperlocal\')">Pidge hyperlocal</button>' +
             '</div>' +
             '<p id="bs-commerce-book-msg" style="font-weight:600;margin:8px 0 0;"></p>';
         const manual = ship.querySelector('#bs-courier-tracking');
@@ -713,10 +741,14 @@ async function commerceFillPosKeys() {
         set('bpos-lng', c.storeLng != null ? c.storeLng : '');
         const tookan = c.tookan || {};
         const ship = c.shipday || {};
+        const pidge = c.pidge || {};
         const tookanOn = document.getElementById('bpos-tookan-on');
         const shipOn = document.getElementById('bpos-ship-on');
+        const pidgeOn = document.getElementById('bpos-pidge-on');
         if (tookanOn) tookanOn.checked = !!tookan.enabled;
         if (shipOn) shipOn.checked = !!ship.enabled;
+        if (pidgeOn) pidgeOn.checked = !!pidge.enabled;
+        set('bpos-pidge-channel', pidge.channel || '');
         const mode = document.getElementById('bpos-mode');
         const hyper = document.getElementById('bpos-hyper');
         if (mode) mode.value = c.defaultMode || 'logistics';
@@ -730,6 +762,9 @@ async function commerceFillPosKeys() {
                 ' · ' +
                 (ship.configured ? 'Shipday key saved' : 'Shipday key not saved') +
                 (ship.apiKeyHint ? ' (' + ship.apiKeyHint + ')' : '') +
+                ' · ' +
+                (pidge.configured ? 'Pidge login saved' : 'Pidge login not saved') +
+                (pidge.usernameHint ? ' (' + pidge.usernameHint + ')' : '') +
                 (c.mapsKeySet ? ' · Maps key saved' : ' · Maps key not saved');
         }
     } catch (e) {
@@ -763,13 +798,20 @@ async function commerceSavePosKeys() {
                     shipday: {
                         enabled: !!(document.getElementById('bpos-ship-on') && document.getElementById('bpos-ship-on').checked),
                         apiKey: val('bpos-ship')
+                    },
+                    pidge: {
+                        enabled: !!(document.getElementById('bpos-pidge-on') && document.getElementById('bpos-pidge-on').checked),
+                        username: val('bpos-pidge-user'),
+                        password: val('bpos-pidge-pass'),
+                        webhookToken: val('bpos-pidge-hook'),
+                        channel: val('bpos-pidge-channel')
                     }
                 }
             })
         });
         if (msg) {
             msg.style.color = '#15803d';
-            msg.textContent = 'Tookan, Shipday, and map settings saved.';
+            msg.textContent = 'Tookan, Shipday, Pidge, and map settings saved.';
         }
         commerceFillPosKeys();
     } catch (e) {
@@ -803,7 +845,7 @@ async function bsBookCommerce(provider, mode) {
             msg.style.color = '#15803d';
             msg.textContent =
                 'Booked with Gogate Products.' +
-                (provider === 'shipday' ? '' : ' Pickup OTP ' + (o.pickupOtp || '—') + ' · Delivery OTP ' + (o.deliveryOtp || '—')) +
+                (commerceNoOtp(provider) ? '' : ' Pickup OTP ' + (o.pickupOtp || '—') + ' · Delivery OTP ' + (o.deliveryOtp || '—')) +
                 (o.commerceTrackUrl ? ' · ' + o.commerceTrackUrl : '');
         }
         if (typeof bsViewOrderTracking === 'function') bsViewOrderTracking(id);
@@ -829,7 +871,7 @@ async function appendCommerceTrackPanel(id) {
         'Gogate Products' +
         (co.commerceMode ? ' · ' + escCommerce(co.commerceMode) : '') +
         '</p>' +
-        (co.commerceProvider === 'shipday'
+        (commerceNoOtp(co.commerceProvider)
             ? ''
             : '<p style="margin:0 0 8px;font-size:0.85rem;">Pickup OTP <strong>' +
               escCommerce(co.pickupOtp || '—') +
@@ -838,7 +880,7 @@ async function appendCommerceTrackPanel(id) {
               '</strong>' +
               (co.agentPhone ? ' · Agent ' + escCommerce(co.agentPhone) : '') +
               '</p>') +
-        (co.commerceProvider === 'shipday' && co.agentPhone ? '<p style="margin:0 0 8px;font-size:0.85rem;">Agent ' + escCommerce(co.agentPhone) + '</p>' : '');
+        (commerceNoOtp(co.commerceProvider) && co.agentPhone ? '<p style="margin:0 0 8px;font-size:0.85rem;">Agent ' + escCommerce(co.agentPhone) + '</p>' : '');
     if (co.commerceTrackUrl) {
         inner += '<p style="margin:0 0 8px;font-size:0.82rem;"><a href="' + escCommerce(co.commerceTrackUrl) + '" target="_blank" rel="noopener">Public tracking link</a></p>';
     }

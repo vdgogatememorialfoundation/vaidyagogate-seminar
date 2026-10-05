@@ -313,4 +313,122 @@ assert.ok(transitActive.lineFill <= 88);
 assert.strictEqual(transitTl.steps.find((s) => s.key === 'out_for_delivery').state, 'upcoming');
 assert.strictEqual(transitTl.steps.find((s) => s.key === 'delivered').state, 'upcoming');
 
+assert.strictEqual(commerce.pidgeFulfillmentKind('PICKED_UP'), 'picked_up');
+assert.strictEqual(commerce.pidgeFulfillmentKind('DELIVERED'), 'delivered');
+assert.strictEqual(commerce.pidgeFulfillmentKind('UNDELIVERED'), 'failed');
+assert.strictEqual(commerce.pidgeFulfillmentKind('RTO_DELIVERED'), 'failed');
+assert.strictEqual(commerce.pidgeFulfillmentKind('OUT_FOR_DELIVERY'), 'out_for_delivery');
+assert.strictEqual(commerce.pidgeFulfillmentKind('IN_TRANSIT'), 'arrived_facility');
+assert.strictEqual(commerce.pidgeFulfillmentKind('CANCELLED'), 'pickup_scheduled');
+assert.strictEqual(commerce.stageFromKind('arrived_facility', 'logistics'), 'in_transit');
+
+const pidgeTransit = commerce.pidgePayloadToUpdate({ status: 'fulfilled', fulfillment: { status: 'IN_TRANSIT' } }, 'logistics');
+assert.strictEqual(pidgeTransit.kind, 'arrived_facility');
+assert.strictEqual(pidgeTransit.stage, 'in_transit');
+assert.strictEqual(pidgeTransit.title, 'Item arrived at courier facility');
+assert.strictEqual(pidgeTransit.city, '');
+assert.strictEqual(pidgeTransit.agentLat, null);
+
+const pidgeHyper = commerce.pidgePayloadToUpdate(
+    {
+        id: 'pidge-1',
+        reference_id: 'BKTEST',
+        status: 'fulfilled',
+        fulfillment: {
+            status: 'OUT_FOR_DELIVERY',
+            track_code: 'TRK1',
+            logs: [
+                {
+                    timestamp: '2026-10-05T10:00:00.000Z',
+                    status: 'OUT_FOR_DELIVERY',
+                    location: { latitude: 18.52, longitude: 73.85 },
+                    rider: { name: 'Asha', mobile: '9000000001' }
+                }
+            ]
+        }
+    },
+    'hyperlocal'
+);
+assert.strictEqual(pidgeHyper.kind, 'out_for_delivery');
+assert.strictEqual(pidgeHyper.agentName, 'Asha');
+assert.strictEqual(pidgeHyper.agentLat, 18.52);
+assert.strictEqual(pidgeHyper.trackingNo, 'TRK1');
+assert.strictEqual(pidgeHyper.pickupOtp, '');
+assert.strictEqual(pidgeHyper.deliveryOtp, '');
+assert.ok(!JSON.stringify(pidgeHyper).match(/otp":"[0-9]/i));
+
+const pidgeLogistics = commerce.pidgePayloadToUpdate(
+    {
+        id: 'pidge-1',
+        status: 'fulfilled',
+        fulfillment: {
+            status: 'OUT_FOR_DELIVERY',
+            logs: [{ status: 'OUT_FOR_DELIVERY', location: { latitude: 18.52, longitude: 73.85 }, rider: { name: 'Asha', mobile: '9000000001' } }]
+        }
+    },
+    'logistics'
+);
+assert.strictEqual(pidgeLogistics.agentLat, null);
+assert.strictEqual(pidgeLogistics.agentName, null);
+
+const pidgeCompleted = commerce.pidgePayloadToUpdate({ status: 'completed', fulfillment: { status: 'RTO_DELIVERED' } }, 'logistics');
+assert.strictEqual(pidgeCompleted.kind, 'failed');
+const pidgeCompletedBare = commerce.pidgePayloadToUpdate({ status: 'completed' }, 'logistics');
+assert.notStrictEqual(pidgeCompletedBare.kind, 'delivered');
+const pidgeCancelled = commerce.pidgePayloadToUpdate({ id: 'x', status: 'cancelled' }, 'logistics');
+assert.strictEqual(pidgeCancelled.cancelOrder, true);
+assert.notStrictEqual(pidgeCancelled.kind, 'delivered');
+const pidgeRevert = commerce.pidgePayloadToUpdate({ status: 'pending', fulfillment: { status: 'CANCELLED' } }, 'hyperlocal');
+assert.strictEqual(pidgeRevert.kind, 'pickup_scheduled');
+assert.notStrictEqual(pidgeRevert.kind, 'failed');
+const pidgeReached = commerce.pidgePayloadToUpdate({ status: 'fulfilled', fulfillment: { status: 'REACHED_DELIVERY' } }, 'hyperlocal');
+assert.strictEqual(pidgeReached.kind, 'out_for_delivery');
+assert.strictEqual(pidgeReached.title, 'Delivery agent reached the drop location');
+assert.strictEqual(pidgeReached.stage, 'out_for_delivery');
+
+const pidgeCfg = commerce.normalizeCommerceConfig({
+    storeName: 'VGMF',
+    storePhone: '9123456780',
+    storeAddress: 'Clinic road',
+    storeCity: 'Pune',
+    defaultHyperlocalProvider: 'pidge',
+    pidge: { enabled: true, username: 'vendor1', password: 'secret-pass', channel: 'shop' }
+});
+assert.strictEqual(pidgeCfg.defaultHyperlocalProvider, 'pidge');
+const pidgePublic = commerce.publicConfigView(pidgeCfg);
+assert.ok(!JSON.stringify(pidgePublic).includes('secret-pass'));
+assert.strictEqual(pidgePublic.pidge.configured, true);
+assert.strictEqual(pidgePublic.pidge.channel, 'shop');
+const pidgeKept = commerce.mergeConfigSecrets(pidgeCfg, { pidge: { enabled: true, username: '', password: '', webhookToken: '' }, defaultHyperlocalProvider: 'pidge' });
+assert.strictEqual(pidgeKept.pidge.password, 'secret-pass');
+assert.strictEqual(pidgeKept.pidge.username, 'vendor1');
+assert.strictEqual(pidgeKept.defaultHyperlocalProvider, 'pidge');
+
+const pidgeBody = commerce.buildPidgeOrderBody(pidgeCfg, {
+    orderCode: 'BKTEST',
+    shippingPhone: '9876543210',
+    shippingRecipientName: 'Buyer',
+    deliveryAddress: 'Lane 1',
+    shippingCity: 'Pune',
+    shippingState: 'Maharashtra',
+    shippingPincode: '411009',
+    paymentMode: 'cod',
+    totalAmount: 100,
+    items: [{ title: 'Book', qty: 1, unitPrice: 100, book_id: 'b1' }],
+    pickupAtMs: Date.parse('2026-10-06T04:30:00.000Z'),
+    dropAtMs: Date.parse('2026-10-06T06:30:00.000Z')
+});
+const pidgeJson = JSON.stringify(pidgeBody);
+assert.strictEqual(pidgeBody.channel, 'shop');
+assert.strictEqual(pidgeBody.trips[0].source_order_id, 'BKTEST');
+assert.strictEqual(pidgeBody.trips[0].cod_amount, 100);
+assert.strictEqual(pidgeBody.trips[0].receiver_detail.address.country, 'India');
+assert.ok(!pidgeJson.includes('dead_weight'));
+assert.ok(!pidgeJson.includes('image_url'));
+assert.ok(!pidgeJson.includes('brand'));
+assert.ok(!pidgeJson.includes('secret-pass'));
+assert.strictEqual(commerce.pidgeWebhookAuthorized({ pidge: { webhookToken: '' } }, ''), true);
+assert.strictEqual(commerce.pidgeWebhookAuthorized({ pidge: { webhookToken: 'hook' } }, 'Bearer hook'), true);
+assert.strictEqual(commerce.pidgeWebhookAuthorized({ pidge: { webhookToken: 'hook' } }, 'nope'), false);
+
 console.log('commerce phrase tests passed');
