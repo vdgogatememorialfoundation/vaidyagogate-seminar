@@ -391,6 +391,8 @@ const pidgeCfg = commerce.normalizeCommerceConfig({
     storePhone: '9123456780',
     storeAddress: 'Clinic road',
     storeCity: 'Pune',
+    storeState: 'Maharashtra',
+    storePincode: '411001',
     defaultHyperlocalProvider: 'pidge',
     pidge: { enabled: true, username: 'vendor1', password: 'secret-pass', channel: 'shop' }
 });
@@ -423,6 +425,32 @@ assert.strictEqual(pidgeBody.channel, 'shop');
 assert.strictEqual(pidgeBody.trips[0].source_order_id, 'BKTEST');
 assert.strictEqual(pidgeBody.trips[0].cod_amount, 100);
 assert.strictEqual(pidgeBody.trips[0].receiver_detail.address.country, 'India');
+assert.strictEqual(pidgeBody.sender_detail.address.state, 'Maharashtra');
+assert.strictEqual(pidgeBody.sender_detail.address.pincode, '411001');
+assert.strictEqual(pidgeBody.trips[0].receiver_detail.address.state, 'Maharashtra');
+assert.strictEqual(pidgeBody.trips[0].receiver_detail.address.pincode, '411009');
+const pidgeFromLine = commerce.buildPidgeOrderBody(
+    commerce.normalizeCommerceConfig({
+        storeName: 'VGMF',
+        storePhone: '9123456780',
+        storeAddress: 'Clinic road, Pune, Maharashtra 411001',
+        storeCity: 'Pune',
+        pidge: { enabled: true, username: 'vendor1', password: 'secret-pass' }
+    }),
+    {
+        orderCode: 'BKLINE',
+        shippingPhone: '9876543210',
+        shippingRecipientName: 'Buyer',
+        deliveryAddress: 'Lane 1, Pune, Maharashtra 411009',
+        paymentMode: 'prepaid',
+        totalAmount: 50,
+        items: [{ title: 'Book', qty: 1, unitPrice: 50 }]
+    }
+);
+assert.strictEqual(pidgeFromLine.sender_detail.address.state, 'Maharashtra');
+assert.strictEqual(pidgeFromLine.sender_detail.address.pincode, '411001');
+assert.strictEqual(pidgeFromLine.trips[0].receiver_detail.address.state, 'Maharashtra');
+assert.strictEqual(pidgeFromLine.trips[0].receiver_detail.address.pincode, '411009');
 assert.ok(!pidgeJson.includes('dead_weight'));
 assert.ok(!pidgeJson.includes('image_url'));
 assert.ok(!pidgeJson.includes('brand'));

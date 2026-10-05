@@ -310,6 +310,8 @@ async function renderCommerceSettings() {
             field('cs-phone', 'Store phone', c.storePhone) +
             field('cs-addr', 'Store address', c.storeAddress) +
             field('cs-city', 'Store city', c.storeCity) +
+            field('cs-state', 'Store state', c.storeState) +
+            field('cs-pin', 'Store PIN', c.storePincode) +
             field('cs-lat', 'Store latitude', c.storeLat) +
             field('cs-lng', 'Store longitude', c.storeLng) +
             field('cs-maps', 'Google Maps API key', '') +
@@ -388,6 +390,8 @@ async function commerceSaveSettings() {
                     storePhone: val('cs-phone'),
                     storeAddress: val('cs-addr'),
                     storeCity: val('cs-city'),
+                    storeState: val('cs-state'),
+                    storePincode: val('cs-pin'),
                     storeLat: val('cs-lat'),
                     storeLng: val('cs-lng'),
                     mapsApiKey: val('cs-maps'),
@@ -654,6 +658,8 @@ function commerceKeyCardHtml(compact) {
         field('bpos-phone', 'Store phone') +
         field('bpos-addr', 'Store address') +
         field('bpos-city', 'Store city') +
+        field('bpos-state', 'Store state') +
+        field('bpos-pin', 'Store PIN') +
         field('bpos-lat', 'Store latitude') +
         field('bpos-lng', 'Store longitude') +
         field('bpos-maps', 'Google Maps API key') +
@@ -737,6 +743,8 @@ async function commerceFillPosKeys() {
         set('bpos-phone', c.storePhone || '');
         set('bpos-addr', c.storeAddress || '');
         set('bpos-city', c.storeCity || '');
+        set('bpos-state', c.storeState || '');
+        set('bpos-pin', c.storePincode || '');
         set('bpos-lat', c.storeLat != null ? c.storeLat : '');
         set('bpos-lng', c.storeLng != null ? c.storeLng : '');
         const tookan = c.tookan || {};
@@ -785,6 +793,8 @@ async function commerceSavePosKeys() {
                     storePhone: val('bpos-phone'),
                     storeAddress: val('bpos-addr'),
                     storeCity: val('bpos-city'),
+                    storeState: val('bpos-state'),
+                    storePincode: val('bpos-pin'),
                     storeLat: val('bpos-lat'),
                     storeLng: val('bpos-lng'),
                     mapsApiKey: val('bpos-maps'),
