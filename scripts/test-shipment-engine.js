@@ -153,9 +153,9 @@ const again = engine.buildCustomerTracking(
     ]
 );
 assert.strictEqual(again.operationalStatus, 'RESCHEDULED');
-assert.strictEqual(again.mainStatus, 'SHIPPED');
+assert.strictEqual(again.mainStatus, 'OUT_FOR_DELIVERY');
 assert.strictEqual(again.pipeline.find((step) => step.key === 'SHIPPED').state, 'done');
-assert.strictEqual(again.pipeline.find((step) => step.key === 'OUT_FOR_DELIVERY').state, 'upcoming');
+assert.strictEqual(again.pipeline.find((step) => step.key === 'OUT_FOR_DELIVERY').state, 'active');
 assert.strictEqual(again.map.enabled, false);
 assert.ok(again.expectedDelivery && again.expectedDelivery.label);
 
