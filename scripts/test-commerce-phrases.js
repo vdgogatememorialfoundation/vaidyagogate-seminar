@@ -595,4 +595,118 @@ assert.strictEqual(commerce.awbFromUpdate({ trackingNo: 'AWB45' }), 'AWB45');
 assert.strictEqual(commerce.awbFromUpdate({ barcode: 'BAR1' }), 'BAR1');
 assert.strictEqual(commerce.awbFromUpdate(null), '');
 
+const fleetCfg = commerce.normalizeCommerceConfig({
+    storeName: 'VGMF Book Desk',
+    storeAddress: '12 Main Road',
+    storeCity: 'Pune',
+    storeState: 'Maharashtra',
+    storePincode: '411001',
+    fleetbase: {
+        enabled: true,
+        apiHost: 'http://127.0.0.1:8095/',
+        secretKey: 'flb_test_secret',
+        hubs: 'Pune Hub | 12 Market Road, Pune, Maharashtra 411009\nBad line',
+        openBoxDelivery: true
+    }
+});
+assert.strictEqual(fleetCfg.fleetbase.apiHost, 'http://127.0.0.1:8095');
+assert.strictEqual(fleetCfg.fleetbase.enabled, true);
+const fleetOff = commerce.normalizeCommerceConfig({
+    fleetbase: { enabled: true, apiHost: '127.0.0.1:8095', secretKey: 'abc' }
+});
+assert.strictEqual(fleetOff.fleetbase.enabled, false);
+const fleetBody = commerce.buildFleetbaseOrderBody(fleetCfg, {
+    orderCode: 'BKFLEET1',
+    shippingRecipientName: 'Asha',
+    shippingPhone: '9000000001',
+    deliveryAddress: '44 Lake Road',
+    shippingCity: 'Pune',
+    shippingState: 'Maharashtra',
+    shippingPincode: '411009',
+    dropAtMs: Date.parse('2026-10-06T12:30:00Z'),
+    items: [{ title: 'Book', unitPrice: 100 }]
+});
+assert.strictEqual(fleetBody.pod_method, 'sms');
+assert.strictEqual(fleetBody.pod_required, true);
+assert.strictEqual(fleetBody.meta.open_box_delivery, true);
+assert.strictEqual(fleetBody.meta.barcode_scan, true);
+assert.ok(fleetBody.pickup.indexOf('12 Main Road') !== -1);
+assert.ok(fleetBody.dropoff.indexOf('44 Lake Road') !== -1);
+assert.deepStrictEqual(fleetBody.waypoints, ['Pune Hub, 12 Market Road, Pune, Maharashtra 411009']);
+assert.ok(!JSON.stringify(fleetBody).match(/"otp"/));
+assert.throws(() => commerce.buildFleetbaseOrderBody(fleetCfg, { orderCode: 'X' }), /delivery address/);
+const hubUpdate = commerce.fleetbaseOrderToUpdate(
+    {
+        id: 'order_abc',
+        internal_id: 'BKFLEET1',
+        status: 'in_transit',
+        tracking_number: { tracking_number: 'FB-1001' },
+        tracking_statuses: [
+            { code: 'arrived', place_name: 'Pune Hub', city: 'Pune', updated_at: '2026-10-06T08:00:00.000Z' },
+            { code: 'arrived', details: 'Arrived at 411009' }
+        ],
+        payload: { pickup: { name: 'VGMF Book Desk' }, dropoff: { name: 'Asha' } },
+        meta: { postal_code: '411009' },
+        driver_assigned: { name: 'Ravi', phone: '9000000002', location: { latitude: 18.52, longitude: 73.85 } }
+    },
+    'logistics'
+);
+assert.strictEqual(hubUpdate.kind, 'arrived_facility');
+assert.strictEqual(hubUpdate.title, 'Arrived at Pune Hub');
+assert.strictEqual(hubUpdate.stage, 'in_transit');
+assert.strictEqual(hubUpdate.trackingNo, 'FB-1001');
+assert.strictEqual(hubUpdate.agentLat, null);
+assert.strictEqual(hubUpdate.pickupOtp, '');
+assert.strictEqual(hubUpdate.deliveryOtp, '');
+assert.ok(!JSON.stringify(hubUpdate).includes('411009'));
+const fleetOtp = commerce.fleetbaseOrderToUpdate(
+    {
+        id: 'order_otp',
+        status: 'out_for_delivery',
+        tracking_number: { tracking_number: 'FB-2002' },
+        proofs: [
+            { type: 'sms', otp: '4455' },
+            { type: 'pickup_sms', otp: '3322' }
+        ],
+        meta: { postal_code: '411009' },
+        scheduled_at: '2026-10-06T12:30:00.000Z',
+        driver_assigned: {
+            name: 'Ravi',
+            phone: '9000000002',
+            location: { latitude: 18.52, longitude: 73.85, updated_at: '2026-10-06T08:00:00.000Z' }
+        }
+    },
+    'hyperlocal'
+);
+assert.strictEqual(fleetOtp.deliveryOtp, '4455');
+assert.strictEqual(fleetOtp.pickupOtp, '3322');
+assert.strictEqual(fleetOtp.agentLat, 18.52);
+assert.strictEqual(fleetOtp.agentName, 'Ravi');
+assert.strictEqual(fleetOtp.deliveryAt, '2026-10-06T12:30:00.000Z');
+assert.ok(!JSON.stringify(fleetOtp).includes('411009'));
+assert.strictEqual(
+    commerce.fleetbaseOrderToUpdate({ id: 'order_done', status: 'completed', tracking_number: { tracking_number: 'FB-9' } }, 'logistics').kind,
+    'delivered'
+);
+const fleetCancel = commerce.fleetbaseOrderToUpdate({ id: 'order_x', status: 'canceled' }, 'logistics');
+assert.strictEqual(fleetCancel.cancelOrder, true);
+assert.notStrictEqual(fleetCancel.kind, 'delivered');
+const fleetLabel = commerce.labelHtml(
+    {
+        orderCode: 'BKFLEET1',
+        commerceProvider: 'fleetbase',
+        courierTrackingNo: 'FB-1001',
+        openBox: true,
+        deliveryOtp: '4455',
+        commerceTrackUrl: '/track-commerce?token=abc123token',
+        items: []
+    },
+    labelCfg
+);
+assert.ok(fleetLabel.includes('FB-1001'));
+assert.ok(fleetLabel.includes('Open box delivery'));
+assert.ok(fleetLabel.includes('4455'));
+assert.ok(fleetLabel.includes('data-sym="courier-barcode"'));
+assert.ok(fleetLabel.includes('<svg'));
+
 console.log('commerce phrase tests passed');

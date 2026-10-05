@@ -305,4 +305,47 @@ assert.strictEqual(
     null
 );
 
+const fleetPacked = engine.buildCustomerTracking(
+    {
+        orderCode: 'FB4',
+        commerceStage: 'pickup_scheduled',
+        commerceMode: 'logistics',
+        commerceProvider: 'fleetbase',
+        fulfillmentType: 'courier',
+        pickupOtp: '3434'
+    },
+    [{ title: 'Your order has been placed', kind: 'placed', at: '2026-10-05T06:30:00Z' }]
+);
+assert.strictEqual(fleetPacked.mainStatus, 'PACKED');
+assert.strictEqual(fleetPacked.pickupOtp, '3434');
+assert.strictEqual(fleetPacked.map.enabled, false);
+const fleetHub = engine.buildCustomerTracking(
+    {
+        orderCode: 'FB5',
+        commerceStage: 'in_transit',
+        commerceMode: 'logistics',
+        commerceProvider: 'fleetbase',
+        fulfillmentType: 'courier'
+    },
+    [{ title: 'Arrived at Pune Hub', kind: 'arrived_facility', at: '2026-10-05T08:00:00Z', city: 'Pune' }]
+);
+assert.strictEqual(fleetHub.mainStatus, 'SHIPPED');
+assert.ok(fleetHub.timeline.some((ev) => ev.message === 'Arrived at Pune Hub'));
+const fleetOfd = engine.buildCustomerTracking(
+    {
+        orderCode: 'FB6',
+        commerceStage: 'out_for_delivery',
+        commerceMode: 'hyperlocal',
+        commerceProvider: 'fleetbase',
+        deliveryOtp: '4455',
+        storeLat: 18.5,
+        storeLng: 73.8,
+        dropLat: 18.6,
+        dropLng: 73.9
+    },
+    [{ title: 'Out for delivery', kind: 'out_for_delivery', at: '2026-10-05T09:00:00Z' }]
+);
+assert.strictEqual(fleetOfd.deliveryOtp, '4455');
+assert.strictEqual(fleetOfd.pickupOtp, null);
+
 console.log('shipment engine tests passed');
