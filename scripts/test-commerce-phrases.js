@@ -249,7 +249,7 @@ const packedStep = noiseTl.steps.find((s) => s.key === 'packed');
 assert.ok(!packedStep.updates.some((u) => /created by api|deleted by/i.test(u.title)));
 assert.strictEqual(shop.buildLiveView(noiseOrder, noiseTl, 'map-key'), null);
 
-const assigned = Object.assign({}, noiseOrder, { agentName: 'Ravi', agentPhone: '9800000000', storeLat: 18.5, storeLng: 73.8, dropLat: 18.6, dropLng: 73.9, agentLat: 18.52, agentLng: 73.85, liveLeg: 'to_store' });
+const assigned = Object.assign({}, noiseOrder, { agentName: 'Ravi', agentPhone: '9800000000', storeLat: 18.5, storeLng: 73.8, dropLat: 18.6, dropLng: 73.9, agentLat: 18.52, agentLng: 73.85, agentLocationAt: new Date().toISOString(), liveLeg: 'to_store' });
 const assignedTl = shop.buildShopTimeline(assigned, noiseEvents, {});
 const live = shop.buildLiveView(assigned, assignedTl, 'map-key');
 assert.ok(live);
