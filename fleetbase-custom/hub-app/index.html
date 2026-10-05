@@ -58,7 +58,19 @@
 
         <section class="card hidden" data-panel="orders">
             <h2>Shipments</h2>
-            <p class="muted">A new seller shipment stays on status <strong>Shipment Created</strong> until Navigator moves it. Assigning a driver sends the job to Fleetbase Navigator.</p>
+            <p class="muted">A new seller shipment stays on status <strong>Shipment Created</strong> until Navigator moves it. Assigning a driver sends the job to Fleetbase Navigator. A cash-on-delivery shipment can collect with a Razorpay QR.</p>
+            <div id="razorpay-box" class="card" style="padding:12px;margin:0 0 12px;background:#f8faf8;">
+                <h2>Razorpay</h2>
+                <p id="razorpay-status" class="muted">Checking Razorpay…</p>
+                <div id="razorpay-form" class="hidden">
+                    <div class="grid">
+                        <label>Live key id<input id="rz-key" autocomplete="off" placeholder="rzp_live_"></label>
+                        <label>Live key secret<input id="rz-secret" type="password" autocomplete="new-password"></label>
+                    </div>
+                    <button type="button" id="save-razorpay" style="margin-top:8px;">Save Razorpay</button>
+                </div>
+                <div id="razorpay-qr"></div>
+            </div>
             <div id="orders"></div>
         </section>
 
@@ -73,6 +85,13 @@
                 <label>Country<input id="hub-country"></label>
                 <label>PIN<input id="hub-pin"></label>
                 <label>Address<input id="hub-address"></label>
+                <label>Serves
+                    <select id="hub-mode">
+                        <option value="both">Logistics and hyperlocal</option>
+                        <option value="logistics">Logistics</option>
+                        <option value="hyperlocal">Hyperlocal</option>
+                    </select>
+                </label>
                 <label>Role
                     <select id="hub-role">
                         <option value="seller_local">Seller local hub</option>

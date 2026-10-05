@@ -127,6 +127,10 @@
 
     function fillHubSelects() {
         const options = state.hubs
+            .filter((hub) => {
+                const mode = hub.mode || metaOf(hub).mode || 'both';
+                return mode === 'both' || mode === state.mode;
+            })
             .map((hub) => '<option value="' + escapeAttr(hub.id || hub.public_id || '') + '">' + escapeHtml(hubLabel(hub)) + '</option>')
             .join('');
         $('scan-hub').innerHTML = options || '<option value="">No hubs yet</option>';
@@ -149,9 +153,31 @@
         return state.hubs.find((hub) => String(hub.id || hub.public_id) === id) || null;
     }
 
+    async function loadRazorpay() {
+        const box = $('razorpay-status');
+        const form = $('razorpay-form');
+        if (!box) return;
+        try {
+            const data = await api('GET', '/gogate/razorpay');
+            state.razorpay = data;
+            if (data.configured) {
+                box.textContent = 'Razorpay live keys are connected (' + (data.key_prefix || 'rzp_live_') + '…).';
+                box.className = 'muted ok';
+                form.classList.add('hidden');
+            } else {
+                box.textContent = 'Save the live Razorpay key so a cash-on-delivery shipment can show a QR.';
+                box.className = 'muted';
+                form.classList.remove('hidden');
+            }
+        } catch (err) {
+            box.textContent = err.message || 'Razorpay is unavailable.';
+            box.className = 'muted bad';
+        }
+    }
+
     async function loadHubs() {
-        const data = await api('GET', '/places?limit=100');
-        state.hubs = listOf(data, 'places').filter((place) => String(place.type || '').toLowerCase() === 'hub');
+        const data = await api('GET', '/gogate/hubs');
+        state.hubs = listOf(data, 'hubs');
         fillHubSelects();
         $('hubs').innerHTML = state.hubs.length
             ? '<table><thead><tr><th>Hub</th><th>Role</th><th>Address</th></tr></thead><tbody>' +
@@ -236,7 +262,9 @@
                           escapeHtml(when(meta.expected_delivery_at || order.scheduled_at)) +
                           '</div></td><td class="row"><button type="button" class="secondary" data-schedule="' +
                           id +
-                          '">Set delivery time</button><button type="button" class="secondary" data-assign="' +
+                          '">Set delivery time</button>' +
+                          (meta.cod ? '<button type="button" class="secondary" data-qr="' + id + '">Razorpay QR</button>' : '') +
+                          '<button type="button" class="secondary" data-assign="' +
                           id +
                           '">Assign to Navigator driver</button></td></tr>'
                       );
@@ -251,6 +279,7 @@
         await loadHubs();
         await loadDrivers();
         await loadOrders();
+        await loadRazorpay();
     }
 
     async function findOrder(code) {
@@ -322,6 +351,7 @@
         if (!button) return;
         state.mode = button.getAttribute('data-mode');
         document.querySelectorAll('#mode-tabs button').forEach((item) => item.setAttribute('aria-pressed', item === button ? 'true' : 'false'));
+        fillHubSelects();
         loadOrders().catch((err) => say('work-msg', err.message));
     });
 
@@ -349,21 +379,17 @@
             const country = $('hub-country').value.trim();
             const address = $('hub-address').value.trim();
             if (!name || !city || !stateName || !country || !address) throw new Error('Enter the hub name, address, city, state, and country.');
-            await api('POST', '/places', {
-                place: {
+            await api('POST', '/gogate/hubs', {
+                hub: {
                     name,
-                    street1: address,
-                    neighborhood: $('hub-locality').value.trim(),
+                    address,
+                    locality: $('hub-locality').value.trim(),
                     city,
-                    province: stateName,
+                    state: stateName,
                     postal_code: $('hub-pin').value.trim(),
                     country,
-                    type: 'hub',
-                    meta: {
-                        role: $('hub-role').value,
-                        locality: $('hub-locality').value.trim(),
-                        country_name: country
-                    }
+                    role: $('hub-role').value,
+                    mode: $('hub-mode').value
                 }
             });
             ['hub-name', 'hub-locality', 'hub-city', 'hub-state', 'hub-country', 'hub-pin', 'hub-address'].forEach((id) => {
@@ -432,7 +458,38 @@
         }
     });
 
+    const saveRazorpay = $('save-razorpay');
+    if (saveRazorpay) {
+        saveRazorpay.addEventListener('click', async () => {
+            try {
+                await api('POST', '/gogate/razorpay', {
+                    key_id: $('rz-key').value.trim(),
+                    key_secret: $('rz-secret').value
+                });
+                $('rz-secret').value = '';
+                say('work-msg', 'Razorpay saved.', true);
+                await loadRazorpay();
+            } catch (err) {
+                say('work-msg', err.message || 'Could not save Razorpay.');
+            }
+        });
+    }
+
     $('orders').addEventListener('click', async (event) => {
+        const qrButton = event.target.closest('button[data-qr]');
+        if (qrButton) {
+            try {
+                const data = await api('POST', '/gogate/razorpay/qr', { order: qrButton.getAttribute('data-qr') });
+                const box = $('razorpay-qr');
+                box.innerHTML = data.image_url
+                    ? '<p class="' + (data.paid ? 'ok' : 'muted') + '">' + (data.paid ? 'Payment received.' : 'Ask the customer to pay this QR.') + '</p><img alt="Razorpay QR" src="' + escapeAttr(data.image_url) + '" style="width:220px;height:220px;background:#fff;">'
+                    : '<p class="muted">QR created.</p>';
+                say('work-msg', data.paid ? 'Razorpay payment received.' : 'Razorpay QR ready.', true);
+            } catch (err) {
+                say('work-msg', err.message || 'Razorpay could not create a QR.');
+            }
+            return;
+        }
         const schedule = event.target.closest('button[data-schedule]');
         if (schedule) {
             const orderId = schedule.getAttribute('data-schedule');

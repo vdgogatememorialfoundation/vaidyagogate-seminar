@@ -664,6 +664,17 @@ assert.deepStrictEqual(hopped.waypoints, ['Pune Hub, 12 Market Road, Pune, Mahar
 assert.strictEqual(commerce.trackPath('abc123token', 'tookan'), '/track-commerce?token=abc123token');
 assert.strictEqual(commerce.trackPath('abc123token', 'fleetbase'), '/fleetbase/track/?token=abc123token');
 assert.strictEqual(fleetBody.meta.fulfillment, 'logistics');
+const codBody = commerce.buildFleetbaseOrderBody(scanCfg, {
+    orderCode: 'BKFLEETCOD',
+    deliveryAddress: '44 Lake Road',
+    shippingCity: 'Pune',
+    shippingState: 'Maharashtra',
+    shippingPincode: '411009',
+    paymentMode: 'cod',
+    totalAmount: 250
+});
+assert.strictEqual(codBody.meta.cod, true);
+assert.strictEqual(codBody.meta.cod_amount, 250);
 assert.ok(!JSON.stringify(fleetBody).match(/"otp"/));
 assert.throws(() => commerce.buildFleetbaseOrderBody(fleetCfg, { orderCode: 'X' }), /delivery address/);
 const hubUpdate = commerce.fleetbaseOrderToUpdate(
