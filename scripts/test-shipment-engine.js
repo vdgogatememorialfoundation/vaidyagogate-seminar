@@ -1,0 +1,182 @@
+const assert = require('assert');
+const engine = require('../lib/shipment-engine');
+const shop = require('../lib/shop-timeline');
+
+assert.strictEqual(engine.mainKeyFromOrder({ commerceStage: 'placed', status: 'confirmed', commerceProvider: 'tookan' }), 'ORDERED');
+assert.strictEqual(engine.mainKeyFromOrder({ commerceStage: 'preparing', commerceProvider: 'tookan' }), 'ORDERED');
+assert.strictEqual(engine.mainKeyFromOrder({ commerceStage: 'ready', commerceProvider: 'tookan' }), 'PACKED');
+assert.strictEqual(engine.mainKeyFromOrder({ commerceStage: 'pickup_scheduled', status: 'shipped', commerceProvider: 'tookan' }), 'PACKED');
+assert.strictEqual(engine.mainKeyFromOrder({ commerceStage: 'in_transit', commerceProvider: 'tookan' }), 'SHIPPED');
+assert.strictEqual(engine.mainKeyFromOrder({ commerceStage: 'out_for_delivery', commerceProvider: 'shipday' }), 'OUT_FOR_DELIVERY');
+assert.strictEqual(engine.mainKeyFromOrder({ commerceStage: 'delivered' }), 'DELIVERED');
+
+assert.strictEqual(engine.allowMainTransition('ORDERED', 'PACKED'), true);
+assert.strictEqual(engine.allowMainTransition('PACKED', 'SHIPPED'), true);
+assert.strictEqual(engine.allowMainTransition('SHIPPED', 'OUT_FOR_DELIVERY'), true);
+assert.strictEqual(engine.allowMainTransition('OUT_FOR_DELIVERY', 'DELIVERED'), true);
+assert.strictEqual(engine.allowMainTransition('ORDERED', 'DELIVERED'), false);
+assert.strictEqual(engine.allowMainTransition('PACKED', 'OUT_FOR_DELIVERY'), false);
+assert.strictEqual(engine.allowMainTransition('DELIVERED', 'PACKED'), false);
+assert.strictEqual(engine.allowMainTransition('ORDERED', 'ORDERED'), true);
+
+const logistics = engine.buildCustomerTracking(
+    {
+        orderCode: 'BK1',
+        status: 'shipped',
+        commerceStage: 'in_transit',
+        commerceMode: 'logistics',
+        commerceProvider: 'tookan',
+        fulfillmentType: 'courier',
+        courierTrackingNo: 'RIECA5I4',
+        pickupOtp: '4321',
+        deliveryOtp: '8765',
+        agentName: 'Ravi',
+        agentPhone: '9800000000'
+    },
+    [
+        { title: 'Created By API - Gogate Products - 884520', kind: 'update', at: '2026-10-05T06:00:00Z' },
+        { title: 'Shipment arrived at Courier Facility', kind: 'arrived_facility', city: 'Pune', detail: 'Swargate Hub', at: '2026-10-05T08:00:00Z' },
+        { title: 'Expected at Lonavala Hub', kind: 'hub_eta', city: 'Lonavala', at: '2026-10-05T12:00:00Z' }
+    ]
+);
+assert.strictEqual(logistics.fulfillmentType, 'NORMAL_LOGISTICS');
+assert.strictEqual(logistics.mainStatus, 'SHIPPED');
+assert.strictEqual(logistics.map.enabled, false);
+assert.strictEqual(logistics.shipment.trackingId, 'RIECA5I4');
+assert.strictEqual(logistics.shipment.courier, 'Gogate Products');
+assert.strictEqual(logistics.pickupOtp, null);
+assert.strictEqual(logistics.deliveryOtp, null);
+assert.strictEqual(logistics.agent, null);
+assert.strictEqual(logistics.expectedDelivery, null);
+assert.ok(!logistics.timeline.some((row) => /created by api/i.test(row.message)));
+const arrived = logistics.timeline.find((row) => row.message === 'Item arrived at courier facility');
+assert.ok(arrived);
+assert.strictEqual(arrived.city, 'Pune');
+assert.strictEqual(arrived.state, null);
+assert.strictEqual(arrived.country, null);
+assert.strictEqual(arrived.facilityName, 'Swargate Hub');
+assert.strictEqual(logistics.pipeline.filter((step) => step.state === 'done').length, 2);
+assert.strictEqual(logistics.pipeline.find((step) => step.key === 'SHIPPED').state, 'active');
+assert.strictEqual(logistics.pipeline.find((step) => step.key === 'OUT_FOR_DELIVERY').state, 'upcoming');
+
+const hyper = engine.buildCustomerTracking(
+    {
+        orderCode: 'BK2',
+        status: 'shipped',
+        commerceStage: 'out_for_delivery',
+        commerceMode: 'hyperlocal',
+        commerceProvider: 'tookan',
+        pickupOtp: '1111',
+        deliveryOtp: '2222',
+        agentName: 'Asha',
+        agentPhone: '9811111111',
+        agentLat: 18.52,
+        agentLng: 73.85
+    },
+    [{ title: 'Out for delivery', kind: 'out_for_delivery', at: '2026-10-05T09:00:00Z' }]
+);
+assert.strictEqual(hyper.fulfillmentType, 'HYPERLOCAL');
+assert.strictEqual(hyper.mainStatus, 'OUT_FOR_DELIVERY');
+assert.strictEqual(hyper.map.enabled, true);
+assert.strictEqual(hyper.deliveryOtp, '2222');
+assert.strictEqual(hyper.pickupOtp, null);
+assert.strictEqual(hyper.agent.name, 'Asha');
+assert.strictEqual(hyper.agent.phone, '9811111111');
+assert.strictEqual(hyper.agent.latitude, 18.52);
+
+const shipday = engine.buildCustomerTracking(
+    {
+        orderCode: 'BK3',
+        commerceStage: 'out_for_delivery',
+        commerceMode: 'hyperlocal',
+        commerceProvider: 'shipday',
+        pickupOtp: '1111',
+        deliveryOtp: '2222',
+        agentName: 'Ravi',
+        agentPhone: '9800000000'
+    },
+    []
+);
+assert.strictEqual(shipday.deliveryOtp, null);
+assert.strictEqual(shipday.pickupOtp, null);
+assert.strictEqual(shipday.map.enabled, true);
+
+const packed = engine.buildCustomerTracking(
+    {
+        orderCode: 'BK4',
+        commerceStage: 'pickup_scheduled',
+        commerceMode: 'hyperlocal',
+        commerceProvider: 'tookan',
+        pickupOtp: '3434',
+        storeLat: 18.5,
+        storeLng: 73.8,
+        dropLat: 18.6,
+        dropLng: 73.9
+    },
+    [{ title: 'Your order has been placed', kind: 'placed', at: '2026-10-05T06:30:00Z' }]
+);
+assert.strictEqual(packed.mainStatus, 'PACKED');
+assert.strictEqual(packed.pickupOtp, '3434');
+assert.strictEqual(packed.agent, null);
+const placedTl = shop.buildShopTimeline(
+    {
+        status: 'confirmed',
+        commerceStage: 'pickup_scheduled',
+        commerceMode: 'hyperlocal',
+        commerceProvider: 'tookan',
+        fulfillmentType: 'courier',
+        orderCode: 'BK4',
+        storeLat: 18.5,
+        storeLng: 73.8,
+        dropLat: 18.6,
+        dropLng: 73.9
+    },
+    [],
+    {}
+);
+const preview = shop.buildLiveView(
+    {
+        commerceMode: 'hyperlocal',
+        commerceStage: 'pickup_scheduled',
+        storeLat: 18.5,
+        storeLng: 73.8,
+        dropLat: 18.6,
+        dropLng: 73.9
+    },
+    placedTl,
+    'map-key'
+);
+assert.ok(preview);
+assert.strictEqual(preview.agent, null);
+assert.strictEqual(preview.route, 'dotted');
+assert.strictEqual(
+    shop.buildLiveView(
+        {
+            commerceMode: 'logistics',
+            commerceStage: 'out_for_delivery',
+            agentLat: 18.5,
+            agentLng: 73.8,
+            storeLat: 18.5,
+            storeLng: 73.8,
+            dropLat: 18.6,
+            dropLng: 73.9,
+            agentName: 'Ravi'
+        },
+        shop.buildShopTimeline(
+            {
+                status: 'shipped',
+                commerceStage: 'out_for_delivery',
+                commerceMode: 'logistics',
+                commerceProvider: 'tookan',
+                fulfillmentType: 'courier',
+                orderCode: 'BK9'
+            },
+            [],
+            {}
+        ),
+        'map-key'
+    ),
+    null
+);
+
+console.log('shipment engine tests passed');

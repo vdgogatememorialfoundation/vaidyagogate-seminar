@@ -48,6 +48,31 @@
 .tl-live { display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; font-weight: 700; color: var(--tl-green); margin-top: 12px; }
 .tl-live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--tl-green); }
 .tl-map { height: 380px; border-radius: 8px; margin-top: 8px; border: 1px solid var(--tl-line); background: #e5e3df; }
+.ship { color: #0f1111; }
+.ship-head h1 { font-size: 1.45rem; margin: 4px 0; }
+.ship-head .kicker { color: #565959; font-size: .9rem; }
+.ship-head .expect { color: #565959; margin: 0; }
+.ship-grid { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(240px, .8fr); gap: 16px; margin-top: 16px; }
+.ship-pipe, .ship-events { list-style: none; margin: 0; padding: 0; }
+.ship-pipe { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px 16px 4px; }
+.ship-pipe li { position: relative; padding: 0 0 22px 34px; color: #8d9096; }
+.ship-pipe li::before { content: ""; position: absolute; left: 8px; top: 18px; bottom: 0; width: 2px; background: #d5d9d9; }
+.ship-pipe li.done::before { background: #067d62; }
+.ship-pipe li:last-child::before { display: none; }
+.ship-pipe .dot { position: absolute; left: 0; top: 1px; width: 18px; height: 18px; border-radius: 50%; border: 2px solid #c7cccc; background: #fff; box-sizing: border-box; }
+.ship-pipe li.done .dot, .ship-pipe li.active .dot { background: #067d62; border-color: #067d62; }
+.ship-pipe li.done, .ship-pipe li.active { color: #0f1111; }
+.ship-events { margin-top: 8px; }
+.ship-events li { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px 14px; margin-top: 8px; }
+.ship-events .when, .ship-events .where, .ship .muted { color: #565959; font-size: .85rem; }
+.ship-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 14px; margin-bottom: 10px; }
+.ship-card .lbl, .ship-otp .lbl { font-size: .72rem; letter-spacing: .04em; text-transform: uppercase; color: #565959; }
+.ship-card .val { font-weight: 700; font-size: 1.05rem; margin-top: 2px; }
+.ship-card .call { display: inline-block; margin-top: 8px; color: #067d62; font-weight: 700; }
+.ship-otp { border: 1px dashed #067d62; background: #f3faf7; border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
+.ship-otp .code { font-size: 1.5rem; font-weight: 800; letter-spacing: 4px; }
+.ship h2 { font-size: 1rem; margin: 18px 0 0; }
+@media (max-width: 800px) { .ship-grid { grid-template-columns: 1fr; } }
 .tl-rider { position: absolute; width: 56px; height: 56px; margin: -28px 0 0 -28px; z-index: 6; pointer-events: none; }
 .tl-rider-pulse { position: absolute; inset: 6px; border-radius: 50%; background: rgba(6, 125, 98, 0.22); animation: tlRiderPulse 2s ease-out infinite; }
 .tl-rider-bike { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 2px 3px rgba(15, 17, 17, 0.35)); }

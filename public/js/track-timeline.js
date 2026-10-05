@@ -302,13 +302,10 @@
             const path = el.__path;
             const cum = el.__cum;
             if (!path || !cum || !el.__agentLive || !el.__rider) return;
-            const total = cum[cum.length - 1] || 0;
             const gps = el.__gpsMeters || 0;
-            const cap = Math.min(total, gps + (el.__speed > 0 ? 70 : 0));
             let m = el.__agentMeters || 0;
             if (m < gps) m += (gps - m) * Math.min(1, dt * 1.8);
-            else if (m > cap) m += (cap - m) * Math.min(1, dt * 2.2);
-            else m = Math.min(cap, m + (el.__speed || 0) * dt);
+            else m = gps;
             el.__agentMeters = m;
             const at = along(path, cum, m);
             el.__rider.setRider(at, at.heading, true);
@@ -391,6 +388,29 @@
         };
         place('store', live.store, 'Store', STORE_SVG);
         place('drop', live.drop, 'Delivery location', HOME_SVG);
+        const preview = live.leg !== 'done' && (live.route === 'dotted' || !live.agent);
+        if (preview) {
+            el.__agentLive = false;
+            el.__path = null;
+            if (el.__rider) el.__rider.setRider(null, 0, false);
+            if (el.__doneLine) el.__doneLine.setPath([]);
+            if (el.__remain && live.store && live.drop) {
+                el.__remain.setOptions({
+                    strokeOpacity: 0,
+                    icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 3 }, offset: '0', repeat: '14px' }]
+                });
+                el.__remain.setPath([live.store, live.drop]);
+            }
+            if (!el.__fitted || el.__fitLeg !== live.leg) {
+                const bounds = new google.maps.LatLngBounds();
+                [live.store, live.drop].forEach((pos) => pos && bounds.extend(pos));
+                if (!bounds.isEmpty()) el.__map.fitBounds(bounds, 64);
+                el.__fitted = true;
+                el.__fitLeg = live.leg;
+            }
+            return;
+        }
+        if (el.__remain) el.__remain.setOptions({ strokeOpacity: 1, icons: null });
         const moving = live.leg !== 'done' && !!live.agent;
         el.__agentLive = moving;
         el.__pendingGps = live.agent || null;
@@ -408,13 +428,6 @@
             target = live.drop || live.store;
         }
         if (moving && live.agent) {
-            const prev = el.__lastGps;
-            if (prev) {
-                const dist = haversine(prev, live.agent);
-                const secs = (Date.now() - (el.__lastGpsAt || Date.now())) / 1000;
-                if (dist < 12) el.__speed = 0;
-                else if (secs >= 2 && secs <= 90) el.__speed = Math.max(2, Math.min(14, dist / secs));
-            } else el.__speed = 3.2;
             el.__lastGps = { lat: live.agent.lat, lng: live.agent.lng };
             el.__lastGpsAt = Date.now();
             if (!el.__path) {
@@ -442,7 +455,17 @@
             el.__routeFrom = { lat: origin.lat, lng: origin.lng };
             el.__routeTo = { lat: target.lat, lng: target.lng };
             new google.maps.DirectionsService().route({ origin, destination: target, travelMode: 'DRIVING' }, (result, status) => {
-                if (status !== 'OK') return;
+                if (status !== 'OK') {
+                    if (el.__remain && origin && target) {
+                        el.__remain.setOptions({
+                            strokeOpacity: 0,
+                            icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 3 }, offset: '0', repeat: '14px' }]
+                        });
+                        el.__remain.setPath([origin, target]);
+                    }
+                    return;
+                }
+                if (el.__remain) el.__remain.setOptions({ strokeOpacity: 1, icons: null });
                 const pts = routePoints(result);
                 if (!el.__agentLive) {
                     el.__path = null;
