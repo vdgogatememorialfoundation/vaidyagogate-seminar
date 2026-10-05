@@ -33,7 +33,7 @@
             const sig = JSON.stringify(o.commerceTimeline) + '|' + (live && live.slot ? live.slot : '') + '|' + (live && live.leg ? live.leg : '');
             if (sig !== lastCommerceSig) {
                 lastCommerceSig = sig;
-                root.innerHTML = window.TrackTimeline.render({ timeline: o.commerceTimeline, live: live }, { animate: false });
+                root.innerHTML = window.TrackTimeline.render({ timeline: o.commerceTimeline, live: live }, { animate: true });
             }
             window.TrackTimeline.mount(live);
         } else if (window.BookTrackingUI) {

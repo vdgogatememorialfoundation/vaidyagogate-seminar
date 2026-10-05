@@ -38,7 +38,7 @@
             (ev.reason ? '<div class="where">Reason: ' + esc(ev.reason) + '</div>' : '') +
             '</li>';
         return (track.pipeline || [])
-            .map((step) => {
+            .map((step, i) => {
                 const kids = (step.events || []).map(child).join('');
                 const shippedNote = step.key === 'SHIPPED' && step.state !== 'upcoming' && track.shipment
                     ? '<li class="ship-sub"><b>' + esc(track.shipment.courier || 'Gogate Products') + '</b><div class="where">' +
@@ -46,11 +46,16 @@
                       (track.shipment.trackingId ? ' · Tracking ID ' + esc(track.shipment.trackingId) : '') +
                       '</div></li>'
                     : '';
-                return '<li class="' + esc(step.state) + '"><span class="dot"></span><b>' + esc(step.title) + '</b>' +
+                const grow = step.state === 'active' ? '0.55' : '1';
+                return '<li class="' + esc(step.state) + '" style="--i:' + i + ';--grow:' + grow + '"><span class="dot"></span><b>' + esc(step.title) + '</b>' +
                     (kids || shippedNote ? '<ul class="ship-kids">' + kids + shippedNote + '</ul>' : '') +
                     '</li>';
             })
             .join('');
+    }
+
+    function progressHtml(track) {
+        return '<h2 class="hl-progress-title">Order progress</h2><ol class="ship-pipe">' + pipeHtml(track) + '</ol>';
     }
 
     function otpHtml(label, code) {
@@ -80,36 +85,24 @@
     }
 
     function documentHtml(track, shipment) {
-        const live = track.map.enabled ? shipment.live : null;
-        const partner = track.agent
-            ? '<div class="ship-card"><div class="lbl">Delivery partner</div><div class="val">' + esc(track.agent.name || 'Assigned') + '</div>' +
-              (track.agent.phone ? '<a class="call" href="' + esc(telHref(track.agent.phone)) + '">Call</a>' : '') +
-              '</div>'
-            : track.mainStatus === 'OUT_FOR_DELIVERY' && track.operationalStatus !== 'DELIVERY_ATTEMPT_FAILED'
-              ? '<div class="ship-card"><div class="lbl">Delivery partner</div><div class="val">Finding a delivery partner</div></div>'
-              : '';
+        const courier = (track.shipment && track.shipment.courier) || 'Gogate Products';
+        const mode = track.fulfillmentType === 'HYPERLOCAL' ? 'Hyperlocal delivery' : 'Logistics';
+        const detail = track.currentDetail || track.currentMessage || '';
         const tracking = track.shipment && track.shipment.trackingId
-            ? '<div class="ship-card"><div class="lbl">Tracking ID</div><div class="val">' + esc(track.shipment.trackingId) + '</div></div>'
+            ? '<div class="hl-drop"><div class="lbl">Tracking ID</div><div class="val">' + esc(track.shipment.trackingId) + '</div></div>'
             : '';
-        return '<div class="ship">' +
-            '<div class="ship-head"><div class="kicker">Order #' + esc(track.orderId || shipment.orderCode || '') + '</div>' +
-            '<h1>' + esc(track.currentStatus || track.currentMessage) + '</h1>' +
-            (track.currentDetail || (track.expectedDelivery && track.expectedDelivery.label)
-                ? '<p class="expect">' + esc(track.currentDetail || track.expectedDelivery.label) + '</p>'
-                : '') +
-            '</div>' +
+        return '<div class="hl"><section class="hl-sheet hl-sheet-flat">' +
+            '<div class="hl-kicker">Order #' + esc(track.orderId || shipment.orderCode || '') + '</div>' +
+            '<div class="hl-top"><div><h1>' + esc(track.currentStatus || track.currentMessage) + '</h1>' +
+            (detail ? '<p class="hl-sub">' + esc(detail) + '</p>' : '') +
+            '</div></div>' +
+            '<div class="hl-drop"><div class="lbl">Courier</div><div class="val">' + esc(courier) + '</div><div class="hl-note-hint">' + esc(mode) + '</div></div>' +
+            tracking +
             failureHtml(track) +
-            '<div class="ship-grid"><div>' +
-            '<ol class="ship-pipe">' + pipeHtml(track) + '</ol>' +
-            (track.map.enabled ? '<div class="ship-card"><div class="lbl">' + (track.map.live ? 'Live delivery tracking' : 'Store and delivery location') + '</div>' +
-              (track.map.live ? '<div id="tl-eta" class="muted">Delivery partner is on the way.</div>' : '<div class="muted">The route stays dotted until a delivery partner location arrives.</div>') +
-              '<div id="tl-map-slot"></div></div>' : '') +
-            '</div>' +
-            '<aside>' +
-            '<div class="ship-card"><div class="lbl">Courier</div><div class="val">' + esc((track.shipment && track.shipment.courier) || 'Gogate Products') + '</div>' +
-            '<div class="muted">' + esc(track.fulfillmentType === 'HYPERLOCAL' ? 'Hyperlocal delivery' : 'Logistics') + '</div></div>' +
-            tracking + partner + otpHtml('Pickup OTP', track.pickupOtp) + otpHtml('Delivery OTP', track.deliveryOtp) +
-            '</aside></div></div>';
+            '</section><div class="hl-below">' +
+            otpHtml('Pickup OTP', track.pickupOtp) + otpHtml('Delivery OTP', track.deliveryOtp) +
+            progressHtml(track) +
+            '</div></div>';
     }
 
     function sheetHtml(track, shipment) {
@@ -145,7 +138,7 @@
             partner +
             '</section><div class="hl-below">' +
             otpHtml('Pickup OTP', track.pickupOtp) + otpHtml('Delivery OTP', track.deliveryOtp) +
-            '<details class="hl-progress"><summary>Order progress</summary><ol class="ship-pipe">' + pipeHtml(track) + '</ol></details>' +
+            progressHtml(track) +
             '</div></div>';
     }
 
@@ -160,7 +153,7 @@
         }
         sub.textContent = '';
         const liveSheet = hyperLive(track);
-        document.body.classList.toggle('hl-page', liveSheet);
+        document.body.classList.add('hl-page');
         const live = track.map.enabled ? shipment.live : null;
         const editing = document.getElementById('hl-note-form');
         const sig = JSON.stringify(track) + '|' + (live && live.slot ? live.slot : '') + '|' + (live && live.leg ? live.leg : '') + '|' + (live && live.route ? live.route : '');
