@@ -459,4 +459,92 @@ assert.strictEqual(commerce.pidgeWebhookAuthorized({ pidge: { webhookToken: '' }
 assert.strictEqual(commerce.pidgeWebhookAuthorized({ pidge: { webhookToken: 'hook' } }, 'Bearer hook'), true);
 assert.strictEqual(commerce.pidgeWebhookAuthorized({ pidge: { webhookToken: 'hook' } }, 'nope'), false);
 
+function code128Bits(svg) {
+    const width = Number(svg.match(/viewBox="0 0 (\d+)/)[1]);
+    const bits = new Array(width).fill('0');
+    const re = /<rect x="(\d+)" y="0" width="(\d+)"/g;
+    let m;
+    while ((m = re.exec(svg))) {
+        const x = Number(m[1]);
+        const w = Number(m[2]);
+        for (let i = 0; i < w; i++) bits[x + i] = '1';
+    }
+    return bits.join('').slice(10, width - 10);
+}
+const codeA = commerce.code128Svg('A');
+assert.ok(codeA.includes('viewBox="0 0 66 '));
+assert.strictEqual(code128Bits(codeA), '1101001000010100011000100010110001100011101011');
+const codeOrder = commerce.code128Svg('BKLABEL1');
+assert.ok(codeOrder.includes('viewBox="0 0 143 '));
+assert.strictEqual(commerce.code128Svg(''), '');
+assert.strictEqual(commerce.code128Svg('हिंदी'), '');
+const qrMark = commerce.qrSvg('https://seminar.vaidyagogate.org/track-commerce?token=abc');
+assert.ok(qrMark.includes('<svg'));
+assert.ok(qrMark.includes('viewBox='));
+assert.strictEqual(commerce.qrSvg(''), '');
+
+const labelCfg = { storeName: 'VGMF', storeAddress: 'Clinic road', storeCity: 'Pune', storePhone: '9000000000' };
+const labelBase = String(process.env.PUBLIC_BASE_URL || process.env.SITE_URL || process.env.APP_URL || 'https://seminar.vaidyagogate.org')
+    .trim()
+    .replace(/\/$/, '');
+const labelHtml = commerce.labelHtml(
+    {
+        orderCode: 'BKLABEL1',
+        commerceProvider: 'pidge',
+        commerceMode: 'hyperlocal',
+        pickupOtp: '9999',
+        deliveryOtp: '1234',
+        commerceTrackUrl: '/track-commerce?token=abc123token',
+        courierTrackingNo: 'PIDGEAWB99',
+        shippingRecipientName: 'Buyer',
+        deliveryAddress: 'Lane 1',
+        shippingCity: 'Pune',
+        shippingState: 'Maharashtra',
+        shippingPincode: '411009',
+        items: [{ title: 'Book', qty: 2 }]
+    },
+    labelCfg
+);
+assert.ok(labelHtml.includes('data-sym="track-qr"'));
+assert.ok(labelHtml.includes('data-sym="order-qr"'));
+assert.ok(labelHtml.includes('data-sym="order-barcode"'));
+assert.ok(labelHtml.includes('data-sym="courier-qr"'));
+assert.ok(labelHtml.includes('data-sym="courier-barcode"'));
+assert.ok(labelHtml.includes(labelBase + '/track-commerce?token=abc123token'));
+assert.ok(labelHtml.includes('BKLABEL1'));
+assert.ok(labelHtml.includes('PIDGEAWB99'));
+assert.ok(labelHtml.includes('Gogate Products'));
+assert.ok(!labelHtml.includes('9999'));
+assert.ok(!labelHtml.includes('1234'));
+assert.ok(!labelHtml.includes('api.qrserver.com'));
+assert.ok(!labelHtml.includes('Delivery PIN'));
+assert.strictEqual((labelHtml.match(/data-sym="order-barcode"/g) || []).length, 1);
+
+const tookanLabel = commerce.labelHtml(
+    {
+        orderCode: 'BKLABEL1',
+        commerceProvider: 'tookan',
+        pickupOtp: '2468',
+        deliveryOtp: '1357',
+        courierTrackingNo: 'BKLABEL1',
+        commerceTrackUrl: 'https://seminar.vaidyagogate.org/track-commerce?token=abc123token',
+        items: []
+    },
+    labelCfg
+);
+assert.ok(!tookanLabel.includes('data-sym="courier-barcode"'));
+assert.ok(!tookanLabel.includes('data-sym="courier-qr"'));
+assert.ok(tookanLabel.includes('2468'));
+assert.ok(tookanLabel.includes('1357'));
+assert.ok(tookanLabel.includes('https://seminar.vaidyagogate.org/track-commerce?token=abc123token'));
+assert.strictEqual((tookanLabel.match(/data-sym="order-barcode"/g) || []).length, 1);
+
+const bareLabel = commerce.labelHtml({ orderCode: 'ONLYCODE', commerceProvider: 'shipday', pickupOtp: '0000', items: [] }, labelCfg);
+assert.ok(bareLabel.includes('data-sym="order-qr"'));
+assert.ok(bareLabel.includes('data-sym="order-barcode"'));
+assert.ok(!bareLabel.includes('data-sym="track-qr"'));
+assert.ok(!bareLabel.includes('data-sym="courier-barcode"'));
+assert.ok(!bareLabel.includes('Pickup OTP'));
+assert.ok(!bareLabel.includes('Delivery OTP'));
+
 console.log('commerce phrase tests passed');

@@ -168,6 +168,7 @@ function renderCommerceBook() {
         '<label>Pickup time (IST)<input id="c-book-when" type="datetime-local"></label>' +
         '</div>' +
         '<button type="button" class="btn-primary" style="margin-top:12px;" onclick="commerceBookShipment()">Book pickup</button>' +
+        '<button type="button" class="btn-primary" style="margin:12px 0 0 8px;background:#111;" onclick="commercePrintSelectedLabel()">Print shipping label</button>' +
         '<p id="commerce-book-msg" style="font-weight:600;"></p></div>';
 }
 
@@ -278,7 +279,7 @@ function renderCommerceLabels() {
                 o.id +
                 '/label?actingAdminId=' +
                 encodeURIComponent(commerceActor()) +
-                '">Print label</a></td></tr>'
+                '">Print shipping label</a></td></tr>'
         )
         .join('');
     panel.innerHTML =
@@ -478,6 +479,40 @@ async function commerceSetStage(id, stage) {
     }
 }
 
+function commerceLabelHref(id) {
+    return '/api/admin/commerce/orders/' + encodeURIComponent(id) + '/label?actingAdminId=' + encodeURIComponent(commerceActor());
+}
+
+function openCommerceLabel(id) {
+    if (!id) return;
+    window.open(commerceLabelHref(id), '_blank', 'noopener');
+}
+
+function commercePrintSelectedLabel() {
+    openCommerceLabel(val('c-book-order') || val('c-track-order'));
+}
+
+function commerceBookedHtml(provider, order, id) {
+    const o = order || {};
+    let html = 'Booked with Gogate Products.';
+    if (!commerceNoOtp(provider)) {
+        html += ' Pickup OTP ' + escCommerce(o.pickupOtp || '—') + ' · Delivery OTP ' + escCommerce(o.deliveryOtp || '—');
+    }
+    if (o.commerceTrackUrl) html += ' · ' + escCommerce(o.commerceTrackUrl);
+    if (id) html += ' <a href="' + commerceLabelHref(id) + '" target="_blank" rel="noopener">Print shipping label</a>';
+    return html;
+}
+
+function bsPrintCommerceLabel() {
+    const id = parseInt((document.getElementById('bs-courier-order-id') || {}).value, 10);
+    const msg = document.getElementById('bs-commerce-book-msg');
+    if (!id) {
+        if (msg) msg.textContent = 'Open an order before printing the shipping label.';
+        return;
+    }
+    openCommerceLabel(id);
+}
+
 async function commerceBookShipment() {
     const msg = document.getElementById('commerce-book-msg');
     try {
@@ -492,10 +527,8 @@ async function commerceBookShipment() {
         });
         const o = data.order || {};
         if (msg) {
-            msg.textContent =
-                'Booked with Gogate Products.' +
-                (commerceNoOtp(o.commerceProvider) ? '' : ' Pickup OTP ' + (o.pickupOtp || '—') + ' · Delivery OTP ' + (o.deliveryOtp || '—')) +
-                (o.commerceTrackUrl ? ' · ' + o.commerceTrackUrl : '');
+            msg.style.color = '#15803d';
+            msg.innerHTML = commerceBookedHtml(o.commerceProvider, o, val('c-book-order'));
         }
     } catch (e) {
         if (msg) msg.textContent = e.message;
@@ -542,6 +575,7 @@ function renderCommerceShipment(data, animate) {
               escCommerce(data.deliveryOtp || o.deliveryOtp || '—') +
               '</strong></p>') +
         (o.commerceTrackUrl ? '<p><a href="' + escCommerce(o.commerceTrackUrl) + '" target="_blank">Customer tracking link</a></p>' : '') +
+        (o.id ? '<p><a class="btn-primary" style="text-decoration:none;" target="_blank" rel="noopener" href="' + commerceLabelHref(o.id) + '">Print shipping label</a></p>' : '') +
         (window.TrackTimeline && data.timeline
             ? TrackTimeline.render(
                   { timeline: data.timeline, live: data.live, awbTrackUrl: o.tookanTrackingLink || o.shipdayTrackingLink || null, trackUrl: o.commerceTrackUrl },
@@ -716,6 +750,7 @@ function mountBookIntegrations() {
             '<p style="font-size:0.8rem;color:#64748b;margin:0 0 10px;">Customers see Gogate Products as the courier partner. Tookan logistics creates one parcel and uses the pickup and drop OTPs Tookan issues. Shipday and Pidge do not use an OTP.</p>' +
             '<label style="font-size:0.78rem;">Pickup time (IST)<input id="bs-commerce-when" type="datetime-local" style="width:100%;padding:8px;margin:4px 0 10px;"></label>' +
             '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+            '<button type="button" class="btn-primary" style="background:#111;flex:1;min-width:140px;" onclick="bsPrintCommerceLabel()">Print shipping label</button>' +
             '<button type="button" class="btn-primary" style="background:#0d9488;flex:1;min-width:140px;" onclick="bsBookCommerce(\'tookan\',\'logistics\')">Tookan logistics</button>' +
             '<button type="button" class="btn-primary" style="background:#0f766e;flex:1;min-width:140px;" onclick="bsBookCommerce(\'tookan\',\'hyperlocal\')">Tookan hyperlocal</button>' +
             '<button type="button" class="btn-primary" style="background:#0369a1;flex:1;min-width:140px;" onclick="bsBookCommerce(\'shipday\',\'hyperlocal\')">Shipday hyperlocal</button>' +
@@ -853,10 +888,7 @@ async function bsBookCommerce(provider, mode) {
         const o = data.order || {};
         if (msg) {
             msg.style.color = '#15803d';
-            msg.textContent =
-                'Booked with Gogate Products.' +
-                (commerceNoOtp(provider) ? '' : ' Pickup OTP ' + (o.pickupOtp || '—') + ' · Delivery OTP ' + (o.deliveryOtp || '—')) +
-                (o.commerceTrackUrl ? ' · ' + o.commerceTrackUrl : '');
+            msg.innerHTML = commerceBookedHtml(provider, o, id);
         }
         if (typeof bsViewOrderTracking === 'function') bsViewOrderTracking(id);
     } catch (e) {
@@ -893,6 +925,12 @@ async function appendCommerceTrackPanel(id) {
         (commerceNoOtp(co.commerceProvider) && co.agentPhone ? '<p style="margin:0 0 8px;font-size:0.85rem;">Agent ' + escCommerce(co.agentPhone) + '</p>' : '');
     if (co.commerceTrackUrl) {
         inner += '<p style="margin:0 0 8px;font-size:0.82rem;"><a href="' + escCommerce(co.commerceTrackUrl) + '" target="_blank" rel="noopener">Public tracking link</a></p>';
+    }
+    if (id) {
+        inner +=
+            '<p style="margin:0 0 8px;"><a class="btn-primary" style="text-decoration:none;" target="_blank" rel="noopener" href="' +
+            commerceLabelHref(id) +
+            '">Print shipping label</a></p>';
     }
     if (data.timeline && window.TrackTimeline) {
         inner += window.TrackTimeline.render(
