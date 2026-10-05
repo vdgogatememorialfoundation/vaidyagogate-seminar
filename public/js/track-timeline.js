@@ -432,7 +432,7 @@
                 el.__userMoved = true;
             });
             el.__doneLine = new google.maps.Polyline({ map: el.__map, strokeColor: '#94a3b8', strokeWeight: 5, strokeOpacity: 0.85, zIndex: 1 });
-            el.__remain = new google.maps.Polyline({ map: el.__map, strokeColor: '#067d62', strokeWeight: 6, strokeOpacity: 1, zIndex: 2 });
+            el.__remain = new google.maps.Polyline({ map: el.__map, strokeColor: routeColor(), strokeWeight: 6, strokeOpacity: 1, zIndex: 2 });
             el.__markers = {};
             ensureRider(el);
             ensureMotion(el);
@@ -458,6 +458,7 @@
             if (el.__doneLine) el.__doneLine.setPath([]);
             if (el.__remain && live.store && live.drop) {
                 el.__remain.setOptions({
+                    strokeColor: routeColor(),
                     strokeOpacity: 0,
                     icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 3 }, offset: '0', repeat: '14px' }]
                 });
@@ -466,13 +467,13 @@
             if (!el.__fitted || el.__fitLeg !== live.leg) {
                 const bounds = new google.maps.LatLngBounds();
                 [live.store, live.drop].forEach((pos) => pos && bounds.extend(pos));
-                if (!bounds.isEmpty()) el.__map.fitBounds(bounds, 64);
+                if (!bounds.isEmpty()) el.__map.fitBounds(bounds, mapPadding());
                 el.__fitted = true;
                 el.__fitLeg = live.leg;
             }
             return;
         }
-        if (el.__remain) el.__remain.setOptions({ strokeOpacity: 1, icons: null });
+        if (el.__remain) el.__remain.setOptions({ strokeColor: routeColor(), strokeOpacity: 1, icons: null });
         const moving = live.leg !== 'done' && !!live.agent;
         el.__agentLive = moving;
         el.__pendingGps = live.agent || null;
@@ -520,6 +521,7 @@
                 if (status !== 'OK') {
                     if (el.__remain && origin && target) {
                         el.__remain.setOptions({
+                            strokeColor: routeColor(),
                             strokeOpacity: 0,
                             icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 3 }, offset: '0', repeat: '14px' }]
                         });
@@ -527,10 +529,14 @@
                     }
                     return;
                 }
-                if (el.__remain) el.__remain.setOptions({ strokeOpacity: 1, icons: null });
+                if (el.__remain) el.__remain.setOptions({ strokeColor: routeColor(), strokeOpacity: 1, icons: null });
                 const duration = result.routes && result.routes[0] && result.routes[0].legs && result.routes[0].legs[0] && result.routes[0].legs[0].duration;
                 const eta = document.getElementById('tl-eta');
-                if (eta && duration && duration.text && el.__agentLive) eta.textContent = 'Arriving in approximately ' + duration.text;
+                if (eta && duration && duration.text && el.__agentLive) {
+                    eta.hidden = false;
+                    eta.classList.add('is-on');
+                    eta.textContent = eta.classList.contains('hl-eta') ? duration.text : 'Arriving in approximately ' + duration.text;
+                }
                 const pts = routePoints(result);
                 if (!el.__agentLive) {
                     el.__path = null;
@@ -547,13 +553,21 @@
         if (!el.__fitted || el.__fitLeg !== live.leg) {
             const bounds = new google.maps.LatLngBounds();
             [live.store, live.drop, live.agent].forEach((pos) => pos && bounds.extend(pos));
-            if (!bounds.isEmpty()) el.__map.fitBounds(bounds, 64);
+            if (!bounds.isEmpty()) el.__map.fitBounds(bounds, mapPadding());
             el.__fitted = true;
             el.__fitLeg = live.leg;
             el.__userMoved = false;
         } else if (moving && live.agent && !el.__userMoved) {
             el.__map.panTo(live.agent);
         }
+    }
+
+    function routeColor() {
+        return document.body.classList.contains('hl-page') ? '#ea580c' : '#067d62';
+    }
+
+    function mapPadding() {
+        return document.body.classList.contains('hl-page') ? { top: 48, right: 28, bottom: 120, left: 28 } : 64;
     }
 
     function tickLines() {

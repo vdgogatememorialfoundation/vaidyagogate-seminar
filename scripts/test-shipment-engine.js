@@ -47,6 +47,8 @@ assert.strictEqual(logistics.shipment.courier, 'Gogate Products');
 assert.strictEqual(logistics.pickupOtp, null);
 assert.strictEqual(logistics.deliveryOtp, null);
 assert.strictEqual(logistics.agent, null);
+assert.strictEqual(logistics.deliveryNote, null);
+assert.strictEqual(logistics.dropLabel, null);
 assert.strictEqual(logistics.expectedDelivery, null);
 assert.ok(!logistics.timeline.some((row) => /created by api/i.test(row.message)));
 const arrived = logistics.timeline.find((row) => row.message === 'Item arrived at courier facility');
@@ -72,7 +74,9 @@ const hyper = engine.buildCustomerTracking(
         agentPhone: '9811111111',
         agentLat: 18.52,
         agentLng: 73.85,
-        agentLocationAt: new Date().toISOString()
+        agentLocationAt: new Date().toISOString(),
+        deliveryAddress: '15th Cross, 2nd Street',
+        deliveryNote: 'Leave at the door'
     },
     [{ title: 'Out for delivery', kind: 'out_for_delivery', at: '2026-10-05T09:00:00Z' }]
 );
@@ -84,6 +88,22 @@ assert.strictEqual(hyper.pickupOtp, null);
 assert.strictEqual(hyper.agent.name, 'Asha');
 assert.strictEqual(hyper.agent.phone, '9811111111');
 assert.strictEqual(hyper.agent.latitude, 18.52);
+assert.strictEqual(hyper.map.live, true);
+assert.strictEqual(hyper.dropLabel, '15th Cross, 2nd Street');
+assert.strictEqual(hyper.deliveryNote, 'Leave at the door');
+const longDrop = engine.buildCustomerTracking(
+    {
+        orderCode: 'BK2B',
+        commerceStage: 'out_for_delivery',
+        commerceMode: 'hyperlocal',
+        commerceProvider: 'tookan',
+        deliveryAddress: 'A very long delivery address that should be shortened for the map card and not shown as a delivery pin'
+    },
+    []
+);
+assert.strictEqual(longDrop.dropLabel.length, 80);
+assert.ok(longDrop.dropLabel.endsWith('...'));
+assert.ok(!JSON.stringify(longDrop).includes('Delivery PIN'));
 
 const shipday = engine.buildCustomerTracking(
     {
@@ -101,6 +121,9 @@ const shipday = engine.buildCustomerTracking(
 assert.strictEqual(shipday.deliveryOtp, null);
 assert.strictEqual(shipday.pickupOtp, null);
 assert.strictEqual(shipday.map.enabled, true);
+assert.strictEqual(shipday.map.live, false);
+assert.strictEqual(shipday.deliveryNote, '');
+assert.strictEqual(shipday.dropLabel, null);
 
 const failed = engine.buildCustomerTracking(
     {
@@ -125,6 +148,8 @@ assert.strictEqual(failed.currentStatus, 'Delivery attempt unsuccessful');
 assert.strictEqual(failed.map.enabled, false);
 assert.strictEqual(failed.deliveryOtp, null);
 assert.strictEqual(failed.agent, null);
+assert.strictEqual(failed.deliveryNote, null);
+assert.strictEqual(failed.dropLabel, null);
 assert.ok(failed.slots.length > 0);
 assert.strictEqual(failed.slots[0].source, 'store_delivery_hours');
 assert.ok(/Tomorrow/.test(failed.slots[0].label));
