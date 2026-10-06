@@ -52,6 +52,15 @@ assert.ok(bad.error);
 const window = network.scheduleWindow({ deliveryOpen: '10:00', deliveryClose: '20:00' }, Date.parse('2026-10-05T12:00:00Z'));
 assert.ok(window.pickupAt.indexOf('T10:00:00+05:30') !== -1);
 assert.ok(window.deliveryAt.indexOf('+05:30') !== -1);
+const logisticsTimes = network.plannedStopTimes('logistics', 'pidge', null, { deliveryOpen: '10:00', deliveryClose: '20:00' }, Date.parse('2026-10-05T12:00:00Z'));
+assert.strictEqual(logisticsTimes.pickupAtMs, Date.parse('2026-10-06T10:00:00+05:30'));
+assert.strictEqual(logisticsTimes.dropAtMs, Date.parse(window.deliveryAt));
+const hyperTimes = network.plannedStopTimes('hyperlocal', 'pidge', null, { pickupLeadMinutes: 30, deliveryLeadMinutes: 90 }, Date.parse('2026-10-05T12:00:00.000Z'));
+assert.strictEqual(hyperTimes.pickupAtMs, Date.parse('2026-10-05T12:00:00.000Z') + 30 * 60 * 1000);
+assert.strictEqual(hyperTimes.dropAtMs, hyperTimes.pickupAtMs + 90 * 60 * 1000);
+const chosen = Date.parse('2026-10-07T08:00:00Z');
+const explicitTimes = network.plannedStopTimes('logistics', 'tookan', chosen, { deliveryOpen: '10:00', deliveryClose: '20:00' }, Date.parse('2026-10-05T12:00:00Z'));
+assert.strictEqual(explicitTimes.pickupAtMs, chosen);
 
 const hash = network.hashPassword('correct horse');
 assert.strictEqual(network.verifyPassword('correct horse', hash), true);
