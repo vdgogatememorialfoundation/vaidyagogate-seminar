@@ -198,6 +198,35 @@ const sameCityGap = commerce.tookanHubGapMessage(
 assert.ok(sameCityGap.indexOf('Transit hub') === -1);
 assert.ok(sameCityGap.indexOf('Destination city hub') === -1);
 assert.ok(sameCityGap.indexOf('Still needed:') === -1);
+const radiusHubs = [
+    { id: '1917', name: 'Swargate Hub - Pune', address: 'Pune', lat: 18.5, lng: 73.86, radius: 5, usable: true },
+    { id: '1915', name: 'Motherhub Pune - PUNE', address: 'Pune', lat: 18.75, lng: 73.8, radius: 5, usable: true },
+    { id: '1922', name: 'Dapoli HUB - Dapoli', address: 'Dapoli', lat: 17.76, lng: 73.19, radius: 5, usable: true },
+    { id: '1920', name: 'Khed Hub - Khed', address: 'Khed', lat: 17.9, lng: 73.4, radius: 5, usable: true },
+    { id: '1930', name: 'Panvel Hub - Mumbai', address: 'Panvel', lat: 0, lng: 0, radius: 5, usable: false }
+];
+const ratnagiriGap = commerce.tookanHubGapMessage(
+    { storeCity: 'Pune', storeState: 'Maharashtra', storePincode: '411002', storeLat: 18.509, storeLng: 73.86 },
+    {
+        shippingCity: 'RATNAGIRI',
+        shippingState: 'MAHARASHTRA',
+        shippingPincode: '415712',
+        dropLat: 17.769,
+        dropLng: 73.19
+    },
+    radiusHubs
+);
+assert.ok(ratnagiriGap.indexOf('Seller local hub for Pune, Maharashtra, 411002 covered by Swargate Hub - Pune') !== -1);
+assert.ok(ratnagiriGap.indexOf('City mother hub for Pune, Maharashtra covered by Motherhub Pune - PUNE') !== -1);
+assert.ok(ratnagiriGap.indexOf('Delivery local hub for RATNAGIRI, MAHARASHTRA, 415712 covered by Dapoli HUB - Dapoli') !== -1);
+assert.ok(ratnagiriGap.indexOf('covered by Khed Hub - Khed') === -1);
+assert.ok(ratnagiriGap.indexOf('Transit hub') === -1);
+assert.ok(ratnagiriGap.indexOf('Destination city hub') === -1);
+assert.ok(ratnagiriGap.indexOf('Still needed:') === -1);
+assert.ok(ratnagiriGap.indexOf('Hubs read from Tookan:') !== -1);
+assert.ok(ratnagiriGap.indexOf('Panvel Hub - Mumbai (no map pin)') !== -1);
+assert.ok(ratnagiriGap.indexOf('Hubs Tookan can use:') !== -1);
+assert.ok(ratnagiriGap.split('Hubs Tookan can use:')[1].split('Hubs read from Tookan:')[0].indexOf('Panvel Hub - Mumbai') === -1);
 const hyper = commerce.buildTookanTaskBody(sampleCfg, sampleOrder, 'hyperlocal');
 assert.strictEqual(hyper.is_multiple_tasks, undefined);
 assert.strictEqual(hyper.tags, 'hyperlocal');
