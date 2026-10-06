@@ -152,7 +152,8 @@ body.hl-page .tl-rider-pulse { background: rgba(234, 88, 12, 0.28); }
 @keyframes trkIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes trkPulse { 0% { box-shadow: 0 0 0 0 rgba(6, 125, 98, 0.35); } 100% { box-shadow: 0 0 0 10px rgba(6, 125, 98, 0); } }
 @media (prefers-reduced-motion: reduce) {
-    .tl-step.done::before, .tl-step.active::after, .ship-pipe > li.done::after, .ship-pipe > li.active::after, .ship-pipe > li, .ship-pipe > li.active > .dot, .tl-rider-pulse, .tl-rider-bob, .tl-wheel { animation: none; }
+    .tl-step.done::before, .tl-step.active::after, .ship-pipe > li.done::after, .ship-pipe > li.active::after, .ship-pipe > li, .ship-pipe > li.active > .dot, .tl-rider-pulse, .tl-rider-bob, .tl-wheel, .trk-rail li, .trk-route-move, .trk-pill { animation: none; }
+    .trk-nav-fill, .trk-ring { transition: none; }
     .tl-step.done::before { transform: none; clip-path: inset(0 0 0 0); }
     .tl-step.active::after { transform: none; clip-path: inset(0 0 calc((1 - min(0.88, var(--line) / 100)) * 100%) 0); }
     .ship-pipe > li.done::after, .ship-pipe > li.active::after { transform: none; clip-path: inset(0 0 calc((1 - var(--grow, 1)) * 100%) 0); transition: none; }
@@ -223,21 +224,34 @@ body.hl-page .hl-below .ship-pipe { border: 0; background: #fff; border-radius: 
 .trk-copy { border: 1px solid #d5d9d9; background: #fff; color: #0f1111; border-radius: 999px; padding: 8px 12px; font-weight: 700; cursor: pointer; }
 .trk-copy.is-on { background: #067d62; color: #fff; border-color: #067d62; }
 .trk-copy-mini { margin-top: 8px; padding: 4px 10px; font-size: .75rem; }
-.trk-hero { display: flex; gap: 16px; align-items: center; background: #fff; border-radius: 20px; padding: 18px; box-shadow: 0 10px 28px rgba(15, 17, 17, 0.08); }
+.trk-hero { display: flex; gap: 16px; align-items: center; background: linear-gradient(180deg, #fff 0%, #f7fbf9 100%); border-radius: 20px; padding: 18px; box-shadow: 0 10px 28px rgba(15, 17, 17, 0.08); border: 1px solid #e7eeeb; }
+.trk-hero-copy { flex: 1; min-width: 0; }
 .trk-hero h1 { margin: 2px 0 0; font-size: 1.7rem; letter-spacing: -0.03em; }
 .trk-hero p { margin: 6px 0 0; color: #3f4448; }
 .trk-kicker, .trk-stepno { color: #565959; font-size: .82rem; }
 .trk-stepno { margin: 8px 0 0; font-weight: 700; color: #067d62; }
+.trk-pill { display: inline-flex; align-items: center; margin-left: 8px; padding: 2px 8px; border-radius: 999px; font-size: .72rem; font-weight: 800; letter-spacing: .03em; vertical-align: 2px; }
+.trk-pill.is-ok { background: #e6f4ef; color: #067d62; }
+.trk-pill.is-late { background: #fff1e8; color: #c2410c; }
+.trk-route { flex: 0 0 auto; color: #067d62; }
+.trk-route-base, .trk-route-move { fill: none; stroke-linecap: round; }
+.trk-route-base { stroke: #d7ebe4; stroke-width: 4; }
+.trk-route-move { stroke: currentColor; stroke-width: 3; stroke-dasharray: 18 46; animation: trkRoute 2.8s linear infinite; }
 .trk-actions { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 @property --fill { syntax: "<number>"; inherits: true; initial-value: 0; }
 .trk-ring { width: 84px; height: 84px; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(#067d62 calc(var(--fill) * 1%), #e6e8eb 0); flex: 0 0 auto; transition: --fill 2.6s linear; }
 .trk-ring-ico { width: 64px; height: 64px; border-radius: 50%; background: #fff; display: flex; align-items: center; justify-content: center; color: #067d62; }
 .trk-ring-ico svg { width: 26px; height: 26px; }
-.trk-rail { display: flex; gap: 8px; overflow-x: auto; margin: 14px 0; padding-bottom: 4px; list-style: none; }
-.trk-rail li { flex: 1 0 108px; background: #fff; border-radius: 14px; padding: 10px; color: #8d9096; font-size: .78rem; font-weight: 700; }
+.trk-nav { position: relative; margin: 14px 0; background: #fff; border: 1px solid #e7eeeb; border-radius: 18px; padding: 16px 8px 14px; box-shadow: 0 8px 24px rgba(15, 17, 17, 0.05); }
+.trk-nav-line { position: absolute; left: 10%; right: 10%; top: 33px; height: 3px; background: #e6e8eb; border-radius: 99px; overflow: hidden; }
+.trk-nav-fill { display: block; height: 100%; width: calc(var(--nav, 0) * 1%); max-width: 100%; background: #067d62; border-radius: inherit; transition: width 1.1s ease; }
+.trk-rail { position: relative; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; margin: 0; padding: 0; list-style: none; overflow: visible; }
+.trk-rail li { background: transparent; border-radius: 14px; padding: 0 4px; color: #8d9096; font-size: .74rem; font-weight: 700; text-align: center; animation: trkIn 0.45s ease both; animation-delay: calc(var(--i) * 0.06s); }
 .trk-rail li.done, .trk-rail li.active { color: #0f1111; }
-.trk-rail-ico { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: #f3f4f6; margin-bottom: 6px; }
-.trk-rail li.done .trk-rail-ico, .trk-rail li.active .trk-rail-ico { background: #067d62; color: #fff; }
+.trk-rail-ico { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: #f3f4f6; margin: 0 auto 8px; position: relative; z-index: 1; border: 3px solid #fff; box-shadow: 0 0 0 1px #e5e7eb; }
+.trk-rail li.done .trk-rail-ico, .trk-rail li.active .trk-rail-ico { background: #067d62; color: #fff; box-shadow: 0 0 0 1px #067d62; }
+.trk-rail li.active .trk-rail-ico { animation: trkPulse 2.4s ease-out infinite; }
+.trk-rail-name { display: block; line-height: 1.25; }
 .trk-facts, .trk-whens { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-top: 10px; }
 .trk-fact, .trk-when { background: #fff; border-radius: 16px; padding: 12px 14px; }
 .trk-fact .lbl, .trk-when .lbl { font-size: .72rem; letter-spacing: .04em; text-transform: uppercase; color: #565959; }
@@ -260,8 +274,12 @@ body.hl-page .hl-below .ship-pipe { border: 0; background: #fff; border-radius: 
 .trk-more { margin-top: 8px; border: 0; background: transparent; color: #067d62; font-weight: 800; cursor: pointer; padding: 4px 0; }
 .trk-foot { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 16px; color: #565959; font-size: .82rem; }
 .trk-foot a { color: #067d62; font-weight: 700; }
+@keyframes trkRoute { to { stroke-dashoffset: -64; } }
+.hl-drop .trk-pill { margin-left: 8px; }
 @media (max-width: 640px) {
     .trk-hero { align-items: flex-start; }
     .trk-hero h1 { font-size: 1.4rem; }
+    .trk-route { display: none; }
+    .trk-rail-name { font-size: .66rem; }
     .trk-foot { flex-direction: column; }
 }

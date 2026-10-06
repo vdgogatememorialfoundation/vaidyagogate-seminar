@@ -142,13 +142,37 @@ assert.ok(parcelTrack.events.some((ev) => ev.title === 'Arrived at Swargate Hub 
 assert.ok(parcelTrack.events.some((ev) => ev.title === 'Shipment left for Dapoli HUB - Dapoli' && ev.detail === 'Swargate Hub - Pune'));
 assert.ok(parcelTrack.events.some((ev) => ev.title === 'Arrived at Dapoli HUB - Dapoli' && ev.at === '2026-10-06T07:26:00.000Z' && ev.city === 'Dapoli'));
 assert.ok(!parcelTrack.events.some((ev) => ev.kind === 'delivered'));
+assert.strictEqual(parcelTrack.explicitDelivery, false);
 assert.ok(parcelTrack.lineFill <= 0.88);
+const deliveredSteps = parcelSteps.slice(0, 5).concat([
+    { status: 'Parcel has been delivered,Gogate Products', line_status: 'Dapoli HUB - Dapoli', date_time: '2026-10-06T08:04:00.000Z', customer_username: 'Asha BK1' }
+]);
+const deliveredTrack = commerce.tookanParcelJourney(deliveredSteps, Date.parse('2026-10-06T09:00:00Z'));
+assert.strictEqual(deliveredTrack.stage, 'delivered');
+assert.strictEqual(deliveredTrack.explicitDelivery, true);
+assert.strictEqual(deliveredTrack.at, '2026-10-06T08:04:00.000Z');
+assert.ok(deliveredTrack.events.some((ev) => ev.kind === 'delivered' && ev.at === '2026-10-06T08:04:00.000Z'));
+assert.ok(deliveredTrack.events.some((ev) => ev.title === 'Arrived at Dapoli HUB - Dapoli'));
+const streetSteps = parcelSteps.slice(0, 5).concat([
+    { status: 'Parcel has been delivered,Gogate Products', line_status: 'Khed Road, Maharashtra, India', date_time: '2026-10-06T08:04:00.000Z', customer_username: 'Asha BK1' }
+]);
+const streetTrack = commerce.tookanParcelJourney(streetSteps, Date.parse('2026-10-06T09:00:00Z'));
+assert.strictEqual(streetTrack.stage, 'delivered');
+assert.strictEqual(streetTrack.events.find((ev) => ev.kind === 'delivered').detail, 'Dapoli HUB - Dapoli');
+assert.ok(JSON.stringify(streetTrack).indexOf('Khed Road') === -1);
 const ofdJobs = hubJobs.map((job, i) => (i === 2 ? Object.assign({}, job, { job_status: 1 }) : job));
 const ofdJourney = commerce.parcelJourneyUpdate(ofdJobs, hubs, now);
 assert.strictEqual(ofdJourney.stage, 'out_for_delivery');
 assert.ok(ofdJourney.lineFill <= 0.88);
 const deliveredJobs = hubJobs.map((job, i) => (i === 2 ? Object.assign({}, job, { job_status: 2 }) : job));
-assert.strictEqual(commerce.parcelJourneyUpdate(deliveredJobs, hubs, now).stage, 'delivered');
+const closed = commerce.parcelJourneyUpdate(deliveredJobs, hubs, now);
+assert.strictEqual(closed.stage, 'delivered');
+assert.strictEqual(closed.explicitDelivery, true);
+assert.strictEqual(scanned.explicitDelivery, false);
+assert.strictEqual(require('../lib/shipment-engine').allowMainTransition('SHIPPED', 'DELIVERED'), false);
+assert.strictEqual(require('../lib/shipment-engine').acceptsStageChange('SHIPPED', 'DELIVERED', { explicitDelivery: true, kind: 'delivered' }), true);
+assert.strictEqual(require('../lib/shipment-engine').acceptsStageChange('SHIPPED', 'DELIVERED', { kind: 'delivered' }), false);
+assert.strictEqual(require('../lib/shipment-engine').acceptsStageChange('PACKED', 'DELIVERED', { explicitDelivery: true, kind: 'delivered' }), false);
 assert.strictEqual(commerce.stageFromKind('hub_eta'), null);
 const fleetAgent = commerce.tookanAgentFromProfile({
     fleet_details: [

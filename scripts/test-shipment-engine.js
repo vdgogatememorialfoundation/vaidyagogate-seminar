@@ -419,4 +419,53 @@ const fleetOfd = engine.buildCustomerTracking(
 assert.strictEqual(fleetOfd.deliveryOtp, '4455');
 assert.strictEqual(fleetOfd.pickupOtp, null);
 
+const earlyDrop = engine.buildCustomerTracking(
+    {
+        orderCode: 'BKEARLY',
+        commerceStage: 'delivered',
+        status: 'delivered',
+        commerceMode: 'logistics',
+        commerceProvider: 'tookan',
+        deliveryAt: '2026-10-07T05:30:00.000Z',
+        courierDeliveredAt: '2026-10-06T08:04:00.000Z'
+    },
+    [{ title: 'Delivered', kind: 'delivered', at: '2026-10-06T08:04:00.000Z', detail: 'Dapoli HUB - Dapoli', city: 'Dapoli' }],
+    { now: Date.parse('2026-10-06T09:00:00.000Z') }
+);
+assert.strictEqual(earlyDrop.mainStatus, 'DELIVERED');
+assert.strictEqual(earlyDrop.deliveryBy, '');
+assert.strictEqual(earlyDrop.timing.state, 'on_time');
+assert.strictEqual(earlyDrop.timing.label, 'On time');
+assert.strictEqual(earlyDrop.timing.deliveredAt, '2026-10-06T08:04:00.000Z');
+assert.ok(earlyDrop.timeline.some((ev) => ev.parentStage === 'DELIVERED' && ev.message === 'Your order has been delivered'));
+
+const lateShip = engine.buildCustomerTracking(
+    {
+        orderCode: 'BKLATE',
+        commerceStage: 'in_transit',
+        commerceMode: 'logistics',
+        commerceProvider: 'tookan',
+        deliveryAt: '2026-10-05T10:00:00.000Z'
+    },
+    [],
+    { now: Date.parse('2026-10-06T09:00:00.000Z') }
+);
+assert.strictEqual(lateShip.mainStatus, 'SHIPPED');
+assert.strictEqual(lateShip.timing.state, 'delayed');
+assert.strictEqual(lateShip.timing.label, 'Delayed');
+assert.strictEqual(lateShip.timing.deliveredAt, null);
+assert.ok(lateShip.deliveryBy);
+
+const noClock = engine.buildCustomerTracking(
+    {
+        orderCode: 'BKNONE',
+        commerceStage: 'in_transit',
+        commerceMode: 'logistics',
+        commerceProvider: 'tookan'
+    },
+    [],
+    { now: Date.parse('2026-10-06T09:00:00.000Z') }
+);
+assert.strictEqual(noClock.timing, null);
+
 console.log('shipment engine tests passed');

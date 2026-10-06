@@ -121,17 +121,34 @@
                 return '<li class="' + esc(step.state) + '"' + tick + ' style="--i:' + i + ';--grow:' + grow + '">' + head + '<span class="dot">' + stepIcon(step.key) + '</span><div class="ship-copy"><div class="ship-title"><b>' + esc(step.title) + '</b>' + stamp + '</div>' +
                     (step.message && step.state !== 'upcoming' ? '<div class="ship-msg">' + esc(step.message) + '</div>' : '') +
                     nextHint +
-                    (step.expectedLabel ? '<span class="ship-expect">' + esc(step.expectedLabel) + '</span>' : '') +
+                    (showExpect(step) ? '<span class="ship-expect">' + esc(step.expectedLabel) + '</span>' : '') +
                     (kids || shippedNote ? '<ul class="ship-kids">' + kids + shippedNote + '</ul>' : '') +
                     '</div></li>';
             })
             .join('');
     }
 
+    function showExpect(step) {
+        if (!step || !step.expectedLabel || step.state === 'done') return false;
+        if (step.state === 'active' && (step.events || []).length && step.key !== 'OUT_FOR_DELIVERY') return false;
+        return true;
+    }
+
+    function timingBadge(track) {
+        const timing = track && track.timing;
+        if (!timing || (timing.state !== 'on_time' && timing.state !== 'delayed')) return '';
+        const late = timing.state === 'delayed';
+        return '<span class="trk-pill ' + (late ? 'is-late' : 'is-ok') + '">' + esc(timing.label || (late ? 'Delayed' : 'On time')) + '</span>';
+    }
+
     function railHtml(track) {
-        return '<ol class="trk-rail">' + (track.pipeline || []).map((step) =>
-            '<li class="' + esc(step.state) + '"><span class="trk-rail-ico">' + stepIcon(step.key) + '</span><span>' + esc(step.title) + '</span></li>'
-        ).join('') + '</ol>';
+        return '<nav class="trk-nav" aria-label="Shipment progress"><div class="trk-nav-line" aria-hidden="true"><span class="trk-nav-fill" style="--nav:0"></span></div><ol class="trk-rail">' +
+            (track.pipeline || []).map((step, i) =>
+                '<li class="' + esc(step.state) + '" style="--i:' + i + '"><span class="trk-rail-ico">' +
+                (step.state === 'done' ? iconSvg('M5 12l5 5L20 7') : stepIcon(step.key)) +
+                '</span><span class="trk-rail-name">' + esc(step.title) + '</span></li>'
+            ).join('') +
+            '</ol></nav>';
     }
 
     function progressHtml(track) {
@@ -139,9 +156,13 @@
     }
 
     function deliveryHtml(track) {
+        const badge = timingBadge(track);
+        if (track && track.timing && track.timing.deliveredAt) {
+            return '<div class="hl-drop"><div class="lbl">Delivered</div><div class="val">' + esc(when(track.timing.deliveredAt)) + (badge ? ' ' + badge : '') + '</div></div>';
+        }
         return track && track.deliveryBy
-            ? '<div class="hl-drop"><div class="lbl">Delivery by</div><div class="val">' + esc(track.deliveryBy) + '</div></div>'
-            : '';
+            ? '<div class="hl-drop"><div class="lbl">Delivery by</div><div class="val">' + esc(track.deliveryBy) + (badge ? ' ' + badge : '') + '</div></div>'
+            : badge ? '<div class="hl-drop">' + badge + '</div>' : '';
     }
 
     function growFor(el) {
@@ -202,24 +223,33 @@
                 el.style.setProperty('--grow', String(growFor(el)));
             });
         }
-        const ring = document.querySelector('.trk-ring');
-        if (!ring || !items.length) return;
+        if (!items.length) return;
+        const last = items[items.length - 1];
+        const finished = last && last.classList.contains('active') && !items.some((el) => el.classList.contains('upcoming'));
         let portion = 0;
-        items.forEach((el) => {
-            if (el.classList.contains('done')) portion += 1;
-            else if (el.classList.contains('active')) {
-                const grow = Number(String(el.style.getPropertyValue('--grow')).trim());
-                portion += Number.isFinite(grow) ? Math.min(0.55, Math.max(0, grow)) : 0.12;
+        if (!finished) {
+            items.forEach((el) => {
+                if (el.classList.contains('done')) portion += 1;
+                else if (el.classList.contains('active')) {
+                    const grow = Number(String(el.style.getPropertyValue('--grow')).trim());
+                    portion += Number.isFinite(grow) ? Math.min(0.55, Math.max(0, grow)) : 0.12;
+                }
+            });
+        }
+        const fill = finished ? '100' : String(Math.round((portion / items.length) * 100));
+        const ring = document.querySelector('.trk-ring');
+        const nav = document.querySelector('.trk-nav-fill');
+        [ring, nav].forEach((el) => {
+            if (!el) return;
+            const prop = el.classList.contains('trk-ring') ? '--fill' : '--nav';
+            if (!el.dataset.filled) {
+                el.dataset.filled = '1';
+                el.style.setProperty(prop, '0');
+                requestAnimationFrame(() => el.style.setProperty(prop, fill));
+            } else {
+                el.style.setProperty(prop, fill);
             }
         });
-        const fill = String(Math.round((portion / items.length) * 100));
-        if (!ring.dataset.filled) {
-            ring.dataset.filled = '1';
-            ring.style.setProperty('--fill', '0');
-            requestAnimationFrame(() => ring.style.setProperty('--fill', fill));
-        } else {
-            ring.style.setProperty('--fill', fill);
-        }
     }
 
     function otpHtml(label, code) {
@@ -288,28 +318,33 @@
         const detail = track.currentDetail || track.currentMessage || '';
         const code = track.orderId || shipment.orderCode || '';
         const active = (track.pipeline || []).find((step) => step.state === 'active') || (track.pipeline || [])[0] || {};
-        const expects = (track.pipeline || []).filter((step) => step.expectedLabel).map((step) =>
+        const expects = (track.pipeline || []).filter(showExpect).map((step) =>
             '<article class="trk-when"><span class="trk-when-ico">' + stepIcon(step.key) + '</span><div><div class="lbl">' + esc(step.title) + '</div><div class="val">' + esc(step.expectedLabel) + '</div></div></article>'
         ).join('');
         const trackingId = track.shipment && track.shipment.trackingId;
         const steps = track.pipeline || [];
         const doneCount = steps.filter((step) => step.state === 'done').length;
-        const stepNo = active && active.state === 'active' ? doneCount + 1 : doneCount;
+        const delivered = active && active.key === 'DELIVERED' && active.state === 'active';
+        const stepNo = delivered ? steps.length : active && active.state === 'active' ? doneCount + 1 : doneCount;
+        const badge = timingBadge(track);
+        const deliveredAt = track.timing && track.timing.deliveredAt ? when(track.timing.deliveredAt) : '';
+        const routeArt = '<span class="trk-route" aria-hidden="true"><svg viewBox="0 0 128 40" width="128" height="40"><path class="trk-route-base" d="M4 30 C 22 30, 22 10, 42 10 S 62 30, 82 30 S 104 10, 124 10"/><path class="trk-route-move" d="M4 30 C 22 30, 22 10, 42 10 S 62 30, 82 30 S 104 10, 124 10"/></svg></span>';
         return '<div class="trk">' +
             '<header class="trk-bar"><div class="trk-brand"><span class="trk-mark">' + iconSvg('M3 8l9-4 9 4-9 4-9-4zM3 8v8l9 4 9-4V8') + '</span><div><div class="trk-brand-name">Gogate Products</div><div class="trk-brand-sub">Shipment tracking</div></div></div>' +
             '<div class="trk-actions">' +
             (code ? '<button type="button" class="trk-copy" data-copy="' + esc(code) + '">Copy order</button>' : '') +
             '<button type="button" class="trk-copy" data-copy-href="1">Copy link</button>' +
             '</div></header>' +
-            '<section class="trk-hero"><div class="trk-ring" style="--fill:0"><span class="trk-ring-ico">' + stepIcon(active.key) + '</span></div><div><div class="trk-kicker">Order #' + esc(code) + '</div><h1>' + esc(track.currentStatus || track.currentMessage) + '</h1>' +
+            '<section class="trk-hero"><div class="trk-ring" style="--fill:0"><span class="trk-ring-ico">' + stepIcon(active.key) + '</span></div><div class="trk-hero-copy"><div class="trk-kicker">Order #' + esc(code) + (badge ? ' ' + badge : '') + '</div><h1>' + esc(track.currentStatus || track.currentMessage) + '</h1>' +
             (detail ? '<p>' + esc(detail) + '</p>' : '') +
             '<p class="trk-stepno">Step ' + stepNo + ' of ' + (steps.length || 5) + '</p>' +
-            '</div></section>' +
+            '</div>' + routeArt + '</section>' +
             railHtml(track) +
             '<div class="trk-facts">' +
             factCard('Courier', courier) +
             factCard('Service', mode) +
             (trackingId ? factCard('Tracking ID', trackingId, '<button type="button" class="trk-copy trk-copy-mini" data-copy="' + esc(trackingId) + '">Copy</button>') : '') +
+            (deliveredAt ? factCard('Delivered', deliveredAt) : '') +
             (track.deliveryBy ? factCard('Delivery by', track.deliveryBy) : '') +
             attemptCard(track) +
             '</div>' +
