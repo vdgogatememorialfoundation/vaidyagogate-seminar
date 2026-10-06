@@ -3,9 +3,9 @@
 .tl-step { position: relative; padding: 0 0 28px 46px; }
 .tl-step:last-child { padding-bottom: 4px; }
 .tl-step::before { content: ""; position: absolute; left: 13px; top: 30px; bottom: -2px; width: 3px; background: var(--tl-line); border-radius: 2px; }
-.tl-step.done::before { background: var(--tl-green); transform-origin: top center; }
-.tl:not(.tl-static) .tl-step.done::before { transform: scaleY(0); animation: shipDraw 1.15s linear forwards; animation-delay: calc(var(--i) * 1.15s); }
-.tl:not(.tl-static) .tl-step.active::after { animation: shipDrawLine 1.15s linear backwards; animation-delay: calc(var(--i) * 1.15s); transition: transform 1.15s linear; }
+.tl-step.done::before { background: var(--tl-green); transform: none; clip-path: inset(0 0 0 0); }
+.tl:not(.tl-static) .tl-step.done::before { clip-path: inset(0 0 100% 0); animation: shipReveal 1.15s linear forwards; animation-delay: calc(var(--i) * 1.15s); }
+.tl:not(.tl-static) .tl-step.active::after { animation: shipRevealLine 1.15s linear both; animation-delay: calc(var(--i) * 1.15s); }
 .tl-step:last-child::before { display: none; }
 .tl-step.active { --line: 42; }
 .tl-step.active::after {
@@ -17,9 +17,9 @@
     width: 3px;
     background: var(--tl-green);
     border-radius: 2px;
-    transform-origin: top center;
-    transform: scaleY(calc(min(0.88, var(--line) / 100)));
-    transition: transform 1.6s ease;
+    transform: none;
+    clip-path: inset(0 0 calc((1 - min(0.88, var(--line) / 100)) * 100%) 0);
+    transition: none;
     z-index: 0;
     pointer-events: none;
 }
@@ -72,10 +72,10 @@
     width: 3px;
     background: #067d62;
     border-radius: 2px;
-    transform-origin: top center;
-    transform: scaleY(var(--grow, 0));
+    transform: none;
+    clip-path: inset(0 0 calc((1 - var(--grow, 0)) * 100%) 0);
     animation: none;
-    transition: transform var(--draw, 0s) linear;
+    transition: none;
     z-index: 0;
 }
 @property --grow { syntax: "<number>"; inherits: true; initial-value: 0; }
@@ -90,9 +90,9 @@
     background: #067d62;
     box-shadow: 0 0 0 4px rgba(6, 125, 98, 0.16);
     top: calc(34px + (100% - 34px) * var(--grow, 0));
-    transform: translateY(-6px);
+    transform: none;
     z-index: 2;
-    transition: top var(--draw, 3.2s) linear;
+    transition: none;
 }
 .ship-pipe > li:last-child::after { display: none; }
 .ship-pipe > li > .dot { position: absolute; left: 0; top: 0; width: 32px; height: 32px; border-radius: 50%; border: 2px solid #c7cccc; background: #fff; box-sizing: border-box; display: flex; align-items: center; justify-content: center; color: #8d9096; }
@@ -138,16 +138,15 @@
 .tl-rider-pulse { position: absolute; inset: 6px; border-radius: 50%; background: rgba(6, 125, 98, 0.22); animation: tlRiderPulse 2s ease-out infinite; }
 .tl-rider-bike { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 2px 3px rgba(15, 17, 17, 0.35)); }
 @keyframes tlRiderPulse { 0% { transform: scale(0.72); opacity: 0.75; } 100% { transform: scale(1.55); opacity: 0; } }
-@keyframes shipDraw { from { transform-origin: top center; transform: scaleY(0); } to { transform-origin: top center; transform: scaleY(1); } }
-@keyframes shipDrawLine { from { transform-origin: top center; transform: scaleY(0); } to { transform-origin: top center; transform: scaleY(calc(min(0.88, var(--line) / 100))); } }
-@keyframes shipDrawTo { from { transform-origin: top center; transform: scaleY(0); } to { transform-origin: top center; transform: scaleY(var(--grow, 1)); } }
-@keyframes trkIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes shipReveal { from { clip-path: inset(0 0 100% 0); } to { clip-path: inset(0 0 0 0); } }
+@keyframes shipRevealLine { from { clip-path: inset(0 0 100% 0); } to { clip-path: inset(0 0 calc((1 - min(0.88, var(--line) / 100)) * 100%) 0); } }
+@keyframes trkIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes trkPulse { 0% { box-shadow: 0 0 0 0 rgba(6, 125, 98, 0.35); } 100% { box-shadow: 0 0 0 10px rgba(6, 125, 98, 0); } }
 @media (prefers-reduced-motion: reduce) {
     .tl-step.done::before, .tl-step.active::after, .ship-pipe > li.done::after, .ship-pipe > li.active::after, .ship-pipe > li, .ship-pipe > li.active > .dot { animation: none; }
-    .tl-step.done::before { transform: none; }
-    .tl-step.active::after { transform: scaleY(calc(min(0.88, var(--line) / 100))); }
-    .ship-pipe > li.done::after, .ship-pipe > li.active::after { transform: scaleY(var(--grow, 1)); transition: none; }
+    .tl-step.done::before { transform: none; clip-path: inset(0 0 0 0); }
+    .tl-step.active::after { transform: none; clip-path: inset(0 0 calc((1 - min(0.88, var(--line) / 100)) * 100%) 0); }
+    .ship-pipe > li.done::after, .ship-pipe > li.active::after { transform: none; clip-path: inset(0 0 calc((1 - var(--grow, 1)) * 100%) 0); transition: none; }
     .ship-pipe > li.active[data-line-until], .ship-pipe > li .ship-headway { transition: none; }
 }
 
