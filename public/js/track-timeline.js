@@ -325,20 +325,20 @@
         '<circle cx="48" cy="22" r="7" fill="none" stroke="#64748b" stroke-width="1.3"/>' +
         '<path d="M48 12.6v18.8M38.6 22h18.8M41.4 15.4l13.2 13.2M54.6 15.4L41.4 28.6" stroke="#f8fafc" stroke-width="1.05" stroke-linecap="round"/>' +
         '<circle cx="48" cy="22" r="2" fill="#ea580c"/></g>' +
-        '<path d="M48 33v16" stroke="url(#tlBikePaint)" stroke-width="5" stroke-linecap="round"/>' +
-        '<path d="M48 49 L38 64 M48 49 L58 60" stroke="url(#tlBikePaint)" stroke-width="3.4" stroke-linecap="round"/>' +
-        '<path d="M48 16v6" stroke="#334155" stroke-width="2.6" stroke-linecap="round"/>' +
-        '<path d="M32 16h32" stroke="#1e293b" stroke-width="3.2" stroke-linecap="round"/>' +
-        '<path d="M32 16v5M64 16v5" stroke="#1e293b" stroke-width="3.2" stroke-linecap="round"/>' +
-        '<ellipse cx="48" cy="50" rx="8" ry="2.8" fill="#1e293b"/>' +
-        '<path d="M41 51c-2 6-1 10 2 11M55 51c2 6 1 10-2 11" fill="none" stroke="#1e293b" stroke-width="3.3" stroke-linecap="round"/>' +
-        '<path d="M39 44c2-8 16-8 18 0l-2 8c-2 3-12 3-14 0z" fill="url(#tlCloth)"/>' +
-        '<circle cx="48" cy="36" r="7.4" fill="url(#tlHelmet)"/>' +
-        '<path d="M41 38.2h14" stroke="#7c2d12" stroke-width="1.6" stroke-linecap="round" opacity="0.85"/>' +
-        '<path d="M40 44c-8-6-12-16-6-24" fill="none" stroke="#fdba74" stroke-width="3.3" stroke-linecap="round"/>' +
-        '<path d="M56 44c8-6 12-16 6-24" fill="none" stroke="#c2410c" stroke-width="3.3" stroke-linecap="round"/>' +
-        '<circle cx="34" cy="19" r="2.2" fill="#fdba74"/>' +
-        '<circle cx="62" cy="19" r="2.2" fill="#ea580c"/>' +
+        '<path d="M48 30v18" stroke="url(#tlBikePaint)" stroke-width="5.5" stroke-linecap="round"/>' +
+        '<path d="M48 48 L36 68 M48 48 L60 64" stroke="url(#tlBikePaint)" stroke-width="3.6" stroke-linecap="round"/>' +
+        '<path d="M48 12v8" stroke="#334155" stroke-width="2.8" stroke-linecap="round"/>' +
+        '<path d="M30 12h36" stroke="#1e293b" stroke-width="3.4" stroke-linecap="round"/>' +
+        '<path d="M30 12v6M66 12v6" stroke="#1e293b" stroke-width="3.4" stroke-linecap="round"/>' +
+        '<ellipse cx="48" cy="52" rx="9" ry="3" fill="#1e293b"/>' +
+        '<path d="M40 52c-1 7 0 12 3 13M56 52c1 7 0 12-3 13" fill="none" stroke="#0f172a" stroke-width="4" stroke-linecap="round"/>' +
+        '<path d="M36 46c3-6 21-6 24 0l-1 10c-3 4-19 4-22 0z" fill="url(#tlCloth)" stroke="#94a3b8" stroke-width="0.6"/>' +
+        '<circle cx="48" cy="34" r="9.2" fill="url(#tlHelmet)" stroke="#9a3412" stroke-width="0.8"/>' +
+        '<path d="M39.5 36.5h17" stroke="#431407" stroke-width="2.2" stroke-linecap="round"/>' +
+        '<path d="M39 47c-7-4-12-18-7-28" fill="none" stroke="#fdba74" stroke-width="4" stroke-linecap="round"/>' +
+        '<path d="M57 47c7-4 12-18 7-28" fill="none" stroke="#c2410c" stroke-width="4" stroke-linecap="round"/>' +
+        '<circle cx="32" cy="16" r="2.6" fill="#fdba74" stroke="#9a3412" stroke-width="0.4"/>' +
+        '<circle cx="64" cy="16" r="2.6" fill="#ea580c" stroke="#9a3412" stroke-width="0.4"/>' +
         '</svg>';
 
     function ensureRider(el) {
@@ -541,8 +541,6 @@
             el.__fitted = true;
             el.__fitLeg = live.leg;
             el.__userMoved = false;
-        } else if (moving && live.agent && !el.__userMoved) {
-            el.__map.panTo(live.agent);
         }
         if (el.__map && window.google && google.maps.event) google.maps.event.trigger(el.__map, 'resize');
     }
