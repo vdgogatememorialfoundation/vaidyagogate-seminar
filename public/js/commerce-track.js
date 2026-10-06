@@ -30,6 +30,31 @@
         return clean ? 'tel:' + clean : '';
     }
 
+    function iconSvg(paths) {
+        return '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="' + paths + '"/></svg>';
+    }
+
+    function stepIcon(key) {
+        const paths = {
+            ORDERED: 'M8 4h8v3H8zM7 7h10v13H7zM9 12h6M9 16h4',
+            PACKED: 'M3 8l9-4 9 4-9 4-9-4zM3 8v8l9 4 9-4V8M12 12v8',
+            SHIPPED: 'M3 7h11v8H3zM14 10h4l3 3v2h-7zM7 18a1.5 1.5 0 110-3 1.5 1.5 0 010 3zM18 18a1.5 1.5 0 110-3 1.5 1.5 0 010 3z',
+            OUT_FOR_DELIVERY: 'M5 17a2 2 0 110-4 2 2 0 010 4zM16 17a2 2 0 110-4 2 2 0 010 4zM7 15h7l2-5H10M14 10l2 5M9 8h5',
+            DELIVERED: 'M5 12l5 5L20 7'
+        };
+        return iconSvg(paths[key] || paths.ORDERED);
+    }
+
+    function progressFill(track) {
+        const steps = track.pipeline || [];
+        if (!steps.length) return 0;
+        const done = steps.filter((step) => step.state === 'done').length;
+        const active = steps.find((step) => step.state === 'active');
+        const grow = active && active.lineGrow != null ? Number(active.lineGrow) : active ? 0.55 : 0;
+        const portion = done + (active ? Math.min(0.55, Math.max(0.12, grow)) : 0);
+        return Math.round((portion / steps.length) * 100);
+    }
+
     function pipeHtml(track) {
         const child = (ev) =>
             '<li class="ship-sub' + (ev.tone ? ' ' + esc(ev.tone) : '') + '"><b>' + esc(ev.message) + '</b>' +
@@ -50,12 +75,19 @@
                 const tick = step.state === 'active' && step.lineUntil
                     ? ' data-line-since="' + Number(step.lineSince) + '" data-line-until="' + Number(step.lineUntil) + '"'
                     : '';
-                return '<li class="' + esc(step.state) + '"' + tick + ' style="--i:' + i + ';--grow:' + grow + '"><span class="dot"></span><b>' + esc(step.title) + '</b>' +
+                return '<li class="' + esc(step.state) + '"' + tick + ' style="--i:' + i + ';--grow:' + grow + '"><span class="dot">' + stepIcon(step.key) + '</span><div class="ship-copy"><b>' + esc(step.title) + '</b>' +
+                    (step.message && step.state !== 'upcoming' ? '<div class="ship-msg">' + esc(step.message) + '</div>' : '') +
                     (step.expectedLabel ? '<span class="ship-expect">' + esc(step.expectedLabel) + '</span>' : '') +
                     (kids || shippedNote ? '<ul class="ship-kids">' + kids + shippedNote + '</ul>' : '') +
-                    '</li>';
+                    '</div></li>';
             })
             .join('');
+    }
+
+    function railHtml(track) {
+        return '<ol class="trk-rail">' + (track.pipeline || []).map((step) =>
+            '<li class="' + esc(step.state) + '"><span class="trk-rail-ico">' + stepIcon(step.key) + '</span><span>' + esc(step.title) + '</span></li>'
+        ).join('') + '</ol>';
     }
 
     function progressHtml(track) {
@@ -105,26 +137,41 @@
             '<a class="call" href="' + esc(track.supportUrl || '/support') + '">Get help</a></div>';
     }
 
+    function factCard(label, value, extra) {
+        if (!value) return '';
+        return '<article class="trk-fact"><div class="lbl">' + esc(label) + '</div><div class="val">' + esc(value) + '</div>' + (extra || '') + '</article>';
+    }
+
     function documentHtml(track, shipment) {
         const courier = (track.shipment && track.shipment.courier) || 'Gogate Products';
         const mode = track.fulfillmentType === 'HYPERLOCAL' ? 'Hyperlocal delivery' : 'Logistics';
         const detail = track.currentDetail || track.currentMessage || '';
-        const tracking = track.shipment && track.shipment.trackingId
-            ? '<div class="hl-drop"><div class="lbl">Tracking ID</div><div class="val">' + esc(track.shipment.trackingId) + '</div></div>'
-            : '';
-        return '<div class="hl"><section class="hl-sheet hl-sheet-flat">' +
-            '<div class="hl-kicker">Order #' + esc(track.orderId || shipment.orderCode || '') + '</div>' +
-            '<div class="hl-top"><div><h1>' + esc(track.currentStatus || track.currentMessage) + '</h1>' +
-            (detail ? '<p class="hl-sub">' + esc(detail) + '</p>' : '') +
-            '</div></div>' +
-            '<div class="hl-drop"><div class="lbl">Courier</div><div class="val">' + esc(courier) + '</div><div class="hl-note-hint">' + esc(mode) + '</div></div>' +
-            tracking +
-            deliveryHtml(track) +
+        const code = track.orderId || shipment.orderCode || '';
+        const active = (track.pipeline || []).find((step) => step.state === 'active') || (track.pipeline || [])[0] || {};
+        const expects = (track.pipeline || []).filter((step) => step.expectedLabel).map((step) =>
+            '<article class="trk-when"><span class="trk-when-ico">' + stepIcon(step.key) + '</span><div><div class="lbl">' + esc(step.title) + '</div><div class="val">' + esc(step.expectedLabel) + '</div></div></article>'
+        ).join('');
+        const trackingId = track.shipment && track.shipment.trackingId;
+        return '<div class="trk">' +
+            '<header class="trk-bar"><div class="trk-brand"><span class="trk-mark">' + iconSvg('M3 8l9-4 9 4-9 4-9-4zM3 8v8l9 4 9-4V8') + '</span><div><div class="trk-brand-name">Gogate Products</div><div class="trk-brand-sub">Shipment tracking</div></div></div>' +
+            (code ? '<button type="button" class="trk-copy" data-copy="' + esc(code) + '">Copy order</button>' : '') +
+            '</header>' +
+            '<section class="trk-hero"><div class="trk-ring" style="--fill:' + progressFill(track) + '"><span class="trk-ring-ico">' + stepIcon(active.key) + '</span></div><div><div class="trk-kicker">Order #' + esc(code) + '</div><h1>' + esc(track.currentStatus || track.currentMessage) + '</h1>' +
+            (detail ? '<p>' + esc(detail) + '</p>' : '') +
+            '</div></section>' +
+            railHtml(track) +
+            '<div class="trk-facts">' +
+            factCard('Courier', courier) +
+            factCard('Service', mode) +
+            (trackingId ? factCard('Tracking ID', trackingId, '<button type="button" class="trk-copy trk-copy-mini" data-copy="' + esc(trackingId) + '">Copy</button>') : '') +
+            (track.deliveryBy ? factCard('Delivery by', track.deliveryBy) : '') +
+            '</div>' +
+            (expects ? '<div class="trk-whens">' + expects + '</div>' : '') +
             failureHtml(track) +
-            '</section><div class="hl-below">' +
             otpHtml('Pickup OTP', track.pickupOtp) + otpHtml('Delivery OTP', track.deliveryOtp) +
-            progressHtml(track) +
-            '</div></div>';
+            '<section class="trk-progress"><h2>Order progress</h2><ol class="ship-pipe">' + pipeHtml(track) + '</ol></section>' +
+            '<footer class="trk-foot"><a href="' + esc(track.supportUrl || '/support') + '">Need help with this shipment?</a><span id="trk-fresh">Checking for updates</span></footer>' +
+            '</div>';
     }
 
     function sheetHtml(track, shipment) {
@@ -186,10 +233,45 @@
         if (!(editing && !editing.hidden) && sig !== drawn) {
             drawn = sig;
             tracker.innerHTML = liveSheet ? sheetHtml(track, shipment) : documentHtml(track, shipment);
+            bindCopy();
         }
         bindReschedule();
         bindNote();
+        touchFresh();
         if (live && window.TrackTimeline) TrackTimeline.mount(live);
+    }
+
+    function bindCopy() {
+        tracker.querySelectorAll('[data-copy]').forEach((btn) => {
+            if (btn.dataset.bound) return;
+            btn.dataset.bound = '1';
+            const label = btn.textContent;
+            btn.addEventListener('click', async () => {
+                const text = btn.getAttribute('data-copy') || '';
+                try {
+                    if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(text);
+                    else return;
+                    btn.textContent = 'Copied';
+                    btn.classList.add('is-on');
+                    setTimeout(() => {
+                        btn.textContent = label;
+                        btn.classList.remove('is-on');
+                    }, 1200);
+                } catch (err) {
+                    btn.textContent = 'Copy blocked';
+                }
+            });
+        });
+    }
+
+    function touchFresh() {
+        const el = document.getElementById('trk-fresh');
+        if (!el) return;
+        el.textContent = 'Updated ' + new Intl.DateTimeFormat('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            hour: 'numeric',
+            minute: '2-digit'
+        }).format(new Date());
     }
 
     function bindReschedule() {
