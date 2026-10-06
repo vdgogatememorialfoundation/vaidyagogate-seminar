@@ -562,6 +562,7 @@ assert.ok(!labelHtml.includes(labelBase + '/track-commerce?token=abc123token'));
 assert.ok(labelHtml.includes('data-status="SHIPPED"'));
 assert.ok(labelHtml.includes('Expected shipping '));
 assert.ok(labelHtml.includes('Expected delivery '));
+assert.ok(!labelHtml.includes('Expected pickup '));
 assert.ok(labelHtml.includes('>Picked up</b>'));
 assert.ok(!labelHtml.includes('>Shipped</b>'));
 assert.ok(labelHtml.includes('data-sym="order-qr"'));
@@ -583,6 +584,8 @@ const tookanLabel = commerce.labelHtml(
         commerceProvider: 'tookan',
         pickupOtp: '2468',
         deliveryOtp: '1357',
+        pickupAt: '2026-10-05T06:00:00.000Z',
+        deliveryAt: '2026-10-05T10:00:00.000Z',
         courierTrackingNo: 'BKLABEL1',
         commerceTrackUrl: 'https://seminar.vaidyagogate.org/track-commerce?token=abc123token',
         items: []
@@ -594,6 +597,9 @@ assert.ok(!tookanLabel.includes('data-sym="courier-qr"'));
 assert.ok(!tookanLabel.includes('data-sym="track-qr"'));
 assert.ok(!tookanLabel.includes('https://seminar.vaidyagogate.org/track-commerce?token=abc123token'));
 assert.ok(tookanLabel.includes('>Shipped</b>'));
+assert.ok(tookanLabel.includes('Expected pickup '));
+assert.ok(tookanLabel.includes('Expected shipping '));
+assert.ok(tookanLabel.includes('Expected delivery '));
 assert.ok(tookanLabel.includes('2468'));
 assert.ok(tookanLabel.includes('1357'));
 assert.strictEqual((tookanLabel.match(/data-sym="order-barcode"/g) || []).length, 1);
@@ -753,6 +759,21 @@ assert.strictEqual(fleetOtp.pickupOtp, '3322');
 assert.strictEqual(fleetOtp.agentLat, 18.52);
 assert.strictEqual(fleetOtp.agentName, 'Ravi');
 assert.strictEqual(fleetOtp.deliveryAt, '2026-10-06T12:30:00.000Z');
+assert.strictEqual(fleetOtp.pickupAt, null);
+const fleetDates = commerce.fleetbaseOrderToUpdate(
+    {
+        id: 'order_dates',
+        status: 'created',
+        meta: {
+            expected_pickup_at: '2026-10-06T04:30:00.000Z',
+            expected_delivery_at: '2026-10-06T12:30:00.000Z'
+        },
+        scheduled_at: '2026-10-07T12:30:00.000Z'
+    },
+    'logistics'
+);
+assert.strictEqual(fleetDates.pickupAt, '2026-10-06T04:30:00.000Z');
+assert.strictEqual(fleetDates.deliveryAt, '2026-10-06T12:30:00.000Z');
 assert.ok(!JSON.stringify(fleetOtp).includes('411009'));
 assert.strictEqual(
     commerce.fleetbaseOrderToUpdate({ id: 'order_done', status: 'completed', tracking_number: { tracking_number: 'FB-9' } }, 'logistics').kind,

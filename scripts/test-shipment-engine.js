@@ -166,6 +166,7 @@ assert.ok(!pidgeTrack.pickupBy);
 assert.ok(!JSON.stringify(pidgeTrack).includes('411009'));
 const pidgeShip = pidgeTrack.pipeline.find((step) => step.key === 'SHIPPED');
 const pidgeOfd = pidgeTrack.pipeline.find((step) => step.key === 'OUT_FOR_DELIVERY');
+assert.strictEqual(pidgeTrack.pipeline.find((step) => step.key === 'PACKED').expectedLabel, '');
 assert.strictEqual(pidgeShip.expectedLabel, 'Expected shipping ' + engine.expectedWhen('2026-10-05T06:00:00.000Z'));
 assert.strictEqual(pidgeOfd.expectedLabel, 'Expected delivery ' + engine.expectedWhen('2026-10-05T10:00:00.000Z'));
 assert.ok(pidgeOfd.lineGrow <= 0.55);
@@ -186,6 +187,7 @@ const moving = engine.buildCustomerTracking(
 );
 const movingShipped = moving.pipeline.find((step) => step.key === 'SHIPPED');
 assert.strictEqual(movingShipped.title, 'Shipped');
+assert.strictEqual(moving.pipeline.find((step) => step.key === 'PACKED').expectedLabel, 'Expected pickup ' + engine.expectedWhen('2026-10-05T06:00:00.000Z'));
 assert.strictEqual(movingShipped.expectedLabel, 'Expected shipping ' + engine.expectedWhen('2026-10-05T06:00:00.000Z'));
 assert.strictEqual(moving.pipeline.find((step) => step.key === 'OUT_FOR_DELIVERY').expectedLabel, 'Expected delivery ' + engine.expectedWhen('2026-10-05T10:00:00.000Z'));
 assert.strictEqual(movingShipped.state, 'active');
