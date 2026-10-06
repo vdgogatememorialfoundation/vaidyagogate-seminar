@@ -4,8 +4,8 @@
 .tl-step:last-child { padding-bottom: 4px; }
 .tl-step::before { content: ""; position: absolute; left: 13px; top: 30px; bottom: -2px; width: 3px; background: var(--tl-line); border-radius: 2px; }
 .tl-step.done::before { background: var(--tl-green); transform-origin: top center; }
-.tl:not(.tl-static) .tl-step.done::before { transform: scaleY(0); animation: shipDraw 2s ease forwards; animation-delay: calc(var(--i) * 1.15s); }
-.tl:not(.tl-static) .tl-step.active::after { animation: shipDrawLine 2s ease backwards; animation-delay: calc(var(--i) * 1.15s); transition: transform 2.6s linear; }
+.tl:not(.tl-static) .tl-step.done::before { transform: scaleY(0); animation: shipDraw 1.15s linear forwards; animation-delay: calc(var(--i) * 1.15s); }
+.tl:not(.tl-static) .tl-step.active::after { animation: shipDrawLine 1.15s linear backwards; animation-delay: calc(var(--i) * 1.15s); transition: transform 1.15s linear; }
 .tl-step:last-child::before { display: none; }
 .tl-step.active { --line: 42; }
 .tl-step.active::after {
@@ -74,7 +74,7 @@
     border-radius: 2px;
     transform-origin: top center;
     transform: scaleY(0);
-    animation: shipDrawTo 2s cubic-bezier(.22, .7, .2, 1) forwards;
+    animation: shipDrawTo 1.15s linear forwards;
     animation-delay: calc(var(--i) * 1.15s);
     z-index: 0;
 }
@@ -142,9 +142,9 @@
 .tl-rider-pulse { position: absolute; inset: 6px; border-radius: 50%; background: rgba(6, 125, 98, 0.22); animation: tlRiderPulse 2s ease-out infinite; }
 .tl-rider-bike { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 2px 3px rgba(15, 17, 17, 0.35)); }
 @keyframes tlRiderPulse { 0% { transform: scale(0.72); opacity: 0.75; } 100% { transform: scale(1.55); opacity: 0; } }
-@keyframes shipDraw { from { transform: scaleY(0); } to { transform: scaleY(1); } }
-@keyframes shipDrawLine { from { transform: scaleY(0); } to { transform: scaleY(calc(min(0.88, var(--line) / 100))); } }
-@keyframes shipDrawTo { from { transform: scaleY(0); } to { transform: scaleY(var(--grow, 1)); } }
+@keyframes shipDraw { from { transform-origin: top center; transform: scaleY(0); } to { transform-origin: top center; transform: scaleY(1); } }
+@keyframes shipDrawLine { from { transform-origin: top center; transform: scaleY(0); } to { transform-origin: top center; transform: scaleY(calc(min(0.88, var(--line) / 100))); } }
+@keyframes shipDrawTo { from { transform-origin: top center; transform: scaleY(0); } to { transform-origin: top center; transform: scaleY(var(--grow, 1)); } }
 @keyframes trkIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 @keyframes trkPulse { 0% { box-shadow: 0 0 0 0 rgba(6, 125, 98, 0.35); } 100% { box-shadow: 0 0 0 10px rgba(6, 125, 98, 0); } }
 @media (prefers-reduced-motion: reduce) {

@@ -153,30 +153,26 @@
         return Math.min(0.55, Math.max(0.12, Math.round(ratio * 100) / 100));
     }
 
-    function drawMs(el) {
-        const since = Number(el.getAttribute('data-line-since'));
-        const until = Number(el.getAttribute('data-line-until'));
-        if (!until || until <= since) return 3200;
-        const ratio = Math.min(1, Math.max(0, (Date.now() - since) / (until - since)));
-        return Math.round(3200 + ratio * 5200);
-    }
-
     function tickPipe() {
         const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         const items = Array.from(document.querySelectorAll('.ship-pipe > li'));
         const activeIndex = items.findIndex((el) => el.classList.contains('active'));
-        const wait = reduce || activeIndex <= 0 ? 0 : (activeIndex - 1) * 1150 + 2000;
+        const stepMs = 1150;
+        const wait = reduce || activeIndex <= 0 ? 0 : activeIndex * stepMs;
         items.forEach((el) => {
             if (!el.classList.contains('active') || !el.hasAttribute('data-line-until')) return;
             const grow = String(growFor(el));
             if (!el.dataset.lined) {
-                el.dataset.lined = 'wait';
-                el.style.setProperty('--grow', '0');
-                el.style.setProperty('--draw', drawMs(el) + 'ms');
-                window.setTimeout(() => {
-                    el.dataset.lined = '1';
-                    requestAnimationFrame(() => el.style.setProperty('--grow', String(growFor(el))));
-                }, wait);
+                const intro = Math.max(360, Math.round(Number(grow) * stepMs));
+                el.dataset.lined = reduce ? '1' : 'wait';
+                el.style.setProperty('--grow', reduce ? grow : '0');
+                el.style.setProperty('--draw', reduce ? '0s' : intro + 'ms');
+                if (!reduce) {
+                    window.setTimeout(() => {
+                        el.dataset.lined = '1';
+                        requestAnimationFrame(() => el.style.setProperty('--grow', String(growFor(el))));
+                    }, wait);
+                }
             } else if (el.dataset.lined === '1') {
                 el.style.setProperty('--draw', '2s');
                 el.style.setProperty('--grow', grow);
