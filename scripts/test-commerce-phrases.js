@@ -167,7 +167,22 @@ assert.ok(gap.indexOf('City mother hub for Pune, Maharashtra') !== -1);
 assert.ok(gap.indexOf('Transit hub from Pune to Khed') !== -1);
 assert.ok(gap.indexOf('Destination city hub for Khed, Maharashtra') !== -1);
 assert.ok(gap.indexOf('Delivery local hub for Khed, Maharashtra, 415709') !== -1);
-assert.ok(gap.indexOf('Khed Hub - Khed is saved but has no map pin') !== -1);
+assert.ok(gap.indexOf('Delivery local hub for Khed, Maharashtra, 415709 (Khed Hub - Khed is saved but has no map pin)') !== -1);
+const dapoli = {
+    id: '1922',
+    name: 'Dapoli HUB - Dapoli',
+    address: 'Dapoli, Khed, Ratnagiri, Maharashtra, India',
+    lat: 0,
+    lng: 0,
+    usable: false
+};
+const tight = commerce.tookanHubGapMessage(
+    { storeCity: 'Pune', storeState: 'Maharashtra', storePincode: '411009' },
+    { shippingCity: 'Khed', shippingState: 'Maharashtra', shippingPincode: '415709' },
+    parsedHubs.hubs.concat([dapoli])
+);
+assert.ok(tight.indexOf('Delivery local hub for Khed, Maharashtra, 415709 (Khed Hub - Khed is saved but has no map pin)') !== -1);
+assert.ok(tight.indexOf('Dapoli HUB - Dapoli is saved but has no map pin') === -1);
 assert.ok(gap.indexOf('Still needed:') !== -1);
 assert.ok(gap.indexOf('City mother hub for Pune, Maharashtra') !== -1);
 assert.ok(gap.indexOf('Still needed:') > gap.indexOf('City mother hub for Pune, Maharashtra'));
