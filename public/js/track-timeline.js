@@ -129,7 +129,7 @@
                         '<div class="tl-step ' + s.state + '"' +
                         (s.lineUntil ? ' data-line-since="' + Number(s.lineSince) + '" data-line-until="' + Number(s.lineUntil) + '" data-line-floor="' + Number(s.lineFloor || 12) + '"' : '') +
                         ' style="--i:' + i + (s.lineFill != null ? ';--line:' + Number(s.lineFill) : '') + '"><div class="tl-dot">' + (s.state === 'done' ? '&#10003;' : '') + '</div>' +
-                        '<div class="tl-title">' + esc(s.title) + (s.at && s.state !== 'upcoming' ? '<span class="tl-time">' + esc(when(s.at)) + '</span>' : '') + '</div>' +
+                        '<div class="tl-title">' + esc(s.title) + (s.expectedLabel ? '<span class="tl-expect">' + esc(s.expectedLabel) + '</span>' : '') + (s.at && s.state !== 'upcoming' ? '<span class="tl-time">' + esc(when(s.at)) + '</span>' : '') + '</div>' +
                         (s.summary ? '<div class="tl-sum">' + esc(s.summary) + '</div>' : '') +
                         extra(s, data) +
                         updates(s.updates) +

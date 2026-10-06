@@ -88,6 +88,7 @@
 .ship-pipe > li.done > .dot, .ship-pipe > li.active > .dot { background: #067d62; border-color: #067d62; }
 .ship-pipe > li.done, .ship-pipe > li.active { color: #0f1111; }
 .ship-pipe > li > b { font-size: 1.05rem; }
+.ship-expect, .tl-expect { display: inline; margin-left: 8px; font-size: .82rem; font-weight: 500; color: #565959; }
 .ship-kids { margin: 8px 0 0; }
 .ship-kids > li { position: relative; padding: 0 0 12px 18px; color: #0f1111; font-size: .92rem; font-weight: 400; }
 .ship-kids > li::before { content: ""; position: absolute; left: 0; top: 6px; width: 8px; height: 8px; border-radius: 50%; background: #067d62; }

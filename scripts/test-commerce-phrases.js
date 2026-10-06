@@ -244,6 +244,7 @@ const noiseEvents = [
 ];
 const noiseTl = shop.buildShopTimeline(noiseOrder, noiseEvents, {});
 const shippedStep = noiseTl.steps.find((s) => s.key === 'shipped');
+assert.strictEqual(shippedStep.title, 'Picked up');
 assert.notStrictEqual(shippedStep.state, 'done');
 const packedStep = noiseTl.steps.find((s) => s.key === 'packed');
 assert.ok(!packedStep.updates.some((u) => /created by api|deleted by/i.test(u.title)));
@@ -309,6 +310,7 @@ const transitTl = shop.buildShopTimeline(
 );
 const transitActive = transitTl.steps.find((s) => s.state === 'active');
 assert.strictEqual(transitActive.key, 'shipped');
+assert.strictEqual(transitActive.title, 'Shipped');
 assert.ok(transitActive.lineFill <= 88);
 assert.strictEqual(transitTl.steps.find((s) => s.key === 'out_for_delivery').state, 'upcoming');
 assert.strictEqual(transitTl.steps.find((s) => s.key === 'delivered').state, 'upcoming');
@@ -542,6 +544,8 @@ const labelHtml = commerce.labelHtml(
         deliveryOtp: '1234',
         commerceTrackUrl: '/track-commerce?token=abc123token',
         courierTrackingNo: 'PIDGEAWB99',
+        pickupAt: '2026-10-05T06:00:00.000Z',
+        deliveryAt: '2026-10-05T10:00:00.000Z',
         shippingRecipientName: 'Buyer',
         deliveryAddress: 'Lane 1',
         shippingCity: 'Pune',
@@ -551,12 +555,19 @@ const labelHtml = commerce.labelHtml(
     },
     labelCfg
 );
-assert.ok(labelHtml.includes('data-sym="track-qr"'));
+assert.ok(!labelHtml.includes('data-sym="track-qr"'));
+assert.ok(!labelHtml.includes('Scan to track'));
+assert.ok(!labelHtml.includes('Track:'));
+assert.ok(!labelHtml.includes(labelBase + '/track-commerce?token=abc123token'));
+assert.ok(labelHtml.includes('data-status="SHIPPED"'));
+assert.ok(labelHtml.includes('Expected shipping '));
+assert.ok(labelHtml.includes('Expected delivery '));
+assert.ok(labelHtml.includes('>Picked up</b>'));
+assert.ok(!labelHtml.includes('>Shipped</b>'));
 assert.ok(labelHtml.includes('data-sym="order-qr"'));
 assert.ok(labelHtml.includes('data-sym="order-barcode"'));
 assert.ok(labelHtml.includes('data-sym="courier-qr"'));
 assert.ok(labelHtml.includes('data-sym="courier-barcode"'));
-assert.ok(labelHtml.includes(labelBase + '/track-commerce?token=abc123token'));
 assert.ok(labelHtml.includes('BKLABEL1'));
 assert.ok(labelHtml.includes('PIDGEAWB99'));
 assert.ok(labelHtml.includes('Gogate Products'));
@@ -580,9 +591,11 @@ const tookanLabel = commerce.labelHtml(
 );
 assert.ok(!tookanLabel.includes('data-sym="courier-barcode"'));
 assert.ok(!tookanLabel.includes('data-sym="courier-qr"'));
+assert.ok(!tookanLabel.includes('data-sym="track-qr"'));
+assert.ok(!tookanLabel.includes('https://seminar.vaidyagogate.org/track-commerce?token=abc123token'));
+assert.ok(tookanLabel.includes('>Shipped</b>'));
 assert.ok(tookanLabel.includes('2468'));
 assert.ok(tookanLabel.includes('1357'));
-assert.ok(tookanLabel.includes('https://seminar.vaidyagogate.org/track-commerce?token=abc123token'));
 assert.strictEqual((tookanLabel.match(/data-sym="order-barcode"/g) || []).length, 1);
 
 const bareLabel = commerce.labelHtml({ orderCode: 'ONLYCODE', commerceProvider: 'shipday', pickupOtp: '0000', items: [] }, labelCfg);

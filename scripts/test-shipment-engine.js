@@ -72,6 +72,7 @@ const leftCopy = engine.customerEvent({
 assert.strictEqual(leftCopy.message, 'Shipment Left Local Hub- Pune Maharashtra, India');
 assert.strictEqual(leftCopy.parentStage, 'SHIPPED');
 assert.strictEqual(logistics.pipeline.filter((step) => step.state === 'done').length, 2);
+assert.strictEqual(logistics.pipeline.find((step) => step.key === 'SHIPPED').title, 'Shipped');
 assert.strictEqual(logistics.pipeline.find((step) => step.key === 'SHIPPED').state, 'active');
 assert.strictEqual(logistics.pipeline.find((step) => step.key === 'OUT_FOR_DELIVERY').state, 'upcoming');
 
@@ -95,6 +96,15 @@ const hyper = engine.buildCustomerTracking(
     [{ title: 'Out for delivery', kind: 'out_for_delivery', at: '2026-10-05T09:00:00Z' }]
 );
 assert.strictEqual(hyper.fulfillmentType, 'HYPERLOCAL');
+assert.strictEqual(hyper.pipeline.find((step) => step.key === 'SHIPPED').title, 'Picked up');
+assert.strictEqual(hyper.pipeline.find((step) => step.key === 'SHIPPED').message, 'The delivery partner has picked up your order');
+assert.strictEqual(
+    engine.customerEvent(
+        { title: 'Shipment Received at Local Hub- Pune Maharashtra, India', kind: 'arrived_facility', at: '2026-10-05T09:00:00Z' },
+        { hyperlocal: true }
+    ),
+    null
+);
 assert.strictEqual(hyper.mainStatus, 'OUT_FOR_DELIVERY');
 assert.strictEqual(hyper.map.enabled, true);
 assert.strictEqual(hyper.deliveryOtp, '2222');
@@ -154,7 +164,10 @@ assert.strictEqual(pidgeTrack.pickupOtp, null);
 assert.ok(pidgeTrack.deliveryBy);
 assert.ok(!pidgeTrack.pickupBy);
 assert.ok(!JSON.stringify(pidgeTrack).includes('411009'));
+const pidgeShip = pidgeTrack.pipeline.find((step) => step.key === 'SHIPPED');
 const pidgeOfd = pidgeTrack.pipeline.find((step) => step.key === 'OUT_FOR_DELIVERY');
+assert.strictEqual(pidgeShip.expectedLabel, 'Expected shipping ' + engine.expectedWhen('2026-10-05T06:00:00.000Z'));
+assert.strictEqual(pidgeOfd.expectedLabel, 'Expected delivery ' + engine.expectedWhen('2026-10-05T10:00:00.000Z'));
 assert.ok(pidgeOfd.lineGrow <= 0.55);
 assert.ok(pidgeOfd.lineGrow >= 0.45);
 assert.ok(pidgeOfd.lineUntil > pidgeOfd.lineSince);
@@ -172,6 +185,9 @@ const moving = engine.buildCustomerTracking(
     { now: Date.parse('2026-10-05T07:00:00.000Z') }
 );
 const movingShipped = moving.pipeline.find((step) => step.key === 'SHIPPED');
+assert.strictEqual(movingShipped.title, 'Shipped');
+assert.strictEqual(movingShipped.expectedLabel, 'Expected shipping ' + engine.expectedWhen('2026-10-05T06:00:00.000Z'));
+assert.strictEqual(moving.pipeline.find((step) => step.key === 'OUT_FOR_DELIVERY').expectedLabel, 'Expected delivery ' + engine.expectedWhen('2026-10-05T10:00:00.000Z'));
 assert.strictEqual(movingShipped.state, 'active');
 assert.ok(movingShipped.lineGrow < 0.55);
 assert.ok(movingShipped.lineGrow > 0.12);
@@ -288,6 +304,23 @@ const preview = shop.buildLiveView(
 );
 assert.ok(preview);
 assert.strictEqual(preview.agent, null);
+const datedShop = shop.buildShopTimeline(
+    {
+        status: 'shipped',
+        commerceStage: 'in_transit',
+        commerceMode: 'hyperlocal',
+        commerceProvider: 'tookan',
+        orderCode: 'BKDATE',
+        pickupAt: '2026-10-05T06:00:00.000Z',
+        deliveryAt: '2026-10-05T10:00:00.000Z'
+    },
+    [{ title: 'Shipment Received at Local Hub- Pune Maharashtra, India', kind: 'arrived_facility', at: '2026-10-05T09:00:00Z' }],
+    {}
+);
+assert.strictEqual(datedShop.steps.find((s) => s.key === 'shipped').title, 'Picked up');
+assert.strictEqual(datedShop.steps.find((s) => s.key === 'shipped').updates.length, 0);
+assert.strictEqual(datedShop.steps.find((s) => s.key === 'shipped').expectedLabel, 'Expected shipping ' + engine.expectedWhen('2026-10-05T06:00:00.000Z'));
+assert.strictEqual(datedShop.steps.find((s) => s.key === 'out_for_delivery').expectedLabel, 'Expected delivery ' + engine.expectedWhen('2026-10-05T10:00:00.000Z'));
 assert.strictEqual(preview.route, 'dotted');
 assert.strictEqual(
     shop.buildLiveView(

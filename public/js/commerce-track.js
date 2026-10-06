@@ -51,6 +51,7 @@
                     ? ' data-line-since="' + Number(step.lineSince) + '" data-line-until="' + Number(step.lineUntil) + '"'
                     : '';
                 return '<li class="' + esc(step.state) + '"' + tick + ' style="--i:' + i + ';--grow:' + grow + '"><span class="dot"></span><b>' + esc(step.title) + '</b>' +
+                    (step.expectedLabel ? '<span class="ship-expect">' + esc(step.expectedLabel) + '</span>' : '') +
                     (kids || shippedNote ? '<ul class="ship-kids">' + kids + shippedNote + '</ul>' : '') +
                     '</li>';
             })
