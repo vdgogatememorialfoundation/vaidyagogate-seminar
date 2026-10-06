@@ -125,6 +125,64 @@ assert.ok(ofdJourney.lineFill <= 0.88);
 const deliveredJobs = hubJobs.map((job, i) => (i === 2 ? Object.assign({}, job, { job_status: 2 }) : job));
 assert.strictEqual(commerce.parcelJourneyUpdate(deliveredJobs, hubs, now).stage, 'delivered');
 assert.strictEqual(commerce.stageFromKind('hub_eta'), null);
+const parsedHubs = commerce.parseTookanHubPayload({
+    status: 200,
+    data: {
+        count: 2,
+        totalPages: 1,
+        data: [
+            { hub_id: 1924, hub_name: 'Khed Hub - Khed', hub_address: 'Khed, Maharashtra, India', hub_lat: 0, hub_long: 0, hub_radius: 5 },
+            { hub_id: 1915, hub_name: 'Motherhub Pune - PUNE', hub_address: 'Pune, Maharashtra, India', hub_lat: 18.5, hub_long: 73.8, hub_radius: 5 },
+            { hub_id: 1917, hub_name: 'Swargate Hub - Pune', hub_address: 'Swargate, Pune, Maharashtra, India', hub_lat: 18.5, hub_long: 73.86, hub_radius: 5 }
+        ]
+    }
+});
+assert.strictEqual(parsedHubs.pages, 1);
+assert.strictEqual(parsedHubs.hubs.length, 3);
+assert.strictEqual(parsedHubs.hubs[0].usable, false);
+assert.strictEqual(parsedHubs.hubs[1].usable, true);
+assert.strictEqual(commerce.tookanHubUsable(0, 0), false);
+const puneToKhed = commerce.tookanAreaRequirements(
+    { city: 'Pune', state: 'Maharashtra', pincode: '411009' },
+    { city: 'Khed', state: 'Maharashtra', pincode: '415709' }
+);
+assert.ok(puneToKhed.some((area) => area.role === 'seller_local' && area.label.indexOf('Pune') !== -1));
+assert.ok(puneToKhed.some((area) => area.role === 'city_mother'));
+assert.ok(puneToKhed.some((area) => area.role === 'transit' && area.label === 'Transit hub from Pune to Khed'));
+assert.ok(puneToKhed.some((area) => area.role === 'destination_city' && area.label.indexOf('Khed') !== -1));
+assert.ok(puneToKhed.some((area) => area.role === 'delivery_local' && area.label.indexOf('415709') !== -1));
+const sameCityAreas = commerce.tookanAreaRequirements(
+    { city: 'Pune', state: 'Maharashtra', pincode: '411009' },
+    { city: 'Pune', state: 'Maharashtra', pincode: '411038' }
+);
+assert.ok(!sameCityAreas.some((area) => area.role === 'transit' || area.role === 'destination_city'));
+const gap = commerce.tookanHubGapMessage(
+    { storeCity: 'Pune', storeState: 'Maharashtra', storePincode: '411009' },
+    { shippingCity: 'Khed', shippingState: 'Maharashtra', shippingPincode: '415709' },
+    parsedHubs.hubs
+);
+assert.ok(gap.indexOf('Area hubs required:') === 0);
+assert.ok(gap.indexOf('Seller local hub for Pune, Maharashtra, 411009') !== -1);
+assert.ok(gap.indexOf('City mother hub for Pune, Maharashtra') !== -1);
+assert.ok(gap.indexOf('Transit hub from Pune to Khed') !== -1);
+assert.ok(gap.indexOf('Destination city hub for Khed, Maharashtra') !== -1);
+assert.ok(gap.indexOf('Delivery local hub for Khed, Maharashtra, 415709') !== -1);
+assert.ok(gap.indexOf('Khed Hub - Khed is saved but has no map pin') !== -1);
+assert.ok(gap.indexOf('Still needed:') !== -1);
+assert.ok(gap.indexOf('City mother hub for Pune, Maharashtra') !== -1);
+assert.ok(gap.indexOf('Still needed:') > gap.indexOf('City mother hub for Pune, Maharashtra'));
+assert.ok(gap.indexOf('Hubs Tookan can use:') !== -1);
+assert.ok(gap.indexOf('Motherhub Pune - PUNE') !== -1);
+assert.ok(gap.indexOf('Swargate Hub - Pune') !== -1);
+assert.ok(gap.indexOf('Shivajinagar') === -1);
+const sameCityGap = commerce.tookanHubGapMessage(
+    { storeCity: 'Pune', storeState: 'Maharashtra', storePincode: '411009' },
+    { shippingCity: 'Pune', shippingState: 'Maharashtra', shippingPincode: '411038' },
+    parsedHubs.hubs
+);
+assert.ok(sameCityGap.indexOf('Transit hub') === -1);
+assert.ok(sameCityGap.indexOf('Destination city hub') === -1);
+assert.ok(sameCityGap.indexOf('Still needed:') === -1);
 const hyper = commerce.buildTookanTaskBody(sampleCfg, sampleOrder, 'hyperlocal');
 assert.strictEqual(hyper.is_multiple_tasks, undefined);
 assert.strictEqual(hyper.tags, 'hyperlocal');
