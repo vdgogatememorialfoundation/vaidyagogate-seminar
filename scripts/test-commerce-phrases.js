@@ -150,6 +150,43 @@ assert.ok(ofdJourney.lineFill <= 0.88);
 const deliveredJobs = hubJobs.map((job, i) => (i === 2 ? Object.assign({}, job, { job_status: 2 }) : job));
 assert.strictEqual(commerce.parcelJourneyUpdate(deliveredJobs, hubs, now).stage, 'delivered');
 assert.strictEqual(commerce.stageFromKind('hub_eta'), null);
+const fleetAgent = commerce.tookanAgentFromProfile({
+    fleet_details: [
+        {
+            first_name: 'GOGATE PUNE PRODUCTS',
+            phone: '9800000000',
+            latitude: 17.7,
+            longitude: 73.1,
+            location_update_datetime: '2026-10-06T07:54:39.000Z'
+        }
+    ]
+});
+assert.strictEqual(fleetAgent.name, 'GOGATE PUNE PRODUCTS');
+assert.strictEqual(fleetAgent.phone, '9800000000');
+assert.strictEqual(fleetAgent.lat, 17.7);
+assert.strictEqual(fleetAgent.lng, 73.1);
+assert.strictEqual(fleetAgent.at, '2026-10-06T07:54:39.000Z');
+const unnamed = commerce.tookanAgentFromProfile({
+    fleet_details: [{ first_name: 'Created By API - Gogate Products', phone: '1', latitude: 1, longitude: 2 }]
+});
+assert.strictEqual(unnamed.name, '');
+assert.strictEqual(unnamed.phone, '');
+assert.strictEqual(unnamed.at, null);
+const scheduled = commerce.tookanJobToUpdate(
+    {
+        job_id: 9,
+        job_type: 1,
+        job_status: 1,
+        job_time_utc: '2026-10-06T07:54:00.000Z',
+        job_pickup_datetime: '2026-10-06T11:54:00.000Z',
+        job_delivery_datetime: '2026-10-06T13:24:00.000Z',
+        fleet_id: 4
+    },
+    'hyperlocal',
+    'delivery'
+);
+assert.strictEqual(scheduled.deliveryAt, '2026-10-06T07:54:00.000Z');
+assert.strictEqual(scheduled.stage, 'out_for_delivery');
 const parsedHubs = commerce.parseTookanHubPayload({
     status: 200,
     data: {
