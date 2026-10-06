@@ -137,6 +137,7 @@ const parcelTrack = commerce.tookanParcelJourney(parcelSteps, Date.parse('2026-1
 assert.strictEqual(parcelTrack.stage, 'in_transit');
 assert.notStrictEqual(parcelTrack.stage, 'delivered');
 assert.notStrictEqual(parcelTrack.stage, 'out_for_delivery');
+assert.ok(parcelTrack.events.some((ev) => ev.title === 'Shipment left origin' && ev.detail === 'Origin' && ev.at === '2026-10-06T07:11:24.000Z'));
 assert.ok(parcelTrack.events.some((ev) => ev.title === 'Arrived at Swargate Hub - Pune' && ev.at === '2026-10-06T07:19:31.000Z' && ev.city === 'Pune'));
 assert.ok(parcelTrack.events.some((ev) => ev.title === 'Shipment left for Dapoli HUB - Dapoli' && ev.detail === 'Swargate Hub - Pune'));
 assert.ok(parcelTrack.events.some((ev) => ev.title === 'Arrived at Dapoli HUB - Dapoli' && ev.at === '2026-10-06T07:26:00.000Z' && ev.city === 'Dapoli'));
