@@ -187,6 +187,21 @@ const scheduled = commerce.tookanJobToUpdate(
 );
 assert.strictEqual(scheduled.deliveryAt, '2026-10-06T07:54:00.000Z');
 assert.strictEqual(scheduled.stage, 'out_for_delivery');
+const places = commerce.tookanPlacesFromJobs(
+    { job_pickup_latitude: '18.500', job_pickup_longitude: '73.800', job_latitude: '17.700', job_longitude: '73.100' },
+    { job_pickup_latitude: '18.500', job_pickup_longitude: '73.800', job_latitude: '17.700', job_longitude: '73.100' }
+);
+assert.strictEqual(places.storeLat, 18.5);
+assert.strictEqual(places.storeLng, 73.8);
+assert.strictEqual(places.dropLat, 17.7);
+assert.strictEqual(places.dropLng, 73.1);
+const sameStop = commerce.tookanPlacesFromJobs(
+    { job_pickup_latitude: '18.5', job_pickup_longitude: '73.8', job_latitude: '18.5', job_longitude: '73.8' },
+    null
+);
+assert.strictEqual(sameStop.storeLat, 18.5);
+assert.strictEqual(sameStop.dropLat, null);
+assert.strictEqual(commerce.tookanPlacesFromJobs({ job_pickup_latitude: '0', job_pickup_longitude: '0' }, null).storeLat, null);
 const parsedHubs = commerce.parseTookanHubPayload({
     status: 200,
     data: {
