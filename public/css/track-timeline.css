@@ -134,16 +134,25 @@
 .tl-warn .call, .ship-fail .call { display: inline-block; margin: 8px 12px 0 0; color: #067d62; font-weight: 700; }
 .ship-fail .form-msg { min-height: 1.2em; }
 @media (max-width: 800px) { .ship-grid { grid-template-columns: 1fr; } }
-.tl-rider { position: absolute; width: 64px; height: 64px; margin: -32px 0 0 -32px; z-index: 6; pointer-events: none; }
-.tl-rider-pulse { position: absolute; inset: 6px; border-radius: 50%; background: rgba(6, 125, 98, 0.22); animation: tlRiderPulse 2s ease-out infinite; }
-.tl-rider-bike { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 2px 3px rgba(15, 17, 17, 0.35)); }
+.tl-rider { position: absolute; width: 96px; height: 96px; margin: -48px 0 0 -48px; z-index: 6; pointer-events: none; }
+.tl-rider-pulse { position: absolute; inset: 18px; border-radius: 50%; background: rgba(6, 125, 98, 0.22); display: none; }
+.tl-rider.is-moving .tl-rider-pulse { display: block; animation: tlRiderPulse 2s ease-out infinite; }
+body.hl-page .tl-rider-pulse { background: rgba(234, 88, 12, 0.28); }
+.tl-rider-aim, .tl-rider-bob { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.tl-rider-bob { filter: drop-shadow(0 6px 4px rgba(15, 17, 17, 0.28)); }
+.tl-rider.is-moving .tl-rider-bob { animation: tlRiderBob 0.55s ease-in-out infinite; }
+.tl-wheel { transform-box: fill-box; transform-origin: center; }
+.tl-rider.is-moving .tl-wheel { animation: tlWheelSpin 0.7s linear infinite; }
+.tl-rider.is-moving .tl-wheel-front { animation-duration: 0.5s; }
 @keyframes tlRiderPulse { 0% { transform: scale(0.72); opacity: 0.75; } 100% { transform: scale(1.55); opacity: 0; } }
+@keyframes tlWheelSpin { to { transform: rotate(360deg); } }
+@keyframes tlRiderBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2.5px); } }
 @keyframes shipReveal { from { clip-path: inset(0 0 100% 0); } to { clip-path: inset(0 0 0 0); } }
 @keyframes shipRevealLine { from { clip-path: inset(0 0 100% 0); } to { clip-path: inset(0 0 calc((1 - min(0.88, var(--line) / 100)) * 100%) 0); } }
 @keyframes trkIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes trkPulse { 0% { box-shadow: 0 0 0 0 rgba(6, 125, 98, 0.35); } 100% { box-shadow: 0 0 0 10px rgba(6, 125, 98, 0); } }
 @media (prefers-reduced-motion: reduce) {
-    .tl-step.done::before, .tl-step.active::after, .ship-pipe > li.done::after, .ship-pipe > li.active::after, .ship-pipe > li, .ship-pipe > li.active > .dot { animation: none; }
+    .tl-step.done::before, .tl-step.active::after, .ship-pipe > li.done::after, .ship-pipe > li.active::after, .ship-pipe > li, .ship-pipe > li.active > .dot, .tl-rider-pulse, .tl-rider-bob, .tl-wheel { animation: none; }
     .tl-step.done::before { transform: none; clip-path: inset(0 0 0 0); }
     .tl-step.active::after { transform: none; clip-path: inset(0 0 calc((1 - min(0.88, var(--line) / 100)) * 100%) 0); }
     .ship-pipe > li.done::after, .ship-pipe > li.active::after { transform: none; clip-path: inset(0 0 calc((1 - var(--grow, 1)) * 100%) 0); transition: none; }
