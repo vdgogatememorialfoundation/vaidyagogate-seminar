@@ -73,18 +73,14 @@
     background: #067d62;
     border-radius: 2px;
     transform-origin: top center;
-    transform: scaleY(0);
-    animation: shipDrawTo 1.15s linear forwards;
-    animation-delay: calc(var(--i) * 1.15s);
+    transform: scaleY(var(--grow, 0));
+    animation: none;
+    transition: transform var(--draw, 0s) linear;
     z-index: 0;
 }
 @property --grow { syntax: "<number>"; inherits: true; initial-value: 0; }
-.ship-pipe > li.active[data-line-until] { transition: --grow var(--draw, 3.2s) linear; }
-.ship-pipe > li.active[data-line-until]::after {
-    animation: none;
-    transform: scaleY(var(--grow, 0));
-    transition: transform var(--draw, 3.2s) linear;
-}
+.ship-pipe > li.done,
+.ship-pipe > li.active { transition: --grow var(--draw, 0s) linear; }
 .ship-pipe > li .ship-headway {
     position: absolute;
     left: 10px;

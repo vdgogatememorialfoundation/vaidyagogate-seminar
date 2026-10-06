@@ -109,7 +109,7 @@
                       '</div></li>'
                     : '';
                 const timed = step.state === 'active' && step.lineUntil;
-                const grow = timed ? '0' : step.state === 'active' ? (step.lineGrow != null ? step.lineGrow : '0.55') : '1';
+                const grow = '0';
                 const tick = timed
                     ? ' data-line-since="' + Number(step.lineSince) + '" data-line-until="' + Number(step.lineUntil) + '"'
                     : '';
@@ -153,31 +153,55 @@
         return Math.min(0.55, Math.max(0.12, Math.round(ratio * 100) / 100));
     }
 
+    function targetGrow(el) {
+        if (el.classList.contains('done')) return 1;
+        if (!el.classList.contains('active')) return 0;
+        if (el.hasAttribute('data-line-until')) return growFor(el);
+        return 0.55;
+    }
+
     function tickPipe() {
         const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const pipe = document.querySelector('.ship-pipe');
         const items = Array.from(document.querySelectorAll('.ship-pipe > li'));
-        const activeIndex = items.findIndex((el) => el.classList.contains('active'));
-        const stepMs = 1150;
-        const wait = reduce || activeIndex <= 0 ? 0 : activeIndex * stepMs;
-        items.forEach((el) => {
-            if (!el.classList.contains('active') || !el.hasAttribute('data-line-until')) return;
-            const grow = String(growFor(el));
-            if (!el.dataset.lined) {
-                const intro = Math.max(360, Math.round(Number(grow) * stepMs));
-                el.dataset.lined = reduce ? '1' : 'wait';
-                el.style.setProperty('--grow', reduce ? grow : '0');
-                el.style.setProperty('--draw', reduce ? '0s' : intro + 'ms');
-                if (!reduce) {
-                    window.setTimeout(() => {
-                        el.dataset.lined = '1';
-                        requestAnimationFrame(() => el.style.setProperty('--grow', String(growFor(el))));
-                    }, wait);
-                }
-            } else if (el.dataset.lined === '1') {
-                el.style.setProperty('--draw', '2s');
-                el.style.setProperty('--grow', grow);
+        const playable = items.filter((el) => el.classList.contains('done') || el.classList.contains('active'));
+        const stepMs = 900;
+        if (pipe && !pipe.dataset.playing) {
+            pipe.dataset.playing = 'play';
+            if (reduce) {
+                playable.forEach((el) => {
+                    el.style.setProperty('--draw', '0s');
+                    el.style.setProperty('--grow', String(targetGrow(el)));
+                });
+                pipe.dataset.playing = 'live';
+            } else {
+                playable.forEach((el) => {
+                    el.style.setProperty('--draw', '0s');
+                    el.style.setProperty('--grow', '0');
+                });
+                let index = 0;
+                const next = () => {
+                    const el = playable[index];
+                    if (!el) {
+                        pipe.dataset.playing = 'live';
+                        return;
+                    }
+                    const target = targetGrow(el);
+                    const ms = el.classList.contains('done') ? stepMs : Math.max(280, Math.round(target * stepMs));
+                    el.style.setProperty('--draw', ms + 'ms');
+                    requestAnimationFrame(() => el.style.setProperty('--grow', String(target)));
+                    index += 1;
+                    window.setTimeout(next, ms);
+                };
+                requestAnimationFrame(next);
             }
-        });
+        } else if (pipe && pipe.dataset.playing === 'live') {
+            items.forEach((el) => {
+                if (!el.classList.contains('active') || !el.hasAttribute('data-line-until')) return;
+                el.style.setProperty('--draw', '2s');
+                el.style.setProperty('--grow', String(growFor(el)));
+            });
+        }
         const ring = document.querySelector('.trk-ring');
         if (!ring || !items.length) return;
         let portion = 0;
