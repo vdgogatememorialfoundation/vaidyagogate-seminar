@@ -118,8 +118,9 @@
                 const reached = step.state === 'upcoming' ? '' : latestAt(step);
                 const stamp = reached ? '<span class="ship-time">' + esc(clock(reached)) + '</span>' : '';
                 const head = timed ? '<span class="ship-headway" aria-hidden="true"></span>' : '';
+                const stageCopy = step.message && step.state !== 'upcoming' && !(step.state === 'done' && step.key === 'OUT_FOR_DELIVERY' && !(step.events || []).length);
                 return '<li class="' + esc(step.state) + '"' + tick + ' style="--i:' + i + ';--grow:' + grow + '">' + head + '<span class="dot">' + stepIcon(step.key) + '</span><div class="ship-copy"><div class="ship-title"><b>' + esc(step.title) + '</b>' + stamp + '</div>' +
-                    (step.message && step.state !== 'upcoming' ? '<div class="ship-msg">' + esc(step.message) + '</div>' : '') +
+                    (stageCopy ? '<div class="ship-msg">' + esc(step.message) + '</div>' : '') +
                     nextHint +
                     (showExpect(step) ? '<span class="ship-expect">' + esc(step.expectedLabel) + '</span>' : '') +
                     (kids || shippedNote ? '<ul class="ship-kids">' + kids + shippedNote + '</ul>' : '') +
@@ -306,6 +307,8 @@
     function attemptCard(track) {
         const attempt = track.deliveryAttempt;
         if (!attempt || !attempt.attemptNumber) return '';
+        const notable = track.operationalStatus === 'DELIVERY_ATTEMPT_FAILED' || track.operationalStatus === 'RESCHEDULED' || attempt.failureReason || attempt.rescheduledForStart;
+        if (!notable) return '';
         const windowText = attempt.scheduledDate && attempt.scheduledStart
             ? attempt.scheduledDate + ' ' + attempt.scheduledStart + (attempt.scheduledEnd ? ' – ' + attempt.scheduledEnd : '')
             : '';

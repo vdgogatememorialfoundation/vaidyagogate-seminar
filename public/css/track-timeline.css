@@ -102,7 +102,7 @@
 .ship-copy { min-width: 0; }
 .ship-title { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
 .ship-title b { font-size: 1.05rem; }
-.ship-time { color: #565959; font-size: .75rem; font-weight: 600; text-align: right; }
+.ship-time { color: #565959; font-size: .75rem; font-weight: 600; text-align: right; flex: 0 0 auto; max-width: 48%; }
 .ship-msg, .ship-next { margin-top: 2px; color: #3f4448; font-size: .88rem; font-weight: 500; }
 .ship-next { color: #067d62; }
 .ship-expect, .tl-expect { display: inline-flex; margin: 6px 0 0; padding: 3px 8px; border-radius: 999px; background: #f3faf7; font-size: .75rem; font-weight: 700; color: #067d62; }
@@ -281,5 +281,7 @@ body.hl-page .hl-below .ship-pipe { border: 0; background: #fff; border-radius: 
     .trk-hero h1 { font-size: 1.4rem; }
     .trk-route { display: none; }
     .trk-rail-name { font-size: .66rem; }
+    .ship-title { flex-wrap: wrap; }
+    .ship-time { flex: 1 0 100%; max-width: none; text-align: left; }
     .trk-foot { flex-direction: column; }
 }
