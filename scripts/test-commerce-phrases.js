@@ -117,7 +117,31 @@ assert.strictEqual(hubJourney.stage, 'in_transit');
 assert.notStrictEqual(hubJourney.stage, 'out_for_delivery');
 assert.ok(hubJourney.lineFill <= 0.88);
 assert.ok(hubJourney.lineFill >= 0.12);
-assert.ok(hubJourney.events.some((ev) => ev.kind === 'arrived_facility' && ev.city === 'Pune'));
+assert.ok(hubJourney.events.some((ev) => ev.kind === 'arrived_facility' && ev.city === 'Pune' && ev.title === 'Arrived at 1917 Swargate Hub - Pune'));
+const scannedHubs = [
+    { job_id: 1, job_type: 0, job_status: 2, completed_datetime: '2026-10-06T07:11:24.000Z', job_time_utc: '2026-10-07T04:30:00.000Z' },
+    { job_id: 2, job_type: 1, job_status: 2, order_id: '1917', completed_datetime: '2026-10-06T07:19:31.000Z', job_time_utc: '2026-10-07T05:30:00.000Z' }
+];
+const scanned = commerce.parcelJourneyUpdate(scannedHubs, hubs, Date.parse('2026-10-06T08:00:00Z'));
+assert.strictEqual(scanned.stage, 'in_transit');
+assert.strictEqual(scanned.events.find((ev) => ev.kind === 'arrived_facility').at, '2026-10-06T07:19:31.000Z');
+const parcelSteps = [
+    { status: 'Order Placed', line_status: 'Booked', date_time: '2026-10-06T06:54:32.000Z', customer_username: 'Asha BK1' },
+    { status: 'Departed from Origin', line_status: 'Booked', date_time: '2026-10-06T07:11:24.000Z', customer_username: 'Asha BK1' },
+    { status: 'Arrived at Destination Swargate Hub - Pune', line_status: 'Swargate Hub - Pune', date_time: '2026-10-06T07:19:31.000Z', customer_username: 'Asha BK1' },
+    { status: 'Out for next location Dapoli HUB - Dapoli', line_status: 'Swargate Hub - Pune', date_time: '2026-10-06T07:23:52.000Z', customer_username: 'Asha BK1' },
+    { status: 'Arrived at Destination Dapoli HUB - Dapoli', line_status: 'Dapoli HUB - Dapoli', date_time: '2026-10-06T07:26:00.000Z', customer_username: 'Asha BK1' },
+    { status: '', line_status: 'delivered', date_time: '', customer_username: 'Asha BK1' }
+];
+const parcelTrack = commerce.tookanParcelJourney(parcelSteps, Date.parse('2026-10-06T08:00:00Z'));
+assert.strictEqual(parcelTrack.stage, 'in_transit');
+assert.notStrictEqual(parcelTrack.stage, 'delivered');
+assert.notStrictEqual(parcelTrack.stage, 'out_for_delivery');
+assert.ok(parcelTrack.events.some((ev) => ev.title === 'Arrived at Swargate Hub - Pune' && ev.at === '2026-10-06T07:19:31.000Z' && ev.city === 'Pune'));
+assert.ok(parcelTrack.events.some((ev) => ev.title === 'Shipment left for Dapoli HUB - Dapoli' && ev.detail === 'Swargate Hub - Pune'));
+assert.ok(parcelTrack.events.some((ev) => ev.title === 'Arrived at Dapoli HUB - Dapoli' && ev.at === '2026-10-06T07:26:00.000Z' && ev.city === 'Dapoli'));
+assert.ok(!parcelTrack.events.some((ev) => ev.kind === 'delivered'));
+assert.ok(parcelTrack.lineFill <= 0.88);
 const ofdJobs = hubJobs.map((job, i) => (i === 2 ? Object.assign({}, job, { job_status: 1 }) : job));
 const ofdJourney = commerce.parcelJourneyUpdate(ofdJobs, hubs, now);
 assert.strictEqual(ofdJourney.stage, 'out_for_delivery');

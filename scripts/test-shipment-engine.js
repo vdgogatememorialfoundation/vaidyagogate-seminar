@@ -57,6 +57,28 @@ assert.strictEqual(arrived.city, 'Pune');
 assert.strictEqual(arrived.state, null);
 assert.strictEqual(arrived.country, null);
 assert.strictEqual(arrived.facilityName, 'Swargate Hub');
+const namedHubs = engine.buildCustomerTracking(
+    {
+        orderCode: 'BK1',
+        status: 'shipped',
+        commerceStage: 'in_transit',
+        commerceMode: 'logistics',
+        commerceProvider: 'tookan',
+        fulfillmentType: 'courier'
+    },
+    [
+        { title: 'Shipment arrived at Courier Facility', kind: 'arrived_facility', city: 'Pune', detail: 'Pune', at: '2026-10-06T07:11:47.000Z' },
+        { title: 'Arrived at Swargate Hub - Pune', kind: 'arrived_facility', city: 'Pune', detail: 'Swargate Hub - Pune', at: '2026-10-06T07:19:31.000Z' },
+        { title: 'Shipment left for Dapoli HUB - Dapoli', kind: 'left_facility', city: 'Pune', detail: 'Swargate Hub - Pune', at: '2026-10-06T07:23:52.000Z' },
+        { title: 'Arrived at Dapoli HUB - Dapoli', kind: 'arrived_facility', city: 'Dapoli', detail: 'Dapoli HUB - Dapoli', at: '2026-10-06T07:26:00.000Z' }
+    ]
+);
+assert.strictEqual(namedHubs.mainStatus, 'SHIPPED');
+assert.ok(!namedHubs.timeline.some((row) => row.message === 'Item arrived at courier facility'));
+assert.ok(namedHubs.timeline.some((row) => row.message === 'Arrived at Swargate Hub - Pune'));
+assert.ok(namedHubs.timeline.some((row) => row.message === 'Arrived at Dapoli HUB - Dapoli'));
+assert.ok(namedHubs.timeline.some((row) => row.message === 'Shipment left for Dapoli HUB - Dapoli'));
+assert.strictEqual(namedHubs.pipeline.find((step) => step.key === 'OUT_FOR_DELIVERY').state, 'upcoming');
 const hubCopy = engine.customerEvent({
     title: 'Shipment Received at Local Hub- Pune Maharashtra, India',
     kind: 'arrived_facility',

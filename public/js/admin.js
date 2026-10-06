@@ -22418,10 +22418,14 @@ async function bsViewOrderTracking(id) {
             }
             body.innerHTML = html;
             if (commerceData && commerceData.live && window.TrackTimeline) TrackTimeline.mount(commerceData.live);
-            if (o.commerce_provider || (commerceData && commerceData.order && commerceData.order.commerceProvider)) {
-                _bsTrackPollTimer = _bsTrackPollTimer || setInterval(() => render(false), 15000);
+            if (_bsTrackPollTimer) {
+                clearInterval(_bsTrackPollTimer);
+                _bsTrackPollTimer = null;
             }
-            if (o.fulfillmentType === 'courier' && (o.status === 'shipped' || (o.deliveryJourney && o.deliveryJourney.isLive))) {
+            const commerceOrder = !!(o.commerce_provider || (commerceData && commerceData.order && commerceData.order.commerceProvider));
+            if (commerceOrder) {
+                _bsTrackPollTimer = setInterval(() => render(false), 15000);
+            } else if (o.fulfillmentType === 'courier' && (o.status === 'shipped' || (o.deliveryJourney && o.deliveryJourney.isLive))) {
                 _bsTrackPollTimer = setInterval(() => render(true), 12000);
             }
         } catch (err) {
