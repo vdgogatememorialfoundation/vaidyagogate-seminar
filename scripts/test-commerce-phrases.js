@@ -216,10 +216,9 @@ const ratnagiriGap = commerce.tookanHubGapMessage(
     },
     radiusHubs
 );
-assert.ok(ratnagiriGap.indexOf('Seller local hub for Pune, Maharashtra, 411002 covered by Swargate Hub - Pune') !== -1);
-assert.ok(ratnagiriGap.indexOf('City mother hub for Pune, Maharashtra covered by Motherhub Pune - PUNE') !== -1);
-assert.ok(ratnagiriGap.indexOf('Delivery local hub for RATNAGIRI, MAHARASHTRA, 415712 covered by Dapoli HUB - Dapoli') !== -1);
-assert.ok(ratnagiriGap.indexOf('covered by Khed Hub - Khed') === -1);
+assert.ok(ratnagiriGap.indexOf('Pickup is inside Swargate Hub - Pune') !== -1);
+assert.ok(ratnagiriGap.indexOf('Delivery is inside Dapoli HUB - Dapoli') !== -1);
+assert.ok(ratnagiriGap.indexOf('Kothrud') === -1);
 assert.ok(ratnagiriGap.indexOf('Transit hub') === -1);
 assert.ok(ratnagiriGap.indexOf('Destination city hub') === -1);
 assert.ok(ratnagiriGap.indexOf('Still needed:') === -1);
@@ -227,6 +226,26 @@ assert.ok(ratnagiriGap.indexOf('Hubs read from Tookan:') !== -1);
 assert.ok(ratnagiriGap.indexOf('Panvel Hub - Mumbai (no map pin)') !== -1);
 assert.ok(ratnagiriGap.indexOf('Hubs Tookan can use:') !== -1);
 assert.ok(ratnagiriGap.split('Hubs Tookan can use:')[1].split('Hubs read from Tookan:')[0].indexOf('Panvel Hub - Mumbai') === -1);
+const outsideDrop = { lat: 17.76 + 5.1 / 111, lng: 73.19 };
+const outsideReach = commerce.tookanHubReach(radiusHubs, outsideDrop);
+assert.strictEqual(outsideReach.inside.length, 0);
+assert.strictEqual(outsideReach.nearest.hub.name, 'Dapoli HUB - Dapoli');
+assert.strictEqual(outsideReach.widenTo, 7);
+const outsideGap = commerce.tookanHubGapMessage(
+    { storeCity: 'Pune', storeState: 'Maharashtra', storePincode: '411002', storeLat: 18.509, storeLng: 73.86 },
+    {
+        shippingCity: 'RATNAGIRI',
+        shippingState: 'MAHARASHTRA',
+        shippingPincode: '415712',
+        dropLat: outsideDrop.lat,
+        dropLng: outsideDrop.lng
+    },
+    radiusHubs
+);
+assert.ok(outsideGap.indexOf('Pickup is inside Swargate Hub - Pune') !== -1);
+assert.ok(outsideGap.indexOf('Delivery is outside every hub radius. Nearest hub is Dapoli HUB - Dapoli') !== -1);
+assert.ok(outsideGap.indexOf('radius 5 km') !== -1);
+assert.ok(outsideGap.indexOf('Delivery is inside') === -1);
 const hyper = commerce.buildTookanTaskBody(sampleCfg, sampleOrder, 'hyperlocal');
 assert.strictEqual(hyper.is_multiple_tasks, undefined);
 assert.strictEqual(hyper.tags, 'hyperlocal');
