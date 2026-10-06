@@ -45,14 +45,51 @@
         return iconSvg(paths[key] || paths.ORDERED);
     }
 
-    function progressFill(track) {
+    function latestAt(step) {
+        let best = 0;
+        let iso = '';
+        (step.events || []).forEach((ev) => {
+            const ms = ev && ev.at ? Date.parse(ev.at) : NaN;
+            if (Number.isFinite(ms) && ms >= best) {
+                best = ms;
+                iso = ev.at;
+            }
+        });
+        return iso;
+    }
+
+    function ago(at) {
+        const ms = at ? Date.parse(at) : NaN;
+        if (!Number.isFinite(ms)) return '';
+        const min = Math.round((Date.now() - ms) / 60000);
+        if (min < 1) return 'Just now';
+        if (min < 60) return min + ' min ago';
+        const hr = Math.round(min / 60);
+        if (hr < 36) return hr + ' hr ago';
+        return Math.round(hr / 24) + ' days ago';
+    }
+
+    function clock(at) {
+        const text = when(at);
+        const rel = ago(at);
+        if (!text) return '';
+        return rel ? text + ' · ' + rel : text;
+    }
+
+    function lineNote(track) {
         const steps = track.pipeline || [];
-        if (!steps.length) return 0;
-        const done = steps.filter((step) => step.state === 'done').length;
-        const active = steps.find((step) => step.state === 'active');
-        const grow = active && active.lineGrow != null ? Number(active.lineGrow) : active ? 0.55 : 0;
-        const portion = done + (active ? Math.min(0.55, Math.max(0.12, grow)) : 0);
-        return Math.round((portion / steps.length) * 100);
+        const index = steps.findIndex((step) => step.state === 'active');
+        const active = index >= 0 ? steps[index] : null;
+        if (!active) return 'Completed steps stay green from the top of the journey to the bottom.';
+        if (track.operationalStatus === 'DELIVERY_ATTEMPT_FAILED') {
+            return 'The line stays on ' + active.title + ' until the next attempt starts.';
+        }
+        const next = steps[index + 1];
+        if (!next) return 'The line has reached the bottom. This shipment is delivered.';
+        if (active.key === 'PACKED') return 'The line moves down from the order time toward the expected pickup, and it stops before ' + next.title + '.';
+        if (active.key === 'SHIPPED') return 'The line moves down from pickup toward the expected delivery, and it stops before ' + next.title + '.';
+        if (active.key === 'OUT_FOR_DELIVERY') return 'The line moves down through the delivery window, and it stops before ' + next.title + '.';
+        return 'The line moves down from the top and pauses on ' + active.title + ', before ' + next.title + '.';
     }
 
     function pipeHtml(track) {
@@ -71,12 +108,19 @@
                       (track.shipment.trackingId ? ' · Tracking ID ' + esc(track.shipment.trackingId) : '') +
                       '</div></li>'
                     : '';
-                const grow = step.state === 'active' ? (step.lineGrow != null ? step.lineGrow : '0.55') : '1';
-                const tick = step.state === 'active' && step.lineUntil
+                const timed = step.state === 'active' && step.lineUntil;
+                const grow = timed ? '0' : step.state === 'active' ? (step.lineGrow != null ? step.lineGrow : '0.55') : '1';
+                const tick = timed
                     ? ' data-line-since="' + Number(step.lineSince) + '" data-line-until="' + Number(step.lineUntil) + '"'
                     : '';
-                return '<li class="' + esc(step.state) + '"' + tick + ' style="--i:' + i + ';--grow:' + grow + '"><span class="dot">' + stepIcon(step.key) + '</span><div class="ship-copy"><b>' + esc(step.title) + '</b>' +
+                const firstUpcoming = (track.pipeline || []).findIndex((row) => row.state === 'upcoming');
+                const nextHint = i === firstUpcoming && step.message ? '<div class="ship-next">Up next · ' + esc(step.message) + '</div>' : '';
+                const reached = step.state === 'upcoming' ? '' : latestAt(step);
+                const stamp = reached ? '<span class="ship-time">' + esc(clock(reached)) + '</span>' : '';
+                const head = timed ? '<span class="ship-headway" aria-hidden="true"></span>' : '';
+                return '<li class="' + esc(step.state) + '"' + tick + ' style="--i:' + i + ';--grow:' + grow + '">' + head + '<span class="dot">' + stepIcon(step.key) + '</span><div class="ship-copy"><div class="ship-title"><b>' + esc(step.title) + '</b>' + stamp + '</div>' +
                     (step.message && step.state !== 'upcoming' ? '<div class="ship-msg">' + esc(step.message) + '</div>' : '') +
+                    nextHint +
                     (step.expectedLabel ? '<span class="ship-expect">' + esc(step.expectedLabel) + '</span>' : '') +
                     (kids || shippedNote ? '<ul class="ship-kids">' + kids + shippedNote + '</ul>' : '') +
                     '</div></li>';
@@ -91,7 +135,7 @@
     }
 
     function progressHtml(track) {
-        return '<h2 class="hl-progress-title">Order progress</h2><ol class="ship-pipe">' + pipeHtml(track) + '</ol>';
+        return '<h2 class="hl-progress-title">Order progress</h2><p class="trk-line-note">' + esc(lineNote(track)) + '</p><ol class="ship-pipe">' + pipeHtml(track) + '</ol>' + logHtml(track);
     }
 
     function deliveryHtml(track) {
@@ -100,15 +144,62 @@
             : '';
     }
 
+    function growFor(el) {
+        const since = Number(el.getAttribute('data-line-since'));
+        const until = Number(el.getAttribute('data-line-until'));
+        if (!until || until <= since) return 0.12;
+        const now = Date.now();
+        const ratio = now <= since ? 0.12 : Math.min(1, (now - since) / (until - since));
+        return Math.min(0.55, Math.max(0.12, Math.round(ratio * 100) / 100));
+    }
+
+    function drawMs(el) {
+        const since = Number(el.getAttribute('data-line-since'));
+        const until = Number(el.getAttribute('data-line-until'));
+        if (!until || until <= since) return 3200;
+        const ratio = Math.min(1, Math.max(0, (Date.now() - since) / (until - since)));
+        return Math.round(3200 + ratio * 5200);
+    }
+
     function tickPipe() {
-        document.querySelectorAll('.ship-pipe > li.active[data-line-until]').forEach((el) => {
-            const since = Number(el.getAttribute('data-line-since'));
-            const until = Number(el.getAttribute('data-line-until'));
-            if (!until || until <= since) return;
-            const now = Date.now();
-            const ratio = now <= since ? 0.12 : Math.min(1, (now - since) / (until - since));
-            el.style.setProperty('--grow', String(Math.min(0.55, Math.max(0.12, Math.round(ratio * 100) / 100))));
+        const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const items = Array.from(document.querySelectorAll('.ship-pipe > li'));
+        const activeIndex = items.findIndex((el) => el.classList.contains('active'));
+        const wait = reduce || activeIndex <= 0 ? 0 : (activeIndex - 1) * 1150 + 2000;
+        items.forEach((el) => {
+            if (!el.classList.contains('active') || !el.hasAttribute('data-line-until')) return;
+            const grow = String(growFor(el));
+            if (!el.dataset.lined) {
+                el.dataset.lined = 'wait';
+                el.style.setProperty('--grow', '0');
+                el.style.setProperty('--draw', drawMs(el) + 'ms');
+                window.setTimeout(() => {
+                    el.dataset.lined = '1';
+                    requestAnimationFrame(() => el.style.setProperty('--grow', String(growFor(el))));
+                }, wait);
+            } else if (el.dataset.lined === '1') {
+                el.style.setProperty('--draw', '2s');
+                el.style.setProperty('--grow', grow);
+            }
         });
+        const ring = document.querySelector('.trk-ring');
+        if (!ring || !items.length) return;
+        let portion = 0;
+        items.forEach((el) => {
+            if (el.classList.contains('done')) portion += 1;
+            else if (el.classList.contains('active')) {
+                const grow = Number(String(el.style.getPropertyValue('--grow')).trim());
+                portion += Number.isFinite(grow) ? Math.min(0.55, Math.max(0, grow)) : 0.12;
+            }
+        });
+        const fill = String(Math.round((portion / items.length) * 100));
+        if (!ring.dataset.filled) {
+            ring.dataset.filled = '1';
+            ring.style.setProperty('--fill', '0');
+            requestAnimationFrame(() => ring.style.setProperty('--fill', fill));
+        } else {
+            ring.style.setProperty('--fill', fill);
+        }
     }
 
     function otpHtml(label, code) {
@@ -142,6 +233,35 @@
         return '<article class="trk-fact"><div class="lbl">' + esc(label) + '</div><div class="val">' + esc(value) + '</div>' + (extra || '') + '</article>';
     }
 
+    function logHtml(track) {
+        const rows = [];
+        (track.pipeline || []).forEach((step) => {
+            (step.events || []).forEach((ev) => rows.push({ key: step.key, title: step.title, ev: ev }));
+        });
+        rows.sort((a, b) => (Date.parse(b.ev.at) || 0) - (Date.parse(a.ev.at) || 0));
+        if (!rows.length) return '';
+        const items = rows.map((row, i) =>
+            '<li' + (i >= 4 ? ' class="trk-log-more"' : '') + '><span class="trk-log-ico">' + stepIcon(row.key) + '</span><div><span class="trk-log-step">' + esc(row.title) + '</span><b>' + esc(row.ev.message) + '</b>' +
+            (row.ev.at ? '<div class="when">' + esc(clock(row.ev.at)) + '</div>' : '') +
+            (row.ev.location ? '<div class="where">' + esc(row.ev.location) + '</div>' : '') +
+            (row.ev.reason ? '<div class="where">Reason: ' + esc(row.ev.reason) + '</div>' : '') +
+            '</div></li>'
+        ).join('');
+        const more = rows.length > 4
+            ? '<button type="button" class="trk-more" data-more="1">Show all ' + rows.length + ' updates</button>'
+            : '';
+        return '<section class="trk-log"><div class="trk-log-head"><h2>Shipment updates</h2><span>' + rows.length + '</span></div><ol>' + items + '</ol>' + more + '</section>';
+    }
+
+    function attemptCard(track) {
+        const attempt = track.deliveryAttempt;
+        if (!attempt || !attempt.attemptNumber) return '';
+        const windowText = attempt.scheduledDate && attempt.scheduledStart
+            ? attempt.scheduledDate + ' ' + attempt.scheduledStart + (attempt.scheduledEnd ? ' – ' + attempt.scheduledEnd : '')
+            : '';
+        return factCard('Delivery attempt', String(attempt.attemptNumber), windowText ? '<div class="where">' + esc(windowText) + '</div>' : '');
+    }
+
     function documentHtml(track, shipment) {
         const courier = (track.shipment && track.shipment.courier) || 'Gogate Products';
         const mode = track.fulfillmentType === 'HYPERLOCAL' ? 'Hyperlocal delivery' : 'Logistics';
@@ -152,12 +272,18 @@
             '<article class="trk-when"><span class="trk-when-ico">' + stepIcon(step.key) + '</span><div><div class="lbl">' + esc(step.title) + '</div><div class="val">' + esc(step.expectedLabel) + '</div></div></article>'
         ).join('');
         const trackingId = track.shipment && track.shipment.trackingId;
+        const steps = track.pipeline || [];
+        const doneCount = steps.filter((step) => step.state === 'done').length;
+        const stepNo = active && active.state === 'active' ? doneCount + 1 : doneCount;
         return '<div class="trk">' +
             '<header class="trk-bar"><div class="trk-brand"><span class="trk-mark">' + iconSvg('M3 8l9-4 9 4-9 4-9-4zM3 8v8l9 4 9-4V8') + '</span><div><div class="trk-brand-name">Gogate Products</div><div class="trk-brand-sub">Shipment tracking</div></div></div>' +
+            '<div class="trk-actions">' +
             (code ? '<button type="button" class="trk-copy" data-copy="' + esc(code) + '">Copy order</button>' : '') +
-            '</header>' +
-            '<section class="trk-hero"><div class="trk-ring" style="--fill:' + progressFill(track) + '"><span class="trk-ring-ico">' + stepIcon(active.key) + '</span></div><div><div class="trk-kicker">Order #' + esc(code) + '</div><h1>' + esc(track.currentStatus || track.currentMessage) + '</h1>' +
+            '<button type="button" class="trk-copy" data-copy-href="1">Copy link</button>' +
+            '</div></header>' +
+            '<section class="trk-hero"><div class="trk-ring" style="--fill:0"><span class="trk-ring-ico">' + stepIcon(active.key) + '</span></div><div><div class="trk-kicker">Order #' + esc(code) + '</div><h1>' + esc(track.currentStatus || track.currentMessage) + '</h1>' +
             (detail ? '<p>' + esc(detail) + '</p>' : '') +
+            '<p class="trk-stepno">Step ' + stepNo + ' of ' + (steps.length || 5) + '</p>' +
             '</div></section>' +
             railHtml(track) +
             '<div class="trk-facts">' +
@@ -165,12 +291,14 @@
             factCard('Service', mode) +
             (trackingId ? factCard('Tracking ID', trackingId, '<button type="button" class="trk-copy trk-copy-mini" data-copy="' + esc(trackingId) + '">Copy</button>') : '') +
             (track.deliveryBy ? factCard('Delivery by', track.deliveryBy) : '') +
+            attemptCard(track) +
             '</div>' +
             (expects ? '<div class="trk-whens">' + expects + '</div>' : '') +
             failureHtml(track) +
             otpHtml('Pickup OTP', track.pickupOtp) + otpHtml('Delivery OTP', track.deliveryOtp) +
-            '<section class="trk-progress"><h2>Order progress</h2><ol class="ship-pipe">' + pipeHtml(track) + '</ol></section>' +
-            '<footer class="trk-foot"><a href="' + esc(track.supportUrl || '/support') + '">Need help with this shipment?</a><span id="trk-fresh">Checking for updates</span></footer>' +
+            '<section class="trk-progress"><h2>Order progress</h2><p class="trk-line-note">' + esc(lineNote(track)) + '</p><ol class="ship-pipe">' + pipeHtml(track) + '</ol></section>' +
+            logHtml(track) +
+            '<footer class="trk-foot"><a href="' + esc(track.supportUrl || '/support') + '">Need help with this shipment?</a><span id="trk-fresh">Checking for updates</span><span>Refreshes automatically</span></footer>' +
             '</div>';
     }
 
@@ -229,25 +357,34 @@
         document.body.classList.add('hl-page');
         const live = track.map.enabled ? shipment.live : null;
         const editing = document.getElementById('hl-note-form');
-        const sig = JSON.stringify(track) + '|' + (live && live.slot ? live.slot : '') + '|' + (live && live.leg ? live.leg : '') + '|' + (live && live.route ? live.route : '');
+        const steady = Object.assign({}, track, {
+            pipeline: (track.pipeline || []).map((step) => {
+                const copy = Object.assign({}, step);
+                delete copy.lineGrow;
+                return copy;
+            })
+        });
+        const sig = JSON.stringify(steady) + '|' + (live && live.slot ? live.slot : '') + '|' + (live && live.leg ? live.leg : '') + '|' + (live && live.route ? live.route : '');
         if (!(editing && !editing.hidden) && sig !== drawn) {
             drawn = sig;
             tracker.innerHTML = liveSheet ? sheetHtml(track, shipment) : documentHtml(track, shipment);
             bindCopy();
+            bindMore();
         }
         bindReschedule();
         bindNote();
         touchFresh();
+        tickPipe();
         if (live && window.TrackTimeline) TrackTimeline.mount(live);
     }
 
     function bindCopy() {
-        tracker.querySelectorAll('[data-copy]').forEach((btn) => {
+        tracker.querySelectorAll('[data-copy], [data-copy-href]').forEach((btn) => {
             if (btn.dataset.bound) return;
             btn.dataset.bound = '1';
             const label = btn.textContent;
             btn.addEventListener('click', async () => {
-                const text = btn.getAttribute('data-copy') || '';
+                const text = btn.hasAttribute('data-copy-href') ? window.location.href : btn.getAttribute('data-copy') || '';
                 try {
                     if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(text);
                     else return;
@@ -272,6 +409,18 @@
             hour: 'numeric',
             minute: '2-digit'
         }).format(new Date());
+    }
+
+    function bindMore() {
+        const btn = tracker.querySelector('[data-more]');
+        if (!btn || btn.dataset.bound) return;
+        btn.dataset.bound = '1';
+        btn.addEventListener('click', () => {
+            const box = btn.closest('.trk-log');
+            if (!box) return;
+            const open = box.classList.toggle('is-open');
+            btn.textContent = open ? 'Show fewer updates' : 'Show all ' + box.querySelectorAll('li').length + ' updates';
+        });
     }
 
     function bindReschedule() {
