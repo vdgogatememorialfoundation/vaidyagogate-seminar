@@ -1876,7 +1876,7 @@
             <!-- Certificate management -->
             <div id="tab-certificates" class="tab-pane hidden cert-mgmt-theme">
                 <h2 class="cert-mgmt-heading">Certificate Management</h2>
-                <p class="cert-mgmt-intro">Apply the <strong>VGMF gold certificate design</strong> for <strong>participant</strong> and <strong>volunteer</strong> separately, then enable each type from the candidates list (switch Template type). Participation certificates require venue check-in; volunteer certificates can be enabled for approved volunteers. Each certificate must show <strong>PRN No.</strong>, <strong>Application No.</strong>, and a <strong>verification QR</strong>.</p>
+                <p class="cert-mgmt-intro">Apply the <strong>VGMF gold certificate design</strong> for <strong>participant</strong> and <strong>volunteer</strong> separately, then enable each type from the candidates list (switch Template type). Check someone in for a specific event day without the scanner. From those days you can issue a <strong>volunteering certificate</strong> and a <strong>participation certificate</strong> for volunteers, and a <strong>participation certificate</strong> for delegates. Each certificate must show <strong>PRN No.</strong>, <strong>Application No.</strong>, and a <strong>verification QR</strong>.</p>
                 <div class="card cert-mgmt-card">
                     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px;">
                         <div>
@@ -1954,6 +1954,18 @@
                     <button type="button" class="btn-primary" style="margin-top:12px;margin-left:8px;background:#64748b;" onclick="dispatchCompletedDayCertificates(true)">Resend to completed days</button>
                     <p id="cert-dispatch-msg" style="font-size:0.88rem;margin-top:8px;"></p>
                 </div>
+                <div class="card cert-mgmt-card" id="cert-day-checkin-card" style="margin-top:20px;">
+                    <h3 style="margin:0 0 8px;color:#92400e;">Manual check-in by event day</h3>
+                    <p style="font-size:0.85rem;color:#78716c;margin:0 0 12px;">Record attendance for one seminar day. A volunteer can then receive a volunteering certificate (final day) and a participation certificate (any attended day). A delegate can receive a participation certificate for any attended day. This does not email certificates.</p>
+                    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;">
+                        <div style="flex:1;min-width:220px;">
+                            <label for="cert-checkin-q">Application no., PRN, ticket, email, or phone</label>
+                            <input type="search" id="cert-checkin-q" placeholder="Look up someone in the selected seminar" style="width:100%;padding:8px;" onkeydown="if(event.key==='Enter'){event.preventDefault();adminCertCheckinLookup();}">
+                        </div>
+                        <button type="button" class="btn-primary" style="background:#0f766e;" onclick="adminCertCheckinLookup()">Find</button>
+                    </div>
+                    <div id="cert-checkin-panel"></div>
+                </div>
                 <div class="card" style="margin-top:20px;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px;">
                         <h3 style="margin:0;">Candidates</h3>
@@ -1968,8 +1980,8 @@
                         <p id="cert-candidates-search-count" style="margin:6px 0 0;font-size:0.82rem;color:#64748b;"></p>
                     </div>
                     <table class="data-table">
-                        <thead><tr><th><input type="checkbox" id="cert-cand-select-all" onchange="toggleAllCertCandidates(this.checked)"></th><th>PRN No.</th><th>Name</th><th>Application No.</th><th>Reg. status</th><th>Paid</th><th>Scans</th><th>Ticket</th><th>Certificate</th><th>Name on certificate</th></tr></thead>
-                        <tbody id="cert-mgmt-list"><tr><td colspan="10" style="text-align:center;">Select a seminar</td></tr></tbody>
+                        <thead><tr><th><input type="checkbox" id="cert-cand-select-all" onchange="toggleAllCertCandidates(this.checked)"></th><th>PRN No.</th><th>Name</th><th>Application No.</th><th>Reg. status</th><th>Paid</th><th>Scans</th><th>Days</th><th>Ticket</th><th>Certificate</th><th>Name on certificate</th></tr></thead>
+                        <tbody id="cert-mgmt-list"><tr><td colspan="11" style="text-align:center;">Select a seminar</td></tr></tbody>
                     </table>
                 </div>
             </div>
@@ -2288,7 +2300,7 @@
             <!-- E-tickets: lookup, generate, send -->
             <div id="tab-etickets" class="tab-pane hidden">
                 <h2 style="margin-bottom: 12px;">E-tickets</h2>
-                <p style="color:#64748b;margin-bottom:18px;max-width:900px;">Look up a doctor’s e-ticket by <strong>12-digit ticket ID</strong>, <strong>application ID</strong>, <strong>email</strong>, or <strong>phone</strong>. Generate if missing, preview the printable ticket, then <strong>resend</strong> via email (with attachment) and/or WhatsApp.</p>
+                <p style="color:#64748b;margin-bottom:18px;max-width:900px;">Look up a doctor’s e-ticket by <strong>12-digit ticket ID</strong>, <strong>application ID</strong>, <strong>email</strong>, or <strong>phone</strong>. Generate if missing, preview the printable ticket, then <strong>resend</strong> via email (with attachment) and/or WhatsApp. Check the person in for an event day from the same result, then issue a volunteering or participation certificate when that day allows it.</p>
                 <div class="card" style="margin-bottom:16px;border-left:4px solid #0369a1;">
                     <h3 style="margin:0 0 8px;color:#1e40af;font-size:1rem;">Missing ticket emails</h3>
                     <p id="eticket-missing-status" style="font-size:0.88rem;color:#64748b;margin:0 0 10px;">Loading…</p>
@@ -3505,6 +3517,6 @@
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
     <script src="/js/track-timeline.js?v=20261003tl"></script>
     <script src="/js/admin-commerce.js?v=20261003tl"></script>
-    <script src="/js/admin.js?v=20261004attend"></script>
+    <script src="/js/admin.js?v=20261007dayin"></script>
 </body>
 </html>

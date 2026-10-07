@@ -5173,10 +5173,10 @@ async function loadAdminCertificateCandidates() {
     const tbody = document.getElementById('cert-mgmt-list');
     if (!tbody) return;
     if (!sid) {
-        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;">Select a seminar</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;">Select a seminar</td></tr>';
         return;
     }
-    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;">Loading…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;">Loading…</td></tr>';
     try {
         const certType = document.getElementById('cert-mgmt-type')?.value || 'participant';
         const res = await fetch(
@@ -5187,7 +5187,7 @@ async function loadAdminCertificateCandidates() {
         renderAdminCertificateCandidatesTable();
     } catch (e) {
         console.error(e);
-        tbody.innerHTML = '<tr><td colspan="10">Error loading</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11">Error loading</td></tr>';
     }
 }
 
@@ -8368,7 +8368,7 @@ function renderAdminEticketDetail(row) {
         (row.isScanned ? 'Yes' + (row.scanTime ? ' (' + escAdmin(row.scanTime) + ')' : '') : 'No') +
         (row.scanCount > 0 ? ' · scans: ' + row.scanCount : '') +
         (row.ticketExpired
-            ? '<br><strong style="color:#b91c1c;">Expired</strong> — seminar date passed (scanner blocked). Use Applications → Check in for manual override.'
+            ? '<br><strong style="color:#b91c1c;">Expired</strong> — seminar date passed (scanner blocked). Check in the event day below.'
             : '') +
         '</p>' +
         (function () {
@@ -8385,13 +8385,8 @@ function renderAdminEticketDetail(row) {
                         : escAdmin(st);
             return '<p><strong>Ticket email:</strong> ' + label + '</p>';
         })() +
-        (row.ticketExpired && row.registrationId
-            ? '<p><button type="button" class="btn-primary" style="background:#0f766e;padding:6px 10px;font-size:0.85rem;" onclick="adminManualCheckinRegistration(' +
-              row.registrationId +
-              ", '" +
-              String(row.applicationNo || '').replace(/'/g, "\\'") +
-              '\')">Check in manually</button></p>'
-            : '');
+        '<div id="eticket-day-checkin"></div>';
+    if (row.registrationId) adminOpenDayCheckin(row.registrationId, 'eticket-day-checkin');
     if (preview) {
         if (row.ticketPreviewUrl) {
             preview.href = row.ticketPreviewUrl;
@@ -8990,7 +8985,7 @@ function renderAdminCertificateCandidatesTable() {
     if (!tbody) return;
     const sid = document.getElementById('cert-mgmt-seminar')?.value;
     if (!sid) {
-        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;">Select a seminar</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;">Select a seminar</td></tr>';
         return;
     }
     const certType = document.getElementById('cert-mgmt-type')?.value || 'participant';
@@ -9000,7 +8995,8 @@ function renderAdminCertificateCandidatesTable() {
         const name = [r.first_name, r.last_name].filter(Boolean).join(' ');
         const appDisplay =
             certType === 'volunteer' ? r.ticket_id_string || r.application_no : r.application_no;
-        return [r.user_id_string, name, appDisplay, r.reg_status, r.order_status, r.ticket_id_string]
+        const dayNames = (r.day_scans || []).map((d) => d && d.title).join(' ');
+        return [r.user_id_string, name, appDisplay, r.reg_status, r.order_status, r.ticket_id_string, dayNames, r.role]
             .join(' ')
             .toLowerCase();
     });
@@ -9010,12 +9006,12 @@ function renderAdminCertificateCandidatesTable() {
             certType === 'volunteer'
                 ? 'No approved volunteers for this seminar yet.'
                 : 'No registrations for this seminar yet.';
-        tbody.innerHTML = `<tr><td colspan="10" style="text-align:center;">${emptyMsg}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;">${emptyMsg}</td></tr>`;
         return;
     }
     if (!rows.length) {
         tbody.innerHTML =
-            '<tr><td colspan="10" style="text-align:center;">No candidates match your search.</td></tr>';
+            '<tr><td colspan="11" style="text-align:center;">No candidates match your search.</td></tr>';
         return;
     }
     tbody.innerHTML = '';
@@ -9062,6 +9058,7 @@ function renderAdminCertificateCandidatesTable() {
                 <td>${escAdmin(r.reg_status || '—')}</td>
                 <td>${paid}</td>
                 <td>${checked}</td>
+                <td>${adminCertDayCell(r)}</td>
                 <td><code>${escAdmin(r.ticket_id_string || '—')}</code></td>
                 <td title="${escAdmin(certLabel)}">${cert}</td>
                 <td>${certNameCell}</td>
@@ -11313,6 +11310,304 @@ function onApplicationStatusChange(appId, selectEl, appIndex) {
         return;
     }
     updateAppStatus(appId, status);
+}
+
+const ADMIN_CERT_ISSUE_LABELS = {
+    volunteering: 'volunteering certificate',
+    volunteer_participation: 'participation certificate for this volunteer',
+    delegate_participation: 'participation certificate for this delegate'
+};
+
+function adminCertDayCell(r) {
+    const id = Number(r.registration_id);
+    const days = Array.isArray(r.day_scans) ? r.day_scans : [];
+    const chips = days
+        .map((d) => {
+            const title = escAdmin(d.title || 'Day');
+            if (d.scanned) {
+                return (
+                    '<span style="display:inline-block;margin:2px 4px 2px 0;padding:2px 6px;border-radius:999px;background:#dcfce7;color:#166534;font-size:0.75rem;">' +
+                    title +
+                    ' in</span>'
+                );
+            }
+            if (!d.hasTicket) {
+                return (
+                    '<span style="display:inline-block;margin:2px 4px 2px 0;padding:2px 6px;border-radius:999px;background:#fef3c7;color:#92400e;font-size:0.75rem;" title="Generate the e-ticket for this day first">' +
+                    title +
+                    ' · no ticket</span>'
+                );
+            }
+            const dayArg = d.dayId == null ? 'null' : Number(d.dayId);
+            const safeTitle = String(d.title || 'this day')
+                .replace(/\\/g, '\\\\')
+                .replace(/'/g, "\\'")
+                .replace(/"/g, '');
+            return (
+                '<button type="button" class="btn-primary" style="margin:2px 4px 2px 0;padding:3px 8px;font-size:0.75rem;background:#0f766e;" onclick="adminManualCheckinDay(' +
+                id +
+                ',' +
+                dayArg +
+                ',\'cert-checkin-panel\',\'' +
+                safeTitle +
+                '\')">' +
+                title +
+                '</button>'
+            );
+        })
+        .join('');
+    return (
+        chips +
+        '<button type="button" class="btn-primary" style="margin:2px 0;padding:3px 8px;font-size:0.75rem;background:#0369a1;" onclick="adminCertFocusCheckin(' +
+        id +
+        ')">Certificates</button>'
+    );
+}
+
+function adminRenderCheckinState(data, mountId) {
+    const role = data.role === 'volunteer' ? 'Volunteer' : 'Delegate';
+    const days = data.days || [];
+    const mount = "'" + String(mountId || '').replace(/'/g, '') + "'";
+    const regId = Number(data.registrationId);
+    let html =
+        '<div style="margin-top:12px;padding:12px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;">';
+    html +=
+        '<p style="margin:0 0 8px;"><strong>' +
+        escAdmin(data.name || 'Registration') +
+        '</strong>';
+    if (data.applicationNo) html += ' · ' + escAdmin(data.applicationNo);
+    if (data.prn) html += ' · ' + escAdmin(data.prn);
+    html += ' · ' + role + '</p>';
+    html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">';
+    days.forEach((d) => {
+        const title = escAdmin(d.title || 'Day');
+        if (d.scanned) {
+            html +=
+                '<span style="padding:6px 10px;border-radius:999px;background:#dcfce7;color:#166534;font-size:0.82rem;">' +
+                title +
+                ' · checked in</span>';
+            return;
+        }
+        if (!d.hasTicket) {
+            html +=
+                '<span style="padding:6px 10px;border-radius:999px;background:#fef3c7;color:#92400e;font-size:0.82rem;">' +
+                title +
+                ' · generate the e-ticket first</span>';
+            return;
+        }
+        const dayArg = d.dayId == null ? 'null' : Number(d.dayId);
+        const safeTitle = String(d.title || 'this day')
+            .replace(/\\/g, '\\\\')
+            .replace(/'/g, "\\'")
+            .replace(/"/g, '');
+        html +=
+            '<button type="button" class="btn-primary" style="background:#0f766e;padding:6px 10px;" onclick="adminManualCheckinDay(' +
+            regId +
+            ',' +
+            dayArg +
+            ',' +
+            mount +
+            ',\'' +
+            safeTitle +
+            '\')">Check in ' +
+            title +
+            '</button>';
+    });
+    html += '</div><div style="display:flex;flex-wrap:wrap;gap:8px;">';
+    (data.offers || []).forEach((offer) => {
+        const label = escAdmin(offer.label || 'Certificate');
+        const who = offer.audience === 'volunteer' ? 'Volunteer' : 'Delegate';
+        if (offer.issued) {
+            html +=
+                '<span style="padding:6px 10px;border-radius:8px;background:#ecfdf5;color:#047857;font-size:0.82rem;">' +
+                who +
+                ' · ' +
+                label +
+                ' enabled</span>';
+            return;
+        }
+        if (!offer.eligible) {
+            html +=
+                '<span style="padding:6px 10px;border-radius:8px;background:#f1f5f9;color:#64748b;font-size:0.82rem;" title="' +
+                escAdmin(offer.reason || '') +
+                '">' +
+                who +
+                ' · ' +
+                label +
+                ' · ' +
+                escAdmin(offer.reason || 'Not yet') +
+                '</span>';
+            return;
+        }
+        html +=
+            '<button type="button" class="btn-primary" style="background:#b45309;padding:6px 10px;" onclick="adminIssueDayCertificate(' +
+            regId +
+            ",'" +
+            String(offer.kind || '').replace(/'/g, '') +
+            "'," +
+            mount +
+            ')">Issue ' +
+            who.toLowerCase() +
+            ' ' +
+            label.toLowerCase() +
+            '</button>';
+    });
+    html += '</div></div>';
+    return html;
+}
+
+async function adminOpenDayCheckin(regId, mountId) {
+    const mount = document.getElementById(mountId);
+    if (!mount) return;
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) {
+        mount.innerHTML = '<p style="color:#b91c1c;margin-top:10px;">Not logged in.</p>';
+        return;
+    }
+    mount.innerHTML = '<p style="color:#64748b;margin-top:10px;">Loading days…</p>';
+    try {
+        const res = await fetch(
+            '/api/admin/registrations/' +
+                encodeURIComponent(regId) +
+                '/checkin-days?actingAdminId=' +
+                encodeURIComponent(adm.id)
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            mount.innerHTML =
+                '<p style="color:#b91c1c;margin-top:10px;">' + escAdmin(data.error || 'Could not load days') + '</p>';
+            return;
+        }
+        mount.innerHTML = adminRenderCheckinState(data, mountId);
+    } catch (e) {
+        console.error(e);
+        mount.innerHTML = '<p style="color:#b91c1c;margin-top:10px;">Network error</p>';
+    }
+}
+
+function adminCertFocusCheckin(regId) {
+    const card = document.getElementById('cert-day-checkin-card');
+    if (card && card.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    adminOpenDayCheckin(regId, 'cert-checkin-panel');
+}
+
+async function adminCertCheckinLookup() {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return alert('Not logged in.');
+    const q = String((document.getElementById('cert-checkin-q') || {}).value || '').trim();
+    const sid = String((document.getElementById('cert-mgmt-seminar') || {}).value || '');
+    const mount = document.getElementById('cert-checkin-panel');
+    if (!q) return alert('Enter an application number, PRN, ticket, email, or phone.');
+    if (!sid) return alert('Select a seminar first.');
+    if (mount) mount.innerHTML = '<p style="color:#64748b;margin-top:10px;">Searching…</p>';
+    try {
+        const res = await fetch(
+            '/api/admin/e-tickets/lookup?q=' + encodeURIComponent(q) + '&actingAdminId=' + encodeURIComponent(adm.id)
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            if (mount) {
+                mount.innerHTML =
+                    '<p style="color:#b91c1c;margin-top:10px;">' + escAdmin(data.error || 'Lookup failed') + '</p>';
+            }
+            return;
+        }
+        const seen = new Set();
+        const rows = (data.results || []).filter((row) => {
+            if (sid && String(row.seminarId) !== sid) return false;
+            if (!row.registrationId || seen.has(row.registrationId)) return false;
+            seen.add(row.registrationId);
+            return true;
+        });
+        if (!rows.length) {
+            if (mount) {
+                mount.innerHTML =
+                    '<p style="color:#b45309;margin-top:10px;">No registration in this seminar matched that search.</p>';
+            }
+            return;
+        }
+        if (rows.length === 1) {
+            adminOpenDayCheckin(rows[0].registrationId, 'cert-checkin-panel');
+            return;
+        }
+        if (!mount) return;
+        mount.innerHTML =
+            '<div style="margin-top:10px;">' +
+            rows
+                .map((row) => {
+                    return (
+                        '<button type="button" class="btn-primary" style="margin:4px 6px 0 0;background:#0369a1;padding:6px 10px;" onclick="adminOpenDayCheckin(' +
+                        Number(row.registrationId) +
+                        ',\'cert-checkin-panel\')">' +
+                        escAdmin(row.doctorName || 'Registration') +
+                        ' · ' +
+                        escAdmin(row.applicationNo || '') +
+                        '</button>'
+                    );
+                })
+                .join('') +
+            '</div>';
+    } catch (e) {
+        console.error(e);
+        if (mount) mount.innerHTML = '<p style="color:#b91c1c;margin-top:10px;">Network error</p>';
+    }
+}
+
+async function adminManualCheckinDay(regId, dayId, mountId, dayTitle) {
+    const label = dayTitle || 'this event day';
+    if (
+        !confirm(
+            'Check in ' +
+                label +
+                ' without the scanner?\n\nThis records that day on the e-ticket. Certificates are not emailed from this step.'
+        )
+    ) {
+        return;
+    }
+    const adm = getStoredAdminUser();
+    try {
+        const body = { actingAdminId: adm && adm.id };
+        if (dayId != null && dayId !== 'null') body.dayId = dayId;
+        const res = await fetch('/api/admin/registrations/' + regId + '/manual-checkin', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return alert(data.error || 'Manual check-in failed');
+        alert(data.message || 'Checked in.');
+        if (mountId) adminOpenDayCheckin(regId, mountId);
+        if (document.getElementById('cert-mgmt-seminar') && document.getElementById('cert-mgmt-seminar').value) {
+            loadAdminCertificateCandidates();
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Network error');
+    }
+}
+
+async function adminIssueDayCertificate(regId, kind, mountId) {
+    const label = ADMIN_CERT_ISSUE_LABELS[kind] || 'certificate';
+    if (!confirm('Enable the ' + label + ' for this person?\n\nThis does not send a certificate email.')) return;
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return alert('Not logged in.');
+    try {
+        const res = await fetch('/api/admin/registrations/' + regId + '/issue-certificate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: adm.id, kind })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return alert(data.error || 'Could not enable the certificate');
+        alert(data.message || 'Certificate enabled.');
+        if (mountId) adminOpenDayCheckin(regId, mountId);
+        if (document.getElementById('cert-mgmt-seminar') && document.getElementById('cert-mgmt-seminar').value) {
+            loadAdminCertificateCandidates();
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Network error');
+    }
 }
 
 async function adminManualCheckinRegistration(regId, appNo) {
