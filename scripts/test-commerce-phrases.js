@@ -37,6 +37,11 @@ const tookan = commerce.parseTookanWebhook({
 });
 assert.strictEqual(tookan.title, 'Shipment arrived at Courier Facility');
 assert.strictEqual(tookan.city, 'Thane');
+assert.strictEqual(tookan.pickupOtp, '');
+assert.strictEqual(tookan.deliveryOtp, '');
+const tookanOtpHook = commerce.parseTookanWebhook({ job_id: 56, order_id: 'BK1', job_type: 1, job_status: 1, job_otp: '4455' });
+assert.strictEqual(tookanOtpHook.deliveryOtp, '4455');
+assert.strictEqual(tookanOtpHook.pickupOtp, '');
 
 const ready = commerce.parseShipdayWebhook({
     orderId: 9,
@@ -357,6 +362,31 @@ assert.strictEqual(pickupJob.deliveryOtp, '');
 const dropJob = commerce.tookanOtpsFromJob({ job_type: 1, job_validate_otp: '7788', pickup_job_validate_otp: '1100' });
 assert.strictEqual(dropJob.pickupOtp, '1100');
 assert.strictEqual(dropJob.deliveryOtp, '7788');
+const labeledOtp = commerce.tookanOtpsFromJob({
+    job_type: 1,
+    custom_field: [
+        { label: 'Delivery OTP', data: '5566' },
+        { label: 'Pincode', data: '411009' }
+    ]
+});
+assert.strictEqual(labeledOtp.deliveryOtp, '5566');
+assert.strictEqual(labeledOtp.pickupOtp, '');
+const pinOnly = commerce.tookanOtpsFromJob({ job_type: 0, custom_field: [{ label: 'Pincode', data: '411001' }] });
+assert.strictEqual(pinOnly.pickupOtp, '');
+assert.strictEqual(pinOnly.deliveryOtp, '');
+const otpJourney = commerce.tookanParcelJourney(
+    [{ status: 'Departed from origin', date_time: '2026-10-06T07:11:00.000Z', line_status: 'Origin', customer_username: 'BKOTP' }],
+    Date.parse('2026-10-06T08:00:00.000Z')
+);
+const stamped = commerce.applyTookanJobOtps(otpJourney, [
+    { job_type: 0, job_id: 1, job_otp: '4321' },
+    { job_type: 1, job_id: 2, job_otp: '8765' }
+]);
+assert.strictEqual(stamped.pickupOtp, '4321');
+assert.strictEqual(stamped.deliveryOtp, '8765');
+const kept = commerce.applyTookanJobOtps(Object.assign({}, stamped), [{ job_type: 0, job_id: 3 }]);
+assert.strictEqual(kept.pickupOtp, '4321');
+assert.strictEqual(kept.deliveryOtp, '8765');
 const shipBody = commerce.buildShipdayOrderBody(sampleCfg, sampleOrder);
 assert.strictEqual(shipBody.restaurantName, 'Gogate Products');
 assert.ok(JSON.stringify(shipBody).indexOf('4321') === -1);
@@ -794,8 +824,10 @@ assert.ok(labelHtml.includes('data-sym="courier-barcode"'));
 assert.ok(labelHtml.includes('BKLABEL1'));
 assert.ok(labelHtml.includes('PIDGEAWB99'));
 assert.ok(labelHtml.includes('Gogate Products'));
-assert.ok(!labelHtml.includes('9999'));
-assert.ok(!labelHtml.includes('1234'));
+assert.ok(labelHtml.includes('Pickup OTP'));
+assert.ok(labelHtml.includes('9999'));
+assert.ok(labelHtml.includes('Delivery OTP'));
+assert.ok(labelHtml.includes('1234'));
 assert.ok(!labelHtml.includes('api.qrserver.com'));
 assert.ok(!labelHtml.includes('Delivery PIN'));
 assert.strictEqual((labelHtml.match(/data-sym="order-barcode"/g) || []).length, 1);
@@ -832,6 +864,19 @@ assert.ok(!bareLabel.includes('<svg'));
 assert.ok(!bareLabel.includes('window.print'));
 assert.ok(!bareLabel.includes('Pickup OTP'));
 assert.ok(!bareLabel.includes('Delivery OTP'));
+const shipdayLabel = commerce.labelHtml(
+    {
+        orderCode: 'BKSHIP',
+        commerceProvider: 'shipday',
+        pickupOtp: '1111',
+        deliveryOtp: '2222',
+        courierTrackingNo: 'AWBSHIP',
+        items: []
+    },
+    labelCfg
+);
+assert.ok(!shipdayLabel.includes('Pickup OTP'));
+assert.ok(!shipdayLabel.includes('Delivery OTP'));
 assert.strictEqual(commerce.awbFromUpdate({ trackingNo: 'AWB45' }), 'AWB45');
 assert.strictEqual(commerce.awbFromUpdate({ barcode: 'BAR1' }), 'BAR1');
 assert.strictEqual(commerce.awbFromUpdate(null), '');
@@ -1022,7 +1067,8 @@ const fleetLabel = commerce.labelHtml(
 );
 assert.ok(fleetLabel.includes('FB-1001'));
 assert.ok(fleetLabel.includes('Open box delivery'));
-assert.ok(!fleetLabel.includes('4455'));
+assert.ok(fleetLabel.includes('Delivery OTP'));
+assert.ok(fleetLabel.includes('4455'));
 assert.ok(fleetLabel.includes('data-sym="courier-barcode"'));
 assert.ok(fleetLabel.includes('<svg'));
 

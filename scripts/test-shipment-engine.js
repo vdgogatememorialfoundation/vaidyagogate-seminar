@@ -45,7 +45,7 @@ assert.strictEqual(logistics.map.enabled, false);
 assert.strictEqual(logistics.shipment.trackingId, 'RIECA5I4');
 assert.strictEqual(logistics.shipment.courier, 'Gogate Products');
 assert.strictEqual(logistics.pickupOtp, null);
-assert.strictEqual(logistics.deliveryOtp, null);
+assert.strictEqual(logistics.deliveryOtp, '8765');
 assert.strictEqual(logistics.agent, null);
 assert.strictEqual(logistics.deliveryNote, null);
 assert.strictEqual(logistics.dropLabel, null);
@@ -183,6 +183,20 @@ const pidgeTrack = engine.buildCustomerTracking(
 );
 assert.strictEqual(pidgeTrack.deliveryOtp, '4455');
 assert.strictEqual(pidgeTrack.pickupOtp, null);
+const pidgePacked = engine.buildCustomerTracking(
+    {
+        orderCode: 'BKPIDGEP',
+        commerceStage: 'pickup_scheduled',
+        commerceMode: 'hyperlocal',
+        commerceProvider: 'pidge',
+        pickupOtp: '3434',
+        deliveryOtp: '4455'
+    },
+    []
+);
+assert.strictEqual(pidgePacked.mainStatus, 'PACKED');
+assert.strictEqual(pidgePacked.pickupOtp, '3434');
+assert.strictEqual(pidgePacked.deliveryOtp, null);
 assert.ok(pidgeTrack.deliveryBy);
 assert.ok(!pidgeTrack.pickupBy);
 assert.ok(!JSON.stringify(pidgeTrack).includes('411009'));
@@ -429,6 +443,7 @@ const earlyDrop = engine.buildCustomerTracking(
         status: 'delivered',
         commerceMode: 'logistics',
         commerceProvider: 'tookan',
+        deliveryOtp: '8765',
         deliveryAt: '2026-10-07T05:30:00.000Z',
         courierDeliveredAt: '2026-10-06T08:04:00.000Z'
     },
@@ -436,6 +451,7 @@ const earlyDrop = engine.buildCustomerTracking(
     { now: Date.parse('2026-10-06T09:00:00.000Z') }
 );
 assert.strictEqual(earlyDrop.mainStatus, 'DELIVERED');
+assert.strictEqual(earlyDrop.deliveryOtp, '8765');
 assert.strictEqual(earlyDrop.deliveryBy, '');
 assert.strictEqual(earlyDrop.timing.state, 'on_time');
 assert.strictEqual(earlyDrop.timing.label, 'On time');

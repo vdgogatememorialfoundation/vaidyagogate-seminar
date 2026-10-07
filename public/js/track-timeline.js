@@ -72,6 +72,9 @@
                 html += '<div class="tl-otps"><div class="tl-otp"><div class="lbl">Pickup OTP</div><div class="code">' + esc(pk.pickupOtp) + '</div></div></div><div class="tl-note">Store staff: the courier agent must quote this at handover.</div>';
             }
         }
+        if (step.deliveryOtp && (step.key === 'shipped' || step.key === 'out_for_delivery' || step.key === 'delivered')) {
+            html += '<div class="tl-otps"><div class="tl-otp"><div class="lbl">Delivery OTP</div><div class="code">' + esc(step.deliveryOtp) + '</div></div></div><div class="tl-note">Share this code with the delivery partner.</div>';
+        }
         if (step.key === 'shipped' && step.partner) {
             html += partnerCard(step.partner, null);
             if (!step.updates.length && step.state !== 'done') html += '<div class="tl-note">Shipped starts when the parcel is scanned at the local hub.</div>';
@@ -100,8 +103,7 @@
             html +=
                 '<div class="tl-card"><div><div class="lbl">Delivery partner</div><div class="val">' + esc(a.name || 'Assigned') + '</div></div>' +
                 (a.phone ? '<div><div class="lbl">Phone</div><div class="val"><a href="tel:' + esc(a.phone) + '">Call</a></div></div>' : '') +
-                '</div>' +
-                (step.deliveryOtp ? '<div class="tl-otps"><div class="tl-otp"><div class="lbl">Delivery OTP</div><div class="code">' + esc(step.deliveryOtp) + '</div></div></div>' : '');
+                '</div>';
         } else if (step.key === 'out_for_delivery' && step.state === 'active' && step.operational !== 'RESCHEDULED') {
             html += '<div class="tl-note">Finding a delivery partner.</div>';
         }

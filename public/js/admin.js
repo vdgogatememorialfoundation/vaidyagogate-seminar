@@ -22388,8 +22388,10 @@ async function bsViewOrderTracking(id) {
                 const co = commerceData.order;
                 html +=
                     '<div style="border:1px solid #99f6e4;background:#f0fdfa;border-radius:12px;padding:14px;margin-bottom:14px;">' +
-                    '<p style="margin:0 0 6px;font-weight:700;">' + e(co.commerceProvider === 'shipday' ? 'Shipday' : 'Tookan') + ' · ' + e(co.commerceMode || '') + '</p>' +
-                    '<p style="margin:0 0 8px;font-size:0.85rem;">Pickup OTP <strong>' + e(co.pickupOtp || '—') + '</strong> · Delivery OTP <strong>' + e(co.deliveryOtp || '—') + '</strong></p>' +
+                    '<p style="margin:0 0 6px;font-weight:700;">Gogate Products' + (co.commerceMode ? ' · ' + e(co.commerceMode) : '') + '</p>' +
+                    (co.commerceProvider === 'shipday'
+                        ? ''
+                        : '<p style="margin:0 0 8px;font-size:0.85rem;">Pickup OTP <strong>' + e(co.pickupOtp || '—') + '</strong> · Delivery OTP <strong>' + e(co.deliveryOtp || '—') + '</strong></p>') +
                     TrackTimeline.render({ timeline: commerceData.timeline, live: commerceData.live, awbTrackUrl: co.tookanTrackingLink || co.shipdayTrackingLink || null, trackUrl: co.commerceTrackUrl }, { animate: !window._bsTlSeen }) +
                     '</div>';
                 window._bsTlSeen = true;
