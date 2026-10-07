@@ -370,23 +370,26 @@
             ? '<a class="hl-call" href="' + esc(href) + '" aria-label="Call delivery partner"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M6.6 10.8a15.1 15.1 0 006.6 6.6l2.2-2.2a1 1 0 011-.25 11.4 11.4 0 003.6.57 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 4a1 1 0 011-1h3.5a1 1 0 011 1 11.4 11.4 0 00.57 3.6 1 1 0 01-.25 1L6.6 10.8z"/></svg></a>'
             : '';
         const bike =
-            '<span class="hl-bike" aria-hidden="true"><svg viewBox="0 0 64 64" width="28" height="28"><circle cx="16" cy="44" r="8" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="48" cy="44" r="8" fill="none" stroke="currentColor" stroke-width="3"/><path d="M16 44h14l8-16h10M28 28l6 16M36 18h8l6 10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>';
-        const partner = name || href
-            ? '<div class="hl-partner">' +
-              bike +
-              (name ? '<span class="hl-avatar" aria-hidden="true">' + esc(initial) + '</span><span class="hl-partner-name">' + esc(name) + '</span>' : '<span class="hl-partner-name">Delivery partner</span>') +
-              call + '</div>'
-            : '<div class="hl-partner">' + bike + '<span class="hl-partner-name">Finding a delivery partner</span></div>';
+            '<span class="hl-bike" aria-hidden="true"><svg viewBox="0 0 64 64" width="28" height="28"><circle cx="18" cy="44" r="8" fill="none" stroke="currentColor" stroke-width="3"/><circle cx="48" cy="44" r="8" fill="none" stroke="currentColor" stroke-width="3"/><path d="M18 44h12l6-14h8M30 30l6 14M34 20h8l4 8" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><circle cx="40" cy="18" r="4" fill="currentColor"/></svg></span>';
+        const partner = '<div class="hl-partner">' + bike +
+            '<div class="hl-partner-copy"><div class="lbl">Delivery partner</div><div class="hl-partner-name">' +
+            esc(name || (href ? 'Delivery partner' : 'Finding a delivery partner')) + '</div></div>' +
+            (name ? '<span class="hl-avatar" aria-hidden="true">' + esc(initial) + '</span>' : '') +
+            call + '</div>';
+        const livePill = track.map && track.map.live ? '<span class="hl-live-pill">Live</span>' : '';
         const map = shipment.live
-            ? '<div class="hl-map"><div id="tl-map-slot"></div></div>'
+            ? '<div class="hl-map"><div id="tl-map-slot"></div><div class="hl-legend">' + livePill +
+              '<span><i class="is-store"></i>Store</span><span><i class="is-road"></i>Route</span><span><i class="is-home"></i>Delivery</span></div></div>'
             : '<div class="hl-map hl-map-empty">The map appears when the store and delivery locations are available.</div>';
+        const badge = timingBadge(track);
         return '<div class="hl hl-wide">' + map +
             '<section class="hl-sheet">' +
-            '<div class="hl-kicker">Order #' + esc(track.orderId || shipment.orderCode || '') + '</div>' +
-            '<div class="hl-top"><div><h1>' + esc(track.currentStatus || track.currentMessage) + '</h1>' +
+            '<header class="hl-brand"><span class="trk-mark">' + iconSvg('M3 8l9-4 9 4-9 4-9-4zM3 8v8l9 4 9-4V8') + '</span><div><div class="trk-brand-name">Gogate Products</div><div class="trk-brand-sub">Hyperlocal delivery</div></div></header>' +
+            '<div class="hl-top"><div><div class="hl-kicker">Order #' + esc(track.orderId || shipment.orderCode || '') + (badge ? ' ' + badge : '') + '</div><h1>' + esc(track.currentStatus || track.currentMessage) + '</h1>' +
             '<p class="hl-sub">' + esc(partnerLine(track)) + '</p>' +
             (track.map.live ? '' : '<p class="hl-wait">The route stays dotted until a delivery partner location arrives.</p>') +
-            '</div><div id="tl-eta" class="hl-eta" hidden></div></div>' +
+            '</div><div id="tl-eta" class="hl-eta" hidden><span class="hl-eta-lbl">Arriving</span><b class="hl-eta-val"></b></div></div>' +
+            railHtml(track) +
             (track.dropLabel ? '<div class="hl-drop"><div class="lbl">Delivering to</div><div class="val">' + esc(track.dropLabel) + '</div></div>' : '') +
             deliveryHtml(track) +
             '<div class="hl-note"><button type="button" class="hl-note-toggle" id="hl-note-toggle"><span class="hl-plus" aria-hidden="true">+</span><span><b>' +
