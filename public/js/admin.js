@@ -8971,7 +8971,8 @@ function renderDoctorsUsersTable() {
                             <option value="regular" ${cat === 'regular' ? 'selected' : ''}>Regular</option>
                             <option value="volunteer" ${cat === 'volunteer' ? 'selected' : ''}>Volunteer</option>
                         </select>
-                        <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-left:6px;background:#0f766e;" onclick="saveDoctorAccessFromList(${u.id})">Save access</button>
+                        <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-left:6px;background:#0f766e;" onclick="saveDoctorAccessFromList(${u.id})">Save category</button>
+                        <button type="button" data-doctor-mod-access="1" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-left:6px;background:#0369a1;" onclick="openDoctorModuleAccess(${u.id})">Module access</button>
                         ${
                             adminCanDeleteUsers()
                                 ? `<button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-left:6px;background:#b91c1c;" onclick="adminDeleteUserAccount(${u.id}, '${String((u.first_name || '') + ' ' + (u.last_name || '')).trim().replace(/'/g, "\\'")}', '${String(u.user_id_string || '').replace(/'/g, "\\'")}')">Delete</button>`
@@ -18950,12 +18951,12 @@ async function saveDoctorPortalModulesAdminConfig() {
     const doctorPortalModulesRegular = {};
     document.querySelectorAll('#doctor-portal-modules-regular input[data-doctor-global-mod]').forEach((inp) => {
         const id = inp.getAttribute('data-doctor-global-mod');
-        if (id && inp.checked) doctorPortalModulesRegular[id] = true;
+        if (id) doctorPortalModulesRegular[id] = !!inp.checked;
     });
     const doctorPortalModulesVolunteer = {};
     document.querySelectorAll('#doctor-portal-modules-volunteer input[data-doctor-global-mod]').forEach((inp) => {
         const id = inp.getAttribute('data-doctor-global-mod');
-        if (id && inp.checked) doctorPortalModulesVolunteer[id] = true;
+        if (id) doctorPortalModulesVolunteer[id] = !!inp.checked;
     });
     const config = Object.assign({}, base, {
         doctorPortalModulesRegular,
@@ -18969,7 +18970,7 @@ async function saveDoctorPortalModulesAdminConfig() {
         const res = await fetch('/api/admin/portal-auth-config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ actingAdminId: adm.id, config, resetAllDoctorModuleOverrides: true })
+            body: JSON.stringify({ actingAdminId: adm.id, config, resetAllDoctorModuleOverrides: false })
         });
         const data = await res.json();
         if (!res.ok || !data.success) {
@@ -19113,7 +19114,7 @@ async function savePortalAuthAdminConfig() {
     const doctorPortalModulesRegular = {};
     document.querySelectorAll('#doctor-portal-modules-regular input[data-doctor-global-mod]').forEach((inp) => {
         const id = inp.getAttribute('data-doctor-global-mod');
-        if (id && inp.checked) doctorPortalModulesRegular[id] = true;
+        if (id) doctorPortalModulesRegular[id] = !!inp.checked;
     });
     if (document.querySelectorAll('#doctor-portal-modules-regular input[data-doctor-global-mod]').length) {
         config.doctorPortalModulesRegular = doctorPortalModulesRegular;
@@ -19121,7 +19122,7 @@ async function savePortalAuthAdminConfig() {
     const doctorPortalModulesVolunteer = {};
     document.querySelectorAll('#doctor-portal-modules-volunteer input[data-doctor-global-mod]').forEach((inp) => {
         const id = inp.getAttribute('data-doctor-global-mod');
-        if (id && inp.checked) doctorPortalModulesVolunteer[id] = true;
+        if (id) doctorPortalModulesVolunteer[id] = !!inp.checked;
     });
     if (document.querySelectorAll('#doctor-portal-modules-volunteer input[data-doctor-global-mod]').length) {
         config.doctorPortalModulesVolunteer = doctorPortalModulesVolunteer;
@@ -22387,8 +22388,10 @@ async function bsViewOrderTracking(id) {
                 const co = commerceData.order;
                 html +=
                     '<div style="border:1px solid #99f6e4;background:#f0fdfa;border-radius:12px;padding:14px;margin-bottom:14px;">' +
-                    '<p style="margin:0 0 6px;font-weight:700;">' + e(co.commerceProvider === 'shipday' ? 'Shipday' : 'Tookan') + ' · ' + e(co.commerceMode || '') + '</p>' +
-                    '<p style="margin:0 0 8px;font-size:0.85rem;">Pickup OTP <strong>' + e(co.pickupOtp || '—') + '</strong> · Delivery OTP <strong>' + e(co.deliveryOtp || '—') + '</strong></p>' +
+                    '<p style="margin:0 0 6px;font-weight:700;">Gogate Products' + (co.commerceMode ? ' · ' + e(co.commerceMode) : '') + '</p>' +
+                    (co.commerceProvider === 'shipday'
+                        ? ''
+                        : '<p style="margin:0 0 8px;font-size:0.85rem;">Pickup OTP <strong>' + e(co.pickupOtp || '—') + '</strong> · Delivery OTP <strong>' + e(co.deliveryOtp || '—') + '</strong></p>') +
                     TrackTimeline.render({ timeline: commerceData.timeline, live: commerceData.live, awbTrackUrl: co.tookanTrackingLink || co.shipdayTrackingLink || null, trackUrl: co.commerceTrackUrl }, { animate: !window._bsTlSeen }) +
                     '</div>';
                 window._bsTlSeen = true;
@@ -22417,10 +22420,14 @@ async function bsViewOrderTracking(id) {
             }
             body.innerHTML = html;
             if (commerceData && commerceData.live && window.TrackTimeline) TrackTimeline.mount(commerceData.live);
-            if (o.commerce_provider || (commerceData && commerceData.order && commerceData.order.commerceProvider)) {
-                _bsTrackPollTimer = _bsTrackPollTimer || setInterval(() => render(false), 15000);
+            if (_bsTrackPollTimer) {
+                clearInterval(_bsTrackPollTimer);
+                _bsTrackPollTimer = null;
             }
-            if (o.fulfillmentType === 'courier' && (o.status === 'shipped' || (o.deliveryJourney && o.deliveryJourney.isLive))) {
+            const commerceOrder = !!(o.commerce_provider || (commerceData && commerceData.order && commerceData.order.commerceProvider));
+            if (commerceOrder) {
+                _bsTrackPollTimer = setInterval(() => render(false), 15000);
+            } else if (o.fulfillmentType === 'courier' && (o.status === 'shipped' || (o.deliveryJourney && o.deliveryJourney.isLive))) {
                 _bsTrackPollTimer = setInterval(() => render(true), 12000);
             }
         } catch (err) {

@@ -783,7 +783,7 @@
                 '<p style="font-size:0.8rem;color:#64748b;margin:4px 0 0;">Code: ' + esc(o.orderCode) + ' · Show to book desk volunteer</p></div>';
         } else if (o.fulfillmentType === 'courier' && o.courierShipmentStatus === 'ready_to_ship' && o.status === 'confirmed') {
             extra =
-                '<p style="margin:8px 0 0;font-size:0.88rem;color:#0f766e;">Shipping address confirmed. AWB and tracking link will appear once staff dispatches your parcel.</p>';
+                '<p style="margin:8px 0 0;font-size:0.88rem;color:#0f766e;">Shipping address confirmed. Your shipment tracker is ready. The airway bill appears when the parcel is dispatched.</p>';
         } else if (o.fulfillmentType === 'courier' && (o.status === 'shipped' || o.courierTrackingNo)) {
             const j = o.deliveryJourney;
             if (j && j.headline) {
@@ -796,19 +796,13 @@
                 extra =
                     '<p style="margin:6px 0 0;font-size:0.88rem;color:#0f766e;font-weight:600;">' + esc(o.courierTrackLabel) + '</p>';
             }
-            if (o.commerceTrackUrl) {
+            if (o.deliveryOtp) {
                 extra +=
-                    '<p style="margin:8px 0 0;"><a href="' +
-                    esc(o.commerceTrackUrl) +
-                    '" target="_blank" rel="noopener" style="font-size:0.82rem;color:#0f766e;font-weight:700;">Live shipment tracker ↗</a></p>';
-                if (o.deliveryOtp) {
-                    extra +=
-                        '<p style="margin:4px 0 0;font-size:0.88rem;">Delivery OTP <strong>' +
-                        esc(o.deliveryOtp) +
-                        '</strong>' +
-                        (o.agentPhone ? ' · Agent ' + esc(o.agentPhone) : '') +
-                        '</p>';
-                }
+                    '<p style="margin:4px 0 0;font-size:0.88rem;">Delivery OTP <strong>' +
+                    esc(o.deliveryOtp) +
+                    '</strong>' +
+                    (o.agentPhone ? ' · Agent ' + esc(o.agentPhone) : '') +
+                    '</p>';
             }
             if (o.courierTrackingNo && o.orderCode) {
                 const pub =
@@ -836,6 +830,12 @@
                   '</span>'
                 : '') +
             '</div>';
+        if (o.commerceTrackUrl && extra.indexOf(o.commerceTrackUrl) === -1) {
+            extra +=
+                '<p style="margin:8px 0 0;"><a href="' +
+                esc(o.commerceTrackUrl) +
+                '" target="_blank" rel="noopener" style="font-size:0.82rem;color:#0f766e;font-weight:700;">Track this shipment</a></p>';
+        }
         return '<div class="card" style="margin-bottom:12px;padding:14px;border:1px solid #e2e8f0;" data-book-order-id="' + o.id + '">' +
             '<div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">' +
             '<strong>' + esc(o.orderCode) + '</strong>' +

@@ -21,7 +21,8 @@ assert.ok(out.detail.indexOf('Nashik') !== -1);
 assert.strictEqual(commerce.mapShipdayStatus('PICKED_UP'), 'out_for_delivery');
 assert.strictEqual(commerce.mapShipdayStatus('STARTED'), 'to_store');
 assert.strictEqual(commerce.mapShipdayStatus('ALREADY_DELIVERED'), 'delivered');
-assert.strictEqual(commerce.mapTookanStatus(2, 'Successful'), 'delivered');
+assert.strictEqual(commerce.mapTookanStatus(2, 'Successful', 'delivery'), 'delivered');
+assert.strictEqual(commerce.mapTookanStatus(2, 'Successful', 'pickup'), 'picked_up');
 assert.strictEqual(commerce.stageFromKind('arrived_facility', 'logistics'), 'in_transit');
 assert.strictEqual(commerce.liveLegFor('out_for_delivery', 'hyperlocal'), 'to_drop');
 assert.strictEqual(commerce.liveLegFor('to_store', 'hyperlocal'), 'to_store');
@@ -36,11 +37,24 @@ const tookan = commerce.parseTookanWebhook({
 });
 assert.strictEqual(tookan.title, 'Shipment arrived at Courier Facility');
 assert.strictEqual(tookan.city, 'Thane');
+assert.strictEqual(tookan.pickupOtp, '');
+assert.strictEqual(tookan.deliveryOtp, '');
+const tookanOtpHook = commerce.parseTookanWebhook({ job_id: 56, order_id: 'BK1', job_type: 1, job_status: 1, job_otp: '4455' });
+assert.strictEqual(tookanOtpHook.deliveryOtp, '4455');
+assert.strictEqual(tookanOtpHook.pickupOtp, '');
 
-const ship = commerce.parseShipdayWebhook({
+const ready = commerce.parseShipdayWebhook({
     orderId: 9,
     orderNumber: 'BK2',
     orderStatus: 'READY_TO_DELIVER',
+    carrierPhone: '9111111111',
+    carrierName: 'Asha'
+});
+assert.strictEqual(ready.kind, 'ready_for_pickup');
+const ship = commerce.parseShipdayWebhook({
+    orderId: 9,
+    orderNumber: 'BK2',
+    orderStatus: 'PICKED_UP',
     carrierPhone: '9111111111',
     carrierName: 'Asha'
 });
@@ -60,5 +74,1002 @@ assert.strictEqual(cfg.storeName, 'Desk');
 assert.strictEqual(commerce.withinIstWindow('09:00', '18:00', 10 * 60), true);
 assert.strictEqual(commerce.withinIstWindow('09:00', '18:00', 8 * 60), false);
 assert.strictEqual(commerce.withinIstWindow('09:00', '18:00', 18 * 60), true);
+
+const sampleCfg = {
+    tookan: { apiKey: 'k', enabled: true },
+    shipday: { apiKey: 's', enabled: true },
+    storeName: 'Desk',
+    storePhone: '9000000000',
+    storeAddress: 'Clinic road',
+    storeCity: 'Pune'
+};
+const sampleOrder = {
+    orderCode: 'BK1',
+    buyerName: 'Asha',
+    buyerPhone: '9111111111',
+    deliveryAddress: 'Lane 2',
+    shippingCity: 'Nashik',
+    shippingState: 'MH',
+    shippingPincode: '422001',
+    pickupOtp: '4321',
+    deliveryOtp: '8765',
+    totalAmount: 100,
+    items: []
+};
+const parcel = commerce.buildTookanParcelBody(
+    Object.assign({}, sampleCfg, { storeLat: 18.5, storeLng: 73.85 }),
+    Object.assign({}, sampleOrder, { storeLat: 18.5, storeLng: 73.85, dropLat: 19.07, dropLng: 72.87 })
+);
+assert.strictEqual(parcel.timezone, -330);
+assert.strictEqual(parcel.has_pickup, undefined);
+assert.strictEqual(parcel.order_id, undefined);
+assert.strictEqual(parcel.pickups.length, 1);
+assert.strictEqual(parcel.deliveries.length, 1);
+assert.ok(parcel.pickups[0].name.indexOf('Gogate Products') === 0);
+assert.ok(parcel.pickups[0].name.indexOf('BK1') !== -1);
+assert.ok(parcel.deliveries[0].time > parcel.pickups[0].time);
+assert.ok(JSON.stringify(parcel).indexOf('4321') === -1);
+assert.ok(JSON.stringify(parcel).indexOf('8765') === -1);
+const hubs = [{ id: '1917', name: '1917 Swargate Hub - Pune' }];
+const now = Date.parse('2026-10-04T12:00:00Z');
+const hubJobs = [
+    { job_id: 1, job_type: 0, job_status: 2, job_time_utc: '2026-10-04T06:00:00.000Z', barcode: 'ABC' },
+    { job_id: 2, job_type: 1, job_status: 2, order_id: '1917', job_time_utc: '2026-10-04T08:00:00.000Z' },
+    { job_id: 3, job_type: 1, job_status: 6, order_id: '', job_time_utc: '2026-10-04T18:00:00.000Z' }
+];
+const hubJourney = commerce.parcelJourneyUpdate(hubJobs, hubs, now);
+assert.strictEqual(hubJourney.stage, 'in_transit');
+assert.notStrictEqual(hubJourney.stage, 'out_for_delivery');
+assert.ok(hubJourney.lineFill <= 0.88);
+assert.ok(hubJourney.lineFill >= 0.12);
+assert.ok(hubJourney.events.some((ev) => ev.kind === 'arrived_facility' && ev.city === 'Pune' && ev.title === 'Arrived at 1917 Swargate Hub - Pune'));
+const scannedHubs = [
+    { job_id: 1, job_type: 0, job_status: 2, completed_datetime: '2026-10-06T07:11:24.000Z', job_time_utc: '2026-10-07T04:30:00.000Z' },
+    { job_id: 2, job_type: 1, job_status: 2, order_id: '1917', completed_datetime: '2026-10-06T07:19:31.000Z', job_time_utc: '2026-10-07T05:30:00.000Z' }
+];
+const scanned = commerce.parcelJourneyUpdate(scannedHubs, hubs, Date.parse('2026-10-06T08:00:00Z'));
+assert.strictEqual(scanned.stage, 'in_transit');
+assert.strictEqual(scanned.events.find((ev) => ev.kind === 'arrived_facility').at, '2026-10-06T07:19:31.000Z');
+const parcelSteps = [
+    { status: 'Order Placed', line_status: 'Booked', date_time: '2026-10-06T06:54:32.000Z', customer_username: 'Asha BK1' },
+    { status: 'Departed from Origin', line_status: 'Booked', date_time: '2026-10-06T07:11:24.000Z', customer_username: 'Asha BK1' },
+    { status: 'Arrived at Destination Swargate Hub - Pune', line_status: 'Swargate Hub - Pune', date_time: '2026-10-06T07:19:31.000Z', customer_username: 'Asha BK1' },
+    { status: 'Out for next location Dapoli HUB - Dapoli', line_status: 'Swargate Hub - Pune', date_time: '2026-10-06T07:23:52.000Z', customer_username: 'Asha BK1' },
+    { status: 'Arrived at Destination Dapoli HUB - Dapoli', line_status: 'Dapoli HUB - Dapoli', date_time: '2026-10-06T07:26:00.000Z', customer_username: 'Asha BK1' },
+    { status: '', line_status: 'delivered', date_time: '', customer_username: 'Asha BK1' }
+];
+const parcelTrack = commerce.tookanParcelJourney(parcelSteps, Date.parse('2026-10-06T08:00:00Z'));
+assert.strictEqual(parcelTrack.stage, 'in_transit');
+assert.notStrictEqual(parcelTrack.stage, 'delivered');
+assert.notStrictEqual(parcelTrack.stage, 'out_for_delivery');
+assert.ok(parcelTrack.events.some((ev) => ev.title === 'Shipment left origin' && ev.detail === 'Origin' && ev.at === '2026-10-06T07:11:24.000Z'));
+assert.ok(parcelTrack.events.some((ev) => ev.title === 'Arrived at Swargate Hub - Pune' && ev.at === '2026-10-06T07:19:31.000Z' && ev.city === 'Pune'));
+assert.ok(parcelTrack.events.some((ev) => ev.title === 'Shipment left for Dapoli HUB - Dapoli' && ev.detail === 'Swargate Hub - Pune'));
+assert.ok(parcelTrack.events.some((ev) => ev.title === 'Arrived at Dapoli HUB - Dapoli' && ev.at === '2026-10-06T07:26:00.000Z' && ev.city === 'Dapoli'));
+assert.ok(!parcelTrack.events.some((ev) => ev.kind === 'delivered'));
+assert.strictEqual(parcelTrack.explicitDelivery, false);
+assert.ok(parcelTrack.lineFill <= 0.88);
+const deliveredSteps = parcelSteps.slice(0, 5).concat([
+    { status: 'Parcel has been delivered,Gogate Products', line_status: 'Dapoli HUB - Dapoli', date_time: '2026-10-06T08:04:00.000Z', customer_username: 'Asha BK1' }
+]);
+const deliveredTrack = commerce.tookanParcelJourney(deliveredSteps, Date.parse('2026-10-06T09:00:00Z'));
+assert.strictEqual(deliveredTrack.stage, 'delivered');
+assert.strictEqual(deliveredTrack.explicitDelivery, true);
+assert.strictEqual(deliveredTrack.at, '2026-10-06T08:04:00.000Z');
+assert.ok(deliveredTrack.events.some((ev) => ev.kind === 'delivered' && ev.at === '2026-10-06T08:04:00.000Z'));
+assert.ok(deliveredTrack.events.some((ev) => ev.title === 'Arrived at Dapoli HUB - Dapoli'));
+const streetSteps = parcelSteps.slice(0, 5).concat([
+    { status: 'Parcel has been delivered,Gogate Products', line_status: 'Khed Road, Maharashtra, India', date_time: '2026-10-06T08:04:00.000Z', customer_username: 'Asha BK1' }
+]);
+const streetTrack = commerce.tookanParcelJourney(streetSteps, Date.parse('2026-10-06T09:00:00Z'));
+assert.strictEqual(streetTrack.stage, 'delivered');
+assert.strictEqual(streetTrack.events.find((ev) => ev.kind === 'delivered').detail, 'Dapoli HUB - Dapoli');
+assert.ok(JSON.stringify(streetTrack).indexOf('Khed Road') === -1);
+const ofdJobs = hubJobs.map((job, i) => (i === 2 ? Object.assign({}, job, { job_status: 1 }) : job));
+const ofdJourney = commerce.parcelJourneyUpdate(ofdJobs, hubs, now);
+assert.strictEqual(ofdJourney.stage, 'out_for_delivery');
+assert.ok(ofdJourney.lineFill <= 0.88);
+const deliveredJobs = hubJobs.map((job, i) => (i === 2 ? Object.assign({}, job, { job_status: 2 }) : job));
+const closed = commerce.parcelJourneyUpdate(deliveredJobs, hubs, now);
+assert.strictEqual(closed.stage, 'delivered');
+assert.strictEqual(closed.explicitDelivery, true);
+assert.strictEqual(scanned.explicitDelivery, false);
+assert.strictEqual(require('../lib/shipment-engine').allowMainTransition('SHIPPED', 'DELIVERED'), false);
+assert.strictEqual(require('../lib/shipment-engine').acceptsStageChange('SHIPPED', 'DELIVERED', { explicitDelivery: true, kind: 'delivered' }), true);
+assert.strictEqual(require('../lib/shipment-engine').acceptsStageChange('SHIPPED', 'DELIVERED', { kind: 'delivered' }), false);
+assert.strictEqual(require('../lib/shipment-engine').acceptsStageChange('PACKED', 'DELIVERED', { explicitDelivery: true, kind: 'delivered' }), false);
+assert.strictEqual(commerce.stageFromKind('hub_eta'), null);
+const fleetAgent = commerce.tookanAgentFromProfile({
+    fleet_details: [
+        {
+            first_name: 'GOGATE PUNE PRODUCTS',
+            phone: '9800000000',
+            latitude: 17.7,
+            longitude: 73.1,
+            location_update_datetime: '2026-10-06T07:54:39.000Z'
+        }
+    ]
+});
+assert.strictEqual(fleetAgent.name, 'GOGATE PUNE PRODUCTS');
+assert.strictEqual(fleetAgent.phone, '9800000000');
+assert.strictEqual(fleetAgent.lat, 17.7);
+assert.strictEqual(fleetAgent.lng, 73.1);
+assert.strictEqual(fleetAgent.at, '2026-10-06T07:54:39.000Z');
+const unnamed = commerce.tookanAgentFromProfile({
+    fleet_details: [{ first_name: 'Created By API - Gogate Products', phone: '1', latitude: 1, longitude: 2 }]
+});
+assert.strictEqual(unnamed.name, '');
+assert.strictEqual(unnamed.phone, '');
+assert.strictEqual(unnamed.at, null);
+const scheduled = commerce.tookanJobToUpdate(
+    {
+        job_id: 9,
+        job_type: 1,
+        job_status: 1,
+        job_time_utc: '2026-10-06T07:54:00.000Z',
+        job_pickup_datetime: '2026-10-06T11:54:00.000Z',
+        job_delivery_datetime: '2026-10-06T13:24:00.000Z',
+        fleet_id: 4
+    },
+    'hyperlocal',
+    'delivery'
+);
+assert.strictEqual(scheduled.deliveryAt, '2026-10-06T07:54:00.000Z');
+assert.strictEqual(scheduled.stage, 'out_for_delivery');
+const places = commerce.tookanPlacesFromJobs(
+    { job_pickup_latitude: '18.500', job_pickup_longitude: '73.800', job_latitude: '17.700', job_longitude: '73.100' },
+    { job_pickup_latitude: '18.500', job_pickup_longitude: '73.800', job_latitude: '17.700', job_longitude: '73.100' }
+);
+assert.strictEqual(places.storeLat, 18.5);
+assert.strictEqual(places.storeLng, 73.8);
+assert.strictEqual(places.dropLat, 17.7);
+assert.strictEqual(places.dropLng, 73.1);
+const sameStop = commerce.tookanPlacesFromJobs(
+    { job_pickup_latitude: '18.5', job_pickup_longitude: '73.8', job_latitude: '18.5', job_longitude: '73.8' },
+    null
+);
+assert.strictEqual(sameStop.storeLat, 18.5);
+assert.strictEqual(sameStop.dropLat, null);
+assert.strictEqual(commerce.tookanPlacesFromJobs({ job_pickup_latitude: '0', job_pickup_longitude: '0' }, null).storeLat, null);
+const parsedHubs = commerce.parseTookanHubPayload({
+    status: 200,
+    data: {
+        count: 2,
+        totalPages: 1,
+        data: [
+            { hub_id: 1924, hub_name: 'Khed Hub - Khed', hub_address: 'Khed, Maharashtra, India', hub_lat: 0, hub_long: 0, hub_radius: 5 },
+            { hub_id: 1915, hub_name: 'Motherhub Pune - PUNE', hub_address: 'Pune, Maharashtra, India', hub_lat: 18.5, hub_long: 73.8, hub_radius: 5 },
+            { hub_id: 1917, hub_name: 'Swargate Hub - Pune', hub_address: 'Swargate, Pune, Maharashtra, India', hub_lat: 18.5, hub_long: 73.86, hub_radius: 5 }
+        ]
+    }
+});
+assert.strictEqual(parsedHubs.pages, 1);
+assert.strictEqual(parsedHubs.hubs.length, 3);
+assert.strictEqual(parsedHubs.hubs[0].usable, false);
+assert.strictEqual(parsedHubs.hubs[1].usable, true);
+assert.strictEqual(commerce.tookanHubUsable(0, 0), false);
+const puneToKhed = commerce.tookanAreaRequirements(
+    { city: 'Pune', state: 'Maharashtra', pincode: '411009' },
+    { city: 'Khed', state: 'Maharashtra', pincode: '415709' }
+);
+assert.ok(puneToKhed.some((area) => area.role === 'seller_local' && area.label.indexOf('Pune') !== -1));
+assert.ok(puneToKhed.some((area) => area.role === 'city_mother'));
+assert.ok(puneToKhed.some((area) => area.role === 'transit' && area.label === 'Transit hub from Pune to Khed'));
+assert.ok(puneToKhed.some((area) => area.role === 'destination_city' && area.label.indexOf('Khed') !== -1));
+assert.ok(puneToKhed.some((area) => area.role === 'delivery_local' && area.label.indexOf('415709') !== -1));
+const sameCityAreas = commerce.tookanAreaRequirements(
+    { city: 'Pune', state: 'Maharashtra', pincode: '411009' },
+    { city: 'Pune', state: 'Maharashtra', pincode: '411038' }
+);
+assert.ok(!sameCityAreas.some((area) => area.role === 'transit' || area.role === 'destination_city'));
+const gap = commerce.tookanHubGapMessage(
+    { storeCity: 'Pune', storeState: 'Maharashtra', storePincode: '411009' },
+    { shippingCity: 'Khed', shippingState: 'Maharashtra', shippingPincode: '415709' },
+    parsedHubs.hubs
+);
+assert.ok(gap.indexOf('Area hubs required:') === 0);
+assert.ok(gap.indexOf('Seller local hub for Pune, Maharashtra, 411009') !== -1);
+assert.ok(gap.indexOf('City mother hub for Pune, Maharashtra') !== -1);
+assert.ok(gap.indexOf('Transit hub from Pune to Khed') !== -1);
+assert.ok(gap.indexOf('Destination city hub for Khed, Maharashtra') !== -1);
+assert.ok(gap.indexOf('Delivery local hub for Khed, Maharashtra, 415709') !== -1);
+assert.ok(gap.indexOf('Delivery local hub for Khed, Maharashtra, 415709 (Khed Hub - Khed is saved but has no map pin)') !== -1);
+const dapoli = {
+    id: '1922',
+    name: 'Dapoli HUB - Dapoli',
+    address: 'Dapoli, Khed, Ratnagiri, Maharashtra, India',
+    lat: 0,
+    lng: 0,
+    usable: false
+};
+const tight = commerce.tookanHubGapMessage(
+    { storeCity: 'Pune', storeState: 'Maharashtra', storePincode: '411009' },
+    { shippingCity: 'Khed', shippingState: 'Maharashtra', shippingPincode: '415709' },
+    parsedHubs.hubs.concat([dapoli])
+);
+assert.ok(tight.indexOf('Delivery local hub for Khed, Maharashtra, 415709 (Khed Hub - Khed is saved but has no map pin)') !== -1);
+assert.ok(tight.indexOf('Dapoli HUB - Dapoli is saved but has no map pin') === -1);
+assert.ok(gap.indexOf('Still needed:') !== -1);
+assert.ok(gap.indexOf('City mother hub for Pune, Maharashtra') !== -1);
+assert.ok(gap.indexOf('Still needed:') > gap.indexOf('City mother hub for Pune, Maharashtra'));
+assert.ok(gap.indexOf('Hubs Tookan can use:') !== -1);
+assert.ok(gap.indexOf('Motherhub Pune - PUNE') !== -1);
+assert.ok(gap.indexOf('Swargate Hub - Pune') !== -1);
+assert.ok(gap.indexOf('Shivajinagar') === -1);
+const sameCityGap = commerce.tookanHubGapMessage(
+    { storeCity: 'Pune', storeState: 'Maharashtra', storePincode: '411009' },
+    { shippingCity: 'Pune', shippingState: 'Maharashtra', shippingPincode: '411038' },
+    parsedHubs.hubs
+);
+assert.ok(sameCityGap.indexOf('Transit hub') === -1);
+assert.ok(sameCityGap.indexOf('Destination city hub') === -1);
+assert.ok(sameCityGap.indexOf('Still needed:') === -1);
+const radiusHubs = [
+    { id: '1917', name: 'Swargate Hub - Pune', address: 'Pune', lat: 18.5, lng: 73.86, radius: 5, usable: true },
+    { id: '1915', name: 'Motherhub Pune - PUNE', address: 'Pune', lat: 18.75, lng: 73.8, radius: 5, usable: true },
+    { id: '1922', name: 'Dapoli HUB - Dapoli', address: 'Dapoli', lat: 17.76, lng: 73.19, radius: 5, usable: true },
+    { id: '1920', name: 'Khed Hub - Khed', address: 'Khed', lat: 17.9, lng: 73.4, radius: 5, usable: true },
+    { id: '1930', name: 'Panvel Hub - Mumbai', address: 'Panvel', lat: 0, lng: 0, radius: 5, usable: false }
+];
+const ratnagiriGap = commerce.tookanHubGapMessage(
+    { storeCity: 'Pune', storeState: 'Maharashtra', storePincode: '411002', storeLat: 18.509, storeLng: 73.86 },
+    {
+        shippingCity: 'RATNAGIRI',
+        shippingState: 'MAHARASHTRA',
+        shippingPincode: '415712',
+        dropLat: 17.769,
+        dropLng: 73.19
+    },
+    radiusHubs
+);
+assert.ok(ratnagiriGap.indexOf('Pickup is inside Swargate Hub - Pune') !== -1);
+assert.ok(ratnagiriGap.indexOf('Delivery is inside Dapoli HUB - Dapoli') !== -1);
+assert.ok(ratnagiriGap.indexOf('Kothrud') === -1);
+assert.ok(ratnagiriGap.indexOf('Transit hub') === -1);
+assert.ok(ratnagiriGap.indexOf('Destination city hub') === -1);
+assert.ok(ratnagiriGap.indexOf('Still needed:') === -1);
+assert.ok(ratnagiriGap.indexOf('Hubs read from Tookan:') !== -1);
+assert.ok(ratnagiriGap.indexOf('Panvel Hub - Mumbai (no map pin)') !== -1);
+assert.ok(ratnagiriGap.indexOf('Hubs Tookan can use:') !== -1);
+assert.ok(ratnagiriGap.split('Hubs Tookan can use:')[1].split('Hubs read from Tookan:')[0].indexOf('Panvel Hub - Mumbai') === -1);
+const outsideDrop = { lat: 17.76 + 5.1 / 111, lng: 73.19 };
+const outsideReach = commerce.tookanHubReach(radiusHubs, outsideDrop);
+assert.strictEqual(outsideReach.inside.length, 0);
+assert.strictEqual(outsideReach.nearest.hub.name, 'Dapoli HUB - Dapoli');
+assert.strictEqual(outsideReach.widenTo, 7);
+const outsideGap = commerce.tookanHubGapMessage(
+    { storeCity: 'Pune', storeState: 'Maharashtra', storePincode: '411002', storeLat: 18.509, storeLng: 73.86 },
+    {
+        shippingCity: 'RATNAGIRI',
+        shippingState: 'MAHARASHTRA',
+        shippingPincode: '415712',
+        dropLat: outsideDrop.lat,
+        dropLng: outsideDrop.lng
+    },
+    radiusHubs
+);
+assert.ok(outsideGap.indexOf('Pickup is inside Swargate Hub - Pune') !== -1);
+assert.ok(outsideGap.indexOf('Delivery is outside every hub radius. Nearest hub is Dapoli HUB - Dapoli') !== -1);
+assert.ok(outsideGap.indexOf('radius 5 km') !== -1);
+assert.ok(outsideGap.indexOf('Delivery is inside') === -1);
+const hyper = commerce.buildTookanTaskBody(sampleCfg, sampleOrder, 'hyperlocal');
+assert.strictEqual(hyper.is_multiple_tasks, undefined);
+assert.strictEqual(hyper.tags, 'hyperlocal');
+assert.ok(hyper.job_description.indexOf('Hyperlocal') === 0);
+const pickupJob = commerce.tookanOtpsFromJob({ job_type: 0, job_otp: '4321' });
+assert.strictEqual(pickupJob.pickupOtp, '4321');
+assert.strictEqual(pickupJob.deliveryOtp, '');
+const dropJob = commerce.tookanOtpsFromJob({ job_type: 1, job_validate_otp: '7788', pickup_job_validate_otp: '1100' });
+assert.strictEqual(dropJob.pickupOtp, '1100');
+assert.strictEqual(dropJob.deliveryOtp, '7788');
+const labeledOtp = commerce.tookanOtpsFromJob({
+    job_type: 1,
+    custom_field: [
+        { label: 'Delivery OTP', data: '5566' },
+        { label: 'Pincode', data: '411009' }
+    ]
+});
+assert.strictEqual(labeledOtp.deliveryOtp, '5566');
+assert.strictEqual(labeledOtp.pickupOtp, '');
+const pinOnly = commerce.tookanOtpsFromJob({ job_type: 0, custom_field: [{ label: 'Pincode', data: '411001' }] });
+assert.strictEqual(pinOnly.pickupOtp, '');
+assert.strictEqual(pinOnly.deliveryOtp, '');
+const otpJourney = commerce.tookanParcelJourney(
+    [{ status: 'Departed from origin', date_time: '2026-10-06T07:11:00.000Z', line_status: 'Origin', customer_username: 'BKOTP' }],
+    Date.parse('2026-10-06T08:00:00.000Z')
+);
+const stamped = commerce.applyTookanJobOtps(otpJourney, [
+    { job_type: 0, job_id: 1, job_otp: '4321' },
+    { job_type: 1, job_id: 2, job_otp: '8765' }
+]);
+assert.strictEqual(stamped.pickupOtp, '4321');
+assert.strictEqual(stamped.deliveryOtp, '8765');
+const kept = commerce.applyTookanJobOtps(Object.assign({}, stamped), [{ job_type: 0, job_id: 3 }]);
+assert.strictEqual(kept.pickupOtp, '4321');
+assert.strictEqual(kept.deliveryOtp, '8765');
+const shipBody = commerce.buildShipdayOrderBody(sampleCfg, sampleOrder);
+assert.strictEqual(shipBody.restaurantName, 'Gogate Products');
+assert.ok(JSON.stringify(shipBody).indexOf('4321') === -1);
+assert.ok(JSON.stringify(shipBody).indexOf('8765') === -1);
+assert.ok(!/otp/i.test(shipBody.deliveryInstruction));
+
+const deliveredOrder = {
+    orderId: 20625,
+    orderNumber: 'BK9',
+    orderStatus: { incomplete: false, accepted: true, orderState: 'ALREADY_DELIVERED' },
+    assignedCarrier: { name: 'Ravi', phoneNumber: '+919800000000' },
+    activityLog: {
+        startTime: '2026-10-04T10:05:00',
+        pickedUpTime: '2026-10-04T10:20:00',
+        deliveryTime: '2026-10-04T10:40:00'
+    }
+};
+const deliveredUpdate = commerce.shipdayOrderToUpdate(deliveredOrder);
+assert.strictEqual(deliveredUpdate.kind, 'delivered');
+assert.strictEqual(deliveredUpdate.stage, 'delivered');
+assert.strictEqual(deliveredUpdate.title, 'Delivered');
+assert.strictEqual(deliveredUpdate.agentPhone, '+919800000000');
+assert.ok(deliveredUpdate.at && deliveredUpdate.at.indexOf('2026-10-04T10:40:00') === 0);
+assert.strictEqual(commerce.shipdayOrderToUpdate([]), null);
+
+const activePicked = commerce.shipdayOrderToUpdate({
+    orderStatus: { orderState: 'ACTIVE' },
+    activityLog: { startTime: '2026-10-04T10:05:00', pickedUpTime: '2026-10-04T10:20:00' },
+    assignedCarrier: { name: 'Ravi', phoneNumber: '9800000000' }
+});
+assert.strictEqual(activePicked.kind, 'out_for_delivery');
+assert.strictEqual(activePicked.stage, 'out_for_delivery');
+const activeIdle = commerce.shipdayOrderToUpdate({
+    orderStatus: { orderState: 'ACTIVE', incomplete: false },
+    activityLog: { placementTime: '2026-10-04T10:00:00' }
+});
+assert.strictEqual(activeIdle.kind, 'update');
+assert.strictEqual(activeIdle.stage, null);
+
+assert.strictEqual(commerce.selectShipdayOrder([], '54298088', 'BK9'), null);
+assert.strictEqual(commerce.selectShipdayOrder([{ orderId: 1, orderNumber: 'OTHER' }], '54298088', 'BK9'), null);
+const selected = commerce.selectShipdayOrder(
+    [{ orderId: 20625, orderNumber: 'BK9', orderStatus: { orderState: 'PICKED_UP' } }],
+    '20625',
+    'BK9'
+);
+assert.strictEqual(selected.orderNumber, 'BK9');
+assert.strictEqual(commerce.mapShipdayStatus({ orderState: 'STARTED' }), 'to_store');
+
+const nestedHook = commerce.parseShipdayWebhook({
+    event: 'ORDER_PIKEDUP',
+    order_status: 'PICKED_UP',
+    order: { id: 20625, order_number: 'BK2', delivery_time: 1684644196000 },
+    carrier: { name: 'Asha', phone: '9111111111' }
+});
+assert.strictEqual(nestedHook.kind, 'out_for_delivery');
+assert.strictEqual(nestedHook.shipdayOrderId, '20625');
+assert.strictEqual(nestedHook.orderCode, 'BK2');
+assert.ok(nestedHook.detail.indexOf('9111111111') !== -1);
+
+assert.strictEqual(commerce.isDeskNoise('Created By API - Gogate Products - 884520'), true);
+assert.strictEqual(commerce.isDeskNoise('Deleted by 884520'), true);
+assert.strictEqual(commerce.isDeskNoise('Out for delivery'), false);
+
+const placed = commerce.shipdayOrderToUpdate({
+    orderStatus: { orderState: 'ORDER_ASSIGNED' },
+    restaurant: { latitude: 18.5, longitude: 73.8 },
+    customer: { latitude: 18.6, longitude: 73.9 },
+    assignedCarrier: { id: 12, name: 'Ravi' }
+});
+assert.strictEqual(placed.kind, 'agent_assigned');
+assert.strictEqual(placed.storeLat, 18.5);
+assert.strictEqual(placed.dropLng, 73.9);
+assert.strictEqual(placed.carrierId, '12');
+
+const shop = require('../lib/shop-timeline');
+const journey = require('../lib/book-tracking-journey');
+assert.strictEqual(journey.classifyScanStage('Pickup requested from courier partner', ''), 'ordered');
+assert.strictEqual(journey.classifyScanStage('Expected at Swargate Hub', ''), 'ordered');
+assert.strictEqual(journey.classifyScanStage('Shipment arrived at Courier Facility', ''), 'shipped');
+const onlyPickup = journey.buildAmazonStyleJourney({
+    status: 'confirmed',
+    fulfillmentType: 'courier',
+    commerceProvider: 'shipday',
+    commerceStage: 'pickup_scheduled',
+    courierShipmentStatus: 'shipped',
+    courierTrackStatus: 'in_transit',
+    events: [{ type: 'pickup_scheduled', title: 'Pickup requested from courier partner', at: '2026-10-04T10:00:00Z' }],
+    courierTrackEvents: [{ description: 'Created By API - Gogate Products - 884520', at: '2026-10-04T10:00:00Z' }]
+});
+assert.strictEqual(onlyPickup.headline, 'Ordered');
+assert.strictEqual(onlyPickup.providerLabel, 'Gogate Products');
+assert.ok(!onlyPickup.updateTimeline.some((row) => /created by api/i.test(row.title)));
+
+const noiseOrder = {
+    status: 'confirmed',
+    commerceStage: 'pickup_scheduled',
+    commerceMode: 'hyperlocal',
+    commerceProvider: 'shipday',
+    fulfillmentType: 'courier',
+    orderCode: 'BK1'
+};
+const noiseEvents = [
+    { title: 'Created By API - Gogate Products - 884520', detail: 'Book desk', city: 'Book desk', kind: 'update', at: '2026-10-04T10:00:00Z' },
+    { title: 'Deleted by 884520', detail: 'Book desk', city: 'Book desk', kind: 'update', at: '2026-10-04T10:01:00Z' },
+    { title: 'Pickup requested from courier partner', kind: 'pickup_scheduled', at: '2026-10-04T10:02:00Z' }
+];
+const noiseTl = shop.buildShopTimeline(noiseOrder, noiseEvents, {});
+const shippedStep = noiseTl.steps.find((s) => s.key === 'shipped');
+assert.strictEqual(shippedStep.title, 'Picked up');
+assert.notStrictEqual(shippedStep.state, 'done');
+const packedStep = noiseTl.steps.find((s) => s.key === 'packed');
+assert.ok(!packedStep.updates.some((u) => /created by api|deleted by/i.test(u.title)));
+assert.strictEqual(shop.buildLiveView(noiseOrder, noiseTl, 'map-key'), null);
+
+const assigned = Object.assign({}, noiseOrder, { agentName: 'Ravi', agentPhone: '9800000000', storeLat: 18.5, storeLng: 73.8, dropLat: 18.6, dropLng: 73.9, agentLat: 18.52, agentLng: 73.85, agentLocationAt: new Date().toISOString(), liveLeg: 'to_store' });
+const assignedTl = shop.buildShopTimeline(assigned, noiseEvents, {});
+const live = shop.buildLiveView(assigned, assignedTl, 'map-key');
+assert.ok(live);
+assert.strictEqual(live.leg, 'to_store');
+assert.ok(live.agent && live.store && live.drop);
+
+const deliveredTl = shop.buildShopTimeline(Object.assign({}, assigned, { status: 'delivered', commerceStage: 'delivered' }), [], {});
+const done = shop.buildLiveView(Object.assign({}, assigned, { status: 'delivered', commerceStage: 'delivered' }), deliveredTl, 'map-key');
+assert.strictEqual(done, null);
+
+const failedOrder = {
+    status: 'shipped',
+    commerceStage: 'out_for_delivery',
+    commerceMode: 'hyperlocal',
+    commerceProvider: 'tookan',
+    fulfillmentType: 'courier',
+    orderCode: 'BK5',
+    shippingPincode: '411009',
+    agentName: '',
+    agentPhone: '',
+    storeLat: 18.5,
+    storeLng: 73.8,
+    dropLat: 18.6,
+    dropLng: 73.9
+};
+const failedTl = shop.buildShopTimeline(
+    failedOrder,
+    [
+        { title: 'Out for delivery', kind: 'out_for_delivery', at: '2026-10-04T11:24:00Z' },
+        { title: 'Delivery attempt failed', kind: 'failed', at: '2026-10-04T11:27:00Z' }
+    ],
+    {}
+);
+assert.strictEqual(failedTl.operational, 'DELIVERY_ATTEMPT_FAILED');
+assert.strictEqual(failedTl.headline, 'Delivery attempt unsuccessful');
+const failedStep = failedTl.steps.find((s) => s.key === 'out_for_delivery');
+assert.ok(failedStep.reschedule && failedStep.reschedule.slots.length > 0);
+assert.ok(!failedStep.agent);
+assert.ok(!JSON.stringify(failedStep).includes('411009'));
+assert.strictEqual(shop.buildLiveView(failedOrder, failedTl, 'map-key'), null);
+
+const transitTl = shop.buildShopTimeline(
+    {
+        status: 'shipped',
+        commerceStage: 'in_transit',
+        commerceMode: 'logistics',
+        commerceProvider: 'tookan',
+        fulfillmentType: 'courier',
+        orderCode: 'BK1',
+        lineFill: 0.99
+    },
+    [
+        { title: 'Expected at Lonavala Hub', kind: 'hub_eta', city: 'Lonavala', at: '2026-10-05T06:00:00Z' },
+        { title: 'Shipment arrived at Courier Facility', kind: 'arrived_facility', city: 'Pune', at: '2026-10-04T08:00:00Z' }
+    ],
+    {}
+);
+const transitActive = transitTl.steps.find((s) => s.state === 'active');
+assert.strictEqual(transitActive.key, 'shipped');
+assert.strictEqual(transitActive.title, 'Shipped');
+assert.ok(transitActive.lineFill <= 88);
+assert.strictEqual(transitTl.steps.find((s) => s.key === 'out_for_delivery').state, 'upcoming');
+assert.strictEqual(transitTl.steps.find((s) => s.key === 'delivered').state, 'upcoming');
+
+assert.strictEqual(commerce.pidgeFulfillmentKind('PICKED_UP'), 'picked_up');
+assert.strictEqual(commerce.pidgeFulfillmentKind('DELIVERED'), 'delivered');
+assert.strictEqual(commerce.pidgeFulfillmentKind('UNDELIVERED'), 'failed');
+assert.strictEqual(commerce.pidgeFulfillmentKind('RTO_DELIVERED'), 'failed');
+assert.strictEqual(commerce.pidgeFulfillmentKind('OUT_FOR_DELIVERY'), 'out_for_delivery');
+assert.strictEqual(commerce.pidgeFulfillmentKind('IN_TRANSIT'), 'arrived_facility');
+assert.strictEqual(commerce.pidgeFulfillmentKind('CANCELLED'), 'pickup_scheduled');
+assert.strictEqual(commerce.stageFromKind('arrived_facility', 'logistics'), 'in_transit');
+
+const pidgeTransit = commerce.pidgePayloadToUpdate({ status: 'fulfilled', fulfillment: { status: 'IN_TRANSIT' } }, 'logistics');
+assert.strictEqual(pidgeTransit.kind, 'arrived_facility');
+assert.strictEqual(pidgeTransit.stage, 'in_transit');
+assert.strictEqual(pidgeTransit.title, 'Item arrived at courier facility');
+assert.strictEqual(pidgeTransit.city, '');
+assert.strictEqual(pidgeTransit.agentLat, null);
+
+const pidgeHyper = commerce.pidgePayloadToUpdate(
+    {
+        id: 'pidge-1',
+        reference_id: 'BKTEST',
+        status: 'fulfilled',
+        fulfillment: {
+            status: 'OUT_FOR_DELIVERY',
+            track_code: 'TRK1',
+            logs: [
+                {
+                    timestamp: '2026-10-05T10:00:00.000Z',
+                    status: 'OUT_FOR_DELIVERY',
+                    location: { latitude: 18.52, longitude: 73.85 },
+                    rider: { name: 'Asha', mobile: '9000000001' }
+                }
+            ]
+        }
+    },
+    'hyperlocal'
+);
+assert.strictEqual(pidgeHyper.kind, 'out_for_delivery');
+assert.strictEqual(pidgeHyper.agentName, 'Asha');
+assert.strictEqual(pidgeHyper.agentLat, 18.52);
+assert.strictEqual(pidgeHyper.trackingNo, 'TRK1');
+assert.strictEqual(pidgeHyper.pickupOtp, '');
+assert.strictEqual(pidgeHyper.deliveryOtp, '');
+assert.ok(!JSON.stringify(pidgeHyper).match(/otp":"[0-9]/i));
+
+const pidgeOtp = commerce.pidgePayloadToUpdate(
+    {
+        status: 'fulfilled',
+        fulfillment: {
+            status: 'OUT_FOR_DELIVERY',
+            track_code: 'AWB45',
+            pickup: { eta: '2026-10-06T04:30:00.000Z', pincode: '411001' },
+            drop: { eta: '2026-10-06T08:30:00.000Z', otp: '4455', pincode: '411009' }
+        }
+    },
+    'hyperlocal'
+);
+assert.strictEqual(pidgeOtp.deliveryOtp, '4455');
+assert.strictEqual(pidgeOtp.pickupOtp, '');
+assert.strictEqual(pidgeOtp.trackingNo, 'AWB45');
+assert.strictEqual(pidgeOtp.pickupAt, '2026-10-06T04:30:00.000Z');
+assert.strictEqual(pidgeOtp.deliveryAt, '2026-10-06T08:30:00.000Z');
+assert.ok(!JSON.stringify(pidgeOtp).includes('411009'));
+assert.ok(!JSON.stringify(pidgeOtp).includes('411001'));
+
+const pidgeGeneric = commerce.pidgePayloadToUpdate(
+    { status: 'fulfilled', fulfillment: { status: 'OUT_FOR_DELIVERY', otp: '7788' } },
+    'logistics'
+);
+assert.strictEqual(pidgeGeneric.deliveryOtp, '7788');
+assert.strictEqual(pidgeGeneric.pickupOtp, '');
+assert.strictEqual(pidgeGeneric.agentLat, null);
+
+const shipdayDated = commerce.shipdayOrderToUpdate({
+    orderNumber: 'BK1',
+    orderId: 9,
+    orderStatus: 'STARTED',
+    expectedDeliveryDate: '2026-10-06',
+    expectedDeliveryTime: '16:00:00',
+    expectedPickupTime: '14:00:00',
+    thirdPartyDeliveryOrder: { trackingId: 'AWB99' }
+});
+assert.strictEqual(shipdayDated.trackingNo, 'AWB99');
+assert.strictEqual(shipdayDated.deliveryOtp, '');
+assert.strictEqual(shipdayDated.pickupOtp, '');
+assert.ok(shipdayDated.pickupAt);
+assert.ok(shipdayDated.deliveryAt);
+assert.ok(shipdayDated.deliveryAt > shipdayDated.pickupAt);
+const shipdayOwn = commerce.shipdayOrderToUpdate({ orderNumber: 'BK1', orderId: 9, orderStatus: 'STARTED', trackingId: 'BK1' });
+assert.strictEqual(shipdayOwn.trackingNo, '');
+
+const pidgeLogistics = commerce.pidgePayloadToUpdate(
+    {
+        id: 'pidge-1',
+        status: 'fulfilled',
+        fulfillment: {
+            status: 'OUT_FOR_DELIVERY',
+            logs: [{ status: 'OUT_FOR_DELIVERY', location: { latitude: 18.52, longitude: 73.85 }, rider: { name: 'Asha', mobile: '9000000001' } }]
+        }
+    },
+    'logistics'
+);
+assert.strictEqual(pidgeLogistics.agentLat, null);
+assert.strictEqual(pidgeLogistics.agentName, null);
+
+const pidgeCompleted = commerce.pidgePayloadToUpdate({ status: 'completed', fulfillment: { status: 'RTO_DELIVERED' } }, 'logistics');
+assert.strictEqual(pidgeCompleted.kind, 'failed');
+const pidgeCompletedBare = commerce.pidgePayloadToUpdate({ status: 'completed' }, 'logistics');
+assert.notStrictEqual(pidgeCompletedBare.kind, 'delivered');
+const pidgeCancelled = commerce.pidgePayloadToUpdate({ id: 'x', status: 'cancelled' }, 'logistics');
+assert.strictEqual(pidgeCancelled.cancelOrder, true);
+assert.notStrictEqual(pidgeCancelled.kind, 'delivered');
+const pidgeRevert = commerce.pidgePayloadToUpdate({ status: 'pending', fulfillment: { status: 'CANCELLED' } }, 'hyperlocal');
+assert.strictEqual(pidgeRevert.kind, 'pickup_scheduled');
+assert.notStrictEqual(pidgeRevert.kind, 'failed');
+const pidgeReached = commerce.pidgePayloadToUpdate({ status: 'fulfilled', fulfillment: { status: 'REACHED_DELIVERY' } }, 'hyperlocal');
+assert.strictEqual(pidgeReached.kind, 'out_for_delivery');
+assert.strictEqual(pidgeReached.title, 'Delivery agent reached the drop location');
+assert.strictEqual(pidgeReached.stage, 'out_for_delivery');
+
+const pidgeCfg = commerce.normalizeCommerceConfig({
+    storeName: 'VGMF',
+    storePhone: '9123456780',
+    storeAddress: 'Clinic road',
+    storeCity: 'Pune',
+    storeState: 'Maharashtra',
+    storePincode: '411001',
+    defaultHyperlocalProvider: 'pidge',
+    pidge: { enabled: true, username: 'vendor1', password: 'secret-pass', channel: 'shop' }
+});
+assert.strictEqual(pidgeCfg.defaultHyperlocalProvider, 'pidge');
+const pidgePublic = commerce.publicConfigView(pidgeCfg);
+assert.ok(!JSON.stringify(pidgePublic).includes('secret-pass'));
+assert.strictEqual(pidgePublic.pidge.configured, true);
+assert.strictEqual(pidgePublic.pidge.channel, 'shop');
+const pidgeKept = commerce.mergeConfigSecrets(pidgeCfg, { pidge: { enabled: true, username: '', password: '', webhookToken: '' }, defaultHyperlocalProvider: 'pidge' });
+assert.strictEqual(pidgeKept.pidge.password, 'secret-pass');
+assert.strictEqual(pidgeKept.pidge.username, 'vendor1');
+assert.strictEqual(pidgeKept.defaultHyperlocalProvider, 'pidge');
+
+const pidgeBody = commerce.buildPidgeOrderBody(pidgeCfg, {
+    orderCode: 'BKTEST',
+    shippingPhone: '9876543210',
+    shippingRecipientName: 'Buyer',
+    deliveryAddress: 'Lane 1',
+    shippingCity: 'Pune',
+    shippingState: 'Maharashtra',
+    shippingPincode: '411009',
+    paymentMode: 'cod',
+    totalAmount: 100,
+    items: [{ title: 'Book', qty: 1, unitPrice: 100, book_id: 'b1' }],
+    pickupAtMs: Date.parse('2026-10-06T04:30:00.000Z'),
+    dropAtMs: Date.parse('2026-10-06T06:30:00.000Z')
+});
+const pidgeJson = JSON.stringify(pidgeBody);
+assert.strictEqual(pidgeBody.channel, 'shop');
+assert.strictEqual(pidgeBody.trips[0].source_order_id, 'BKTEST');
+assert.strictEqual(pidgeBody.trips[0].cod_amount, 100);
+assert.strictEqual(pidgeBody.trips[0].receiver_detail.address.country, 'India');
+assert.strictEqual(pidgeBody.sender_detail.address.state, 'Maharashtra');
+assert.strictEqual(pidgeBody.sender_detail.address.pincode, '411001');
+assert.strictEqual(pidgeBody.trips[0].receiver_detail.address.state, 'Maharashtra');
+assert.strictEqual(pidgeBody.trips[0].receiver_detail.address.pincode, '411009');
+const pidgeFromLine = commerce.buildPidgeOrderBody(
+    commerce.normalizeCommerceConfig({
+        storeName: 'VGMF',
+        storePhone: '9123456780',
+        storeAddress: 'Clinic road, Pune, Maharashtra 411001',
+        storeCity: 'Pune',
+        pidge: { enabled: true, username: 'vendor1', password: 'secret-pass' }
+    }),
+    {
+        orderCode: 'BKLINE',
+        shippingPhone: '9876543210',
+        shippingRecipientName: 'Buyer',
+        deliveryAddress: 'Lane 1, Pune, Maharashtra 411009',
+        paymentMode: 'prepaid',
+        totalAmount: 50,
+        items: [{ title: 'Book', qty: 1, unitPrice: 50 }]
+    }
+);
+assert.strictEqual(pidgeFromLine.sender_detail.address.state, 'Maharashtra');
+assert.strictEqual(pidgeFromLine.sender_detail.address.pincode, '411001');
+assert.strictEqual(pidgeFromLine.trips[0].receiver_detail.address.state, 'Maharashtra');
+assert.strictEqual(pidgeFromLine.trips[0].receiver_detail.address.pincode, '411009');
+assert.ok(!pidgeJson.includes('dead_weight'));
+assert.ok(!pidgeJson.includes('image_url'));
+assert.ok(!pidgeJson.includes('brand'));
+assert.ok(!pidgeJson.includes('secret-pass'));
+assert.strictEqual(commerce.pidgeWebhookAuthorized({ pidge: { webhookToken: '' } }, ''), true);
+assert.strictEqual(commerce.pidgeWebhookAuthorized({ pidge: { webhookToken: 'hook' } }, 'Bearer hook'), true);
+assert.strictEqual(commerce.pidgeWebhookAuthorized({ pidge: { webhookToken: 'hook' } }, 'nope'), false);
+
+function code128Bits(svg) {
+    const width = Number(svg.match(/viewBox="0 0 (\d+)/)[1]);
+    const bits = new Array(width).fill('0');
+    const re = /<rect x="(\d+)" y="0" width="(\d+)"/g;
+    let m;
+    while ((m = re.exec(svg))) {
+        const x = Number(m[1]);
+        const w = Number(m[2]);
+        for (let i = 0; i < w; i++) bits[x + i] = '1';
+    }
+    return bits.join('').slice(10, width - 10);
+}
+const codeA = commerce.code128Svg('A');
+assert.ok(codeA.includes('viewBox="0 0 66 '));
+assert.strictEqual(code128Bits(codeA), '1101001000010100011000100010110001100011101011');
+const codeOrder = commerce.code128Svg('BKLABEL1');
+assert.ok(codeOrder.includes('viewBox="0 0 143 '));
+assert.strictEqual(commerce.code128Svg(''), '');
+assert.strictEqual(commerce.code128Svg('हिंदी'), '');
+const qrMark = commerce.qrSvg('https://seminar.vaidyagogate.org/track-commerce?token=abc');
+assert.ok(qrMark.includes('<svg'));
+assert.ok(qrMark.includes('viewBox='));
+assert.strictEqual(commerce.qrSvg(''), '');
+
+const labelCfg = { storeName: 'VGMF', storeAddress: 'Clinic road', storeCity: 'Pune', storePhone: '9000000000' };
+const labelBase = String(process.env.PUBLIC_BASE_URL || process.env.SITE_URL || process.env.APP_URL || 'https://seminar.vaidyagogate.org')
+    .trim()
+    .replace(/\/$/, '');
+const labelHtml = commerce.labelHtml(
+    {
+        orderCode: 'BKLABEL1',
+        commerceProvider: 'pidge',
+        commerceMode: 'hyperlocal',
+        pickupOtp: '9999',
+        deliveryOtp: '1234',
+        commerceTrackUrl: '/track-commerce?token=abc123token',
+        courierTrackingNo: 'PIDGEAWB99',
+        pickupAt: '2026-10-05T06:00:00.000Z',
+        deliveryAt: '2026-10-05T10:00:00.000Z',
+        shippingRecipientName: 'Buyer',
+        deliveryAddress: 'Lane 1',
+        shippingCity: 'Pune',
+        shippingState: 'Maharashtra',
+        shippingPincode: '411009',
+        items: [{ title: 'Book', qty: 2 }]
+    },
+    labelCfg
+);
+assert.ok(!labelHtml.includes('data-sym="track-qr"'));
+assert.ok(!labelHtml.includes('Scan to track'));
+assert.ok(!labelHtml.includes('Track:'));
+assert.ok(!labelHtml.includes(labelBase + '/track-commerce?token=abc123token'));
+assert.ok(labelHtml.includes('data-status="SHIPPED"'));
+assert.ok(labelHtml.includes('Expected shipping '));
+assert.ok(labelHtml.includes('Expected delivery '));
+assert.ok(!labelHtml.includes('Expected pickup '));
+assert.ok(labelHtml.includes('>Picked up</b>'));
+assert.ok(!labelHtml.includes('>Shipped</b>'));
+assert.ok(labelHtml.includes('data-sym="order-qr"'));
+assert.ok(labelHtml.includes('data-sym="order-barcode"'));
+assert.ok(labelHtml.includes('data-sym="courier-qr"'));
+assert.ok(labelHtml.includes('data-sym="courier-barcode"'));
+assert.ok(labelHtml.includes('BKLABEL1'));
+assert.ok(labelHtml.includes('PIDGEAWB99'));
+assert.ok(labelHtml.includes('Gogate Products'));
+assert.ok(labelHtml.includes('Pickup OTP'));
+assert.ok(labelHtml.includes('9999'));
+assert.ok(labelHtml.includes('Delivery OTP'));
+assert.ok(labelHtml.includes('1234'));
+assert.ok(!labelHtml.includes('api.qrserver.com'));
+assert.ok(!labelHtml.includes('Delivery PIN'));
+assert.strictEqual((labelHtml.match(/data-sym="order-barcode"/g) || []).length, 1);
+
+const tookanLabel = commerce.labelHtml(
+    {
+        orderCode: 'BKLABEL1',
+        commerceProvider: 'tookan',
+        pickupOtp: '2468',
+        deliveryOtp: '1357',
+        pickupAt: '2026-10-05T06:00:00.000Z',
+        deliveryAt: '2026-10-05T10:00:00.000Z',
+        courierTrackingNo: 'BKLABEL1',
+        commerceTrackUrl: 'https://seminar.vaidyagogate.org/track-commerce?token=abc123token',
+        items: []
+    },
+    labelCfg
+);
+assert.ok(!tookanLabel.includes('data-sym="courier-barcode"'));
+assert.ok(!tookanLabel.includes('data-sym="courier-qr"'));
+assert.ok(!tookanLabel.includes('data-sym="track-qr"'));
+assert.ok(!tookanLabel.includes('https://seminar.vaidyagogate.org/track-commerce?token=abc123token'));
+assert.ok(tookanLabel.includes('>Shipped</b>'));
+assert.ok(tookanLabel.includes('Expected pickup '));
+assert.ok(tookanLabel.includes('Expected shipping '));
+assert.ok(tookanLabel.includes('Expected delivery '));
+assert.ok(tookanLabel.includes('2468'));
+assert.ok(tookanLabel.includes('1357'));
+assert.strictEqual((tookanLabel.match(/data-sym="order-barcode"/g) || []).length, 1);
+
+const bareLabel = commerce.labelHtml({ orderCode: 'ONLYCODE', commerceProvider: 'shipday', pickupOtp: '0000', items: [] }, labelCfg);
+assert.ok(bareLabel.includes('assigns an AWB'));
+assert.ok(!bareLabel.includes('<svg'));
+assert.ok(!bareLabel.includes('window.print'));
+assert.ok(!bareLabel.includes('Pickup OTP'));
+assert.ok(!bareLabel.includes('Delivery OTP'));
+const shipdayLabel = commerce.labelHtml(
+    {
+        orderCode: 'BKSHIP',
+        commerceProvider: 'shipday',
+        pickupOtp: '1111',
+        deliveryOtp: '2222',
+        courierTrackingNo: 'AWBSHIP',
+        items: []
+    },
+    labelCfg
+);
+assert.ok(!shipdayLabel.includes('Pickup OTP'));
+assert.ok(!shipdayLabel.includes('Delivery OTP'));
+assert.strictEqual(commerce.awbFromUpdate({ trackingNo: 'AWB45' }), 'AWB45');
+assert.strictEqual(commerce.awbFromUpdate({ barcode: 'BAR1' }), 'BAR1');
+assert.strictEqual(commerce.awbFromUpdate(null), '');
+
+const fleetCfg = commerce.normalizeCommerceConfig({
+    storeName: 'VGMF Book Desk',
+    storeAddress: '12 Main Road',
+    storeCity: 'Pune',
+    storeState: 'Maharashtra',
+    storePincode: '411001',
+    fleetbase: {
+        enabled: true,
+        apiHost: 'http://127.0.0.1:8095/',
+        secretKey: 'flb_test_secret',
+        hubs: 'Pune Hub | 12 Market Road, Pune, Maharashtra 411009\nBad line',
+        openBoxDelivery: true
+    }
+});
+assert.strictEqual(fleetCfg.fleetbase.apiHost, 'http://127.0.0.1:8095');
+assert.strictEqual(fleetCfg.fleetbase.enabled, true);
+const fleetOff = commerce.normalizeCommerceConfig({
+    fleetbase: { enabled: true, apiHost: '127.0.0.1:8095', secretKey: 'abc' }
+});
+assert.strictEqual(fleetOff.fleetbase.enabled, false);
+const fleetBody = commerce.buildFleetbaseOrderBody(fleetCfg, {
+    orderCode: 'BKFLEET1',
+    shippingRecipientName: 'Asha',
+    shippingPhone: '9000000001',
+    deliveryAddress: '44 Lake Road',
+    shippingCity: 'Pune',
+    shippingState: 'Maharashtra',
+    shippingPincode: '411009',
+    dropAtMs: Date.parse('2026-10-06T12:30:00Z'),
+    items: [{ title: 'Book', unitPrice: 100 }]
+});
+assert.strictEqual(fleetBody.pod_method, 'photo');
+const scanCfg = commerce.normalizeCommerceConfig({
+    storeName: 'VGMF Book Desk',
+    storeAddress: '12 Main Road',
+    storeCity: 'Pune',
+    storeState: 'Maharashtra',
+    storePincode: '411001',
+    fleetbase: { enabled: true, apiHost: 'http://127.0.0.1:8095', secretKey: 'flb_test_secret' }
+});
+assert.strictEqual(
+    commerce.buildFleetbaseOrderBody(scanCfg, {
+        orderCode: 'BKFLEET2',
+        deliveryAddress: '44 Lake Road',
+        shippingCity: 'Pune',
+        shippingState: 'Maharashtra',
+        shippingPincode: '411009'
+    }).pod_method,
+    'scan'
+);
+assert.strictEqual(fleetBody.pod_required, true);
+assert.strictEqual(fleetBody.meta.open_box_delivery, true);
+assert.strictEqual(fleetBody.meta.barcode_scan, true);
+assert.ok(fleetBody.pickup.indexOf('12 Main Road') !== -1);
+assert.ok(fleetBody.dropoff.indexOf('44 Lake Road') !== -1);
+assert.ok(!fleetBody.waypoints);
+const hopped = commerce.buildFleetbaseOrderBody(fleetCfg, {
+    orderCode: 'BKFLEET1',
+    shippingRecipientName: 'Asha',
+    deliveryAddress: '44 Lake Road',
+    shippingCity: 'Pune',
+    shippingState: 'Maharashtra',
+    shippingPincode: '411009',
+    networkWaypoints: [{ name: 'Pune Hub', address: '12 Market Road, Pune, Maharashtra 411009' }]
+});
+assert.deepStrictEqual(hopped.waypoints, ['Pune Hub, 12 Market Road, Pune, Maharashtra 411009']);
+assert.strictEqual(commerce.trackPath('abc123token', 'tookan'), '/track-commerce?token=abc123token');
+assert.strictEqual(commerce.trackPath('abc123token', 'fleetbase'), '/fleetbase/track/?token=abc123token');
+assert.strictEqual(fleetBody.meta.fulfillment, 'logistics');
+const codBody = commerce.buildFleetbaseOrderBody(scanCfg, {
+    orderCode: 'BKFLEETCOD',
+    deliveryAddress: '44 Lake Road',
+    shippingCity: 'Pune',
+    shippingState: 'Maharashtra',
+    shippingPincode: '411009',
+    paymentMode: 'cod',
+    totalAmount: 250
+});
+assert.strictEqual(codBody.meta.cod, true);
+assert.strictEqual(codBody.meta.cod_amount, 250);
+assert.ok(!JSON.stringify(fleetBody).match(/"otp"/));
+assert.throws(() => commerce.buildFleetbaseOrderBody(fleetCfg, { orderCode: 'X' }), /delivery address/);
+const hubUpdate = commerce.fleetbaseOrderToUpdate(
+    {
+        id: 'order_abc',
+        internal_id: 'BKFLEET1',
+        status: 'in_transit',
+        tracking_number: { tracking_number: 'FB-1001' },
+        tracking_statuses: [
+            { code: 'arrived', place_name: 'Pune Hub', city: 'Pune', updated_at: '2026-10-06T08:00:00.000Z' },
+            { code: 'arrived', details: 'Arrived at 411009' }
+        ],
+        payload: { pickup: { name: 'VGMF Book Desk' }, dropoff: { name: 'Asha' } },
+        meta: { postal_code: '411009' },
+        driver_assigned: { name: 'Ravi', phone: '9000000002', location: { latitude: 18.52, longitude: 73.85 } }
+    },
+    'logistics'
+);
+assert.strictEqual(hubUpdate.kind, 'arrived_facility');
+assert.strictEqual(hubUpdate.title, 'Arrived at Pune Hub');
+assert.strictEqual(hubUpdate.stage, 'in_transit');
+assert.strictEqual(hubUpdate.trackingNo, 'FB-1001');
+assert.strictEqual(hubUpdate.agentLat, null);
+assert.strictEqual(hubUpdate.pickupOtp, '');
+assert.strictEqual(hubUpdate.deliveryOtp, '');
+const phraseUpdate = commerce.fleetbaseOrderToUpdate(
+    {
+        id: 'order_phrase',
+        status: 'created',
+        tracking_statuses: [
+            { status: 'Shipment Created', code: 'CREATED' },
+            { status: 'Shipment Received at Local Hub- Pune Maharashtra, India', code: 'HUB_RECEIVED', city: 'Pune' },
+            { status: 'Shipment Left Local Hub- Pune Maharashtra, India', code: 'HUB_LEFT', city: 'Pune' }
+        ]
+    },
+    'logistics'
+);
+assert.strictEqual(phraseUpdate.kind, 'pickup_scheduled');
+assert.ok(phraseUpdate.events.some((ev) => ev.title === 'Shipment Received at Local Hub- Pune Maharashtra, India'));
+assert.ok(phraseUpdate.events.some((ev) => ev.title === 'Shipment Left Local Hub- Pune Maharashtra, India' && ev.kind === 'left_facility'));
+assert.ok(!JSON.stringify(hubUpdate).includes('411009'));
+const fleetOtp = commerce.fleetbaseOrderToUpdate(
+    {
+        id: 'order_otp',
+        status: 'out_for_delivery',
+        tracking_number: { tracking_number: 'FB-2002' },
+        proofs: [
+            { type: 'sms', otp: '4455' },
+            { type: 'pickup_sms', otp: '3322' }
+        ],
+        meta: { postal_code: '411009' },
+        scheduled_at: '2026-10-06T12:30:00.000Z',
+        driver_assigned: {
+            name: 'Ravi',
+            phone: '9000000002',
+            location: { latitude: 18.52, longitude: 73.85, updated_at: '2026-10-06T08:00:00.000Z' }
+        }
+    },
+    'hyperlocal'
+);
+assert.strictEqual(fleetOtp.deliveryOtp, '4455');
+assert.strictEqual(fleetOtp.pickupOtp, '3322');
+assert.strictEqual(fleetOtp.agentLat, 18.52);
+assert.strictEqual(fleetOtp.agentName, 'Ravi');
+assert.strictEqual(fleetOtp.deliveryAt, '2026-10-06T12:30:00.000Z');
+assert.strictEqual(fleetOtp.pickupAt, null);
+const fleetDates = commerce.fleetbaseOrderToUpdate(
+    {
+        id: 'order_dates',
+        status: 'created',
+        meta: {
+            expected_pickup_at: '2026-10-06T04:30:00.000Z',
+            expected_delivery_at: '2026-10-06T12:30:00.000Z'
+        },
+        scheduled_at: '2026-10-07T12:30:00.000Z'
+    },
+    'logistics'
+);
+assert.strictEqual(fleetDates.pickupAt, '2026-10-06T04:30:00.000Z');
+assert.strictEqual(fleetDates.deliveryAt, '2026-10-06T12:30:00.000Z');
+assert.ok(!JSON.stringify(fleetOtp).includes('411009'));
+assert.strictEqual(
+    commerce.fleetbaseOrderToUpdate({ id: 'order_done', status: 'completed', tracking_number: { tracking_number: 'FB-9' } }, 'logistics').kind,
+    'arrived_facility'
+);
+assert.strictEqual(
+    commerce.fleetbaseOrderToUpdate({ id: 'order_done_hl', status: 'completed', tracking_number: { tracking_number: 'FB-9' } }, 'hyperlocal').kind,
+    'delivered'
+);
+const fleetCancel = commerce.fleetbaseOrderToUpdate({ id: 'order_x', status: 'canceled' }, 'logistics');
+assert.strictEqual(fleetCancel.cancelOrder, true);
+assert.notStrictEqual(fleetCancel.kind, 'delivered');
+const fleetLabel = commerce.labelHtml(
+    {
+        orderCode: 'BKFLEET1',
+        commerceProvider: 'fleetbase',
+        courierTrackingNo: 'FB-1001',
+        openBox: true,
+        deliveryOtp: '4455',
+        commerceTrackUrl: '/track-commerce?token=abc123token',
+        items: []
+    },
+    labelCfg
+);
+assert.ok(fleetLabel.includes('FB-1001'));
+assert.ok(fleetLabel.includes('Open box delivery'));
+assert.ok(fleetLabel.includes('Delivery OTP'));
+assert.ok(fleetLabel.includes('4455'));
+assert.ok(fleetLabel.includes('data-sym="courier-barcode"'));
+assert.ok(fleetLabel.includes('<svg'));
 
 console.log('commerce phrase tests passed');
