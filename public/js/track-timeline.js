@@ -142,7 +142,8 @@
         const promised = dates.deliveryState === 'actual' && dates.promisedLabel
             ? '<p class="trk-date-note">Promised ' + esc(dates.promisedLabel) + '</p>'
             : '';
-        const fresh = dates.updatedAt
+        const repeatsDelivery = dates.deliveryState === 'actual' && /delivered/i.test(String(dates.updatedLabel || ''));
+        const fresh = dates.updatedAt && !repeatsDelivery
             ? '<span class="trk-date-fresh">Latest' + (dates.updatedLabel ? ' · ' + esc(dates.updatedLabel) : '') + ' · ' + esc(when(dates.updatedAt)) + '</span>'
             : '';
         return '<section class="trk-dates" aria-label="Shipping and delivery">' +
@@ -157,8 +158,9 @@
         const t = data.timeline;
         if (!t) return '';
         const animate = !opts || opts.animate !== false;
+        const settled = t.steps && t.steps.length && t.steps.every((step) => step.state === 'done');
         return (
-            '<div class="tl' + (animate ? '' : ' tl-static') + '">' +
+            '<div class="tl' + (animate ? '' : ' tl-static') + (settled ? ' is-settled' : '') + '">' +
             dateStrip(t) +
             t.steps
                 .map(

@@ -98,6 +98,14 @@
 .ship-pipe > li > .dot { position: absolute; left: 0; top: 0; width: 32px; height: 32px; border-radius: 50%; border: 2px solid #c7cccc; background: #fff; box-sizing: border-box; display: flex; align-items: center; justify-content: center; color: #8d9096; }
 .ship-pipe > li.done > .dot, .ship-pipe > li.active > .dot { background: #067d62; border-color: #067d62; color: #fff; }
 .ship-pipe > li.active > .dot { animation: trkPulse 2.4s ease-out infinite; }
+.ship-pipe > li:last-child { padding-bottom: 8px; }
+.trk.is-settled .ship-headway,
+.hl.is-settled .ship-headway,
+.tl.is-settled .tl-step.active .tl-dot::after { display: none; }
+.trk.is-settled .ship-pipe > li.active > .dot,
+.hl.is-settled .ship-pipe > li.active > .dot,
+.trk.is-settled .trk-rail li.active .trk-rail-ico,
+.hl.is-settled .trk-rail li.active .trk-rail-ico { animation: none; box-shadow: 0 0 0 1px #067d62; }
 .ship-pipe > li.done, .ship-pipe > li.active { color: #0f1111; }
 .ship-copy { min-width: 0; }
 .ship-title { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
@@ -278,6 +286,8 @@ body.hl-page .hl-below .ship-pipe { border: 0; background: #fff; border-radius: 
 .trk-rail-ico { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: #f3f4f6; margin: 0 auto 8px; position: relative; z-index: 1; border: 3px solid #fff; box-shadow: 0 0 0 1px #e5e7eb; }
 .trk-rail li.done .trk-rail-ico, .trk-rail li.active .trk-rail-ico { background: #067d62; color: #fff; box-shadow: 0 0 0 1px #067d62; }
 .trk-rail li.active .trk-rail-ico { animation: trkPulse 2.4s ease-out infinite; }
+.trk.is-settled .trk-line-note,
+.hl.is-settled .trk-line-note { color: #0f766e; font-weight: 700; }
 .trk-rail-name { display: block; line-height: 1.25; }
 .trk-facts, .trk-whens { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-top: 10px; }
 .trk-fact, .trk-when { background: #fff; border-radius: 16px; padding: 12px 14px; border: 1px solid #e6eeea; box-shadow: 0 8px 22px rgba(15, 23, 42, 0.04); }

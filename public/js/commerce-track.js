@@ -85,7 +85,10 @@
             return 'The line stays on ' + active.title + ' until the next attempt starts.';
         }
         const next = steps[index + 1];
-        if (!next) return 'The line has reached the bottom. This shipment is delivered.';
+        if (!next) {
+            const at = track.dates && track.dates.deliveryAt ? when(track.dates.deliveryAt) : '';
+            return at ? 'Delivered ' + at + '.' : 'This shipment is delivered.';
+        }
         if (active.key === 'PACKED') return 'The line moves down from the order time toward the expected pickup, and it stops before ' + next.title + '.';
         if (active.key === 'SHIPPED') return 'The line moves down from pickup toward the expected delivery, and it stops before ' + next.title + '.';
         if (active.key === 'OUT_FOR_DELIVERY') return 'The line moves down through the delivery window, and it stops before ' + next.title + '.';
@@ -108,7 +111,8 @@
                       (track.shipment.trackingId ? ' · Tracking ID ' + esc(track.shipment.trackingId) : '') +
                       '</div></li>'
                     : '';
-                const timed = step.state === 'active' && step.lineUntil;
+                const settled = track.mainStatus === 'DELIVERED';
+                const timed = step.state === 'active' && step.lineUntil && !settled;
                 const grow = '0';
                 const tick = timed
                     ? ' data-line-since="' + Number(step.lineSince) + '" data-line-until="' + Number(step.lineUntil) + '"'
@@ -338,7 +342,8 @@
         const promised = dates.deliveryState === 'actual' && dates.promisedLabel
             ? '<p class="trk-date-note">Promised ' + esc(dates.promisedLabel) + '</p>'
             : '';
-        const fresh = dates.updatedAt
+        const repeatsDelivery = dates.deliveryState === 'actual' && /delivered/i.test(String(dates.updatedLabel || ''));
+        const fresh = dates.updatedAt && !repeatsDelivery
             ? '<span class="trk-date-fresh">Latest' + (dates.updatedLabel ? ' · ' + esc(dates.updatedLabel) : '') + ' · ' + esc(when(dates.updatedAt)) + '</span>'
             : '';
         return '<section class="trk-dates" aria-label="Shipping and delivery">' +
@@ -363,7 +368,7 @@
         const stepNo = delivered ? steps.length : active && active.state === 'active' ? doneCount + 1 : doneCount;
         const board = dateBoard(track);
         const badge = board ? '' : timingBadge(track);
-        return '<div class="trk">' +
+        return '<div class="trk' + (delivered ? ' is-settled' : '') + '">' +
             '<header class="trk-bar"><div class="trk-brand"><span class="trk-mark">' + iconSvg('M3 8l9-4 9 4-9 4-9-4zM3 8v8l9 4 9-4V8') + '</span><div><div class="trk-brand-name">Gogate Products</div><div class="trk-brand-sub">Shipment tracking</div></div></div>' +
             '<div class="trk-actions">' +
             (code ? '<button type="button" class="trk-copy" data-copy="' + esc(code) + '">Copy order</button>' : '') +
@@ -371,7 +376,7 @@
             '</div></header>' +
             '<section class="trk-hero"><div class="trk-ring" style="--fill:0"><span class="trk-ring-ico">' + stepIcon(active.key) + '</span></div><div class="trk-hero-copy"><div class="trk-kicker">Order #' + esc(code) + (badge ? ' ' + badge : '') + '</div><h1>' + esc(track.currentStatus || track.currentMessage) + '</h1>' +
             (detail ? '<p>' + esc(detail) + '</p>' : '') +
-            '<p class="trk-stepno">Step ' + stepNo + ' of ' + (steps.length || 5) + '</p>' +
+            '<p class="trk-stepno">' + (delivered ? 'Completed' : 'Step ' + stepNo + ' of ' + (steps.length || 5)) + '</p>' +
             '</div>' + board + '</section>' +
             railHtml(track) +
             '<div class="trk-facts">' +
@@ -412,7 +417,8 @@
             : '<div class="hl-map hl-map-empty">The map appears when the store and delivery locations are available.</div>';
         const board = dateBoard(track);
         const badge = board ? '' : timingBadge(track);
-        return '<div class="hl hl-wide">' + map +
+        const settled = track.mainStatus === 'DELIVERED';
+        return '<div class="hl hl-wide' + (settled ? ' is-settled' : '') + '">' + map +
             '<section class="hl-sheet">' +
             '<header class="hl-brand"><span class="trk-mark">' + iconSvg('M3 8l9-4 9 4-9 4-9-4zM3 8v8l9 4 9-4V8') + '</span><div><div class="trk-brand-name">Gogate Products</div><div class="trk-brand-sub">Hyperlocal delivery</div></div></header>' +
             '<div class="hl-top"><div><div class="hl-kicker">Order #' + esc(track.orderId || shipment.orderCode || '') + (badge ? ' ' + badge : '') + '</div><h1>' + esc(track.currentStatus || track.currentMessage) + '</h1>' +
