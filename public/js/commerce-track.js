@@ -329,7 +329,7 @@
               : '';
         if (!shipped && !delivery) return '';
         const kind = (state) => (state === 'actual' ? 'Actual' : state === 'expected' ? 'Expected' : '');
-        const shipIco = '<img src="/img/delivery-rider.webp" alt="">';
+        const shipIco = '<img src="/media/delivery-rider.webp" alt="">';
         const dropIco = iconSvg('M12 21s7-6.2 7-11a7 7 0 10-14 0c0 4.8 7 11 7 11z');
         const tile = (label, state, value, ico, extra) =>
             value
@@ -399,7 +399,7 @@
             ? '<a class="hl-call" href="' + esc(href) + '" aria-label="Call delivery partner"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M6.6 10.8a15.1 15.1 0 006.6 6.6l2.2-2.2a1 1 0 011-.25 11.4 11.4 0 003.6.57 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 4a1 1 0 011-1h3.5a1 1 0 011 1 11.4 11.4 0 00.57 3.6 1 1 0 01-.25 1L6.6 10.8z"/></svg></a>'
             : '';
         const bike =
-            '<span class="hl-bike" aria-hidden="true"><img src="/img/delivery-rider.webp" alt=""></span>';
+            '<span class="hl-bike" aria-hidden="true"><img src="/media/delivery-rider.webp" alt=""></span>';
         const partner = '<div class="hl-partner">' + bike +
             '<div class="hl-partner-copy"><div class="lbl">Delivery partner</div><div class="hl-partner-name">' +
             esc(name || (href ? 'Delivery partner' : 'Finding a delivery partner')) + '</div></div>' +

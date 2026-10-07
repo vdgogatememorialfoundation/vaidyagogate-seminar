@@ -346,7 +346,7 @@
     const HOME_SVG =
         '<svg xmlns="http://www.w3.org/2000/svg" width="42" height="52" viewBox="0 0 42 52"><ellipse cx="21" cy="48" rx="8" ry="3" fill="#0f172a" opacity="0.18"/><path d="M21 46s14-12.4 14-25A14 14 0 1 0 7 21c0 12.6 14 25 14 25z" fill="#0f172a"/><circle cx="21" cy="20" r="8.5" fill="#fff"/><path d="M15 23.5V18l6-4.2 6 4.2v5.5h-4.2v-3.4h-3.6v3.4z" fill="#0f172a"/></svg>';
     // The scooter artwork faces right. A -90 degree turn points the front up so the map heading follows the road.
-    const RIDER_ICON = '/img/delivery-rider.webp';
+    const RIDER_ICON = '/media/delivery-rider.webp';
 
     function ensureRider(el) {
         if (el.__rider) return el.__rider;
