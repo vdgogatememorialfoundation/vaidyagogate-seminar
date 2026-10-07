@@ -9591,6 +9591,7 @@ app.post('/api/admin/registrations/:id/manual-checkin', (req, res) => {
     if (!Number.isInteger(rid) || rid < 1) {
         return res.status(400).json({ error: 'Invalid registration id' });
     }
+    const dayId = req.body && req.body.dayId != null && req.body.dayId !== '' ? parseInt(req.body.dayId, 10) : null;
     adminManualCheckin.performManualCheckin(
         db,
         {
@@ -9604,13 +9605,59 @@ app.post('/api/admin/registrations/:id/manual-checkin', (req, res) => {
         adminId,
         (err, result) => {
             if (err) return res.status(400).json({ error: err.message });
+            const dayName = result && result.dayTitle ? ' for ' + result.dayTitle : '';
+            const note = result && result.eligibilityNote ? ' ' + result.eligibilityNote : '';
+            const message =
+                dayId && result
+                    ? 'Checked in' + dayName + '.' + note
+                    : 'Manual check-in complete. Ticket marked scanned and certificate eligibility updated.';
             res.json({
                 success: true,
-                message: 'Manual check-in complete. Ticket marked scanned and certificate eligibility updated.',
+                message,
                 ...result
             });
-        }
+        },
+        { dayId }
     );
+});
+
+app.get('/api/admin/registrations/:id/checkin-days', (req, res) => {
+    const rid = parseInt(req.params.id, 10);
+    const adminId = parseInt(req.query.actingAdminId, 10);
+    if (!Number.isInteger(rid) || rid < 1) {
+        return res.status(400).json({ error: 'Invalid registration id' });
+    }
+    assertAdminPortalActor(adminId, (eAct) => {
+        if (eAct) {
+            return res.status(eAct.message === 'FORBIDDEN' || eAct.message === 'BAD_ACTOR' ? 403 : 500).json({
+                error: 'Admin access required'
+            });
+        }
+        adminManualCheckin.listCheckinState(db, rid, (err, state) => {
+            if (err) return res.status(400).json({ error: err.message });
+            res.json(state);
+        });
+    });
+});
+
+app.post('/api/admin/registrations/:id/issue-certificate', (req, res) => {
+    const rid = parseInt(req.params.id, 10);
+    const adminId = req.body && req.body.actingAdminId != null ? parseInt(req.body.actingAdminId, 10) : null;
+    const kind = req.body && req.body.kind;
+    if (!Number.isInteger(rid) || rid < 1) {
+        return res.status(400).json({ error: 'Invalid registration id' });
+    }
+    assertAdminPortalActor(adminId, (eAct) => {
+        if (eAct) {
+            return res.status(eAct.message === 'FORBIDDEN' || eAct.message === 'BAD_ACTOR' ? 403 : 500).json({
+                error: 'Admin access required'
+            });
+        }
+        adminManualCheckin.issueAttendanceCertificate(db, { certVerify }, rid, kind, (err, result) => {
+            if (err) return res.status(400).json({ error: err.message });
+            res.json(result);
+        });
+    });
 });
 
 app.post('/api/admin/applications/status', (req, res) => {
