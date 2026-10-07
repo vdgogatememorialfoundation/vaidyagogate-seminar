@@ -115,6 +115,43 @@
         return html;
     }
 
+    function dateStrip(t) {
+        const dates = (t && t.dates) || {};
+        const shipped = dates.shippedState === 'actual' && dates.shippedAt
+            ? when(dates.shippedAt)
+            : dates.shippedState === 'expected' && dates.shippedExpected
+              ? when(dates.shippedExpected)
+              : '';
+        const delivery = dates.deliveryState === 'actual' && dates.deliveryAt
+            ? when(dates.deliveryAt)
+            : dates.deliveryState === 'expected'
+              ? dates.deliveryLabel || ''
+              : '';
+        if (!shipped && !delivery && !t.deliveryBy) return '';
+        const kind = (state) => (state === 'actual' ? 'Actual' : state === 'expected' ? 'Expected' : '');
+        const tile = (label, state, value, extra) =>
+            value
+                ? '<article class="trk-date' + extra + '"><div class="trk-date-copy"><div class="trk-date-top"><span class="lbl">' + esc(label) + '</span>' +
+                  (state ? '<span class="kind is-' + esc(state) + '">' + esc(kind(state)) + '</span>' : '') +
+                  '</div><div class="val">' + esc(value) + '</div></div></article>'
+                : '';
+        const timing = t.timing;
+        const badge = timing && (timing.state === 'on_time' || timing.state === 'delayed')
+            ? '<span class="trk-pill ' + (timing.state === 'delayed' ? 'is-late' : 'is-ok') + '">' + esc(timing.label) + '</span>'
+            : '';
+        const promised = dates.deliveryState === 'actual' && dates.promisedLabel
+            ? '<p class="trk-date-note">Promised ' + esc(dates.promisedLabel) + '</p>'
+            : '';
+        const fresh = dates.updatedAt
+            ? '<span class="trk-date-fresh">Latest' + (dates.updatedLabel ? ' · ' + esc(dates.updatedLabel) : '') + ' · ' + esc(when(dates.updatedAt)) + '</span>'
+            : '';
+        return '<section class="trk-dates" aria-label="Shipping and delivery">' +
+            tile('Shipping', dates.shippedState, shipped, '') +
+            tile('Delivery', dates.deliveryState, delivery, ' is-delivery') +
+            (!shipped && !delivery && t.deliveryBy ? tile('Delivery', 'expected', t.deliveryBy, ' is-delivery') : '') +
+            '<div class="trk-date-meta">' + badge + promised + fresh + '</div></section>';
+    }
+
     /** data: { timeline, live, awbTrackUrl, trackUrl }; opts: { animate } */
     function render(data, opts) {
         const t = data.timeline;
@@ -122,14 +159,14 @@
         const animate = !opts || opts.animate !== false;
         return (
             '<div class="tl' + (animate ? '' : ' tl-static') + '">' +
-            (t.deliveryBy ? '<div class="tl-sum">Delivery by ' + esc(t.deliveryBy) + '</div>' : '') +
+            dateStrip(t) +
             t.steps
                 .map(
                     (s, i) =>
                         '<div class="tl-step ' + s.state + '"' +
                         (s.lineUntil ? ' data-line-since="' + Number(s.lineSince) + '" data-line-until="' + Number(s.lineUntil) + '" data-line-floor="' + Number(s.lineFloor || 12) + '"' : '') +
                         ' style="--i:' + i + (s.lineFill != null ? ';--line:' + Number(s.lineFill) : '') + '"><div class="tl-dot">' + (s.state === 'done' ? '&#10003;' : '') + '</div>' +
-                        '<div class="tl-title">' + esc(s.title) + (s.expectedLabel ? '<span class="tl-expect">' + esc(s.expectedLabel) + '</span>' : '') + (s.at && s.state !== 'upcoming' ? '<span class="tl-time">' + esc(when(s.at)) + '</span>' : '') + '</div>' +
+                        '<div class="tl-title">' + esc(s.title) + (s.expectedLabel && s.state !== 'done' && !(s.at && s.state === 'active') ? '<span class="tl-expect">' + esc(s.expectedLabel) + '</span>' : '') + (s.at && s.state !== 'upcoming' ? '<span class="tl-time">' + esc(when(s.at)) + '</span>' : '') + '</div>' +
                         (s.summary ? '<div class="tl-sum">' + esc(s.summary) + '</div>' : '') +
                         extra(s, data) +
                         updates(s.updates) +

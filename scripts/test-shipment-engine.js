@@ -345,6 +345,9 @@ assert.strictEqual(datedShop.steps.find((s) => s.key === 'shipped').title, 'Pick
 assert.strictEqual(datedShop.steps.find((s) => s.key === 'shipped').updates.length, 0);
 assert.strictEqual(datedShop.steps.find((s) => s.key === 'shipped').expectedLabel, 'Expected shipping ' + engine.expectedWhen('2026-10-05T06:00:00.000Z'));
 assert.strictEqual(datedShop.steps.find((s) => s.key === 'out_for_delivery').expectedLabel, 'Expected delivery ' + engine.expectedWhen('2026-10-05T10:00:00.000Z'));
+assert.strictEqual(datedShop.dates.shippedState, 'expected');
+assert.strictEqual(datedShop.dates.deliveryState, 'expected');
+assert.ok(datedShop.timing);
 assert.strictEqual(preview.route, 'dotted');
 assert.strictEqual(
     shop.buildLiveView(
@@ -437,6 +440,34 @@ assert.strictEqual(earlyDrop.deliveryBy, '');
 assert.strictEqual(earlyDrop.timing.state, 'on_time');
 assert.strictEqual(earlyDrop.timing.label, 'On time');
 assert.strictEqual(earlyDrop.timing.deliveredAt, '2026-10-06T08:04:00.000Z');
+assert.strictEqual(earlyDrop.dates.shippedAt, null);
+assert.strictEqual(earlyDrop.dates.deliveryState, 'actual');
+assert.strictEqual(earlyDrop.dates.deliveryAt, '2026-10-06T08:04:00.000Z');
+assert.ok(earlyDrop.dates.promisedLabel);
+assert.strictEqual(earlyDrop.dates.deliveryLabel, '');
+assert.strictEqual(earlyDrop.dates.updatedAt, '2026-10-06T08:04:00.000Z');
+assert.strictEqual(earlyDrop.dates.updatedLabel, 'Your order has been delivered');
+
+const scannedDates = engine.buildCustomerTracking(
+    {
+        orderCode: 'BKSCAN',
+        commerceStage: 'in_transit',
+        commerceMode: 'logistics',
+        commerceProvider: 'tookan',
+        pickupAt: '2026-10-07T04:30:00.000Z',
+        deliveryAt: '2026-10-07T05:30:00.000Z'
+    },
+    [
+        { title: 'Shipment left origin', kind: 'left_facility', detail: 'Origin', at: '2026-10-06T07:11:00.000Z' },
+        { title: 'Arrived at Dapoli HUB - Dapoli', kind: 'arrived_facility', detail: 'Dapoli HUB - Dapoli', city: 'Dapoli', at: '2026-10-06T07:26:00.000Z' }
+    ],
+    { now: Date.parse('2026-10-06T09:00:00.000Z') }
+);
+assert.strictEqual(scannedDates.dates.shippedState, 'actual');
+assert.strictEqual(scannedDates.dates.shippedAt, '2026-10-06T07:11:00.000Z');
+assert.strictEqual(scannedDates.dates.deliveryState, 'expected');
+assert.ok(scannedDates.dates.deliveryLabel);
+assert.strictEqual(scannedDates.dates.deliveryAt, null);
 assert.ok(earlyDrop.timeline.some((ev) => ev.parentStage === 'DELIVERED' && ev.message === 'Your order has been delivered'));
 
 const lateShip = engine.buildCustomerTracking(

@@ -315,6 +315,38 @@
         return factCard('Delivery attempt', String(attempt.attemptNumber), windowText ? '<div class="where">' + esc(windowText) + '</div>' : '');
     }
 
+    function dateBoard(track) {
+        const dates = (track && track.dates) || {};
+        const shipped = dates.shippedState === 'actual' && dates.shippedAt
+            ? when(dates.shippedAt)
+            : dates.shippedState === 'expected' && dates.shippedExpected
+              ? when(dates.shippedExpected)
+              : '';
+        const delivery = dates.deliveryState === 'actual' && dates.deliveryAt
+            ? when(dates.deliveryAt)
+            : dates.deliveryState === 'expected'
+              ? dates.deliveryLabel || ''
+              : '';
+        if (!shipped && !delivery) return '';
+        const kind = (state) => (state === 'actual' ? 'Actual' : state === 'expected' ? 'Expected' : '');
+        const shipIco = iconSvg('M3 7h11v8H3zM14 10h4l3 3v2h-7zM7 18a2 2 0 100-4 2 2 0 000 4zM18 18a2 2 0 100-4 2 2 0 000 4z');
+        const dropIco = iconSvg('M12 21s7-6.2 7-11a7 7 0 10-14 0c0 4.8 7 11 7 11z');
+        const tile = (label, state, value, ico, extra) =>
+            value
+                ? '<article class="trk-date' + (extra || '') + '"><span class="trk-date-ico" aria-hidden="true">' + ico + '</span><div class="trk-date-copy"><div class="trk-date-top"><span class="lbl">' + esc(label) + '</span><span class="kind is-' + esc(state) + '">' + esc(kind(state)) + '</span></div><div class="val">' + esc(value) + '</div></div></article>'
+                : '';
+        const promised = dates.deliveryState === 'actual' && dates.promisedLabel
+            ? '<p class="trk-date-note">Promised ' + esc(dates.promisedLabel) + '</p>'
+            : '';
+        const fresh = dates.updatedAt
+            ? '<span class="trk-date-fresh">Latest' + (dates.updatedLabel ? ' · ' + esc(dates.updatedLabel) : '') + ' · ' + esc(when(dates.updatedAt)) + '</span>'
+            : '';
+        return '<section class="trk-dates" aria-label="Shipping and delivery">' +
+            tile('Shipping', dates.shippedState, shipped, shipIco, '') +
+            tile('Delivery', dates.deliveryState, delivery, dropIco, ' is-delivery') +
+            '<div class="trk-date-meta">' + (timingBadge(track) || '') + promised + fresh + '</div></section>';
+    }
+
     function documentHtml(track, shipment) {
         const courier = (track.shipment && track.shipment.courier) || 'Gogate Products';
         const mode = track.fulfillmentType === 'HYPERLOCAL' ? 'Hyperlocal delivery' : 'Logistics';
@@ -329,9 +361,8 @@
         const doneCount = steps.filter((step) => step.state === 'done').length;
         const delivered = active && active.key === 'DELIVERED' && active.state === 'active';
         const stepNo = delivered ? steps.length : active && active.state === 'active' ? doneCount + 1 : doneCount;
-        const badge = timingBadge(track);
-        const deliveredAt = track.timing && track.timing.deliveredAt ? when(track.timing.deliveredAt) : '';
-        const routeArt = '<span class="trk-route" aria-hidden="true"><svg viewBox="0 0 128 40" width="128" height="40"><path class="trk-route-base" d="M4 30 C 22 30, 22 10, 42 10 S 62 30, 82 30 S 104 10, 124 10"/><path class="trk-route-move" d="M4 30 C 22 30, 22 10, 42 10 S 62 30, 82 30 S 104 10, 124 10"/></svg></span>';
+        const board = dateBoard(track);
+        const badge = board ? '' : timingBadge(track);
         return '<div class="trk">' +
             '<header class="trk-bar"><div class="trk-brand"><span class="trk-mark">' + iconSvg('M3 8l9-4 9 4-9 4-9-4zM3 8v8l9 4 9-4V8') + '</span><div><div class="trk-brand-name">Gogate Products</div><div class="trk-brand-sub">Shipment tracking</div></div></div>' +
             '<div class="trk-actions">' +
@@ -341,14 +372,12 @@
             '<section class="trk-hero"><div class="trk-ring" style="--fill:0"><span class="trk-ring-ico">' + stepIcon(active.key) + '</span></div><div class="trk-hero-copy"><div class="trk-kicker">Order #' + esc(code) + (badge ? ' ' + badge : '') + '</div><h1>' + esc(track.currentStatus || track.currentMessage) + '</h1>' +
             (detail ? '<p>' + esc(detail) + '</p>' : '') +
             '<p class="trk-stepno">Step ' + stepNo + ' of ' + (steps.length || 5) + '</p>' +
-            '</div>' + routeArt + '</section>' +
+            '</div>' + board + '</section>' +
             railHtml(track) +
             '<div class="trk-facts">' +
             factCard('Courier', courier) +
             factCard('Service', mode) +
             (trackingId ? factCard('Tracking ID', trackingId, '<button type="button" class="trk-copy trk-copy-mini" data-copy="' + esc(trackingId) + '">Copy</button>') : '') +
-            (deliveredAt ? factCard('Delivered', deliveredAt) : '') +
-            (track.deliveryBy ? factCard('Delivery by', track.deliveryBy) : '') +
             attemptCard(track) +
             '</div>' +
             (expects ? '<div class="trk-whens">' + expects + '</div>' : '') +
@@ -381,7 +410,8 @@
             ? '<div class="hl-map"><div id="tl-map-slot"></div><div class="hl-legend">' + livePill +
               '<span><i class="is-store"></i>Store</span><span><i class="is-road"></i>Route</span><span><i class="is-home"></i>Delivery</span></div></div>'
             : '<div class="hl-map hl-map-empty">The map appears when the store and delivery locations are available.</div>';
-        const badge = timingBadge(track);
+        const board = dateBoard(track);
+        const badge = board ? '' : timingBadge(track);
         return '<div class="hl hl-wide">' + map +
             '<section class="hl-sheet">' +
             '<header class="hl-brand"><span class="trk-mark">' + iconSvg('M3 8l9-4 9 4-9 4-9-4zM3 8v8l9 4 9-4V8') + '</span><div><div class="trk-brand-name">Gogate Products</div><div class="trk-brand-sub">Hyperlocal delivery</div></div></header>' +
@@ -390,8 +420,8 @@
             (track.map.live ? '' : '<p class="hl-wait">The route stays dotted until a delivery partner location arrives.</p>') +
             '</div><div id="tl-eta" class="hl-eta" hidden><span class="hl-eta-lbl">Arriving</span><b class="hl-eta-val"></b></div></div>' +
             railHtml(track) +
+            board +
             (track.dropLabel ? '<div class="hl-drop"><div class="lbl">Delivering to</div><div class="val">' + esc(track.dropLabel) + '</div></div>' : '') +
-            deliveryHtml(track) +
             '<div class="hl-note"><button type="button" class="hl-note-toggle" id="hl-note-toggle"><span class="hl-plus" aria-hidden="true">+</span><span><b>' +
             (note ? 'Delivery instructions' : 'Add delivery instructions') + '</b>' +
             (note ? '<span class="hl-note-text">' + esc(note) + '</span>' : '<span class="hl-note-hint">Saved with your order</span>') +
