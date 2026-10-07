@@ -345,35 +345,8 @@
         '<svg xmlns="http://www.w3.org/2000/svg" width="42" height="52" viewBox="0 0 42 52"><ellipse cx="21" cy="48" rx="8" ry="3" fill="#0f172a" opacity="0.18"/><path d="M21 46s14-12.4 14-25A14 14 0 1 0 7 21c0 12.6 14 25 14 25z" fill="#0f766e"/><circle cx="21" cy="20" r="8.5" fill="#fff"/><path d="M15.5 24.5v-7h11v7M15.5 20.5h11M18 17.5V16h6v1.5" fill="none" stroke="#0f766e" stroke-width="1.6" stroke-linejoin="round"/></svg>';
     const HOME_SVG =
         '<svg xmlns="http://www.w3.org/2000/svg" width="42" height="52" viewBox="0 0 42 52"><ellipse cx="21" cy="48" rx="8" ry="3" fill="#0f172a" opacity="0.18"/><path d="M21 46s14-12.4 14-25A14 14 0 1 0 7 21c0 12.6 14 25 14 25z" fill="#0f172a"/><circle cx="21" cy="20" r="8.5" fill="#fff"/><path d="M15 23.5V18l6-4.2 6 4.2v5.5h-4.2v-3.4h-3.6v3.4z" fill="#0f172a"/></svg>';
-    // Front of the bike points up so a map heading rotates it along the road.
-    const RIDER_BIKE =
-        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="88" height="88" aria-hidden="true">' +
-        '<defs>' +
-        '<linearGradient id="tlBikePaint" x1="48" y1="18" x2="48" y2="78" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fb923c"/><stop offset="0.55" stop-color="#ea580c"/><stop offset="1" stop-color="#9a3412"/></linearGradient>' +
-        '<radialGradient id="tlHelmet" cx="38%" cy="32%" r="68%"><stop offset="0" stop-color="#fff7ed"/><stop offset="0.5" stop-color="#fb923c"/><stop offset="1" stop-color="#7c2d12"/></radialGradient>' +
-        '</defs>' +
-        '<path d="M48 8l7 8H41z" fill="#ea580c"/>' +
-        '<g class="tl-wheel tl-wheel-front"><circle cx="48" cy="28" r="10" fill="#f8fafc" stroke="#0f172a" stroke-width="4"/>' +
-        '<circle cx="48" cy="28" r="6.2" fill="none" stroke="#94a3b8" stroke-width="1.2"/>' +
-        '<path d="M48 19.4v17.2M38.4 28h19.2M41.2 21.2l13.6 13.6M54.8 21.2L41.2 34.8" stroke="#e2e8f0" stroke-width="1" stroke-linecap="round"/>' +
-        '<circle cx="48" cy="28" r="1.8" fill="#ea580c"/></g>' +
-        '<g class="tl-wheel tl-wheel-rear"><circle cx="48" cy="70" r="12.5" fill="#f8fafc" stroke="#0f172a" stroke-width="4.4"/>' +
-        '<circle cx="48" cy="70" r="8" fill="none" stroke="#94a3b8" stroke-width="1.3"/>' +
-        '<path d="M48 59.2v21.6M36.4 70h23.2M39.6 61.6l16.8 16.8M56.4 61.6L39.6 78.4" stroke="#e2e8f0" stroke-width="1.1" stroke-linecap="round"/>' +
-        '<circle cx="48" cy="70" r="2.1" fill="#ea580c"/></g>' +
-        '<path d="M48 36.5v16" stroke="url(#tlBikePaint)" stroke-width="6" stroke-linecap="round"/>' +
-        '<path d="M48 52.5c-8 1.2-12 8-11 16M48 52.5c8 1.2 12 8 11 16" fill="none" stroke="url(#tlBikePaint)" stroke-width="3.4" stroke-linecap="round"/>' +
-        '<path d="M34 22h28" stroke="#0f172a" stroke-width="3.2" stroke-linecap="round"/>' +
-        '<path d="M36 22v5M60 22v5" stroke="#0f172a" stroke-width="3" stroke-linecap="round"/>' +
-        '<path d="M40 48c-8-2-12-14-6-22" fill="none" stroke="#fdba74" stroke-width="3.6" stroke-linecap="round"/>' +
-        '<path d="M56 48c8-2 12-14 6-22" fill="none" stroke="#c2410c" stroke-width="3.6" stroke-linecap="round"/>' +
-        '<circle cx="34" cy="24" r="2.4" fill="#fff7ed" stroke="#9a3412" stroke-width="0.6"/>' +
-        '<circle cx="62" cy="24" r="2.4" fill="#fff7ed" stroke="#9a3412" stroke-width="0.6"/>' +
-        '<path d="M39 46c2-5 16-5 18 0l-1 9c-2.4 3.2-13.6 3.2-16 0z" fill="#fff" stroke="#cbd5e1" stroke-width="0.7"/>' +
-        '<circle cx="48" cy="38" r="8.4" fill="url(#tlHelmet)" stroke="#9a3412" stroke-width="0.7"/>' +
-        '<path d="M40.2 40.2h15.6" stroke="#431407" stroke-width="2" stroke-linecap="round"/>' +
-        '<path d="M44 36.5h8" stroke="#fff7ed" stroke-width="1.3" stroke-linecap="round" opacity="0.8"/>' +
-        '</svg>';
+    // The scooter artwork faces right. A -90 degree turn points the front up so the map heading follows the road.
+    const RIDER_ICON = '/img/delivery-rider.webp';
 
     function ensureRider(el) {
         if (el.__rider) return el.__rider;
@@ -387,7 +360,7 @@
         Rider.prototype.onAdd = function () {
             const div = document.createElement('div');
             div.className = 'tl-rider';
-            div.innerHTML = '<div class="tl-rider-pulse"></div><div class="tl-rider-plate"></div><div class="tl-rider-aim"><div class="tl-rider-bob">' + RIDER_BIKE + '</div></div>';
+            div.innerHTML = '<div class="tl-rider-pulse"></div><div class="tl-rider-plate"></div><div class="tl-rider-aim"><div class="tl-rider-bob"><img class="tl-rider-img" alt="" src="' + RIDER_ICON + '"></div></div>';
             this.div = div;
             this.getPanes().overlayMouseTarget.appendChild(div);
         };
