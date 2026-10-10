@@ -192,6 +192,13 @@
                 <a class="menu-item" data-admin-module="tab-system-platform" onclick="switchTab('tab-system-platform'); initAdminSystemHealth('platform');"><i class="fas fa-server"></i> System health</a>
                 <a class="menu-item" data-admin-module="tab-system-users" onclick="switchTab('tab-system-users'); initAdminSystemHealth('users');"><i class="fas fa-users-cog"></i> User health</a>
                 <a class="menu-item" data-admin-module="tab-settings" onclick="switchTab('tab-settings'); initAdminBrandingPreview();"><i class="fas fa-cogs"></i> Global Settings</a>
+                <div class="menu-item" data-admin-module="tab-commerce" style="margin:18px 12px 6px;padding-top:12px;border-top:1px solid #e2e8f0;font-size:0.68rem;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#64748b;pointer-events:none;">Commerce</div>
+                <a class="menu-item" data-admin-module="tab-commerce" style="padding-left:28px;" onclick="openCommercePanel('desk')"><i class="fas fa-clipboard-list"></i> Order desk</a>
+                <a class="menu-item" data-admin-module="tab-commerce" style="padding-left:28px;" onclick="openCommercePanel('book')"><i class="fas fa-truck"></i> Schedule pickup</a>
+                <a class="menu-item" data-admin-module="tab-commerce" style="padding-left:28px;" onclick="openCommercePanel('track')"><i class="fas fa-map-marked-alt"></i> Shipment tracking</a>
+                <a class="menu-item" data-admin-module="tab-commerce" style="padding-left:28px;" style="padding-left:28px;" onclick="openCommercePanel('returns')"><i class="fas fa-undo"></i> Returns &amp; replacements</a>
+                <a class="menu-item" data-admin-module="tab-commerce" style="padding-left:28px;" onclick="openCommercePanel('labels')"><i class="fas fa-tag"></i> Shipping labels</a>
+                <a class="menu-item" data-admin-module="tab-commerce" style="padding-left:28px;" onclick="openCommercePanel('settings')"><i class="fas fa-key"></i> Shop settings</a>
             </div>
         </aside>
 
@@ -495,6 +502,18 @@
                     <select id="feedback-seminar-filter" onchange="loadFeedbackForSeminar()" style="margin-bottom: 20px;">
                         <option value="">-- Select Seminar --</option>
                     </select>
+
+                    <div id="feedback-email-card" style="margin:0 0 20px;padding:16px;border:1px solid #bae6fd;border-radius:10px;background:#f0f9ff;">
+                        <h3 style="margin:0 0 8px;color:#0369a1;">Email checked-in participants</h3>
+                        <p style="margin:0 0 12px;color:#475569;font-size:0.9rem;">Send one feedback email to every doctor who checked in on the days you select. Someone who attended only one day is included when that day is selected. Someone who attended both days receives a single email.</p>
+                        <div id="feedback-email-days" style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:12px;"></div>
+                        <label for="feedback-email-subject" style="font-weight:600;">Subject</label>
+                        <input type="text" id="feedback-email-subject" style="width:100%;max-width:640px;padding:8px;margin:6px 0 12px;border:1px solid #cbd5e1;border-radius:8px;" placeholder="Select a seminar to prepare the email">
+                        <label for="feedback-email-body" style="font-weight:600;">Message</label>
+                        <textarea id="feedback-email-body" rows="6" style="width:100%;max-width:640px;padding:8px;margin-top:6px;border:1px solid #cbd5e1;border-radius:8px;" placeholder="Thank them and ask for feedback"></textarea>
+                        <p id="feedback-email-status" style="margin:8px 0;font-size:0.88rem;color:#475569;"></p>
+                        <button type="button" class="btn-primary" onclick="sendFeedbackEmailToCheckedIn()"><i class="fas fa-paper-plane"></i> Email checked-in participants</button>
+                    </div>
                     
                     <div id="feedback-stats" style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; margin-bottom: 20px;">
                         <div class="card" style="margin-bottom: 0;">
@@ -1730,6 +1749,13 @@
                 </div>
             </div>
 
+            <div id="tab-commerce" class="tab-pane hidden">
+                <h2 style="margin-bottom:6px;">Commerce</h2>
+                <p style="color:#64748b;margin-bottom:14px;">Book orders placed by doctors show here even when the doctor book-order screen is closed. Accept, prepare, and mark ready to schedule pickup. Tookan covers logistics and hyperlocal. Shipday covers hyperlocal pickup and delivery.</p>
+                <div id="commerce-subnav" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;"></div>
+                <div id="commerce-panel"></div>
+            </div>
+
             <!-- Payments module -->
             <div id="tab-admin-payments" class="tab-pane hidden">
                 <h2 style="margin-bottom: 16px;">Payments &amp; refunds</h2>
@@ -1891,7 +1917,7 @@
             <!-- Certificate management -->
             <div id="tab-certificates" class="tab-pane hidden cert-mgmt-theme">
                 <h2 class="cert-mgmt-heading">Certificate Management</h2>
-                <p class="cert-mgmt-intro">Apply the <strong>VGMF gold certificate design</strong> for <strong>participant</strong> and <strong>volunteer</strong> separately, then enable each type from the candidates list (switch Template type). Participation certificates require venue check-in; volunteer certificates can be enabled for approved volunteers. Each certificate must show <strong>PRN No.</strong>, <strong>Application No.</strong>, and a <strong>verification QR</strong>.</p>
+                <p class="cert-mgmt-intro">Apply the <strong>VGMF gold certificate design</strong> for <strong>participant</strong> and <strong>volunteer</strong> separately, then enable each type from the candidates list (switch Template type). Check someone in for a specific event day without the scanner. From those days you can issue a <strong>volunteering certificate</strong> and a <strong>participation certificate</strong> for volunteers, and a <strong>participation certificate</strong> for delegates. Each certificate must show <strong>PRN No.</strong>, <strong>Application No.</strong>, and a <strong>verification QR</strong>.</p>
                 <div class="card cert-mgmt-card">
                     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-bottom:16px;">
                         <div>
@@ -1949,7 +1975,7 @@
                 </div>
                 <div class="card cert-mgmt-card" style="margin-top:16px;">
                     <h3 style="margin:0 0 8px;color:#92400e;">Public verification &amp; dispatch</h3>
-                    <p style="font-size:0.85rem;color:#78716c;margin:0 0 12px;">Turn on the public certificate verification page at <code>/verify-certificate</code>. Visitors must pass <strong>email and WhatsApp one-time password</strong> to confirm authenticity. You may enable verification manually before the seminar ends, or schedule an opening date and time.</p>
+                    <p style="font-size:0.85rem;color:#78716c;margin:0 0 12px;">Turn on the public certificate verification page at <code>/verify-certificate</code>. Visitors who type an application number confirm with an <strong>email one-time password</strong>. Scanning the certificate QR opens the seminar and certificate details directly. WhatsApp OTP is not used. You may enable verification manually before the seminar ends, or schedule an opening date and time.</p>
                     <label style="display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:8px;">
                         <input type="checkbox" id="cert-verify-enabled" onchange="saveCertVerifyEnabled()">
                         Enable public certificate verification for this seminar
@@ -1965,7 +1991,21 @@
                     </div>
                     <p id="cert-verify-status" style="font-size:0.88rem;margin:10px 0 0;color:#64748b;"></p>
                     <button type="button" class="btn-primary cert-btn-gold" style="margin-top:12px;" onclick="dispatchAllAdminCertificates()"><i class="fas fa-paper-plane"></i> Dispatch all enabled certificates</button>
+                    <button type="button" class="btn-primary" style="margin-top:12px;margin-left:8px;background:#0f766e;" onclick="dispatchCompletedDayCertificates(false)"><i class="fas fa-calendar-check"></i> Send certificate issued (completed days)</button>
+                    <button type="button" class="btn-primary" style="margin-top:12px;margin-left:8px;background:#64748b;" onclick="dispatchCompletedDayCertificates(true)">Resend to completed days</button>
                     <p id="cert-dispatch-msg" style="font-size:0.88rem;margin-top:8px;"></p>
+                </div>
+                <div class="card cert-mgmt-card" id="cert-day-checkin-card" style="margin-top:20px;">
+                    <h3 style="margin:0 0 8px;color:#92400e;">Manual check-in by event day</h3>
+                    <p style="font-size:0.85rem;color:#78716c;margin:0 0 12px;">Record attendance for one seminar day. A volunteer can then receive a volunteering certificate (final day) and a participation certificate (any attended day). A delegate can receive a participation certificate for any attended day. This does not email certificates.</p>
+                    <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;">
+                        <div style="flex:1;min-width:220px;">
+                            <label for="cert-checkin-q">Application no., PRN, ticket, email, or phone</label>
+                            <input type="search" id="cert-checkin-q" placeholder="Look up someone in the selected seminar" style="width:100%;padding:8px;" onkeydown="if(event.key==='Enter'){event.preventDefault();adminCertCheckinLookup();}">
+                        </div>
+                        <button type="button" class="btn-primary" style="background:#0f766e;" onclick="adminCertCheckinLookup()">Find</button>
+                    </div>
+                    <div id="cert-checkin-panel"></div>
                 </div>
                 <div class="card" style="margin-top:20px;">
                     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px;">
@@ -1981,8 +2021,8 @@
                         <p id="cert-candidates-search-count" style="margin:6px 0 0;font-size:0.82rem;color:#64748b;"></p>
                     </div>
                     <table class="data-table">
-                        <thead><tr><th><input type="checkbox" id="cert-cand-select-all" onchange="toggleAllCertCandidates(this.checked)"></th><th>PRN No.</th><th>Name</th><th>Application No.</th><th>Reg. status</th><th>Paid</th><th>Scans</th><th>Ticket</th><th>Certificate</th></tr></thead>
-                        <tbody id="cert-mgmt-list"><tr><td colspan="9" style="text-align:center;">Select a seminar</td></tr></tbody>
+                        <thead><tr><th><input type="checkbox" id="cert-cand-select-all" onchange="toggleAllCertCandidates(this.checked)"></th><th>PRN No.</th><th>Name</th><th>Application No.</th><th>Reg. status</th><th>Paid</th><th>Scans</th><th>Days</th><th>Ticket</th><th>Certificate</th><th>Name on certificate</th></tr></thead>
+                        <tbody id="cert-mgmt-list"><tr><td colspan="11" style="text-align:center;">Select a seminar</td></tr></tbody>
                     </table>
                 </div>
             </div>
@@ -2315,7 +2355,7 @@
             <!-- E-tickets: lookup, generate, send -->
             <div id="tab-etickets" class="tab-pane hidden">
                 <h2 style="margin-bottom: 12px;">E-tickets</h2>
-                <p style="color:#64748b;margin-bottom:18px;max-width:900px;">Look up a doctor’s e-ticket by <strong>12-digit ticket ID</strong>, <strong>application ID</strong>, <strong>email</strong>, or <strong>phone</strong>. Generate if missing, preview the printable ticket, then <strong>resend</strong> via email (with attachment) and/or WhatsApp.</p>
+                <p style="color:#64748b;margin-bottom:18px;max-width:900px;">Look up a doctor’s e-ticket by <strong>12-digit ticket ID</strong>, <strong>application ID</strong>, <strong>email</strong>, or <strong>phone</strong>. Generate if missing, preview the printable ticket, then <strong>resend</strong> via email (with attachment) and/or WhatsApp. Check the person in for an event day from the same result, then issue a volunteering or participation certificate when that day allows it.</p>
                 <div class="card" style="margin-bottom:16px;border-left:4px solid #0369a1;">
                     <h3 style="margin:0 0 8px;color:#1e40af;font-size:1rem;">Missing ticket emails</h3>
                     <p id="eticket-missing-status" style="font-size:0.88rem;color:#64748b;margin:0 0 10px;">Loading…</p>
@@ -2430,18 +2470,27 @@
                     <div style="display:flex;gap:12px;align-items:end;margin-bottom:16px;flex-wrap:wrap;">
                         <div style="flex:1;min-width:200px;">
                             <label>Filter by seminar (optional)</label>
-                            <select id="scanner-log-seminar" style="width:100%;padding:8px;" onchange="loadAdminScannerLogs()"><option value="">All seminars</option></select>
+                            <select id="scanner-log-seminar" style="width:100%;padding:8px;" onchange="onAdminScannerSeminarChange()"><option value="">All seminars</option></select>
+                        </div>
+                        <div style="min-width:180px;">
+                            <label>Day</label>
+                            <select id="scanner-log-day" style="width:100%;padding:8px;" onchange="loadAdminScannerLogs()"><option value="">All days</option></select>
+                        </div>
+                        <div style="min-width:200px;">
+                            <label>Scanned by</label>
+                            <select id="scanner-log-scanner" style="width:100%;padding:8px;" onchange="loadAdminScannerLogs()"><option value="">All scanners</option></select>
                         </div>
                         <button type="button" class="btn-primary" onclick="loadAdminScannerLogs()"><i class="fas fa-sync"></i> Refresh</button>
                     </div>
+                    <div id="scanner-day-summary" style="display:none;margin-bottom:16px;"></div>
                     <div style="margin-bottom:12px;">
                         <label for="scanner-logs-search" style="font-weight:600;font-size:0.9rem;">Search scan logs</label>
                         <input type="search" id="scanner-logs-search" placeholder="Doctor ID, name, app no., ticket, scanner, or seminar…" oninput="renderAdminScannerLogsTable()" style="width:100%;max-width:560px;padding:8px 12px;border:1px solid #cbd5e1;border-radius:8px;margin-top:6px;">
                         <p id="scanner-logs-search-count" style="margin:6px 0 0;font-size:0.82rem;color:#64748b;"></p>
                     </div>
                     <table class="data-table">
-                        <thead><tr><th>Time</th><th>Doctor ID</th><th>Doctor name</th><th>App no.</th><th>Ticket</th><th>Scanned by (staff)</th><th>Seminar</th></tr></thead>
-                        <tbody id="scanner-logs-list"><tr><td colspan="7" style="text-align:center;">Loading…</td></tr></tbody>
+                        <thead><tr><th>Time</th><th>Day</th><th>Doctor ID</th><th>Doctor name</th><th>App no.</th><th>Ticket</th><th>Scanned by (staff)</th><th>Seminar / event</th></tr></thead>
+                        <tbody id="scanner-logs-list"><tr><td colspan="8" style="text-align:center;">Loading…</td></tr></tbody>
                     </table>
                 </div>
             </div>
@@ -3707,11 +3756,15 @@
     <script src="/js/user-roles.js?v=20260522f"></script>
     <script src="/js/admin-list-search.js?v=20260522a"></script>
     <link rel="stylesheet" href="/css/book-track.css?v=20260529stg">
+    <link rel="stylesheet" href="/css/track-timeline.css?v=20261007done">
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
     <script src="/js/admin-module-defs.js?v=20261001b"></script>
-    <script src="/js/admin.js?v=20261001n"></script>
+    <script src="/js/track-timeline.js?v=20261007otp"></script>
+    <script src="/js/admin-commerce.js?v=20261006hubs"></script>
+    <script src="/js/doctor-module-access.js?v=20261004mod"></script>
+    <script src="/js/admin.js?v=20261007dayin"></script>
     <script src="/js/pos-onspot-ui.js?v=20261001m"></script>
     <script src="/js/admin-whatsapp.js?v=20260921a"></script>
     <script src="/js/admin-payment-followup.js?v=20260929a"></script>

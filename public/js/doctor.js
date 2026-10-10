@@ -720,11 +720,15 @@ function parseDoctorModulesMap(raw) {
 }
 
 function modulesMapToAllowedSetClient(modulesMap) {
-    const m = modulesMap && typeof modulesMap === 'object' ? modulesMap : {};
+    const m = modulesMap && typeof modulesMap === 'object' ? Object.assign({}, modulesMap) : {};
     const keys = Object.keys(m);
-    if (!keys.length) return null;
-    if (!keys.some((k) => m[k] === true)) return null;
-    return new Set(keys.filter((k) => m[k] === true));
+    if (keys.length && keys.some((k) => m[k] === true) && !Object.prototype.hasOwnProperty.call(m, 'tab-books')) {
+        m['tab-books'] = true;
+    }
+    const nextKeys = Object.keys(m);
+    if (!nextKeys.length) return null;
+    if (!nextKeys.some((k) => m[k] === true)) return null;
+    return new Set(nextKeys.filter((k) => m[k] === true));
 }
 
 function isLegacyVolunteerDefaultModulesClient(userModulesRaw) {
@@ -1459,15 +1463,21 @@ function layoutFkTimelines(root) {
         track.style.top = top + 'px';
         track.style.height = Math.max(0, bottom - top) + 'px';
         const items = tl.querySelectorAll('.fk-tl-item');
-        let target = null;
+        let nextStop = null;
+        let allDone = items.length > 0;
         items.forEach(function (it) {
-            if (it.classList.contains('done') || it.classList.contains('active')) target = it;
+            if (!it.classList.contains('done')) {
+                allDone = false;
+                if (!nextStop) nextStop = it;
+            }
         });
         let fillH = 0;
-        if (target) {
-            const d = target.querySelector('.fk-tl-dot').getBoundingClientRect();
-            fillH = d.top - base.top + d.height / 2 - top;
-            if (target.classList.contains('done') && target === items[items.length - 1]) fillH = bottom - top;
+        if (allDone) {
+            fillH = bottom - top;
+        } else if (nextStop) {
+            const d = nextStop.querySelector('.fk-tl-dot').getBoundingClientRect();
+            const dotTop = d.top - base.top - top;
+            fillH = Math.max(0, dotTop - 14);
         }
         const fill = track.querySelector('.fk-tl-track-fill');
         if (!fill) return;
@@ -1924,7 +1934,7 @@ function renderSeminarApplicationTrackerCard(a) {
             : '';
     const waBlock = renderWhatsappLinkBlock(a);
     const yearBadge = a.portal_year
-        ? '<span style="font-size:0.75rem;background:#e0f2fe;color:#0369a1;padding:2px 8px;border-radius:6px;margin-left:8px;">' +
+        ? '<span style="font-size:0.75rem;background:#dcfce7;color:#166534;padding:2px 8px;border-radius:6px;margin-left:8px;">' +
           escapeHtml(String(a.portal_year)) +
           '</span>'
         : '';
@@ -1935,9 +1945,9 @@ function renderSeminarApplicationTrackerCard(a) {
           '</p>'
         : '';
     return (
-        '<div class="card sat-app-card" style="margin-bottom:15px;border-top:4px solid #1a237e;overflow:hidden;padding:0;">' +
+        '<div class="card sat-app-card" style="margin-bottom:15px;border-top:4px solid #15803d;overflow:hidden;padding:0;">' +
         '<div style="padding:16px 16px 0;">' +
-        '<h4 style="color:#1a237e;margin-bottom:16px;"><i class="fas fa-calendar-check"></i> Seminar · ' +
+        '<h4 style="color:#15803d;margin-bottom:16px;"><i class="fas fa-calendar-check"></i> Seminar · ' +
         escapeHtml(a.application_no) +
         (a.seminar_title ? ' · ' + escapeHtml(a.seminar_title) : '') +
         yearBadge +
@@ -5713,15 +5723,38 @@ function renderDoctorCertWaitingBlock(track) {
         '<p style="margin:0 0 10px;font-size:0.9rem;color:#64748b;line-height:1.5;">' +
         escapeHtml(reason) +
         '</p>';
-    if (t.scansRequired === 2 && t.paid && !t.checkinComplete) {
+    if (t.scansRequired === 2 && t.paid && !t.checkinComplete && !t.awaitingFinalDay) {
         html +=
             '<p style="margin:0 0 10px;font-size:0.85rem;font-weight:600;color:#b45309;"><i class="fas fa-qrcode"></i> Scans: ' +
             escapeHtml(String(t.scanCount || 0)) +
             ' / 2 (entry + exit)</p>';
     }
+    if (t.awaitingFinalDay || Number(t.seminarDayCount) >= 2) {
+        const firstDay = t.firstDayTitle || 'Day 1';
+        const finalDay = t.certDayTitle || 'Day 2';
+        const day1Done = !!(t.earlierDayScanned || t.awaitingFinalDay || t.certDayScanned);
+        const day2Done = !!t.certDayScanned && !t.awaitingFinalDay;
+        html +=
+            '<p style="margin:0 0 6px;font-size:0.85rem;font-weight:700;color:' +
+            (day1Done ? '#15803d' : '#b45309') +
+            ';"><i class="fas ' +
+            (day1Done ? 'fa-check-circle' : 'fa-circle') +
+            '"></i> ' +
+            escapeHtml(firstDay) +
+            (day1Done ? ' scanned' : ' not scanned') +
+            '</p>' +
+            '<p style="margin:0 0 10px;font-size:0.85rem;font-weight:700;color:' +
+            (day2Done ? '#15803d' : '#b45309') +
+            ';"><i class="fas ' +
+            (day2Done ? 'fa-check-circle' : 'fa-circle') +
+            '"></i> ' +
+            escapeHtml(finalDay) +
+            (day2Done ? ' scanned' : ' not scanned — attending adds this day to your certificate') +
+            '</p>';
+    }
     if (t.certCountdown) {
         html += renderDoctorCertCountdownHtml(t.certCountdown, 'doctor-cert-cd-' + (t.seminarId || t.certId || 'x'));
-    } else if (t.certPhase === 'awaiting_scans' || t.certPhase === 'awaiting_approval') {
+    } else if (t.certPhase === 'awaiting_scans' || t.certPhase === 'awaiting_approval' || t.certPhase === 'awaiting_final_day') {
         html +=
             '<p style="margin:0;font-size:0.82rem;color:#94a3b8;"><i class="fas fa-hourglass-half"></i> Status updates automatically on this page.</p>';
     }
@@ -5910,11 +5943,20 @@ async function loadDoctorCertificates() {
             const card = document.createElement('div');
             card.className = 'card';
             card.style.marginBottom = '16px';
-            const canView = track ? !!track.canViewCertificate : false;
+            // Volunteer certificates are independent of the participant certificate's day-wise status.
+            const canView = c._volunteer
+                ? c.can_view != null
+                    ? !!c.can_view
+                    : Number(c.enabled) === 1 && Number(c.scan_verified) === 1
+                : track
+                  ? !!track.canViewCertificate
+                  : false;
             if (!canView) {
                 renderWaitingCard(
                     title,
-                    track || { certHiddenReason: 'Your certificate is not available yet. Complete venue scans and wait for foundation approval.' }
+                    c._volunteer
+                        ? { certHiddenReason: 'Your volunteer certificate becomes available once your attendance for the final event day is recorded.' }
+                        : track || { certHiddenReason: 'Your certificate is not available yet. Complete venue scans and wait for foundation approval.' }
                 );
                 return;
             }
@@ -7881,7 +7923,7 @@ function viewApplication(index) {
         <p><strong>College:</strong> ${formData.college || ''}</p>
         <p><strong>Location:</strong> ${formData.ccity || ''}, ${formData.cstate || ''}</p>
         <hr style="margin: 16px 0; border: 0; border-top: 1px solid #cbd5e1;">
-        <h4 style="color: #1a237e; margin-bottom: 12px;"><i class="fas fa-route"></i> Seminar registration tracking</h4>
+        <h4 style="color: #15803d; margin-bottom: 12px;"><i class="fas fa-route"></i> Seminar registration tracking</h4>
         <div id="view-app-tracking"></div>
     `;
     const trackEl = document.getElementById('view-app-tracking');
@@ -8464,10 +8506,6 @@ async function loadDoctorCertificateTracking(quiet) {
     if (!wrap || !currentUser) return;
     if (!doctorTabVisible('tab-certificate')) return;
     if (!quiet) wrap.innerHTML = '<p style="color:#94a3b8;text-align:center;">Loading…</p>';
-    if (live) {
-        live.textContent = 'Updating…';
-        live.style.color = '#64748b';
-    }
     try {
         const uid = await ensureDoctorInternalUserId();
         if (!uid) {
@@ -8495,6 +8533,13 @@ async function loadDoctorCertificateTracking(quiet) {
             throw new Error(msg);
         }
         if (!Array.isArray(rows)) throw new Error('Unexpected response from server.');
+        const certFp = (rows || [])
+            .map(function (r) {
+                return [r.registrationId, r.certStatus, r.paid ? 1 : 0, r.certDayScanned ? 1 : 0, r.canViewCertificate ? 1 : 0, r.certStatusLabel || ''].join(':');
+            })
+            .join('|');
+        if (quiet && certFp === window.__lastCertTrackFingerprint) return;
+        window.__lastCertTrackFingerprint = certFp;
         if (!Array.isArray(rows) || !rows.length) {
             wrap.innerHTML =
                 '<p style="color:#64748b;text-align:center;">No seminar registrations yet. Register and complete payment to track certificate status here.</p>';
@@ -8520,39 +8565,148 @@ async function loadDoctorCertificateTracking(quiet) {
 }
 
 function buildDoctorCertPipelineSteps(r) {
-    const st = r.certStatus || 'not_applicable';
-    const order = ['awaiting_payment', 'awaiting_checkin', 'checked_in', 'awaiting_approval', 'approved_pending_design', 'scheduled_release', 'issued'];
-    const rank = (k) => order.indexOf(k);
-    const cur = st === 'not_attended' ? rank('awaiting_checkin') : rank(st);
-    const scansLbl = (r.scanCount || 0) + ' / ' + (r.scansRequired || 1) + (r.scansRequired === 2 ? ' (entry + exit)' : '');
-    const defs = [
-        { key: 'registered', title: 'Registered', icon: 'fa-file-signature', minRank: 0, done: true, desc: 'Application ' + (r.applicationNo || '') },
-        { key: 'paid', title: 'Payment confirmed', icon: 'fa-wallet', minRank: rank('awaiting_checkin'), activeDesc: 'Complete payment to become eligible for the e-certificate.', desc: 'Payment received · e-ticket ' + (r.ticketId || '') },
-        { key: 'checkin', title: 'Venue check-in', icon: 'fa-qrcode', minRank: rank('checked_in'), activeDesc: 'Scan your e-ticket at the venue. Scans: ' + scansLbl, desc: 'Checked in at the venue · scans ' + scansLbl, at: r.scanTime },
-        { key: 'approval', title: 'Certificate approval', icon: 'fa-user-check', minRank: rank('approved_pending_design'), activeDesc: 'Attendance verified. Waiting for the organiser to approve certificates.', desc: 'Approved by organiser' },
-        { key: 'prepare', title: 'Certificate prepared', icon: 'fa-file-pdf', minRank: rank('scheduled_release'), activeDesc: 'Approved — your certificate design is being prepared.', desc: 'Certificate generated' },
-        { key: 'ready', title: 'E-certificate ready', icon: 'fa-certificate', minRank: rank('issued'), activeDesc: 'Approved — releases on schedule.', desc: 'Download your e-certificate below.' }
+    const row = r || {};
+    const st = String(row.certStatus || '');
+    const paidStatuses = [
+        'awaiting_checkin',
+        'awaiting_final_day',
+        'checked_in',
+        'awaiting_approval',
+        'approved_pending_design',
+        'scheduled_release',
+        'issued',
+        'not_attended'
     ];
-    let activeSet = false;
-    return defs.map((d) => {
-        let state = 'upcoming';
-        if (d.done || cur >= d.minRank) state = 'completed';
-        else if (!activeSet) {
-            state = 'active';
-            activeSet = true;
+    const isPaid = !!row.paid || paidStatuses.indexOf(st) >= 0;
+    const multi = Number(row.seminarDayCount) >= 2 || !!row.awaitingFinalDay;
+    const finalTitle = row.certDayTitle || 'Day 2';
+    const firstTitle = row.firstDayTitle || 'Day 1';
+    const finalScanned =
+        !!row.certDayScanned ||
+        (!row.awaitingFinalDay &&
+            multi &&
+            ['checked_in', 'awaiting_approval', 'approved_pending_design', 'scheduled_release', 'issued'].indexOf(st) >= 0);
+    const day1Scanned = !!(row.earlierDayScanned || row.awaitingFinalDay || (multi && finalScanned));
+    const singleScansDone =
+        !multi &&
+        (!!row.checkinComplete ||
+            ['checked_in', 'awaiting_approval', 'approved_pending_design', 'scheduled_release', 'issued'].indexOf(st) >= 0);
+    const listedDayScanned =
+        Array.isArray(row.dayScans) && row.dayScans.some(function (d) { return d && d.scanned; });
+    const scansDone = multi
+        ? listedDayScanned || day1Scanned || finalScanned
+        : singleScansDone && st !== 'awaiting_checkin' && st !== 'not_attended';
+    const approved =
+        !row.awaitingFinalDay &&
+        scansDone &&
+        (['approved_pending_design', 'scheduled_release', 'issued'].indexOf(st) >= 0 || !!row.certEnabled);
+    const prepared =
+        approved &&
+        (['scheduled_release', 'issued'].indexOf(st) >= 0 || !!(row.templatePath && String(row.templatePath).trim()));
+    const ready = prepared && (st === 'issued' || !!row.canViewCertificate);
+    const steps = [
+        {
+            key: 'registered',
+            title: 'Registered',
+            icon: 'fa-file-signature',
+            state: 'completed',
+            desc: 'Application ' + (row.applicationNo || '')
+        },
+        {
+            key: 'paid',
+            title: 'Payment confirmed',
+            icon: 'fa-wallet',
+            state: isPaid ? 'completed' : 'active',
+            desc: isPaid
+                ? 'Payment received' + (row.ticketId ? ' · e-ticket ' + row.ticketId : '')
+                : 'Complete payment to become eligible for the e-certificate.'
         }
-        if (st === 'not_attended' && d.key === 'checkin' && state === 'active') {
-            return { key: d.key, title: d.title, icon: d.icon, state: 'cancelled', desc: 'Not attended — no venue check-in recorded.' };
+    ];
+    if (multi) {
+        const dayScans = Array.isArray(row.dayScans) ? row.dayScans : [];
+        if (dayScans.length >= 2) {
+            let activeAssigned = false;
+            dayScans.forEach(function (d, idx) {
+                const isLast = idx === dayScans.length - 1;
+                let state = 'upcoming';
+                if (isPaid) {
+                    if (d.scanned) state = 'completed';
+                    else if (!activeAssigned) {
+                        state = 'active';
+                        activeAssigned = true;
+                    }
+                }
+                steps.push({
+                    key: 'day' + (idx + 1),
+                    title: d.title + (isLast ? ' scan' : ' check-in'),
+                    icon: isLast ? 'fa-calendar-check' : 'fa-qrcode',
+                    state: state,
+                    desc: d.scanned
+                        ? d.title + ' scanned at the venue. This day is included on your certificate.'
+                        : 'Scan the ' + d.title + ' e-ticket at the venue. Attending adds this day to the same certificate.',
+                    at: d.scanned ? d.scanTime : null
+                });
+            });
+        } else {
+            steps.push({
+                key: 'day1',
+                title: firstTitle + ' check-in',
+                icon: 'fa-qrcode',
+                state: !isPaid ? 'upcoming' : day1Scanned ? 'completed' : 'active',
+                desc: day1Scanned
+                    ? firstTitle + ' scanned at the venue.'
+                    : 'Scan the ' + firstTitle + ' e-ticket at the venue.',
+                at: day1Scanned && !finalScanned ? row.scanTime : null
+            });
+            steps.push({
+                key: 'day2',
+                title: finalTitle + ' scan',
+                icon: 'fa-calendar-check',
+                state: !isPaid || !day1Scanned ? 'upcoming' : finalScanned ? 'completed' : 'active',
+                desc: finalScanned
+                    ? finalTitle + ' scanned. This day is included on your certificate.'
+                    : finalTitle + ' not scanned yet. Attending adds this day to the same certificate.',
+                at: finalScanned ? row.scanTime : null
+            });
         }
-        return {
-            key: d.key,
-            title: d.title,
-            icon: d.icon,
-            state,
-            at: state === 'completed' ? d.at || null : null,
-            desc: state === 'active' ? d.activeDesc || d.desc : d.desc
-        };
+
+        const scansLbl = (row.scanCount || 0) + ' / ' + (row.scansRequired || 1);
+        const venueDone = isPaid && scansDone;
+        steps.push({
+            key: 'checkin',
+            title: 'Venue check-in',
+            icon: 'fa-qrcode',
+            state: !isPaid ? 'upcoming' : venueDone ? 'completed' : 'active',
+            desc: venueDone
+                ? 'Checked in at the venue · scans ' + scansLbl
+                : st === 'not_attended'
+                  ? 'No venue check-in recorded.'
+                  : 'Scan your e-ticket at the venue. Scans: ' + scansLbl,
+            at: venueDone ? row.scanTime : null
+        });
+    }
+    steps.push({
+        key: 'approval',
+        title: 'Certificate approval',
+        icon: 'fa-user-check',
+        state: !scansDone ? 'upcoming' : approved ? 'completed' : 'active',
+        desc: approved ? 'Approved by the organiser.' : 'Approved after the required venue scan.'
     });
+    steps.push({
+        key: 'prepared',
+        title: 'Certificate prepared',
+        icon: 'fa-file-pdf',
+        state: !approved ? 'upcoming' : prepared ? 'completed' : 'active',
+        desc: prepared ? 'Certificate generated.' : 'Certificate is generated after approval.'
+    });
+    steps.push({
+        key: 'ready',
+        title: 'E-certificate ready',
+        icon: 'fa-award',
+        state: !prepared ? 'upcoming' : ready ? 'completed' : 'active',
+        desc: ready ? 'Download your e-certificate below.' : 'Download unlocks when the certificate is issued.'
+    });
+    return steps;
 }
 
 function renderDoctorCertPipelineCard(r) {
@@ -8605,6 +8759,18 @@ async function loadDoctorDashboardStats() {
         set('stat-registered', d.registered_seminars);
         set('stat-paid', d.paid_or_confirmed);
         set('stat-checked', d.checked_in_seminars);
+        const chkEl = document.getElementById('stat-checked');
+        if (chkEl && chkEl.parentElement) {
+            const days = Number(d.checked_in_days) || 0;
+            chkEl.parentElement.title = days ? days + ' day check-in' + (days === 1 ? '' : 's') + ' recorded' : '';
+        }
+        set('stat-certs', d.certificates != null ? d.certificates : 0);
+        const certEl = document.getElementById('stat-certs');
+        if (certEl && certEl.parentElement) {
+            const vc = Number(d.volunteer_certificates) || 0;
+            const pc = Number(d.participant_certificates) || 0;
+            certEl.parentElement.title = pc + ' participant · ' + vc + ' volunteer';
+        }
         set('stat-feedback', d.feedback_submitted);
         set('stat-abstracts', d.case_presentations != null ? d.case_presentations : d.abstracts_submitted);
         set('stat-ptix', d.participant_tickets);

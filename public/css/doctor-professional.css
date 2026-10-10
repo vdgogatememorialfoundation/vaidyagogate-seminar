@@ -385,7 +385,7 @@
 
 .fk-timeline { padding: 18px 18px 16px; position: relative; }
 .fk-tl-track { position: absolute; left: 27.5px; width: 3px; background: #e2e8f0; border-radius: 999px; overflow: hidden; }
-.fk-tl-track-fill { position: absolute; left: 0; top: 0; width: 100%; height: 0; background: #26a541; border-radius: 999px; transition: height 2.4s cubic-bezier(0.22, 0.61, 0.36, 1); }
+.fk-tl-track-fill { position: absolute; left: 0; top: 0; width: 100%; height: 0; background: #26a541; border-radius: 999px; transition: height 14s cubic-bezier(0.22, 0.61, 0.36, 1); }
 .fk-tl-track-fill::after { content: ''; position: absolute; left: 0; width: 100%; height: 42px; top: -42px; background: linear-gradient(180deg, rgba(255,255,255,0), rgba(255,255,255,0.85), rgba(255,255,255,0)); animation: fk-track-glide 2.6s linear infinite; }
 @keyframes fk-track-glide { from { transform: translateY(0); } to { transform: translateY(calc(var(--fk-fill-h, 200px) + 42px)); } }
 .fk-track.is-complete .fk-tl-track-fill::after, .fk-track.is-cancelled .fk-tl-track-fill::after { display: none; }
