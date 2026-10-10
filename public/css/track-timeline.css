@@ -354,3 +354,7 @@ body.hl-page .hl-below .ship-pipe { border: 0; background: #fff; border-radius: 
 @keyframes tlRiderBob{0%,100%{transform:translateY(0) rotateX(18deg)}50%{transform:translateY(-3px) rotateX(22deg)}}
 .hl-bike-3d img{filter:drop-shadow(0 8px 6px rgba(15,23,42,.35));transform:perspective(300px) rotateY(-18deg) rotateX(10deg);animation:tlRiderBob 1.4s ease-in-out infinite}
 .hl-bike-idle{display:inline-flex;align-items:center;justify-content:center;width:52px;height:52px;border-radius:14px;background:#f8fafc;border:1px solid #e2e8f0}
+
+.ship-courier { margin: 6px 0 0; padding: 6px 10px; border: 1px solid #e3e6e6; border-radius: 8px; background: #fafafa; display: flex; flex-direction: column; gap: 2px; font-size: .88rem; }
+.ship-courier > b { color: #0f1111; text-transform: capitalize; }
+.ship-courier > span { color: #565959; font-size: .8rem; }

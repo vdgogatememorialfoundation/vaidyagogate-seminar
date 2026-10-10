@@ -106,10 +106,10 @@
             .map((step, i) => {
                 const kids = (step.events || []).map(child).join('');
                 const shippedNote = step.key === 'SHIPPED' && step.state !== 'upcoming' && track.shipment
-                    ? '<li class="ship-sub"><b>' + esc(track.shipment.courier || 'Gogate Products') + '</b><div class="where">' +
+                    ? '<div class="ship-courier"><b>' + esc(track.shipment.courier || 'Gogate Products') + '</b><span>' +
                       esc(track.fulfillmentType === 'HYPERLOCAL' ? 'Hyperlocal' : 'Logistics') +
                       (track.shipment.trackingId ? ' · Tracking ID ' + esc(track.shipment.trackingId) : '') +
-                      '</div></li>'
+                      '</span></div>'
                     : '';
                 const settled = track.mainStatus === 'DELIVERED';
                 const timed = step.state === 'active' && step.lineUntil && !settled;
@@ -127,7 +127,8 @@
                     (stageCopy ? '<div class="ship-msg">' + esc(step.message) + '</div>' : '') +
                     nextHint +
                     (showExpect(step) ? '<span class="ship-expect">' + esc(step.expectedLabel) + '</span>' : '') +
-                    (kids || shippedNote ? '<ul class="ship-kids">' + kids + shippedNote + '</ul>' : '') +
+                    shippedNote +
+                    (kids ? '<ul class="ship-kids">' + kids + '</ul>' : '') +
                     '</div></li>';
             })
             .join('');
