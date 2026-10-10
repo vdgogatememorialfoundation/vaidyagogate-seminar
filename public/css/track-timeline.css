@@ -358,3 +358,5 @@ body.hl-page .hl-below .ship-pipe { border: 0; background: #fff; border-radius: 
 .ship-courier { margin: 6px 0 0; padding: 6px 10px; border: 1px solid #e3e6e6; border-radius: 8px; background: #fafafa; display: flex; flex-direction: column; gap: 2px; font-size: .88rem; }
 .ship-courier > b { color: #0f1111; text-transform: capitalize; }
 .ship-courier > span { color: #565959; font-size: .8rem; }
+
+@media print { .adm-shiptrack, .trk-progress, .trk-log, .trk-foot, .trk-nav { display: none !important; } }

@@ -231,6 +231,8 @@ function renderCommerceReturns() {
                 '<select id="ret-cp-' + o.id + '">' + courierProviderOptions(o.courierProvider) + '</select> ' +
                 '<input id="ret-awb-' + o.id + '" placeholder="Return AWB / tracking no" style="width:170px;">' +
                 '<button type="button" class="btn-primary" style="margin-left:6px;background:#b45309;" onclick="commerceCreateReturnShipment(' + o.id + ')">Create return shipment</button>' +
+                '<div style="margin-top:8px;"><button type="button" class="btn-primary" style="background:#1d4ed8;" onclick="commerceOpenReturnLabel(' + o.id + ')">Print return shipping label</button></div>' +
+                commerceReturnReceiveHtml(o) +
                 (o.returnTrackingLink ? '<div style="margin-top:4px;"><a href="' + escCommerce(o.returnTrackingLink) + '" target="_blank" rel="noopener">Courier return tracking</a></div>' : '') +
                 (o.returnTrackUrl ? '<div style="margin-top:4px;"><a href="' + escCommerce(o.returnTrackUrl) + '" target="_blank" rel="noopener">Customer return tracking page (shareable)</a> <button type="button" class="btn-primary" style="padding:2px 8px;font-size:0.76rem;" onclick="navigator.clipboard&&navigator.clipboard.writeText(location.origin+\'' + escCommerce(o.returnTrackUrl) + '\')">Copy link</button></div>' : '') +
                 '</div></td></tr>'
@@ -257,6 +259,67 @@ function renderCommerceReturns() {
         '<table class="data-table" style="width:100%;"><thead><tr><th>Order</th><th>Status</th><th></th></tr></thead><tbody>' +
         (rows || '<tr><td colspan="3">No return requests yet.</td></tr>') +
         '</tbody></table>';
+}
+
+function commerceReturnReceiveHtml(o) {
+    const c = (o.returnCheck && o.returnCheck.checks) || null;
+    const done = !!o.returnReceivedAt;
+    const box = (key, label) => '<label style="display:block;font-size:0.82rem;"><input type="checkbox" id="ret-chk-' + key + '-' + o.id + '"' + (c && c[key] ? ' checked' : '') + (done ? ' disabled' : '') + '> ' + label + '</label>';
+    let html = '<div style="margin-top:10px;padding-top:8px;border-top:1px dashed #e2e8f0;"><div style="font-size:0.8rem;color:#64748b;">Receive returned item · verification checks</div>' +
+        box('itemsMatch', 'Items match the order') + box('qtyMatch', 'Quantity correct') + box('condition', 'Condition acceptable') + box('complete', 'Packaging / accessories complete') +
+        (done
+            ? '<div style="font-size:0.8rem;color:' + (o.returnCheck && o.returnCheck.passed ? '#047857' : '#b91c1c') + ';">' + (o.returnCheck && o.returnCheck.passed ? 'Checks passed' : 'Check failed — request declined') + ' · received ' + escCommerce(commerceWhen(o.returnReceivedAt)) + (o.returnCheck && o.returnCheck.notes ? ' · ' + escCommerce(o.returnCheck.notes) : '') + '</div>'
+            : '<input id="ret-notes-' + o.id + '" placeholder="Notes (optional)" style="width:220px;margin-top:4px;"> <button type="button" class="btn-primary" style="margin-top:4px;background:#047857;" onclick="commerceReceiveReturn(' + o.id + ')">Mark received &amp; verify</button>');
+    if (o.replacementOrderId) {
+        const rep = commerceOrders.find((x) => x.id === o.replacementOrderId);
+        html += '<div style="margin-top:6px;font-size:0.82rem;">Replacement order: <strong>' + escCommerce(rep ? rep.orderCode : '#' + o.replacementOrderId) + '</strong>' + (rep ? ' · ' + escCommerce(rep.commerceStage || rep.status || '') : '') + '</div>';
+    } else if (o.returnKind === 'replacement' && (o.returnStatus === 'received' || o.returnStatus === 'replacement_preparing')) {
+        html += '<div style="margin-top:6px;"><button type="button" class="btn-primary" style="background:#7c3aed;" onclick="commerceCreateReplacementOrder(' + o.id + ')">Create replacement order</button></div>';
+    }
+    return html + '</div>';
+}
+
+function commerceWhen(v) {
+    if (!v) return '';
+    const d = new Date(v);
+    return isNaN(d) ? String(v) : d.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+}
+
+function commerceOpenReturnLabel(id) {
+    window.open('/api/admin/commerce/orders/' + id + '/return-label?actingAdminId=' + encodeURIComponent(commerceActor()), '_blank');
+}
+
+async function commerceReceiveReturn(id) {
+    const checks = {};
+    ['itemsMatch', 'qtyMatch', 'condition', 'complete'].forEach((k) => {
+        const el = document.getElementById('ret-chk-' + k + '-' + id);
+        checks[k] = !!(el && el.checked);
+    });
+    const allOk = Object.keys(checks).every((k) => checks[k]);
+    if (!allOk && !confirm('Not all checks are ticked. Mark the return as received but DECLINE the request?')) return;
+    try {
+        await commerceFetch('/api/admin/commerce/orders/' + id + '/return-receive', {
+            method: 'POST',
+            body: JSON.stringify({ actingAdminId: commerceActor(), checks, notes: val('ret-notes-' + id) })
+        });
+        loadCommerceAdmin();
+    } catch (e) {
+        alert(e.message);
+    }
+}
+
+async function commerceCreateReplacementOrder(id) {
+    if (!confirm('Create a new ₹0 replacement order with the same items and address?')) return;
+    try {
+        const data = await commerceFetch('/api/admin/commerce/orders/' + id + '/replacement-order', {
+            method: 'POST',
+            body: JSON.stringify({ actingAdminId: commerceActor() })
+        });
+        alert('Replacement order ' + (data.replacement ? data.replacement.orderCode : '') + ' created. Pack and ship it from Orders.');
+        loadCommerceAdmin();
+    } catch (e) {
+        alert(e.message);
+    }
 }
 
 function courierProviderOptions(selected) {
