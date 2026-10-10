@@ -712,6 +712,11 @@ function termOrder(data) {
 
 function returnHtml(data) {
     const r = data.returnView;
+    if (r && data.returnTrack && window.ShipTrack) {
+        const url = data.order && data.order.returnTrackUrl;
+        return '<div class="box ret-box" style="padding:0;overflow:hidden;"><div id="shop-return-track"></div></div>' +
+            (url ? '<div class="box"><a href="' + shopEsc(url) + '" target="_blank" rel="noopener">Shareable ' + (r.kind === 'replacement' ? 'replacement' : 'return') + ' tracking link</a></div>' : '');
+    }
     if (r) {
         const provName = r.provider ? r.provider.charAt(0).toUpperCase() + r.provider.slice(1) : '';
         return (
@@ -763,7 +768,7 @@ function renderOrderDetail(data) {
         '<div class="layout-2"><div><div class="box"><div class="track-head"><div><h1>Track package</h1><div class="muted">Order # ' + shopEsc(o.orderCode) + ' · Placed ' + shopEsc(when(o.createdAt, false)) + '</div></div>' +
         '<span class="eta-chip' + (tone ? ' ' + tone : '') + '">' + shopEsc(headline) + '</span></div>' +
         (o.status === 'pending_payment' ? '<p><button class="btn sm buy" type="button" onclick="payPending(' + o.id + ')">Complete payment</button></p>' : '') +
-        '<div style="height:14px"></div>' + TrackTimeline.render({ timeline: data.timeline, live: data.live, awbTrackUrl: o.awbTrackUrl, trackUrl: o.trackUrl }, { animate: !shopTrackerSeen }) + '</div>' + returnHtml(data) + '</div>' +
+        '<div style="height:14px"></div>' + (data.track && window.ShipTrack ? '<div id="shop-order-track"></div>' : TrackTimeline.render({ timeline: data.timeline, live: data.live, awbTrackUrl: o.awbTrackUrl, trackUrl: o.trackUrl }, { animate: !shopTrackerSeen })) + '</div>' + returnHtml(data) + '</div>' +
         '<div><div class="box"><h3>Order summary</h3>' +
         (o.items || []).map((it) => '<div class="item-line">' + miniCover(it) + '<div style="flex:1"><b>' + shopEsc(it.title) + '</b><div class="muted" style="text-transform:capitalize">' + shopEsc(it.language) + ' · Qty ' + shopEsc(it.qty) + '</div></div><b>' + money(it.lineTotal) + '</b></div>').join('') +
         '<div class="sum-row total"><span>Total</span><span>' + money(o.totalAmount) + '</span></div><div class="muted">' + shopEsc(payLabel(o)) + '</div></div>' +
@@ -775,6 +780,10 @@ function renderOrderDetail(data) {
         (o.trackUrl ? '<div class="box"><a href="' + shopEsc(o.trackUrl) + '" target="_blank" rel="noopener">Shareable tracking link</a></div>' : '') +
         '</div></div>';
     shopTrackerSeen = true;
+    if (window.ShipTrack) {
+        window.ShipTrack.draw(document.getElementById('shop-order-track'), data.track, o);
+        window.ShipTrack.draw(document.getElementById('shop-return-track'), data.returnTrack, o);
+    }
     TrackTimeline.mount(data.live);
 }
 

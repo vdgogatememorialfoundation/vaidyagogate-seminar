@@ -1,8 +1,11 @@
 (function () {
     const params = new URLSearchParams(window.location.search);
+    const returnToken = params.get('return') || '';
     const token = params.get('token') || '';
     const sub = document.getElementById('sub');
     const tracker = document.getElementById('tracker');
+    const isReturn = (track) => !!(track && (track.kind === 'return' || track.kind === 'replacement'));
+    const kindWord = (track) => (track && track.kind === 'replacement' ? 'Replacement' : 'Return');
     let drawn = '';
 
     function esc(s) {
@@ -40,7 +43,16 @@
             PACKED: 'M3 8l9-4 9 4-9 4-9-4zM3 8v8l9 4 9-4V8M12 12v8',
             SHIPPED: 'M3 7h11v8H3zM14 10h4l3 3v2h-7zM7 18a1.5 1.5 0 110-3 1.5 1.5 0 010 3zM18 18a1.5 1.5 0 110-3 1.5 1.5 0 010 3z',
             OUT_FOR_DELIVERY: 'M5 17a2 2 0 110-4 2 2 0 010 4zM16 17a2 2 0 110-4 2 2 0 010 4zM7 15h7l2-5H10M14 10l2 5M9 8h5',
-            DELIVERED: 'M5 12l5 5L20 7'
+            DELIVERED: 'M5 12l5 5L20 7',
+            REQUESTED: 'M8 4h8v3H8zM7 7h10v13H7zM9 12h6M9 16h4',
+            APPROVED: 'M5 12l5 5L20 7',
+            PICKUP_SCHEDULED: 'M3 7h11v8H3zM14 10h4l3 3v2h-7zM7 18a1.5 1.5 0 110-3 1.5 1.5 0 010 3zM18 18a1.5 1.5 0 110-3 1.5 1.5 0 010 3z',
+            IN_TRANSIT: 'M5 17a2 2 0 110-4 2 2 0 010 4zM16 17a2 2 0 110-4 2 2 0 010 4zM7 15h7l2-5H10M14 10l2 5M9 8h5',
+            RECEIVED: 'M3 8l9-4 9 4-9 4-9-4zM3 8v8l9 4 9-4V8M12 12v8',
+            REFUNDED: 'M12 3v18M7 8h7a3 3 0 010 6H8a3 3 0 000 6h8',
+            REPLACEMENT_PREPARING: 'M3 8l9-4 9 4-9 4-9-4zM3 8v8l9 4 9-4V8M12 12v8',
+            REPLACEMENT_SENT: 'M3 7h11v8H3zM14 10h4l3 3v2h-7zM7 18a1.5 1.5 0 110-3 1.5 1.5 0 010 3zM18 18a1.5 1.5 0 110-3 1.5 1.5 0 010 3z',
+            REPLACEMENT_DELIVERED: 'M5 12l5 5L20 7'
         };
         return iconSvg(paths[key] || paths.ORDERED);
     }
@@ -80,6 +92,11 @@
         const steps = track.pipeline || [];
         const index = steps.findIndex((step) => step.state === 'active');
         const active = index >= 0 ? steps[index] : null;
+        if (isReturn(track)) {
+            if (track.rejected) return 'This request was declined.';
+            const nxt = steps[index + 1];
+            return nxt ? 'Current step: ' + (active ? active.title : '') + '. Up next: ' + nxt.title + '.' : 'This ' + kindWord(track).toLowerCase() + ' is complete.';
+        }
         if (!active) return 'Completed steps stay green from the top of the journey to the bottom.';
         if (track.operationalStatus === 'DELIVERY_ATTEMPT_FAILED') {
             return 'The line stays on ' + active.title + ' until the next attempt starts.';
@@ -105,10 +122,12 @@
         return (track.pipeline || [])
             .map((step, i) => {
                 const kids = (step.events || []).map(child).join('');
-                const shippedNote = step.key === 'SHIPPED' && step.state !== 'upcoming' && track.shipment
+                const courierStep = isReturn(track) ? 'PICKUP_SCHEDULED' : 'SHIPPED';
+                const shippedNote = step.key === courierStep && step.state !== 'upcoming' && track.shipment && (track.shipment.courier || track.shipment.trackingId)
                     ? '<div class="ship-courier"><b>' + esc(track.shipment.courier || 'Gogate Products') + '</b><span>' +
-                      esc(track.fulfillmentType === 'HYPERLOCAL' ? 'Hyperlocal' : 'Logistics') +
+                      esc(isReturn(track) ? kindWord(track) + ' pickup' : track.fulfillmentType === 'HYPERLOCAL' ? 'Hyperlocal' : 'Logistics') +
                       (track.shipment.trackingId ? ' · Tracking ID ' + esc(track.shipment.trackingId) : '') +
+                      (track.shipment.externalLink ? ' · <a href="' + esc(track.shipment.externalLink) + '" target="_blank" rel="noopener">Courier site</a>' : '') +
                       '</span></div>'
                     : '';
                 const settled = track.mainStatus === 'DELIVERED';
@@ -188,9 +207,13 @@
     }
 
     function tickPipe() {
+        document.querySelectorAll('.ship-pipe').forEach(tickOnePipe);
+    }
+
+    function tickOnePipe(pipe) {
         const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-        const pipe = document.querySelector('.ship-pipe');
-        const items = Array.from(document.querySelectorAll('.ship-pipe > li'));
+        const root = pipe.closest('.trk, .hl') || document;
+        const items = Array.from(pipe.querySelectorAll(':scope > li'));
         const playable = items.filter((el) => el.classList.contains('done') || el.classList.contains('active'));
         const stepMs = 900;
         if (pipe && !pipe.dataset.playing) {
@@ -243,8 +266,8 @@
             });
         }
         const fill = finished ? '100' : String(Math.round((portion / items.length) * 100));
-        const ring = document.querySelector('.trk-ring');
-        const nav = document.querySelector('.trk-nav-fill');
+        const ring = root.querySelector('.trk-ring');
+        const nav = root.querySelector('.trk-nav-fill');
         [ring, nav].forEach((el) => {
             if (!el) return;
             const prop = el.classList.contains('trk-ring') ? '--fill' : '--nav';
@@ -306,7 +329,7 @@
         const more = rows.length > 4
             ? '<button type="button" class="trk-more" data-more="1">Show all ' + rows.length + ' updates</button>'
             : '';
-        return '<section class="trk-log"><div class="trk-log-head"><h2>Shipment updates</h2><span>' + rows.length + '</span></div><ol>' + items + '</ol>' + more + '</section>';
+        return '<section class="trk-log"><div class="trk-log-head"><h2>' + (isReturn(track) ? kindWord(track) + ' updates' : 'Shipment updates') + '</h2><span>' + rows.length + '</span></div><ol>' + items + '</ol>' + more + '</section>';
     }
 
     function attemptCard(track) {
@@ -354,8 +377,9 @@
     }
 
     function documentHtml(track, shipment) {
-        const courier = (track.shipment && track.shipment.courier) || 'Gogate Products';
-        const mode = track.fulfillmentType === 'HYPERLOCAL' ? 'Hyperlocal delivery' : 'Logistics';
+        const ret = isReturn(track);
+        const courier = (track.shipment && track.shipment.courier) || (ret ? 'Store pickup / courier' : 'Gogate Products');
+        const mode = ret ? kindWord(track) + ' pickup' : track.fulfillmentType === 'HYPERLOCAL' ? 'Hyperlocal delivery' : 'Logistics';
         const detail = track.currentDetail || track.currentMessage || '';
         const code = track.orderId || shipment.orderCode || '';
         const active = (track.pipeline || []).find((step) => step.state === 'active') || (track.pipeline || [])[0] || {};
@@ -365,17 +389,17 @@
         const trackingId = track.shipment && track.shipment.trackingId;
         const steps = track.pipeline || [];
         const doneCount = steps.filter((step) => step.state === 'done').length;
-        const delivered = active && active.key === 'DELIVERED' && active.state === 'active';
+        const delivered = active && active.state === 'active' && (active.key === 'DELIVERED' || active.key === 'REFUNDED' || active.key === 'REPLACEMENT_DELIVERED');
         const stepNo = delivered ? steps.length : active && active.state === 'active' ? doneCount + 1 : doneCount;
         const board = dateBoard(track);
         const badge = board ? '' : timingBadge(track);
         return '<div class="trk' + (delivered ? ' is-settled' : '') + '">' +
-            '<header class="trk-bar"><div class="trk-brand"><span class="trk-mark">' + iconSvg('M3 8l9-4 9 4-9 4-9-4zM3 8v8l9 4 9-4V8') + '</span><div><div class="trk-brand-name">Gogate Products</div><div class="trk-brand-sub">Shipment tracking</div></div></div>' +
+            '<header class="trk-bar"><div class="trk-brand"><span class="trk-mark">' + iconSvg('M3 8l9-4 9 4-9 4-9-4zM3 8v8l9 4 9-4V8') + '</span><div><div class="trk-brand-name">Gogate Products</div><div class="trk-brand-sub">' + (ret ? kindWord(track) + ' tracking' : 'Shipment tracking') + '</div></div></div>' +
             '<div class="trk-actions">' +
             (code ? '<button type="button" class="trk-copy" data-copy="' + esc(code) + '">Copy order</button>' : '') +
             '<button type="button" class="trk-copy" data-copy-href="1">Copy link</button>' +
             '</div></header>' +
-            '<section class="trk-hero"><div class="trk-ring" style="--fill:0"><span class="trk-ring-ico">' + stepIcon(active.key) + '</span></div><div class="trk-hero-copy"><div class="trk-kicker">Order #' + esc(code) + (badge ? ' ' + badge : '') + '</div><h1>' + esc(track.currentStatus || track.currentMessage) + '</h1>' +
+            '<section class="trk-hero"><div class="trk-ring" style="--fill:0"><span class="trk-ring-ico">' + stepIcon(active.key) + '</span></div><div class="trk-hero-copy"><div class="trk-kicker">' + (ret ? kindWord(track) + ' for order #' : 'Order #') + esc(code) + (badge ? ' ' + badge : '') + '</div><h1>' + esc(track.currentStatus || track.currentMessage) + '</h1>' +
             (detail ? '<p>' + esc(detail) + '</p>' : '') +
             '<p class="trk-stepno">' + (delivered ? 'Completed' : 'Step ' + stepNo + ' of ' + (steps.length || 5)) + '</p>' +
             '</div>' + board + '</section>' +
@@ -389,9 +413,9 @@
             (expects ? '<div class="trk-whens">' + expects + '</div>' : '') +
             failureHtml(track) +
             otpHtml('Pickup OTP', track.pickupOtp) + otpHtml('Delivery OTP', track.deliveryOtp) +
-            '<section class="trk-progress"><h2>Order progress</h2><p class="trk-line-note">' + esc(lineNote(track)) + '</p><ol class="ship-pipe">' + pipeHtml(track) + '</ol></section>' +
+            '<section class="trk-progress"><h2>' + (ret ? kindWord(track) + ' progress' : 'Order progress') + '</h2><p class="trk-line-note">' + esc(lineNote(track)) + '</p><ol class="ship-pipe">' + pipeHtml(track) + '</ol></section>' +
             logHtml(track) +
-            '<footer class="trk-foot"><a href="' + esc(track.supportUrl || '/support') + '">Need help with this shipment?</a><span id="trk-fresh">Checking for updates</span><span>Refreshes automatically</span></footer>' +
+            '<footer class="trk-foot"><a href="' + esc(track.supportUrl || '/support') + '">Need help with this ' + (ret ? kindWord(track).toLowerCase() : 'shipment') + '?</a><span class="trk-fresh">Checking for updates</span><span>Refreshes automatically</span></footer>' +
             '</div>';
     }
 
@@ -481,8 +505,8 @@
         if (live && window.TrackTimeline) TrackTimeline.mount(live);
     }
 
-    function bindCopy() {
-        tracker.querySelectorAll('[data-copy], [data-copy-href]').forEach((btn) => {
+    function bindCopy(root) {
+        (root || tracker).querySelectorAll('[data-copy], [data-copy-href]').forEach((btn) => {
             if (btn.dataset.bound) return;
             btn.dataset.bound = '1';
             const label = btn.textContent;
@@ -504,18 +528,42 @@
         });
     }
 
-    function touchFresh() {
-        const el = document.getElementById('trk-fresh');
-        if (!el) return;
-        el.textContent = 'Updated ' + new Intl.DateTimeFormat('en-IN', {
-            timeZone: 'Asia/Kolkata',
-            hour: 'numeric',
-            minute: '2-digit'
-        }).format(new Date());
+    function touchFresh(root) {
+        (root || document).querySelectorAll('.trk-fresh').forEach((el) => {
+            el.textContent = 'Updated ' + new Intl.DateTimeFormat('en-IN', {
+                timeZone: 'Asia/Kolkata',
+                hour: 'numeric',
+                minute: '2-digit'
+            }).format(new Date());
+        });
     }
 
-    function bindMore() {
-        const btn = tracker.querySelector('[data-more]');
+    /** Embeddable renderer: draws an order or return `track` into any container (admin panel, shop order page). */
+    window.ShipTrack = {
+        html: function (track, shipment) {
+            if (!track || !track.pipeline) return '';
+            return documentHtml(track, shipment || {});
+        },
+        draw: function (container, track, shipment) {
+            if (!container) return;
+            const html = window.ShipTrack.html(track, shipment);
+            if (container.dataset.sig === html) return;
+            container.dataset.sig = html;
+            container.innerHTML = html;
+            container.querySelectorAll('.ship-pipe').forEach((pipe) => delete pipe.dataset.playing);
+            bindCopy(container);
+            bindMore(container);
+            touchFresh(container);
+            tickPipe();
+        },
+        tick: tickPipe
+    };
+
+    function bindMore(root) {
+        (root || tracker).querySelectorAll('[data-more]').forEach((btn) => bindMoreBtn(btn));
+    }
+
+    function bindMoreBtn(btn) {
         if (!btn || btn.dataset.bound) return;
         btn.dataset.bound = '1';
         btn.addEventListener('click', () => {
@@ -612,6 +660,21 @@
     }
 
     async function poll() {
+        if (returnToken) {
+            try {
+                const res = await fetch('/api/public/commerce/track-return?token=' + encodeURIComponent(returnToken));
+                const data = await res.json();
+                if (!res.ok) {
+                    sub.textContent = data.error || 'Return shipment not found.';
+                    return;
+                }
+                document.title = 'Return tracking';
+                render(data.shipment || {});
+            } catch (e) {
+                sub.textContent = 'Could not refresh tracking.';
+            }
+            return;
+        }
         if (!token) {
             document.body.classList.remove('hl-page');
             sub.textContent = 'This tracking link is missing a token.';
@@ -638,7 +701,9 @@
         }
     }
 
-    poll();
-    setInterval(poll, 8000);
+    if (tracker && sub) {
+        poll();
+        setInterval(poll, 8000);
+    }
     setInterval(tickPipe, 2000);
 })();

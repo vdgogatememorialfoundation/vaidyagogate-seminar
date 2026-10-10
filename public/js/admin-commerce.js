@@ -231,7 +231,8 @@ function renderCommerceReturns() {
                 '<select id="ret-cp-' + o.id + '">' + courierProviderOptions(o.courierProvider) + '</select> ' +
                 '<input id="ret-awb-' + o.id + '" placeholder="Return AWB / tracking no" style="width:170px;">' +
                 '<button type="button" class="btn-primary" style="margin-left:6px;background:#b45309;" onclick="commerceCreateReturnShipment(' + o.id + ')">Create return shipment</button>' +
-                (o.returnTrackingLink ? '<div style="margin-top:4px;"><a href="' + escCommerce(o.returnTrackingLink) + '" target="_blank" rel="noopener">Return tracking link</a></div>' : '') +
+                (o.returnTrackingLink ? '<div style="margin-top:4px;"><a href="' + escCommerce(o.returnTrackingLink) + '" target="_blank" rel="noopener">Courier return tracking</a></div>' : '') +
+                (o.returnTrackUrl ? '<div style="margin-top:4px;"><a href="' + escCommerce(o.returnTrackUrl) + '" target="_blank" rel="noopener">Customer return tracking page (shareable)</a> <button type="button" class="btn-primary" style="padding:2px 8px;font-size:0.76rem;" onclick="navigator.clipboard&&navigator.clipboard.writeText(location.origin+\'' + escCommerce(o.returnTrackUrl) + '\')">Copy link</button></div>' : '') +
                 '</div></td></tr>'
             );
         })
@@ -661,7 +662,8 @@ async function commerceLoadTrack() {
     const draw = async () => {
         try {
             const data = await commerceFetch('/api/admin/commerce/orders/' + id + '/track?actingAdminId=' + encodeURIComponent(commerceActor()));
-            body.innerHTML = renderCommerceShipment(data, commerceTrackSeen !== id);
+            if (commerceTrackSeen !== id || !body.querySelector('.adm-shiptrack')) body.innerHTML = renderCommerceShipment(data, commerceTrackSeen !== id);
+            drawCommerceShipTracks(body, data);
             commerceTrackSeen = id;
             if (window.TrackTimeline) TrackTimeline.mount(data.live);
         } catch (e) {
@@ -691,13 +693,24 @@ function renderCommerceShipment(data, animate) {
               '</strong></p>') +
         (o.commerceTrackUrl ? '<p><a href="' + escCommerce(o.commerceTrackUrl) + '" target="_blank">Customer tracking link</a></p>' : '') +
         (o.id ? '<p><a class="btn-primary" style="text-decoration:none;" target="_blank" rel="noopener" href="' + commerceLabelHref(o.id) + '">Print shipping label</a></p>' : '') +
-        (window.TrackTimeline && data.timeline
-            ? TrackTimeline.render(
-                  { timeline: data.timeline, live: data.live, awbTrackUrl: o.tookanTrackingLink || o.shipdayTrackingLink || null, trackUrl: o.commerceTrackUrl },
-                  { animate: animate !== false }
-              )
-            : '<p style="color:#64748b;">No tracking yet.</p>')
+        (o.returnTrackUrl ? '<p><a href="' + escCommerce(o.returnTrackUrl) + '" target="_blank" rel="noopener">Customer return tracking link</a></p>' : '') +
+        (window.ShipTrack && data.track
+            ? '<div class="adm-shiptrack" data-kind="order"></div>' + (data.returnTrack ? '<div class="adm-shiptrack" data-kind="return" style="margin-top:18px;"></div>' : '')
+            : window.TrackTimeline && data.timeline
+              ? TrackTimeline.render(
+                    { timeline: data.timeline, live: data.live, awbTrackUrl: o.tookanTrackingLink || o.shipdayTrackingLink || null, trackUrl: o.commerceTrackUrl },
+                    { animate: animate !== false }
+                )
+              : '<p style="color:#64748b;">No tracking yet.</p>')
     );
+}
+
+function drawCommerceShipTracks(root, data) {
+    if (!window.ShipTrack || !root) return;
+    root.querySelectorAll('.adm-shiptrack').forEach((el) => {
+        const track = el.getAttribute('data-kind') === 'return' ? data.returnTrack : data.track;
+        window.ShipTrack.draw(el, track, data.order || {});
+    });
 }
 
 function formatCommerceWhen(at) {
@@ -1092,7 +1105,12 @@ async function appendCommerceTrackPanel(id) {
             commerceLabelHref(id) +
             '">Print shipping label</a></p>';
     }
-    if (data.timeline && window.TrackTimeline) {
+    if (co.returnTrackUrl) {
+        inner += '<p style="margin:0 0 8px;font-size:0.82rem;"><a href="' + escCommerce(co.returnTrackUrl) + '" target="_blank" rel="noopener">Customer return tracking link</a></p>';
+    }
+    if (data.track && window.ShipTrack) {
+        inner += '<div class="adm-shiptrack" data-kind="order"></div>' + (data.returnTrack ? '<div class="adm-shiptrack" data-kind="return" style="margin-top:18px;"></div>' : '');
+    } else if (data.timeline && window.TrackTimeline) {
         inner += window.TrackTimeline.render(
             {
                 timeline: data.timeline,
@@ -1105,6 +1123,7 @@ async function appendCommerceTrackPanel(id) {
     }
     box.innerHTML = inner;
     body.insertBefore(box, body.firstChild);
+    drawCommerceShipTracks(box, data);
     if (window.TrackTimeline) {
         if (data.live) window.TrackTimeline.mount(data.live);
         else if (window.TrackTimeline.bind) window.TrackTimeline.bind(box);
