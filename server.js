@@ -24,6 +24,7 @@ const pincodeLookup = require('./lib/pincode-lookup');
 const countriesList = require('./lib/countries');
 const designatedNotify = require('./lib/designated-notify');
 const ticketHtml = require('./lib/ticket-html');
+const userNameSync = require('./lib/user-name-sync');
 const ticketAccess = require('./lib/ticket-access');
 const ticketPdfServer = require('./lib/certificate-pdf-server');
 const {
@@ -63,11 +64,16 @@ const { registerPaymentsRoutes } = require('./lib/routes-payments');
 const seminarCapacity = require('./lib/seminar-capacity');
 const requestGuard = require('./lib/request-guard');
 const ticketScanEvents = require('./lib/ticket-scan-events');
+const { dayWiseScanStats } = require('./lib/scan-day-stats');
 const scannerIdCapture = require('./lib/scanner-id-capture');
 const feedbackFormConfig = require('./lib/feedback-form-config');
 const feedbackEligibility = require('./lib/feedback-eligibility');
 const { registerLiveScannerRoutes } = require('./lib/routes-live-scanner');
+const { registerApplicationFormExportRoutes } = require('./lib/application-form-export');
 const { registerWhatsAppRoutes } = require('./lib/routes-whatsapp');
+const { registerApplicationContactRoutes } = require('./lib/routes-application-contact');
+const { registerSeminarVideoRoutes } = require('./lib/routes-seminar-video');
+const { registerWhatsAppGroupAccessRoutes } = require('./lib/routes-whatsapp-group-access');
 const { registerPosRoutes } = require('./lib/pos-onspot');
 const onspotLinks = require('./lib/onspot-links');
 const siteSeoMod = require('./lib/site-seo');
@@ -90,6 +96,7 @@ function volunteerTicketDeps() {
     return {
         generateId,
         insertParticipantTicket,
+        insertParticipantTicketsForRegistration,
         syncCertificateEligibilityForTicket,
         certVerify,
         notifEngine,
@@ -103,6 +110,7 @@ const authLoginOtp = require('./lib/auth-login-otp');
 const certRender = require('./lib/certificate-render');
 const certTemplateCfg = require('./lib/certificate-template-config');
 const certVerify = require('./lib/certificate-verify');
+const registrationDayScans = require('./lib/registration-day-scans');
 const docVerify = require('./lib/application-document-verify');
 const seminarAutoConfirm = require('./lib/seminar-auto-confirm');
 const platformDailyBackup = require('./lib/platform-daily-backup');
@@ -156,6 +164,7 @@ app.use(
 app.use(cors());
 app.use(
     express.json({
+          limit: '10mb',
         verify: (req, res, buf) => {
             req.rawBody = buf;
         }
@@ -238,6 +247,13 @@ function mountPaymentsRoutes() {
         parsePositiveUserId,
         upsertGlobalSetting
     });
+    require('./lib/commerce-routes').registerCommerceRoutes(app, db, {
+        upsertGlobalSetting
+    });
+    require('./lib/shop-routes').registerShopRoutes(app, db, {
+        listDoctorPaymentOptions,
+        parsePositiveUserId
+    });
     require('./lib/staff-portal-routes').registerStaffPortalRoutes(app, db, {
         portalTracking,
         notifEngine,
@@ -245,6 +261,9 @@ function mountPaymentsRoutes() {
         volunteerTicketFlow,
         volunteerTicketDeps
     });
+    registerApplicationContactRoutes(app, { db, assertAdminPortalActor });
+    registerSeminarVideoRoutes(app, { db, assertAdminPortalActor });
+    registerWhatsAppGroupAccessRoutes(app, { db, assertAdminPortalActor });
 }
 
 function bootstrapApp(done) {
@@ -533,6 +552,7 @@ function requestNeedsBootstrap(req) {
     if (p === '/api/health') return false;
     if (p.startsWith('/api/branding/logo')) return false;
     if (p === '/scanner' || p === '/scanner/') return false;
+    if (p === '/certificate-scanner' || p === '/certificate-scanner/') return false;
     if (/\.(html?|css|js|ico|png|jpe?g|gif|webp|svg|woff2?|json|webmanifest|txt|map)$/i.test(p)) return false;
     if (p.startsWith('/css/') || p.startsWith('/js/') || p.startsWith('/uploads/')) return false;
     if (p.startsWith('/api/')) return true;
@@ -1481,6 +1501,7 @@ function migrateLegacyRegistrationFormConfig(done) {
 }
 
 const regFormCfg = require('./lib/registration-form-config');
+const deferredFields = require('./lib/deferred-fields');
 
 function loadGlobalRegistrationFormConfig(callback) {
     db.get(`SELECT value FROM global_settings WHERE key = 'registration_form_config'`, [], (err, row) => {
@@ -1735,9 +1756,10 @@ function validateFormDataAgainstRegistrationConfig(formData, hasCertificateFile,
     }
     const nameErr = validateRegistrationPersonNames(formData);
     if (nameErr) return nameErr;
-    const contactErr = contactValidation.validateFormContactFields(formData, fields);
+    const effFields = deferredFields.relaxFieldsForPending(fields, fd);
+    const contactErr = contactValidation.validateFormContactFields(formData, effFields);
     if (contactErr) return contactErr;
-    return regFormCfg.validateFormWithPolicy(formData, hasCertificateFile, fields, qualOverride, policy);
+    return regFormCfg.validateFormWithPolicy(formData, hasCertificateFile, effFields, qualOverride, policy);
 }
 
 function parseMaybeJson(val) {
@@ -2435,7 +2457,9 @@ function recordScanEventForDashboard(seminarId, staffId, payload, cb) {
             doctor_user_id: payload.doctor_user_id,
             doctor_name: payload.doctor_name,
             outcome: payload.outcome || 'failed',
-            message: payload.message || null
+            message: payload.message || null,
+            day_id: payload.day_id || null,
+            day_title: payload.day_title || null
         },
         cb || (() => {})
     );
@@ -2933,6 +2957,9 @@ function integrationSettingsJson(data) {
     );
     masked.zeptomail_api_region = raw.zeptomail_api_region || process.env.ZEPTOMAIL_API_REGION || 'in';
     masked.whatsapp_token_saved = !!(raw.whatsapp_token && String(raw.whatsapp_token).trim());
+    masked.google_maps_api_key_saved = !!(
+        raw.google_maps_api_key && String(raw.google_maps_api_key).trim()
+    );
     masked.whatsapp_verify_token_saved = !!(
         raw.whatsapp_verify_token && String(raw.whatsapp_verify_token).trim()
     );
@@ -2940,6 +2967,14 @@ function integrationSettingsJson(data) {
     masked.email_status = integrationSettings.getEmailConfigStatus();
     masked.whatsapp_configured = integrationSettings.isWhatsAppConfiguredFromSettings();
     masked.whatsapp_status = integrationSettings.getWhatsAppConfigStatus();
+    masked.whatsapp_provider = integrationSettings.getAisensyConfig().provider;
+    masked.aisensy_api_key_saved = !!(raw.aisensy_api_key && String(raw.aisensy_api_key).trim());
+    masked.aisensy_project_api_pwd_saved = !!(
+        raw.aisensy_project_api_pwd && String(raw.aisensy_project_api_pwd).trim()
+    );
+    masked.aisensy_status = require('./lib/aisensy-service').getAisensyStatus();
+    masked.slice_secret_key_saved = !!(raw.slice_secret_key && String(raw.slice_secret_key).trim());
+    masked.slice_status = require('./lib/slice-payments').getStatus();
     masked.msg91_auth_key_saved = !!(raw.msg91_auth_key && String(raw.msg91_auth_key).trim());
     masked.msg91_configured = integrationSettings.isMsg91ConfiguredFromSettings();
     masked.msg91_status = integrationSettings.getMsg91ConfigStatus();
@@ -3074,22 +3109,29 @@ app.post('/api/admin/integrations/whatsapp-event-templates', withIntegrationSett
 
 app.post('/api/admin/integrations', withIntegrationSettingsLoaded, (req, res) => {
     const body = req.body || {};
+
+    console.log(
+        '[integrations-debug] google_maps_api_key incoming:',
+        !!(body.google_maps_api_key && String(body.google_maps_api_key).trim()),
+        'length:',
+        body.google_maps_api_key ? String(body.google_maps_api_key).trim().length : 0
+    );
+
     const passwordUpdateAttempted =
         body.zoho_pass != null &&
         String(body.zoho_pass).trim() &&
         !integrationSettings.isMaskedSecretValue(body.zoho_pass);
+
     integrationSettings.loadFromDb(db, (loadErr, existing) => {
         if (loadErr) return res.status(500).json({ error: loadErr.message });
         const ex = existing || {};
         const nextProvider = String(body.email_api_provider || ex.email_api_provider || '').toLowerCase();
-        const nextFallback = String(
-            body.email_api_fallback_provider || ex.email_api_fallback_provider || 'sender'
-        ).toLowerCase();
+        const nextFallback = String(body.email_api_fallback_provider || ex.email_api_fallback_provider || 'sender').toLowerCase();
+
         if (
             nextProvider === 'zeptomail' &&
             nextFallback === 'sender' &&
             !body.email_api_fallback_key &&
-            !integrationSettings.isMaskedSecretValue(body.email_api_fallback_key) &&
             ex.email_api_provider === 'sender' &&
             ex.email_api_key &&
             !ex.email_api_fallback_key
@@ -3097,66 +3139,78 @@ app.post('/api/admin/integrations', withIntegrationSettingsLoaded, (req, res) =>
             body.email_api_fallback_provider = 'sender';
             body.email_api_fallback_key = ex.email_api_key;
         }
+
         const emailProv = require('./lib/email-provider-settings');
         const incomingZepto =
             (body.email_provider_keys && body.email_provider_keys.zeptomail) ||
             (nextProvider === 'zeptomail' && body.email_api_key);
+
         if (incomingZepto && !integrationSettings.isMaskedSecretValue(incomingZepto)) {
             const zeptoCheck = emailProv.validateZeptoMailToken(incomingZepto);
-            if (zeptoCheck.wrong) {
-                return res.status(400).json({ error: zeptoCheck.reason });
-            }
+            if (zeptoCheck.wrong) return res.status(400).json({ error: zeptoCheck.reason });
         }
+
         const mergedKeys = emailProv.mergeProviderKeys(ex, body);
         const payload = {
             ...body,
             email_provider_keys: mergedKeys,
             email_primary_enabled:
-                body.email_primary_enabled === false ||
-                body.email_primary_enabled === 0 ||
-                body.email_primary_enabled === '0'
-                    ? 0
-                    : 1,
+                body.email_primary_enabled === false || body.email_primary_enabled === 0 || body.email_primary_enabled === '0' ? 0 : 1,
             email_fallback_enabled:
-                body.email_fallback_enabled === false ||
-                body.email_fallback_enabled === 0 ||
-                body.email_fallback_enabled === '0'
-                    ? 0
-                    : 1,
+                body.email_fallback_enabled === false || body.email_fallback_enabled === 0 || body.email_fallback_enabled === '0' ? 0 : 1,
             email_smtp_standby_enabled:
-                body.email_smtp_standby_enabled === false ||
-                body.email_smtp_standby_enabled === 0 ||
-                body.email_smtp_standby_enabled === '0'
-                    ? 0
-                    : 1
+                body.email_smtp_standby_enabled === false || body.email_smtp_standby_enabled === 0 || body.email_smtp_standby_enabled === '0' ? 0 : 1
         };
+
         const synced = emailProv.syncActiveEmailCredentials({ ...ex, ...payload });
+
         integrationSettings.saveToDb(db, synced, (err, merged) => {
-        if (err) return res.status(500).json({ error: err.message });
-        if (body.public_base_url) {
-            upsertGlobalSetting('domain', String(body.public_base_url).replace(/^https?:\/\//, ''), () => {});
-        }
-        const emailConfigured = integrationSettings.isEmailConfiguredFromSettings();
-        const emailStatus = integrationSettings.getEmailConfigStatus();
-        let smtpWarning = null;
-        if (!emailConfigured && (body.zoho_host || body.zoho_user)) {
-            smtpWarning =
-                passwordUpdateAttempted && !(merged && merged.zoho_pass)
-                    ? 'App password could not be saved — paste it again and click Save.'
-                    : 'Paste your Zoho app-specific password and click Save API keys & messaging.';
-        }
-        notifEngine.syncOtpNotificationDefaults(db, body, () => {
-            res.json({
-                success: true,
-                settings: integrationSettingsJson(merged),
-                email_configured: emailConfigured,
-                email_status: emailStatus,
-                whatsapp_configured: integrationSettings.isWhatsAppConfiguredFromSettings(),
-                password_saved: !!(merged && merged.zoho_pass && String(merged.zoho_pass).trim()),
-                password_update_attempted: !!passwordUpdateAttempted,
-                smtp_warning: smtpWarning
-            });
-        });
+            if (err) return res.status(500).json({ error: err.message });
+
+            const waMirror = [
+                ['whatsapp_phone_number_id', body.whatsapp_phone_number_id],
+                ['whatsapp_business_account_id', body.whatsapp_business_account_id],
+                ['whatsapp_verify_token', body.whatsapp_verify_token],
+                ['whatsapp_template_lang', body.whatsapp_template_lang],
+                ['whatsapp_otp_template_name', body.whatsapp_otp_template_name]
+            ].filter(x => x[1] !== undefined && x[1] !== null && String(x[1]).trim() !== '');
+
+            const saveMirror = (idx) => {
+                if (idx >= waMirror.length) return finish();
+                upsertGlobalSetting(waMirror[idx][0], String(waMirror[idx][1]), () => saveMirror(idx + 1));
+            };
+
+            saveMirror(0);
+
+            function finish() {
+                if (body.public_base_url) {
+                    upsertGlobalSetting('domain', String(body.public_base_url).replace(/^https?:\/\//, ''), () => {});
+                }
+
+                const emailConfigured = integrationSettings.isEmailConfiguredFromSettings();
+                const emailStatus = integrationSettings.getEmailConfigStatus();
+                let smtpWarning = null;
+
+                if (!emailConfigured && (body.zoho_host || body.zoho_user)) {
+                    smtpWarning =
+                        passwordUpdateAttempted && !(merged && merged.zoho_pass)
+                            ? 'App password could not be saved — paste it again and click Save.'
+                            : 'Paste your Zoho app-specific password and click Save API keys & messaging.';
+                }
+
+                notifEngine.syncOtpNotificationDefaults(db, body, () => {
+                    res.json({
+                        success: true,
+                        settings: integrationSettingsJson(merged),
+                        email_configured: emailConfigured,
+                        email_status: emailStatus,
+                        whatsapp_configured: integrationSettings.isWhatsAppConfiguredFromSettings(),
+                        password_saved: !!(merged && merged.zoho_pass && String(merged.zoho_pass).trim()),
+                        password_update_attempted: !!passwordUpdateAttempted,
+                        smtp_warning: smtpWarning
+                    });
+                });
+            }
         });
     });
 });
@@ -3384,6 +3438,56 @@ app.post('/api/admin/integrations/test-whatsapp', withIntegrationSettingsLoaded,
             to +
             ' as test recipient in development mode.'
     });
+});
+
+// AiSensy: send a test campaign message (uses OTP campaign with code 123456, else text campaign)
+app.post('/api/admin/integrations/test-aisensy', withIntegrationSettingsLoaded, async (req, res) => {
+    const aisensy = require('./lib/aisensy-service');
+    const phone = String((req.body && req.body.phone) || '').trim();
+    const campaignName = String((req.body && req.body.campaignName) || '').trim();
+    if (!phone) return res.status(400).json({ error: 'phone required' });
+    if (!aisensy.isAisensyConfigured()) {
+        return res.status(503).json({ error: 'AiSensy not configured — save the AiSensy API key first.' });
+    }
+    const st = aisensy.getAisensyStatus();
+    let r;
+    let method;
+    if (campaignName) {
+        method = 'campaign:' + campaignName;
+        const params = Array.isArray(req.body.templateParams) ? req.body.templateParams : [];
+        r = await aisensy.sendAisensyCampaign({ phone, campaignName, userName: 'Admin test', templateParams: params });
+    } else if (st.otpCampaign) {
+        method = 'otp_campaign:' + st.otpCampaign;
+        r = await aisensy.sendAisensyCampaign({ phone, campaignName: st.otpCampaign, userName: 'Admin test', templateParams: ['123456'] });
+    } else if (st.textCampaign) {
+        method = 'text_campaign:' + st.textCampaign;
+        r = await aisensy.sendAisensyText(phone, 'VGMF Seminar Portal: AiSensy test message from admin.', { userName: 'Admin test' });
+    } else {
+        return res.status(400).json({ error: 'Set an OTP campaign or Text campaign (or pass a campaign name) to test.' });
+    }
+    notifEngine.logNotification(
+        db,
+        {
+            event_key: 'INTEGRATION_TEST_AISENSY',
+            channel: 'whatsapp',
+            destination: aisensy.toDestination(phone),
+            status: r.ok ? 'accepted' : 'failed',
+            provider_message_id: r.messageId || null,
+            subject: 'Admin AiSensy test',
+            body_preview: method + (r.messageId ? ' id=' + r.messageId : ''),
+            error: r.ok ? null : String(r.error || '').slice(0, 900)
+        },
+        () => {}
+    );
+    if (!r.ok) return res.status(502).json({ error: r.error, method });
+    res.json({ success: true, method, messageId: r.messageId || null, destination: r.destination, response: r.raw || null });
+});
+
+app.get('/api/admin/integrations/aisensy-campaigns', withIntegrationSettingsLoaded, async (req, res) => {
+    const aisensy = require('./lib/aisensy-service');
+    const r = await aisensy.listAisensyApiCampaigns();
+    if (!r.ok) return res.status(502).json({ error: r.error });
+    res.json({ success: true, campaigns: r.campaigns });
 });
 
 app.post('/api/admin/integrations/test-msg91', withIntegrationSettingsLoaded, async (req, res) => {
@@ -5346,7 +5450,7 @@ function parseApplicationFormBody(body) {
             formData = JSON.parse(formData);
         } catch (_) {}
     }
-    return formData || {};
+    return deferredFields.stripPending(formData || {});
 }
 
 function seminarRegistrationWindowOpen(sem, userId, seminarId, cb) {
@@ -5744,6 +5848,9 @@ app.post('/api/applications/submit', requestGuard.registrationSubmitLimit, withC
                             const regStatus = isWaitlistSubmit ? 'waitlisted' : 'submitted';
                             const afterRegInserted = (newId, err3) => {
                                 if (err3) return res.status(500).json({ error: err3.message });
+                                userNameSync.syncUserNameFromFormData(db, userId, stored, (nErr) => {
+                                    if (nErr) console.warn('[name-sync] submit:', nErr.message);
+                                });
                                 portalTracking.logRegistrationEvent(
                                     db,
                                     newId,
@@ -6046,6 +6153,81 @@ app.get('/api/applications/:userId', (req, res) => {
     const yearFilter = req.query && req.query.year != null ? parseInt(req.query.year, 10) : null;
     respondApplicationsList(uid, yearFilter, res);
 });
+// 5b2. Pending fields the applicant must still complete (admin-filled registrations)
+app.get('/api/applications/:applicationId/pending-fields', (req, res) => {
+    const rid = parseInt(req.params.applicationId, 10);
+    const uid = parsePositiveUserId(req.query && req.query.userId);
+    if (!Number.isInteger(rid) || rid < 1 || !uid) return res.status(400).json({ error: 'Invalid request' });
+    db.get(`SELECT user_id, seminar_id, form_data FROM registrations WHERE id = ?`, [rid], (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!row || Number(row.user_id) !== uid) return res.status(404).json({ error: 'Application not found' });
+        loadRegistrationFormConfig(row.seminar_id, (cfgErr, regCfg) => {
+            if (cfgErr) return res.status(500).json({ error: cfgErr.message });
+            res.json({
+                fields: deferredFields.pendingFieldDefs(row.form_data, (regCfg && regCfg.fields) || [])
+            });
+        });
+    });
+});
+
+// 5b3. Applicant completes fields deferred by admin ("Applicant will add later")
+app.put('/api/applications/:applicationId/pending-fields', withApplicationDocUpload, (req, res) => {
+    const rid = parseInt(req.params.applicationId, 10);
+    const body = req.body || {};
+    const uid = parsePositiveUserId(body.userId);
+    let values = body.values;
+    if (typeof values === 'string') {
+        try {
+            values = JSON.parse(values);
+        } catch (_) {
+            values = {};
+        }
+    }
+    values = values && typeof values === 'object' ? values : {};
+    if (!Number.isInteger(rid) || rid < 1 || !uid) return res.status(400).json({ error: 'Invalid request' });
+    db.get(`SELECT user_id, seminar_id, status, form_data FROM registrations WHERE id = ?`, [rid], (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!row || Number(row.user_id) !== uid) return res.status(404).json({ error: 'Application not found' });
+        const st = String(row.status || '').toLowerCase();
+        if (st === 'cancelled' || st === 'rejected' || st === 'expired') {
+            return res.status(400).json({ error: 'This application can no longer be updated.' });
+        }
+        const prev = deferredFields.parseFormData(row.form_data);
+        const pend = deferredFields.pendingKeys(prev);
+        if (!pend.length) return res.status(400).json({ error: 'Nothing pending for this application.' });
+        const merged = { ...prev };
+        pend.forEach((k) => {
+            if (k === 'certificate') return;
+            if (values[k] != null && String(values[k]).trim() !== '') merged[k] = String(values[k]).trim();
+        });
+        persistUploadedCertificate(req, (certErr, certPath) => {
+            if (certErr) return res.status(500).json({ error: certErr.message });
+            if (certPath && pend.includes('certificate')) merged.certificate_path = certPath;
+            const settled = deferredFields.settlePending(merged);
+            loadRegistrationFormConfig(row.seminar_id, (cfgErr, regCfg) => {
+                if (cfgErr) return res.status(500).json({ error: cfgErr.message });
+                const fields = (regCfg && regCfg.fields) || [];
+                const validationError = validateFormDataAgainstRegistrationConfig(
+                    settled,
+                    !!settled.certificate_path,
+                    fields,
+                    null,
+                    regCfg
+                );
+                if (validationError) return res.status(400).json({ error: validationError });
+                const stored = sanitizeFormDataForStorage(settled);
+                db.run(`UPDATE registrations SET form_data = ? WHERE id = ?`, [JSON.stringify(stored), rid], (uErr) => {
+                    if (uErr) return res.status(500).json({ error: uErr.message });
+                    res.json({
+                        success: true,
+                        pending: deferredFields.pendingFieldDefs(stored, fields)
+                    });
+                });
+            });
+        });
+    });
+});
+
 // 5c. Edit Application
 app.put('/api/applications/:applicationId', withCertificateUpload, (req, res) => {
     let { formData, phoneOtpToken, emailOtpToken, fieldOtpTokens } = req.body;
@@ -6138,7 +6320,10 @@ app.put('/api/applications/:applicationId', withCertificateUpload, (req, res) =>
                         [JSON.stringify(mergedStored), req.params.applicationId],
                         function (err2) {
                             if (err2) return res.status(500).json({ error: err2.message });
-                res.json({ success: true, message: 'Application updated successfully' });
+                            userNameSync.syncUserNameFromFormData(db, row.user_id, mergedStored, (nErr) => {
+                                if (nErr) console.warn('[name-sync] doctor edit:', nErr.message);
+                                res.json({ success: true, message: 'Application updated successfully' });
+                            });
                         }
                     );
                 }
@@ -6271,6 +6456,11 @@ app.get('/api/admin/site-visitors/live', (req, res) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json({ success: true, ...data });
     });
+});
+
+// Admin: Live Radar — Google Maps browser key (from Integrations or env)
+app.get('/api/admin/live-radar/maps-key', (req, res) => {
+    res.json({ success: true, key: googleMaps.getApiKey() });
 });
 
 // Admin: Live Radar snapshot (realtime seminar application tracking)
@@ -6709,6 +6899,11 @@ function mapDoctorCertificateTrackingRows(rows) {
                 } else if (view.phase === 'not_attended') {
                     certStatus = 'not_attended';
                     certStatusLabel = 'Not attended — no venue check-in';
+                } else if (view.phase === 'awaiting_final_day') {
+                    certStatus = 'awaiting_final_day';
+                    certStatusLabel = view.certDayTitle
+                        ? `Checked in — certificate issues on ${view.certDayTitle} scan`
+                        : 'Checked in — certificate issues on the final day scan';
                 } else if (!checkinComplete) {
                     certStatus = 'awaiting_checkin';
                     certStatusLabel =
@@ -6728,7 +6923,10 @@ function mapDoctorCertificateTrackingRows(rows) {
                     certStatusLabel = 'Approved — releases on schedule';
                 } else {
                     certStatus = 'issued';
-                    certStatusLabel = 'Certificate issued — download available';
+                    certStatusLabel =
+                        Number(row.seminar_day_count) >= 2
+                            ? 'Certificate issued for the days you attended'
+                            : 'Certificate issued — download available';
                 }
         return {
             registrationId: row.registration_id,
@@ -6748,6 +6946,15 @@ function mapDoctorCertificateTrackingRows(rows) {
             templatePath: row.template_path,
             certStatus,
             certStatusLabel,
+            awaitingFinalDay: !!view.awaitingFinalDay,
+            certDayTitle: view.certDayTitle || null,
+            firstDayTitle: row.first_day_title || null,
+            seminarDayCount: Number(row.seminar_day_count) || 0,
+            certDayScanned: Number(row.cert_day_scanned) === 1,
+            venueScanCount: Number(row.venue_scan_count) || 0,
+            earlierDayScanned:
+                !!view.awaitingFinalDay ||
+                (Number(row.venue_scan_count) || 0) > (Number(row.cert_day_scanned) === 1 ? 1 : 0),
             canViewCertificate: view.canViewCertificate,
             certPhase: view.phase,
             certHiddenReason: view.hiddenReason,
@@ -6762,6 +6969,7 @@ const DOCTOR_CERT_TRACKING_SQL = `SELECT r.id AS registration_id, r.application_
                 s.event_date, COALESCE(s.certificate_verify_enabled, 0) AS certificate_verify_enabled,
                 COALESCE(s.certificate_verify_manual, 0) AS certificate_verify_manual,
                 s.certificate_verify_go_live_at,
+                ${certVerify.certDayEligibilitySelectSql('s', 'r')},
                 o.status AS order_status,
                 t.id AS ticket_id, COALESCE(t.scan_count, 0) AS scan_count, COALESCE(t.is_scanned, 0) AS is_scanned,
                 t.scan_time, t.ticket_id_string,
@@ -6770,7 +6978,19 @@ const DOCTOR_CERT_TRACKING_SQL = `SELECT r.id AS registration_id, r.application_
          FROM registrations r
          JOIN seminars s ON s.id = r.seminar_id
          LEFT JOIN orders o ON o.registration_id = r.id AND lower(trim(o.status)) = 'success'
-         LEFT JOIN tickets t ON t.order_id = o.id
+         LEFT JOIN tickets t ON t.id = (
+             SELECT tpick.id FROM tickets tpick
+             WHERE tpick.order_id = o.id
+             ORDER BY CASE
+                 WHEN tpick.day_id = (
+                     SELECT sd_pick.id FROM seminar_days sd_pick
+                     WHERE sd_pick.seminar_id = s.id AND IFNULL(sd_pick.is_active, 1) = 1
+                     ORDER BY sd_pick.sort_order DESC, sd_pick.day_date DESC, sd_pick.id DESC LIMIT 1
+                 ) THEN 0 ELSE 1 END,
+                 IFNULL(tpick.scan_count, 0) DESC,
+                 tpick.id DESC
+             LIMIT 1
+         )
          LEFT JOIN user_certificates uc ON uc.user_id = r.user_id AND uc.seminar_id = r.seminar_id
          LEFT JOIN certificate_templates ct ON ct.id = uc.template_id AND COALESCE(ct.is_active, 1) = 1
          WHERE r.user_id = ? AND COALESCE(r.status, '') NOT IN ('rejected', 'cancelled')
@@ -6799,7 +7019,9 @@ function queryDoctorCertificateTracking(uid, res, sql, retried) {
             return queryDoctorCertificateTracking(uid, res, DOCTOR_CERT_TRACKING_SQL_LEGACY, true);
         }
         if (err) return res.status(500).json({ error: err.message });
-        res.json(mapDoctorCertificateTrackingRows(rows));
+        registrationDayScans.attachDayScansToRows(db, mapDoctorCertificateTrackingRows(rows), (_e, mapped) =>
+            res.json(mapped)
+        );
     });
 }
 
@@ -6825,6 +7047,7 @@ app.get('/api/doctor/dashboard-stats/:userId', (req, res) => {
         registered_seminars: 0,
         paid_or_confirmed: 0,
         checked_in_seminars: 0,
+        checked_in_days: 0,
         feedback_submitted: 0,
         case_presentations: 0,
         support_tickets: 0,
@@ -6840,8 +7063,24 @@ app.get('/api/doctor/dashboard-stats/:userId', (req, res) => {
             'paid_or_confirmed'
         ],
         [
-            `SELECT COUNT(*) AS c FROM registrations WHERE user_id = ? AND status = 'checked_in'`,
+            `SELECT COUNT(DISTINCT r.id) AS c
+             FROM registrations r
+             LEFT JOIN orders o ON o.registration_id = r.id AND o.status = 'success'
+             LEFT JOIN tickets t ON t.order_id = o.id
+             WHERE r.user_id = ?
+               AND IFNULL(r.status,'') NOT IN ('rejected','cancelled','draft')
+               AND (r.status IN ('checked_in','certificate_issued')
+                    OR IFNULL(t.is_scanned, 0) = 1
+                    OR IFNULL(t.scan_count, 0) > 0)`,
             'checked_in_seminars'
+        ],
+        [
+            `SELECT COUNT(*) AS c
+             FROM tickets t
+             JOIN orders o ON o.id = t.order_id
+             JOIN registrations r ON r.id = o.registration_id
+             WHERE r.user_id = ? AND (IFNULL(t.is_scanned, 0) = 1 OR IFNULL(t.scan_count, 0) > 0)`,
+            'checked_in_days'
         ],
         [
             `SELECT COUNT(*) AS c FROM seminar_feedback WHERE user_id = ?`,
@@ -6857,13 +7096,47 @@ app.get('/api/doctor/dashboard-stats/:userId', (req, res) => {
             'participant_tickets'
         ]
     ];
+    out.volunteer_certificates = 0;
+    out.participant_certificates = 0;
+    out.certificates = 0;
+    const countVolunteerCerts = (done) => {
+        db.all(
+            `SELECT id FROM volunteer_certificates WHERE user_id = ? AND IFNULL(enabled, 0) = 1`,
+            [uid],
+            (vErr, vRows) => {
+                if (vErr || !vRows || !vRows.length) return done();
+                let left = vRows.length;
+                vRows.forEach((v) => {
+                    certRender.canViewVolunteerCert(db, v.id, uid, (_e, ok) => {
+                        if (ok) out.volunteer_certificates += 1;
+                        if (--left === 0) done();
+                    });
+                });
+            }
+        );
+    };
+    const finish = () => countVolunteerCerts(() => {
+        db.all(DOCTOR_CERT_TRACKING_SQL, [uid], (cErr, cRows) => {
+            if (!cErr) {
+                try {
+                    const seen = new Set();
+                    mapDoctorCertificateTrackingRows(cRows).forEach((tr) => {
+                        if (tr.canViewCertificate && tr.certId != null) seen.add(tr.certId);
+                    });
+                    out.participant_certificates = seen.size;
+                } catch (_) {}
+            }
+            out.certificates = out.participant_certificates + out.volunteer_certificates;
+            res.json(out);
+        });
+    });
     let i = 0;
     const next = () => {
-        if (i >= steps.length) return res.json(out);
+        if (i >= steps.length) return finish();
         const [sql, key] = steps[i];
         i++;
         db.get(sql, [uid], (err, row) => {
-            if (!err && row) out[key] = row.c != null ? row.c : row.count || 0;
+            if (!err && row) out[key] = Number(row.c != null ? row.c : row.count) || 0;
             next();
         });
     };
@@ -6904,7 +7177,7 @@ app.get('/api/doctor/event-tickets/:userId', (req, res) => {
         `SELECT t.id as ticket_row_id, t.ticket_id_string, t.qr_code_data, t.is_scanned, t.scan_time,
                 IFNULL(t.scan_count, 0) AS scan_count, IFNULL(t.is_valid, 1) AS is_valid,
                 o.order_id_string, o.amount, o.status as order_status, o.payment_date,
-                r.application_no, r.status as registration_status, s.title as seminar_title, s.id as seminar_id, s.event_date,
+                r.application_no, r.status as registration_status, r.form_data, s.title as seminar_title, s.id as seminar_id, s.event_date,
                 s.event_end_date, s.ticket_expires_at,
                 sday.title AS day_title, sday.day_date AS day_date
          FROM tickets t
@@ -6929,8 +7202,12 @@ app.get('/api/doctor/event-tickets/:userId', (req, res) => {
                 };
                 const expired = isTicketExpired(expiryRow) && !scanned && !adminCheckedIn;
                 const expMs = ticketExpiryMs(expiryRow);
+                const holderName = ticketHtml.nameFromFormData(row.form_data);
+                delete row.form_data;
+                if (row.day_title) row.day_title = seminarDt.shortDayTitle(row.day_title, row.seminar_title);
                 return {
                     ...row,
+                    holder_name: holderName || null,
                     download_token: ticketAccess.createTicketAccessToken(row.ticket_id_string, uid, 900000),
                     seminar_ended: isSeminarEnded(row.event_end_date || ticketDate),
                     ticket_expires_on: expMs != null ? new Date(expMs).toISOString() : null,
@@ -6995,7 +7272,7 @@ app.get('/api/doctor/ticket-document/:ticketId', (req, res) => {
                         ticket_id_string: row.ticket_id_string,
                         application_no: row.application_no,
                         seminar_title: row.day_title
-                            ? row.seminar_title + ' — ' + row.day_title
+                            ? row.seminar_title + ' — ' + seminarDt.shortDayTitle(row.day_title, row.seminar_title)
                             : row.seminar_title,
                         event_date: row.day_date || row.event_date,
                         event_end_date: row.day_date ? null : row.event_end_date,
@@ -8316,11 +8593,26 @@ app.post('/api/scanner/mark', (req, res) => {
                             const eventName =
                                 String(row.scan_event_title || row.seminar_title || '').trim() ||
                                 'National Seminar';
+                            certVerify.scanMayIssueCertificate(db, row.seminar_id, row.day_id, (gateErr, gate) => {
+                            if (gateErr) console.warn('[scanner] cert day:', gateErr.message);
+                            const issuesOnThisDay = !gate || gate.issuesCertificate !== false;
                             const certEligibleNow =
                                 String(row.payment_status || '').toLowerCase() === 'success' &&
-                                newScanCount >= scansRequired;
+                                newScanCount >= scansRequired &&
+                                issuesOnThisDay;
                             let scanMsg = 'Attendance marked. Doctor tracking updated.';
-                            if (scansRequired === 2) {
+                            if (gate && gate.multiDay && issuesOnThisDay && certEligibleNow) {
+                                scanMsg =
+                                    'Attendance marked. This day is on the doctor certificate. Checking in on another day updates the same certificate.';
+                            } else if (gate && gate.multiDay && !issuesOnThisDay) {
+                                const thisDay = String(row.scan_event_title || 'This day').trim();
+                                const finalDay = gate.certDayTitle || 'the final day';
+                                scanMsg =
+                                    thisDay +
+                                    ' check-in recorded. The volunteer certificate is issued on the ' +
+                                    finalDay +
+                                    ' scan.';
+                            } else if (scansRequired === 2) {
                                 if (newScanCount === 1) {
                                     scanMsg =
                                         'Entry scan recorded (1 of 2). Exit scan still required for certificate eligibility.';
@@ -8344,7 +8636,9 @@ app.post('/api/scanner/mark', (req, res) => {
                                     doctor_user_id: row.doctor_user_id,
                                     doctor_name: doctorName,
                                     outcome: 'success',
-                                    message: scanMsg
+                                    message: scanMsg,
+                                    day_id: row.day_id || null,
+                                    day_title: row.scan_event_title || null
                                 },
                                 (_evErr, scanEventId) => {
                                     res.json({
@@ -8399,10 +8693,10 @@ app.post('/api/scanner/mark', (req, res) => {
                                     }
                                 );
                             });
-                            notifEngine.notify(
-                                db,
-                                'CHECK_IN_SUCCESS',
-                                {
+                            seminarDays.getDayById(db, row.day_id, (dayErr, dayRow) => {
+                                if (dayErr) console.warn('[scanner] day email:', dayErr.message);
+                                const dayTitle = (dayRow && dayRow.title) || eventName;
+                                const notifyOpts = {
                                     userId: row.doctor_user_id,
                                     seminarId: row.seminar_id,
                                     registrationId: regId || null,
@@ -8411,16 +8705,30 @@ app.post('/api/scanner/mark', (req, res) => {
                                         ticket_id: row.ticket_id_string,
                                         event_name: eventName,
                                         scan_event_title: eventName,
+                                        day_title: dayTitle,
                                         payment_status:
                                             row.payment_status === 'success' ? 'PAID' : 'UNPAID',
                                         approval_status: 'checked_in',
                                         check_in_time: formatCheckInTimeForNotify(atIso)
                                     }
-                                },
-                                (nErr) => {
-                                    if (nErr) console.warn('[scanner] check-in notify:', nErr.message);
+                                };
+                                if (dayRow && dayRow.scanEmailEnabled === false) {
+                                    notifyOpts.skipEmail = true;
+                                } else if (
+                                    dayRow &&
+                                    (String(dayRow.scanEmailSubject || '').trim() ||
+                                        String(dayRow.scanEmailHtml || '').trim())
+                                ) {
+                                    notifyOpts.emailOverride = {
+                                        subject: String(dayRow.scanEmailSubject || '').trim(),
+                                        html: seminarDays.formatScanEmailHtml(dayRow.scanEmailHtml)
+                                    };
                                 }
-                            );
+                                notifEngine.notify(db, 'CHECK_IN_SUCCESS', notifyOpts, (nErr) => {
+                                    if (nErr) console.warn('[scanner] check-in notify:', nErr.message);
+                                });
+                            });
+                            });
                         };
 
                         if (!regId) return finishScanResponse(new Date().toISOString());
@@ -8998,19 +9306,30 @@ app.get('/api/admin/seminars/:id/stats', (req, res) => {
         });
 
         db.all(`
-            SELECT o.status, o.amount 
+            SELECT o.registration_id, o.status, o.amount, o.refunded_amount, r.status AS reg_status
             FROM orders o 
             JOIN registrations r ON o.registration_id = r.id 
             WHERE r.seminar_id = ?
         `, [seminarId], (err, orders) => {
             if (err) return res.status(500).json({ error: err.message });
+            const paidRegs = new Set();
             orders.forEach(o => {
-                if (o.status === 'pending') stats.pending_payments++;
-                if (o.status === 'success') {
+                if (String(o.status || '').trim().toLowerCase() === 'success') paidRegs.add(o.registration_id);
+            });
+            const pendingRegs = new Set();
+            orders.forEach(o => {
+                const st = String(o.status || '').trim().toLowerCase();
+                const regSt = String(o.reg_status || '').trim().toLowerCase();
+                if (st === 'pending' && !paidRegs.has(o.registration_id) && regSt !== 'cancelled' && regSt !== 'rejected') {
+                    pendingRegs.add(o.registration_id);
+                }
+                if (st === 'success') {
                     stats.completed_payments++;
-                    stats.total_revenue += (o.amount || 0);
+                    stats.total_revenue += (Number(o.amount) || 0) - (Number(o.refunded_amount) || 0);
                 }
             });
+            stats.pending_payments = pendingRegs.size;
+            stats.total_revenue = Math.round(stats.total_revenue * 100) / 100;
             seminarCapacity.getSeminarCapacity(db, seminarId, (eCap, cap) => {
                 if (!eCap && cap) {
                     stats.capacity = cap.capacity;
@@ -9100,11 +9419,19 @@ app.get('/api/admin/applications', withApplicationReviewSchema, (req, res) => {
         SELECT a.id, a.application_no, a.status, a.form_data, a.doc_review_json, a.created_at, a.seminar_id,
                a.review_required_level, a.review_escalated_at, a.review_escalated_by, a.review_escalation_json,
                u.first_name, u.last_name, u.user_id_string, u.id AS user_id,
-               s.title AS seminar_title, s.price AS seminar_price, s.event_date AS seminar_event_date,
+               s.title AS seminar_title, s.price AS seminar_price, s.event_date AS seminar_event_date, s.event_end_date AS seminar_event_end_date,
                o.id AS order_id, o.order_id_string, o.amount AS order_amount, o.status AS order_status,
                o.payment_gateway, o.payment_date, o.provider_transaction_id,
                o.refund_status AS order_refund_status, o.refunded_amount AS order_refunded_amount,
-               t.ticket_id_string, t.is_scanned, t.scan_time
+               t.ticket_id_string, t.is_scanned, t.scan_time,
+               sv.id AS volunteer_assignment_id, sv.status AS volunteer_status, sv.volunteer_ticket_id_string,
+               CASE WHEN LOWER(IFNULL(a.status,'')) IN ('cancelled','rejected')
+                    THEN COALESCE(
+                        (SELECT cr.reviewed_at FROM cancellation_requests cr
+                          WHERE cr.registration_id = a.id AND cr.reviewed_at IS NOT NULL
+                          ORDER BY cr.id DESC LIMIT 1),
+                        a.updated_at, a.created_at)
+               END AS cancelled_at
         FROM registrations a
         JOIN users u ON a.user_id = u.id
         LEFT JOIN seminars s ON s.id = a.seminar_id
@@ -9112,17 +9439,25 @@ app.get('/api/admin/applications', withApplicationReviewSchema, (req, res) => {
             SELECT id FROM orders WHERE registration_id = a.id ORDER BY id DESC LIMIT 1
         )
         LEFT JOIN tickets t ON t.order_id = o.id
+        LEFT JOIN seminar_volunteers sv ON sv.seminar_id = a.seminar_id AND sv.user_id = a.user_id
         ORDER BY a.created_at DESC
     `, [], (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
+        const scope = String((req.query && req.query.scope) || 'doctor').toLowerCase();
+        const isVolunteerRow = (row) =>
+            (row.volunteer_assignment_id != null && String(row.volunteer_status || '').toLowerCase() !== 'removed') ||
+            String(row.volunteer_ticket_id_string || '').startsWith('VOL_') ||
+            String(row.ticket_id_string || '').startsWith('VOL_') ||
+            String(row.order_id_string || '').startsWith('ORD_VOL_');
         const grouped = new Map();
         (rows || []).forEach((row) => {
             const key = String(row.id);
             const existing = grouped.get(key);
             if (!existing) {
-                grouped.set(key, { ...row, ticket_id_string: row.ticket_id_string || '' });
+                grouped.set(key, { ...row, ticket_id_string: row.ticket_id_string || '', is_volunteer: isVolunteerRow(row) ? 1 : 0 });
                 return;
             }
+            if (isVolunteerRow(row)) existing.is_volunteer = 1;
             const ticketIds = new Set(
                 String(existing.ticket_id_string || '')
                     .split(',')
@@ -9136,9 +9471,14 @@ app.get('/api/admin/applications', withApplicationReviewSchema, (req, res) => {
                 existing.scan_time = row.scan_time;
             }
         });
-        seminarEvents.attachPaymentAmountsToRegistrations(db, Array.from(grouped.values()), (ePay, withPay) => {
+        const scoped = Array.from(grouped.values()).filter((r) =>
+            scope === 'all' ? true : scope === 'volunteer' ? r.is_volunteer === 1 : r.is_volunteer !== 1
+        );
+        seminarEvents.attachPaymentAmountsToRegistrations(db, scoped, (ePay, withPay) => {
             if (ePay) return res.status(500).json({ error: ePay.message });
-            res.json(withPay || []);
+            registrationDayScans.attachDayScansByRegistrationId(db, withPay || [], 'id', () => {
+                res.json(withPay || []);
+            });
         });
     });
 });
@@ -9212,7 +9552,7 @@ function enableCertificateForRegistration(registrationId, cb) {
                          ON CONFLICT (user_id, seminar_id) DO UPDATE SET
                            enabled = 1,
                            registration_id = excluded.registration_id,
-                           display_name = excluded.display_name,
+                           display_name = CASE WHEN IFNULL(user_certificates.name_edited, 0) = 1 THEN user_certificates.display_name ELSE excluded.display_name END,
                            template_id = COALESCE(excluded.template_id, user_certificates.template_id),
                            updated_at = CURRENT_TIMESTAMP`,
                         [row.user_id, row.seminar_id, registrationId, displayName, tpl ? tpl.id : null],
@@ -9537,6 +9877,7 @@ app.post('/api/admin/registrations/:id/manual-checkin', (req, res) => {
     if (!Number.isInteger(rid) || rid < 1) {
         return res.status(400).json({ error: 'Invalid registration id' });
     }
+    const dayId = req.body && req.body.dayId != null && req.body.dayId !== '' ? parseInt(req.body.dayId, 10) : null;
     adminManualCheckin.performManualCheckin(
         db,
         {
@@ -9550,13 +9891,59 @@ app.post('/api/admin/registrations/:id/manual-checkin', (req, res) => {
         adminId,
         (err, result) => {
             if (err) return res.status(400).json({ error: err.message });
+            const dayName = result && result.dayTitle ? ' for ' + result.dayTitle : '';
+            const note = result && result.eligibilityNote ? ' ' + result.eligibilityNote : '';
+            const message =
+                dayId && result
+                    ? 'Checked in' + dayName + '.' + note
+                    : 'Manual check-in complete. Ticket marked scanned and certificate eligibility updated.';
             res.json({
                 success: true,
-                message: 'Manual check-in complete. Ticket marked scanned and certificate eligibility updated.',
+                message,
                 ...result
             });
-        }
+        },
+        { dayId }
     );
+});
+
+app.get('/api/admin/registrations/:id/checkin-days', (req, res) => {
+    const rid = parseInt(req.params.id, 10);
+    const adminId = parseInt(req.query.actingAdminId, 10);
+    if (!Number.isInteger(rid) || rid < 1) {
+        return res.status(400).json({ error: 'Invalid registration id' });
+    }
+    assertAdminPortalActor(adminId, (eAct) => {
+        if (eAct) {
+            return res.status(eAct.message === 'FORBIDDEN' || eAct.message === 'BAD_ACTOR' ? 403 : 500).json({
+                error: 'Admin access required'
+            });
+        }
+        adminManualCheckin.listCheckinState(db, rid, (err, state) => {
+            if (err) return res.status(400).json({ error: err.message });
+            res.json(state);
+        });
+    });
+});
+
+app.post('/api/admin/registrations/:id/issue-certificate', (req, res) => {
+    const rid = parseInt(req.params.id, 10);
+    const adminId = req.body && req.body.actingAdminId != null ? parseInt(req.body.actingAdminId, 10) : null;
+    const kind = req.body && req.body.kind;
+    if (!Number.isInteger(rid) || rid < 1) {
+        return res.status(400).json({ error: 'Invalid registration id' });
+    }
+    assertAdminPortalActor(adminId, (eAct) => {
+        if (eAct) {
+            return res.status(eAct.message === 'FORBIDDEN' || eAct.message === 'BAD_ACTOR' ? 403 : 500).json({
+                error: 'Admin access required'
+            });
+        }
+        adminManualCheckin.issueAttendanceCertificate(db, { certVerify }, rid, kind, (err, result) => {
+            if (err) return res.status(400).json({ error: err.message });
+            res.json(result);
+        });
+    });
 });
 
 app.post('/api/admin/applications/status', (req, res) => {
@@ -9635,7 +10022,35 @@ app.post('/api/admin/applications/status', (req, res) => {
             );
         }
 
-    db.run(`UPDATE registrations SET status = ? WHERE id = ?`, [status, applicationId], function(err) {
+    const persistApprovalFee =
+        newSt === 'approved_pending_payment' &&
+        feeTypeNorm !== 'volunteer' &&
+        Number.isFinite(feeAmountNum) &&
+        feeAmountNum >= 0;
+
+    const updateRegistrationSql = persistApprovalFee
+        ? `UPDATE registrations
+           SET status = ?,
+               doc_review_json = (
+                   COALESCE(doc_review_json::jsonb, '{}'::jsonb)
+                   || jsonb_build_object(
+                       'fee_type', 'regular',
+                       'fee_amount', ?::numeric,
+                       'decision', 'approve',
+                       'reviewed_at', COALESCE(
+                           doc_review_json::jsonb->>'reviewed_at',
+                           to_char(NOW(), 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')
+                       )
+                   )
+               )::text
+           WHERE id = ?`
+        : `UPDATE registrations SET status = ? WHERE id = ?`;
+
+    const updateRegistrationParams = persistApprovalFee
+        ? [status, feeAmountNum, applicationId]
+        : [status, applicationId];
+
+    db.run(updateRegistrationSql, updateRegistrationParams, function(err) {
         if (err) return res.status(500).json({ error: err.message });
         
             const logEntries = portalTracking.registrationStatusToLog(newSt, prevStatus);
@@ -10182,15 +10597,22 @@ app.post('/api/admin/users/:userId/resend-verification', (req, res) => {
 // Admin: scanner check-in log (which doctor was scanned, by whom)
 app.get('/api/admin/scanner/logs', (req, res) => {
     const seminarId = req.query.seminarId ? parseInt(req.query.seminarId, 10) : null;
+    const dayId = req.query.dayId ? parseInt(req.query.dayId, 10) : null;
+    const scannerId = req.query.scannerId ? parseInt(req.query.scannerId, 10) : null;
     let sql = `
-        SELECT t.id, t.ticket_id_string, t.scan_time, t.is_scanned,
+        SELECT t.id, t.ticket_id_string, t.scan_time, t.is_scanned, t.day_id, t.event_id,
+               sday.title AS day_title, sday.day_date AS day_date,
+               sev.title AS event_title,
                doc.user_id_string AS doctor_user_id_string, doc.first_name AS doctor_first_name, doc.last_name AS doctor_last_name,
                doc.email AS doctor_email, doc.phone AS doctor_phone,
+               t.scanned_by AS scanner_id,
                scanner.first_name AS scanner_first_name, scanner.last_name AS scanner_last_name, scanner.user_id_string AS scanner_user_id_string,
                r.application_no, s.title AS seminar_title, s.id AS seminar_id
         FROM tickets t
         JOIN users doc ON doc.id = t.user_id
         LEFT JOIN users scanner ON scanner.id = t.scanned_by
+        LEFT JOIN seminar_days sday ON sday.id = t.day_id
+        LEFT JOIN seminar_events sev ON sev.id = t.event_id
         JOIN orders o ON o.id = t.order_id
         JOIN registrations r ON r.id = o.registration_id
         JOIN seminars s ON r.seminar_id = s.id
@@ -10201,10 +10623,30 @@ app.get('/api/admin/scanner/logs', (req, res) => {
         sql += ` AND s.id = ?`;
         params.push(seminarId);
     }
-    sql += ` ORDER BY t.scan_time DESC LIMIT 500`;
+    if (Number.isInteger(dayId) && dayId > 0) {
+        sql += ` AND t.day_id = ?`;
+        params.push(dayId);
+    }
+    if (Number.isInteger(scannerId) && scannerId > 0) {
+        sql += ` AND t.scanned_by = ?`;
+        params.push(scannerId);
+    }
+    sql += ` ORDER BY t.scan_time DESC LIMIT 2000`;
     db.all(sql, params, (err, rows) => {
         if (err) return res.status(500).json({ error: err.message });
         res.json(rows || []);
+    });
+});
+
+// Admin: day-wise scan counts (per day, per scanner) for one event
+app.get('/api/admin/scanner/day-summary', (req, res) => {
+    const seminarId = parseInt(req.query.seminarId, 10);
+    if (!Number.isInteger(seminarId) || seminarId < 1) {
+        return res.status(400).json({ error: 'seminarId required' });
+    }
+    dayWiseScanStats(db, seminarId, (err, out) => {
+        if (err) return res.status(500).json({ error: err.message });
+        res.json(out);
     });
 });
 
@@ -10302,10 +10744,21 @@ app.post('/api/admin/certificates/signature-image', withMemoryAwareUpload('signa
     certRender.getActiveTemplate(db, seminarId, certType, (e, tpl) => {
         if (e) return res.status(500).json({ error: e.message });
         const applyPath = (templateId, cb) => {
-            db.run(`UPDATE certificate_templates SET ${col} = ? WHERE id = ?`, [relPath, templateId], (e2) => {
-                if (e2) return res.status(500).json({ error: e2.message });
-                cb(null, { templateId, path: relPath, side });
-            });
+            const cfgKey = side === 'left' ? 'sigLeftImagePath' : 'sigRightImagePath';
+            let nextConfigJson = null;
+            try {
+                const cfg = certTemplateCfg.parseConfig(tpl && tpl.config_json);
+                cfg[cfgKey] = relPath;
+                nextConfigJson = certTemplateCfg.stringifyConfig(cfg);
+            } catch (_) {}
+            db.run(
+                `UPDATE certificate_templates SET ${col} = ?, config_json = COALESCE(?, config_json) WHERE id = ?`,
+                [relPath, nextConfigJson, templateId],
+                (e2) => {
+                    if (e2) return res.status(500).json({ error: e2.message });
+                    cb(null, { templateId, path: relPath, side, previewUrl: fileStore.publicFileUrl(relPath) });
+                }
+            );
         };
         if (tpl && tpl.id) return applyPath(tpl.id, (e2, out) => res.json({ success: true, ...out }));
         certRender.applyBuiltinTemplate(
@@ -10563,14 +11016,13 @@ function sendCertificateVerifyOtpChannel(channel, destination, meta, cb) {
                     purpose: 'certificate_verify'
                 })
                 .then((results) => {
-                    const sent = channel === 'phone' ? results.whatsapp : results.email;
+                    const sent = channel === 'email' ? results.email : results.whatsapp;
                     const debug =
                         process.env.OTP_RETURN_CODE === '1' || process.env.NODE_ENV === 'development';
-                    if (!sent.ok && !sent.skipped) {
+                    if (!sent || !sent.ok) {
                         return cb(null, {
                             deliverError:
-                                sent.error ||
-                                'Could not deliver OTP. Configure Zoho email and/or WhatsApp API.',
+                                'The email code could not be sent. Please try again in a few minutes.',
                             debugCode: debug ? code : undefined
                         });
                     }
@@ -10590,11 +11042,8 @@ app.post('/api/public/certificate-verify/otp/send-both', withIntegrationSettings
             if (err) return res.status(500).json({ error: err.message });
             if (!out || !out.ok) return res.status(400).json(out || { ok: false, error: 'Lookup failed' });
             const email = String(out.cert.email || '').trim();
-            const phone = String(out.cert.phone || '').trim();
             const ev = contactValidation.validateEmail(email);
-            const pv = contactValidation.validatePhone(phone);
             if (!ev.valid) return res.status(400).json({ error: 'Certificate holder email is not on file.' });
-            if (!pv.valid) return res.status(400).json({ error: 'Certificate holder mobile is not on file.' });
             const meta = {
                 certId: out.cert.id,
                 certKind: out.cert.kind || 'participant',
@@ -10609,38 +11058,27 @@ app.post('/api/public/certificate-verify/otp/send-both', withIntegrationSettings
                 if (r1 && r1.deliverError) {
                     return res.status(503).json({ error: r1.deliverError, debugCode: r1.debugCode });
                 }
-                sendCertificateVerifyOtpChannel('phone', pv.cleanedPhone, meta, (e2, r2) => {
-                    if (e2) return res.status(500).json({ error: e2.message });
-                    if (r2 && r2.rateLimited) {
-                        return res.status(429).json({ error: 'Too many OTP requests. Try again later.' });
-                    }
-                    if (r2 && r2.deliverError) {
-                        return res.status(503).json({ error: r2.deliverError, debugCode: r2.debugCode });
-                    }
-                    const debug =
-                        process.env.OTP_RETURN_CODE === '1' || process.env.NODE_ENV === 'development';
-                    const payload = {
-                        success: true,
-                        ttlMinutes: otpLib.OTP_TTL_MIN,
-                        maskedEmail: certVerify.maskEmail(ev.cleanedEmail),
-                        maskedPhone: certVerify.maskPhone(pv.cleanedPhone),
-                        certId: out.cert.id
-                    };
-                    if (debug) {
-                        payload.debugEmailCode = r1 && r1.debugCode;
-                        payload.debugPhoneCode = r2 && r2.debugCode;
-                    }
-                    res.json(payload);
-                });
+                const debug =
+                    process.env.OTP_RETURN_CODE === '1' || process.env.NODE_ENV === 'development';
+                const payload = {
+                    success: true,
+                    ttlMinutes: otpLib.OTP_TTL_MIN,
+                    maskedEmail: certVerify.maskEmail(ev.cleanedEmail),
+                    certId: out.cert.id
+                };
+                if (debug) {
+                    payload.debugEmailCode = r1 && r1.debugCode;
+                }
+                res.json(payload);
             });
         }
     );
 });
 
 app.post('/api/public/certificate-verify/confirm', (req, res) => {
-    const { seminarId, applicationNo, prn, token, emailCode, phoneCode } = req.body || {};
-    if (!emailCode || !phoneCode) {
-        return res.status(400).json({ error: 'Email and WhatsApp OTP codes are both required.' });
+    const { seminarId, applicationNo, prn, token, emailCode } = req.body || {};
+    if (!emailCode) {
+        return res.status(400).json({ error: 'Email OTP code is required.' });
     }
     certVerify.resolveCertForPublicLookup(
         db,
@@ -10649,9 +11087,8 @@ app.post('/api/public/certificate-verify/confirm', (req, res) => {
             if (err) return res.status(500).json({ error: err.message });
             if (!out || !out.ok) return res.status(400).json(out || { ok: false, error: 'Lookup failed' });
             const ev = contactValidation.validateEmail(out.cert.email);
-            const pv = contactValidation.validatePhone(out.cert.phone);
-            if (!ev.valid || !pv.valid) {
-                return res.status(400).json({ error: 'Certificate contact details are incomplete.' });
+            if (!ev.valid) {
+                return res.status(400).json({ error: 'Certificate holder email is not on file.' });
             }
             const meta = {
                 certId: out.cert.id,
@@ -10677,51 +11114,29 @@ app.post('/api/public/certificate-verify/confirm', (req, res) => {
                             error: (r1 && r1.error) || 'Invalid or expired email OTP.'
                         });
                     }
-                    otpLib.verifyOtp(
+                    certVerify.validateCertificateEmailOtp(
                         db,
                         {
-                            channel: 'phone',
-                            destination: pv.cleanedPhone,
-                            purpose: 'certificate_verify',
-                            code: String(phoneCode).trim(),
-                            meta,
-                            userId: out.cert.userId,
-                            seminarId: out.seminar.id
+                            certId: out.cert.id,
+                            certKind: out.cert.kind || 'participant',
+                            emailToken: r1.token
                         },
-                        (e2, r2) => {
-                            if (e2) return res.status(500).json({ error: e2.message });
-                            if (!r2 || !r2.ok) {
-                                return res.status(400).json({
-                                    error: (r2 && r2.error) || 'Invalid or expired WhatsApp OTP.'
-                                });
+                        (e3, v) => {
+                            if (e3) return res.status(500).json({ error: e3.message });
+                            if (!v || !v.ok) {
+                                return res.status(400).json(v || { ok: false, error: 'OTP validation failed' });
                             }
-                            certVerify.validateBothOtpTokens(
-                                db,
-                                {
-                                    certId: out.cert.id,
-                                    certKind: out.cert.kind || 'participant',
-                                    emailToken: r1.token,
-                                    phoneToken: r2.token
-                                },
-                                (e3, v) => {
-                                    if (e3) return res.status(500).json({ error: e3.message });
-                                    if (!v || !v.ok) {
-                                        return res.status(400).json(
-                                            v || { ok: false, error: 'OTP validation failed' }
-                                        );
-                                    }
-                                    res.json({
-                                        ok: true,
-                                        valid: true,
-                                        seminarTitle: out.seminar.title,
-                                        displayName: out.cert.displayName,
-                                        applicationNo: out.cert.applicationNo,
-                                        prn: out.cert.prn,
-                                        message:
-                                            'This certificate is authentic and was issued by the Vaidya Gogate Memorial Foundation.'
-                                    });
-                                }
-                            );
+                            res.json({
+                                ok: true,
+                                valid: true,
+                                certKind: out.cert.kind || 'participant',
+                                seminarTitle: out.seminar.title,
+                                displayName: out.cert.displayName,
+                                applicationNo: out.cert.applicationNo,
+                                prn: out.cert.prn,
+                                message:
+                                    'This certificate is authentic and was issued by the Vaidya Gogate Memorial Foundation.'
+                            });
                         }
                     );
                 }
@@ -10841,16 +11256,18 @@ function assertAdminPortalActor(adminId, cb) {
     const aid = parseInt(adminId, 10);
     if (!Number.isInteger(aid) || aid < 1) return cb(new Error('BAD_ACTOR'), null);
     db.get(
-        `SELECT id, role, user_role FROM users WHERE id = ? AND COALESCE(CAST(is_disabled AS INTEGER), 0) = 0`,
+        `SELECT id, role, user_role, staff_modules FROM users WHERE id = ? AND COALESCE(CAST(is_disabled AS INTEGER), 0) = 0`,
         [aid],
         (e, adm) => {
             if (e) return cb(e, null);
             if (!adm) return cb(new Error('FORBIDDEN'), null);
             const ur = String(adm.user_role || '').toLowerCase();
+            const coAdminAccess = require('./lib/co-admin-access');
             const ok =
                 String(adm.role || '').toLowerCase() === 'admin' ||
                 ur === 'co_admin' ||
-                ur === 'scanner_dashboard_user';
+                ur === 'scanner_dashboard_user' ||
+                coAdminAccess.staffCrmAllowedTabIds(adm).length > 0;
             if (!ok) return cb(new Error('FORBIDDEN'), null);
             cb(null, adm);
         }
@@ -10872,7 +11289,12 @@ function requireAdminActor(req, res, next) {
     });
 }
 
+app.get('/api/admin/certificates/:kind/:id/download.pdf', (req, res) => {
+    requireAdminActor(req, res, () => certRender.handleAdminPdfDownload(db, req, res));
+});
+
 registerLiveScannerRoutes(app, { db, requireAdminActor });
+registerApplicationFormExportRoutes(app, { db, requireAdminActor, loadRegistrationFormConfig });
 registerWhatsAppRoutes(app, { db, requireAdminActor, generateId, getOrCreatePendingOrder });
 registerPosRoutes(app, {
     db,
@@ -10895,7 +11317,8 @@ onspotLinks.registerOnspotRoutes(app, {
     notifEngine,
     activityLog,
     seminarCapacity,
-    listDoctorPaymentOptions
+    listDoctorPaymentOptions,
+    loadRegistrationFormConfig
 });
 app.get('/onspot/:token', (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -10950,6 +11373,7 @@ app.get('/api/admin/session', (req, res) => {
                 res.json({
                     user: row,
                     isCoAdmin: String(row.user_role || '').toLowerCase() === 'co_admin',
+                    isStaffCrm: coAdminAccess.isStaffCrmUser(row),
                     allowedTabIds,
                     unrestricted: allowedTabIds == null
                 });
@@ -11583,6 +12007,9 @@ app.post('/api/admin/users/create', (req, res) => {
                                 }
                                 const newId = saved.id || insertedId;
                                 userAccountLifecycle.stampAccountActivated(db, newId, () => {});
+                                if (String((req.body && req.body.accountCategory) || '').toLowerCase() === 'general') {
+                                    db.run(`UPDATE users SET qualification = 'General account' WHERE id = ?`, [newId], () => {});
+                                }
                                 const applyMods = () => {
                                     if (jobRoleApply && (jobRoleApply.staff_modules || jobRoleApply.admin_modules)) {
                                         const sets = [];
@@ -11603,6 +12030,12 @@ app.post('/api/admin/users/create', (req, res) => {
                                                 () => {}
                                             );
                                         }
+                                    } else if (userRole === 'desk_staff') {
+                                        db.run(
+                                            `UPDATE users SET staff_modules = ? WHERE id = ?`,
+                                            [JSON.stringify(require('./lib/user-roles').DESK_STAFF_MODULES), newId],
+                                            () => {}
+                                        );
                                     } else if (userRole === 'book_sales_staff') {
                                         db.run(
                                             `UPDATE users SET staff_modules = ? WHERE id = ?`,
@@ -11792,9 +12225,12 @@ app.post('/api/admin/users/:userId/role', (req, res) => {
     }
 
     const roleCol = userRoles.roleColumnForUserRole(user_role);
+    const deskMods = user_role === 'desk_staff' ? JSON.stringify(userRoles.DESK_STAFF_MODULES) : null;
     db.run(
-        `UPDATE users SET user_role = ?, role = ? WHERE id = ?`,
-        [user_role, roleCol, req.params.userId],
+        deskMods
+            ? `UPDATE users SET user_role = ?, role = ?, staff_modules = ? WHERE id = ?`
+            : `UPDATE users SET user_role = ?, role = ? WHERE id = ?`,
+        deskMods ? [user_role, roleCol, deskMods, req.params.userId] : [user_role, roleCol, req.params.userId],
         function (err) {
             if (err) return res.status(500).json({ error: err.message });
             res.json({ success: true, message: `User role updated to ${user_role}` });
@@ -12942,6 +13378,37 @@ app.post('/api/admin/registrations/certificate-upload', withApplicationDocUpload
     });
 });
 
+app.post('/api/admin/registrations/:id/paid-mark', (req, res) => {
+    requireAdminActor(req, res, (actor) => {
+        const rid = parseInt(req.params.id, 10);
+        if (!Number.isInteger(rid) || rid < 1) return res.status(400).json({ error: 'Invalid registration id' });
+        const paid = req.body && (req.body.paid === true || req.body.paid === 1 || req.body.paid === '1' || req.body.paid === 'true');
+        db.get(`SELECT id, form_data FROM registrations WHERE id = ?`, [rid], (err, row) => {
+            if (err) return res.status(500).json({ error: err.message });
+            if (!row) return res.status(404).json({ error: 'Registration not found' });
+            let fd = {};
+            try {
+                fd = row.form_data ? JSON.parse(row.form_data) : {};
+            } catch (_) {
+                fd = {};
+            }
+            if (paid) {
+                fd.admin_paid_mark = true;
+                fd.admin_paid_mark_at = new Date().toISOString();
+                fd.admin_paid_mark_by = actor.id;
+            } else {
+                delete fd.admin_paid_mark;
+                delete fd.admin_paid_mark_at;
+                delete fd.admin_paid_mark_by;
+            }
+            db.run(`UPDATE registrations SET form_data = ? WHERE id = ?`, [JSON.stringify(fd), rid], (uErr) => {
+                if (uErr) return res.status(500).json({ error: uErr.message });
+                res.json({ success: true, paid: !!paid, markedAt: fd.admin_paid_mark_at || null });
+            });
+        });
+    });
+});
+
 app.post('/api/admin/registrations/upsert', (req, res) => {
     const {
         targetUserId,
@@ -13037,6 +13504,10 @@ app.put('/api/admin/applications/:applicationId/form-data', (req, res) => {
                                 formData: result.formData
                             };
                             if (eMeta || !regMeta) return res.json(payload);
+                            userNameSync.syncUserNameFromFormData(db, regMeta.user_id, result.formData, (nErr, nRes) => {
+                                if (nErr) console.warn('[name-sync] admin form edit:', nErr.message);
+                                if (nRes && nRes.changed) payload.nameSynced = true;
+                            });
                             volunteerTicketFlow.tryFulfillVolunteerAfterRegistration(
                                 db,
                                 volunteerTicketDeps(),
@@ -14860,9 +15331,9 @@ function adminDeliverEticketNotification(userId, registrationId, ticketId, opts,
         payment_status: 'PAID'
     };
 
-    db.get(
+    db.all(
         `SELECT r.seminar_id, r.application_no, r.user_id,
-                t.qr_code_data, t.ticket_id_string, t.is_scanned, t.scan_time,
+                o.id AS order_id, t.qr_code_data, t.ticket_id_string, t.is_scanned, t.scan_time,
                 IFNULL(t.is_valid, 1) AS is_valid, o.status AS payment_status,
                 s.title AS seminar_title, s.event_date, s.location_url, s.portal_year,
                 u.first_name, u.last_name
@@ -14871,12 +15342,18 @@ function adminDeliverEticketNotification(userId, registrationId, ticketId, opts,
          JOIN tickets t ON t.order_id = o.id
          JOIN seminars s ON s.id = r.seminar_id
          JOIN users u ON u.id = r.user_id
-         WHERE r.id = ? AND TRIM(t.ticket_id_string) = TRIM(?)
-         ORDER BY o.id DESC, t.id DESC
-         LIMIT 1`,
-        [registrationId, String(ticketId)],
-        (e, row) => {
+         WHERE r.id = ?
+         ORDER BY o.id DESC, t.id ASC`,
+        [registrationId],
+        (e, allRows) => {
             if (e) return cb && cb(e);
+            allRows = Array.isArray(allRows) ? allRows : [];
+            const wanted = String(ticketId || '').trim();
+            const match = allRows.find((r) => String(r.ticket_id_string || '').trim() === wanted) || null;
+            const anchor = match || allRows[0] || null;
+            const orderRows = anchor ? allRows.filter((r) => r.order_id === anchor.order_id) : [];
+            const row = anchor;
+            const ticketRows = orderRows.filter((r) => r && r.qr_code_data);
             let pending = 0;
             let emailSent = false;
             let whatsappQueued = false;
@@ -14911,6 +15388,7 @@ function adminDeliverEticketNotification(userId, registrationId, ticketId, opts,
                         registrationId,
                         ticketId,
                         ticketRow: row,
+                        ticketRows,
                         vars,
                         immediate
                     },
@@ -15123,8 +15601,18 @@ function enrichEticketRowsWithEmailStatus(db, rows, cb) {
                 out[idx].ticketEmailStatus = log && log.status ? log.status : 'never';
                 out[idx].ticketEmailSentAt = log && log.created_at ? log.created_at : null;
                 out[idx].ticketEmailError = log && log.error ? log.error : null;
-                left--;
-                if (left === 0) cb(null, out);
+                db.get(
+                    `SELECT status, created_at, error FROM notification_logs
+                     WHERE event_key = 'TICKET_ISSUED' AND channel = 'whatsapp' AND user_id = ?
+                     ORDER BY id DESC LIMIT 1`,
+                    [uid],
+                    (e3, wa) => {
+                        out[idx].ticketWhatsappStatus = wa && wa.status ? wa.status : 'never';
+                        out[idx].ticketWhatsappSentAt = wa && wa.created_at ? wa.created_at : null;
+                        left--;
+                        if (left === 0) cb(null, out);
+                    }
+                );
             }
         );
     });
@@ -15133,17 +15621,19 @@ function enrichEticketRowsWithEmailStatus(db, rows, cb) {
 // ==================== ADMIN E-TICKETS (lookup / generate / send) ====================
 
 const ADMIN_ETICKET_LOOKUP_SQL = `
-        SELECT r.id AS registration_id, r.application_no, r.status AS registration_status,
+        SELECT r.id AS registration_id, r.application_no, r.status AS registration_status, r.form_data, r.created_at AS registered_at,
                u.id AS user_id, u.first_name, u.last_name, u.email, u.phone,
                s.id AS seminar_id, s.title AS seminar_title, s.event_date, s.event_end_date, s.ticket_expires_at, s.price AS seminar_price,
                o.id AS order_db_id, o.order_id_string, o.status AS payment_status, o.payment_date,
                t.id AS ticket_row_id, t.ticket_id_string, t.is_scanned, IFNULL(t.scan_count, 0) AS scan_count,
-               t.scan_time, IFNULL(t.is_valid, 1) AS is_valid, t.qr_code_data
+               t.scan_time, IFNULL(t.is_valid, 1) AS is_valid, t.qr_code_data,
+               sd.title AS day_title, sd.day_date, sd.sort_order AS day_sort_order
         FROM registrations r
         JOIN users u ON u.id = r.user_id
         JOIN seminars s ON s.id = r.seminar_id
         LEFT JOIN orders o ON o.registration_id = r.id AND LOWER(TRIM(o.status)) = 'success'
-        LEFT JOIN tickets t ON t.order_id = o.id`;
+        LEFT JOIN tickets t ON t.order_id = o.id
+        LEFT JOIN seminar_days sd ON sd.id = t.day_id`;
 
 function adminLookupEtickets(db, q, cb) {
     const raw = String(q || '').trim();
@@ -15186,7 +15676,9 @@ app.get('/api/admin/e-tickets/lookup', (req, res) => {
                 applicationNo: row.application_no,
                 registrationStatus: row.registration_status,
                 userId: row.user_id,
-                doctorName: [row.first_name, row.last_name].filter(Boolean).join(' ').trim(),
+                doctorName:
+                    ticketHtml.nameFromFormData(row.form_data) ||
+                    [row.first_name, row.last_name].filter(Boolean).join(' ').trim(),
                 email: row.email,
                 phone: row.phone,
                 seminarId: row.seminar_id,
@@ -15200,20 +15692,63 @@ app.get('/api/admin/e-tickets/lookup', (req, res) => {
                 scanTime: row.scan_time,
                 isValid: row.is_valid !== 0 && row.is_valid !== false,
                 eventDate: row.event_date,
+                registeredAt: row.registered_at || null,
+                paymentDate: row.payment_date || null,
                 ticketExpiresAt: formatTicketExpiry(row) || null,
                 ticketExpired:
                     isTicketExpired(row) &&
                     !Number(row.is_scanned) &&
                     Number(row.scan_count || 0) < 1,
                 hasTicket: !!row.ticket_id_string,
+                dayTitle: row.day_title ? seminarDt.shortDayTitle(row.day_title, row.seminar_title) : null,
+                dayDate: row.day_date || null,
+                daySortOrder: row.day_sort_order,
                 ticketPreviewUrl:
                     row.ticket_id_string && row.user_id
                         ? ticketDocumentUrl(row.ticket_id_string, row.user_id)
                         : null
             }));
-            enrichEticketRowsWithEmailStatus(db, list, (e2, enriched) => {
+            // One entry per registration, carrying every event-day ticket in `tickets`.
+            const byReg = new Map();
+            list.forEach((item) => {
+                const key = item.registrationId;
+                if (!byReg.has(key)) byReg.set(key, Object.assign({}, item, { tickets: [] }));
+                const group = byReg.get(key);
+                if (item.ticketIdString) {
+                    group.tickets.push({
+                        ticketIdString: item.ticketIdString,
+                        ticketRowId: item.ticketRowId,
+                        dayTitle: item.dayTitle,
+                        dayDate: item.dayDate,
+                        daySortOrder: item.daySortOrder,
+                        isScanned: item.isScanned,
+                        scanCount: item.scanCount,
+                        scanTime: item.scanTime,
+                        ticketExpired: item.ticketExpired,
+                        ticketPreviewUrl: item.ticketPreviewUrl
+                    });
+                }
+            });
+            const grouped = Array.from(byReg.values()).map((g) => {
+                g.tickets.sort((a, b) => (Number(a.daySortOrder) || 0) - (Number(b.daySortOrder) || 0) || String(a.dayDate || '').localeCompare(String(b.dayDate || '')));
+                if (g.tickets.length) {
+                    const first = g.tickets[0];
+                    Object.assign(g, {
+                        ticketIdString: first.ticketIdString,
+                        ticketRowId: first.ticketRowId,
+                        isScanned: first.isScanned,
+                        scanCount: first.scanCount,
+                        scanTime: first.scanTime,
+                        ticketExpired: first.ticketExpired,
+                        ticketPreviewUrl: first.ticketPreviewUrl,
+                        hasTicket: true
+                    });
+                }
+                return g;
+            });
+            enrichEticketRowsWithEmailStatus(db, grouped, (e2, enriched) => {
                 if (e2) return res.status(500).json({ error: e2.message });
-                res.json({ success: true, results: enriched || list });
+                res.json({ success: true, results: enriched || grouped });
             });
         });
     });
@@ -15771,11 +16306,11 @@ function startBackgroundWorkers() {
         });
         db.get(`SELECT value FROM global_settings WHERE key = ?`, ['notification_templates_sync_v'], (eSync, row) => {
             if (eSync) return;
-            if (row && row.value === '20260619portallinks') return;
+            if (row && row.value === '20260922paylinks') return;
             notifEngine.syncDefaultNotificationTemplates(db, (syncErr) => {
                 if (syncErr) console.warn('[notifications] template sync failed:', syncErr.message);
                 else {
-                    upsertGlobalSetting('notification_templates_sync_v', '20260619portallinks', () => {
+                    upsertGlobalSetting('notification_templates_sync_v', '20260922paylinks', () => {
                         console.log('[notifications] email templates synced (role-based portal links)');
                     });
                 }

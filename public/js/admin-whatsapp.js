@@ -376,9 +376,9 @@
     function campaignTypeChanged() {
         const t = $('wa-c-type').value;
         const f = $('wa-c-filter');
-        const map = { payment_reminder: 'payment_pending', eticket: 'eticket_issued', event_reminder: 'eticket_issued', attendance_thanks: 'attended', certificate: 'certificate_issued', registration_confirmation: 'all' };
+        const map = { payment_reminder: 'payment_pending', whatsapp_group_join: 'eticket_issued', eticket: 'eticket_issued', event_reminder: 'eticket_issued', attendance_thanks: 'attended', certificate: 'certificate_issued', registration_confirmation: 'all' };
         if (map[t] && f) f.value = map[t];
-        if (t === 'eticket') $('wa-c-perticket').checked = true;
+        if (t === 'eticket') $('wa-c-perticket').checked = true; if (t === 'whatsapp_group_join') { const gt = state.templates.find((x) => x.meta_name === 'whatsapp_group_joining_event_updates' && x.is_active); const sel = $('wa-c-template'); if (gt && sel) { sel.value = String(gt.id); } else { toast('Template whatsapp_group_joining_event_updates is not synced or active in the portal.', true); } } if (t === 'whatsapp_group_join') { const gt = state.templates.find((x) => x.meta_name === 'whatsapp_group_joining_event_updates' && x.is_active); const sel = $('wa-c-template'); if (gt && sel) { sel.value = String(gt.id); } else { toast('Template whatsapp_group_joining_event_updates is not synced or active in the portal.', true); } }
         campaignFilterChanged();
     }
     function campaignSourceChanged() {
@@ -472,7 +472,7 @@
             body.template_id = t.id;
             body.template_name = t.meta_name;
             body.template_lang = t.language;
-            body.variable_map = readMapping('wa-c');
+            body.variable_map = readMapping('wa-c'); if (body.campaign_type === 'whatsapp_group_join') { const gt = state.templates.find((x) => x.id === t.id); if (gt && Array.isArray(gt.variables)) { body.variable_map = gt.variables.map((v, i) => String(v || '').trim() === 'whatsapp_group_join_link' ? 'whatsapp_group_join_link' : (body.variable_map[i] || v || '')); } }
             const hu = $('wa-c-header-url');
             if (hu && hu.value.trim()) body.media_url = hu.value.trim();
         } else if (kind === 'text') {

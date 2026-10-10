@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex,nofollow">
+    <title>Book shop</title>
+    <link rel="stylesheet" href="/css/track-timeline.css?v=20261011v9">
+    <link rel="stylesheet" href="/css/shop.css?v=20261011v3">
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+</head>
+<body>
+<div class="topbar">
+    <button type="button" class="brand" onclick="shopGo('home')"><span id="store-name">Book shop</span><small>Books by Dr. R.B. Gogate</small></button>
+    <form class="searchbar" onsubmit="shopSearch(event)">
+        <input id="shop-search" type="search" placeholder="Search books" autocomplete="off">
+        <button type="submit">Search</button>
+    </form>
+    <button type="button" class="top-link" onclick="shopGo('account')"><span id="hello-line">Hello, sign in</span><strong>Account &amp; Orders</strong></button>
+    <button type="button" class="top-link cart-link" onclick="openCartDrawer()">Cart <span class="cart-count" id="cart-count">0</span></button>
+</div>
+<div class="subnav">
+    <button type="button" id="nav-home" onclick="shopGo('home')">All books</button>
+    <button type="button" id="nav-orders" onclick="shopGo('account','orders')">Your orders</button>
+    <button type="button" id="nav-addresses" onclick="shopGo('account','address')">Your addresses</button>
+    <span class="hours" id="shop-hours"></span>
+</div>
+<div id="closed-banner" class="closed-banner hidden"></div>
+
+<main class="wrap">
+    <section id="view-home"></section>
+    <section id="view-checkout" class="hidden"></section>
+    <section id="view-login" class="hidden"></section>
+    <section id="view-account" class="hidden"></section>
+    <section id="view-order" class="hidden"></section>
+</main>
+
+<footer class="footer" id="shop-footer"></footer>
+
+<div id="drawer-mask" class="drawer-mask hidden" onclick="closeCartDrawer()"></div>
+<aside id="cart-drawer" class="drawer hidden" aria-label="Shopping cart">
+    <header>Shopping cart <button type="button" onclick="closeCartDrawer()" aria-label="Close">&times;</button></header>
+    <div class="drawer-body" id="drawer-body"></div>
+    <div class="drawer-foot" id="drawer-foot"></div>
+</aside>
+
+<script src="/js/track-timeline.js?v=20261011v9"></script>
+<script src="/js/commerce-track.js?v=20261011v9"></script>
+<script src="/js/shop.js?v=20261011v9"></script>
+</body>
+</html>

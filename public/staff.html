@@ -113,25 +113,51 @@
             </div>
 
             <div id="staff-panel-pos" class="card hidden">
-                <p style="color:#64748b;font-size:0.88rem;margin:0 0 12px;">On-spot registration: search by phone, name, email, doctor ID or application no. Registered participants appear below. Send a private payment link (valid 1 hour) to the participant's email.</p>
+                <p style="color:#64748b;font-size:0.88rem;margin:0 0 12px;">On-spot registration: search by phone, name, email, doctor ID or application no., or register a new participant and collect payment now.</p>
                 <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;">
                     <input type="search" id="staff-pos-q" placeholder="Phone / name / email / doctor ID…" style="flex:1;min-width:200px;">
                     <button type="button" class="btn btn-primary" onclick="staffPosSearch()">Search</button>
                 </div>
                 <div id="staff-pos-results" style="margin-bottom:16px;"><p style="color:#64748b;">Enter a search term above.</p></div>
-                <h3 style="font-size:1rem;margin:0 0 8px;">Send private on-spot link</h3>
+                <h3 style="font-size:1rem;margin:0 0 8px;">Register &amp; collect payment</h3>
                 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin-bottom:8px;">
                     <select id="staff-pos-seminar"><option value="">Select seminar</option></select>
+                    <select id="staff-pos-day" title="Ticket days"><option value="">All days</option></select>
                     <input type="number" id="staff-pos-amount" placeholder="Amount (₹, blank = seminar fee)" min="0" step="1">
                     <input type="text" id="staff-pos-first" placeholder="First name">
+                    <input type="text" id="staff-pos-middle" placeholder="Middle name (optional)">
                     <input type="text" id="staff-pos-last" placeholder="Last name">
                     <input type="tel" id="staff-pos-phone" placeholder="Phone">
-                    <input type="email" id="staff-pos-email" placeholder="Email (link is sent here)">
+                    <input type="email" id="staff-pos-email" placeholder="Email">
+                    <select id="staff-pos-payment-method"><option value="cash">Cash</option></select>
                 </div>
+                <p id="staff-pos-method-desc" style="color:#64748b;font-size:0.82rem;margin:0 0 8px;"></p>
                 <input type="hidden" id="staff-pos-user-id">
-                <button type="button" class="btn btn-primary" onclick="staffPosCreateLink()">Create &amp; email 1-hour link</button>
-                <div id="staff-pos-link-out" style="margin-top:10px;"></div>
+                <button type="button" class="btn btn-primary" onclick="staffPosRegisterNow()">Register &amp; collect payment</button>
+                <div id="staff-pos-status" style="margin-top:10px;font-weight:600;"></div>
+                <div id="staff-pos-qr-block" class="hidden" style="margin-top:10px;text-align:center;">
+                    <img id="staff-pos-qr-img" alt="Payment QR" style="max-width:220px;border:1px solid #cbd5e1;border-radius:8px;">
+                    <p id="staff-pos-qr-amount" style="margin:6px 0;color:#0f172a;"></p>
+                </div>
+                <p id="staff-pos-poll-status" style="color:#64748b;font-size:0.85rem;margin-top:6px;"></p>
+                <button type="button" class="btn btn-muted hidden" id="staff-pos-mark-upi-btn" onclick="staffPosMarkUpiPaid()">UPI received — mark paid</button>
+                <div id="staff-pos-link-section" class="hidden" style="margin-top:18px;border-top:1px solid #e2e8f0;padding-top:12px;">
+                    <h3 style="font-size:1rem;margin:0 0 8px;">Or email a private 1-hour registration link</h3>
+                    <p style="color:#64748b;font-size:0.85rem;margin:0 0 8px;">Uses the details entered above; the link is sent to the email.</p>
+                    <button type="button" class="btn btn-muted" onclick="staffPosCreateLink()">Create &amp; email 1-hour link</button>
+                    <div id="staff-pos-link-out" style="margin-top:10px;"></div>
+                </div>
             </div>
+        </div>
+    </div>
+
+    <div id="staff-contact-modal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:51;padding:16px;">
+        <div class="card" style="width:760px;max-width:100%;max-height:90vh;overflow-y:auto;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+                <h2 style="margin:0;font-size:1.1rem;">Contact Applicant</h2>
+                <button type="button" class="btn btn-muted" style="padding:4px 10px;" onclick="staffCloseContactModal()">×</button>
+            </div>
+            <div id="staff-contact-modal-body">Loading…</div>
         </div>
     </div>
 
@@ -145,10 +171,21 @@
         </div>
     </div>
 
+<section id="staff-panel-contact-center" class="staff-panel hidden">
+  <div class="staff-card">
+    <div class="staff-card-header">
+      <h2>Contact Center</h2>
+      <button type="button" onclick="loadStaffContactCenter()">Refresh</button>
+    </div>
+    <div id="staff-contact-center-list">Loading assigned applicants...</div>
+  </div>
+</section>
+
     <script src="/js/fetch-json.js?v=20260527a"></script>
-    <script src="/js/portal-auth.js?v=20260527b"></script>
+    <script src="/js/portal-auth.js?v=20261001b"></script>
     <script src="/js/book-tracking-ui.js?v=20260530d"></script>
-    <script src="/js/staff-portal.js?v=20260916pos"></script>
-    <script src="/js/pos-onspot-ui.js?v=20260916a"></script>
+    <script src="/js/staff-portal.js?v=20261001c"></script>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <script src="/js/pos-onspot-ui.js?v=20261001m"></script>
 </body>
 </html>

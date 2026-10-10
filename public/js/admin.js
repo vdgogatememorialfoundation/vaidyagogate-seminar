@@ -256,14 +256,64 @@ function readStaffPortalUser() {
     }
 }
 
+const STAFF_MODULE_TO_ADMIN_TAB = {
+    applications: 'tab-applications',
+    pos: 'tab-pos',
+    etickets: 'tab-etickets',
+    payments: 'tab-admin-payments',
+    'support-tickets': 'tab-support-tickets',
+    'contact-center': 'tab-contact-center',
+    'book-inventory': 'tab-book-sales',
+    'book-orders': 'tab-book-sales'
+};
+
+function isStaffCrmUserClient(u) {
+    const ur = String((u && u.user_role) || '').toLowerCase();
+    const r = String((u && u.role) || '').toLowerCase();
+    return r !== 'admin' && (ur === 'staff_user' || ur === 'book_sales_staff' || ur === 'desk_staff');
+}
+
+/** admin_modules (tab ids) derived from a staff user's staff_modules. */
+function staffModulesToAdminTabs(raw) {
+    let mods = {};
+    try {
+        mods = typeof raw === 'string' ? JSON.parse(raw || '{}') : raw || {};
+    } catch (_) {
+        mods = {};
+    }
+    const out = {};
+    Object.keys(mods || {}).forEach((k) => {
+        if (mods[k] !== true) return;
+        if (STAFF_MODULE_TO_ADMIN_TAB[k]) out[STAFF_MODULE_TO_ADMIN_TAB[k]] = true;
+        else if (k.indexOf('tab-') === 0) out[k] = true;
+    });
+    return out;
+}
+
+const DESK_STAFF_MODULES = { applications: true, pos: true, etickets: true };
+
+function withStaffCrmModules(u) {
+    if (!isStaffCrmUserClient(u)) return u;
+    const isDesk = String(u.user_role || '').toLowerCase() === 'desk_staff';
+    const hasStored = Object.keys(staffModulesToAdminTabs(u.staff_modules)).length > 0;
+    return Object.assign({}, u, { admin_modules: staffModulesToAdminTabs(isDesk && !hasStored ? DESK_STAFF_MODULES : u.staff_modules) });
+}
+
+function usesCoAdminModuleGating(u) {
+    return String((u && u.user_role) || '').toLowerCase() === 'co_admin' || isStaffCrmUserClient(u);
+}
+
 function tryBootstrapStaffCrmAuth() {
     if (!isStaffCrmRoute()) return false;
     const staffUser = readStaffPortalUser();
-    if (!staffUser || String(staffUser.user_role || '').toLowerCase() !== 'co_admin') {
-        return false;
-    }
+    if (!staffUser) return false;
+    const isCo = String(staffUser.user_role || '').toLowerCase() === 'co_admin';
+    const isStaff =
+        isStaffCrmUserClient(staffUser) &&
+        Object.keys(staffModulesToAdminTabs(String(staffUser.user_role || '').toLowerCase() === 'desk_staff' ? DESK_STAFF_MODULES : staffUser.staff_modules)).length > 0;
+    if (!isCo && !isStaff) return false;
     localStorage.setItem('admin_auth', 'true');
-    localStorage.setItem('admin_user', JSON.stringify(staffUser));
+    localStorage.setItem('admin_user', JSON.stringify(withStaffCrmModules(staffUser)));
     return true;
 }
 
@@ -273,7 +323,7 @@ function applyStaffCrmChrome() {
     const loginHint = document.querySelector('#auth-overlay p');
     if (loginHint) {
         loginHint.textContent =
-            'Co-admin session required. Sign in at /staff/login first, then open /staff/crm.';
+            'Staff session required. Sign in at /staff/login first, then open /staff/crm.';
     }
 }
 
@@ -616,8 +666,10 @@ function mergeAdminEnabledPagesPolicy(stored) {
     const restrict = keys.length && keys.some((k) => pages[k] === true);
     if (restrict) {
         if (!('tab-book-sales' in pages)) pages['tab-book-sales'] = true;
+        if (!('tab-commerce' in pages)) pages['tab-commerce'] = true;
         if (!('tab-cancellation-review' in pages)) pages['tab-cancellation-review'] = true;
         if (!('tab-whatsapp' in pages)) pages['tab-whatsapp'] = true;
+        if (!('tab-payment-followup' in pages)) pages['tab-payment-followup'] = pages['tab-admin-payments'] === true;
     }
     return pages;
 }
@@ -654,21 +706,29 @@ function adminCanAccessTab(tabId) {
     if (checkId === 'tab-users') checkId = 'tab-staff-users';
     if (isSuperAdminUser()) return true;
     const u = getStoredAdminUser();
-    const isCo = String(u && u.user_role || '').toLowerCase() === 'co_admin';
+    if ((tabId === 'tab-book-sales' || tabId === 'tab-commerce') && String((u && (u.user_role || u.role)) || '').toLowerCase() !== 'co_admin') {
+        return false;
+    }
+    const isCo = usesCoAdminModuleGating(u);
     if (!isCo) {
         if (tabId === 'tab-cancellation-review' && globalAdminTabAllowed('tab-admin-payments')) return true;
         if (tabId === 'tab-refund-tracking' && globalAdminTabAllowed('tab-admin-payments')) return true;
+        if (tabId === 'tab-payment-followup' && globalAdminTabAllowed('tab-admin-payments')) return true;
+        if (tabId === 'tab-commerce' && globalAdminTabAllowed('tab-book-sales')) return true;
         return globalAdminTabAllowed(checkId);
     }
     const { unset, mods } = coAdminModulesState(u);
     if (unset) {
         if (tabId === 'tab-cancellation-review' && globalAdminTabAllowed('tab-admin-payments')) return true;
         if (tabId === 'tab-refund-tracking' && globalAdminTabAllowed('tab-admin-payments')) return true;
+        if (tabId === 'tab-commerce' && globalAdminTabAllowed('tab-book-sales')) return true;
         return globalAdminTabAllowed(checkId);
     }
     if (!Object.keys(mods).length) return false;
-    if (tabId === 'tab-cancellation-review' && mods['tab-admin-payments'] === true) return true;
-    if (tabId === 'tab-refund-tracking' && mods['tab-admin-payments'] === true) return true;
+    if (!isStaffCrmUserClient(u) && mods['tab-admin-payments'] === true) {
+        if (tabId === 'tab-cancellation-review' || tabId === 'tab-refund-tracking' || tabId === 'tab-payment-followup') return true;
+    }
+    if (tabId === 'tab-commerce' && (mods['tab-commerce'] === true || mods['tab-book-sales'] === true)) return true;
     return mods[checkId] === true;
 }
 
@@ -679,6 +739,15 @@ function applyCoAdminSidebarVisibility() {
         if (!adminCanAccessTab(m)) el.classList.add('hidden');
         else el.classList.remove('hidden');
     });
+    if (isSuperAdminUser()) return;
+    const visible = Array.from(document.querySelectorAll('.tab-pane')).filter((p) => !p.classList.contains('hidden'));
+    const blocked = visible.filter((p) => !adminCanAccessTab(p.id));
+    if (!blocked.length) return;
+    blocked.forEach((p) => p.classList.add('hidden'));
+    if (visible.length === blocked.length) {
+        const first = document.querySelector('.menu-item[data-admin-module]:not(.hidden)');
+        if (first) first.click();
+    }
 }
 
 async function refreshAdminLoginOtpPanel() {
@@ -707,6 +776,14 @@ window.onload = async () => {
     if (localStorage.getItem('admin_auth')) {
         showAdminDashboard();
         await refreshCoAdminSessionFromServer();
+        if (isStaffCrmRoute() && /^#tab-/.test(window.location.hash || '')) {
+            const want = decodeURIComponent(window.location.hash.slice(1));
+            if (adminCanAccessTab(want)) {
+                const mi = document.querySelector('.menu-item[data-admin-module="' + want + '"]');
+                if (mi) mi.click();
+                else switchTab(want);
+            }
+        }
         loadAllData();
         loadPortalAuthAdminForm()
             .then(() => applyCoAdminSidebarVisibility())
@@ -894,7 +971,7 @@ function switchTab(tabId) {
     const menuMatch = document.querySelector('.menu-item[data-admin-module="' + tabId + '"]');
     if (menuMatch) menuMatch.classList.add('active');
     else if (typeof event !== 'undefined' && event && event.currentTarget) event.currentTarget.classList.add('active');
-    if (tabId === 'tab-behalf-reg' || tabId === 'tab-site-cms') {
+    if (tabId === 'tab-behalf-reg' || tabId === 'tab-volunteer-app' || tabId === 'tab-site-cms') {
         refreshAdminSensitiveOtpRequirement();
     }
     if (tabId === 'tab-site-cms' && typeof loadAdminSiteCms === 'function') {
@@ -908,6 +985,9 @@ function switchTab(tabId) {
     }
     if (tabId === 'tab-book-sales' && typeof loadBookSalesAdmin === 'function') {
         loadBookSalesAdmin();
+    }
+    if (tabId === 'tab-commerce' && typeof loadCommerceAdmin === 'function') {
+        loadCommerceAdmin();
     }
     if (tabId === 'tab-staff-users' || tabId === 'tab-doctors') {
         loadUsers();
@@ -1086,7 +1166,9 @@ function openAdminCreateUserModal(kind) {
         }
     }
     const title = modal.querySelector('h2');
-    if (title) title.textContent = kind === 'doctor' ? 'Register new doctor' : 'Register new staff user';
+    if (title) title.textContent = kind === 'doctor' ? 'Register new doctor / general account' : 'Register new staff user';
+    const catSel = document.getElementById('newuser-account-category');
+    if (catSel) catSel.value = '';
     populateNewUserJobRoles(kind);
     if (kind === 'staff') {
         loadSupportDeskDepartmentsForForms();
@@ -1115,25 +1197,25 @@ function adminAccountActivationLabel(u) {
 
 function refreshCoAdminModulesFromServer(users) {
     const u = getStoredAdminUser();
-    if (!u || String(u.user_role || '').toLowerCase() !== 'co_admin') return;
+    if (!u || !usesCoAdminModuleGating(u)) return;
     const fresh = (users || []).find((row) => Number(row.id) === Number(u.id));
     if (!fresh) return;
-    const next = Object.assign({}, u, {
+    const next = withStaffCrmModules(Object.assign({}, u, {
         admin_modules: fresh.admin_modules,
         staff_modules: fresh.staff_modules
-    });
+    }));
     localStorage.setItem('admin_user', JSON.stringify(next));
     applyCoAdminSidebarVisibility();
 }
 
 async function refreshCoAdminSessionFromServer() {
     const u = getStoredAdminUser();
-    if (!u || !u.id || String(u.user_role || '').toLowerCase() !== 'co_admin') return;
+    if (!u || !u.id || !usesCoAdminModuleGating(u)) return;
     try {
         const res = await fetch(`/api/admin/session?actingAdminId=${encodeURIComponent(u.id)}`);
         const data = await res.json();
         if (!res.ok || !data.user) return;
-        const next = Object.assign({}, u, data.user);
+        const next = withStaffCrmModules(Object.assign({}, u, data.user));
         localStorage.setItem('admin_user', JSON.stringify(next));
         applyCoAdminSidebarVisibility();
     } catch (_) {
@@ -1142,6 +1224,7 @@ async function refreshCoAdminSessionFromServer() {
 }
 
 async function loadUsers() {
+    if (!adminCanAccessTab('tab-staff-users') && !adminCanAccessTab('tab-doctors')) return;
     try {
         const res = await fetch('/api/admin/users');
         const users = await res.json();
@@ -1298,7 +1381,7 @@ function renderStaffUsersTable(staffList) {
                 ? ' style="background:#ecfdf5;"'
                 : '';
         const userRole = adminStaffUserRoleValue(u);
-        const staffPortalRoles = ['co_admin', 'book_sales_staff', 'staff_user'];
+        const staffPortalRoles = ['co_admin', 'book_sales_staff', 'staff_user', 'desk_staff'];
                 const modulesBtn =
                     isSuperAdminUser() && String(userRole).toLowerCase() === 'co_admin'
                 ? `<button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;margin-left:6px;background:#0d9488;" onclick="openAdminModulesModal(${u.id})">Admin modules</button>`
@@ -1329,6 +1412,7 @@ function renderStaffUsersTable(staffList) {
                             <option value="reviewer" ${userRole === 'reviewer' ? 'selected' : ''}>Reviewer</option>
                             <option value="book_sales_staff" ${userRole === 'book_sales_staff' ? 'selected' : ''}>Book sales staff</option>
                             <option value="staff_user" ${userRole === 'staff_user' ? 'selected' : ''}>Staff user</option>
+                            <option value="desk_staff" ${userRole === 'desk_staff' ? 'selected' : ''}>Desk staff (On-spot POS + Doctor applications + E-tickets)</option>
                             <option value="support_agent" ${userRole === 'support_agent' ? 'selected' : ''}>Support agent</option>
                             <option value="doctor" ${userRole === 'doctor' ? 'selected' : ''}>Doctor (doctor portal)</option>
                         </select>
@@ -1702,10 +1786,13 @@ const ADMIN_MODULE_TAB_DEFS = [
     ['tab-email-compose', 'Send email'],
     ['tab-transfer', 'Transfer applications'],
     ['tab-behalf-reg', 'Doctor applications (admin workspace)'],
+    ['tab-volunteer-app', 'Volunteer applications (admin workspace)'],
     ['tab-reg-form', 'Registration form fields'],
     ['tab-site-cms', 'Website & doctor updates'],
     ['tab-book-sales', 'Book sales'],
+    ['tab-commerce', 'Commerce'],
     ['tab-admin-payments', 'Payments'],
+    ['tab-payment-followup', 'Payment follow-up'],
     ['tab-cancellation-review', 'Cancellation review & refunds'],
     ['tab-refund-tracking', 'Refund tracking'],
     ['tab-certificates', 'Certificate management'],
@@ -1811,11 +1898,27 @@ async function initAdminPosTab() {
             if (s.price) o.dataset.price = s.price;
             sel.appendChild(o);
         });
+        const daySel = document.getElementById('pos-day');
+        const fillPosDays = () => {
+            if (!daySel) return;
+            const sem = list.find((x) => String(x.id) === String(sel.value));
+            const days = (sem && sem.days) || [];
+            daySel.innerHTML = '<option value="">All days</option>';
+            days.forEach((d, i) => {
+                const o = document.createElement('option');
+                o.value = d.id;
+                o.textContent = (d.title || 'Day ' + (i + 1)) + (d.day_date ? ' — ' + d.day_date : '') + ' only';
+                daySel.appendChild(o);
+            });
+            daySel.disabled = days.length < 2;
+        };
         sel.onchange = () => {
             const opt = sel.selectedOptions[0];
             const priceEl = document.getElementById('pos-amount');
             if (priceEl && opt && opt.dataset.price) priceEl.value = opt.dataset.price;
+            fillPosDays();
         };
+        fillPosDays();
         await loadPosPaymentMethods();
     } catch (e) {
         console.warn(e);
@@ -1915,15 +2018,23 @@ function startPosPaymentPoll() {
     __posPollTimer = setInterval(posPollPaymentOnce, 4000);
 }
 
+/** Ask the desk for the UPI UTR / reference; returns '' when skipped, null when cancelled. */
+function promptUpiUtr() {
+    const v = prompt('UPI payment received?\nEnter the UPI transaction ID / UTR from the payer\'s app (or leave blank), then OK to confirm.', '');
+    if (v === null) return null;
+    return String(v).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
+}
+
 async function posMarkUpiPaid() {
     const adm = getStoredAdminUser();
     if (!adm?.id || !__posOrderDbId) return alert('No pending UPI order.');
-    if (!confirm('Confirm that UPI payment was received in the bank?')) return;
+    const __utr = promptUpiUtr();
+    if (__utr === null) return;
     try {
         const res = await fetch('/api/admin/payments/mark-upi-paid', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ orderDbId: __posOrderDbId, adminUserId: adm.id })
+            body: JSON.stringify({ orderDbId: __posOrderDbId, adminUserId: adm.id, utr: __utr })
         });
         const data = await res.json();
         if (!res.ok) return alert(data.error || 'Could not mark paid');
@@ -2041,7 +2152,10 @@ async function submitAdminPosRegistration() {
                 email: document.getElementById('pos-email').value,
                 amount: document.getElementById('pos-amount').value,
                 paymentMethod: methodId,
-                sendTicketEmail: !!(document.getElementById('pos-send-ticket-email') || {}).checked
+                selectedDayIds: (document.getElementById('pos-day') || {}).value
+                    ? [document.getElementById('pos-day').value]
+                    : [],
+                sendTicketEmail: true
             })
         });
         const data = await res.json().catch(() => ({}));
@@ -2110,6 +2224,24 @@ async function submitAdminPosRegistration() {
 function adminActorId() {
     const u = getStoredAdminUser();
     return u && u.id ? u.id : null;
+}
+
+function downloadAdminApplicationForm(appId, format) {
+    const aid = adminActorId();
+    if (!aid) return alert('Please sign in again.');
+    window.open(
+        '/api/admin/applications/' + encodeURIComponent(appId) + '/form-export?format=' + (format === 'png' ? 'png' : 'pdf') + '&actingAdminId=' + encodeURIComponent(aid),
+        '_blank'
+    );
+}
+
+function downloadAdminSeminarBlankForm(seminarId, format) {
+    const aid = adminActorId();
+    if (!aid) return alert('Please sign in again.');
+    window.open(
+        '/api/admin/seminars/' + encodeURIComponent(seminarId) + '/form-export?format=' + (format === 'png' ? 'png' : 'pdf') + '&actingAdminId=' + encodeURIComponent(aid),
+        '_blank'
+    );
 }
 
 async function loadAdminFeedbackFormConfig() {
@@ -2322,12 +2454,17 @@ async function saveAdminModulesForTarget() {
 const STAFF_PORTAL_MODULE_DEFS = [
     ['book-inventory', 'Stock inventory'],
     ['book-orders', 'Book orders'],
-    ['applications', 'Review applications'],
+    ['applications', 'Doctor applications (staff review)'],
     ['support-tickets', 'Support tickets'],
     ['etickets', 'E-tickets lookup'],
     ['payments', 'Payments & seminar orders'],
-    ['pos', 'On-spot POS (search, private pay links)']
-];
+    ['pos', 'On-spot POS (register & collect, private pay links)'],
+    ['contact-center', 'Contact Center (assigned applicant follow-up)']
+].concat(
+    (window.ADMIN_MODULE_DEFS || [])
+        .filter((d) => !Object.values(STAFF_MODULE_TO_ADMIN_TAB).includes(d.id))
+        .map((d) => [d.id, 'Admin: ' + d.label])
+);
 
 function parseStaffModulesObject(str) {
     if (str == null || !String(str).trim()) return {};
@@ -2350,7 +2487,7 @@ function openStaffModulesModal(userId) {
     if (ur === 'co_admin') {
         return openAdminModulesModal(userId);
     }
-    if (!['book_sales_staff', 'staff_user'].includes(ur)) {
+    if (!['book_sales_staff', 'staff_user', 'desk_staff'].includes(ur)) {
         return alert('Portal access applies to staff portal users only. Co-admins use Admin modules.');
     }
     const mods = parseStaffModulesObject(u.staff_modules);
@@ -2852,15 +2989,29 @@ function renderAdminBehalfFormFields(preservedData) {
         if (f.type === 'textarea') {
             html += '<textarea id="' + id + '" rows="2" style="width:100%;padding:8px;"></textarea>';
         } else if (f.type === 'select' && Array.isArray(f.options)) {
-            html += '<select id="' + id + '" style="width:100%;padding:8px;"><option value="">Select</option>';
-            f.options.forEach((o) => {
-                const v = o.value != null ? o.value : o.label;
-                html += '<option value="' + escAdmin(String(v)) + '">' + escAdmin(o.label || v) + '</option>';
-            });
-            html += '</select>';
+            html += '<select id="' + id + '" style="width:100%;padding:8px;"><option value="">Select</option>' + adminSelectOptionsHtml(f) + '</select>';
+        } else if (t === 'date') {
+            html += '<input type="date" id="' + id + '" style="width:100%;padding:8px;">';
         } else {
-            const ty = f.type === 'email' ? 'email' : f.type === 'tel' ? 'tel' : 'text';
-            html += '<input type="' + ty + '" id="' + id + '" style="width:100%;padding:8px;">';
+            const ty = t === 'email' ? 'email' : t === 'tel' ? 'tel' : t === 'number' ? 'number' : 'text';
+            const pinAttr =
+                f.key === 'pin' || f.key === 'cpin'
+                    ? ' maxlength="12" placeholder="PIN / postal code (6-digit Indian PIN auto-fills city & state)"'
+                    : f.key === 'phone'
+                      ? ' placeholder="10-digit mobile, or +country code for other countries"'
+                      : f.key === 'country'
+                        ? ' list="admin-country-datalist" placeholder="India"'
+                        : '';
+            html += '<input type="' + ty + '" id="' + id + '" style="width:100%;padding:8px;"' + pinAttr + '>';
+        }
+        if (adminBehalfFieldDeferrable(f)) {
+            html +=
+                '<label style="display:flex;align-items:center;gap:6px;font-size:0.78rem;color:#64748b;margin-top:4px;font-weight:500;cursor:pointer;">' +
+                '<input type="checkbox" id="behalf-later-' + f.key + '" class="behalf-later-cb" data-key="' + escAdmin(f.key) + '" style="width:auto;margin:0;"> Applicant will add later</label>' +
+                (t !== 'select'
+                    ? '<label style="display:flex;align-items:center;gap:6px;font-size:0.78rem;color:#64748b;margin-top:2px;font-weight:500;cursor:pointer;">' +
+                      '<input type="checkbox" id="behalf-na-' + f.key + '" class="behalf-na-cb" data-key="' + escAdmin(f.key) + '" style="width:auto;margin:0;"> Not applicable</label>'
+                    : '');
         }
         html += '</div>';
     });
@@ -2870,7 +3021,10 @@ function renderAdminBehalfFormFields(preservedData) {
             '<input type="file" id="behalf-cert-file" accept=".pdf,.jpg,.jpeg,.png,.webp,image/*,application/pdf" style="width:100%;padding:8px;">' +
             '<p id="behalf-cert-hint" style="font-size:0.82rem;margin-top:6px;">' +
             adminBehalfCertificateHintHtml(__behalfCertPath) +
-            '</p></div>';
+            '</p>' +
+            '<label style="display:flex;align-items:center;gap:6px;font-size:0.78rem;color:#64748b;margin-top:4px;font-weight:500;cursor:pointer;">' +
+            '<input type="checkbox" id="behalf-later-certificate" class="behalf-later-cb" data-key="certificate" data-target="behalf-cert-file" style="width:auto;margin:0;"> Applicant will upload later</label>' +
+            '</div>';
     }
     host.innerHTML = html;
     Object.keys(preserved || {}).forEach((k) => {
@@ -2883,7 +3037,54 @@ function renderAdminBehalfFormFields(preservedData) {
             el.value = preserved[k];
         }
     });
+    const pendingKeys = Array.isArray(preserved.pending_fields) ? preserved.pending_fields : [];
+    pendingKeys.forEach((k) => {
+        const cb = document.getElementById('behalf-later-' + k);
+        if (cb) cb.checked = true;
+    });
+    Object.keys(preserved || {}).forEach((k) => {
+        if (preserved[k] !== ADMIN_NOT_APPLICABLE) return;
+        const cb = document.getElementById('behalf-na-' + k);
+        if (cb) cb.checked = true;
+    });
+    host.querySelectorAll('.behalf-later-cb').forEach((cb) => {
+        const sync = () => {
+            const inp = document.getElementById(cb.dataset.target || 'behalf-f-' + cb.dataset.key);
+            if (!inp) return;
+            const na = document.getElementById('behalf-na-' + cb.dataset.key);
+            if (cb.checked && na && na.checked) {
+                na.checked = false;
+            }
+            inp.disabled = cb.checked || !!(na && na.checked);
+            inp.style.opacity = inp.disabled ? '0.55' : '';
+            if (cb.checked) inp.type === 'checkbox' ? (inp.checked = false) : (inp.value = '');
+        };
+        cb.addEventListener('change', sync);
+        sync();
+    });
+    host.querySelectorAll('.behalf-na-cb').forEach((cb) => {
+        const sync = () => {
+            const inp = document.getElementById('behalf-f-' + cb.dataset.key);
+            if (!inp) return;
+            const later = document.getElementById('behalf-later-' + cb.dataset.key);
+            if (cb.checked && later && later.checked) later.checked = false;
+            if (cb.checked) {
+                inp.value = ADMIN_NOT_APPLICABLE;
+                inp.disabled = true;
+                inp.style.opacity = '0.55';
+            } else if (!(later && later.checked)) {
+                if (inp.value === ADMIN_NOT_APPLICABLE) inp.value = '';
+                inp.disabled = false;
+                inp.style.opacity = '';
+            }
+            syncBehalfJsonFromForm();
+            scheduleBehalfRegSave();
+        };
+        cb.addEventListener('change', sync);
+        sync();
+    });
     applyBehalfSelectedEvents(preserved);
+    applyBehalfSelectedDays(preserved);
     const qualEl = document.getElementById('behalf-f-qual');
     if (qualEl) {
         qualEl.addEventListener('change', () => renderAdminBehalfFormFields(collectAdminBehalfFormData()));
@@ -2898,6 +3099,7 @@ function renderAdminBehalfFormFields(preservedData) {
             }
         });
     }
+    ensureAdminCountryDatalist();
     ['pin', 'cpin'].forEach((pk) => {
         const pel = document.getElementById('behalf-f-' + pk);
         if (pel) pel.addEventListener('blur', () => adminPincodeAutofill('behalf-f-', pk));
@@ -2959,6 +3161,56 @@ function renderAdminBehalfEventPicker(seminar) {
     });
 }
 
+function getSelectedBehalfDayIds() {
+    const sel = document.getElementById('behalf-day-select');
+    if (!sel || !sel.value) return [];
+    const n = parseInt(sel.value, 10);
+    return Number.isInteger(n) && n > 0 ? [n] : [];
+}
+
+function renderAdminBehalfDayPicker(seminar) {
+    const panel = document.getElementById('behalf-days-panel');
+    if (!panel) return;
+    const days = (seminar && seminar.days) || [];
+    if (days.length < 2) {
+        panel.classList.add('hidden');
+        panel.innerHTML = '';
+        return;
+    }
+    let html =
+        '<p style="font-weight:700;color:#1d4ed8;margin:0 0 10px;"><i class="fas fa-ticket-alt"></i> Ticket days</p>' +
+        '<p style="font-size:0.84rem;color:#64748b;margin:0 0 10px;">Choose a single day to issue only that day\'s ticket, or all days.</p>' +
+        '<select id="behalf-day-select" style="width:100%;max-width:420px;padding:8px;"><option value="">All days (' +
+        days.length +
+        ' tickets)</option>';
+    days.forEach((d, i) => {
+        html +=
+            '<option value="' +
+            Number(d.id) +
+            '">' +
+            escAdmin((d.title || 'Day ' + (i + 1)) + (d.day_date ? ' — ' + d.day_date : '')) +
+            ' only</option>';
+    });
+    html += '</select>';
+    panel.innerHTML = html;
+    panel.classList.remove('hidden');
+    const sel = document.getElementById('behalf-day-select');
+    if (sel) {
+        sel.addEventListener('change', () => {
+            syncBehalfJsonFromForm();
+            scheduleBehalfRegSave();
+        });
+    }
+}
+
+function applyBehalfSelectedDays(formData) {
+    const sel = document.getElementById('behalf-day-select');
+    if (!sel) return;
+    const ids = (formData && (formData.selected_day_ids || formData.selectedDayIds)) || [];
+    const adminPick = formData && (formData.day_selection_admin === true || formData.day_selection_admin === 1 || formData.day_selection_admin === '1');
+    sel.value = adminPick && Array.isArray(ids) && ids.length === 1 ? String(ids[0]) : '';
+}
+
 function applyBehalfSelectedEvents(formData) {
     const ids = (formData && (formData.selected_event_ids || formData.selectedEventIds)) || [];
     if (!Array.isArray(ids) || !ids.length) return;
@@ -2966,6 +3218,39 @@ function applyBehalfSelectedEvents(formData) {
     document.querySelectorAll('.behalf-event-cb').forEach((cb) => {
         cb.checked = idSet.has(parseInt(cb.value, 10));
     });
+}
+
+const ADMIN_BEHALF_NON_DEFERRABLE = ['fname', 'lname', 'email', 'phone', 'qual'];
+const ADMIN_ONLY_QUAL_OPTIONS = [{ value: 'General account', label: 'General account (non-doctor)' }];
+const ADMIN_NOT_APPLICABLE = 'Not applicable';
+function adminIsStaffEnd() {
+    return isStaffCrmRoute();
+}
+function adminSelectOptionsHtml(f) {
+    let html = '';
+    const seen = new Set();
+    (Array.isArray(f.options) ? f.options : []).forEach((o) => {
+        const v = String(o.value != null ? o.value : o.label);
+        seen.add(v);
+        html += '<option value="' + escAdmin(v) + '">' + escAdmin(o.label || v) + '</option>';
+    });
+    if (f.key === 'qual' && !adminIsStaffEnd()) {
+        ADMIN_ONLY_QUAL_OPTIONS.forEach((o) => {
+            if (seen.has(o.value)) return;
+            html += '<option value="' + escAdmin(o.value) + '">' + escAdmin(o.label) + '</option>';
+        });
+    }
+    if (f.key !== 'qual' && !seen.has(ADMIN_NOT_APPLICABLE)) {
+        html += '<option value="' + ADMIN_NOT_APPLICABLE + '">' + ADMIN_NOT_APPLICABLE + '</option>';
+    }
+    return html;
+}
+
+function adminBehalfFieldDeferrable(f) {
+    if (!f || !f.key) return false;
+    if (ADMIN_BEHALF_NON_DEFERRABLE.includes(String(f.key))) return false;
+    const t = String(f.type || 'text').toLowerCase();
+    return t !== 'otp' && t !== 'terms' && t !== 'boolean' && t !== 'checkbox';
 }
 
 function collectAdminBehalfFormData() {
@@ -2986,9 +3271,19 @@ function collectAdminBehalfFormData() {
             o[f.key] = el.value;
         }
     });
+    const later = [];
+    document.querySelectorAll('#behalf-form-fields .behalf-later-cb').forEach((cb) => {
+        if (cb.checked && cb.dataset.key) later.push(cb.dataset.key);
+    });
+    if (later.length) o.pending_fields = later;
     if (__behalfCertPath) o.certificate_path = __behalfCertPath;
     const eventIds = getSelectedBehalfEventIds();
     if (eventIds.length) o.selected_event_ids = eventIds;
+    const dayIds = getSelectedBehalfDayIds();
+    if (dayIds.length) {
+        o.selected_day_ids = dayIds;
+        o.day_selection_admin = true;
+    }
     return o;
 }
 
@@ -3016,6 +3311,7 @@ function syncBehalfFormFromJson() {
             }
         });
         applyBehalfSelectedEvents(fd);
+        applyBehalfSelectedDays(fd);
     } catch (_) {}
 }
 
@@ -3068,7 +3364,7 @@ function refreshAdminBehalfWorkflow(data) {
     st.innerHTML = lines.join('<br>');
     if (payWrap) {
         const paid = data.order && String(data.order.status).toLowerCase() === 'success';
-        if (paid) payWrap.classList.add('hidden');
+        if (paid || adminBehalfIsVolunteerMode()) payWrap.classList.add('hidden');
         else {
             payWrap.classList.remove('hidden');
             const ps = document.getElementById('behalf-payment-status');
@@ -3093,6 +3389,7 @@ async function onAdminBehalfDoctorOrSeminarChange() {
     await loadAdminBehalfFormConfig(sid);
     const semRow = (globalSeminars || []).find((s) => Number(s.id) === Number(sid));
     renderAdminBehalfEventPicker(semRow);
+    renderAdminBehalfDayPicker(semRow);
     if (Number.isInteger(docId) && docId > 0) {
         const u = window.__adminUsersById && window.__adminUsersById[docId];
         if (u) {
@@ -3389,12 +3686,13 @@ async function behalfInitiatePayment() {
 async function behalfMarkUpiPaid() {
     const adm = getStoredAdminUser();
     if (!adm?.id || !__behalfOrderDbId) return alert('Start payment first.');
-    if (!confirm('Confirm UPI received?')) return;
+    const __utr = promptUpiUtr();
+    if (__utr === null) return;
     try {
         const res = await fetch('/api/admin/payments/mark-upi-paid', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ orderDbId: __behalfOrderDbId, adminUserId: adm.id })
+            body: JSON.stringify({ orderDbId: __behalfOrderDbId, adminUserId: adm.id, utr: __utr })
         });
         const data = await res.json();
         if (!res.ok) return alert(data.error || 'Failed');
@@ -3515,6 +3813,31 @@ async function behalfPollPayment() {
     }
 }
 
+function clearAdminBehalfForm() {
+    if (!confirm('Clear this form and start a new application? (Saved applications are not deleted.)')) return;
+    stopBehalfPaymentPoll();
+    __behalfRegId = null;
+    __behalfRegApplicationNo = '';
+    __behalfCertPath = '';
+    __behalfOrderDbId = null;
+    resetBehalfApplicantOtpTokens();
+    const docSel = document.getElementById('behalf-doctor-select');
+    if (docSel) docSel.value = '';
+    const q = document.getElementById('behalf-doctor-search');
+    if (q) q.value = '';
+    const results = document.getElementById('behalf-doctor-search-results');
+    if (results) results.innerHTML = '';
+    document.getElementById('behalf-events-panel')?.classList.add('hidden');
+    document.getElementById('behalf-days-panel')?.classList.add('hidden');
+    renderAdminBehalfFormFields({});
+    syncBehalfJsonFromForm();
+    refreshAdminBehalfWorkflow({ found: false, registration: null, order: null, ticket: null });
+    const summary = document.getElementById('behalf-app-summary');
+    if (summary) summary.textContent = 'Form cleared — select a doctor (or use form details) to start a new application.';
+    const st = document.getElementById('behalf-save-status');
+    if (st) st.textContent = '';
+}
+
 function scheduleBehalfRegSave() {
     const st = document.getElementById('behalf-save-status');
     if (st) {
@@ -3524,9 +3847,58 @@ function scheduleBehalfRegSave() {
     }
 }
 
-async function openAdminBehalfForVolunteer(userId, seminarId) {
-    switchTab('tab-behalf-reg');
+let __behalfMode = 'doctor';
+function adminBehalfIsVolunteerMode() {
+    return __behalfMode === 'volunteer';
+}
+function openAdminBehalfMode(mode) {
+    __behalfMode = mode === 'volunteer' ? 'volunteer' : 'doctor';
+    const ws = document.getElementById('behalf-workspace');
+    const host = document.getElementById(__behalfMode === 'volunteer' ? 'volunteer-app-host' : 'tab-behalf-reg');
+    if (ws && host && ws.parentNode !== host) {
+        if (__behalfMode === 'volunteer') host.appendChild(ws);
+        else {
+            const h2 = host.querySelector('h2');
+            const intro = h2 && h2.nextElementSibling;
+            if (intro && intro.nextSibling) host.insertBefore(ws, intro.nextSibling);
+            else host.appendChild(ws);
+        }
+    }
+    const payWrap = document.getElementById('behalf-payment-wrap');
+    if (payWrap && __behalfMode === 'volunteer') payWrap.classList.add('hidden');
+    switchTab(__behalfMode === 'volunteer' ? 'tab-volunteer-app' : 'tab-behalf-reg');
     initAdminBehalfRegTab();
+}
+window.openAdminBehalfMode = openAdminBehalfMode;
+
+async function ensureVolunteerAssignedAfterBehalfSave(userId, seminarId, st) {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id || !Number.isInteger(userId) || !Number.isInteger(seminarId)) return;
+    try {
+        const res = await fetch('/api/admin/volunteers', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ seminarId, userId, actingAdminId: adm.id, adminUserId: adm.id })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            if (st) st.textContent += ' — volunteer assignment failed: ' + (data.error || res.status);
+            return;
+        }
+        if (st) {
+            st.textContent +=
+                data.volunteerTicketIssued || data.ticketId || data.volunteerTicketId
+                    ? ' — volunteer ticket (₹0) issued' + (data.ticketId || data.volunteerTicketId ? ': ' + (data.ticketId || data.volunteerTicketId) : '')
+                    : ' — assigned as volunteer' + (data.message ? ' (' + data.message + ')' : '');
+        }
+        if (typeof loadAdminVolunteerAssignments === 'function') loadAdminVolunteerAssignments().catch(() => {});
+    } catch (e) {
+        console.error(e);
+    }
+}
+
+async function openAdminBehalfForVolunteer(userId, seminarId) {
+    openAdminBehalfMode('volunteer');
     const ds = document.getElementById('behalf-doctor-select');
     const ss = document.getElementById('behalf-seminar-select');
     if (ds) ds.value = String(userId);
@@ -3535,6 +3907,23 @@ async function openAdminBehalfForVolunteer(userId, seminarId) {
     await onAdminBehalfDoctorOrSeminarChange();
 }
 window.openAdminBehalfForVolunteer = openAdminBehalfForVolunteer;
+
+async function removeVolunteerAssignment(assignId, hasTicket) {
+    const warn = hasTicket
+        ? 'Remove this volunteer assignment? The free (₹0) volunteer ticket and volunteer certificates will be cancelled.'
+        : 'Remove this volunteer assignment?';
+    if (!confirm(warn)) return;
+    try {
+        const res = await fetch('/api/admin/volunteers/' + assignId, { method: 'DELETE' });
+        const data = await res.json();
+        if (data.success) refreshVolunteerAdminPanels();
+        else alert(data.error || 'Could not remove assignment');
+    } catch (e) {
+        console.error(e);
+        alert('Network error');
+    }
+}
+window.removeVolunteerAssignment = removeVolunteerAssignment;
 
 async function editVolunteerDuties(assignId, currentDuties) {
     const duties = prompt('Volunteer duties (e.g. Registration desk, Scanner hall)', currentDuties || '');
@@ -3636,6 +4025,14 @@ async function flushBehalfRegistrationSave(manual) {
             st.textContent = `Saved ${data.created ? '(new application)' : '(updated)'} at ${new Date().toLocaleTimeString()}`;
         __behalfRegId = data.registrationId || __behalfRegId;
         if (data.applicationNo) __behalfRegApplicationNo = data.applicationNo;
+        if (adminBehalfIsVolunteerMode()) {
+            if (data.volunteerTicketIssued) {
+                if (st) st.textContent += ' — volunteer ticket (₹0) issued' + (data.volunteerTicketId ? ': ' + data.volunteerTicketId : '');
+            } else {
+                const uid = parseInt(data.userId != null ? data.userId : docId, 10);
+                await ensureVolunteerAssignedAfterBehalfSave(uid, sid, st);
+            }
+        }
         if (data.userId && data.userIdString) {
             const sel = document.getElementById('behalf-doctor-select');
             if (sel) {
@@ -3725,6 +4122,7 @@ const ADMIN_CREATED_ROLE_LABELS = {
     venue_gate_user: 'Venue gate',
     book_sales_staff: 'Book sales staff',
     staff_user: 'Staff user',
+    desk_staff: 'Desk staff (On-spot POS, Doctor applications, E-tickets)',
     reviewer: 'Reviewer',
     support_agent: 'Support agent'
 };
@@ -3784,6 +4182,11 @@ function resolveAdminCreatedUserPortal(userRole) {
             hint: 'Sign in to manage book inventory and orders.'
         },
         staff_user: staff,
+        desk_staff: {
+            path: '/staff/login',
+            name: 'Staff portal (desk)',
+            hint: 'Sign in for On-spot POS (register & collect), Doctor applications and E-tickets.'
+        },
         support_agent: {
             path: '/support',
             name: 'Support portal',
@@ -4044,6 +4447,7 @@ async function adminCreateUser() {
         email,
         phone,
         role: userRole,
+        accountCategory: String((document.getElementById('newuser-account-category') || {}).value || '').trim() || undefined,
         createKind,
         allowStaffTestDuplicate: createKind === 'staff',
         actingAdminId: adm && adm.id,
@@ -4518,7 +4922,7 @@ function renderAdminUserDetailTab() {
                     <button type="button" class="btn-primary" style="margin-top:10px;background:#7c3aed;" onclick="toggleAdminUserDemo(${u.id}, ${Number(u.is_demo) === 1 ? 'false' : 'true'})">${Number(u.is_demo) === 1 ? 'Remove dummy account' : 'Mark as dummy account (any OTP)'}</button>`
                             : ''
                     }
-                    <button type="button" class="btn-primary" style="margin-top:12px;" onclick="adminSaveUserAccountEdit(${u.id})">Save account</button>
+                    <button type="button" class="btn-primary" style="margin-top:12px;" onclick="adminSaveUserAllEdits(${u.id})">Save changes</button>
                 </div>
                 <div>
                     <h4>Doctor profile (editable)</h4>
@@ -4529,8 +4933,12 @@ function renderAdminUserDetailTab() {
                     <div class="form-group"><label>Hospital</label><input type="text" id="admin-edit-hospital" value="${escAdmin((p && p.hospital_name) || '')}" style="width:100%;padding:8px;"></div>
                     <div class="form-group"><label>Contact</label><input type="tel" id="admin-edit-contact" value="${escAdmin((p && p.contact_number) || '')}" style="width:100%;padding:8px;"></div>
                     <div class="form-group"><label>Bio</label><textarea id="admin-edit-bio" rows="3" style="width:100%;padding:8px;">${escAdmin((p && p.bio) || '')}</textarea></div>
-                    <button type="button" class="btn-primary" style="margin-top:12px;" onclick="adminSaveDoctorProfileEdit(${u.id})">Save doctor profile</button>
+                    <button type="button" class="btn-primary" style="margin-top:12px;" onclick="adminSaveUserAllEdits(${u.id})">Save changes</button>
                 </div>
+            </div>
+            <div style="margin-top:14px;padding:12px;border:1px solid #bbf7d0;border-radius:8px;background:#f0fdf4;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+                <button type="button" class="btn-primary" style="background:#15803d;" onclick="adminSaveUserAllEdits(${u.id})">Save all changes (account + doctor profile)</button>
+                <span id="admin-edit-save-status" style="font-size:0.85rem;color:#166534;">Saves the account fields (name, email, phone, qualification) and the doctor profile together. The name on tickets, certificates and emails follows the account name.</span>
             </div>
             ${
                 formRows
@@ -4928,6 +5336,54 @@ async function dispatchAllAdminCertificates() {
     }
 }
 
+
+async function dispatchCompletedDayCertificates(resend) {
+    const sid = document.getElementById('cert-mgmt-seminar')?.value;
+    const msg = document.getElementById('cert-dispatch-msg');
+    if (!sid) return alert('Select a seminar');
+    const again = !!resend;
+    if (
+        !confirm(
+            again
+                ? 'Resend the certificate email and WhatsApp to doctors who checked in on any day, including people already emailed? One certificate names only the days they attended.'
+                : 'Send the certificate email and WhatsApp to doctors who checked in on any day and have not yet been emailed for that set of days? One day names that day only. Both days say they attended both days.'
+        )
+    ) {
+        return;
+    }
+    if (msg) {
+        msg.style.color = '#78716c';
+        msg.textContent = again ? 'Resending…' : 'Sending certificate issued emails…';
+    }
+    try {
+        const res = await fetch('/api/admin/certificates/dispatch-completed-days', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ seminarId: parseInt(sid, 10), resend: again })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Send failed');
+        if (msg) {
+            msg.style.color = '#15803d';
+            msg.textContent =
+                (data.issuingDay ? data.issuingDay + ': ' : '') +
+                'Sent ' +
+                (data.dispatched || 0) +
+                ', already sent ' +
+                (data.skipped || 0) +
+                ' of ' +
+                (data.eligible || 0) +
+                (data.errors && data.errors.length ? '. Some failed: ' + data.errors[0] : '.');
+        }
+    } catch (e) {
+        if (msg) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = e.message || 'Send failed';
+        }
+        alert(e.message || 'Send failed');
+    }
+}
+
 function readCertConfigFromForm() {
     return {
         orgName: document.getElementById('cert-cfg-org')?.value || '',
@@ -4980,8 +5436,34 @@ function fillCertConfigForm(cfg) {
     window.__certSigRightPath = c.sigRightImagePath || '';
     const lp = document.getElementById('cert-sig-left-preview');
     const rp = document.getElementById('cert-sig-right-preview');
-    if (lp) lp.textContent = window.__certSigLeftPath ? 'Current: ' + window.__certSigLeftPath : 'No left signature image uploaded.';
-    if (rp) rp.textContent = window.__certSigRightPath ? 'Current: ' + window.__certSigRightPath : 'No right signature image uploaded.';
+    renderCertSigPreview(lp, window.__certSigLeftPath, 'left');
+    renderCertSigPreview(rp, window.__certSigRightPath, 'right');
+}
+
+function certSigBrowserUrl(p) {
+    const v = String(p || '').trim();
+    if (!v) return '';
+    const m = /^https?:\/\/[^/]+\.r2\.cloudflarestorage\.com\/[^/]+\/(.+?)(?:\?.*)?$/i.exec(v);
+    if (m) return '/uploads/' + m[1];
+    return v;
+}
+
+function renderCertSigPreview(el, p, side) {
+    if (!el) return;
+    el.textContent = '';
+    if (!p) {
+        el.textContent = 'No ' + side + ' signature image uploaded.';
+        return;
+    }
+    const img = document.createElement('img');
+    img.src = certSigBrowserUrl(p);
+    img.alt = 'Signature';
+    img.style.cssText = 'display:block;max-height:56px;max-width:220px;margin-top:4px;background:#fff;border:1px solid #e2e8f0;padding:2px;';
+    img.onerror = () => {
+        img.remove();
+        el.appendChild(document.createTextNode('Uploaded (preview unavailable): ' + p));
+    };
+    el.appendChild(img);
 }
 
 async function uploadCertSignatureImage(side) {
@@ -5112,10 +5594,10 @@ async function loadAdminCertificateCandidates() {
     const tbody = document.getElementById('cert-mgmt-list');
     if (!tbody) return;
     if (!sid) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Select a seminar</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;">Select a seminar</td></tr>';
         return;
     }
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Loading…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;">Loading…</td></tr>';
     try {
         const certType = document.getElementById('cert-mgmt-type')?.value || 'participant';
         const res = await fetch(
@@ -5126,8 +5608,107 @@ async function loadAdminCertificateCandidates() {
         renderAdminCertificateCandidatesTable();
     } catch (e) {
         console.error(e);
-        tbody.innerHTML = '<tr><td colspan="9">Error loading</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11">Error loading</td></tr>';
     }
+}
+
+const CERT_HONORIFIC_CHOICES = ['Dr.', 'Mr.', 'Ms.', 'Mrs.', 'Prof.', 'Vaidya', 'Shri', 'Smt.'];
+
+function openCertRecipientEditor(userId) {
+    const row = (__adminCertCandidatesCache || []).find((r) => Number(r.user_id) === Number(userId));
+    const sid = document.getElementById('cert-mgmt-seminar')?.value;
+    if (!row || !sid) return;
+    const certType = document.getElementById('cert-mgmt-type')?.value || 'participant';
+    const profileName = [row.first_name, row.last_name].filter(Boolean).join(' ');
+    const edited = Number(row.name_edited) === 1;
+    const startName = edited && row.display_name ? row.display_name : profileName || row.display_name || '';
+    const curHon = edited ? String(row.cert_honorific || '') : '';
+    const honIsCustom =
+        curHon && curHon.toLowerCase() !== 'none' && !CERT_HONORIFIC_CHOICES.includes(curHon);
+
+    document.getElementById('cert-recipient-modal')?.remove();
+    const wrap = document.createElement('div');
+    wrap.id = 'cert-recipient-modal';
+    wrap.style.cssText =
+        'position:fixed;inset:0;background:rgba(15,23,42,0.55);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px;';
+    const opts = ['<option value="">Automatic (Dr. / Mr. / Ms. from profile)</option>', '<option value="none">No honorific</option>']
+        .concat(CERT_HONORIFIC_CHOICES.map((h) => `<option value="${escAdmin(h)}">${escAdmin(h)}</option>`))
+        .concat(['<option value="__custom">Other…</option>'])
+        .join('');
+    wrap.innerHTML = `
+        <div style="background:#fff;border-radius:12px;max-width:480px;width:100%;padding:20px 22px;box-shadow:0 20px 50px rgba(0,0,0,0.3);">
+            <h3 style="margin:0 0 4px;">Edit certificate name</h3>
+            <p style="margin:0 0 14px;font-size:0.85rem;color:#64748b;">${escAdmin(profileName || '—')} · PRN ${escAdmin(row.user_id_string || '—')} · ${escAdmin(certType)} certificate</p>
+            <label style="font-weight:600;font-size:0.85rem;">Honorific</label>
+            <select id="cert-rcp-hon" style="width:100%;padding:8px;margin:4px 0 8px;">${opts}</select>
+            <input id="cert-rcp-hon-custom" placeholder="e.g. Col." maxlength="20" style="display:none;width:100%;padding:8px;margin-bottom:8px;">
+            <label style="font-weight:600;font-size:0.85rem;">Name (as it should be printed)</label>
+            <input id="cert-rcp-name" maxlength="120" style="width:100%;padding:8px;margin:4px 0 12px;" value="${escAdmin(startName)}">
+            <div style="background:#fffbeb;border:1px solid #e8d48a;border-radius:8px;padding:10px 12px;font-size:0.9rem;">Will print as: <strong id="cert-rcp-preview"></strong></div>
+            <p id="cert-rcp-msg" style="font-size:0.85rem;min-height:1.2em;margin:10px 0 0;color:#b91c1c;"></p>
+            <div style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;margin-top:6px;">
+                ${edited ? '<button type="button" id="cert-rcp-reset" class="btn-primary" style="background:#64748b;">Reset to automatic</button>' : ''}
+                <button type="button" id="cert-rcp-cancel" class="btn-primary" style="background:#94a3b8;">Cancel</button>
+                <button type="button" id="cert-rcp-save" class="btn-primary cert-btn-gold">Save</button>
+            </div>
+        </div>`;
+    document.body.appendChild(wrap);
+    const honSel = wrap.querySelector('#cert-rcp-hon');
+    const honCustom = wrap.querySelector('#cert-rcp-hon-custom');
+    const nameEl = wrap.querySelector('#cert-rcp-name');
+    const prev = wrap.querySelector('#cert-rcp-preview');
+    const msg = wrap.querySelector('#cert-rcp-msg');
+    if (honIsCustom) {
+        honSel.value = '__custom';
+        honCustom.value = curHon;
+        honCustom.style.display = '';
+    } else {
+        honSel.value = curHon.toLowerCase() === 'none' ? 'none' : curHon;
+    }
+    const currentHon = () => (honSel.value === '__custom' ? honCustom.value.trim() : honSel.value);
+    const refresh = () => {
+        honCustom.style.display = honSel.value === '__custom' ? '' : 'none';
+        const h = currentHon();
+        const n = nameEl.value.trim();
+        prev.textContent = h === 'none' ? n : h ? h + ' ' + n : 'Automatic prefix + ' + n;
+    };
+    honSel.addEventListener('change', refresh);
+    honCustom.addEventListener('input', refresh);
+    nameEl.addEventListener('input', refresh);
+    refresh();
+    const close = () => wrap.remove();
+    wrap.querySelector('#cert-rcp-cancel').onclick = close;
+    wrap.addEventListener('click', (ev) => {
+        if (ev.target === wrap) close();
+    });
+    const send = async (payload) => {
+        msg.style.color = '#64748b';
+        msg.textContent = 'Saving…';
+        try {
+            const res = await fetch('/api/admin/certificates/recipient', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ seminarId: parseInt(sid, 10), userId: row.user_id, certType, ...payload })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || 'Save failed');
+            close();
+            await loadAdminCertificateCandidates();
+        } catch (e) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = e.message || 'Save failed';
+        }
+    };
+    wrap.querySelector('#cert-rcp-save').onclick = () => {
+        if (!nameEl.value.trim()) {
+            msg.style.color = '#b91c1c';
+            msg.textContent = 'Name is required';
+            return;
+        }
+        send({ displayName: nameEl.value.trim(), honorific: currentHon() });
+    };
+    const rs = wrap.querySelector('#cert-rcp-reset');
+    if (rs) rs.onclick = () => send({ reset: true });
 }
 
 function toggleAllCertCandidates(on) {
@@ -5343,7 +5924,8 @@ function renderAdminVolunteerAssignmentsTable() {
             ',' +
             Number(v.seminar_id) +
             ')">Fill application</button>';
-        if (!hasTicket && regSt === 'submitted') {
+        const regReady = ['submitted', 'waitlisted', 'pending_approval', 'approved', 'approved_pending_payment', 'completed', 'checked_in', 'e_ticket_issued', 'certificate_issued', 'revision_required', 'documents_requested'].includes(regSt);
+        if (!hasTicket && regReady) {
             actions +=
                 '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.8rem;margin-right:4px;" onclick="approveAdminVolunteer(' +
                 assignId +
@@ -5351,14 +5933,23 @@ function renderAdminVolunteerAssignmentsTable() {
         } else if (!hasTicket) {
             actions += '<span style="font-size:0.8rem;color:#64748b;">Waiting for registration</span>';
         } else {
-            actions += '<span style="font-size:0.8rem;color:#059669;">Ticket issued</span>';
+            actions +=
+                '<span style="font-size:0.8rem;color:#059669;">Ticket issued</span>' +
+                '<button type="button" style="padding:4px 8px;font-size:0.8rem;margin-left:4px;" title="Issue any missing per-day tickets" onclick="approveAdminVolunteer(' +
+                assignId +
+                ')">Check day tickets</button>';
         }
         actions +=
             '<button type="button" style="padding:4px 8px;font-size:0.8rem;margin-left:4px;" onclick="editVolunteerDuties(' +
             assignId +
             ',' +
             JSON.stringify(String(v.duties || '')) +
-            ')">Duties</button>';
+            ')">Duties</button>' +
+            '<button type="button" style="padding:4px 8px;font-size:0.8rem;margin-left:4px;color:#b91c1c;border-color:#fca5a5;" onclick="removeVolunteerAssignment(' +
+            assignId +
+            ',' +
+            (hasTicket ? 'true' : 'false') +
+            ')">Remove</button>';
         const eventLine = v.event_date
             ? '<div class="muted" style="font-size:0.78rem;">' + escAdmin(String(v.event_date).slice(0, 10)) + '</div>'
             : '';
@@ -5399,7 +5990,42 @@ async function initAdminVolunteersTab() {
         inp.addEventListener('input', scheduleVolunteerDoctorLookup);
     }
     await loadAdminVolunteers();
+    loadAdminVolunteerApplications().catch(console.error);
 }
+
+async function loadAdminVolunteerApplications() {
+    const tb = document.getElementById('vol-apps-list');
+    if (!tb) return;
+    try {
+        const res = await fetch('/api/admin/applications?scope=volunteer');
+        const rows = await res.json();
+        const list = Array.isArray(rows) ? rows : [];
+        if (!list.length) {
+            tb.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#64748b;">No volunteer applications yet.</td></tr>';
+            return;
+        }
+        tb.innerHTML = list
+            .map((a) => {
+                const name = ((a.first_name || '') + ' ' + (a.last_name || '')).trim() || a.user_id_string || '';
+                const tickets = String(a.ticket_id_string || a.volunteer_ticket_id_string || '')
+                    .split(',')
+                    .map((v) => v.trim())
+                    .filter(Boolean);
+                return (
+                    '<tr><td>' + escAdmin(name) + '</td><td>' + escAdmin(a.seminar_title || '') +
+                    '</td><td>' + escAdmin(a.application_no || a.id) + '</td><td>' + escAdmin(a.status || '') +
+                    '</td><td>' + (tickets.length ? tickets.map(escAdmin).join('<br>') : '<span style="color:#94a3b8;">not issued</span>') +
+                    '</td><td><button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.75rem;background:#2563eb;border:none;" onclick="adminOpenApplicationInView(' +
+                    Number(a.id) + ')">Open</button></td></tr>'
+                );
+            })
+            .join('');
+    } catch (e) {
+        console.error(e);
+        tb.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#b91c1c;">Could not load volunteer applications.</td></tr>';
+    }
+}
+window.loadAdminVolunteerApplications = loadAdminVolunteerApplications;
 
 async function loadAdminVolunteers() {
     const sid = document.getElementById('vol-mgmt-seminar')?.value;
@@ -5745,7 +6371,7 @@ function adminPromptFeeChoice(app, title, onConfirm) {
 
 async function approveAdminVolunteer(volId) {
     const admin = getStoredAdminUser();
-    if (!confirm('Issue free volunteer ticket (₹0)? Doctor must have completed seminar registration first.')) return;
+    if (!confirm('Issue free volunteer ticket (₹0) — one per allotted seminar day? Doctor must have completed seminar registration first. Missing day tickets are added if some already exist.')) return;
     try {
         const res = await fetch(`/api/admin/volunteers/${volId}/approve`, {
             method: 'POST',
@@ -6452,11 +7078,11 @@ function downloadCaseMarksheet(format) {
     const programId = document.getElementById('case-results-program')?.value || '';
     const q = programId ? '?programId=' + encodeURIComponent(programId) + '&' : '?';
     const fmt = format || 'xlsx';
-    if (fmt === 'pdf') {
-        window.open('/api/admin/case/marksheet' + (programId ? '?programId=' + encodeURIComponent(programId) : '') + '&format=pdf', '_blank');
+    if (fmt === 'html') {
+        window.open('/api/admin/case/marksheet' + q + 'format=html', '_blank');
         return;
     }
-    window.location.href = '/api/admin/case/marksheet' + (programId ? '?programId=' + encodeURIComponent(programId) + '&' : '?') + 'format=xlsx';
+    window.location.href = '/api/admin/case/marksheet' + q + 'format=' + (fmt === 'pdf' ? 'pdf' : 'xlsx');
 }
 
 async function loadAdminCaseMarksheetPreview() {
@@ -6523,7 +7149,7 @@ async function loadAdminCaseResults() {
         let html =
             '<table class="data-table"><thead><tr><th>Rank</th><th>App</th><th>Doctor</th><th>Topic</th><th>Avg / ' +
             escAdmin(String(totalMax)) +
-            '</th><th>Judges</th><th>Auto eligibility</th><th>Status</th></tr></thead><tbody>';
+            '</th><th>Judges</th><th>Auto eligibility</th><th>Status</th><th>e-Marksheet</th></tr></thead><tbody>';
         rows.forEach((r, idx) => {
             const avg = r.avg_score != null ? Number(r.avg_score) : null;
             const isTop = avg != null && topScore != null && avg === topScore && (r.judges_scored || 0) > 0;
@@ -6553,6 +7179,13 @@ async function loadAdminCaseResults() {
                 escAdmin(elig) +
                 '</td><td>' +
                 escAdmin(r.status || '—') +
+                '</td><td style="white-space:nowrap;">' +
+                '<a class="btn-muted" style="padding:4px 8px;font-size:0.78rem;" href="/api/admin/case/marksheet/candidate/' +
+                encodeURIComponent(r.id) +
+                '?format=pdf" title="Download individual e-marksheet (judge marks &amp; remarks)"><i class="fas fa-file-pdf"></i> PDF</a> ' +
+                '<a class="btn-muted" style="padding:4px 8px;font-size:0.78rem;" href="/api/admin/case/marksheet/candidate/' +
+                encodeURIComponent(r.id) +
+                '?format=html" target="_blank" rel="noopener" title="Preview e-marksheet"><i class="fas fa-eye"></i></a>' +
                 '</td></tr>';
         });
         html += '</tbody></table>';
@@ -8043,20 +8676,122 @@ async function checkWhatsAppWebhookStatus() {
     }
 }
 
+function adminScanDayLabel(d, i) {
+    const dt = d.dayDate ? ' · ' + String(d.dayDate).slice(0, 10) : '';
+    return `Day ${i + 1} — ${d.title || ''}${dt}`;
+}
+
+async function onAdminScannerSeminarChange() {
+    const daySel = document.getElementById('scanner-log-day');
+    const scSel = document.getElementById('scanner-log-scanner');
+    if (daySel) daySel.innerHTML = '<option value="">All days</option>';
+    if (scSel) scSel.innerHTML = '<option value="">All scanners</option>';
+    await loadAdminScannerDaySummary();
+    await loadAdminScannerLogs();
+}
+
+async function loadAdminScannerDaySummary() {
+    const box = document.getElementById('scanner-day-summary');
+    const sid = document.getElementById('scanner-log-seminar')?.value || '';
+    if (!box) return;
+    if (!sid) {
+        box.style.display = 'none';
+        box.innerHTML = '';
+        return;
+    }
+    try {
+        const res = await fetch('/api/admin/scanner/day-summary?seminarId=' + encodeURIComponent(sid));
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Failed');
+        const days = data.days || [];
+        const daySel = document.getElementById('scanner-log-day');
+        const scSel = document.getElementById('scanner-log-scanner');
+        const keepDay = daySel ? daySel.value : '';
+        const keepSc = scSel ? scSel.value : '';
+        if (daySel) {
+            daySel.innerHTML =
+                '<option value="">All days</option>' +
+                days
+                    .map((d, i) => `<option value="${d.dayId}">${escAdmin(adminScanDayLabel(d, i))}</option>`)
+                    .join('');
+            daySel.value = keepDay;
+        }
+        const scanners = new Map();
+        days.concat(data.unassigned ? [data.unassigned] : []).forEach((d) =>
+            (d.scanners || []).forEach((x) => {
+                if (x.scannerId && !scanners.has(x.scannerId)) scanners.set(x.scannerId, x.name);
+            })
+        );
+        if (scSel) {
+            scSel.innerHTML =
+                '<option value="">All scanners</option>' +
+                [...scanners.entries()]
+                    .map(([id, name]) => `<option value="${id}">${escAdmin(name)}</option>`)
+                    .join('');
+            scSel.value = keepSc;
+        }
+        if (!days.length) {
+            box.style.display = 'none';
+            box.innerHTML = '';
+            return;
+        }
+        const rows = days
+            .map((d, i) => {
+                const by =
+                    (d.scanners || [])
+                        .filter((x) => x.successCount || x.duplicateCount || x.failedCount)
+                        .map(
+                            (x) =>
+                                `<span style="display:inline-block;margin:2px 6px 2px 0;padding:2px 8px;background:#f1f5f9;border-radius:999px;font-size:0.78rem;">${escAdmin(x.name)}: <strong>${x.successCount}</strong>${
+                                    x.duplicateCount || x.failedCount
+                                        ? ` <span style="color:#94a3b8;">(+${x.duplicateCount} dup, ${x.failedCount} rej)</span>`
+                                        : ''
+                                }</span>`
+                        )
+                        .join('') || '<span style="color:#94a3b8;">No scans</span>';
+                return `<tr>
+                    <td><strong>Day ${i + 1}</strong><br><span style="font-size:0.8rem;color:#64748b;">${escAdmin(d.title || '')}${d.dayDate ? ' · ' + escAdmin(String(d.dayDate).slice(0, 10)) : ''}</span></td>
+                    <td><strong style="font-size:1.2rem;color:#047857;">${d.successCount}</strong></td>
+                    <td>${d.duplicateCount}</td>
+                    <td>${d.failedCount}</td>
+                    <td>${d.ticketsScanned}${d.ticketsTotal ? ' / ' + d.ticketsTotal : ''}</td>
+                    <td>${by}</td>
+                </tr>`;
+            })
+            .join('');
+        const other = data.unassigned
+            ? `<tr><td><em>Day not recorded</em></td><td>${data.unassigned.successCount}</td><td>${data.unassigned.duplicateCount}</td><td>${data.unassigned.failedCount}</td><td>—</td><td style="color:#94a3b8;">Older scans without a day</td></tr>`
+            : '';
+        box.innerHTML = `<h3 style="margin:0 0 8px;font-size:1rem;">Day-wise scans</h3>
+            <table class="data-table"><thead><tr><th>Day</th><th>Checked in</th><th>Duplicate</th><th>Rejected</th><th>Tickets scanned / issued</th><th>By scanner</th></tr></thead><tbody>${rows}${other}</tbody></table>`;
+        box.style.display = '';
+    } catch (e) {
+        console.warn('scanner day summary', e);
+        box.style.display = 'none';
+    }
+}
+
 async function loadAdminScannerLogs() {
     const tbody = document.getElementById('scanner-logs-list');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">Loading…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">Loading…</td></tr>';
+    const qs = new URLSearchParams();
     const sid = document.getElementById('scanner-log-seminar')?.value || '';
-    const q = sid ? `?seminarId=${encodeURIComponent(sid)}` : '';
+    const did = document.getElementById('scanner-log-day')?.value || '';
+    const scid = document.getElementById('scanner-log-scanner')?.value || '';
+    if (sid) qs.set('seminarId', sid);
+    if (did) qs.set('dayId', did);
+    if (scid) qs.set('scannerId', scid);
+    const q = qs.toString() ? '?' + qs.toString() : '';
     try {
         const res = await fetch('/api/admin/scanner/logs' + q);
         const rows = await res.json();
         __adminScannerLogsCache = Array.isArray(rows) ? rows : [];
         renderAdminScannerLogsTable();
+        if (sid) loadAdminScannerDaySummary();
     } catch (e) {
         console.error(e);
-        tbody.innerHTML = '<tr><td colspan="7">Error</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8">Error</td></tr>';
     }
 }
 
@@ -8093,22 +8828,48 @@ function renderAdminEticketDetail(row) {
         '</p>' +
         '<p><strong>Seminar:</strong> ' +
         escAdmin(row.seminarTitle) +
+        (row.eventDate ? ' · <strong>Event date:</strong> ' + escAdmin(adminAppEventDateText({ seminar_event_date: row.eventDate })) : '') +
+        (Array.isArray(row.tickets) && row.tickets.length === 1 && row.tickets[0].dayDate
+            ? ' (' + escAdmin(adminAppEventDateText({ seminar_event_date: row.tickets[0].dayDate })) + ')'
+            : '') +
         '<br><strong>Application:</strong> <code>' +
         escAdmin(row.applicationNo) +
         '</code> · <strong>Status:</strong> ' +
         escAdmin(row.registrationStatus) +
+        (row.registeredAt ? '<br><strong>Applied on:</strong> ' + escAdmin(adminFmtDateTimeIst(row.registeredAt)) : '') +
+        (row.paymentDate ? ' · <strong>Paid on:</strong> ' + escAdmin(adminFmtDateTimeIst(row.paymentDate)) : '') +
         '</p>' +
         '<p><strong>Payment:</strong> ' +
         escAdmin(pay) +
         (row.orderIdString ? ' · Order <code>' + escAdmin(row.orderIdString) + '</code>' : '') +
         '</p>' +
-        '<p><strong>E-ticket ID:</strong> ' +
-        (row.ticketIdString ? '<code>' + escAdmin(row.ticketIdString) + '</code>' : '<span style="color:#b45309;">Not generated yet</span>') +
-        '<br><strong>Scanned:</strong> ' +
-        (row.isScanned ? 'Yes' + (row.scanTime ? ' (' + escAdmin(row.scanTime) + ')' : '') : 'No') +
-        (row.scanCount > 0 ? ' · scans: ' + row.scanCount : '') +
+        (Array.isArray(row.tickets) && row.tickets.length > 1
+            ? '<p><strong>E-tickets (' + row.tickets.length + ' event days):</strong></p><ul style="margin:0 0 8px 18px;padding:0;">' +
+              row.tickets
+                  .map(function (t) {
+                      const day = t.dayTitle || (t.dayDate ? String(t.dayDate).slice(0, 10) : '');
+                      const dateTxt = t.dayDate ? new Date(String(t.dayDate).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : '';
+                      return (
+                          '<li>' +
+                          (day ? '<strong>' + escAdmin(day) + '</strong>' + (dateTxt ? ' (' + escAdmin(dateTxt) + ')' : '') + ' — ' : '') +
+                          '<code>' + escAdmin(t.ticketIdString) + '</code> · Scanned: ' +
+                          (t.isScanned ? 'Yes' + (t.scanTime ? ' (' + escAdmin(t.scanTime) + ')' : '') : 'No') +
+                          (t.ticketExpired ? ' · <span style="color:#b91c1c;">Expired</span>' : '') +
+                          (t.ticketPreviewUrl ? ' · <a href="' + escAdmin(t.ticketPreviewUrl) + '" target="_blank" rel="noopener">View</a>' : '') +
+                          '</li>'
+                      );
+                  })
+                  .join('') +
+              '</ul>'
+            : '<p><strong>E-ticket ID:</strong> ' +
+              (row.ticketIdString ? '<code>' + escAdmin(row.ticketIdString) + '</code>' : '<span style="color:#b45309;">Not generated yet</span>') +
+              (row.dayTitle ? ' · ' + escAdmin(row.dayTitle) : '') +
+              '<br><strong>Scanned:</strong> ' +
+              (row.isScanned ? 'Yes' + (row.scanTime ? ' (' + escAdmin(row.scanTime) + ')' : '') : 'No') +
+              (row.scanCount > 0 ? ' · scans: ' + row.scanCount : '') + '</p>') +
+        '<p>' +
         (row.ticketExpired
-            ? '<br><strong style="color:#b91c1c;">Expired</strong> — seminar date passed (scanner blocked). Use Applications → Check in for manual override.'
+            ? '<br><strong style="color:#b91c1c;">Expired</strong> — seminar date passed (scanner blocked). Check in the event day below.'
             : '') +
         '</p>' +
         (function () {
@@ -8123,15 +8884,18 @@ function renderAdminEticketDetail(row) {
                       : st === 'never'
                         ? '<span style="color:#b45309;">Never sent</span>'
                         : escAdmin(st);
-            return '<p><strong>Ticket email:</strong> ' + label + '</p>';
+            const wa = String(row.ticketWhatsappStatus || 'never').toLowerCase();
+            const waLabel =
+                wa === 'sent'
+                    ? '<span style="color:#15803d;">Sent</span>' +
+                      (row.ticketWhatsappSentAt ? ' · ' + escAdmin(String(row.ticketWhatsappSentAt).slice(0, 16).replace('T', ' ')) : '')
+                    : wa === 'never'
+                      ? '<span style="color:#b45309;">Never sent</span>'
+                      : escAdmin(wa);
+            return '<p><strong>Ticket email:</strong> ' + label + '<br><strong>Ticket WhatsApp:</strong> ' + waLabel + '</p>';
         })() +
-        (row.ticketExpired && row.registrationId
-            ? '<p><button type="button" class="btn-primary" style="background:#0f766e;padding:6px 10px;font-size:0.85rem;" onclick="adminManualCheckinRegistration(' +
-              row.registrationId +
-              ", '" +
-              String(row.applicationNo || '').replace(/'/g, "\\'") +
-              '\')">Check in manually</button></p>'
-            : '');
+        '<div id="eticket-day-checkin"></div>';
+    if (row.registrationId) adminOpenDayCheckin(row.registrationId, 'eticket-day-checkin');
     if (preview) {
         if (row.ticketPreviewUrl) {
             preview.href = row.ticketPreviewUrl;
@@ -8338,6 +9102,91 @@ async function adminEticketLoadMissingCount() {
 
 let adminEticketResendAllTimer = null;
 
+async function adminAppsFillTicketSeminars() {
+    const sel = document.getElementById('apps-send-all-seminar');
+    if (!sel || sel.options.length > 1) return;
+    try {
+        const res = await fetch('/api/admin/seminars');
+        const list = await res.json();
+        (Array.isArray(list) ? list : list.seminars || []).forEach((s) => {
+            const o = document.createElement('option');
+            o.value = s.id;
+            o.textContent = s.title;
+            sel.appendChild(o);
+        });
+    } catch (_) {}
+}
+
+let adminAppsSendAllTimer = null;
+
+async function adminAppsPollSendAll() {
+    const adm = getStoredAdminUser();
+    const st = document.getElementById('apps-send-all-status');
+    if (!adm || !st) return;
+    try {
+        const res = await fetch('/api/admin/e-tickets/resend-all/status?actingAdminId=' + encodeURIComponent(adm.id));
+        const j = await res.json();
+        if (!res.ok) throw new Error(j.error || 'Status failed');
+        const sent = j.sent != null ? j.sent : j.emailed != null ? j.emailed : 0;
+        const failed = j.failed != null ? j.failed : 0;
+        const total = j.total != null ? j.total : 0;
+        const done = sent + failed;
+        if (!j.lastError && Array.isArray(j.errors) && j.errors.length) j.lastError = String(j.errors[j.errors.length - 1].error || j.errors[j.errors.length - 1]);
+        st.textContent =
+            (j.running ? 'Sending… ' : 'Finished. ') +
+            done + ' / ' + total + ' participants · emailed ' + sent + ' · failed ' + failed +
+            (j.lastError ? ' · last error: ' + j.lastError : '');
+        st.style.color = j.running ? '#92400e' : failed ? '#b91c1c' : '#15803d';
+        if (!j.running && adminAppsSendAllTimer) {
+            clearInterval(adminAppsSendAllTimer);
+            adminAppsSendAllTimer = null;
+            if (typeof loadApplications === 'function') loadApplications(true);
+        }
+    } catch (e) {
+        st.textContent = e.message || 'Could not read progress';
+        st.style.color = '#b91c1c';
+    }
+}
+
+async function adminAppsSendAllIssuedTickets() {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return alert('Not logged in.');
+    const sel = document.getElementById('apps-send-all-seminar');
+    const seminarId = sel && sel.value ? parseInt(sel.value, 10) : null;
+    const st = document.getElementById('apps-send-all-status');
+    const semLabel = seminarId && sel ? sel.options[sel.selectedIndex].textContent : 'ALL seminars';
+    if (
+        !confirm(
+            'Email e-tickets (every event day, PDF attached) to EVERY applicant with status "E-ticket issued" in ' +
+                semLabel +
+                '?\n\nThis runs in the background; progress is shown below.'
+        )
+    )
+        return;
+    if (st) {
+        st.textContent = 'Starting…';
+        st.style.color = '#92400e';
+    }
+    try {
+        const res = await fetch('/api/admin/e-tickets/resend-all', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: adm.id, seminarId, sendWhatsapp: false })
+        });
+        const j = await res.json();
+        if (!res.ok) throw new Error(j.error || 'Could not start');
+        if (st) st.textContent = 'Started for ' + (j.total != null ? j.total : '…') + ' participants…';
+        if (adminAppsSendAllTimer) clearInterval(adminAppsSendAllTimer);
+        adminAppsSendAllTimer = setInterval(adminAppsPollSendAll, 3000);
+        adminAppsPollSendAll();
+    } catch (e) {
+        if (st) {
+            st.textContent = e.message || 'Failed';
+            st.style.color = '#b91c1c';
+        }
+    }
+}
+
 async function adminEticketFillResendAllSeminars() {
     const sel = document.getElementById('eticket-resend-all-seminar');
     if (!sel || sel.options.length > 1) return;
@@ -8473,6 +9322,7 @@ async function adminEticketResendAllMissing() {
 
 async function initAdminScannerLogsTab() {
     await fillAdminSeminarSelect('scanner-log-seminar', true);
+    await loadAdminScannerDaySummary();
     await loadAdminScannerLogs();
 }
 
@@ -8629,17 +9479,114 @@ function adminApplicationSearchBlob(a) {
         .toLowerCase();
 }
 
+let __adminAppEventFilter = '';
+function adminAppEventDateText(a) {
+    const fmt = (v) => {
+        const raw = String(v || '');
+        if (!raw) return '';
+        const dt = /T|\s\d{2}:\d{2}/.test(raw) ? new Date(raw.replace(' ', 'T')) : new Date(raw.slice(0, 10) + 'T00:00:00');
+        return isNaN(dt)
+            ? raw.slice(0, 10)
+            : dt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' });
+    };
+    const start = fmt(a.seminar_event_date);
+    const end = fmt(a.seminar_event_end_date);
+    if (!start) return '';
+    return end && end !== start ? start + ' – ' + end : start;
+}
+function adminAppEventLabel(a) {
+    const title = a.seminar_title || '';
+    const date = adminAppEventDateText(a);
+    return [title, date].filter(Boolean).join(' · ') || '—';
+}
+function adminAppsFillEventFilter(apps) {
+    const sel = document.getElementById('applications-event-filter');
+    if (!sel) return;
+    const seen = new Map();
+    (apps || []).forEach((a) => {
+        if (a.seminar_id == null) return;
+        const k = String(a.seminar_id);
+        if (!seen.has(k)) seen.set(k, { label: adminAppEventLabel(a), date: String(a.seminar_event_date || '') });
+    });
+    const sig = Array.from(seen.keys()).sort().join(',');
+    if (sel.dataset.sig === sig) return;
+    sel.dataset.sig = sig;
+    const opts = ['<option value="">All events</option>'];
+    Array.from(seen.entries())
+        .sort((x, y) => (y[1].date > x[1].date ? 1 : y[1].date < x[1].date ? -1 : 0))
+        .forEach(([k, v]) => {
+            opts.push(`<option value="${escAdmin(k)}">${escAdmin(v.label)}</option>`);
+        });
+    sel.innerHTML = opts.join('');
+    sel.value = __adminAppEventFilter;
+    if (sel.value !== __adminAppEventFilter) __adminAppEventFilter = '';
+}
+let __adminAppDateFrom = '';
+let __adminAppDateTo = '';
+function adminIstDateKey(v) {
+    const raw = String(v || '');
+    if (!raw) return '';
+    const dt = /T|\s\d{2}:\d{2}/.test(raw) ? new Date(raw.replace(' ', 'T')) : new Date(raw.slice(0, 10) + 'T00:00:00');
+    if (isNaN(dt)) return raw.slice(0, 10);
+    const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(dt);
+    return parts;
+}
+function adminFmtDateTimeIst(v) {
+    const raw = String(v || '');
+    if (!raw) return '';
+    const dt = /T|\s\d{2}:\d{2}/.test(raw) ? new Date(raw.replace(' ', 'T')) : new Date(raw.slice(0, 10) + 'T00:00:00');
+    return isNaN(dt)
+        ? raw
+        : dt.toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' });
+}
+function adminAppDatesLabel(a) {
+    const bits = [];
+    if (a.created_at) bits.push('Applied: ' + adminFmtDateTimeIst(a.created_at));
+    if (a.payment_date && String(a.order_status || '').toLowerCase() === 'success') bits.push('Paid: ' + adminFmtDateTimeIst(a.payment_date));
+    if (a.scan_time) bits.push('Scanned: ' + adminFmtDateTimeIst(a.scan_time));
+    return bits.join(' · ');
+}
+function adminAppInDateRange(a) {
+    if (!__adminAppDateFrom && !__adminAppDateTo) return true;
+    const k = adminIstDateKey(a.created_at);
+    if (!k) return false;
+    if (__adminAppDateFrom && k < __adminAppDateFrom) return false;
+    if (__adminAppDateTo && k > __adminAppDateTo) return false;
+    return true;
+}
+function adminSetApplicationDateFilter() {
+    __adminAppDateFrom = String((document.getElementById('applications-date-from') || {}).value || '');
+    __adminAppDateTo = String((document.getElementById('applications-date-to') || {}).value || '');
+    renderApplicationsTable();
+}
+function adminClearApplicationDateFilter() {
+    const f = document.getElementById('applications-date-from');
+    const t = document.getElementById('applications-date-to');
+    if (f) f.value = '';
+    if (t) t.value = '';
+    adminSetApplicationDateFilter();
+}
+function adminSetApplicationEventFilter(v) {
+    __adminAppEventFilter = String(v || '');
+    renderApplicationsTable();
+}
 function renderApplicationsTable() {
     const tbody = document.getElementById('applications-list');
+    adminAppsFillTicketSeminars();
     if (!tbody) return;
     const q = String((document.getElementById('applications-search') || {}).value || '')
         .trim()
         .toLowerCase();
     const apps = globalAdminApps || [];
+    adminAppsFillEventFilter(apps);
     const statusFilter = String(__adminAppStatusFilter || '').toLowerCase();
+    const eventFilter = String(__adminAppEventFilter || '');
+    const eventFiltered = (eventFilter
+        ? apps.filter((a) => String(a.seminar_id || '') === eventFilter)
+        : apps).filter(adminAppInDateRange);
     const statusFiltered = statusFilter
-        ? apps.filter((a) => String(a.status || '').toLowerCase() === statusFilter)
-        : apps;
+        ? eventFiltered.filter((a) => String(a.status || '').toLowerCase() === statusFilter)
+        : eventFiltered;
     const filtered = q
         ? statusFiltered.filter((a) => adminApplicationSearchBlob(a).includes(q))
         : statusFiltered;
@@ -8701,14 +9648,18 @@ function renderApplicationsTable() {
                     <td>${a.user_id_string}</td>
                     <td>${candidateName}${fileLink}${dupBadge}</td>
                     <td>${reviewBadge}</td>
-                    <td><code>${escAdmin(a.ticket_id_string || '—')}</code></td>
+                    <td><code>${escAdmin(a.ticket_id_string || '—')}</code><div style="margin-top:4px;font-size:0.78rem;color:#475569;">${escAdmin(adminAppEventLabel(a))}</div><div style="margin-top:2px;font-size:0.78rem;color:#1e293b;">${escAdmin(adminAppDatesLabel(a))}</div>${a.cancelled_at ? '<div style="margin-top:2px;font-size:0.78rem;color:#b91c1c;font-weight:600;">Cancelled: ' + escAdmin(adminFmtDateTimeIst(a.cancelled_at)) + '</div>' : ''}</td>
                     <td>
                         <select onchange="onApplicationStatusChange(${a.id}, this, ${index})" style="width: auto; min-width: 200px;">
                             ${adminRegistrationStatusOptionsHtml(a.status)}
                         </select>
+                        <label style="display:flex;align-items:center;gap:6px;margin-top:6px;font-size:0.8rem;color:#065f46;cursor:pointer;" title="Record-keeping tick only — does not change status or payment">
+                            <input type="checkbox" ${formData.admin_paid_mark ? 'checked' : ''} onchange="adminTogglePaidMark(${a.id}, this)"> Applicant paid${formData.admin_paid_mark_at ? ' <span style="color:#64748b;">(' + escAdmin(adminFmtDateTimeIst(formData.admin_paid_mark_at)) + ')</span>' : ''}
+                        </label>
                     </td>
                     <td>
                         <button class="btn-primary" onclick="viewFullApplication(${index})">View</button>
+                        ${a.ticket_id_string ? `<button type="button" class="btn-primary" style="margin-left:6px;background:#0369a1;padding:4px 8px;font-size:0.8rem;" onclick="adminResendTicketEmail(${a.id}, '${String(a.ticket_id_string).replace(/'/g, "\\'")}', true, false)" title="Email all e-tickets (every event day) to this applicant">Send ticket</button>` : ''}
                         <button type="button" class="btn-primary" style="margin-left:6px;background:#0f766e;padding:4px 8px;font-size:0.8rem;" onclick="adminManualCheckinRegistration(${a.id}, '${String(a.application_no || '').replace(/'/g, "\\'")}')" title="Mark venue check-in without scanner">Check in</button>
                         <button type="button" class="btn-primary" style="margin-left:6px;background:#b91c1c;padding:4px 8px;font-size:0.8rem;" onclick="deleteAdminRegistration(${a.id}, '${String(a.application_no || '').replace(/'/g, "\\'")}')">Delete</button>
                     </td>
@@ -8716,6 +9667,43 @@ function renderApplicationsTable() {
             `);
         });
     tbody.innerHTML = rowsHtml.join('');
+}
+
+async function adminTogglePaidMark(regId, cb) {
+    const aid = adminActorId();
+    if (!aid) return alert('Sign in as admin first.');
+    const paid = !!cb.checked;
+    cb.disabled = true;
+    try {
+        const res = await fetch('/api/admin/registrations/' + regId + '/paid-mark', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: aid, paid })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || 'Could not save');
+        const row = (globalAdminApps || []).find((a) => Number(a.id) === Number(regId));
+        if (row) {
+            let fd = {};
+            try {
+                fd = JSON.parse(row.form_data || '{}');
+            } catch (_) {}
+            if (paid) {
+                fd.admin_paid_mark = true;
+                fd.admin_paid_mark_at = data.markedAt || new Date().toISOString();
+            } else {
+                delete fd.admin_paid_mark;
+                delete fd.admin_paid_mark_at;
+            }
+            row.form_data = JSON.stringify(fd);
+        }
+        renderApplicationsTable();
+    } catch (e) {
+        cb.checked = !paid;
+        alert(e.message || 'Could not save paid mark');
+    } finally {
+        cb.disabled = false;
+    }
 }
 
 function adminFilterApplicationsList() {
@@ -8822,7 +9810,7 @@ function renderAdminCertificateCandidatesTable() {
     if (!tbody) return;
     const sid = document.getElementById('cert-mgmt-seminar')?.value;
     if (!sid) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">Select a seminar</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;">Select a seminar</td></tr>';
         return;
     }
     const certType = document.getElementById('cert-mgmt-type')?.value || 'participant';
@@ -8832,7 +9820,8 @@ function renderAdminCertificateCandidatesTable() {
         const name = [r.first_name, r.last_name].filter(Boolean).join(' ');
         const appDisplay =
             certType === 'volunteer' ? r.ticket_id_string || r.application_no : r.application_no;
-        return [r.user_id_string, name, appDisplay, r.reg_status, r.order_status, r.ticket_id_string]
+        const dayNames = (r.day_scans || []).map((d) => d && d.title).join(' ');
+        return [r.user_id_string, name, appDisplay, r.reg_status, r.order_status, r.ticket_id_string, dayNames, r.role]
             .join(' ')
             .toLowerCase();
     });
@@ -8842,12 +9831,12 @@ function renderAdminCertificateCandidatesTable() {
             certType === 'volunteer'
                 ? 'No approved volunteers for this seminar yet.'
                 : 'No registrations for this seminar yet.';
-        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;">${emptyMsg}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;">${emptyMsg}</td></tr>`;
         return;
     }
     if (!rows.length) {
         tbody.innerHTML =
-            '<tr><td colspan="9" style="text-align:center;">No candidates match your search.</td></tr>';
+            '<tr><td colspan="11" style="text-align:center;">No candidates match your search.</td></tr>';
         return;
     }
     tbody.innerHTML = '';
@@ -8878,6 +9867,18 @@ function renderAdminCertificateCandidatesTable() {
         const prnCell = r.user_id_string
             ? escAdmin(r.user_id_string)
             : '<span style="color:#b91c1c;">Missing PRN</span>';
+        const dl =
+            r.cert_enabled && r.certificate_id
+                ? ` <a href="${adminCertificateDownloadUrl(certType, r.certificate_id)}" target="_blank" rel="noopener" title="Download certificate PDF" style="margin-left:6px;color:#0369a1;font-size:0.82rem;white-space:nowrap;"><i class="fas fa-file-pdf"></i> PDF</a>`
+                : '';
+        const edited = Number(r.name_edited) === 1;
+        const honTxt = String(r.cert_honorific || '').toLowerCase() === 'none' ? '' : r.cert_honorific || '';
+        const printed = edited ? [honTxt, r.display_name].filter(Boolean).join(' ') : '';
+        const certNameCell =
+            (edited
+                ? `<strong title="Edited by admin">${escAdmin(printed)}</strong>`
+                : '<span style="color:#64748b;">Automatic</span>') +
+            ` <button type="button" class="btn-primary" style="padding:3px 9px;font-size:0.76rem;margin-left:6px;" onclick="openCertRecipientEditor(${Number(r.user_id)})"><i class="fas fa-pen"></i> Edit</button>`;
         tbody.innerHTML += `<tr>
                 <td><input type="checkbox" class="cert-cand-cb" data-user-id="${r.user_id}" value="${r.user_id}"></td>
                 <td>${prnCell}</td>
@@ -8886,10 +9887,25 @@ function renderAdminCertificateCandidatesTable() {
                 <td>${escAdmin(r.reg_status || '—')}</td>
                 <td>${paid}</td>
                 <td>${checked}</td>
+                <td>${adminCertDayCell(r)}</td>
                 <td><code>${escAdmin(r.ticket_id_string || '—')}</code></td>
-                <td title="${escAdmin(certLabel)}">${cert}</td>
+                <td title="${escAdmin(certLabel)}">${cert}${dl}</td>
+                <td>${certNameCell}</td>
             </tr>`;
     });
+}
+
+function adminCertificateDownloadUrl(certType, certificateId) {
+    const admin = getStoredAdminUser();
+    const kind = certType === 'volunteer' ? 'volunteer' : 'participant';
+    return (
+        '/api/admin/certificates/' +
+        kind +
+        '/' +
+        encodeURIComponent(certificateId) +
+        '/download.pdf?actingAdminId=' +
+        encodeURIComponent((admin && admin.id) || '')
+    );
 }
 
 function renderAdminVolunteersTable() {
@@ -9591,7 +10607,7 @@ async function adminOpenApplicationInView(registrationId) {
     let idx = (globalAdminApps || []).findIndex((a) => Number(a.id) === rid);
     if (idx < 0) {
         try {
-            const res = await fetch('/api/admin/applications');
+            const res = await fetch('/api/admin/applications?scope=all');
             const rows = await res.json();
             globalAdminApps = Array.isArray(rows) ? rows : [];
             idx = globalAdminApps.findIndex((a) => Number(a.id) === rid);
@@ -9635,13 +10651,25 @@ function renderAdminApplicationPaymentHtml(app) {
           escAdmin(amt != null ? amt : 0) +
           (txnId ? ' · Txn ' + escAdmin(txnId) : '')
         : 'No payment order yet';
-    const checkIn = ticketId
-        ? escAdmin(ticketId) +
-          ' · ' +
-          (isScanned
-              ? 'Checked in' + (scanTime ? ' · ' + escAdmin(adminFormatCancelReviewDateTime(scanTime)) : '')
-              : 'Not checked in')
-        : 'No e-ticket issued';
+    const dayScanLines = Array.isArray(app.day_scans) ? app.day_scans : [];
+    const checkIn =
+        dayScanLines.length >= 2
+            ? dayScanLines
+                  .map((d) => {
+                      const when =
+                          d.scanned && d.scanTime
+                              ? 'Checked in · ' + adminFormatCancelReviewDateTime(d.scanTime)
+                              : 'Not checked in';
+                      return escAdmin(d.title || 'Day') + ' — ' + escAdmin(when);
+                  })
+                  .join('<br>')
+            : ticketId
+              ? escAdmin(ticketId) +
+                ' · ' +
+                (isScanned
+                    ? 'Checked in' + (scanTime ? ' · ' + escAdmin(adminFormatCancelReviewDateTime(scanTime)) : '')
+                    : 'Not checked in')
+              : 'No e-ticket issued';
     let html =
         '<div style="margin:12px 0;padding:14px 16px;border:1px solid #bbf7d0;background:#f0fdf4;border-radius:10px;">' +
         '<h4 style="margin:0 0 10px;color:#166534;"><i class="fas fa-credit-card"></i> Payment details</h4>' +
@@ -9706,8 +10734,182 @@ function renderAdminApplicationPaymentHtml(app) {
             ', true, true)"><i class="fas fa-paper-plane"></i> Resend email + WhatsApp</button>' +
             '</div>';
     }
+    html += renderAdminApplicationRazorpayHtml(app, orderStatus, txnId);
     html += '</div>';
     return html;
+}
+
+/* Razorpay block under an applicant's payment details: shows the matched payment (fetched live from
+   Razorpay) or, for unpaid applications, lets admin paste a pay_ id and match it to this application. */
+function renderAdminApplicationRazorpayHtml(app, orderStatus, txnId) {
+    const rid = parseInt(app && app.id, 10);
+    if (!rid) return '';
+    const st = String(app.status || '').toLowerCase();
+    const pid = txnId && /^pay_[A-Za-z0-9]{10,}$/.test(String(txnId)) ? String(txnId) : null;
+    const boxId = 'rzp-app-details-' + rid;
+    if (pid) {
+        setTimeout(function () {
+            adminLoadRazorpayPaymentDetails(rid, pid, boxId);
+        }, 0);
+        return (
+            '<div style="margin-top:12px;padding-top:10px;border-top:1px dashed #bbf7d0;font-size:0.85rem;">' +
+            '<strong style="color:#166534;"><i class="fas fa-link"></i> Razorpay payment</strong> <code>' +
+            escAdmin(pid) +
+            '</code>' +
+            (String(app.payment_gateway || '') === 'razorpay_manual'
+                ? ' <span style="color:#0369a1;">(matched manually)</span>'
+                : '') +
+            '<div id="' +
+            boxId +
+            '" class="muted" style="margin-top:6px;">Fetching from Razorpay…</div></div>'
+        );
+    }
+    if (orderStatus === 'success' || st === 'cancelled' || st === 'rejected') return '';
+    return (
+        '<div style="margin-top:12px;padding-top:10px;border-top:1px dashed #bbf7d0;font-size:0.85rem;">' +
+        '<strong style="color:#166534;"><i class="fas fa-link"></i> Match a Razorpay payment to this application</strong>' +
+        '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;align-items:center;">' +
+        '<input type="text" id="rzp-app-pid-' +
+        rid +
+        '" placeholder="pay_XXXXXXXXXXXXXX" style="flex:1;min-width:200px;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-family:monospace;">' +
+        '<button type="button" class="btn-primary" style="padding:6px 10px;font-size:0.8rem;background:#15803d;" onclick="adminMatchRazorpayToApplication(' +
+        rid +
+        ')"><i class="fas fa-search-dollar"></i> Fetch &amp; match</button></div>' +
+        '<div id="' +
+        boxId +
+        '" class="muted" style="margin-top:6px;font-size:0.82rem;">Paste the payment id from the Razorpay dashboard; details are fetched from Razorpay before matching.</div></div>'
+    );
+}
+
+function adminRazorpayPaymentSummaryHtml(p) {
+    const statusColor = p.captured ? '#15803d' : '#b45309';
+    return (
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:6px 14px;">' +
+        '<div><span class="muted">Amount</span><br><strong>₹' +
+        escAdmin(String(p.amount)) +
+        '</strong></div>' +
+        '<div><span class="muted">Razorpay status</span><br><strong style="color:' +
+        statusColor +
+        ';">' +
+        escAdmin(p.status || '—') +
+        '</strong></div>' +
+        '<div><span class="muted">Method</span><br>' +
+        escAdmin(p.method || '—') +
+        '</div>' +
+        '<div><span class="muted">Paid at</span><br>' +
+        escAdmin(p.createdAt ? new Date(p.createdAt).toLocaleString('en-IN') : '—') +
+        '</div>' +
+        '<div><span class="muted">Payer email</span><br>' +
+        escAdmin(p.email || '—') +
+        '</div>' +
+        '<div><span class="muted">Payer phone</span><br>' +
+        escAdmin(p.contact || '—') +
+        '</div>' +
+        '<div><span class="muted">Razorpay order</span><br><code>' +
+        escAdmin(p.orderId || '—') +
+        '</code></div></div>'
+    );
+}
+
+async function adminLoadRazorpayPaymentDetails(rid, pid, boxId) {
+    const adm = getStoredAdminUser();
+    const box = document.getElementById(boxId);
+    if (!box) return;
+    if (!adm?.id) {
+        box.textContent = 'Admin login required to fetch Razorpay details.';
+        return;
+    }
+    try {
+        const res = await fetch(
+            '/api/admin/payments/razorpay/lookup?actingAdminId=' +
+                encodeURIComponent(adm.id) +
+                '&paymentId=' +
+                encodeURIComponent(pid)
+        );
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Lookup failed');
+        box.classList.remove('muted');
+        box.innerHTML = adminRazorpayPaymentSummaryHtml(data.payment);
+    } catch (e) {
+        box.innerHTML = '<span style="color:#b91c1c;">Could not fetch from Razorpay: ' + escAdmin(e.message) + '</span>';
+    }
+}
+
+async function adminMatchRazorpayToApplication(rid) {
+    const adm = getStoredAdminUser();
+    const input = document.getElementById('rzp-app-pid-' + rid);
+    const box = document.getElementById('rzp-app-details-' + rid);
+    const pid = (input?.value || '').trim();
+    if (!adm?.id) return alert('Admin login required.');
+    if (!/^pay_[A-Za-z0-9]{10,}$/.test(pid)) return alert('Enter a Razorpay payment id like pay_XXXXXXXXXXXXXX.');
+    if (box) {
+        box.style.color = '#64748b';
+        box.textContent = 'Fetching payment from Razorpay…';
+    }
+    try {
+        const lookupRes = await fetch(
+            '/api/admin/payments/razorpay/lookup?actingAdminId=' +
+                encodeURIComponent(adm.id) +
+                '&paymentId=' +
+                encodeURIComponent(pid)
+        );
+        const lookup = await lookupRes.json();
+        if (!lookupRes.ok) throw new Error(lookup.error || 'Lookup failed');
+        const p = lookup.payment;
+        if (lookup.alreadyMatched) {
+            const m = lookup.alreadyMatched;
+            if (box) {
+                box.innerHTML =
+                    adminRazorpayPaymentSummaryHtml(p) +
+                    '<p style="margin:8px 0 0;color:#b45309;font-weight:600;">This payment is already matched to application ' +
+                    escAdmin(m.applicationNo || m.registrationId) +
+                    ' (' +
+                    escAdmin(m.name || '') +
+                    ').</p>';
+            }
+            return;
+        }
+        if (box) box.innerHTML = adminRazorpayPaymentSummaryHtml(p);
+        if (
+            !confirm(
+                'Match Razorpay payment ' +
+                    pid +
+                    ' (₹' +
+                    p.amount +
+                    ', ' +
+                    p.status +
+                    ') to this application? It will be marked paid and the e-ticket issued and emailed.'
+            )
+        )
+            return;
+        const res = await fetch('/api/admin/payments/razorpay/match', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: adm.id, paymentId: pid, registrationId: rid })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Match failed');
+        if (box) {
+            box.innerHTML +=
+                '<p style="margin:8px 0 0;color:#15803d;font-weight:600;">Matched: ₹' +
+                escAdmin(String(data.amount)) +
+                ' recorded' +
+                (data.ticketId ? ' · e-ticket ' + escAdmin(String(data.ticketId)) + ' issued and emailed.' : ' · marked paid.') +
+                '</p>';
+        }
+        try {
+            const r2 = await fetch('/api/admin/applications?scope=all');
+            const rows = await r2.json();
+            if (Array.isArray(rows)) {
+                globalAdminApps = rows;
+                const idx = globalAdminApps.findIndex((a) => Number(a.id) === Number(rid));
+                if (idx >= 0) setTimeout(() => viewFullApplication(idx), 1200);
+            }
+        } catch (_) {}
+        if (typeof loadAdminEnrichedOrders === 'function') loadAdminEnrichedOrders();
+    } catch (e) {
+        if (box) box.innerHTML = '<span style="color:#b91c1c;">' + escAdmin(e.message) + '</span>';
+    }
 }
 
 function populateAdminCancellationReviewModal(row) {
@@ -9745,6 +10947,12 @@ function populateAdminCancellationReviewModal(row) {
             '<p style="margin:0 0 6px;font-weight:700;color:#334155;">Cancellation request</p>' +
             '<p style="margin:0 0 6px;"><strong>Doctor reason:</strong> ' +
             escAdmin(row.reason || '—') +
+            '</p>' +
+            '<p style="margin:0 0 6px;"><strong>Requested on:</strong> ' +
+            escAdmin(when) +
+            (adminCancellationDateLabel(row)
+                ? ' · <strong style="color:#b91c1c;">Cancelled on:</strong> ' + escAdmin(adminCancellationDateLabel(row))
+                : '') +
             '</p>' +
             '<p style="margin:0 0 6px;"><strong>Request status:</strong> ' +
             escAdmin(row.status) +
@@ -9900,6 +11108,17 @@ function closeAdminCancellationReviewModal() {
     }
 }
 
+function adminCancellationDateLabel(r) {
+    const actionType = String(r.action_type || r.actionType || '').toLowerCase();
+    const regStatus = String(r.registration_status || '').toLowerCase();
+    const approved = String(r.status || '').toLowerCase() === 'approved';
+    const cancelled =
+        regStatus === 'cancelled' || (approved && actionType !== 'refund_only');
+    if (!cancelled) return '';
+    const at = r.reviewed_at || r.reviewedAt || r.requested_at || r.requestedAt;
+    return at ? new Date(at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : '';
+}
+
 function renderAdminCancellationRequestsTable() {
     const tbody = document.getElementById('admin-cancel-req-tbody');
     if (!tbody) return;
@@ -9940,6 +11159,7 @@ function renderAdminCancellationRequestsTable() {
         const when = r.requested_at
             ? new Date(r.requested_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })
             : '—';
+        const cancelledOn = adminCancellationDateLabel(r);
         const pol = '₹' + (r.refund_amount || 0) + ' (' + (r.refund_percent || 0) + '%)';
         const actionType = String(r.action_type || r.actionType || '').toLowerCase();
         const typeBadge =
@@ -9992,6 +11212,9 @@ function renderAdminCancellationRequestsTable() {
         cancelRowsHtml.push(
             '<tr><td>' +
             escAdmin(when) +
+            (cancelledOn
+                ? '<br><span style="font-size:0.75rem;color:#b91c1c;font-weight:600;">Cancelled: ' + escAdmin(cancelledOn) + '</span>'
+                : '') +
             '</td><td>' +
             doc +
             '</td><td>' +
@@ -10076,6 +11299,8 @@ function renderSeminarsTable() {
                         <button class="btn-success" style="padding: 5px 10px; font-size: 0.85rem;" onclick="manageSeminar(${s.id}, '${String(s.title).replace(/'/g, "\\'")}')">Manage</button>
                         <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.85rem;background:#0d9488;margin-left:4px;" onclick="openEventScheduleModalForSeminar(${s.id}, '${String(s.title).replace(/'/g, "\\'")}')">Schedule</button>
                         <button class="btn-primary" style="padding: 5px 10px; font-size: 0.85rem;" onclick="editSeminar(${idx})">Edit</button>
+                        <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.85rem;background:#b91c1c;margin-left:4px;" title="Download blank registration form (PDF)" onclick="downloadAdminSeminarBlankForm(${s.id}, 'pdf')"><i class="fas fa-file-pdf"></i> Form</button>
+                        <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.85rem;background:#0369a1;margin-left:4px;" title="Download blank registration form (image)" onclick="downloadAdminSeminarBlankForm(${s.id}, 'png')"><i class="fas fa-image"></i> Form</button>
                         <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.85rem;background:#7c3aed;margin-left:4px;" onclick="purgeAdminSeminarTestData(${s.id}, '${String(s.title).replace(/'/g, "\\'")}')">Purge test data</button>
                         <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.85rem;background:#b91c1c;margin-left:4px;" onclick="deleteAdminSeminar(${s.id}, '${String(s.title).replace(/'/g, "\\'")}')">Delete</button>
                     </td>
@@ -10250,19 +11475,21 @@ function renderAdminScannerLogsTable() {
             s.application_no,
             s.ticket_id_string,
             staff,
-            s.seminar_title
+            s.seminar_title,
+            s.event_title,
+            s.day_title
         ]
             .join(' ')
             .toLowerCase();
     });
     adminSearchSetCount('scanner-logs-search-count', q, rows.length, all.length, 'scans');
     if (!all.length) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No scans yet</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;">No scans yet</td></tr>';
         return;
     }
     if (!rows.length) {
         tbody.innerHTML =
-            '<tr><td colspan="7" style="text-align:center;">No scans match your search.</td></tr>';
+            '<tr><td colspan="8" style="text-align:center;">No scans match your search.</td></tr>';
         return;
     }
     tbody.innerHTML = '';
@@ -10274,12 +11501,13 @@ function renderAdminScannerLogsTable() {
             : '—';
         tbody.innerHTML += `<tr>
                 <td>${escAdmin(t)}</td>
+                <td>${escAdmin(s.day_title || '—')}${s.day_date ? '<br><span style="font-size:0.78rem;color:#64748b;">' + escAdmin(String(s.day_date).slice(0, 10)) + '</span>' : ''}</td>
                 <td><strong>${escAdmin(s.doctor_user_id_string)}</strong></td>
                 <td>${escAdmin(doc)}</td>
                 <td>${escAdmin(s.application_no)}</td>
                 <td>${escAdmin(s.ticket_id_string)}</td>
                 <td>${escAdmin(staff)}</td>
-                <td>${escAdmin(s.seminar_title)}</td>
+                <td>${escAdmin(s.seminar_title)}${s.event_title ? '<br><span style="font-size:0.78rem;color:#64748b;">' + escAdmin(s.event_title) + '</span>' : ''}</td>
             </tr>`;
     });
 }
@@ -10319,11 +11547,34 @@ async function adminLiveEditOtpPayload(targetUserId) {
 let __adminEditFormFields = [];
 let __adminEditFormPrefix = 'appedit-f-';
 
+let __adminCountryDatalistReady = false;
+async function ensureAdminCountryDatalist() {
+    if (__adminCountryDatalistReady || document.getElementById('admin-country-datalist')) return;
+    __adminCountryDatalistReady = true;
+    try {
+        const r = await fetch('/api/public/countries');
+        const data = await r.json();
+        const dl = document.createElement('datalist');
+        dl.id = 'admin-country-datalist';
+        ((data && data.countries) || []).forEach((c) => {
+            const o = document.createElement('option');
+            o.value = c;
+            dl.appendChild(o);
+        });
+        document.body.appendChild(dl);
+    } catch (_) {
+        __adminCountryDatalistReady = false;
+    }
+}
+
 async function adminPincodeAutofill(prefix, pinKey) {
     const pinEl = document.getElementById(prefix + pinKey);
     if (!pinEl) return;
     const pin = String(pinEl.value || '').replace(/\D/g, '');
-    if (pin.length !== 6) return;
+    if (pin.length !== 6 || pin.length !== String(pinEl.value || '').trim().length) return;
+    const countryNow = document.getElementById(prefix + 'country');
+    const cv = countryNow ? String(countryNow.value || '').trim().toLowerCase() : '';
+    if (cv && cv !== 'india') return;
     try {
         const r = await fetch('/api/public/pincode-lookup?pin=' + encodeURIComponent(pin));
         const data = await r.json();
@@ -10407,12 +11658,7 @@ function renderAdminDynamicFormFields(hostId, fields, prefix, existingData) {
         if (f.type === 'textarea') {
             html += '<textarea id="' + id + '" rows="2" style="width:100%;padding:8px;"></textarea>';
         } else if (f.type === 'select' && Array.isArray(f.options)) {
-            html += '<select id="' + id + '" style="width:100%;padding:8px;"><option value="">Select</option>';
-            f.options.forEach((o) => {
-                const v = o.value != null ? o.value : o.label;
-                html += '<option value="' + escAdmin(String(v)) + '">' + escAdmin(o.label || v) + '</option>';
-            });
-            html += '</select>';
+            html += '<select id="' + id + '" style="width:100%;padding:8px;"><option value="">Select</option>' + adminSelectOptionsHtml(f) + '</select>';
         } else if (f.type === 'date') {
             html += '<input type="date" id="' + id + '" style="width:100%;padding:8px;">';
         } else if (f.type === 'checkbox' || f.type === 'boolean') {
@@ -10424,7 +11670,14 @@ function renderAdminDynamicFormFields(hostId, fields, prefix, existingData) {
                 '</label>';
         } else {
             const ty = f.type === 'email' ? 'email' : f.type === 'tel' ? 'tel' : 'text';
-            const pinAttr = f.key === 'pin' || f.key === 'cpin' ? ' maxlength="6" inputmode="numeric"' : '';
+            const pinAttr =
+                f.key === 'pin' || f.key === 'cpin'
+                    ? ' maxlength="12" placeholder="PIN / postal code (6-digit Indian PIN auto-fills city & state)"'
+                    : f.key === 'phone'
+                      ? ' placeholder="10-digit mobile, or +country code for other countries"'
+                      : f.key === 'country'
+                        ? ' list="admin-country-datalist" placeholder="India"'
+                        : '';
             html += '<input type="' + ty + '" id="' + id + '" style="width:100%;padding:8px;"' + pinAttr + '>';
         }
         html += '</div>';
@@ -10443,6 +11696,7 @@ function renderAdminDynamicFormFields(hostId, fields, prefix, existingData) {
             renderAdminDynamicFormFields(hostId, __adminEditFormFields, prefix, collectAdminDynamicFormData(prefix))
         );
     }
+    ensureAdminCountryDatalist();
     ['pin', 'cpin'].forEach((pk) => {
         const pel = document.getElementById(prefix + pk);
         if (pel) pel.addEventListener('blur', () => adminPincodeAutofill(prefix, pk));
@@ -10506,61 +11760,69 @@ async function adminSaveApplicationFormEdit(applicationId) {
     }
 }
 
-async function adminSaveUserAccountEdit(userId) {
-    const otp = await adminLiveEditOtpPayload(userId);
-    if (!otp) return;
-    const body = {
+function adminAccountEditBody() {
+    return {
         firstName: document.getElementById('admin-edit-first')?.value,
         middleName: document.getElementById('admin-edit-middle')?.value,
         lastName: document.getElementById('admin-edit-last')?.value,
         email: document.getElementById('admin-edit-email')?.value,
         phone: document.getElementById('admin-edit-phone')?.value,
         whatsapp: document.getElementById('admin-edit-whatsapp')?.value,
-        qualification: document.getElementById('admin-edit-qual')?.value,
-        ...otp
+        qualification: document.getElementById('admin-edit-qual')?.value
     };
-    try {
-        const res = await fetch('/api/admin/users/' + userId + '/account', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        });
-        const data = await res.json();
-        if (!res.ok) return alert(data.error || 'Save failed');
-        alert('Account updated.');
-        openAdminUserDetail(userId);
-        loadUsers();
-    } catch (e) {
-        alert('Network error');
-    }
 }
 
-async function adminSaveDoctorProfileEdit(userId) {
-    const otp = await adminLiveEditOtpPayload();
-    if (!otp) return;
-    const body = {
+function adminDoctorProfileEditBody() {
+    return {
         specialization: document.getElementById('admin-edit-spec')?.value,
         registration_no: document.getElementById('admin-edit-regno')?.value,
         qualifications: document.getElementById('admin-edit-quals')?.value,
         experience_years: document.getElementById('admin-edit-exp')?.value,
         hospital_name: document.getElementById('admin-edit-hospital')?.value,
         contact_number: document.getElementById('admin-edit-contact')?.value,
-        bio: document.getElementById('admin-edit-bio')?.value,
-        ...otp
+        bio: document.getElementById('admin-edit-bio')?.value
     };
-    try {
-        const res = await fetch('/api/admin/users/' + userId + '/doctor-profile', {
+}
+
+async function adminSaveUserAllEdits(userId) {
+    const otp = await adminLiveEditOtpPayload(userId);
+    if (!otp) return;
+    const st = document.getElementById('admin-edit-save-status');
+    if (st) st.textContent = 'Saving…';
+    const put = (url, body) =>
+        fetch(url, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        });
-        const data = await res.json();
-        if (!res.ok) return alert(data.error || 'Save failed');
-        alert('Doctor profile updated.');
-        openAdminUserDetail(userId);
+            body: JSON.stringify({ ...body, ...otp })
+        }).then(async (r) => ({ ok: r.ok, data: await r.json().catch(() => ({})) }));
+    try {
+        const acc = await put('/api/admin/users/' + userId + '/account', adminAccountEditBody());
+        if (!acc.ok) {
+            if (st) st.textContent = acc.data.error || 'Account save failed';
+            return alert(acc.data.error || 'Account save failed');
+        }
+        const prof = await put('/api/admin/users/' + userId + '/doctor-profile', adminDoctorProfileEditBody());
+        if (!prof.ok) {
+            if (st) st.textContent = 'Account saved, doctor profile failed: ' + (prof.data.error || '');
+            return alert('Account saved, but doctor profile failed: ' + (prof.data.error || 'Save failed'));
+        }
+        if (st) st.textContent = 'Saved at ' + new Date().toLocaleTimeString();
+        alert('Account and doctor profile updated.');
+        await openAdminUserDetail(userId);
+        loadUsers();
+        if (typeof loadApplications === 'function') loadApplications();
     } catch (e) {
+        if (st) st.textContent = 'Network error';
         alert('Network error');
     }
+}
+
+function adminSaveUserAccountEdit(userId) {
+    return adminSaveUserAllEdits(userId);
+}
+
+function adminSaveDoctorProfileEdit(userId) {
+    return adminSaveUserAllEdits(userId);
 }
 
 async function adminSaveCaseSubmissionEdit(subId) {
@@ -10909,10 +12171,22 @@ function viewFullApplication(index) {
     const content = document.getElementById('admin-view-content');
     content.innerHTML = `
         <p><strong>App No:</strong> ${escAdmin(a.application_no)}</p>
+        <p><strong>Applied on:</strong> ${a.created_at ? escAdmin(adminFmtDateTimeIst(a.created_at)) : '—'}</p>
         <p><strong>Status:</strong> ${escAdmin(String(a.status || '').toUpperCase())}</p>
         ${escalationBlock}
         <p><strong>Seminar:</strong> ${escAdmin(a.seminar_title || '—')}${a.seminar_price != null ? ' · Fee ₹' + escAdmin(String(adminSeminarFeeAmount(a))) : ''}</p>
         <p><strong>Portal ID:</strong> ${escAdmin(a.user_id_string || '')}</p>
+        ${
+            Array.isArray(formData.pending_fields) && formData.pending_fields.length
+                ? '<p style="background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:8px 10px;"><strong>Pending from applicant:</strong> ' +
+                  escAdmin(formData.pending_fields.join(', ')) +
+                  ' <span class="muted">(marked "Applicant will add later" — doctor completes these in the portal)</span></p>'
+                : ''
+        }
+        <p style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;"><strong>Application form:</strong>
+            <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;background:#b91c1c;" onclick="downloadAdminApplicationForm(${a.id}, 'pdf')"><i class="fas fa-file-pdf"></i> PDF</button>
+            <button type="button" class="btn-primary" style="padding:5px 10px;font-size:0.8rem;background:#0369a1;" onclick="downloadAdminApplicationForm(${a.id}, 'png')"><i class="fas fa-image"></i> Image</button>
+        </p>
         ${renderAdminApplicationPaymentHtml(a)}
         ${
             dupReview
@@ -11121,6 +12395,304 @@ function onApplicationStatusChange(appId, selectEl, appIndex) {
         return;
     }
     updateAppStatus(appId, status);
+}
+
+const ADMIN_CERT_ISSUE_LABELS = {
+    volunteering: 'volunteering certificate',
+    volunteer_participation: 'participation certificate for this volunteer',
+    delegate_participation: 'participation certificate for this delegate'
+};
+
+function adminCertDayCell(r) {
+    const id = Number(r.registration_id);
+    const days = Array.isArray(r.day_scans) ? r.day_scans : [];
+    const chips = days
+        .map((d) => {
+            const title = escAdmin(d.title || 'Day');
+            if (d.scanned) {
+                return (
+                    '<span style="display:inline-block;margin:2px 4px 2px 0;padding:2px 6px;border-radius:999px;background:#dcfce7;color:#166534;font-size:0.75rem;">' +
+                    title +
+                    ' in</span>'
+                );
+            }
+            if (!d.hasTicket) {
+                return (
+                    '<span style="display:inline-block;margin:2px 4px 2px 0;padding:2px 6px;border-radius:999px;background:#fef3c7;color:#92400e;font-size:0.75rem;" title="Generate the e-ticket for this day first">' +
+                    title +
+                    ' · no ticket</span>'
+                );
+            }
+            const dayArg = d.dayId == null ? 'null' : Number(d.dayId);
+            const safeTitle = String(d.title || 'this day')
+                .replace(/\\/g, '\\\\')
+                .replace(/'/g, "\\'")
+                .replace(/"/g, '');
+            return (
+                '<button type="button" class="btn-primary" style="margin:2px 4px 2px 0;padding:3px 8px;font-size:0.75rem;background:#0f766e;" onclick="adminManualCheckinDay(' +
+                id +
+                ',' +
+                dayArg +
+                ',\'cert-checkin-panel\',\'' +
+                safeTitle +
+                '\')">' +
+                title +
+                '</button>'
+            );
+        })
+        .join('');
+    return (
+        chips +
+        '<button type="button" class="btn-primary" style="margin:2px 0;padding:3px 8px;font-size:0.75rem;background:#0369a1;" onclick="adminCertFocusCheckin(' +
+        id +
+        ')">Certificates</button>'
+    );
+}
+
+function adminRenderCheckinState(data, mountId) {
+    const role = data.role === 'volunteer' ? 'Volunteer' : 'Delegate';
+    const days = data.days || [];
+    const mount = "'" + String(mountId || '').replace(/'/g, '') + "'";
+    const regId = Number(data.registrationId);
+    let html =
+        '<div style="margin-top:12px;padding:12px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc;">';
+    html +=
+        '<p style="margin:0 0 8px;"><strong>' +
+        escAdmin(data.name || 'Registration') +
+        '</strong>';
+    if (data.applicationNo) html += ' · ' + escAdmin(data.applicationNo);
+    if (data.prn) html += ' · ' + escAdmin(data.prn);
+    html += ' · ' + role + '</p>';
+    html += '<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;">';
+    days.forEach((d) => {
+        const title = escAdmin(d.title || 'Day');
+        if (d.scanned) {
+            html +=
+                '<span style="padding:6px 10px;border-radius:999px;background:#dcfce7;color:#166534;font-size:0.82rem;">' +
+                title +
+                ' · checked in</span>';
+            return;
+        }
+        if (!d.hasTicket) {
+            html +=
+                '<span style="padding:6px 10px;border-radius:999px;background:#fef3c7;color:#92400e;font-size:0.82rem;">' +
+                title +
+                ' · generate the e-ticket first</span>';
+            return;
+        }
+        const dayArg = d.dayId == null ? 'null' : Number(d.dayId);
+        const safeTitle = String(d.title || 'this day')
+            .replace(/\\/g, '\\\\')
+            .replace(/'/g, "\\'")
+            .replace(/"/g, '');
+        html +=
+            '<button type="button" class="btn-primary" style="background:#0f766e;padding:6px 10px;" onclick="adminManualCheckinDay(' +
+            regId +
+            ',' +
+            dayArg +
+            ',' +
+            mount +
+            ',\'' +
+            safeTitle +
+            '\')">Check in ' +
+            title +
+            '</button>';
+    });
+    html += '</div><div style="display:flex;flex-wrap:wrap;gap:8px;">';
+    (data.offers || []).forEach((offer) => {
+        const label = escAdmin(offer.label || 'Certificate');
+        const who = offer.audience === 'volunteer' ? 'Volunteer' : 'Delegate';
+        if (offer.issued) {
+            html +=
+                '<span style="padding:6px 10px;border-radius:8px;background:#ecfdf5;color:#047857;font-size:0.82rem;">' +
+                who +
+                ' · ' +
+                label +
+                ' enabled</span>';
+            return;
+        }
+        if (!offer.eligible) {
+            html +=
+                '<span style="padding:6px 10px;border-radius:8px;background:#f1f5f9;color:#64748b;font-size:0.82rem;" title="' +
+                escAdmin(offer.reason || '') +
+                '">' +
+                who +
+                ' · ' +
+                label +
+                ' · ' +
+                escAdmin(offer.reason || 'Not yet') +
+                '</span>';
+            return;
+        }
+        html +=
+            '<button type="button" class="btn-primary" style="background:#b45309;padding:6px 10px;" onclick="adminIssueDayCertificate(' +
+            regId +
+            ",'" +
+            String(offer.kind || '').replace(/'/g, '') +
+            "'," +
+            mount +
+            ')">Issue ' +
+            who.toLowerCase() +
+            ' ' +
+            label.toLowerCase() +
+            '</button>';
+    });
+    html += '</div></div>';
+    return html;
+}
+
+async function adminOpenDayCheckin(regId, mountId) {
+    const mount = document.getElementById(mountId);
+    if (!mount) return;
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) {
+        mount.innerHTML = '<p style="color:#b91c1c;margin-top:10px;">Not logged in.</p>';
+        return;
+    }
+    mount.innerHTML = '<p style="color:#64748b;margin-top:10px;">Loading days…</p>';
+    try {
+        const res = await fetch(
+            '/api/admin/registrations/' +
+                encodeURIComponent(regId) +
+                '/checkin-days?actingAdminId=' +
+                encodeURIComponent(adm.id)
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            mount.innerHTML =
+                '<p style="color:#b91c1c;margin-top:10px;">' + escAdmin(data.error || 'Could not load days') + '</p>';
+            return;
+        }
+        mount.innerHTML = adminRenderCheckinState(data, mountId);
+    } catch (e) {
+        console.error(e);
+        mount.innerHTML = '<p style="color:#b91c1c;margin-top:10px;">Network error</p>';
+    }
+}
+
+function adminCertFocusCheckin(regId) {
+    const card = document.getElementById('cert-day-checkin-card');
+    if (card && card.scrollIntoView) card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    adminOpenDayCheckin(regId, 'cert-checkin-panel');
+}
+
+async function adminCertCheckinLookup() {
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return alert('Not logged in.');
+    const q = String((document.getElementById('cert-checkin-q') || {}).value || '').trim();
+    const sid = String((document.getElementById('cert-mgmt-seminar') || {}).value || '');
+    const mount = document.getElementById('cert-checkin-panel');
+    if (!q) return alert('Enter an application number, PRN, ticket, email, or phone.');
+    if (!sid) return alert('Select a seminar first.');
+    if (mount) mount.innerHTML = '<p style="color:#64748b;margin-top:10px;">Searching…</p>';
+    try {
+        const res = await fetch(
+            '/api/admin/e-tickets/lookup?q=' + encodeURIComponent(q) + '&actingAdminId=' + encodeURIComponent(adm.id)
+        );
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            if (mount) {
+                mount.innerHTML =
+                    '<p style="color:#b91c1c;margin-top:10px;">' + escAdmin(data.error || 'Lookup failed') + '</p>';
+            }
+            return;
+        }
+        const seen = new Set();
+        const rows = (data.results || []).filter((row) => {
+            if (sid && String(row.seminarId) !== sid) return false;
+            if (!row.registrationId || seen.has(row.registrationId)) return false;
+            seen.add(row.registrationId);
+            return true;
+        });
+        if (!rows.length) {
+            if (mount) {
+                mount.innerHTML =
+                    '<p style="color:#b45309;margin-top:10px;">No registration in this seminar matched that search.</p>';
+            }
+            return;
+        }
+        if (rows.length === 1) {
+            adminOpenDayCheckin(rows[0].registrationId, 'cert-checkin-panel');
+            return;
+        }
+        if (!mount) return;
+        mount.innerHTML =
+            '<div style="margin-top:10px;">' +
+            rows
+                .map((row) => {
+                    return (
+                        '<button type="button" class="btn-primary" style="margin:4px 6px 0 0;background:#0369a1;padding:6px 10px;" onclick="adminOpenDayCheckin(' +
+                        Number(row.registrationId) +
+                        ',\'cert-checkin-panel\')">' +
+                        escAdmin(row.doctorName || 'Registration') +
+                        ' · ' +
+                        escAdmin(row.applicationNo || '') +
+                        '</button>'
+                    );
+                })
+                .join('') +
+            '</div>';
+    } catch (e) {
+        console.error(e);
+        if (mount) mount.innerHTML = '<p style="color:#b91c1c;margin-top:10px;">Network error</p>';
+    }
+}
+
+async function adminManualCheckinDay(regId, dayId, mountId, dayTitle) {
+    const label = dayTitle || 'this event day';
+    if (
+        !confirm(
+            'Check in ' +
+                label +
+                ' without the scanner?\n\nThis records that day on the e-ticket. Certificates are not emailed from this step.'
+        )
+    ) {
+        return;
+    }
+    const adm = getStoredAdminUser();
+    try {
+        const body = { actingAdminId: adm && adm.id };
+        if (dayId != null && dayId !== 'null') body.dayId = dayId;
+        const res = await fetch('/api/admin/registrations/' + regId + '/manual-checkin', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return alert(data.error || 'Manual check-in failed');
+        alert(data.message || 'Checked in.');
+        if (mountId) adminOpenDayCheckin(regId, mountId);
+        if (document.getElementById('cert-mgmt-seminar') && document.getElementById('cert-mgmt-seminar').value) {
+            loadAdminCertificateCandidates();
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Network error');
+    }
+}
+
+async function adminIssueDayCertificate(regId, kind, mountId) {
+    const label = ADMIN_CERT_ISSUE_LABELS[kind] || 'certificate';
+    if (!confirm('Enable the ' + label + ' for this person?\n\nThis does not send a certificate email.')) return;
+    const adm = getStoredAdminUser();
+    if (!adm || !adm.id) return alert('Not logged in.');
+    try {
+        const res = await fetch('/api/admin/registrations/' + regId + '/issue-certificate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: adm.id, kind })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) return alert(data.error || 'Could not enable the certificate');
+        alert(data.message || 'Certificate enabled.');
+        if (mountId) adminOpenDayCheckin(regId, mountId);
+        if (document.getElementById('cert-mgmt-seminar') && document.getElementById('cert-mgmt-seminar').value) {
+            loadAdminCertificateCandidates();
+        }
+    } catch (e) {
+        console.error(e);
+        alert('Network error');
+    }
 }
 
 async function adminManualCheckinRegistration(regId, appNo) {
@@ -11521,6 +13093,39 @@ function renderIntegrationSecretStatus(s) {
         waHint.style.color = waSaved ? '#15803d' : '#64748b';
     }
 
+    const googleMapsSaved = !!settings.google_maps_api_key_saved;
+    window.__integrationGoogleMapsKeySaved = googleMapsSaved;
+
+    const googleMapsBadge = document.getElementById('int-google-maps-key-saved-badge');
+    if (googleMapsBadge) {
+        if (googleMapsSaved) {
+            googleMapsBadge.textContent = '✓ Google Maps API key saved on server';
+            googleMapsBadge.style.background = '#ecfdf5';
+            googleMapsBadge.style.borderColor = '#a7f3d0';
+            googleMapsBadge.style.color = '#15803d';
+        } else {
+            googleMapsBadge.textContent = 'Google Maps API key not saved yet';
+            googleMapsBadge.style.background = '#f8fafc';
+            googleMapsBadge.style.borderColor = '#e2e8f0';
+            googleMapsBadge.style.color = '#64748b';
+        }
+    }
+
+    const googleMapsNew = document.getElementById('int-google-maps-key-new');
+    if (googleMapsNew) {
+        googleMapsNew.placeholder = googleMapsSaved
+            ? 'Leave empty to keep saved key — paste here only to replace it'
+            : 'Paste Google Maps API key here, then Save API keys & messaging';
+    }
+
+    const googleMapsHint = document.getElementById('int-google-maps-key-hint');
+    if (googleMapsHint) {
+        googleMapsHint.textContent = googleMapsSaved
+            ? 'Saved key stays on the server until you paste a replacement and save.'
+            : 'Paste your Google Maps API key, then save.';
+        googleMapsHint.style.color = googleMapsSaved ? '#15803d' : '#64748b';
+    }
+
     const msg91Saved = !!(settings.msg91_configured || settings.msg91_auth_key_saved);
     window.__integrationMsg91KeySaved = msg91Saved;
     const msg91Badge = document.getElementById('int-msg91-key-saved-badge');
@@ -11577,7 +13182,10 @@ function applySavedIntegrationSecrets(data) {
         whatsapp_configured: !!(data && data.whatsapp_configured) || !!settings.whatsapp_token_saved,
         whatsapp_token_saved: !!settings.whatsapp_token_saved || !!(data && data.whatsapp_configured),
         msg91_configured: !!(data && data.msg91_configured) || !!settings.msg91_auth_key_saved,
-        msg91_auth_key_saved: !!settings.msg91_auth_key_saved || !!(data && data.msg91_configured)
+        msg91_auth_key_saved: !!settings.msg91_auth_key_saved || !!(data && data.msg91_configured),
+        google_maps_api_key_saved:
+            !!settings.google_maps_api_key_saved ||
+            !!(data && data.google_maps_api_key_saved)
     });
 }
 
@@ -11614,6 +13222,33 @@ async function loadIntegrationSettings() {
         set('int-wa-lang', s.whatsapp_template_lang || 'en');
         set('int-wa-otp-template', s.whatsapp_otp_template_name);
         set('int-otp-email-subject', s.otp_email_subject);
+        set('int-wa-provider', s.whatsapp_provider || 'meta');
+        set('int-aisensy-source', s.aisensy_source);
+        set('int-aisensy-otp-campaign', s.aisensy_otp_campaign);
+        set('int-aisensy-text-campaign', s.aisensy_text_campaign);
+        set('int-aisensy-media-campaign', s.aisensy_media_campaign);
+        set('int-aisensy-project-id', s.aisensy_project_id);
+        set('int-aisensy-campaign-map', s.aisensy_campaign_map);
+        setIntegrationSavedBadge('int-aisensy-key-saved-badge', !!s.aisensy_api_key_saved, 'AiSensy API key saved on server', 'AiSensy API key not saved yet');
+        setIntegrationSavedBadge('int-aisensy-pwd-saved-badge', !!s.aisensy_project_api_pwd_saved, 'Project API password saved on server', 'Project API password not saved');
+        set('int-upi-vpa', s.upi_vpa);
+        set('int-upi-payee-name', s.upi_payee_name);
+        set('int-slice-enabled', s.slice_enabled === true || s.slice_enabled === 1 || s.slice_enabled === '1' ? '1' : '0');
+        set('int-slice-env', s.slice_env === 'uat' ? 'uat' : 'prod');
+        set('int-slice-client-id', s.slice_client_id);
+        set('int-slice-partner-id', s.slice_partner_id);
+        set('int-slice-enc-version', s.slice_encryption_key_version || '1');
+        set('int-slice-base-url', s.slice_base_url);
+        setIntegrationSavedBadge('int-slice-secret-saved-badge', !!s.slice_secret_key_saved, 'Slice secret saved on server', 'Slice secret not saved yet');
+        const sliceSt = document.getElementById('int-slice-status');
+        if (sliceSt && s.slice_status) {
+            sliceSt.style.color = s.slice_status.active ? '#15803d' : '#b45309';
+            sliceSt.textContent = s.slice_status.active
+                ? 'UPI (Slice) is active (' + s.slice_status.env + ').'
+                : 'UPI (Slice) inactive' +
+                  (s.slice_status.missing && s.slice_status.missing.length ? ' — missing: ' + s.slice_status.missing.join(', ') : ' — switch "Slice enabled" on') +
+                  '. UPI (manual) still works.';
+        }
         setIntegrationCheckbox('int-msg91-enabled', s.msg91_sms_enabled !== false && s.msg91_sms_enabled !== 0 && s.msg91_sms_enabled !== '0');
         set('int-msg91-sender', s.msg91_sender_id);
         set('int-msg91-route', s.msg91_route || '4');
@@ -11782,6 +13417,21 @@ async function saveIntegrationSettings() {
         whatsapp_template_lang: (document.getElementById('int-wa-lang') || {}).value.trim() || 'en',
         whatsapp_otp_template_name: (document.getElementById('int-wa-otp-template') || {}).value.trim(),
         otp_email_subject: (document.getElementById('int-otp-email-subject') || {}).value.trim(),
+        whatsapp_provider: (document.getElementById('int-wa-provider') || {}).value || 'meta',
+        aisensy_source: ((document.getElementById('int-aisensy-source') || {}).value || '').trim(),
+        aisensy_otp_campaign: ((document.getElementById('int-aisensy-otp-campaign') || {}).value || '').trim(),
+        aisensy_text_campaign: ((document.getElementById('int-aisensy-text-campaign') || {}).value || '').trim(),
+        aisensy_media_campaign: ((document.getElementById('int-aisensy-media-campaign') || {}).value || '').trim(),
+        aisensy_project_id: ((document.getElementById('int-aisensy-project-id') || {}).value || '').trim(),
+        aisensy_campaign_map: ((document.getElementById('int-aisensy-campaign-map') || {}).value || '').trim(),
+        upi_vpa: ((document.getElementById('int-upi-vpa') || {}).value || '').trim(),
+        upi_payee_name: ((document.getElementById('int-upi-payee-name') || {}).value || '').trim(),
+        slice_enabled: ((document.getElementById('int-slice-enabled') || {}).value || '0') === '1' ? '1' : '0',
+        slice_env: ((document.getElementById('int-slice-env') || {}).value || 'prod').trim(),
+        slice_client_id: ((document.getElementById('int-slice-client-id') || {}).value || '').trim(),
+        slice_partner_id: ((document.getElementById('int-slice-partner-id') || {}).value || '').trim(),
+        slice_encryption_key_version: ((document.getElementById('int-slice-enc-version') || {}).value || '1').trim(),
+        slice_base_url: ((document.getElementById('int-slice-base-url') || {}).value || '').trim(),
         msg91_sms_enabled: (document.getElementById('int-msg91-enabled') || {}).checked !== false,
         msg91_sender_id: (document.getElementById('int-msg91-sender') || {}).value.trim(),
         msg91_route: (document.getElementById('int-msg91-route') || {}).value.trim() || '4',
@@ -11789,7 +13439,16 @@ async function saveIntegrationSettings() {
         msg91_flow_message_var: (document.getElementById('int-msg91-flow-var') || {}).value.trim() || 'VAR1'
     };
     const newMsg91Key = ((document.getElementById('int-msg91-key-new') || {}).value || '').trim();
+    const newGoogleMapsKey = ((document.getElementById('int-google-maps-key-new') || {}).value || '').trim();
+
     if (newMsg91Key) body.msg91_auth_key = newMsg91Key;
+    if (newGoogleMapsKey) body.google_maps_api_key = newGoogleMapsKey;
+    const newAisensyKey = ((document.getElementById('int-aisensy-key-new') || {}).value || '').trim();
+    const newAisensyPwd = ((document.getElementById('int-aisensy-pwd-new') || {}).value || '').trim();
+    if (newAisensyKey) body.aisensy_api_key = newAisensyKey;
+    if (newAisensyPwd) body.aisensy_project_api_pwd = newAisensyPwd;
+    const newSliceSecret = ((document.getElementById('int-slice-secret-new') || {}).value || '').trim();
+    if (newSliceSecret) body.slice_secret_key = newSliceSecret;
     if (newZohoPass) body.zoho_pass = newZohoPass;
     if (newEmailApiKey) body.email_api_key = newEmailApiKey;
     if (newEmailFallbackKey) body.email_api_fallback_key = newEmailFallbackKey;
@@ -11815,6 +13474,14 @@ async function saveIntegrationSettings() {
         if (waNewEl) waNewEl.value = '';
         const msg91NewEl = document.getElementById('int-msg91-key-new');
         if (msg91NewEl) msg91NewEl.value = '';
+
+        const googleMapsNewEl = document.getElementById('int-google-maps-key-new');
+        if (googleMapsNewEl) googleMapsNewEl.value = '';
+        ['int-aisensy-key-new', 'int-aisensy-pwd-new', 'int-slice-secret-new'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+
         applySavedIntegrationSecrets(data);
         await loadIntegrationSettings();
         const st = data.email_status;
@@ -12020,6 +13687,74 @@ async function saveWhatsAppEventTemplates() {
         await loadIntegrationSettings();
     } catch (e) {
         alert('Save failed');
+    }
+}
+
+function setIntegrationSavedBadge(id, saved, onText, offText) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = saved ? onText : offText;
+    el.style.background = saved ? '#ecfdf5' : '#f8fafc';
+    el.style.borderColor = saved ? '#a7f3d0' : '#e2e8f0';
+    el.style.color = saved ? '#047857' : '#64748b';
+}
+
+async function testIntegrationAisensy() {
+    const phone = ((document.getElementById('int-aisensy-test-phone') || {}).value || '').trim();
+    const campaignName = ((document.getElementById('int-aisensy-test-campaign') || {}).value || '').trim();
+    const hint = document.getElementById('int-aisensy-hint');
+    if (!phone) {
+        if (hint) hint.textContent = 'Enter a test mobile number first.';
+        return;
+    }
+    if (hint) hint.textContent = 'Sending via AiSensy…';
+    try {
+        const res = await fetch('/api/admin/integrations/test-aisensy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone, campaignName })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            if (hint) hint.textContent = 'AiSensy test failed: ' + (data.error || 'HTTP ' + res.status) + (data.method ? ' [' + data.method + ']' : '');
+            return;
+        }
+        if (hint) {
+            hint.textContent =
+                'AiSensy accepted (' + data.method + ') → ' + (data.destination || phone) + (data.messageId ? ' · id ' + data.messageId : '') + '. Check WhatsApp Logs for delivery.';
+        }
+    } catch (e) {
+        if (hint) hint.textContent = 'AiSensy test failed: ' + (e.message || e);
+    }
+}
+
+async function listAisensyCampaigns() {
+    const box = document.getElementById('int-aisensy-campaigns');
+    if (!box) return;
+    box.innerHTML = '<p style="font-size:0.85rem;color:#64748b;">Loading campaigns…</p>';
+    try {
+        const res = await fetch('/api/admin/integrations/aisensy-campaigns');
+        const data = await res.json();
+        if (!res.ok) {
+            box.innerHTML = '<p style="font-size:0.85rem;color:#b91c1c;">' + escAdmin(data.error || 'HTTP ' + res.status) + '</p>';
+            return;
+        }
+        const list = data.campaigns || [];
+        if (!list.length) {
+            box.innerHTML = '<p style="font-size:0.85rem;color:#64748b;">No API campaigns found in this AiSensy project.</p>';
+            return;
+        }
+        box.innerHTML =
+            '<div style="overflow-x:auto;max-height:260px;border:1px solid #e2e8f0;border-radius:8px;margin-top:6px;"><table class="data-table" style="width:100%;font-size:0.85rem;"><thead><tr><th>Campaign</th><th>Status</th><th>Type</th><th>Template</th></tr></thead><tbody>' +
+            list
+                .map(
+                    (c) =>
+                        '<tr><td><code>' + escAdmin(c.name) + '</code></td><td>' + escAdmin(c.status) + '</td><td>' + escAdmin(c.type) + '</td><td>' + escAdmin(c.template) + '</td></tr>'
+                )
+                .join('') +
+            '</tbody></table></div>';
+    } catch (e) {
+        box.innerHTML = '<p style="font-size:0.85rem;color:#b91c1c;">' + escAdmin(e.message || String(e)) + '</p>';
     }
 }
 
@@ -13161,12 +14896,13 @@ function openProxyRazorpayCheckout(data) {
 async function proxyMarkUpiPaid() {
     const adm = getStoredAdminUser();
     if (!adm || !adm.id || !__proxyLastOrderDbId) return alert('Create a UPI payment request first.');
-    if (!confirm('Confirm that UPI payment was received in your bank account?')) return;
+    const __utr = promptUpiUtr();
+    if (__utr === null) return;
     try {
         const res = await fetch('/api/admin/payments/mark-upi-paid', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ orderDbId: __proxyLastOrderDbId, adminUserId: adm.id })
+            body: JSON.stringify({ orderDbId: __proxyLastOrderDbId, adminUserId: adm.id, utr: __utr })
         });
         const data = await res.json();
         if (!res.ok) return alert(data.error || 'Could not confirm.');
@@ -14271,7 +16007,21 @@ function addSeminarDayRow(prefill) {
         '<label style="display:flex;align-items:center;gap:8px;font-size:0.84rem;color:#334155;">' +
         '<input type="checkbox" class="day-checkin-enabled"' +
         (checkinOn ? ' checked' : '') +
-        '> Enable scanner check-in for this day</label></div>';
+        '> Enable scanner check-in for this day</label>' +
+        '<div style="margin-top:4px;padding:10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;">' +
+        '<label style="display:flex;align-items:center;gap:8px;font-size:0.84rem;color:#166534;font-weight:700;">' +
+        '<input type="checkbox" class="day-email-enabled"' +
+        (p.scanEmailEnabled === false || p.scan_email_enabled === 0 || p.scan_email_enabled === false ? '' : ' checked') +
+        '> Email this day when its e-ticket is scanned</label>' +
+        '<p style="font-size:0.75rem;color:#64748b;margin:6px 0;">Leave the subject and message blank to use the standard check-in email. Placeholders: {{full_name}}, {{first_name}}, {{event_name}}, {{day_title}}, {{check_in_time}}, {{application_no}}, {{ticket_id}}, {{user_id_string}}</p>' +
+        '<label style="font-size:0.78rem;">Email subject for this day</label>' +
+        '<input type="text" class="day-email-subject" maxlength="300" value="' +
+        escAdmin(p.scanEmailSubject || p.scan_email_subject || '') +
+        '" placeholder="e.g. Day 1 check-in confirmed — {{event_name}}">' +
+        '<label style="font-size:0.78rem;margin-top:8px;display:block;">Email message for this day</label>' +
+        '<textarea class="day-email-html" rows="4" maxlength="20000" placeholder="Dear {{full_name}}, your {{day_title}} check-in is recorded.">' +
+        escAdmin(p.scanEmailHtml || p.scan_email_html || '') +
+        '</textarea></div></div>';
     row.querySelector('.day-remove').addEventListener('click', function () {
         row.remove();
     });
@@ -14290,6 +16040,9 @@ function collectSeminarDaysFromUi() {
             checkin_date: row.querySelector('.day-checkin')?.value || null,
             sort_order: idx,
             checkin_enabled: row.querySelector('.day-checkin-enabled')?.checked !== false,
+            scan_email_enabled: row.querySelector('.day-email-enabled')?.checked !== false,
+            scan_email_subject: row.querySelector('.day-email-subject')?.value.trim() || '',
+            scan_email_html: row.querySelector('.day-email-html')?.value.trim() || '',
             is_active: true
         };
         const did = parseInt(row.dataset.dayId, 10);
@@ -14471,14 +16224,7 @@ async function saveSeminar(e) {
         price: parseFloat(document.getElementById('seminar-price').value) || 0,
         is_active: document.getElementById('seminar-active').value === '1',
         checkin_enabled: document.getElementById('seminar-checkin-enabled').value === '1',
-        checkin_date: (() => {
-            const enabled = document.getElementById('seminar-checkin-enabled').value === '1';
-            let d = document.getElementById('seminar-checkin-date').value || '';
-            if (enabled && !d) {
-                d = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
-            }
-            return d || null;
-        })(),
+        checkin_date: document.getElementById('seminar-checkin-date').value || null,
         public_list_enabled: document.getElementById('seminar-public-list-enabled')?.value === '1',
         cert_scans_required: parseInt(document.getElementById('seminar-cert-scans-required')?.value || '1', 10) === 2 ? 2 : 1,
         location_text: (document.getElementById('seminar-location-text') || {}).value?.trim() || null,
@@ -14887,6 +16633,7 @@ async function loadFeedbackForSeminar() {
     }
 
     currentFeedbackSeminarId = seminarId;
+    loadFeedbackEmailDays(seminarId);
     
     try {
         // Load statistics
@@ -14907,6 +16654,128 @@ async function loadFeedbackForSeminar() {
         __adminFeedbackCache = Array.isArray(feedbacks) ? feedbacks : [];
         renderFeedbackTable();
     } catch(err) { console.error(err); }
+}
+
+async function loadFeedbackEmailDays(seminarId) {
+    const box = document.getElementById('feedback-email-days');
+    const subject = document.getElementById('feedback-email-subject');
+    const body = document.getElementById('feedback-email-body');
+    const status = document.getElementById('feedback-email-status');
+    if (!box) return;
+    box.innerHTML = '';
+    if (status) status.textContent = '';
+    if (!seminarId) return;
+    let days = [];
+    let title = '';
+    try {
+        const sel = document.getElementById('feedback-seminar-filter');
+        title = sel && sel.selectedOptions && sel.selectedOptions[0] ? sel.selectedOptions[0].textContent : '';
+        const res = await fetch('/api/admin/seminars/' + encodeURIComponent(seminarId) + '/days');
+        days = await res.json();
+        if (!Array.isArray(days)) days = [];
+    } catch (err) {
+        console.error(err);
+        days = [];
+    }
+    if (!days.length) {
+        box.innerHTML = '<p style="margin:0;color:#64748b;">No seminar days found. The email will go to everyone with a venue check-in.</p>';
+    } else {
+        days.forEach(function (d) {
+            const id = 'feedback-day-' + d.id;
+            const label = document.createElement('label');
+            label.style.cssText = 'display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #cbd5e1;border-radius:8px;padding:6px 10px;';
+            label.innerHTML =
+                '<input type="checkbox" class="feedback-email-day" value="' +
+                String(d.id) +
+                '" checked id="' +
+                id +
+                '"> ' +
+                escapeHtml(d.title || 'Day') +
+                (d.dayDate || d.day_date
+                    ? ' · ' + escapeHtml(String(d.dayDate || d.day_date).slice(0, 10))
+                    : '');
+            box.appendChild(label);
+        });
+    }
+    if (subject && !subject.dataset.edited) {
+        subject.value = 'Please share your feedback' + (title ? ' — ' + title : '');
+    }
+    if (body && !body.dataset.edited) {
+        body.value =
+            'Thank you for attending. Your feedback helps the Vaidya Gogate Memorial Foundation plan the next seminar.\n\nPlease open your doctor portal and complete the seminar feedback form:\n{{feedback_url}}';
+    }
+    if (subject && !subject.dataset.bound) {
+        subject.dataset.bound = '1';
+        subject.addEventListener('input', function () { subject.dataset.edited = '1'; });
+    }
+    if (body && !body.dataset.bound) {
+        body.dataset.bound = '1';
+        body.addEventListener('input', function () { body.dataset.edited = '1'; });
+    }
+}
+
+async function sendFeedbackEmailToCheckedIn() {
+    const seminarId = document.getElementById('feedback-seminar-filter') && document.getElementById('feedback-seminar-filter').value;
+    const status = document.getElementById('feedback-email-status');
+    const subject = (document.getElementById('feedback-email-subject') || {}).value || '';
+    const message = (document.getElementById('feedback-email-body') || {}).value || '';
+    if (!seminarId) return alert('Select a seminar');
+    const dayIds = Array.prototype.map.call(
+        document.querySelectorAll('.feedback-email-day:checked'),
+        function (el) { return parseInt(el.value, 10); }
+    ).filter(function (n) { return n > 0; });
+    const dayBoxes = document.querySelectorAll('.feedback-email-day');
+    if (dayBoxes.length && !dayIds.length) return alert('Select at least one day');
+    if (!String(subject).trim() || !String(message).trim()) return alert('Enter a subject and message');
+    if (status) {
+        status.style.color = '#475569';
+        status.textContent = 'Counting checked-in participants…';
+    }
+    try {
+        const previewRes = await fetch('/api/admin/feedback/email-checked-in', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ seminarId: parseInt(seminarId, 10), dayIds: dayIds, dryRun: true })
+        });
+        const preview = await previewRes.json();
+        if (!previewRes.ok) throw new Error(preview.error || 'Could not count recipients');
+        const n = Number(preview.recipients) || 0;
+        if (!n) {
+            if (status) {
+                status.style.color = '#b45309';
+                status.textContent = 'No checked-in participants with an email address for the selected days.';
+            }
+            return;
+        }
+        if (!confirm('Send this feedback email to ' + n + ' checked-in participant' + (n === 1 ? '' : 's') + '?')) {
+            if (status) status.textContent = 'Not sent.';
+            return;
+        }
+        if (status) status.textContent = 'Queueing emails…';
+        const res = await fetch('/api/admin/feedback/email-checked-in', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                seminarId: parseInt(seminarId, 10),
+                dayIds: dayIds,
+                subject: String(subject).trim(),
+                message: String(message).trim()
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Could not send feedback email');
+        if (status) {
+            status.style.color = '#15803d';
+            status.textContent = 'Queued ' + (data.queued || 0) + ' feedback email' + ((data.queued || 0) === 1 ? '' : 's') + '.';
+        }
+    } catch (err) {
+        console.error(err);
+        if (status) {
+            status.style.color = '#b91c1c';
+            status.textContent = err.message || 'Send failed';
+        }
+        alert(err.message || 'Send failed');
+    }
 }
 
 // ==================== CONTACT INQUIRIES (website) ====================
@@ -15029,7 +16898,6 @@ async function sendContactInquiryEmail() {
 async function initAdminEmailComposeTab() {
     await fillAdminSeminarSelect('mail-bulk-seminar', false);
     onMailBulkAudienceChange();
-    loadMailBulkSeminarDoctors();
     loadAdminMailInboundStatus();
     loadAdminMailThreads();
 }
@@ -15058,19 +16926,31 @@ async function loadAdminMailInboundStatus() {
 }
 
 let __adminMailThreadId = null;
+let __adminMailThreadsReq = 0;
+let __adminMailSearchTimer = null;
 
-async function loadAdminMailThreads() {
+function scheduleAdminMailThreadsSearch() {
+    clearTimeout(__adminMailSearchTimer);
+    __adminMailSearchTimer = setTimeout(() => loadAdminMailThreads(), 350);
+}
+
+async function loadAdminMailThreads(opts) {
     const admin = getStoredAdminUser();
     const listEl = document.getElementById('mail-thread-list');
     if (!admin?.id || !listEl) return;
+    const reopen = !(opts && opts.skipOpen);
     const q = String((document.getElementById('mail-thread-search') || {}).value || '').trim();
-    listEl.innerHTML = '<p style="padding:12px;color:#64748b;">Loading…</p>';
+    const reqId = ++__adminMailThreadsReq;
+    if (!listEl.querySelector('button')) {
+        listEl.innerHTML = '<p style="padding:12px;color:#64748b;">Loading…</p>';
+    }
     try {
         let url = '/api/admin/mail/threads?actingAdminId=' + encodeURIComponent(admin.id);
         if (q) url += '&q=' + encodeURIComponent(q);
         const res = await fetch(url);
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed');
+        if (reqId !== __adminMailThreadsReq) return;
         const rows = data.threads || [];
         if (!rows.length) {
             listEl.innerHTML = '<p style="padding:12px;color:#64748b;">No conversations yet. Send email with reply tracking enabled.</p>';
@@ -15097,8 +16977,11 @@ async function loadAdminMailThreads() {
                 );
             })
             .join('');
-        if (__adminMailThreadId) openAdminMailThread(__adminMailThreadId);
+        if (reopen && __adminMailThreadId && !document.getElementById('mail-thread-reply-body')) {
+            openAdminMailThread(__adminMailThreadId);
+        }
     } catch (e) {
+        if (reqId !== __adminMailThreadsReq) return;
         listEl.innerHTML = '<p style="padding:12px;color:#b91c1c;">' + escAdmin(e.message || 'Error') + '</p>';
     }
 }
@@ -15108,7 +16991,9 @@ async function openAdminMailThread(threadId) {
     const panel = document.getElementById('mail-thread-detail');
     if (!admin?.id || !panel) return;
     __adminMailThreadId = threadId;
-    panel.innerHTML = '<p style="color:#64748b;">Loading…</p>';
+    if (!document.getElementById('mail-thread-reply-body')) {
+        panel.innerHTML = '<p style="color:#64748b;">Loading…</p>';
+    }
     try {
         const res = await fetch(
             '/api/admin/mail/threads/' + threadId + '?actingAdminId=' + encodeURIComponent(admin.id)
@@ -15148,7 +17033,7 @@ async function openAdminMailThread(threadId) {
             ')">Send reply</button>' +
             '<p id="mail-thread-reply-msg" style="font-size:0.85rem;margin-top:8px;"></p>';
         panel.innerHTML = html;
-        loadAdminMailThreads();
+        loadAdminMailThreads({ skipOpen: true });
     } catch (e) {
         panel.innerHTML = '<p style="color:#b91c1c;">' + escAdmin(e.message || 'Error') + '</p>';
     }
@@ -18621,12 +20506,12 @@ async function saveDoctorPortalModulesAdminConfig() {
     const doctorPortalModulesRegular = {};
     document.querySelectorAll('#doctor-portal-modules-regular input[data-doctor-global-mod]').forEach((inp) => {
         const id = inp.getAttribute('data-doctor-global-mod');
-        if (id && inp.checked) doctorPortalModulesRegular[id] = true;
+        if (id) doctorPortalModulesRegular[id] = !!inp.checked;
     });
     const doctorPortalModulesVolunteer = {};
     document.querySelectorAll('#doctor-portal-modules-volunteer input[data-doctor-global-mod]').forEach((inp) => {
         const id = inp.getAttribute('data-doctor-global-mod');
-        if (id && inp.checked) doctorPortalModulesVolunteer[id] = true;
+        if (id) doctorPortalModulesVolunteer[id] = !!inp.checked;
     });
     const config = Object.assign({}, base, {
         doctorPortalModulesRegular,
@@ -18640,7 +20525,7 @@ async function saveDoctorPortalModulesAdminConfig() {
         const res = await fetch('/api/admin/portal-auth-config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ actingAdminId: adm.id, config, resetAllDoctorModuleOverrides: true })
+            body: JSON.stringify({ actingAdminId: adm.id, config, resetAllDoctorModuleOverrides: false })
         });
         const data = await res.json();
         if (!res.ok || !data.success) {
@@ -18784,7 +20669,7 @@ async function savePortalAuthAdminConfig() {
     const doctorPortalModulesRegular = {};
     document.querySelectorAll('#doctor-portal-modules-regular input[data-doctor-global-mod]').forEach((inp) => {
         const id = inp.getAttribute('data-doctor-global-mod');
-        if (id && inp.checked) doctorPortalModulesRegular[id] = true;
+        if (id) doctorPortalModulesRegular[id] = !!inp.checked;
     });
     if (document.querySelectorAll('#doctor-portal-modules-regular input[data-doctor-global-mod]').length) {
         config.doctorPortalModulesRegular = doctorPortalModulesRegular;
@@ -18792,7 +20677,7 @@ async function savePortalAuthAdminConfig() {
     const doctorPortalModulesVolunteer = {};
     document.querySelectorAll('#doctor-portal-modules-volunteer input[data-doctor-global-mod]').forEach((inp) => {
         const id = inp.getAttribute('data-doctor-global-mod');
-        if (id && inp.checked) doctorPortalModulesVolunteer[id] = true;
+        if (id) doctorPortalModulesVolunteer[id] = !!inp.checked;
     });
     if (document.querySelectorAll('#doctor-portal-modules-volunteer input[data-doctor-global-mod]').length) {
         config.doctorPortalModulesVolunteer = doctorPortalModulesVolunteer;
@@ -19081,11 +20966,11 @@ function renderRzpMatchRegRows(rows, heading) {
                     '</td><td>' +
                     (fee != null ? '₹' + escAdmin(String(fee)) : '—') +
                     '</td><td>' +
-                    (r.paid
-                        ? '<span style="color:#64748b;">Already paid</span>'
-                        : '<button type="button" class="btn-primary" style="background:#15803d;" onclick="matchRazorpayPaymentToRegistration(' +
-                          Number(r.registrationId) +
-                          ')">Match &amp; issue ticket</button>') +
+                    '<button type="button" class="btn-primary" style="background:#15803d;" onclick="matchRazorpayPaymentToRegistration(' +
+                        Number(r.registrationId) +
+                        ')">' +
+                        (r.paid ? 'Link payment' : 'Match &amp; issue ticket') +
+                        '</button>' +
                     '</td></tr>'
                 );
             })
@@ -19206,7 +21091,7 @@ async function matchRazorpayPaymentToRegistration(registrationId) {
         !confirm(
             'Match Razorpay payment ' +
                 __rzpMatchPaymentId +
-                ' to this application? It will be marked paid and the e-ticket issued and emailed.'
+                ' to this application? If unpaid it will be marked paid and the e-ticket issued and emailed; if already paid the payment is linked to the existing order.'
         )
     )
         return;
@@ -19229,7 +21114,11 @@ async function matchRazorpayPaymentToRegistration(registrationId) {
                 data.amount +
                 ' recorded for application ' +
                 (data.registration.applicationNo || registrationId) +
-                (data.ticketId ? ' · e-ticket ' + data.ticketId + ' issued and emailed.' : ' · marked paid.');
+                (data.alreadyPaid
+                    ? ' · linked to the existing paid order.'
+                    : data.ticketId
+                      ? ' · e-ticket ' + data.ticketId + ' issued and emailed.'
+                      : ' · marked paid.');
         }
         lookupRazorpayPaymentForMatch();
         loadAdminEnrichedOrders();
@@ -19485,12 +21374,13 @@ async function initiateAdminCreateOrderPayment() {
 async function markAdminCreateOrderUpiPaid() {
     const adm = getStoredAdminUser();
     if (!adm?.id || !__coOrderDbId) return alert('Start UPI payment first.');
-    if (!confirm('Confirm UPI payment received?')) return;
+    const __utr = promptUpiUtr();
+    if (__utr === null) return;
     try {
         const res = await fetch('/api/admin/payments/mark-upi-paid', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ orderDbId: __coOrderDbId, adminUserId: adm.id })
+            body: JSON.stringify({ orderDbId: __coOrderDbId, adminUserId: adm.id, utr: __utr })
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Failed');
@@ -22226,7 +24116,13 @@ async function bsViewOrderTracking(id) {
                 html += '</ul>';
             }
             body.innerHTML = html;
-            if (o.fulfillmentType === 'courier' && (o.status === 'shipped' || (o.deliveryJourney && o.deliveryJourney.isLive))) {
+            if (_bsTrackPollTimer) {
+                clearInterval(_bsTrackPollTimer);
+                _bsTrackPollTimer = null;
+            }
+            if (o.commerceProvider) {
+                _bsTrackPollTimer = setInterval(() => render(false), 15000);
+            } else if (o.fulfillmentType === 'courier' && (o.status === 'shipped' || (o.deliveryJourney && o.deliveryJourney.isLive))) {
                 _bsTrackPollTimer = setInterval(() => render(true), 12000);
             }
         } catch (err) {
