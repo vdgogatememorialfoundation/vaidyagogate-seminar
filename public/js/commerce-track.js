@@ -546,8 +546,9 @@
         draw: function (container, track, shipment) {
             if (!container) return;
             const html = window.ShipTrack.html(track, shipment);
-            if (container.dataset.sig === html) return;
-            container.dataset.sig = html;
+            const sig = JSON.stringify(Object.assign({}, track, { pipeline: (track && track.pipeline || []).map((step) => Object.assign({}, step, { lineGrow: undefined })) }));
+            if (container.dataset.sig === sig) return;
+            container.dataset.sig = sig;
             container.innerHTML = html;
             container.querySelectorAll('.ship-pipe').forEach((pipe) => delete pipe.dataset.playing);
             bindCopy(container);
