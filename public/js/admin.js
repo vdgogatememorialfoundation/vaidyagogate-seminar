@@ -9648,7 +9648,7 @@ function renderApplicationsTable() {
                     <td>${a.user_id_string}</td>
                     <td>${candidateName}${fileLink}${dupBadge}</td>
                     <td>${reviewBadge}</td>
-                    <td><code>${escAdmin(a.ticket_id_string || '—')}</code><div style="margin-top:4px;font-size:0.78rem;color:#475569;">${escAdmin(adminAppEventLabel(a))}</div><div style="margin-top:2px;font-size:0.78rem;color:#1e293b;">${escAdmin(adminAppDatesLabel(a))}</div></td>
+                    <td><code>${escAdmin(a.ticket_id_string || '—')}</code><div style="margin-top:4px;font-size:0.78rem;color:#475569;">${escAdmin(adminAppEventLabel(a))}</div><div style="margin-top:2px;font-size:0.78rem;color:#1e293b;">${escAdmin(adminAppDatesLabel(a))}</div>${a.cancelled_at ? '<div style="margin-top:2px;font-size:0.78rem;color:#b91c1c;font-weight:600;">Cancelled: ' + escAdmin(adminFmtDateTimeIst(a.cancelled_at)) + '</div>' : ''}</td>
                     <td>
                         <select onchange="onApplicationStatusChange(${a.id}, this, ${index})" style="width: auto; min-width: 200px;">
                             ${adminRegistrationStatusOptionsHtml(a.status)}

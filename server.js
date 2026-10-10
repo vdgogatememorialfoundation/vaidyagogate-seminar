@@ -9424,7 +9424,14 @@ app.get('/api/admin/applications', withApplicationReviewSchema, (req, res) => {
                o.payment_gateway, o.payment_date, o.provider_transaction_id,
                o.refund_status AS order_refund_status, o.refunded_amount AS order_refunded_amount,
                t.ticket_id_string, t.is_scanned, t.scan_time,
-               sv.id AS volunteer_assignment_id, sv.status AS volunteer_status, sv.volunteer_ticket_id_string
+               sv.id AS volunteer_assignment_id, sv.status AS volunteer_status, sv.volunteer_ticket_id_string,
+               CASE WHEN LOWER(IFNULL(a.status,'')) IN ('cancelled','rejected')
+                    THEN COALESCE(
+                        (SELECT cr.reviewed_at FROM cancellation_requests cr
+                          WHERE cr.registration_id = a.id AND cr.reviewed_at IS NOT NULL
+                          ORDER BY cr.id DESC LIMIT 1),
+                        a.updated_at, a.created_at)
+               END AS cancelled_at
         FROM registrations a
         JOIN users u ON a.user_id = u.id
         LEFT JOIN seminars s ON s.id = a.seminar_id
