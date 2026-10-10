@@ -326,3 +326,31 @@ body.hl-page .hl-below .ship-pipe { border: 0; background: #fff; border-radius: 
     .ship-time { flex: 1 0 100%; max-width: none; text-align: left; }
     .trk-foot { flex-direction: column; }
 }
+
+/* v2: expected dates, courier card, 3D rider */
+.tl-expected{margin:10px 0 14px;padding:12px 14px;border:1px solid #e2e8f0;border-radius:14px;background:linear-gradient(180deg,#fff,#f8fafc)}
+.tl-expected-h{font-size:.8rem;font-weight:700;color:#0f172a;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.tl-expected-h span{font-weight:500;color:#64748b}
+.tl-expected-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:8px;margin-top:8px}
+.tl-expected-cell{padding:8px 10px;border-radius:10px;background:#fff;border:1px solid #eef2f7}
+.tl-expected-cell .lbl{font-size:.7rem;text-transform:uppercase;letter-spacing:.04em;color:#64748b}
+.tl-expected-cell .val{font-size:.84rem;font-weight:600;color:#0f172a;margin-top:2px}
+.tl-expected-slot{margin-top:8px;font-size:.82rem;color:#0f766e;font-weight:600}
+.tl-courier{display:flex;justify-content:space-between;gap:12px;align-items:center;margin:0 0 14px;padding:12px 14px;border-radius:14px;border:1px solid #dbeafe;background:#eff6ff}
+.tl-courier.is-rto{border-color:#fed7aa;background:#fff7ed}
+.tl-courier .lbl{font-size:.7rem;text-transform:uppercase;letter-spacing:.04em;color:#64748b}
+.tl-courier .val{font-weight:700;color:#0f172a}
+.tl-courier code{font-size:.85em;background:#fff;padding:1px 6px;border-radius:6px;border:1px solid #e2e8f0}
+.tl-courier-status{font-size:.82rem;color:#334155;margin-top:2px}
+.tl-courier-status span{color:#94a3b8}
+.tl-courier-side{text-align:right;display:flex;flex-direction:column;gap:4px;align-items:flex-end}
+.tl-rate{font-weight:700;color:#0f766e}
+.tl-courier-link{font-size:.82rem;font-weight:600;color:#1d4ed8}
+.tl-rider{perspective:600px}
+.tl-rider-aim,.tl-rider-bob{transform-style:preserve-3d}
+.tl-rider-bob{animation:tlRiderBob 1.4s ease-in-out infinite}
+.tl-rider-img{filter:drop-shadow(0 10px 8px rgba(15,23,42,.35)) drop-shadow(0 2px 2px rgba(15,23,42,.25));transform:rotateX(18deg) translateZ(12px)}
+.tl-rider-plate{background:radial-gradient(ellipse at center,rgba(15,23,42,.35),rgba(15,23,42,0) 70%);transform:rotateX(70deg)}
+@keyframes tlRiderBob{0%,100%{transform:translateY(0) rotateX(18deg)}50%{transform:translateY(-3px) rotateX(22deg)}}
+.hl-bike-3d img{filter:drop-shadow(0 8px 6px rgba(15,23,42,.35));transform:perspective(300px) rotateY(-18deg) rotateX(10deg);animation:tlRiderBob 1.4s ease-in-out infinite}
+.hl-bike-idle{display:inline-flex;align-items:center;justify-content:center;width:52px;height:52px;border-radius:14px;background:#f8fafc;border:1px solid #e2e8f0}

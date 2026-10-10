@@ -156,6 +156,42 @@
     }
 
     /** data: { timeline, live, awbTrackUrl, trackUrl }; opts: { animate } */
+    function expectedStrip(t) {
+        const e = t && t.expected;
+        if (!e || t.cancelled) return '';
+        const rows = [
+            ['Packed', e.packedAt],
+            ['Pickup', e.pickupAt],
+            ['Shipped', e.shippedAt],
+            ['Out for delivery', e.outForDeliveryAt],
+            ['Delivery', e.deliveryAt, e.deliveryText]
+        ].filter((r) => r[1]);
+        if (!rows.length) return '';
+        const src = e.source === 'courier' ? 'Delivery date from courier' : e.source === 'rescheduled' ? 'Rescheduled' : e.source === 'slot' ? 'Your chosen slot' : 'Seller estimate · ' + esc(e.zone) + ' zone';
+        return (
+            '<div class="tl-expected"><div class="tl-expected-h">Expected dates <span>' + src + '</span></div><div class="tl-expected-row">' +
+            rows.map((r) => '<div class="tl-expected-cell"><div class="lbl">' + esc(r[0]) + '</div><div class="val">' + esc(r[2] || when(r[1])) + '</div></div>').join('') +
+            '</div>' +
+            (e.slot && e.slot.date ? '<div class="tl-expected-slot">Delivery slot: ' + esc(e.slot.date) + ' · ' + esc(e.slot.start) + '–' + esc(e.slot.end) + '</div>' : '') +
+            '</div>'
+        );
+    }
+
+    function courierCard(t, data) {
+        const c = t && t.courier;
+        if (!c || !(c.trackingNo || c.provider)) return '';
+        const link = data && data.awbTrackUrl ? '<a class="tl-courier-link" href="' + esc(data.awbTrackUrl) + '" target="_blank" rel="noopener">Open on courier site</a>' : '';
+        return (
+            '<div class="tl-courier' + (c.rto ? ' is-rto' : '') + '"><div class="tl-courier-main"><div class="lbl">Courier</div><div class="val">' + esc(c.provider || 'Courier') +
+            (c.trackingNo ? ' · AWB <code>' + esc(c.trackingNo) + '</code>' : '') + '</div>' +
+            (c.label ? '<div class="tl-courier-status">' + esc(c.label) + (c.updatedAt ? ' <span>· updated ' + esc(when(c.updatedAt)) + '</span>' : '') + '</div>' : '') +
+            (c.destination ? '<div class="tl-courier-status">Destination ' + esc(c.destination) + '</div>' : '') +
+            '</div><div class="tl-courier-side">' +
+            (c.shippingRate != null ? '<div class="tl-rate">Shipping ₹' + esc(Number(c.shippingRate).toFixed(0)) + '</div>' : '') +
+            link + '</div></div>'
+        );
+    }
+
     function render(data, opts) {
         const t = data.timeline;
         if (!t) return '';
@@ -164,6 +200,8 @@
         return (
             '<div class="tl' + (animate ? '' : ' tl-static') + (settled ? ' is-settled' : '') + '">' +
             dateStrip(t) +
+            expectedStrip(t) +
+            courierCard(t, data) +
             t.steps
                 .map(
                     (s, i) =>

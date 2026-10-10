@@ -226,15 +226,69 @@ function renderCommerceReturns() {
                 '" type="datetime-local" style="margin-top:6px;">' +
                 '<button type="button" class="btn-primary" style="margin-top:6px;background:#0f766e;" onclick="commerceScheduleReturn(' +
                 o.id +
-                ')">Schedule return pickup</button></div></td></tr>'
+                ')">Schedule return pickup</button></div>' +
+                '<div style="margin-top:10px;padding-top:8px;border-top:1px dashed #e2e8f0;"><div style="font-size:0.8rem;color:#64748b;">Return shipment by courier (manual AWB)</div>' +
+                '<select id="ret-cp-' + o.id + '">' + courierProviderOptions(o.courierProvider) + '</select> ' +
+                '<input id="ret-awb-' + o.id + '" placeholder="Return AWB / tracking no" style="width:170px;">' +
+                '<button type="button" class="btn-primary" style="margin-left:6px;background:#b45309;" onclick="commerceCreateReturnShipment(' + o.id + ')">Create return shipment</button>' +
+                (o.returnTrackingLink ? '<div style="margin-top:4px;"><a href="' + escCommerce(o.returnTrackingLink) + '" target="_blank" rel="noopener">Return tracking link</a></div>' : '') +
+                '</div></td></tr>'
             );
         })
         .join('');
+    const undelivered = commerceOrders.filter((o) => !o.returnStatus && o.courierTrackFlags && (o.courierTrackFlags.rto || o.courierTrackFlags.attemptFailed));
+    const raise =
+        '<div class="card" style="padding:14px;margin-bottom:14px;"><h4 style="margin:0 0 8px;">Raise a return / replacement for an order</h4>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">' +
+        '<select id="ret-new-order">' + commerceOrders.filter((o) => !o.returnStatus).map((o) => '<option value="' + o.id + '">' + escCommerce(o.orderCode) + ' · ' + escCommerce(o.buyerName || '') + '</option>').join('') + '</select>' +
+        '<select id="ret-new-kind"><option value="return">Return (refund)</option><option value="replacement">Replacement</option></select>' +
+        '<input id="ret-new-reason" placeholder="Reason" style="min-width:220px;">' +
+        '<button type="button" class="btn-primary" onclick="commerceRaiseReturn()">Open request</button></div>' +
+        (undelivered.length
+            ? '<div style="margin-top:10px;color:#b45309;font-size:0.86rem;"><strong>Undelivered / RTO by courier:</strong> ' +
+              undelivered.map((o) => escCommerce(o.orderCode) + ' <button type="button" class="btn-primary" style="padding:2px 8px;font-size:0.78rem;background:#b45309;" onclick="commerceCreateReturnShipment(' + o.id + ', true)">Create return shipment</button>').join(' · ') +
+              '</div>'
+            : '') +
+        '</div>';
     panel.innerHTML =
+        raise +
         '<p style="color:#64748b;">Customer return and replacement requests appear here. Update the status, then schedule a Tookan, Shipday, Pidge, or Fleetbase pickup for the return shipment. The customer sees the same updates on the order tracking screen.</p>' +
         '<table class="data-table" style="width:100%;"><thead><tr><th>Order</th><th>Status</th><th></th></tr></thead><tbody>' +
         (rows || '<tr><td colspan="3">No return requests yet.</td></tr>') +
         '</tbody></table>';
+}
+
+function courierProviderOptions(selected) {
+    const list = [['delhivery', 'Delhivery'], ['ekart', 'Ekart'], ['dtdc', 'DTDC'], ['bluedart', 'Blue Dart'], ['indian_post', 'India Post'], ['xpressbees', 'Xpressbees'], ['ecom_express', 'Ecom Express'], ['other', 'Other']];
+    return list.map((x) => '<option value="' + x[0] + '"' + (selected === x[0] ? ' selected' : '') + '>' + x[1] + '</option>').join('');
+}
+
+async function commerceRaiseReturn() {
+    const id = val('ret-new-order');
+    if (!id) return alert('Choose an order.');
+    try {
+        await commerceFetch('/api/admin/commerce/orders/' + id + '/return', {
+            method: 'POST',
+            body: JSON.stringify({ actingAdminId: commerceActor(), status: 'requested', kind: val('ret-new-kind'), reason: val('ret-new-reason') || 'Raised by admin' })
+        });
+        loadCommerceAdmin();
+    } catch (e) {
+        alert(e.message);
+    }
+}
+
+async function commerceCreateReturnShipment(id, fromUndelivered) {
+    const provider = fromUndelivered ? '' : val('ret-cp-' + id);
+    const trackingNo = fromUndelivered ? (prompt('Return AWB / tracking number (leave blank to reuse the forward AWB):') || '') : val('ret-awb-' + id);
+    try {
+        await commerceFetch('/api/admin/commerce/orders/' + id + '/return-shipment', {
+            method: 'POST',
+            body: JSON.stringify({ actingAdminId: commerceActor(), provider: provider || undefined, trackingNo, reason: fromUndelivered ? 'Undelivered — return to seller' : undefined })
+        });
+        loadCommerceAdmin();
+    } catch (e) {
+        alert(e.message);
+    }
 }
 
 async function commerceSaveReturn(id) {
@@ -374,6 +428,19 @@ async function renderCommerceSettings() {
             field('cs-window', 'Return window days', c.shop && c.shop.returnWindowDays) +
             field('cs-cod-fee', 'COD extra charge', c.shop && c.shop.codExtraCharge) +
             '</div>' +
+            '<h4 style="margin:16px 0 6px;">Expected dates & delivery slots</h4>' +
+            '<p style="color:#64748b;font-size:0.84rem;margin:0 0 8px;">Tracking shows expected packed / pickup / shipping / delivery dates from these values (courier ETA overrides delivery when available). Zone = local (same city / PIN area), zonal (same state or listed states), national (rest).</p>' +
+            '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;">' +
+            field('cs-pack-h', 'Packing time (hours)', c.shop && c.shop.packHours) +
+            field('cs-pick-d', 'Courier pickup after packing (days)', c.shop && c.shop.pickupDays) +
+            field('cs-tr-local', 'Transit days — local', c.shop && c.shop.transitLocalDays) +
+            field('cs-tr-zonal', 'Transit days — zonal', c.shop && c.shop.transitZonalDays) +
+            field('cs-tr-nat', 'Transit days — national', c.shop && c.shop.transitNationalDays) +
+            field('cs-zonal-states', 'Zonal states (comma separated)', c.shop && c.shop.zonalStates) +
+            field('cs-slot-h', 'Delivery slot length (hours)', c.shop && c.shop.slotHours) +
+            '</div>' +
+            '<label style="display:inline-block;margin-top:8px;"><input type="checkbox" id="cs-slots-on"> Let customers choose a delivery time slot at checkout</label>' +
+            '<label style="display:inline-block;margin-left:14px;margin-top:8px;"><input type="checkbox" id="cs-auto-rto"> Auto-create return shipment when courier marks RTO / undelivered</label>' +
             '<div><button type="button" class="btn-primary" style="margin-top:12px;" onclick="commerceSaveSettings()">Save</button></div>' +
             '<p id="commerce-settings-msg" style="font-weight:600;"></p></div>';
         const mode = document.getElementById('cs-mode');
@@ -392,6 +459,8 @@ async function renderCommerceSettings() {
         box('cs-delivery', shop.deliveryEnabled !== false);
         box('cs-returns', shop.returnsEnabled !== false);
         box('cs-replace', shop.replacementsEnabled !== false);
+        box('cs-slots-on', shop.slotsEnabled !== false);
+        box('cs-auto-rto', shop.autoReturnShipment !== false);
     } catch (e) {
         panel.innerHTML = '<p style="color:#b91c1c;">' + escCommerce(e.message) + '</p>';
     }
@@ -452,7 +521,16 @@ async function commerceSaveSettings() {
                         pickupLeadMinutes: val('cs-lead'),
                         deliveryLeadMinutes: val('cs-dlead'),
                         returnWindowDays: val('cs-window'),
-                        codExtraCharge: val('cs-cod-fee')
+                        codExtraCharge: val('cs-cod-fee'),
+                        packHours: val('cs-pack-h'),
+                        pickupDays: val('cs-pick-d'),
+                        transitLocalDays: val('cs-tr-local'),
+                        transitZonalDays: val('cs-tr-zonal'),
+                        transitNationalDays: val('cs-tr-nat'),
+                        zonalStates: val('cs-zonal-states'),
+                        slotHours: val('cs-slot-h'),
+                        slotsEnabled: document.getElementById('cs-slots-on').checked,
+                        autoReturnShipment: document.getElementById('cs-auto-rto').checked
                     }
                 }
             })

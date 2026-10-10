@@ -409,7 +409,16 @@ async function renderCheckout() {
           '</div>'
         : '';
 
+    const slots = delivery && s.slotsEnabled !== false ? (shopCatalog.deliverySlots || []) : [];
+    if (slots.length && !slots.find((x) => checkoutState.slot && x.date === checkoutState.slot.date && x.start === checkoutState.slot.start)) checkoutState.slot = null;
+    const slotBox = slots.length
+        ? '<div class="box"><div class="step-h"><i>' + (delivery ? '2b' : 2) + '</i>Preferred delivery time <span class="muted" style="font-weight:400;font-size:.85rem;">(optional)</span></div>' +
+          '<div class="slot-grid">' +
+          slots.map((x, i) => '<label class="slot' + (checkoutState.slot && x.date === checkoutState.slot.date && x.start === checkoutState.slot.start ? ' on' : '') + '"><input type="radio" name="slot" ' + (checkoutState.slot && x.date === checkoutState.slot.date && x.start === checkoutState.slot.start ? 'checked' : '') + ' onchange="setSlot(' + i + ')"><span>' + shopEsc(x.label || x.date + ' ' + x.start + '–' + x.end) + '</span></label>').join('') +
+          '</div><p class="muted" style="margin:8px 0 0;font-size:.82rem;">Estimated from seller packing and transit times for your area; the courier may confirm a different date.</p></div>'
+        : '';
     const payBox =
+        slotBox +
         '<div class="box"><div class="step-h"><i>' + (delivery ? 3 : 2) + '</i>Payment method</div>' +
         opts
             .map(
@@ -460,6 +469,11 @@ function setFulfillment(v) {
 }
 function setAddress(id) {
     checkoutState.addressId = id;
+    renderCheckout();
+}
+function setSlot(i) {
+    const x = (shopCatalog.deliverySlots || [])[i];
+    checkoutState.slot = x ? { date: x.date, start: x.start, end: x.end } : null;
     renderCheckout();
 }
 function setMethod(v) {
@@ -522,7 +536,8 @@ async function shopCheckout() {
                 items: shopCart.map((l) => ({ bookId: l.bookId, language: l.language, qty: l.qty })),
                 fulfillment: checkoutState.fulfillment,
                 method: checkoutState.method,
-                addressId: delivery ? checkoutState.addressId : null
+                addressId: delivery ? checkoutState.addressId : null,
+                deliverySlot: delivery ? checkoutState.slot || null : null
             })
         });
         const data = await res.json();
@@ -698,19 +713,26 @@ function termOrder(data) {
 function returnHtml(data) {
     const r = data.returnView;
     if (r) {
+        const provName = r.provider ? r.provider.charAt(0).toUpperCase() + r.provider.slice(1) : '';
         return (
-            '<div class="box"><h3>' + (r.kind === 'replacement' ? 'Replacement' : 'Return') + ' tracking</h3>' +
-            '<div><span class="badge warn">' + shopEsc(r.statusLabel) + '</span>' + (r.reason ? ' <span class="muted">Reason: ' + shopEsc(r.reason) + '</span>' : '') + '</div>' +
+            '<div class="box ret-box"><div class="ret-head"><h3>' + (r.kind === 'replacement' ? 'Replacement' : 'Return') + ' tracking</h3>' +
+            '<span class="badge ' + (r.status === 'rejected' ? 'red' : r.status === 'refunded' || r.status === 'replacement_delivered' ? 'ok' : 'warn') + '">' + shopEsc(r.statusLabel) + '</span></div>' +
+            (r.reason ? '<div class="muted ret-reason">Reason: ' + shopEsc(r.reason) + '</div>' : '') +
             (r.status === 'rejected'
                 ? '<p class="msg">This request was declined. Contact the store for help.</p>'
-                : '<div class="ret-steps">' + r.steps.map((s) => '<div class="ret-step ' + s.state + '">' + shopEsc(s.title) + '</div>').join('') + '</div>') +
+                : '<ol class="ret-list">' + r.steps.map((s) => '<li class="' + s.state + '"><span class="ret-dot"></span><span>' + shopEsc(s.title) + '</span>' +
+                      (s.key === 'pickup_scheduled' && r.scheduledAt && s.state !== 'upcoming' ? '<small>' + shopEsc(when(r.scheduledAt)) + '</small>' : '') + '</li>').join('') + '</ol>') +
+            (provName || r.trackingLink
+                ? '<div class="ret-courier">' + (provName ? '<span>Pickup / return via <b>' + shopEsc(provName) + '</b></span>' : '') +
+                  (r.trackingLink ? '<a class="btn sm ghost" href="' + shopEsc(r.trackingLink) + '" target="_blank" rel="noopener">Track return shipment</a>' : '') + '</div>'
+                : '') +
             (r.agent || r.pickupOtp
                 ? '<div class="agent-card">' +
                   (r.agent ? '<div><div class="lbl">Pickup agent</div><div class="val">' + shopEsc(r.agent.name || '') + ' <a href="tel:' + shopEsc(r.agent.phone) + '">' + shopEsc(r.agent.phone) + '</a></div></div>' : '') +
                   (r.pickupOtp ? '<div class="otp-box"><div class="lbl">Return pickup OTP</div><div class="code">' + shopEsc(r.pickupOtp) + '</div></div>' : '') +
                   '</div>'
                 : '') +
-            TrackTimeline.updates(r.updates) + '</div>'
+            (r.updates && r.updates.length ? '<div class="ret-updates"><div class="lbl">Updates</div>' + TrackTimeline.updates(r.updates) + '</div>' : '') + '</div>'
         );
     }
     if (!data.canReturn) return '';
