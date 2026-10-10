@@ -127,7 +127,6 @@
                     ? '<div class="ship-courier"><b>' + esc(track.shipment.courier || 'Gogate Products') + '</b><span>' +
                       esc(isReturn(track) ? kindWord(track) + ' pickup' : track.fulfillmentType === 'HYPERLOCAL' ? 'Hyperlocal' : 'Logistics') +
                       (track.shipment.trackingId ? ' · Tracking ID ' + esc(track.shipment.trackingId) : '') +
-                      (track.shipment.externalLink ? ' · <a href="' + esc(track.shipment.externalLink) + '" target="_blank" rel="noopener">Courier site</a>' : '') +
                       '</span></div>'
                     : '';
                 const settled = track.mainStatus === 'DELIVERED';
@@ -215,7 +214,7 @@
         const root = pipe.closest('.trk, .hl') || document;
         const items = Array.from(pipe.querySelectorAll(':scope > li'));
         const playable = items.filter((el) => el.classList.contains('done') || el.classList.contains('active'));
-        const stepMs = 900;
+        const stepMs = 2600;
         if (pipe && !pipe.dataset.playing) {
             pipe.dataset.playing = 'play';
             if (reduce) {
@@ -237,7 +236,7 @@
                         return;
                     }
                     const target = targetGrow(el);
-                    const ms = el.classList.contains('done') ? stepMs : Math.max(280, Math.round(target * stepMs));
+                    const ms = el.classList.contains('done') ? stepMs : Math.max(6000, Math.round(target * stepMs * 4));
                     el.style.setProperty('--draw', ms + 'ms');
                     requestAnimationFrame(() => el.style.setProperty('--grow', String(target)));
                     index += 1;
@@ -248,7 +247,7 @@
         } else if (pipe && pipe.dataset.playing === 'live') {
             items.forEach((el) => {
                 if (!el.classList.contains('active') || !el.hasAttribute('data-line-until')) return;
-                el.style.setProperty('--draw', '2s');
+                el.style.setProperty('--draw', '12s');
                 el.style.setProperty('--grow', String(growFor(el)));
             });
         }

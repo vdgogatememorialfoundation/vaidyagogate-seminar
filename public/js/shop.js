@@ -717,29 +717,7 @@ function returnHtml(data) {
         return '<div class="box ret-box" style="padding:0;overflow:hidden;"><div id="shop-return-track"></div></div>' +
             (url ? '<div class="box"><a href="' + shopEsc(url) + '" target="_blank" rel="noopener">Shareable ' + (r.kind === 'replacement' ? 'replacement' : 'return') + ' tracking link</a></div>' : '');
     }
-    if (r) {
-        const provName = r.provider ? r.provider.charAt(0).toUpperCase() + r.provider.slice(1) : '';
-        return (
-            '<div class="box ret-box"><div class="ret-head"><h3>' + (r.kind === 'replacement' ? 'Replacement' : 'Return') + ' tracking</h3>' +
-            '<span class="badge ' + (r.status === 'rejected' ? 'red' : r.status === 'refunded' || r.status === 'replacement_delivered' ? 'ok' : 'warn') + '">' + shopEsc(r.statusLabel) + '</span></div>' +
-            (r.reason ? '<div class="muted ret-reason">Reason: ' + shopEsc(r.reason) + '</div>' : '') +
-            (r.status === 'rejected'
-                ? '<p class="msg">This request was declined. Contact the store for help.</p>'
-                : '<ol class="ret-list">' + r.steps.map((s) => '<li class="' + s.state + '"><span class="ret-dot"></span><span>' + shopEsc(s.title) + '</span>' +
-                      (s.key === 'pickup_scheduled' && r.scheduledAt && s.state !== 'upcoming' ? '<small>' + shopEsc(when(r.scheduledAt)) + '</small>' : '') + '</li>').join('') + '</ol>') +
-            (provName || r.trackingLink
-                ? '<div class="ret-courier">' + (provName ? '<span>Pickup / return via <b>' + shopEsc(provName) + '</b></span>' : '') +
-                  (r.trackingLink ? '<a class="btn sm ghost" href="' + shopEsc(r.trackingLink) + '" target="_blank" rel="noopener">Track return shipment</a>' : '') + '</div>'
-                : '') +
-            (r.agent || r.pickupOtp
-                ? '<div class="agent-card">' +
-                  (r.agent ? '<div><div class="lbl">Pickup agent</div><div class="val">' + shopEsc(r.agent.name || '') + ' <a href="tel:' + shopEsc(r.agent.phone) + '">' + shopEsc(r.agent.phone) + '</a></div></div>' : '') +
-                  (r.pickupOtp ? '<div class="otp-box"><div class="lbl">Return pickup OTP</div><div class="code">' + shopEsc(r.pickupOtp) + '</div></div>' : '') +
-                  '</div>'
-                : '') +
-            (r.updates && r.updates.length ? '<div class="ret-updates"><div class="lbl">Updates</div>' + TrackTimeline.updates(r.updates) + '</div>' : '') + '</div>'
-        );
-    }
+    if (r) return '';
     if (!data.canReturn) return '';
     const opt = data.returnOptions;
     return (
