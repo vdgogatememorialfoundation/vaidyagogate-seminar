@@ -97,7 +97,7 @@
 .ship-pipe > li:last-child::after { display: none; }
 .ship-pipe > li > .dot { position: absolute; left: 0; top: 0; width: 32px; height: 32px; border-radius: 50%; border: 2px solid #c7cccc; background: #fff; box-sizing: border-box; display: flex; align-items: center; justify-content: center; color: #8d9096; }
 .ship-pipe > li.done > .dot, .ship-pipe > li.active > .dot { background: #067d62; border-color: #067d62; color: #fff; }
-.ship-pipe > li.active > .dot { animation: trkPulse 2.4s ease-out infinite; }
+.ship-pipe > li.active > .dot { animation: trkPulse 2.4s ease-out 3; }
 .ship-pipe > li:last-child { padding-bottom: 8px; }
 .trk.is-settled .ship-headway,
 .hl.is-settled .ship-headway,
@@ -285,7 +285,7 @@ body.hl-page .hl-below .ship-pipe { border: 0; background: #fff; border-radius: 
 .trk-rail li.done, .trk-rail li.active { color: #0f1111; }
 .trk-rail-ico { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: #f3f4f6; margin: 0 auto 8px; position: relative; z-index: 1; border: 3px solid #fff; box-shadow: 0 0 0 1px #e5e7eb; }
 .trk-rail li.done .trk-rail-ico, .trk-rail li.active .trk-rail-ico { background: #067d62; color: #fff; box-shadow: 0 0 0 1px #067d62; }
-.trk-rail li.active .trk-rail-ico { animation: trkPulse 2.4s ease-out infinite; }
+.trk-rail li.active .trk-rail-ico { animation: trkPulse 2.4s ease-out 3; }
 .trk.is-settled .trk-line-note,
 .hl.is-settled .trk-line-note { color: #0f766e; font-weight: 700; }
 .trk-rail-name { display: block; line-height: 1.25; }
