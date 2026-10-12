@@ -271,6 +271,7 @@
 
     /** Call after the rendered HTML is in the page. */
     function mount(live) {
+        if (live && !live.mapsApiKey) return;
         bind();
         if (!live) return;
         if (mapEl && mapEl.isConnected && mapEl.__map) return paint(live);

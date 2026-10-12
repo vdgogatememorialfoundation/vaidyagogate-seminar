@@ -440,8 +440,16 @@
             (name ? '<span class="hl-avatar" aria-hidden="true">' + esc(initial) + '</span>' : '') +
             call + '</div>';
         const livePill = track.map && track.map.live ? '<span class="hl-live-pill">Live</span>' : '';
+        const cv = shipment.live && shipment.live.courierView;
+        const ownMap = !!(shipment.live && shipment.live.mapsApiKey);
+        const viewTabs = cv && ownMap
+            ? '<div class="hl-view-tabs"><button type="button" class="is-on" data-hl-view="own">Live map</button><button type="button" data-hl-view="courier">Courier live view</button></div>'
+            : '';
+        const courierFrame = cv
+            ? '<div class="hl-courier-frame' + (ownMap ? ' is-hidden' : '') + '"><iframe src="' + esc(cv.url) + '" title="Courier live tracking" loading="lazy" referrerpolicy="no-referrer" allow="geolocation"></iframe></div>'
+            : '';
         const map = shipment.live
-            ? '<div class="hl-map"><div id="tl-map-slot"></div><div class="hl-legend">' + livePill +
+            ? '<div class="hl-map">' + viewTabs + (ownMap ? '<div id="tl-map-slot"></div>' : '') + courierFrame + '<div class="hl-legend">' + livePill +
               '<span><i class="is-store"></i>Store</span><span><i class="is-road"></i>Route</span><span><i class="is-home"></i>Delivery</span></div></div>'
             : '<div class="hl-map hl-map-empty">The map appears when the store and delivery locations are available.</div>';
         const board = dateBoard(track);
@@ -490,10 +498,11 @@
                 return copy;
             })
         });
-        const sig = JSON.stringify(steady) + '|' + JSON.stringify(shipment.linked || null) + '|' + (live && live.slot ? live.slot : '') + '|' + (live && live.leg ? live.leg : '') + '|' + (live && live.route ? live.route : '');
+        const sig = JSON.stringify(steady) + '|' + JSON.stringify(shipment.linked || null) + '|' + (live && live.slot ? live.slot : '') + '|' + (live && live.courierView ? live.courierView.url : '') + '|' + (live && live.leg ? live.leg : '') + '|' + (live && live.route ? live.route : '');
         if (!(editing && !editing.hidden) && sig !== drawn) {
             drawn = sig;
             tracker.innerHTML = (liveSheet ? sheetHtml(track, shipment) : documentHtml(track, shipment)) + linkedHtml(shipment);
+            bindViewTabs();
             bindCopy();
             bindMore();
         }
@@ -502,6 +511,20 @@
         touchFresh();
         tickPipe();
         if (live && window.TrackTimeline) TrackTimeline.mount(live);
+    }
+
+    function bindViewTabs() {
+        tracker.querySelectorAll('[data-hl-view]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const which = btn.getAttribute('data-hl-view');
+                tracker.querySelectorAll('[data-hl-view]').forEach((b) => b.classList.toggle('is-on', b === btn));
+                const slot = document.getElementById('tl-map-slot');
+                const frame = tracker.querySelector('.hl-courier-frame');
+                if (slot) slot.classList.toggle('is-hidden', which !== 'own');
+                if (frame) frame.classList.toggle('is-hidden', which !== 'courier');
+                if (which === 'own' && slot && slot.__map && window.google && google.maps.event) google.maps.event.trigger(slot.__map, 'resize');
+            });
+        });
     }
 
     function linkedHtml(shipment) {
