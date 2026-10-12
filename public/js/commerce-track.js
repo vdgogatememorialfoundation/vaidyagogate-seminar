@@ -376,6 +376,57 @@
             '<div class="trk-date-meta">' + (timingBadge(track) || '') + promised + fresh + '</div></section>';
     }
 
+    const WX_ICON = {
+        sun: '<svg viewBox="0 0 48 48"><circle cx="24" cy="24" r="9" fill="#fbbf24"/><g stroke="#f59e0b" stroke-width="3" stroke-linecap="round" class="wx-rays"><path d="M24 4v6M24 38v6M4 24h6M38 24h6M9.9 9.9l4.2 4.2M33.9 33.9l4.2 4.2M9.9 38.1l4.2-4.2M33.9 14.1l4.2-4.2"/></g></svg>',
+        'cloud-sun': '<svg viewBox="0 0 48 48"><circle cx="18" cy="18" r="8" fill="#fbbf24"/><path class="wx-cloud" d="M16 38a8 8 0 010-16 11 11 0 0121-3 7 7 0 011 19z" fill="#e2e8f0" stroke="#94a3b8" stroke-width="2"/></svg>',
+        cloud: '<svg viewBox="0 0 48 48"><path class="wx-cloud" d="M14 38a8 8 0 010-16 11 11 0 0121-3 7 7 0 011 19z" fill="#e2e8f0" stroke="#94a3b8" stroke-width="2"/></svg>',
+        fog: '<svg viewBox="0 0 48 48"><path d="M14 30a8 8 0 010-16 11 11 0 0121-3 7 7 0 011 19z" fill="#e2e8f0" stroke="#94a3b8" stroke-width="2"/><g stroke="#94a3b8" stroke-width="3" stroke-linecap="round" class="wx-fog"><path d="M10 38h26M14 44h18"/></g></svg>',
+        drizzle: '<svg viewBox="0 0 48 48"><path d="M14 30a8 8 0 010-16 11 11 0 0121-3 7 7 0 011 19z" fill="#cbd5e1" stroke="#94a3b8" stroke-width="2"/><g stroke="#38bdf8" stroke-width="3" stroke-linecap="round" class="wx-drops"><path d="M18 36v3M26 36v3M34 36v3"/></g></svg>',
+        rain: '<svg viewBox="0 0 48 48"><path d="M14 28a8 8 0 010-16 11 11 0 0121-3 7 7 0 011 19z" fill="#94a3b8" stroke="#64748b" stroke-width="2"/><g stroke="#0ea5e9" stroke-width="3" stroke-linecap="round" class="wx-drops"><path d="M16 34l-2 8M26 34l-2 8M36 34l-2 8"/></g></svg>',
+        storm: '<svg viewBox="0 0 48 48"><path d="M14 28a8 8 0 010-16 11 11 0 0121-3 7 7 0 011 19z" fill="#64748b" stroke="#475569" stroke-width="2"/><path class="wx-bolt" d="M26 30l-6 9h5l-2 7 7-10h-5z" fill="#facc15"/></svg>',
+        snow: '<svg viewBox="0 0 48 48"><path d="M14 28a8 8 0 010-16 11 11 0 0121-3 7 7 0 011 19z" fill="#e2e8f0" stroke="#94a3b8" stroke-width="2"/><g fill="#7dd3fc" class="wx-drops"><circle cx="16" cy="37" r="2"/><circle cx="26" cy="40" r="2"/><circle cx="36" cy="37" r="2"/></g></svg>'
+    };
+
+    function wxIcon(key) {
+        return '<span class="wx-ico wx-' + esc(key || 'sun') + '">' + (WX_ICON[key] || WX_ICON.sun) + '</span>';
+    }
+
+    function weatherTile(w, role) {
+        if (!w) return '';
+        const day = (w.days || [])[0];
+        return '<article class="wx-tile wx-tile-' + role + (w.isDay ? '' : ' is-night') + '">' + wxIcon(w.icon) +
+            '<div class="wx-copy"><div class="lbl">' + esc(role === 'from' ? 'Origin' : 'Destination') + ' · ' + esc(w.place || '') + '</div>' +
+            '<div class="wx-temp">' + esc(String(w.temp)) + '°C</div><div class="wx-lbl">' + esc(w.label) +
+            (day ? ' · ' + esc(String(day.min)) + '° / ' + esc(String(day.max)) + '°' : '') + '</div>' +
+            '<div class="wx-meta">Humidity ' + esc(String(w.humidity)) + '% · Wind ' + esc(String(w.wind)) + ' km/h' + (day && day.rain != null ? ' · Rain ' + esc(String(day.rain)) + '%' : '') + '</div></div></article>';
+    }
+
+    function weatherHtml(journey) {
+        const wx = journey && journey.weather;
+        if (!wx || (!wx.from && !wx.to)) return '';
+        const week = wx.to && wx.to.days ? '<div class="wx-week">' + wx.to.days.slice(0, 5).map((d) =>
+            '<span class="wx-day">' + wxIcon(d.icon) + '<b>' + esc(new Date(d.date + 'T00:00:00').toLocaleDateString('en-IN', { weekday: 'short' })) + '</b><i>' + esc(String(d.max)) + '°</i></span>').join('') + '</div>' : '';
+        return '<section class="wx"><h2>Weather on the route</h2><div class="wx-grid">' + weatherTile(wx.from, 'from') + weatherTile(wx.to, 'to') + '</div>' +
+            week + (wx.impact ? '<p class="wx-impact">' + esc(wx.impact) + '</p>' : '') + '</section>';
+    }
+
+    function journeyHtml(journey, track) {
+        if (!journey || !journey.from || !journey.to) return '';
+        const stops = [{ code: journey.from.code, city: journey.from.city, sub: journey.from.kind, done: true }]
+            .concat((journey.hubs || []).map((h) => ({ code: h.code, city: h.name, sub: 'Hub' + (h.id ? ' #' + h.id : ''), done: h.done, at: h.at })))
+            .concat([{ code: journey.to.code, city: journey.to.city, sub: journey.to.kind, done: track.mainStatus === 'DELIVERED' || track.mainStatus === 'RECEIVED' }]);
+        const doneStops = stops.filter((s) => s.done).length;
+        const pct = Math.min(100, Math.round(((doneStops - 1) / Math.max(1, stops.length - 1)) * 100 + (track.mainStatus === 'DELIVERED' ? 0 : 8)));
+        const truck = '<span class="jr-truck" style="--pos:' + pct + '%" aria-hidden="true"><svg viewBox="0 0 64 40"><rect x="2" y="10" width="36" height="20" rx="3" fill="#0f766e"/><path d="M38 16h12l8 8v6H38z" fill="#14b8a6"/><rect x="42" y="18" width="7" height="6" fill="#ccfbf1"/><circle cx="14" cy="32" r="5" fill="#111" class="jr-wheel"/><circle cx="50" cy="32" r="5" fill="#111" class="jr-wheel"/><circle cx="14" cy="32" r="2" fill="#94a3b8"/><circle cx="50" cy="32" r="2" fill="#94a3b8"/></svg></span>';
+        return '<section class="jr"><div class="jr-head"><h2>Route</h2>' +
+            (journey.distanceKm ? '<span class="jr-km">' + esc(String(journey.distanceKm)) + ' km</span>' : '') +
+            (journey.parcel ? '<span class="jr-parcel">Parcel ' + esc(journey.parcel.code || '#' + journey.parcel.id) + '</span>' : '') + '</div>' +
+            '<div class="jr-board">' + stops.map((s, i) =>
+                '<div class="jr-stop' + (s.done ? ' is-done' : '') + '"><b class="jr-code">' + esc(s.code || '—') + '</b><span class="jr-city">' + esc(s.city || '') + '</span><span class="jr-sub">' + esc(s.sub) + (s.at ? ' · ' + esc(when(s.at)) : '') + '</span></div>' +
+                (i < stops.length - 1 ? '<div class="jr-leg' + (stops[i + 1].done ? ' is-done' : '') + '"><i></i></div>' : '')).join('') + '</div>' +
+            '<div class="jr-road"><div class="jr-fill" style="--pct:' + pct + '%"></div>' + truck + '</div></section>';
+    }
+
     function documentHtml(track, shipment) {
         const ret = isReturn(track);
         const courier = (track.shipment && track.shipment.courier) || (ret ? 'Store pickup / courier' : 'Gogate Products');
@@ -404,6 +455,8 @@
             '<p class="trk-stepno">' + (delivered ? 'Completed' : 'Step ' + stepNo + ' of ' + (steps.length || 5)) + '</p>' +
             '</div>' + board + '</section>' +
             railHtml(track) +
+            journeyHtml(shipment.journey, track) +
+            weatherHtml(shipment.journey) +
             '<div class="trk-facts">' +
             factCard('Courier', courier) +
             factCard('Service', mode) +
@@ -462,6 +515,8 @@
             '</div><div id="tl-eta" class="hl-eta" hidden><span class="hl-eta-lbl">Arriving</span><b class="hl-eta-val"></b></div></div>' +
             railHtml(track) +
             board +
+            journeyHtml(shipment.journey, track) +
+            weatherHtml(shipment.journey) +
             (track.dropLabel ? '<div class="hl-drop"><div class="lbl">Delivering to</div><div class="val">' + esc(track.dropLabel) + '</div></div>' : '') +
             '<div class="hl-note"><button type="button" class="hl-note-toggle" id="hl-note-toggle"><span class="hl-plus" aria-hidden="true">+</span><span><b>' +
             (note ? 'Delivery instructions' : 'Add delivery instructions') + '</b>' +
@@ -496,7 +551,7 @@
                 return copy;
             })
         });
-        const sig = JSON.stringify(steady) + '|' + JSON.stringify(shipment.linked || null) + '|' + (live && live.slot ? live.slot : '') + '|' + (live && live.courierView ? live.courierView.url : '') + '|' + (live && live.leg ? live.leg : '') + '|' + (live && live.route ? live.route : '');
+        const sig = JSON.stringify(steady) + '|' + JSON.stringify(shipment.linked || null) + '|' + (live && live.slot ? live.slot : '') + '|' + (live && live.courierView ? live.courierView.url : '') + '|' + JSON.stringify(shipment.journey || null) + '|' + (live && live.leg ? live.leg : '') + '|' + (live && live.route ? live.route : '');
         if (!(editing && !editing.hidden) && sig !== drawn) {
             drawn = sig;
             tracker.innerHTML = (liveSheet ? sheetHtml(track, shipment) : documentHtml(track, shipment)) + linkedHtml(shipment);
