@@ -121,7 +121,13 @@ function commerceCourierCell(o) {
     const name = o.commerceProvider ? o.commerceProvider + (o.commerceMode ? ' · ' + o.commerceMode : '') : o.courierProvider;
     const ref = o.commerceAwb || o.courierTrackingNo || '';
     const cost = o.commerceCost != null ? '<br>Charge ₹' + escCommerce(o.commerceCost) : '';
-    return escCommerce(name) + (ref ? '<br><span style="color:#64748b;font-size:0.8rem;">' + escCommerce(ref) + '</span>' : '') + cost;
+    return escCommerce(name) + (ref ? '<br><span style="color:#64748b;font-size:0.8rem;">' + escCommerce(ref) + '</span>' : '') + commerceParcelHtml(o.parcelInfo) + cost;
+}
+
+function commerceParcelHtml(info) {
+    if (!info || !info.parcelId) return '';
+    const tasks = (info.tasks || []).map((t) => t.type + ' #' + t.jobId + (t.at && window.PortalDateTime && window.PortalDateTime.format ? ' · ' + window.PortalDateTime.format(t.at) : '')).join('<br>');
+    return '<br><span style="font-size:0.78rem;">Tookan parcel <strong>#' + escCommerce(info.parcelId) + '</strong>' + (info.code ? ' · ' + escCommerce(info.code) : '') + '</span>' + (tasks ? '<br><span style="font-size:0.74rem;color:#64748b;">' + tasks + '</span>' : '');
 }
 
 function renderCommerceDesk(keepFilters) {
@@ -309,6 +315,8 @@ function renderCommerceReturns() {
                 (o.returnAgentPhone ? '<br>Agent ' + escCommerce(o.returnAgentPhone) : '') +
                 '<br>Pickup OTP ' +
                 escCommerce(o.returnPickupOtp || '—') +
+                (o.returnAwb ? '<br>Courier code ' + escCommerce(o.returnAwb) : '') +
+                commerceParcelHtml(o.returnParcelInfo) +
                 '</td><td>' +
                 '<select id="ret-status-' +
                 o.id +
