@@ -24093,8 +24093,21 @@ async function bsViewOrderTracking(id) {
             }
             html += '</div>';
 
-            // New vertical tracker
-            if (o.deliveryJourney && window.BookTrackingUI) {
+            // Unified shipment pipeline (same view as customer tracking); old tracker only as fallback
+            let shipData = null;
+            if (window.ShipTrack) {
+                try {
+                    const adm = getStoredAdminUser();
+                    const tr = await fetch('/api/admin/commerce/orders/' + id + '/track?actingAdminId=' + encodeURIComponent((adm && adm.id) || ''));
+                    const td = await tr.json();
+                    if (tr.ok && td.track) shipData = td;
+                } catch (_) {}
+            }
+            if (shipData) {
+                html += '<div class="adm-shiptrack" data-kind="order"></div>';
+                if (shipData.returnTrack) html += '<div class="adm-shiptrack" data-kind="return" style="margin-top:18px;"></div>';
+                if (typeof commerceLinkedTrackHtml === 'function') html += commerceLinkedTrackHtml(shipData);
+            } else if (o.deliveryJourney && window.BookTrackingUI) {
                 html += '<div style="border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;margin-bottom:14px;">';
                 html += window.BookTrackingUI.renderDoctorFullTracking(o.deliveryJourney, o, trackEvents);
                 html += '</div>';
@@ -24102,7 +24115,7 @@ async function bsViewOrderTracking(id) {
                 html += bsRenderCourierLiveTrackHtml(o, data);
                 html += bsRenderAdminTrackerHtml(data.timeline || o.timeline);
             }
-            if (data.events && data.events.length) {
+            if (!shipData && data.events && data.events.length) {
                 html += '<p style="margin:14px 0 6px;font-weight:600;font-size:0.88rem;">Activity log</p><ul style="margin:0;padding-left:18px;font-size:0.85rem;">';
                 data.events.forEach((ev) => {
                     html +=
@@ -24115,7 +24128,13 @@ async function bsViewOrderTracking(id) {
                 });
                 html += '</ul>';
             }
+            if (shipData && body.querySelector('.adm-shiptrack') && body.getAttribute('data-ship-order') === String(id)) {
+                if (typeof drawCommerceShipTracks === 'function') drawCommerceShipTracks(body, shipData);
+                return;
+            }
             body.innerHTML = html;
+            body.setAttribute('data-ship-order', shipData ? String(id) : '');
+            if (shipData && typeof drawCommerceShipTracks === 'function') drawCommerceShipTracks(body, shipData);
             if (_bsTrackPollTimer) {
                 clearInterval(_bsTrackPollTimer);
                 _bsTrackPollTimer = null;
