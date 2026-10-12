@@ -432,7 +432,7 @@
         const upcoming = steps.find((st) => st.state === 'upcoming') || null;
         const etaChip = nextStep ? '<span class="jr-eta"><b>' + esc(nextStep.title) + '</b>' + (nextStep.expectedLabel ? ' · ' + esc(nextStep.expectedLabel) : '') + '</span>' : '';
         const nextChip = upcoming ? '<span class="jr-next">Next: ' + esc(upcoming.title) + (upcoming.expectedLabel ? ' · ' + esc(upcoming.expectedLabel) : '') + '</span>' : '';
-        const serviceChip = jr.service ? '<span class="jr-chip jr-svc">' + esc(jr.service) + '</span>' : '';
+        const serviceChip = journey.service ? '<span class="jr-chip jr-svc">' + esc(journey.service) + '</span>' : '';
         const shareBtn = '<button type="button" class="jr-share" data-share><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg> Share</button>';
         const truck = '<span class="jr-truck" style="--pos:' + pct + '%" aria-hidden="true"><svg viewBox="0 0 64 40"><rect x="2" y="10" width="36" height="20" rx="3" fill="#0f766e"/><path d="M38 16h12l8 8v6H38z" fill="#14b8a6"/><rect x="42" y="18" width="7" height="6" fill="#ccfbf1"/><circle cx="14" cy="32" r="5" fill="#111" class="jr-wheel"/><circle cx="50" cy="32" r="5" fill="#111" class="jr-wheel"/><circle cx="14" cy="32" r="2" fill="#94a3b8"/><circle cx="50" cy="32" r="2" fill="#94a3b8"/></svg></span>';
         return '<section class="jr"><div class="jr-head"><h2>Route</h2>' +
@@ -443,6 +443,50 @@
                 (i < stops.length - 1 ? '<div class="jr-leg' + (stops[i + 1].done ? ' is-done' : i === activeLeg && track.mainStatus !== 'DELIVERED' ? ' is-active' : '') + '" style="--leg:' + (stops[i + 1].done ? 100 : i === activeLeg ? legPct : 0) + '%"><i></i></div>' : '')).join('') + '</div>' +
             '<div class="jr-road"><div class="jr-fill" style="--pct:' + pct + '%"></div>' + truck + '</div>' +
             '<div class="jr-meta"><span class="jr-pct">' + pct + '% of route</span>' + etaChip + nextChip + serviceChip + shareBtn + '</div></section>';
+    }
+
+    function hlNowHtml(track) {
+        const h = track && track.hyperlocal;
+        if (!h) return '';
+        const live = h.live || {};
+        const r = h.rider || {};
+        let now = '';
+        if (track.mainStatus === 'DELIVERED' && h.proof) {
+            now = '<div class="hl-now is-done"><b>Delivered' + (h.proof.deliveredAt ? ' · ' + esc(when(h.proof.deliveredAt)) : '') + '</b><span>' +
+                (h.proof.otpVerified ? 'OTP verified at handover' : 'Handed over to recipient') + (h.proof.recipient ? ' · ' + esc(h.proof.recipient) : '') + '</span></div>';
+        } else if (live.active && live.gps) {
+            now = '<div class="hl-now' + (live.nearby ? ' is-near' : '') + '"><b>' +
+                (live.nearby ? 'Your delivery partner is nearby — please be available' : live.approaching ? 'Delivery partner approaching' : 'Arriving in about ' + esc(live.etaMinutes) + ' min') + '</b><span>' +
+                (live.distanceKm != null ? esc(live.distanceKm) + ' km away · ' : '') + 'GPS updated ' + esc(ago(live.lastGpsAt)) + '</span></div>';
+        } else if (live.active && live.gpsLost) {
+            now = '<div class="hl-now is-warn"><b>Waiting for the partner\u2019s location</b><span>Last location received ' + esc(ago(live.lastGpsAt)) + ' · showing latest milestone</span></div>';
+        } else if (live.active) {
+            now = '<div class="hl-now"><b>Order is on its way</b><span>Live location will appear once the partner\u2019s app shares it</span></div>';
+        } else if (r.status === 'at_store') {
+            now = '<div class="hl-now"><b>Partner is at the store</b><span>' + (r.waitingMinutes != null ? 'Waiting ' + esc(r.waitingMinutes) + ' min · ' : '') + 'pickup verified by OTP before handover</span></div>';
+        } else if (r.status === 'assigned') {
+            now = '<div class="hl-now"><b>Delivery partner assigned</b><span>Heading to the store' + (r.assignedAt ? ' · assigned ' + esc(ago(r.assignedAt)) : '') + '</span></div>';
+        } else if (r.status === 'searching') {
+            now = '<div class="hl-now"><b>Finding a delivery partner</b><span>Your order is packed and waiting at the store</span></div>';
+        } else if (track.mainStatus === 'ORDERED') {
+            now = '<div class="hl-now"><b>Store is preparing your order</b><span>No delivery partner needed yet</span></div>';
+        }
+        const prep = (h.prep || []).map((st) => '<li class="' + (st.done ? 'is-done' : '') + (st.key === 'substitution' ? ' is-warn' : '') + '"><i></i><span>' + esc(st.title) + '</span>' + (st.at ? '<time>' + esc(when(st.at)) + '</time>' : '') + '</li>').join('');
+        const riderRows = [];
+        if (r.name) riderRows.push(['Partner', r.name + (r.vehicle ? ' · ' + r.vehicle : '')]);
+        if (r.assignedAt) riderRows.push(['Assigned', when(r.assignedAt) + (r.reassignments ? ' · reassigned ' + r.reassignments + '×' : '')]);
+        if (r.arrivedAt) riderRows.push(['Reached store', when(r.arrivedAt)]);
+        if (r.pickupVerifiedAt) riderRows.push(['Pickup verified', when(r.pickupVerifiedAt)]);
+        if (r.departedAt) riderRows.push(['Left store', when(r.departedAt) + ' · ' + r.packages + ' package' + (r.packages > 1 ? 's' : '')]);
+        if (r.waitingMinutes != null && r.departedAt) riderRows.push(['Wait at pickup', r.waitingMinutes + ' min']);
+        const riderHtml = riderRows.length ? '<dl class="hl-kv">' + riderRows.map((kv) => '<div><dt>' + esc(kv[0]) + '</dt><dd>' + esc(kv[1]) + '</dd></div>').join('') + '</dl>' : '';
+        return '<section class="hl-ops">' + now +
+            (h.attention ? '<div class="hl-flag"><b>Action needed</b><span>' + esc(h.attention.text) + '</span></div>' : '') +
+            (h.delay ? '<div class="hl-flag is-delay"><b>' + (h.delay.kind === 'store' ? 'Store delay' : 'Partner delay') + '</b><span>' + esc(h.delay.text) + '</span></div>' : '') +
+            '<details class="hl-acc"' + (track.mainStatus === 'ORDERED' || track.mainStatus === 'PACKED' ? ' open' : '') + '><summary>Order preparation</summary><ul class="hl-prep">' + prep + '</ul></details>' +
+            (riderHtml ? '<details class="hl-acc" open><summary>Delivery partner</summary>' + riderHtml + '</details>' : '') +
+            (h.cancellation ? '<p class="hl-policy">' + esc(h.cancellation.text) + '</p>' : '') +
+            '</section>';
     }
 
     function documentHtml(track, shipment) {
@@ -473,6 +517,7 @@
             '<p class="trk-stepno">' + (delivered ? 'Completed' : 'Step ' + stepNo + ' of ' + (steps.length || 5)) + '</p>' +
             '</div>' + board + '</section>' +
             railHtml(track) +
+            hlNowHtml(track) +
             journeyHtml(shipment.journey, track) +
             weatherHtml(shipment.journey) +
             '<div class="trk-facts">' +
@@ -531,6 +576,7 @@
             '<p class="hl-sub">' + esc(partnerLine(track)) + '</p>' +
             (track.map.live ? '' : '<p class="hl-wait">The route stays dotted until a delivery partner location arrives.</p>') +
             '</div><div id="tl-eta" class="hl-eta" hidden><span class="hl-eta-lbl">Arriving</span><b class="hl-eta-val"></b></div></div>' +
+            hlNowHtml(track) +
             railHtml(track) +
             board +
             journeyHtml(shipment.journey, track) +

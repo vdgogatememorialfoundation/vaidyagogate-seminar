@@ -434,3 +434,25 @@ body.hl-page .hl-below .ship-pipe { border: 0; background: #fff; border-radius: 
 .jr-share { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; border: 1px solid #cbd5e1; background: #fff; border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 0.76rem; cursor: pointer; color: #0f172a; }
 .jr-share:hover { border-color: #0f766e; color: #0f766e; }
 @media (prefers-reduced-motion: reduce) { .jr-leg i, .jr-leg.is-active i { animation: none; } }
+
+/* hyperlocal live ops */
+.hl-ops { margin: 10px 0 12px; display: grid; gap: 8px; }
+.hl-now { display: grid; gap: 2px; padding: 12px 14px; border-radius: 14px; background: linear-gradient(135deg, #ecfdf5, #f0fdfa); border: 1px solid #a7f3d0; }
+.hl-now b { font-size: 1rem; color: #064e3b; }
+.hl-now span { font-size: 0.8rem; color: #047857; }
+.hl-now.is-near { background: linear-gradient(135deg, #fef3c7, #fde68a); border-color: #fbbf24; } .hl-now.is-near b { color: #78350f; } .hl-now.is-near span { color: #92400e; }
+.hl-now.is-warn { background: #f8fafc; border-color: #cbd5e1; } .hl-now.is-warn b { color: #334155; } .hl-now.is-warn span { color: #64748b; }
+.hl-now.is-done { background: #f0fdf4; }
+.hl-flag { display: grid; gap: 2px; padding: 10px 12px; border-radius: 12px; background: #fff7ed; border: 1px solid #fed7aa; font-size: 0.82rem; color: #9a3412; }
+.hl-flag b { color: #7c2d12; } .hl-flag.is-delay { background: #fefce8; border-color: #fde047; color: #854d0e; } .hl-flag.is-delay b { color: #713f12; }
+.hl-acc { border: 1px solid #e2e8f0; border-radius: 12px; padding: 8px 12px; background: #fff; }
+.hl-acc summary { cursor: pointer; font-weight: 700; font-size: 0.86rem; color: #0f172a; list-style: none; display: flex; align-items: center; gap: 6px; }
+.hl-acc summary::before { content: "\25B8"; color: #0f766e; transition: transform .2s; } .hl-acc[open] summary::before { transform: rotate(90deg); }
+.hl-prep { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.hl-prep li { display: grid; grid-template-columns: 14px 1fr auto; gap: 8px; align-items: center; font-size: 0.8rem; color: #94a3b8; }
+.hl-prep li i { width: 10px; height: 10px; border-radius: 50%; border: 2px solid #cbd5e1; background: #fff; }
+.hl-prep li.is-done { color: #0f172a; } .hl-prep li.is-done i { background: #10b981; border-color: #10b981; }
+.hl-prep li.is-warn i { background: #f59e0b; border-color: #f59e0b; } .hl-prep li time { font-size: 0.72rem; color: #64748b; }
+.hl-kv { margin: 8px 0 0; display: grid; gap: 4px; } .hl-kv div { display: flex; justify-content: space-between; gap: 10px; font-size: 0.8rem; }
+.hl-kv dt { color: #64748b; } .hl-kv dd { margin: 0; color: #0f172a; font-weight: 600; text-align: right; }
+.hl-policy { margin: 0; font-size: 0.76rem; color: #64748b; padding: 0 2px; }

@@ -251,8 +251,37 @@ function commercePosSummary(o) {
         '<a class="btn-primary" style="background:#334155;" target="_blank" href="/api/admin/commerce/orders/' + o.id + '/label?size=58&actingAdminId=' + aid + '">58mm</a>' +
         '<button type="button" class="btn-primary" style="background:#b45309;" onclick="commerceOpenOrder(\'returns\',' + o.id + ')">Return / replace</button>' +
         (o.publicTrackingUrl ? '<button type="button" class="btn-primary" style="background:#64748b;" onclick="navigator.clipboard.writeText(\'' + escCommerce(o.publicTrackingUrl) + '\')">Copy tracking link</button>' : '') +
-        '</div>'
+        '</div>' +
+        commerceOpsHtml(o)
     );
+}
+
+const COMMERCE_OPS_GROUPS = [
+    ['Preparation', '#0f766e', [['received', 'Received'], ['inventory_ok', 'Stock OK'], ['picking', 'Picking'], ['picked', 'Picked & checked'], ['substitution', 'Substitution'], ['packing', 'Packing'], ['qc_done', 'QC done'], ['ready_for_rider', 'Ready for rider'], ['store_delay', 'Store delay']]],
+    ['Delivery partner', '#1d4ed8', [['rider_arrived', 'Arrived at store'], ['pickup_verified', 'Pickup verified'], ['rider_departed', 'Left store'], ['reassign', 'Reassign']]],
+    ['Last mile', '#b45309', [['waiting_customer', 'Waiting at customer'], ['customer_unreachable', 'Not reachable'], ['wrong_location', 'Wrong location'], ['safe_drop', 'Safe drop'], ['failed_delivery', 'Failed delivery']]]
+];
+
+function commerceOpsHtml(o) {
+    return '<div style="margin-top:12px;border-top:1px dashed #cbd5e1;padding-top:10px;"><b>Hyperlocal operations</b> <span style="color:#64748b;font-size:.8rem;">— each click is logged on the customer\'s live tracking</span>' +
+        COMMERCE_OPS_GROUPS.map((g) => '<div style="margin-top:6px;"><span style="font-size:.78rem;color:#475569;font-weight:700;">' + g[0] + '</span><br>' +
+            g[2].map((a) => '<button type="button" class="btn-primary" style="margin:2px;padding:4px 9px;font-size:.78rem;background:' + g[1] + ';" onclick="commerceOps(' + o.id + ',\'' + a[0] + '\')">' + a[1] + '</button>').join('') + '</div>').join('') +
+        '</div>';
+}
+
+async function commerceOps(id, action) {
+    const needsNote = ['substitution', 'store_delay', 'reassign', 'customer_unreachable', 'wrong_location', 'safe_drop', 'failed_delivery'].includes(action);
+    const note = needsNote ? prompt('Note for this update (shown to the customer)') : '';
+    if (needsNote && note === null) return;
+    try {
+        await commerceFetch('/api/admin/commerce/orders/' + id + '/ops', {
+            method: 'POST',
+            body: JSON.stringify({ actingAdminId: commerceActor(), action, note: note || '' })
+        });
+        loadCommerceAdmin();
+    } catch (e) {
+        alert(e.message);
+    }
 }
 
 function renderCommercePos() {
