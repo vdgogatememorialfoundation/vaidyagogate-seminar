@@ -160,9 +160,10 @@
 
     function timingBadge(track) {
         const timing = track && track.timing;
-        if (!timing || (timing.state !== 'on_time' && timing.state !== 'delayed')) return '';
+        if (!timing || !['on_time', 'delayed', 'early'].includes(timing.state)) return '';
         const late = timing.state === 'delayed';
-        return '<span class="trk-pill ' + (late ? 'is-late' : 'is-ok') + '">' + esc(timing.label || (late ? 'Delayed' : 'On time')) + '</span>';
+        const cls = late ? 'is-late' : timing.state === 'early' ? 'is-early' : 'is-ok';
+        return '<span class="trk-pill ' + cls + '">' + esc(timing.label || (late ? 'Delayed' : 'On time')) + '</span>';
     }
 
     function railHtml(track) {
@@ -441,15 +442,12 @@
             call + '</div>';
         const livePill = track.map && track.map.live ? '<span class="hl-live-pill">Live</span>' : '';
         const cv = shipment.live && shipment.live.courierView;
-        const ownMap = !!(shipment.live && shipment.live.mapsApiKey);
-        const viewTabs = cv && ownMap
-            ? '<div class="hl-view-tabs"><button type="button" class="is-on" data-hl-view="own">Live map</button><button type="button" data-hl-view="courier">Courier live view</button></div>'
-            : '';
+        const ownMap = !cv && !!(shipment.live && shipment.live.mapsApiKey);
         const courierFrame = cv
-            ? '<div class="hl-courier-frame' + (ownMap ? ' is-hidden' : '') + '"><iframe src="' + esc(cv.url) + '" title="Courier live tracking" loading="lazy" referrerpolicy="no-referrer" allow="geolocation"></iframe></div>'
+            ? '<div class="hl-courier-frame"><iframe src="' + esc(cv.url) + '" title="Live courier tracking map" loading="lazy" referrerpolicy="no-referrer" allow="geolocation"></iframe></div>'
             : '';
         const map = shipment.live
-            ? '<div class="hl-map">' + viewTabs + (ownMap ? '<div id="tl-map-slot"></div>' : '') + courierFrame + '<div class="hl-legend">' + livePill +
+            ? '<div class="hl-map">' + (ownMap ? '<div id="tl-map-slot"></div>' : '') + courierFrame + '<div class="hl-legend">' + livePill +
               '<span><i class="is-store"></i>Store</span><span><i class="is-road"></i>Route</span><span><i class="is-home"></i>Delivery</span></div></div>'
             : '<div class="hl-map hl-map-empty">The map appears when the store and delivery locations are available.</div>';
         const board = dateBoard(track);
@@ -510,7 +508,7 @@
         bindNote();
         touchFresh();
         tickPipe();
-        if (live && window.TrackTimeline) TrackTimeline.mount(live);
+        if (live && !live.courierView && window.TrackTimeline) TrackTimeline.mount(live);
     }
 
     function bindViewTabs() {

@@ -117,6 +117,9 @@ function renderCommerceDesk() {
                 '<button type="button" class="btn-primary" style="margin:2px;background:#15803d;" onclick="commerceSetStage(' +
                 o.id +
                 ',\'ready\')">Ready</button>' +
+                '<button type="button" class="btn-primary" style="margin:2px;background:#b91c1c;" onclick="commerceDeleteOrder(' +
+                o.id +
+                ',\'' + escCommerce(o.orderCode || '') + '\')">Delete</button>' +
                 '</td></tr>'
             );
         })
@@ -134,6 +137,7 @@ function renderCommerceDesk() {
         '<label>Hyperlocal provider<select id="c-provider"><option value="">Auto</option><option value="shipday">Shipday</option><option value="tookan">Tookan</option><option value="pidge">Pidge</option><option value="fleetbase">Fleetbase</option></select></label>' +
         '</div><button type="button" class="btn-primary" style="margin-top:12px;" onclick="commercePlaceOrder()">Save order</button>' +
         '<p id="commerce-place-msg" style="font-weight:600;"></p></div>' +
+        '<div style="display:flex;justify-content:flex-end;margin-bottom:8px;"><button type="button" class="btn-primary" style="background:#b91c1c;" onclick="commerceDeleteAllOrders()">Delete all orders</button></div>' +
         '<table class="data-table" style="width:100%;"><thead><tr><th>Order</th><th>Stage</th><th>OTP</th><th></th></tr></thead><tbody>' +
         (rows || '<tr><td colspan="4">No orders yet.</td></tr>') +
         '</tbody></table>';
@@ -657,6 +661,34 @@ async function commercePlaceOrder() {
         loadCommerceAdmin();
     } catch (e) {
         if (msg) msg.textContent = e.message;
+    }
+}
+
+async function commerceDeleteOrder(id, code) {
+    if (!confirm('Delete order ' + (code || id) + ' permanently? Items, events, returns and tracking for it are removed.')) return;
+    try {
+        await commerceFetch('/api/admin/commerce/orders/' + id + '/delete', {
+            method: 'POST',
+            body: JSON.stringify({ actingAdminId: commerceActor() })
+        });
+        loadCommerceAdmin();
+    } catch (e) {
+        alert(e.message);
+    }
+}
+
+async function commerceDeleteAllOrders() {
+    const typed = prompt('This removes EVERY shop order and its tracking. Type DELETE ALL to confirm.');
+    if (typed !== 'DELETE ALL') return;
+    try {
+        const data = await commerceFetch('/api/admin/commerce/orders/delete-all', {
+            method: 'POST',
+            body: JSON.stringify({ actingAdminId: commerceActor(), confirm: 'DELETE ALL' })
+        });
+        alert('Deleted ' + (data.deleted || 0) + ' orders.');
+        loadCommerceAdmin();
+    } catch (e) {
+        alert(e.message);
     }
 }
 

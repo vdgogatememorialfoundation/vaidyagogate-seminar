@@ -148,6 +148,37 @@ try {
 }
 
 const app = express();
+const DEMO_MODE = /^(1|true|yes)$/i.test(String(process.env.DEMO_MODE || ''));
+if (DEMO_MODE) {
+    const DEMO_BANNER =
+        '<div id="demo-mode-banner" style="position:fixed;left:0;right:0;bottom:0;z-index:2147483000;background:#b45309;color:#fff;font:600 13px/1.4 system-ui,sans-serif;text-align:center;padding:6px 12px;">' +
+        'DEMO MODE — demo.seminar.vaidyagogate.org · test data only · nothing here affects the live site</div>';
+    app.use((req, res, next) => {
+        res.setHeader('X-Site-Mode', 'demo');
+        const origSend = res.send.bind(res);
+        res.send = (body) => {
+            const type = String(res.getHeader('Content-Type') || '');
+            if (typeof body === 'string' && /text\/html/i.test(type) && body.includes('</body>')) {
+                body = body.replace('</body>', DEMO_BANNER + '</body>');
+            }
+            return origSend(body);
+        };
+        const origSendFile = res.sendFile.bind(res);
+        res.sendFile = (file, opts, cb) => {
+            if (/\.html?$/i.test(String(file))) {
+                return require('fs').readFile(file, 'utf8', (err, html) => {
+                    if (err) return origSendFile(file, opts, cb);
+                    res.type('html').send(html.includes('</body>') ? html.replace('</body>', DEMO_BANNER + '</body>') : html);
+                });
+            }
+            return origSendFile(file, opts, cb);
+        };
+        next();
+    });
+    app.get('/api/public/site-mode', (req, res) => res.json({ mode: 'demo', demo: true }));
+} else {
+    app.get('/api/public/site-mode', (req, res) => res.json({ mode: 'live', demo: false }));
+}
 const PORT = process.env.PORT || 3000;
 
 app.set('trust proxy', 1);
@@ -603,6 +634,20 @@ app.get('/certificate/download.pdf', (req, res) => {
 siteSeoMod.registerFaviconRoutes(app, { db });
 
 registerProtectedJsDelivery(app, publicDir);
+
+if (DEMO_MODE) {
+    app.use((req, res, next) => {
+        if (req.method !== 'GET') return next();
+        const rel = req.path === '/' ? 'index.html' : req.path.replace(/^\/+/, '');
+        if (!/\.html$/i.test(rel) || rel.includes('..')) return next();
+        const file = path.join(publicDir, rel);
+        fs.readFile(file, 'utf8', (err, html) => {
+            if (err) return next();
+            res.setHeader('Cache-Control', 'no-store');
+            res.type('html').send(html);
+        });
+    });
+}
 
 app.use(
     express.static('public', {

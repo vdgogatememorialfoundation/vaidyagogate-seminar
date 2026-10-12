@@ -268,6 +268,7 @@ body.hl-page .hl-below .ship-pipe { border: 0; background: #fff; border-radius: 
 .trk-pill { display: inline-flex; align-items: center; margin-left: 8px; padding: 2px 8px; border-radius: 999px; font-size: .72rem; font-weight: 800; letter-spacing: .03em; vertical-align: 2px; }
 .trk-pill.is-ok { background: #e6f4ef; color: #067d62; }
 .trk-pill.is-late { background: #fff1e8; color: #c2410c; }
+.trk-pill.is-early { background: #e0f2fe; color: #0369a1; }
 .trk-route { flex: 0 0 auto; color: #067d62; }
 .trk-route-base, .trk-route-move { fill: none; stroke-linecap: round; }
 .trk-route-base { stroke: #d7ebe4; stroke-width: 4; }
@@ -361,9 +362,6 @@ body.hl-page .hl-below .ship-pipe { border: 0; background: #fff; border-radius: 
 
 @media print { .adm-shiptrack, .trk-progress, .trk-log, .trk-foot, .trk-nav { display: none !important; } }
 
-.hl-view-tabs { display: flex; gap: 6px; padding: 8px; background: #fff; border-bottom: 1px solid var(--tl-line); }
-.hl-view-tabs button { border: 1px solid #cbd5e1; background: #fff; color: #334155; border-radius: 999px; padding: 5px 12px; font: inherit; font-size: 0.8rem; cursor: pointer; }
-.hl-view-tabs button.is-on { background: #0f766e; border-color: #0f766e; color: #fff; }
 .hl-courier-frame { height: 58vh; min-height: 320px; background: #e5e3df; }
 .hl-courier-frame iframe { width: 100%; height: 100%; border: 0; display: block; }
 .hl-map .is-hidden, .hl-courier-frame.is-hidden { display: none; }
