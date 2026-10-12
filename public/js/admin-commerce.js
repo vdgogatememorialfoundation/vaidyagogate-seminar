@@ -241,10 +241,32 @@ function renderCommerceBook() {
         '<label style="align-self:end;"><input id="c-book-fragile" type="checkbox"> Fragile</label>' +
         '<label style="align-self:end;"><input id="c-book-heavy" type="checkbox"> Heavy</label>' +
         '</div>' +
+        '<h4 style="margin:14px 0 6px;">Package</h4>' +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+        '<label>Shipment type<select id="c-pk-type"><option value="box">Box</option><option value="envelope">Envelope / document</option><option value="poly_bag">Poly bag</option><option value="tube">Tube / roll</option><option value="pallet">Pallet</option><option value="other">Other</option></select></label>' +
+        '<label>Box size<select id="c-pk-size"><option value="">Custom</option><option value="S 20x15x10">S · 20×15×10 cm</option><option value="M 30x25x15">M · 30×25×15 cm</option><option value="L 40x30x25">L · 40×30×25 cm</option><option value="XL 50x40x30">XL · 50×40×30 cm</option></select></label>' +
+        '<label>L (cm)<input id="c-pk-l" type="number" min="0" step="0.1" style="width:80px;"></label>' +
+        '<label>W (cm)<input id="c-pk-w" type="number" min="0" step="0.1" style="width:80px;"></label>' +
+        '<label>H (cm)<input id="c-pk-h" type="number" min="0" step="0.1" style="width:80px;"></label>' +
+        '<label>Weight (kg)<input id="c-pk-kg" type="number" min="0" step="0.01" style="width:90px;"></label>' +
+        '<label>Pieces<input id="c-pk-n" type="number" min="1" value="1" style="width:70px;"></label>' +
+        '<label style="flex:1;min-width:200px;">Contents<input id="c-pk-contents" placeholder="e.g. 2 books"></label>' +
+        '</div>' +
         '<div id="c-book-quote" style="font-size:0.85rem;margin-top:8px;"></div>' +
         '<button type="button" class="btn-primary" style="margin-top:12px;" onclick="commerceBookShipment()">Book pickup</button>' +
-        '<button type="button" class="btn-primary" style="margin:12px 0 0 8px;background:#111;" onclick="commercePrintSelectedLabel()">Print shipping label</button>' +
+        '<button type="button" class="btn-primary" style="margin:12px 0 0 8px;background:#111;" onclick="commercePrintSelectedLabel()">Print label (regular)</button>' +
+        '<button type="button" class="btn-primary" style="margin:12px 0 0 8px;background:#334155;" onclick="commercePrintSelectedLabel(58)">Print label (58mm)</button>' +
         '<p id="commerce-book-msg" style="font-weight:600;"></p></div>';
+    const sizeSel = document.getElementById('c-pk-size');
+    if (sizeSel) {
+        sizeSel.addEventListener('change', () => {
+            const m = String(sizeSel.value || '').match(/(\d+)x(\d+)x(\d+)/);
+            if (!m) return;
+            document.getElementById('c-pk-l').value = m[1];
+            document.getElementById('c-pk-w').value = m[2];
+            document.getElementById('c-pk-h').value = m[3];
+        });
+    }
     const bookQuote = () => commerceQuoteLine(val('c-book-order'), val('c-book-provider'), val('c-book-mode'), false, 'c-book-quote');
     ['c-book-order', 'c-book-provider', 'c-book-mode'].forEach((id) => {
         const el = document.getElementById(id);
@@ -314,7 +336,9 @@ function renderCommerceReturns() {
                 '<select id="ret-cp-' + o.id + '">' + courierProviderOptions(o.courierProvider) + '</select> ' +
                 '<input id="ret-awb-' + o.id + '" placeholder="Return AWB / tracking no" style="width:170px;">' +
                 '<button type="button" class="btn-primary" style="margin-left:6px;background:#b45309;" onclick="commerceCreateReturnShipment(' + o.id + ')">Create return shipment</button>' +
-                '<div style="margin-top:8px;"><button type="button" class="btn-primary" style="background:#1d4ed8;" onclick="commerceOpenReturnLabel(' + o.id + ')">Print return shipping label</button></div>' +
+                '<div style="margin-top:8px;"><button type="button" class="btn-primary" style="background:#1d4ed8;" onclick="commerceOpenReturnLabel(' + o.id + ')">Print return label</button> ' +
+                '<button type="button" class="btn-primary" style="background:#334155;" onclick="commerceOpenReturnLabel(' + o.id + ',58)">Return label (58mm)</button> ' +
+                '<button type="button" class="btn-primary" style="background:#b91c1c;" onclick="commerceDeleteReturn(' + o.id + ',\'' + escCommerce(o.orderCode || '') + '\')">Delete return / replacement</button></div>' +
                 commerceReturnReceiveHtml(o) +
                 (o.returnTrackingLink ? '<div style="margin-top:4px;"><a href="' + escCommerce(o.returnTrackingLink) + '" target="_blank" rel="noopener">Courier return tracking</a></div>' : '') +
                 (o.returnTrackUrl ? '<div style="margin-top:4px;"><a href="' + escCommerce(o.returnTrackUrl) + '" target="_blank" rel="noopener">Customer return tracking page (shareable)</a> <button type="button" class="btn-primary" style="padding:2px 8px;font-size:0.76rem;" onclick="navigator.clipboard&&navigator.clipboard.writeText(location.origin+\'' + escCommerce(o.returnTrackUrl) + '\')">Copy link</button></div>' : '') +
@@ -368,8 +392,8 @@ function commerceWhen(v) {
     return isNaN(d) ? String(v) : d.toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
 }
 
-function commerceOpenReturnLabel(id) {
-    window.open('/api/admin/commerce/orders/' + id + '/return-label?actingAdminId=' + encodeURIComponent(commerceActor()), '_blank');
+function commerceOpenReturnLabel(id, size) {
+    window.open('/api/admin/commerce/orders/' + id + '/return-label?actingAdminId=' + encodeURIComponent(commerceActor()) + (size ? '&size=' + encodeURIComponent(size) : ''), '_blank');
 }
 
 async function commerceReceiveReturn(id) {
@@ -780,17 +804,27 @@ async function commerceSetStage(id, stage) {
     }
 }
 
-function commerceLabelHref(id) {
-    return '/api/admin/commerce/orders/' + encodeURIComponent(id) + '/label?actingAdminId=' + encodeURIComponent(commerceActor());
+function commerceLabelHref(id, size) {
+    return '/api/admin/commerce/orders/' + encodeURIComponent(id) + '/label?actingAdminId=' + encodeURIComponent(commerceActor()) + (size ? '&size=' + encodeURIComponent(size) : '');
 }
 
-function openCommerceLabel(id) {
+async function commerceDeleteReturn(id, code) {
+    if (!confirm('Delete the return / replacement request on ' + code + '? Tracking events for the return are removed. The order itself stays.')) return;
+    try {
+        await commerceFetch('/api/admin/commerce/orders/' + id + '/return-delete', { method: 'POST', body: JSON.stringify({ actingAdminId: commerceActor() }) });
+        loadCommerceAdmin();
+    } catch (e) {
+        alert(e.message);
+    }
+}
+
+function openCommerceLabel(id, size) {
     if (!id) return;
-    window.open(commerceLabelHref(id), '_blank', 'noopener');
+    window.open(commerceLabelHref(id, size), "_blank", "noopener");
 }
 
-function commercePrintSelectedLabel() {
-    openCommerceLabel(val('c-book-order') || val('c-track-order'));
+function commercePrintSelectedLabel(size) {
+    openCommerceLabel(val("c-book-order") || val("c-track-order"), size);
 }
 
 function bsCommerceQuotes(id) {
@@ -848,7 +882,17 @@ async function commerceBookShipment() {
                 pickupAt: val('c-book-when'),
                 openBox: !!(document.getElementById('c-book-openbox') && document.getElementById('c-book-openbox').checked),
                 fragile: !!(document.getElementById('c-book-fragile') && document.getElementById('c-book-fragile').checked),
-                heavy: !!(document.getElementById('c-book-heavy') && document.getElementById('c-book-heavy').checked)
+                heavy: !!(document.getElementById('c-book-heavy') && document.getElementById('c-book-heavy').checked),
+                package: {
+                    type: val('c-pk-type'),
+                    boxSize: val('c-pk-size'),
+                    lengthCm: val('c-pk-l'),
+                    widthCm: val('c-pk-w'),
+                    heightCm: val('c-pk-h'),
+                    weightKg: val('c-pk-kg'),
+                    count: val('c-pk-n'),
+                    contents: val('c-pk-contents')
+                }
             })
         });
         const o = data.order || {};
