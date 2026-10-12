@@ -756,11 +756,16 @@ function renderOrderDetail(data) {
             : '<b>' + shopEsc(ship.name || '') + '</b><div>' + shopEsc(ship.address || '') + '</div><div>' + shopEsc([ship.city, ship.state].filter(Boolean).join(', ')) + ' ' + shopEsc(ship.pincode || '') + '</div><div class="muted">Phone: ' + shopEsc(ship.phone || '') + '</div>') +
         '</div>' +
         (o.trackUrl ? '<div class="box"><a href="' + shopEsc(o.trackUrl) + '" target="_blank" rel="noopener">Shareable tracking link</a></div>' : '') +
+        ((data.linked || {}).replacementTrack ? '<div class="box" style="padding:0;overflow:hidden;"><div style="padding:10px 14px;font-weight:700;">Replacement order ' + shopEsc((data.linked || {}).replacementOrderCode || '') + ' — shipment</div><div id="shop-replacement-track"></div></div>' : '') +
+        ((data.linked || {}).originReturnTrack ? '<div class="box" style="padding:0;overflow:hidden;"><div style="padding:10px 14px;font-weight:700;">Return / replacement request on order ' + shopEsc((data.linked || {}).originOrderCode || '') + '</div><div id="shop-origin-return-track"></div></div>' : '') +
         '</div></div>';
     shopTrackerSeen = true;
     if (window.ShipTrack) {
         window.ShipTrack.draw(document.getElementById('shop-order-track'), data.track, o);
         window.ShipTrack.draw(document.getElementById('shop-return-track'), data.returnTrack, o);
+        const linked = data.linked || {};
+        window.ShipTrack.draw(document.getElementById('shop-replacement-track'), linked.replacementTrack, o);
+        window.ShipTrack.draw(document.getElementById('shop-origin-return-track'), linked.originReturnTrack, o);
     }
     TrackTimeline.mount(data.live);
 }

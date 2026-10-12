@@ -170,9 +170,16 @@ function renderCommerceBook() {
         '<label style="align-self:end;"><input id="c-book-fragile" type="checkbox"> Fragile</label>' +
         '<label style="align-self:end;"><input id="c-book-heavy" type="checkbox"> Heavy</label>' +
         '</div>' +
+        '<div id="c-book-quote" style="font-size:0.85rem;margin-top:8px;"></div>' +
         '<button type="button" class="btn-primary" style="margin-top:12px;" onclick="commerceBookShipment()">Book pickup</button>' +
         '<button type="button" class="btn-primary" style="margin:12px 0 0 8px;background:#111;" onclick="commercePrintSelectedLabel()">Print shipping label</button>' +
         '<p id="commerce-book-msg" style="font-weight:600;"></p></div>';
+    const bookQuote = () => commerceQuoteLine(val('c-book-order'), val('c-book-provider'), val('c-book-mode'), false, 'c-book-quote');
+    ['c-book-order', 'c-book-provider', 'c-book-mode'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('change', bookQuote);
+    });
+    if (val('c-book-order')) bookQuote();
 }
 
 function renderCommerceTrackList() {
@@ -367,6 +374,10 @@ async function commerceSaveReturn(id) {
     }
 }
 
+function commerceReturnQuote(id) {
+    commerceQuoteLine(id, val('ret-provider-' + id), val('ret-mode-' + id), true, 'ret-quote-' + id);
+}
+
 async function commerceScheduleReturn(id) {
     try {
         await commerceFetch('/api/admin/commerce/orders/' + id + '/return-pickup', {
@@ -503,6 +514,16 @@ async function renderCommerceSettings() {
             field('cs-zonal-states', 'Zonal states (comma separated)', c.shop && c.shop.zonalStates) +
             field('cs-slot-h', 'Delivery slot length (hours)', c.shop && c.shop.slotHours) +
             '</div>' +
+            '<h4 style="margin:16px 0 6px;">Courier rate card (₹)</h4>' +
+            '<p style="color:#64748b;font-size:0.84rem;margin:0 0 8px;">Estimated courier charge shown while booking forward and return shipments and saved with the booking.</p>' +
+            '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:8px;">' +
+            field('cs-rate-hb', 'Hyperlocal base', c.shop && c.shop.rateHyperBase) +
+            field('cs-rate-hk', 'Hyperlocal per km', c.shop && c.shop.rateHyperPerKm) +
+            field('cs-rate-local', 'Parcel — local zone', c.shop && c.shop.rateLocal) +
+            field('cs-rate-zonal', 'Parcel — zonal', c.shop && c.shop.rateZonal) +
+            field('cs-rate-nat', 'Parcel — national', c.shop && c.shop.rateNational) +
+            field('cs-rate-ret', 'Return leg (% of forward rate)', c.shop && c.shop.rateReturnPct) +
+            '</div>' +
             '<label style="display:inline-block;margin-top:8px;"><input type="checkbox" id="cs-slots-on"> Let customers choose a delivery time slot at checkout</label>' +
             '<label style="display:inline-block;margin-left:14px;margin-top:8px;"><input type="checkbox" id="cs-auto-rto"> Auto-create return shipment when courier marks RTO / undelivered</label>' +
             '<div><button type="button" class="btn-primary" style="margin-top:12px;" onclick="commerceSaveSettings()">Save</button></div>' +
@@ -593,6 +614,12 @@ async function commerceSaveSettings() {
                         transitNationalDays: val('cs-tr-nat'),
                         zonalStates: val('cs-zonal-states'),
                         slotHours: val('cs-slot-h'),
+                        rateHyperBase: val('cs-rate-hb'),
+                        rateHyperPerKm: val('cs-rate-hk'),
+                        rateLocal: val('cs-rate-local'),
+                        rateZonal: val('cs-rate-zonal'),
+                        rateNational: val('cs-rate-nat'),
+                        rateReturnPct: val('cs-rate-ret'),
                         slotsEnabled: document.getElementById('cs-slots-on').checked,
                         autoReturnShipment: document.getElementById('cs-auto-rto').checked
                     }
@@ -662,9 +689,25 @@ function commercePrintSelectedLabel() {
     openCommerceLabel(val('c-book-order') || val('c-track-order'));
 }
 
+function bsCommerceQuotes(id) {
+    const box = document.getElementById('bs-commerce-quotes');
+    if (!box || !id) return;
+    const combos = [['tookan', 'logistics', 'Tookan parcel'], ['tookan', 'hyperlocal', 'Tookan hyperlocal'], ['shipday', 'hyperlocal', 'Shipday hyperlocal'], ['pidge', 'logistics', 'Pidge logistics'], ['pidge', 'hyperlocal', 'Pidge hyperlocal']];
+    box.innerHTML = combos.map((c) => '<div id="bs-q-' + c[0] + '-' + c[1] + '">' + c[2] + ': …</div>').join('');
+    combos.forEach((c) => {
+        commerceFetch('/api/admin/commerce/orders/' + id + '/quote?provider=' + c[0] + '&mode=' + c[1])
+            .then((data) => {
+                const el = document.getElementById('bs-q-' + c[0] + '-' + c[1]);
+                if (el && data.quote) el.innerHTML = c[2] + ': <strong>₹' + escCommerce(data.quote.amount) + '</strong> <span style="color:#64748b;">' + escCommerce(data.quote.basis || '') + '</span>';
+            })
+            .catch(() => {});
+    });
+}
+
 function commerceBookedHtml(provider, order, id) {
     const o = order || {};
     let html = 'Booked with Gogate Products.';
+    if (o.commerceCost != null) html += ' Courier charge ₹' + escCommerce(o.commerceCost) + '.';
     if (provider === 'pidge') {
         if (o.deliveryOtp) html += ' Delivery OTP ' + escCommerce(o.deliveryOtp);
     } else if (provider === 'fleetbase') {
@@ -758,7 +801,7 @@ function renderCommerceShipment(data, animate) {
         (o.id ? '<p><a class="btn-primary" style="text-decoration:none;" target="_blank" rel="noopener" href="' + commerceLabelHref(o.id) + '">Print shipping label</a></p>' : '') +
         (o.returnTrackUrl ? '<p><a href="' + escCommerce(o.returnTrackUrl) + '" target="_blank" rel="noopener">Customer return tracking link</a></p>' : '') +
         (window.ShipTrack && data.track
-            ? '<div class="adm-shiptrack" data-kind="order"></div>' + (data.returnTrack ? '<div class="adm-shiptrack" data-kind="return" style="margin-top:18px;"></div>' : '')
+            ? '<div class="adm-shiptrack" data-kind="order"></div>' + (data.returnTrack ? '<div class="adm-shiptrack" data-kind="return" style="margin-top:18px;"></div>' : '') + commerceLinkedTrackHtml(data)
             : window.TrackTimeline && data.timeline
               ? TrackTimeline.render(
                     { timeline: data.timeline, live: data.live, awbTrackUrl: o.tookanTrackingLink || o.shipdayTrackingLink || null, trackUrl: o.commerceTrackUrl },
@@ -768,10 +811,38 @@ function renderCommerceShipment(data, animate) {
     );
 }
 
+function commerceLinkedTrackHtml(data) {
+    const linked = (data && data.linked) || {};
+    let html = '';
+    if (linked.replacementTrack) {
+        html += '<h4 style="margin:18px 0 6px;">Replacement order ' + escCommerce(linked.replacementOrderCode || '') + ' — shipment</h4><div class="adm-shiptrack" data-kind="replacement"></div>';
+    }
+    if (linked.originReturnTrack) {
+        html += '<h4 style="margin:18px 0 6px;">Return / replacement request on order ' + escCommerce(linked.originOrderCode || '') + '</h4><div class="adm-shiptrack" data-kind="origin"></div>';
+    }
+    return html;
+}
+
+function commerceQuoteLine(id, provider, mode, returnLeg, targetId) {
+    const el = document.getElementById(targetId);
+    if (!el) return;
+    el.textContent = 'Estimating courier charge…';
+    commerceFetch('/api/admin/commerce/orders/' + id + '/quote?provider=' + encodeURIComponent(provider) + '&mode=' + encodeURIComponent(mode) + (returnLeg ? '&returnLeg=1' : ''))
+        .then((data) => {
+            const q = data.quote || {};
+            el.innerHTML = 'Courier charge ≈ <strong>₹' + escCommerce(q.amount) + '</strong> <span style="color:#64748b;">(' + escCommerce(q.courier || '') + ' · ' + escCommerce(q.basis || '') + ')</span>';
+        })
+        .catch((e) => {
+            el.textContent = 'Courier charge: ' + e.message;
+        });
+}
+
 function drawCommerceShipTracks(root, data) {
     if (!window.ShipTrack || !root) return;
     root.querySelectorAll('.adm-shiptrack').forEach((el) => {
-        const track = el.getAttribute('data-kind') === 'return' ? data.returnTrack : data.track;
+        const kind = el.getAttribute('data-kind');
+        const linked = data.linked || {};
+        const track = kind === 'return' ? data.returnTrack : kind === 'replacement' ? linked.replacementTrack : kind === 'origin' ? linked.originReturnTrack : data.track;
         window.ShipTrack.draw(el, track, data.order || {});
     });
 }
@@ -951,6 +1022,7 @@ function mountBookIntegrations() {
             '<label style="font-size:0.78rem;display:block;margin-bottom:8px;"><input id="bs-commerce-fragile" type="checkbox"> Fragile</label>' +
             '<label style="font-size:0.78rem;display:block;margin-bottom:8px;"><input id="bs-commerce-heavy" type="checkbox"> Heavy</label>' +
             '<label style="font-size:0.78rem;">Pickup time (IST)<input id="bs-commerce-when" type="datetime-local" style="width:100%;padding:8px;margin:4px 0 10px;"></label>' +
+            '<div id="bs-commerce-quotes" style="font-size:0.8rem;margin:0 0 10px;color:#334155;"></div>' +
             '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
             '<button type="button" class="btn-primary" style="background:#111;flex:1;min-width:140px;" onclick="bsPrintCommerceLabel()">Print shipping label</button>' +
             '<button type="button" class="btn-primary" style="background:#0d9488;flex:1;min-width:140px;" onclick="bsBookCommerce(\'tookan\',\'logistics\')">Tookan logistics</button>' +
@@ -966,6 +1038,15 @@ function mountBookIntegrations() {
         const manualBox = manual && manual.closest('div[style*="border:1px solid"]');
         if (manualBox && manualBox.parentNode) manualBox.parentNode.insertBefore(box, manualBox);
         else ship.appendChild(box);
+        let lastQuoteId = '';
+        setInterval(() => {
+            const idEl = document.getElementById('bs-courier-order-id');
+            const v = idEl && idEl.value ? String(idEl.value) : '';
+            if (v && v !== lastQuoteId) {
+                lastQuoteId = v;
+                bsCommerceQuotes(parseInt(v, 10));
+            }
+        }, 1500);
     }
 }
 
@@ -1172,7 +1253,7 @@ async function appendCommerceTrackPanel(id) {
         inner += '<p style="margin:0 0 8px;font-size:0.82rem;"><a href="' + escCommerce(co.returnTrackUrl) + '" target="_blank" rel="noopener">Customer return tracking link</a></p>';
     }
     if (data.track && window.ShipTrack) {
-        inner += '<div class="adm-shiptrack" data-kind="order"></div>' + (data.returnTrack ? '<div class="adm-shiptrack" data-kind="return" style="margin-top:18px;"></div>' : '');
+        inner += '<div class="adm-shiptrack" data-kind="order"></div>' + (data.returnTrack ? '<div class="adm-shiptrack" data-kind="return" style="margin-top:18px;"></div>' : '') + commerceLinkedTrackHtml(data);
     } else if (data.timeline && window.TrackTimeline) {
         inner += window.TrackTimeline.render(
             {

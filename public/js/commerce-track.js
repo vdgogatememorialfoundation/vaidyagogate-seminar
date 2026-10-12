@@ -490,10 +490,10 @@
                 return copy;
             })
         });
-        const sig = JSON.stringify(steady) + '|' + (live && live.slot ? live.slot : '') + '|' + (live && live.leg ? live.leg : '') + '|' + (live && live.route ? live.route : '');
+        const sig = JSON.stringify(steady) + '|' + JSON.stringify(shipment.linked || null) + '|' + (live && live.slot ? live.slot : '') + '|' + (live && live.leg ? live.leg : '') + '|' + (live && live.route ? live.route : '');
         if (!(editing && !editing.hidden) && sig !== drawn) {
             drawn = sig;
-            tracker.innerHTML = liveSheet ? sheetHtml(track, shipment) : documentHtml(track, shipment);
+            tracker.innerHTML = (liveSheet ? sheetHtml(track, shipment) : documentHtml(track, shipment)) + linkedHtml(shipment);
             bindCopy();
             bindMore();
         }
@@ -502,6 +502,18 @@
         touchFresh();
         tickPipe();
         if (live && window.TrackTimeline) TrackTimeline.mount(live);
+    }
+
+    function linkedHtml(shipment) {
+        const linked = (shipment && shipment.linked) || {};
+        let html = '';
+        if (linked.replacementTrack && linked.replacementTrack.pipeline) {
+            html += '<h3 style="margin:22px 0 8px;">Replacement order ' + (linked.replacementOrderCode || '') + ' — shipment</h3>' + documentHtml(linked.replacementTrack, {});
+        }
+        if (linked.originReturnTrack && linked.originReturnTrack.pipeline) {
+            html += '<h3 style="margin:22px 0 8px;">Return / replacement request on order ' + (linked.originOrderCode || '') + '</h3>' + documentHtml(linked.originReturnTrack, {});
+        }
+        return html;
     }
 
     function bindCopy(root) {
