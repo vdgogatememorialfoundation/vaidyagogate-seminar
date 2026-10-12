@@ -90,9 +90,53 @@ function commerceStageLabel(stage) {
     return map[stage] || stage || 'Placed';
 }
 
-function renderCommerceDesk() {
+let commerceDeskQuery = '';
+let commerceDeskStage = '';
+
+function commerceDeskFilter(o) {
+    if (commerceDeskStage && String(o.commerceStage || 'placed') !== commerceDeskStage) return false;
+    if (!commerceDeskQuery) return true;
+    const hay = [o.orderCode, o.buyerName, o.buyerPhone, o.buyerEmail, o.shippingCity, o.courierTrackingNo, o.commerceAwb, o.commerceProvider].map((x) => String(x || '').toLowerCase()).join(' ');
+    return hay.indexOf(commerceDeskQuery) !== -1;
+}
+
+function commerceDeskSearch(v) {
+    commerceDeskQuery = String(v || '').trim().toLowerCase();
+    renderCommerceDesk(true);
+}
+
+function commerceDeskSetStage(v) {
+    commerceDeskStage = String(v || '');
+    renderCommerceDesk(true);
+}
+
+function commerceOpenOrder(panelId, orderId) {
+    commercePanel = panelId;
+    window.commerceFocusOrder = orderId;
+    loadCommerceAdmin();
+}
+
+function commerceCourierCell(o) {
+    if (!o.commerceProvider && !o.courierProvider) return '<span style="color:#94a3b8;">Not booked</span>';
+    const name = o.commerceProvider ? o.commerceProvider + (o.commerceMode ? ' · ' + o.commerceMode : '') : o.courierProvider;
+    const ref = o.commerceAwb || o.courierTrackingNo || '';
+    const cost = o.commerceCost != null ? '<br>Charge ₹' + escCommerce(o.commerceCost) : '';
+    return escCommerce(name) + (ref ? '<br><span style="color:#64748b;font-size:0.8rem;">' + escCommerce(ref) + '</span>' : '') + cost;
+}
+
+function renderCommerceDesk(keepFilters) {
     const panel = document.getElementById('commerce-panel');
-    const rows = commerceOrders
+    const all = commerceOrders;
+    const counts = all.reduce((m, o) => {
+        const k = o.commerceStage || 'placed';
+        m[k] = (m[k] || 0) + 1;
+        return m;
+    }, {});
+    const stageOptions = ['', 'placed', 'accepted', 'preparing', 'ready', 'pickup_scheduled', 'in_transit', 'out_for_delivery', 'delivered']
+        .map((st) => '<option value="' + st + '"' + (commerceDeskStage === st ? ' selected' : '') + '>' + (st ? commerceStageLabel(st) + ' (' + (counts[st] || 0) + ')' : 'All stages (' + all.length + ')') + '</option>')
+        .join('');
+    const rows = all
+        .filter(commerceDeskFilter)
         .map((o) => {
             return (
                 '<tr><td><strong>' +
@@ -101,8 +145,13 @@ function renderCommerceDesk() {
                 escCommerce(o.buyerName || '') +
                 ' ' +
                 escCommerce(o.buyerPhone || '') +
-                '</span></td><td>' +
+                (o.shippingCity ? ' · ' + escCommerce(o.shippingCity) : '') +
+                '</span>' +
+                (o.returnStatus ? '<br><span style="font-size:0.78rem;color:#b45309;">Return: ' + escCommerce(o.returnStatus) + '</span>' : '') +
+                '</td><td>' +
                 escCommerce(commerceStageLabel(o.commerceStage)) +
+                '</td><td>' +
+                commerceCourierCell(o) +
                 '</td><td>' +
                 (commerceNoOtp(o.commerceProvider)
                     ? '—'
@@ -117,6 +166,12 @@ function renderCommerceDesk() {
                 '<button type="button" class="btn-primary" style="margin:2px;background:#15803d;" onclick="commerceSetStage(' +
                 o.id +
                 ',\'ready\')">Ready</button>' +
+                '<br>' +
+                '<button type="button" class="btn-primary" style="margin:2px;background:#334155;" onclick="commerceOpenOrder(\'track\',' + o.id + ')">Track</button>' +
+                '<button type="button" class="btn-primary" style="margin:2px;background:#334155;" onclick="commerceOpenOrder(\'book\',' + o.id + ')">Book pickup</button>' +
+                '<button type="button" class="btn-primary" style="margin:2px;background:#334155;" onclick="commerceOpenOrder(\'returns\',' + o.id + ')">Return</button>' +
+                '<a class="btn-primary" style="margin:2px;background:#111;display:inline-block;" href="' + commerceLabelHref(o.id) + '" target="_blank" rel="noopener">Label</a>' +
+                (o.trackUrl ? '<button type="button" class="btn-primary" style="margin:2px;background:#0369a1;" onclick="navigator.clipboard.writeText(\'' + escCommerce(o.trackUrl) + '\');this.textContent=\'Copied\'">Copy tracking link</button>' : '') +
                 '<button type="button" class="btn-primary" style="margin:2px;background:#b91c1c;" onclick="commerceDeleteOrder(' +
                 o.id +
                 ',\'' + escCommerce(o.orderCode || '') + '\')">Delete</button>' +
@@ -137,10 +192,22 @@ function renderCommerceDesk() {
         '<label>Hyperlocal provider<select id="c-provider"><option value="">Auto</option><option value="shipday">Shipday</option><option value="tookan">Tookan</option><option value="pidge">Pidge</option><option value="fleetbase">Fleetbase</option></select></label>' +
         '</div><button type="button" class="btn-primary" style="margin-top:12px;" onclick="commercePlaceOrder()">Save order</button>' +
         '<p id="commerce-place-msg" style="font-weight:600;"></p></div>' +
-        '<div style="display:flex;justify-content:flex-end;margin-bottom:8px;"><button type="button" class="btn-primary" style="background:#b91c1c;" onclick="commerceDeleteAllOrders()">Delete all orders</button></div>' +
-        '<table class="data-table" style="width:100%;"><thead><tr><th>Order</th><th>Stage</th><th>OTP</th><th></th></tr></thead><tbody>' +
-        (rows || '<tr><td colspan="4">No orders yet.</td></tr>') +
+        '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">' +
+        '<input id="c-desk-q" placeholder="Search order, name, phone, city, AWB" value="' + escCommerce(commerceDeskQuery) + '" oninput="commerceDeskSearch(this.value)" style="min-width:260px;">' +
+        '<select onchange="commerceDeskSetStage(this.value)">' + stageOptions + '</select>' +
+        '<button type="button" class="btn-primary" style="background:#64748b;" onclick="loadCommerceAdmin()">Refresh</button>' +
+        '<span style="flex:1;"></span>' +
+        '<button type="button" class="btn-primary" style="background:#b91c1c;" onclick="commerceDeleteAllOrders()">Delete all orders</button></div>' +
+        '<table class="data-table" style="width:100%;"><thead><tr><th>Order</th><th>Stage</th><th>Courier</th><th>OTP</th><th>Actions</th></tr></thead><tbody>' +
+        (rows || '<tr><td colspan="5">No orders match.</td></tr>') +
         '</tbody></table>';
+    if (keepFilters) {
+        const q = document.getElementById('c-desk-q');
+        if (q) {
+            q.focus();
+            q.setSelectionRange(q.value.length, q.value.length);
+        }
+    }
 }
 
 function field(id, label, value) {
@@ -183,6 +250,11 @@ function renderCommerceBook() {
         const el = document.getElementById(id);
         if (el) el.addEventListener('change', bookQuote);
     });
+    if (window.commerceFocusOrder) {
+        const sel = document.getElementById('c-book-order');
+        if (sel) sel.value = String(window.commerceFocusOrder);
+        window.commerceFocusOrder = null;
+    }
     if (val('c-book-order')) bookQuote();
 }
 
@@ -862,7 +934,8 @@ function commerceQuoteLine(id, provider, mode, returnLeg, targetId) {
     commerceFetch('/api/admin/commerce/orders/' + id + '/quote?provider=' + encodeURIComponent(provider) + '&mode=' + encodeURIComponent(mode) + (returnLeg ? '&returnLeg=1' : ''))
         .then((data) => {
             const q = data.quote || {};
-            el.innerHTML = 'Courier charge ≈ <strong>₹' + escCommerce(q.amount) + '</strong> <span style="color:#64748b;">(' + escCommerce(q.courier || '') + ' · ' + escCommerce(q.basis || '') + ')</span>';
+            const src = q.source && q.source !== 'seller_rate_card' ? 'Live quote from ' + q.source : 'Seller rate card';
+            el.innerHTML = 'Courier charge ≈ <strong>₹' + escCommerce(q.amount) + '</strong> <span style="color:#64748b;">(' + escCommerce(src) + ' · ' + escCommerce(q.basis || '') + ')</span>';
         })
         .catch((e) => {
             el.textContent = 'Courier charge: ' + e.message;
