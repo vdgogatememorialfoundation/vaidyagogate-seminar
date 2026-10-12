@@ -33,6 +33,7 @@ function loadCommerceAdmin() {
     const nav = document.getElementById('commerce-subnav');
     if (!nav) return;
     const tabs = [
+        ['pos', 'Order & courier POS'],
         ['desk', 'Order desk'],
         ['book', 'Schedule pickup'],
         ['track', 'Shipment tracking'],
@@ -56,7 +57,8 @@ function loadCommerceAdmin() {
     commerceFetch('/api/admin/commerce/orders?actingAdminId=' + encodeURIComponent(commerceActor()))
         .then((data) => {
             commerceOrders = data.orders || [];
-            if (commercePanel === 'desk') renderCommerceDesk();
+            if (commercePanel === 'pos') renderCommercePos();
+            else if (commercePanel === 'desk') renderCommerceDesk();
             else if (commercePanel === 'book') renderCommerceBook();
             else if (commercePanel === 'track') renderCommerceTrackList();
             else if (commercePanel === 'returns') renderCommerceReturns();
@@ -195,6 +197,7 @@ function renderCommerceDesk(keepFilters) {
         field('c-city', 'City') +
         field('c-item', 'Item', 'Book') +
         '<label>Mode<select id="c-mode"><option value="logistics">Tookan logistics</option><option value="hyperlocal">Hyperlocal pickup & delivery</option></select></label>' +
+        '<label>Shipping mode<select id="c-service"><option value="standard">Standard</option><option value="express">Express</option><option value="same-day">Same day</option><option value="next-day">Next day</option><option value="surface">Surface</option><option value="air">Air</option><option value="overnight">Overnight</option><option value="economy">Economy</option><option value="scheduled">Scheduled slot</option><option value="store-pickup">Store pickup</option></select></label>' +
         '<label>Hyperlocal provider<select id="c-provider"><option value="">Auto</option><option value="shipday">Shipday</option><option value="tookan">Tookan</option><option value="pidge">Pidge</option><option value="fleetbase">Fleetbase</option></select></label>' +
         '</div><button type="button" class="btn-primary" style="margin-top:12px;" onclick="commercePlaceOrder()">Save order</button>' +
         '<p id="commerce-place-msg" style="font-weight:600;"></p></div>' +
@@ -228,8 +231,74 @@ function field(id, label, value) {
     );
 }
 
-function renderCommerceBook() {
+function commercePosSummary(o) {
+    if (!o) return '<p style="color:#64748b;">Select an order.</p>';
+    const items = (o.items || []).map((it) => escCommerce(it.name || it.title || '') + (it.variant ? ' · ' + escCommerce(it.variant) : '') + ' × ' + (it.qty || it.quantity || 1)).join('<br>');
+    const addr = [o.shippingName || o.customerName, o.shippingAddress || o.address, o.shippingCity || o.city, o.shippingPincode || o.pincode].filter(Boolean).map(escCommerce).join(', ');
+    const aid = encodeURIComponent(commerceActor());
+    return (
+        '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;font-size:0.86rem;">' +
+        '<div><b>' + escCommerce(o.orderCode) + '</b><br><span style="color:#64748b;">' + escCommerce(commerceStageLabel(o.commerceStage)) + '</span></div>' +
+        '<div><b>Customer</b><br>' + escCommerce(o.customerName || o.shippingName || '') + '<br>' + escCommerce(o.customerPhone || o.phone || '') + '</div>' +
+        '<div><b>Ship to</b><br>' + addr + '</div>' +
+        '<div><b>Items</b><br>' + (items || '—') + '</div>' +
+        '<div><b>Courier</b><br>' + commerceCourierCell(o) + (o.service ? '<br><span style="color:#1d4ed8;font-weight:700;text-transform:capitalize;">' + escCommerce(String(o.service).replace(/[_-]/g, ' ')) + '</span>' : '') + '</div>' +
+        '<div><b>Amount</b><br>₹' + escCommerce(o.total || o.amount || 0) + (o.cod ? ' · COD' : '') + '</div>' +
+        '</div>' +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">' +
+        '<button type="button" class="btn-primary" style="background:#0f766e;" onclick="commerceOpenOrder(\'track\',' + o.id + ')">Track</button>' +
+        '<a class="btn-primary" style="background:#334155;" target="_blank" href="/api/admin/commerce/orders/' + o.id + '/label?actingAdminId=' + aid + '">Label</a>' +
+        '<a class="btn-primary" style="background:#334155;" target="_blank" href="/api/admin/commerce/orders/' + o.id + '/label?size=58&actingAdminId=' + aid + '">58mm</a>' +
+        '<button type="button" class="btn-primary" style="background:#b45309;" onclick="commerceOpenOrder(\'returns\',' + o.id + ')">Return / replace</button>' +
+        (o.publicTrackingUrl ? '<button type="button" class="btn-primary" style="background:#64748b;" onclick="navigator.clipboard.writeText(\'' + escCommerce(o.publicTrackingUrl) + '\')">Copy tracking link</button>' : '') +
+        '</div>'
+    );
+}
+
+function renderCommercePos() {
     const panel = document.getElementById('commerce-panel');
+    const stages = commerceOrders.reduce((m, o) => { const k = o.commerceStage || 'placed'; m[k] = (m[k] || 0) + 1; return m; }, {});
+    panel.innerHTML =
+        '<div class="card" style="padding:16px;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">' +
+        '<h3 style="margin:0;">Order &amp; courier POS</h3>' +
+        '<div style="display:flex;gap:6px;flex-wrap:wrap;font-size:0.78rem;">' + Object.keys(stages).map((k) => '<span style="background:#f1f5f9;padding:3px 8px;border-radius:999px;">' + escCommerce(commerceStageLabel(k)) + ' <b>' + stages[k] + '</b></span>').join('') + '</div></div>' +
+        '<div style="display:grid;grid-template-columns:minmax(260px,320px) 1fr;gap:14px;margin-top:12px;" class="commerce-pos-grid">' +
+        '<div><input id="c-pos-q" placeholder="Search order / name / phone / AWB" style="width:100%;padding:8px;border:1px solid #cbd5e1;border-radius:8px;">' +
+        '<select id="c-pos-stage" style="width:100%;margin-top:6px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;"><option value="">All stages</option>' + Object.keys(stages).map((k) => '<option value="' + k + '">' + escCommerce(commerceStageLabel(k)) + '</option>').join('') + '</select>' +
+        '<div id="c-pos-list" style="max-height:60vh;overflow:auto;margin-top:8px;border:1px solid #e2e8f0;border-radius:8px;"></div></div>' +
+        '<div><div id="c-pos-summary" style="border:1px solid #e2e8f0;border-radius:10px;padding:12px;background:#f8fafc;"></div>' +
+        '<div id="c-pos-book" style="margin-top:12px;"></div></div></div></div>' +
+        '<style>@media(max-width:860px){.commerce-pos-grid{grid-template-columns:1fr!important}}</style>';
+    const list = document.getElementById('c-pos-list');
+    const q = document.getElementById('c-pos-q');
+    const st = document.getElementById('c-pos-stage');
+    let selectedId = commerceOrders.length ? commerceOrders[0].id : null;
+    function pick(id) {
+        selectedId = id;
+        const o = commerceOrders.find((x) => x.id === id) || null;
+        document.getElementById('c-pos-summary').innerHTML = commercePosSummary(o);
+        renderCommerceBook(document.getElementById('c-pos-book'));
+        const sel = document.getElementById('c-book-order');
+        if (sel && o) sel.value = String(o.id);
+        list.querySelectorAll('[data-pos-id]').forEach((el) => (el.style.background = Number(el.getAttribute('data-pos-id')) === id ? '#ecfdf5' : ''));
+    }
+    function draw() {
+        const term = (q.value || '').toLowerCase().trim();
+        const rows = commerceOrders.filter((o) => (!st.value || (o.commerceStage || 'placed') === st.value) && (!term || [o.orderCode, o.customerName, o.customerPhone, o.phone, o.courierTrackingNo, o.commerceAwb].filter(Boolean).join(' ').toLowerCase().includes(term)));
+        list.innerHTML = rows.length
+            ? rows.map((o) => '<div data-pos-id="' + o.id + '" style="padding:8px 10px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:0.84rem;' + (o.id === selectedId ? 'background:#ecfdf5;' : '') + '"><b>' + escCommerce(o.orderCode) + '</b> <span style="color:#64748b;">' + escCommerce(commerceStageLabel(o.commerceStage)) + '</span><br><span style="color:#475569;">' + escCommerce(o.customerName || o.shippingName || '') + ' · ' + escCommerce(o.shippingCity || o.city || '') + '</span></div>').join('')
+            : '<p style="padding:10px;color:#64748b;">No orders match.</p>';
+        list.querySelectorAll('[data-pos-id]').forEach((el) => el.addEventListener('click', () => pick(Number(el.getAttribute('data-pos-id')))));
+    }
+    q.addEventListener('input', draw);
+    st.addEventListener('change', draw);
+    draw();
+    if (selectedId != null) pick(selectedId);
+}
+
+function renderCommerceBook(target) {
+    const panel = target || document.getElementById('commerce-panel');
     const opts = commerceOrders
         .map((o) => '<option value="' + o.id + '">' + escCommerce(o.orderCode) + ' · ' + escCommerce(commerceStageLabel(o.commerceStage)) + '</option>')
         .join('');
@@ -242,6 +311,7 @@ function renderCommerceBook() {
         '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;">' +
         '<label>Provider<select id="c-book-provider"><option value="tookan">Tookan</option><option value="shipday">Shipday</option><option value="pidge">Pidge</option><option value="fleetbase">Fleetbase</option></select></label>' +
         '<label>Mode<select id="c-book-mode"><option value="logistics">Logistics</option><option value="hyperlocal">Hyperlocal</option></select></label>' +
+        '<label>Shipping mode<select id="c-book-service"><option value="standard">Standard</option><option value="express">Express</option><option value="same-day">Same day</option><option value="next-day">Next day</option><option value="surface">Surface</option><option value="air">Air</option><option value="overnight">Overnight</option><option value="economy">Economy</option><option value="scheduled">Scheduled slot</option><option value="store-pickup">Store pickup</option></select></label>' +
         '<label>Pickup time (IST)<input id="c-book-when" type="datetime-local"></label>' +
         '<label style="align-self:end;"><input id="c-book-openbox" type="checkbox"> Open box delivery</label>' +
         '<label style="align-self:end;"><input id="c-book-fragile" type="checkbox"> Fragile</label>' +
@@ -757,6 +827,7 @@ async function commercePlaceOrder() {
                 deliveryAddress: val('c-address'),
                 city: val('c-city'),
                 mode: val('c-mode'),
+                service: val('c-service'),
                 provider: val('c-provider'),
                 items: [{ title: val('c-item') || 'Book', qty: 1 }]
             })
@@ -887,6 +958,7 @@ async function commerceBookShipment() {
                 actingAdminId: commerceActor(),
                 provider: val('c-book-provider'),
                 mode: val('c-book-mode'),
+                service: val('c-book-service'),
                 pickupAt: val('c-book-when'),
                 openBox: !!(document.getElementById('c-book-openbox') && document.getElementById('c-book-openbox').checked),
                 fragile: !!(document.getElementById('c-book-fragile') && document.getElementById('c-book-fragile').checked),

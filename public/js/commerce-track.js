@@ -416,15 +416,33 @@
             .concat((journey.hubs || []).map((h) => ({ code: h.code, city: h.name, sub: 'Hub' + (h.id ? ' #' + h.id : ''), done: h.done, at: h.at })))
             .concat([{ code: journey.to.code, city: journey.to.city, sub: journey.to.kind, done: track.mainStatus === 'DELIVERED' || track.mainStatus === 'RECEIVED' }]);
         const doneStops = stops.filter((s) => s.done).length;
-        const pct = Math.min(100, Math.round(((doneStops - 1) / Math.max(1, stops.length - 1)) * 100 + (track.mainStatus === 'DELIVERED' ? 0 : 8)));
+        const steps = Array.isArray(track.pipeline) ? track.pipeline : [];
+        const doneSteps = steps.filter((st) => st.state === 'done').length;
+        const activeIdx = steps.findIndex((st) => st.state === 'active');
+        const tlFrac = steps.length > 1 ? Math.min(1, (doneSteps + (activeIdx >= 0 ? 0.5 : 0)) / (steps.length - 1)) : 0;
+        const legs = Math.max(1, stops.length - 1);
+        const legStart = Math.max(0, doneStops - 1) / legs;
+        const legEnd = Math.min(1, Math.max(0, doneStops) / legs);
+        let frac = track.mainStatus === 'DELIVERED' ? 1 : Math.max(legStart + 0.04, Math.min(legEnd - 0.03, tlFrac));
+        if (track.mainStatus === 'OUT_FOR_DELIVERY') frac = Math.max(frac, 1 - 0.12);
+        const pct = Math.round(Math.max(0, Math.min(100, frac * 100)));
+        const activeLeg = Math.min(legs - 1, Math.max(0, doneStops - 1));
+        const legPct = Math.round(Math.max(0, Math.min(100, (frac - activeLeg / legs) * legs * 100)));
+        const nextStep = steps[activeIdx] || null;
+        const upcoming = steps.find((st) => st.state === 'upcoming') || null;
+        const etaChip = nextStep ? '<span class="jr-eta"><b>' + esc(nextStep.title) + '</b>' + (nextStep.expectedLabel ? ' · ' + esc(nextStep.expectedLabel) : '') + '</span>' : '';
+        const nextChip = upcoming ? '<span class="jr-next">Next: ' + esc(upcoming.title) + (upcoming.expectedLabel ? ' · ' + esc(upcoming.expectedLabel) : '') + '</span>' : '';
+        const serviceChip = jr.service ? '<span class="jr-chip jr-svc">' + esc(jr.service) + '</span>' : '';
+        const shareBtn = '<button type="button" class="jr-share" data-share><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"/></svg> Share</button>';
         const truck = '<span class="jr-truck" style="--pos:' + pct + '%" aria-hidden="true"><svg viewBox="0 0 64 40"><rect x="2" y="10" width="36" height="20" rx="3" fill="#0f766e"/><path d="M38 16h12l8 8v6H38z" fill="#14b8a6"/><rect x="42" y="18" width="7" height="6" fill="#ccfbf1"/><circle cx="14" cy="32" r="5" fill="#111" class="jr-wheel"/><circle cx="50" cy="32" r="5" fill="#111" class="jr-wheel"/><circle cx="14" cy="32" r="2" fill="#94a3b8"/><circle cx="50" cy="32" r="2" fill="#94a3b8"/></svg></span>';
         return '<section class="jr"><div class="jr-head"><h2>Route</h2>' +
             (journey.distanceKm ? '<span class="jr-km">' + esc(String(journey.distanceKm)) + ' km</span>' : '') +
             (journey.parcel ? '<span class="jr-parcel">Parcel ' + esc(journey.parcel.code || '#' + journey.parcel.id) + '</span>' : '') + '</div>' +
             '<div class="jr-board">' + stops.map((s, i) =>
                 '<div class="jr-stop' + (s.done ? ' is-done' : '') + '"><b class="jr-code">' + esc(s.code || '—') + '</b><span class="jr-city">' + esc(s.city || '') + '</span><span class="jr-sub">' + esc(s.sub) + (s.at ? ' · ' + esc(when(s.at)) : '') + '</span></div>' +
-                (i < stops.length - 1 ? '<div class="jr-leg' + (stops[i + 1].done ? ' is-done' : '') + '"><i></i></div>' : '')).join('') + '</div>' +
-            '<div class="jr-road"><div class="jr-fill" style="--pct:' + pct + '%"></div>' + truck + '</div></section>';
+                (i < stops.length - 1 ? '<div class="jr-leg' + (stops[i + 1].done ? ' is-done' : i === activeLeg && track.mainStatus !== 'DELIVERED' ? ' is-active' : '') + '" style="--leg:' + (stops[i + 1].done ? 100 : i === activeLeg ? legPct : 0) + '%"><i></i></div>' : '')).join('') + '</div>' +
+            '<div class="jr-road"><div class="jr-fill" style="--pct:' + pct + '%"></div>' + truck + '</div>' +
+            '<div class="jr-meta"><span class="jr-pct">' + pct + '% of route</span>' + etaChip + nextChip + serviceChip + shareBtn + '</div></section>';
     }
 
     function documentHtml(track, shipment) {
@@ -557,6 +575,7 @@
             tracker.innerHTML = (liveSheet ? sheetHtml(track, shipment) : documentHtml(track, shipment)) + linkedHtml(shipment);
             bindViewTabs();
             bindCopy();
+            bindShare();
             bindMore();
         }
         bindReschedule();
@@ -592,6 +611,15 @@
         return html;
     }
 
+    function bindShare(root) {
+        (root || tracker).querySelectorAll('[data-share]').forEach((b) => {
+            b.addEventListener('click', () => {
+                const data = { title: document.title, text: 'Track my shipment', url: location.href };
+                if (navigator.share) navigator.share(data).catch(() => {});
+                else if (navigator.clipboard) navigator.clipboard.writeText(location.href).then(() => { b.textContent = 'Link copied'; setTimeout(() => (b.textContent = 'Share'), 1800); });
+            });
+        });
+    }
     function bindCopy(root) {
         (root || tracker).querySelectorAll('[data-copy], [data-copy-href]').forEach((btn) => {
             if (btn.dataset.bound) return;
