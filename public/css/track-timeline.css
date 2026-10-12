@@ -473,3 +473,30 @@ body.hl-page .hl-below .ship-pipe { border: 0; background: #fff; border-radius: 
 .trk-issue-actions { grid-column: 1 / -1; display: flex; gap: 10px; align-items: center; font-size: 0.76rem; color: #b91c1c; }
 .trk-issue-actions button { font: inherit; font-size: 0.8rem; font-weight: 700; background: #0f766e; color: #fff; border: 0; border-radius: 999px; padding: 6px 14px; cursor: pointer; }
 .trk-issue-done { margin: 6px 0 0; color: #065f46; }
+
+/* delivery intelligence, package, security, appointment, notifications */
+.trk-health { margin: 10px 0; padding: 12px 14px; border-radius: 14px; border: 1px solid #bbf7d0; background: linear-gradient(135deg,#f0fdf4,#ecfeff); }
+.trk-health.is-update_expected { border-color: #fde68a; background: linear-gradient(135deg,#fffbeb,#fefce8); }
+.trk-health.is-delayed, .trk-health.is-stalled, .trk-health.is-exception { border-color: #fecaca; background: linear-gradient(135deg,#fff1f2,#fff7ed); }
+.trk-health.is-delivered { border-color: #e2e8f0; background: #f8fafc; }
+.trk-health-head { display: flex; gap: 8px; align-items: center; font-size: 0.9rem; }
+.trk-health-pill { font-size: 0.7rem; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; padding: 3px 9px; border-radius: 999px; background: #0f766e; color: #fff; }
+.is-update_expected .trk-health-pill { background: #b45309; } .is-delayed .trk-health-pill, .is-stalled .trk-health-pill, .is-exception .trk-health-pill { background: #b91c1c; } .is-delivered .trk-health-pill { background: #475569; }
+.trk-health p { margin: 6px 0 8px; font-size: 0.86rem; color: #0f172a; }
+.trk-health-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.trk-health-grid div { background: rgba(255,255,255,.75); border-radius: 10px; padding: 7px 9px; display: grid; }
+.trk-health-grid span { font-size: 0.68rem; text-transform: uppercase; letter-spacing: .04em; color: #64748b; } .trk-health-grid span i { font-style: normal; background: #e2e8f0; border-radius: 4px; padding: 0 4px; text-transform: none; letter-spacing: 0; }
+.trk-health-grid b { font-size: 0.84rem; color: #0f172a; } .trk-health-grid small { font-size: 0.7rem; color: #64748b; }
+.conf-high { color: #047857 !important; } .conf-low { color: #b91c1c !important; } .conf-medium { color: #b45309 !important; }
+.trk-promise { margin-top: 8px; font-size: 0.8rem; } .trk-promise summary { cursor: pointer; color: #0f766e; font-weight: 700; } .trk-promise ul { margin: 6px 0 0; padding-left: 18px; } .trk-promise li span { color: #64748b; }
+.trk-anomalies { margin: 8px 0 0; padding: 0; list-style: none; display: grid; gap: 4px; } .trk-anomalies li { font-size: 0.78rem; padding: 6px 9px; border-radius: 8px; background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; }
+.trk-anomalies li.an-suspicious_delivered, .trk-anomalies li.an-address { background: #fef2f2; border-color: #fecaca; color: #991b1b; }
+.trk-pack { margin: 10px 0; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px 12px; font-size: 0.84rem; background: #fff; } .trk-pack summary { cursor: pointer; font-weight: 700; color: #0f172a; }
+.trk-pack-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-top: 8px; } .trk-pack-grid div { display: grid; } .trk-pack-grid span { font-size: 0.68rem; text-transform: uppercase; letter-spacing: .04em; color: #64748b; } .trk-pack-grid b { font-size: 0.82rem; word-break: break-all; }
+.trk-pack-items { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; } .trk-pack-items span { font-size: 0.68rem; text-transform: uppercase; color: #64748b; } .trk-pack-items em { font-style: normal; background: #f1f5f9; border-radius: 999px; padding: 2px 9px; font-size: 0.78rem; }
+.trk-secure { margin: 10px 0; padding: 10px 12px; border-radius: 12px; border: 1px solid #e2e8f0; background: #f8fafc; font-size: 0.82rem; } .trk-secure > div { display: grid; grid-template-columns: 18px 1fr; column-gap: 8px; } .trk-secure b { grid-column: 2; } .trk-secure small { grid-column: 2; color: #64748b; font-size: 0.72rem; }
+.trk-shield { width: 14px; height: 16px; margin-top: 2px; border-radius: 3px 3px 8px 8px; background: #cbd5e1; grid-row: 1 / span 2; } .trk-shield.ok { background: #059669; box-shadow: 0 0 0 3px #d1fae5; }
+.trk-secure p { margin: 8px 0 0; color: #7c2d12; background: #fff7ed; border-radius: 8px; padding: 6px 9px; font-size: 0.76rem; }
+.apt-cur { display: grid; gap: 3px; margin-top: 8px; font-size: 0.84rem; } .apt-cur small { color: #64748b; font-size: 0.74rem; }
+.apt-st { display: inline-block; width: max-content; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #e2e8f0; } .apt-pending { background: #fef3c7; color: #92400e; } .apt-accepted, .apt-carrier_confirmed { background: #dcfce7; color: #166534; } .apt-rejected { background: #fee2e2; color: #991b1b; }
+.trk-notify { display: flex; gap: 10px; align-items: flex-start; margin: 10px 0; font-size: 0.82rem; } .trk-notify small { display: block; color: #64748b; font-size: 0.72rem; } .trk-notify input { margin-top: 3px; }

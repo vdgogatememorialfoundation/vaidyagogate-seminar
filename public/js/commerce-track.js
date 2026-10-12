@@ -496,6 +496,102 @@
             '</section>';
     }
 
+
+    const HEALTH_LABEL = { on_track: 'On track', update_expected: 'Update expected', delayed: 'Delayed', stalled: 'No recent movement', exception: 'Needs attention', delivered: 'Delivered' };
+    function healthHtml(track) {
+        const h = track && track.health;
+        if (!h) return '';
+        const f = h.freshness || {};
+        const p = h.promise || {};
+        return (
+            '<section class="trk-health is-' + esc(h.state) + '"><div class="trk-health-head"><span class="trk-health-pill">' + esc(HEALTH_LABEL[h.state] || h.state) + '</span><b>Is my parcel on track?</b></div>' +
+            '<p>' + esc(h.answer) + '</p><div class="trk-health-grid">' +
+            (f.lastCourierAt || f.lastAnyAt ? '<div><span>' + esc(f.label) + '</span><b>' + esc(ago(f.lastCourierAt || f.lastAnyAt)) + '</b><small>' + esc(when(f.lastCourierAt || f.lastAnyAt)) + '</small></div>' : '') +
+            (h.state !== 'delivered' ? '<div><span>ETA confidence</span><b class="conf-' + esc(h.etaConfidence) + '">' + esc(h.etaConfidence === 'high' ? 'Reliable (courier-confirmed)' : h.etaConfidence === 'medium' ? 'Moderate (seller estimate)' : 'Uncertain') + '</b></div>' : '') +
+            (h.next ? '<div><span>Next milestone <i>prediction</i></span><b>' + esc(h.next.label) + '</b>' + (h.next.at ? '<small>around ' + esc(when(h.next.at)) + '</small>' : '') + '</div>' : '') +
+            '</div>' +
+            (p.history && p.history.length > 1 ? '<details class="trk-promise"><summary>Delivery promise history</summary><ul>' + p.history.map((x) => '<li><b>' + esc(x.label) + '</b> ' + esc(when(x.at)) + (x.reason ? ' <span>— ' + esc(x.reason) + '</span>' : '') + '</li>').join('') + '</ul></details>' : '') +
+            (h.anomalies && h.anomalies.length ? '<ul class="trk-anomalies">' + h.anomalies.map((a) => '<li class="an-' + esc(a.kind) + '">' + esc(a.text) + '</li>').join('') + '</ul>' : '') +
+            '</section>'
+        );
+    }
+    function packageHtml(track, shipment) {
+        const pk = track && track.package;
+        if (!pk) return '';
+        const items = (shipment && shipment.items) || [];
+        const row = (k, v) => (v ? '<div><span>' + k + '</span><b>' + esc(v) + '</b></div>' : '');
+        return (
+            '<details class="trk-pack"><summary>Package details · ' + pk.count + (pk.count > 1 ? ' packages' : ' package') + '</summary><div class="trk-pack-grid">' +
+            pk.packages.map((x) => row('Package ' + x.index + (pk.count > 1 ? ' tracking ID' : ' tracking ID'), x.trackingId || 'Assigned at pickup')).join('') +
+            row('Courier', pk.courier) + row('Service level', pk.service) + row('Type', pk.type) + row('Weight', pk.weightKg ? pk.weightKg + ' kg' : '') + row('Dimensions', pk.dimensions) +
+            row('Dispatched from', pk.from) + row('Destination area', pk.toArea) + row('Packed', pk.packedAt ? when(pk.packedAt) : '') + row('Dispatched', pk.dispatchedAt ? when(pk.dispatchedAt) : '') +
+            '</div>' + (items.length ? '<div class="trk-pack-items"><span>Contents</span>' + items.map((it) => '<em>' + esc(it.title || it.name || '') + (it.qty || it.quantity ? ' × ' + (it.qty || it.quantity) : '') + '</em>').join('') + '</div>' : pk.contents ? '<div class="trk-pack-items"><span>Contents</span><em>' + esc(pk.contents) + '</em></div>' : '') +
+            '</details>'
+        );
+    }
+    function securityHtml(track) {
+        const sc = track && track.security;
+        if (!sc) return '';
+        return (
+            '<section class="trk-secure"><div><span class="trk-shield' + (sc.awbVerified ? ' ok' : '') + '"></span><b>' + (sc.awbVerified ? 'Verified shipment' : 'Awaiting courier reference') + '</b>' +
+            (sc.reference ? '<small>' + esc(sc.courier || 'Courier') + ' · ref ' + esc(sc.reference) + ' matches this order</small>' : '<small>The courier reference will appear here once the parcel is accepted.</small>') + '</div>' +
+            '<p>' + esc(sc.otpNotice) + '</p></section>'
+        );
+    }
+    function appointmentHtml(track) {
+        if (!track || isFinished(track) || track.mainStatus === 'DELIVERED') return '';
+        const ap = track.appointment || {};
+        const cur = ap.current;
+        const hist = (ap.history || []).slice().reverse();
+        const badge = (st) => '<span class="apt-st apt-' + esc(st) + '">' + esc(st === 'pending' ? 'Pending confirmation' : st === 'accepted' ? 'Accepted' : st === 'carrier_confirmed' ? 'Confirmed by courier' : 'Not available') + '</span>';
+        let body = '';
+        if (cur && cur.status === 'pending') {
+            body = '<div class="apt-cur"><b>' + esc(cur.date) + ' · ' + esc(cur.start) + '–' + esc(cur.end) + '</b>' + badge('pending') + '<small>We will confirm with the courier and notify you. Nothing to do now.</small></div>';
+        } else {
+            if (cur) body += '<div class="apt-cur"><b>' + esc(cur.date) + ' · ' + esc(cur.start) + '–' + esc(cur.end) + '</b>' + badge(cur.status) + (cur.note ? '<small>' + esc(cur.note) + '</small>' : '') + '</div>';
+            const slots = (track.slots || []);
+            body += '<form id="trk-apt-form" class="trk-issue-form"><input name="date" type="date" required min="' + new Date().toISOString().slice(0, 10) + '">' +
+                (slots.length ? '<select name="win">' + slots.map((s) => '<option value="' + esc(s.start) + '|' + esc(s.end) + '">' + esc(s.label || s.start + '–' + s.end) + '</option>').join('') + '</select>' : '<select name="win"><option value="10:00|13:00">10:00 – 13:00</option><option value="13:00|16:00">13:00 – 16:00</option><option value="16:00|20:00">16:00 – 20:00</option></select>') +
+                '<input name="recipient" maxlength="80" placeholder="Authorised recipient (optional)"><input name="instructions" maxlength="240" placeholder="Gate / building / access instructions">' +
+                '<div class="trk-issue-actions"><button type="submit">' + (cur ? 'Request another window' : 'Request appointment') + '</button><span id="trk-apt-msg"></span></div></form>';
+        }
+        return '<details class="trk-issue trk-apt"' + (cur ? ' open' : '') + '><summary>Delivery appointment' + (cur ? ' · ' + (cur.status === 'pending' ? 'pending' : cur.status === 'rejected' ? 'not available' : 'confirmed') : '') + '</summary>' + body +
+            (hist.length > 1 ? '<details class="trk-promise"><summary>Appointment history</summary><ul>' + hist.map((a) => '<li><b>' + esc(a.date) + ' ' + esc(a.start) + '–' + esc(a.end) + '</b> ' + badge(a.status) + ' <span>requested ' + esc(when(a.requestedAt)) + '</span></li>').join('') + '</ul></details>' : '') +
+            '</details>';
+    }
+    function notifyHtml(track) {
+        if (!track || isFinished(track)) return '';
+        const mute = !!(track.notifyPrefs && track.notifyPrefs.muteRoutine);
+        return '<label class="trk-notify"><input type="checkbox" id="trk-mute"' + (mute ? ' checked' : '') + '> <span><b>Mute routine transit updates</b><small>You will still get alerts when the date changes, action is needed, a reattempt is confirmed, delivery is done, or a refund/replacement moves.</small></span></label>';
+    }
+    async function postJson(url, payload) {
+        const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Could not save.');
+        return data;
+    }
+    function bindExtras() {
+        const apt = document.getElementById('trk-apt-form');
+        if (apt && !apt.dataset.bound) {
+            apt.dataset.bound = '1';
+            apt.addEventListener('submit', async (event) => {
+                event.preventDefault();
+                const fd = new FormData(apt);
+                const win = String(fd.get('win') || '').split('|');
+                const msg = document.getElementById('trk-apt-msg');
+                try {
+                    await postJson('/api/public/commerce/appointment', { token, date: fd.get('date'), start: win[0], end: win[1], recipient: fd.get('recipient'), instructions: fd.get('instructions') });
+                    drawn = '';
+                    poll();
+                } catch (e) { if (msg) msg.textContent = e.message; }
+            });
+        }
+        const mute = document.getElementById('trk-mute');
+        if (mute && !mute.dataset.bound) {
+            mute.dataset.bound = '1';
+            mute.addEventListener('change', () => postJson('/api/public/commerce/notify-prefs', { token, muteRoutine: mute.checked }).catch(() => {}));
+        }
+    }
     function latestHtml(track) {
         const u = track && track.latestUpdate;
         if (!u) return '';
@@ -577,8 +673,13 @@
             hlNowHtml(track) +
             journeyHtml(shipment.journey, track) +
             (isFinished(track) ? '' : weatherHtml(shipment.journey)) +
+            healthHtml(track) +
             latestHtml(track) +
             issueHtml(track) +
+            appointmentHtml(track) +
+            packageHtml(track, shipment) +
+            securityHtml(track) +
+            notifyHtml(track) +
             '<div class="trk-facts">' +
             factCard('Courier', courier) +
             factCard('Service', mode) +
@@ -641,8 +742,13 @@
             board +
             journeyHtml(shipment.journey, track) +
             (isFinished(track) ? '' : weatherHtml(shipment.journey)) +
+            healthHtml(track) +
             latestHtml(track) +
             issueHtml(track) +
+            appointmentHtml(track) +
+            packageHtml(track, shipment) +
+            securityHtml(track) +
+            notifyHtml(track) +
             (track.dropLabel ? '<div class="hl-drop"><div class="lbl">Delivering to</div><div class="val">' + esc(track.dropLabel) + '</div></div>' : '') +
             '<div class="hl-note"><button type="button" class="hl-note-toggle" id="hl-note-toggle"><span class="hl-plus" aria-hidden="true">+</span><span><b>' +
             (note ? 'Delivery instructions' : 'Add delivery instructions') + '</b>' +
@@ -689,6 +795,7 @@
         bindReschedule();
         bindNote();
         bindIssue();
+        bindExtras();
         touchFresh();
         tickPipe();
         if (live && !live.courierView && window.TrackTimeline) TrackTimeline.mount(live);

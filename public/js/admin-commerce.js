@@ -252,6 +252,7 @@ function commercePosSummary(o) {
         '<button type="button" class="btn-primary" style="background:#b45309;" onclick="commerceOpenOrder(\'returns\',' + o.id + ')">Return / replace</button>' +
         (o.publicTrackingUrl ? '<button type="button" class="btn-primary" style="background:#64748b;" onclick="navigator.clipboard.writeText(\'' + escCommerce(o.publicTrackingUrl) + '\')">Copy tracking link</button>' : '') +
         '</div>' +
+        commerceAppointmentsHtml(o) +
         commerceOpsHtml(o)
     );
 }
@@ -261,6 +262,26 @@ const COMMERCE_OPS_GROUPS = [
     ['Delivery partner', '#1d4ed8', [['rider_arrived', 'Arrived at store'], ['pickup_verified', 'Pickup verified'], ['rider_departed', 'Left store'], ['reassign', 'Reassign']]],
     ['Last mile', '#b45309', [['waiting_customer', 'Waiting at customer'], ['customer_unreachable', 'Not reachable'], ['wrong_location', 'Wrong location'], ['safe_drop', 'Safe drop'], ['failed_delivery', 'Failed delivery']]]
 ];
+
+function commerceAppointmentsHtml(o) {
+    const list = (o.appointments || []).slice().reverse();
+    if (!list.length) return '';
+    return '<div style="margin-top:12px;border-top:1px dashed #cbd5e1;padding-top:10px;"><b>Delivery appointments</b>' +
+        list.map((a) => '<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:6px;font-size:.82rem;"><b>' + a.date + ' ' + a.start + '–' + a.end + '</b>' +
+            (a.recipient ? '<span>Recipient: ' + a.recipient + '</span>' : '') + (a.instructions ? '<span style="color:#475569;">' + a.instructions + '</span>' : '') +
+            '<span style="padding:2px 8px;border-radius:999px;background:' + (a.status === 'pending' ? '#fef3c7' : a.status === 'rejected' ? '#fee2e2' : '#dcfce7') + ';">' + a.status.replace('_', ' ') + '</span>' +
+            (a.status === 'pending' ? '<button type="button" class="btn-primary" style="padding:3px 9px;font-size:.76rem;" onclick="commerceAppointment(' + o.id + ',\'' + a.id + '\',\'accepted\')">Accept</button><button type="button" class="btn-primary" style="padding:3px 9px;font-size:.76rem;background:#0369a1;" onclick="commerceAppointment(' + o.id + ',\'' + a.id + '\',\'carrier_confirmed\')">Courier confirmed</button><button type="button" class="btn-primary" style="padding:3px 9px;font-size:.76rem;background:#b91c1c;" onclick="commerceAppointment(' + o.id + ',\'' + a.id + '\',\'rejected\')">Reject</button>' : '') +
+            '</div>').join('') + '</div>';
+}
+
+async function commerceAppointment(id, appointmentId, decision) {
+    const note = decision === 'rejected' ? prompt('Reason shown to the customer') : '';
+    if (note === null) return;
+    try {
+        await commerceFetch('/api/admin/commerce/orders/' + id + '/appointment', { method: 'POST', body: JSON.stringify({ actingAdminId: commerceActor(), appointmentId, decision, note: note || '' }) });
+        loadCommerceAdmin();
+    } catch (e) { alert(e.message); }
+}
 
 function commerceOpsHtml(o) {
     return '<div style="margin-top:12px;border-top:1px dashed #cbd5e1;padding-top:10px;"><b>Hyperlocal operations</b> <span style="color:#64748b;font-size:.8rem;">— each click is logged on the customer\'s live tracking</span>' +
