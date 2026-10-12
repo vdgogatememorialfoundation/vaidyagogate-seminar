@@ -185,8 +185,11 @@
         if (track && track.timing && track.timing.deliveredAt) {
             return '<div class="hl-drop"><div class="lbl">Delivered</div><div class="val">' + esc(when(track.timing.deliveredAt)) + (badge ? ' ' + badge : '') + '</div></div>';
         }
+        const kind = track && track.dates ? track.dates.deliveryKind : '';
+        const lbl = kind === 'courier' ? 'Delivery date \u2014 confirmed by courier' : 'Estimated delivery';
         return track && track.deliveryBy
-            ? '<div class="hl-drop"><div class="lbl">Delivery by</div><div class="val">' + esc(track.deliveryBy) + (badge ? ' ' + badge : '') + '</div></div>'
+            ? '<div class="hl-drop"><div class="lbl">' + lbl + '</div><div class="val">' + esc(track.deliveryBy) + (badge ? ' ' + badge : '') + '</div>' +
+              (kind === 'courier' ? '<div class="hl-sub">Updated from the courier\u2019s latest scan</div>' : kind === 'estimate' ? '<div class="hl-sub">Seller estimate \u2014 confirmed once the courier reports a date</div>' : '') + '</div>'
             : badge ? '<div class="hl-drop">' + badge + '</div>' : '';
     }
 
@@ -410,8 +413,12 @@
             week + (wx.impact ? '<p class="wx-impact">' + esc(wx.impact) + '</p>' : '') + '</section>';
     }
 
+    function isFinished(track) {
+        return !!(track && (track.mainStatus === 'DELIVERED' || track.mainStatus === 'RECEIVED'));
+    }
+
     function journeyHtml(journey, track) {
-        if (!journey || !journey.from || !journey.to) return '';
+        if (!journey || !journey.from || !journey.to || isFinished(track)) return '';
         const stops = [{ code: journey.from.code, city: journey.from.city, sub: journey.from.kind, done: true }]
             .concat((journey.hubs || []).map((h) => ({ code: h.code, city: h.name, sub: 'Hub' + (h.id ? ' #' + h.id : ''), done: h.done, at: h.at })))
             .concat([{ code: journey.to.code, city: journey.to.city, sub: journey.to.kind, done: track.mainStatus === 'DELIVERED' || track.mainStatus === 'RECEIVED' }]);
@@ -489,6 +496,56 @@
             '</section>';
     }
 
+    function latestHtml(track) {
+        const u = track && track.latestUpdate;
+        if (!u) return '';
+        return '<div class="trk-latest"><span class="trk-latest-dot' + (u.verified ? ' is-verified' : '') + '"></span><div><b>' + esc(u.message) + '</b><span>' +
+            (u.verified ? 'Verified courier update' : 'Store update') + ' \u00b7 ' + esc(when(u.at)) + ' \u00b7 ' + esc(ago(u.at)) + '</span></div></div>';
+    }
+
+    function issueHtml(track) {
+        if (!track) return '';
+        const finished = isFinished(track);
+        const failed = track.operationalStatus === 'DELIVERY_ATTEMPT_FAILED' || (track.timing && track.timing.state === 'failed');
+        if (!finished && !failed) return '';
+        if (track.issue) {
+            return '<section class="trk-issue is-open"><b>Problem reported' + (track.issue.reference ? ' \u00b7 ' + esc(track.issue.reference) : '') + '</b><span>' +
+                esc(track.issue.title) + (track.issue.detail ? ' \u2014 ' + esc(track.issue.detail) : '') + '</span><span class="trk-issue-state">' +
+                (track.issue.status === 'resolved' ? 'Resolved' : 'Under review \u2014 keep this reference for support') + '</span></section>';
+        }
+        return '<details class="trk-issue"><summary>' + (finished ? 'Not received or something wrong with the order? Report a problem' : 'Report a delivery problem') + '</summary>' +
+            '<form id="trk-issue-form" class="trk-issue-form">' +
+            '<select name="type"><option value="non_receipt">Marked delivered but not received</option><option value="damaged">Damaged item</option><option value="incomplete">Missing items</option><option value="wrong_item">Wrong item</option><option value="other">Other</option></select>' +
+            '<input name="items" maxlength="160" placeholder="Affected item(s)"><input name="quantity" type="number" min="1" placeholder="Qty">' +
+            '<textarea name="description" maxlength="400" placeholder="What happened? Photos can be sent to support with your case reference."></textarea>' +
+            '<div class="trk-issue-actions"><button type="submit">Submit</button><span id="trk-issue-msg"></span></div></form></details>';
+    }
+
+    function bindIssue() {
+        const form = document.getElementById('trk-issue-form');
+        if (!form || form.dataset.bound) return;
+        form.dataset.bound = '1';
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const msg = document.getElementById('trk-issue-msg');
+            const fd = new FormData(form);
+            try {
+                const res = await fetch('/api/public/commerce/issue', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token, type: fd.get('type'), items: fd.get('items'), quantity: fd.get('quantity'), description: fd.get('description') })
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Could not submit.');
+                form.innerHTML = '<p class="trk-issue-done">Reported. Your case reference is <b>' + esc(data.reference) + '</b> \u2014 quote it to support.</p>';
+                drawn = '';
+                setTimeout(() => poll(), 1200);
+            } catch (e) {
+                if (msg) msg.textContent = e.message;
+            }
+        });
+    }
+
     function documentHtml(track, shipment) {
         const ret = isReturn(track);
         const courier = (track.shipment && track.shipment.courier) || (ret ? 'Store pickup / courier' : 'Gogate Products');
@@ -519,7 +576,9 @@
             railHtml(track) +
             hlNowHtml(track) +
             journeyHtml(shipment.journey, track) +
-            weatherHtml(shipment.journey) +
+            (isFinished(track) ? '' : weatherHtml(shipment.journey)) +
+            latestHtml(track) +
+            issueHtml(track) +
             '<div class="trk-facts">' +
             factCard('Courier', courier) +
             factCard('Service', mode) +
@@ -557,12 +616,13 @@
             (name ? '<span class="hl-avatar" aria-hidden="true">' + esc(initial) + '</span>' : '') +
             call + '</div>';
         const livePill = track.map && track.map.live ? '<span class="hl-live-pill">Live</span>' : '';
-        const cv = shipment.live && shipment.live.courierView;
-        const ownMap = !cv && !!(shipment.live && shipment.live.mapsApiKey);
+        const liveSrc = track.map && track.map.enabled ? shipment.live : null;
+        const cv = liveSrc && liveSrc.courierView;
+        const ownMap = !cv && !!(liveSrc && liveSrc.mapsApiKey);
         const courierFrame = cv
             ? '<div class="hl-courier-frame"><iframe src="' + esc(cv.url) + '" title="Live courier tracking map" loading="lazy" referrerpolicy="no-referrer" allow="geolocation"></iframe></div>'
             : '';
-        const map = shipment.live
+        const map = liveSrc
             ? '<div class="hl-map">' + (ownMap ? '<div id="tl-map-slot"></div>' : '') + courierFrame + '<div class="hl-legend">' + livePill +
               '<span><i class="is-store"></i>Store</span><span><i class="is-road"></i>Route</span><span><i class="is-home"></i>Delivery</span></div></div>'
             : '<div class="hl-map hl-map-empty">The map appears when the store and delivery locations are available.</div>';
@@ -580,7 +640,9 @@
             railHtml(track) +
             board +
             journeyHtml(shipment.journey, track) +
-            weatherHtml(shipment.journey) +
+            (isFinished(track) ? '' : weatherHtml(shipment.journey)) +
+            latestHtml(track) +
+            issueHtml(track) +
             (track.dropLabel ? '<div class="hl-drop"><div class="lbl">Delivering to</div><div class="val">' + esc(track.dropLabel) + '</div></div>' : '') +
             '<div class="hl-note"><button type="button" class="hl-note-toggle" id="hl-note-toggle"><span class="hl-plus" aria-hidden="true">+</span><span><b>' +
             (note ? 'Delivery instructions' : 'Add delivery instructions') + '</b>' +
@@ -626,6 +688,7 @@
         }
         bindReschedule();
         bindNote();
+        bindIssue();
         touchFresh();
         tickPipe();
         if (live && !live.courierView && window.TrackTimeline) TrackTimeline.mount(live);

@@ -456,3 +456,20 @@ body.hl-page .hl-below .ship-pipe { border: 0; background: #fff; border-radius: 
 .hl-kv { margin: 8px 0 0; display: grid; gap: 4px; } .hl-kv div { display: flex; justify-content: space-between; gap: 10px; font-size: 0.8rem; }
 .hl-kv dt { color: #64748b; } .hl-kv dd { margin: 0; color: #0f172a; font-weight: 600; text-align: right; }
 .hl-policy { margin: 0; font-size: 0.76rem; color: #64748b; padding: 0 2px; }
+/* latest verified update + post-delivery service */
+.trk-latest { display: flex; gap: 10px; align-items: flex-start; margin: 10px 0; padding: 10px 12px; border-radius: 12px; background: #f8fafc; border: 1px solid #e2e8f0; }
+.trk-latest-dot { width: 10px; height: 10px; border-radius: 50%; background: #94a3b8; margin-top: 5px; flex: none; }
+.trk-latest-dot.is-verified { background: #10b981; box-shadow: 0 0 0 3px #d1fae5; }
+.trk-latest b { display: block; font-size: 0.86rem; color: #0f172a; } .trk-latest span { font-size: 0.74rem; color: #64748b; }
+.hl-sub { font-size: 0.72rem; color: #64748b; margin-top: 2px; }
+.trk-issue { margin: 10px 0; border: 1px solid #e2e8f0; border-radius: 12px; padding: 10px 12px; background: #fff; font-size: 0.84rem; }
+.trk-issue summary { cursor: pointer; font-weight: 700; color: #0f766e; list-style: none; }
+.trk-issue.is-open { display: grid; gap: 3px; background: #fff7ed; border-color: #fed7aa; color: #9a3412; }
+.trk-issue.is-open b { color: #7c2d12; } .trk-issue-state { font-size: 0.74rem; font-weight: 700; }
+.trk-issue-form { display: grid; gap: 6px; margin-top: 8px; grid-template-columns: 1fr 1fr; }
+.trk-issue-form select, .trk-issue-form textarea { grid-column: 1 / -1; }
+.trk-issue-form select, .trk-issue-form input, .trk-issue-form textarea { font: inherit; font-size: 0.82rem; border: 1px solid #cbd5e1; border-radius: 8px; padding: 7px 9px; }
+.trk-issue-form textarea { min-height: 64px; resize: vertical; }
+.trk-issue-actions { grid-column: 1 / -1; display: flex; gap: 10px; align-items: center; font-size: 0.76rem; color: #b91c1c; }
+.trk-issue-actions button { font: inherit; font-size: 0.8rem; font-weight: 700; background: #0f766e; color: #fff; border: 0; border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+.trk-issue-done { margin: 6px 0 0; color: #065f46; }
