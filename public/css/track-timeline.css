@@ -281,7 +281,8 @@ body.hl-page .hl-below .ship-pipe { border: 0; background: #fff; border-radius: 
 .trk-nav { position: relative; margin: 14px 0; background: #fff; border: 1px solid #e7eeeb; border-radius: 18px; padding: 16px 8px 14px; box-shadow: 0 8px 24px rgba(15, 17, 17, 0.05); }
 .trk-nav-line { position: absolute; left: 10%; right: 10%; top: 33px; height: 3px; background: #e6e8eb; border-radius: 99px; overflow: hidden; }
 .trk-nav-fill { display: block; height: 100%; width: calc(var(--nav, 0) * 1%); max-width: 100%; background: #067d62; border-radius: inherit; transition: width 1.1s ease; }
-.trk-rail { position: relative; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; margin: 0; padding: 0; list-style: none; overflow: visible; }
+.trk-nav { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.trk-rail { position: relative; display: grid; grid-template-columns: repeat(var(--n, 5), minmax(78px, 1fr)); min-width: calc(var(--n, 5) * 78px); gap: 4px; margin: 0; padding: 0; list-style: none; overflow: visible; }
 .trk-rail li { background: transparent; border-radius: 14px; padding: 0 4px; color: #8d9096; font-size: .74rem; font-weight: 700; text-align: center; animation: trkIn 0.45s ease both; animation-delay: calc(var(--i) * 0.06s); }
 .trk-rail li.done, .trk-rail li.active { color: #0f1111; }
 .trk-rail-ico { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: #f3f4f6; margin: 0 auto 8px; position: relative; z-index: 1; border: 3px solid #fff; box-shadow: 0 0 0 1px #e5e7eb; }
@@ -501,17 +502,3 @@ body.hl-page .hl-below .ship-pipe { border: 0; background: #fff; border-radius: 
 .apt-st { display: inline-block; width: max-content; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #e2e8f0; } .apt-pending { background: #fef3c7; color: #92400e; } .apt-accepted, .apt-carrier_confirmed { background: #dcfce7; color: #166534; } .apt-rejected { background: #fee2e2; color: #991b1b; }
 .trk-notify { display: flex; gap: 10px; align-items: flex-start; margin: 10px 0; font-size: 0.82rem; } .trk-notify small { display: block; color: #64748b; font-size: 0.72rem; } .trk-notify input { margin-top: 3px; }
 
-/* phased return / replacement pipelines */
-.trk-phase { margin: 12px 0 0; border-radius: 16px; border: 1px solid #e6eeea; background: #f7faf8; padding: 10px 10px 2px; animation: trkIn .45s ease both; animation-delay: calc(var(--p) * .1s); }
-.trk-phase.active { border-color: #067d62; background: #f0fbf6; box-shadow: 0 8px 22px rgba(6,125,98,.08); }
-.trk-phase.upcoming { opacity: .78; }
-.trk-phase-head { display: flex; align-items: center; gap: 10px; padding: 2px 4px 10px; }
-.trk-phase-head h3 { margin: 0; font-size: .95rem; }
-.trk-phase-head small { color: #565959; font-size: .78rem; }
-.trk-phase-head > div { flex: 1; min-width: 0; }
-.trk-phase-no { width: 26px; height: 26px; border-radius: 50%; background: #c7cccc; color: #fff; font-weight: 800; font-size: .8rem; display: grid; place-items: center; flex: none; }
-.trk-phase.done .trk-phase-no, .trk-phase.active .trk-phase-no { background: #067d62; }
-.trk-phase-badge { font-size: .7rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 3px 8px; border-radius: 999px; background: #e6eeea; color: #565959; }
-.trk-phase.active .trk-phase-badge { background: #067d62; color: #fff; }
-.trk-phase.done .trk-phase-badge { background: #d7f1e6; color: #0a5c48; }
-.trk-phase .ship-pipe { box-shadow: none; border-radius: 12px; padding-top: 14px; }
