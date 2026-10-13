@@ -115,14 +115,34 @@
         return 'The line moves down from the top and pauses on ' + active.title + ', before ' + next.title + '.';
     }
 
-    function pipeHtml(track) {
+    const RETURN_PHASES = [
+        ['Request', ['REQUESTED', 'APPROVED']],
+        ['Pickup from you', ['PICKUP_SCHEDULED', 'OUT_FOR_PICKUP', 'PICKED_UP']],
+        ['Back to store', ['IN_TRANSIT', 'RECEIVED']],
+        ['Replacement', ['REPLACEMENT_PREPARING', 'REPLACEMENT_SENT', 'REPLACEMENT_DELIVERED']],
+        ['Refund', ['REFUNDED']]
+    ];
+    function phasedPipeHtml(track) {
+        const steps = track.pipeline || [];
+        return RETURN_PHASES.map(([name, keys], n) => {
+            const rows = steps.filter((st) => keys.indexOf(st.key) >= 0);
+            if (!rows.length) return '';
+            const state = rows.some((st) => st.state === 'active') ? 'active' : rows.every((st) => st.state === 'done') ? 'done' : 'upcoming';
+            const cur = rows.find((st) => st.state === 'active');
+            const badge = state === 'done' ? 'Completed' : state === 'active' ? 'In progress' : 'Upcoming';
+            const doneN = rows.filter((st) => st.state === 'done').length;
+            return '<section class="trk-phase ' + state + '" style="--p:' + n + '"><header class="trk-phase-head"><span class="trk-phase-no">' + (n + 1) + '</span><div><h3>' + esc(name) + '</h3><small>' +
+                (cur ? esc(cur.title) + (cur.expectedLabel ? ' · ' + esc(cur.expectedLabel) : '') : doneN + ' of ' + rows.length + ' steps') + '</small></div><span class="trk-phase-badge">' + badge + '</span></header><ol class="ship-pipe">' + pipeHtml(track, rows) + '</ol></section>';
+        }).join('');
+    }
+    function pipeHtml(track, subset) {
         const child = (ev) =>
             '<li class="ship-sub' + (ev.tone ? ' ' + esc(ev.tone) : '') + '"><b>' + esc(ev.message) + '</b>' +
             (ev.at ? '<div class="when">' + esc(when(ev.at)) + '</div>' : '') +
             (ev.location ? '<div class="where">' + esc(ev.location) + '</div>' : '') +
             (ev.reason ? '<div class="where">Reason: ' + esc(ev.reason) + '</div>' : '') +
             '</li>';
-        return (track.pipeline || [])
+        return (subset || track.pipeline || [])
             .map((step, i) => {
                 const kids = (step.events || []).map(child).join('');
                 const courierStep = isReturn(track) ? 'PICKUP_SCHEDULED' : 'SHIPPED';
@@ -692,7 +712,7 @@
             (expects ? '<div class="trk-whens">' + expects + '</div>' : '') +
             failureHtml(track) +
             otpHtml('Pickup OTP', track.pickupOtp) + otpHtml('Delivery OTP', track.deliveryOtp) +
-            '<section class="trk-progress"><h2>' + (ret ? kindWord(track) + ' progress' : 'Order progress') + '</h2><p class="trk-line-note">' + esc(lineNote(track)) + '</p><ol class="ship-pipe">' + pipeHtml(track) + '</ol></section>' +
+            '<section class="trk-progress' + (ret ? ' trk-phased' : '') + '"><h2>' + (ret ? kindWord(track) + ' progress' : 'Order progress') + '</h2><p class="trk-line-note">' + esc(lineNote(track)) + '</p>' + (ret ? phasedPipeHtml(track) : '<ol class="ship-pipe">' + pipeHtml(track) + '</ol>') + '</section>' +
             logHtml(track) +
             '<footer class="trk-foot"><a href="' + esc(track.supportUrl || '/support') + '">Need help with this ' + (ret ? kindWord(track).toLowerCase() : 'shipment') + '?</a><span class="trk-fresh">Checking for updates</span><span>Refreshes automatically</span></footer>' +
             '</div>';
