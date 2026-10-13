@@ -7,6 +7,7 @@
     const isReturn = (track) => !!(track && (track.kind === 'return' || track.kind === 'replacement'));
     const kindWord = (track) => (track && track.kind === 'replacement' ? 'Replacement' : 'Return');
     let drawn = '';
+    let pipePlayed = false;
 
     function esc(s) {
         return window.TrackTimeline ? TrackTimeline.esc(s) : String(s == null ? '' : s);
@@ -47,6 +48,8 @@
             REQUESTED: 'M8 4h8v3H8zM7 7h10v13H7zM9 12h6M9 16h4',
             APPROVED: 'M5 12l5 5L20 7',
             PICKUP_SCHEDULED: 'M3 7h11v8H3zM14 10h4l3 3v2h-7zM7 18a1.5 1.5 0 110-3 1.5 1.5 0 010 3zM18 18a1.5 1.5 0 110-3 1.5 1.5 0 010 3z',
+            OUT_FOR_PICKUP: 'M5 17a2 2 0 110-4 2 2 0 010 4zM16 17a2 2 0 110-4 2 2 0 010 4zM7 15h7l2-5H10M14 10l2 5M9 8h5',
+            PICKED_UP: 'M3 8l9-4 9 4-9 4-9-4zM3 8v8l9 4 9-4V8M12 12v8M8 17l4-4 4 4',
             IN_TRANSIT: 'M5 17a2 2 0 110-4 2 2 0 010 4zM16 17a2 2 0 110-4 2 2 0 010 4zM7 15h7l2-5H10M14 10l2 5M9 8h5',
             RECEIVED: 'M3 8l9-4 9 4-9 4-9-4zM3 8v8l9 4 9-4V8M12 12v8',
             REFUNDED: 'M12 3v18M7 8h7a3 3 0 010 6H8a3 3 0 000 6h8',
@@ -214,13 +217,14 @@
     }
 
     function tickOnePipe(pipe) {
-        const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        const reduce = (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) || pipePlayed;
         const root = pipe.closest('.trk, .hl') || document;
         const items = Array.from(pipe.querySelectorAll(':scope > li'));
         const playable = items.filter((el) => el.classList.contains('done') || el.classList.contains('active'));
         const stepMs = 2600;
         if (pipe && !pipe.dataset.playing) {
             pipe.dataset.playing = 'play';
+            pipePlayed = true;
             if (reduce) {
                 playable.forEach((el) => {
                     el.style.setProperty('--draw', '0s');
@@ -418,7 +422,7 @@
     }
 
     function journeyHtml(journey, track) {
-        if (!journey || !journey.from || !journey.to || isFinished(track)) return '';
+        if (!journey || !journey.from || !journey.to || isFinished(track) || isReturn(track)) return '';
         const stops = [{ code: journey.from.code, city: journey.from.city, sub: journey.from.kind, done: true }]
             .concat((journey.hubs || []).map((h) => ({ code: h.code, city: h.name, sub: 'Hub' + (h.id ? ' #' + h.id : ''), done: h.done, at: h.at })))
             .concat([{ code: journey.to.code, city: journey.to.city, sub: journey.to.kind, done: track.mainStatus === 'DELIVERED' || track.mainStatus === 'RECEIVED' }]);
@@ -542,6 +546,7 @@
         if (!track || isFinished(track) || track.mainStatus === 'DELIVERED') return '';
         const ap = track.appointment || {};
         const cur = ap.current;
+        if (!ap.eligible && !cur) return '';
         const hist = (ap.history || []).slice().reverse();
         const badge = (st) => '<span class="apt-st apt-' + esc(st) + '">' + esc(st === 'pending' ? 'Pending confirmation' : st === 'accepted' ? 'Accepted' : st === 'carrier_confirmed' ? 'Confirmed by courier' : 'Not available') + '</span>';
         let body = '';
@@ -549,8 +554,8 @@
             body = '<div class="apt-cur"><b>' + esc(cur.date) + ' · ' + esc(cur.start) + '–' + esc(cur.end) + '</b>' + badge('pending') + '<small>We will confirm with the courier and notify you. Nothing to do now.</small></div>';
         } else {
             if (cur) body += '<div class="apt-cur"><b>' + esc(cur.date) + ' · ' + esc(cur.start) + '–' + esc(cur.end) + '</b>' + badge(cur.status) + (cur.note ? '<small>' + esc(cur.note) + '</small>' : '') + '</div>';
-            const slots = (track.slots || []);
-            body += '<form id="trk-apt-form" class="trk-issue-form"><input name="date" type="date" required min="' + new Date().toISOString().slice(0, 10) + '">' +
+            const slots = (ap.slots && ap.slots.length ? ap.slots : track.slots || []);
+            body += (ap.courierPush ? '<small class="hl-sub">Slots are booked directly with the courier.</small>' : '<small class="hl-sub">The store confirms the slot with the courier.</small>') + '<form id="trk-apt-form" class="trk-issue-form"><input name="date" type="date" required min="' + new Date().toISOString().slice(0, 10) + '">' +
                 (slots.length ? '<select name="win">' + slots.map((s) => '<option value="' + esc(s.start) + '|' + esc(s.end) + '">' + esc(s.label || s.start + '–' + s.end) + '</option>').join('') + '</select>' : '<select name="win"><option value="10:00|13:00">10:00 – 13:00</option><option value="13:00|16:00">13:00 – 16:00</option><option value="16:00|20:00">16:00 – 20:00</option></select>') +
                 '<input name="recipient" maxlength="80" placeholder="Authorised recipient (optional)"><input name="instructions" maxlength="240" placeholder="Gate / building / access instructions">' +
                 '<div class="trk-issue-actions"><button type="submit">' + (cur ? 'Request another window' : 'Request appointment') + '</button><span id="trk-apt-msg"></span></div></form>';
@@ -591,6 +596,10 @@
             mute.dataset.bound = '1';
             mute.addEventListener('change', () => postJson('/api/public/commerce/notify-prefs', { token, muteRoutine: mute.checked }).catch(() => {}));
         }
+    }
+    function extrasHtml(track, shipment) {
+        if (isReturn(track)) return latestHtml(track);
+        return healthHtml(track) + latestHtml(track) + issueHtml(track) + appointmentHtml(track) + packageHtml(track, shipment) + securityHtml(track) + notifyHtml(track);
     }
     function latestHtml(track) {
         const u = track && track.latestUpdate;
@@ -673,13 +682,7 @@
             hlNowHtml(track) +
             journeyHtml(shipment.journey, track) +
             (isFinished(track) ? '' : weatherHtml(shipment.journey)) +
-            healthHtml(track) +
-            latestHtml(track) +
-            issueHtml(track) +
-            appointmentHtml(track) +
-            packageHtml(track, shipment) +
-            securityHtml(track) +
-            notifyHtml(track) +
+            extrasHtml(track, shipment) +
             '<div class="trk-facts">' +
             factCard('Courier', courier) +
             factCard('Service', mode) +
@@ -742,13 +745,7 @@
             board +
             journeyHtml(shipment.journey, track) +
             (isFinished(track) ? '' : weatherHtml(shipment.journey)) +
-            healthHtml(track) +
-            latestHtml(track) +
-            issueHtml(track) +
-            appointmentHtml(track) +
-            packageHtml(track, shipment) +
-            securityHtml(track) +
-            notifyHtml(track) +
+            extrasHtml(track, shipment) +
             (track.dropLabel ? '<div class="hl-drop"><div class="lbl">Delivering to</div><div class="val">' + esc(track.dropLabel) + '</div></div>' : '') +
             '<div class="hl-note"><button type="button" class="hl-note-toggle" id="hl-note-toggle"><span class="hl-plus" aria-hidden="true">+</span><span><b>' +
             (note ? 'Delivery instructions' : 'Add delivery instructions') + '</b>' +
