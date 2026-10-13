@@ -171,11 +171,22 @@
 
     function railHtml(track) {
         const steps = track.pipeline || [];
-        const doneN = steps.filter((st) => st.state === 'done').length;
+        const n = steps.length;
         const activeI = steps.findIndex((st) => st.state === 'active');
-        const settledAll = activeI === steps.length - 1 && !steps.some((st) => st.state === 'upcoming');
-        const navPct = steps.length > 1 ? Math.round(((settledAll ? steps.length - 1 : Math.max(doneN, activeI >= 0 ? activeI : 0)) / (steps.length - 1)) * 100) : 0;
-        return '<nav class="trk-nav" aria-label="Shipment progress"><div class="trk-nav-line" aria-hidden="true"><span class="trk-nav-fill" data-fixed="1" style="--nav:' + navPct + '"></span></div><ol class="trk-rail" style="--n:' + ((track.pipeline || []).length || 5) + '">' +
+        const settledAll = activeI === n - 1 && !steps.some((st) => st.state === 'upcoming');
+        let reach = steps.filter((st) => st.state === 'done').length;
+        if (activeI >= 0 && !settledAll) {
+            const st = steps[activeI];
+            let part = 0.55;
+            if (st.lineUntil && st.lineSince && Number(st.lineUntil) > Number(st.lineSince)) {
+                const r = (Date.now() - Number(st.lineSince)) / (Number(st.lineUntil) - Number(st.lineSince));
+                part = Math.min(0.55, Math.max(0.12, r));
+            }
+            reach = activeI + part;
+        }
+        const navPct = n > 1 ? Math.round(((settledAll ? n - 1 : Math.min(n - 1, reach)) / (n - 1)) * 100) : 0;
+        return '<nav class="trk-nav' + (pipePlayed ? ' trk-nav-still' : '') + '" aria-label="Shipment progress">' +
+            '<ol class="trk-rail" style="--n:' + (n || 5) + '"><div class="trk-nav-line" aria-hidden="true"><span class="trk-nav-fill" data-fixed="1" style="--nav:' + navPct + '"></span></div>' +
             (track.pipeline || []).map((step, i) =>
                 '<li class="' + esc(step.state) + '" style="--i:' + i + '"><span class="trk-rail-ico">' +
                 (step.state === 'done' ? iconSvg('M5 12l5 5L20 7') : stepIcon(step.key)) +
