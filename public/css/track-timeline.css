@@ -280,7 +280,8 @@ body.hl-page .hl-below .ship-pipe { border: 0; background: #fff; border-radius: 
 .trk-ring-ico svg { width: 26px; height: 26px; }
 .trk-nav { position: relative; margin: 14px 0; background: #fff; border: 1px solid #e7eeeb; border-radius: 18px; padding: 16px 8px 14px; box-shadow: 0 8px 24px rgba(15, 17, 17, 0.05); }
 .trk-nav-line { position: absolute; left: 10%; right: 10%; top: 33px; height: 3px; background: #e6e8eb; border-radius: 99px; overflow: hidden; }
-.trk-nav-fill { display: block; height: 100%; width: calc(var(--nav, 0) * 1%); max-width: 100%; background: #067d62; border-radius: inherit; transition: width 1.1s ease; }
+.trk-nav-fill { display: block; height: 100%; width: calc(var(--nav, 0) * 1%); max-width: 100%; background: #067d62; border-radius: inherit; transition: width 1.1s ease; animation: trkNavGrow 1.4s ease both; }
+@keyframes trkNavGrow { from { width: 0; } }
 .trk-nav { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .trk-rail { position: relative; display: grid; grid-template-columns: repeat(var(--n, 5), minmax(78px, 1fr)); min-width: calc(var(--n, 5) * 78px); gap: 4px; margin: 0; padding: 0; list-style: none; overflow: visible; }
 .trk-rail li { background: transparent; border-radius: 14px; padding: 0 4px; color: #8d9096; font-size: .74rem; font-weight: 700; text-align: center; animation: trkIn 0.45s ease both; animation-delay: calc(var(--i) * 0.06s); }

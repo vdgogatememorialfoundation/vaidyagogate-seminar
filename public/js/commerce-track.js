@@ -170,7 +170,12 @@
     }
 
     function railHtml(track) {
-        return '<nav class="trk-nav" aria-label="Shipment progress"><div class="trk-nav-line" aria-hidden="true"><span class="trk-nav-fill" style="--nav:0"></span></div><ol class="trk-rail" style="--n:' + ((track.pipeline || []).length || 5) + '">' +
+        const steps = track.pipeline || [];
+        const doneN = steps.filter((st) => st.state === 'done').length;
+        const activeI = steps.findIndex((st) => st.state === 'active');
+        const settledAll = activeI === steps.length - 1 && !steps.some((st) => st.state === 'upcoming');
+        const navPct = steps.length > 1 ? Math.round(((settledAll ? steps.length - 1 : Math.max(doneN, activeI >= 0 ? activeI : 0)) / (steps.length - 1)) * 100) : 0;
+        return '<nav class="trk-nav" aria-label="Shipment progress"><div class="trk-nav-line" aria-hidden="true"><span class="trk-nav-fill" data-fixed="1" style="--nav:' + navPct + '"></span></div><ol class="trk-rail" style="--n:' + ((track.pipeline || []).length || 5) + '">' +
             (track.pipeline || []).map((step, i) =>
                 '<li class="' + esc(step.state) + '" style="--i:' + i + '"><span class="trk-rail-ico">' +
                 (step.state === 'done' ? iconSvg('M5 12l5 5L20 7') : stepIcon(step.key)) +
@@ -276,7 +281,7 @@
         const ring = root.querySelector('.trk-ring');
         const nav = root.querySelector('.trk-nav-fill');
         [ring, nav].forEach((el) => {
-            if (!el) return;
+            if (!el || el.dataset.fixed) return;
             const prop = el.classList.contains('trk-ring') ? '--fill' : '--nav';
             if (!el.dataset.filled) {
                 el.dataset.filled = '1';

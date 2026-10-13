@@ -128,7 +128,7 @@ function commerceCourierCell(o) {
 
 function commerceParcelHtml(info) {
     if (!info || !info.parcelId) return '';
-    const tasks = (info.tasks || []).map((t) => t.type + ' #' + t.jobId + (t.at && window.PortalDateTime && window.PortalDateTime.format ? ' · ' + window.PortalDateTime.format(t.at) : '')).join('<br>');
+    const tasks = (info.tasks || []).map((t) => t.type + ' #' + t.jobId + (t.otp ? ' · OTP ' + t.otp : '') + (t.at && window.PortalDateTime && window.PortalDateTime.format ? ' · ' + window.PortalDateTime.format(t.at) : '')).join('<br>');
     return '<br><span style="font-size:0.78rem;">Tookan parcel <strong>#' + escCommerce(info.parcelId) + '</strong>' + (info.code ? ' · ' + escCommerce(info.code) : '') + '</span>' + (tasks ? '<br><span style="font-size:0.74rem;color:#64748b;">' + tasks + '</span>' : '');
 }
 
