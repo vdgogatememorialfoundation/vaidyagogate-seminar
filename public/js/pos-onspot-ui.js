@@ -56,6 +56,26 @@
         return { res, data };
     }
 
+    /* Staff portal uses staff-pos-* ids; the admin portal shares one form (pos-*) between
+       "register now" and "send link". */
+    const ID_ALIASES = {
+        'staff-pos-seminar': ['staff-pos-seminar', 'pos-seminar'],
+        'staff-pos-amount': ['staff-pos-amount', 'pos-amount'],
+        'staff-pos-first': ['staff-pos-first', 'pos-fname'],
+        'staff-pos-middle': ['staff-pos-middle', 'pos-mname'],
+        'staff-pos-last': ['staff-pos-last', 'pos-lname'],
+        'staff-pos-phone': ['staff-pos-phone', 'pos-phone'],
+        'staff-pos-email': ['staff-pos-email', 'pos-email']
+    };
+    function el(id) {
+        const ids = ID_ALIASES[id] || [id];
+        for (const i of ids) {
+            const e = document.getElementById(i);
+            if (e) return e;
+        }
+        return null;
+    }
+
     let seminarsLoaded = false;
     async function ensureSeminars() {
         const sel = document.getElementById('staff-pos-seminar');
@@ -71,6 +91,22 @@
                 sel.appendChild(o);
             });
             seminarsLoaded = list.length > 0;
+            const daySel = document.getElementById('staff-pos-day');
+            const fillDays = () => {
+                if (!daySel) return;
+                const sem = list.find((x) => String(x.id) === String(sel.value));
+                const days = (sem && sem.days) || [];
+                daySel.innerHTML = '<option value="">All days</option>';
+                days.forEach((d, i) => {
+                    const o = document.createElement('option');
+                    o.value = d.id;
+                    o.textContent = (d.title || 'Day ' + (i + 1)) + (d.day_date ? ' — ' + d.day_date : '') + ' only';
+                    daySel.appendChild(o);
+                });
+                daySel.style.display = days.length > 1 ? '' : 'none';
+            };
+            sel.addEventListener('change', fillDays);
+            fillDays();
         } catch (_) {}
     }
 
@@ -138,14 +174,17 @@
                 const u = users[Number(btn.getAttribute('data-pos-pick'))];
                 if (!u) return;
                 const set = (id, v) => {
-                    const el = document.getElementById(id);
-                    if (el) el.value = v || '';
+                    const e = el(id);
+                    if (e) e.value = v || '';
                 };
                 set('staff-pos-user-id', u.id);
                 set('staff-pos-first', u.firstName);
+                set('staff-pos-middle', u.middleName);
                 set('staff-pos-last', u.lastName);
                 set('staff-pos-phone', u.phone);
                 set('staff-pos-email', u.email);
+                const hint = document.getElementById('pos-user-hint');
+                if (hint) hint.textContent = 'Selected ' + (u.name || '') + (u.userIdString ? ' (' + u.userIdString + ')' : '') + '.';
                 const out = document.getElementById('staff-pos-link-out');
                 if (out) out.innerHTML = '<p style="color:#0f766e;">Selected ' + esc(u.email || u.phone || '') + '.</p>';
             });
@@ -154,11 +193,12 @@
 
     window.staffPosCreateLink = async function () {
         const out = document.getElementById('staff-pos-link-out');
-        const v = (id) => ((document.getElementById(id) || {}).value || '').trim();
+        const v = (id) => ((el(id) || {}).value || '').trim();
         const payload = {
             seminarId: v('staff-pos-seminar'),
             amount: v('staff-pos-amount'),
             firstName: v('staff-pos-first'),
+            middleName: v('staff-pos-middle'),
             lastName: v('staff-pos-last'),
             phone: v('staff-pos-phone'),
             email: v('staff-pos-email'),
@@ -197,5 +237,181 @@
             ')">Copy link</button></div>';
         const uid = document.getElementById('staff-pos-user-id');
         if (uid) uid.value = '';
+    };
+
+    /* ---------- Register & collect payment now (staff portal) ---------- */
+    let orderDbId = null;
+    let pollTimer = null;
+    let methods = [];
+
+    function el(id) {
+        return document.getElementById(id);
+    }
+    function stopPoll() {
+        if (pollTimer) clearInterval(pollTimer);
+        pollTimer = null;
+    }
+    function setStatus(html, color) {
+        const st = el('staff-pos-status');
+        if (!st) return;
+        st.innerHTML = html;
+        st.style.color = color || '#0f172a';
+    }
+
+    window.staffPosLoadMethods = async function () {
+        const sel = el('staff-pos-payment-method');
+        const id = actorId();
+        if (!sel || !id) return;
+        const { res, data } = await api('/api/admin/payments/methods?actingAdminId=' + encodeURIComponent(id));
+        if (!res.ok) return;
+        methods = data.methods || data || [];
+        if (!Array.isArray(methods) || !methods.length) return;
+        sel.innerHTML = methods
+            .map((m) => '<option value="' + esc(m.id) + '"' + (m.disabled ? ' disabled' : '') + '>' + esc(m.label || m.id) + '</option>')
+            .join('');
+        sel.onchange = () => {
+            const m = methods.find((x) => x.id === sel.value);
+            const hint = el('staff-pos-method-desc');
+            if (hint) hint.textContent = (m && m.description) || '';
+        };
+        sel.onchange();
+    };
+
+    async function pollOnce() {
+        const id = actorId();
+        if (!id || !orderDbId) return;
+        const pollSt = el('staff-pos-poll-status');
+        const { res, data } = await api(
+            '/api/admin/payments/poll/' + encodeURIComponent(orderDbId) + '?actingAdminId=' + encodeURIComponent(id)
+        );
+        if (!res.ok) return;
+        if (data.paid) {
+            stopPoll();
+            setStatus('Payment received — ticket ' + esc(data.ticketId || 'issued') + '. Doctor must complete profile in portal.', '#059669');
+            if (pollSt) {
+                pollSt.style.color = '#15803d';
+                pollSt.textContent = data.message || 'Payment complete. E-ticket issued.';
+            }
+            return;
+        }
+        if (pollSt && data.message) pollSt.textContent = data.message;
+    }
+    function startPoll() {
+        stopPoll();
+        pollOnce();
+        pollTimer = setInterval(pollOnce, 4000);
+    }
+
+    function openRazorpay(pay) {
+        const rzOrder = pay.razorpayOrder || pay.order;
+        if (!rzOrder || !rzOrder.id || !pay.keyId) {
+            alert('Razorpay checkout could not start. Ask admin to re-save gateway keys.');
+            return;
+        }
+        if (typeof Razorpay === 'undefined') {
+            alert('Razorpay checkout script not loaded. Refresh the page.');
+            return;
+        }
+        const rzp = new Razorpay({
+            key: pay.keyId,
+            amount: rzOrder.amount,
+            currency: rzOrder.currency || 'INR',
+            name: 'VGMF Seminar',
+            description: 'Registration ' + (pay.applicationNo || ''),
+            order_id: rzOrder.id,
+            handler: function () {
+                startPoll();
+            },
+            modal: {
+                ondismiss: function () {
+                    const p = el('staff-pos-poll-status');
+                    if (p) p.textContent = 'Payment window closed — payment is still being checked.';
+                }
+            }
+        });
+        rzp.on('payment.failed', function (resp) {
+            alert((resp.error && resp.error.description) || 'Payment failed or was cancelled.');
+        });
+        rzp.open();
+    }
+
+    window.staffPosRegisterNow = async function () {
+        const id = actorId();
+        if (!id) return alert('Sign in first.');
+        stopPoll();
+        orderDbId = null;
+        ['staff-pos-qr-block', 'staff-pos-mark-upi-btn'].forEach((k) => el(k) && el(k).classList.add('hidden'));
+        if (el('staff-pos-poll-status')) el('staff-pos-poll-status').textContent = '';
+        setStatus('Registering…', '#64748b');
+        const val = (k) => (el(k) ? el(k).value : '');
+        const { res, data } = await api('/api/admin/pos/register', {
+            method: 'POST',
+            headers: headers(),
+            body: JSON.stringify({
+                actingAdminId: id,
+                seminarId: val('staff-pos-seminar'),
+                firstName: val('staff-pos-first'),
+                middleName: val('staff-pos-middle'),
+                lastName: val('staff-pos-last'),
+                phone: val('staff-pos-phone'),
+                email: val('staff-pos-email'),
+                amount: val('staff-pos-amount'),
+                paymentMethod: val('staff-pos-payment-method') || 'cash',
+                selectedDayIds: val('staff-pos-day') ? [val('staff-pos-day')] : [],
+                sendTicketEmail: true
+            })
+        });
+        if (!res.ok) return setStatus(esc(data.error || data.message || 'Registration failed (HTTP ' + res.status + ')'), '#b91c1c');
+        const capNote = data.capacityNote ? ' <span style="color:#b45309;">(Seminar was full — added as on-spot override.)</span>' : '';
+        if (data.paid) {
+            setStatus(
+                (data.userIdString ? (data.isNewUser ? 'New ID ' : 'Doctor ') + esc(data.userIdString) + ' · ' : '') +
+                    (data.applicationNo ? 'Application ' + appNoHtml(data.applicationNo) + ' · ' : '') +
+                    'Ticket ' + esc(data.ticketId || '—') + (data.emailNote ? ' ' + esc(data.emailNote) : '') + capNote,
+                '#059669'
+            );
+            return;
+        }
+        if (data.paymentPending && data.payment) {
+            const pay = data.payment;
+            orderDbId = pay.orderDbId;
+            setStatus('Registration saved for application ' + appNoHtml(data.applicationNo || data.registrationId) + '. Waiting for payment…' + capNote, '#b45309');
+            if (el('staff-pos-qr-amount')) el('staff-pos-qr-amount').textContent = 'Amount: ₹' + (pay.amount || '') + ' — Order ' + (pay.orderIdString || '');
+            if (pay.qrImageUrl && el('staff-pos-qr-img')) {
+                el('staff-pos-qr-img').src = pay.qrImageUrl;
+                el('staff-pos-qr-block').classList.remove('hidden');
+            }
+            if (pay.manualConfirm && el('staff-pos-mark-upi-btn')) el('staff-pos-mark-upi-btn').classList.remove('hidden');
+            if (pay.paymentType === 'razorpay_checkout') openRazorpay(pay);
+            else if (pay.paymentUrl) window.open(pay.paymentUrl, '_blank', 'noopener');
+            if (pay.pollRequired) {
+                if (el('staff-pos-poll-status')) el('staff-pos-poll-status').textContent = pay.message || 'Waiting for payment confirmation…';
+                startPoll();
+            } else if (el('staff-pos-poll-status')) el('staff-pos-poll-status').textContent = pay.message || '';
+            return;
+        }
+        setStatus(esc(data.message || 'Registration saved.'), '#059669');
+    };
+
+    window.staffPosMarkUpiPaid = async function () {
+        const id = actorId();
+        if (!id || !orderDbId) return alert('No pending UPI order.');
+        const v = prompt('UPI payment received?\nEnter the UPI transaction ID / UTR (or leave blank), then OK to confirm.', '');
+        if (v === null) return;
+        const utr = String(v).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40);
+        const { res, data } = await api('/api/admin/payments/mark-upi-paid', {
+            method: 'POST',
+            headers: headers(),
+            body: JSON.stringify({ orderDbId: orderDbId, adminUserId: id, utr: utr })
+        });
+        if (!res.ok) return alert(data.error || 'Could not mark paid');
+        stopPoll();
+        setStatus(esc(data.message || 'Marked paid.'), '#059669');
+    };
+
+    const prevInit = window.staffPosInit;
+    window.staffPosInit = function () {
+        if (typeof prevInit === 'function') prevInit.apply(this, arguments);
+        window.staffPosLoadMethods();
     };
 })();
