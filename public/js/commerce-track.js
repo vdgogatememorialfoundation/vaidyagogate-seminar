@@ -615,7 +615,36 @@
     }
     function extrasHtml(track, shipment) {
         if (isReturn(track)) return latestHtml(track);
-        return healthHtml(track) + latestHtml(track) + issueHtml(track) + appointmentHtml(track) + packageHtml(track, shipment) + securityHtml(track) + notifyHtml(track);
+        return healthHtml(track) + consignmentHtml(track) + attemptsHtml(track) + latestHtml(track) + issueHtml(track) + appointmentHtml(track) + packageHtml(track, shipment) + securityHtml(track) + notifyHtml(track);
+    }
+    function legIcon(state) {
+        if (state === 'done') return iconSvg('M5 12l5 5L20 7');
+        if (state === 'failed') return iconSvg('M6 6l12 12M18 6L6 18');
+        if (state === 'active') return iconSvg('M3 12h13l3-4h2M7 17a2 2 0 100-4 2 2 0 000 4zm10 0a2 2 0 100-4 2 2 0 000 4z');
+        return iconSvg('M12 6v6l4 2M12 22a10 10 0 100-20 10 10 0 000 20z');
+    }
+    /** Consignment journey: each hub-to-hub leg with its own task barcode, agent and status. */
+    function consignmentHtml(track) {
+        const c = track.consignment;
+        if (!c || !c.legs || !c.legs.length) return '';
+        const done = c.legs.filter((l) => l.state === 'done').length;
+        return '<section class="trk-card trk-legs" aria-label="Consignment journey">' +
+            '<div class="trk-card-head"><span class="trk-card-ico">' + iconSvg('M3 7h13v10H3zM16 10h4l1 3v4h-5M7 20a2 2 0 100-4 2 2 0 000 4zm11 0a2 2 0 100-4 2 2 0 000 4z') + '</span><div><b>Consignment journey</b><small>' + done + ' of ' + c.legs.length + ' legs completed' + (c.code ? ' · parcel ' + esc(c.code) : '') + '</small></div></div>' +
+            '<ol class="trk-leg-list">' + c.legs.map((l) =>
+                '<li class="trk-leg is-' + esc(l.state) + '"><span class="trk-leg-dot">' + legIcon(l.state) + '</span><div class="trk-leg-body">' +
+                '<div class="trk-leg-route"><span>' + esc(l.from || 'Origin') + '</span><i class="trk-leg-arrow" aria-hidden="true"></i><span>' + esc(l.to || 'Next stop') + '</span></div>' +
+                '<div class="trk-leg-meta">' + (l.barcode ? '<span class="trk-chip trk-chip-code">' + esc(l.barcode) + '</span>' : '') +
+                l.tasks.map((t) => '<span class="trk-chip">' + esc(t.type) + ' · ' + esc(t.status) + '</span>').join('') +
+                (l.agent ? '<span class="trk-chip trk-chip-agent">' + esc(l.agent) + '</span>' : '') +
+                (l.at ? '<span class="trk-leg-when">' + esc(when(l.at)) + '</span>' : '') + '</div></div></li>'
+            ).join('') + '</ol></section>';
+    }
+    function attemptsHtml(track) {
+        const a = track.attempts;
+        if (!a || !a.length) return '';
+        return '<section class="trk-card trk-attempts" aria-label="Delivery attempts">' +
+            '<div class="trk-card-head"><span class="trk-card-ico is-warn">' + iconSvg('M12 9v4m0 4h.01M10.3 3.9L2.5 17.5A2 2 0 004.2 20.5h15.6a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z') + '</span><div><b>Delivery attempts</b><small>The parcel goes back to the hub and another agent tries again</small></div></div>' +
+            '<ol class="trk-attempt-list">' + a.map((x) => '<li><b>Attempt ' + x.n + ' · ' + esc(x.outcome) + '</b><span>' + (x.returnedTo ? 'Returned to ' + esc(x.returnedTo) + ' · ' : '') + (x.nextTask ? 'new task #' + esc(x.nextTask) + ' · ' : '') + esc(when(x.at)) + '</span></li>').join('') + '</ol></section>';
     }
     function latestHtml(track) {
         const u = track && track.latestUpdate;
