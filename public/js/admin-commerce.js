@@ -219,6 +219,39 @@ function renderCommerceDesk(keepFilters) {
     }
 }
 
+var commerceLabelPrefs = { style: 'sheet', roll: '210' };
+
+function commerceLabelUrl(id, aid, fmt) {
+    var q = '/api/admin/commerce/orders/' + id + '/label?actingAdminId=' + aid + '&style=' + commerceLabelPrefs.style;
+    if (commerceLabelPrefs.style === 'roll') q += '&roll=' + commerceLabelPrefs.roll;
+    if (fmt === 'pdf') q += '&format=pdf';
+    return q;
+}
+
+function commerceLabelOpen(id, aid, fmt) {
+    var sel = document.getElementById('c-label-style-' + id);
+    var roll = document.getElementById('c-label-roll-' + id);
+    if (sel) commerceLabelPrefs.style = sel.value;
+    if (roll) commerceLabelPrefs.roll = roll.value;
+    var url = commerceLabelUrl(id, aid, fmt);
+    if (fmt === 'pdf') location.href = url;
+    else window.open(url, '_blank');
+}
+
+function commerceLabelControls(o, aid) {
+    var opt = function (v, t, cur) { return '<option value="' + v + '"' + (v === cur ? ' selected' : '') + '>' + t + '</option>'; };
+    return (
+        '<span style="display:inline-flex;gap:4px;align-items:center;flex-wrap:wrap;background:#f1f5f9;border-radius:8px;padding:4px 6px;">' +
+        '<select id="c-label-style-' + o.id + '" onchange="commerceLabelPrefs.style=this.value;document.getElementById(\'c-label-roll-' + o.id + '\').style.display=this.value===\'roll\'?\'\':\'none\'">' +
+        opt('sheet', 'Sheet A4', commerceLabelPrefs.style) + opt('tag', 'Tag 100×150', commerceLabelPrefs.style) + opt('roll', 'Paper roll 58 mm', commerceLabelPrefs.style) + '</select>' +
+        '<select id="c-label-roll-' + o.id + '" style="' + (commerceLabelPrefs.style === 'roll' ? '' : 'display:none') + '" onchange="commerceLabelPrefs.roll=this.value">' +
+        opt('210', '58 × 210', commerceLabelPrefs.roll) + opt('297', '58 × 297', commerceLabelPrefs.roll) + opt('3276', '58 × 3276', commerceLabelPrefs.roll) + opt('auto', 'Cut to length', commerceLabelPrefs.roll) + '</select>' +
+        '<button type="button" class="btn-primary" style="background:#334155;" onclick="commerceLabelOpen(' + o.id + ',\'' + aid + '\',\'html\')">Label</button>' +
+        '<button type="button" class="btn-primary" style="background:#067d62;" onclick="commerceLabelOpen(' + o.id + ',\'' + aid + '\',\'pdf\')">PDF</button>' +
+        '</span>'
+    );
+}
+
 function field(id, label, value) {
     return (
         '<label style="font-size:0.82rem;color:#334155;">' +
@@ -247,10 +280,7 @@ function commercePosSummary(o) {
         '</div>' +
         '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">' +
         '<button type="button" class="btn-primary" style="background:#0f766e;" onclick="commerceOpenOrder(\'track\',' + o.id + ')">Track</button>' +
-        '<a class="btn-primary" style="background:#334155;" target="_blank" href="/api/admin/commerce/orders/' + o.id + '/label?actingAdminId=' + aid + '">Label</a>' +
-        '<a class="btn-primary" style="background:#334155;" target="_blank" href="/api/admin/commerce/orders/' + o.id + '/label?style=roll&actingAdminId=' + aid + '">58mm roll</a>' +
-        '<a class="btn-primary" style="background:#334155;" target="_blank" href="/api/admin/commerce/orders/' + o.id + '/label?style=tag&actingAdminId=' + aid + '">Tag</a>' +
-        '<a class="btn-primary" style="background:#067d62;" href="/api/admin/commerce/orders/' + o.id + '/label?format=pdf&actingAdminId=' + aid + '">PDF</a>' +
+        commerceLabelControls(o, aid) +
         '<button type="button" class="btn-primary" style="background:#b45309;" onclick="commerceOpenOrder(\'returns\',' + o.id + ')">Return / replace</button>' +
         (o.publicTrackingUrl ? '<button type="button" class="btn-primary" style="background:#64748b;" onclick="navigator.clipboard.writeText(\'' + escCommerce(o.publicTrackingUrl) + '\')">Copy tracking link</button>' : '') +
         '</div>' +

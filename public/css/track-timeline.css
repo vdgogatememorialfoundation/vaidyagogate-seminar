@@ -557,3 +557,11 @@ body.hl-page .hl-below .ship-pipe { border: 0; background: #fff; border-radius: 
 .trk-attempt-list li:first-child { border-top: 0; }
 .trk-attempt-list b { display: block; color: #9a3412; }
 .trk-attempt-list span { font-size: .8rem; color: #565959; }
+
+.hl-legend i{position:relative}
+.hl-legend .is-store::after,.hl-legend .is-home::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:2px solid currentColor;opacity:0;animation:trkPinPulse 1.8s ease-out infinite}
+.hl-legend .is-home::after{animation-delay:.9s}
+@keyframes trkPinPulse{0%{transform:scale(.6);opacity:.7}100%{transform:scale(1.6);opacity:0}}
+.hl-courier-frame{position:relative;border-radius:14px;overflow:hidden;border:1px solid #e2e8f0;background:#f8fafc}
+.hl-courier-frame iframe{width:100%;min-height:380px;border:0;display:block}
+.hl-courier-frame::before{content:"Live courier view";position:absolute;top:8px;left:8px;z-index:2;background:#0f172a;color:#fff;font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:999px}
