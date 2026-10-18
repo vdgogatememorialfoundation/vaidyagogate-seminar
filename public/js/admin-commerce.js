@@ -248,7 +248,9 @@ function commercePosSummary(o) {
         '<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">' +
         '<button type="button" class="btn-primary" style="background:#0f766e;" onclick="commerceOpenOrder(\'track\',' + o.id + ')">Track</button>' +
         '<a class="btn-primary" style="background:#334155;" target="_blank" href="/api/admin/commerce/orders/' + o.id + '/label?actingAdminId=' + aid + '">Label</a>' +
-        '<a class="btn-primary" style="background:#334155;" target="_blank" href="/api/admin/commerce/orders/' + o.id + '/label?size=58&actingAdminId=' + aid + '">58mm</a>' +
+        '<a class="btn-primary" style="background:#334155;" target="_blank" href="/api/admin/commerce/orders/' + o.id + '/label?style=roll&actingAdminId=' + aid + '">58mm roll</a>' +
+        '<a class="btn-primary" style="background:#334155;" target="_blank" href="/api/admin/commerce/orders/' + o.id + '/label?style=tag&actingAdminId=' + aid + '">Tag</a>' +
+        '<a class="btn-primary" style="background:#067d62;" href="/api/admin/commerce/orders/' + o.id + '/label?format=pdf&actingAdminId=' + aid + '">PDF</a>' +
         '<button type="button" class="btn-primary" style="background:#b45309;" onclick="commerceOpenOrder(\'returns\',' + o.id + ')">Return / replace</button>' +
         (o.publicTrackingUrl ? '<button type="button" class="btn-primary" style="background:#64748b;" onclick="navigator.clipboard.writeText(\'' + escCommerce(o.publicTrackingUrl) + '\')">Copy tracking link</button>' : '') +
         '</div>' +
