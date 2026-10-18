@@ -685,10 +685,10 @@
         const board = dateBoard(track);
         const badge = board ? '' : timingBadge(track);
         return '<div class="trk' + (delivered ? ' is-settled' : '') + '">' +
-            '<header class="trk-bar"><div class="trk-brand"><span class="trk-mark">' + iconSvg('M3 8l9-4 9 4-9 4-9-4zM3 8v8l9 4 9-4V8') + '</span><div><div class="trk-brand-name">Gogate Products</div><div class="trk-brand-sub">' + (ret ? kindWord(track) + ' tracking' : 'Shipment tracking') + '</div></div></div>' +
+            '<header class="trk-bar"><div class="trk-brand"><span class="trk-mark">' + iconSvg('M3 8l9-4 9 4-9 4-9-4zM3 8v8l9 4 9-4V8') + '</span><div><div class="trk-brand-name">Gogate Products</div><div class="trk-brand-sub">' + (ret ? kindWord(track) + ' tracking' : 'Shipment tracking <small class="trk-ver">v2</small>') + '</div></div></div>' +
             '<div class="trk-actions">' +
             (code ? '<button type="button" class="trk-copy" data-copy="' + esc(code) + '">Copy order</button>' : '') +
-            '<button type="button" class="trk-copy" data-copy-href="1">Copy link</button>' +
+            '<button type="button" class="trk-copy" data-copy-href="1">Copy link</button><button type="button" class="trk-copy trk-refresh">Refresh</button>' +
             '</div></header>' +
             '<section class="trk-hero"><div class="trk-ring" style="--fill:0"><span class="trk-ring-ico">' + stepIcon(active.key) + '</span></div><div class="trk-hero-copy"><div class="trk-kicker">' + (ret ? kindWord(track) + ' for order #' : 'Order #') + esc(code) + (badge ? ' ' + badge : '') + '</div><h1>' + esc(track.currentStatus || track.currentMessage) + '</h1>' +
             (detail ? '<p>' + esc(detail) + '</p>' : '') +
@@ -1051,7 +1051,7 @@
 
     if (tracker && sub) {
         poll();
-        setInterval(poll, 8000);
+        document.addEventListener('click', (e) => { if (e.target.closest && e.target.closest('.trk-refresh')) { pipePlayed = false; poll(); } });
     }
     setInterval(tickPipe, 2000);
 })();

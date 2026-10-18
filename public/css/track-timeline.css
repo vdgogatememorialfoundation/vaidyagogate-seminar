@@ -504,3 +504,5 @@ body.hl-page .hl-below .ship-pipe { border: 0; background: #fff; border-radius: 
 .apt-st { display: inline-block; width: max-content; font-size: 0.7rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #e2e8f0; } .apt-pending { background: #fef3c7; color: #92400e; } .apt-accepted, .apt-carrier_confirmed { background: #dcfce7; color: #166534; } .apt-rejected { background: #fee2e2; color: #991b1b; }
 .trk-notify { display: flex; gap: 10px; align-items: flex-start; margin: 10px 0; font-size: 0.82rem; } .trk-notify small { display: block; color: #64748b; font-size: 0.72rem; } .trk-notify input { margin-top: 3px; }
 
+
+.trk-ver { font-size: .6em; font-weight: 800; color: #067d62; border: 1px solid #067d62; border-radius: 999px; padding: 1px 7px; vertical-align: middle; margin-left: 4px; }
