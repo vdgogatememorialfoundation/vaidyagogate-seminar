@@ -515,13 +515,17 @@ body.hl-page .hl-below .ship-pipe { border: 0; background: #fff; border-radius: 
 .trk-bar .trk-copy { background: rgba(255,255,255,0.16); color: #fff; border-color: rgba(255,255,255,0.35); }
 .trk-bar .trk-ver { color: #fff; border-color: rgba(255,255,255,0.7); }
 @keyframes trkFloat { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(-30px, 18px); } }
-.trk-nav-fill { background: repeating-linear-gradient(135deg, #067d62 0 10px, #0ea47f 10px 20px); background-size: 28px 28px; animation: trkNavGrow 1.4s ease both, trkStripes 1.2s linear infinite; }
-.trk-nav-still .trk-nav-fill { animation: trkStripes 1.2s linear infinite; }
-@keyframes trkStripes { to { background-position: 28px 0; } }
-.trk-rail li.active .trk-rail-ico { animation: trkPulse 2.4s ease-out 3, trkBob 2.2s ease-in-out infinite; box-shadow: 0 0 0 6px rgba(6, 125, 98, 0.14), 0 0 0 1px #067d62; }
-.trk-rail li.done .trk-rail-ico svg { animation: trkPop 0.5s cubic-bezier(.2,1.6,.4,1) both; animation-delay: calc(var(--i) * 0.12s); }
-@keyframes trkBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
-@keyframes trkPop { from { transform: scale(0); } to { transform: scale(1); } }
+.trk-nav-fill { background: #067d62; }
+.trk-rail li.active .trk-rail-ico { animation: none; box-shadow: 0 0 0 6px rgba(6, 125, 98, 0.14), 0 0 0 1px #067d62; }
+.trk-leg.is-active .trk-leg-arrow { animation: none; }
+.trk-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 12px; }
+.trk-tile { background: #fff; border: 1px solid #e6eeea; border-radius: 16px; padding: 12px 14px; box-shadow: 0 8px 22px rgba(15, 23, 42, 0.04); display: flex; flex-direction: column; gap: 4px; border-top: 4px solid #067d62; }
+.trk-tile-1 { border-top-color: #0b7285; }
+.trk-tile-2 { border-top-color: #c2410c; }
+.trk-tile-3 { border-top-color: #5b21b6; }
+.trk-tile .lbl { font-size: .7rem; letter-spacing: .05em; text-transform: uppercase; color: #565959; }
+.trk-tile b { font-size: .98rem; line-height: 1.3; }
+.trk-tile small { color: #565959; font-size: .76rem; }
 .trk-card { background: #fff; border: 1px solid #e6eeea; border-radius: 18px; padding: 14px 16px; margin-top: 12px; box-shadow: 0 10px 26px rgba(15, 23, 42, 0.05); animation: trkIn 0.5s ease both; }
 .trk-card-head { display: flex; align-items: center; gap: 12px; }
 .trk-card-head b { display: block; font-size: 1rem; }

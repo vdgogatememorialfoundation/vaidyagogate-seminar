@@ -438,7 +438,7 @@
     }
 
     function journeyHtml(journey, track) {
-        if (!journey || !journey.from || !journey.to || isFinished(track) || isReturn(track)) return '';
+        if (!journey || !journey.from || !journey.to || isFinished(track) || isReturn(track) || track.fulfillmentType !== 'HYPERLOCAL') return '';
         const stops = [{ code: journey.from.code, city: journey.from.city, sub: journey.from.kind, done: true }]
             .concat((journey.hubs || []).map((h) => ({ code: h.code, city: h.name, sub: 'Hub' + (h.id ? ' #' + h.id : ''), done: h.done, at: h.at })))
             .concat([{ code: journey.to.code, city: journey.to.city, sub: journey.to.kind, done: track.mainStatus === 'DELIVERED' || track.mainStatus === 'RECEIVED' }]);
@@ -615,7 +615,25 @@
     }
     function extrasHtml(track, shipment) {
         if (isReturn(track)) return latestHtml(track);
-        return healthHtml(track) + consignmentHtml(track) + attemptsHtml(track) + latestHtml(track) + issueHtml(track) + appointmentHtml(track) + packageHtml(track, shipment) + securityHtml(track) + notifyHtml(track);
+        return summaryHtml(track) + healthHtml(track) + attemptsHtml(track) + latestHtml(track) + issueHtml(track) + appointmentHtml(track) + packageHtml(track, shipment) + securityHtml(track) + notifyHtml(track);
+    }
+    /** At-a-glance: where the parcel is, what happens next, when, and the last verified update. */
+    function summaryHtml(track) {
+        const steps = track.pipeline || [];
+        const active = steps.find((st) => st.state === 'active') || null;
+        const next = active ? steps[steps.indexOf(active) + 1] : steps.find((st) => st.state !== 'done');
+        const lu = track.latestUpdate || {};
+        const eta = (track.dates && (track.dates.confirmed || track.dates.estimated)) || track.expectedDelivery || null;
+        const etaLabel = track.dates && track.dates.confirmed ? 'Confirmed by courier' : 'Estimated';
+        const tiles = [
+            ['Where it is', active ? active.title : track.currentStatus || '—', active && active.at ? when(active.at) : (track.currentDetail || '')],
+            ['What happens next', next ? next.title : isFinished(track) ? 'Nothing more to do' : '—', next && next.expectedLabel ? next.expectedLabel : ''],
+            [isFinished(track) ? 'Completed' : 'Delivery date', eta ? (typeof eta === 'string' && /\d{4}-\d\d-\d\d/.test(eta) ? when(eta) : String(eta)) : 'Will be confirmed by the courier', eta && !isFinished(track) ? etaLabel : ''],
+            ['Last verified update', lu.title || lu.text || track.currentMessage || '—', lu.at ? (lu.source ? lu.source + ' · ' : '') + when(lu.at) : '']
+        ];
+        return '<section class="trk-summary" aria-label="Shipment summary">' + tiles.map((t, i) =>
+            '<article class="trk-tile trk-tile-' + i + '"><span class="lbl">' + esc(t[0]) + '</span><b>' + esc(t[1]) + '</b>' + (t[2] ? '<small>' + esc(t[2]) + '</small>' : '') + '</article>'
+        ).join('') + '</section>';
     }
     function legIcon(state) {
         if (state === 'done') return iconSvg('M5 12l5 5L20 7');
@@ -742,7 +760,7 @@
             otpHtml('Pickup OTP', track.pickupOtp) + otpHtml('Delivery OTP', track.deliveryOtp) +
             '<section class="trk-progress"><h2>' + (ret ? kindWord(track) + ' progress' : 'Order progress') + '</h2><p class="trk-line-note">' + esc(lineNote(track)) + '</p>' + '<ol class="ship-pipe">' + pipeHtml(track) + '</ol>' + '</section>' +
             logHtml(track) +
-            '<footer class="trk-foot"><a href="' + esc(track.supportUrl || '/support') + '">Need help with this ' + (ret ? kindWord(track).toLowerCase() : 'shipment') + '?</a><span class="trk-fresh">Checking for updates</span><span>Refreshes automatically</span></footer>' +
+            '<footer class="trk-foot"><a href="' + esc(track.supportUrl || '/support') + '">Need help with this ' + (ret ? kindWord(track).toLowerCase() : 'shipment') + '?</a><span class="trk-fresh">Checking for updates</span><span>Updates when you refresh</span></footer>' +
             '</div>';
     }
 
