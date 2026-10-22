@@ -130,8 +130,8 @@
             tile('fa-truck', 'Courier', partner ? partner.name : o.courierProviderLabel || o.courierProvider || '—', (partner && partner.trackingNo) || o.courierTrackingNo || '') +
             tile('fa-clock-rotate-left', 'Last update', latest && latest.at ? fmtWhen(latest.at) : o.updatedAt ? fmtWhen(o.updatedAt) : '—', st.scans ? st.scans + ' courier scans' : '') +
             tile('fa-warehouse', 'Hubs crossed', st.hubsVisited ? String(st.hubsVisited) : '', st.route && st.route.length ? st.route.join(' → ') : '') +
-            (otpStep ? '<div class="ts4-tile ts4-otp"><i class="fas fa-key"></i><div><small>Delivery OTP</small><b>' + esc(otpStep.deliveryOtp) + '</b><em>Share only with the delivery partner at your door</em></div></div>' : '') +
-            (pickupStep ? '<div class="ts4-tile ts4-otp"><i class="fas fa-key"></i><div><small>Pickup OTP</small><b>' + esc(pickupStep.pickup.pickupOtp) + '</b><em>Store staff quote this to the courier</em></div></div>' : '') +
+            (otpStep ? '<div class="ts4-tile ts4-otp"><i class="fas fa-key"></i><div><small>Delivery OTP</small><b>' + esc(otpStep.deliveryOtp) + '</b><em>Share only with the delivery partner at your door</em></div></div>' : t.otpSupported && !pickupStep && t.rank < 5 ? '<div class="ts4-tile ts4-otp is-empty"><i class="fas fa-key"></i><div><small>Delivery OTP</small><b>\u2014</b><em>Not issued by the courier yet \u2014 shows here once the delivery task is assigned</em></div></div>' : '') +
+            (pickupStep ? '<div class="ts4-tile ts4-otp"><i class="fas fa-key"></i><div><small>Pickup OTP</small><b>' + esc(pickupStep.pickup.pickupOtp) + '</b><em>Store staff quote this to the courier</em></div></div>' : t.otpSupported && t.rank >= 1 && t.rank < 3 ? '<div class="ts4-tile ts4-otp is-empty"><i class="fas fa-key"></i><div><small>Pickup OTP</small><b>\u2014</b><em>Not issued by the courier yet</em></div></div>' : '') +
             '</div>' +
             journeyHtml(o)
         );

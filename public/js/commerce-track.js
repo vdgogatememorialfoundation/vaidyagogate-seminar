@@ -349,8 +349,13 @@
         });
     }
 
-    function otpHtml(label, code) {
-        return code ? '<div class="ship-otp"><div class="lbl">' + esc(label) + '</div><div class="code">' + esc(code) + '</div></div>' : '';
+    function otpHtml(label, code, track) {
+        if (code) return '<div class="ship-otp"><div class="lbl">' + esc(label) + '</div><div class="code">' + esc(code) + '</div></div>';
+        if (!track || !track.otpSupported || isReturn(track)) return '';
+        const ms = track.mainStatus;
+        const show = label === 'Pickup OTP' ? ms === 'ORDERED' || ms === 'PACKED' : ms !== 'DELIVERED' && ms !== 'ORDERED';
+        if (!show) return '';
+        return '<div class="ship-otp is-empty"><div class="lbl">' + esc(label) + '</div><div class="code">\u2014</div><div class="note">Not issued by the courier yet \u2014 appears here once the task is assigned</div></div>';
     }
 
     function failureHtml(track) {
@@ -803,7 +808,7 @@
             '</div>' +
             (expects ? '<div class="trk-whens">' + expects + '</div>' : '') +
             failureHtml(track) +
-            otpHtml('Pickup OTP', track.pickupOtp) + otpHtml('Delivery OTP', track.deliveryOtp) +
+            otpHtml('Pickup OTP', track.pickupOtp, track) + otpHtml('Delivery OTP', track.deliveryOtp, track) +
             '<section class="trk-progress"><h2>' + (ret ? kindWord(track) + ' progress' : 'Order progress') + '</h2><p class="trk-line-note">' + esc(lineNote(track)) + '</p>' + '<ol class="ship-pipe">' + pipeHtml(track) + '</ol>' + '</section>' +
             logHtml(track) +
             '<footer class="trk-foot"><a href="' + esc(track.supportUrl || '/support') + '">Need help with this ' + (ret ? kindWord(track).toLowerCase() : 'shipment') + '?</a><span class="trk-fresh">Checking for updates</span><span>Updates when you refresh</span></footer>' +

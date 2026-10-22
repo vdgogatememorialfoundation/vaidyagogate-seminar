@@ -66,3 +66,4 @@ body.ts4{background:#f3f6fb;margin:0;font-family:Inter,system-ui,-apple-system,'
 #track-shipment-poll{position:sticky;bottom:10px;margin:14px auto 0;width:max-content;background:#fff;border:1px solid #e2e8f0;border-radius:999px;padding:7px 14px;box-shadow:0 8px 24px rgba(15,23,42,.1);color:#334155!important;font-weight:600!important}
 .ts4 .ts-hero,.ts4 .ts-tiles{display:none}
 @media (max-width:640px){.ts4-form{grid-template-columns:1fr 1fr}.ts4-form button{grid-column:1/-1}.ts4-hero-body{flex-direction:column;align-items:flex-start}.ts4-ring{width:76px;height:76px}}
+.ts4-tile.ts4-otp.is-empty{background:#f8fafc;border-color:#e2e8f0}.ts4-tile.ts4-otp.is-empty i{background:#f1f5f9;color:#94a3b8}.ts4-tile.ts4-otp.is-empty b{color:#94a3b8;letter-spacing:0;font-size:1.3rem}

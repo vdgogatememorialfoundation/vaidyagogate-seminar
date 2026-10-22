@@ -584,3 +584,4 @@ body.hl-page .hl-below .ship-pipe { border: 0; background: #fff; border-radius: 
 .trk-stat em{display:block;font-style:normal;font-size:.72rem;color:#64748b;margin-top:2px;word-break:break-word}
 .ship-queue{background:#ecfeff;border:1px solid #a5f3fc;border-radius:10px;padding:8px 10px;margin:6px 0}
 .ship-queue b{display:block;font-size:.85rem;color:#0f172a}.ship-queue span{display:block;font-size:.75rem;color:#475569}
+.ship-otp.is-empty{background:#f8fafc;border-style:dashed}.ship-otp.is-empty .code{color:#94a3b8}.ship-otp .note{font-size:.74rem;color:#64748b;margin-top:4px}
