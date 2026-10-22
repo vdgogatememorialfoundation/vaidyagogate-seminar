@@ -56,14 +56,15 @@
         if (!steps.length) return '';
         const done = steps.filter(function (s) { return s.state === 'done'; }).length;
         const activeIdx = steps.findIndex(function (s) { return s.state === 'active'; });
-        const grow = activeIdx >= 0 ? Math.min(0.88, (Number(steps[activeIdx].lineFill) || 12) / 100) : 0;
-        const fill = steps.length > 1 ? Math.min(100, ((Math.max(0, done - (activeIdx >= 0 ? 0 : 1)) + grow) / (steps.length - 1)) * 100) : 0;
+        const grow = activeIdx >= 0 ? Math.min(0.5, Math.max(0.1, (Number(steps[activeIdx].lineFill) || 12) / 100 * 0.5)) : 0;
+        const reached = activeIdx >= 0 ? activeIdx : Math.max(0, done - 1);
+        const fill = steps.length > 1 ? Math.min(100, ((reached + grow) / (steps.length - 1)) * 100) : 0;
         return (
             '<div class="ts4-rail" style="--fill:' + (t.rank >= 5 ? 100 : fill.toFixed(1)) + '">' +
             '<div class="ts4-rail-line"><span></span></div>' +
             '<ol class="ts4-rail-steps">' +
             steps.map(function (s) {
-                return '<li class="' + s.state + '"><span class="ts4-rail-ico">' + stepIcon(s.key) + '</span><b>' + esc(s.title) + '</b>' +
+                return '<li class="' + s.state + '"><span class="ts4-rail-ico">' + stepIcon(s.key) + '</span><b>' + esc(s.title) + '</b>' + (s.state === 'active' ? '<i class="ts4-now">In progress</i>' : s.state === 'done' ? '<i class="ts4-done">Done</i>' : '') +
                     (s.at ? '<small>' + esc(fmtWhen(s.at)) + '</small>' : s.expectedLabel && s.state !== 'done' ? '<small class="exp">' + esc(s.expectedLabel) + '</small>' : '') + '</li>';
             }).join('') +
             '</ol></div>'
@@ -125,7 +126,7 @@
             railHtml(t) +
             '</section>' +
             '<div class="ts4-tiles">' +
-            tile('fa-location-dot', 'Where it is', latest ? latest.city || latest.title : headline, latest ? latest.title : '') +
+            tile('fa-location-dot', 'Where it is', latest ? latest.city || latest.title : headline, latest && latest.city ? latest.title : '') +
             tile('fa-calendar-check', t.rank >= 5 ? 'Delivered' : 'Delivery by', t.deliveryBy || (t.expected && t.expected.deliveryText) || String(((steps.find(function (s) { return s.key === 'delivered'; }) || {}).expectedLabel || '')).replace(/^Expected\s*/i, '') || '—', t.rank >= 5 ? '' : t.dates && t.dates.deliveryKind === 'courier' ? 'Confirmed by courier' : 'Seller estimate') +
             tile('fa-truck', 'Courier', partner ? partner.name : o.courierProviderLabel || o.courierProvider || '—', (partner && partner.trackingNo) || o.courierTrackingNo || '') +
             tile('fa-clock-rotate-left', 'Last update', latest && latest.at ? fmtWhen(latest.at) : o.updatedAt ? fmtWhen(o.updatedAt) : '—', st.scans ? st.scans + ' courier scans' : '') +
