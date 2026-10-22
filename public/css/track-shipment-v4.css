@@ -68,3 +68,25 @@ body.ts4{background:#f3f6fb;margin:0;font-family:Inter,system-ui,-apple-system,'
 @media (max-width:640px){.ts4-form{grid-template-columns:1fr 1fr}.ts4-form button{grid-column:1/-1}.ts4-hero-body{flex-direction:column;align-items:flex-start}.ts4-ring{width:76px;height:76px}}
 .ts4-tile.ts4-otp.is-empty{background:#f8fafc;border-color:#e2e8f0}.ts4-tile.ts4-otp.is-empty i{background:#f1f5f9;color:#94a3b8}.ts4-tile.ts4-otp.is-empty b{color:#94a3b8;letter-spacing:0;font-size:1.3rem}
 .ts4-rail-steps i.ts4-now,.ts4-rail-steps i.ts4-done{display:inline-block;font-style:normal;font-size:.6rem;font-weight:800;text-transform:uppercase;letter-spacing:.05em;border-radius:999px;padding:2px 7px;margin-top:4px}.ts4-rail-steps i.ts4-now{background:#ecfeff;color:#0e7490;border:1px solid #a5f3fc}.ts4-rail-steps i.ts4-done{background:#ecfdf5;color:#047857}.ts4-rail-steps li.active .ts4-rail-ico{animation:ts4ring 1.8s ease-out infinite}@keyframes ts4ring{0%{box-shadow:0 0 0 0 rgba(15,118,110,.35)}100%{box-shadow:0 0 0 12px rgba(15,118,110,0)}}
+/* mobile fit: no horizontal scroll, rail stays aligned */
+body.ts4{overflow-x:hidden}
+.ts4-page,.ts4-search,.ts4-hero,.ts4-card,.ts4-tile{box-sizing:border-box;max-width:100%}
+.ts4-form,.ts4-form label{min-width:0}
+.ts4-rail{overflow:visible;margin:18px 0 10px;padding:6px 0 10px}
+.ts4-rail-steps{min-width:0}
+.ts4-rail-line{left:8.33%;right:8.33%}
+@media (max-width:640px){
+  .ts4-rail-ico{width:32px;height:32px;font-size:.75rem;border-width:2px}
+  .ts4-rail-line{top:22px;height:3px}
+  .ts4-rail-steps b{font-size:.6rem;margin-top:6px}
+  .ts4-rail-steps small{display:none}
+  .ts4-rail-steps li.active small{display:block;font-size:.58rem}
+  .ts4-rail-steps i.ts4-now,.ts4-rail-steps i.ts4-done{font-size:.5rem;padding:1px 5px}
+  .ts4-hero{padding:14px 14px 4px}
+  .ts4-hero-top{gap:8px}
+  .ts4-actions .ts4-btn{padding:6px 10px;font-size:.72rem}
+  .ts4-hero-body{gap:12px}
+  .ts4-hero-body h2{font-size:1.25rem}
+  .ts4-tiles{grid-template-columns:1fr 1fr}
+  #track-shipment-poll{max-width:calc(100% - 20px);text-align:center;white-space:normal}
+}
