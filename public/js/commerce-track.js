@@ -270,7 +270,8 @@
             }
         } else if (pipe && pipe.dataset.playing === 'live') {
             items.forEach((el) => {
-                if (!el.classList.contains('active') || !el.hasAttribute('data-line-until')) return;
+                if (!el.classList.contains('active') || !el.hasAttribute('data-line-until') || el.dataset.grown) return;
+                el.dataset.grown = '1';
                 el.style.setProperty('--draw', '12s');
                 el.style.setProperty('--grow', String(growFor(el)));
             });

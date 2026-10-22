@@ -75,6 +75,14 @@
         if (step.deliveryOtp && (step.key === 'shipped' || step.key === 'out_for_delivery' || step.key === 'delivered')) {
             html += '<div class="tl-otps"><div class="tl-otp"><div class="lbl">Delivery OTP</div><div class="code">' + esc(step.deliveryOtp) + '</div></div></div><div class="tl-note">Share this code with the delivery partner.</div>';
         }
+        if (step.queue && step.state === 'active') {
+            const q = step.queue;
+            const ord = q.position === 1 ? 'next' : q.position === 2 ? '2nd' : q.position === 3 ? '3rd' : q.position + 'th';
+            html +=
+                '<div class="tl-queue"><i class="fas fa-route"></i><div><b>' +
+                (q.position === 1 ? 'You are next on the delivery route' : 'Your parcel is ' + ord + ' of ' + q.total + ' deliveries on the route') +
+                '</b><span>' + (q.ahead ? q.ahead + (q.ahead === 1 ? ' delivery' : ' deliveries') + ' ahead of yours' : 'No deliveries ahead of yours') + (q.agent ? ' · ' + esc(q.agent) : '') + '</span></div></div>';
+        }
         if (step.key === 'shipped' && step.partner) {
             html += partnerCard(step.partner, null);
             if (!step.updates.length && step.state !== 'done') html += '<div class="tl-note">Shipped starts when the parcel is scanned at the local hub.</div>';
@@ -927,7 +935,5 @@
             el.style.setProperty('--line', String(pct));
         });
     }
-    setInterval(tickLines, 2000);
-
-    window.TrackTimeline = { render, mount, bind, when, esc, updates };
+    window.TrackTimeline = { render, mount, bind, when, esc, updates, tick: tickLines };
 })();

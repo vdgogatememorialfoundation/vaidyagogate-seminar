@@ -21,6 +21,49 @@
     }
 
     let lastCommerceSig = '';
+    let lastPayload = null;
+
+    function fmtWhen(iso) {
+        if (!iso) return '';
+        const d = new Date(iso);
+        if (isNaN(d.getTime())) return String(iso);
+        return d.toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' });
+    }
+
+    function esc(s) {
+        return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) {
+            return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+        });
+    }
+
+    function summaryHtml(o) {
+        const t = o.commerceTimeline;
+        const steps = (t && t.steps) || [];
+        const active = steps.find(function (s) { return s.state === 'active'; });
+        const doneCount = steps.filter(function (s) { return s.state === 'done'; }).length;
+        const pct = steps.length ? Math.round(((doneCount + (active ? Math.min(0.88, (Number(active.lineFill) || 12) / 100) : 0)) / steps.length) * 100) : 0;
+        const headline = (t && t.headline) || o.courierTrackLabel || 'Tracking';
+        const tone = t && t.cancelled ? 'cancelled' : t && t.rank >= 5 ? 'delivered' : '';
+        const latest = steps.slice().reverse().map(function (s) { return (s.updates || [])[0]; }).filter(Boolean)[0];
+        const partner = t && t.partner;
+        const otpStep = steps.find(function (s) { return s.deliveryOtp; });
+        return (
+            '<div class="ts-hero ' + tone + '">' +
+            '<div class="ts-hero-top"><span class="ts-chip">Order #' + esc(o.orderCode) + '</span>' +
+            '<button type="button" class="ts-refresh" id="ts-refresh"><i class="fas fa-rotate"></i> Refresh</button></div>' +
+            '<h2>' + esc(headline) + '</h2>' +
+            (active && active.summary ? '<p>' + esc(active.summary) + '</p>' : '') +
+            '<div class="ts-ring" style="--p:' + (t && t.rank >= 5 ? 100 : pct) + '"><b>' + (t && t.rank >= 5 ? 100 : pct) + '%</b><span>complete</span></div>' +
+            '</div>' +
+            '<div class="ts-tiles">' +
+            '<div class="ts-tile"><i class="fas fa-location-dot"></i><div><small>Where it is</small><b>' + esc(latest ? (latest.city || latest.title) : headline) + '</b></div></div>' +
+            '<div class="ts-tile"><i class="fas fa-calendar-check"></i><div><small>' + (t && t.rank >= 5 ? 'Delivered' : 'Delivery by') + '</small><b>' + esc((t && t.deliveryBy) || (t && t.expected && t.expected.deliveryText) || '—') + '</b></div></div>' +
+            '<div class="ts-tile"><i class="fas fa-truck"></i><div><small>Courier</small><b>' + esc(partner ? partner.name : (o.courierProviderLabel || o.courierProvider || '—')) + '</b>' + (partner && partner.trackingNo ? '<em>' + esc(partner.trackingNo) + '</em>' : o.courierTrackingNo ? '<em>' + esc(o.courierTrackingNo) + '</em>' : '') + '</div></div>' +
+            '<div class="ts-tile"><i class="fas fa-clock-rotate-left"></i><div><small>Last update</small><b>' + esc(latest && latest.at ? fmtWhen(latest.at) : o.updatedAt ? fmtWhen(o.updatedAt) : '—') + '</b></div></div>' +
+            (otpStep ? '<div class="ts-tile ts-otp"><i class="fas fa-key"></i><div><small>Delivery OTP</small><b>' + esc(otpStep.deliveryOtp) + '</b><em>Share only with the delivery partner at your door</em></div></div>' : '') +
+            '</div>'
+        );
+    }
 
     function renderResult(data) {
         const root = document.getElementById('track-shipment-result');
@@ -33,9 +76,10 @@
             const sig = JSON.stringify(o.commerceTimeline) + '|' + (live && live.slot ? live.slot : '') + '|' + (live && live.leg ? live.leg : '');
             if (sig !== lastCommerceSig) {
                 lastCommerceSig = sig;
-                root.innerHTML = window.TrackTimeline.render({ timeline: o.commerceTimeline, live: live }, { animate: true });
+                root.innerHTML = summaryHtml(o) + window.TrackTimeline.render({ timeline: o.commerceTimeline, live: live }, { animate: true });
             }
             window.TrackTimeline.mount(live);
+            if (window.TrackTimeline.tick) window.TrackTimeline.tick();
         } else if (window.BookTrackingUI) {
             lastCommerceSig = '';
             root.innerHTML = window.BookTrackingUI.renderPackageTracker(o.deliveryJourney, o.courierTrackEvents || [], {
@@ -50,9 +94,10 @@
             o.deliveryJourney.isLive &&
             !o.isCancelled &&
             !o.shipmentCancelled;
-        if (poll) poll.classList.toggle('hidden', !live);
-        const ul = root.querySelector('.pkg-scan-timeline');
-        if (ul) ul.scrollTop = ul.scrollHeight;
+        if (poll) {
+            poll.classList.toggle('hidden', !live);
+            poll.innerHTML = 'Updated ' + esc(fmtWhen(new Date().toISOString())) + ' · updates when you refresh';
+        }
     }
 
     async function trackOrder(payload, silent) {
@@ -64,27 +109,9 @@
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error || 'Could not track shipment');
+        lastPayload = payload;
         renderResult(data);
-        const liveMap = data.order && data.order.commerceLive && data.order.commerceLive.leg && data.order.commerceLive.leg !== 'done';
-        const journeyLive =
-            data.order &&
-            data.order.deliveryJourney &&
-            data.order.deliveryJourney.isLive &&
-            !data.order.isCancelled &&
-            !data.order.shipmentCancelled;
-        if (liveMap || journeyLive) {
-            startPoll(payload);
-        } else {
-            stopPoll();
-        }
         return data;
-    }
-
-    function startPoll(payload) {
-        stopPoll();
-        pollTimer = setInterval(function () {
-            trackOrder(payload, true).catch(function () {});
-        }, 10000);
     }
 
     function stopPoll() {
@@ -93,6 +120,14 @@
             pollTimer = null;
         }
     }
+
+    document.addEventListener('click', function (e) {
+        const btn = e.target.closest && e.target.closest('#ts-refresh');
+        if (!btn || !lastPayload) return;
+        btn.disabled = true;
+        lastCommerceSig = '';
+        trackOrder(lastPayload, true).catch(function (err) { showErr(err.message || 'Refresh failed'); }).then(function () { btn.disabled = false; });
+    });
 
     function readForm() {
         return {
