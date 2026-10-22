@@ -53,6 +53,8 @@
             '<button type="button" class="ts-refresh" id="ts-refresh"><i class="fas fa-rotate"></i> Refresh</button></div>' +
             '<h2>' + esc(headline) + '</h2>' +
             (active && active.summary ? '<p>' + esc(active.summary) + '</p>' : '') +
+            (t && t.courierStatus && t.courierStatus.label ? '<div class="ts-cstatus is-' + esc(t.courierStatus.tone || 'label') + '"><b>' + esc(t.courierStatus.label) + '</b>' + (t.courierStatus.place ? ' · ' + esc(t.courierStatus.place) : '') + (t.courierStatus.at ? ' · ' + esc(fmtWhen(t.courierStatus.at)) : '') + '</div>' : '') +
+            (t && t.stats && t.stats.scans ? '<div class="ts-mini">' + t.stats.scans + ' courier scans' + (t.stats.hubsVisited ? ' · ' + t.stats.hubsVisited + ' hubs' : '') + (t.stats.route && t.stats.route.length ? ' · ' + esc(t.stats.route.join(' → ')) : '') + '</div>' : '') +
             '<div class="ts-ring" style="--p:' + (t && t.rank >= 5 ? 100 : pct) + '"><b>' + (t && t.rank >= 5 ? 100 : pct) + '%</b><span>complete</span></div>' +
             '</div>' +
             '<div class="ts-tiles">' +

@@ -565,3 +565,22 @@ body.hl-page .hl-below .ship-pipe { border: 0; background: #fff; border-radius: 
 .hl-courier-frame{position:relative;border-radius:14px;overflow:hidden;border:1px solid #e2e8f0;background:#f8fafc}
 .hl-courier-frame iframe{width:100%;min-height:380px;border:0;display:block}
 .hl-courier-frame::before{content:"Live courier view";position:absolute;top:8px;left:8px;z-index:2;background:#0f172a;color:#fff;font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:999px}
+
+/* courier main-status chip + stats strip */
+.trk-cstatus{display:inline-flex;align-items:center;gap:6px;margin-top:8px;font-size:.78rem;font-weight:700;border-radius:999px;padding:5px 12px;background:#eef2ff;color:#1e3a8a;border:1px solid #c7d2fe}
+.trk-cstatus-dot{width:8px;height:8px;border-radius:50%;background:currentColor}
+.trk-cstatus.is-move{background:#ecfeff;color:#155e75;border-color:#a5f3fc}
+.trk-cstatus.is-hub{background:#f5f3ff;color:#5b21b6;border-color:#ddd6fe}
+.trk-cstatus.is-ok{background:#ecfdf5;color:#065f46;border-color:#a7f3d0}
+.trk-cstatus.is-warn{background:#fffbeb;color:#92400e;border-color:#fde68a}
+.trk-cstatus.is-bad{background:#fef2f2;color:#991b1b;border-color:#fecaca}
+.trk-cstatus-at{opacity:.7;font-weight:600;margin-left:4px}
+.trk-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin:14px 0}
+.trk-stat{display:flex;gap:10px;align-items:flex-start;background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:12px 14px}
+.trk-stat-ico{display:inline-flex;width:30px;height:30px;border-radius:10px;background:#f1f5f9;color:#0f766e;align-items:center;justify-content:center;flex:none}
+.trk-stat-ico svg{width:16px;height:16px}
+.trk-stat small{display:block;font-size:.66rem;text-transform:uppercase;letter-spacing:.06em;color:#64748b;font-weight:700}
+.trk-stat b{display:block;font-size:1rem;color:#0f172a;margin-top:2px}
+.trk-stat em{display:block;font-style:normal;font-size:.72rem;color:#64748b;margin-top:2px;word-break:break-word}
+.ship-queue{background:#ecfeff;border:1px solid #a5f3fc;border-radius:10px;padding:8px 10px;margin:6px 0}
+.ship-queue b{display:block;font-size:.85rem;color:#0f172a}.ship-queue span{display:block;font-size:.75rem;color:#475569}

@@ -322,3 +322,7 @@
 .tl-queue b{display:block;font-size:.9rem;color:#0f172a}
 .tl-queue span{display:block;font-size:.78rem;color:#475569;margin-top:2px}
 @media (max-width:560px){.ts-hero h2,.ts-hero p{padding-right:0}.ts-ring{position:static;margin-top:12px}}
+
+.ts-cstatus{display:inline-flex;align-items:center;gap:6px;margin-top:10px;font-size:.8rem;font-weight:700;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);border-radius:999px;padding:5px 12px}
+.ts-cstatus.is-bad{background:rgba(239,68,68,.35)}.ts-cstatus.is-warn{background:rgba(245,158,11,.35)}.ts-cstatus.is-ok{background:rgba(16,185,129,.4)}
+.ts-mini{margin-top:8px;font-size:.78rem;opacity:.85}

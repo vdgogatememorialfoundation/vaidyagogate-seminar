@@ -111,6 +111,7 @@
         }
         if (active.key === 'PACKED') return 'The line moves down from the order time toward the expected pickup, and it stops before ' + next.title + '.';
         if (active.key === 'SHIPPED') return 'The line moves down from pickup toward the expected delivery, and it stops before ' + next.title + '.';
+        if (active.key === 'PICKED_UP') return 'The line moves down once the delivery partner has collected the parcel from the store.';
         if (active.key === 'OUT_FOR_DELIVERY') return 'The line moves down through the delivery window, and it stops before ' + next.title + '.';
         return 'The line moves down from the top and pauses on ' + active.title + ', before ' + next.title + '.';
     }
@@ -140,13 +141,16 @@
                     : '';
                 const firstUpcoming = (track.pipeline || []).findIndex((row) => row.state === 'upcoming');
                 const nextHint = i === firstUpcoming && step.message ? '<div class="ship-next">Up next · ' + esc(step.message) + '</div>' : '';
+                const queueNote = step.queue && step.state === 'active'
+                    ? '<div class="ship-queue"><b>' + (step.queue.position === 1 ? 'You are next on the delivery route' : 'Your parcel is #' + step.queue.position + ' of ' + step.queue.total + ' on the route') + '</b><span>' + (step.queue.ahead ? step.queue.ahead + ' ahead of yours' : 'No deliveries ahead of yours') + (step.queue.agent ? ' · ' + esc(step.queue.agent) : '') + '</span></div>'
+                    : '';
                 const reached = step.state === 'upcoming' ? '' : latestAt(step);
                 const stamp = reached ? '<span class="ship-time">' + esc(clock(reached)) + '</span>' : '';
                 const head = timed ? '<span class="ship-headway" aria-hidden="true"></span>' : '';
                 const stageCopy = step.message && step.state !== 'upcoming' && !(step.state === 'done' && step.key === 'OUT_FOR_DELIVERY' && !(step.events || []).length);
                 return '<li class="' + esc(step.state) + '"' + tick + ' style="--i:' + i + ';--grow:' + grow + '">' + head + '<span class="dot">' + stepIcon(step.key) + '</span><div class="ship-copy"><div class="ship-title"><b>' + esc(step.title) + '</b>' + stamp + '</div>' +
                     (stageCopy ? '<div class="ship-msg">' + esc(step.message) + '</div>' : '') +
-                    nextHint +
+                    nextHint + queueNote +
                     (showExpect(step) ? '<span class="ship-expect">' + esc(step.expectedLabel) + '</span>' : '') +
                     shippedNote +
                     (kids ? '<ul class="ship-kids">' + kids + '</ul>' : '') +
@@ -155,7 +159,47 @@
             .join('');
     }
 
+    function courierChip(track) {
+        const cs = track && track.courierStatus;
+        if (!cs || !cs.label) return '';
+        return '<div class="trk-cstatus is-' + esc(cs.tone || 'label') + '"><span class="trk-cstatus-dot"></span><b>' + esc(cs.label) + '</b>' +
+            (cs.place ? '<span> · ' + esc(cs.place) + '</span>' : '') + (cs.at ? '<span class="trk-cstatus-at">' + esc(ago(cs.at)) + '</span>' : '') + '</div>';
+    }
+
+    function ago(iso) {
+        const ms = Date.now() - Date.parse(iso);
+        if (!isFinite(ms) || ms < 0) return '';
+        const m = Math.round(ms / 60000);
+        if (m < 60) return m <= 1 ? 'just now' : m + ' min ago';
+        const h = Math.round(m / 60);
+        if (h < 48) return h + ' hr ago';
+        return Math.round(h / 24) + ' days ago';
+    }
+
+    function etaCountdown(track) {
+        const d = track && track.dates;
+        if (!d || d.deliveryAt || !d.promisedLabel) return '';
+        const target = Date.parse(String(d.promisedLabel));
+        if (!isFinite(target)) return d.promisedLabel;
+        const days = Math.ceil((target - Date.now()) / 864e5);
+        return days <= 0 ? 'Today' : days === 1 ? 'Tomorrow' : 'In ' + days + ' days';
+    }
+
+    function statsHtml(track) {
+        const st = track && track.stats;
+        if (!st || isReturn(track)) return '';
+        const eta = etaCountdown(track);
+        const tile = (ico, lbl, val, sub) => val ? '<div class="trk-stat"><span class="trk-stat-ico">' + ico + '</span><div><small>' + lbl + '</small><b>' + esc(val) + '</b>' + (sub ? '<em>' + esc(sub) + '</em>' : '') + '</div></div>' : '';
+        return '<div class="trk-stats">' +
+            tile(iconSvg('M12 3a9 9 0 110 18 9 9 0 010-18zM12 7v5l3 2'), 'Progress', st.progressPct + '%', track.mainStatus === 'DELIVERED' ? 'Delivered' : 'of the journey') +
+            tile(iconSvg('M4 6h16M4 12h16M4 18h10'), 'Courier scans', st.scans ? String(st.scans) : '', st.lastScanAt ? 'last ' + ago(st.lastScanAt) : '') +
+            tile(iconSvg('M3 8l9-4 9 4-9 4-9-4zM3 8v8l9 4 9-4V8'), 'Hubs crossed', st.hubsVisited ? String(st.hubsVisited) : '', st.route && st.route.length ? st.route.join(' → ') : '') +
+            (track.mainStatus !== 'DELIVERED' ? tile(iconSvg('M5 12l5 5L20 7'), 'Arrives', eta, track.deliveryBy || '') : '') +
+            '</div>';
+    }
+
     function showExpect(step) {
+
         if (!step || !step.expectedLabel || step.state === 'done') return false;
         if (step.state === 'active' && (step.events || []).length && step.key !== 'OUT_FOR_DELIVERY') return false;
         return true;
@@ -740,9 +784,10 @@
             '</div></header>' +
             '<section class="trk-hero"><div class="trk-ring" style="--fill:0"><span class="trk-ring-ico">' + stepIcon(active.key) + '</span></div><div class="trk-hero-copy"><div class="trk-kicker">' + (ret ? kindWord(track) + ' for order #' : 'Order #') + esc(code) + (badge ? ' ' + badge : '') + '</div><h1>' + esc(track.currentStatus || track.currentMessage) + '</h1>' +
             (detail ? '<p>' + esc(detail) + '</p>' : '') +
-            '<p class="trk-stepno">' + (delivered ? 'Completed' : 'Step ' + stepNo + ' of ' + (steps.length || 5)) + '</p>' +
+            '<p class="trk-stepno">' + (delivered ? 'Completed' : 'Step ' + stepNo + ' of ' + (steps.length || 5)) + '</p>' + courierChip(track) +
             '</div>' + board + '</section>' +
             railHtml(track) +
+            statsHtml(track) +
             hlNowHtml(track) +
             journeyHtml(shipment.journey, track) +
             (isFinished(track) ? '' : weatherHtml(shipment.journey)) +
