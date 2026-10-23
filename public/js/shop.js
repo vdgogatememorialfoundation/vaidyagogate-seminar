@@ -253,7 +253,8 @@ function renderHome() {
     document.getElementById('view-home').innerHTML =
         '<div class="hero"><div><h1>Authentic Ayurveda texts</h1><p>Books by Dr. R.B. Gogate in English, Marathi, Hindi and Kannada, delivered to your door or ready for pickup.</p></div>' +
         '<div class="hero-badges">' + badges.map((b) => '<span>' + shopEsc(b) + '</span>').join('') + '</div></div>' +
-        '<div class="section-title">' + (shopSearchTerm ? 'Results for "' + shopEsc(shopSearchTerm) + '"' : 'All books') + '</div>' +
+        '<div class="filter-row" style="display:flex;gap:8px;flex-wrap:wrap;margin:18px 0 0">' + ['All'].concat(langs).map((l) => '<button type="button" class="pill' + ((shopLangFilter || 'All') === l ? ' on' : '') + '" onclick="shopFilterLang(\'' + shopEsc(l) + '\')">' + shopEsc(l.charAt(0).toUpperCase() + l.slice(1)) + '</button>').join('') + '</div>' +
+        '<div class="section-title">' + (shopSearchTerm ? 'Results for "' + shopEsc(shopSearchTerm) + '"' : 'All books') + ' <span class="muted" style="font-size:.8rem;font-weight:500">' + books.length + ' title' + (books.length === 1 ? '' : 's') + '</span></div>' +
         (books.length
             ? '<div class="product-grid">' +
               books
@@ -280,6 +281,13 @@ function renderHome() {
                   .join('') +
               '</div>'
             : '<div class="box empty">No books match your search.</div>');
+}
+
+let shopLangFilter = 'All';
+function shopFilterLang(l) {
+    shopLangFilter = l;
+    renderHome();
+    setTimeout(function () { document.querySelectorAll('.product .pill[data-lang]').forEach(function (p) { if (l !== 'All') { p.classList.toggle('on', p.getAttribute('data-lang') === l); } }); }, 0);
 }
 
 function pickLang(bookId, btn) {
