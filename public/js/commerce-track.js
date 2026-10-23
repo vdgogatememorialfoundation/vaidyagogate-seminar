@@ -355,7 +355,7 @@
         const ms = track.mainStatus;
         const show = label === 'Pickup OTP' ? ms === 'ORDERED' || ms === 'PACKED' : ms !== 'DELIVERED' && ms !== 'ORDERED';
         if (!show) return '';
-        return '<div class="ship-otp is-empty"><div class="lbl">' + esc(label) + '</div><div class="code">\u2014</div><div class="note">Not issued by the courier yet \u2014 appears here once the task is assigned</div></div>';
+        return '<div class="ship-otp is-empty"><div class="lbl">' + esc(label) + '</div><div class="code">\u2014</div><div class="note">The courier sends this code to your phone when the task is assigned \u2014 the delivery partner will ask for it</div></div>';
     }
 
     function failureHtml(track) {
