@@ -478,7 +478,6 @@
     </div>
 
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
-    <script src="/js/portal-content-protection.js"></script>
     <script src="/js/portal-scrolling-announcements.js"></script>
     <script src="/js/vgmf-home.js?v=20260612legal2"></script>
     <script src="/js/portal-theme.js?v=20260620theme1"></script>
@@ -1900,7 +1899,7 @@
                     '<div class="box"><h2 class="cv-home-cd-m" style="margin:0;">00</h2><span style="font-size:0.65rem;color:#166534;font-weight:700;">MINUTES</span></div>' +
                     '<div class="box"><h2 class="cv-home-cd-s" style="margin:0;">00</h2><span style="font-size:0.65rem;color:#166534;font-weight:700;">SECONDS</span></div>' +
                     '</div>' +
-                    '<p style="margin:12px 0 0;"><a href="/verify-certificate" style="color:#0f766e;font-weight:600;">Open certificate verification page</a></p>' +
+                    '<p style="margin:12px 0 0;"><a href="/verify-certificate" style="color:#0f766e;font-weight:600;">Open certificate verification page</a> · <a href="/certificate-scanner" style="color:#0f766e;font-weight:600;">Scan a certificate</a></p>' +
                     '</div>';
                 const tick = () => {
                     const dist = new Date(opensAt).getTime() - Date.now();
@@ -2058,7 +2057,7 @@
     </script>
     <script src="/js/site-branding.js" defer></script>
     <script src="/js/name-validation.js" defer></script>
-    <script src="/js/contact-validation.js" defer></script>
+    <script src="/js/contact-validation.js?v=20260928a" defer></script>
     <script src="/js/site-visitor-beacon.js?v=20260613radar6"></script>
 </body>
 </html>

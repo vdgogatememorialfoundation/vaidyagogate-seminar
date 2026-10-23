@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#ffffff">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="VGMF Certificate Scanner">
+    <meta name="description" content="Scan a Vaidya Gogate Memorial Foundation certificate QR code and confirm it is authentic.">
+    <meta http-equiv="Permissions-Policy" content="camera=(self)">
+    <link rel="manifest" href="/certificate-scanner-manifest.json">
+    <title>VGMF Certificate Scanner</title>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/scanner-portal.css?v=20261004certscan">
+</head>
+<body class="scanner-body">
+    <div class="scanner-shell">
+        <header class="scanner-top">
+            <div class="scanner-top-main">
+                <p class="scanner-eyebrow">VGMF certificate scanner</p>
+                <h1>Scan certificates</h1>
+                <p class="who">Point the camera at the QR code on a participant or volunteer certificate. An email code is sent to the holder before the certificate is marked authentic.</p>
+            </div>
+        </header>
+
+        <div class="stats-row" style="grid-template-columns:repeat(2,1fr);">
+            <div class="stat-pill stat-ok"><strong id="stat-ok">0</strong><span>Authentic</span></div>
+            <div class="stat-pill stat-err"><strong id="stat-err">0</strong><span>Not authentic</span></div>
+        </div>
+
+        <div class="camera-wrap" id="camera-panel">
+            <div id="reader"></div>
+            <div class="scan-line-anim" aria-hidden="true"></div>
+            <p class="camera-hint">Align the certificate QR inside the frame</p>
+        </div>
+
+        <div class="camera-tools">
+            <button type="button" class="tool-btn" id="btn-torch" title="Torch on" aria-pressed="false"><i class="far fa-lightbulb"></i></button>
+            <button type="button" class="tool-btn" id="btn-switch-cam" title="Flip camera"><i class="fas fa-sync"></i></button>
+            <button type="button" class="tool-btn" id="btn-fullscreen" title="Fullscreen"><i class="fas fa-expand"></i></button>
+        </div>
+
+        <div id="result-box" class="hidden"></div>
+
+        <div class="scan-card hidden" id="otp-card">
+            <label for="otp-code"><i class="fas fa-envelope"></i> Email code</label>
+            <p id="otp-hint" class="seminar-hint"></p>
+            <div class="manual-row">
+                <input type="text" id="otp-code" placeholder="Code from the holder’s email" inputmode="numeric" maxlength="8" autocomplete="one-time-code">
+                <button type="button" class="tool-btn primary" id="btn-confirm">Verify</button>
+            </div>
+            <button type="button" class="tool-btn" id="btn-resend" style="margin-top:8px;">Resend email code</button>
+        </div>
+
+        <div class="scan-card">
+            <label for="manual-qr"><i class="fas fa-keyboard"></i> Paste certificate link</label>
+            <div class="manual-row">
+                <input type="text" id="manual-qr" placeholder="Certificate QR link or token" inputmode="text" autocomplete="off" spellcheck="false">
+                <button type="button" class="tool-btn primary" id="btn-manual">Check</button>
+            </div>
+        </div>
+
+        <div class="scan-card scan-card-compact">
+            <label><i class="fas fa-history"></i> Recent scans</label>
+            <ul class="history-list" id="scan-history"></ul>
+            <p class="seminar-hint">Typed lookup without a camera is on the <a href="/verify-certificate">certificate verification page</a>.</p>
+        </div>
+
+        <button type="button" class="tool-btn scan-next-btn" id="btn-reset">Clear &amp; scan again</button>
+    </div>
+    <script src="/js/certificate-scanner.js?v=20261004certscan"></script>
+</body>
+</html>

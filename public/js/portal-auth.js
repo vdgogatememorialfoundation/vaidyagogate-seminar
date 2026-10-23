@@ -21,6 +21,7 @@
         if (!user) return false;
         if (isAdminPortalUser(user) || isJudgeUser(user) || isScannerUser(user)) return false;
         const { ur, r } = normRole(user);
+        if (ur && ur !== 'doctor' && ur !== 'event_attendee') return false;
         return ur === 'doctor' || r === 'doctor' || ur === 'event_attendee';
     }
 
@@ -59,7 +60,7 @@
     function isBookStaffUser(user) {
         if (!user) return false;
         const { ur, r } = normRole(user);
-        if (ur === 'book_sales_staff' || ur === 'staff_user' || ur === 'co_admin') return true;
+        if (ur === 'book_sales_staff' || ur === 'staff_user' || ur === 'desk_staff' || ur === 'co_admin') return true;
         if (r === 'admin' && ur !== 'co_admin') return true;
         try {
             const raw = user && user.staff_modules;
