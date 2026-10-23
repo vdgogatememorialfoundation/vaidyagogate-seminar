@@ -193,7 +193,6 @@
         return '<div class="trk-stats">' +
             tile(iconSvg('M12 3a9 9 0 110 18 9 9 0 010-18zM12 7v5l3 2'), 'Progress', st.progressPct + '%', track.mainStatus === 'DELIVERED' ? 'Delivered' : 'of the journey') +
             tile(iconSvg('M4 6h16M4 12h16M4 18h10'), 'Courier scans', st.scans ? String(st.scans) : '', st.lastScanAt ? 'last ' + ago(st.lastScanAt) : '') +
-            tile(iconSvg('M3 8l9-4 9 4-9 4-9-4zM3 8v8l9 4 9-4V8'), 'Hubs crossed', st.hubsVisited ? String(st.hubsVisited) : '', st.route && st.route.length ? st.route.join(' → ') : '') +
             (track.mainStatus !== 'DELIVERED' ? tile(iconSvg('M5 12l5 5L20 7'), 'Arrives', eta, track.deliveryBy || '') : '') +
             '</div>';
     }
