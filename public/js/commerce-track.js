@@ -148,12 +148,17 @@
                 const stamp = reached ? '<span class="ship-time">' + esc(clock(reached)) + '</span>' : '';
                 const head = timed ? '<span class="ship-headway" aria-hidden="true"></span>' : '';
                 const stageCopy = step.message && step.state !== 'upcoming' && !(step.state === 'done' && step.key === 'OUT_FOR_DELIVERY' && !(step.events || []).length);
-                return '<li class="' + esc(step.state) + '"' + tick + ' style="--i:' + i + ';--grow:' + grow + '">' + head + '<span class="dot">' + stepIcon(step.key) + '</span><div class="ship-copy"><div class="ship-title"><b>' + esc(step.title) + '</b>' + stamp + '</div>' +
+                const nKids = (step.events || []).length;
+                const drawerBtn = nKids || step.pickup || step.deliveryOtp
+                    ? '<button type="button" class="ship-drawer-btn" data-drawer-toggle="' + i + '" aria-expanded="' + (step.state === 'active' ? 'true' : 'false') + '">' + (nKids ? nKids + ' update' + (nKids > 1 ? 's' : '') : 'Details') + ' <i>▾</i></button>'
+                    : '';
+                return '<li class="' + esc(step.state) + (step.state === 'active' ? ' drawer-open' : '') + '"' + tick + ' style="--i:' + i + ';--grow:' + grow + '" data-pipe-idx="' + i + '">' + head + '<span class="dot">' + stepIcon(step.key) + '</span><div class="ship-copy"><div class="ship-title"><b>' + esc(step.title) + '</b>' + stamp + '</div>' +
                     (stageCopy ? '<div class="ship-msg">' + esc(step.message) + '</div>' : '') +
                     nextHint + queueNote +
                     (showExpect(step) ? '<span class="ship-expect">' + esc(step.expectedLabel) + '</span>' : '') +
                     shippedNote +
-                    (kids ? '<ul class="ship-kids">' + kids + '</ul>' : '') +
+                    drawerBtn +
+                    (kids ? '<ul class="ship-kids ship-drawer">' + kids + '</ul>' : '') +
                     '</div></li>';
             })
             .join('');
@@ -239,7 +244,7 @@
         return '<nav class="trk-nav' + (pipePlayed ? ' trk-nav-still' : '') + '" aria-label="Shipment progress">' +
             '<ol class="trk-rail" style="--n:' + (n || 5) + '"><div class="trk-nav-line" aria-hidden="true"><span class="trk-nav-fill" data-fixed="1" style="--nav:' + navPct + '"></span></div>' +
             (track.pipeline || []).map((step, i) =>
-                '<li class="' + esc(step.state) + '" style="--i:' + i + '"><span class="trk-rail-ico">' +
+                '<li class="' + esc(step.state) + '" style="--i:' + i + '" data-rail-idx="' + i + '" title="Tap for details"><span class="trk-rail-ico">' +
                 (step.state === 'done' ? iconSvg('M5 12l5 5L20 7') : stepIcon(step.key)) +
                 '</span><span class="trk-rail-name">' + esc(step.title) + '</span></li>'
             ).join('') +
@@ -1160,3 +1165,25 @@
     }
     setInterval(tickPipe, 2000);
 })();
+
+document.addEventListener('click', function (e) {
+    var rail = e.target.closest('[data-rail-idx]');
+    var btn = e.target.closest('[data-drawer-toggle]');
+    if (rail) {
+        var li = document.querySelector('[data-pipe-idx="' + rail.getAttribute('data-rail-idx') + '"]');
+        if (li) {
+            li.classList.add('drawer-open', 'drawer-flash');
+            var b = li.querySelector('[data-drawer-toggle]'); if (b) b.setAttribute('aria-expanded', 'true');
+            li.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setTimeout(function () { li.classList.remove('drawer-flash'); }, 1600);
+        }
+        return;
+    }
+    if (btn) {
+        var row = btn.closest('[data-pipe-idx]');
+        if (!row) return;
+        var open = !row.classList.contains('drawer-open');
+        row.classList.toggle('drawer-open', open);
+        btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }
+});

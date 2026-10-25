@@ -586,3 +586,14 @@ body.hl-page .hl-below .ship-pipe { border: 0; background: #fff; border-radius: 
 .ship-queue b{display:block;font-size:.85rem;color:#0f172a}.ship-queue span{display:block;font-size:.75rem;color:#475569}
 .ship-otp.is-empty{background:#f8fafc;border-style:dashed}.ship-otp.is-empty .code{color:#94a3b8}.ship-otp .note{font-size:.74rem;color:#64748b;margin-top:4px}
 .trk-cstatus.is-prox{background:#eef7ff;border-color:#bfdcff;color:#0b4a8b}.trk-cstatus.is-prox.is-doorstep{background:#e8f8ee;border-color:#9fdcb4;color:#0b6b36}.trk-cstatus.is-prox.is-nearing{background:#fff6e5;border-color:#ffd48a;color:#8a5300}.trk-cstatus.is-prox .trk-cstatus-dot{animation:none}
+
+/* status drawers (/track-commerce) */
+.trk-rail li[data-rail-idx]{cursor:pointer}
+.ship-drawer-btn{margin:6px 0 0;border:1px solid #dbe3ec;background:#fff;color:#334155;border-radius:999px;padding:3px 10px;font-size:.74rem;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:4px}
+.ship-drawer-btn i{font-style:normal;transition:transform .2s}
+li.drawer-open .ship-drawer-btn i{transform:rotate(180deg)}
+li.drawer-open .ship-drawer-btn{background:#eef7ff;border-color:#bfdcff;color:#0b4a8b}
+.ship-kids.ship-drawer{display:none}
+li.drawer-open .ship-kids.ship-drawer{display:block}
+li.drawer-flash .ship-copy{animation:shipFlash 1.5s ease}
+@keyframes shipFlash{0%{background:#fff7d6}100%{background:transparent}}
