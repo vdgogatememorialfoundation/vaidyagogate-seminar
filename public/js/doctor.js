@@ -10526,3 +10526,52 @@ if (document.readyState === 'loading') {
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
     else init();
 })();
+
+/* ---- Browser push notifications (instant alerts without an app) ---- */
+(function () {
+    function pushUserId() {
+        try {
+            var u = JSON.parse(localStorage.getItem('seminar_doctor_user') || localStorage.getItem('seminar_user') || 'null');
+            return u && (u.id || u.userId) ? parseInt(u.id || u.userId, 10) : null;
+        } catch (_) { return null; }
+    }
+    function b64ToU8(b64) {
+        var pad = '='.repeat((4 - (b64.length % 4)) % 4);
+        var raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+        var out = new Uint8Array(raw.length);
+        for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+        return out;
+    }
+    async function subscribePush(uid, interactive) {
+        if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+        var perm = Notification.permission;
+        if (perm === 'denied') return;
+        if (perm !== 'granted') { if (!interactive) return; perm = await Notification.requestPermission(); if (perm !== 'granted') return; }
+        var reg = await navigator.serviceWorker.register('/sw.js');
+        var vp = await fetch('/api/push/vapid-public').then(function (r) { return r.json(); });
+        var sub = await reg.pushManager.getSubscription();
+        if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToU8(vp.publicKey) });
+        await fetch('/api/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: uid, subscription: sub.toJSON() }) });
+        localStorage.setItem('seminar_push_on', '1');
+        if (interactive) fetch('/api/push/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: uid }) });
+    }
+    function showPrompt(uid) {
+        if (document.getElementById('push-optin') || localStorage.getItem('seminar_push_dismissed') === '1') return;
+        var bar = document.createElement('div');
+        bar.id = 'push-optin';
+        bar.style.cssText = 'position:fixed;left:12px;right:12px;bottom:14px;z-index:9999;background:#fff;border:1px solid #cfe3df;border-radius:14px;box-shadow:0 10px 30px rgba(15,23,42,.14);padding:12px 14px;display:flex;gap:10px;align-items:center;font-size:.9rem;max-width:560px;margin:0 auto;';
+        bar.innerHTML = '<i class="fas fa-bell" style="color:#0f9d8a;font-size:1.2rem;"></i><div style="flex:1;"><b>Get instant alerts on this device</b><br><span style="color:#64748b;font-size:.82rem;">Tickets, payment confirmations and shipment updates — no app needed.</span></div>' +
+            '<button type="button" id="push-optin-yes" style="background:#0f9d8a;color:#fff;border:0;border-radius:10px;padding:8px 12px;font-weight:600;cursor:pointer;">Enable</button>' +
+            '<button type="button" id="push-optin-no" style="background:none;border:0;color:#64748b;cursor:pointer;font-size:1.1rem;" title="Not now">×</button>';
+        document.body.appendChild(bar);
+        document.getElementById('push-optin-yes').onclick = function () { subscribePush(uid, true).catch(function () {}); bar.remove(); };
+        document.getElementById('push-optin-no').onclick = function () { localStorage.setItem('seminar_push_dismissed', '1'); bar.remove(); };
+    }
+    function tick() {
+        var uid = pushUserId();
+        if (!uid) return;
+        if (Notification.permission === 'granted') subscribePush(uid, false).catch(function () {});
+        else if (Notification.permission === 'default') showPrompt(uid);
+    }
+    if (window.Notification) { window.addEventListener('load', function () { setTimeout(tick, 4000); setInterval(tick, 60000); }); }
+})();

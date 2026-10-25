@@ -281,6 +281,7 @@ function mountPaymentsRoutes() {
     require('./lib/commerce-routes').registerCommerceRoutes(app, db, {
         upsertGlobalSetting
     });
+    require('./lib/web-push').registerWebPushRoutes(app, db);
     require('./lib/shop-routes').registerShopRoutes(app, db, {
         listDoctorPaymentOptions,
         parsePositiveUserId
