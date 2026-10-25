@@ -409,7 +409,7 @@ async function renderCheckout() {
           shopAddresses
               .map(
                   (a) =>
-                      '<label class="choice' + (String(a.id) === String(checkoutState.addressId) ? ' on' : '') + '"><input type="radio" name="addr" ' + (String(a.id) === String(checkoutState.addressId) ? 'checked' : '') + ' onchange="setAddress(' + a.id + ')"><div><b>' + shopEsc(a.recipientName) + '</b> · ' + shopEsc(a.phone) +
+                      '<label class="choice addr-card' + (String(a.id) === String(checkoutState.addressId) ? ' on' : '') + '"><input type="radio" name="addr" ' + (String(a.id) === String(checkoutState.addressId) ? 'checked' : '') + ' onchange="setAddress(' + a.id + ')"><div><b>' + shopEsc(a.recipientName) + '</b> · ' + shopEsc(a.phone) +
                       '<div class="muted">' + shopEsc(a.line1) + ', ' + shopEsc(a.city) + ', ' + shopEsc(a.state) + ' ' + shopEsc(a.pincode) + '</div></div></label>'
               )
               .join('') +
@@ -457,7 +457,10 @@ async function renderCheckout() {
         (shopCatalog.open ? '' : '<p class="msg">' + shopEsc(shopCatalog.closedMessage || 'The shop is closed.') + '</p>') +
         '</div>';
 
-    root.innerHTML = '<div class="section-title">Checkout</div><div class="layout-2"><div>' + fulfillBox + addrBox + payBox + reviewBox + '</div><div>' + summary + '</div></div>';
+    const stepNames = delivery ? ['Delivery', 'Address', 'Payment', 'Review'] : ['Collect', 'Payment', 'Review'];
+    const stepDone = [true, delivery ? !!checkoutState.addressId : true, !!checkoutState.method, false];
+    const stepper = '<ol class="co-steps">' + stepNames.map(function (n, i) { return '<li class="' + (stepDone[i] ? 'done' : i === stepDone.indexOf(false) ? 'now' : '') + '"><i>' + (stepDone[i] ? '<svg width="12" height="12" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" fill="none" stroke="currentColor" stroke-width="3"/></svg>' : i + 1) + '</i><span>' + n + '</span></li>'; }).join('') + '</ol>';
+    root.innerHTML = '<div class="section-title">Checkout</div>' + stepper + '<div class="layout-2"><div>' + fulfillBox + addrBox + payBox + reviewBox + '</div><div>' + summary + '</div></div>';
 }
 
 function addressForm(ctx) {
@@ -638,6 +641,27 @@ function payLabel(o) {
     return o.status === 'pending_payment' ? 'Online - unpaid' : 'Paid online';
 }
 
+function orderTrackStrip(o) {
+    if (!o || o.fulfillmentType === 'pickup' || o.status === 'cancelled' || o.status === 'pending_payment') return '';
+    const stages = ['placed', 'packed', 'picked_up', 'shipped', 'out_for_delivery', 'delivered'];
+    const names = ['Ordered', 'Packed', 'Picked up', 'Shipped', 'Out for delivery', 'Delivered'];
+    const ts = String(o.courierTrackStatus || '').toLowerCase();
+    const cs = String(o.commerceStage || '').toLowerCase();
+    let idx = 0;
+    if (o.status === 'delivered' || o.status === 'fulfilled' || ts === 'delivered' || cs === 'delivered') idx = 5;
+    else if (ts === 'out_for_delivery' || cs === 'out_for_delivery') idx = 4;
+    else if (ts === 'in_transit' || cs === 'shipped' || cs === 'in_transit') idx = 3;
+    else if (cs === 'picked_up' || ts === 'picked_up') idx = 2;
+    else if (cs === 'packed' || o.status === 'packed' || o.status === 'ready' || o.courierTrackingNo) idx = 1;
+    const dots = stages.map(function (k, i) { return '<li class="' + (i < idx ? 'done' : i === idx ? 'now' : '') + '"><i></i><span>' + names[i] + '</span></li>'; }).join('');
+    const eta = o.courierEtaText || (o.courierEtaAt ? when(o.courierEtaAt, false) : '');
+    const meta = [];
+    if (o.courierTrackLabel) meta.push('<b>' + shopEsc(o.courierTrackLabel) + '</b>');
+    if (eta && idx < 5) meta.push('Delivery by <b>' + shopEsc(eta) + '</b>');
+    if (o.courierTrackAt) meta.push('Updated ' + shopEsc(when(o.courierTrackAt)));
+    return '<div class="order-track"><ol class="ot-rail" style="--ot-fill:' + Math.round((idx / 5) * 100) + '%">' + dots + '</ol>' + (meta.length ? '<div class="ot-meta">' + meta.join('<span class="ot-sep">·</span>') + '</div>' : '') + '</div>';
+}
+
 function orderCardHtml(o) {
     const st = orderStatusText(o);
     const ret = o.returnStatus ? '<div class="badge warn" style="margin-top:6px">' + shopEsc(o.returnKind || 'return') + ': ' + shopEsc(String(o.returnStatus).replace(/_/g, ' ')) + '</div>' : '';
@@ -646,7 +670,7 @@ function orderCardHtml(o) {
         '<div class="order-head"><div>ORDER PLACED<b>' + shopEsc(when(o.createdAt, false)) + '</b></div><div>TOTAL<b>' + money(o.totalAmount) + '</b></div>' +
         '<div>' + (o.fulfillmentType === 'pickup' ? 'COLLECT FROM' : 'SHIP TO') + '<b>' + shopEsc(o.fulfillmentType === 'pickup' ? 'Store' : o.shippingRecipientName || 'You') + '</b></div>' +
         '<div class="right">ORDER # ' + shopEsc(o.orderCode) + '<b style="color:#007185">View order details</b></div></div>' +
-        '<div class="order-body"><div class="order-items"><div class="order-status ' + st.tone + '">' + shopEsc(st.text) + '</div>' +
+        '<div class="order-body"><div class="order-items"><div class="order-status ' + st.tone + '">' + shopEsc(st.text) + '</div>' + orderTrackStrip(o) +
         (o.items || [])
             .map((it) => '<div class="order-item">' + miniCover(it) + '<div><b>' + shopEsc(it.title) + '</b><div class="muted" style="text-transform:capitalize">' + shopEsc(it.language) + ' · Qty ' + shopEsc(it.qty) + '</div></div></div>')
             .join('') +

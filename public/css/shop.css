@@ -283,3 +283,25 @@ body{font-family:Inter,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font
 .toast{background:#0f172a;color:#fff;border-radius:999px;font-weight:700}
 .signin{background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
 @media (max-width:760px){.hero{flex-direction:column;align-items:flex-start;padding:24px 20px}.hero h1{font-size:1.5rem}.hero-badges{justify-content:flex-start;max-width:none}.topbar{flex-wrap:wrap;gap:8px}.searchbar{order:3;flex-basis:100%}.subnav{overflow-x:auto;white-space:nowrap}}
+/* Storefront v2: checkout stepper, address cards, order tracking strip */
+.co-steps{display:flex;gap:0;list-style:none;margin:0 0 16px;padding:14px 16px;background:#fff;border:1px solid #e3e8ef;border-radius:14px;counter-reset:s}
+.co-steps li{flex:1;display:flex;align-items:center;gap:8px;font-size:.86rem;color:#64748b;position:relative}
+.co-steps li+li::before{content:"";flex:1;height:2px;background:#e2e8f0;margin:0 10px;order:-1}
+.co-steps li.done+li::before{background:#0f9d8a}
+.co-steps li i{width:26px;height:26px;border-radius:50%;display:inline-grid;place-items:center;font-style:normal;font-weight:700;background:#f1f5f9;color:#475569;font-size:.8rem;flex:none}
+.co-steps li.done i{background:#0f9d8a;color:#fff}.co-steps li.now i{background:#0f172a;color:#fff;box-shadow:0 0 0 4px #e2e8f0}
+.co-steps li.now span{color:#0f172a;font-weight:600}
+.addr-card{display:block;border:1.5px solid #e3e8ef;border-radius:12px;padding:12px 14px 12px 40px;margin:0 0 10px;position:relative;background:#fff;transition:border-color .15s,box-shadow .15s}
+.addr-card.on{border-color:#0f9d8a;box-shadow:0 0 0 3px rgba(15,157,138,.12);background:#f4fbfa}
+.addr-card.on::after{content:"Deliver here";position:absolute;right:12px;top:12px;font-size:.72rem;font-weight:700;color:#0f9d8a;background:#e6f6f3;padding:3px 8px;border-radius:999px}
+.addr-card input{position:absolute;left:14px;top:16px}
+.order-track{margin:10px 0 12px;padding:12px 12px 8px;background:#f8fafc;border:1px solid #e8edf3;border-radius:12px}
+.ot-rail{list-style:none;margin:0;padding:0 4px;display:flex;justify-content:space-between;position:relative}
+.ot-rail::before{content:"";position:absolute;left:10px;right:10px;top:7px;height:3px;background:#e2e8f0;border-radius:3px}
+.ot-rail::after{content:"";position:absolute;left:10px;top:7px;height:3px;width:calc((100% - 20px) * var(--ot-fill,0) / 100);background:#0f9d8a;border-radius:3px}
+.ot-rail li{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:6px;flex:1;font-size:.7rem;color:#94a3b8;text-align:center}
+.ot-rail li i{width:16px;height:16px;border-radius:50%;background:#fff;border:3px solid #cbd5e1;display:block}
+.ot-rail li.done i{background:#0f9d8a;border-color:#0f9d8a}.ot-rail li.now i{border-color:#0f9d8a;box-shadow:0 0 0 4px rgba(15,157,138,.18)}
+.ot-rail li.done,.ot-rail li.now{color:#0f172a;font-weight:600}
+.ot-meta{margin-top:10px;font-size:.8rem;color:#475569}.ot-sep{margin:0 6px;color:#cbd5e1}
+@media(max-width:640px){.co-steps li span{display:none}.co-steps li.now span{display:inline}.ot-rail li span{display:none}.ot-rail li.now span{display:block;position:absolute;top:22px;white-space:nowrap}.ot-rail{padding-bottom:18px}}
