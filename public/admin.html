@@ -1530,11 +1530,16 @@
 
                 <!-- POS panel -->
                 <div id="bs-panel-pos" class="hidden">
+                    <div id="bs-pos-mode-tabs" style="display:flex;gap:8px;margin:0 0 12px;flex-wrap:wrap;">
+                        <button type="button" class="btn-primary bs-pos-mode-btn" data-pos-mode="store" style="background:#0f9d8a;" onclick="bsPosSetMode('store')">Store POS</button>
+                        <button type="button" class="btn-primary bs-pos-mode-btn" data-pos-mode="admin" style="background:#cbd5e1;color:#0f172a;" onclick="bsPosSetMode('admin')">Main admin POS</button>
+                        <span id="bs-pos-mode-hint" style="font-size:0.82rem;color:#64748b;align-self:center;">Store POS: quick counter sale (cash / UPI / card). Main admin POS: link doctor account, online gateway, full controls.</span>
+                    </div>
                     <div style="display:grid;grid-template-columns:minmax(320px,1fr) minmax(360px,1.2fr);gap:16px;align-items:start;">
                         <div class="card" style="padding:18px;">
-                            <h3 style="margin:0 0 12px;color:#7c3aed;">Book POS — Walk-in / desk sale</h3>
+                            <h3 id="bs-pos-title" style="margin:0 0 12px;color:#7c3aed;">Store POS — Counter sale</h3>
                             <p style="font-size:0.88rem;color:#64748b;margin:0 0 12px;">Search doctor by phone, email, user ID, or registration number. Full profile appears below. Walk-in buyers can use name/phone only.</p>
-                            <div style="display:grid;grid-template-columns:1fr auto;gap:8px;margin-bottom:10px;">
+                            <div class="bs-pos-adv" style="display:grid;grid-template-columns:1fr auto;gap:8px;margin-bottom:10px;">
                                 <input type="text" id="bs-pos-search" placeholder="Phone / name / email / user ID / reg. no." style="padding:8px;" oninput="bsPosSearch()">
                                 <button type="button" class="btn-primary" style="padding:8px 12px;background:#7c3aed;" onclick="bsPosSearch()">Search</button>
                             </div>
@@ -1552,7 +1557,7 @@
                                     <option value="cash">Cash</option>
                                     <option value="upi">UPI (manual)</option>
                                     <option value="card">Card (manual)</option>
-                                    <option value="online">Online gateway (PayU, Razorpay, etc.)</option>
+                                    <option value="online" class="bs-pos-adv">Online gateway (PayU, Razorpay, etc.)</option>
                                 </select>
                             </div>
                             <div id="bs-pos-gateway-wrap" class="hidden" style="margin-bottom:12px;max-width:320px;">

@@ -22456,7 +22456,7 @@ function switchBsTab(tab) {
     if (tab === 'orders') startBsOrdersAutoRefresh();
     else stopBsOrdersAutoRefresh();
     if (tab === 'pos') {
-        renderBsPosBooks();
+        bsPosSetMode(_bsPosMode);
         loadBsPosOrders();
     }
     if (tab === 'inventory') loadBsInventory();
@@ -24220,23 +24220,92 @@ window.bsPosClearBuyer = bsPosClearBuyer;
 
 let _bsPosSelectedUserId = null;
 
+let _bsPosCart = [];
+let _bsPosMode = 'store';
+const BS_POS_LANGS = ['english', 'marathi', 'hindi', 'kannada'];
+
+function bsPosSetMode(mode) {
+    _bsPosMode = mode === 'admin' ? 'admin' : 'store';
+    document.querySelectorAll('.bs-pos-mode-btn').forEach((b) => {
+        const on = b.getAttribute('data-pos-mode') === _bsPosMode;
+        b.style.background = on ? (_bsPosMode === 'admin' ? '#7c3aed' : '#0f9d8a') : '#cbd5e1';
+        b.style.color = on ? '#fff' : '#0f172a';
+    });
+    const title = document.getElementById('bs-pos-title');
+    if (title) title.textContent = _bsPosMode === 'admin' ? 'Main admin POS — Full sale desk' : 'Store POS — Counter sale';
+    document.querySelectorAll('.bs-pos-adv').forEach((el) => {
+        if (el.tagName === 'OPTION') el.disabled = _bsPosMode !== 'admin';
+        else el.style.display = _bsPosMode === 'admin' ? '' : 'none';
+    });
+    const pay = document.getElementById('bs-pos-pay-mode');
+    if (pay && _bsPosMode !== 'admin' && pay.value === 'online') { pay.value = 'cash'; if (typeof bsPosPayModeChanged === 'function') bsPosPayModeChanged(); }
+    if (_bsPosMode !== 'admin') {
+        const uid = document.getElementById('bs-pos-user-id');
+        if (uid) uid.value = '';
+        _bsPosSelectedUserId = null;
+        const su = document.getElementById('bs-pos-selected-user');
+        if (su) su.style.display = 'none';
+    }
+    _bsPosCart = [];
+    renderBsPosBooks();
+}
+
+function bsPosAdd(bookId) {
+    const books = (_bsCurrentConfig && _bsCurrentConfig.books) || [];
+    const b = books.find((x) => String(x.id) === String(bookId));
+    if (!b) return;
+    const lang = (b.languages && b.languages[0]) || BS_POS_LANGS[0];
+    const same = _bsPosCart.find((l) => String(l.bookId) === String(b.id) && l.language === lang);
+    if (same) same.qty = Math.min(99, same.qty + 1);
+    else _bsPosCart.push({ bookId: b.id, title: b.title, language: lang, qty: 1, unitPrice: Number(b.price) || 0 });
+    renderBsPosCart();
+}
+function bsPosRemove(i) { _bsPosCart.splice(i, 1); renderBsPosCart(); }
+function bsPosLine(i, field, val) {
+    const l = _bsPosCart[i];
+    if (!l) return;
+    if (field === 'qty') l.qty = Math.max(1, Math.min(99, parseInt(val, 10) || 1));
+    else if (field === 'unitPrice') l.unitPrice = Math.max(0, parseFloat(val) || 0);
+    else if (field === 'language') l.language = val;
+    renderBsPosCart();
+}
+
 function renderBsPosBooks() {
     const root = document.getElementById('bs-pos-books');
     if (!root) return;
-    const books = (_bsCurrentConfig && _bsCurrentConfig.books || []).filter((b) => b.active !== false);
+    const books = ((_bsCurrentConfig && _bsCurrentConfig.books) || []).filter((b) => b.active !== false);
     if (!books.length) { root.innerHTML = '<p style="color:#b91c1c;">No active books configured. Save settings first.</p>'; return; }
-    root.innerHTML = '<p style="font-size:0.85rem;font-weight:600;margin:0 0 6px;">Select books:</p>' +
-        books.map((b, i) =>
-            '<div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px;" data-bs-pos-row>' +
-            '<div><label style="font-size:0.8rem;">' + e(b.title) + '</label>' +
-            '<select class="bs-pos-book-sel" style="width:100%;padding:6px;" data-book-id="' + e(b.id) + '">' +
-            '<option value="">— skip —</option>' +
-            ['english','marathi','hindi','kannada'].map((l) => '<option value="' + l + '">' + l.charAt(0).toUpperCase() + l.slice(1) + '</option>').join('') +
-            '</select></div>' +
-            '<div><label style="font-size:0.8rem;">Qty</label><input type="number" class="bs-pos-qty" value="1" min="1" max="99" style="width:100%;padding:6px;"></div>' +
-            '<div><label style="font-size:0.8rem;">Price</label><input type="number" class="bs-pos-price" value="' + (b.price || 0) + '" min="0" step="1" style="width:100%;padding:6px;"></div>' +
-            '</div>'
-        ).join('');
+    root.innerHTML =
+        '<p style="font-size:0.85rem;font-weight:600;margin:0 0 6px;">Tap a product to add it to the bill</p>' +
+        '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:12px;">' +
+        books.map((b) =>
+            '<button type="button" onclick="bsPosAdd(\'' + e(String(b.id)) + '\')" style="text-align:left;border:1px solid #e2e8f0;border-radius:10px;padding:10px;background:#fff;cursor:pointer;">' +
+            '<div style="font-weight:600;font-size:0.86rem;line-height:1.25;">' + e(b.title) + '</div>' +
+            '<div style="font-size:0.8rem;color:#0f9d8a;margin-top:4px;">₹ ' + e(String(b.price || 0)) + '</div></button>').join('') +
+        '</div><div id="bs-pos-cart"></div>';
+    renderBsPosCart();
+}
+
+function renderBsPosCart() {
+    const root = document.getElementById('bs-pos-cart');
+    if (!root) return;
+    if (!_bsPosCart.length) { root.innerHTML = '<p style="font-size:0.84rem;color:#64748b;border:1px dashed #cbd5e1;border-radius:8px;padding:10px;">Bill is empty — tap a product above.</p>'; return; }
+    let total = 0;
+    root.innerHTML =
+        '<div style="border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;">' +
+        '<div style="display:grid;grid-template-columns:1fr 110px 64px 90px 80px 28px;gap:6px;padding:6px 8px;background:#f8fafc;font-size:0.75rem;font-weight:600;color:#475569;"><span>Item</span><span>Language</span><span>Qty</span><span>Price</span><span style="text-align:right;">Amount</span><span></span></div>' +
+        _bsPosCart.map((l, i) => {
+            const amt = Math.round(l.qty * l.unitPrice * 100) / 100; total += amt;
+            return '<div data-bs-pos-row style="display:grid;grid-template-columns:1fr 110px 64px 90px 80px 28px;gap:6px;padding:6px 8px;border-top:1px solid #f1f5f9;align-items:center;font-size:0.84rem;">' +
+                '<span>' + e(l.title) + '</span>' +
+                '<select class="bs-pos-book-sel" data-book-id="' + e(String(l.bookId)) + '" style="padding:4px;" onchange="bsPosLine(' + i + ',\'language\',this.value)">' +
+                BS_POS_LANGS.map((x) => '<option value="' + x + '"' + (x === l.language ? ' selected' : '') + '>' + x.charAt(0).toUpperCase() + x.slice(1) + '</option>').join('') + '</select>' +
+                '<input type="number" class="bs-pos-qty" value="' + l.qty + '" min="1" max="99" style="padding:4px;width:100%;" onchange="bsPosLine(' + i + ',\'qty\',this.value)">' +
+                '<input type="number" class="bs-pos-price" value="' + l.unitPrice + '" min="0" step="1" style="padding:4px;width:100%;" onchange="bsPosLine(' + i + ',\'unitPrice\',this.value)">' +
+                '<span style="text-align:right;font-weight:600;">₹ ' + amt.toFixed(2) + '</span>' +
+                '<button type="button" onclick="bsPosRemove(' + i + ')" title="Remove" style="border:0;background:none;color:#b91c1c;cursor:pointer;font-size:1rem;">×</button></div>';
+        }).join('') +
+        '<div style="display:flex;justify-content:space-between;padding:8px 10px;background:#f8fafc;border-top:1px solid #e2e8f0;font-weight:700;"><span>' + _bsPosCart.reduce((n, l) => n + l.qty, 0) + ' item(s)</span><span>Total ₹ ' + total.toFixed(2) + '</span></div></div>';
 }
 
 function bsPosSearch() {
@@ -24532,6 +24601,8 @@ async function bsPosSave() {
         });
         const data = await res.json();
         if (!res.ok) { if (msg) { msg.style.color = '#b91c1c'; msg.textContent = data.error || 'Failed'; } return; }
+        _bsPosCart = [];
+        renderBsPosCart();
         if (data.pollRequired && !data.paid) {
             if (msg) {
                 msg.style.color = '#0d9488';
