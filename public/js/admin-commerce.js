@@ -248,6 +248,13 @@ function commerceLabelControls(o, aid) {
         opt('210', '58 × 210', commerceLabelPrefs.roll) + opt('297', '58 × 297', commerceLabelPrefs.roll) + opt('3276', '58 × 3276', commerceLabelPrefs.roll) + opt('auto', 'Cut to length', commerceLabelPrefs.roll) + '</select>' +
         '<button type="button" class="btn-primary" style="background:#334155;" onclick="commerceLabelOpen(' + o.id + ',\'' + aid + '\',\'html\')">Label</button>' +
         '<button type="button" class="btn-primary" style="background:#067d62;" onclick="commerceLabelOpen(' + o.id + ',\'' + aid + '\',\'pdf\')">PDF</button>' +
+        '<div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:4px;align-items:center;" class="c-docs-' + o.id + '"><span style="font-size:0.75rem;color:#64748b;">Documents:</span>' +
+        '<a class="btn-primary" style="background:#475569;padding:4px 8px;font-size:0.78rem;" target="_blank" href="/api/admin/commerce/orders/' + o.id + '/invoice?format=pdf&actingAdminId=' + aid + '">Invoice PDF</a>' +
+        '<button type="button" class="btn-primary" style="background:#0f766e;padding:4px 8px;font-size:0.78rem;" onclick="commerceSendDocs(' + o.id + ',[\'invoice\'],\'buyer\')">Email invoice</button>' +
+        '<button type="button" class="btn-primary" style="background:#1d4ed8;padding:4px 8px;font-size:0.78rem;" onclick="commerceSendDocs(' + o.id + ',[\'label\'],\'buyer\')">Email shipping label</button>' +
+        '<button type="button" class="btn-primary" style="background:#b45309;padding:4px 8px;font-size:0.78rem;" onclick="commerceSendDocs(' + o.id + ',[\'return\'],\'buyer\')">Resend return label</button>' +
+        '<button type="button" class="btn-primary" style="background:#7c3aed;padding:4px 8px;font-size:0.78rem;" onclick="commerceSendDocs(' + o.id + ',[\'invoice\',\'label\',\'return\'],\'both\')">Email all (buyer + store)</button>' +
+        '<span id="c-docs-msg-' + o.id + '" style="font-size:0.78rem;font-weight:600;"></span></div>' +
         '</span>'
     );
 }
@@ -1611,3 +1618,22 @@ document.addEventListener('click', function () {
 });
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootCommerceEmbeds);
 else bootCommerceEmbeds();
+
+
+async function commerceSendDocs(id, docs, to) {
+    var msg = document.getElementById('c-docs-msg-' + id);
+    if (msg) { msg.style.color = '#0d9488'; msg.textContent = 'Sending…'; }
+    try {
+        var res = await fetch('/api/admin/commerce/orders/' + id + '/documents', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ actingAdminId: commerceActor(), docs: docs, to: to })
+        });
+        var data = await res.json().catch(function () { return {}; });
+        if (!res.ok) throw new Error(data.error || 'Failed');
+        if (msg) { msg.textContent = 'Sent ' + (data.documents || []).join(', ') + ' → ' + (data.sent || []).join(', '); }
+    } catch (e) {
+        if (msg) { msg.style.color = '#b91c1c'; msg.textContent = e.message || 'Failed'; }
+    }
+}

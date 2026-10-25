@@ -63,12 +63,27 @@
             '<div class="ts4-rail" style="--fill:' + (t.rank >= 5 ? 100 : fill.toFixed(1)) + '">' +
             '<div class="ts4-rail-line"><span></span></div>' +
             '<ol class="ts4-rail-steps">' +
-            steps.map(function (s) {
-                return '<li class="' + s.state + '"><span class="ts4-rail-ico">' + stepIcon(s.key) + '</span><b>' + esc(s.title) + '</b>' + (s.state === 'active' ? '<i class="ts4-now">In progress</i>' : s.state === 'done' ? '<i class="ts4-done">Done</i>' : '') +
+            steps.map(function (s, i) {
+                return '<li class="' + s.state + '" data-step-idx="' + i + '" title="Tap for details"><span class="ts4-rail-ico">' + stepIcon(s.key) + '</span><b>' + esc(s.title) + '</b>' + (s.state === 'active' ? '<i class="ts4-now">In progress</i>' : s.state === 'done' ? '<i class="ts4-done">Done</i>' : '') +
                     (s.at ? '<small>' + esc(fmtWhen(s.at)) + '</small>' : s.expectedLabel && s.state !== 'done' ? '<small class="exp">' + esc(s.expectedLabel) + '</small>' : '') + '</li>';
             }).join('') +
-            '</ol></div>'
+            '</ol></div>' + drawersHtml(steps)
         );
+    }
+
+    function drawersHtml(steps) {
+        return '<div class="ts4-drawers">' + steps.map(function (s, i) {
+            const ups = (s.updates || []).slice().sort(function (a, b) { return (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0); });
+            const body = ups.length
+                ? '<ul class="ts4-drawer-list">' + ups.map(function (u) {
+                    return '<li><b>' + esc(u.title || '') + '</b>' + (u.city ? '<span class="city">' + esc(u.city) + '</span>' : '') + (u.detail ? '<span class="det">' + esc(u.detail) + '</span>' : '') + (u.at ? '<time>' + esc(fmtWhen(u.at)) + '</time>' : '') + '</li>';
+                }).join('') + '</ul>'
+                : '<p class="ts4-drawer-empty">' + (s.state === 'done' ? 'Completed' : s.expectedLabel ? 'Expected ' + esc(s.expectedLabel) : 'No courier update for this step yet') + '</p>';
+            const extra = (s.deliveryOtp ? '<div class="ts4-drawer-otp">Delivery OTP <b>' + esc(s.deliveryOtp) + '</b></div>' : '') +
+                (s.pickup && s.pickup.pickupOtp ? '<div class="ts4-drawer-otp">Pickup OTP <b>' + esc(s.pickup.pickupOtp) + '</b></div>' : '') +
+                (s.queueNote ? '<div class="ts4-drawer-note">' + esc(s.queueNote) + '</div>' : '');
+            return '<div class="ts4-drawer' + (s.state === 'active' ? ' open' : '') + '" data-drawer-idx="' + i + '"><div class="ts4-drawer-head"><span class="ts4-rail-ico">' + stepIcon(s.key) + '</span><b>' + esc(s.title) + '</b><i class="ts4-drawer-state ' + s.state + '">' + (s.state === 'done' ? 'Done' : s.state === 'active' ? 'In progress' : 'Upcoming') + '</i>' + (ups.length ? '<small>' + ups.length + ' update' + (ups.length > 1 ? 's' : '') + '</small>' : '') + '<span class="ts4-drawer-chev">▾</span></div><div class="ts4-drawer-body">' + extra + body + '</div></div>';
+        }).join('') + '</div>';
     }
 
     function journeyHtml(o) {
@@ -196,6 +211,14 @@
     }
 
     document.addEventListener('click', function (e) {
+        const stepEl = e.target.closest('[data-step-idx]');
+        const headEl = e.target.closest('.ts4-drawer-head');
+        if (stepEl || headEl) {
+            const idx = stepEl ? stepEl.getAttribute('data-step-idx') : headEl.parentNode.getAttribute('data-drawer-idx');
+            const dr = document.querySelector('.ts4-drawer[data-drawer-idx="' + idx + '"]');
+            if (dr) { dr.classList.toggle('open'); if (stepEl && dr.classList.contains('open')) dr.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
+            return;
+        }
         const copy = e.target.closest && e.target.closest('[data-copy]');
         if (copy && navigator.clipboard) {
             navigator.clipboard.writeText(copy.getAttribute('data-copy')).then(function () { copy.classList.add('ok'); setTimeout(function () { copy.classList.remove('ok'); }, 1200); });
