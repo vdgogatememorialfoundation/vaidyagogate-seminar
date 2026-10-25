@@ -126,7 +126,7 @@
             railHtml(t) +
             '</section>' +
             '<div class="ts4-tiles">' +
-            tile('fa-location-dot', 'Where it is', latest ? latest.city || latest.title : headline, latest && latest.city ? latest.title : '') +
+            (t.proximity ? tile('fa-location-dot', 'Delivery partner', t.proximity.label, (t.proximity.distanceKm != null ? t.proximity.distanceKm + ' km away' : '') + (t.proximity.etaMinutes ? ' · ~' + t.proximity.etaMinutes + ' min' : '')) : '') + tile('fa-location-dot', 'Where it is', latest ? latest.city || latest.title : headline, latest && latest.city ? latest.title : '') +
             tile('fa-calendar-check', t.rank >= 5 ? 'Delivered' : 'Delivery by', t.deliveryBy || (t.expected && t.expected.deliveryText) || String(((steps.find(function (s) { return s.key === 'delivered'; }) || {}).expectedLabel || '')).replace(/^Expected\s*/i, '') || '—', t.rank >= 5 ? '' : t.dates && t.dates.deliveryKind === 'courier' ? 'Confirmed by courier' : 'Seller estimate') +
             tile('fa-truck', 'Courier', partner ? partner.name : o.courierProviderLabel || o.courierProvider || '—', (partner && partner.trackingNo) || o.courierTrackingNo || '') +
             tile('fa-clock-rotate-left', 'Last update', latest && latest.at ? fmtWhen(latest.at) : o.updatedAt ? fmtWhen(o.updatedAt) : '—', st.scans ? st.scans + ' courier scans' : '') +

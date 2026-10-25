@@ -159,10 +159,18 @@
             .join('');
     }
 
+    function proximityChip(track) {
+        const px = track && track.proximity;
+        if (!px || !px.label) return '';
+        return '<div class="trk-cstatus is-prox is-' + esc(px.state) + '"><span class="trk-cstatus-dot"></span><b>' + esc(px.label) + '</b>' +
+            (px.distanceKm != null ? '<span> · ' + esc(px.distanceKm) + ' km away</span>' : '') + (px.etaMinutes ? '<span> · ~' + esc(px.etaMinutes) + ' min</span>' : '') +
+            (px.lastGpsAt ? '<span class="trk-cstatus-at">GPS ' + esc(ago(px.lastGpsAt)) + '</span>' : '') + '</div>';
+    }
+
     function courierChip(track) {
         const cs = track && track.courierStatus;
-        if (!cs || !cs.label) return '';
-        return '<div class="trk-cstatus is-' + esc(cs.tone || 'label') + '"><span class="trk-cstatus-dot"></span><b>' + esc(cs.label) + '</b>' +
+        if (!cs || !cs.label) return proximityChip(track);
+        return proximityChip(track) + '<div class="trk-cstatus is-' + esc(cs.tone || 'label') + '"><span class="trk-cstatus-dot"></span><b>' + esc(cs.label) + '</b>' +
             (cs.place ? '<span> · ' + esc(cs.place) + '</span>' : '') + (cs.at ? '<span class="trk-cstatus-at">' + esc(ago(cs.at)) + '</span>' : '') + '</div>';
     }
 
@@ -532,7 +540,7 @@
                 (h.proof.otpVerified ? 'OTP verified at handover' : 'Handed over to recipient') + (h.proof.recipient ? ' · ' + esc(h.proof.recipient) : '') + '</span></div>';
         } else if (live.active && live.gps) {
             now = '<div class="hl-now' + (live.nearby ? ' is-near' : '') + '"><b>' +
-                (live.nearby ? 'Your delivery partner is nearby — please be available' : live.approaching ? 'Delivery partner approaching' : 'Arriving in about ' + esc(live.etaMinutes) + ' min') + '</b><span>' +
+                (live.atDoorstep ? 'Delivery partner has arrived at your doorstep' : live.nearby ? 'Your delivery partner is nearby — please be available' : live.approaching ? 'Delivery partner approaching' : 'Arriving in about ' + esc(live.etaMinutes) + ' min') + '</b><span>' +
                 (live.distanceKm != null ? esc(live.distanceKm) + ' km away · ' : '') + 'GPS updated ' + esc(ago(live.lastGpsAt)) + '</span></div>';
         } else if (live.active && live.gpsLost) {
             now = '<div class="hl-now is-warn"><b>Waiting for the partner\u2019s location</b><span>Last location received ' + esc(ago(live.lastGpsAt)) + ' · showing latest milestone</span></div>';
