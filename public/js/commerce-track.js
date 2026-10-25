@@ -837,7 +837,7 @@
             call + '</div>';
         const livePill = track.map && track.map.live ? '<span class="hl-live-pill">Live</span>' : '';
         const liveSrc = track.map && track.map.enabled ? shipment.live : null;
-        const cv = liveSrc && liveSrc.courierView;
+        const cv = liveSrc && liveSrc.courierView && !liveSrc.mapsApiKey ? liveSrc.courierView : null;
         const ownMap = !cv && !!(liveSrc && liveSrc.mapsApiKey);
         const courierFrame = cv
             ? '<div class="hl-courier-frame"><iframe src="' + esc(cv.url) + '" title="Live courier tracking map" loading="lazy" referrerpolicy="no-referrer" allow="geolocation"></iframe></div>'
@@ -911,7 +911,7 @@
         bindExtras();
         touchFresh();
         tickPipe();
-        if (live && !live.courierView && window.TrackTimeline) TrackTimeline.mount(live);
+        if (live && (live.mapsApiKey || !live.courierView) && window.TrackTimeline) TrackTimeline.mount(live);
     }
 
     function bindViewTabs() {
