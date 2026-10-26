@@ -416,7 +416,13 @@
             this.getPanes().overlayMouseTarget.appendChild(div);
         };
         Rider.prototype.draw = function () {
-            if (!this.div || !this.pos || !this.getProjection()) return;
+            if (!this.div) return;
+            if (!this.pos || !this.visible) {
+                this.div.style.display = 'none';
+                this.div.classList.remove('is-moving');
+                return;
+            }
+            if (!this.getProjection()) return;
             const pt = this.getProjection().fromLatLngToDivPixel(new google.maps.LatLng(this.pos.lat, this.pos.lng));
             if (!pt) return;
             this.div.style.left = pt.x + 'px';
@@ -671,8 +677,13 @@
         if (pts && pts.length) line.setPath(pts);
     }
 
-    function dottedLine(line, a, b) {
+    function dottedLine(line, a, b, pts) {
         if (!line || !a || !b) return;
+        if (pts && pts.length > 1) {
+            line.setOptions({ strokeColor: routeColor(), strokeOpacity: 0, strokeWeight: 6, icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 3 }, offset: '0', repeat: '14px' }] });
+            line.setPath(pts);
+            return;
+        }
         line.setOptions({
             strokeColor: routeColor(),
             strokeOpacity: 0,
@@ -841,8 +852,8 @@
             clearConnectors(el);
             return;
         }
-        solidLine(el.__remain, pts);
-        paintAddressConnectors(el, live.store, live.drop, [pts]);
+        dottedLine(el.__remain, live.store, live.drop, pts);
+        clearConnectors(el);
     }
 
     function followTrip(el, live, pts) {
