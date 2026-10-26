@@ -444,7 +444,7 @@
               : '';
         if (!shipped && !delivery) return '';
         const kind = (state) => (state === 'actual' ? 'Actual' : state === 'expected' ? 'Expected' : '');
-        const shipIco = '<img src="/media/delivery-agent.png" alt="">';
+        const shipIco = '<img src="/media/delivery-agent.png?v=2" alt="">';
         const dropIco = iconSvg('M12 21s7-6.2 7-11a7 7 0 10-14 0c0 4.8 7 11 7 11z');
         const tile = (label, state, value, ico, extra) =>
             value
@@ -845,7 +845,7 @@
             Number.isFinite(Number(track.agentLat)) &&
             Number.isFinite(Number(track.agentLng));
         const bike = onRoad
-            ? '<span class="hl-bike hl-bike-3d" aria-hidden="true"><img src="/media/delivery-agent.png" alt=""></span>'
+            ? '<span class="hl-bike hl-bike-3d" aria-hidden="true"><img src="/media/delivery-agent.png?v=2" alt=""></span>'
             : '<span class="hl-bike hl-bike-idle" aria-hidden="true"><svg viewBox="0 0 48 48" width="40" height="40"><path d="M8 18l16-8 16 8v14l-16 8-16-8z" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/><path d="M8 18l16 8 16-8M24 26v14" fill="none" stroke="#94a3b8" stroke-width="2"/></svg></span>';
         const partner = '<div class="hl-partner">' + bike +
             '<div class="hl-partner-copy"><div class="lbl">Delivery partner</div><div class="hl-partner-name">' +
