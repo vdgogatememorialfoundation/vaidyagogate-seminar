@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Retail POS</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<link rel="stylesheet" href="/css/pos.css?v=1">
+</head>
+<body>
+<header class="pos-top">
+  <div class="pos-brand"><i class="fas fa-cash-register"></i> <span id="pos-title">Retail POS</span></div>
+  <nav class="pos-nav" id="pos-nav"></nav>
+  <div class="pos-user"><span id="pos-actor"></span> <button type="button" class="pos-btn ghost" id="pos-logout">Sign out</button></div>
+</header>
+<main id="pos-main">
+  <section id="pos-login" class="pos-card pos-login hidden">
+    <h2>Staff sign in</h2>
+    <p>Use your staff / admin account. Book orders access is required.</p>
+    <form id="pos-login-form">
+      <input type="email" id="pos-login-email" placeholder="Email" required>
+      <input type="password" id="pos-login-password" placeholder="Password" required>
+      <button type="submit" class="pos-btn primary">Sign in</button>
+      <p id="pos-login-msg" class="pos-msg"></p>
+    </form>
+  </section>
+  <section id="pos-sale" class="pos-sale hidden">
+    <div class="pos-col pos-products">
+      <div class="pos-card">
+        <div class="pos-search"><i class="fas fa-search"></i><input type="search" id="pos-q" placeholder="Search products (name / code) — Enter adds first match" autocomplete="off"></div>
+        <div class="pos-langs" id="pos-langs"></div>
+        <div class="pos-grid" id="pos-grid"></div>
+      </div>
+      <div class="pos-card" id="pos-recent-card"><h3>Recent sales</h3><div id="pos-recent"></div></div>
+    </div>
+    <div class="pos-col pos-bill">
+      <div class="pos-card">
+        <h3><i class="fas fa-user"></i> Customer</h3>
+        <div class="pos-search"><i class="fas fa-search"></i><input type="search" id="pos-cust-q" placeholder="Phone / name / email / doctor ID" autocomplete="off"></div>
+        <div id="pos-cust-results" class="pos-cust-results"></div>
+        <div class="pos-row3">
+          <input type="text" id="pos-cust-name" placeholder="Name">
+          <input type="tel" id="pos-cust-phone" placeholder="Phone">
+          <input type="email" id="pos-cust-email" placeholder="Email (receipt)">
+        </div>
+        <div id="pos-cust-summary" class="pos-cust-summary"></div>
+      </div>
+      <div class="pos-card">
+        <h3><i class="fas fa-receipt"></i> Bill</h3>
+        <div id="pos-cart" class="pos-cart"><p class="pos-muted">Tap products to add.</p></div>
+        <h4>Fulfilment</h4>
+        <div class="pos-seg" id="pos-fulfil"></div>
+        <div id="pos-address" class="pos-address hidden">
+          <input type="text" id="pos-addr-recipient" placeholder="Recipient name">
+          <input type="tel" id="pos-addr-phone" placeholder="Recipient phone">
+          <input type="text" id="pos-addr-line1" placeholder="Address">
+          <div class="pos-row3"><input type="text" id="pos-addr-city" placeholder="City"><input type="text" id="pos-addr-state" placeholder="State"><input type="text" id="pos-addr-pin" placeholder="Pincode"></div>
+          <input type="number" id="pos-ship-override" placeholder="Delivery charge override (₹, optional)" min="0" step="1">
+        </div>
+        <h4>Discounts &amp; redemptions</h4>
+        <div class="pos-row2">
+          <div class="pos-inline"><input type="text" id="pos-voucher" placeholder="Voucher code"><button type="button" class="pos-btn small" onclick="posRequote()">Apply</button></div>
+          <input type="number" id="pos-manual-disc" placeholder="Manual discount ₹" min="0" step="1" onchange="posRequote()">
+        </div>
+        <div class="pos-row2">
+          <div class="pos-inline"><input type="text" id="pos-giftcard" placeholder="Gift card code"><input type="number" id="pos-giftcard-amt" placeholder="₹" min="0" step="1" style="max-width:90px"><button type="button" class="pos-btn small" onclick="posRequote()">Apply</button></div>
+          <div class="pos-inline"><input type="number" id="pos-loyalty-pts" placeholder="Loyalty points" min="0" step="1" onchange="posRequote()"><input type="number" id="pos-wallet-amt" placeholder="Wallet ₹" min="0" step="1" onchange="posRequote()"></div>
+        </div>
+        <div id="pos-totals" class="pos-totals"></div>
+        <h4>Payment</h4>
+        <div class="pos-seg" id="pos-paymodes"></div>
+        <textarea id="pos-note" placeholder="Note (printed on invoice)" rows="1"></textarea>
+        <button type="button" class="pos-btn primary big" id="pos-charge" onclick="posCheckout()">Charge</button>
+        <button type="button" class="pos-btn ghost" onclick="posClear()">Clear bill</button>
+        <p id="pos-msg" class="pos-msg"></p>
+      </div>
+    </div>
+  </section>
+  <section id="pos-tools" class="hidden"></section>
+  <section id="pos-admin" class="hidden"></section>
+</main>
+<div id="pos-receipt" class="pos-modal hidden"><div class="pos-modal-box" id="pos-receipt-box"></div></div>
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script src="/js/pos.js?v=1"></script>
+</body>
+</html>

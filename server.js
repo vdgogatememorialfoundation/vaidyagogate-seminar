@@ -282,6 +282,14 @@ function mountPaymentsRoutes() {
         upsertGlobalSetting
     });
     require('./lib/web-push').registerWebPushRoutes(app, db);
+    require('./lib/retail-pos').registerRetailPosRoutes(app, db, {
+        bookSales,
+        listDoctorPaymentOptions,
+        notifEngine,
+        commerceRoutes: require('./lib/commerce-routes'),
+        commerce: require('./lib/commerce-logistics'),
+        upsertGlobalSetting
+    });
     require('./lib/shop-routes').registerShopRoutes(app, db, {
         listDoctorPaymentOptions,
         parsePositiveUserId
