@@ -599,3 +599,6 @@ li.drawer-flash .ship-copy{animation:shipFlash 1.5s ease}
 @keyframes shipFlash{0%{background:#fff7d6}100%{background:transparent}}
 
 .ship-otp.ship-otp-ok .code{color:#0f9d8a;letter-spacing:0;font-size:1rem}
+
+.hl-legend button{font:inherit;font-weight:700;font-size:.82rem;border:1px solid transparent;background:transparent;border-radius:999px;padding:4px 10px;cursor:pointer;color:#0f172a;display:inline-flex;align-items:center}
+.hl-legend button:hover{background:#f1f5f9}.hl-legend button.is-on{border-color:#0f766e;background:#ecfeff}

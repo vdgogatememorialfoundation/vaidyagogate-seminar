@@ -546,6 +546,8 @@
             }
             if (!el.__markers[key]) {
                 el.__markers[key] = new google.maps.Marker({ map: el.__map, title, icon: markerIcon(svg, 42, 52), zIndex: 3 });
+                el.__markers[key].__svg = svg;
+                el.__markers[key].addListener('click', () => focusPlace(key));
             }
             el.__markers[key].setMap(el.__map);
             el.__markers[key].setPosition(pos);
@@ -611,6 +613,30 @@
             el.__userMoved = false;
         }
         if (el.__map && window.google && google.maps.event) google.maps.event.trigger(el.__map, 'resize');
+    }
+
+    function focusPlace(key) {
+        const el = mapEl;
+        if (!el || !el.__map || !el.__markers || !window.google) return;
+        const live = el.__liveSnap || {};
+        const pos = key === 'store' ? live.store : live.drop;
+        if (!pos) return;
+        Object.keys(el.__markers).forEach((k) => {
+            const m = el.__markers[k];
+            if (!m || !m.__svg) return;
+            const on = k === key;
+            m.setIcon(markerIcon(m.__svg, on ? 56 : 42, on ? 70 : 52));
+            m.setZIndex(on ? 9 : 3);
+            m.setAnimation(on ? google.maps.Animation.BOUNCE : null);
+            if (on) setTimeout(() => m.setAnimation(null), 2100);
+        });
+        el.__map.panTo(pos);
+        if (el.__map.getZoom() < 15) el.__map.setZoom(15);
+        if (!el.__info) el.__info = new google.maps.InfoWindow();
+        const label = key === 'store' ? live.storeLabel || 'Store' : live.dropLabel || 'Delivery location';
+        el.__info.setContent('<div style="font:600 13px/1.4 Inter,system-ui,sans-serif;color:#0f172a;max-width:240px"><div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:' + (key === 'store' ? '#0f766e' : '#1d4ed8') + '">' + (key === 'store' ? 'Store' : 'Delivery') + '</div>' + esc(label) + '</div>');
+        el.__info.open({ map: el.__map, anchor: el.__markers[key] });
+        document.querySelectorAll('[data-focus-place]').forEach((b) => b.classList.toggle('is-on', b.getAttribute('data-focus-place') === key));
     }
 
     function isPreview(live) {
@@ -946,5 +972,5 @@
             el.style.setProperty('--line', String(pct));
         });
     }
-    window.TrackTimeline = { render, mount, bind, when, esc, updates, tick: tickLines };
+    window.TrackTimeline = { render, mount, bind, when, esc, updates, tick: tickLines, focusPlace };
 })();

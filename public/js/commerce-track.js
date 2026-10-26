@@ -502,6 +502,7 @@
     }
 
     function journeyHtml(journey, track) {
+        return '';
         if (!journey || !journey.from || !journey.to || isFinished(track) || isReturn(track) || track.fulfillmentType !== 'HYPERLOCAL') return '';
         const stops = [{ code: journey.from.code, city: journey.from.city, sub: journey.from.kind, done: true }]
             .concat((journey.hubs || []).map((h) => ({ code: h.code, city: h.name, sub: 'Hub' + (h.id ? ' #' + h.id : ''), done: h.done, at: h.at })))
@@ -860,7 +861,7 @@
             : '';
         const map = liveSrc
             ? '<div class="hl-map">' + (ownMap ? '<div id="tl-map-slot"></div>' : '') + courierFrame + '<div class="hl-legend">' + livePill +
-              '<span><i class="is-store"></i>Store</span><span><i class="is-road"></i>Route</span><span><i class="is-home"></i>Delivery</span></div></div>'
+              '<button type="button" data-focus-place="store"><i class="is-store"></i>Store</button><button type="button" data-focus-place="drop"><i class="is-home"></i>Delivery</button></div></div>'
             : '<div class="hl-map hl-map-empty">The map appears when the store and delivery locations are available.</div>';
         const board = dateBoard(track);
         const badge = board ? '' : timingBadge(track);
@@ -928,6 +929,11 @@
         touchFresh();
         tickPipe();
         if (live && (live.mapsApiKey || !live.courierView) && window.TrackTimeline) TrackTimeline.mount(live);
+        document.querySelectorAll('[data-focus-place]').forEach((b) => {
+            if (b.__bound) return;
+            b.__bound = true;
+            b.addEventListener('click', () => window.TrackTimeline && TrackTimeline.focusPlace && TrackTimeline.focusPlace(b.getAttribute('data-focus-place')));
+        });
     }
 
     function bindViewTabs() {
