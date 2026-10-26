@@ -289,11 +289,11 @@
     }
 
     function tickOnePipe(pipe) {
-        const reduce = (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) || pipePlayed;
+        const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
         const root = pipe.closest('.trk, .hl') || document;
         const items = Array.from(pipe.querySelectorAll(':scope > li'));
         const playable = items.filter((el) => el.classList.contains('done') || el.classList.contains('active'));
-        const stepMs = 2600;
+        const stepMs = pipePlayed ? 900 : 2600;
         if (pipe && !pipe.dataset.playing) {
             pipe.dataset.playing = 'play';
             pipePlayed = true;
@@ -362,6 +362,8 @@
     }
 
     function otpHtml(label, code, track) {
+        const verified = track && ((/pickup/i.test(label) && track.pickupOtpVerified) || (/delivery/i.test(label) && track.deliveryOtpVerified));
+        if (verified) return '<div class="ship-otp ship-otp-ok"><div class="lbl">' + esc(label) + '</div><div class="code">\u2713 OTP verified</div></div>';
         if (code) return '<div class="ship-otp"><div class="lbl">' + esc(label) + '</div><div class="code">' + esc(code) + '</div></div>';
         if (!track || !track.otpSupported || isReturn(track)) return '';
         const ms = track.mainStatus;
@@ -838,6 +840,7 @@
             : '';
         const onRoad =
             String(track.commerceStage || '') === 'out_for_delivery' &&
+            !!(track.agent && (track.agent.name || track.agent.phone)) &&
             Number.isFinite(Number(track.agentLat)) &&
             Number.isFinite(Number(track.agentLng));
         const bike = onRoad

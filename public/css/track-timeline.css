@@ -597,3 +597,5 @@ li.drawer-open .ship-drawer-btn{background:#eef7ff;border-color:#bfdcff;color:#0
 li.drawer-open .ship-kids.ship-drawer{display:block}
 li.drawer-flash .ship-copy{animation:shipFlash 1.5s ease}
 @keyframes shipFlash{0%{background:#fff7d6}100%{background:transparent}}
+
+.ship-otp.ship-otp-ok .code{color:#0f9d8a;letter-spacing:0;font-size:1rem}
