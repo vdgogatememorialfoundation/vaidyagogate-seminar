@@ -284,6 +284,8 @@ function mountPaymentsRoutes() {
     require('./lib/web-push').registerWebPushRoutes(app, db);
     require('./lib/retail-pos').registerRetailPosRoutes(app, db, {
         bookSales,
+        Razorpay: require('razorpay'),
+        adminPaymentFlow: require('./lib/admin-payment-flow'),
         listDoctorPaymentOptions,
         notifEngine,
         commerceRoutes: require('./lib/commerce-routes'),

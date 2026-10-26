@@ -12,6 +12,7 @@
     let payMode = 'cash';
     let quote = null;
     let view = 'sale';
+    let otpToken = '';
 
     const $ = (id) => document.getElementById(id);
     const esc = (s) => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -106,7 +107,7 @@
         setView(isAdminPath && catalog.actor.isAdmin ? 'admin' : 'sale');
     }
     function renderNav() {
-        const items = [['sale', 'Sale'], ['tools', 'Gift cards & wallet'], ['recent', 'My sales']];
+        const items = [['sale', 'Sale'], ['orders', 'Orders & tracking'], ['razorpay', 'Razorpay transactions'], ['tools', 'Gift cards & wallet'], ['recent', 'My sales']];
         if (catalog.actor.isAdmin) items.push(['admin', 'Admin: discounts · vouchers · gift cards · loyalty · reports']);
         $('pos-nav').innerHTML = items.map(([k, l]) => '<button type="button" data-v="' + k + '" class="' + (view === k ? 'active' : '') + '">' + esc(l) + '</button>').join('');
         $('pos-nav').querySelectorAll('button').forEach((b) => b.addEventListener('click', () => setView(b.getAttribute('data-v'))));
@@ -115,7 +116,7 @@
         view = v;
         renderNav();
         $('pos-sale').classList.toggle('hidden', v !== 'sale' && v !== 'recent');
-        $('pos-tools').classList.toggle('hidden', v !== 'tools');
+        $('pos-tools').classList.toggle('hidden', v !== 'tools' && v !== 'orders' && v !== 'razorpay');
         $('pos-admin').classList.toggle('hidden', v !== 'admin');
         if (v === 'sale') {
             renderLangs();
@@ -130,6 +131,8 @@
             $('pos-recent-card').scrollIntoView({ behavior: 'smooth' });
         }
         if (v === 'tools') renderTools();
+        if (v === 'orders') renderOrders();
+        if (v === 'razorpay') renderRazorpay();
         if (v === 'admin') renderAdmin('settings');
     }
 
@@ -316,7 +319,41 @@
             if (!$('pos-addr-phone').value) $('pos-addr-phone').value = customer.phone || '';
         }
     }
+    function renderOtpBox() {
+        let box = $('pos-otp-box');
+        if (!box) {
+            box = document.createElement('div');
+            box.id = 'pos-otp-box';
+            $('pos-charge').parentNode.insertBefore(box, $('pos-charge'));
+        }
+        if (!catalog.settings.transactionOtp) {
+            box.innerHTML = '';
+            return;
+        }
+        box.innerHTML = otpToken
+            ? '<div class="pos-cust-summary"><span style="background:#dcfce7">\u2713 Customer OTP verified</span></div>'
+            : '<h4>Customer verification</h4><div class="pos-inline"><button type="button" class="pos-btn small" id="otp-send">Send OTP to customer</button><input type="text" id="otp-code" placeholder="6-digit code" maxlength="6" style="max-width:130px"><button type="button" class="pos-btn small primary" id="otp-verify">Verify</button></div><p id="otp-msg" class="pos-muted"></p>';
+        if (otpToken) return;
+        $('otp-send').addEventListener('click', async () => {
+            try {
+                const d = await api('/api/pos/retail/otp/send', { method: 'POST', body: JSON.stringify({ customer }) });
+                $('otp-msg').textContent = 'Code sent to ' + d.sentTo.join(' / ');
+            } catch (e) {
+                $('otp-msg').textContent = e.message;
+            }
+        });
+        $('otp-verify').addEventListener('click', async () => {
+            try {
+                const d = await api('/api/pos/retail/otp/verify', { method: 'POST', body: JSON.stringify({ customer, code: $('otp-code').value }) });
+                otpToken = d.token;
+                renderOtpBox();
+            } catch (e) {
+                $('otp-msg').textContent = e.message;
+            }
+        });
+    }
     function renderPay() {
+        renderOtpBox();
         const modes = (catalog.settings.paymentModes || ['cash']).filter((m) => PAY_LABEL[m] && (m !== 'razorpay' || catalog.settings.razorpayMethodId));
         if (!modes.includes(payMode)) payMode = modes[0] || 'cash';
         $('pos-paymodes').innerHTML = modes.map((m) => '<button type="button" data-p="' + m + '" class="' + (payMode === m ? 'active' : '') + '">' + PAY_LABEL[m] + '</button>').join('');
@@ -344,6 +381,7 @@
             loyaltyPoints: $('pos-loyalty-pts').value,
             walletAmount: $('pos-wallet-amt').value,
             paymentMode: payMode,
+            otpToken: otpToken,
             note: $('pos-note').value,
             address: {
                 recipient: $('pos-addr-recipient').value,
@@ -402,6 +440,8 @@
         customer = { userId: null, name: '', phone: '', email: '' };
         ['pos-cust-name', 'pos-cust-phone', 'pos-cust-email', 'pos-voucher', 'pos-manual-disc', 'pos-giftcard', 'pos-giftcard-amt', 'pos-loyalty-pts', 'pos-wallet-amt', 'pos-note', 'pos-addr-recipient', 'pos-addr-phone', 'pos-addr-line1', 'pos-addr-city', 'pos-addr-state', 'pos-addr-pin', 'pos-ship-override'].forEach((id) => ($(id).value = ''));
         $('pos-cust-summary').innerHTML = '';
+        otpToken = '';
+        renderOtpBox();
         renderCart();
         msg('');
     };
@@ -414,9 +454,15 @@
             const out = await api('/api/pos/retail/checkout', { method: 'POST', body: JSON.stringify(quoteBody()) });
             if (out.needsPayment) {
                 await payRazorpay(out);
-                const st = await api('/api/pos/retail/orders/' + out.orderId + '/status');
-                if (!st.paid) throw new Error('Payment not confirmed yet. Use "My sales" to re-check or mark as paid.');
+                let st = null;
+                for (let i = 0; i < 4; i++) {
+                    st = await api('/api/pos/retail/orders/' + out.orderId + '/status');
+                    if (st.paid) break;
+                    await new Promise((r) => setTimeout(r, 2500));
+                }
+                if (!st || !st.paid) throw new Error('Razorpay has not confirmed order ' + out.orderCode + ' yet. Open "Razorpay transactions" to match it, or "My sales" to re-check.');
                 out.order = st.order;
+                out.payment = st.payment;
             }
             showReceipt(out);
             catalog = await api('/api/pos/retail/catalog');
@@ -460,6 +506,7 @@
             '<div class="grand"><span>Total</span><span>' + money(q.grandTotal) + '</span></div>' +
             (q.prepaid ? '<div><span>Gift card / wallet</span><span>− ' + money(q.prepaid) + '</span></div><div><span>Paid now</span><span>' + money(q.dueAmount) + '</span></div>' : '') +
             (q.loyaltyPointsEarned ? '<div><span>Loyalty points earned</span><span>+' + q.loyaltyPointsEarned + '</span></div>' : '') + '</div>' +
+            (out.payment && (out.payment.transactionId || out.payment.orderIdString) ? '<p class="pos-muted">Payment ref ' + esc(out.payment.orderIdString || '') + (out.payment.transactionId ? ' · Transaction ' + esc(out.payment.transactionId) : '') + (out.payment.gateway ? ' · ' + esc(out.payment.gateway) : '') + '</p>' : '') +
             '<p class="pos-muted">' + esc(catalog.settings.receiptFooter || '') + '<br>Invoice emailed to ' + esc(o.buyerEmail || customer.email || 'customer (no email)') + '. Track: ' + location.origin + esc(out.trackUrl || '') + '</p>' +
             '<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="pos-btn primary" onclick="window.print()">Print receipt</button>' +
             '<a class="pos-btn" href="' + esc(out.trackUrl || '#') + '" target="_blank">Open tracking</a>' +
@@ -553,6 +600,113 @@
         });
     }
 
+    /* ---------- orders & tracking ---------- */
+    async function renderOrders(q) {
+        const root = $('pos-tools');
+        root.innerHTML = '<div class="pos-card"><h3><i class="fas fa-box"></i> Orders & tracking</h3><div class="pos-inline" style="max-width:520px;margin-bottom:10px"><input type="search" id="ord-q" placeholder="Order id / name / phone / transaction id" value="' + esc(q || '') + '"><button type="button" class="pos-btn" id="ord-go">Search</button><button type="button" class="pos-btn" id="ord-recon" title="Check Razorpay for paid-but-pending orders">Reconcile pending</button></div><div id="ord-list">Loading…</div></div>';
+        $('ord-go').addEventListener('click', () => renderOrders($('ord-q').value.trim()));
+        $('ord-q').addEventListener('keydown', (e) => e.key === 'Enter' && renderOrders($('ord-q').value.trim()));
+        $('ord-recon').addEventListener('click', async () => {
+            $('ord-recon').disabled = true;
+            try {
+                const d = await api('/api/pos/retail/razorpay/reconcile', { method: 'POST', body: '{}' });
+                alert('Checked ' + d.checked + ' pending orders; confirmed: ' + (d.settled.length ? d.settled.join(', ') : 'none'));
+            } catch (e) {
+                alert(e.message);
+            }
+            renderOrders(q);
+        });
+        try {
+            const d = await api('/api/pos/retail/orders' + (q ? '?q=' + encodeURIComponent(q) : ''));
+            $('ord-list').innerHTML = (d.orders || []).length
+                ? '<table class="pos-table"><tr><th>Order</th><th>Customer</th><th>Amount · payment</th><th>Fulfilment · stage</th><th>OTPs</th><th>Transaction</th><th></th></tr>' +
+                  d.orders
+                      .map(
+                          (o) =>
+                              '<tr><td><b>' + esc(o.order_code) + '</b><br><small>' + esc(String(o.created_at || '').slice(0, 16).replace('T', ' ')) + ' · ' + esc(o.order_channel || '') + '</small></td><td>' + esc(o.buyer_name || '') + '<br><small>' + esc(o.buyer_phone || '') + '</small></td><td>' + money(o.total_amount) + '<br><small>' + esc(o.payment_mode || '') + ' · <span class="pill ' + (o.status === 'pending_payment' ? 'off' : 'ok') + '">' + esc(o.status) + '</span></small></td>' +
+                              '<td>' + esc(o.fulfillment_type === 'pickup' ? 'Store pickup' : o.commerce_mode === 'hyperlocal' ? 'Hyperlocal' : 'Courier') + '<br><small>' + esc(o.commerce_stage || '') + (o.courier_tracking_no || o.commerce_awb ? ' · ' + esc(o.courier_tracking_no || o.commerce_awb) : '') + '</small></td>' +
+                              '<td>' + (o.pickup_otp ? 'Pickup <b>' + esc(o.pickup_otp) + '</b><br>' : '') + (o.delivery_otp ? 'Delivery <b>' + esc(o.delivery_otp) + '</b>' : '') + (!o.pickup_otp && !o.delivery_otp ? '<small class="pos-muted">—</small>' : '') + '</td>' +
+                              '<td><small>' + esc(o.order_id_string || '') + (o.provider_transaction_id ? '<br>' + esc(o.provider_transaction_id) : '') + (o.provider_order_id ? '<br>' + esc(o.provider_order_id) : '') + (o.pay_status ? '<br>' + esc(o.pay_status) : '') + '</small></td>' +
+                              '<td>' + (o.track_url ? '<a class="pos-btn small" href="' + esc(o.track_url) + '" target="_blank">Track</a> ' : '') + (o.status === 'pending_payment' ? '<button type="button" class="pos-btn small" data-check="' + o.id + '">Check payment</button> <button type="button" class="pos-btn small" data-paid="' + o.id + '">Mark paid</button>' : '') + '</td></tr>'
+                      )
+                      .join('') +
+                  '</table>'
+                : '<p class="pos-muted">No orders found.</p>';
+            $('ord-list').querySelectorAll('button[data-check]').forEach((b) =>
+                b.addEventListener('click', async () => {
+                    try {
+                        const r = await api('/api/pos/retail/orders/' + b.getAttribute('data-check') + '/status');
+                        alert(r.paid ? 'Payment confirmed' + (r.payment && r.payment.transactionId ? ' · ' + r.payment.transactionId : '') : 'Still unpaid at Razorpay');
+                    } catch (e) {
+                        alert(e.message);
+                    }
+                    renderOrders(q);
+                })
+            );
+            $('ord-list').querySelectorAll('button[data-paid]').forEach((b) =>
+                b.addEventListener('click', async () => {
+                    const mode = prompt('Payment mode received (cash / upi / card):', 'cash');
+                    if (!mode) return;
+                    const reference = prompt('Reference / UTR (optional):', '') || '';
+                    try {
+                        await api('/api/pos/retail/orders/' + b.getAttribute('data-paid') + '/mark-paid', { method: 'POST', body: JSON.stringify({ paymentMode: mode, reference }) });
+                    } catch (e) {
+                        alert(e.message);
+                    }
+                    renderOrders(q);
+                })
+            );
+        } catch (e) {
+            $('ord-list').innerHTML = '<p class="pos-msg">' + esc(e.message) + '</p>';
+        }
+    }
+
+    async function renderRazorpay(days) {
+        const root = $('pos-tools');
+        days = days || 3;
+        root.innerHTML = '<div class="pos-card"><h3><i class="fas fa-credit-card"></i> Razorpay transactions</h3><p class="pos-muted">Payments received at Razorpay. "Not updated" means the customer paid but no order was confirmed — match it to the order.</p><div class="pos-inline" style="max-width:360px;margin-bottom:10px"><select id="rz-days"><option value="1">Last 24 h</option><option value="3" selected>Last 3 days</option><option value="7">Last 7 days</option><option value="30">Last 30 days</option></select><button type="button" class="pos-btn" id="rz-go">Refresh</button></div><div id="rz-list">Loading…</div></div>';
+        $('rz-days').value = String(days);
+        $('rz-go').addEventListener('click', () => renderRazorpay(Number($('rz-days').value)));
+        try {
+            const d = await api('/api/pos/retail/razorpay/transactions?days=' + days);
+            $('rz-list').innerHTML = (d.transactions || []).length
+                ? '<table class="pos-table"><tr><th>When</th><th>Payment id</th><th>Amount</th><th>Status</th><th>Payer</th><th>Ack / RRN</th><th>Order</th><th></th></tr>' +
+                  d.transactions
+                      .map((t) => {
+                          const m = t.matched;
+                          const state = !m ? '<span class="pill off">no order</span>' : m.updated ? '<span class="pill ok">' + esc(m.orderCode) + '</span>' : '<span class="pill off">' + esc(m.orderCode) + ' not updated</span>';
+                          return '<tr><td>' + esc(String(t.createdAt || '').slice(0, 16).replace('T', ' ')) + '</td><td><small>' + esc(t.id) + '<br>' + esc(t.orderId || '') + '</small></td><td>' + money(t.amount) + '</td><td>' + esc(t.status) + ' · ' + esc(t.method || '') + '</td><td><small>' + esc(t.contact || '') + '<br>' + esc(t.email || '') + '</small></td><td><small>' + esc(t.acknowledgementId || '') + '</small></td><td>' + state + '</td>' +
+                              '<td>' + (t.status === 'captured' && (!m || !m.updated) ? '<button type="button" class="pos-btn small" data-match="' + esc(t.id) + '" data-bo="' + (m ? m.bookOrderId : '') + '">Match to order</button>' : '') + '</td></tr>';
+                      })
+                      .join('') +
+                  '</table>'
+                : '<p class="pos-muted">No Razorpay payments in this window.</p>';
+            $('rz-list').querySelectorAll('button[data-match]').forEach((b) =>
+                b.addEventListener('click', async () => {
+                    const pre = b.getAttribute('data-bo');
+                    const code = prompt('12-digit order id to match this payment to:', pre ? '' : '');
+                    let bookOrderId = pre;
+                    if (code) {
+                        const found = await api('/api/pos/retail/orders?q=' + encodeURIComponent(code.trim()));
+                        const hit = (found.orders || []).find((o) => String(o.order_code) === code.trim());
+                        if (!hit) return alert('Order ' + code + ' not found');
+                        bookOrderId = hit.id;
+                    }
+                    if (!bookOrderId) return;
+                    try {
+                        await api('/api/pos/retail/razorpay/match', { method: 'POST', body: JSON.stringify({ paymentId: b.getAttribute('data-match'), bookOrderId: Number(bookOrderId) }) });
+                        alert('Matched and confirmed');
+                    } catch (e) {
+                        alert(e.message);
+                    }
+                    renderRazorpay(days);
+                })
+            );
+        } catch (e) {
+            $('rz-list').innerHTML = '<p class="pos-msg">' + esc(e.message) + '</p>';
+        }
+    }
+
     /* ---------- admin ---------- */
     async function renderAdmin(tab) {
         const root = $('pos-admin');
@@ -577,7 +731,7 @@
         const num = (k, label) => '<label>' + label + '<input type="number" step="any" id="st-' + k + '" value="' + esc(s[k] == null ? '' : s[k]) + '"></label>';
         const txt = (k, label) => '<label>' + label + '<input type="text" id="st-' + k + '" value="' + esc(Array.isArray(s[k]) ? s[k].join(',') : s[k] == null ? '' : s[k]) + '"></label>';
         body.innerHTML =
-            '<h3>Discount &amp; POS rules</h3><div class="pos-form">' + num('manualDiscountMaxPct', 'Staff manual discount cap (%)') + chk('staffManualDiscount') + '</div>' +
+            '<h3>Discount &amp; POS rules</h3><div class="pos-form">' + num('manualDiscountMaxPct', 'Staff manual discount cap (%)') + chk('staffManualDiscount') + chk('transactionOtp') + '</div>' +
             '<h3>Loyalty</h3><div class="pos-form">' + chk('loyaltyEnabled') + num('loyaltyEarnPerRupee', 'Points earned per ₹1 (0.01 = 1 pt / ₹100)') + num('loyaltyPointValue', '₹ value per point') + num('loyaltyMinRedeem', 'Minimum points to redeem') + num('loyaltyMaxRedeemPct', 'Max % of bill payable by points') + '</div>' +
             '<h3>Gift cards &amp; wallet</h3><div class="pos-form">' + chk('giftCardsEnabled') + txt('giftCardDenominations', 'Quick denominations (comma)') + num('giftCardValidityDays', 'Validity (days)') + chk('walletEnabled') + '</div>' +
             '<h3>Payments &amp; fulfilment</h3><div class="pos-form">' + txt('paymentModes', 'Payment modes (cash,upi,card,razorpay,wallet)') + txt('fulfillmentTypes', 'Fulfilment types (pickup,hyperlocal,courier)') + num('hyperlocalCharge', 'Hyperlocal delivery charge ₹') + num('courierCharge', 'Courier charge ₹ (blank = book-sales default)') + txt('receiptFooter', 'Receipt footer') + '</div>' +
