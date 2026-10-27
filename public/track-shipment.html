@@ -10,39 +10,40 @@
     <link rel="apple-touch-icon" href="/favicon.ico">
     <link rel="canonical" href="https://seminar.vaidyagogate.org/track-shipment">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" crossorigin="anonymous">
-    <link rel="stylesheet" href="/css/book-track.css?v=20260529stg">
+    <link rel="stylesheet" href="/css/book-track.css?v=20261022v4">
+    <link rel="stylesheet" href="/css/track-shipment-v4.css?v=20261022v10">
+    <link rel="stylesheet" href="/css/track-timeline.css?v=20261026v2">
     <script src="/js/site-seo.js?v=20260608seo2"></script>
     <script src="/js/portal-datetime.js?v=1"></script>
 </head>
-<body>
-    <div class="pkg-track-page">
-        <div class="pkg-track-brand">
-            <a href="https://seminar.vaidyagogate.org">Vaidya Gogate Memorial Foundation</a>
-            <p style="margin:6px 0 0;font-size:0.85rem;color:#64748b;">Seminar book courier · Shipment tracking</p>
-        </div>
+<body class="ts4">
+    <div class="pkg-track-page ts4-page">
+        <header class="ts4-top">
+            <a class="ts4-brand" href="https://seminar.vaidyagogate.org"><i class="fas fa-box-open"></i> Gogate Products</a>
+            <span class="ts4-top-sub">Shipment tracking</span>
+        </header>
 
-        <div class="pkg-track-search" id="track-shipment-search">
-            <h1><i class="fas fa-truck-fast"></i> Track your shipment</h1>
-            <p>Enter your book order details to see live courier updates (package booked, in transit, out for delivery).</p>
-            <form id="track-shipment-form" autocomplete="off">
-                <label for="ts-order-code">Order code</label>
-                <input type="text" id="ts-order-code" name="orderCode" placeholder="e.g. BK-…" required>
-                <label for="ts-awb">AWB / tracking number <span style="font-weight:400;color:#94a3b8;">(recommended)</span></label>
-                <input type="text" id="ts-awb" name="awb" placeholder="Courier AWB after dispatch">
-                <label for="ts-phone">Or last 4 digits of shipping mobile</label>
-                <input type="text" id="ts-phone" name="phoneLast4" maxlength="4" inputmode="numeric" placeholder="e.g. 7890">
-                <button type="submit"><i class="fas fa-location-arrow"></i> Track shipment</button>
+        <section class="pkg-track-search ts4-search" id="track-shipment-search">
+            <div class="ts4-search-copy">
+                <h1>Track your shipment</h1>
+                <p>Enter your order code with the AWB or the last 4 digits of the shipping mobile number.</p>
+            </div>
+            <form id="track-shipment-form" autocomplete="off" class="ts4-form">
+                <label><span>Order code</span><input type="text" id="ts-order-code" name="orderCode" placeholder="e.g. BKMV…" required></label>
+                <label><span>AWB / tracking no.</span><input type="text" id="ts-awb" name="awb" placeholder="Courier AWB"></label>
+                <label><span>or mobile (last 4)</span><input type="text" id="ts-phone" name="phoneLast4" maxlength="4" inputmode="numeric" placeholder="7890"></label>
+                <button type="submit"><i class="fas fa-location-arrow"></i> Track</button>
             </form>
             <p id="track-shipment-err" class="pkg-track-err hidden"></p>
-        </div>
+        </section>
 
         <div id="track-shipment-result" class="hidden"></div>
         <p id="track-shipment-poll" class="hidden" style="text-align:center;font-size:0.82rem;color:#0f766e;font-weight:700;margin-top:12px;">
-            <span class="pkg-track-live-dot" style="display:inline-block;vertical-align:middle;margin-right:6px;background:#10b981;"></span>
-            Live shipment updates every 10 seconds
+            Updates when you refresh
         </p>
     </div>
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
-    <script src="/js/track-shipment.js?v=20260529stg"></script>
+    <script src="/js/track-timeline.js?v=20261022v3"></script>
+    <script src="/js/track-shipment.js?v=20261023v2"></script>
 </body>
 </html>
