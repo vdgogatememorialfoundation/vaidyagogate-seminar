@@ -22609,7 +22609,7 @@ function bsPosAddBook(bookId) {
 
 function bsPosAddAllBooks() {
     bsPosRememberPicks();
-    const lang = _bsPosPick.__allLang || 'english';
+    const lang = (_bsPosPick.__form && _bsPosPick.__form.lang) || 'english';
     bsPosActiveBooks().forEach((book) => bsPosPushLine(book, lang, 1));
     renderBsPosBooks();
 }
