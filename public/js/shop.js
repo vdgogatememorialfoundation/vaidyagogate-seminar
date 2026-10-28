@@ -4,6 +4,10 @@ let shopCart = [];
 let shopAddresses = [];
 let razorpayMethod = null;
 let shopSearchTerm = '';
+let shopLangFilter = 'all';
+let shopSort = 'featured';
+let shopPick = {};
+let shopRecent = [];
 let shopPending = null;
 let orderPoll = null;
 let checkoutState = { fulfillment: 'delivery', method: '', addressId: null, showForm: false };
@@ -87,6 +91,11 @@ function loadShopUser() {
     } catch (_) {
         shopCart = [];
     }
+    try {
+        shopRecent = JSON.parse(sessionStorage.getItem('shop_recent') || '[]') || [];
+    } catch (_) {
+        shopRecent = [];
+    }
 }
 
 function saveCart() {
@@ -130,6 +139,7 @@ function showView(name) {
 function route() {
     stopPolling();
     closeCartDrawer();
+    closeProduct();
     const hash = location.hash || '#/';
     const needsLogin = /^#\/(checkout|account|order)/.test(hash);
     if (needsLogin && !shopUser) {
@@ -158,6 +168,7 @@ function shopSearch(e) {
 
 function renderLogin() {
     showView('login');
+    markNav('');
     document.getElementById('view-login').innerHTML =
         '<div class="box signin"><h2>Sign in</h2>' +
         '<p class="muted">Use your Vaidya Gogate portal account. Your orders, addresses and tracking are linked to it.</p>' +
@@ -212,7 +223,8 @@ async function bootShop() {
     document.getElementById('store-name').textContent = store.name || 'Book shop';
     document.title = (store.name || 'Book shop') + ' - Online book shop';
     document.getElementById('shop-hours').textContent =
-        'Orders ' + (s.orderOpen || '') + ' - ' + (s.orderClose || '') + ' IST';
+        'Orders ' + (s.orderOpen || '') + ' – ' + (s.orderClose || '') + ' IST';
+    renderShopChrome();
     if (!shopCatalog.open) {
         const b = document.getElementById('closed-banner');
         b.textContent = shopCatalog.closedMessage || 'The shop is currently closed.';
@@ -236,69 +248,278 @@ async function bootShop() {
 
 /* ---------- home ---------- */
 
-function renderHome() {
-    showView('home');
-    const s = shopCatalog.settings || {};
-    const langs = shopCatalog.languages || ['english'];
-    let books = shopCatalog.books || [];
+function langLabel(id) {
+    const name = String(id || '');
+    return name ? name.charAt(0).toUpperCase() + name.slice(1) : '';
+}
+
+function bookPick(bookId) {
+    if (!shopPick[bookId]) {
+        const langs = (shopCatalog && shopCatalog.languages) || ['english'];
+        shopPick[bookId] = { lang: shopLangFilter !== 'all' ? shopLangFilter : langs[0] || 'english', qty: 1 };
+    }
+    if (shopLangFilter !== 'all') shopPick[bookId].lang = shopLangFilter;
+    return shopPick[bookId];
+}
+
+function cartQtyOf(bookId, lang) {
+    return shopCart.filter((l) => l.bookId === bookId && (!lang || l.language === lang)).reduce((s, l) => s + l.qty, 0);
+}
+
+function shopBooksView() {
+    let books = (shopCatalog.books || []).slice();
     if (shopSearchTerm) {
         books = books.filter((b) => (b.title + ' ' + (b.author || '')).toLowerCase().includes(shopSearchTerm));
     }
+    if (shopSort === 'price-asc') books.sort((a, b) => Number(a.price) - Number(b.price) || String(a.title).localeCompare(b.title));
+    else if (shopSort === 'price-desc') books.sort((a, b) => Number(b.price) - Number(a.price) || String(a.title).localeCompare(b.title));
+    else if (shopSort === 'title') books.sort((a, b) => String(a.title).localeCompare(String(b.title)));
+    return books;
+}
+
+function markNav(which) {
+    document.querySelectorAll('.subnav button').forEach((b) => b.classList.remove('on'));
+    const map = { home: 'nav-home', orders: 'nav-orders', address: 'nav-addresses' };
+    const el = document.getElementById(map[which] || '');
+    if (el) el.classList.add('on');
+}
+
+function renderShopChrome() {
+    const s = (shopCatalog && shopCatalog.settings) || {};
+    const store = (shopCatalog && shopCatalog.store) || {};
+    const ann = document.getElementById('shop-announce');
+    if (ann) {
+        ann.textContent = shopCatalog && shopCatalog.open
+            ? 'Orders ' + (s.orderOpen || '') + ' – ' + (s.orderClose || '') + ' IST · English, Marathi, Hindi and Kannada · Several titles in one checkout'
+            : (shopCatalog && shopCatalog.closedMessage) || 'The shop is currently closed.';
+    }
+    const items = [
+        ['Authentic editions', 'Texts by Dr. R.B. Gogate'],
+        ['Portal account', 'Orders stay with your login']
+    ];
+    if (s.razorpayEnabled !== false) items.push(['Pay online', 'UPI, cards, net banking']);
+    if (s.codEnabled !== false) items.push(['Cash on delivery', Number(s.codExtraCharge) ? 'Extra ' + money(s.codExtraCharge) : 'Pay the delivery agent']);
+    if (s.storePickupEnabled !== false) items.push(['Store pickup', store.city || 'Collect at the counter']);
+    if (s.deliveryEnabled !== false) items.push(['Home delivery', 'Live parcel tracking']);
+    if (s.returnsEnabled !== false) items.push(['Returns', 'Request from the order page']);
+    const trust = document.getElementById('shop-trust');
+    if (trust) {
+        trust.innerHTML = items
+            .slice(0, 6)
+            .map((pair) => '<div><b>' + shopEsc(pair[0]) + '</b><span>' + shopEsc(pair[1]) + '</span></div>')
+            .join('');
+    }
+}
+
+function rememberBook(id) {
+    shopRecent = shopRecent.filter((x) => x !== id);
+    shopRecent.unshift(id);
+    shopRecent = shopRecent.slice(0, 8);
+    try {
+        sessionStorage.setItem('shop_recent', JSON.stringify(shopRecent));
+    } catch (_) {}
+}
+
+function renderHome() {
+    const home = document.getElementById('view-home');
+    if (home.classList.contains('hidden')) showView('home');
+    markNav('home');
+    const s = shopCatalog.settings || {};
+    const langs = shopCatalog.languages || ['english'];
+    const books = shopBooksView();
+    const catalogCount = (shopCatalog.books || []).length;
     const badges = [];
     if (s.razorpayEnabled !== false) badges.push('Secure online payment');
     if (s.codEnabled !== false) badges.push('Cash on delivery');
-    if (s.storePickupEnabled !== false) badges.push('Free store pickup');
-    if (s.returnsEnabled !== false) badges.push('Easy returns');
-    badges.push('Live order tracking');
-    document.getElementById('view-home').innerHTML =
-        '<div class="hero"><div><h1>Authentic Ayurveda texts</h1><p>Books by Dr. R.B. Gogate in English, Marathi, Hindi and Kannada, delivered to your door or ready for pickup.</p></div>' +
+    if (s.storePickupEnabled !== false) badges.push('Store pickup');
+    if (s.returnsEnabled !== false) badges.push('Returns from your order');
+    badges.push('Live tracking');
+    const edition = shopLangFilter === 'all' ? 'the language on each card' : langLabel(shopLangFilter);
+    const setBanner = books.length >= 2
+        ? '<div class="set-banner"><div><h2>Order the set in one checkout</h2><p>Add every title on this page in ' + shopEsc(edition) + '. Agnikarma and Viddhakarma can travel together.</p></div>' +
+          '<div class="set-actions"><button class="btn gold sm" type="button" onclick="shopAddVisible(false)">Add all ' + books.length + ' books</button>' +
+          '<button class="btn ghost sm" type="button" onclick="shopAddVisible(true)">Buy the set now</button></div></div>'
+        : '';
+    const langFilters =
+        '<button type="button" class="pill' + (shopLangFilter === 'all' ? ' on' : '') + '" onclick="setLangFilter(\'all\')">All languages</button>' +
+        langs.map((l) => '<button type="button" class="pill' + (shopLangFilter === l ? ' on' : '') + '" onclick="setLangFilter(\'' + shopEsc(l) + '\')">' + shopEsc(langLabel(l)) + '</button>').join('');
+    const cards = books.length
+        ? '<div class="product-grid">' + books.map((b) => productCardHtml(b, langs, s)).join('') + '</div>'
+        : '<div class="box empty">' +
+          (catalogCount ? 'No books match that search.' : 'Books appear here after a price is saved in seminar book settings.') +
+          (shopSearchTerm ? '<br><br><button class="btn sm" type="button" onclick="clearShopSearch()">Clear search</button>' : '') +
+          '</div>';
+    const recent = recentHtml();
+    home.innerHTML =
+        '<div class="hero"><div><p class="c-kicker" style="letter-spacing:.14em;text-transform:uppercase;font-size:.72rem;opacity:.75;margin:0 0 8px;">Vaidya Gogate Memorial Foundation</p><h1>Seminar book shop</h1><p>Choose a language, add one title or the full set, and check out once. Delivery and store pickup stay on the same order.</p></div>' +
         '<div class="hero-badges">' + badges.map((b) => '<span>' + shopEsc(b) + '</span>').join('') + '</div></div>' +
-        '<div class="section-title">' + (shopSearchTerm ? 'Results for "' + shopEsc(shopSearchTerm) + '"' : 'All books') + '</div>' +
-        (books.length
-            ? '<div class="product-grid">' +
-              books
-                  .map((b) => {
-                      const id = shopEsc(b.id);
-                      return (
-                          '<div class="product"><div class="cover" style="' + coverBg(b.id) + '">' +
-                          '<div class="c-title">' + shopEsc(b.title) + '</div><div class="c-author">' + shopEsc(b.author || '') + '</div><div class="c-mark">॥</div></div>' +
-                          '<h3>' + shopEsc(b.title) + '</h3><div class="by">by ' + shopEsc(b.author || '') + '</div>' +
-                          '<div class="price"><sup>₹</sup>' + shopEsc(Number(b.price).toLocaleString('en-IN')) + '</div>' +
-                          '<div>' +
-                          (s.storePickupEnabled !== false ? '<span class="badge">Store pickup</span>' : '') +
-                          (s.codEnabled !== false ? '<span class="badge">COD</span>' : '') +
-                          '</div>' +
-                          '<div class="pill-row" id="langs-' + id + '">' +
-                          langs.map((l, i) => '<button type="button" class="pill' + (i === 0 ? ' on' : '') + '" data-lang="' + shopEsc(l) + '" onclick="pickLang(\'' + id + '\',this)">' + shopEsc(l) + '</button>').join('') +
-                          '</div>' +
-                          '<div class="qty"><label class="muted" for="qty-' + id + '">Qty:</label><select id="qty-' + id + '">' +
-                          [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => '<option>' + n + '</option>').join('') + '</select></div>' +
-                          '<button class="btn" type="button" onclick="shopAdd(\'' + id + '\')">Add to cart</button>' +
-                          '<button class="btn buy" type="button" onclick="shopAdd(\'' + id + '\',true)">Buy now</button></div>'
-                      );
-                  })
-                  .join('') +
-              '</div>'
-            : '<div class="box empty">No books match your search.</div>');
+        '<div class="toolbar"><div><h2 class="section-title">' + (shopSearchTerm ? 'Results for “' + shopEsc(shopSearchTerm) + '”' : 'Books') + '</h2><div class="result-count">' + books.length + ' title' + (books.length === 1 ? '' : 's') + '</div></div>' +
+        '<div class="toolbar-tools"><label class="muted" for="shop-sort">Sort</label><select id="shop-sort" onchange="setShopSort(this.value)">' +
+        [['featured', 'Featured'], ['price-asc', 'Price: low to high'], ['price-desc', 'Price: high to low'], ['title', 'Title A–Z']]
+            .map((opt) => '<option value="' + opt[0] + '"' + (shopSort === opt[0] ? ' selected' : '') + '>' + opt[1] + '</option>')
+            .join('') +
+        '</select></div></div>' +
+        '<div class="filter-row" style="margin-bottom:14px">' + langFilters + '</div>' +
+        setBanner + cards + recent;
+}
+
+function productCardHtml(b, langs, s) {
+    const id = shopEsc(b.id);
+    const pick = bookPick(b.id);
+    const inCart = cartQtyOf(b.id);
+    return (
+        '<article class="product"><button type="button" class="cover-btn" onclick="openProduct(\'' + id + '\')"><div class="cover" style="' + coverBg(b.id) + '">' +
+        '<div class="c-kicker">Seminar text</div><div class="c-title">' + shopEsc(b.title) + '</div><div class="c-author">' + shopEsc(b.author || '') + '</div></div></button>' +
+        '<h3>' + shopEsc(b.title) + '</h3><div class="by">by ' + shopEsc(b.author || 'Dr. R.B. Gogate') + '</div>' +
+        '<div class="price"><sup>₹</sup>' + shopEsc(Number(b.price).toLocaleString('en-IN')) + '<span class="edition">' + shopEsc(langLabel(pick.lang)) + ' edition</span></div>' +
+        '<div>' +
+        (s.storePickupEnabled !== false ? '<span class="badge">Pickup</span>' : '') +
+        (s.codEnabled !== false ? '<span class="badge">COD</span>' : '') +
+        (s.deliveryEnabled !== false ? '<span class="badge ink">Delivery</span>' : '') +
+        '</div>' +
+        '<div class="pill-row" id="langs-' + id + '">' +
+        langs.map((l) => '<button type="button" class="pill' + (pick.lang === l ? ' on' : '') + '" data-lang="' + shopEsc(l) + '" onclick="pickLang(\'' + id + '\',this)">' + shopEsc(langLabel(l)) + '</button>').join('') +
+        '</div>' +
+        '<div class="buy-row"><div class="stepper"><button type="button" onclick="stepQty(\'' + id + '\',-1)" aria-label="Decrease quantity">−</button><span id="qty-' + id + '">' + pick.qty + '</span><button type="button" onclick="stepQty(\'' + id + '\',1)" aria-label="Increase quantity">+</button></div>' +
+        '<button class="btn" type="button" onclick="shopAdd(\'' + id + '\')">' + (inCart ? 'Add more' : 'Add to cart') + '</button></div>' +
+        '<button class="btn buy" type="button" onclick="shopAdd(\'' + id + '\',true)">Buy now</button>' +
+        '<button class="linkish" type="button" onclick="openProduct(\'' + id + '\')">View details</button>' +
+        (inCart ? '<div class="in-cart">' + inCart + ' already in your cart</div>' : '') +
+        '</article>'
+    );
+}
+
+function recentHtml() {
+    const books = shopRecent
+        .map((id) => (shopCatalog.books || []).find((b) => b.id === id))
+        .filter(Boolean);
+    if (books.length < 2) return '';
+    return (
+        '<section class="recent"><h2>Recently viewed</h2><div class="recent-row">' +
+        books
+            .map(
+                (b) =>
+                    '<button type="button" class="recent-card" onclick="openProduct(\'' + shopEsc(b.id) + '\')"><span class="mini" style="' + coverBg(b.id) + '">' + shopEsc(b.title) + '</span><span><b>' + shopEsc(b.title) + '</b><span>' + money(b.price) + '</span></span></button>'
+            )
+            .join('') +
+        '</div></section>'
+    );
+}
+
+function setLangFilter(lang) {
+    shopLangFilter = lang;
+    if (lang !== 'all') {
+        (shopCatalog.books || []).forEach((b) => {
+            bookPick(b.id).lang = lang;
+        });
+    }
+    renderHome();
+}
+
+function setShopSort(value) {
+    shopSort = value || 'featured';
+    renderHome();
+}
+
+function clearShopSearch() {
+    shopSearchTerm = '';
+    const input = document.getElementById('shop-search');
+    if (input) input.value = '';
+    renderHome();
 }
 
 function pickLang(bookId, btn) {
-    document.querySelectorAll('#langs-' + bookId + ' .pill').forEach((p) => p.classList.remove('on'));
-    btn.classList.add('on');
+    shopLangFilter = 'all';
+    bookPick(bookId).lang = btn.getAttribute('data-lang') || 'english';
+    renderHome();
+}
+
+function stepQty(bookId, delta) {
+    const pick = bookPick(bookId);
+    pick.qty = Math.max(1, Math.min(10, pick.qty + delta));
+    const el = document.getElementById('qty-' + bookId);
+    if (el) el.textContent = String(pick.qty);
+    const pdp = document.getElementById('pdp-qty');
+    if (pdp && pdp.getAttribute('data-book') === bookId) pdp.textContent = String(pick.qty);
+}
+
+function pushCartLine(book, lang, qty) {
+    const add = Math.max(1, qty || 1);
+    const hit = shopCart.find((l) => l.bookId === book.id && l.language === lang);
+    if (hit) hit.qty = Math.min(20, hit.qty + add);
+    else shopCart.push({ bookId: book.id, language: lang, qty: Math.min(20, add), title: book.title, price: book.price });
+    rememberBook(book.id);
 }
 
 function shopAdd(bookId, buyNow) {
     const book = (shopCatalog.books || []).find((b) => b.id === bookId);
     if (!book) return;
-    const pill = document.querySelector('#langs-' + bookId + ' .pill.on');
-    const lang = pill ? pill.getAttribute('data-lang') : 'english';
-    const qty = parseInt(document.getElementById('qty-' + bookId).value, 10) || 1;
-    const hit = shopCart.find((l) => l.bookId === bookId && l.language === lang);
-    if (hit) hit.qty = Math.min(20, hit.qty + qty);
-    else shopCart.push({ bookId, language: lang, qty, title: book.title, price: book.price });
+    const pick = bookPick(bookId);
+    pushCartLine(book, pick.lang, pick.qty);
     saveCart();
     if (buyNow) return shopGo('checkout');
+    renderHome();
     openCartDrawer();
+}
+
+function shopAddVisible(buyNow) {
+    const books = shopBooksView();
+    if (!books.length) return;
+    books.forEach((book) => {
+        const lang = shopLangFilter === 'all' ? bookPick(book.id).lang : shopLangFilter;
+        pushCartLine(book, lang, 1);
+    });
+    saveCart();
+    if (buyNow) return shopGo('checkout');
+    renderHome();
+    openCartDrawer();
+}
+
+function openProduct(bookId) {
+    const book = (shopCatalog.books || []).find((b) => b.id === bookId);
+    const body = document.getElementById('pdp-body');
+    if (!book || !body) return;
+    closeCartDrawer();
+    rememberBook(bookId);
+    const langs = shopCatalog.languages || ['english'];
+    const pick = bookPick(book.id);
+    const s = shopCatalog.settings || {};
+    const others = (shopCatalog.books || []).filter((b) => b.id !== book.id);
+    body.innerHTML =
+        '<div class="cover" style="' + coverBg(book.id) + '"><div class="c-kicker">Seminar text</div><div class="c-title">' + shopEsc(book.title) + '</div><div class="c-author">' + shopEsc(book.author || '') + '</div></div>' +
+        '<h2>' + shopEsc(book.title) + '</h2><div class="by">by ' + shopEsc(book.author || 'Dr. R.B. Gogate') + '</div>' +
+        '<div class="price" style="margin:8px 0"><sup>₹</sup>' + shopEsc(Number(book.price).toLocaleString('en-IN')) + '</div>' +
+        '<p class="muted">Printed seminar text. Pick the language you want to read. It can be ordered alone or with the other titles in a single checkout, then delivered or collected from the store.</p>' +
+        '<div class="pill-row" id="langs-' + shopEsc(book.id) + '">' +
+        langs.map((l) => '<button type="button" class="pill' + (pick.lang === l ? ' on' : '') + '" data-lang="' + shopEsc(l) + '" onclick="pickLang(\'' + shopEsc(book.id) + '\',this);openProduct(\'' + shopEsc(book.id) + '\')">' + shopEsc(langLabel(l)) + '</button>').join('') +
+        '</div>' +
+        '<div class="pdp-actions"><div class="buy-row"><div class="stepper"><button type="button" onclick="stepQty(\'' + shopEsc(book.id) + '\',-1)">−</button><span id="pdp-qty" data-book="' + shopEsc(book.id) + '">' + pick.qty + '</span><button type="button" onclick="stepQty(\'' + shopEsc(book.id) + '\',1)">+</button></div>' +
+        '<button class="btn" type="button" onclick="shopAdd(\'' + shopEsc(book.id) + '\')">Add to cart</button></div>' +
+        '<button class="btn buy" type="button" onclick="shopAdd(\'' + shopEsc(book.id) + '\',true)">Buy now</button></div>' +
+        '<p class="assurance">' +
+        [s.deliveryEnabled !== false ? 'Home delivery with live tracking' : '', s.storePickupEnabled !== false ? 'Store pickup' : '', s.codEnabled !== false ? 'Cash on delivery on home orders' : '', s.returnsEnabled !== false ? 'Return request from the order page' : '']
+            .filter(Boolean)
+            .join(' · ') +
+        '</p>' +
+        (others.length
+            ? '<div class="also"><h3>Also in the catalog</h3>' +
+              others
+                  .map(
+                      (b) =>
+                          '<button type="button" class="recent-card" onclick="openProduct(\'' + shopEsc(b.id) + '\')"><span class="mini" style="' + coverBg(b.id) + '">' + shopEsc(b.title) + '</span><span><b>' + shopEsc(b.title) + '</b><span>' + money(b.price) + ' · add it to the same order</span></span></button>'
+                  )
+                  .join('') +
+              '</div>'
+            : '');
+    document.getElementById('pdp-mask').classList.remove('hidden');
+    document.getElementById('pdp').classList.remove('hidden');
+}
+
+function closeProduct() {
+    const mask = document.getElementById('pdp-mask');
+    const panel = document.getElementById('pdp');
+    if (mask) mask.classList.add('hidden');
+    if (panel) panel.classList.add('hidden');
 }
 
 /* ---------- cart drawer ---------- */
@@ -308,6 +529,7 @@ function cartTotal() {
 }
 
 function openCartDrawer() {
+    closeProduct();
     document.getElementById('drawer-mask').classList.remove('hidden');
     document.getElementById('cart-drawer').classList.remove('hidden');
     renderDrawer();
@@ -321,10 +543,17 @@ function closeCartDrawer() {
 function cartQty(i, v) {
     const qty = parseInt(v, 10);
     if (qty <= 0) shopCart.splice(i, 1);
-    else shopCart[i].qty = qty;
+    else if (shopCart[i]) shopCart[i].qty = Math.min(20, qty);
     saveCart();
     renderDrawer();
+    const home = document.getElementById('view-home');
+    if (home && !home.classList.contains('hidden')) renderHome();
     if (location.hash === '#/checkout') renderCheckout();
+}
+
+function cartStep(i, delta) {
+    if (!shopCart[i]) return;
+    cartQty(i, shopCart[i].qty + delta);
 }
 
 function renderDrawer() {
@@ -339,16 +568,32 @@ function renderDrawer() {
         .map(
             (l, i) =>
                 '<div class="cart-line"><div class="mini" style="' + coverBg(l.bookId) + '">' + shopEsc(l.title) + '</div><div class="info"><b>' + shopEsc(l.title) +
-                '</b><div class="muted" style="text-transform:capitalize">' + shopEsc(l.language) + '</div><div><b>' + money(l.price) + '</b></div>' +
-                '<div class="qty" style="margin-top:6px"><select onchange="cartQty(' + i + ',this.value)">' +
-                [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => '<option value="' + n + '"' + (n === l.qty ? ' selected' : '') + '>' + (n === 0 ? '0 (remove)' : n) + '</option>').join('') +
-                '</select> <a onclick="cartQty(' + i + ',0)" style="cursor:pointer">Delete</a></div></div></div>'
+                '</b><div class="muted">' + shopEsc(langLabel(l.language)) + ' edition</div><div><b>' + money(l.price) + '</b> · line ' + money(l.price * l.qty) + '</div>' +
+                '<div class="line-actions"><div class="stepper"><button type="button" onclick="cartStep(' + i + ',-1)" aria-label="Decrease">−</button><span>' + l.qty + '</span><button type="button" onclick="cartStep(' + i + ',1)" aria-label="Increase">+</button></div>' +
+                '<button type="button" class="linkish" onclick="cartQty(' + i + ',0)">Remove</button></div></div></div>'
         )
         .join('');
     const count = shopCart.reduce((s, l) => s + l.qty, 0);
+    const titlesInCart = new Set(shopCart.map((l) => l.bookId));
+    const missing = (shopCatalog.books || []).filter((b) => !titlesInCart.has(b.id));
     foot.innerHTML =
         '<div class="sub-total"><span>Subtotal (' + count + ' item' + (count === 1 ? '' : 's') + ')</span><b>' + money(cartTotal()) + '</b></div>' +
-        '<button class="btn buy" type="button" onclick="closeCartDrawer();shopGo(\'checkout\')">Proceed to checkout</button>';
+        '<p class="assurance">' + titlesInCart.size + ' title' + (titlesInCart.size === 1 ? '' : 's') + ' in this order. Shipping is chosen at checkout.</p>' +
+        (missing.length
+            ? '<button class="btn ghost" type="button" style="margin-bottom:8px" onclick="shopAddMissing()">Add the other ' + missing.length + ' title' + (missing.length === 1 ? '' : 's') + '</button>'
+            : '') +
+        '<button class="btn buy" type="button" onclick="closeCartDrawer();shopGo(\'checkout\')">Checkout</button>';
+}
+
+function shopAddMissing() {
+    const have = new Set(shopCart.map((l) => l.bookId));
+    (shopCatalog.books || []).filter((b) => !have.has(b.id)).forEach((book) => {
+        pushCartLine(book, bookPick(book.id).lang, 1);
+    });
+    saveCart();
+    const home = document.getElementById('view-home');
+    if (home && !home.classList.contains('hidden')) renderHome();
+    renderDrawer();
 }
 
 /* ---------- checkout ---------- */
@@ -366,6 +611,7 @@ function paymentOptions() {
 
 async function renderCheckout() {
     showView('checkout');
+    markNav('');
     const root = document.getElementById('view-checkout');
     if (!shopCart.length) {
         root.innerHTML = '<div class="box empty">Your cart is empty.<br><br><button class="btn sm" onclick="shopGo(\'home\')">Browse books</button></div>';
@@ -384,6 +630,7 @@ async function renderCheckout() {
     const delivery = checkoutState.fulfillment === 'delivery';
     const cod = checkoutState.method === 'cod' ? Number(s.codExtraCharge) || 0 : 0;
     const total = cartTotal() + cod;
+    const titleCount = new Set(shopCart.map((l) => l.bookId)).size;
     const store = shopCatalog.store || {};
 
     const fulfillBox =
@@ -424,8 +671,8 @@ async function renderCheckout() {
         shopCart
             .map(
                 (l, i) =>
-                    '<div class="item-line"><div class="mini" style="' + coverBg(l.bookId) + '">' + shopEsc(l.title) + '</div><div style="flex:1"><b>' + shopEsc(l.title) + '</b><div class="muted" style="text-transform:capitalize">' + shopEsc(l.language) +
-                    '</div><div class="qty" style="margin-top:4px"><select onchange="cartQty(' + i + ',this.value)">' + [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => '<option value="' + n + '"' + (n === l.qty ? ' selected' : '') + '>' + (n === 0 ? '0 (remove)' : n) + '</option>').join('') + '</select></div></div><b>' + money(l.price * l.qty) + '</b></div>'
+                    '<div class="item-line"><div class="mini" style="' + coverBg(l.bookId) + '">' + shopEsc(l.title) + '</div><div style="flex:1"><b>' + shopEsc(l.title) + '</b><div class="muted">' + shopEsc(langLabel(l.language)) + ' edition</div>' +
+                    '<div class="line-actions"><div class="stepper"><button type="button" onclick="cartStep(' + i + ',-1)">−</button><span>' + l.qty + '</span><button type="button" onclick="cartStep(' + i + ',1)">+</button></div><button type="button" class="linkish" onclick="cartQty(' + i + ',0)">Remove</button></div></div><b>' + money(l.price * l.qty) + '</b></div>'
             )
             .join('') +
         '</div>';
@@ -433,6 +680,7 @@ async function renderCheckout() {
     const summary =
         '<div class="box" style="position:sticky;top:76px"><button class="btn buy" id="place-btn" type="button" onclick="shopCheckout()"' + (shopCatalog.open ? '' : ' disabled') + '>Place your order</button>' +
         '<h3 style="margin-top:14px">Order summary</h3>' +
+        '<div class="sum-row"><span>Titles</span><span>' + titleCount + '</span></div>' +
         '<div class="sum-row"><span>Items</span><span>' + money(cartTotal()) + '</span></div>' +
         (cod ? '<div class="sum-row"><span>COD charge</span><span>' + money(cod) + '</span></div>' : '') +
         '<div class="sum-row total"><span>Order total</span><span>' + money(total) + '</span></div>' +
@@ -657,6 +905,7 @@ function renderOrdersList() {
 
 async function renderAccount() {
     showView('account');
+    markNav(accountTab);
     const root = document.getElementById('view-account');
     root.innerHTML = '<div class="box empty">Loading...</div>';
     const [ordersRes, addrRes] = await Promise.all([
@@ -763,6 +1012,7 @@ async function fetchOrder(id) {
 
 async function openShopOrder(id) {
     showView('order');
+    markNav('orders');
     shopTrackerSeen = false;
     const root = document.getElementById('view-order');
     root.innerHTML = '<div class="box empty">Loading tracking...</div>';

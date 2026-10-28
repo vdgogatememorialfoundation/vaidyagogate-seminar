@@ -1383,9 +1383,9 @@
                     #tab-book-sales .track-title { font-weight:700; font-size:0.9rem; }
                     #tab-book-sales .track-desc { font-size:0.82rem; color:#64748b; }
                 </style>
-                <h2 style="margin-bottom:12px;">Book sales — Agnikarma &amp; Viddhakarma</h2>
+                <h2 style="margin-bottom:12px;">Seminar book orders</h2>
                 <p style="margin:-6px 0 14px;font-size:0.88rem;color:#64748b;">Public shipment tracker: <a href="/track-shipment" target="_blank" rel="noopener" style="color:#0f766e;font-weight:700;">track-shipment ↗</a> (order code + AWB or mobile last 4 digits).</p>
-                <p style="color:#64748b;margin-bottom:14px;max-width:900px;">Configure books on the portal. Doctors order, pay online or at counter, and collect at the seminar. Scanner <strong>Book pickup</strong> mode marks delivery. For absent doctors, ship by courier.</p>
+                <p style="color:#64748b;margin-bottom:14px;max-width:900px;">The catalog is configurable: add Agnikarma, Viddhakarma, or any other title, set the price, and save. Doctors, the shop, and Book POS can put <strong>two or more books in one order</strong>. Doctors pay online or at the counter and collect at the seminar. Scanner <strong>Book pickup</strong> mode marks delivery. For absent doctors, ship by courier.</p>
 
                 <!-- Subtabs -->
                 <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
@@ -1460,8 +1460,8 @@
                         </div>
                     </div>
                     <div class="card" style="padding:18px;margin-bottom:14px;">
-                        <h3 style="margin:0 0 12px;">Books</h3>
-                        <p style="font-size:0.85rem;color:#64748b;margin:0 0 10px;">Add, remove, or price books. Set stock per book and language under the <strong>Stock inventory</strong> tab.</p>
+                        <h3 style="margin:0 0 12px;">Book catalog</h3>
+                        <p style="font-size:0.85rem;color:#64748b;margin:0 0 10px;">Add a row for each title you sell, set the price, and save. Remove a title you no longer sell, or turn Active off to hide it from new orders. Stock per book and language is under <strong>Stock inventory</strong>. These same books appear in Book POS and on /shop.</p>
                         <div id="bs-books-rows"></div>
                         <button type="button" class="btn-primary" style="margin-top:8px;padding:6px 14px;font-size:0.85rem;background:#0d9488;" onclick="bsAddBookRow()">+ Add book</button>
                     </div>
@@ -1504,7 +1504,7 @@
                     <div style="display:grid;grid-template-columns:minmax(320px,1fr) minmax(360px,1.2fr);gap:16px;align-items:start;">
                         <div class="card" style="padding:18px;">
                             <h3 style="margin:0 0 12px;color:#7c3aed;">Book POS — Walk-in / desk sale</h3>
-                            <p style="font-size:0.88rem;color:#64748b;margin:0 0 12px;">Search doctor by phone, email, user ID, or registration number. Full profile appears below. Walk-in buyers can use name/phone only.</p>
+                            <p style="font-size:0.88rem;color:#64748b;margin:0 0 12px;">Search a doctor by phone, email, user ID, or registration number, then add every book they want. One order can include both titles and more than one language. Walk-in buyers can use name and phone only.</p>
                             <div style="display:grid;grid-template-columns:1fr auto;gap:8px;margin-bottom:10px;">
                                 <input type="text" id="bs-pos-search" placeholder="Phone / name / email / user ID / reg. no." style="padding:8px;" oninput="bsPosSearch()">
                                 <button type="button" class="btn-primary" style="padding:8px 12px;background:#7c3aed;" onclick="bsPosSearch()">Search</button>
@@ -3514,7 +3514,7 @@
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
     <script src="/js/track-timeline.js?v=20261003tl"></script>
     <script src="/js/admin-commerce.js?v=20261003tl"></script>
-    <script src="/js/admin.js?v=20261029vl4"></script>
+    <script src="/js/admin.js?v=20261029books3"></script>
     <script src="/js/admin-videos.js?v=20261029vl6"></script>
 </body>
 </html>

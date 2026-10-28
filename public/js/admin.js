@@ -21040,18 +21040,39 @@ function renderBsConfigForm(cfg, logistics) {
     renderBsLogisticsForm(logistics);
 }
 
+function bsBookEditorRow(b) {
+    const book = b || { id: '', title: '', author: 'Dr. R.B. Gogate', price: 0, active: true };
+    return (
+        '<div data-bs-book-row style="display:grid;grid-template-columns:minmax(110px,1fr) minmax(160px,1.6fr) minmax(120px,1fr) 100px auto;gap:8px;align-items:end;margin-bottom:8px;">' +
+        '<div><label style="font-size:0.8rem;">Book ID</label><input type="text" class="bs-book-id" value="' + e(book.id) + '" style="width:100%;padding:6px;" placeholder="e.g. agnikarma"></div>' +
+        '<div><label style="font-size:0.8rem;">Title</label><input type="text" class="bs-book-title" value="' + e(book.title) + '" style="width:100%;padding:6px;" placeholder="Book title"></div>' +
+        '<div><label style="font-size:0.8rem;">Author</label><input type="text" class="bs-book-author" value="' + e(book.author || 'Dr. R.B. Gogate') + '" style="width:100%;padding:6px;"></div>' +
+        '<div><label style="font-size:0.8rem;">Price (₹)</label><input type="number" class="bs-book-price" value="' + (book.price || 0) + '" min="0" step="1" style="width:100%;padding:6px;"></div>' +
+        '<div style="display:flex;flex-direction:column;gap:6px;padding-bottom:2px;">' +
+        '<label style="font-size:0.8rem;white-space:nowrap;"><input type="checkbox" class="bs-book-active"' + (book.active !== false ? ' checked' : '') + '> Active</label>' +
+        '<button type="button" onclick="bsRemoveBookRow(this)" style="padding:6px 10px;border:1px solid #fecaca;background:#fff;color:#b91c1c;border-radius:6px;cursor:pointer;font-size:0.78rem;">Remove</button>' +
+        '</div></div>'
+    );
+}
+
 function renderBsBooksRows(books) {
     const root = document.getElementById('bs-books-rows');
     if (!root) return;
-    root.innerHTML = books.map((b, i) =>
-        '<div style="display:grid;grid-template-columns:1fr 1.5fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px;" data-bs-book-row="' + i + '">' +
-        '<div><label style="font-size:0.8rem;">Book ID</label><input type="text" class="bs-book-id" value="' + e(b.id) + '" style="width:100%;padding:6px;" placeholder="e.g. agnikarma"></div>' +
-        '<div><label style="font-size:0.8rem;">Title</label><input type="text" class="bs-book-title" value="' + e(b.title) + '" style="width:100%;padding:6px;" placeholder="Book title"></div>' +
-        '<div><label style="font-size:0.8rem;">Author</label><input type="text" class="bs-book-author" value="' + e(b.author) + '" style="width:100%;padding:6px;"></div>' +
-        '<div><label style="font-size:0.8rem;">Price (₹)</label><input type="number" class="bs-book-price" value="' + (b.price || 0) + '" min="0" step="1" style="width:100%;padding:6px;"></div>' +
-        '<div style="padding-bottom:2px;"><label style="font-size:0.8rem;">Active</label><br><input type="checkbox" class="bs-book-active"' + (b.active !== false ? ' checked' : '') + '></div>' +
-        '</div>'
-    ).join('');
+    const list = books && books.length ? books : [];
+    root.innerHTML = list.length
+        ? list.map((b) => bsBookEditorRow(b)).join('')
+        : '<p style="color:#64748b;font-size:0.85rem;">No books yet. Add Agnikarma, Viddhakarma, or any other title.</p>';
+}
+
+function bsRemoveBookRow(btn) {
+    const row = btn && btn.closest ? btn.closest('[data-bs-book-row]') : null;
+    const root = document.getElementById('bs-books-rows');
+    if (!row || !root) return;
+    if (root.querySelectorAll('[data-bs-book-row]').length <= 1) {
+        alert('Keep at least one book in the catalog. Turn Active off if you only want to hide it from new orders.');
+        return;
+    }
+    row.remove();
 }
 
 function e(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); }
@@ -21059,17 +21080,12 @@ function e(s) { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt
 function bsAddBookRow() {
     const root = document.getElementById('bs-books-rows');
     if (!root) return;
-    const idx = root.querySelectorAll('[data-bs-book-row]').length;
+    const hint = root.querySelector('p');
+    if (hint && !root.querySelector('[data-bs-book-row]')) hint.remove();
     const div = document.createElement('div');
-    div.setAttribute('data-bs-book-row', idx);
-    div.style.cssText = 'display:grid;grid-template-columns:1fr 1.5fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px;';
-    div.innerHTML =
-        '<div><label style="font-size:0.8rem;">Book ID</label><input type="text" class="bs-book-id" style="width:100%;padding:6px;" placeholder="custom_book"></div>' +
-        '<div><label style="font-size:0.8rem;">Title</label><input type="text" class="bs-book-title" style="width:100%;padding:6px;" placeholder="Book title"></div>' +
-        '<div><label style="font-size:0.8rem;">Author</label><input type="text" class="bs-book-author" value="Dr. R.B. Gogate" style="width:100%;padding:6px;"></div>' +
-        '<div><label style="font-size:0.8rem;">Price (₹)</label><input type="number" class="bs-book-price" value="0" min="0" step="1" style="width:100%;padding:6px;"></div>' +
-        '<div style="padding-bottom:2px;"><label style="font-size:0.8rem;">Active</label><br><input type="checkbox" class="bs-book-active" checked></div>';
-    root.appendChild(div);
+    div.innerHTML = bsBookEditorRow({ id: '', title: '', author: 'Dr. R.B. Gogate', price: 0, active: true });
+    const row = div.firstElementChild;
+    if (row) root.appendChild(row);
 }
 
 function bsCollectBooksFromForm() {
@@ -22504,24 +22520,157 @@ function bsPosClearBuyer() {
 window.bsPosClearBuyer = bsPosClearBuyer;
 
 let _bsPosSelectedUserId = null;
+let _bsPosLines = [];
+let _bsPosPick = {};
+const BS_POS_LANGS = [
+    { id: 'english', label: 'English' },
+    { id: 'marathi', label: 'Marathi' },
+    { id: 'hindi', label: 'Hindi' },
+    { id: 'kannada', label: 'Kannada' }
+];
+
+function bsPosActiveBooks() {
+    return ((_bsCurrentConfig && _bsCurrentConfig.books) || []).filter((b) => b.active !== false);
+}
+
+function bsPosLangLabel(id) {
+    const hit = BS_POS_LANGS.find((l) => l.id === id);
+    return hit ? hit.label : id;
+}
+
+function bsPosRememberPicks() {
+    bsPosActiveBooks().forEach((b) => {
+        const langEl = document.getElementById('bs-pos-lang-' + b.id);
+        const qtyEl = document.getElementById('bs-pos-qty-' + b.id);
+        if (!langEl && !qtyEl) return;
+        _bsPosPick[b.id] = {
+            lang: (langEl && langEl.value) || (_bsPosPick[b.id] && _bsPosPick[b.id].lang) || 'english',
+            qty: Math.max(1, Math.min(99, parseInt((qtyEl && qtyEl.value) || '1', 10) || 1))
+        };
+    });
+    const allLang = document.getElementById('bs-pos-all-lang');
+    if (allLang) _bsPosPick.__allLang = allLang.value || 'english';
+}
+
+function bsPosPushLine(book, lang, qty) {
+    const language = lang || 'english';
+    const add = Math.max(1, Math.min(99, parseInt(qty, 10) || 1));
+    const hit = _bsPosLines.find((l) => l.bookId === book.id && l.language === language);
+    if (hit) hit.qty = Math.min(99, hit.qty + add);
+    else {
+        _bsPosLines.push({
+            bookId: book.id,
+            title: book.title,
+            language,
+            qty: add,
+            unitPrice: Number(book.price) || 0
+        });
+    }
+}
+
+function bsPosAddBook(bookId) {
+    bsPosRememberPicks();
+    const book = bsPosActiveBooks().find((b) => b.id === bookId);
+    if (!book) return;
+    const pick = _bsPosPick[bookId] || { lang: 'english', qty: 1 };
+    bsPosPushLine(book, pick.lang, pick.qty);
+    renderBsPosBooks();
+}
+
+function bsPosAddAllBooks() {
+    bsPosRememberPicks();
+    const lang = _bsPosPick.__allLang || 'english';
+    bsPosActiveBooks().forEach((book) => bsPosPushLine(book, lang, 1));
+    renderBsPosBooks();
+}
+
+function bsPosRemoveLine(index) {
+    bsPosRememberPicks();
+    _bsPosLines.splice(index, 1);
+    renderBsPosBooks();
+}
+
+function bsPosSetLineQty(index, value) {
+    bsPosRememberPicks();
+    const qty = parseInt(value, 10);
+    if (!_bsPosLines[index]) return;
+    if (!Number.isInteger(qty) || qty < 1) _bsPosLines.splice(index, 1);
+    else _bsPosLines[index].qty = Math.min(99, qty);
+    renderBsPosBooks();
+}
+
+function bsPosClearLines() {
+    _bsPosLines = [];
+    renderBsPosBooks();
+}
 
 function renderBsPosBooks() {
     const root = document.getElementById('bs-pos-books');
     if (!root) return;
-    const books = (_bsCurrentConfig && _bsCurrentConfig.books || []).filter((b) => b.active !== false);
-    if (!books.length) { root.innerHTML = '<p style="color:#b91c1c;">No active books configured. Save settings first.</p>'; return; }
-    root.innerHTML = '<p style="font-size:0.85rem;font-weight:600;margin:0 0 6px;">Select books:</p>' +
-        books.map((b, i) =>
-            '<div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;align-items:end;margin-bottom:8px;" data-bs-pos-row>' +
-            '<div><label style="font-size:0.8rem;">' + e(b.title) + '</label>' +
-            '<select class="bs-pos-book-sel" style="width:100%;padding:6px;" data-book-id="' + e(b.id) + '">' +
-            '<option value="">— skip —</option>' +
-            ['english','marathi','hindi','kannada'].map((l) => '<option value="' + l + '">' + l.charAt(0).toUpperCase() + l.slice(1) + '</option>').join('') +
+    const books = bsPosActiveBooks();
+    if (!books.length) {
+        root.innerHTML = '<p style="color:#b91c1c;">No active books configured. Add books under Settings, set a price above ₹0, and save.</p>';
+        return;
+    }
+    const activeIds = {};
+    books.forEach((b) => { activeIds[b.id] = b; });
+    _bsPosLines = _bsPosLines.filter((l) => activeIds[l.bookId]);
+    _bsPosLines.forEach((l) => {
+        const book = activeIds[l.bookId];
+        l.title = book.title;
+        l.unitPrice = Number(book.price) || 0;
+    });
+    const allLang = _bsPosPick.__allLang || 'english';
+    const catalog = books.map((b) => {
+        const pick = _bsPosPick[b.id] || { lang: 'english', qty: 1 };
+        const price = Number(b.price) || 0;
+        return (
+            '<div style="display:grid;grid-template-columns:minmax(140px,1.4fr) minmax(110px,1fr) 72px auto;gap:8px;align-items:end;margin-bottom:8px;padding:8px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;">' +
+            '<div><div style="font-weight:700;font-size:0.9rem;">' + e(b.title) + '</div>' +
+            '<div style="font-size:0.78rem;color:' + (price > 0 ? '#64748b' : '#b91c1c') + ';">' +
+            (price > 0 ? '₹' + price.toFixed(0) + ' each' : 'Set a price in Settings') + '</div></div>' +
+            '<div><label style="font-size:0.75rem;color:#64748b;">Language</label>' +
+            '<select id="bs-pos-lang-' + e(b.id) + '" style="width:100%;padding:6px;">' +
+            BS_POS_LANGS.map((l) => '<option value="' + l.id + '"' + (pick.lang === l.id ? ' selected' : '') + '>' + l.label + '</option>').join('') +
             '</select></div>' +
-            '<div><label style="font-size:0.8rem;">Qty</label><input type="number" class="bs-pos-qty" value="1" min="1" max="99" style="width:100%;padding:6px;"></div>' +
-            '<div><label style="font-size:0.8rem;">Price</label><input type="number" class="bs-pos-price" value="' + (b.price || 0) + '" min="0" step="1" style="width:100%;padding:6px;"></div>' +
+            '<div><label style="font-size:0.75rem;color:#64748b;">Qty</label>' +
+            '<input id="bs-pos-qty-' + e(b.id) + '" type="number" value="' + pick.qty + '" min="1" max="99" style="width:100%;padding:6px;"></div>' +
+            '<button type="button" class="btn-primary" style="padding:8px 12px;background:#7c3aed;" onclick="bsPosAddBook(\'' + String(b.id).replace(/[^a-z0-9_]/g, '') + '\')">Add</button>' +
             '</div>'
-        ).join('');
+        );
+    }).join('');
+    const total = _bsPosLines.reduce((sum, l) => sum + l.unitPrice * l.qty, 0);
+    const unpriced = _bsPosLines.filter((l) => !(l.unitPrice > 0));
+    const lines = _bsPosLines.length
+        ? _bsPosLines.map((l, i) =>
+            '<div style="display:grid;grid-template-columns:1fr 72px auto auto;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid #e2e8f0;">' +
+            '<div><strong>' + e(l.title) + '</strong><div style="font-size:0.78rem;color:#64748b;">' + e(bsPosLangLabel(l.language)) + ' · ₹' + Number(l.unitPrice || 0).toFixed(0) + '</div></div>' +
+            '<input type="number" min="1" max="99" value="' + l.qty + '" style="width:100%;padding:6px;" onchange="bsPosSetLineQty(' + i + ', this.value)">' +
+            '<div style="font-weight:700;text-align:right;">₹' + (l.unitPrice * l.qty).toFixed(0) + '</div>' +
+            '<button type="button" onclick="bsPosRemoveLine(' + i + ')" style="border:0;background:none;color:#b91c1c;cursor:pointer;font-size:0.8rem;">Remove</button>' +
+            '</div>'
+        ).join('')
+        : '<p style="margin:0;color:#64748b;font-size:0.85rem;">Nothing in this order yet. Add Agnikarma and Viddhakarma, or any active titles, before placing it.</p>';
+    root.innerHTML =
+        '<p style="font-size:0.85rem;font-weight:700;margin:0 0 8px;">Add books to this order</p>' +
+        '<p style="font-size:0.8rem;color:#64748b;margin:0 0 10px;">One order can include both titles, and the same title in more than one language. The bill uses the price saved in Settings.</p>' +
+        catalog +
+        '<div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin:4px 0 12px;">' +
+        '<div><label style="font-size:0.75rem;color:#64748b;">Language for all</label>' +
+        '<select id="bs-pos-all-lang" style="padding:6px;">' +
+        BS_POS_LANGS.map((l) => '<option value="' + l.id + '"' + (allLang === l.id ? ' selected' : '') + '>' + l.label + '</option>').join('') +
+        '</select></div>' +
+        '<button type="button" class="btn-primary" style="padding:8px 12px;background:#0f766e;" onclick="bsPosAddAllBooks()">Add all ' + books.length + ' books</button>' +
+        '</div>' +
+        '<div style="padding:12px;border-radius:10px;background:#f5f3ff;border:1px solid #ddd6fe;">' +
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;">' +
+        '<strong style="color:#5b21b6;">This order · ' + _bsPosLines.length + ' line' + (_bsPosLines.length === 1 ? '' : 's') + '</strong>' +
+        (_bsPosLines.length ? '<button type="button" onclick="bsPosClearLines()" style="border:0;background:none;color:#6d28d9;cursor:pointer;font-size:0.8rem;">Clear books</button>' : '') +
+        '</div>' +
+        lines +
+        '<div style="display:flex;justify-content:space-between;margin-top:10px;font-size:1rem;"><span>Total</span><strong>₹' + total.toFixed(0) + '</strong></div>' +
+        (unpriced.length ? '<p style="margin:8px 0 0;color:#b91c1c;font-size:0.8rem;">A title in this order has no price. Set it under Settings and save before placing the order.</p>' : '') +
+        '</div>';
 }
 
 function bsPosSearch() {
@@ -22779,20 +22928,15 @@ function bsPosOpenBookPayment(data) {
 async function bsPosSave() {
     const msg = document.getElementById('bs-pos-msg');
     const adm = getStoredAdminUser();
-    const items = [];
-    document.querySelectorAll('[data-bs-pos-row]').forEach((row) => {
-        const langSel = row.querySelector('.bs-pos-book-sel');
-        const qtyEl = row.querySelector('.bs-pos-qty');
-        const priceEl = row.querySelector('.bs-pos-price');
-        if (!langSel || !langSel.value) return;
-        items.push({
-            bookId: langSel.getAttribute('data-book-id'),
-            language: langSel.value,
-            qty: parseInt((qtyEl || {}).value, 10) || 1,
-            unitPrice: parseFloat((priceEl || {}).value) || 0
-        });
-    });
-    if (!items.length) { if (msg) { msg.style.color = '#b91c1c'; msg.textContent = 'Select at least one book with language'; } return; }
+    bsPosRememberPicks();
+    const items = _bsPosLines.map((l) => ({
+        bookId: l.bookId,
+        language: l.language,
+        qty: l.qty,
+        unitPrice: l.unitPrice
+    }));
+    if (!items.length) { if (msg) { msg.style.color = '#b91c1c'; msg.textContent = 'Add at least one book. You can add both titles in the same order.'; } return; }
+    if (items.some((l) => !(Number(l.unitPrice) > 0))) { if (msg) { msg.style.color = '#b91c1c'; msg.textContent = 'Set a price above ₹0 for every book in Settings, then save, before placing this order.'; } return; }
     // Patch item prices from form into books for server-side validation
     // (server re-validates but client collects data)
     const linkedUid = parseInt((document.getElementById('bs-pos-user-id') || {}).value, 10);
@@ -22830,6 +22974,8 @@ async function bsPosSave() {
                     e(data.orderCode || data.bookOrderId || '') +
                     '</strong> awaiting payment. Complete checkout; pickup QR issues after payment.';
             }
+            _bsPosLines = [];
+            renderBsPosBooks();
             loadBsPosOrders();
             return;
         }
@@ -22845,6 +22991,8 @@ async function bsPosSave() {
             msg.innerHTML = html;
         }
         bsPosClearBuyer();
+        _bsPosLines = [];
+        renderBsPosBooks();
         loadBsOrders(false);
         loadBsPosOrders();
     } catch (e) { if (msg) { msg.style.color = '#b91c1c'; msg.textContent = e.message; } }
