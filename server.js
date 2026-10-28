@@ -4381,8 +4381,8 @@ app.post('/api/auth/login', requestGuard.authLoginLimit, withAuxiliaryTables, (r
                 }
 
                 if (loginOtpRequired(loginPortal) && !portalAuthPolicy.isStaffPortalAccount(row)) {
-                    if (!phoneOtpToken || !emailOtpToken) {
-                        return res.status(400).json({ error: 'Phone and email OTP verification is required to log in.' });
+                    if (!emailOtpToken) {
+                        return res.status(400).json({ error: 'Email OTP verification is required to log in.' });
                     }
                     otpLib.validateLoginOtpTokens(
                         db,

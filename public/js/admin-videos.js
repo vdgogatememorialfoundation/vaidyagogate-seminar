@@ -149,18 +149,19 @@
             '<div><label>Where finished videos are stored</label><select id="vls-storage"><option value="local">Server disk</option><option value="r2">Cloud bucket (Cloudflare R2)</option></select></div></div>' +
             '<div class="vl-upload-row" style="margin-top:10px;"><button type="button" class="vl-btn" id="vls-save">Save settings</button><span class="vl-note" id="vls-cloud"></span></div>' +
             '<p class="vl-form-msg" id="vls-msg"></p>' +
-            '<p class="vl-note">Each doctor gets a permanent 12-digit video license that is printed inside every video they watch. A doctor may play videos on the number of devices set here; the first devices used are registered automatically, and the office can remove a device below.</p></div>' +
+            '<p class="vl-note">Each doctor gets a permanent 12-digit video license that is printed inside every video they watch. Playback uses the VGMF license: the video is encrypted, the key is issued only to that doctor’s registered device, and save/download from the player is blocked. A doctor may play videos on the number of devices set here; the first devices used are registered automatically, and the office can remove a device below. Choosing the cloud bucket moves finished videos off the server disk into Cloudflare R2. Playback still goes through this license.</p></div>' +
             '<h3 style="margin:18px 0 8px;font-size:1.05rem;">Videos</h3><div id="vl-admin-videos"></div>' +
             '<div class="vl-admin-grid" style="margin-top:22px;">' +
             '<div class="vl-form"><h3>Issue video access</h3>' +
             '<label>Find the person</label><input type="text" id="vla-search" placeholder="Name, phone, email, portal ID, or registration / application number"><div class="vl-user-pick" id="vla-picks"></div><div id="vla-chosen"></div>' +
-            '<div class="vl-form-row"><div><label>Year</label><input type="number" id="vla-year" min="2000" max="2100"></div>' +
-            '<div><label>Video (optional)</label><select id="vla-video"><option value="">All videos of the year</option></select></div></div>' +
+            '<label>Find videos</label><input type="text" id="vla-video-q" placeholder="Search by title, year, or seminar">' +
+            '<div class="vl-shop" id="vla-catalog"></div>' +
+            '<div class="vl-cart" id="vla-cart"></div>' +
             '<div class="vl-form-row"><div><label>Payment</label><select id="vla-mode"><option value="waiver">Waiver (complimentary)</option><option value="cash">Cash</option><option value="upi">UPI</option><option value="card">Card</option><option value="razorpay">Razorpay</option><option value="bank">Bank transfer</option><option value="cheque">Cheque</option><option value="other">Other</option></select></div>' +
-            '<div><label>Amount received (₹)</label><input type="number" id="vla-amount" min="0" step="1" placeholder="0"></div></div>' +
+            '<div><label>Amount (₹)</label><input type="number" id="vla-amount" min="0" step="1" placeholder="0"></div></div>' +
             '<label>Note</label><input type="text" id="vla-note" maxlength="300" placeholder="Receipt no., reason…">' +
             '<div class="vl-upload-row" style="margin-top:10px;"><button type="button" class="vl-btn" id="vla-save">Record payment &amp; enable</button></div>' +
-            '<p class="vl-note">The doctor can watch as soon as this is saved. An email goes to them with the payment and their video license.</p>' +
+            '<p class="vl-note" id="vla-pay-note">Add the videos that apply. If this person is not registered for that seminar, the year’s amount is added automatically, the same way a product is added to a cart. Razorpay creates an order for the amount when you save. The doctor can watch as soon as this is saved, and an email goes out with the payment and their video license.</p>' +
             '<p class="vl-form-msg" id="vla-msg"></p></div>' +
             '<div class="vl-form"><h3>Enabled by the office &amp; purchases</h3><div class="vl-upload-row"><label style="margin:0;">Year</label><input type="number" id="vlg-year" min="2000" max="2100" style="width:120px;"><button type="button" class="vl-btn is-ghost is-small" id="vlg-reload">Refresh</button></div>' +
             '<div class="vl-table-wrap" id="vl-grants"></div><h4 style="margin:14px 0 6px;font-size:0.95rem;">Online purchases</h4><div class="vl-table-wrap" id="vl-purchases"></div></div>' +
@@ -179,13 +180,14 @@
         $('vly-theme-apply').addEventListener('click', applyTheme);
         $('vly-year').addEventListener('change', renderYearForm);
         $('vla-search').addEventListener('input', debounce(searchUsers, 300));
+        $('vla-video-q').addEventListener('input', renderCatalog);
         $('vla-save').addEventListener('click', grantAccess);
-        $('vla-year').addEventListener('change', fillGrantVideos);
-        $('vlg-reload').addEventListener('click', loadAccess);
-        $('vla-mode').addEventListener('change', () => {
-            $('vla-amount').disabled = $('vla-mode').value === 'waiver';
+        $('vla-mode').addEventListener('change', syncAmountField);
+        $('vla-amount').addEventListener('input', () => {
+            $('vla-amount').dataset.touched = '1';
         });
-        $('vla-amount').disabled = true;
+        syncAmountField();
+        $('vlg-reload').addEventListener('click', loadAccess);
         $('vls-save').addEventListener('click', saveSettings);
         $('vle-run').addEventListener('click', loadEligible);
         $('vle-csv').addEventListener('click', downloadEligibleCsv);
@@ -278,10 +280,8 @@
         }
         $('vly-price').value = y && y.bundlePriceInr != null ? y.bundlePriceInr : '';
         if (!$('vlg-year').value && years.length) $('vlg-year').value = years[0];
-        if (!$('vla-year').value && years.length) {
-            $('vla-year').value = years[0];
-            fillGrantVideos();
-        }
+        renderCatalog();
+        renderCart();
         if ($('vle-year') && !$('vle-year').value && years.length) {
             $('vle-year').value = years[0];
             fillEligibleVideos();
@@ -303,19 +303,142 @@
             });
     }
 
-    function fillGrantVideos() {
-        const sel = $('vla-video');
-        const year = Number($('vla-year').value);
-        if (!sel) return;
-        sel.innerHTML = '<option value="">All videos of the year</option>';
-        (state.videos || [])
-            .filter((v) => v.year === year)
-            .forEach((v) => {
-                const o = document.createElement('option');
-                o.value = v.id;
-                o.textContent = (v.kind === 'full' ? 'Full · ' : 'Part ' + (v.partNo || '') + ' · ') + v.title;
-                sel.appendChild(o);
+    let cartIds = [];
+    let amountTouched = false;
+
+    function syncAmountField() {
+        const waiver = $('vla-mode') && $('vla-mode').value === 'waiver';
+        if ($('vla-amount')) $('vla-amount').disabled = !!waiver;
+        const note = $('vla-pay-note');
+        if (note && $('vla-mode')) {
+            note.textContent =
+                $('vla-mode').value === 'razorpay'
+                    ? 'Razorpay creates an order for this amount when you save. The doctor can watch immediately, and the email includes the order.'
+                    : 'Add the videos that apply. If this person is not registered for that seminar, the year’s amount is added automatically. The doctor can watch as soon as this is saved.';
+        }
+        renderCart();
+    }
+
+    function paidYearSet(user) {
+        const years = new Set();
+        (user && user.registrations ? user.registrations : []).forEach((r) => {
+            if (r.paid && r.year) years.add(Number(r.year));
+        });
+        return years;
+    }
+
+    function cartVideos() {
+        return (state && state.videos ? state.videos : []).filter((v) => cartIds.indexOf(v.id) >= 0);
+    }
+
+    function suggestCartTotal() {
+        const videos = cartVideos();
+        if (!videos.length) return { total: 0, lines: [] };
+        const paid = paidYearSet(chosenUser);
+        const anyReg = !!(chosenUser && chosenUser.registrations && chosenUser.registrations.length);
+        const byYear = {};
+        videos.forEach((v) => {
+            const y = Number(v.year);
+            if (!byYear[y]) byYear[y] = [];
+            byYear[y].push(v);
+        });
+        const lines = [];
+        let total = 0;
+        Object.keys(byYear).forEach((key) => {
+            const year = Number(key);
+            const list = byYear[year];
+            const meta = (state.years || []).find((row) => Number(row.year) === year) || {};
+            const bundle = meta.bundlePriceInr != null && meta.bundlePriceInr !== '' ? Number(meta.bundlePriceInr) : null;
+            if (list.every((v) => paid.has(year))) {
+                list.forEach((v) => lines.push({ title: v.title, year, amount: 0, reason: 'Included with registration' }));
+                return;
+            }
+            if (bundle != null && !Number.isNaN(bundle)) {
+                lines.push({
+                    title: (meta.title || 'Seminar ' + year) + ' — year amount',
+                    year,
+                    amount: bundle,
+                    reason: anyReg ? 'Not registered for this year' : 'No seminar registration'
+                });
+                total += bundle;
+                return;
+            }
+            list.forEach((v) => {
+                const price = Number(v.priceInr) || 0;
+                lines.push({ title: v.title, year, amount: price, reason: 'Video price' });
+                total += price;
             });
+        });
+        return { total, lines };
+    }
+
+    function renderCatalog() {
+        const host = $('vla-catalog');
+        if (!host || !state) return;
+        const q = ($('vla-video-q') && $('vla-video-q').value ? $('vla-video-q').value : '').trim().toLowerCase();
+        const videos = (state.videos || []).filter((v) => {
+            if (!q) return true;
+            const semTitle = v.seminarTitle || '';
+            return [v.title, v.year, v.kind, semTitle].join(' ').toLowerCase().indexOf(q) >= 0;
+        });
+        if (!videos.length) {
+            host.innerHTML = '<p class="vl-note">No videos match that search.</p>';
+            return;
+        }
+        host.innerHTML = videos
+            .map((v) => {
+                const inCart = cartIds.indexOf(v.id) >= 0;
+                const semTitle = v.seminarTitle || '';
+                return (
+                    '<article class="vl-product"><div><strong>' +
+                    esc(v.title) +
+                    '</strong><p class="vl-note">' +
+                    esc(v.year) +
+                    (semTitle ? ' · ' + esc(semTitle) : '') +
+                    ' · ' +
+                    fmtMoney(v.priceInr || 0) +
+                    '</p></div><button type="button" class="vl-btn is-small' +
+                    (inCart ? ' is-ghost' : '') +
+                    '" data-add="' +
+                    v.id +
+                    '">' +
+                    (inCart ? 'Added' : 'Add') +
+                    '</button></article>'
+                );
+            })
+            .join('');
+        host.querySelectorAll('[data-add]').forEach((b) =>
+            b.addEventListener('click', () => {
+                const id = parseInt(b.getAttribute('data-add'), 10);
+                if (cartIds.indexOf(id) < 0) cartIds.push(id);
+                else cartIds = cartIds.filter((x) => x !== id);
+                amountTouched = false;
+                if ($('vla-amount')) delete $('vla-amount').dataset.touched;
+                renderCatalog();
+                renderCart();
+            })
+        );
+    }
+
+    function renderCart() {
+        const host = $('vla-cart');
+        if (!host) return;
+        const quote = suggestCartTotal();
+        if (!cartIds.length) {
+            host.innerHTML = '<p class="vl-note">Cart is empty. Search for videos and add the ones that apply.</p>';
+            return;
+        }
+        host.innerHTML =
+            '<p class="vl-profile-lbl">Cart</p><ul class="vl-devlist">' +
+            quote.lines
+                .map((l) => '<li><strong>' + esc(l.title) + '</strong> ' + esc(l.year) + '<small>' + esc(l.reason) + ' · ' + fmtMoney(l.amount) + '</small></li>')
+                .join('') +
+            '</ul><p class="vl-note">Suggested amount ' +
+            fmtMoney(quote.total) +
+            (chosenUser && !(chosenUser.registrations || []).length ? '. No seminar registration, so each selected year is charged at the year amount.' : '') +
+            '</p>';
+        const amount = $('vla-amount');
+        if (amount && amount.dataset.touched !== '1' && $('vla-mode') && $('vla-mode').value !== 'waiver') amount.value = quote.total ? String(quote.total) : '';
     }
 
     function statusBadge(v) {
@@ -724,30 +847,32 @@
             (regs ? '<p class="vl-profile-lbl">Registrations</p><ul class="vl-devlist">' + regs + '</ul>' : '<p class="vl-note">No seminar registration on this account.</p>') +
             (access ? '<p class="vl-profile-lbl">Video access already on the account</p><ul class="vl-devlist">' + access + '</ul>' : '<p class="vl-note">No office video grant yet. Record one below.</p>') +
             '</div>';
-        const year = (u.registrations || []).map((r) => r.year).find(Boolean);
-        if (year && $('vla-year') && !$('vla-year').value) {
-            $('vla-year').value = year;
-            fillGrantVideos();
-        }
+        renderCatalog();
+        renderCart();
     }
 
     async function grantAccess() {
         if (!chosenUser) return setMsg('vla-msg', 'Find the person and select the account first.', true);
+        if (!cartIds.length) return setMsg('vla-msg', 'Add at least one video.', true);
         try {
-            await api('/api/admin/videos/access', {
+            const out = await api('/api/admin/videos/access/cart', {
                 method: 'POST',
                 body: {
                     userId: chosenUser.id,
-                    year: $('vla-year').value,
-                    videoId: $('vla-video').value,
+                    videoIds: cartIds.slice(),
                     paymentMode: $('vla-mode').value,
                     amountInr: $('vla-amount').value,
                     note: $('vla-note').value
                 }
             });
-            setMsg('vla-msg', 'Access enabled for ' + chosenUser.name + '.');
+            const extra = out.razorpayOrderId ? ' Razorpay order ' + out.razorpayOrderId + '.' : out.orderRef ? ' Order ' + out.orderRef + '.' : '';
+            setMsg('vla-msg', 'Access enabled for ' + chosenUser.name + '.' + extra);
             $('vla-note').value = '';
-            $('vlg-year').value = $('vla-year').value;
+            cartIds = [];
+            amountTouched = false;
+            if ($('vla-amount')) delete $('vla-amount').dataset.touched;
+            renderCatalog();
+            renderCart();
             loadAccess();
         } catch (e) {
             setMsg('vla-msg', e.message, true);

@@ -206,6 +206,32 @@
         const crAmt = document.getElementById('books-cart-courier-amt');
         if (cr) cr.classList.toggle('hidden', courier <= 0);
         if (crAmt) crAmt.textContent = courier.toFixed(2);
+        const lines = collectCartItems();
+        let lineHost = document.getElementById('books-cart-lines');
+        const totalBox = document.getElementById('books-cart-total');
+        if (totalBox && totalBox.parentElement && !lineHost) {
+            lineHost = document.createElement('div');
+            lineHost.id = 'books-cart-lines';
+            lineHost.style.marginTop = '8px';
+            totalBox.parentElement.insertBefore(lineHost, totalBox.parentElement.firstChild);
+        }
+        if (lineHost && bookConfig && bookConfig.books) {
+            const titleOf = {};
+            bookConfig.books.forEach((b) => {
+                titleOf[b.id] = b.title;
+            });
+            const langOf = {};
+            (bookConfig.languages || []).forEach((l) => {
+                langOf[l.id] = l.label;
+            });
+            lineHost.innerHTML = lines.length
+                ? '<div style="font-size:0.82rem;color:#334155;margin-bottom:6px;">' +
+                  lines
+                      .map((it) => esc(titleOf[it.bookId] || it.bookId) + ' · ' + esc(langOf[it.language] || it.language) + ' × ' + it.qty)
+                      .join('<br>') +
+                  '</div>'
+                : '<div style="font-size:0.82rem;color:#64748b;margin-bottom:6px;">Set a quantity on one or more books. You can order both titles together.</div>';
+        }
         return grand;
     }
 

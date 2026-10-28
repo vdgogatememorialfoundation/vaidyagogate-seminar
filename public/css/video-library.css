@@ -103,3 +103,7 @@
 .vl-track-head { display: flex; flex-wrap: wrap; gap: 10px 24px; align-items: flex-end; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; }
 .vl-track-head b { display: block; font-size: 1.05rem; letter-spacing: 0.1em; font-variant-numeric: tabular-nums; color: #0f172a; }
 @media (max-width: 900px) { .vl-form-row-3 { grid-template-columns: 1fr; } }
+.vl-shop { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; max-height: 280px; overflow: auto; }
+.vl-product { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; }
+.vl-product strong { color: #0f172a; font-size: 0.92rem; }
+.vl-cart { margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: #f8fafc; border: 1px dashed #cbd5e1; }

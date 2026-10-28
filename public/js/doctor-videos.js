@@ -334,7 +334,18 @@
                 msg.textContent = 'This browser cannot play protected video. Use a current version of Chrome, Edge, Firefox, or Safari.';
                 return;
             }
-            const hls = new Hls({ enableWorker: true, lowLatencyMode: false, backBufferLength: 60, maxBufferLength: 45 });
+            const hls = new Hls({
+                enableWorker: false,
+                lowLatencyMode: false,
+                backBufferLength: 60,
+                maxBufferLength: 45,
+                xhrSetup: function (xhr) {
+                    try {
+                        xhr.withCredentials = true;
+                        xhr.setRequestHeader('X-Vgmf-Device', deviceId());
+                    } catch (_) {}
+                }
+            });
             play.hls = hls;
             hls.on(Hls.Events.ERROR, (_evt, err) => {
                 const code = err && err.response && err.response.code;

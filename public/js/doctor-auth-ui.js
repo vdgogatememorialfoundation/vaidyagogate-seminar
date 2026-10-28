@@ -215,7 +215,7 @@
             const d = await res.json();
             panel.style.display = d.required ? 'block' : 'none';
         } catch (_) {
-            panel.style.display = 'none';
+            panel.style.display = 'block';
         }
     }
 

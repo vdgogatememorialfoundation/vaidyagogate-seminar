@@ -316,9 +316,8 @@
                         <div class="form-group"><label>Password</label><input type="password" id="login_password" required autocomplete="current-password"></div>
                         <p id="login_email_hint" style="font-size:0.82rem;color:var(--muted);margin:-4px 0 8px;display:none;"></p>
                         <p style="margin:0 0 12px;"><button type="button" class="btn-ghost" style="padding:0;font-size:0.85rem;border:none;color:var(--brand);" onclick="openForgotPasswordModal()">Forgot password?</button></p>
-                        <div id="login_otp_panel" class="hidden" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line);">
-                            <p style="font-size:0.85rem;color:var(--muted);margin-bottom:10px;">Enter your email, then send codes to your registered email and WhatsApp (both required).</p>
-                            <button type="button" class="btn-ghost" style="padding:6px 14px;font-size:0.8rem;margin-bottom:10px;border-color:var(--line);color:var(--ink);" onclick="sendLoginOtpBoth()">Send codes to email &amp; WhatsApp</button>
+                        <div id="login_otp_panel" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line);">
+                            <p style="font-size:0.85rem;color:var(--muted);margin-bottom:10px;">Email verification is required. Send a code to your email, enter it, then press Verify.</p>
                             <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;">
                                 <span style="font-weight:700;min-width:48px;">Email</span>
                                 <button type="button" class="btn-ghost" style="padding:6px 12px;font-size:0.8rem;color:var(--ink);border-color:var(--line);" onclick="sendLoginOtp('email')">Send</button>
@@ -328,7 +327,7 @@
                                 <span id="login_email_otp_ok" style="font-size:0.8rem;color:#059669;"></span>
                             </div>
                             <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
-                                <span style="font-weight:700;min-width:48px;">WhatsApp</span>
+                                <span style="font-weight:700;min-width:48px;">WhatsApp <span style="font-weight:500;">(optional)</span></span>
                                 <button type="button" class="btn-ghost" style="padding:6px 12px;font-size:0.8rem;color:var(--ink);border-color:var(--line);" onclick="sendLoginOtp('phone')">Send</button>
                                 <button type="button" class="btn-ghost" style="padding:6px 12px;font-size:0.8rem;color:var(--ink);border-color:var(--line);" onclick="sendLoginOtp('phone')">Resend</button>
                                 <input type="text" id="login_phone_otp" placeholder="Code" style="max-width:80px;padding:8px;border-radius:8px;border:1px solid var(--line);">
@@ -347,7 +346,7 @@
                         </div>
                         <div class="form-group"><input type="email" id="signup_email" placeholder="Email" required></div>
                         <div class="form-group"><input type="tel" id="signup_phone" placeholder="Phone" required></div>
-                        <div id="signup_otp_panel" class="hidden" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line);">
+                        <div id="signup_otp_panel" style="margin-top:14px;padding-top:14px;border-top:1px solid var(--line);">
                             <p style="font-size:0.85rem;color:var(--muted);margin-bottom:10px;">Verify email before creating your account.</p>
                             <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px;">
                                 <span style="font-weight:600;min-width:48px;">Email</span>
@@ -632,7 +631,7 @@
                 const d = await res.json();
                 setOtpPanelVisible(panel, !!d.required);
             } catch (_) {
-                setOtpPanelVisible(panel, false);
+                setOtpPanelVisible(panel, true);
             }
         }
 
@@ -644,7 +643,7 @@
                 const d = await res.json();
                 setOtpPanelVisible(panel, !!d.required);
             } catch (_) {
-                setOtpPanelVisible(panel, false);
+                setOtpPanelVisible(panel, true);
             }
         }
 
@@ -1535,13 +1534,11 @@
             const body = { email, password };
             const lo = document.getElementById('login_otp_panel');
             if (isOtpPanelActive(lo)) {
-                if (!loginPhoneOtpToken || !loginEmailOtpToken) {
-                    return alert(
-                        'Please verify both your email and WhatsApp with the codes sent to you before signing in.'
-                    );
+                if (!loginEmailOtpToken) {
+                    return alert('Send the email code, enter it, and press Verify before signing in.');
                 }
-                body.phoneOtpToken = loginPhoneOtpToken;
                 body.emailOtpToken = loginEmailOtpToken;
+                if (loginPhoneOtpToken) body.phoneOtpToken = loginPhoneOtpToken;
             }
             const res = await fetch('/api/auth/login', {
                 method: 'POST',
