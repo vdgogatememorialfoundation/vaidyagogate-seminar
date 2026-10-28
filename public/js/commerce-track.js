@@ -324,7 +324,7 @@
         const shipped = dates.shippedState === 'actual' && dates.shippedAt
             ? when(dates.shippedAt)
             : dates.shippedState === 'expected' && dates.shippedExpected
-              ? when(dates.shippedExpected)
+              ? dates.shippedLabel || when(dates.shippedExpected)
               : '';
         const delivery = dates.deliveryState === 'actual' && dates.deliveryAt
             ? when(dates.deliveryAt)

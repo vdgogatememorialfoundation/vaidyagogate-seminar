@@ -515,4 +515,29 @@ const noClock = engine.buildCustomerTracking(
 );
 assert.strictEqual(noClock.timing, null);
 
+// Pickup and delivery windows: a real start before the end renders as a range; a lone instant stays a single time.
+const windowed = engine.buildCustomerTracking(
+    {
+        orderCode: 'BKWIN',
+        commerceStage: 'pickup_scheduled',
+        commerceMode: 'logistics',
+        commerceProvider: 'tookan',
+        createdAt: '2026-10-05T03:00:00.000Z',
+        pickupFrom: '2026-10-05T04:30:00.000Z',
+        pickupAt: '2026-10-05T07:30:00.000Z',
+        deliveryFrom: '2026-10-05T11:30:00.000Z',
+        deliveryAt: '2026-10-05T14:30:00.000Z'
+    },
+    [],
+    { now: Date.parse('2026-10-05T05:00:00.000Z') }
+);
+assert.strictEqual(engine.expectedRange('2026-10-05T04:30:00.000Z', '2026-10-05T07:30:00.000Z'), '5 Oct 2026, 10:00 am – 1:00 pm');
+assert.strictEqual(engine.expectedRange(null, '2026-10-05T07:30:00.000Z'), engine.expectedWhen('2026-10-05T07:30:00.000Z'));
+assert.strictEqual(engine.expectedRange('2026-10-05T07:30:00.000Z', '2026-10-05T07:30:00.000Z'), engine.expectedWhen('2026-10-05T07:30:00.000Z'));
+assert.strictEqual(windowed.pipeline.find((step) => step.key === 'PACKED').expectedLabel, 'Expected pickup 5 Oct 2026, 10:00 am – 1:00 pm');
+assert.strictEqual(windowed.pipeline.find((step) => step.key === 'OUT_FOR_DELIVERY').expectedLabel, 'Expected delivery 5 Oct 2026, 5:00 pm – 8:00 pm');
+assert.strictEqual(windowed.dates.shippedLabel, '5 Oct 2026, 10:00 am – 1:00 pm');
+assert.ok(/5:00 pm – 8:00 pm/.test(windowed.dates.deliveryLabel));
+assert.ok(/5:00 pm – 8:00 pm/.test(windowed.deliveryBy || ''));
+
 console.log('shipment engine tests passed');

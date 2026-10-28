@@ -1072,4 +1072,26 @@ assert.ok(fleetLabel.includes('4455'));
 assert.ok(fleetLabel.includes('data-sym="courier-barcode"'));
 assert.ok(fleetLabel.includes('<svg'));
 
+// Provider slot ranges become a window; single times and postal-looking values do not.
+assert.deepStrictEqual(commerce.pidgeSlot('2026-10-05', '10:00-13:00'), { start: '2026-10-05T04:30:00.000Z', end: '2026-10-05T07:30:00.000Z' });
+assert.deepStrictEqual(commerce.pidgeSlot('2026-10-05', '10:00 AM - 01:00 PM'), { start: '2026-10-05T04:30:00.000Z', end: '2026-10-05T07:30:00.000Z' });
+assert.deepStrictEqual(commerce.pidgeSlot('2026-10-05', '13:00'), { start: '2026-10-05T07:30:00.000Z', end: null });
+assert.deepStrictEqual(commerce.pidgeSlot('', '10:00-13:00'), { start: null, end: null });
+assert.strictEqual(commerce.windowStart('2026-10-05T07:30:00.000Z', '2026-10-05T04:30:00.000Z'), null);
+assert.strictEqual(commerce.windowStart('2026-10-05T04:30:00.000Z', '2026-10-05T07:30:00.000Z'), '2026-10-05T04:30:00.000Z');
+const pidgeSlotUpdate = commerce.pidgePayloadToUpdate(
+    { status: 'fulfilled', delivery_date: '2026-10-05', delivery_slot: '17:00-20:00', fulfillment: { status: 'IN_TRANSIT' } },
+    'logistics'
+);
+assert.strictEqual(pidgeSlotUpdate.deliveryFrom, '2026-10-05T11:30:00.000Z');
+assert.strictEqual(pidgeSlotUpdate.deliveryAt, '2026-10-05T14:30:00.000Z');
+const fleetNet = require('../lib/fleet-network');
+const plannedLogistics = fleetNet.plannedStopTimes('logistics', 'tookan', null, { deliveryOpen: '10:00', deliveryClose: '20:00' }, Date.parse('2026-10-05T05:00:00.000Z'));
+assert.ok(plannedLogistics.pickupFromMs < plannedLogistics.pickupAtMs);
+assert.ok(plannedLogistics.dropFromMs < plannedLogistics.dropAtMs);
+assert.strictEqual(plannedLogistics.courierPickupMs, plannedLogistics.pickupFromMs);
+const plannedHyper = fleetNet.plannedStopTimes('hyperlocal', 'tookan', null, {}, Date.parse('2026-10-05T05:00:00.000Z'));
+assert.strictEqual(plannedHyper.pickupFromMs, null);
+assert.strictEqual(plannedHyper.dropFromMs, null);
+
 console.log('commerce phrase tests passed');
