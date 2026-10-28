@@ -112,7 +112,7 @@
         let html =
             '<p style="color:#64748b;margin:0 0 16px;">Books by <strong>Dr. R.B. Gogate</strong>. ' +
             (orderingOpen
-                ? 'Choose language and quantity below. Pick up at the seminar book desk, or select courier delivery with live shipping rates.'
+                ? 'Select every book you want in this order — both titles can be ordered together. Set the language and quantity for each.'
                 : 'You can view the catalog below; new orders are not accepted outside the registration window.') +
             '</p>';
         html += '<div style="display:grid;gap:16px;">';

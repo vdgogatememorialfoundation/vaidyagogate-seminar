@@ -117,6 +117,9 @@ function renderCommerceDesk() {
                 '<button type="button" class="btn-primary" style="margin:2px;background:#15803d;" onclick="commerceSetStage(' +
                 o.id +
                 ',\'ready\')">Ready</button>' +
+                '<button type="button" class="btn-primary" style="margin:2px;background:#b91c1c;" onclick="commerceDeleteOrder(' +
+                o.id +
+                ')">Delete</button>' +
                 '</td></tr>'
             );
         })
@@ -138,6 +141,20 @@ function renderCommerceDesk() {
         (rows || '<tr><td colspan="4">No orders yet.</td></tr>') +
         '</tbody></table>';
 }
+
+function commerceDeleteOrder(id) {
+    if (!confirm('Delete this order? Any Tookan parcel or task, and the Shipday, Pidge, or Fleetbase job, will be cancelled too.')) return;
+    commerceFetch('/api/admin/commerce/orders/' + id + '/delete', {
+        method: 'POST',
+        body: JSON.stringify({ actingAdminId: commerceActor() })
+    })
+        .then((data) => {
+            if (data && data.courier && data.courier.ok === false) alert('The order was deleted here. The courier cancel reported: ' + (data.courier.error || 'not confirmed'));
+            return loadCommerceAdmin();
+        })
+        .catch((e) => alert(e.message || 'Could not delete the order'));
+}
+window.commerceDeleteOrder = commerceDeleteOrder;
 
 function field(id, label, value) {
     return (

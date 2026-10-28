@@ -356,6 +356,9 @@ const hyper = commerce.buildTookanTaskBody(sampleCfg, sampleOrder, 'hyperlocal')
 assert.strictEqual(hyper.is_multiple_tasks, undefined);
 assert.strictEqual(hyper.tags, 'hyperlocal');
 assert.ok(hyper.job_description.indexOf('Hyperlocal') === 0);
+const pickupOwn = commerce.tookanOtpsFromJob({ job_type: 0, job_validate_otp: '2468', job_otp: '2468' });
+assert.strictEqual(pickupOwn.pickupOtp, '2468');
+assert.strictEqual(pickupOwn.deliveryOtp, '');
 const pickupJob = commerce.tookanOtpsFromJob({ job_type: 0, job_otp: '4321' });
 assert.strictEqual(pickupJob.pickupOtp, '4321');
 assert.strictEqual(pickupJob.deliveryOtp, '');

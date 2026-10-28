@@ -322,3 +322,7 @@ body.hl-page .hl-below .ship-pipe { border: 0; background: #fff; border-radius: 
     .ship-time { flex: 1 0 100%; max-width: none; text-align: left; }
     .trk-foot { flex-direction: column; }
 }
+.ship-head h1 { letter-spacing: -0.03em; }
+.tl-otp { border-radius: 14px; }
+body.hl-page .hl-sheet { box-shadow: 0 12px 40px rgba(15, 23, 42, 0.08); }
+body.hl-page .trk-hero, .trk-hero { border-radius: 18px; }

@@ -251,8 +251,9 @@ function renderHome() {
     if (s.returnsEnabled !== false) badges.push('Easy returns');
     badges.push('Live order tracking');
     document.getElementById('view-home').innerHTML =
-        '<div class="hero"><div><h1>Authentic Ayurveda texts</h1><p>Books by Dr. R.B. Gogate in English, Marathi, Hindi and Kannada, delivered to your door or ready for pickup.</p></div>' +
+        '<div class="hero"><div><h1>Authentic Ayurveda texts</h1><p>Books by Dr. R.B. Gogate in English, Marathi, Hindi and Kannada. Order more than one title, pay online or on delivery, and follow the parcel from packing to your door.</p></div>' +
         '<div class="hero-badges">' + badges.map((b) => '<span>' + shopEsc(b) + '</span>').join('') + '</div></div>' +
+        '<div class="trust"><span>Secure checkout</span><span>Seminar-office dispatch</span><span>Live tracking</span><span>Easy returns</span></div>' +
         '<div class="section-title">' + (shopSearchTerm ? 'Results for "' + shopEsc(shopSearchTerm) + '"' : 'All books') + '</div>' +
         (books.length
             ? '<div class="product-grid">' +
@@ -264,6 +265,7 @@ function renderHome() {
                           '<div class="c-title">' + shopEsc(b.title) + '</div><div class="c-author">' + shopEsc(b.author || '') + '</div><div class="c-mark">॥</div></div>' +
                           '<h3>' + shopEsc(b.title) + '</h3><div class="by">by ' + shopEsc(b.author || '') + '</div>' +
                           '<div class="price"><sup>₹</sup>' + shopEsc(Number(b.price).toLocaleString('en-IN')) + '</div>' +
+                          '<div class="stock">In stock · Ships from the seminar office</div>' +
                           '<div>' +
                           (s.storePickupEnabled !== false ? '<span class="badge">Store pickup</span>' : '') +
                           (s.codEnabled !== false ? '<span class="badge">COD</span>' : '') +
