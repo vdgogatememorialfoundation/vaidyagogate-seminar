@@ -244,6 +244,10 @@ function mountPaymentsRoutes() {
         listDoctorPaymentOptions,
         parsePositiveUserId
     });
+    require('./lib/video-library').registerVideoLibraryRoutes(app, db, {
+        listDoctorPaymentOptions,
+        parsePositiveUserId
+    });
     require('./lib/staff-portal-routes').registerStaffPortalRoutes(app, db, {
         portalTracking,
         notifEngine,
@@ -6541,7 +6545,7 @@ function respondDoctorPortalAccess(res, row) {
         const globalVolunteer = c.doctorPortalModulesVolunteer || {};
         const useGlobalModules = !doctorPortalModules.userHasCustomModules(row.doctor_modules);
         const modulesForResolve = useGlobalModules ? null : row.doctor_modules;
-        const allowedSet = expandRefundTabAccess(
+        const allowedSet = doctorPortalModules.expandRefundTabAccess(
             doctorPortalModules.resolveDoctorAllowedTabs(
                 row.doctor_category,
                 globalRegular,
