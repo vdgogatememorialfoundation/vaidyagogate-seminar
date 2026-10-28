@@ -99,6 +99,7 @@
         renderYearForm();
         renderVideos();
         loadAccess();
+        if ($('vl-tracking') && !$('vl-tracking').innerHTML) loadTracking(null);
         schedulePoll();
     }
 
@@ -123,7 +124,7 @@
             '<div class="vl-admin-grid">' +
             '<div class="vl-form" id="vl-create-form"><h3>Add a video</h3>' +
             '<div class="vl-form-row"><div><label>Seminar year</label><input type="number" id="vlc-year" min="2000" max="2100" placeholder="2026"></div>' +
-            '<div><label>Seminar (optional, for free access)</label><select id="vlc-seminar"><option value="">Any seminar of that year</option></select></div></div>' +
+            '<div><label>Linked seminar (free for its paid participants)</label><select id="vlc-seminar"><option value="">Any seminar of that year</option></select></div></div>' +
             '<label>Title</label><input type="text" id="vlc-title" maxlength="200" placeholder="Day 1 — Inaugural session">' +
             '<div class="vl-form-row"><div><label>Type</label><select id="vlc-kind"><option value="episode">Episode / part</option><option value="full">Full video</option></select></div>' +
             '<div><label>Part number</label><input type="number" id="vlc-part" min="1" placeholder="1"></div></div>' +
@@ -138,22 +139,39 @@
             '<label>Price to unlock all videos of the year (₹, blank = not offered)</label><input type="number" id="vly-price" min="0" step="1">' +
             '<div class="vl-upload-row" style="margin-top:10px;"><button type="button" class="vl-btn" id="vly-save">Save year</button></div>' +
             '<p class="vl-form-msg" id="vly-msg"></p>' +
-            '<p class="vl-note" style="margin-top:10px;">Free access: a doctor whose registration for that year is completed, has an e-ticket, is checked in, or has a certificate. Everyone else pays the price or is enabled below.</p></div>' +
+            '<p class="vl-note" style="margin-top:10px;">Free access: volunteers, and any doctor whose registration for the linked seminar (or that year) is paid — whether or not the ticket was scanned. Everyone else pays the price or is enabled below.</p></div>' +
             '</div>' +
+            '<div class="vl-form" id="vl-settings-form" style="margin-top:16px;"><h3>Protection &amp; storage settings</h3>' +
+            '<div class="vl-form-row vl-form-row-3"><div><label>Devices allowed per account</label><input type="number" id="vls-devices" min="1" max="10"></div>' +
+            '<div><label>Volunteer accounts</label><select id="vls-volunteers"><option value="1">Watch free</option><option value="0">Pay like others</option></select></div>' +
+            '<div><label>Where finished videos are stored</label><select id="vls-storage"><option value="local">Server disk</option><option value="r2">Cloud bucket (Cloudflare R2)</option></select></div></div>' +
+            '<div class="vl-upload-row" style="margin-top:10px;"><button type="button" class="vl-btn" id="vls-save">Save settings</button><span class="vl-note" id="vls-cloud"></span></div>' +
+            '<p class="vl-form-msg" id="vls-msg"></p>' +
+            '<p class="vl-note">Each doctor gets a permanent 12-digit video license that is printed inside every video they watch. A doctor may play videos on the number of devices set here; the first devices used are registered automatically, and the office can remove a device below.</p></div>' +
             '<h3 style="margin:18px 0 8px;font-size:1.05rem;">Videos</h3><div id="vl-admin-videos"></div>' +
             '<div class="vl-admin-grid" style="margin-top:22px;">' +
             '<div class="vl-form"><h3>Enable a doctor</h3>' +
             '<label>Find doctor (name, email, phone, ID)</label><input type="text" id="vla-search" placeholder="Type at least 2 characters"><div class="vl-user-pick" id="vla-picks"></div><div id="vla-chosen"></div>' +
             '<div class="vl-form-row"><div><label>Year</label><input type="number" id="vla-year" min="2000" max="2100"></div>' +
             '<div><label>Video (optional)</label><select id="vla-video"><option value="">All videos of the year</option></select></div></div>' +
-            '<div class="vl-form-row"><div><label>Type</label><select id="vla-source"><option value="admin_free">Free (complimentary)</option><option value="admin_paid">Paid at the office (record payment)</option></select></div>' +
+            '<div class="vl-form-row"><div><label>Payment</label><select id="vla-mode"><option value="waiver">Waiver (complimentary)</option><option value="cash">Cash</option><option value="upi">UPI</option><option value="card">Card</option><option value="razorpay">Razorpay</option><option value="bank">Bank transfer</option><option value="cheque">Cheque</option><option value="other">Other</option></select></div>' +
             '<div><label>Amount received (₹)</label><input type="number" id="vla-amount" min="0" step="1" placeholder="0"></div></div>' +
             '<label>Note</label><input type="text" id="vla-note" maxlength="300" placeholder="Receipt no., reason…">' +
-            '<div class="vl-upload-row" style="margin-top:10px;"><button type="button" class="vl-btn" id="vla-save">Enable access</button></div>' +
+            '<div class="vl-upload-row" style="margin-top:10px;"><button type="button" class="vl-btn" id="vla-save">Record payment &amp; enable</button></div>' +
+            '<p class="vl-note">The doctor can watch as soon as this is saved. An email goes to them with the payment and their video license.</p>' +
             '<p class="vl-form-msg" id="vla-msg"></p></div>' +
-            '<div class="vl-form"><h3>Who has access</h3><div class="vl-upload-row"><label style="margin:0;">Year</label><input type="number" id="vlg-year" min="2000" max="2100" style="width:120px;"><button type="button" class="vl-btn is-ghost is-small" id="vlg-reload">Refresh</button></div>' +
+            '<div class="vl-form"><h3>Enabled by the office &amp; purchases</h3><div class="vl-upload-row"><label style="margin:0;">Year</label><input type="number" id="vlg-year" min="2000" max="2100" style="width:120px;"><button type="button" class="vl-btn is-ghost is-small" id="vlg-reload">Refresh</button></div>' +
             '<div class="vl-table-wrap" id="vl-grants"></div><h4 style="margin:14px 0 6px;font-size:0.95rem;">Online purchases</h4><div class="vl-table-wrap" id="vl-purchases"></div></div>' +
-            '</div>';
+            '</div>' +
+            '<div class="vl-form" style="margin-top:22px;"><h3>Who can watch</h3>' +
+            '<div class="vl-upload-row"><label style="margin:0;">Year</label><input type="number" id="vle-year" min="2000" max="2100" style="width:110px;">' +
+            '<label style="margin:0 0 0 8px;">Video</label><select id="vle-video" style="max-width:260px;"><option value="">Any video of the year</option></select>' +
+            '<input type="text" id="vle-q" placeholder="Filter by name, email, phone, ID or license" style="flex:1;min-width:200px;">' +
+            '<button type="button" class="vl-btn is-small" id="vle-run">Show</button><button type="button" class="vl-btn is-ghost is-small" id="vle-csv">Download CSV</button></div>' +
+            '<p class="vl-note" id="vle-summary"></p><div class="vl-table-wrap" id="vl-eligible"></div></div>' +
+            '<div class="vl-form" style="margin-top:22px;"><h3>Devices &amp; account tracking</h3>' +
+            '<div class="vl-upload-row"><input type="text" id="vlt-search" placeholder="Find an account (name, email, phone, ID)" style="flex:1;min-width:220px;"><button type="button" class="vl-btn is-ghost is-small" id="vlt-all">Recent activity (all accounts)</button></div>' +
+            '<div class="vl-user-pick" id="vlt-picks"></div><div id="vl-tracking"></div></div>';
         $('vlc-save').addEventListener('click', createVideo);
         $('vly-save').addEventListener('click', saveYear);
         $('vly-year').addEventListener('change', renderYearForm);
@@ -161,10 +179,20 @@
         $('vla-save').addEventListener('click', grantAccess);
         $('vla-year').addEventListener('change', fillGrantVideos);
         $('vlg-reload').addEventListener('click', loadAccess);
-        $('vla-source').addEventListener('change', () => {
-            $('vla-amount').disabled = $('vla-source').value !== 'admin_paid';
+        $('vla-mode').addEventListener('change', () => {
+            $('vla-amount').disabled = $('vla-mode').value === 'waiver';
         });
         $('vla-amount').disabled = true;
+        $('vls-save').addEventListener('click', saveSettings);
+        $('vle-run').addEventListener('click', loadEligible);
+        $('vle-csv').addEventListener('click', downloadEligibleCsv);
+        $('vle-year').addEventListener('change', fillEligibleVideos);
+        $('vlt-search').addEventListener('input', debounce(searchTracking, 300));
+        $('vlt-all').addEventListener('click', () => loadTracking(null));
+        $('vlc-seminar').addEventListener('change', () => {
+            const sem = (state.seminars || []).find((x) => String(x.id) === $('vlc-seminar').value);
+            if (sem && sem.year) $('vlc-year').value = sem.year;
+        });
     }
 
     function debounce(fn, ms) {
@@ -188,7 +216,20 @@
             '<span>Storage: <code>' + esc(t.storageDir || '') + '</code></span>' +
             (disk ? '<span>' + esc(disk) + '</span>' : '') +
             '<span>Upload chunk: ' + fmtBytes(t.chunkBytes) + '</span>' +
+            cloudBadge() +
             (proc.running ? '<span class="good">Processing video #' + proc.running + (proc.queued && proc.queued.length ? ' (+' + proc.queued.length + ' queued)' : '') + '</span>' : '');
+        const st = state.settings || {};
+        if ($('vls-devices') && document.activeElement !== $('vls-devices')) $('vls-devices').value = st.maxDevices || 2;
+        if ($('vls-volunteers')) $('vls-volunteers').value = st.volunteersFree === false ? '0' : '1';
+        if ($('vls-storage')) $('vls-storage').value = st.storageBackend === 'r2' ? 'r2' : 'local';
+        const c = state.cloud || {};
+        if ($('vls-cloud')) {
+            $('vls-cloud').innerHTML = c.ready
+                ? '<span class="good">Cloud bucket reachable' + (c.bucket ? ' (' + esc(c.bucket) + ')' : '') + '</span>'
+                : c.configured
+                  ? '<span class="bad">Cloud bucket not reachable: ' + esc(c.error || '') + '</span>'
+                  : '<span>Cloud storage is not configured on this server. Set the R2 variables in the pm2 environment to enable it.</span>';
+        }
         const sel = $('vlc-seminar');
         if (sel && sel.options.length <= 1) {
             (state.seminars || []).forEach((s) => {
@@ -197,6 +238,26 @@
                 o.textContent = (s.year ? s.year + ' · ' : '') + s.title;
                 sel.appendChild(o);
             });
+        }
+    }
+
+    function cloudBadge() {
+        const c = state.cloud || {};
+        const st = state.settings || {};
+        if (st.storageBackend === 'r2') return c.ready ? '<span class="good"><i class="fas fa-cloud"></i> New videos go to the cloud bucket</span>' : '<span class="bad"><i class="fas fa-cloud"></i> Cloud storage selected but the bucket is not reachable — new videos stay on the server disk</span>';
+        return '<span>New videos stay on the server disk' + (c.ready ? ' (cloud bucket available)' : '') + '</span>';
+    }
+
+    async function saveSettings() {
+        try {
+            await api('/api/admin/videos/settings', {
+                method: 'PUT',
+                body: { maxDevices: $('vls-devices').value, volunteersFree: $('vls-volunteers').value === '1', storageBackend: $('vls-storage').value }
+            });
+            setMsg('vls-msg', 'Saved.');
+            await load();
+        } catch (e) {
+            setMsg('vls-msg', e.message, true);
         }
     }
 
@@ -214,6 +275,25 @@
             $('vla-year').value = years[0];
             fillGrantVideos();
         }
+        if ($('vle-year') && !$('vle-year').value && years.length) {
+            $('vle-year').value = years[0];
+            fillEligibleVideos();
+        }
+    }
+
+    function fillEligibleVideos() {
+        const sel = $('vle-video');
+        const year = Number($('vle-year').value);
+        if (!sel) return;
+        sel.innerHTML = '<option value="">Any video of the year</option>';
+        (state.videos || [])
+            .filter((v) => v.year === year)
+            .forEach((v) => {
+                const o = document.createElement('option');
+                o.value = v.id;
+                o.textContent = (v.kind === 'full' ? 'Full · ' : 'Part ' + (v.partNo || '') + ' · ') + v.title;
+                sel.appendChild(o);
+            });
     }
 
     function fillGrantVideos() {
@@ -276,7 +356,7 @@
                             esc(v.title) +
                             '</strong><div class="vl-note">' +
                             (v.kind === 'full' ? 'Full video' : 'Part ' + (v.partNo != null ? v.partNo : '—')) +
-                            (v.seminarId ? ' · seminar #' + v.seminarId : '') +
+                            (v.seminarTitle ? ' · ' + esc(v.seminarTitle) : v.seminarId ? ' · seminar #' + v.seminarId : '') +
                             '</div>' +
                             log +
                             '</td><td>' +
@@ -287,6 +367,7 @@
                             '<div class="vl-note">' +
                             fmtDuration(v.durationSec) +
                             (v.segmentCount ? ' · ' + v.segmentCount + ' seg' : '') +
+                            (v.status === 'ready' ? ' · ' + (v.storage === 'r2' ? '<span class="vl-badge is-free">cloud</span>' : '<span class="vl-badge">server disk</span>') : '') +
                             '</div></td><td>' +
                             (v.priceInr > 0 ? fmtMoney(v.priceInr) : '<span class="vl-note">registered only</span>') +
                             '</td><td>' +
@@ -297,6 +378,7 @@
                             (v.status === 'ready'
                                 ? '<button type="button" class="vl-btn is-small ' + (v.published ? 'is-ghost' : '') + '" data-vl-act="publish" data-id="' + v.id + '">' + (v.published ? 'Unpublish' : 'Publish') + '</button>'
                                 : '') +
+                            (v.status === 'ready' && v.storage !== 'r2' && state.cloud && state.cloud.ready ? '<button type="button" class="vl-btn is-ghost is-small" data-vl-act="offload" data-id="' + v.id + '">Move to cloud</button>' : '') +
                             '<button type="button" class="vl-btn is-ghost is-small" data-vl-act="edit" data-id="' + v.id + '">Edit</button>' +
                             '<button type="button" class="vl-btn is-danger is-small" data-vl-act="delete" data-id="' + v.id + '">Delete</button>' +
                             '</div></td></tr>'
@@ -366,6 +448,10 @@
                 await api('/api/admin/videos/' + id, { method: 'PUT', body: { published: !v.published } });
             } else if (kind === 'process') {
                 await api('/api/admin/videos/' + id + '/process', { method: 'POST', body: {} });
+            } else if (kind === 'offload') {
+                if (!confirm('Move "' + v.title + '" to the cloud bucket? Playback continues through this site; the local copy is removed once the upload completes.')) return;
+                const out = await api('/api/admin/videos/' + id + '/offload', { method: 'POST', body: {} });
+                if (!out.moved) alert('The video was not moved. Check the status line for the reason.');
             } else if (kind === 'delete') {
                 if (!confirm('Delete "' + v.title + '" and its encrypted files? Doctors lose access to this video.')) return;
                 await api('/api/admin/videos/' + id, { method: 'DELETE' });
@@ -589,7 +675,7 @@
                     userId: chosenUser.id,
                     year: $('vla-year').value,
                     videoId: $('vla-video').value,
-                    source: $('vla-source').value,
+                    paymentMode: $('vla-mode').value,
                     amountInr: $('vla-amount').value,
                     note: $('vla-note').value
                 }
@@ -612,14 +698,14 @@
             const out = await api('/api/admin/videos/access' + (year ? '?year=' + encodeURIComponent(year) : ''));
             const grants = out.grants || [];
             gHost.innerHTML = grants.length
-                ? '<table class="vl-table"><thead><tr><th>Doctor</th><th>Scope</th><th>Type</th><th>By</th><th>When</th><th></th></tr></thead><tbody>' +
+                ? '<table class="vl-table"><thead><tr><th>Doctor</th><th>License</th><th>Scope</th><th>Type</th><th>By</th><th>When</th><th></th></tr></thead><tbody>' +
                   grants
                       .map(
                           (g) =>
-                              '<tr' + (g.revokedAt ? ' style="opacity:.55;"' : '') + '><td>' + esc(g.user) + '<div class="vl-note">' + esc(g.userIdString || g.email || '') + '</div></td><td>' +
+                              '<tr' + (g.revokedAt ? ' style="opacity:.55;"' : '') + '><td>' + esc(g.user) + '<div class="vl-note">' + esc(g.userIdString || g.email || '') + '</div></td><td><code>' + esc(g.license || '—') + '</code></td><td>' +
                               (g.videoId ? esc(g.videoTitle) : 'All ' + g.year + ' videos') +
                               '</td><td>' +
-                              (g.source === 'purchase' ? 'Online · ' + fmtMoney(g.amountInr) : g.source === 'admin_paid' ? 'Paid at office · ' + fmtMoney(g.amountInr) : 'Free') +
+                              esc(g.paymentModeLabel || (g.source === 'purchase' ? 'Online payment' : g.source === 'admin_paid' ? 'Paid at office' : 'Complimentary')) + (g.amountInr ? ' · ' + fmtMoney(g.amountInr) : '') +
                               (g.note ? '<div class="vl-note">' + esc(g.note) + '</div>' : '') +
                               '</td><td>' + esc(g.grantedBy || (g.source === 'purchase' ? 'Doctor' : '')) + '</td><td>' + fmtWhen(g.createdAt) + (g.revokedAt ? '<div class="vl-note">Revoked ' + fmtWhen(g.revokedAt) + '</div>' : '') + '</td><td>' +
                               (g.revokedAt ? '' : '<button type="button" class="vl-btn is-danger is-small" data-revoke="' + g.id + '">Revoke</button>') +
@@ -653,6 +739,227 @@
         } catch (e) {
             gHost.innerHTML = '<p class="vl-note" style="color:#b91c1c;">' + esc(e.message) + '</p>';
         }
+    }
+
+    /* ----------------------------------------------------- who can watch */
+
+    let eligible = null;
+
+    function reasonText(r) {
+        if (!r.allowed) return r.checks && r.checks.registered ? (r.checks.paid ? 'Registered' : 'Registered — fee not paid') : 'Not registered';
+        const map = {
+            volunteer: 'Volunteer',
+            registered_scanned: 'Registered · paid · ticket scanned',
+            registered_paid: 'Registered · paid · not scanned',
+            registered: 'Registered · paid',
+            admin_free: 'Enabled by office (free)',
+            admin_paid: 'Paid at office',
+            purchase: 'Purchased online'
+        };
+        return map[r.reason] || r.reason || '';
+    }
+
+    function tick(v) {
+        return v ? '<span class="vl-tick yes">&#10003;</span>' : '<span class="vl-tick no">&#10007;</span>';
+    }
+
+    async function loadEligible() {
+        const host = $('vl-eligible');
+        const sum = $('vle-summary');
+        const year = $('vle-year').value;
+        if (!year) return (sum.textContent = 'Choose a year.');
+        host.innerHTML = '<p class="vl-note">Checking every account…</p>';
+        try {
+            eligible = await api('/api/admin/videos/eligible?year=' + encodeURIComponent(year) + ($('vle-video').value ? '&videoId=' + encodeURIComponent($('vle-video').value) : '') + '&q=' + encodeURIComponent($('vle-q').value.trim()));
+        } catch (e) {
+            host.innerHTML = '<p class="vl-note" style="color:#b91c1c;">' + esc(e.message) + '</p>';
+            return;
+        }
+        const c = eligible.counts || {};
+        sum.innerHTML = '<b>' + (c.allowed || 0) + '</b> can watch now · <b>' + (c.pending || 0) + '</b> registered but must pay first · <b>' + (c.other || 0) + '</b> other accounts' + (eligible.video ? ' — for “' + esc(eligible.video.title) + '”' : ' — any ' + esc(eligible.year) + ' video');
+        const rows = eligible.rows || [];
+        host.innerHTML = rows.length
+            ? '<table class="vl-table"><thead><tr><th>Account</th><th>License</th><th>Access</th><th>Reg.</th><th>Paid</th><th>Scanned</th><th>Devices</th><th>Last watched</th><th>Last IP</th><th>Watched</th><th></th></tr></thead><tbody>' +
+              rows
+                  .map(
+                      (r) =>
+                          '<tr' + (r.allowed ? '' : ' style="opacity:.75;"') + '><td>' + esc(r.user) + (r.volunteer ? ' <span class="vl-badge is-part">volunteer</span>' : '') + '<div class="vl-note">' + esc(r.userIdString || '') + ' ' + esc(r.email || '') + '</div></td>' +
+                          '<td><code>' + esc(r.license || '—') + '</code></td>' +
+                          '<td>' + (r.allowed ? '<span class="vl-badge is-free">' : '<span class="vl-badge is-paid">') + esc(reasonText(r)) + '</span>' + (r.checks && r.checks.seminarTitle ? '<div class="vl-note">' + esc(r.checks.seminarTitle) + '</div>' : '') + '</td>' +
+                          '<td>' + tick(r.checks && r.checks.registered) + '</td><td>' + tick(r.checks && r.checks.paid) + '</td><td>' + tick(r.checks && r.checks.scanned) + '</td>' +
+                          '<td>' + r.devices + (r.deviceLimit ? ' / ' + r.deviceLimit : '') + '</td><td>' + fmtWhen(r.lastWatchedAt) + '</td><td>' + esc(r.lastIp || '—') + '</td><td>' + fmtDuration(r.watchSeconds) + '</td>' +
+                          '<td><button type="button" class="vl-btn is-ghost is-small" data-track="' + r.userId + '">Tracking</button></td></tr>'
+                  )
+                  .join('') +
+              '</tbody></table>'
+            : '<p class="vl-note">No matching accounts.</p>';
+        host.querySelectorAll('[data-track]').forEach((b) =>
+            b.addEventListener('click', () => {
+                loadTracking(parseInt(b.getAttribute('data-track'), 10));
+                $('vl-tracking').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            })
+        );
+    }
+
+    function downloadEligibleCsv() {
+        if (!eligible || !(eligible.rows || []).length) return alert('Show the list first.');
+        const head = ['Name', 'ID', 'Email', 'Phone', 'License', 'Can watch', 'Reason', 'Registered', 'Paid', 'Scanned', 'Devices', 'Last watched', 'Last IP', 'Watched minutes'];
+        const q = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+        const lines = [head.map(q).join(',')].concat(
+            eligible.rows.map((r) =>
+                [r.user, r.userIdString, r.email, r.phone, r.license, r.allowed ? 'yes' : 'no', reasonText(r), r.checks.registered ? 'yes' : 'no', r.checks.paid ? 'yes' : 'no', r.checks.scanned ? 'yes' : 'no', r.devices, r.lastWatchedAt || '', r.lastIp || '', Math.round((r.watchSeconds || 0) / 60)].map(q).join(',')
+            )
+        );
+        const blob = new Blob(['\ufeff' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'video-access-' + eligible.year + (eligible.video ? '-video' + eligible.video.id : '') + '.csv';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+            URL.revokeObjectURL(a.href);
+            a.remove();
+        }, 500);
+    }
+
+    /* ------------------------------------------------ devices & tracking */
+
+    async function searchTracking() {
+        const q = $('vlt-search').value.trim();
+        const host = $('vlt-picks');
+        if (q.length < 2) return (host.innerHTML = '');
+        try {
+            const rows = await api('/api/admin/videos/users?q=' + encodeURIComponent(q));
+            host.innerHTML = rows.length
+                ? rows.map((u) => '<button type="button" data-tuid="' + u.id + '"><strong>' + esc(u.name) + '</strong> <span class="vl-note">' + esc(u.userIdString || '') + ' ' + esc(u.email || '') + '</span></button>').join('')
+                : '<span class="vl-note">No account matches.</span>';
+            host.querySelectorAll('[data-tuid]').forEach((b) =>
+                b.addEventListener('click', () => {
+                    host.innerHTML = '';
+                    loadTracking(parseInt(b.getAttribute('data-tuid'), 10));
+                })
+            );
+        } catch (e) {
+            host.innerHTML = '<span class="vl-note" style="color:#b91c1c;">' + esc(e.message) + '</span>';
+        }
+    }
+
+    function sessionsTable(sessions, withUser) {
+        if (!sessions.length) return '<p class="vl-note">No playback yet.</p>';
+        return (
+            '<div class="vl-table-wrap"><table class="vl-table"><thead><tr>' + (withUser ? '<th>Account</th>' : '') + '<th>Video</th><th>Device</th><th>IP</th><th>Started</th><th>Last seen</th><th>Watched</th><th>State</th></tr></thead><tbody>' +
+            sessions
+                .map(
+                    (x) =>
+                        '<tr>' + (withUser ? '<td>' + esc(x.user) + '<div class="vl-note">' + esc(x.userIdString || '') + '</div></td>' : '') +
+                        '<td>' + esc(x.videoTitle || '#' + x.videoId) + '</td><td>' + esc(x.device || '—') + (x.deviceId ? ' <code>' + esc(x.deviceId) + '</code>' : '') + '</td>' +
+                        '<td>' + esc(x.ip || '—') + (x.lastIp && x.lastIp !== x.ip ? ' → ' + esc(x.lastIp) : '') + (x.ipChanges ? ' <span class="vl-badge is-paid">' + x.ipChanges + ' IP change' + (x.ipChanges === 1 ? '' : 's') + '</span>' : '') + '</td>' +
+                        '<td>' + fmtWhen(x.startedAt) + '</td><td>' + fmtWhen(x.lastSeenAt) + '</td><td>' + fmtDuration(x.watchSeconds) + '</td>' +
+                        '<td>' + (x.active ? '<span class="vl-badge is-free">active</span>' : x.endedAt ? 'ended' : 'expired') + '</td></tr>'
+                )
+                .join('') +
+            '</tbody></table></div>'
+        );
+    }
+
+    async function loadTracking(userId) {
+        const host = $('vl-tracking');
+        if (!host) return;
+        host.innerHTML = '<p class="vl-note">Loading…</p>';
+        let t;
+        try {
+            t = await api('/api/admin/videos/tracking' + (userId ? '?userId=' + encodeURIComponent(userId) : ''));
+        } catch (e) {
+            host.innerHTML = '<p class="vl-note" style="color:#b91c1c;">' + esc(e.message) + '</p>';
+            return;
+        }
+        const flags = (t.flags || []).length ? '<div class="vl-flags">' + t.flags.map((f) => '<span class="vl-badge is-paid"><i class="fas fa-exclamation-triangle"></i> ' + esc(f) + '</span>').join('') + '</div>' : '';
+        if (!userId) {
+            host.innerHTML =
+                '<h4 style="margin:12px 0 6px;">Recent playback across all accounts</h4>' +
+                sessionsTable(t.sessions || [], true) +
+                '<h4 style="margin:14px 0 6px;">Recently registered devices</h4>' +
+                devicesTable(t.devices || [], true);
+            bindDeviceButtons(host, null);
+            return;
+        }
+        const u = t.user || {};
+        const lic = t.license || {};
+        host.innerHTML =
+            '<div class="vl-track-head"><div><h4 style="margin:0;">' + esc(u.name || 'Account #' + userId) + (u.volunteer ? ' <span class="vl-badge is-part">volunteer</span>' : '') + '</h4><div class="vl-note">' + esc(u.userIdString || '') + ' ' + esc(u.email || '') + ' ' + esc(u.phone || '') + '</div></div>' +
+            '<div><span class="vl-license-lbl">Video license</span><b>' + esc(lic.id || 'not issued yet') + '</b></div>' +
+            '<div class="vl-upload-row"><label style="margin:0;">Device limit for this account</label><input type="number" id="vlt-limit" min="1" max="10" style="width:80px;" value="' + (lic.deviceLimit || '') + '" placeholder="default"><button type="button" class="vl-btn is-small" id="vlt-limit-save">Save</button>' +
+            '<button type="button" class="vl-btn is-danger is-small" id="vlt-end">End playback now</button></div></div>' +
+            flags +
+            '<h4 style="margin:14px 0 6px;">Devices</h4>' +
+            devicesTable(t.devices || [], false) +
+            '<h4 style="margin:14px 0 6px;">Playback sessions</h4>' +
+            sessionsTable(t.sessions || [], false) +
+            '<h4 style="margin:14px 0 6px;">Activity log</h4>' +
+            ((t.log || []).length
+                ? '<div class="vl-table-wrap"><table class="vl-table"><thead><tr><th>When</th><th>Event</th><th>Video</th><th>Device</th><th>IP</th><th>Detail</th></tr></thead><tbody>' +
+                  t.log.map((l) => '<tr><td>' + fmtWhen(l.at) + '</td><td>' + esc(l.event) + '</td><td>' + esc(l.videoTitle || '') + '</td><td><code>' + esc(l.deviceId || '') + '</code></td><td>' + esc(l.ip || '') + '</td><td>' + esc(l.detail || '') + (l.positionSec != null ? ' @ ' + fmtDuration(l.positionSec) : '') + '</td></tr>').join('') +
+                  '</tbody></table></div>'
+                : '<p class="vl-note">No activity yet.</p>');
+        bindDeviceButtons(host, userId);
+        $('vlt-limit-save').addEventListener('click', async () => {
+            try {
+                await api('/api/admin/videos/users/' + userId + '/device-limit', { method: 'POST', body: { limit: $('vlt-limit').value } });
+                loadTracking(userId);
+            } catch (e) {
+                alert(e.message);
+            }
+        });
+        $('vlt-end').addEventListener('click', async () => {
+            try {
+                await api('/api/admin/videos/sessions/' + userId + '/end', { method: 'POST', body: {} });
+                loadTracking(userId);
+            } catch (e) {
+                alert(e.message);
+            }
+        });
+    }
+
+    function devicesTable(devices, withUser) {
+        if (!devices.length) return '<p class="vl-note">No devices registered yet.</p>';
+        return (
+            '<div class="vl-table-wrap"><table class="vl-table"><thead><tr>' + (withUser ? '<th>Account</th>' : '') + '<th>Device</th><th>First used</th><th>Last used</th><th>IP (first → last)</th><th>Status</th><th></th></tr></thead><tbody>' +
+            devices
+                .map(
+                    (d) =>
+                        '<tr' + (d.revokedAt ? ' style="opacity:.55;"' : '') + '>' + (withUser ? '<td>' + esc([d.first_name, d.last_name].filter(Boolean).join(' ') || '#' + d.user_id) + '<div class="vl-note">' + esc(d.user_id_string || '') + '</div></td>' : '') +
+                        '<td>' + esc(d.label || 'Device') + ' <code>' + esc(d.shortId || String(d.device_id || '').slice(0, 8)) + '</code></td><td>' + fmtWhen(d.firstSeenAt || d.first_seen_at) + '</td><td>' + fmtWhen(d.lastSeenAt || d.last_seen_at) + '</td>' +
+                        '<td>' + esc(d.firstIp || d.first_ip || '—') + ((d.lastIp || d.last_ip) && (d.lastIp || d.last_ip) !== (d.firstIp || d.first_ip) ? ' → ' + esc(d.lastIp || d.last_ip) : '') + '</td>' +
+                        '<td>' + (d.revokedAt || d.revoked_at ? '<span class="vl-badge">removed</span>' : '<span class="vl-badge is-free">allowed</span>') + '</td>' +
+                        '<td>' + (d.revokedAt || d.revoked_at ? '<button type="button" class="vl-btn is-ghost is-small" data-dev-restore="' + d.id + '">Restore</button>' : '<button type="button" class="vl-btn is-danger is-small" data-dev-revoke="' + d.id + '">Remove</button>') + '</td></tr>'
+                )
+                .join('') +
+            '</tbody></table></div>'
+        );
+    }
+
+    function bindDeviceButtons(host, userId) {
+        host.querySelectorAll('[data-dev-revoke]').forEach((b) =>
+            b.addEventListener('click', async () => {
+                if (!confirm('Remove this device? Playback on it stops and it cannot be used again until restored.')) return;
+                try {
+                    await api('/api/admin/videos/devices/' + b.getAttribute('data-dev-revoke') + '/revoke', { method: 'POST', body: {} });
+                    loadTracking(userId);
+                } catch (e) {
+                    alert(e.message);
+                }
+            })
+        );
+        host.querySelectorAll('[data-dev-restore]').forEach((b) =>
+            b.addEventListener('click', async () => {
+                try {
+                    await api('/api/admin/videos/devices/' + b.getAttribute('data-dev-restore') + '/restore', { method: 'POST', body: {} });
+                    loadTracking(userId);
+                } catch (e) {
+                    alert(e.message);
+                }
+            })
+        );
     }
 
     window.loadVideoLibraryAdmin = load;

@@ -42,10 +42,35 @@
 
     function accessLabel(access) {
         if (!access || !access.allowed) return '';
-        if (access.reason === 'registered') return 'Included with your seminar registration';
+        if (access.reason === 'volunteer') return 'Free for volunteers';
+        if (access.reason === 'registered_scanned') return 'Included — registered, paid, ticket scanned';
+        if (access.reason === 'registered_paid' || access.reason === 'registered') return 'Included — registered and paid';
         if (access.reason === 'purchase') return 'Purchased';
         if (access.reason === 'admin_paid') return 'Payment recorded by the seminar office';
         return 'Enabled by the seminar office';
+    }
+
+    function whyLocked(access) {
+        const c = (access && access.checks) || {};
+        if (!c.registered) return 'You are not registered for this seminar.';
+        if (!c.paid) return 'Your registration fee is not paid yet, so this video is not included.';
+        return '';
+    }
+
+    /** A stable, random id for this browser. Devices are limited per account, so it is kept for good. */
+    function deviceId() {
+        try {
+            let id = localStorage.getItem('vl_device');
+            if (!/^[a-f0-9]{32}$/.test(id || '')) {
+                const buf = new Uint8Array(16);
+                (window.crypto || window.msCrypto).getRandomValues(buf);
+                id = Array.from(buf, (b) => b.toString(16).padStart(2, '0')).join('');
+                localStorage.setItem('vl_device', id);
+            }
+            return id;
+        } catch (_) {
+            return '';
+        }
     }
 
     function loadScript(src) {
@@ -115,7 +140,14 @@
             return;
         }
         const pending = data.pendingPurchases || [];
-        host.innerHTML = years
+        const licenseBar = data.license
+            ? '<div class="vl-license"><div><span class="vl-license-lbl">Your video license</span><b>' +
+              esc(data.license) +
+              '</b></div><div class="vl-license-note">This number is printed inside every video you watch. Videos play on up to ' +
+              esc(data.maxDevices || 2) +
+              ' of your own devices. <button type="button" class="vl-linkbtn" id="vl-devices-btn">My devices</button></div><div id="vl-devices" class="hidden"></div></div>'
+            : '';
+        host.innerHTML = licenseBar + years
             .map((y) => {
                 const bundle =
                     y.bundlePriceInr != null && y.bundlePriceInr > 0 && !y.allAllowed
@@ -141,6 +173,39 @@
         host.querySelectorAll('[data-vl-buy]').forEach((b) => b.addEventListener('click', () => startPurchase({ videoId: parseInt(b.getAttribute('data-vl-buy'), 10) })));
         host.querySelectorAll('[data-vl-buy-year]').forEach((b) => b.addEventListener('click', () => startPurchase({ year: parseInt(b.getAttribute('data-vl-buy-year'), 10) })));
         host.querySelectorAll('[data-vl-check]').forEach((b) => b.addEventListener('click', () => checkPending(parseInt(b.getAttribute('data-vl-check'), 10), b)));
+        const devBtn = $('vl-devices-btn');
+        if (devBtn) devBtn.addEventListener('click', showDevices);
+    }
+
+    async function showDevices() {
+        const box = $('vl-devices');
+        if (!box) return;
+        box.classList.remove('hidden');
+        box.innerHTML = '<span class="vl-note">Loading…</span>';
+        try {
+            const d = await api('/api/doctor/videos/devices?userId=' + encodeURIComponent(userId()) + '&deviceId=' + encodeURIComponent(deviceId()));
+            const rows = (d.devices || []).map(
+                (x) =>
+                    '<li>' +
+                    esc(x.label) +
+                    (x.current ? ' <span class="vl-badge is-free">this device</span>' : '') +
+                    '<small>first used ' + esc(fmtWhen(x.firstSeenAt)) + ' · last used ' + esc(fmtWhen(x.lastSeenAt)) + '</small></li>'
+            );
+            box.innerHTML =
+                '<p class="vl-note">' + (d.devices || []).length + ' of ' + esc(d.limit) + ' devices in use. To move your access to a new device, contact the seminar office.</p>' +
+                (rows.length ? '<ul class="vl-devlist">' + rows.join('') + '</ul>' : '<p class="vl-note">No device has played a video yet. The first device you watch on is registered automatically.</p>');
+        } catch (e) {
+            box.innerHTML = '<span class="vl-note" style="color:#b91c1c;">' + esc(e.message) + '</span>';
+        }
+    }
+
+    function fmtWhen(iso) {
+        if (!iso) return '—';
+        try {
+            return new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' });
+        } catch (_) {
+            return iso;
+        }
     }
 
     function card(v, pending) {
@@ -159,9 +224,11 @@
                 '<span class="vl-badge is-paid">Payment pending</span>' +
                 '<button type="button" class="vl-btn is-ghost is-small" data-vl-check="' + pend.id + '">Check payment</button>';
         } else if (v.priceInr > 0) {
-            actions = '<button type="button" class="vl-btn is-warn" data-vl-buy="' + v.id + '"><i class="fas fa-lock"></i> Unlock · ' + fmtMoney(v.priceInr) + '</button>';
+            actions =
+                '<button type="button" class="vl-btn is-warn" data-vl-buy="' + v.id + '"><i class="fas fa-lock"></i> Unlock · ' + fmtMoney(v.priceInr) + '</button>' +
+                (whyLocked(v.access) ? '<span class="vl-note vl-why">' + esc(whyLocked(v.access)) + '</span>' : '');
         } else {
-            actions = '<span class="vl-badge">Available to registered participants</span>';
+            actions = '<span class="vl-badge">Available to registered participants</span>' + (whyLocked(v.access) ? '<span class="vl-note vl-why">' + esc(whyLocked(v.access)) + '</span>' : '');
         }
         const progress = allowed && v.durationSec && v.positionSec > 0 ? '<div class="vl-progress"><span style="width:' + Math.min(100, Math.round((v.positionSec / v.durationSec) * 100)) + '%"></span></div>' : '';
         return (
@@ -171,6 +238,7 @@
             '</div><h4>' +
             esc(v.title) +
             '</h4>' +
+            (v.seminarTitle ? '<p class="vl-seminar"><i class="fas fa-calendar-check"></i> ' + esc(v.seminarTitle) + '</p>' : '') +
             (v.description ? '<p>' + esc(v.description.length > 180 ? v.description.slice(0, 177) + '…' : v.description) + '</p>' : '') +
             progress +
             '<div class="vl-card-actions">' +
@@ -185,7 +253,7 @@
         const now = new Date();
         const hh = String(now.getHours()).padStart(2, '0');
         const mm = String(now.getMinutes()).padStart(2, '0');
-        return '<span>' + esc(wm.name || '') + '</span><small>' + esc(wm.id || '') + ' · ' + hh + ':' + mm + '</small>';
+        return '<b>' + esc(wm.license || '') + '</b><span>' + esc(wm.name || '') + '</span><small>' + esc(wm.id || '') + ' · ' + hh + ':' + mm + '</small>';
     }
 
     function moveWatermark() {
@@ -209,11 +277,20 @@
         wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
         let session;
         try {
-            session = await api('/api/doctor/videos/' + videoId + '/session', { method: 'POST', body: JSON.stringify({ userId: uid }) });
+            session = await api('/api/doctor/videos/' + videoId + '/session', { method: 'POST', body: JSON.stringify({ userId: uid, deviceId: deviceId() }) });
         } catch (e) {
             msg.textContent = e.message;
+            if (e.body && (e.body.code === 'device_limit' || e.body.code === 'device_blocked')) {
+                const box = $('vl-devices');
+                if (box) {
+                    showDevices();
+                    box.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            }
             return;
         }
+        const fixedWm = $('vl-wm-fixed');
+        if (fixedWm) fixedWm.textContent = (session.watermark && session.watermark.license) || '';
         $('vl-player-title').textContent = session.video ? session.video.title : 'Seminar video';
         play = { token: session.token, videoId, hls: null, heartbeat: null, wmTimer: null, watermark: session.watermark || {}, ended: false };
         moveWatermark();
