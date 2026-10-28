@@ -153,15 +153,16 @@
             '<h3 style="margin:18px 0 8px;font-size:1.05rem;">Videos</h3><div id="vl-admin-videos"></div>' +
             '<div class="vl-admin-grid" style="margin-top:22px;">' +
             '<div class="vl-form"><h3>Issue video access</h3>' +
+            '<p class="vl-note">Same screen for the admin and for staff on Staff CRM. Find the doctor, select each seminar year they missed, and the total for those videos is filled in. One payment opens every video of the selected years.</p>' +
             '<label>Find the person</label><input type="text" id="vla-search" placeholder="Name, phone, email, portal ID, or registration / application number"><div class="vl-user-pick" id="vla-picks"></div><div id="vla-chosen"></div>' +
-            '<label>Find videos</label><input type="text" id="vla-video-q" placeholder="Search by title, year, or seminar">' +
+            '<label>Seminar years</label><input type="text" id="vla-video-q" placeholder="Search a year or a video title">' +
             '<div class="vl-shop" id="vla-catalog"></div>' +
             '<div class="vl-cart" id="vla-cart"></div>' +
             '<div class="vl-form-row"><div><label>Payment</label><select id="vla-mode"><option value="waiver">Waiver (complimentary)</option><option value="cash">Cash</option><option value="upi">UPI</option><option value="card">Card</option><option value="razorpay">Razorpay</option><option value="bank">Bank transfer</option><option value="cheque">Cheque</option><option value="other">Other</option></select></div>' +
-            '<div><label>Amount (₹)</label><input type="number" id="vla-amount" min="0" step="1" placeholder="0"></div></div>' +
+            '<div><label>Total amount (₹)</label><input type="number" id="vla-amount" min="0" step="1" placeholder="0"></div></div>' +
             '<label>Note</label><input type="text" id="vla-note" maxlength="300" placeholder="Receipt no., reason…">' +
-            '<div class="vl-upload-row" style="margin-top:10px;"><button type="button" class="vl-btn" id="vla-save">Record payment &amp; enable</button></div>' +
-            '<p class="vl-note" id="vla-pay-note">Add the videos that apply. If this person is not registered for that seminar, the year’s amount is added automatically, the same way a product is added to a cart. Razorpay creates an order for the amount when you save. The doctor can watch as soon as this is saved, and an email goes out with the payment and their video license.</p>' +
+            '<div class="vl-upload-row" style="margin-top:10px;"><button type="button" class="vl-btn" id="vla-save">Take payment &amp; enable</button></div>' +
+            '<p class="vl-note" id="vla-pay-note">Select 2026 and 2027, for example. The prices of the videos in those years are added together. Access to both years opens when this payment is completed.</p>' +
             '<p class="vl-form-msg" id="vla-msg"></p></div>' +
             '<div class="vl-form"><h3>Enabled by the office &amp; purchases</h3><div class="vl-upload-row"><label style="margin:0;">Year</label><input type="number" id="vlg-year" min="2000" max="2100" style="width:120px;"><button type="button" class="vl-btn is-ghost is-small" id="vlg-reload">Refresh</button></div>' +
             '<div class="vl-table-wrap" id="vl-grants"></div><h4 style="margin:14px 0 6px;font-size:0.95rem;">Online purchases</h4><div class="vl-table-wrap" id="vl-purchases"></div></div>' +
@@ -303,116 +304,116 @@
             });
     }
 
-    let cartIds = [];
-    let amountTouched = false;
+    let cartYears = [];
 
-    function syncAmountField() {
-        const waiver = $('vla-mode') && $('vla-mode').value === 'waiver';
-        if ($('vla-amount')) $('vla-amount').disabled = !!waiver;
-        const note = $('vla-pay-note');
-        if (note && $('vla-mode')) {
-            note.textContent =
-                $('vla-mode').value === 'razorpay'
-                    ? 'Razorpay creates an order for this amount when you save. The doctor can watch immediately, and the email includes the order.'
-                    : 'Add the videos that apply. If this person is not registered for that seminar, the year’s amount is added automatically. The doctor can watch as soon as this is saved.';
-        }
-        renderCart();
-    }
-
-    function paidYearSet(user) {
-        const years = new Set();
-        (user && user.registrations ? user.registrations : []).forEach((r) => {
-            if (r.paid && r.year) years.add(Number(r.year));
-        });
-        return years;
-    }
-
-    function cartVideos() {
-        return (state && state.videos ? state.videos : []).filter((v) => cartIds.indexOf(v.id) >= 0);
-    }
-
-    function suggestCartTotal() {
-        const videos = cartVideos();
-        if (!videos.length) return { total: 0, lines: [] };
-        const paid = paidYearSet(chosenUser);
-        const anyReg = !!(chosenUser && chosenUser.registrations && chosenUser.registrations.length);
+    function yearCatalog() {
         const byYear = {};
-        videos.forEach((v) => {
+        (state.videos || []).forEach((v) => {
             const y = Number(v.year);
             if (!byYear[y]) byYear[y] = [];
             byYear[y].push(v);
         });
-        const lines = [];
-        let total = 0;
-        Object.keys(byYear).forEach((key) => {
-            const year = Number(key);
-            const list = byYear[year];
-            const meta = (state.years || []).find((row) => Number(row.year) === year) || {};
-            const bundle = meta.bundlePriceInr != null && meta.bundlePriceInr !== '' ? Number(meta.bundlePriceInr) : null;
-            if (list.every((v) => paid.has(year))) {
-                list.forEach((v) => lines.push({ title: v.title, year, amount: 0, reason: 'Included with registration' }));
-                return;
-            }
-            if (bundle != null && !Number.isNaN(bundle)) {
-                lines.push({
-                    title: (meta.title || 'Seminar ' + year) + ' — year amount',
-                    year,
-                    amount: bundle,
-                    reason: anyReg ? 'Not registered for this year' : 'No seminar registration'
-                });
-                total += bundle;
-                return;
-            }
-            list.forEach((v) => {
-                const price = Number(v.priceInr) || 0;
-                lines.push({ title: v.title, year, amount: price, reason: 'Video price' });
-                total += price;
-            });
+        (state.years || []).forEach((row) => {
+            const y = Number(row.year);
+            if (!byYear[y]) byYear[y] = [];
         });
-        return { total, lines };
+        return Object.keys(byYear)
+            .map((key) => {
+                const year = Number(key);
+                const videos = byYear[year];
+                const meta = (state.years || []).find((row) => Number(row.year) === year) || {};
+                const bundle = meta.bundlePriceInr != null && meta.bundlePriceInr !== '' ? Number(meta.bundlePriceInr) : null;
+                const videoSum = videos.reduce((sum, v) => sum + (Number(v.priceInr) || 0), 0);
+                const amount = bundle != null && bundle > 0 ? bundle : videoSum;
+                return {
+                    year,
+                    title: meta.title || 'Seminar ' + year,
+                    videos,
+                    amount,
+                    reason: bundle != null && bundle > 0 ? 'Year price' : 'Total of the videos'
+                };
+            })
+            .sort((a, b) => b.year - a.year);
+    }
+
+    function suggestCartTotal() {
+        const picked = yearCatalog().filter((row) => cartYears.indexOf(row.year) >= 0);
+        return {
+            total: picked.reduce((sum, row) => sum + row.amount, 0),
+            lines: picked
+        };
+    }
+
+    function syncAmountField() {
+        const waiver = $('vla-mode') && $('vla-mode').value === 'waiver';
+        const save = $('vla-save');
+        if ($('vla-amount')) $('vla-amount').disabled = !!waiver;
+        if (save) save.textContent = $('vla-mode') && $('vla-mode').value === 'razorpay' ? 'Pay with Razorpay & enable' : 'Take payment & enable';
+        const note = $('vla-pay-note');
+        if (note) {
+            note.textContent =
+                $('vla-mode') && $('vla-mode').value === 'razorpay'
+                    ? 'Razorpay opens for the total. Every selected year is enabled only after that payment succeeds.'
+                    : 'The total is the sum of the selected years. Recording the payment enables every video in those years together.';
+        }
+        renderCart();
     }
 
     function renderCatalog() {
         const host = $('vla-catalog');
         if (!host || !state) return;
         const q = ($('vla-video-q') && $('vla-video-q').value ? $('vla-video-q').value : '').trim().toLowerCase();
-        const videos = (state.videos || []).filter((v) => {
+        const rows = yearCatalog().filter((row) => {
             if (!q) return true;
-            const semTitle = v.seminarTitle || '';
-            return [v.title, v.year, v.kind, semTitle].join(' ').toLowerCase().indexOf(q) >= 0;
+            return [row.year, row.title].concat(row.videos.map((v) => v.title)).join(' ').toLowerCase().indexOf(q) >= 0;
         });
-        if (!videos.length) {
-            host.innerHTML = '<p class="vl-note">No videos match that search.</p>';
+        if (!rows.length) {
+            host.innerHTML = '<p class="vl-note">No seminar years match that search.</p>';
             return;
         }
-        host.innerHTML = videos
-            .map((v) => {
-                const inCart = cartIds.indexOf(v.id) >= 0;
-                const semTitle = v.seminarTitle || '';
+        const already = new Set(
+            ((chosenUser && chosenUser.access) || []).filter((a) => !a.revoked && !a.videoTitle).map((a) => Number(a.year))
+        );
+        const paidYears = new Set(
+            ((chosenUser && chosenUser.registrations) || []).filter((r) => r.paid && r.year).map((r) => Number(r.year))
+        );
+        host.innerHTML = rows
+            .map((row) => {
+                const inCart = cartYears.indexOf(row.year) >= 0;
+                const owned = already.has(row.year);
+                const included = paidYears.has(row.year);
+                const vids = row.videos.length
+                    ? row.videos.map((v) => esc(v.kind === 'full' ? 'Full' : 'Part ' + (v.partNo || '')) + ' · ' + esc(v.title)).join('<br>')
+                    : 'No video published for this year yet';
                 return (
                     '<article class="vl-product"><div><strong>' +
-                    esc(v.title) +
-                    '</strong><p class="vl-note">' +
-                    esc(v.year) +
-                    (semTitle ? ' · ' + esc(semTitle) : '') +
+                    esc(row.year) +
                     ' · ' +
-                    fmtMoney(v.priceInr || 0) +
+                    esc(row.title) +
+                    '</strong><p class="vl-note">' +
+                    vids +
+                    '</p><p class="vl-note">' +
+                    esc(row.reason) +
+                    ' · ' +
+                    fmtMoney(row.amount) +
+                    (owned ? ' · already enabled' : included ? ' · already included with a paid registration' : '') +
                     '</p></div><button type="button" class="vl-btn is-small' +
                     (inCart ? ' is-ghost' : '') +
-                    '" data-add="' +
-                    v.id +
-                    '">' +
-                    (inCart ? 'Added' : 'Add') +
+                    '" data-year="' +
+                    row.year +
+                    '"' +
+                    (owned || included ? ' disabled' : '') +
+                    '>' +
+                    (owned ? 'Enabled' : included ? 'Included' : inCart ? 'Added' : 'Add year') +
                     '</button></article>'
                 );
             })
             .join('');
-        host.querySelectorAll('[data-add]').forEach((b) =>
+        host.querySelectorAll('[data-year]').forEach((b) =>
             b.addEventListener('click', () => {
-                const id = parseInt(b.getAttribute('data-add'), 10);
-                if (cartIds.indexOf(id) < 0) cartIds.push(id);
-                else cartIds = cartIds.filter((x) => x !== id);
-                amountTouched = false;
+                const year = parseInt(b.getAttribute('data-year'), 10);
+                if (cartYears.indexOf(year) < 0) cartYears.push(year);
+                else cartYears = cartYears.filter((y) => y !== year);
                 if ($('vla-amount')) delete $('vla-amount').dataset.touched;
                 renderCatalog();
                 renderCart();
@@ -424,19 +425,23 @@
         const host = $('vla-cart');
         if (!host) return;
         const quote = suggestCartTotal();
-        if (!cartIds.length) {
-            host.innerHTML = '<p class="vl-note">Cart is empty. Search for videos and add the ones that apply.</p>';
+        if (!cartYears.length) {
+            host.innerHTML = '<p class="vl-note">No years selected. Add each year the doctor needs, for example 2026 and 2027.</p>';
             return;
         }
         host.innerHTML =
-            '<p class="vl-profile-lbl">Cart</p><ul class="vl-devlist">' +
+            '<p class="vl-profile-lbl">Selected years</p><ul class="vl-devlist">' +
             quote.lines
-                .map((l) => '<li><strong>' + esc(l.title) + '</strong> ' + esc(l.year) + '<small>' + esc(l.reason) + ' · ' + fmtMoney(l.amount) + '</small></li>')
+                .map((l) => {
+                    const names = l.videos.length ? l.videos.map((v) => v.title).join(', ') : 'videos of this year';
+                    return '<li><strong>' + esc(l.year) + ' · ' + esc(l.title) + '</strong> ' + fmtMoney(l.amount) + '<small>' + esc(names) + '</small></li>';
+                })
                 .join('') +
-            '</ul><p class="vl-note">Suggested amount ' +
+            '</ul><p class="vl-note"><strong>Total ' +
             fmtMoney(quote.total) +
-            (chosenUser && !(chosenUser.registrations || []).length ? '. No seminar registration, so each selected year is charged at the year amount.' : '') +
-            '</p>';
+            '</strong> · one payment enables every video in ' +
+            quote.lines.map((l) => l.year).join(' and ') +
+            '.</p>';
         const amount = $('vla-amount');
         if (amount && amount.dataset.touched !== '1' && $('vla-mode') && $('vla-mode').value !== 'waiver') amount.value = quote.total ? String(quote.total) : '';
     }
@@ -851,31 +856,89 @@
         renderCart();
     }
 
+    function clearYearCart() {
+        cartYears = [];
+        if ($('vla-amount')) delete $('vla-amount').dataset.touched;
+        $('vla-note').value = '';
+        renderCatalog();
+        renderCart();
+        loadAccess();
+    }
+
+    async function verifyOfficePayment(out, response) {
+        const paid = await api('/api/admin/videos/access/cart/verify', {
+            method: 'POST',
+            body: {
+                orderDbId: out.orderDbId,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature
+            }
+        });
+        setMsg('vla-msg', 'Payment received. ' + (paid.years || cartYears).join(' and ') + ' are enabled for ' + chosenUser.name + '.');
+        clearYearCart();
+    }
+
+    function openOfficeCheckout(out) {
+        if (typeof Razorpay === 'undefined') {
+            setMsg('vla-msg', 'Razorpay did not load. The order is ' + (out.orderRef || '') + ' and access is not enabled yet.', true);
+            return;
+        }
+        const rzp = new Razorpay({
+            key: out.keyId,
+            amount: out.razorpayOrder.amount,
+            currency: out.razorpayOrder.currency || 'INR',
+            name: 'Vaidya Gogate Memorial Foundation',
+            description: (out.years || []).join(', ') + ' seminar videos',
+            order_id: out.razorpayOrder.id,
+            handler: function (response) {
+                verifyOfficePayment(out, response).catch((e) => setMsg('vla-msg', e.message, true));
+            },
+            modal: {
+                ondismiss: function () {
+                    setMsg('vla-msg', 'Payment window closed. Access stays off until the payment is completed. Order ' + (out.orderRef || '') + '.', true);
+                }
+            },
+            prefill: {
+                name: chosenUser.name || '',
+                email: chosenUser.email || '',
+                contact: chosenUser.phone || ''
+            },
+            theme: { color: '#0f766e' }
+        });
+        rzp.on('payment.failed', function (resp) {
+            setMsg('vla-msg', (resp.error && resp.error.description) || 'Payment failed. Access was not enabled.', true);
+        });
+        rzp.open();
+    }
+
     async function grantAccess() {
         if (!chosenUser) return setMsg('vla-msg', 'Find the person and select the account first.', true);
-        if (!cartIds.length) return setMsg('vla-msg', 'Add at least one video.', true);
+        if (!cartYears.length) return setMsg('vla-msg', 'Select at least one seminar year.', true);
+        const save = $('vla-save');
+        if (save) save.disabled = true;
         try {
             const out = await api('/api/admin/videos/access/cart', {
                 method: 'POST',
                 body: {
                     userId: chosenUser.id,
-                    videoIds: cartIds.slice(),
+                    years: cartYears.slice(),
                     paymentMode: $('vla-mode').value,
                     amountInr: $('vla-amount').value,
                     note: $('vla-note').value
                 }
             });
-            const extra = out.razorpayOrderId ? ' Razorpay order ' + out.razorpayOrderId + '.' : out.orderRef ? ' Order ' + out.orderRef + '.' : '';
-            setMsg('vla-msg', 'Access enabled for ' + chosenUser.name + '.' + extra);
-            $('vla-note').value = '';
-            cartIds = [];
-            amountTouched = false;
-            if ($('vla-amount')) delete $('vla-amount').dataset.touched;
-            renderCatalog();
-            renderCart();
-            loadAccess();
+            if (out.paymentType === 'razorpay_checkout' && !out.paid) {
+                setMsg('vla-msg', 'Razorpay order ' + (out.orderRef || '') + ' for ' + fmtMoney(out.amountInr) + '. Complete the payment to enable ' + (out.years || []).join(' and ') + '.');
+                openOfficeCheckout(out);
+                return;
+            }
+            setMsg('vla-msg', 'Payment recorded. ' + (out.years || cartYears).join(' and ') + ' are enabled for ' + chosenUser.name + (out.orderRef ? '. Order ' + out.orderRef : '') + '.');
+            clearYearCart();
         } catch (e) {
             setMsg('vla-msg', e.message, true);
+        } finally {
+            if (save) save.disabled = false;
         }
     }
 
