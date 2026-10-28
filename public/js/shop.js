@@ -16,6 +16,10 @@ let orderFilter = 'all';
 let accountOrders = [];
 let shopTrackerSeen = false;
 let shopLastOrder = null;
+let shopLayout = 'grid';
+let shopPrice = 'all';
+let shopWish = [];
+let orderQuery = '';
 
 const COVER_COLORS = [
     ['#0b3d2e', '#1f7a4d'],
@@ -97,12 +101,31 @@ function loadShopUser() {
     } catch (_) {
         shopRecent = [];
     }
+    try {
+        shopWish = JSON.parse(localStorage.getItem('shop_wish') || '[]') || [];
+    } catch (_) {
+        shopWish = [];
+    }
+    shopLayout = localStorage.getItem('shop_layout') === 'list' ? 'list' : 'grid';
+    shopPrice = localStorage.getItem('shop_price') || 'all';
 }
 
 function saveCart() {
     localStorage.setItem('shop_cart', JSON.stringify(shopCart));
     const n = shopCart.reduce((s, l) => s + l.qty, 0);
     document.getElementById('cart-count').textContent = n;
+    const dock = document.getElementById('dock-count');
+    if (dock) dock.textContent = n;
+}
+
+function saveWish() {
+    localStorage.setItem('shop_wish', JSON.stringify(shopWish));
+    const n = document.getElementById('wish-count');
+    if (n) n.textContent = String(shopWish.length);
+}
+
+function wished(id) {
+    return shopWish.indexOf(id) >= 0;
 }
 
 function userQuery() {
@@ -121,6 +144,10 @@ function shopGo(view, arg) {
     if (view === 'checkout') hash = '#/checkout';
     else if (view === 'account') hash = '#/account/' + (arg || 'orders');
     else if (view === 'order') hash = '#/order/' + arg;
+    else if (view === 'book') hash = '#/book/' + encodeURIComponent(arg);
+    else if (view === 'help') hash = '#/help';
+    else if (view === 'saved') hash = '#/saved';
+    hideSuggest();
     if (location.hash === hash) route();
     else location.hash = hash;
 }
@@ -131,8 +158,9 @@ function stopPolling() {
 }
 
 function showView(name) {
-    ['home', 'checkout', 'login', 'account', 'order'].forEach((v) => {
-        document.getElementById('view-' + v).classList.toggle('hidden', v !== name);
+    ['home', 'book', 'saved', 'help', 'checkout', 'login', 'account', 'order'].forEach((v) => {
+        const el = document.getElementById('view-' + v);
+        if (el) el.classList.toggle('hidden', v !== name);
     });
     window.scrollTo(0, 0);
 }
@@ -141,6 +169,7 @@ function route() {
     stopPolling();
     closeCartDrawer();
     closeProduct();
+    hideSuggest();
     const hash = location.hash || '#/';
     const needsLogin = /^#\/(checkout|account|order)/.test(hash);
     if (needsLogin && !shopUser) {
@@ -150,16 +179,53 @@ function route() {
     }
     let m;
     if (hash === '#/checkout') return renderCheckout();
+    if (hash === '#/help') return renderHelp();
+    if (hash === '#/saved') return renderSaved();
     if ((m = hash.match(/^#\/account\/(\w+)/))) {
         accountTab = m[1] === 'address' ? 'address' : 'orders';
         return renderAccount();
     }
     if ((m = hash.match(/^#\/order\/(\d+)/))) return openShopOrder(parseInt(m[1], 10));
+    if ((m = hash.match(/^#\/book\/([^/]+)/))) return renderBookPage(decodeURIComponent(m[1]));
     renderHome();
 }
 
+function hideSuggest() {
+    const box = document.getElementById('search-suggest');
+    if (box) {
+        box.classList.add('hidden');
+        box.innerHTML = '';
+    }
+}
+
+function shopSuggest() {
+    const input = document.getElementById('shop-search');
+    const box = document.getElementById('search-suggest');
+    if (!input || !box || !shopCatalog) return;
+    const q = input.value.trim().toLowerCase();
+    if (q.length < 1) return hideSuggest();
+    const hits = (shopCatalog.books || [])
+        .filter((b) => (b.title + ' ' + (b.author || '') + ' ' + (shopCatalog.languages || []).join(' ')).toLowerCase().includes(q))
+        .slice(0, 6);
+    if (!hits.length) {
+        box.innerHTML = '<button type="button" onclick="shopSearch(event)">Search “' + shopEsc(input.value.trim()) + '”</button>';
+        box.classList.remove('hidden');
+        return;
+    }
+    box.innerHTML = hits
+        .map(
+            (b) =>
+                '<button type="button" onclick="shopGo(\'book\',\'' + shopEsc(b.id) + '\')">' +
+                miniCover(b) +
+                '<span><b>' + shopEsc(b.title) + '</b><span>' + shopEsc(b.author || '') + ' · ' + money(b.price) + '</span></span></button>'
+        )
+        .join('');
+    box.classList.remove('hidden');
+}
+
 function shopSearch(e) {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
+    hideSuggest();
     shopSearchTerm = document.getElementById('shop-search').value.trim().toLowerCase();
     if (location.hash && location.hash !== '#/') location.hash = '#/';
     else renderHome();
@@ -232,11 +298,25 @@ async function bootShop() {
         b.classList.remove('hidden');
     }
     document.getElementById('shop-footer').innerHTML =
-        '<b>' + shopEsc(store.name || 'Book shop') + '</b><br>' +
-        shopEsc([store.address, store.city].filter(Boolean).join(', ')) +
-        (store.phone ? '<br>Call <a href="tel:' + shopEsc(store.phone) + '" style="color:#fff">' + shopEsc(store.phone) + '</a>' : '') +
-        '<br><span style="opacity:.7">Pickup ' + shopEsc(s.pickupOpen || '') + ' - ' + shopEsc(s.pickupClose || '') +
-        ' · Delivery ' + shopEsc(s.deliveryOpen || '') + ' - ' + shopEsc(s.deliveryClose || '') + '</span>';
+        '<div class="footer-grid"><div><h3>' + shopEsc(store.name || 'Book shop') + '</h3><div>' +
+        shopEsc([store.address, store.city].filter(Boolean).join(', ')) + '</div>' +
+        (store.phone ? '<div>Call <a href="tel:' + shopEsc(store.phone) + '">' + shopEsc(store.phone) + '</a></div>' : '') +
+        '<div>Orders ' + shopEsc(s.orderOpen || '') + ' – ' + shopEsc(s.orderClose || '') + ' IST</div></div>' +
+        '<div><h3>Shop</h3>' +
+        '<button class="link" type="button" onclick="shopGo(\'home\')">All books</button>' +
+        '<button class="link" type="button" onclick="shopGo(\'saved\')">Saved titles</button>' +
+        '<button class="link" type="button" onclick="shopGo(\'account\',\'orders\')">Your orders</button>' +
+        '<button class="link" type="button" onclick="openCartDrawer()">Cart</button></div>' +
+        '<div><h3>Help</h3>' +
+        '<button class="link" type="button" onclick="shopGo(\'help\')">Delivery, pickup and returns</button>' +
+        '<div>Pickup ' + shopEsc(s.pickupOpen || '') + ' – ' + shopEsc(s.pickupClose || '') + '</div>' +
+        '<div>Delivery ' + shopEsc(s.deliveryOpen || '') + ' – ' + shopEsc(s.deliveryClose || '') + '</div>' +
+        '<div><a href="mailto:care@vaidyagogate.org">care@vaidyagogate.org</a></div></div></div>' +
+        '<div class="fine">Seminar texts of Dr. R.B. Gogate. Prices come from the seminar book settings.</div>';
+    saveWish();
+    document.addEventListener('click', (ev) => {
+        if (!ev.target.closest('.search-wrap')) hideSuggest();
+    });
     try {
         const pay = await fetch('/api/shop/pay-options').then((r) => r.json());
         razorpayMethod = pay.razorpay || null;
@@ -267,20 +347,36 @@ function cartQtyOf(bookId, lang) {
     return shopCart.filter((l) => l.bookId === bookId && (!lang || l.language === lang)).reduce((s, l) => s + l.qty, 0);
 }
 
+function priceCuts() {
+    const prices = (shopCatalog.books || []).map((b) => Number(b.price)).filter((n) => !isNaN(n)).sort((a, b) => a - b);
+    if (!prices.length) return { min: 0, max: 0 };
+    return { min: prices[0], max: prices[prices.length - 1] };
+}
+
 function shopBooksView() {
     let books = (shopCatalog.books || []).slice();
     if (shopSearchTerm) {
         books = books.filter((b) => (b.title + ' ' + (b.author || '')).toLowerCase().includes(shopSearchTerm));
     }
+    const cuts = priceCuts();
+    if (shopPrice === 'low' && cuts.min !== cuts.max) books = books.filter((b) => Number(b.price) === cuts.min);
+    if (shopPrice === 'high' && cuts.min !== cuts.max) books = books.filter((b) => Number(b.price) === cuts.max);
     if (shopSort === 'price-asc') books.sort((a, b) => Number(a.price) - Number(b.price) || String(a.title).localeCompare(b.title));
     else if (shopSort === 'price-desc') books.sort((a, b) => Number(b.price) - Number(a.price) || String(a.title).localeCompare(b.title));
     else if (shopSort === 'title') books.sort((a, b) => String(a.title).localeCompare(String(b.title)));
     return books;
 }
 
+function paintCatalog() {
+    const hash = location.hash || '#/';
+    if (hash.indexOf('#/book/') === 0) return renderBookPage(decodeURIComponent(hash.slice('#/book/'.length)));
+    if (hash === '#/saved') return renderSaved();
+    if (hash === '#/' || hash === '' || hash === '#') return renderHome();
+}
+
 function markNav(which) {
     document.querySelectorAll('.subnav button').forEach((b) => b.classList.remove('on'));
-    const map = { home: 'nav-home', orders: 'nav-orders', address: 'nav-addresses' };
+    const map = { home: 'nav-home', orders: 'nav-orders', address: 'nav-addresses', saved: 'nav-saved', help: 'nav-help', book: 'nav-home' };
     const el = document.getElementById(map[which] || '');
     if (el) el.classList.add('on');
 }
@@ -329,6 +425,7 @@ function renderHome() {
     const langs = shopCatalog.languages || ['english'];
     const books = shopBooksView();
     const catalogCount = (shopCatalog.books || []).length;
+    const cuts = priceCuts();
     const badges = [];
     if (s.razorpayEnabled !== false) badges.push('Secure online payment');
     if (s.codEnabled !== false) badges.push('Cash on delivery');
@@ -337,31 +434,39 @@ function renderHome() {
     badges.push('Live tracking');
     const edition = shopLangFilter === 'all' ? 'the language on each card' : langLabel(shopLangFilter);
     const setBanner = books.length >= 2
-        ? '<div class="set-banner"><div><h2>Order the set in one checkout</h2><p>Add every title on this page in ' + shopEsc(edition) + '. Agnikarma and Viddhakarma can travel together.</p></div>' +
+        ? '<div class="set-banner"><div><h2>Order the set in one checkout</h2><p>Add every title on this page in ' + shopEsc(edition) + '. Each language stays on its own line in the cart.</p></div>' +
           '<div class="set-actions"><button class="btn gold sm" type="button" onclick="shopAddVisible(false)">Add all ' + books.length + ' books</button>' +
           '<button class="btn ghost sm" type="button" onclick="shopAddVisible(true)">Buy the set now</button></div></div>'
         : '';
     const langFilters =
         '<button type="button" class="pill' + (shopLangFilter === 'all' ? ' on' : '') + '" onclick="setLangFilter(\'all\')">All languages</button>' +
         langs.map((l) => '<button type="button" class="pill' + (shopLangFilter === l ? ' on' : '') + '" onclick="setLangFilter(\'' + shopEsc(l) + '\')">' + shopEsc(langLabel(l)) + '</button>').join('');
+    const priceFilters = cuts.min !== cuts.max
+        ? '<h3>Price</h3>' +
+          '<button type="button" class="pill' + (shopPrice === 'all' ? ' on' : '') + '" onclick="setPriceFilter(\'all\')">All prices</button>' +
+          '<button type="button" class="pill' + (shopPrice === 'low' ? ' on' : '') + '" onclick="setPriceFilter(\'low\')">' + money(cuts.min) + '</button>' +
+          '<button type="button" class="pill' + (shopPrice === 'high' ? ' on' : '') + '" onclick="setPriceFilter(\'high\')">' + money(cuts.max) + '</button>'
+        : '';
     const cards = books.length
-        ? '<div class="product-grid">' + books.map((b) => productCardHtml(b, langs, s)).join('') + '</div>'
+        ? '<div class="product-grid' + (shopLayout === 'list' ? ' list' : '') + '">' + books.map((b) => productCardHtml(b, langs, s)).join('') + '</div>'
         : '<div class="box empty">' +
-          (catalogCount ? 'No books match that search.' : 'Books appear here after a price is saved in seminar book settings.') +
-          (shopSearchTerm ? '<br><br><button class="btn sm" type="button" onclick="clearShopSearch()">Clear search</button>' : '') +
+          (catalogCount ? 'No books match these filters.' : 'Books appear here after a price is saved in seminar book settings.') +
+          (shopSearchTerm || shopPrice !== 'all' ? '<br><br><button class="btn sm" type="button" onclick="clearShopSearch()">Clear filters</button>' : '') +
           '</div>';
-    const recent = recentHtml();
     home.innerHTML =
-        '<div class="hero"><div><p class="c-kicker" style="letter-spacing:.14em;text-transform:uppercase;font-size:.72rem;opacity:.75;margin:0 0 8px;">Vaidya Gogate Memorial Foundation</p><h1>Seminar book shop</h1><p>Choose a language, add one title or the full set, and check out once. Delivery and store pickup stay on the same order.</p></div>' +
+        '<div class="hero"><div><p class="c-kicker" style="letter-spacing:.14em;text-transform:uppercase;font-size:.72rem;opacity:.75;margin:0 0 8px;">Vaidya Gogate Memorial Foundation</p><h1>Seminar book shop</h1><p>Choose a language, save a title, or check out the full set. Delivery and store pickup stay on the same order, with live tracking after you pay.</p></div>' +
         '<div class="hero-badges">' + badges.map((b) => '<span>' + shopEsc(b) + '</span>').join('') + '</div></div>' +
-        '<div class="toolbar"><div><h2 class="section-title">' + (shopSearchTerm ? 'Results for “' + shopEsc(shopSearchTerm) + '”' : 'Books') + '</h2><div class="result-count">' + books.length + ' title' + (books.length === 1 ? '' : 's') + '</div></div>' +
+        '<div class="store"><aside class="filters"><h3>Language</h3>' + langFilters + priceFilters +
+        '<h3>View</h3><div class="view-toggle"><button type="button" class="pill' + (shopLayout === 'grid' ? ' on' : '') + '" onclick="setShopLayout(\'grid\')">Grid</button>' +
+        '<button type="button" class="pill' + (shopLayout === 'list' ? ' on' : '') + '" onclick="setShopLayout(\'list\')">List</button></div>' +
+        '<h3>Also</h3><button type="button" class="pill" onclick="shopGo(\'saved\')">Saved (' + shopWish.length + ')</button>' +
+        '<button type="button" class="pill" onclick="shopGo(\'help\')">Delivery &amp; help</button></aside><div>' +
+        '<div class="toolbar"><div><h2 class="section-title">' + (shopSearchTerm ? 'Results for “' + shopEsc(shopSearchTerm) + '”' : 'Books') + '</h2><div class="result-count">' + books.length + ' title' + (books.length === 1 ? '' : 's') + ' · ' + langs.length + ' languages</div></div>' +
         '<div class="toolbar-tools"><label class="muted" for="shop-sort">Sort</label><select id="shop-sort" onchange="setShopSort(this.value)">' +
         [['featured', 'Featured'], ['price-asc', 'Price: low to high'], ['price-desc', 'Price: high to low'], ['title', 'Title A–Z']]
             .map((opt) => '<option value="' + opt[0] + '"' + (shopSort === opt[0] ? ' selected' : '') + '>' + opt[1] + '</option>')
             .join('') +
-        '</select></div></div>' +
-        '<div class="filter-row" style="margin-bottom:14px">' + langFilters + '</div>' +
-        setBanner + cards + recent;
+        '</select></div></div>' + setBanner + cards + recentHtml() + '</div></div>';
 }
 
 function productCardHtml(b, langs, s) {
@@ -381,10 +486,12 @@ function productCardHtml(b, langs, s) {
         '<div class="pill-row" id="langs-' + id + '">' +
         langs.map((l) => '<button type="button" class="pill' + (pick.lang === l ? ' on' : '') + '" data-lang="' + shopEsc(l) + '" onclick="pickLang(\'' + id + '\',this)">' + shopEsc(langLabel(l)) + '</button>').join('') +
         '</div>' +
+        '<button type="button" class="wish' + (wished(b.id) ? ' on' : '') + '" onclick="toggleWish(\'' + id + '\', event)" aria-label="Save ' + shopEsc(b.title) + '">' + (wished(b.id) ? '♥' : '♡') + '</button>' +
         '<div class="buy-row"><div class="stepper"><button type="button" onclick="stepQty(\'' + id + '\',-1)" aria-label="Decrease quantity">−</button><span id="qty-' + id + '">' + pick.qty + '</span><button type="button" onclick="stepQty(\'' + id + '\',1)" aria-label="Increase quantity">+</button></div>' +
         '<button class="btn" type="button" onclick="shopAdd(\'' + id + '\')">' + (inCart ? 'Add more' : 'Add to cart') + '</button></div>' +
         '<button class="btn buy" type="button" onclick="shopAdd(\'' + id + '\',true)">Buy now</button>' +
-        '<button class="linkish" type="button" onclick="openProduct(\'' + id + '\')">View details</button>' +
+        '<div class="card-tools"><button class="linkish" type="button" onclick="openProduct(\'' + id + '\')">Quick view</button>' +
+        '<button class="linkish" type="button" onclick="shopGo(\'book\',\'' + id + '\')">Full page</button></div>' +
         (inCart ? '<div class="in-cart">' + inCart + ' already in your cart</div>' : '') +
         '</article>'
     );
@@ -422,17 +529,44 @@ function setShopSort(value) {
     renderHome();
 }
 
+function setShopLayout(mode) {
+    shopLayout = mode === 'list' ? 'list' : 'grid';
+    localStorage.setItem('shop_layout', shopLayout);
+    renderHome();
+}
+
+function setPriceFilter(band) {
+    shopPrice = band === 'low' || band === 'high' ? band : 'all';
+    localStorage.setItem('shop_price', shopPrice);
+    renderHome();
+}
+
 function clearShopSearch() {
     shopSearchTerm = '';
+    shopPrice = 'all';
+    localStorage.setItem('shop_price', 'all');
     const input = document.getElementById('shop-search');
     if (input) input.value = '';
     renderHome();
 }
 
+function toggleWish(bookId, event) {
+    if (event && event.stopPropagation) event.stopPropagation();
+    const had = wished(bookId);
+    if (had) shopWish = shopWish.filter((id) => id !== bookId);
+    else shopWish.unshift(bookId);
+    shopWish = shopWish.slice(0, 24);
+    saveWish();
+    toast(had ? 'Removed from saved' : 'Saved for later');
+    paintCatalog();
+}
+
 function pickLang(bookId, btn) {
     shopLangFilter = 'all';
     bookPick(bookId).lang = btn.getAttribute('data-lang') || 'english';
-    renderHome();
+    const pdpOpen = document.getElementById('pdp') && !document.getElementById('pdp').classList.contains('hidden');
+    paintCatalog();
+    if (pdpOpen) openProduct(bookId);
 }
 
 function stepQty(bookId, delta) {
@@ -459,7 +593,8 @@ function shopAdd(bookId, buyNow) {
     pushCartLine(book, pick.lang, pick.qty);
     saveCart();
     if (buyNow) return shopGo('checkout');
-    renderHome();
+    closeProduct();
+    paintCatalog();
     openCartDrawer();
 }
 
@@ -472,7 +607,7 @@ function shopAddVisible(buyNow) {
     });
     saveCart();
     if (buyNow) return shopGo('checkout');
-    renderHome();
+    paintCatalog();
     openCartDrawer();
 }
 
@@ -521,6 +656,90 @@ function closeProduct() {
     const panel = document.getElementById('pdp');
     if (mask) mask.classList.add('hidden');
     if (panel) panel.classList.add('hidden');
+}
+
+function buyFacts(s) {
+    const rows = [];
+    if (s.deliveryEnabled !== false) rows.push(['Home delivery', 'Live tracking after dispatch. ' + (s.deliveryOpen || '') + ' – ' + (s.deliveryClose || '') + ' IST.']);
+    if (s.storePickupEnabled !== false) rows.push(['Store pickup', 'Collect at the counter, ' + (s.pickupOpen || '') + ' – ' + (s.pickupClose || '') + ' IST.']);
+    if (s.razorpayEnabled !== false) rows.push(['Pay online', 'UPI, cards and net banking through Razorpay.']);
+    if (s.codEnabled !== false) rows.push(['Cash on delivery', Number(s.codExtraCharge) ? 'Extra ' + money(s.codExtraCharge) + ' on home delivery.' : 'Pay the delivery agent. Home delivery only.']);
+    if (s.returnsEnabled !== false) rows.push(['Returns', 'Request within ' + (s.returnWindowDays || 7) + ' days from the order page.']);
+    if (s.replacementsEnabled !== false) rows.push(['Replacement', 'Ask for a replacement from the same order page.']);
+    return rows;
+}
+
+function renderBookPage(bookId) {
+    const book = (shopCatalog.books || []).find((b) => b.id === bookId);
+    showView('book');
+    markNav('book');
+    const root = document.getElementById('view-book');
+    if (!book) {
+        root.innerHTML = '<div class="box empty">That book is not in the catalog.<br><br><button class="btn sm" type="button" onclick="shopGo(\'home\')">Back to the shop</button></div>';
+        return;
+    }
+    rememberBook(book.id);
+    const langs = shopCatalog.languages || ['english'];
+    const pick = bookPick(book.id);
+    const s = shopCatalog.settings || {};
+    const id = shopEsc(book.id);
+    const inCart = cartQtyOf(book.id, pick.lang);
+    const others = (shopCatalog.books || []).filter((b) => b.id !== book.id);
+    root.innerHTML =
+        '<div class="crumb"><a onclick="shopGo(\'home\')">Shop</a> &rsaquo; ' + shopEsc(book.title) + '</div>' +
+        '<div class="book-page"><div><div class="cover" style="' + coverBg(book.id) + '"><div class="c-kicker">Seminar text</div><div class="c-title">' + shopEsc(book.title) + '</div><div class="c-author">' + shopEsc(book.author || '') + '</div></div></div>' +
+        '<div class="buybox"><div class="muted">by ' + shopEsc(book.author || 'Dr. R.B. Gogate') + '</div><h1 class="section-title" style="margin:4px 0 8px">' + shopEsc(book.title) + '</h1>' +
+        '<div class="price"><sup>₹</sup>' + shopEsc(Number(book.price).toLocaleString('en-IN')) + '<span class="edition">' + shopEsc(langLabel(pick.lang)) + ' edition</span></div>' +
+        '<p class="muted">Printed seminar text. The price is the catalog price for every language. Add it alone or with the other titles, then choose home delivery or store pickup at checkout.</p>' +
+        '<div class="pill-row">' +
+        langs.map((l) => '<button type="button" class="pill' + (pick.lang === l ? ' on' : '') + '" data-lang="' + shopEsc(l) + '" onclick="pickLang(\'' + id + '\',this)">' + shopEsc(langLabel(l)) + '</button>').join('') +
+        '</div>' +
+        '<div class="buy-row" style="margin-top:14px"><div class="stepper"><button type="button" onclick="stepQty(\'' + id + '\',-1)" aria-label="Decrease quantity">−</button><span id="qty-' + id + '">' + pick.qty + '</span><button type="button" onclick="stepQty(\'' + id + '\',1)" aria-label="Increase quantity">+</button></div>' +
+        '<button class="btn" type="button" onclick="shopAdd(\'' + id + '\')">' + (inCart ? 'Add more' : 'Add to cart') + '</button></div>' +
+        '<button class="btn buy" type="button" style="margin-top:8px" onclick="shopAdd(\'' + id + '\',true)">Buy now</button>' +
+        '<button class="btn ghost" type="button" style="margin-top:8px" onclick="toggleWish(\'' + id + '\')">' + (wished(book.id) ? 'Saved' : 'Save for later') + '</button>' +
+        (inCart ? '<div class="in-cart" style="margin-top:8px">' + inCart + ' of this edition already in your cart</div>' : '') +
+        '<div class="facts">' + buyFacts(s).map((pair) => '<div><b>' + shopEsc(pair[0]) + '</b>' + shopEsc(pair[1]) + '</div>').join('') + '</div>' +
+        '<button class="linkish" type="button" onclick="shopGo(\'help\')">Delivery, pickup and returns</button></div></div>' +
+        (others.length
+            ? '<section class="recent"><h2>Add another title to the same order</h2><div class="recent-row">' +
+              others.map((b) => '<button type="button" class="recent-card" onclick="shopGo(\'book\',\'' + shopEsc(b.id) + '\')"><span class="mini" style="' + coverBg(b.id) + '">' + shopEsc(b.title) + '</span><span><b>' + shopEsc(b.title) + '</b><span>' + money(b.price) + '</span></span></button>').join('') +
+              '</div></section>'
+            : '');
+}
+
+function renderSaved() {
+    showView('saved');
+    markNav('saved');
+    const langs = (shopCatalog && shopCatalog.languages) || ['english'];
+    const s = (shopCatalog && shopCatalog.settings) || {};
+    const books = shopWish.map((id) => (shopCatalog.books || []).find((b) => b.id === id)).filter(Boolean);
+    const root = document.getElementById('view-saved');
+    root.innerHTML =
+        '<div class="crumb"><a onclick="shopGo(\'home\')">Shop</a> &rsaquo; Saved</div>' +
+        '<div class="toolbar"><div><h2 class="section-title">Saved titles</h2><div class="result-count">Kept in this browser until you remove them.</div></div></div>' +
+        (books.length
+            ? '<div class="product-grid">' + books.map((b) => productCardHtml(b, langs, s)).join('') + '</div>'
+            : '<div class="box empty">Nothing saved yet. Use the heart on a book to keep it here.<br><br><button class="btn sm" type="button" onclick="shopGo(\'home\')">Browse books</button></div>');
+}
+
+function renderHelp() {
+    showView('help');
+    markNav('help');
+    const s = (shopCatalog && shopCatalog.settings) || {};
+    const store = (shopCatalog && shopCatalog.store) || {};
+    const facts = buyFacts(s);
+    document.getElementById('view-help').innerHTML =
+        '<div class="crumb"><a onclick="shopGo(\'home\')">Shop</a> &rsaquo; Delivery &amp; help</div>' +
+        '<h2 class="section-title">How ordering works</h2>' +
+        '<p class="muted">Sign in with your portal account. Prices, hours and payment choices come from the shop settings.</p>' +
+        '<div class="help-grid">' +
+        facts.map((pair) => '<div class="box"><h3>' + shopEsc(pair[0]) + '</h3><p class="muted">' + shopEsc(pair[1]) + '</p></div>').join('') +
+        '<div class="box"><h3>One checkout, several books</h3><p class="muted">Each language is its own line. Agnikarma and Viddhakarma can be paid together, then delivered or collected as one order.</p></div>' +
+        '<div class="box"><h3>Tracking</h3><p class="muted">After the order is placed, open it from Your orders. Home delivery shows the courier, the live steps, and the delivery OTP when the partner sends one.</p></div>' +
+        '<div class="box"><h3>The counter</h3><p>' + shopEsc(store.name || 'Book shop') + '</p><p class="muted">' + shopEsc([store.address, store.city].filter(Boolean).join(', ')) +
+        (store.phone ? '<br>Phone ' + shopEsc(store.phone) : '') + '<br>Orders ' + shopEsc(s.orderOpen || '') + ' – ' + shopEsc(s.orderClose || '') + ' IST</p>' +
+        '<p><a href="mailto:care@vaidyagogate.org">care@vaidyagogate.org</a><br><a href="mailto:vd.gogatememorialfoundation@gmail.com">vd.gogatememorialfoundation@gmail.com</a></p></div></div>';
 }
 
 /* ---------- cart drawer ---------- */
@@ -886,10 +1105,21 @@ function orderCardHtml(o) {
 }
 
 function filterOrders(list) {
-    if (orderFilter === 'open') return list.filter((o) => !['cancelled'].includes(o.status) && !(o.status === 'delivered' || o.status === 'fulfilled' || o.commerceStage === 'delivered'));
-    if (orderFilter === 'delivered') return list.filter((o) => o.status === 'delivered' || o.status === 'fulfilled' || o.commerceStage === 'delivered');
-    if (orderFilter === 'returns') return list.filter((o) => o.returnStatus);
-    return list;
+    let out = list;
+    if (orderQuery) {
+        out = out.filter((o) =>
+            (String(o.orderCode || '') + ' ' + (o.items || []).map((i) => (i.title || '') + ' ' + (i.language || '')).join(' ')).toLowerCase().includes(orderQuery)
+        );
+    }
+    if (orderFilter === 'open') return out.filter((o) => !['cancelled'].includes(o.status) && !(o.status === 'delivered' || o.status === 'fulfilled' || o.commerceStage === 'delivered'));
+    if (orderFilter === 'delivered') return out.filter((o) => o.status === 'delivered' || o.status === 'fulfilled' || o.commerceStage === 'delivered');
+    if (orderFilter === 'returns') return out.filter((o) => o.returnStatus);
+    return out;
+}
+
+function setOrderQuery(value) {
+    orderQuery = String(value || '').trim().toLowerCase();
+    renderOrdersList();
 }
 
 function setOrderFilter(f) {
@@ -922,7 +1152,7 @@ async function renderAccount() {
         '<div class="tabs"><button type="button" class="' + (accountTab === 'orders' ? 'on' : '') + '" onclick="shopGo(\'account\',\'orders\')">Your orders</button>' +
         '<button type="button" class="' + (accountTab === 'address' ? 'on' : '') + '" onclick="shopGo(\'account\',\'address\')">Your addresses</button></div>' +
         (accountTab === 'orders'
-            ? '<div class="filter-row" id="order-filters">' +
+            ? '<label class="field">Find an order<input type="search" placeholder="Order code, title, or language" oninput="setOrderQuery(this.value)"></label><div class="filter-row" id="order-filters">' +
               [['all', 'All orders'], ['open', 'In progress'], ['delivered', 'Delivered'], ['returns', 'Returns & replacements']]
                   .map((f) => '<button type="button" class="pill" data-f="' + f[0] + '" onclick="setOrderFilter(\'' + f[0] + '\')">' + f[1] + '</button>')
                   .join('') +
@@ -1046,6 +1276,7 @@ function renderOrderDetail(data) {
         '<button class="btn ghost sm" type="button" onclick="copyShopText(\'' + shopEsc(o.orderCode) + '\')">Copy order code</button>' +
         (o.trackingNo ? '<button class="btn ghost sm" type="button" onclick="copyShopText(\'' + shopEsc(o.trackingNo) + '\')">Copy tracking number</button>' : '') +
         '<button class="btn ghost sm" type="button" onclick="openShopOrder(' + o.id + ')">Refresh tracking</button>' +
+        '<button class="btn ghost sm" type="button" onclick="window.print()">Print summary</button>' +
         '</div>' +
         (o.status === 'pending_payment' ? '<p><button class="btn sm buy" type="button" onclick="payPending(' + o.id + ')">Complete payment</button></p>' : '') +
         (partner && partner.name ? '<div class="courier-card"><div><div class="lbl">Delivery partner</div><b>' + shopEsc(partner.name) + '</b><div class="muted">' + shopEsc(partner.service || '') + (partner.trackingNo ? ' · ' + shopEsc(partner.trackingNo) : '') + '</div></div></div>' : '') +
