@@ -122,7 +122,7 @@
         const shipped = dates.shippedState === 'actual' && dates.shippedAt
             ? when(dates.shippedAt)
             : dates.shippedState === 'expected' && dates.shippedExpected
-              ? when(dates.shippedExpected)
+              ? dates.shippedLabel || when(dates.shippedExpected)
               : '';
         const delivery = dates.deliveryState === 'actual' && dates.deliveryAt
             ? when(dates.deliveryAt)
@@ -349,8 +349,17 @@
         '<svg xmlns="http://www.w3.org/2000/svg" width="42" height="52" viewBox="0 0 42 52"><ellipse cx="21" cy="48" rx="8" ry="3" fill="#0f172a" opacity="0.18"/><path d="M21 46s14-12.4 14-25A14 14 0 1 0 7 21c0 12.6 14 25 14 25z" fill="#0f766e"/><circle cx="21" cy="20" r="8.5" fill="#fff"/><path d="M15.5 24.5v-7h11v7M15.5 20.5h11M18 17.5V16h6v1.5" fill="none" stroke="#0f766e" stroke-width="1.6" stroke-linejoin="round"/></svg>';
     const HOME_SVG =
         '<svg xmlns="http://www.w3.org/2000/svg" width="42" height="52" viewBox="0 0 42 52"><ellipse cx="21" cy="48" rx="8" ry="3" fill="#0f172a" opacity="0.18"/><path d="M21 46s14-12.4 14-25A14 14 0 1 0 7 21c0 12.6 14 25 14 25z" fill="#0f172a"/><circle cx="21" cy="20" r="8.5" fill="#fff"/><path d="M15 23.5V18l6-4.2 6 4.2v5.5h-4.2v-3.4h-3.6v3.4z" fill="#0f172a"/></svg>';
-    // The scooter artwork faces right. A -90 degree turn points the front up so the map heading follows the road.
-    const RIDER_ICON = '/media/delivery-rider.webp';
+    // A fixed-size rider badge. The badge never scales or pulses; only the heading wedge turns and the
+    // badge glides between GPS fixes.
+    const RIDER_GLYPH =
+        '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><circle cx="15.5" cy="4.2" r="2.1" fill="#0f172a"/>' +
+        '<path d="M5.5 20.2a3.3 3.3 0 1 0 0-6.6 3.3 3.3 0 0 0 0 6.6zm13 0a3.3 3.3 0 1 0 0-6.6 3.3 3.3 0 0 0 0 6.6z" fill="none" stroke="#0f172a" stroke-width="1.7"/>' +
+        '<path d="M5.5 16.9l4.1-6.2h4.2l2.3 3.4 2.4 2.8M13.8 10.7l-2.6-3.1 3.6-1.1 2.6 2.5h2.4" fill="none" stroke="#0f172a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+    function shortestTurn(from, to) {
+        const d = ((((to - from) % 360) + 540) % 360) - 180;
+        return from + d;
+    }
 
     function ensureRider(el) {
         if (el.__rider) return el.__rider;
@@ -359,31 +368,61 @@
             this.pos = null;
             this.heading = 0;
             this.visible = false;
+            this.glide = null;
         }
         Rider.prototype = Object.create(google.maps.OverlayView.prototype);
         Rider.prototype.onAdd = function () {
             const div = document.createElement('div');
             div.className = 'tl-rider';
-            div.innerHTML = '<div class="tl-rider-pulse"></div><div class="tl-rider-plate"></div><div class="tl-rider-aim"><div class="tl-rider-bob"><img class="tl-rider-img" alt="" src="' + RIDER_ICON + '"></div></div>';
+            div.innerHTML = '<div class="tl-rider-aim"><span class="tl-rider-wedge"></span></div><div class="tl-rider-badge">' + RIDER_GLYPH + '</div>';
             this.div = div;
             this.getPanes().overlayMouseTarget.appendChild(div);
         };
         Rider.prototype.draw = function () {
-            if (!this.div || !this.pos || !this.getProjection()) return;
+            if (!this.div || !this.getProjection()) return;
+            if (!this.pos || !this.visible) {
+                this.div.style.display = 'none';
+                return;
+            }
             const pt = this.getProjection().fromLatLngToDivPixel(new google.maps.LatLng(this.pos.lat, this.pos.lng));
             if (!pt) return;
             this.div.style.left = pt.x + 'px';
             this.div.style.top = pt.y + 'px';
-            this.div.style.display = this.visible ? 'block' : 'none';
-            this.div.classList.toggle('is-moving', !!this.visible);
+            this.div.style.display = 'block';
             const aim = this.div.querySelector('.tl-rider-aim');
             if (aim) aim.style.transform = 'rotate(' + (this.heading || 0) + 'deg)';
         };
         Rider.prototype.setRider = function (pos, heading, visible) {
+            this.glide = null;
             this.pos = pos;
             this.heading = heading || 0;
-            this.visible = !!visible && !!pos;
+            this.visible = !!pos && !!visible;
             this.draw();
+        };
+        // Move from the current spot to the new GPS fix over a short time instead of jumping.
+        Rider.prototype.glideTo = function (pos, heading, ms) {
+            if (!pos) return this.setRider(null, 0, false);
+            if (!this.pos || !this.visible) return this.setRider(pos, heading, true);
+            const from = { lat: this.pos.lat, lng: this.pos.lng };
+            const fromHeading = this.heading || 0;
+            const toHeading = shortestTurn(fromHeading, heading || 0);
+            const started = performance.now();
+            const span = Math.max(200, ms || 1200);
+            const self = this;
+            const run = { id: 0 };
+            this.glide = run;
+            this.visible = true;
+            const step = (now) => {
+                if (self.glide !== run) return;
+                const t = Math.min(1, (now - started) / span);
+                const k = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+                self.pos = { lat: from.lat + (pos.lat - from.lat) * k, lng: from.lng + (pos.lng - from.lng) * k };
+                self.heading = (fromHeading + (toHeading - fromHeading) * k + 360) % 360;
+                self.draw();
+                if (t < 1) run.id = requestAnimationFrame(step);
+                else self.glide = null;
+            };
+            run.id = requestAnimationFrame(step);
         };
         Rider.prototype.onRemove = function () {
             if (this.div && this.div.parentNode) this.div.parentNode.removeChild(this.div);
@@ -777,8 +816,10 @@
             el.__rider.setRider(null, 0, false);
             return;
         }
-        const heading = toward ? bearingDeg(agent, toward) % 360 : 0;
-        el.__rider.setRider(agent, heading, true);
+        const prev = el.__parkedAt;
+        const heading = prev && haversine(prev, agent) > 3 ? bearingDeg(prev, agent) % 360 : toward ? bearingDeg(agent, toward) % 360 : 0;
+        el.__parkedAt = { lat: agent.lat, lng: agent.lng };
+        el.__rider.glideTo(agent, heading, 1200);
     }
 
     function applyPreviewRoad(el, live, pts) {
