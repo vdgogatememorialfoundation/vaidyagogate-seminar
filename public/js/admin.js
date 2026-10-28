@@ -1563,6 +1563,7 @@ const DOCTOR_MODULE_TAB_DEFS = [
     ['tab-receipts', 'Receipts'],
     ['tab-payments', 'Payments'],
     ['tab-books', 'Book orders (Agnikarma / Viddhakarma)'],
+    ['tab-videos', 'Seminar videos'],
     ['tab-ticket', 'Participant tickets'],
     ['tab-certificate', 'Certificates'],
     ['tab-reset-pwd', 'Change password']
@@ -1714,6 +1715,7 @@ const ADMIN_MODULE_TAB_DEFS = [
     ['tab-reg-form', 'Registration form fields'],
     ['tab-site-cms', 'Website & doctor updates'],
     ['tab-book-sales', 'Book sales'],
+    ['tab-video-library', 'Seminar videos'],
     ['tab-commerce', 'Commerce'],
     ['tab-admin-payments', 'Payments'],
     ['tab-cancellation-review', 'Cancellation review & refunds'],
