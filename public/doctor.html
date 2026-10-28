@@ -14,6 +14,7 @@
     <link rel="stylesheet" href="/css/responsive-portals.css?v=20260620layout4">
     <link rel="stylesheet" href="/css/vgmf-portal-bright.css?v=20260620theme1">
     <link rel="stylesheet" href="/css/vgmf-mobile-portal.css">
+    <link rel="stylesheet" href="/css/video-library.css?v=20261028vl">
     <link rel="stylesheet" href="/css/doctor-vivid.css?v=20260916vivid1">
     <style>
         :root {
@@ -319,6 +320,7 @@
                 <button type="button" class="menu-item" data-tab="tab-refunds"><i class="fas fa-undo-alt"></i> <span data-i18n="doctor.menu.refunds">Refund tracking</span></button>
                 <button type="button" class="menu-item" data-tab="tab-receipts"><i class="fas fa-file-invoice"></i> <span data-i18n="doctor.menu.receipts">Receipts</span></button>
                 <button type="button" class="menu-item hidden" id="nav-books" data-tab="tab-books"><i class="fas fa-book"></i> <span data-i18n="doctor.menu.books">Book orders</span></button>
+                <button type="button" class="menu-item" data-tab="tab-videos"><i class="fas fa-video"></i> Seminar videos</button>
                 <button type="button" class="menu-item" data-tab="tab-payments"><i class="fas fa-credit-card"></i> <span data-i18n="doctor.menu.payments">Payments</span></button>
                 <button type="button" class="menu-item" data-tab="tab-ticket"><i class="fas fa-qrcode"></i> <span data-i18n="doctor.menu.tickets">Participant tickets</span></button>
                 <button type="button" class="menu-item" data-tab="tab-certificate"><i class="fas fa-award"></i> Certificates</button>
@@ -744,6 +746,25 @@
                     </div>
                 </div>
 
+                <div id="tab-videos" class="tab-pane hidden">
+                    <h2 class="section-title">Seminar videos</h2>
+                    <p class="vl-intro">Recordings of the national seminar, year by year. Videos are included when you are registered for that year's seminar. Other years can be unlocked online or by the seminar office.</p>
+                    <div id="vl-player-wrap" class="vl-player hidden">
+                        <div class="vl-player-head">
+                            <h3 id="vl-player-title">Seminar video</h3>
+                            <button type="button" class="vl-btn is-ghost is-small" id="vl-player-close"><i class="fas fa-times"></i> Close</button>
+                        </div>
+                        <div class="vl-stage">
+                            <video id="vl-video" controls playsinline preload="metadata" controlsList="nodownload noremoteplayback noplaybackrate" disablePictureInPicture oncontextmenu="return false;"></video>
+                            <div class="vl-wm" id="vl-wm"></div>
+                        </div>
+                        <p class="vl-player-msg" id="vl-player-msg"></p>
+                        <div class="vl-player-foot"><span><i class="fas fa-shield-alt"></i> Protected stream, personal to your account.</span><span>Playback on one device at a time.</span></div>
+                    </div>
+                    <div id="vl-pay" class="vl-pay hidden"></div>
+                    <div id="vl-years"><p class="vl-note">Loading…</p></div>
+                </div>
+
                 <div id="tab-books" class="tab-pane hidden">
                     <h2 class="section-title">Books — Agnikarma &amp; Viddhakarma</h2>
                     <p style="color:#64748b;margin:-10px 0 16px;">Order Dr. R.B. Gogate books in English, Marathi, Hindi, or Kannada. Collect at the seminar book desk, or choose courier delivery with live shipping rates.</p>
@@ -917,6 +938,7 @@
     <link rel="stylesheet" href="/css/book-track.css?v=20260529stg">
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/doctor-books.js?v=20261003commerce"></script>
+    <script src="/js/doctor-videos.js?v=20261028vl"></script>
     <script src="/js/live-chat-client-info.js?v=20260610chat1"></script>
     <script src="/js/doctor-live-chat-widget.js?v=20260615live2"></script>
     <script src="/js/site-visitor-beacon.js?v=20260613radar6"></script>
@@ -942,6 +964,6 @@
         }
     })();
     </script>
-    <script src="/js/doctor.js?v=20261004attend"></script>
+    <script src="/js/doctor.js?v=20261028vl"></script>
 </body>
 </html>

@@ -776,6 +776,7 @@ function resolveDoctorAllowedTabsClient(category, globalRegular, globalVolunteer
         'tab-receipts',
         'tab-payments',
         'tab-books',
+        'tab-videos',
         'tab-ticket',
         'tab-certificate',
         'tab-reset-pwd'
@@ -3984,6 +3985,12 @@ function switchTab(tabId, menuEl) {
     }
     if (tabId === 'tab-books' && typeof initDoctorBooksTab === 'function') {
         initDoctorBooksTab();
+    }
+    if (tabId === 'tab-videos' && typeof initDoctorVideosTab === 'function') {
+        initDoctorVideosTab();
+    }
+    if (tabId !== 'tab-videos' && typeof stopDoctorVideoPlayback === 'function') {
+        stopDoctorVideoPlayback();
     }
     if (tabId === 'tab-ticket') {
         loadDoctorEventTickets();
