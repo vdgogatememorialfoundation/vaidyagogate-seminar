@@ -545,6 +545,22 @@ button, input, select, textarea { font-family: inherit; }
 }
 .empty { text-align: center; padding: 36px 12px; color: var(--muted); }
 
+.tl { --tl-green: var(--teal); --tl-line: var(--line); --tl-muted: var(--muted); --tl-text: var(--text); }
+.track-hero h1 { font-family: Georgia, "Iowan Old Style", Palatino, serif; }
+.track-kicker { margin: 0 0 4px; letter-spacing: 0.12em; text-transform: uppercase; font-size: 0.72rem; color: var(--gold); font-weight: 700; }
+.miles { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin: 14px 0 8px; }
+.mile { background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 10px 10px 10px 12px; min-width: 0; }
+.mile i { display: block; width: 28px; height: 4px; border-radius: 999px; background: #e7e0d4; margin-bottom: 8px; }
+.mile.done i { background: var(--teal); }
+.mile.active i { background: var(--gold); }
+.mile b { display: block; font-size: 0.84rem; }
+.mile span { display: block; color: var(--muted); font-size: 0.72rem; margin-top: 2px; }
+.mile.upcoming { opacity: 0.55; }
+.window { margin: 8px 0; color: var(--ink); font-size: 0.9rem; }
+.track-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0 12px; }
+.courier-card { margin-top: 8px; padding: 12px 14px; border-radius: 12px; background: var(--teal-soft); }
+.courier-card .lbl { font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--teal-dark); font-weight: 700; }
+
 @media (max-width: 980px) {
     .trust { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     .trust div:nth-child(3) { border-right: 0; }

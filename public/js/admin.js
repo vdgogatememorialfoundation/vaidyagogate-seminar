@@ -7506,6 +7506,28 @@ function downloadAdminReport(type, format) {
     window.location.href = `/api/admin/reports/${sid}/${type}?format=${encodeURIComponent(fmt)}`;
 }
 
+function downloadVideoReport(type, format) {
+    const adm = typeof getStoredAdminUser === 'function' ? getStoredAdminUser() : null;
+    if (!adm || !adm.id) return alert('Sign in again to export video reports.');
+    const yearEl =
+        document.querySelector('#tab-video-library:not(.hidden) #vl-report-year') ||
+        document.querySelector('#tab-reports:not(.hidden) #video-report-year') ||
+        document.getElementById('video-report-year') ||
+        document.getElementById('vl-report-year');
+    const year = yearEl && String(yearEl.value || '').trim();
+    const fmt = format || window.__videoReportFmt || 'xlsx';
+    let url =
+        '/api/admin/videos/reports/' +
+        encodeURIComponent(type) +
+        '?format=' +
+        encodeURIComponent(fmt) +
+        '&actingAdminId=' +
+        encodeURIComponent(adm.id);
+    if (year) url += '&year=' + encodeURIComponent(year);
+    window.location.href = url;
+}
+window.downloadVideoReport = downloadVideoReport;
+
 function togglePlatformBackupDriveAuthUi() {
     const mode = document.getElementById('pb-gdrive-auth-mode')?.value || 'oauth';
     const oauthPanel = document.getElementById('pb-gdrive-oauth-panel');
@@ -22539,17 +22561,25 @@ function bsPosLangLabel(id) {
 }
 
 function bsPosRememberPicks() {
-    bsPosActiveBooks().forEach((b) => {
-        const langEl = document.getElementById('bs-pos-lang-' + b.id);
-        const qtyEl = document.getElementById('bs-pos-qty-' + b.id);
-        if (!langEl && !qtyEl) return;
-        _bsPosPick[b.id] = {
-            lang: (langEl && langEl.value) || (_bsPosPick[b.id] && _bsPosPick[b.id].lang) || 'english',
-            qty: Math.max(1, Math.min(99, parseInt((qtyEl && qtyEl.value) || '1', 10) || 1))
-        };
-    });
-    const allLang = document.getElementById('bs-pos-all-lang');
-    if (allLang) _bsPosPick.__allLang = allLang.value || 'english';
+    const bookEl = document.getElementById('bs-pos-book');
+    const langEl = document.getElementById('bs-pos-lang');
+    const qtyEl = document.getElementById('bs-pos-qty');
+    if (!bookEl && !langEl && !qtyEl) return;
+    const prev = _bsPosPick.__form || {};
+    _bsPosPick.__form = {
+        bookId: (bookEl && bookEl.value) || prev.bookId || '',
+        lang: (langEl && langEl.value) || prev.lang || 'english',
+        qty: Math.max(1, Math.min(99, parseInt((qtyEl && qtyEl.value) || String(prev.qty || 1), 10) || 1))
+    };
+}
+
+function bsPosAddSelected() {
+    bsPosRememberPicks();
+    const form = _bsPosPick.__form || {};
+    const book = bsPosActiveBooks().find((b) => b.id === form.bookId);
+    if (!book) return;
+    bsPosPushLine(book, form.lang, form.qty);
+    renderBsPosBooks();
 }
 
 function bsPosPushLine(book, lang, qty) {
@@ -22620,25 +22650,28 @@ function renderBsPosBooks() {
         l.title = book.title;
         l.unitPrice = Number(book.price) || 0;
     });
-    const allLang = _bsPosPick.__allLang || 'english';
-    const catalog = books.map((b) => {
-        const pick = _bsPosPick[b.id] || { lang: 'english', qty: 1 };
-        const price = Number(b.price) || 0;
-        return (
-            '<div style="display:grid;grid-template-columns:minmax(140px,1.4fr) minmax(110px,1fr) 72px auto;gap:8px;align-items:end;margin-bottom:8px;padding:8px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;">' +
-            '<div><div style="font-weight:700;font-size:0.9rem;">' + e(b.title) + '</div>' +
-            '<div style="font-size:0.78rem;color:' + (price > 0 ? '#64748b' : '#b91c1c') + ';">' +
-            (price > 0 ? '₹' + price.toFixed(0) + ' each' : 'Set a price in Settings') + '</div></div>' +
-            '<div><label style="font-size:0.75rem;color:#64748b;">Language</label>' +
-            '<select id="bs-pos-lang-' + e(b.id) + '" style="width:100%;padding:6px;">' +
-            BS_POS_LANGS.map((l) => '<option value="' + l.id + '"' + (pick.lang === l.id ? ' selected' : '') + '>' + l.label + '</option>').join('') +
-            '</select></div>' +
-            '<div><label style="font-size:0.75rem;color:#64748b;">Qty</label>' +
-            '<input id="bs-pos-qty-' + e(b.id) + '" type="number" value="' + pick.qty + '" min="1" max="99" style="width:100%;padding:6px;"></div>' +
-            '<button type="button" class="btn-primary" style="padding:8px 12px;background:#7c3aed;" onclick="bsPosAddBook(\'' + String(b.id).replace(/[^a-z0-9_]/g, '') + '\')">Add</button>' +
-            '</div>'
-        );
-    }).join('');
+    const form = _bsPosPick.__form || { bookId: books[0] ? books[0].id : '', lang: 'english', qty: 1 };
+    const selected = books.some((b) => b.id === form.bookId) ? form.bookId : books[0].id;
+    const selectedBook = books.find((b) => b.id === selected) || books[0];
+    const catalog =
+        '<div style="display:grid;grid-template-columns:minmax(160px,1.4fr) minmax(120px,1fr) 80px auto;gap:8px;align-items:end;margin-bottom:8px;">' +
+        '<div><label style="font-size:0.75rem;color:#64748b;">Book</label>' +
+        '<select id="bs-pos-book" style="width:100%;padding:8px;">' +
+        books.map((b) => {
+            const price = Number(b.price) || 0;
+            return '<option value="' + e(b.id) + '"' + (b.id === selected ? ' selected' : '') + '>' + e(b.title) + (price > 0 ? ' · ₹' + price.toFixed(0) : ' · set a price') + '</option>';
+        }).join('') +
+        '</select></div>' +
+        '<div><label style="font-size:0.75rem;color:#64748b;">Language</label>' +
+        '<select id="bs-pos-lang" style="width:100%;padding:8px;">' +
+        BS_POS_LANGS.map((l) => '<option value="' + l.id + '"' + (form.lang === l.id ? ' selected' : '') + '>' + l.label + '</option>').join('') +
+        '</select></div>' +
+        '<div><label style="font-size:0.75rem;color:#64748b;">Qty</label>' +
+        '<input id="bs-pos-qty" type="number" min="1" max="99" value="' + (form.qty || 1) + '" style="width:100%;padding:8px;"></div>' +
+        '<button type="button" class="btn-primary" style="padding:8px 14px;background:#7c3aed;" onclick="bsPosAddSelected()">Add book</button>' +
+        '</div>' +
+        '<p style="margin:0 0 10px;font-size:0.78rem;color:#64748b;">' + books.length + ' active book' + (books.length === 1 ? '' : 's') + ' in the catalog' +
+        (selectedBook ? ', including ' + e(selectedBook.title) : '') + '. Choose the title the customer wants, then the quantity. Add another line for the second book or another language.</p>';
     const total = _bsPosLines.reduce((sum, l) => sum + l.unitPrice * l.qty, 0);
     const unpriced = _bsPosLines.filter((l) => !(l.unitPrice > 0));
     const lines = _bsPosLines.length
@@ -22652,16 +22685,8 @@ function renderBsPosBooks() {
         ).join('')
         : '<p style="margin:0;color:#64748b;font-size:0.85rem;">Nothing in this order yet. Add Agnikarma and Viddhakarma, or any active titles, before placing it.</p>';
     root.innerHTML =
-        '<p style="font-size:0.85rem;font-weight:700;margin:0 0 8px;">Add books to this order</p>' +
-        '<p style="font-size:0.8rem;color:#64748b;margin:0 0 10px;">One order can include both titles, and the same title in more than one language. The bill uses the price saved in Settings.</p>' +
+        '<p style="font-size:0.85rem;font-weight:700;margin:0 0 8px;">Select the book and quantity</p>' +
         catalog +
-        '<div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;margin:4px 0 12px;">' +
-        '<div><label style="font-size:0.75rem;color:#64748b;">Language for all</label>' +
-        '<select id="bs-pos-all-lang" style="padding:6px;">' +
-        BS_POS_LANGS.map((l) => '<option value="' + l.id + '"' + (allLang === l.id ? ' selected' : '') + '>' + l.label + '</option>').join('') +
-        '</select></div>' +
-        '<button type="button" class="btn-primary" style="padding:8px 12px;background:#0f766e;" onclick="bsPosAddAllBooks()">Add all ' + books.length + ' books</button>' +
-        '</div>' +
         '<div style="padding:12px;border-radius:10px;background:#f5f3ff;border:1px solid #ddd6fe;">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:6px;">' +
         '<strong style="color:#5b21b6;">This order · ' + _bsPosLines.length + ' line' + (_bsPosLines.length === 1 ? '' : 's') + '</strong>' +

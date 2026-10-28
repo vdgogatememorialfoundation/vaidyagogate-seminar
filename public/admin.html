@@ -1504,7 +1504,7 @@
                     <div style="display:grid;grid-template-columns:minmax(320px,1fr) minmax(360px,1.2fr);gap:16px;align-items:start;">
                         <div class="card" style="padding:18px;">
                             <h3 style="margin:0 0 12px;color:#7c3aed;">Book POS — Walk-in / desk sale</h3>
-                            <p style="font-size:0.88rem;color:#64748b;margin:0 0 12px;">Search a doctor by phone, email, user ID, or registration number, then add every book they want. One order can include both titles and more than one language. Walk-in buyers can use name and phone only.</p>
+                            <p style="font-size:0.88rem;color:#64748b;margin:0 0 12px;">The catalog starts with Agnikarma and Viddhakarma. Search the doctor, then choose the book they want and the quantity. Add a second line when they take both titles, or the same title in another language. Walk-in buyers can use name and phone only.</p>
                             <div style="display:grid;grid-template-columns:1fr auto;gap:8px;margin-bottom:10px;">
                                 <input type="text" id="bs-pos-search" placeholder="Phone / name / email / user ID / reg. no." style="padding:8px;" oninput="bsPosSearch()">
                                 <button type="button" class="btn-primary" style="padding:8px 12px;background:#7c3aed;" onclick="bsPosSearch()">Search</button>
@@ -2162,6 +2162,26 @@
                         <button type="button" class="btn-primary" style="background:#0369a1;" onclick="downloadAdminReport('check_in', window.__reportFmt||'xlsx')">Check-in report</button>
                         <button type="button" class="btn-primary" style="background:#a16207;" onclick="downloadAdminReport('finance', window.__reportFmt||'xlsx')">Finance report</button>
                         <button type="button" class="btn-primary" style="background:#4d7c0f;" onclick="downloadAdminReport('certificate_report', window.__reportFmt||'xlsx')">Certificate report</button>
+                    </div>
+                </div>
+                <div class="card" style="margin-top:16px;">
+                    <h3 style="margin-top:0;">Seminar video reports</h3>
+                    <p style="color:#64748b;font-size:0.88rem;margin-bottom:10px;">Exports for the video library: who was given a year, what was paid, which devices are registered, and recent playback. Leave the year blank for every year. Excel, CSV, or a printable page.</p>
+                    <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:end;margin-bottom:12px;">
+                        <div>
+                            <label>Year (optional)</label>
+                            <input type="number" id="video-report-year" min="2000" max="2100" placeholder="2026" style="width:140px;padding:8px;">
+                        </div>
+                        <button type="button" class="btn-primary" style="background:#334155;" onclick="window.__videoReportFmt='xlsx'">Excel (.xlsx)</button>
+                        <button type="button" class="btn-primary" style="background:#475569;" onclick="window.__videoReportFmt='csv'">CSV</button>
+                        <button type="button" class="btn-primary" style="background:#64748b;" onclick="window.__videoReportFmt='pdf'">PDF / Print</button>
+                    </div>
+                    <div style="display:flex;flex-wrap:wrap;gap:10px;">
+                        <button type="button" class="btn-primary" style="background:#0f766e;" onclick="downloadVideoReport('catalog')">Video catalog</button>
+                        <button type="button" class="btn-primary" style="background:#1e40af;" onclick="downloadVideoReport('access')">Access granted</button>
+                        <button type="button" class="btn-primary" style="background:#7c3aed;" onclick="downloadVideoReport('payments')">Payments</button>
+                        <button type="button" class="btn-primary" style="background:#0369a1;" onclick="downloadVideoReport('devices')">Devices</button>
+                        <button type="button" class="btn-primary" style="background:#b45309;" onclick="downloadVideoReport('activity')">Watch activity</button>
                     </div>
                 </div>
                 <div class="card" style="margin-top:16px;">
@@ -3514,7 +3534,7 @@
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
     <script src="/js/track-timeline.js?v=20261003tl"></script>
     <script src="/js/admin-commerce.js?v=20261003tl"></script>
-    <script src="/js/admin.js?v=20261029books3"></script>
-    <script src="/js/admin-videos.js?v=20261029vl6"></script>
+    <script src="/js/admin.js?v=20261029books4"></script>
+    <script src="/js/admin-videos.js?v=20261029vl7"></script>
 </body>
 </html>

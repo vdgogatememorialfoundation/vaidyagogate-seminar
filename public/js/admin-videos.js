@@ -150,6 +150,14 @@
             '<div class="vl-upload-row" style="margin-top:10px;"><button type="button" class="vl-btn" id="vls-save">Save settings</button><span class="vl-note" id="vls-cloud"></span></div>' +
             '<p class="vl-form-msg" id="vls-msg"></p>' +
             '<p class="vl-note">Each doctor gets a permanent 12-digit video license that is printed inside every video they watch. Playback uses the VGMF license: the video is encrypted, the key is issued only to that doctor’s registered device, and save/download from the player is blocked. A doctor may play videos on the number of devices set here; the first devices used are registered automatically, and the office can remove a device below. Choosing the cloud bucket moves finished videos off the server disk into Cloudflare R2. Playback still goes through this license.</p></div>' +
+            '<div class="vl-form" style="margin-top:16px;"><h3>Reports &amp; exports</h3>' +
+            '<p class="vl-note">Download the catalog, who can watch, payments, registered devices, and recent playback. The same exports are under Reports &amp; exports. Pick the file type there, or download Excel from here. Optional year filters the file.</p>' +
+            '<div class="vl-upload-row"><label style="margin:0;">Year</label><input type="number" id="vl-report-year" min="2000" max="2100" placeholder="All" style="width:110px;">' +
+            '<button type="button" class="vl-btn is-small" onclick="downloadVideoReport(\'catalog\')">Catalog</button>' +
+            '<button type="button" class="vl-btn is-small" onclick="downloadVideoReport(\'access\')">Access</button>' +
+            '<button type="button" class="vl-btn is-small" onclick="downloadVideoReport(\'payments\')">Payments</button>' +
+            '<button type="button" class="vl-btn is-small" onclick="downloadVideoReport(\'devices\')">Devices</button>' +
+            '<button type="button" class="vl-btn is-ghost is-small" onclick="downloadVideoReport(\'activity\')">Activity</button></div></div>' +
             '<h3 style="margin:18px 0 8px;font-size:1.05rem;">Videos</h3><div id="vl-admin-videos"></div>' +
             '<div class="vl-admin-grid" style="margin-top:22px;">' +
             '<div class="vl-form"><h3>Issue video access</h3>' +

@@ -15,6 +15,7 @@ let accountTab = 'orders';
 let orderFilter = 'all';
 let accountOrders = [];
 let shopTrackerSeen = false;
+let shopLastOrder = null;
 
 const COVER_COLORS = [
     ['#0b3d2e', '#1f7a4d'],
@@ -675,7 +676,7 @@ async function renderCheckout() {
                     '<div class="line-actions"><div class="stepper"><button type="button" onclick="cartStep(' + i + ',-1)">−</button><span>' + l.qty + '</span><button type="button" onclick="cartStep(' + i + ',1)">+</button></div><button type="button" class="linkish" onclick="cartQty(' + i + ',0)">Remove</button></div></div><b>' + money(l.price * l.qty) + '</b></div>'
             )
             .join('') +
-        '</div>';
+        '<label class="field" style="margin-top:12px">Delivery note (optional)<textarea id="shop-note" rows="2" maxlength="300" placeholder="Landmark, gate code, or when someone is home"></textarea></label></div>';
 
     const summary =
         '<div class="box" style="position:sticky;top:76px"><button class="btn buy" id="place-btn" type="button" onclick="shopCheckout()"' + (shopCatalog.open ? '' : ' disabled') + '>Place your order</button>' +
@@ -770,7 +771,8 @@ async function shopCheckout() {
                 items: shopCart.map((l) => ({ bookId: l.bookId, language: l.language, qty: l.qty })),
                 fulfillment: checkoutState.fulfillment,
                 method: checkoutState.method,
-                addressId: delivery ? checkoutState.addressId : null
+                addressId: delivery ? checkoutState.addressId : null,
+                note: (document.getElementById('shop-note') && document.getElementById('shop-note').value) || ''
             })
         });
         const data = await res.json();
@@ -972,33 +974,94 @@ function returnHtml(data) {
     );
 }
 
+function milestoneHtml(t) {
+    const steps = (t && t.steps) || [];
+    if (!steps.length) return '';
+    return (
+        '<div class="miles">' +
+        steps
+            .map((s) => {
+                const whenText = s.at ? when(s.at) : s.state === 'active' ? 'In progress' : s.state === 'done' ? 'Done' : 'Upcoming';
+                return '<div class="mile ' + shopEsc(s.state) + '"><i></i><b>' + shopEsc(s.title) + '</b><span>' + shopEsc(whenText) + '</span></div>';
+            })
+            .join('') +
+        '</div>'
+    );
+}
+
+function deliveryWindow(o, t) {
+    if (t && t.cancelled) return 'This order was cancelled.';
+    if (o.status === 'pending_payment') return 'Tracking starts after payment is received.';
+    if (o.fulfillmentType === 'pickup') return 'Collect from the store once the order is packed. Store hours are on this page.';
+    if (t && t.hyperlocal) return 'A nearby rider usually delivers the same day after the store hands over the parcel.';
+    const placed = parseWhen(o.createdAt);
+    if (!placed) return 'Courier scans appear here as the parcel moves.';
+    const from = new Date(placed.getTime() + 2 * 86400000);
+    const to = new Date(placed.getTime() + 5 * 86400000);
+    return 'Typical courier window ' + when(from.toISOString(), false) + ' – ' + when(to.toISOString(), false) + ' (IST). Live scans below replace this estimate.';
+}
+
+function copyShopText(text) {
+    const value = String(text || '');
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(value).then(() => toast('Copied')).catch(() => toast(value));
+    } else toast(value);
+}
+
+function shopReorder() {
+    const items = (shopLastOrder && shopLastOrder.items) || [];
+    if (!items.length) return;
+    items.forEach((it) => {
+        const book = (shopCatalog.books || []).find((b) => b.id === it.bookId);
+        if (book) pushCartLine(book, it.language, it.qty);
+    });
+    saveCart();
+    toast('Books added to your cart');
+    shopGo('home');
+    openCartDrawer();
+}
+
 function renderOrderDetail(data) {
     const root = document.getElementById('view-order');
     const o = data.order;
-    const t = data.timeline;
+    const t = data.timeline || { steps: [] };
+    shopLastOrder = o;
     const lastStep = t.steps[t.steps.length - 1];
     let headline;
     if (t.cancelled) headline = 'Cancelled';
     else if (o.status === 'pending_payment') headline = 'Payment pending';
-    else if (lastStep.state === 'done') headline = lastStep.title;
-    else headline = 'Next: ' + t.headline;
+    else if (lastStep && lastStep.state === 'done') headline = lastStep.title;
+    else headline = t.headline || 'Order placed';
     const tone = t.cancelled || o.status === 'pending_payment' ? 'red' : '';
     const ship = o.shipTo || {};
+    const partner = t.partner || null;
+    const note = String(o.note || '').replace(/^Private shop order\.?\s*/i, '');
     root.innerHTML =
         '<div class="crumb"><a onclick="shopGo(\'account\',\'orders\')">Your orders</a> &rsaquo; Order ' + shopEsc(o.orderCode) + '</div>' +
-        '<div class="layout-2"><div><div class="box"><div class="track-head"><div><h1>Track package</h1><div class="muted">Order # ' + shopEsc(o.orderCode) + ' · Placed ' + shopEsc(when(o.createdAt, false)) + '</div></div>' +
-        '<span class="eta-chip' + (tone ? ' ' + tone : '') + '">' + shopEsc(headline) + '</span></div>' +
+        '<div class="layout-2"><div><div class="box track-hero"><div class="track-head"><div><p class="track-kicker">Live order</p><h1>' + shopEsc(headline) + '</h1><div class="muted">Order ' + shopEsc(o.orderCode) + ' · Placed ' + shopEsc(when(o.createdAt, false)) + '</div></div>' +
+        '<span class="eta-chip' + (tone ? ' ' + tone : '') + '">' + shopEsc(o.fulfillmentType === 'pickup' ? 'Store pickup' : (t.hyperlocal ? 'Hyperlocal' : 'Courier')) + '</span></div>' +
+        milestoneHtml(t) +
+        '<p class="window">' + shopEsc(deliveryWindow(o, t)) + '</p>' +
+        '<div class="track-actions">' +
+        '<button class="btn ghost sm" type="button" onclick="copyShopText(\'' + shopEsc(o.orderCode) + '\')">Copy order code</button>' +
+        (o.trackingNo ? '<button class="btn ghost sm" type="button" onclick="copyShopText(\'' + shopEsc(o.trackingNo) + '\')">Copy tracking number</button>' : '') +
+        '<button class="btn ghost sm" type="button" onclick="openShopOrder(' + o.id + ')">Refresh tracking</button>' +
+        '</div>' +
         (o.status === 'pending_payment' ? '<p><button class="btn sm buy" type="button" onclick="payPending(' + o.id + ')">Complete payment</button></p>' : '') +
-        '<div style="height:14px"></div>' + TrackTimeline.render({ timeline: data.timeline, live: data.live, awbTrackUrl: o.awbTrackUrl, trackUrl: o.trackUrl }, { animate: !shopTrackerSeen }) + '</div>' + returnHtml(data) + '</div>' +
+        (partner && partner.name ? '<div class="courier-card"><div><div class="lbl">Delivery partner</div><b>' + shopEsc(partner.name) + '</b><div class="muted">' + shopEsc(partner.service || '') + (partner.trackingNo ? ' · ' + shopEsc(partner.trackingNo) : '') + '</div></div></div>' : '') +
+        '<div style="height:8px"></div>' + TrackTimeline.render({ timeline: data.timeline, live: data.live, awbTrackUrl: o.awbTrackUrl, trackUrl: o.trackUrl }, { animate: !shopTrackerSeen }) + '</div>' + returnHtml(data) +
+        '<div class="box"><h3>Help with this order</h3><p class="muted">Reply reaches the book desk at both inboxes.</p><p><a href="mailto:care@vaidyagogate.org,vd.gogatememorialfoundation@gmail.com?subject=' + encodeURIComponent('Order ' + o.orderCode) + '">care@vaidyagogate.org</a><br><a href="mailto:vd.gogatememorialfoundation@gmail.com?subject=' + encodeURIComponent('Order ' + o.orderCode) + '">vd.gogatememorialfoundation@gmail.com</a></p></div></div>' +
         '<div><div class="box"><h3>Order summary</h3>' +
-        (o.items || []).map((it) => '<div class="item-line">' + miniCover(it) + '<div style="flex:1"><b>' + shopEsc(it.title) + '</b><div class="muted" style="text-transform:capitalize">' + shopEsc(it.language) + ' · Qty ' + shopEsc(it.qty) + '</div></div><b>' + money(it.lineTotal) + '</b></div>').join('') +
-        '<div class="sum-row total"><span>Total</span><span>' + money(o.totalAmount) + '</span></div><div class="muted">' + shopEsc(payLabel(o)) + '</div></div>' +
+        (o.items || []).map((it) => '<div class="item-line">' + miniCover(it) + '<div style="flex:1"><b>' + shopEsc(it.title) + '</b><div class="muted">' + shopEsc(langLabel(it.language)) + ' · Qty ' + shopEsc(it.qty) + '</div></div><b>' + money(it.lineTotal) + '</b></div>').join('') +
+        '<div class="sum-row total"><span>Total</span><span>' + money(o.totalAmount) + '</span></div><div class="muted">' + shopEsc(payLabel(o)) + '</div>' +
+        (note ? '<p class="muted" style="margin-top:8px">Note: ' + shopEsc(note) + '</p>' : '') +
+        '<button class="btn ghost sm" type="button" style="margin-top:12px" onclick="shopReorder()">Order these books again</button></div>' +
         '<div class="box"><h3>' + (o.fulfillmentType === 'pickup' ? 'Pickup' : 'Shipping address') + '</h3>' +
         (o.fulfillmentType === 'pickup'
             ? '<div>' + shopEsc((shopCatalog.store || {}).name || 'Store') + '</div><div class="muted">' + shopEsc([(shopCatalog.store || {}).address, (shopCatalog.store || {}).city].filter(Boolean).join(', ')) + '</div>'
             : '<b>' + shopEsc(ship.name || '') + '</b><div>' + shopEsc(ship.address || '') + '</div><div>' + shopEsc([ship.city, ship.state].filter(Boolean).join(', ')) + ' ' + shopEsc(ship.pincode || '') + '</div><div class="muted">Phone: ' + shopEsc(ship.phone || '') + '</div>') +
         '</div>' +
-        (o.trackUrl ? '<div class="box"><a href="' + shopEsc(o.trackUrl) + '" target="_blank" rel="noopener">Shareable tracking link</a></div>' : '') +
+        (o.trackUrl ? '<div class="box"><a href="' + shopEsc(o.trackUrl) + '" target="_blank" rel="noopener">Open the shareable tracking page</a></div>' : '') +
         '</div></div>';
     shopTrackerSeen = true;
     TrackTimeline.mount(data.live);
