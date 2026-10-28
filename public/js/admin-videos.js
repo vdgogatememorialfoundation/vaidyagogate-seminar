@@ -123,8 +123,8 @@
             '<div class="vl-admin-status" id="vl-admin-status"></div>' +
             '<div class="vl-admin-grid">' +
             '<div class="vl-form" id="vl-create-form"><h3>Add a video</h3>' +
-            '<div class="vl-form-row"><div><label>Seminar year</label><input type="number" id="vlc-year" min="2000" max="2100" placeholder="2026"></div>' +
-            '<div><label>Linked seminar (free for its paid participants)</label><select id="vlc-seminar"><option value="">Any seminar of that year</option></select></div></div>' +
+            '<div class="vl-form-row"><div><label>Seminar year</label><input type="number" id="vlc-year" min="2000" max="2100" placeholder="2026" required></div>' +
+            '<div><label>Seminar</label><select id="vlc-seminar" required><option value="">Choose a seminar</option></select></div></div>' +
             '<label>Title</label><input type="text" id="vlc-title" maxlength="200" placeholder="Day 1 — Inaugural session">' +
             '<div class="vl-form-row"><div><label>Type</label><select id="vlc-kind"><option value="episode">Episode / part</option><option value="full">Full video</option></select></div>' +
             '<div><label>Part number</label><input type="number" id="vlc-part" min="1" placeholder="1"></div></div>' +
@@ -136,6 +136,8 @@
             '<label>Year</label><input type="number" id="vly-year" min="2000" max="2100">' +
             '<label>Title shown to doctors</label><input type="text" id="vly-title" maxlength="200" placeholder="National Seminar 2026">' +
             '<label>Description</label><textarea id="vly-desc" maxlength="2000"></textarea>' +
+            '<label>Theme for this year</label><textarea id="vly-theme" maxlength="2000" placeholder="Describe next year\'s theme — colours, mood, and what the recordings should feel like."></textarea>' +
+            '<div class="vl-upload-row" style="margin-top:10px;"><button type="button" class="vl-btn is-ghost" id="vly-theme-apply">Apply theme</button><span class="vl-note" id="vly-theme-note"></span></div>' +
             '<label>Price to unlock all videos of the year (₹, blank = not offered)</label><input type="number" id="vly-price" min="0" step="1">' +
             '<div class="vl-upload-row" style="margin-top:10px;"><button type="button" class="vl-btn" id="vly-save">Save year</button></div>' +
             '<p class="vl-form-msg" id="vly-msg"></p>' +
@@ -150,8 +152,8 @@
             '<p class="vl-note">Each doctor gets a permanent 12-digit video license that is printed inside every video they watch. A doctor may play videos on the number of devices set here; the first devices used are registered automatically, and the office can remove a device below.</p></div>' +
             '<h3 style="margin:18px 0 8px;font-size:1.05rem;">Videos</h3><div id="vl-admin-videos"></div>' +
             '<div class="vl-admin-grid" style="margin-top:22px;">' +
-            '<div class="vl-form"><h3>Enable a doctor</h3>' +
-            '<label>Find doctor (name, email, phone, ID)</label><input type="text" id="vla-search" placeholder="Type at least 2 characters"><div class="vl-user-pick" id="vla-picks"></div><div id="vla-chosen"></div>' +
+            '<div class="vl-form"><h3>Issue video access</h3>' +
+            '<label>Find the person</label><input type="text" id="vla-search" placeholder="Name, phone, email, portal ID, or registration / application number"><div class="vl-user-pick" id="vla-picks"></div><div id="vla-chosen"></div>' +
             '<div class="vl-form-row"><div><label>Year</label><input type="number" id="vla-year" min="2000" max="2100"></div>' +
             '<div><label>Video (optional)</label><select id="vla-video"><option value="">All videos of the year</option></select></div></div>' +
             '<div class="vl-form-row"><div><label>Payment</label><select id="vla-mode"><option value="waiver">Waiver (complimentary)</option><option value="cash">Cash</option><option value="upi">UPI</option><option value="card">Card</option><option value="razorpay">Razorpay</option><option value="bank">Bank transfer</option><option value="cheque">Cheque</option><option value="other">Other</option></select></div>' +
@@ -174,6 +176,7 @@
             '<div class="vl-user-pick" id="vlt-picks"></div><div id="vl-tracking"></div></div>';
         $('vlc-save').addEventListener('click', createVideo);
         $('vly-save').addEventListener('click', saveYear);
+        $('vly-theme-apply').addEventListener('click', applyTheme);
         $('vly-year').addEventListener('change', renderYearForm);
         $('vla-search').addEventListener('input', debounce(searchUsers, 300));
         $('vla-save').addEventListener('click', grantAccess);
@@ -267,8 +270,12 @@
         const years = Array.from(new Set([...(state.years || []).map((y) => y.year), ...(state.videos || []).map((v) => v.year)])).sort((a, b) => b - a);
         if (!yearInput.value && years.length) yearInput.value = years[0];
         const y = (state.years || []).find((row) => Number(row.year) === Number(yearInput.value));
-        $('vly-title').value = y ? y.title : '';
-        $('vly-desc').value = y ? y.description : '';
+        if (document.activeElement !== $('vly-title')) $('vly-title').value = y ? y.title : '';
+        if (document.activeElement !== $('vly-desc')) $('vly-desc').value = y ? y.description : '';
+        if ($('vly-theme') && document.activeElement !== $('vly-theme')) $('vly-theme').value = y ? y.themeBrief || '' : '';
+        if ($('vly-theme-note')) {
+            $('vly-theme-note').textContent = y && y.themeSource === 'ai' ? 'Last theme was written with AI.' : y && y.themeSource === 'composed' ? 'Last theme was written from the description.' : '';
+        }
         $('vly-price').value = y && y.bundlePriceInr != null ? y.bundlePriceInr : '';
         if (!$('vlg-year').value && years.length) $('vlg-year').value = years[0];
         if (!$('vla-year').value && years.length) {
@@ -405,6 +412,8 @@
     /* --------------------------------------------------------- actions */
 
     async function createVideo() {
+        if (!$('vlc-year').value) return setMsg('vlc-msg', 'Choose the seminar year.', true);
+        if (!$('vlc-seminar').value) return setMsg('vlc-msg', 'Choose the seminar this video belongs to.', true);
         const body = {
             year: $('vlc-year').value,
             seminarId: $('vlc-seminar').value,
@@ -434,6 +443,21 @@
                 body: { title: $('vly-title').value, description: $('vly-desc').value, bundlePriceInr: $('vly-price').value }
             });
             setMsg('vly-msg', 'Saved.');
+            await load();
+        } catch (e) {
+            setMsg('vly-msg', e.message, true);
+        }
+    }
+
+    async function applyTheme() {
+        const year = $('vly-year').value;
+        const brief = $('vly-theme') ? $('vly-theme').value.trim() : '';
+        if (!year) return setMsg('vly-msg', 'Enter the year first.', true);
+        if (brief.length < 8) return setMsg('vly-msg', 'Describe the theme in a sentence or two.', true);
+        setMsg('vly-msg', 'Applying the theme…');
+        try {
+            const out = await api('/api/admin/videos/years/' + encodeURIComponent(year) + '/theme', { method: 'POST', body: { brief } });
+            setMsg('vly-msg', out.source === 'ai' ? 'Theme applied with AI and saved for ' + year + '.' : 'Theme written from your description and saved for ' + year + '.');
             await load();
         } catch (e) {
             setMsg('vly-msg', e.message, true);
@@ -480,7 +504,7 @@
         modal.innerHTML =
             '<div class="vl-form"><h3>Edit video</h3>' +
             '<div class="vl-form-row"><div><label>Seminar year</label><input type="number" id="vle-year" value="' + v.year + '"></div>' +
-            '<div><label>Seminar</label><select id="vle-seminar"><option value="">Any seminar of that year</option>' +
+            '<div><label>Seminar</label><select id="vle-seminar"><option value="">Choose a seminar</option>' +
             (state.seminars || []).map((s) => '<option value="' + s.id + '"' + (v.seminarId === s.id ? ' selected' : '') + '>' + esc((s.year ? s.year + ' · ' : '') + s.title) + '</option>').join('') +
             '</select></div></div>' +
             '<label>Title</label><input type="text" id="vle-title" value="' + esc(v.title) + '">' +
@@ -650,14 +674,23 @@
             return;
         }
         try {
-            const rows = await api('/api/admin/videos/users?q=' + encodeURIComponent(q));
+            const rows = await api('/api/admin/videos/lookup?q=' + encodeURIComponent(q));
             host.innerHTML = rows.length
-                ? rows.map((u) => '<button type="button" data-uid="' + u.id + '" data-name="' + esc(u.name) + '"><strong>' + esc(u.name) + '</strong> <span class="vl-note">' + esc(u.userIdString || '') + ' ' + esc(u.email || '') + '</span></button>').join('')
-                : '<span class="vl-note">No doctor matches.</span>';
-            host.querySelectorAll('[data-uid]').forEach((b) =>
+                ? rows
+                      .map((u, i) => {
+                          const bits = [u.userIdString, u.email, u.phone].filter(Boolean).join(' · ');
+                          const reg = (u.registrations && u.registrations[0] && (u.registrations[0].applicationNo || ('Registration ' + u.registrations[0].id))) || '';
+                          return '<button type="button" data-idx="' + i + '"><strong>' + esc(u.name) + '</strong> <span class="vl-note">' + esc(bits) + (reg ? ' · ' + esc(reg) : '') + (u.category === 'volunteer' ? ' · Volunteer' : '') + '</span></button>';
+                      })
+                      .join('')
+                : '<span class="vl-note">No account matches.</span>';
+            host._rows = rows;
+            host.querySelectorAll('[data-idx]').forEach((b) =>
                 b.addEventListener('click', () => {
-                    chosenUser = { id: parseInt(b.getAttribute('data-uid'), 10), name: b.getAttribute('data-name') };
-                    $('vla-chosen').innerHTML = '<div class="vl-chosen">Selected: ' + esc(chosenUser.name) + '</div>';
+                    const row = host._rows[parseInt(b.getAttribute('data-idx'), 10)];
+                    if (!row) return;
+                    chosenUser = row;
+                    renderChosen(row);
                     host.innerHTML = '';
                 })
             );
@@ -666,8 +699,40 @@
         }
     }
 
+    function renderChosen(u) {
+        const regs = (u.registrations || [])
+            .map((r) => {
+                const flags = [r.paid ? 'Paid' : 'Not paid', r.scanned ? 'Ticket scanned' : 'Not scanned', r.status].filter(Boolean).join(' · ');
+                return '<li><strong>' + esc(r.seminarTitle || 'Seminar') + '</strong> ' + (r.year ? esc(r.year) + ' · ' : '') + esc(r.applicationNo || 'Registration ' + r.id) + '<small>' + esc(flags) + '</small></li>';
+            })
+            .join('');
+        const access = (u.access || [])
+            .filter((a) => !a.revoked)
+            .map((a) => '<li>' + esc(a.year) + ' · ' + esc(a.videoTitle || 'All videos of the year') + ' · ' + esc(a.paymentModeLabel || a.source) + '</li>')
+            .join('');
+        $('vla-chosen').innerHTML =
+            '<div class="vl-profile"><div class="vl-profile-head"><strong>' +
+            esc(u.name) +
+            '</strong><span class="vl-badge' +
+            (u.category === 'volunteer' ? ' is-free' : '') +
+            '">' +
+            (u.category === 'volunteer' ? 'Volunteer' : 'Doctor') +
+            '</span></div><p class="vl-note">' +
+            esc([u.userIdString, u.email, u.phone].filter(Boolean).join(' · ')) +
+            (u.license ? ' · License ' + esc(u.license) : '') +
+            '</p>' +
+            (regs ? '<p class="vl-profile-lbl">Registrations</p><ul class="vl-devlist">' + regs + '</ul>' : '<p class="vl-note">No seminar registration on this account.</p>') +
+            (access ? '<p class="vl-profile-lbl">Video access already on the account</p><ul class="vl-devlist">' + access + '</ul>' : '<p class="vl-note">No office video grant yet. Record one below.</p>') +
+            '</div>';
+        const year = (u.registrations || []).map((r) => r.year).find(Boolean);
+        if (year && $('vla-year') && !$('vla-year').value) {
+            $('vla-year').value = year;
+            fillGrantVideos();
+        }
+    }
+
     async function grantAccess() {
-        if (!chosenUser) return setMsg('vla-msg', 'Pick a doctor first.', true);
+        if (!chosenUser) return setMsg('vla-msg', 'Find the person and select the account first.', true);
         try {
             await api('/api/admin/videos/access', {
                 method: 'POST',

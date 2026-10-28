@@ -136,7 +136,13 @@
         if (!host || !data) return;
         const years = data.years || [];
         if (!years.length) {
-            host.innerHTML = '<div class="vl-card"><h4>No videos published yet</h4><p>Seminar recordings appear here once the seminar office publishes them.</p></div>';
+            const volunteer = data.viewer && data.viewer.volunteer;
+            host.innerHTML =
+                '<div class="vl-card"><h4>No videos published yet</h4><p>' +
+                (volunteer
+                    ? 'Seminar videos is turned on for volunteer accounts. Recordings appear here after the seminar office publishes them.'
+                    : 'Seminar recordings appear here once the seminar office publishes them.') +
+                '</p></div>';
             return;
         }
         const pending = data.pendingPurchases || [];
@@ -154,8 +160,11 @@
                         ? '<button type="button" class="vl-btn is-ghost is-small" data-vl-buy-year="' + y.year + '">Unlock all ' + y.year + ' videos · ' + fmtMoney(y.bundlePriceInr) + '</button>'
                         : '';
                 const cards = y.videos.map((v) => card(v, pending)).join('');
+                const accent = /^#[0-9a-fA-F]{6}$/.test(y.accent || '') ? y.accent : '';
                 return (
-                    '<section class="vl-year"><div class="vl-year-head"><h3>' +
+                    '<section class="vl-year"' +
+                    (accent ? ' style="border-top:4px solid ' + accent + ';padding-top:10px;"' : '') +
+                    '><div class="vl-year-head"><h3>' +
                     esc(y.title || 'Seminar ' + y.year) +
                     '</h3><span class="vl-badge">' +
                     y.videos.length +
@@ -296,8 +305,11 @@
         moveWatermark();
         play.wmTimer = setInterval(moveWatermark, 9000);
         video.setAttribute('controlsList', 'nodownload noremoteplayback noplaybackrate');
+        video.controlsList && video.controlsList.add && video.controlsList.add('nodownload');
         video.disablePictureInPicture = true;
         video.disableRemotePlayback = true;
+        video.setAttribute('controlslist', 'nodownload noremoteplayback noplaybackrate');
+        video.oncontextmenu = () => false;
         const start = Number(session.positionSec) || 0;
         const onReady = () => {
             if (start > 5) {
@@ -566,6 +578,19 @@
 
     /* ------------------------------------------------------------- init */
 
+    function playerOpen() {
+        const wrap = $('vl-player-wrap');
+        return !!(wrap && !wrap.classList.contains('hidden'));
+    }
+
+    function blockPlayerSave(e) {
+        if (!playerOpen()) return;
+        const wrap = $('vl-player-wrap');
+        if (!wrap || !wrap.contains(e.target)) return;
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
     function bindOnce() {
         const pane = $('tab-videos');
         if (!pane || pane.__vlBound) return;
@@ -573,12 +598,36 @@
         const close = $('vl-player-close');
         if (close) close.addEventListener('click', () => stop(false));
         const video = $('vl-video');
+        const guard = $('vl-guard');
+        if (guard && video) {
+            guard.addEventListener('click', () => {
+                if (video.paused) video.play().catch(() => {});
+                else video.pause();
+            });
+            guard.addEventListener('dblclick', (e) => {
+                e.preventDefault();
+            });
+        }
         if (video) {
-            video.addEventListener('contextmenu', (e) => e.preventDefault());
+            video.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+            });
+            video.addEventListener('dragstart', (e) => e.preventDefault());
             video.addEventListener('enterpictureinpicture', () => {
                 if (document.exitPictureInPicture) document.exitPictureInPicture().catch(() => {});
             });
         }
+        document.addEventListener('contextmenu', blockPlayerSave, true);
+        document.addEventListener('dragstart', blockPlayerSave, true);
+        document.addEventListener('keydown', (e) => {
+            if (!playerOpen()) return;
+            const k = String(e.key || '').toLowerCase();
+            if ((e.ctrlKey || e.metaKey) && (k === 's' || k === 'u')) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+        }, true);
         document.addEventListener('visibilitychange', () => {
             if (document.hidden && play && video && !video.paused) video.pause();
         });

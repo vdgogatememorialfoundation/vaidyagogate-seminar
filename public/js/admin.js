@@ -1606,7 +1606,11 @@ function resolveDoctorAllowedTabsAdmin(category, userModulesRaw) {
     if (!hasExplicitOff) {
         const uk = Object.keys(userMap);
         if (!uk.length || !uk.some((k) => userMap[k] === true)) return allowed;
-        return new Set(uk.filter((k) => userMap[k] === true));
+        const userAllowed = new Set(uk.filter((k) => userMap[k] === true));
+        if (allowed === null) return userAllowed;
+        const merged = new Set(allowed);
+        userAllowed.forEach((tabId) => merged.add(tabId));
+        return merged;
     }
     const out = new Set();
     DOCTOR_MODULE_TAB_DEFS.forEach(([tabId]) => {

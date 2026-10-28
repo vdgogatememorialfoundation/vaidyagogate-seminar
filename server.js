@@ -11283,7 +11283,9 @@ app.post('/api/admin/portal-auth-config', (req, res) => {
             if (req.body && req.body.resetAllDoctorModuleOverrides) {
                 db.run(
                     `UPDATE users SET doctor_modules = NULL
-                     WHERE LOWER(TRIM(COALESCE(user_role, ''))) = 'doctor'`,
+                     WHERE LOWER(TRIM(COALESCE(user_role, ''))) = 'doctor'
+                        OR LOWER(TRIM(COALESCE(role, ''))) = 'doctor'
+                        OR LOWER(TRIM(COALESCE(doctor_category, ''))) = 'volunteer'`,
                     [],
                     (clrErr) => {
                         if (clrErr) return res.status(500).json({ error: clrErr.message });

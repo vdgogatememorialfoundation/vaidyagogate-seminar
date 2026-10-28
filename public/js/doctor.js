@@ -759,7 +759,14 @@ function resolveDoctorAllowedTabsClient(category, globalRegular, globalVolunteer
     const userMap = parseDoctorModulesMap(userModulesRaw);
     if (!userMap || !Object.keys(userMap).length) return expandDoctorRefundTabAccess(allowed);
     const hasExplicitOff = Object.keys(userMap).some((k) => userMap[k] === false);
-    if (!hasExplicitOff) return expandDoctorRefundTabAccess(modulesMapToAllowedSetClient(userMap));
+    if (!hasExplicitOff) {
+        const userAllowed = modulesMapToAllowedSetClient(userMap);
+        if (allowed === null) return expandDoctorRefundTabAccess(userAllowed);
+        if (!userAllowed) return expandDoctorRefundTabAccess(allowed);
+        const merged = new Set(allowed);
+        userAllowed.forEach((tabId) => merged.add(tabId));
+        return expandDoctorRefundTabAccess(merged);
+    }
     const out = new Set();
     const tabIds = [
         'tab-dashboard',
