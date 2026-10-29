@@ -115,14 +115,20 @@
         } else if (step.key === 'out_for_delivery' && step.state === 'active' && step.operational !== 'RESCHEDULED') {
             html += '<div class="tl-note">Finding a delivery partner.</div>';
         }
-        if (data.live && data.live.slot === step.key && data.live.leg !== 'done') {
-            const riding = !!(data.live.agent && data.live.route !== 'dotted');
-            html +=
-                '<div class="tl-live">' + (riding ? 'Live delivery tracking' : 'Store and delivery location') + '</div>' +
-                (riding ? '<div id="tl-eta" class="tl-note">Delivery partner is on the way.</div>' : '<div class="tl-note">The route stays dotted until a delivery partner location arrives.</div>') +
-                '<div id="tl-map-slot"></div>';
-        }
         return html;
+    }
+
+    function milesHtml(list) {
+        if (!list || !list.length) return '';
+        return '<ol class="tl-miles">' + list.map((m) => '<li class="tl-mile is-' + esc(m.state) + '"><b>' + esc(m.label) + '</b>' + (m.detail && m.state === 'active' ? '<span>' + esc(m.detail) + '</span>' : '') + '</li>').join('') + '</ol>';
+    }
+
+    function mapBlock(live) {
+        if (!live || live.leg === 'done') return '';
+        const label = live.phaseLabel || (live.route === 'dotted' ? 'Route from the store to your address' : 'Delivery partner');
+        return '<div class="tl-map-block"><div class="tl-live">' + esc(label) + '</div>' +
+            '<div id="tl-eta" class="tl-eta" hidden><span class="tl-eta-lbl">' + esc(label) + '</span><b class="tl-eta-val"></b><span class="tl-eta-sub"></span></div>' +
+            '<div id="tl-map-slot"></div></div>';
     }
 
     function dateStrip(t) {
@@ -207,21 +213,23 @@
         const settled = t.steps && t.steps.length && t.steps.every((step) => step.state === 'done');
         return (
             '<div class="tl' + (animate ? '' : ' tl-static') + (settled ? ' is-settled' : '') + '">' +
+            milesHtml(t.milestones) +
+            mapBlock(data.live) +
             dateStrip(t) +
             expectedStrip(t) +
             courierCard(t, data) +
             t.steps
-                .map(
-                    (s, i) =>
-                        '<div class="tl-step ' + s.state + '"' +
+                .map((s, i) => {
+                    const open = s.state === 'active';
+                    const hint = s.state === 'done' ? 'This step is complete.' : s.state === 'active' ? 'This step is in progress.' : 'This step has not started.';
+                    const body = (s.summary ? '<div class="tl-sum">' + esc(s.summary) + '</div>' : '<div class="tl-sum">' + esc(hint) + '</div>') + extra(s, data) + updates(s.updates);
+                    return '<div class="tl-step ' + s.state + '"' +
                         (s.lineUntil ? ' data-line-since="' + Number(s.lineSince) + '" data-line-until="' + Number(s.lineUntil) + '" data-line-floor="' + Number(s.lineFloor || 12) + '"' : '') +
                         ' style="--i:' + i + (s.lineFill != null ? ';--line:' + Number(s.lineFill) : '') + '"><div class="tl-dot">' + (s.state === 'done' ? '&#10003;' : '') + '</div>' +
                         '<div class="tl-title">' + esc(s.title) + (s.expectedLabel && s.state !== 'done' && !(s.at && s.state === 'active') ? '<span class="tl-expect">' + esc(s.expectedLabel) + '</span>' : '') + (s.at && s.state !== 'upcoming' ? '<span class="tl-time">' + esc(when(s.at)) + '</span>' : '') + '</div>' +
-                        (s.summary ? '<div class="tl-sum">' + esc(s.summary) + '</div>' : '') +
-                        extra(s, data) +
-                        updates(s.updates) +
-                        '</div>'
-                )
+                        '<button type="button" class="tl-drawer-btn" aria-expanded="' + (open ? 'true' : 'false') + '">' + (open ? 'Hide details' : 'View details') + '</button>' +
+                        '<div class="tl-drawer"' + (open ? '' : ' hidden') + '>' + body + '</div></div>';
+                })
                 .join('') +
             '</div>'
         );
@@ -229,6 +237,19 @@
 
     function bind(root) {
         const scope = root && root.querySelector ? root : document;
+        scope.querySelectorAll('.tl-drawer-btn').forEach((btn) => {
+            if (btn.dataset.bound) return;
+            btn.dataset.bound = '1';
+            btn.addEventListener('click', () => {
+                const drawer = btn.nextElementSibling;
+                if (!drawer || !drawer.classList.contains('tl-drawer')) return;
+                const open = drawer.hasAttribute('hidden');
+                if (open) drawer.removeAttribute('hidden');
+                else drawer.setAttribute('hidden', '');
+                btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+                btn.textContent = open ? 'Hide details' : 'View details';
+            });
+        });
         const form = scope.querySelector('#tl-reschedule-form');
         if (!form || form.dataset.bound) return;
         form.dataset.bound = '1';
@@ -562,7 +583,7 @@
         Rider.prototype.onAdd = function () {
             const div = document.createElement('div');
             div.className = 'tl-rider';
-            div.innerHTML = '<div class="tl-rider-pulse"></div><div class="tl-rider-plate"></div><div class="tl-rider-aim"><div class="tl-rider-bob"><img class="tl-rider-img" alt="" src="' + RIDER_ICON + '"></div></div>';
+            div.innerHTML = '<div class="tl-rider-plate"></div><div class="tl-rider-aim"><div class="tl-rider-bob"><img class="tl-rider-img" alt="" src="' + RIDER_ICON + '"></div></div>';
             this.div = div;
             this.getPanes().overlayMouseTarget.appendChild(div);
         };
@@ -608,59 +629,30 @@
         document.querySelectorAll('.hl-bike-3d').forEach((node) => node.classList.toggle('is-moving', !!moving));
     }
 
-    function holdRider(el, at, moving) {
+    function holdRider(el, at) {
         if (!el.__rider || !at) return;
-        const heading = moving ? at.heading : (el.__stillHeading != null ? el.__stillHeading : at.heading);
-        if (!moving) el.__stillHeading = heading;
-        else el.__stillHeading = at.heading;
-        el.__rider.setRider(at, heading, true, !!moving);
-        syncBike(!!moving);
+        const heading = at.heading != null ? at.heading : el.__stillHeading || 0;
+        el.__stillHeading = heading;
+        el.__rider.setRider(at, heading, true, false);
+        syncBike(false);
     }
 
     function ensureMotion(el) {
         if (el.__raf) return;
-        let last = 0;
-        let lineAt = 0;
-        const step = (now) => {
+        const step = () => {
             el.__raf = requestAnimationFrame(step);
-            if (!last) last = now;
-            const dt = Math.min(0.05, (now - last) / 1000);
-            last = now;
             const path = el.__path;
             const cum = el.__cum;
             if (!path || !cum || !el.__agentLive || !el.__rider) return;
             const gps = el.__gpsMeters || 0;
-            let m = el.__agentMeters == null ? gps : el.__agentMeters;
-            const traveling = !!el.__riderTraveling && Math.abs(gps - m) > 3;
-            if (!traveling) {
-                el.__riderTraveling = false;
-                if (m !== gps) m = gps;
-                el.__agentMeters = m;
-                if (el.__poseMoving || el.__poseMeters !== m) {
-                    el.__poseMoving = false;
-                    el.__poseMeters = m;
-                    holdRider(el, along(path, cum, m), false);
-                    if (el.__remain) el.__remain.setPath(tailPath(path, cum, m));
-                    if (el.__doneLine) el.__doneLine.setPath(headPath(path, cum, m));
-                }
-                return;
-            }
-            const gap = gps - m;
-            const gain = Math.min(1, dt * 1.6);
-            m += gap * gain;
-            if (Math.abs(gps - m) <= 3) {
-                m = gps;
-                el.__riderTraveling = false;
-            }
-            el.__agentMeters = m;
-            el.__poseMoving = !!el.__riderTraveling;
-            el.__poseMeters = m;
-            holdRider(el, along(path, cum, m), !!el.__riderTraveling);
-            if (now - lineAt > 140) {
-                lineAt = now;
-                if (el.__remain) el.__remain.setPath(tailPath(path, cum, m));
-                if (el.__doneLine) el.__doneLine.setPath(headPath(path, cum, m));
-            }
+            el.__riderTraveling = false;
+            el.__agentMeters = gps;
+            if (el.__poseMeters === gps) return;
+            el.__poseMoving = false;
+            el.__poseMeters = gps;
+            holdRider(el, along(path, cum, gps));
+            if (el.__remain) el.__remain.setPath(tailPath(path, cum, gps));
+            if (el.__doneLine) el.__doneLine.setPath(headPath(path, cum, gps));
         };
         el.__raf = requestAnimationFrame(step);
     }
@@ -672,11 +664,8 @@
         const gps = el.__pendingGps;
         const hit = gps ? projectMeters(path, el.__cum, gps) : { meters: 0, dist: 0 };
         el.__gpsMeters = hit.meters;
-        const far = el.__agentMeters == null || Math.abs(el.__agentMeters - hit.meters) > 800;
-        if (!el.__riderTraveling || far) {
-            el.__agentMeters = hit.meters;
-            if (far) el.__riderTraveling = false;
-        }
+        el.__agentMeters = hit.meters;
+        el.__riderTraveling = false;
         if (el.__remain) el.__remain.setPath(tailPath(path, el.__cum, el.__agentMeters || 0));
         if (el.__doneLine) el.__doneLine.setPath(headPath(path, el.__cum, el.__agentMeters || 0));
     }
@@ -708,6 +697,9 @@
                 streetViewControl: false,
                 fullscreenControl: true,
                 gestureHandling: 'greedy',
+                clickableIcons: false,
+                scaleControl: true,
+                zoomControlOptions: google.maps.ControlPosition ? { position: google.maps.ControlPosition.RIGHT_BOTTOM } : undefined,
                 styles: [
                     { featureType: 'poi', stylers: [{ visibility: 'off' }] },
                     { featureType: 'transit', stylers: [{ visibility: 'off' }] },
@@ -730,8 +722,35 @@
             ensureRider(el);
             ensureMotion(el);
             ensureLinks(el);
+            if (google.maps.TrafficLayer && !el.__traffic) {
+                el.__traffic = new google.maps.TrafficLayer();
+                el.__traffic.setMap(el.__map);
+            }
+            if (!el.querySelector('.tl-map-chip')) {
+                const chip = document.createElement('div');
+                chip.className = 'tl-map-chip';
+                chip.innerHTML = '<b class="tl-map-phase"></b><span class="tl-map-eta"></span>';
+                el.appendChild(chip);
+            }
+            if (!el.querySelector('.tl-map-recenter')) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'tl-map-recenter';
+                btn.textContent = 'Recenter';
+                btn.addEventListener('click', () => {
+                    const snap = el.__liveSnap || {};
+                    const bounds = new google.maps.LatLngBounds();
+                    [snap.store, snap.drop, snap.agent].forEach((pos) => pos && bounds.extend(pos));
+                    if (!bounds.isEmpty()) {
+                        el.__userMoved = false;
+                        el.__map.fitBounds(bounds, mapPadding());
+                    }
+                });
+                el.appendChild(btn);
+            }
         }
         ensureLinks(el);
+        syncMapChrome(el, live);
         const place = (key, pos, title, svg) => {
             if (!pos) {
                 if (el.__markers[key]) el.__markers[key].setMap(null);
@@ -831,8 +850,6 @@
             const on = k === key;
             m.setIcon(markerIcon(m.__svg, on ? 56 : 42, on ? 70 : 52));
             m.setZIndex(on ? 9 : 3);
-            m.setAnimation(on ? google.maps.Animation.BOUNCE : null);
-            if (on) setTimeout(() => m.setAnimation(null), 2100);
         });
         el.__map.panTo(pos);
         if (el.__map.getZoom() < 15) el.__map.setZoom(15);
@@ -844,7 +861,21 @@
     }
 
     function isPreview(live) {
-        return !!(live && live.leg !== 'done' && (live.route === 'dotted' || !live.agent));
+        return !!(live && live.leg !== 'done' && (live.route === 'dotted' || live.leg === 'preview' || !live.agent));
+    }
+
+    function phaseCopy(live) {
+        if (!live || isPreview(live)) return 'From the store';
+        if (live.phaseLabel) return live.phaseLabel;
+        if (live.leg === 'to_store') return 'Heading to the store';
+        return 'On the way to you';
+    }
+
+    function syncMapChrome(el, live) {
+        if (!el || !el.querySelector) return;
+        const phase = el.querySelector('.tl-map-phase');
+        const label = (live && live.phaseLabel) || phaseCopy(live);
+        if (phase && label) phase.textContent = label;
     }
 
     function samePoint(a, b, meters) {
@@ -930,14 +961,30 @@
         eta.classList.remove('is-on');
     }
 
-    function showEta(text) {
+    function showEta(text, label, sub) {
         const eta = document.getElementById('tl-eta');
-        if (!eta || !text) return;
-        eta.hidden = false;
-        eta.classList.add('is-on');
-        const val = eta.querySelector('.hl-eta-val');
-        if (val) val.textContent = text;
-        else eta.textContent = eta.classList.contains('hl-eta') ? text : 'Arriving in approximately ' + text;
+        if (eta && text) {
+            eta.hidden = false;
+            eta.classList.add('is-on');
+            const lbl = eta.querySelector ? eta.querySelector('.hl-eta-lbl, .tl-eta-lbl') : null;
+            const val = eta.querySelector ? eta.querySelector('.hl-eta-val, .tl-eta-val') : null;
+            const subEl = eta.querySelector ? eta.querySelector('.tl-eta-sub') : null;
+            if (lbl && label) lbl.textContent = label;
+            if (val) val.textContent = text;
+            if (subEl) subEl.textContent = sub || '';
+        }
+        const phases = document.querySelectorAll ? document.querySelectorAll('.tl-map-phase') : [];
+        const etas = document.querySelectorAll ? document.querySelectorAll('.tl-map-eta') : [];
+        if (label && phases[0]) phases[0].textContent = label;
+        if (etas[0]) etas[0].textContent = text ? text + (sub ? ' · ' + sub : '') : '';
+        const line = document.getElementById('tl-traffic-line');
+        if (line && text) line.textContent = text + (sub ? ' · ' + sub : '');
+    }
+
+    function etaSub(dur) {
+        if (!dur) return '';
+        const via = dur.traffic ? 'Google traffic' : 'Google Maps';
+        return dur.distanceText ? dur.distanceText + ' · ' + via : via;
     }
 
     function trackLine(el, color, weight, z) {
@@ -993,16 +1040,55 @@
         return formatDriveText(dur.value * (left / total));
     }
 
-    function requestDrive(origin, dest, cb) {
-        new google.maps.DirectionsService().route(
-            { origin: { lat: origin.lat, lng: origin.lng }, destination: { lat: dest.lat, lng: dest.lng }, travelMode: 'DRIVING' },
-            (result, status) => {
-                if (status !== 'OK') return cb(null, null);
-                const pts = routePoints(result);
-                const leg = result.routes && result.routes[0] && result.routes[0].legs && result.routes[0].legs[0];
-                cb(pts.length > 1 ? pts : null, (leg && leg.duration) || null);
+    function requestDrive(origin, dest, cb, plain) {
+        const req = {
+            origin: { lat: origin.lat, lng: origin.lng },
+            destination: { lat: dest.lat, lng: dest.lng },
+            travelMode: 'DRIVING'
+        };
+        if (!plain) req.drivingOptions = { departureTime: new Date(), trafficModel: 'bestguess' };
+        new google.maps.DirectionsService().route(req, (result, status) => {
+            if (status !== 'OK') {
+                if (!plain) return requestDrive(origin, dest, cb, true);
+                return cb(null, null);
             }
-        );
+            const pts = routePoints(result);
+            const leg = result.routes && result.routes[0] && result.routes[0].legs && result.routes[0].legs[0];
+            const dur = leg && (leg.duration_in_traffic || leg.duration);
+            const distance = leg && leg.distance;
+            cb(
+                pts.length > 1 ? pts : null,
+                dur
+                    ? {
+                          text: dur.text,
+                          value: dur.value,
+                          distanceText: distance && distance.text,
+                          traffic: !!(leg && leg.duration_in_traffic)
+                      }
+                    : null
+            );
+        });
+    }
+
+    function trafficEta(el, origin, dest, label) {
+        if (!el || !origin || !dest) return;
+        const key = [Number(origin.lat).toFixed(3), Number(origin.lng).toFixed(3), Number(dest.lat).toFixed(3), Number(dest.lng).toFixed(3), label || ''].join('|');
+        const now = Date.now();
+        if (el.__etaKey === key && el.__etaAt && now - el.__etaAt < 45000) {
+            if (el.__etaText) showEta(el.__etaText, label, el.__etaSub || '');
+            return;
+        }
+        if (el.__etaPending === key) return;
+        el.__etaPending = key;
+        requestDrive(origin, dest, (pts, dur) => {
+            if (el.__etaPending === key) el.__etaPending = null;
+            if (!dur || !dur.text) return;
+            el.__etaKey = key;
+            el.__etaAt = Date.now();
+            el.__etaText = dur.text;
+            el.__etaSub = etaSub(dur);
+            showEta(dur.text, label, el.__etaSub);
+        });
     }
 
     function loadTrip(el, store, drop) {
@@ -1038,7 +1124,8 @@
 
     function loadLeg(el, origin, dest, legName, cb) {
         if (!origin || !dest) return cb(null, null);
-        if (el.__legPath && el.__legName === legName && samePoint(el.__legFrom, origin, 180) && samePoint(el.__legTo, dest, 40)) {
+        const fresh = el.__legAt && Date.now() - el.__legAt < 45000;
+        if (el.__legPath && el.__legName === legName && fresh && samePoint(el.__legFrom, origin, 50) && samePoint(el.__legTo, dest, 40)) {
             return cb(el.__legPath, el.__legDuration);
         }
         const from = { lat: origin.lat, lng: origin.lng };
@@ -1054,6 +1141,7 @@
                 el.__legTo = to;
                 el.__legName = legName;
                 el.__legDuration = duration;
+                el.__legAt = Date.now();
             }
             cb(pts, duration);
         });
@@ -1066,16 +1154,13 @@
             syncBike(false);
             return;
         }
-        const heading = !el.__riderTraveling && el.__stillHeading != null
-            ? el.__stillHeading
-            : (toward ? bearingDeg(agent, toward) % 360 : 0);
-        if (!el.__riderTraveling) el.__stillHeading = heading;
-        el.__rider.setRider(agent, heading, true, !!el.__riderTraveling);
-        syncBike(!!el.__riderTraveling);
+        const heading = toward ? bearingDeg(agent, toward) % 360 : el.__stillHeading || 0;
+        el.__stillHeading = heading;
+        el.__rider.setRider(agent, heading, true, false);
+        syncBike(false);
     }
 
     function applyPreviewRoad(el, live, pts) {
-        hideEta();
         el.__agentLive = false;
         el.__path = null;
         if (el.__rider) el.__rider.setRider(null, 0, false);
@@ -1089,6 +1174,9 @@
         }
         dottedLine(el.__remain, live.store, live.drop, pts);
         clearConnectors(el);
+        const dur = el.__tripDuration;
+        if (dur && dur.text) showEta(dur.text, 'From the store', etaSub(dur));
+        else trafficEta(el, live.store, live.drop, 'From the store');
     }
 
     function followTrip(el, live, pts) {
@@ -1102,9 +1190,7 @@
             solidLine(el.__remain);
             applyPath(el, pts);
             paintAddressConnectors(el, live.store, live.drop, [pts]);
-            const text = scaledEtaText(el);
-            if (text && el.__agentLive) showEta(text);
-            else hideEta();
+            if (live.agent && target) trafficEta(el, live.agent, target, live.phaseLabel || 'On the way to you');
             return;
         }
         if (el.__corridor) {
@@ -1118,7 +1204,7 @@
             return;
         }
         const legName = toStore ? 'to_store' : 'to_drop';
-        const cached = el.__legPath && el.__legName === legName && samePoint(el.__legFrom, live.agent, 180) && samePoint(el.__legTo, target, 40);
+        const cached = el.__legPath && el.__legName === legName && el.__legAt && Date.now() - el.__legAt < 45000 && samePoint(el.__legFrom, live.agent, 50) && samePoint(el.__legTo, target, 40);
         if (!cached) parkRider(el, live.agent, target);
         loadLeg(el, live.agent, target, legName, (legPts, duration) => {
             const snap = el.__liveSnap;
@@ -1142,7 +1228,8 @@
             solidLine(el.__remain);
             applyPath(el, legPts);
             paintAddressConnectors(el, snap.store, snap.drop, roads);
-            if (duration && duration.text && el.__agentLive) showEta(duration.text);
+            const label = snap.phaseLabel || (snap.leg === 'to_store' ? 'Heading to the store' : 'On the way to you');
+            if (duration && duration.text && el.__agentLive) showEta(duration.text, label, etaSub(duration));
             else hideEta();
         });
     }
@@ -1157,7 +1244,10 @@
         else if (el.__rider) el.__rider.setRider(null, 0, false);
         if (origin && target) dottedLine(el.__remain, origin, target);
         if (live.store && live.drop && origin !== live.store) paintAddressConnectors(el, live.store, live.drop, [[live.store, live.drop], origin && target ? [origin, target] : null]);
-        hideEta();
+        const label = live.phaseLabel || (live.leg === 'to_store' ? 'Heading to the store' : 'On the way to you');
+        if (live.agent && target) trafficEta(el, live.agent, target, label);
+        else if (live.store && live.drop) trafficEta(el, live.store, live.drop, 'From the store');
+        else hideEta();
     }
 
     function routeColor() {

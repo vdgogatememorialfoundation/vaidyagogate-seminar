@@ -21,12 +21,31 @@
         return !!(track && track.fulfillmentType === 'HYPERLOCAL' && track.map && track.map.enabled);
     }
 
-    function partnerLine(track) {
+    function partnerLine(track, live) {
         const name = track.agent && track.agent.name;
+        const leg = live && live.leg;
+        const phase = live && live.phase;
+        if (name && (phase === 'at_store' || (live && live.phaseLabel === 'At the store'))) return name + ' is at the store';
+        if (name && leg === 'to_store') return name + ' is heading to the store';
+        if (name && leg === 'to_drop') return name + ' is on the way to you';
         if (name && track.map.live) return name + ' is on the way to deliver your order';
         if (name) return name + ' is assigned to this order';
         if (track.agent && track.agent.phone) return 'A delivery partner is assigned to this order';
         return 'Finding a delivery partner';
+    }
+
+    function milesHtml(shipment) {
+        const miles = (shipment && shipment.timeline && shipment.timeline.milestones) || [];
+        if (!miles.length) return '';
+        return '<ol class="tl-miles">' + miles.map((m) => '<li class="tl-mile is-' + esc(m.state) + '"><b>' + esc(m.label) + '</b>' + (m.detail && m.state === 'active' ? '<span>' + esc(m.detail) + '</span>' : '') + '</li>').join('') + '</ol>';
+    }
+
+    function embeddedMap(shipment) {
+        const live = shipment && shipment.live;
+        if (!live || live.leg === 'done') return '';
+        if (!live.mapsApiKey && !live.store && !live.drop && !live.agent) return '';
+        const label = live.phaseLabel || (live.route === 'dotted' || live.leg === 'preview' ? 'Route from the store to your address' : 'Delivery partner');
+        return '<div class="tl-map-block"><div class="tl-live">' + esc(label) + '</div><div id="tl-eta" class="tl-eta" hidden><span class="tl-eta-lbl">' + esc(label) + '</span><b class="tl-eta-val"></b><span class="tl-eta-sub"></span></div><div id="tl-map-slot"></div></div>';
     }
 
     function telHref(phone) {
@@ -168,7 +187,7 @@
         const px = track && track.proximity;
         if (!px || !px.label) return '';
         return '<div class="trk-cstatus is-prox is-' + esc(px.state) + '"><span class="trk-cstatus-dot"></span><b>' + esc(px.label) + '</b>' +
-            (px.distanceKm != null ? '<span> · ' + esc(px.distanceKm) + ' km away</span>' : '') + (px.etaMinutes ? '<span> · ~' + esc(px.etaMinutes) + ' min</span>' : '') +
+            (px.distanceText ? '<span> · ' + esc(px.distanceText) + '</span>' : px.distanceKm != null ? '<span> · ' + esc(px.distanceKm) + ' km away</span>' : '') + (px.etaText ? '<span> · ' + esc(px.etaText) + ' with traffic</span>' : px.etaMinutes ? '<span> · ~' + esc(px.etaMinutes) + ' min</span>' : '') +
             (px.lastGpsAt ? '<span class="trk-cstatus-at">GPS ' + esc(ago(px.lastGpsAt)) + '</span>' : '') + '</div>';
     }
 
@@ -547,9 +566,10 @@
             now = '<div class="hl-now is-done"><b>Delivered' + (h.proof.deliveredAt ? ' · ' + esc(when(h.proof.deliveredAt)) : '') + '</b><span>' +
                 (h.proof.otpVerified ? 'OTP verified at handover' : 'Handed over to recipient') + (h.proof.recipient ? ' · ' + esc(h.proof.recipient) : '') + '</span></div>';
         } else if (live.active && live.gps) {
+            const trafficLine = live.etaText ? esc(live.etaText) + ' with traffic' : live.etaMinutes ? 'about ' + esc(live.etaMinutes) + ' min' : 'Time updates from Google traffic';
             now = '<div class="hl-now' + (live.nearby ? ' is-near' : '') + '"><b>' +
-                (live.atDoorstep ? 'Delivery partner has arrived at your doorstep' : live.nearby ? 'Your delivery partner is nearby — please be available' : live.approaching ? 'Delivery partner approaching' : 'Arriving in about ' + esc(live.etaMinutes) + ' min') + '</b><span>' +
-                (live.distanceKm != null ? esc(live.distanceKm) + ' km away · ' : '') + 'GPS updated ' + esc(ago(live.lastGpsAt)) + '</span></div>';
+                (live.atDoorstep ? 'Delivery partner has arrived at your doorstep' : live.nearby ? 'Your delivery partner is nearby — please be available' : live.approaching ? 'Delivery partner approaching' : trafficLine) + '</b><span id="tl-traffic-line">' +
+                (live.distanceText ? esc(live.distanceText) + ' · ' : live.distanceKm != null ? esc(live.distanceKm) + ' km away · ' : '') + 'GPS updated ' + esc(ago(live.lastGpsAt)) + '</span></div>';
         } else if (live.active && live.gpsLost) {
             now = '<div class="hl-now is-warn"><b>Waiting for the partner\u2019s location</b><span>Last location received ' + esc(ago(live.lastGpsAt)) + ' · showing latest milestone</span></div>';
         } else if (live.active) {
@@ -806,6 +826,8 @@
             (detail ? '<p>' + esc(detail) + '</p>' : '') +
             '<p class="trk-stepno">' + (delivered ? 'Completed' : 'Step ' + stepNo + ' of ' + (steps.length || 5)) + '</p>' + courierChip(track) +
             '</div>' + board + '</section>' +
+            milesHtml(shipment) +
+            embeddedMap(shipment) +
             railHtml(track) +
             statsHtml(track) +
             hlNowHtml(track) +
@@ -839,12 +861,9 @@
         const call = href
             ? '<a class="hl-call" href="' + esc(href) + '" aria-label="Call delivery partner"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M6.6 10.8a15.1 15.1 0 006.6 6.6l2.2-2.2a1 1 0 011-.25 11.4 11.4 0 003.6.57 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 4a1 1 0 011-1h3.5a1 1 0 011 1 11.4 11.4 0 00.57 3.6 1 1 0 01-.25 1L6.6 10.8z"/></svg></a>'
             : '';
-        const onRoad =
-            String(track.commerceStage || '') === 'out_for_delivery' &&
-            !!(track.agent && (track.agent.name || track.agent.phone)) &&
-            Number.isFinite(Number(track.agentLat)) &&
-            Number.isFinite(Number(track.agentLng));
-        const bike = onRoad
+        const liveNow = shipment.live || {};
+        const showIcon = !!(name || phone || liveNow.agent);
+        const bike = showIcon
             ? '<span class="hl-bike hl-bike-3d" aria-hidden="true"><img src="/media/delivery-agent.png?v=2" alt=""></span>'
             : '<span class="hl-bike hl-bike-idle" aria-hidden="true"><svg viewBox="0 0 48 48" width="40" height="40"><path d="M8 18l16-8 16 8v14l-16 8-16-8z" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/><path d="M8 18l16 8 16-8M24 26v14" fill="none" stroke="#94a3b8" stroke-width="2"/></svg></span>';
         const partner = '<div class="hl-partner">' + bike +
@@ -870,9 +889,10 @@
             '<section class="hl-sheet">' +
             '<header class="hl-brand"><span class="trk-mark">' + iconSvg('M3 8l9-4 9 4-9 4-9-4zM3 8v8l9 4 9-4V8') + '</span><div><div class="trk-brand-name">Gogate Products</div><div class="trk-brand-sub">Hyperlocal delivery</div></div></header>' +
             '<div class="hl-top"><div><div class="hl-kicker">Order #' + esc(track.orderId || shipment.orderCode || '') + (badge ? ' ' + badge : '') + '</div><h1>' + esc(track.currentStatus || track.currentMessage) + '</h1>' +
-            '<p class="hl-sub">' + esc(partnerLine(track)) + '</p>' +
-            (track.map.live ? '' : '<p class="hl-wait">The route stays dotted until a delivery partner location arrives.</p>') +
-            '</div><div id="tl-eta" class="hl-eta" hidden><span class="hl-eta-lbl">Arriving</span><b class="hl-eta-val"></b></div></div>' +
+            '<p class="hl-sub">' + esc(partnerLine(track, liveNow)) + '</p>' +
+            (liveNow.agent ? (liveNow.leg === 'to_store' ? '<p class="hl-wait">' + esc(liveNow.phaseLabel || 'Heading to the store') + '.</p>' : '') : '<p class="hl-wait">Dotted driving route from the store to your address. The partner appears here as soon as one is assigned.</p>') +
+            '</div><div id="tl-eta" class="hl-eta" hidden><span class="hl-eta-lbl">' + esc(liveNow.phaseLabel || 'Arriving') + '</span><b class="hl-eta-val"></b><span class="tl-eta-sub"></span></div></div>' +
+            milesHtml(shipment) +
             hlNowHtml(track) +
             railHtml(track) +
             board +

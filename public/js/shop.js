@@ -793,7 +793,7 @@ function renderOrderDetail(data) {
         '</div></div>';
     shopTrackerSeen = true;
     if (window.ShipTrack) {
-        window.ShipTrack.draw(document.getElementById('shop-order-track'), data.track, o);
+        window.ShipTrack.draw(document.getElementById('shop-order-track'), data.track, Object.assign({}, o, { live: data.live, timeline: data.timeline }));
         window.ShipTrack.draw(document.getElementById('shop-return-track'), data.returnTrack, o);
         const linked = data.linked || {};
         window.ShipTrack.draw(document.getElementById('shop-replacement-track'), linked.replacementTrack, o);

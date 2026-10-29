@@ -51,7 +51,7 @@
 .tl-warn { margin-top: 10px; padding: 10px 12px; border-radius: 8px; background: #fff4e5; color: #8a4b00; font-size: .85rem; }
 .tl-live { display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; font-weight: 700; color: var(--tl-green); margin-top: 12px; }
 .tl-live::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--tl-green); }
-.tl-map { height: 380px; border-radius: 8px; margin-top: 8px; border: 1px solid var(--tl-line); background: #e5e3df; }
+.tl-map { position: relative; height: 380px; border-radius: 8px; margin-top: 8px; border: 1px solid var(--tl-line); background: #e5e3df; }
 .ship { color: #0f1111; }
 .ship-head h1 { font-size: 1.45rem; margin: 4px 0; }
 .ship-head .kicker { color: #565959; font-size: .9rem; }
@@ -143,13 +143,12 @@
 .ship-fail .form-msg { min-height: 1.2em; }
 @media (max-width: 800px) { .ship-grid { grid-template-columns: 1fr; } }
 .tl-rider { position: absolute; width: 148px; height: 148px; margin: -74px 0 0 -74px; z-index: 6; pointer-events: none; }
-.tl-rider-pulse { position: absolute; inset: 28px; border-radius: 50%; background: rgba(6, 125, 98, 0.22); display: none; }
-.tl-rider.is-moving .tl-rider-pulse { display: block; animation: tlRiderPulse 2s ease-out infinite; }
-body.hl-page .tl-rider-pulse { background: rgba(234, 88, 12, 0.32); }
+.tl-rider-pulse { display: none !important; animation: none !important; }
+.tl-rider.is-moving .tl-rider-pulse { display: none !important; animation: none !important; }
 .tl-rider-plate { position: absolute; left: 34px; top: 112px; width: 80px; height: 16px; border-radius: 50%; background: rgba(15, 23, 42, 0.16); }
 .tl-rider-aim, .tl-rider-bob { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
 .tl-rider-img { width: 132px; height: 132px; object-fit: contain; transform: rotate(-90deg); display: block; }
-.tl-rider.is-moving .tl-rider-bob { animation: tlRiderBob 0.55s ease-in-out infinite; }
+.tl-rider-bob, .tl-rider.is-moving .tl-rider-bob { animation: none !important; }
 @keyframes tlRiderPulse { 0% { transform: scale(0.72); opacity: 0.75; } 100% { transform: scale(1.55); opacity: 0; } }
 @keyframes tlWheelSpin { to { transform: rotate(360deg); } }
 @keyframes tlRiderBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-2.5px); } }
@@ -352,19 +351,35 @@ body.hl-page .hl-below .ship-pipe { border: 0; background: #fff; border-radius: 
 .tl-courier-link{font-size:.82rem;font-weight:600;color:#1d4ed8}
 .tl-rider{perspective:600px}
 .tl-rider-aim,.tl-rider-bob{transform-style:preserve-3d}
-.tl-rider-bob{animation:none}
-.tl-rider.is-moving .tl-rider-bob{animation:tlRiderBob .55s ease-in-out infinite}
-.tl-rider-img{filter:drop-shadow(0 10px 8px rgba(15,23,42,.35)) drop-shadow(0 2px 2px rgba(15,23,42,.25));transform:rotateX(18deg) translateZ(12px)}
-.tl-rider-plate{background:radial-gradient(ellipse at center,rgba(15,23,42,.35),rgba(15,23,42,0) 70%);transform:rotateX(70deg)}
-@keyframes tlRiderBob{0%,100%{transform:translateY(0) rotateX(18deg)}50%{transform:translateY(-3px) rotateX(22deg)}}
-.hl-bike-3d img{filter:drop-shadow(0 8px 6px rgba(15,23,42,.35));transform:perspective(300px) rotateY(-18deg) rotateX(10deg);animation:none}
-.hl-bike-3d.is-moving img{animation:tlRiderBob 1.4s ease-in-out infinite}
+.tl-rider-bob,.tl-rider.is-moving .tl-rider-bob{animation:none !important}
+.tl-rider-img{filter:drop-shadow(0 10px 8px rgba(15,23,42,.35)) drop-shadow(0 2px 2px rgba(15,23,42,.25));transform:rotate(-90deg)}
+.tl-rider-plate{background:radial-gradient(ellipse at center,rgba(15,23,42,.35),rgba(15,23,42,0) 70%)}
+.hl-bike-3d img,.hl-bike-3d.is-moving img{filter:drop-shadow(0 8px 6px rgba(15,23,42,.35));animation:none !important}
 .hl-bike-idle{display:inline-flex;align-items:center;justify-content:center;width:52px;height:52px;border-radius:14px;background:#f8fafc;border:1px solid #e2e8f0}
 
 .ship-courier { margin: 6px 0 0; padding: 6px 10px; border: 1px solid #e3e6e6; border-radius: 8px; background: #fafafa; display: flex; flex-direction: column; gap: 2px; font-size: .88rem; }
 .ship-courier > b { color: #0f1111; text-transform: capitalize; }
 .ship-courier > span { color: #565959; font-size: .8rem; }
 
+.tl-map-block { margin: 0 0 14px; }
+.tl-map-chip { position: absolute; z-index: 5; left: 12px; top: 12px; max-width: min(280px, calc(100% - 24px)); background: #fff; border-radius: 12px; padding: 8px 12px; box-shadow: 0 8px 24px rgba(15, 23, 42, 0.16); pointer-events: none; display: flex; flex-direction: column; gap: 2px; }
+.tl-map-phase { font-size: 0.78rem; color: #0f766e; }
+.tl-map-eta { font-size: 0.95rem; font-weight: 800; color: #0f172a; }
+.tl-map-recenter { position: absolute; z-index: 5; right: 12px; bottom: 28px; border: 0; border-radius: 999px; background: #0f172a; color: #fff; font-weight: 700; padding: 8px 12px; cursor: pointer; }
+.tl-miles { list-style: none; display: flex; gap: 8px; overflow-x: auto; margin: 0 0 14px; padding: 0 0 4px; }
+.tl-mile { flex: 0 0 auto; min-width: 132px; border: 1px solid #e2e8f0; border-radius: 12px; padding: 8px 10px; background: #fff; }
+.tl-mile b { display: block; font-size: 0.82rem; }
+.tl-mile span { display: block; margin-top: 2px; color: #64748b; font-size: 0.75rem; }
+.tl-mile.is-done { border-color: #bbf7d0; background: #f0fdf4; }
+.tl-mile.is-done b { color: #047857; }
+.tl-mile.is-active { border-color: #fdba74; background: #fff7ed; }
+.tl-mile.is-active b { color: #c2410c; }
+.tl-mile.is-upcoming { color: #94a3b8; }
+.tl-drawer-btn { margin: 6px 0; border: 0; background: transparent; color: #0f766e; font-weight: 700; cursor: pointer; padding: 0; }
+.tl-drawer { margin-top: 4px; }
+.tl-drawer[hidden] { display: none; }
+.tl-eta-sub { display: block; color: #64748b; font-size: 0.78rem; font-weight: 600; }
+.tl-rider-pulse, .tl-rider-bob, .tl-rider.is-moving .tl-rider-bob, .hl-bike-3d img, .hl-bike-3d.is-moving img { animation: none !important; }
 @media print { .adm-shiptrack, .trk-progress, .trk-log, .trk-foot, .trk-nav { display: none !important; } }
 
 .hl-courier-frame { height: 58vh; min-height: 320px; background: #e5e3df; }

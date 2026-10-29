@@ -71,6 +71,13 @@
         );
     }
 
+    function milesHtml(list) {
+        if (!list || !list.length) return '';
+        return '<ol class="tl-miles">' + list.map(function (m) {
+            return '<li class="tl-mile is-' + m.state + '"><b>' + esc(m.label) + '</b>' + (m.detail && m.state === 'active' ? '<span>' + esc(m.detail) + '</span>' : '') + '</li>';
+        }).join('') + '</ol>';
+    }
+
     function drawersHtml(steps) {
         return '<div class="ts4-drawers">' + steps.map(function (s, i) {
             const ups = (s.updates || []).slice().sort(function (a, b) { return (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0); });
@@ -139,9 +146,10 @@
             (cs && cs.label ? '<div class="ts4-cstatus is-' + esc(cs.tone || 'label') + '"><span></span><b>' + esc(cs.label) + '</b>' + (cs.place ? ' · ' + esc(cs.place) : '') + (cs.at ? ' · ' + esc(fmtWhen(cs.at)) : '') + '</div>' : '') +
             '</div></div>' +
             railHtml(t) +
+            milesHtml(t.milestones) +
             '</section>' +
             '<div class="ts4-tiles">' +
-            (t.proximity ? tile('fa-location-dot', 'Delivery partner', t.proximity.label, (t.proximity.distanceKm != null ? t.proximity.distanceKm + ' km away' : '') + (t.proximity.etaMinutes ? ' · ~' + t.proximity.etaMinutes + ' min' : '')) : '') + tile('fa-location-dot', 'Where it is', latest ? latest.city || latest.title : headline, latest && latest.city ? latest.title : '') +
+            (t.proximity ? tile('fa-location-dot', 'Delivery partner', t.proximity.label, (t.proximity.distanceText || (t.proximity.distanceKm != null ? t.proximity.distanceKm + ' km away' : '')) + (t.proximity.etaText ? ' · ' + t.proximity.etaText + ' with traffic' : t.proximity.etaMinutes ? ' · ~' + t.proximity.etaMinutes + ' min' : '')) : '') + tile('fa-location-dot', 'Where it is', latest ? latest.city || latest.title : headline, latest && latest.city ? latest.title : '') +
             tile('fa-calendar-check', t.rank >= 5 ? 'Delivered' : 'Delivery by', t.deliveryBy || (t.expected && t.expected.deliveryText) || String(((steps.find(function (s) { return s.key === 'delivered'; }) || {}).expectedLabel || '')).replace(/^Expected\s*/i, '') || '—', t.rank >= 5 ? '' : t.dates && t.dates.deliveryKind === 'courier' ? 'Confirmed by courier' : 'Seller estimate') +
             tile('fa-truck', 'Courier', partner ? partner.name : o.courierProviderLabel || o.courierProvider || '—', (partner && partner.trackingNo) || o.courierTrackingNo || '') +
             tile('fa-clock-rotate-left', 'Last update', latest && latest.at ? fmtWhen(latest.at) : o.updatedAt ? fmtWhen(o.updatedAt) : '—', st.scans ? st.scans + ' courier scans' : '') +

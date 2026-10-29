@@ -1161,7 +1161,12 @@ function drawCommerceShipTracks(root, data) {
         const kind = el.getAttribute('data-kind');
         const linked = data.linked || {};
         const track = kind === 'return' ? data.returnTrack : kind === 'replacement' ? linked.replacementTrack : kind === 'origin' ? linked.originReturnTrack : data.track;
-        window.ShipTrack.draw(el, track, data.order || {});
+        const shipment = Object.assign({}, data.order || {});
+        if (!kind || kind === 'order') {
+            shipment.live = data.live || null;
+            shipment.timeline = data.timeline || null;
+        }
+        window.ShipTrack.draw(el, track, shipment);
     });
 }
 
