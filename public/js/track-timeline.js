@@ -132,9 +132,43 @@
         return html;
     }
 
-    function milesHtml(list) {
-        if (!list || !list.length) return '';
-        return '<ol class="tl-miles">' + list.map((m) => '<li class="tl-mile is-' + esc(m.state) + '"><b>' + esc(m.label) + '</b>' + (m.detail && m.state === 'active' ? '<span>' + esc(m.detail) + '</span>' : '') + '</li>').join('') + '</ol>';
+    function partnerContact(t) {
+        const steps = (t && t.steps) || [];
+        for (let i = steps.length - 1; i >= 0; i--) {
+            const step = steps[i];
+            if (step.agent && (step.agent.name || step.agent.phone)) return step.agent;
+            if (step.contact && (step.contact.name || step.contact.phone)) return step.contact;
+            if (step.pickup && step.pickup.agent && (step.pickup.agent.name || step.pickup.agent.phone)) return step.pickup.agent;
+        }
+        return null;
+    }
+
+    function shareUrl(data) {
+        let share = (data && data.trackUrl) || '';
+        const live = data && data.live;
+        if (!share && live && live.watchToken && typeof location !== 'undefined' && location.origin) {
+            share = location.origin + '/track-commerce?token=' + encodeURIComponent(live.watchToken);
+        }
+        if (share && share.charAt(0) === '/' && typeof location !== 'undefined' && location.origin) share = location.origin + share;
+        return share;
+    }
+
+    function assistHtml(t, data) {
+        if (!t || t.cancelled) return '';
+        const partner = partnerContact(t);
+        const phone = partner && String(partner.phone || '').replace(/[^\d+]/g, '');
+        const share = shareUrl(data);
+        const live = data && data.live;
+        const bits = [];
+        if (phone) bits.push('<a class="tl-act" href="tel:' + esc(phone) + '">Call ' + esc((partner && partner.name) || 'partner') + '</a>');
+        if (share) bits.push('<button type="button" class="tl-act" data-tl-copy="' + esc(share) + '">Share tracking</button>');
+        if (t.orderCode) bits.push('<button type="button" class="tl-act" data-tl-copy="' + esc(t.orderCode) + '">Copy order code</button>');
+        if (t.deliveryOtp) bits.push('<button type="button" class="tl-act" data-tl-copy="' + esc(t.deliveryOtp) + '">Copy delivery code</button>');
+        const meta = [];
+        if (live && live.dropLabel) meta.push(live.dropLabel);
+        if (t.deliveryBy) meta.push('Delivery ' + t.deliveryBy);
+        if (!bits.length && !meta.length) return '';
+        return '<section class="tl-assist">' + (bits.length ? '<div class="tl-acts">' + bits.join('') + '</div>' : '') + (meta.length ? '<p class="tl-assist-meta">' + esc(meta.join(' · ')) + '</p>' : '') + '</section>';
     }
 
     function mapBlock(live) {
@@ -227,7 +261,7 @@
         const settled = t.steps && t.steps.length && t.steps.every((step) => step.state === 'done');
         return (
             '<div class="tl' + (animate ? '' : ' tl-static') + (settled ? ' is-settled' : '') + '">' +
-            milesHtml(t.milestones) +
+            assistHtml(t, data) +
             proofHtml(t) +
             mapBlock(data.live) +
             dateStrip(t) +
@@ -252,6 +286,24 @@
 
     function bind(root) {
         const scope = root && root.querySelector ? root : document;
+        scope.querySelectorAll('[data-tl-copy]').forEach((btn) => {
+            if (btn.dataset.bound) return;
+            btn.dataset.bound = '1';
+            const label = btn.textContent;
+            btn.addEventListener('click', async () => {
+                const text = btn.getAttribute('data-tl-copy') || '';
+                try {
+                    if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(text);
+                    else return;
+                    btn.textContent = 'Copied';
+                    setTimeout(() => {
+                        btn.textContent = label;
+                    }, 1200);
+                } catch (err) {
+                    btn.textContent = label;
+                }
+            });
+        });
         scope.querySelectorAll('.tl-drawer-btn').forEach((btn) => {
             if (btn.dataset.bound) return;
             btn.dataset.bound = '1';
@@ -1123,9 +1175,20 @@
         return (km < 10 ? km.toFixed(1) : String(Math.round(km))) + ' km';
     }
 
+    function arrivalClock(seconds) {
+        const when = new Date(Date.now() + Math.max(0, Number(seconds) || 0) * 1000);
+        try {
+            return new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit' }).format(when);
+        } catch (err) {
+            return '';
+        }
+    }
+
     function etaSub(dur) {
         if (!dur) return '';
-        return dur.distanceText || (dur.distanceValue != null ? formatKm(dur.distanceValue) : '');
+        const km = dur.distanceText || (dur.distanceValue != null ? formatKm(dur.distanceValue) : '');
+        const by = dur.value ? 'by ' + arrivalClock(dur.value) : '';
+        return [km, by].filter(Boolean).join(' · ');
     }
 
     function trackLine(el, color, weight, z) {

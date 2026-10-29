@@ -619,6 +619,9 @@ li.drawer-flash .ship-copy{animation:shipFlash 1.5s ease}
 
 .hl-legend button{font:inherit;font-weight:700;font-size:.82rem;border:1px solid transparent;background:transparent;border-radius:999px;padding:4px 10px;cursor:pointer;color:#0f172a;display:inline-flex;align-items:center}
 .hl-legend button:hover{background:#f1f5f9}.hl-legend button.is-on{border-color:#1d4ed8;background:#eff6ff}
+.tl-acts{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
+.tl-act{border:1px solid #dbe7f8;background:#eff6ff;color:#1d4ed8;border-radius:999px;padding:8px 12px;font-weight:800;font-size:.82rem;text-decoration:none;cursor:pointer;font-family:inherit}
+.tl-assist-meta{margin:0 0 12px;color:#475569;font-size:.82rem;line-height:1.45}
 .trk-qr{display:flex;gap:12px;align-items:center;background:#fff;border:1px solid #e6eeea;border-radius:16px;padding:12px 14px;margin:10px 0}
 .trk-qr-copy{flex:1;min-width:0}
 .trk-qr-copy b{display:block}

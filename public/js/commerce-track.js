@@ -34,6 +34,18 @@
         return 'Finding a delivery partner';
     }
 
+    function sheetActs(track) {
+        if (!track) return '';
+        const href = telHref(track.agent && track.agent.phone);
+        const code = track.orderId || '';
+        const bits = [];
+        if (href) bits.push('<a class="tl-act" href="' + esc(href) + '">Call partner</a>');
+        bits.push('<button type="button" class="tl-act" data-copy-href="1">Share tracking</button>');
+        if (code) bits.push('<button type="button" class="tl-act" data-copy="' + esc(code) + '">Copy order code</button>');
+        if (track.deliveryOtp) bits.push('<button type="button" class="tl-act" data-copy="' + esc(track.deliveryOtp) + '">Copy delivery code</button>');
+        return bits.length ? '<div class="tl-acts">' + bits.join('') + '</div>' : '';
+    }
+
     function milesHtml(shipment) {
         const miles = (shipment && shipment.timeline && shipment.timeline.milestones) || [];
         if (!miles.length) return '';
@@ -832,7 +844,7 @@
             (detail ? '<p>' + esc(detail) + '</p>' : '') +
             '<p class="trk-stepno">' + (delivered ? 'Completed' : 'Step ' + stepNo + ' of ' + (steps.length || 5)) + '</p>' + courierChip(track) +
             '</div>' + board + '</section>' +
-            milesHtml(shipment) +
+            sheetActs(track) +
             embeddedMap(shipment) +
             railHtml(track) +
             statsHtml(track) +
@@ -902,7 +914,7 @@
             qrHtml(track) +
             otpHtml('Delivery OTP', track.deliveryOtp, track) +
             otpHtml('Pickup OTP', track.pickupOtp, track) +
-            milesHtml(shipment) +
+            sheetActs(track) +
             hlNowHtml(track) +
             railHtml(track) +
             board +

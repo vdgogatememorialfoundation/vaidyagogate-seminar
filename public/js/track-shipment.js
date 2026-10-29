@@ -146,7 +146,6 @@
             (cs && cs.label ? '<div class="ts4-cstatus is-' + esc(cs.tone || 'label') + '"><span></span><b>' + esc(cs.label) + '</b>' + (cs.place ? ' · ' + esc(cs.place) : '') + (cs.at ? ' · ' + esc(fmtWhen(cs.at)) : '') + '</div>' : '') +
             '</div></div>' +
             railHtml(t) +
-            milesHtml(t.milestones) +
             '</section>' +
             '<div class="ts4-tiles">' +
             (t.proximity ? tile('fa-location-dot', 'Delivery partner', t.proximity.label, (t.proximity.distanceText || (t.proximity.distanceKm != null ? t.proximity.distanceKm + ' km away' : '')) + (t.proximity.etaText ? ' · ' + t.proximity.etaText + ' with traffic' : t.proximity.etaMinutes ? ' · ~' + t.proximity.etaMinutes + ' min' : '')) : '') + tile('fa-location-dot', 'Where it is', latest ? latest.city || latest.title : headline, latest && latest.city ? latest.title : '') +
