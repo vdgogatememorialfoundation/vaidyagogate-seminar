@@ -9,6 +9,7 @@ const path = require('path');
 const vm = require('vm');
 const { payloadFor, attach, haversine, publishTrack } = require('../lib/rider-live-socket');
 const shipmentEngine = require('../lib/shipment-engine');
+const shopTimeline = require('../lib/shop-timeline');
 
 function loadTimeline() {
     const sandbox = {
@@ -222,6 +223,40 @@ async function main() {
     assert.strictEqual(track.pushed, true);
     assert.ok(track.messages.some((msg) => msg.type === 'track' && msg.source === 'poll' && msg.phase === 'Preparing your order' && msg.deliveryOtp === '4821'));
     assert.ok(track.messages.some((msg) => msg.source === 'webhook' && msg.kind === 'picked_up' && msg.phase === 'On the way to you' && msg.distance === '1.2 km away'));
+    const failedOnly = [{ kind: 'failed', title: 'Delivery attempt was unsuccessful', at: '2026-10-29T10:00:00Z' }];
+    assert.strictEqual(shipmentEngine.operationalFromEvents(failedOnly), 'DELIVERY_ATTEMPT_FAILED');
+    const reassigned = failedOnly.concat([
+        { kind: 'rescheduled', title: 'New delivery attempt scheduled', at: '2026-10-29T10:05:00Z' },
+        { kind: 'agent_assigned', title: 'Delivery partner assigned', detail: 'Neha', at: '2026-10-29T10:06:00Z' }
+    ]);
+    assert.strictEqual(shipmentEngine.operationalFromEvents(reassigned), null);
+    const order = {
+        id: 9,
+        orderCode: '482910334455',
+        commerceMode: 'hyperlocal',
+        commerceProvider: 'tookan',
+        status: 'shipped',
+        commerceStage: 'out_for_delivery',
+        createdAt: '2026-10-29T08:00:00Z',
+        storeLat: 19.07,
+        storeLng: 72.87,
+        dropLat: 19.08,
+        dropLng: 72.88,
+        agentName: 'Neha',
+        agentLat: 19.075,
+        agentLng: 72.875,
+        agentLocationAt: new Date().toISOString(),
+        liveLeg: 'to_store',
+        trackingToken: 'tokentoken12',
+        parcelInfo: { reattempts: [{ at: '2026-10-29T10:05:00Z' }] }
+    };
+    const closed = shopTimeline.buildLiveView(order, shopTimeline.buildShopTimeline(order, failedOnly, {}), 'test-key');
+    assert.strictEqual(closed, null);
+    const timeline = shopTimeline.buildShopTimeline(order, reassigned, {});
+    const opened = shopTimeline.buildLiveView(order, timeline, 'test-key');
+    assert.ok(opened && opened.agent);
+    assert.strictEqual(opened.leg, 'to_store');
+    assert.strictEqual(opened.phaseLabel, 'Heading to the store');
     console.log('rider motion ok', live.messages.length, 'socket messages');
     console.log('track cards ok', track.messages.length, 'track messages');
 }

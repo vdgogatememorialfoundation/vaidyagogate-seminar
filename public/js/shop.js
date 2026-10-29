@@ -828,10 +828,11 @@ async function openShopOrder(id) {
                 const r = await fetchOrder(id);
                 if (!r.ok) return;
                 const next = shopOrderStoryOf(r.data);
-                if (next !== shopOrderStory) {
+                const mapOpen = shopMapOpen(r.data);
+                if (next !== shopOrderStory || mapOpen !== shopHasMap()) {
                     shopOrderStory = next;
                     renderOrderDetail(r.data);
-                } else if (window.TrackTimeline && r.data.live) {
+                } else if (mapOpen && window.TrackTimeline) {
                     TrackTimeline.mount(r.data.live);
                 }
                 if (termOrder(r.data) && !r.data.returnView) stopPolling();
@@ -844,7 +845,18 @@ function shopOrderStoryOf(data) {
     const t = (data && data.timeline) || {};
     const steps = (t.steps || []).map((step) => (step.key || '') + ':' + (step.state || '') + ':' + (step.title || '')).join('|');
     const o = (data && data.order) || {};
-    return [o.id || '', o.status || '', t.headline || '', t.cancelled ? '1' : '0', t.deliveryOtp || '', steps].join('~');
+    const names = (t.steps || []).map((step) => ((step.agent && step.agent.name) || (step.contact && step.contact.name) || '')).join(',');
+    return [o.id || '', o.status || '', t.headline || '', t.cancelled ? '1' : '0', t.deliveryOtp || '', names, steps].join('~');
+}
+
+function shopMapOpen(data) {
+    const live = data && data.live;
+    return !!(live && (live.mapsApiKey || live.courierView));
+}
+
+function shopHasMap() {
+    const root = document.getElementById('view-order');
+    return !!(root && root.querySelector('.tl-map, #tl-map-slot'));
 }
 
 async function shopRequestReturn(id) {

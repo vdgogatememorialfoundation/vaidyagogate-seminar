@@ -1052,6 +1052,8 @@
             cancelled: !!track.cancelled,
             otp: track.deliveryOtp || '',
             pickup: track.pickupOtp || '',
+            partner: (track.agent && track.agent.name) || '',
+            map: track.map && track.map.enabled ? 1 : 0,
             steps: steps
         });
     }
