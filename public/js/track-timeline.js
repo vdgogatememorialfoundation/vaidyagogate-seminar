@@ -220,13 +220,6 @@
         );
     }
 
-    function alertHtml(t) {
-        if (!t || !t.steps) return '';
-        const step = t.steps.find((s) => s.key === 'out_for_delivery' && s.operational === 'DELIVERY_ATTEMPT_FAILED');
-        if (!step) return '';
-        return '<div class="tl-step active"><div class="tl-title">' + esc(step.title) + '</div>' + extra(step) + '</div>';
-    }
-
     function render(data, opts) {
         const t = data.timeline;
         if (!t) return '';
@@ -237,7 +230,22 @@
             milesHtml(t.milestones) +
             proofHtml(t) +
             mapBlock(data.live) +
-            alertHtml(t) +
+            dateStrip(t) +
+            expectedStrip(t) +
+            courierCard(t, data) +
+            (t.steps || [])
+                .map((s, i) => {
+                    const open = s.state === 'active';
+                    const hint = s.state === 'done' ? 'This step is complete.' : s.state === 'active' ? 'This step is in progress.' : 'This step has not started.';
+                    const body = (s.summary ? '<div class="tl-sum">' + esc(s.summary) + '</div>' : '<div class="tl-sum">' + esc(hint) + '</div>') + extra(s, data) + updates(s.updates);
+                    return '<div class="tl-step ' + s.state + '"' +
+                        (s.lineUntil ? ' data-line-since="' + Number(s.lineSince) + '" data-line-until="' + Number(s.lineUntil) + '" data-line-floor="' + Number(s.lineFloor || 12) + '"' : '') +
+                        ' style="--i:' + i + (s.lineFill != null ? ';--line:' + Number(s.lineFill) : '') + '"><div class="tl-dot">' + (s.state === 'done' ? '&#10003;' : '') + '</div>' +
+                        '<div class="tl-title">' + esc(s.title) + (s.expectedLabel && s.state !== 'done' && !(s.at && s.state === 'active') ? '<span class="tl-expect">' + esc(s.expectedLabel) + '</span>' : '') + (s.at && s.state !== 'upcoming' ? '<span class="tl-time">' + esc(when(s.at)) + '</span>' : '') + '</div>' +
+                        '<button type="button" class="tl-drawer-btn" aria-expanded="' + (open ? 'true' : 'false') + '">' + (open ? 'Hide details' : 'View details') + '</button>' +
+                        '<div class="tl-drawer"' + (open ? '' : ' hidden') + '>' + body + '</div></div>';
+                })
+                .join('') +
             '</div>'
         );
     }
