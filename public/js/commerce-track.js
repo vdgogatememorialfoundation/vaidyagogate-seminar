@@ -821,6 +821,15 @@
         });
     }
 
+    function cardsHtml(track) {
+        const cards = (track && track.cards) || [];
+        if (!cards.length) return '';
+        return '<section class="tl-cards" aria-label="Order details">' + cards.map((card) => {
+            const now = card.key === 'now' ? ' is-now' : '';
+            return '<article class="tl-mini' + now + '" data-tl-card="' + esc(card.key) + '"><div class="lbl">' + esc(card.label) + '</div><div class="val" data-tl-card-val>' + esc(card.value) + '</div>' + (card.detail ? '<div class="sub" data-tl-card-sub>' + esc(card.detail) + '</div>' : '') + '</article>';
+        }).join('') + '</section>';
+    }
+
     function documentHtml(track, shipment) {
         const ret = isReturn(track);
         const courier = (track.shipment && track.shipment.courier) || (ret ? 'Store pickup / courier' : 'Gogate Products');
@@ -849,6 +858,7 @@
             '<p class="trk-stepno">' + (delivered ? 'Completed' : 'Step ' + stepNo + ' of ' + (steps.length || 5)) + '</p>' + courierChip(track) +
             '</div>' + board + '</section>' +
             sheetActs(track) +
+            cardsHtml(track) +
             embeddedMap(shipment) +
             railHtml(track) +
             statsHtml(track) +
@@ -915,6 +925,7 @@
             '<p class="hl-sub">' + esc(partnerLine(track, liveNow)) + '</p>' +
             (liveNow.agent ? (liveNow.leg === 'to_store' ? '<p class="hl-wait">' + esc(liveNow.phaseLabel || 'Heading to the store') + '.</p>' : '') : '<p class="hl-wait">Dashed route from the store to your address. The partner appears here as soon as one is assigned.</p>') +
             '</div><div id="tl-eta" class="hl-eta" hidden><span class="hl-eta-lbl">' + esc(liveNow.phaseLabel || 'Arriving') + '</span><b class="hl-eta-val"></b><span class="tl-eta-sub"></span></div></div>' +
+            cardsHtml(track) +
             qrHtml(track) +
             otpHtml('Delivery OTP', track.deliveryOtp, track) +
             otpHtml('Pickup OTP', track.pickupOtp, track) +
@@ -1217,6 +1228,7 @@
     if (tracker && sub) {
         poll();
         setInterval(poll, 8000);
+        document.addEventListener('tl-track-refresh', () => { drawn = ''; poll(); });
         document.addEventListener('click', (e) => { if (e.target.closest && e.target.closest('.trk-refresh')) { pipePlayed = false; poll(); } });
     }
     setInterval(tickPipe, 2000);

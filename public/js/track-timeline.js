@@ -257,6 +257,26 @@
         );
     }
 
+    function cardsHtml(t) {
+        const cards = (t && t.cards) || [];
+        if (!cards.length) return '';
+        return (
+            '<section class="tl-cards" aria-label="Order details">' +
+            cards
+                .map((card) => {
+                    const now = card.key === 'now' ? ' is-now' : '';
+                    return (
+                        '<article class="tl-mini' + now + '" data-tl-card="' + esc(card.key) + '"><div class="lbl">' + esc(card.label) + '</div><div class="val" data-tl-card-val>' +
+                        esc(card.value) + '</div>' +
+                        (card.detail ? '<div class="sub" data-tl-card-sub>' + esc(card.detail) + '</div>' : '<div class="sub" data-tl-card-sub hidden></div>') +
+                        '</article>'
+                    );
+                })
+                .join('') +
+            '</section>'
+        );
+    }
+
     function courierCard(t, data) {
         const c = t && t.courier;
         if (!c || !(c.trackingNo || c.provider)) return '';
@@ -280,6 +300,7 @@
         return (
             '<div class="tl' + (animate ? '' : ' tl-static') + (settled ? ' is-settled' : '') + '">' +
             assistHtml(t, data) +
+            cardsHtml(t) +
             proofHtml(t) +
             mapBlock(data.live) +
             dateStrip(t) +
@@ -542,9 +563,181 @@
         };
     }
 
+    let trackSocket = null;
+    let trackToken = '';
+    let trackRetry = null;
+    let trackRefreshTimer = null;
+
+    function cardHost() {
+        return document.querySelector('.tl') || document.querySelector('.hl-sheet') || document.querySelector('.trk');
+    }
+
+    function ensureCard(key, label) {
+        if (!document.querySelector) return null;
+        let section = document.querySelector('.tl-cards');
+        if (!section) {
+            const host = cardHost();
+            if (!host) return null;
+            section = document.createElement('section');
+            section.className = 'tl-cards';
+            section.setAttribute('aria-label', 'Order details');
+            const assist = host.querySelector('.tl-assist');
+            if (assist && assist.parentNode === host) host.insertBefore(section, assist.nextSibling);
+            else host.insertBefore(section, host.firstChild);
+        }
+        let card = section.querySelector('[data-tl-card="' + key + '"]');
+        if (card) return card;
+        card = document.createElement('article');
+        card.className = 'tl-mini' + (key === 'now' ? ' is-now' : '');
+        card.setAttribute('data-tl-card', key);
+        const lbl = document.createElement('div');
+        lbl.className = 'lbl';
+        lbl.textContent = label;
+        const val = document.createElement('div');
+        val.className = 'val';
+        val.setAttribute('data-tl-card-val', '');
+        const sub = document.createElement('div');
+        sub.className = 'sub';
+        sub.setAttribute('data-tl-card-sub', '');
+        sub.hidden = true;
+        card.appendChild(lbl);
+        card.appendChild(val);
+        card.appendChild(sub);
+        if (key === 'now') section.insertBefore(card, section.firstChild);
+        else section.appendChild(card);
+        return card;
+    }
+
+    function setCardText(key, label, value, detail) {
+        const text = String(value || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+        if (!text) return;
+        const card = ensureCard(key, label);
+        if (!card) return;
+        const val = card.querySelector('[data-tl-card-val]');
+        const sub = card.querySelector('[data-tl-card-sub]');
+        if (val) val.textContent = text;
+        if (sub) {
+            const extra = String(detail || '').replace(/\s+/g, ' ').trim().slice(0, 90);
+            sub.textContent = extra;
+            sub.hidden = !extra;
+        }
+        card.classList.add('tl-fresh');
+        setTimeout(() => card.classList.remove('tl-fresh'), 1400);
+    }
+
+    function paintOtp(code) {
+        const otp = String(code || '').replace(/\s+/g, '');
+        if (!/^\d{4,8}$/.test(otp)) return;
+        const boxes = document.querySelectorAll ? document.querySelectorAll('.ship-otp') : [];
+        let found = false;
+        boxes.forEach((box) => {
+            const lbl = box.querySelector('.lbl');
+            if (!lbl || !/delivery otp/i.test(lbl.textContent || '')) return;
+            const codeEl = box.querySelector('.code');
+            if (!codeEl) return;
+            codeEl.textContent = otp;
+            found = true;
+        });
+        if (found) return;
+        const host = cardHost();
+        if (!host) return;
+        const box = document.createElement('div');
+        box.className = 'ship-otp';
+        const lbl = document.createElement('div');
+        lbl.className = 'lbl';
+        lbl.textContent = 'Delivery OTP';
+        const codeEl = document.createElement('div');
+        codeEl.className = 'code';
+        codeEl.textContent = otp;
+        const note = document.createElement('div');
+        note.className = 'note';
+        note.textContent = 'Share this code with the delivery partner at your door.';
+        box.appendChild(lbl);
+        box.appendChild(codeEl);
+        box.appendChild(note);
+        const cards = host.querySelector('.tl-cards');
+        if (cards && cards.parentNode === host) host.insertBefore(box, cards.nextSibling);
+        else host.insertBefore(box, host.firstChild);
+    }
+
+    function paintPartnerPhone(phone) {
+        const clean = String(phone || '').replace(/[^\d+]/g, '');
+        if (clean.length < 6 || clean.length > 16) return;
+        document.querySelectorAll('a.hl-call, a.tl-act[href^="tel:"]').forEach((link) => {
+            link.setAttribute('href', 'tel:' + clean);
+        });
+    }
+
+    function applyTrackMessage(msg) {
+        if (!msg || msg.type !== 'track' || !document.querySelector) return;
+        if (msg.phase) setCardText('now', 'Right now', msg.phase, '');
+        if (msg.partner) setCardText('partner', 'Delivery partner', msg.partner, msg.phone || '');
+        if (msg.distance) setCardText('away', 'Distance', msg.distance, 'From your address');
+        if (msg.pay) setCardText('pay', 'Payment', msg.pay, '');
+        if (msg.deliveryOtp) paintOtp(msg.deliveryOtp);
+        paintPartnerPhone(msg.phone);
+        const nameEl = document.querySelector('.hl-partner-name');
+        if (nameEl && msg.partner) nameEl.textContent = String(msg.partner).replace(/\s+/g, ' ').trim().slice(0, 80);
+        const wait = document.querySelector('.hl-wait');
+        if (wait && msg.phase) wait.textContent = String(msg.phase).replace(/\s+/g, ' ').trim().slice(0, 80);
+        if (msg.source === 'webhook' && msg.kind) {
+            if (trackRefreshTimer) clearTimeout(trackRefreshTimer);
+            trackRefreshTimer = setTimeout(() => {
+                trackRefreshTimer = null;
+                try {
+                    document.dispatchEvent(new CustomEvent('tl-track-refresh'));
+                } catch (e) {}
+            }, 700);
+        }
+    }
+
+    function scheduleTrackRetry() {
+        if (trackRetry || !trackToken) return;
+        trackRetry = setTimeout(() => {
+            trackRetry = null;
+            openTrackSocket(trackToken);
+        }, 4000);
+    }
+
+    function openTrackSocket(token) {
+        token = String(token || '').trim();
+        if (token.length < 8 || typeof WebSocket === 'undefined') return;
+        if (trackToken === token && trackSocket && trackSocket.readyState <= 1) return;
+        trackToken = token;
+        if (trackRetry) {
+            clearTimeout(trackRetry);
+            trackRetry = null;
+        }
+        if (trackSocket) {
+            trackSocket.onclose = null;
+            try { trackSocket.close(); } catch (e) {}
+            trackSocket = null;
+        }
+        const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        let ws;
+        try {
+            ws = new WebSocket(proto + '//' + location.host + '/api/public/commerce/track-live?token=' + encodeURIComponent(trackToken));
+        } catch (e) {
+            scheduleTrackRetry();
+            return;
+        }
+        trackSocket = ws;
+        ws.onmessage = (ev) => {
+            let msg;
+            try { msg = JSON.parse(ev.data); } catch (e) { return; }
+            applyTrackMessage(msg);
+        };
+        ws.onerror = () => {};
+        ws.onclose = () => {
+            if (trackSocket === ws) trackSocket = null;
+            scheduleTrackRetry();
+        };
+    }
+
     function watchRider(token) {
         token = String(token || '').trim();
         if (token.length < 8) return;
+        openTrackSocket(token);
         if (riderToken === token && riderSocket && riderSocket.readyState <= 1) return;
         riderToken = token;
         riderMisses = 0;
