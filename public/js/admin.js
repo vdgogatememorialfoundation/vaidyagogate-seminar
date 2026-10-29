@@ -264,7 +264,8 @@ const STAFF_MODULE_TO_ADMIN_TAB = {
     'support-tickets': 'tab-support-tickets',
     'contact-center': 'tab-contact-center',
     'book-inventory': 'tab-book-sales',
-    'book-orders': 'tab-book-sales'
+    'book-orders': 'tab-book-sales',
+    'field-force': 'tab-field-force'
 };
 
 function isStaffCrmUserClient(u) {
@@ -2459,7 +2460,8 @@ const STAFF_PORTAL_MODULE_DEFS = [
     ['etickets', 'E-tickets lookup'],
     ['payments', 'Payments & seminar orders'],
     ['pos', 'On-spot POS (register & collect, private pay links)'],
-    ['contact-center', 'Contact Center (assigned applicant follow-up)']
+    ['contact-center', 'Contact Center (assigned applicant follow-up)'],
+    ['field-force', 'Appointments & field force']
 ].concat(
     (window.ADMIN_MODULE_DEFS || [])
         .filter((d) => !Object.values(STAFF_MODULE_TO_ADMIN_TAB).includes(d.id))
