@@ -296,6 +296,7 @@ function mountPaymentsRoutes() {
         listDoctorPaymentOptions,
         parsePositiveUserId
     });
+    require('./lib/tookan-field-routes').registerTookanFieldRoutes(app, db);
     require('./lib/staff-portal-routes').registerStaffPortalRoutes(app, db, {
         portalTracking,
         notifEngine,

@@ -155,7 +155,8 @@
             'payments',
             'etickets',
             'contact-center',
-            'pos'
+            'pos',
+            'field-force'
         ];
         panelIds.forEach((id) => {
             const panel = document.getElementById('staff-panel-' + id);

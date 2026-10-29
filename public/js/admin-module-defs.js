@@ -24,6 +24,7 @@
         { id: 'tab-cancellation-review', label: 'Cancellation review' },
         { id: 'tab-refund-tracking', label: 'Refund tracking' },
         { id: 'tab-book-sales', label: 'Book sales' },
+        { id: 'tab-field-force', label: 'Appointments & field force' },
         { id: 'tab-certificates', label: 'Certificate Management' },
         { id: 'tab-volunteers', label: 'Volunteers' },
         { id: 'tab-volunteer-assignments', label: 'Volunteer assignments' },
