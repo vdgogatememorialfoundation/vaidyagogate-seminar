@@ -339,6 +339,11 @@
             <!-- Seminar Management -->
             <div id="tab-seminars" class="tab-pane hidden">
                 <h2 style="margin-bottom: 20px;">Seminar Management</h2>
+                <div class="card" id="online-seminar-settings" style="margin-bottom:16px;border:1px solid #99f6e4;background:#f0fdfa;">
+                    <h3 style="margin:0 0 6px;color:#0f766e;">Online seminar connections</h3>
+                    <p style="margin:0 0 12px;color:#115e59;font-size:0.88rem;">Add the office accounts once. Each seminar can then be at a venue, or online on VGMF Hall, Zoom, Google Meet, Zoho Backstage, or Zoho Webinar. Keys stay on this server.</p>
+                    <div id="online-seminar-settings-body"><p style="color:#64748b;">Open this tab to load the connection form.</p></div>
+                </div>
                 <div class="card">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
                         <h3>Active Seminars</h3>
@@ -3211,6 +3216,42 @@
                     <input type="text" id="seminar-location-text" placeholder="e.g. Smt Shakuntala Shetty Auditorium, Pune — or TBD">
                     <p style="font-size:0.8rem;color:#64748b;margin:4px 0 0;">Doctors see this on a map when set. Enter <strong>TBD</strong> if the venue is not final yet. Requires <code>GOOGLE_MAPS_API_KEY</code> (Maps Embed API) on the server.</p>
                 </div>
+                <div id="seminar-online-card" style="grid-column:1/-1;padding:14px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:10px;">
+                    <h4 style="margin:0 0 8px;color:#0f766e;">Online or at the venue</h4>
+                    <p style="font-size:0.82rem;color:#115e59;margin:0 0 10px;">Offline seminars stay on the venue map. Online seminars give registered doctors a join button. VGMF Hall runs on this server. The other options use the accounts saved under Online seminar connections.</p>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                        <div>
+                            <label>How people attend</label>
+                            <select id="seminar-attend-mode">
+                                <option value="offline">At the venue</option>
+                                <option value="online">Online</option>
+                            </select>
+                        </div>
+                        <div id="seminar-provider-wrap">
+                            <label>Online platform</label>
+                            <select id="seminar-meeting-provider">
+                                <option value="vgmf">VGMF Hall (our webinar)</option>
+                                <option value="zoom">Zoom</option>
+                                <option value="google_meet">Google Meet</option>
+                                <option value="zoho_backstage">Zoho Backstage</option>
+                                <option value="zoho_webinar">Zoho Webinar</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="seminar-online-extra" style="margin-top:12px;display:grid;gap:10px;">
+                        <label style="display:flex;align-items:center;gap:8px;font-weight:600;">
+                            <input type="checkbox" id="seminar-meeting-waiting"> Waiting room on VGMF Hall (host admits each doctor)
+                        </label>
+                        <label id="seminar-manual-wrap" style="display:flex;align-items:center;gap:8px;font-weight:600;">
+                            <input type="checkbox" id="seminar-meeting-manual"> Use a link I paste instead of creating one from the connected account
+                        </label>
+                        <div><label>Attendee link (optional)</label><input type="url" id="seminar-meeting-join-url" placeholder="https://"></div>
+                        <div><label>Host link (optional)</label><input type="url" id="seminar-meeting-host-url" placeholder="Shown only in this office form"></div>
+                        <div><label>Passcode (optional)</label><input type="text" id="seminar-meeting-passcode" autocomplete="off" placeholder="Doctors must enter this to join"></div>
+                        <p id="seminar-online-warning" style="margin:0;font-size:0.82rem;color:#9a3412;"></p>
+                        <button type="button" class="btn-primary" style="background:#0f766e;max-width:240px;" onclick="openOnlineSeminarHost()">Open host hall</button>
+                    </div>
+                </div>
                 <div><label>Terms and Conditions</label><textarea id="seminar-terms" rows="3"></textarea></div>
                 <div style="background: #eff6ff; padding: 15px; border: 1px solid #bfdbfe; border-radius: 12px;">
                     <h4 style="margin-bottom: 10px; color:#1e40af;">Per-seminar links, policy &amp; form override</h4>
@@ -3515,6 +3556,7 @@
     <script src="/js/track-timeline.js?v=20261003tl"></script>
     <script src="/js/admin-commerce.js?v=20261003tl"></script>
     <script src="/js/admin.js?v=20261029vl4"></script>
+    <script src="/js/admin-online-seminar.js?v=20261030hall1"></script>
     <script src="/js/admin-videos.js?v=20261029vl6"></script>
 </body>
 </html>
