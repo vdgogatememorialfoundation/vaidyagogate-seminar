@@ -32,17 +32,19 @@ button:disabled{opacity:.6}
 (function () {
   var params = new URLSearchParams(location.search);
   var token = params.get('token') || '';
-  var orderCode = params.get('order') || '';
+  var code = params.get('code') || params.get('order') || params.get('id') || '';
+  var lookup = token || code;
   var lead = document.getElementById('lead');
   var order = document.getElementById('order');
   var msg = document.getElementById('msg');
   var go = document.getElementById('go');
-  if (orderCode) order.textContent = 'Order ' + orderCode;
-  if (token.length < 8) {
-    lead.textContent = 'This scan link is incomplete.';
+  if (code && code !== token) order.textContent = 'Order ' + code;
+  if (lookup.length < 4) {
+    lead.textContent = 'This scan code is incomplete.';
     return;
   }
-  fetch('/api/public/commerce/shipment-scan?token=' + encodeURIComponent(token), { cache: 'no-store' })
+  var query = token ? 'token=' + encodeURIComponent(token) : 'code=' + encodeURIComponent(code);
+  fetch('/api/public/commerce/shipment-scan?' + query, { cache: 'no-store' })
     .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
     .then(function (res) {
       if (!res.ok) {
@@ -64,7 +66,7 @@ button:disabled{opacity:.6}
         fetch('/api/public/commerce/shipment-scan', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: token })
+          body: JSON.stringify(token ? { token: token } : { code: code })
         }).then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
           .then(function (out) {
             go.hidden = true;

@@ -130,6 +130,7 @@
         const latest = steps.slice().reverse().map(function (s) { return (s.updates || [])[0]; }).filter(Boolean)[0];
         const partner = t.partner;
         const otpStep = steps.find(function (s) { return s.deliveryOtp; });
+        const doorCode = t.deliveryOtp || (otpStep && otpStep.deliveryOtp) || '';
         const pickupStep = steps.find(function (s) { return s.pickup && s.pickup.pickupOtp; });
         const cs = t.courierStatus;
         const st = t.stats || {};
@@ -154,7 +155,7 @@
             tile('fa-clock-rotate-left', 'Last update', latest && latest.at ? fmtWhen(latest.at) : o.updatedAt ? fmtWhen(o.updatedAt) : '—', st.scans ? st.scans + ' courier scans' : '') +
             (t.deliveryOtpVerified ? '<div class="ts4-tile ts4-otp"><i class="fas fa-check-circle"></i><div><small>Delivery OTP</small><b>Verified</b><em>Confirmed by the courier at handover</em></div></div>' : '') +
             (t.pickupOtpVerified ? '<div class="ts4-tile ts4-otp"><i class="fas fa-check-circle"></i><div><small>Pickup OTP</small><b>Verified</b><em>Confirmed by the courier at pickup</em></div></div>' : '') +
-            (otpStep ? '<div class="ts4-tile ts4-otp"><i class="fas fa-key"></i><div><small>Delivery OTP</small><b>' + esc(otpStep.deliveryOtp) + '</b><em>Share only with the delivery partner at your door</em></div></div>' : t.otpSupported && !pickupStep && t.rank < 5 ? '<div class="ts4-tile ts4-otp is-empty"><i class="fas fa-key"></i><div><small>Delivery OTP</small><b>\u2014</b><em>The courier sends this code to your phone when the delivery task is assigned \u2014 the delivery partner will ask for it</em></div></div>' : '') +
+            (doorCode ? '<div class="ts4-tile ts4-otp"><i class="fas fa-key"></i><div><small>Delivery OTP</small><b>' + esc(doorCode) + '</b><em>Share only with the delivery partner at your door</em></div></div>' : t.otpSupported && !pickupStep && t.rank < 5 ? '<div class="ts4-tile ts4-otp is-empty"><i class="fas fa-key"></i><div><small>Delivery OTP</small><b>\u2014</b><em>The courier sends this code to your phone when the delivery task is assigned \u2014 the delivery partner will ask for it</em></div></div>' : '') +
             (pickupStep ? '<div class="ts4-tile ts4-otp"><i class="fas fa-key"></i><div><small>Pickup OTP</small><b>' + esc(pickupStep.pickup.pickupOtp) + '</b><em>Store staff quote this to the courier</em></div></div>' : t.otpSupported && t.rank >= 1 && t.rank < 3 ? '<div class="ts4-tile ts4-otp is-empty"><i class="fas fa-key"></i><div><small>Pickup OTP</small><b>\u2014</b><em>Not issued by the courier yet</em></div></div>' : '') +
             '</div>' +
             journeyHtml(o)

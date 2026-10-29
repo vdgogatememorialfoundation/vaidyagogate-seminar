@@ -42,6 +42,7 @@
         if (href) bits.push('<a class="tl-act" href="' + esc(href) + '">Call partner</a>');
         bits.push('<button type="button" class="tl-act" data-copy-href="1">Share tracking</button>');
         if (code) bits.push('<button type="button" class="tl-act" data-copy="' + esc(code) + '">Copy order code</button>');
+        if (track.scanId && track.scanId !== code) bits.push('<button type="button" class="tl-act" data-copy="' + esc(track.scanId) + '">Copy tracking id</button>');
         if (track.deliveryOtp) bits.push('<button type="button" class="tl-act" data-copy="' + esc(track.deliveryOtp) + '">Copy delivery code</button>');
         return bits.length ? '<div class="tl-acts">' + bits.join('') + '</div>' : '';
     }
@@ -394,8 +395,11 @@
 
     function qrHtml(track) {
         if (!track || !track.shipmentQrSvg || track.mainStatus === 'DELIVERED' || track.mainStatus === 'CANCELLED') return '';
-        const code = track.orderId || '';
-        return '<section class="trk-qr"><div class="trk-qr-copy"><b>Order QR</b>' + (code ? '<div class="trk-qr-code">' + esc(code) + '</div>' : '') + '<p>This code is the order. The delivery partner scans it to confirm pickup, then delivery.</p></div><div class="trk-qr-img">' + track.shipmentQrSvg + '</div></section>';
+        const scanId = track.scanId || track.orderId || '';
+        const kind = track.scanKind === 'tracking' ? 'tracking id' : 'order id';
+        const title = track.scanKind === 'tracking' ? 'Tracking QR' : 'Order QR';
+        const extra = track.orderId && scanId && track.orderId !== scanId ? '<p>Order ' + esc(track.orderId) + '</p>' : '';
+        return '<section class="trk-qr"><div class="trk-qr-copy"><b>' + title + '</b>' + (scanId ? '<div class="trk-qr-code">' + esc(scanId) + '</div>' : '') + extra + '<p>The delivery partner scans this ' + kind + ' in the agent app to confirm pickup, then delivery.</p></div><div class="trk-qr-img">' + track.shipmentQrSvg + '</div></section>';
     }
 
     function otpHtml(label, code, track) {

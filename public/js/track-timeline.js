@@ -118,16 +118,32 @@
         return html;
     }
 
+    function doorCode(t) {
+        if (!t) return '';
+        if (t.deliveryOtp) return String(t.deliveryOtp);
+        const steps = t.steps || [];
+        for (let i = 0; i < steps.length; i++) {
+            if (steps[i] && steps[i].deliveryOtp) return String(steps[i].deliveryOtp);
+        }
+        return '';
+    }
+
     function proofHtml(t) {
         if (!t || t.cancelled) return '';
         let html = '';
-        if (t.deliveryOtp) {
-            html += '<div class="ship-otp"><div class="lbl">Delivery OTP</div><div class="code">' + esc(t.deliveryOtp) + '</div><div class="note">Share this code with the delivery partner at your door.</div></div>';
+        const otp = doorCode(t);
+        if (otp) {
+            html += '<div class="ship-otp"><div class="lbl">Delivery OTP</div><div class="code">' + esc(otp) + '</div><div class="note">Share this code with the delivery partner at your door.</div></div>';
         }
         if (t.shipmentQrSvg) {
-            html += '<section class="trk-qr"><div class="trk-qr-copy"><b>Order QR</b>' +
-                (t.orderCode ? '<div class="trk-qr-code">' + esc(t.orderCode) + '</div>' : '') +
-                '<p>This code is the order. The delivery partner scans it to confirm pickup, then delivery.</p></div><div class="trk-qr-img">' + t.shipmentQrSvg + '</div></section>';
+            const scanId = t.scanId || t.orderCode || '';
+            const kind = t.scanKind === 'tracking' ? 'tracking id' : 'order id';
+            const title = t.scanKind === 'tracking' ? 'Tracking QR' : 'Order QR';
+            const extra = t.orderCode && scanId && t.orderCode !== scanId ? '<p>Order ' + esc(t.orderCode) + '</p>' : '';
+            html += '<section class="trk-qr"><div class="trk-qr-copy"><b>' + title + '</b>' +
+                (scanId ? '<div class="trk-qr-code">' + esc(scanId) + '</div>' : '') +
+                extra +
+                '<p>The delivery partner scans this ' + kind + ' in the agent app to confirm pickup, then delivery.</p></div><div class="trk-qr-img">' + t.shipmentQrSvg + '</div></section>';
         }
         return html;
     }
@@ -163,7 +179,9 @@
         if (phone) bits.push('<a class="tl-act" href="tel:' + esc(phone) + '">Call ' + esc((partner && partner.name) || 'partner') + '</a>');
         if (share) bits.push('<button type="button" class="tl-act" data-tl-copy="' + esc(share) + '">Share tracking</button>');
         if (t.orderCode) bits.push('<button type="button" class="tl-act" data-tl-copy="' + esc(t.orderCode) + '">Copy order code</button>');
-        if (t.deliveryOtp) bits.push('<button type="button" class="tl-act" data-tl-copy="' + esc(t.deliveryOtp) + '">Copy delivery code</button>');
+        if (t.scanId && t.scanId !== t.orderCode) bits.push('<button type="button" class="tl-act" data-tl-copy="' + esc(t.scanId) + '">Copy tracking id</button>');
+        const otp = doorCode(t);
+        if (otp) bits.push('<button type="button" class="tl-act" data-tl-copy="' + esc(otp) + '">Copy delivery code</button>');
         const meta = [];
         if (live && live.dropLabel) meta.push(live.dropLabel);
         if (t.deliveryBy) meta.push('Delivery ' + t.deliveryBy);
