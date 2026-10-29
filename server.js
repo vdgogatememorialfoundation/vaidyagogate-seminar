@@ -16558,7 +16558,7 @@ if (require.main === module) {
             process.exit(1);
         }
         bootstrapApp(() => {
-            app.listen(PORT, () => {
+            const httpServer = app.listen(PORT, () => {
                 console.log(`Server is running on http://localhost:${PORT}`);
                 console.log('[routes] Case presentation APIs: /api/admin/case/programs, /api/case/programs');
                 renderKeepalive.startRenderKeepalive();
@@ -16566,6 +16566,11 @@ if (require.main === module) {
                     require('./lib/gmail-inbound-poller').startGmailInboundPoller(db);
                 } catch (e) {
                     console.warn('[gmail-inbound] start failed:', e.message);
+                }
+                try {
+                    require('./lib/rider-live-socket').attach(httpServer, db);
+                } catch (e) {
+                    console.warn('[rider-live] start failed:', e.message);
                 }
             });
         });

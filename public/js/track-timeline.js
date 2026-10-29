@@ -72,7 +72,7 @@
                 html += '<div class="tl-otps"><div class="tl-otp"><div class="lbl">Pickup OTP</div><div class="code">' + esc(pk.pickupOtp) + '</div></div></div><div class="tl-note">Store staff: the courier agent must quote this at handover.</div>';
             }
         }
-        if (step.deliveryOtp && (step.key === 'shipped' || step.key === 'out_for_delivery' || step.key === 'delivered')) {
+        if (step.deliveryOtp && (step.key === 'packed' || step.key === 'shipped' || step.key === 'out_for_delivery' || step.key === 'delivered')) {
             html += '<div class="tl-otps"><div class="tl-otp"><div class="lbl">Delivery OTP</div><div class="code">' + esc(step.deliveryOtp) + '</div></div></div><div class="tl-note">Share this code with the delivery partner.</div>';
         }
         if (step.queue && step.state === 'active') {
@@ -115,14 +115,86 @@
         } else if (step.key === 'out_for_delivery' && step.state === 'active' && step.operational !== 'RESCHEDULED') {
             html += '<div class="tl-note">Finding a delivery partner.</div>';
         }
-        if (data.live && data.live.slot === step.key && data.live.leg !== 'done') {
-            const riding = !!(data.live.agent && data.live.route !== 'dotted');
-            html +=
-                '<div class="tl-live">' + (riding ? 'Live delivery tracking' : 'Store and delivery location') + '</div>' +
-                (riding ? '<div id="tl-eta" class="tl-note">Delivery partner is on the way.</div>' : '<div class="tl-note">The route stays dotted until a delivery partner location arrives.</div>') +
-                '<div id="tl-map-slot"></div>';
+        return html;
+    }
+
+    function doorCode(t) {
+        if (!t) return '';
+        if (t.deliveryOtp) return String(t.deliveryOtp);
+        const steps = t.steps || [];
+        for (let i = 0; i < steps.length; i++) {
+            if (steps[i] && steps[i].deliveryOtp) return String(steps[i].deliveryOtp);
+        }
+        return '';
+    }
+
+    function proofHtml(t) {
+        if (!t || t.cancelled) return '';
+        let html = '';
+        const otp = doorCode(t);
+        if (otp) {
+            html += '<div class="ship-otp"><div class="lbl">Delivery OTP</div><div class="code">' + esc(otp) + '</div><div class="note">Share this code with the delivery partner at your door.</div></div>';
+        }
+        if (t.shipmentQrSvg) {
+            const scanId = t.scanId || t.orderCode || '';
+            const kind = t.scanKind === 'tracking' ? 'tracking id' : 'order id';
+            const title = t.scanKind === 'tracking' ? 'Tracking QR' : 'Order QR';
+            const extra = t.orderCode && scanId && t.orderCode !== scanId ? '<p>Order ' + esc(t.orderCode) + '</p>' : '';
+            html += '<section class="trk-qr"><div class="trk-qr-copy"><b>' + title + '</b>' +
+                (scanId ? '<div class="trk-qr-code">' + esc(scanId) + '</div>' : '') +
+                extra +
+                '<p>The delivery partner scans this ' + kind + ' in the agent app to confirm pickup, then delivery.</p></div><div class="trk-qr-img">' + t.shipmentQrSvg + '</div></section>';
         }
         return html;
+    }
+
+    function partnerContact(t) {
+        const steps = (t && t.steps) || [];
+        for (let i = steps.length - 1; i >= 0; i--) {
+            const step = steps[i];
+            if (step.agent && (step.agent.name || step.agent.phone)) return step.agent;
+            if (step.contact && (step.contact.name || step.contact.phone)) return step.contact;
+            if (step.pickup && step.pickup.agent && (step.pickup.agent.name || step.pickup.agent.phone)) return step.pickup.agent;
+        }
+        return null;
+    }
+
+    function shareUrl(data) {
+        let share = (data && data.trackUrl) || '';
+        const live = data && data.live;
+        if (!share && live && live.watchToken && typeof location !== 'undefined' && location.origin) {
+            share = location.origin + '/track-commerce?token=' + encodeURIComponent(live.watchToken);
+        }
+        if (share && share.charAt(0) === '/' && typeof location !== 'undefined' && location.origin) share = location.origin + share;
+        return share;
+    }
+
+    function assistHtml(t, data) {
+        if (!t || t.cancelled) return '';
+        const partner = partnerContact(t);
+        const phone = partner && String(partner.phone || '').replace(/[^\d+]/g, '');
+        const share = shareUrl(data);
+        const live = data && data.live;
+        const bits = [];
+        if (phone) bits.push('<a class="tl-act" href="tel:' + esc(phone) + '">Call ' + esc((partner && partner.name) || 'partner') + '</a>');
+        if (share) bits.push('<button type="button" class="tl-act" data-tl-copy="' + esc(share) + '">Share tracking</button>');
+        if (t.orderCode) bits.push('<button type="button" class="tl-act" data-tl-copy="' + esc(t.orderCode) + '">Copy order code</button>');
+        if (t.scanId && t.scanId !== t.orderCode) bits.push('<button type="button" class="tl-act" data-tl-copy="' + esc(t.scanId) + '">Copy tracking id</button>');
+        const otp = doorCode(t);
+        if (otp) bits.push('<button type="button" class="tl-act" data-tl-copy="' + esc(otp) + '">Copy delivery code</button>');
+        const meta = [];
+        if (live && live.dropLabel) meta.push(live.dropLabel);
+        if (t.deliveryBy) meta.push('Delivery ' + t.deliveryBy);
+        if (!bits.length && !meta.length) return '';
+        return '<section class="tl-assist">' + (bits.length ? '<div class="tl-acts">' + bits.join('') + '</div>' : '') + (meta.length ? '<p class="tl-assist-meta">' + esc(meta.join(' · ')) + '</p>' : '') + '</section>';
+    }
+
+    function mapBlock(live) {
+        if (!live || live.leg === 'done') return '';
+        const label = live.phaseLabel || (live.route === 'dotted' ? 'Route from the store to your address' : 'Delivery partner');
+        return '<div class="tl-map-block"><div class="tl-live">' + esc(label) + '</div>' +
+            '<div id="tl-eta" class="tl-eta" hidden><span class="tl-eta-lbl">' + esc(label) + '</span><b class="tl-eta-val"></b><span class="tl-eta-sub"></span></div>' +
+            '<div id="tl-map-slot"></div></div>';
     }
 
     function dateStrip(t) {
@@ -185,6 +257,26 @@
         );
     }
 
+    function cardsHtml(t) {
+        const cards = (t && t.cards) || [];
+        if (!cards.length) return '';
+        return (
+            '<section class="tl-cards" aria-label="Order details">' +
+            cards
+                .map((card) => {
+                    const now = card.key === 'now' ? ' is-now' : '';
+                    return (
+                        '<article class="tl-mini' + now + '" data-tl-card="' + esc(card.key) + '"><div class="lbl">' + esc(card.label) + '</div><div class="val" data-tl-card-val>' +
+                        esc(card.value) + '</div>' +
+                        (card.detail ? '<div class="sub" data-tl-card-sub>' + esc(card.detail) + '</div>' : '<div class="sub" data-tl-card-sub hidden></div>') +
+                        '</article>'
+                    );
+                })
+                .join('') +
+            '</section>'
+        );
+    }
+
     function courierCard(t, data) {
         const c = t && t.courier;
         if (!c || !(c.trackingNo || c.provider)) return '';
@@ -207,21 +299,25 @@
         const settled = t.steps && t.steps.length && t.steps.every((step) => step.state === 'done');
         return (
             '<div class="tl' + (animate ? '' : ' tl-static') + (settled ? ' is-settled' : '') + '">' +
+            assistHtml(t, data) +
+            cardsHtml(t) +
+            proofHtml(t) +
+            mapBlock(data.live) +
             dateStrip(t) +
             expectedStrip(t) +
             courierCard(t, data) +
-            t.steps
-                .map(
-                    (s, i) =>
-                        '<div class="tl-step ' + s.state + '"' +
+            (t.steps || [])
+                .map((s, i) => {
+                    const open = s.state === 'active';
+                    const hint = s.state === 'done' ? 'This step is complete.' : s.state === 'active' ? 'This step is in progress.' : 'This step has not started.';
+                    const body = (s.summary ? '<div class="tl-sum">' + esc(s.summary) + '</div>' : '<div class="tl-sum">' + esc(hint) + '</div>') + extra(s, data) + updates(s.updates);
+                    return '<div class="tl-step ' + s.state + '"' +
                         (s.lineUntil ? ' data-line-since="' + Number(s.lineSince) + '" data-line-until="' + Number(s.lineUntil) + '" data-line-floor="' + Number(s.lineFloor || 12) + '"' : '') +
                         ' style="--i:' + i + (s.lineFill != null ? ';--line:' + Number(s.lineFill) : '') + '"><div class="tl-dot">' + (s.state === 'done' ? '&#10003;' : '') + '</div>' +
                         '<div class="tl-title">' + esc(s.title) + (s.expectedLabel && s.state !== 'done' && !(s.at && s.state === 'active') ? '<span class="tl-expect">' + esc(s.expectedLabel) + '</span>' : '') + (s.at && s.state !== 'upcoming' ? '<span class="tl-time">' + esc(when(s.at)) + '</span>' : '') + '</div>' +
-                        (s.summary ? '<div class="tl-sum">' + esc(s.summary) + '</div>' : '') +
-                        extra(s, data) +
-                        updates(s.updates) +
-                        '</div>'
-                )
+                        '<button type="button" class="tl-drawer-btn" aria-expanded="' + (open ? 'true' : 'false') + '">' + (open ? 'Hide details' : 'View details') + '</button>' +
+                        '<div class="tl-drawer"' + (open ? '' : ' hidden') + '>' + body + '</div></div>';
+                })
                 .join('') +
             '</div>'
         );
@@ -229,6 +325,37 @@
 
     function bind(root) {
         const scope = root && root.querySelector ? root : document;
+        scope.querySelectorAll('[data-tl-copy]').forEach((btn) => {
+            if (btn.dataset.bound) return;
+            btn.dataset.bound = '1';
+            const label = btn.textContent;
+            btn.addEventListener('click', async () => {
+                const text = btn.getAttribute('data-tl-copy') || '';
+                try {
+                    if (navigator.clipboard && navigator.clipboard.writeText) await navigator.clipboard.writeText(text);
+                    else return;
+                    btn.textContent = 'Copied';
+                    setTimeout(() => {
+                        btn.textContent = label;
+                    }, 1200);
+                } catch (err) {
+                    btn.textContent = label;
+                }
+            });
+        });
+        scope.querySelectorAll('.tl-drawer-btn').forEach((btn) => {
+            if (btn.dataset.bound) return;
+            btn.dataset.bound = '1';
+            btn.addEventListener('click', () => {
+                const drawer = btn.nextElementSibling;
+                if (!drawer || !drawer.classList.contains('tl-drawer')) return;
+                const open = drawer.hasAttribute('hidden');
+                if (open) drawer.removeAttribute('hidden');
+                else drawer.setAttribute('hidden', '');
+                btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+                btn.textContent = open ? 'Hide details' : 'View details';
+            });
+        });
         const form = scope.querySelector('#tl-reschedule-form');
         if (!form || form.dataset.bound) return;
         form.dataset.bound = '1';
@@ -277,13 +404,360 @@
         });
     }
 
+    const RIDER_STILL_M = 18;
+    let riderSocket = null;
+    let riderToken = '';
+    let riderRetry = null;
+    let riderHttp = null;
+    let riderMisses = 0;
+    let pendingRider = null;
+
+    function acceptFix(prev, next, deadband) {
+        const band = deadband || RIDER_STILL_M;
+        if (!next || !Number.isFinite(Number(next.lat)) || !Number.isFinite(Number(next.lng))) {
+            return { point: null, traveling: false, first: false, clear: true };
+        }
+        const point = { lat: Number(next.lat), lng: Number(next.lng) };
+        if (!prev) return { point: point, traveling: false, first: true };
+        const dist = haversine(prev, point);
+        if (dist < band) return { point: prev, traveling: false, ignored: true };
+        if (dist > 1500) return { point: point, traveling: false, first: true, snap: true };
+        return { point: point, traveling: true };
+    }
+
+    function lockRider(el, live) {
+        if (!live || !live.agent) {
+            el.__riderTraveling = false;
+            return false;
+        }
+        const fix = acceptFix(el.__acceptedGps, live.agent, RIDER_STILL_M);
+        if (fix.clear) {
+            el.__riderTraveling = false;
+            return false;
+        }
+        if (fix.ignored && !el.__riderTraveling && el.__map && el.__paintedLeg === live.leg) {
+            syncBike(false);
+            return true;
+        }
+        if (!fix.ignored) {
+            const prev = el.__acceptedGps ? { lat: el.__acceptedGps.lat, lng: el.__acceptedGps.lng } : null;
+            const reported = Number(live.agent && live.agent.heading);
+            el.__acceptedGps = fix.point;
+            el.__riderTraveling = !!fix.traveling;
+            if (fix.snap || fix.first) el.__poseMeters = null;
+            if (Number.isFinite(reported)) {
+                el.__stillHeading = ((reported % 360) + 360) % 360;
+                el.__headingFallback = false;
+                el.__glide = null;
+            } else if (fix.traveling && prev) {
+                const heading = bearingDeg(prev, fix.point) % 360;
+                const meters = haversine(prev, fix.point);
+                el.__stillHeading = heading;
+                el.__headingFallback = false;
+                el.__glide = {
+                    from: prev,
+                    to: { lat: fix.point.lat, lng: fix.point.lng },
+                    heading: heading,
+                    start: 0,
+                    ms: Math.min(700, Math.max(280, Math.round(meters * 6)))
+                };
+            } else if (fix.snap || fix.first) {
+                el.__glide = null;
+                el.__headingFallback = true;
+            }
+        }
+        live.agent = Object.assign({}, el.__acceptedGps || live.agent);
+        if (el.__stillHeading != null && !el.__headingFallback) live.agent.heading = el.__stillHeading;
+        return false;
+    }
+
+    function applyRiderMessage(msg) {
+        const el = mapEl;
+        if (!msg || msg.type !== 'rider') return;
+        if (!el || !el.__map || !el.__liveSnap) {
+            pendingRider = msg;
+            return;
+        }
+        const live = el.__liveSnap;
+        if (msg.agent && Number.isFinite(Number(msg.agent.lat)) && Number.isFinite(Number(msg.agent.lng))) {
+            live.agent = { lat: Number(msg.agent.lat), lng: Number(msg.agent.lng) };
+            if (Number.isFinite(Number(msg.agent.heading))) live.agent.heading = Number(msg.agent.heading);
+            live.route = 'road';
+            if (!live.leg || live.leg === 'preview' || live.leg === 'done') live.leg = msg.leg || 'to_drop';
+        } else if (msg.agent == null) {
+            live.agent = null;
+            live.route = 'dotted';
+            if (msg.leg) live.leg = msg.leg;
+        }
+        if (msg.leg && live.leg !== 'done') live.leg = msg.leg;
+        paint(live);
+    }
+
+    function stopRiderHttp() {
+        if (riderHttp) clearInterval(riderHttp);
+        riderHttp = null;
+    }
+
+    function startRiderHttp() {
+        if (riderHttp || !riderToken) return;
+        const pull = () => {
+            fetch('/api/public/commerce/rider-live?token=' + encodeURIComponent(riderToken), { cache: 'no-store' })
+                .then((res) => res.json())
+                .then((data) => applyRiderMessage(data))
+                .catch(() => {});
+        };
+        pull();
+        riderHttp = setInterval(pull, 8000);
+    }
+
+    function scheduleRiderRetry() {
+        if (riderRetry || !riderToken) return;
+        riderRetry = setTimeout(() => {
+            riderRetry = null;
+            openRiderSocket();
+        }, 4000);
+    }
+
+    function openRiderSocket() {
+        if (!riderToken || typeof WebSocket === 'undefined') {
+            startRiderHttp();
+            return;
+        }
+        if (riderRetry) {
+            clearTimeout(riderRetry);
+            riderRetry = null;
+        }
+        if (riderSocket) {
+            riderSocket.onclose = null;
+            try { riderSocket.close(); } catch (e) {}
+            riderSocket = null;
+        }
+        const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        let ws;
+        let opened = false;
+        try {
+            ws = new WebSocket(proto + '//' + location.host + '/api/public/commerce/rider-live?token=' + encodeURIComponent(riderToken));
+        } catch (e) {
+            riderMisses += 1;
+            if (riderMisses >= 2) startRiderHttp();
+            scheduleRiderRetry();
+            return;
+        }
+        riderSocket = ws;
+        ws.onopen = () => {
+            opened = true;
+            riderMisses = 0;
+            stopRiderHttp();
+        };
+        ws.onmessage = (ev) => {
+            let msg;
+            try { msg = JSON.parse(ev.data); } catch (e) { return; }
+            applyRiderMessage(msg);
+        };
+        ws.onerror = () => {};
+        ws.onclose = () => {
+            if (riderSocket === ws) riderSocket = null;
+            if (!opened) riderMisses += 1;
+            if (riderMisses >= 2) startRiderHttp();
+            scheduleRiderRetry();
+        };
+    }
+
+    let trackSocket = null;
+    let trackToken = '';
+    let trackRetry = null;
+    let trackRefreshTimer = null;
+
+    function cardHost() {
+        return document.querySelector('.tl') || document.querySelector('.hl-sheet') || document.querySelector('.trk');
+    }
+
+    function ensureCard(key, label) {
+        if (!document.querySelector) return null;
+        let section = document.querySelector('.tl-cards');
+        if (!section) {
+            const host = cardHost();
+            if (!host) return null;
+            section = document.createElement('section');
+            section.className = 'tl-cards';
+            section.setAttribute('aria-label', 'Order details');
+            const assist = host.querySelector('.tl-assist');
+            if (assist && assist.parentNode === host) host.insertBefore(section, assist.nextSibling);
+            else host.insertBefore(section, host.firstChild);
+        }
+        let card = section.querySelector('[data-tl-card="' + key + '"]');
+        if (card) return card;
+        card = document.createElement('article');
+        card.className = 'tl-mini' + (key === 'now' ? ' is-now' : '');
+        card.setAttribute('data-tl-card', key);
+        const lbl = document.createElement('div');
+        lbl.className = 'lbl';
+        lbl.textContent = label;
+        const val = document.createElement('div');
+        val.className = 'val';
+        val.setAttribute('data-tl-card-val', '');
+        const sub = document.createElement('div');
+        sub.className = 'sub';
+        sub.setAttribute('data-tl-card-sub', '');
+        sub.hidden = true;
+        card.appendChild(lbl);
+        card.appendChild(val);
+        card.appendChild(sub);
+        if (key === 'now') section.insertBefore(card, section.firstChild);
+        else section.appendChild(card);
+        return card;
+    }
+
+    function setCardText(key, label, value, detail) {
+        const text = String(value || '').replace(/\s+/g, ' ').trim().slice(0, 80);
+        if (!text) return;
+        const card = ensureCard(key, label);
+        if (!card) return;
+        const val = card.querySelector('[data-tl-card-val]');
+        const sub = card.querySelector('[data-tl-card-sub]');
+        if (val) val.textContent = text;
+        if (sub) {
+            const extra = String(detail || '').replace(/\s+/g, ' ').trim().slice(0, 90);
+            sub.textContent = extra;
+            sub.hidden = !extra;
+        }
+        card.classList.add('tl-fresh');
+        setTimeout(() => card.classList.remove('tl-fresh'), 1400);
+    }
+
+    function paintOtp(code) {
+        const otp = String(code || '').replace(/\s+/g, '');
+        if (!/^\d{4,8}$/.test(otp)) return;
+        const boxes = document.querySelectorAll ? document.querySelectorAll('.ship-otp') : [];
+        let found = false;
+        boxes.forEach((box) => {
+            const lbl = box.querySelector('.lbl');
+            if (!lbl || !/delivery otp/i.test(lbl.textContent || '')) return;
+            const codeEl = box.querySelector('.code');
+            if (!codeEl) return;
+            codeEl.textContent = otp;
+            found = true;
+        });
+        if (found) return;
+        const host = cardHost();
+        if (!host) return;
+        const box = document.createElement('div');
+        box.className = 'ship-otp';
+        const lbl = document.createElement('div');
+        lbl.className = 'lbl';
+        lbl.textContent = 'Delivery OTP';
+        const codeEl = document.createElement('div');
+        codeEl.className = 'code';
+        codeEl.textContent = otp;
+        const note = document.createElement('div');
+        note.className = 'note';
+        note.textContent = 'Share this code with the delivery partner at your door.';
+        box.appendChild(lbl);
+        box.appendChild(codeEl);
+        box.appendChild(note);
+        const cards = host.querySelector('.tl-cards');
+        if (cards && cards.parentNode === host) host.insertBefore(box, cards.nextSibling);
+        else host.insertBefore(box, host.firstChild);
+    }
+
+    function paintPartnerPhone(phone) {
+        const clean = String(phone || '').replace(/[^\d+]/g, '');
+        if (clean.length < 6 || clean.length > 16) return;
+        document.querySelectorAll('a.hl-call, a.tl-act[href^="tel:"]').forEach((link) => {
+            link.setAttribute('href', 'tel:' + clean);
+        });
+    }
+
+    function applyTrackMessage(msg) {
+        if (!msg || msg.type !== 'track' || !document.querySelector) return;
+        if (msg.phase) setCardText('now', 'Right now', msg.phase, '');
+        if (msg.partner) setCardText('partner', 'Delivery partner', msg.partner, msg.phone || '');
+        if (msg.distance) setCardText('away', 'Distance', msg.distance, 'From your address');
+        if (msg.pay) setCardText('pay', 'Payment', msg.pay, '');
+        if (msg.deliveryOtp) paintOtp(msg.deliveryOtp);
+        paintPartnerPhone(msg.phone);
+        const nameEl = document.querySelector('.hl-partner-name');
+        if (nameEl && msg.partner) nameEl.textContent = String(msg.partner).replace(/\s+/g, ' ').trim().slice(0, 80);
+        const wait = document.querySelector('.hl-wait');
+        if (wait && msg.phase) wait.textContent = String(msg.phase).replace(/\s+/g, ' ').trim().slice(0, 80);
+        if (msg.source === 'webhook' && msg.kind) {
+            if (trackRefreshTimer) clearTimeout(trackRefreshTimer);
+            trackRefreshTimer = setTimeout(() => {
+                trackRefreshTimer = null;
+                try {
+                    document.dispatchEvent(new CustomEvent('tl-track-refresh'));
+                } catch (e) {}
+            }, 700);
+        }
+    }
+
+    function scheduleTrackRetry() {
+        if (trackRetry || !trackToken) return;
+        trackRetry = setTimeout(() => {
+            trackRetry = null;
+            openTrackSocket(trackToken);
+        }, 4000);
+    }
+
+    function openTrackSocket(token) {
+        token = String(token || '').trim();
+        if (token.length < 8 || typeof WebSocket === 'undefined') return;
+        if (trackToken === token && trackSocket && trackSocket.readyState <= 1) return;
+        trackToken = token;
+        if (trackRetry) {
+            clearTimeout(trackRetry);
+            trackRetry = null;
+        }
+        if (trackSocket) {
+            trackSocket.onclose = null;
+            try { trackSocket.close(); } catch (e) {}
+            trackSocket = null;
+        }
+        const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        let ws;
+        try {
+            ws = new WebSocket(proto + '//' + location.host + '/api/public/commerce/track-live?token=' + encodeURIComponent(trackToken));
+        } catch (e) {
+            scheduleTrackRetry();
+            return;
+        }
+        trackSocket = ws;
+        ws.onmessage = (ev) => {
+            let msg;
+            try { msg = JSON.parse(ev.data); } catch (e) { return; }
+            applyTrackMessage(msg);
+        };
+        ws.onerror = () => {};
+        ws.onclose = () => {
+            if (trackSocket === ws) trackSocket = null;
+            scheduleTrackRetry();
+        };
+    }
+
+    function watchRider(token) {
+        token = String(token || '').trim();
+        if (token.length < 8) return;
+        openTrackSocket(token);
+        if (riderToken === token && riderSocket && riderSocket.readyState <= 1) return;
+        riderToken = token;
+        riderMisses = 0;
+        openRiderSocket();
+    }
+
     /** Call after the rendered HTML is in the page. */
     function mount(live) {
+        if (live && live.watchToken) watchRider(live.watchToken);
         if (live && !live.mapsApiKey) return;
         bind();
         if (!live) return;
-        if (mapEl && mapEl.isConnected && mapEl.__map) return paint(live);
         const slot = document.getElementById('tl-map-slot');
+        if (mapEl && mapEl.__map) {
+            if (!mapEl.isConnected) {
+                if (!slot) return;
+                slot.replaceWith(mapEl);
+            }
+            return paint(live);
+        }
         if (!slot) return;
         if (!mapEl) {
             mapEl = document.createElement('div');
@@ -291,7 +765,7 @@
         }
         slot.replaceWith(mapEl);
         if (!live.mapsApiKey) {
-            mapEl.textContent = 'Live map needs a Google Maps key in Commerce settings.';
+            mapEl.textContent = 'The live map is not available yet.';
             return;
         }
         const run = () => paint(live);
@@ -301,7 +775,7 @@
         const s = document.createElement('script');
         s.id = 'tl-maps-js';
         s.async = true;
-        s.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(live.mapsApiKey) + '&callback=__tlMapBoot';
+        s.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(live.mapsApiKey) + '&v=weekly&callback=__tlMapBoot';
         document.body.appendChild(s);
     }
 
@@ -393,9 +867,11 @@
     }
 
     const STORE_SVG =
-        '<svg xmlns="http://www.w3.org/2000/svg" width="42" height="52" viewBox="0 0 42 52"><ellipse cx="21" cy="48" rx="8" ry="3" fill="#0f172a" opacity="0.18"/><path d="M21 46s14-12.4 14-25A14 14 0 1 0 7 21c0 12.6 14 25 14 25z" fill="#0f766e"/><circle cx="21" cy="20" r="8.5" fill="#fff"/><path d="M15.5 24.5v-7h11v7M15.5 20.5h11M18 17.5V16h6v1.5" fill="none" stroke="#0f766e" stroke-width="1.6" stroke-linejoin="round"/></svg>';
+        '<svg xmlns="http://www.w3.org/2000/svg" width="42" height="52" viewBox="0 0 42 52"><ellipse cx="21" cy="48" rx="8" ry="3" fill="#1d4ed8" opacity="0.18"/><path d="M21 46s14-12.4 14-25A14 14 0 1 0 7 21c0 12.6 14 25 14 25z" fill="#1d4ed8"/><circle cx="21" cy="20" r="8.5" fill="#fff"/><path d="M15.5 24.5v-7h11v7M15.5 20.5h11M18 17.5V16h6v1.5" fill="none" stroke="#1d4ed8" stroke-width="1.6" stroke-linejoin="round"/></svg>';
     const HOME_SVG =
-        '<svg xmlns="http://www.w3.org/2000/svg" width="42" height="52" viewBox="0 0 42 52"><ellipse cx="21" cy="48" rx="8" ry="3" fill="#0f172a" opacity="0.18"/><path d="M21 46s14-12.4 14-25A14 14 0 1 0 7 21c0 12.6 14 25 14 25z" fill="#0f172a"/><circle cx="21" cy="20" r="8.5" fill="#fff"/><path d="M15 23.5V18l6-4.2 6 4.2v5.5h-4.2v-3.4h-3.6v3.4z" fill="#0f172a"/></svg>';
+        '<svg xmlns="http://www.w3.org/2000/svg" width="42" height="52" viewBox="0 0 42 52"><ellipse cx="21" cy="48" rx="8" ry="3" fill="#1d4ed8" opacity="0.18"/><path d="M21 46s14-12.4 14-25A14 14 0 1 0 7 21c0 12.6 14 25 14 25z" fill="#1d4ed8"/><circle cx="21" cy="20" r="8.5" fill="#fff"/><path d="M15 23.5V18l6-4.2 6 4.2v5.5h-4.2v-3.4h-3.6v3.4z" fill="#1d4ed8"/></svg>';
+    const PREVIEW_STORE_SVG = STORE_SVG;
+    const PREVIEW_HOME_SVG = HOME_SVG;
     // The scooter artwork faces right. A -90 degree turn points the front up so the map heading follows the road.
     const RIDER_ICON = '/media/delivery-agent.png?v=2';
 
@@ -411,7 +887,7 @@
         Rider.prototype.onAdd = function () {
             const div = document.createElement('div');
             div.className = 'tl-rider';
-            div.innerHTML = '<div class="tl-rider-pulse"></div><div class="tl-rider-plate"></div><div class="tl-rider-aim"><div class="tl-rider-bob"><img class="tl-rider-img" alt="" src="' + RIDER_ICON + '"></div></div>';
+            div.innerHTML = '<div class="tl-rider-plate"></div><div class="tl-rider-aim"><div class="tl-rider-bob"><img class="tl-rider-img" alt="" src="' + RIDER_ICON + '"></div></div>';
             this.div = div;
             this.getPanes().overlayMouseTarget.appendChild(div);
         };
@@ -427,15 +903,20 @@
             if (!pt) return;
             this.div.style.left = pt.x + 'px';
             this.div.style.top = pt.y + 'px';
-            this.div.style.display = this.visible ? 'block' : 'none';
-            this.div.classList.toggle('is-moving', !!this.visible);
+            this.div.style.display = 'block';
+            this.div.classList.toggle('is-moving', !!this.moving);
             const aim = this.div.querySelector('.tl-rider-aim');
-            if (aim) aim.style.transform = 'rotate(' + (this.heading || 0) + 'deg)';
+            const heading = this.heading || 0;
+            const sig = pt.x + ',' + pt.y + ':' + heading + ':' + (this.moving ? 1 : 0);
+            if (this.div.__sig === sig) return;
+            this.div.__sig = sig;
+            if (aim) aim.style.transform = 'rotate(' + heading + 'deg)';
         };
-        Rider.prototype.setRider = function (pos, heading, visible) {
+        Rider.prototype.setRider = function (pos, heading, visible, moving) {
             this.pos = pos;
-            this.heading = heading || 0;
+            this.heading = heading == null || !Number.isFinite(Number(heading)) ? 0 : Number(heading);
             this.visible = !!visible && !!pos;
+            this.moving = false;
             this.draw();
         };
         Rider.prototype.onRemove = function () {
@@ -448,29 +929,34 @@
         return rider;
     }
 
+    function syncBike(moving) {
+        document.querySelectorAll('.hl-bike-3d').forEach((node) => node.classList.toggle('is-moving', !!moving));
+    }
+
+    function holdRider(el, at) {
+        if (!el.__rider || !at) return;
+        const heading = at.heading != null ? at.heading : el.__stillHeading || 0;
+        el.__stillHeading = heading;
+        el.__rider.setRider(at, heading, true, false);
+        syncBike(false);
+    }
+
     function ensureMotion(el) {
         if (el.__raf) return;
-        let last = 0;
-        let lineAt = 0;
         const step = (now) => {
             el.__raf = requestAnimationFrame(step);
-            if (!last) last = now;
-            const dt = Math.min(0.05, (now - last) / 1000);
-            last = now;
-            const path = el.__path;
-            const cum = el.__cum;
-            if (!path || !cum || !el.__agentLive || !el.__rider) return;
-            const gps = el.__gpsMeters || 0;
-            let m = el.__agentMeters || 0;
-            if (m < gps) m += (gps - m) * Math.min(1, dt * 1.8);
-            else m = gps;
-            el.__agentMeters = m;
-            const at = along(path, cum, m);
-            el.__rider.setRider(at, at.heading, true);
-            if (now - lineAt > 140) {
-                lineAt = now;
-                if (el.__remain) el.__remain.setPath(tailPath(path, cum, m));
-                if (el.__doneLine) el.__doneLine.setPath(headPath(path, cum, m));
+            const g = el.__glide;
+            if (!g || !el.__rider || !el.__agentLive) return;
+            if (!g.start) g.start = now;
+            const t = Math.min(1, (now - g.start) / g.ms);
+            const lat = g.from.lat + (g.to.lat - g.from.lat) * t;
+            const lng = g.from.lng + (g.to.lng - g.from.lng) * t;
+            el.__rider.setRider({ lat: lat, lng: lng }, g.heading, true, false);
+            syncBike(false);
+            if (t >= 1) {
+                el.__stillHeading = g.heading;
+                el.__headingFallback = false;
+                el.__glide = null;
             }
         };
         el.__raf = requestAnimationFrame(step);
@@ -483,7 +969,8 @@
         const gps = el.__pendingGps;
         const hit = gps ? projectMeters(path, el.__cum, gps) : { meters: 0, dist: 0 };
         el.__gpsMeters = hit.meters;
-        if (el.__agentMeters == null || Math.abs(el.__agentMeters - hit.meters) > 400) el.__agentMeters = hit.meters;
+        el.__agentMeters = hit.meters;
+        el.__riderTraveling = false;
         if (el.__remain) el.__remain.setPath(tailPath(path, el.__cum, el.__agentMeters || 0));
         if (el.__doneLine) el.__doneLine.setPath(headPath(path, el.__cum, el.__agentMeters || 0));
     }
@@ -508,26 +995,45 @@
         }
         if (!el.__map) {
             el.textContent = '';
-            el.__map = new google.maps.Map(el, {
+            const phone = document.documentElement && document.documentElement.classList.contains('tl-phone');
+            const mapOpts = {
                 center,
-                zoom: 15,
+                zoom: 17,
+                tilt: 45,
+                heading: 0,
+                mapId: 'DEMO_MAP_ID',
                 mapTypeControl: false,
                 streetViewControl: false,
-                fullscreenControl: true,
+                fullscreenControl: !phone,
+                zoomControl: !phone,
+                rotateControl: false,
                 gestureHandling: 'greedy',
-                styles: [
-                    { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-                    { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-                    { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#f4f7f5' }] },
-                    { featureType: 'landscape.man_made', elementType: 'geometry', stylers: [{ color: '#eef2f0' }] },
-                    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#d7e6f4' }] },
-                    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
-                    { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#e2e8e6' }] },
-                    { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#f1f5f4' }] },
-                    { featureType: 'road', elementType: 'labels', stylers: [{ visibility: 'simplified' }] },
-                    { featureType: 'administrative', elementType: 'labels.text.fill', stylers: [{ color: '#64748b' }] }
-                ]
-            });
+                clickableIcons: false,
+                scaleControl: !phone,
+                backgroundColor: '#e8f1fb',
+                minZoom: 12,
+                maxZoom: 20,
+                isFractionalZoomEnabled: true,
+                headingInteractionEnabled: false,
+                tiltInteractionEnabled: false
+            };
+            if (google.maps.ColorScheme) mapOpts.colorScheme = google.maps.ColorScheme.LIGHT;
+            if (google.maps.RenderingType) mapOpts.renderingType = google.maps.RenderingType.VECTOR;
+            el.__buildings3d = true;
+            try {
+                el.__map = new google.maps.Map(el, mapOpts);
+                el.__vectorMap = true;
+            } catch (err) {
+                delete mapOpts.mapId;
+                delete mapOpts.renderingType;
+                delete mapOpts.isFractionalZoomEnabled;
+                mapOpts.tilt = 0;
+                mapOpts.styles = rasterStyles();
+                el.__map = new google.maps.Map(el, mapOpts);
+                el.__vectorMap = false;
+                el.__buildings3d = false;
+            }
+            applyBuildings(el);
             el.__map.addListener('dragstart', () => {
                 el.__userMoved = true;
             });
@@ -537,8 +1043,66 @@
             ensureRider(el);
             ensureMotion(el);
             ensureLinks(el);
+            if (google.maps.TrafficLayer && !el.__traffic) {
+                el.__traffic = new google.maps.TrafficLayer();
+                el.__traffic.setMap(el.__map);
+            }
+            if (!el.querySelector('.tl-map-chip')) {
+                const chip = document.createElement('div');
+                chip.className = 'tl-map-chip';
+                chip.innerHTML = '<b class="tl-map-phase"></b><span class="tl-map-eta"></span>';
+                el.appendChild(chip);
+            }
+            if (!el.querySelector('.tl-map-recenter')) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'tl-map-recenter';
+                btn.textContent = 'Recenter';
+                btn.addEventListener('click', () => {
+                    const snap = el.__liveSnap || {};
+                    const bounds = new google.maps.LatLngBounds();
+                    [snap.store, snap.drop, snap.agent].forEach((pos) => pos && bounds.extend(pos));
+                    el.__userMoved = false;
+                    fitMap(el, bounds);
+                });
+                el.appendChild(btn);
+            }
+            if (el.__vectorMap && !el.querySelector('.tl-map-3d')) {
+                const buildings = document.createElement('button');
+                buildings.type = 'button';
+                buildings.className = 'tl-map-3d is-on';
+                buildings.textContent = 'Flat';
+                buildings.addEventListener('click', () => {
+                    el.__buildings3d = el.__buildings3d === false;
+                    buildings.textContent = el.__buildings3d === false ? '3D' : 'Flat';
+                    buildings.classList.toggle('is-on', el.__buildings3d !== false);
+                    if (el.__buildings3d !== false) {
+                        const snap = el.__liveSnap || {};
+                        const focus = snap.agent || snap.store || snap.drop;
+                        if (focus && el.__map.getZoom && el.__map.getZoom() < 16) {
+                            el.__map.panTo(focus);
+                            el.__map.setZoom(17);
+                        }
+                    }
+                    applyBuildings(el);
+                });
+                el.appendChild(buildings);
+            }
+            if (!el.querySelector('.tl-map-traffic')) {
+                const traffic = document.createElement('button');
+                traffic.type = 'button';
+                traffic.className = 'tl-map-traffic is-on';
+                traffic.textContent = 'Traffic';
+                traffic.addEventListener('click', () => {
+                    const on = traffic.classList.toggle('is-on');
+                    if (el.__traffic) el.__traffic.setMap(on ? el.__map : null);
+                });
+                el.appendChild(traffic);
+            }
+            startReadoutPoll();
         }
         ensureLinks(el);
+        syncMapChrome(el, live);
         const place = (key, pos, title, svg) => {
             if (!pos) {
                 if (el.__markers[key]) el.__markers[key].setMap(null);
@@ -548,12 +1112,16 @@
                 el.__markers[key] = new google.maps.Marker({ map: el.__map, title, icon: markerIcon(svg, 42, 52), zIndex: 3 });
                 el.__markers[key].__svg = svg;
                 el.__markers[key].addListener('click', () => focusPlace(key));
+            } else if (el.__markers[key].__svg !== svg) {
+                el.__markers[key].setIcon(markerIcon(svg, 42, 52));
+                el.__markers[key].__svg = svg;
             }
             el.__markers[key].setMap(el.__map);
             el.__markers[key].setPosition(pos);
         };
-        place('store', live.store, 'Store', STORE_SVG);
-        place('drop', live.drop, 'Delivery location', HOME_SVG);
+        const previewPins = isPreview(live);
+        place('store', live.store, 'Store', previewPins ? PREVIEW_STORE_SVG : STORE_SVG);
+        place('drop', live.drop, 'Delivery location', previewPins ? PREVIEW_HOME_SVG : HOME_SVG);
         el.__liveSnap = live;
         el.__onTrip = (pts) => {
             const snap = el.__liveSnap;
@@ -570,7 +1138,7 @@
             hideEta();
             if (live.store && live.drop) {
                 if (!(el.__tripPath && samePoint(el.__tripFrom, live.store, 40) && samePoint(el.__tripTo, live.drop, 40))) {
-                    dottedLine(el.__remain, live.store, live.drop);
+                    previewArc(el.__remain, live.store, live.drop);
                     clearConnectors(el);
                 }
                 loadTrip(el, live.store, live.drop);
@@ -582,37 +1150,46 @@
             }
             if (!el.__fitted || el.__fitLeg !== live.leg) {
                 const bounds = new google.maps.LatLngBounds();
-                [live.store, live.drop].forEach((pos) => pos && bounds.extend(pos));
-                if (!bounds.isEmpty()) el.__map.fitBounds(bounds, mapPadding());
+                [live.store, live.drop, live.store && live.drop ? arcMid(live.store, live.drop) : null].forEach((pos) => pos && bounds.extend(pos));
+                fitMap(el, bounds);
                 el.__fitted = true;
                 el.__fitLeg = live.leg;
             }
-            if (el.__map && window.google && google.maps.event) google.maps.event.trigger(el.__map, 'resize');
             return;
         }
+        if (lockRider(el, live)) return;
         const moving = live.leg !== 'done' && !!live.agent;
         el.__agentLive = moving;
         el.__pendingGps = live.agent || null;
-        if (!moving && el.__rider) el.__rider.setRider(null, 0, false);
-        if (!moving) hideEta();
+        if (!moving && el.__rider) el.__rider.setRider(null, 0, false, false);
+        if (!moving) {
+            el.__riderTraveling = false;
+            hideEta();
+            syncBike(false);
+        }
         if (el.__fitLeg && el.__fitLeg !== live.leg) el.__legPath = null;
         const toward = live.leg === 'to_store' ? live.store || live.drop : live.drop || live.store;
         if (moving && live.agent) {
             el.__lastGps = { lat: live.agent.lat, lng: live.agent.lng };
             el.__lastGpsAt = Date.now();
-            if (!el.__path) parkRider(el, live.agent, toward);
+            parkRider(el, live.agent, toward);
         }
         if (live.store && live.drop) loadTrip(el, live.store, live.drop);
         else fallbackLive(el, live);
         if (!el.__fitted || el.__fitLeg !== live.leg) {
             const bounds = new google.maps.LatLngBounds();
             [live.store, live.drop, live.agent].forEach((pos) => pos && bounds.extend(pos));
-            if (!bounds.isEmpty()) el.__map.fitBounds(bounds, mapPadding());
+            fitMap(el, bounds);
             el.__fitted = true;
             el.__fitLeg = live.leg;
             el.__userMoved = false;
         }
-        if (el.__map && window.google && google.maps.event) google.maps.event.trigger(el.__map, 'resize');
+        el.__paintedLeg = live.leg;
+        if (pendingRider) {
+            const msg = pendingRider;
+            pendingRider = null;
+            applyRiderMessage(msg);
+        }
     }
 
     function focusPlace(key) {
@@ -627,20 +1204,32 @@
             const on = k === key;
             m.setIcon(markerIcon(m.__svg, on ? 56 : 42, on ? 70 : 52));
             m.setZIndex(on ? 9 : 3);
-            m.setAnimation(on ? google.maps.Animation.BOUNCE : null);
-            if (on) setTimeout(() => m.setAnimation(null), 2100);
         });
         el.__map.panTo(pos);
         if (el.__map.getZoom() < 15) el.__map.setZoom(15);
         if (!el.__info) el.__info = new google.maps.InfoWindow();
         const label = key === 'store' ? live.storeLabel || 'Store' : live.dropLabel || 'Delivery location';
-        el.__info.setContent('<div style="font:600 13px/1.4 Inter,system-ui,sans-serif;color:#0f172a;max-width:240px"><div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:' + (key === 'store' ? '#0f766e' : '#1d4ed8') + '">' + (key === 'store' ? 'Store' : 'Delivery') + '</div>' + esc(label) + '</div>');
+        el.__info.setContent('<div style="font:600 13px/1.4 Inter,system-ui,sans-serif;color:#0f172a;max-width:240px"><div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#1d4ed8">' + (key === 'store' ? 'Store' : 'Delivery') + '</div>' + esc(label) + '</div>');
         el.__info.open({ map: el.__map, anchor: el.__markers[key] });
         document.querySelectorAll('[data-focus-place]').forEach((b) => b.classList.toggle('is-on', b.getAttribute('data-focus-place') === key));
     }
 
     function isPreview(live) {
-        return !!(live && live.leg !== 'done' && (live.route === 'dotted' || !live.agent));
+        return !!(live && live.leg !== 'done' && (live.route === 'dotted' || live.leg === 'preview' || !live.agent));
+    }
+
+    function phaseCopy(live) {
+        if (!live || isPreview(live)) return 'From the store';
+        if (live.phaseLabel) return live.phaseLabel;
+        if (live.leg === 'to_store') return 'Heading to the store';
+        return 'On the way to you';
+    }
+
+    function syncMapChrome(el, live) {
+        if (!el || !el.querySelector) return;
+        const phase = el.querySelector('.tl-map-phase');
+        const label = (live && live.phaseLabel) || phaseCopy(live);
+        if (phase && label) phase.textContent = label;
     }
 
     function samePoint(a, b, meters) {
@@ -655,7 +1244,7 @@
                 strokeOpacity: 0,
                 strokeWeight: 0,
                 zIndex: 4,
-                icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.95, strokeColor: '#334155', scale: 2.2 }, offset: '0', repeat: '8px' }]
+                icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.95, strokeColor: '#1d4ed8', scale: 2.2 }, offset: '0', repeat: '8px' }]
             });
         el.__linkStore = link();
         el.__linkDrop = link();
@@ -703,10 +1292,49 @@
         if (pts && pts.length) line.setPath(pts);
     }
 
+    function arcPoints(a, b) {
+        const dLat = b.lat - a.lat;
+        const dLng = b.lng - a.lng;
+        const len = Math.sqrt(dLat * dLat + dLng * dLng) || 0.0001;
+        const bow = len * 0.42;
+        const cx = (a.lat + b.lat) / 2 + (-dLng / len) * bow;
+        const cy = (a.lng + b.lng) / 2 + (dLat / len) * bow;
+        const pts = [];
+        const steps = 56;
+        for (let i = 0; i <= steps; i++) {
+            const t = i / steps;
+            const u = 1 - t;
+            pts.push({
+                lat: u * u * a.lat + 2 * u * t * cx + t * t * b.lat,
+                lng: u * u * a.lng + 2 * u * t * cy + t * t * b.lng
+            });
+        }
+        return pts;
+    }
+
+    function arcMid(a, b) {
+        const pts = arcPoints(a, b);
+        return pts[Math.floor(pts.length / 2)];
+    }
+
+    function previewArc(line, a, b) {
+        if (!line || !a || !b) return;
+        line.setOptions({
+            strokeOpacity: 0,
+            strokeWeight: 0,
+            icons: [{
+                icon: { path: 'M 0,-3.2 0,3.2', strokeOpacity: 1, strokeColor: '#1d4ed8', strokeWeight: 3.5, scale: 3 },
+                offset: '0',
+                repeat: '28px'
+            }]
+        });
+        line.setPath(arcPoints(a, b));
+    }
+
     function dottedLine(line, a, b, pts) {
         if (!line || !a || !b) return;
         if (pts && pts.length > 1) {
-            line.setOptions({ strokeColor: routeColor(), strokeOpacity: 0, strokeWeight: 6, icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 3 }, offset: '0', repeat: '14px' }] });
+            line.setOptions({ strokeColor: '#1d4ed8', strokeOpacity: 0, strokeWeight: 6, icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, strokeColor: '#1d4ed8', scale: 3 }, offset: '0', repeat: '14px' }] });
             line.setPath(pts);
             return;
         }
@@ -714,7 +1342,7 @@
             strokeColor: routeColor(),
             strokeOpacity: 0,
             strokeWeight: 6,
-            icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 3 }, offset: '0', repeat: '14px' }]
+            icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, strokeColor: '#1d4ed8', scale: 3 }, offset: '0', repeat: '14px' }]
         });
         line.setPath([a, b]);
     }
@@ -726,14 +1354,50 @@
         eta.classList.remove('is-on');
     }
 
-    function showEta(text) {
+    function showEta(text, label, sub) {
         const eta = document.getElementById('tl-eta');
-        if (!eta || !text) return;
-        eta.hidden = false;
-        eta.classList.add('is-on');
-        const val = eta.querySelector('.hl-eta-val');
-        if (val) val.textContent = text;
-        else eta.textContent = eta.classList.contains('hl-eta') ? text : 'Arriving in approximately ' + text;
+        if (eta && (text || sub)) {
+            eta.hidden = false;
+            eta.classList.add('is-on');
+            const lbl = eta.querySelector ? eta.querySelector('.hl-eta-lbl, .tl-eta-lbl') : null;
+            const val = eta.querySelector ? eta.querySelector('.hl-eta-val, .tl-eta-val') : null;
+            const subEl = eta.querySelector ? eta.querySelector('.tl-eta-sub') : null;
+            if (lbl && label) lbl.textContent = label;
+            if (val && text) val.textContent = text;
+            if (subEl && sub) subEl.textContent = sub;
+        }
+        const phases = document.querySelectorAll ? document.querySelectorAll('.tl-map-phase') : [];
+        const etas = document.querySelectorAll ? document.querySelectorAll('.tl-map-eta') : [];
+        const shown = text || '';
+        const shownSub = sub || '';
+        if (label && phases[0]) phases[0].textContent = label;
+        const line = [shown, shownSub].filter(Boolean).join(' · ');
+        if (etas[0] && line) etas[0].textContent = line;
+        const traffic = document.getElementById('tl-traffic-line');
+        if (traffic && line) traffic.textContent = line;
+    }
+
+    function formatKm(meters) {
+        if (!Number.isFinite(meters) || meters < 0) return '';
+        if (meters < 1000) return Math.max(10, Math.round(meters / 10) * 10) + ' m';
+        const km = meters / 1000;
+        return (km < 10 ? km.toFixed(1) : String(Math.round(km))) + ' km';
+    }
+
+    function arrivalClock(seconds) {
+        const when = new Date(Date.now() + Math.max(0, Number(seconds) || 0) * 1000);
+        try {
+            return new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', hour: 'numeric', minute: '2-digit' }).format(when);
+        } catch (err) {
+            return '';
+        }
+    }
+
+    function etaSub(dur) {
+        if (!dur) return '';
+        const km = dur.distanceText || (dur.distanceValue != null ? formatKm(dur.distanceValue) : '');
+        const by = dur.value ? 'by ' + arrivalClock(dur.value) : '';
+        return [km, by].filter(Boolean).join(' · ');
     }
 
     function trackLine(el, color, weight, z) {
@@ -789,16 +1453,59 @@
         return formatDriveText(dur.value * (left / total));
     }
 
-    function requestDrive(origin, dest, cb) {
-        new google.maps.DirectionsService().route(
-            { origin: { lat: origin.lat, lng: origin.lng }, destination: { lat: dest.lat, lng: dest.lng }, travelMode: 'DRIVING' },
-            (result, status) => {
-                if (status !== 'OK') return cb(null, null);
-                const pts = routePoints(result);
-                const leg = result.routes && result.routes[0] && result.routes[0].legs && result.routes[0].legs[0];
-                cb(pts.length > 1 ? pts : null, (leg && leg.duration) || null);
+    function requestDrive(origin, dest, cb, plain) {
+        const req = {
+            origin: { lat: origin.lat, lng: origin.lng },
+            destination: { lat: dest.lat, lng: dest.lng },
+            travelMode: 'DRIVING'
+        };
+        if (!plain) req.drivingOptions = { departureTime: new Date(), trafficModel: 'bestguess' };
+        new google.maps.DirectionsService().route(req, (result, status) => {
+            if (status !== 'OK') {
+                if (!plain) return requestDrive(origin, dest, cb, true);
+                return cb(null, null);
             }
-        );
+            const pts = routePoints(result);
+            const leg = result.routes && result.routes[0] && result.routes[0].legs && result.routes[0].legs[0];
+            const dur = leg && (leg.duration_in_traffic || leg.duration);
+            const distance = leg && leg.distance;
+            cb(
+                pts.length > 1 ? pts : null,
+                dur
+                    ? {
+                          text: dur.text,
+                          value: dur.value,
+                          distanceText: distance && distance.text,
+                          distanceValue: distance && distance.value,
+                          traffic: !!(leg && leg.duration_in_traffic)
+                      }
+                    : null
+            );
+        });
+    }
+
+    function trafficEta(el, origin, dest, label) {
+        if (!el || !origin || !dest) return;
+        const key = [Number(origin.lat).toFixed(3), Number(origin.lng).toFixed(3), Number(dest.lat).toFixed(3), Number(dest.lng).toFixed(3), label || ''].join('|');
+        const now = Date.now();
+        const kmNow = formatKm(haversine(origin, dest));
+        const cached = el.__etaKey === key && el.__etaAt && now - el.__etaAt < 8000;
+        if (kmNow && !cached) showEta(el.__etaText || '', label, kmNow);
+        if (cached) {
+            if (el.__etaText || el.__etaSub || kmNow) showEta(el.__etaText || '', label, el.__etaSub || kmNow);
+            return;
+        }
+        if (el.__etaPending === key) return;
+        el.__etaPending = key;
+        requestDrive(origin, dest, (pts, dur) => {
+            if (el.__etaPending === key) el.__etaPending = null;
+            if (!dur || !dur.text) return;
+            el.__etaKey = key;
+            el.__etaAt = Date.now();
+            el.__etaText = dur.text;
+            el.__etaSub = etaSub(dur);
+            showEta(dur.text, label, el.__etaSub);
+        });
     }
 
     function loadTrip(el, store, drop) {
@@ -834,7 +1541,8 @@
 
     function loadLeg(el, origin, dest, legName, cb) {
         if (!origin || !dest) return cb(null, null);
-        if (el.__legPath && el.__legName === legName && samePoint(el.__legFrom, origin, 180) && samePoint(el.__legTo, dest, 40)) {
+        const fresh = el.__legAt && Date.now() - el.__legAt < 8000;
+        if (el.__legPath && el.__legName === legName && fresh && samePoint(el.__legFrom, origin, 50) && samePoint(el.__legTo, dest, 40)) {
             return cb(el.__legPath, el.__legDuration);
         }
         const from = { lat: origin.lat, lng: origin.lng };
@@ -850,6 +1558,7 @@
                 el.__legTo = to;
                 el.__legName = legName;
                 el.__legDuration = duration;
+                el.__legAt = Date.now();
             }
             cb(pts, duration);
         });
@@ -858,28 +1567,39 @@
     function parkRider(el, agent, toward) {
         if (!el.__rider) return;
         if (!agent) {
-            el.__rider.setRider(null, 0, false);
+            el.__rider.setRider(null, 0, false, false);
+            syncBike(false);
             return;
         }
-        const heading = toward ? bearingDeg(agent, toward) % 360 : 0;
-        el.__rider.setRider(agent, heading, true);
+        if (el.__glide) return;
+        const device = Number(agent.heading);
+        let heading;
+        if (Number.isFinite(device)) {
+            heading = ((device % 360) + 360) % 360;
+            el.__headingFallback = false;
+        } else if (el.__stillHeading != null && !el.__headingFallback) {
+            heading = el.__stillHeading;
+        } else if (toward) {
+            heading = bearingDeg(agent, toward) % 360;
+            el.__headingFallback = true;
+        } else heading = el.__stillHeading || 0;
+        el.__stillHeading = heading;
+        el.__rider.setRider({ lat: Number(agent.lat), lng: Number(agent.lng) }, heading, true, false);
+        syncBike(false);
     }
 
     function applyPreviewRoad(el, live, pts) {
-        hideEta();
         el.__agentLive = false;
         el.__path = null;
         if (el.__rider) el.__rider.setRider(null, 0, false);
         if (el.__doneLine) el.__doneLine.setPath([]);
         if (el.__corridor) el.__corridor.setPath([]);
         if (!live.store || !live.drop || !el.__remain) return;
-        if (!pts) {
-            dottedLine(el.__remain, live.store, live.drop);
-            clearConnectors(el);
-            return;
-        }
-        dottedLine(el.__remain, live.store, live.drop, pts);
+        previewArc(el.__remain, live.store, live.drop);
         clearConnectors(el);
+        const dur = el.__tripDuration;
+        if (dur && dur.text) showEta(dur.text, 'From the store', etaSub(dur));
+        else trafficEta(el, live.store, live.drop, 'From the store');
     }
 
     function followTrip(el, live, pts) {
@@ -893,9 +1613,7 @@
             solidLine(el.__remain);
             applyPath(el, pts);
             paintAddressConnectors(el, live.store, live.drop, [pts]);
-            const text = scaledEtaText(el);
-            if (text && el.__agentLive) showEta(text);
-            else hideEta();
+            if (live.agent && target) trafficEta(el, live.agent, target, live.phaseLabel || 'On the way to you');
             return;
         }
         if (el.__corridor) {
@@ -909,7 +1627,7 @@
             return;
         }
         const legName = toStore ? 'to_store' : 'to_drop';
-        const cached = el.__legPath && el.__legName === legName && samePoint(el.__legFrom, live.agent, 180) && samePoint(el.__legTo, target, 40);
+        const cached = el.__legPath && el.__legName === legName && el.__legAt && Date.now() - el.__legAt < 8000 && samePoint(el.__legFrom, live.agent, 50) && samePoint(el.__legTo, target, 40);
         if (!cached) parkRider(el, live.agent, target);
         loadLeg(el, live.agent, target, legName, (legPts, duration) => {
             const snap = el.__liveSnap;
@@ -933,7 +1651,8 @@
             solidLine(el.__remain);
             applyPath(el, legPts);
             paintAddressConnectors(el, snap.store, snap.drop, roads);
-            if (duration && duration.text && el.__agentLive) showEta(duration.text);
+            const label = snap.phaseLabel || (snap.leg === 'to_store' ? 'Heading to the store' : 'On the way to you');
+            if (duration && duration.text && el.__agentLive) showEta(duration.text, label, etaSub(duration));
             else hideEta();
         });
     }
@@ -948,14 +1667,83 @@
         else if (el.__rider) el.__rider.setRider(null, 0, false);
         if (origin && target) dottedLine(el.__remain, origin, target);
         if (live.store && live.drop && origin !== live.store) paintAddressConnectors(el, live.store, live.drop, [[live.store, live.drop], origin && target ? [origin, target] : null]);
-        hideEta();
+        const label = live.phaseLabel || (live.leg === 'to_store' ? 'Heading to the store' : 'On the way to you');
+        if (live.agent && target) trafficEta(el, live.agent, target, label);
+        else if (live.store && live.drop) trafficEta(el, live.store, live.drop, 'From the store');
+        else hideEta();
+    }
+
+    function rasterStyles() {
+        return [
+            { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+            { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+            { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#f4f7f5' }] },
+            { featureType: 'landscape.man_made', elementType: 'geometry', stylers: [{ color: '#eef2f0' }] },
+            { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#d7e6f4' }] },
+            { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
+            { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#dbe7f8' }] },
+            { featureType: 'road.arterial', elementType: 'geometry', stylers: [{ color: '#e8f1fb' }] },
+            { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#dbeafe' }] },
+            { featureType: 'road', elementType: 'labels', stylers: [{ visibility: 'simplified' }] },
+            { featureType: 'administrative', elementType: 'labels.text.fill', stylers: [{ color: '#64748b' }] }
+        ];
+    }
+
+    function applyBuildings(el) {
+        if (!el || !el.__map || !el.__map.setTilt) return;
+        try {
+            if (el.__map.setHeading) el.__map.setHeading(0);
+            el.__map.setTilt(el.__buildings3d === false ? 0 : 45);
+        } catch (err) {}
+    }
+
+    function fitMap(el, bounds) {
+        if (!el || !el.__map || !bounds || (bounds.isEmpty && bounds.isEmpty())) return;
+        el.__map.fitBounds(bounds, mapPadding());
+        const settle = () => applyBuildings(el);
+        if (window.google && google.maps.event && google.maps.event.addListenerOnce) google.maps.event.addListenerOnce(el.__map, 'idle', settle);
+        else settle();
+    }
+
+    function applyDeviceClass() {
+        const root = document.documentElement;
+        if (!root || !root.classList) return;
+        const width = Math.min(window.innerWidth || 1200, root.clientWidth || window.innerWidth || 1200);
+        const phone = width <= 760;
+        const tablet = !phone && width <= 1100;
+        root.classList.toggle('tl-phone', phone);
+        root.classList.toggle('tl-tablet', tablet);
+        root.classList.toggle('tl-desktop', !phone && !tablet);
+        if (!mapEl || !mapEl.__map) return;
+        const phoneNow = root.classList.contains('tl-phone');
+        try {
+            if (mapEl.__map.setOptions) mapEl.__map.setOptions({ fullscreenControl: !phoneNow, zoomControl: !phoneNow, scaleControl: !phoneNow });
+        } catch (err) {}
+        applyBuildings(mapEl);
+        if (window.google && google.maps.event) google.maps.event.trigger(mapEl.__map, 'resize');
     }
 
     function routeColor() {
-        return document.body.classList.contains('hl-page') ? '#ea580c' : '#067d62';
+        return '#1d4ed8';
+    }
+
+    let readoutTimer = null;
+    function startReadoutPoll() {
+        if (readoutTimer) return;
+        readoutTimer = setInterval(() => {
+            const el = mapEl;
+            const live = el && el.__liveSnap;
+            if (!el || !el.__map || !live || live.leg === 'done') return;
+            const preview = isPreview(live);
+            const origin = preview ? live.store : live.agent || live.store;
+            const target = preview ? live.drop : live.leg === 'to_store' ? live.store || live.drop : live.drop || live.store;
+            if (origin && target) trafficEta(el, origin, target, phaseCopy(live));
+        }, 8000);
     }
 
     function mapPadding() {
+        const root = document.documentElement;
+        if (root && root.classList && root.classList.contains('tl-phone')) return { top: 56, right: 16, bottom: 52, left: 16 };
         return document.body.classList.contains('hl-page') ? { top: 72, right: 72, bottom: 96, left: 72 } : 64;
     }
 
@@ -972,5 +1760,7 @@
             el.style.setProperty('--line', String(pct));
         });
     }
-    window.TrackTimeline = { render, mount, bind, when, esc, updates, tick: tickLines, focusPlace };
+    applyDeviceClass();
+    if (window.addEventListener) window.addEventListener('resize', applyDeviceClass);
+    window.TrackTimeline = { render, mount, bind, when, esc, updates, tick: tickLines, focusPlace, watch: watchRider, acceptFix, haversine };
 })();

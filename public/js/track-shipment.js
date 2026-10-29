@@ -71,6 +71,13 @@
         );
     }
 
+    function milesHtml(list) {
+        if (!list || !list.length) return '';
+        return '<ol class="tl-miles">' + list.map(function (m) {
+            return '<li class="tl-mile is-' + m.state + '"><b>' + esc(m.label) + '</b>' + (m.detail && m.state === 'active' ? '<span>' + esc(m.detail) + '</span>' : '') + '</li>';
+        }).join('') + '</ol>';
+    }
+
     function drawersHtml(steps) {
         return '<div class="ts4-drawers">' + steps.map(function (s, i) {
             const ups = (s.updates || []).slice().sort(function (a, b) { return (Date.parse(b.at) || 0) - (Date.parse(a.at) || 0); });
@@ -123,6 +130,7 @@
         const latest = steps.slice().reverse().map(function (s) { return (s.updates || [])[0]; }).filter(Boolean)[0];
         const partner = t.partner;
         const otpStep = steps.find(function (s) { return s.deliveryOtp; });
+        const doorCode = t.deliveryOtp || (otpStep && otpStep.deliveryOtp) || '';
         const pickupStep = steps.find(function (s) { return s.pickup && s.pickup.pickupOtp; });
         const cs = t.courierStatus;
         const st = t.stats || {};
@@ -141,13 +149,13 @@
             railHtml(t) +
             '</section>' +
             '<div class="ts4-tiles">' +
-            (t.proximity ? tile('fa-location-dot', 'Delivery partner', t.proximity.label, (t.proximity.distanceKm != null ? t.proximity.distanceKm + ' km away' : '') + (t.proximity.etaMinutes ? ' · ~' + t.proximity.etaMinutes + ' min' : '')) : '') + tile('fa-location-dot', 'Where it is', latest ? latest.city || latest.title : headline, latest && latest.city ? latest.title : '') +
+            (t.proximity ? tile('fa-location-dot', 'Delivery partner', t.proximity.label, (t.proximity.distanceText || (t.proximity.distanceKm != null ? t.proximity.distanceKm + ' km away' : '')) + (t.proximity.etaText ? ' · ' + t.proximity.etaText + ' with traffic' : t.proximity.etaMinutes ? ' · ~' + t.proximity.etaMinutes + ' min' : '')) : '') + tile('fa-location-dot', 'Where it is', latest ? latest.city || latest.title : headline, latest && latest.city ? latest.title : '') +
             tile('fa-calendar-check', t.rank >= 5 ? 'Delivered' : 'Delivery by', t.deliveryBy || (t.expected && t.expected.deliveryText) || String(((steps.find(function (s) { return s.key === 'delivered'; }) || {}).expectedLabel || '')).replace(/^Expected\s*/i, '') || '—', t.rank >= 5 ? '' : t.dates && t.dates.deliveryKind === 'courier' ? 'Confirmed by courier' : 'Seller estimate') +
             tile('fa-truck', 'Courier', partner ? partner.name : o.courierProviderLabel || o.courierProvider || '—', (partner && partner.trackingNo) || o.courierTrackingNo || '') +
             tile('fa-clock-rotate-left', 'Last update', latest && latest.at ? fmtWhen(latest.at) : o.updatedAt ? fmtWhen(o.updatedAt) : '—', st.scans ? st.scans + ' courier scans' : '') +
             (t.deliveryOtpVerified ? '<div class="ts4-tile ts4-otp"><i class="fas fa-check-circle"></i><div><small>Delivery OTP</small><b>Verified</b><em>Confirmed by the courier at handover</em></div></div>' : '') +
             (t.pickupOtpVerified ? '<div class="ts4-tile ts4-otp"><i class="fas fa-check-circle"></i><div><small>Pickup OTP</small><b>Verified</b><em>Confirmed by the courier at pickup</em></div></div>' : '') +
-            (otpStep ? '<div class="ts4-tile ts4-otp"><i class="fas fa-key"></i><div><small>Delivery OTP</small><b>' + esc(otpStep.deliveryOtp) + '</b><em>Share only with the delivery partner at your door</em></div></div>' : t.otpSupported && !pickupStep && t.rank < 5 ? '<div class="ts4-tile ts4-otp is-empty"><i class="fas fa-key"></i><div><small>Delivery OTP</small><b>\u2014</b><em>The courier sends this code to your phone when the delivery task is assigned \u2014 the delivery partner will ask for it</em></div></div>' : '') +
+            (doorCode ? '<div class="ts4-tile ts4-otp"><i class="fas fa-key"></i><div><small>Delivery OTP</small><b>' + esc(doorCode) + '</b><em>Share only with the delivery partner at your door</em></div></div>' : t.otpSupported && !pickupStep && t.rank < 5 ? '<div class="ts4-tile ts4-otp is-empty"><i class="fas fa-key"></i><div><small>Delivery OTP</small><b>\u2014</b><em>The courier sends this code to your phone when the delivery task is assigned \u2014 the delivery partner will ask for it</em></div></div>' : '') +
             (pickupStep ? '<div class="ts4-tile ts4-otp"><i class="fas fa-key"></i><div><small>Pickup OTP</small><b>' + esc(pickupStep.pickup.pickupOtp) + '</b><em>Store staff quote this to the courier</em></div></div>' : t.otpSupported && t.rank >= 1 && t.rank < 3 ? '<div class="ts4-tile ts4-otp is-empty"><i class="fas fa-key"></i><div><small>Pickup OTP</small><b>\u2014</b><em>Not issued by the courier yet</em></div></div>' : '') +
             '</div>' +
             journeyHtml(o)
@@ -162,7 +170,8 @@
         root.classList.remove('hidden');
         if (o.commerceTimeline && window.TrackTimeline) {
             const live = o.commerceLive || null;
-            const sig = JSON.stringify(o.commerceTimeline) + '|' + (live && live.slot ? live.slot : '') + '|' + (live && live.leg ? live.leg : '');
+            const steps = (o.commerceTimeline.steps || []).map((step) => (step.key || '') + ':' + (step.state || '') + ':' + (step.title || '')).join('|');
+            const sig = steps + '|' + (o.commerceTimeline.headline || '') + '|' + (o.commerceTimeline.deliveryOtp || '') + '|' + (o.commerceTimeline.cancelled ? '1' : '0');
             if (sig !== lastCommerceSig) {
                 lastCommerceSig = sig;
                 root.innerHTML = summaryHtml(o) + '<section class="ts4-card"><div class="ts4-card-head"><h3><i class="fas fa-list-check"></i> Order progress</h3><span>Updates when you refresh</span></div>' + window.TrackTimeline.render({ timeline: o.commerceTimeline, live: live }, { animate: true }) + '</section>';

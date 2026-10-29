@@ -6,6 +6,7 @@ let razorpayMethod = null;
 let shopSearchTerm = '';
 let shopPending = null;
 let orderPoll = null;
+let shopOrderStory = '';
 let checkoutState = { fulfillment: 'delivery', method: '', addressId: null, showForm: false };
 let accountTab = 'orders';
 let orderFilter = 'all';
@@ -793,7 +794,7 @@ function renderOrderDetail(data) {
         '</div></div>';
     shopTrackerSeen = true;
     if (window.ShipTrack) {
-        window.ShipTrack.draw(document.getElementById('shop-order-track'), data.track, o);
+        window.ShipTrack.draw(document.getElementById('shop-order-track'), data.track, Object.assign({}, o, { live: data.live, timeline: data.timeline }));
         window.ShipTrack.draw(document.getElementById('shop-return-track'), data.returnTrack, o);
         const linked = data.linked || {};
         window.ShipTrack.draw(document.getElementById('shop-replacement-track'), linked.replacementTrack, o);
@@ -818,19 +819,44 @@ async function openShopOrder(id) {
         root.innerHTML = '<div class="box empty">' + shopEsc(data.error || 'Order not found') + '</div>';
         return;
     }
+    shopOrderStory = shopOrderStoryOf(data);
     renderOrderDetail(data);
     if (!termOrder(data) || data.returnView) {
         orderPoll = setInterval(async () => {
             if (document.getElementById('view-order').classList.contains('hidden')) return stopPolling();
             try {
                 const r = await fetchOrder(id);
-                if (r.ok) {
+                if (!r.ok) return;
+                const next = shopOrderStoryOf(r.data);
+                const mapOpen = shopMapOpen(r.data);
+                if (next !== shopOrderStory || mapOpen !== shopHasMap()) {
+                    shopOrderStory = next;
                     renderOrderDetail(r.data);
-                    if (termOrder(r.data) && !r.data.returnView) stopPolling();
+                } else if (mapOpen && window.TrackTimeline) {
+                    TrackTimeline.mount(r.data.live);
                 }
+                if (termOrder(r.data) && !r.data.returnView) stopPolling();
             } catch (_) {}
         }, 15000);
     }
+}
+
+function shopOrderStoryOf(data) {
+    const t = (data && data.timeline) || {};
+    const steps = (t.steps || []).map((step) => (step.key || '') + ':' + (step.state || '') + ':' + (step.title || '')).join('|');
+    const o = (data && data.order) || {};
+    const names = (t.steps || []).map((step) => ((step.agent && step.agent.name) || (step.contact && step.contact.name) || '')).join(',');
+    return [o.id || '', o.status || '', t.headline || '', t.cancelled ? '1' : '0', t.deliveryOtp || '', names, steps].join('~');
+}
+
+function shopMapOpen(data) {
+    const live = data && data.live;
+    return !!(live && (live.mapsApiKey || live.courierView));
+}
+
+function shopHasMap() {
+    const root = document.getElementById('view-order');
+    return !!(root && root.querySelector('.tl-map, #tl-map-slot'));
 }
 
 async function shopRequestReturn(id) {

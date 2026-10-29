@@ -21,12 +21,44 @@
         return !!(track && track.fulfillmentType === 'HYPERLOCAL' && track.map && track.map.enabled);
     }
 
-    function partnerLine(track) {
+    function partnerLine(track, live) {
         const name = track.agent && track.agent.name;
+        const leg = live && live.leg;
+        const phase = live && live.phase;
+        if (name && (phase === 'at_store' || (live && live.phaseLabel === 'At the store'))) return name + ' is at the store';
+        if (name && leg === 'to_store') return name + ' is heading to the store';
+        if (name && leg === 'to_drop') return name + ' is on the way to you';
         if (name && track.map.live) return name + ' is on the way to deliver your order';
         if (name) return name + ' is assigned to this order';
         if (track.agent && track.agent.phone) return 'A delivery partner is assigned to this order';
         return 'Finding a delivery partner';
+    }
+
+    function sheetActs(track) {
+        if (!track) return '';
+        const href = telHref(track.agent && track.agent.phone);
+        const code = track.orderId || '';
+        const bits = [];
+        if (href) bits.push('<a class="tl-act" href="' + esc(href) + '">Call partner</a>');
+        bits.push('<button type="button" class="tl-act" data-copy-href="1">Share tracking</button>');
+        if (code) bits.push('<button type="button" class="tl-act" data-copy="' + esc(code) + '">Copy order code</button>');
+        if (track.scanId && track.scanId !== code) bits.push('<button type="button" class="tl-act" data-copy="' + esc(track.scanId) + '">Copy tracking id</button>');
+        if (track.deliveryOtp) bits.push('<button type="button" class="tl-act" data-copy="' + esc(track.deliveryOtp) + '">Copy delivery code</button>');
+        return bits.length ? '<div class="tl-acts">' + bits.join('') + '</div>' : '';
+    }
+
+    function milesHtml(shipment) {
+        const miles = (shipment && shipment.timeline && shipment.timeline.milestones) || [];
+        if (!miles.length) return '';
+        return '<ol class="tl-miles">' + miles.map((m) => '<li class="tl-mile is-' + esc(m.state) + '"><b>' + esc(m.label) + '</b>' + (m.detail && m.state === 'active' ? '<span>' + esc(m.detail) + '</span>' : '') + '</li>').join('') + '</ol>';
+    }
+
+    function embeddedMap(shipment) {
+        const live = shipment && shipment.live;
+        if (!live || live.leg === 'done') return '';
+        if (!live.mapsApiKey && !live.store && !live.drop && !live.agent) return '';
+        const label = live.phaseLabel || (live.route === 'dotted' || live.leg === 'preview' ? 'Route from the store to your address' : 'Delivery partner');
+        return '<div class="tl-map-block"><div class="tl-live">' + esc(label) + '</div><div id="tl-eta" class="tl-eta" hidden><span class="tl-eta-lbl">' + esc(label) + '</span><b class="tl-eta-val"></b><span class="tl-eta-sub"></span></div><div id="tl-map-slot"></div></div>';
     }
 
     function telHref(phone) {
@@ -168,7 +200,7 @@
         const px = track && track.proximity;
         if (!px || !px.label) return '';
         return '<div class="trk-cstatus is-prox is-' + esc(px.state) + '"><span class="trk-cstatus-dot"></span><b>' + esc(px.label) + '</b>' +
-            (px.distanceKm != null ? '<span> · ' + esc(px.distanceKm) + ' km away</span>' : '') + (px.etaMinutes ? '<span> · ~' + esc(px.etaMinutes) + ' min</span>' : '') +
+            (px.etaText ? '<span> · ' + esc(px.etaText) + '</span>' : px.etaMinutes ? '<span> · ' + esc(px.etaMinutes) + ' min</span>' : '') + (px.distanceText ? '<span> · ' + esc(px.distanceText) + '</span>' : px.distanceKm != null ? '<span> · ' + esc(px.distanceKm) + ' km</span>' : '') +
             (px.lastGpsAt ? '<span class="trk-cstatus-at">GPS ' + esc(ago(px.lastGpsAt)) + '</span>' : '') + '</div>';
     }
 
@@ -361,6 +393,15 @@
         });
     }
 
+    function qrHtml(track) {
+        if (!track || !track.shipmentQrSvg || track.mainStatus === 'DELIVERED' || track.mainStatus === 'CANCELLED') return '';
+        const scanId = track.scanId || track.orderId || '';
+        const kind = track.scanKind === 'tracking' ? 'tracking id' : 'order id';
+        const title = track.scanKind === 'tracking' ? 'Tracking QR' : 'Order QR';
+        const extra = track.orderId && scanId && track.orderId !== scanId ? '<p>Order ' + esc(track.orderId) + '</p>' : '';
+        return '<section class="trk-qr"><div class="trk-qr-copy"><b>' + title + '</b>' + (scanId ? '<div class="trk-qr-code">' + esc(scanId) + '</div>' : '') + extra + '<p>The delivery partner scans this ' + kind + ' in the agent app to confirm pickup, then delivery.</p></div><div class="trk-qr-img">' + track.shipmentQrSvg + '</div></section>';
+    }
+
     function otpHtml(label, code, track) {
         const verified = track && ((/pickup/i.test(label) && track.pickupOtpVerified) || (/delivery/i.test(label) && track.deliveryOtpVerified));
         if (verified) return '<div class="ship-otp ship-otp-ok"><div class="lbl">' + esc(label) + '</div><div class="code">\u2713 OTP verified</div></div>';
@@ -547,9 +588,10 @@
             now = '<div class="hl-now is-done"><b>Delivered' + (h.proof.deliveredAt ? ' · ' + esc(when(h.proof.deliveredAt)) : '') + '</b><span>' +
                 (h.proof.otpVerified ? 'OTP verified at handover' : 'Handed over to recipient') + (h.proof.recipient ? ' · ' + esc(h.proof.recipient) : '') + '</span></div>';
         } else if (live.active && live.gps) {
+            const trafficLine = live.etaText ? esc(live.etaText) : live.etaMinutes ? esc(live.etaMinutes) + ' min' : 'Updating time';
             now = '<div class="hl-now' + (live.nearby ? ' is-near' : '') + '"><b>' +
-                (live.atDoorstep ? 'Delivery partner has arrived at your doorstep' : live.nearby ? 'Your delivery partner is nearby — please be available' : live.approaching ? 'Delivery partner approaching' : 'Arriving in about ' + esc(live.etaMinutes) + ' min') + '</b><span>' +
-                (live.distanceKm != null ? esc(live.distanceKm) + ' km away · ' : '') + 'GPS updated ' + esc(ago(live.lastGpsAt)) + '</span></div>';
+                (live.atDoorstep ? 'Delivery partner has arrived at your doorstep' : live.nearby ? 'Your delivery partner is nearby — please be available' : live.approaching ? 'Delivery partner approaching' : trafficLine) + '</b><span id="tl-traffic-line">' +
+                (live.distanceText ? esc(live.distanceText) + ' · ' : live.distanceKm != null ? esc(live.distanceKm) + ' km away · ' : '') + 'GPS updated ' + esc(ago(live.lastGpsAt)) + '</span></div>';
         } else if (live.active && live.gpsLost) {
             now = '<div class="hl-now is-warn"><b>Waiting for the partner\u2019s location</b><span>Last location received ' + esc(ago(live.lastGpsAt)) + ' · showing latest milestone</span></div>';
         } else if (live.active) {
@@ -779,6 +821,15 @@
         });
     }
 
+    function cardsHtml(track) {
+        const cards = (track && track.cards) || [];
+        if (!cards.length) return '';
+        return '<section class="tl-cards" aria-label="Order details">' + cards.map((card) => {
+            const now = card.key === 'now' ? ' is-now' : '';
+            return '<article class="tl-mini' + now + '" data-tl-card="' + esc(card.key) + '"><div class="lbl">' + esc(card.label) + '</div><div class="val" data-tl-card-val>' + esc(card.value) + '</div>' + (card.detail ? '<div class="sub" data-tl-card-sub>' + esc(card.detail) + '</div>' : '') + '</article>';
+        }).join('') + '</section>';
+    }
+
     function documentHtml(track, shipment) {
         const ret = isReturn(track);
         const courier = (track.shipment && track.shipment.courier) || (ret ? 'Store pickup / courier' : 'Gogate Products');
@@ -806,6 +857,9 @@
             (detail ? '<p>' + esc(detail) + '</p>' : '') +
             '<p class="trk-stepno">' + (delivered ? 'Completed' : 'Step ' + stepNo + ' of ' + (steps.length || 5)) + '</p>' + courierChip(track) +
             '</div>' + board + '</section>' +
+            sheetActs(track) +
+            cardsHtml(track) +
+            embeddedMap(shipment) +
             railHtml(track) +
             statsHtml(track) +
             hlNowHtml(track) +
@@ -823,10 +877,11 @@
             '</div>' +
             (expects ? '<div class="trk-whens">' + expects + '</div>' : '') +
             failureHtml(track) +
+            qrHtml(track) +
             otpHtml('Pickup OTP', track.pickupOtp, track) + otpHtml('Delivery OTP', track.deliveryOtp, track) +
             '<section class="trk-progress"><h2>' + (ret ? kindWord(track) + ' progress' : 'Order progress') + '</h2><p class="trk-line-note">' + esc(lineNote(track)) + '</p>' + '<ol class="ship-pipe">' + pipeHtml(track) + '</ol>' + '</section>' +
             logHtml(track) +
-            '<footer class="trk-foot"><a href="' + esc(track.supportUrl || '/support') + '">Need help with this ' + (ret ? kindWord(track).toLowerCase() : 'shipment') + '?</a><span class="trk-fresh">Checking for updates</span><span>Updates when you refresh</span></footer>' +
+            '<footer class="trk-foot"><a href="' + esc(track.supportUrl || '/support') + '">Need help with this ' + (ret ? kindWord(track).toLowerCase() : 'shipment') + '?</a><span class="trk-fresh">Checking for updates</span><span>Live</span></footer>' +
             '</div>';
     }
 
@@ -839,12 +894,9 @@
         const call = href
             ? '<a class="hl-call" href="' + esc(href) + '" aria-label="Call delivery partner"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M6.6 10.8a15.1 15.1 0 006.6 6.6l2.2-2.2a1 1 0 011-.25 11.4 11.4 0 003.6.57 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 4a1 1 0 011-1h3.5a1 1 0 011 1 11.4 11.4 0 00.57 3.6 1 1 0 01-.25 1L6.6 10.8z"/></svg></a>'
             : '';
-        const onRoad =
-            String(track.commerceStage || '') === 'out_for_delivery' &&
-            !!(track.agent && (track.agent.name || track.agent.phone)) &&
-            Number.isFinite(Number(track.agentLat)) &&
-            Number.isFinite(Number(track.agentLng));
-        const bike = onRoad
+        const liveNow = shipment.live || {};
+        const showIcon = !!(name || phone || liveNow.agent);
+        const bike = showIcon
             ? '<span class="hl-bike hl-bike-3d" aria-hidden="true"><img src="/media/delivery-agent.png?v=2" alt=""></span>'
             : '<span class="hl-bike hl-bike-idle" aria-hidden="true"><svg viewBox="0 0 48 48" width="40" height="40"><path d="M8 18l16-8 16 8v14l-16 8-16-8z" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/><path d="M8 18l16 8 16-8M24 26v14" fill="none" stroke="#94a3b8" stroke-width="2"/></svg></span>';
         const partner = '<div class="hl-partner">' + bike +
@@ -870,9 +922,14 @@
             '<section class="hl-sheet">' +
             '<header class="hl-brand"><span class="trk-mark">' + iconSvg('M3 8l9-4 9 4-9 4-9-4zM3 8v8l9 4 9-4V8') + '</span><div><div class="trk-brand-name">Gogate Products</div><div class="trk-brand-sub">Hyperlocal delivery</div></div></header>' +
             '<div class="hl-top"><div><div class="hl-kicker">Order #' + esc(track.orderId || shipment.orderCode || '') + (badge ? ' ' + badge : '') + '</div><h1>' + esc(track.currentStatus || track.currentMessage) + '</h1>' +
-            '<p class="hl-sub">' + esc(partnerLine(track)) + '</p>' +
-            (track.map.live ? '' : '<p class="hl-wait">The route stays dotted until a delivery partner location arrives.</p>') +
-            '</div><div id="tl-eta" class="hl-eta" hidden><span class="hl-eta-lbl">Arriving</span><b class="hl-eta-val"></b></div></div>' +
+            '<p class="hl-sub">' + esc(partnerLine(track, liveNow)) + '</p>' +
+            (liveNow.agent ? (liveNow.leg === 'to_store' ? '<p class="hl-wait">' + esc(liveNow.phaseLabel || 'Heading to the store') + '.</p>' : '') : '<p class="hl-wait">Dashed route from the store to your address. The partner appears here as soon as one is assigned.</p>') +
+            '</div><div id="tl-eta" class="hl-eta" hidden><span class="hl-eta-lbl">' + esc(liveNow.phaseLabel || 'Arriving') + '</span><b class="hl-eta-val"></b><span class="tl-eta-sub"></span></div></div>' +
+            cardsHtml(track) +
+            qrHtml(track) +
+            otpHtml('Delivery OTP', track.deliveryOtp, track) +
+            otpHtml('Pickup OTP', track.pickupOtp, track) +
+            sheetActs(track) +
             hlNowHtml(track) +
             railHtml(track) +
             board +
@@ -887,7 +944,6 @@
             esc(note) + '</textarea><div class="hl-note-actions"><button type="submit">Save</button><button type="button" id="hl-note-cancel">Cancel</button></div><p class="form-msg" id="hl-note-msg"></p></form></div>' +
             partner +
             '</section><div class="hl-below">' +
-            otpHtml('Pickup OTP', track.pickupOtp) + otpHtml('Delivery OTP', track.deliveryOtp) +
             progressHtml(track) +
             '</div></div>';
     }
@@ -906,14 +962,7 @@
         document.body.classList.add('hl-page');
         const live = track.map.enabled ? shipment.live : null;
         const editing = document.getElementById('hl-note-form');
-        const steady = Object.assign({}, track, {
-            pipeline: (track.pipeline || []).map((step) => {
-                const copy = Object.assign({}, step);
-                delete copy.lineGrow;
-                return copy;
-            })
-        });
-        const sig = JSON.stringify(steady) + '|' + JSON.stringify(shipment.linked || null) + '|' + (live && live.slot ? live.slot : '') + '|' + (live && live.courierView ? live.courierView.url : '') + '|' + JSON.stringify(shipment.journey || null) + '|' + (live && live.leg ? live.leg : '') + '|' + (live && live.route ? live.route : '');
+        const sig = storyKey(track) + '|' + storyKey(shipment.linked && shipment.linked.replacementTrack) + '|' + storyKey(shipment.linked && shipment.linked.originReturnTrack);
         if (!(editing && !editing.hidden) && sig !== drawn) {
             drawn = sig;
             tracker.innerHTML = (liveSheet ? sheetHtml(track, shipment) : documentHtml(track, shipment)) + linkedHtml(shipment);
@@ -929,6 +978,7 @@
         touchFresh();
         tickPipe();
         if (live && (live.mapsApiKey || !live.courierView) && window.TrackTimeline) TrackTimeline.mount(live);
+        if (!returnToken && token && window.TrackTimeline && TrackTimeline.watch) TrackTimeline.watch(token);
         document.querySelectorAll('[data-focus-place]').forEach((b) => {
             if (b.__bound) return;
             b.__bound = true;
@@ -994,6 +1044,20 @@
         });
     }
 
+    function storyKey(track) {
+        if (!track) return '';
+        const steps = (track.pipeline || track.steps || []).map((step) => [step.key || '', step.state || '', step.title || ''].join(':'));
+        return JSON.stringify({
+            status: track.currentStatus || track.mainStatus || track.headline || '',
+            cancelled: !!track.cancelled,
+            otp: track.deliveryOtp || '',
+            pickup: track.pickupOtp || '',
+            partner: (track.agent && track.agent.name) || '',
+            map: track.map && track.map.enabled ? 1 : 0,
+            steps: steps
+        });
+    }
+
     function touchFresh(root) {
         (root || document).querySelectorAll('.trk-fresh').forEach((el) => {
             el.textContent = 'Updated ' + new Intl.DateTimeFormat('en-IN', {
@@ -1013,7 +1077,7 @@
         draw: function (container, track, shipment) {
             if (!container) return;
             const html = window.ShipTrack.html(track, shipment);
-            const sig = JSON.stringify(Object.assign({}, track, { pipeline: (track && track.pipeline || []).map((step) => Object.assign({}, step, { lineGrow: undefined })) }));
+            const sig = storyKey(track);
             if (container.dataset.sig === sig) return;
             container.dataset.sig = sig;
             container.innerHTML = html;
@@ -1170,6 +1234,8 @@
 
     if (tracker && sub) {
         poll();
+        setInterval(poll, 8000);
+        document.addEventListener('tl-track-refresh', () => { poll(); });
         document.addEventListener('click', (e) => { if (e.target.closest && e.target.closest('.trk-refresh')) { pipePlayed = false; poll(); } });
     }
     setInterval(tickPipe, 2000);
