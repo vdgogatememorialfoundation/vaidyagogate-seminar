@@ -123,6 +123,8 @@ function fakeHttp(routes) {
     assert.strictEqual(rows[0].online_seminar.join_url, undefined);
     assert.strictEqual(JSON.stringify(rows[0]).includes('4491'), false);
 
+    const missing = await online.issueJoin(db, { seminarId: '', userId: 4, userIdString: 'PRN1' });
+    assert.strictEqual(missing.status, 400);
     const early = await online.issueJoin(db, { seminarId: 9, userId: 4, userIdString: 'PRN1', passcode: '4491', now: Date.parse('2019-01-01T00:00:00Z') });
     assert.strictEqual(early.status, 403);
     const wrongUser = await online.issueJoin(db, { seminarId: 9, userId: 4, userIdString: 'NOPE', passcode: '4491', now: Date.parse('2020-01-01T05:00:00Z') });
