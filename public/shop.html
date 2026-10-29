@@ -8,7 +8,7 @@
     <link rel="stylesheet" href="/css/track-timeline.css?v=20261003tl">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap">
-    <link rel="stylesheet" href="/css/shop.css?v=20261029shop4">
+    <link rel="stylesheet" href="/css/shop.css?v=20261029shop5">
     <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 </head>
 <body>
@@ -28,7 +28,12 @@
             <div id="search-suggest" class="suggest hidden"></div>
         </div>
         <button type="button" class="top-link" onclick="shopGo('saved')"><span>Saved</span><strong>Wishlist <span id="wish-count">0</span></strong></button>
-        <button type="button" class="top-link" onclick="shopGo('account')"><span id="hello-line">Hello, sign in</span><strong>Account &amp; orders</strong></button>
+        <div class="acct-wrap">
+            <button type="button" class="top-link acct-btn" id="acct-btn" onclick="toggleAccountMenu(event)" aria-expanded="false" aria-haspopup="true">
+                <span id="hello-line">Hello, sign in</span><strong id="acct-label">Account</strong>
+            </button>
+            <div id="acct-menu" class="acct-menu hidden" role="menu"></div>
+        </div>
         <button type="button" class="top-link cart-link" onclick="openCartDrawer()" aria-label="Open cart">
             Cart <span class="cart-count" id="cart-count">0</span>
         </button>
@@ -78,6 +83,6 @@
 </aside>
 
 <script src="/js/track-timeline.js?v=20261003tl"></script>
-<script src="/js/shop.js?v=20261029shop4"></script>
+<script src="/js/shop.js?v=20261029shop5"></script>
 </body>
 </html>

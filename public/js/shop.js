@@ -138,9 +138,60 @@ function userQuery() {
     return 'userId=' + encodeURIComponent(shopUser ? shopUser.id : '');
 }
 
+function shopDisplayName() {
+    if (!shopUser) return '';
+    const full = [shopUser.firstName || shopUser.first_name, shopUser.lastName || shopUser.last_name].filter(Boolean).join(' ');
+    return full || shopUser.name || '';
+}
+
 function updateHello() {
-    const name = shopUser ? shopUser.firstName || shopUser.first_name || shopUser.name || 'there' : null;
-    document.getElementById('hello-line').textContent = name ? 'Hello, ' + name : 'Hello, sign in';
+    const name = shopDisplayName();
+    const hello = document.getElementById('hello-line');
+    const label = document.getElementById('acct-label');
+    if (hello) hello.textContent = name ? 'Hello, ' + name.split(' ')[0] : 'Hello, sign in';
+    if (label) label.textContent = name ? 'Account ▾' : 'Sign in ▾';
+    renderAccountMenu();
+}
+
+function closeAccountMenu() {
+    const menu = document.getElementById('acct-menu');
+    const btn = document.getElementById('acct-btn');
+    if (menu) menu.classList.add('hidden');
+    if (btn) btn.setAttribute('aria-expanded', 'false');
+}
+
+function renderAccountMenu() {
+    const menu = document.getElementById('acct-menu');
+    if (!menu) return;
+    const name = shopDisplayName();
+    const email = shopUser ? shopUser.email || shopUser.user_id_string || '' : '';
+    const head = shopUser
+        ? '<div class="acct-who"><b>' + shopEsc(name || 'Your account') + '</b><span>' + shopEsc(email) + '</span></div>'
+        : '<div class="acct-who"><b>Welcome</b><span>Sign in to see orders and addresses</span></div>';
+    const items = shopUser
+        ? '<button type="button" role="menuitem" onclick="shopGo(\'account\',\'orders\')">Your orders</button>' +
+          '<button type="button" role="menuitem" onclick="shopGo(\'account\',\'address\')">Addresses</button>' +
+          '<button type="button" role="menuitem" onclick="shopGo(\'account\',\'profile\')">Edit profile</button>' +
+          '<button type="button" role="menuitem" onclick="shopGo(\'saved\')">Saved books</button>' +
+          '<button type="button" role="menuitem" onclick="shopGo(\'help\')">Delivery &amp; help</button>' +
+          '<button type="button" class="signout" role="menuitem" onclick="shopSignOut()">Sign out</button>'
+        : '<button type="button" role="menuitem" onclick="shopGo(\'account\')">Sign in</button>' +
+          '<button type="button" role="menuitem" onclick="shopGo(\'saved\')">Saved books</button>' +
+          '<button type="button" role="menuitem" onclick="shopGo(\'help\')">Delivery &amp; help</button>';
+    menu.innerHTML = head + items;
+}
+
+function toggleAccountMenu(event) {
+    if (event) event.stopPropagation();
+    const menu = document.getElementById('acct-menu');
+    const btn = document.getElementById('acct-btn');
+    if (!menu) return;
+    const open = menu.classList.contains('hidden');
+    if (open) {
+        renderAccountMenu();
+        menu.classList.remove('hidden');
+        if (btn) btn.setAttribute('aria-expanded', 'true');
+    } else closeAccountMenu();
 }
 
 /* ---------- routing ---------- */
@@ -176,6 +227,7 @@ function route() {
     closeCartDrawer();
     closeProduct();
     hideSuggest();
+    closeAccountMenu();
     const hash = location.hash || '#/';
     const needsLogin = /^#\/(checkout|account|order)/.test(hash);
     if (needsLogin && !shopUser) {
@@ -188,7 +240,7 @@ function route() {
     if (hash === '#/help') return renderHelp();
     if (hash === '#/saved') return renderSaved();
     if ((m = hash.match(/^#\/account\/(\w+)/))) {
-        accountTab = m[1] === 'address' ? 'address' : 'orders';
+        accountTab = m[1] === 'address' || m[1] === 'profile' ? m[1] : 'orders';
         return renderAccount();
     }
     if ((m = hash.match(/^#\/order\/(\d+)/))) return openShopOrder(parseInt(m[1], 10));
@@ -322,6 +374,7 @@ async function bootShop() {
     saveWish();
     document.addEventListener('click', (ev) => {
         if (!ev.target.closest('.search-wrap')) hideSuggest();
+        if (!ev.target.closest('.acct-wrap')) closeAccountMenu();
     });
     try {
         const pay = await fetch('/api/shop/pay-options').then((r) => r.json());
@@ -1154,37 +1207,181 @@ function renderOrdersList() {
     el.innerHTML = list.length ? list.map(orderCardHtml).join('') : '<div class="box empty">No orders to show.</div>';
 }
 
+function accountNavHtml(name, email) {
+    const initial = (name || 'A').trim().charAt(0).toUpperCase();
+    const items = [
+        ['orders', 'Your orders'],
+        ['address', 'Addresses'],
+        ['profile', 'Edit profile']
+    ];
+    return (
+        '<aside class="account-nav"><div class="acct-id"><div class="acct-avatar" aria-hidden="true">' + shopEsc(initial) + '</div><div><b>' + shopEsc(name || 'Your account') + '</b><span>' + shopEsc(email) + '</span></div></div>' +
+        items.map((item) => '<button type="button" class="' + (accountTab === item[0] ? 'on' : '') + '" onclick="shopGo(\'account\',\'' + item[0] + '\')">' + item[1] + '</button>').join('') +
+        '<button type="button" onclick="shopGo(\'saved\')">Saved books</button>' +
+        '<button type="button" onclick="shopGo(\'help\')">Delivery &amp; help</button>' +
+        '<button type="button" class="signout" onclick="shopSignOut()">Sign out</button></aside>'
+    );
+}
+
+function profilePaneHtml(acct) {
+    const u = acct || {};
+    const p = u.profile || {};
+    return (
+        '<div class="box"><h3>Your details</h3><p class="muted">Name and phone are saved on your portal account. Email stays the address you use to sign in.</p>' +
+        '<div class="grid-2"><label class="field">First name<input id="prof-first" value="' + shopEsc(u.firstName || '') + '" autocomplete="given-name"></label>' +
+        '<label class="field">Last name<input id="prof-last" value="' + shopEsc(u.lastName || '') + '" autocomplete="family-name"></label></div>' +
+        '<label class="field">Phone<input id="prof-phone" value="' + shopEsc(u.phone || '') + '" inputmode="tel" autocomplete="tel"></label>' +
+        '<div class="grid-2"><label class="field">Email<input value="' + shopEsc(u.email || '') + '" disabled></label>' +
+        '<label class="field">Portal ID<input value="' + shopEsc(u.portalId || '') + '" disabled></label></div>' +
+        '<h3>Clinic details</h3><p class="muted">Optional. These sit on your doctor profile and are not shown to other shoppers.</p>' +
+        '<label class="field">Clinic or hospital<input id="prof-hospital" value="' + shopEsc(p.hospitalName || '') + '"></label>' +
+        '<div class="grid-2"><label class="field">Registration no.<input id="prof-reg" value="' + shopEsc(p.registrationNo || '') + '"></label>' +
+        '<label class="field">Qualification<input id="prof-qual" value="' + shopEsc(p.qualifications || '') + '"></label></div>' +
+        '<label class="field">Specialisation<input id="prof-spec" value="' + shopEsc(p.specialization || '') + '"></label>' +
+        '<button class="btn sm" type="button" onclick="shopSaveProfile()">Save profile</button><p id="prof-msg" class="msg"></p></div>' +
+        '<div class="box"><h3>Password</h3><p class="muted">Use the password for this portal account.</p>' +
+        '<label class="field">Current password<input id="pw-current" type="password" autocomplete="current-password"></label>' +
+        '<div class="grid-2"><label class="field">New password<input id="pw-next" type="password" autocomplete="new-password"></label>' +
+        '<label class="field">Confirm new password<input id="pw-again" type="password" autocomplete="new-password"></label></div>' +
+        '<button class="btn ghost sm" type="button" onclick="shopChangePassword()">Update password</button><p id="pw-msg" class="msg"></p></div>'
+    );
+}
+
+async function loadShopAccount() {
+    try {
+        const res = await fetch('/api/shop/account?' + userQuery());
+        if (!res.ok) throw new Error('account');
+        return await res.json();
+    } catch (_) {
+        return {
+            firstName: shopUser.firstName || shopUser.first_name || '',
+            lastName: shopUser.lastName || shopUser.last_name || '',
+            email: shopUser.email || '',
+            phone: shopUser.phone || '',
+            portalId: shopUser.user_id_string || shopUser.userIdString || '',
+            profile: {}
+        };
+    }
+}
+
+async function shopSaveProfile() {
+    const msg = document.getElementById('prof-msg');
+    if (msg) {
+        msg.textContent = '';
+        msg.classList.remove('ok');
+    }
+    try {
+        const res = await fetch('/api/shop/account', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'x-acting-user-id': String(shopUser.id) },
+            body: JSON.stringify({
+                userId: shopUser.id,
+                firstName: document.getElementById('prof-first').value,
+                lastName: document.getElementById('prof-last').value,
+                phone: document.getElementById('prof-phone').value,
+                hospitalName: document.getElementById('prof-hospital').value,
+                registrationNo: document.getElementById('prof-reg').value,
+                qualifications: document.getElementById('prof-qual').value,
+                specialization: document.getElementById('prof-spec').value
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Could not save your profile');
+        shopUser.firstName = data.firstName;
+        shopUser.first_name = data.firstName;
+        shopUser.lastName = data.lastName;
+        shopUser.last_name = data.lastName;
+        shopUser.phone = data.phone;
+        localStorage.setItem('seminar_doctor_user', JSON.stringify(shopUser));
+        updateHello();
+        if (msg) {
+            msg.textContent = 'Profile saved.';
+            msg.classList.add('ok');
+        }
+    } catch (e) {
+        if (msg) msg.textContent = e.message;
+    }
+}
+
+async function shopChangePassword() {
+    const msg = document.getElementById('pw-msg');
+    if (msg) {
+        msg.textContent = '';
+        msg.classList.remove('ok');
+    }
+    const next = document.getElementById('pw-next').value;
+    const again = document.getElementById('pw-again').value;
+    if (next.length < 4) {
+        if (msg) msg.textContent = 'Use at least 4 characters.';
+        return;
+    }
+    if (next !== again) {
+        if (msg) msg.textContent = 'The new passwords do not match.';
+        return;
+    }
+    try {
+        const res = await fetch('/api/auth/change-password', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                userId: shopUser.id,
+                currentPassword: document.getElementById('pw-current').value,
+                newPassword: next
+            })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Could not update the password');
+        document.getElementById('pw-current').value = '';
+        document.getElementById('pw-next').value = '';
+        document.getElementById('pw-again').value = '';
+        if (msg) {
+            msg.textContent = 'Password updated.';
+            msg.classList.add('ok');
+        }
+    } catch (e) {
+        if (msg) msg.textContent = e.message;
+    }
+}
+
 async function renderAccount() {
     showView('account');
-    markNav(accountTab);
+    markNav(accountTab === 'orders' ? 'orders' : accountTab === 'address' ? 'address' : '');
     const root = document.getElementById('view-account');
-    root.innerHTML = '<div class="box empty">Loading...</div>';
-    const [ordersRes, addrRes] = await Promise.all([
+    root.innerHTML = '<div class="box empty">Loading your account...</div>';
+    const [ordersRes, addrRes, acct] = await Promise.all([
         fetch('/api/shop/orders?' + userQuery()),
-        fetch('/api/shop/addresses?' + userQuery())
+        fetch('/api/shop/addresses?' + userQuery()),
+        loadShopAccount()
     ]);
-    accountOrders = (await ordersRes.json()).orders || [];
-    shopAddresses = (await addrRes.json()).addresses || [];
-    const name = [shopUser.firstName || shopUser.first_name, shopUser.lastName || shopUser.last_name].filter(Boolean).join(' ') || shopUser.name || 'Your account';
-    root.innerHTML =
-        '<div class="track-head" style="margin-bottom:8px"><div class="section-title" style="margin:0">' + shopEsc(name) + '</div><button class="btn ghost sm" type="button" onclick="shopSignOut()">Sign out</button></div>' +
-        '<div class="tabs"><button type="button" class="' + (accountTab === 'orders' ? 'on' : '') + '" onclick="shopGo(\'account\',\'orders\')">Your orders</button>' +
-        '<button type="button" class="' + (accountTab === 'address' ? 'on' : '') + '" onclick="shopGo(\'account\',\'address\')">Your addresses</button></div>' +
-        (accountTab === 'orders'
-            ? '<label class="field">Find an order<input type="search" placeholder="Order code, title, or language" oninput="setOrderQuery(this.value)"></label><div class="filter-row" id="order-filters">' +
-              [['all', 'All orders'], ['open', 'In progress'], ['delivered', 'Delivered'], ['returns', 'Returns & replacements']]
-                  .map((f) => '<button type="button" class="pill" data-f="' + f[0] + '" onclick="setOrderFilter(\'' + f[0] + '\')">' + f[1] + '</button>')
-                  .join('') +
-              '</div><div id="orders-list"></div>'
-            : '<div class="layout-2"><div>' +
-              (shopAddresses
-                  .map(
-                      (a) =>
-                          '<div class="box"><b>' + shopEsc(a.recipientName) + '</b><div>' + shopEsc(a.line1) + '</div><div>' + shopEsc(a.city) + ', ' + shopEsc(a.state) + ' ' + shopEsc(a.pincode) +
-                          '</div><div class="muted">Phone: ' + shopEsc(a.phone) + '</div><div style="margin-top:8px"><a style="cursor:pointer" onclick="shopDeleteAddress(' + a.id + ')">Delete</a></div></div>'
-                  )
-                  .join('') || '<div class="box empty">No saved addresses yet.</div>') +
-              '</div><div class="box"><h3>Add a new address</h3>' + addressForm('account') + '</div></div>');
+    const ordersJson = ordersRes.ok ? await ordersRes.json() : {};
+    const addrJson = addrRes.ok ? await addrRes.json() : {};
+    accountOrders = ordersJson.orders || [];
+    shopAddresses = addrJson.addresses || [];
+    const name = [acct.firstName, acct.lastName].filter(Boolean).join(' ') || shopDisplayName() || 'Your account';
+    let main = '';
+    if (accountTab === 'orders') {
+        main =
+            '<h2 class="section-title">Your orders</h2><p class="muted">Track a parcel, complete a payment, or order the same books again.</p>' +
+            '<label class="field">Find an order<input type="search" placeholder="Order code, title, or language" oninput="setOrderQuery(this.value)"></label><div class="filter-row" id="order-filters">' +
+            [['all', 'All orders'], ['open', 'In progress'], ['delivered', 'Delivered'], ['returns', 'Returns & replacements']]
+                .map((f) => '<button type="button" class="pill" data-f="' + f[0] + '" onclick="setOrderFilter(\'' + f[0] + '\')">' + f[1] + '</button>')
+                .join('') +
+            '</div><div id="orders-list"></div>';
+    } else if (accountTab === 'address') {
+        main =
+            '<h2 class="section-title">Addresses</h2><p class="muted">Saved addresses are offered at checkout for home delivery.</p><div class="layout-2"><div>' +
+            (shopAddresses
+                .map(
+                    (a) =>
+                        '<div class="box"><b>' + shopEsc(a.recipientName) + '</b><div>' + shopEsc(a.line1) + '</div><div>' + shopEsc(a.city) + ', ' + shopEsc(a.state) + ' ' + shopEsc(a.pincode) +
+                        '</div><div class="muted">Phone: ' + shopEsc(a.phone) + '</div><div style="margin-top:8px"><button class="linkish" type="button" onclick="shopDeleteAddress(' + a.id + ')">Delete</button></div></div>'
+                )
+                .join('') || '<div class="box empty">No saved addresses yet. Add one and it will be ready at checkout.</div>') +
+            '</div><div class="box"><h3>Add a new address</h3>' + addressForm('account') + '</div></div>';
+    } else {
+        main = '<h2 class="section-title">Edit profile</h2>' + profilePaneHtml(acct);
+    }
+    root.innerHTML = '<div class="account-shell">' + accountNavHtml(name, acct.email || '') + '<div class="account-main">' + main + '</div></div>';
     if (accountTab === 'orders') renderOrdersList();
 }
 
