@@ -187,7 +187,7 @@
         const px = track && track.proximity;
         if (!px || !px.label) return '';
         return '<div class="trk-cstatus is-prox is-' + esc(px.state) + '"><span class="trk-cstatus-dot"></span><b>' + esc(px.label) + '</b>' +
-            (px.distanceText ? '<span> · ' + esc(px.distanceText) + '</span>' : px.distanceKm != null ? '<span> · ' + esc(px.distanceKm) + ' km away</span>' : '') + (px.etaText ? '<span> · ' + esc(px.etaText) + ' with traffic</span>' : px.etaMinutes ? '<span> · ~' + esc(px.etaMinutes) + ' min</span>' : '') +
+            (px.etaText ? '<span> · ' + esc(px.etaText) + '</span>' : px.etaMinutes ? '<span> · ' + esc(px.etaMinutes) + ' min</span>' : '') + (px.distanceText ? '<span> · ' + esc(px.distanceText) + '</span>' : px.distanceKm != null ? '<span> · ' + esc(px.distanceKm) + ' km</span>' : '') +
             (px.lastGpsAt ? '<span class="trk-cstatus-at">GPS ' + esc(ago(px.lastGpsAt)) + '</span>' : '') + '</div>';
     }
 
@@ -382,7 +382,8 @@
 
     function qrHtml(track) {
         if (!track || !track.shipmentQrSvg || track.mainStatus === 'DELIVERED' || track.mainStatus === 'CANCELLED') return '';
-        return '<section class="trk-qr"><div class="trk-qr-copy"><b>Shipment QR</b><p>Show this to the delivery partner. They scan it to confirm pickup, then delivery. Your order updates here.</p></div><div class="trk-qr-img">' + track.shipmentQrSvg + '</div></section>';
+        const code = track.orderId || '';
+        return '<section class="trk-qr"><div class="trk-qr-copy"><b>Order QR</b>' + (code ? '<div class="trk-qr-code">' + esc(code) + '</div>' : '') + '<p>This code is the order. The delivery partner scans it to confirm pickup, then delivery.</p></div><div class="trk-qr-img">' + track.shipmentQrSvg + '</div></section>';
     }
 
     function otpHtml(label, code, track) {
@@ -571,7 +572,7 @@
             now = '<div class="hl-now is-done"><b>Delivered' + (h.proof.deliveredAt ? ' · ' + esc(when(h.proof.deliveredAt)) : '') + '</b><span>' +
                 (h.proof.otpVerified ? 'OTP verified at handover' : 'Handed over to recipient') + (h.proof.recipient ? ' · ' + esc(h.proof.recipient) : '') + '</span></div>';
         } else if (live.active && live.gps) {
-            const trafficLine = live.etaText ? esc(live.etaText) + ' with traffic' : live.etaMinutes ? 'about ' + esc(live.etaMinutes) + ' min' : 'Time updates from Google traffic';
+            const trafficLine = live.etaText ? esc(live.etaText) : live.etaMinutes ? esc(live.etaMinutes) + ' min' : 'Updating time';
             now = '<div class="hl-now' + (live.nearby ? ' is-near' : '') + '"><b>' +
                 (live.atDoorstep ? 'Delivery partner has arrived at your doorstep' : live.nearby ? 'Your delivery partner is nearby — please be available' : live.approaching ? 'Delivery partner approaching' : trafficLine) + '</b><span id="tl-traffic-line">' +
                 (live.distanceText ? esc(live.distanceText) + ' · ' : live.distanceKm != null ? esc(live.distanceKm) + ' km away · ' : '') + 'GPS updated ' + esc(ago(live.lastGpsAt)) + '</span></div>';
@@ -819,8 +820,7 @@
         const doneCount = steps.filter((step) => step.state === 'done').length;
         const delivered = active && active.state === 'active' && (active.key === 'DELIVERED' || active.key === 'REFUNDED' || active.key === 'REPLACEMENT_DELIVERED');
         const stepNo = delivered ? steps.length : active && active.state === 'active' ? doneCount + 1 : doneCount;
-        const board = dateBoard(track);
-        const badge = board ? '' : timingBadge(track);
+        const badge = timingBadge(track);
         return '<div class="trk' + (delivered ? ' is-settled' : '') + '">' +
             '<header class="trk-bar"><div class="trk-brand"><span class="trk-mark">' + iconSvg('M3 8l9-4 9 4-9 4-9-4zM3 8v8l9 4 9-4V8') + '</span><div><div class="trk-brand-name">Gogate Products</div><div class="trk-brand-sub">' + (ret ? kindWord(track) + ' tracking' : 'Shipment tracking <small class="trk-ver">v2</small>') + '</div></div></div>' +
             '<div class="trk-actions">' +
@@ -830,31 +830,13 @@
             '<section class="trk-hero"><div class="trk-ring" style="--fill:0"><span class="trk-ring-ico">' + stepIcon(active.key) + '</span></div><div class="trk-hero-copy"><div class="trk-kicker">' + (ret ? kindWord(track) + ' for order #' : 'Order #') + esc(code) + (badge ? ' ' + badge : '') + '</div><h1>' + esc(track.currentStatus || track.currentMessage) + '</h1>' +
             (detail ? '<p>' + esc(detail) + '</p>' : '') +
             '<p class="trk-stepno">' + (delivered ? 'Completed' : 'Step ' + stepNo + ' of ' + (steps.length || 5)) + '</p>' + courierChip(track) +
-            '</div>' + board + '</section>' +
+            '</div></section>' +
             milesHtml(shipment) +
             embeddedMap(shipment) +
-            railHtml(track) +
-            statsHtml(track) +
-            hlNowHtml(track) +
-            journeyHtml(shipment.journey, track) +
-            (isFinished(track) ? '' : weatherHtml(shipment.journey)) +
-            extrasHtml(track, shipment) +
-            '<div class="trk-facts">' +
-            factCard('Courier', courier) +
-            factCard('Service', mode) +
-            (trackingId ? factCard('Tracking ID', trackingId, '<button type="button" class="trk-copy trk-copy-mini" data-copy="' + esc(trackingId) + '">Copy</button>') : '') +
-            attemptCard(track) +
-            (ret && track.agent && (track.agent.name || track.agent.phone) ? factCard('Pickup agent', [track.agent.name, track.agent.phone].filter(Boolean).join(' · ')) : '') +
-            (ret && track.pickupWindow && !isFinished(track) ? factCard('Pickup slot', when(track.pickupWindow)) : '') +
-            (ret && typeof track.progressPct === 'number' ? factCard('Progress', track.progressPct + '% complete') : '') +
-            '</div>' +
-            (expects ? '<div class="trk-whens">' + expects + '</div>' : '') +
             failureHtml(track) +
             qrHtml(track) +
             otpHtml('Pickup OTP', track.pickupOtp, track) + otpHtml('Delivery OTP', track.deliveryOtp, track) +
-            '<section class="trk-progress"><h2>' + (ret ? kindWord(track) + ' progress' : 'Order progress') + '</h2><p class="trk-line-note">' + esc(lineNote(track)) + '</p>' + '<ol class="ship-pipe">' + pipeHtml(track) + '</ol>' + '</section>' +
-            logHtml(track) +
-            '<footer class="trk-foot"><a href="' + esc(track.supportUrl || '/support') + '">Need help with this ' + (ret ? kindWord(track).toLowerCase() : 'shipment') + '?</a><span class="trk-fresh">Checking for updates</span><span>Updates when you refresh</span></footer>' +
+            '<footer class="trk-foot"><a href="' + esc(track.supportUrl || '/support') + '">Need help with this ' + (ret ? kindWord(track).toLowerCase() : 'shipment') + '?</a><span class="trk-fresh">Checking for updates</span><span>Live</span></footer>' +
             '</div>';
     }
 
@@ -888,8 +870,7 @@
             ? '<div class="hl-map">' + (ownMap ? '<div id="tl-map-slot"></div>' : '') + courierFrame + '<div class="hl-legend">' + livePill +
               '<button type="button" data-focus-place="store"><i class="is-store"></i>Store</button><button type="button" data-focus-place="drop"><i class="is-home"></i>Delivery</button></div></div>'
             : '<div class="hl-map hl-map-empty">The map appears when the store and delivery locations are available.</div>';
-        const board = dateBoard(track);
-        const badge = board ? '' : timingBadge(track);
+        const badge = timingBadge(track);
         const settled = track.mainStatus === 'DELIVERED';
         return '<div class="hl hl-wide' + (settled ? ' is-settled' : '') + '">' + map +
             '<section class="hl-sheet">' +
@@ -902,12 +883,7 @@
             otpHtml('Delivery OTP', track.deliveryOtp, track) +
             otpHtml('Pickup OTP', track.pickupOtp, track) +
             milesHtml(shipment) +
-            hlNowHtml(track) +
-            railHtml(track) +
-            board +
-            journeyHtml(shipment.journey, track) +
-            (isFinished(track) ? '' : weatherHtml(shipment.journey)) +
-            extrasHtml(track, shipment) +
+            failureHtml(track) +
             (track.dropLabel ? '<div class="hl-drop"><div class="lbl">Delivering to</div><div class="val">' + esc(track.dropLabel) + '</div></div>' : '') +
             '<div class="hl-note"><button type="button" class="hl-note-toggle" id="hl-note-toggle"><span class="hl-plus" aria-hidden="true">+</span><span><b>' +
             (note ? 'Delivery instructions' : 'Add delivery instructions') + '</b>' +
@@ -915,9 +891,7 @@
             '</span></button><form id="hl-note-form" hidden><textarea name="note" maxlength="240" placeholder="Gate, floor, or where to leave the order">' +
             esc(note) + '</textarea><div class="hl-note-actions"><button type="submit">Save</button><button type="button" id="hl-note-cancel">Cancel</button></div><p class="form-msg" id="hl-note-msg"></p></form></div>' +
             partner +
-            '</section><div class="hl-below">' +
-            progressHtml(track) +
-            '</div></div>';
+            '</section></div>';
     }
 
     function render(shipment) {
@@ -1199,6 +1173,7 @@
 
     if (tracker && sub) {
         poll();
+        setInterval(poll, 8000);
         document.addEventListener('click', (e) => { if (e.target.closest && e.target.closest('.trk-refresh')) { pipePlayed = false; poll(); } });
     }
     setInterval(tickPipe, 2000);

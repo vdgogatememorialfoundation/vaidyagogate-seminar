@@ -185,9 +185,9 @@ body.hl-page .tl-map { height: 58vh; min-height: 320px; margin: 0; border: 0; bo
 .hl-map { position: relative; z-index: 0; background: #e7eeeb; min-height: 320px; }
 .hl-legend { position: absolute; left: 16px; bottom: 16px; z-index: 2; display: flex; align-items: center; gap: 12px; background: rgba(255,255,255,.96); border-radius: 999px; padding: 8px 14px; box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14); font-size: .74rem; font-weight: 700; color: #0f172a; }
 .hl-legend i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 6px; }
-.hl-legend .is-store { background: #0f766e; }
-.hl-legend .is-road { background: #ea580c; }
-.hl-legend .is-home { background: #0f172a; }
+.hl-legend .is-store { background: #1d4ed8; }
+.hl-legend .is-road { background: #1d4ed8; }
+.hl-legend .is-home { background: #1d4ed8; }
 .hl-live-pill { background: #fff7ed; color: #c2410c; border-radius: 999px; padding: 3px 8px; letter-spacing: .04em; text-transform: uppercase; font-size: .68rem; }
 .hl-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
 .hl-map-empty { display: flex; align-items: center; justify-content: center; min-height: 320px; padding: 24px; text-align: center; color: #565959; }
@@ -576,7 +576,7 @@ body.hl-page .hl-below .ship-pipe { border: 0; background: #fff; border-radius: 
 .trk-attempt-list span { font-size: .8rem; color: #565959; }
 
 .hl-legend i{position:relative}
-.hl-legend .is-store::after,.hl-legend .is-home::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:2px solid currentColor;opacity:0;animation:trkPinPulse 1.8s ease-out infinite}
+.hl-legend .is-store::after,.hl-legend .is-home::after{content:none}
 .hl-legend .is-home::after{animation-delay:.9s}
 @keyframes trkPinPulse{0%{transform:scale(.6);opacity:.7}100%{transform:scale(1.6);opacity:0}}
 .hl-courier-frame{position:relative;border-radius:14px;overflow:hidden;border:1px solid #e2e8f0;background:#f8fafc}
@@ -618,16 +618,19 @@ li.drawer-flash .ship-copy{animation:shipFlash 1.5s ease}
 .ship-otp.ship-otp-ok .code{color:#0f9d8a;letter-spacing:0;font-size:1rem}
 
 .hl-legend button{font:inherit;font-weight:700;font-size:.82rem;border:1px solid transparent;background:transparent;border-radius:999px;padding:4px 10px;cursor:pointer;color:#0f172a;display:inline-flex;align-items:center}
-.hl-legend button:hover{background:#f1f5f9}.hl-legend button.is-on{border-color:#0f766e;background:#ecfeff}
+.hl-legend button:hover{background:#f1f5f9}.hl-legend button.is-on{border-color:#1d4ed8;background:#eff6ff}
 .trk-qr{display:flex;gap:12px;align-items:center;background:#fff;border:1px solid #e6eeea;border-radius:16px;padding:12px 14px;margin:10px 0}
 .trk-qr-copy{flex:1;min-width:0}
 .trk-qr-copy b{display:block}
+.trk-qr-code{margin-top:2px;font-size:1.05rem;font-weight:800;letter-spacing:.04em;color:#1d4ed8}
 .trk-qr-copy p{margin:4px 0 0;color:#64748b;font-size:.8rem;line-height:1.4}
 .trk-qr-img{flex:none;background:#fff;border-radius:12px;padding:4px}
 .trk-qr-img svg{width:112px;height:112px;display:block}
 .hl-sheet .ship-otp{background:#fff}
-.tl-map-3d{position:absolute;z-index:5;right:108px;bottom:28px;border:0;border-radius:999px;background:#fff;color:#0f172a;font-weight:700;padding:8px 12px;cursor:pointer;box-shadow:0 8px 24px rgba(15,23,42,.16)}
-.tl-map-3d.is-on{background:#0f766e;color:#fff}
+.tl-map-3d,.tl-map-traffic{position:absolute;z-index:5;bottom:28px;border:0;border-radius:999px;background:#fff;color:#0f172a;font-weight:700;padding:8px 12px;cursor:pointer;box-shadow:0 8px 24px rgba(15,23,42,.16)}
+.tl-map-3d{right:108px}
+.tl-map-traffic{right:168px}
+.tl-map-3d.is-on,.tl-map-traffic.is-on{background:#1d4ed8;color:#fff}
 
 .hl,.trk,.tl,.ts4-page,.adm-shiptrack,.tl-map-block,#tracker,#tl-map-slot{min-width:0;max-width:100%}
 body.hl-page,body.ts4{overflow-x:hidden}
@@ -651,6 +654,7 @@ body.hl-page,body.ts4{overflow-x:hidden}
     .tl-map-chip{max-width:calc(100% - 16px);left:8px;top:8px}
     .tl-map-recenter{right:8px;bottom:8px;padding:7px 10px;font-size:.78rem}
     .tl-map-3d{right:92px;bottom:8px;padding:7px 10px;font-size:.78rem}
+    .tl-map-traffic{right:148px;bottom:8px;padding:7px 10px;font-size:.78rem}
     .tl-miles{flex-direction:column;overflow:visible}
     .tl-mile{min-width:0;width:auto}
     .trk-nav{overflow:visible;padding:8px 12px}

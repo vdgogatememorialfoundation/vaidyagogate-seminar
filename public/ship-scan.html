@@ -32,10 +32,12 @@ button:disabled{opacity:.6}
 (function () {
   var params = new URLSearchParams(location.search);
   var token = params.get('token') || '';
+  var orderCode = params.get('order') || '';
   var lead = document.getElementById('lead');
   var order = document.getElementById('order');
   var msg = document.getElementById('msg');
   var go = document.getElementById('go');
+  if (orderCode) order.textContent = 'Order ' + orderCode;
   if (token.length < 8) {
     lead.textContent = 'This scan link is incomplete.';
     return;

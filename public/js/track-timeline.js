@@ -125,7 +125,9 @@
             html += '<div class="ship-otp"><div class="lbl">Delivery OTP</div><div class="code">' + esc(t.deliveryOtp) + '</div><div class="note">Share this code with the delivery partner at your door.</div></div>';
         }
         if (t.shipmentQrSvg) {
-            html += '<section class="trk-qr"><div class="trk-qr-copy"><b>Shipment QR</b><p>Show this to the delivery partner. They scan it to confirm pickup, then delivery. Your order updates here.</p></div><div class="trk-qr-img">' + t.shipmentQrSvg + '</div></section>';
+            html += '<section class="trk-qr"><div class="trk-qr-copy"><b>Order QR</b>' +
+                (t.orderCode ? '<div class="trk-qr-code">' + esc(t.orderCode) + '</div>' : '') +
+                '<p>This code is the order. The delivery partner scans it to confirm pickup, then delivery.</p></div><div class="trk-qr-img">' + t.shipmentQrSvg + '</div></section>';
         }
         return html;
     }
@@ -218,6 +220,13 @@
         );
     }
 
+    function alertHtml(t) {
+        if (!t || !t.steps) return '';
+        const step = t.steps.find((s) => s.key === 'out_for_delivery' && s.operational === 'DELIVERY_ATTEMPT_FAILED');
+        if (!step) return '';
+        return '<div class="tl-step active"><div class="tl-title">' + esc(step.title) + '</div>' + extra(step) + '</div>';
+    }
+
     function render(data, opts) {
         const t = data.timeline;
         if (!t) return '';
@@ -228,22 +237,7 @@
             milesHtml(t.milestones) +
             proofHtml(t) +
             mapBlock(data.live) +
-            dateStrip(t) +
-            expectedStrip(t) +
-            courierCard(t, data) +
-            t.steps
-                .map((s, i) => {
-                    const open = s.state === 'active';
-                    const hint = s.state === 'done' ? 'This step is complete.' : s.state === 'active' ? 'This step is in progress.' : 'This step has not started.';
-                    const body = (s.summary ? '<div class="tl-sum">' + esc(s.summary) + '</div>' : '<div class="tl-sum">' + esc(hint) + '</div>') + extra(s, data) + updates(s.updates);
-                    return '<div class="tl-step ' + s.state + '"' +
-                        (s.lineUntil ? ' data-line-since="' + Number(s.lineSince) + '" data-line-until="' + Number(s.lineUntil) + '" data-line-floor="' + Number(s.lineFloor || 12) + '"' : '') +
-                        ' style="--i:' + i + (s.lineFill != null ? ';--line:' + Number(s.lineFill) : '') + '"><div class="tl-dot">' + (s.state === 'done' ? '&#10003;' : '') + '</div>' +
-                        '<div class="tl-title">' + esc(s.title) + (s.expectedLabel && s.state !== 'done' && !(s.at && s.state === 'active') ? '<span class="tl-expect">' + esc(s.expectedLabel) + '</span>' : '') + (s.at && s.state !== 'upcoming' ? '<span class="tl-time">' + esc(when(s.at)) + '</span>' : '') + '</div>' +
-                        '<button type="button" class="tl-drawer-btn" aria-expanded="' + (open ? 'true' : 'false') + '">' + (open ? 'Hide details' : 'View details') + '</button>' +
-                        '<div class="tl-drawer"' + (open ? '' : ' hidden') + '>' + body + '</div></div>';
-                })
-                .join('') +
+            alertHtml(t) +
             '</div>'
         );
     }
@@ -500,7 +494,7 @@
         }
         slot.replaceWith(mapEl);
         if (!live.mapsApiKey) {
-            mapEl.textContent = 'Live map needs a Google Maps key in Commerce settings.';
+            mapEl.textContent = 'The live map is not available yet.';
             return;
         }
         const run = () => paint(live);
@@ -602,13 +596,11 @@
     }
 
     const STORE_SVG =
-        '<svg xmlns="http://www.w3.org/2000/svg" width="42" height="52" viewBox="0 0 42 52"><ellipse cx="21" cy="48" rx="8" ry="3" fill="#0f172a" opacity="0.18"/><path d="M21 46s14-12.4 14-25A14 14 0 1 0 7 21c0 12.6 14 25 14 25z" fill="#0f766e"/><circle cx="21" cy="20" r="8.5" fill="#fff"/><path d="M15.5 24.5v-7h11v7M15.5 20.5h11M18 17.5V16h6v1.5" fill="none" stroke="#0f766e" stroke-width="1.6" stroke-linejoin="round"/></svg>';
+        '<svg xmlns="http://www.w3.org/2000/svg" width="42" height="52" viewBox="0 0 42 52"><ellipse cx="21" cy="48" rx="8" ry="3" fill="#1d4ed8" opacity="0.18"/><path d="M21 46s14-12.4 14-25A14 14 0 1 0 7 21c0 12.6 14 25 14 25z" fill="#1d4ed8"/><circle cx="21" cy="20" r="8.5" fill="#fff"/><path d="M15.5 24.5v-7h11v7M15.5 20.5h11M18 17.5V16h6v1.5" fill="none" stroke="#1d4ed8" stroke-width="1.6" stroke-linejoin="round"/></svg>';
     const HOME_SVG =
-        '<svg xmlns="http://www.w3.org/2000/svg" width="42" height="52" viewBox="0 0 42 52"><ellipse cx="21" cy="48" rx="8" ry="3" fill="#0f172a" opacity="0.18"/><path d="M21 46s14-12.4 14-25A14 14 0 1 0 7 21c0 12.6 14 25 14 25z" fill="#0f172a"/><circle cx="21" cy="20" r="8.5" fill="#fff"/><path d="M15 23.5V18l6-4.2 6 4.2v5.5h-4.2v-3.4h-3.6v3.4z" fill="#0f172a"/></svg>';
-    const PREVIEW_STORE_SVG =
-        '<svg xmlns="http://www.w3.org/2000/svg" width="42" height="52" viewBox="0 0 42 52"><ellipse cx="21" cy="48" rx="8" ry="3" fill="#0f172a" opacity="0.2"/><path d="M21 46s14-12.4 14-25A14 14 0 1 0 7 21c0 12.6 14 25 14 25z" fill="#111"/><circle cx="21" cy="20" r="8.2" fill="#fff"/><path d="M16 22.5v-5.2h10v5.2M16 19.4h10M18.2 17.2h5.6" fill="none" stroke="#111" stroke-width="1.5" stroke-linejoin="round"/></svg>';
-    const PREVIEW_HOME_SVG =
-        '<svg xmlns="http://www.w3.org/2000/svg" width="42" height="52" viewBox="0 0 42 52"><ellipse cx="21" cy="48" rx="8" ry="3" fill="#0f172a" opacity="0.2"/><path d="M21 46s14-12.4 14-25A14 14 0 1 0 7 21c0 12.6 14 25 14 25z" fill="#111"/><circle cx="21" cy="20" r="8.2" fill="#fff"/><path d="M15.2 23.2V18.2l5.8-4 5.8 4v5h-4v-3h-3.6v3z" fill="#111"/></svg>';
+        '<svg xmlns="http://www.w3.org/2000/svg" width="42" height="52" viewBox="0 0 42 52"><ellipse cx="21" cy="48" rx="8" ry="3" fill="#1d4ed8" opacity="0.18"/><path d="M21 46s14-12.4 14-25A14 14 0 1 0 7 21c0 12.6 14 25 14 25z" fill="#1d4ed8"/><circle cx="21" cy="20" r="8.5" fill="#fff"/><path d="M15 23.5V18l6-4.2 6 4.2v5.5h-4.2v-3.4h-3.6v3.4z" fill="#1d4ed8"/></svg>';
+    const PREVIEW_STORE_SVG = STORE_SVG;
+    const PREVIEW_HOME_SVG = HOME_SVG;
     // The scooter artwork faces right. A -90 degree turn points the front up so the map heading follows the road.
     const RIDER_ICON = '/media/delivery-agent.png?v=2';
 
@@ -747,10 +739,14 @@
                 gestureHandling: 'greedy',
                 clickableIcons: false,
                 scaleControl: !phone,
+                backgroundColor: '#e8f1fb',
+                minZoom: 12,
+                maxZoom: 20,
                 isFractionalZoomEnabled: true,
                 headingInteractionEnabled: false,
                 tiltInteractionEnabled: false
             };
+            if (google.maps.ColorScheme) mapOpts.colorScheme = google.maps.ColorScheme.LIGHT;
             if (google.maps.RenderingType) mapOpts.renderingType = google.maps.RenderingType.VECTOR;
             el.__buildings3d = true;
             try {
@@ -821,6 +817,18 @@
                 });
                 el.appendChild(buildings);
             }
+            if (!el.querySelector('.tl-map-traffic')) {
+                const traffic = document.createElement('button');
+                traffic.type = 'button';
+                traffic.className = 'tl-map-traffic is-on';
+                traffic.textContent = 'Traffic';
+                traffic.addEventListener('click', () => {
+                    const on = traffic.classList.toggle('is-on');
+                    if (el.__traffic) el.__traffic.setMap(on ? el.__map : null);
+                });
+                el.appendChild(traffic);
+            }
+            startReadoutPoll();
         }
         ensureLinks(el);
         syncMapChrome(el, live);
@@ -932,7 +940,7 @@
         if (el.__map.getZoom() < 15) el.__map.setZoom(15);
         if (!el.__info) el.__info = new google.maps.InfoWindow();
         const label = key === 'store' ? live.storeLabel || 'Store' : live.dropLabel || 'Delivery location';
-        el.__info.setContent('<div style="font:600 13px/1.4 Inter,system-ui,sans-serif;color:#0f172a;max-width:240px"><div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:' + (key === 'store' ? '#0f766e' : '#1d4ed8') + '">' + (key === 'store' ? 'Store' : 'Delivery') + '</div>' + esc(label) + '</div>');
+        el.__info.setContent('<div style="font:600 13px/1.4 Inter,system-ui,sans-serif;color:#0f172a;max-width:240px"><div style="font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#1d4ed8">' + (key === 'store' ? 'Store' : 'Delivery') + '</div>' + esc(label) + '</div>');
         el.__info.open({ map: el.__map, anchor: el.__markers[key] });
         document.querySelectorAll('[data-focus-place]').forEach((b) => b.classList.toggle('is-on', b.getAttribute('data-focus-place') === key));
     }
@@ -967,7 +975,7 @@
                 strokeOpacity: 0,
                 strokeWeight: 0,
                 zIndex: 4,
-                icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.95, strokeColor: '#334155', scale: 2.2 }, offset: '0', repeat: '8px' }]
+                icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.95, strokeColor: '#1d4ed8', scale: 2.2 }, offset: '0', repeat: '8px' }]
             });
         el.__linkStore = link();
         el.__linkDrop = link();
@@ -1046,7 +1054,7 @@
             strokeOpacity: 0,
             strokeWeight: 0,
             icons: [{
-                icon: { path: 'M 0,-3.2 0,3.2', strokeOpacity: 1, strokeColor: '#161616', strokeWeight: 3.5, scale: 3 },
+                icon: { path: 'M 0,-3.2 0,3.2', strokeOpacity: 1, strokeColor: '#1d4ed8', strokeWeight: 3.5, scale: 3 },
                 offset: '0',
                 repeat: '28px'
             }]
@@ -1057,7 +1065,7 @@
     function dottedLine(line, a, b, pts) {
         if (!line || !a || !b) return;
         if (pts && pts.length > 1) {
-            line.setOptions({ strokeColor: routeColor(), strokeOpacity: 0, strokeWeight: 6, icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 3 }, offset: '0', repeat: '14px' }] });
+            line.setOptions({ strokeColor: '#1d4ed8', strokeOpacity: 0, strokeWeight: 6, icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, strokeColor: '#1d4ed8', scale: 3 }, offset: '0', repeat: '14px' }] });
             line.setPath(pts);
             return;
         }
@@ -1065,7 +1073,7 @@
             strokeColor: routeColor(),
             strokeOpacity: 0,
             strokeWeight: 6,
-            icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, scale: 3 }, offset: '0', repeat: '14px' }]
+            icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 1, strokeColor: '#1d4ed8', scale: 3 }, offset: '0', repeat: '14px' }]
         });
         line.setPath([a, b]);
     }
@@ -1079,28 +1087,37 @@
 
     function showEta(text, label, sub) {
         const eta = document.getElementById('tl-eta');
-        if (eta && text) {
+        if (eta && (text || sub)) {
             eta.hidden = false;
             eta.classList.add('is-on');
             const lbl = eta.querySelector ? eta.querySelector('.hl-eta-lbl, .tl-eta-lbl') : null;
             const val = eta.querySelector ? eta.querySelector('.hl-eta-val, .tl-eta-val') : null;
             const subEl = eta.querySelector ? eta.querySelector('.tl-eta-sub') : null;
             if (lbl && label) lbl.textContent = label;
-            if (val) val.textContent = text;
-            if (subEl) subEl.textContent = sub || '';
+            if (val && text) val.textContent = text;
+            if (subEl && sub) subEl.textContent = sub;
         }
         const phases = document.querySelectorAll ? document.querySelectorAll('.tl-map-phase') : [];
         const etas = document.querySelectorAll ? document.querySelectorAll('.tl-map-eta') : [];
+        const shown = text || '';
+        const shownSub = sub || '';
         if (label && phases[0]) phases[0].textContent = label;
-        if (etas[0]) etas[0].textContent = text ? text + (sub ? ' · ' + sub : '') : '';
-        const line = document.getElementById('tl-traffic-line');
-        if (line && text) line.textContent = text + (sub ? ' · ' + sub : '');
+        const line = [shown, shownSub].filter(Boolean).join(' · ');
+        if (etas[0] && line) etas[0].textContent = line;
+        const traffic = document.getElementById('tl-traffic-line');
+        if (traffic && line) traffic.textContent = line;
+    }
+
+    function formatKm(meters) {
+        if (!Number.isFinite(meters) || meters < 0) return '';
+        if (meters < 1000) return Math.max(10, Math.round(meters / 10) * 10) + ' m';
+        const km = meters / 1000;
+        return (km < 10 ? km.toFixed(1) : String(Math.round(km))) + ' km';
     }
 
     function etaSub(dur) {
         if (!dur) return '';
-        const via = dur.traffic ? 'Google traffic' : 'Google Maps';
-        return dur.distanceText ? dur.distanceText + ' · ' + via : via;
+        return dur.distanceText || (dur.distanceValue != null ? formatKm(dur.distanceValue) : '');
     }
 
     function trackLine(el, color, weight, z) {
@@ -1179,6 +1196,7 @@
                           text: dur.text,
                           value: dur.value,
                           distanceText: distance && distance.text,
+                          distanceValue: distance && distance.value,
                           traffic: !!(leg && leg.duration_in_traffic)
                       }
                     : null
@@ -1190,8 +1208,11 @@
         if (!el || !origin || !dest) return;
         const key = [Number(origin.lat).toFixed(3), Number(origin.lng).toFixed(3), Number(dest.lat).toFixed(3), Number(dest.lng).toFixed(3), label || ''].join('|');
         const now = Date.now();
-        if (el.__etaKey === key && el.__etaAt && now - el.__etaAt < 45000) {
-            if (el.__etaText) showEta(el.__etaText, label, el.__etaSub || '');
+        const kmNow = formatKm(haversine(origin, dest));
+        const cached = el.__etaKey === key && el.__etaAt && now - el.__etaAt < 8000;
+        if (kmNow && !cached) showEta(el.__etaText || '', label, kmNow);
+        if (cached) {
+            if (el.__etaText || el.__etaSub || kmNow) showEta(el.__etaText || '', label, el.__etaSub || kmNow);
             return;
         }
         if (el.__etaPending === key) return;
@@ -1240,7 +1261,7 @@
 
     function loadLeg(el, origin, dest, legName, cb) {
         if (!origin || !dest) return cb(null, null);
-        const fresh = el.__legAt && Date.now() - el.__legAt < 45000;
+        const fresh = el.__legAt && Date.now() - el.__legAt < 8000;
         if (el.__legPath && el.__legName === legName && fresh && samePoint(el.__legFrom, origin, 50) && samePoint(el.__legTo, dest, 40)) {
             return cb(el.__legPath, el.__legDuration);
         }
@@ -1326,7 +1347,7 @@
             return;
         }
         const legName = toStore ? 'to_store' : 'to_drop';
-        const cached = el.__legPath && el.__legName === legName && el.__legAt && Date.now() - el.__legAt < 45000 && samePoint(el.__legFrom, live.agent, 50) && samePoint(el.__legTo, target, 40);
+        const cached = el.__legPath && el.__legName === legName && el.__legAt && Date.now() - el.__legAt < 8000 && samePoint(el.__legFrom, live.agent, 50) && samePoint(el.__legTo, target, 40);
         if (!cached) parkRider(el, live.agent, target);
         loadLeg(el, live.agent, target, legName, (legPts, duration) => {
             const snap = el.__liveSnap;
@@ -1380,8 +1401,9 @@
             { featureType: 'landscape.man_made', elementType: 'geometry', stylers: [{ color: '#eef2f0' }] },
             { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#d7e6f4' }] },
             { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
-            { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#e2e8e6' }] },
-            { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#f1f5f4' }] },
+            { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#dbe7f8' }] },
+            { featureType: 'road.arterial', elementType: 'geometry', stylers: [{ color: '#e8f1fb' }] },
+            { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#dbeafe' }] },
             { featureType: 'road', elementType: 'labels', stylers: [{ visibility: 'simplified' }] },
             { featureType: 'administrative', elementType: 'labels.text.fill', stylers: [{ color: '#64748b' }] }
         ];
@@ -1422,7 +1444,21 @@
     }
 
     function routeColor() {
-        return document.body.classList.contains('hl-page') ? '#ea580c' : '#067d62';
+        return '#1d4ed8';
+    }
+
+    let readoutTimer = null;
+    function startReadoutPoll() {
+        if (readoutTimer) return;
+        readoutTimer = setInterval(() => {
+            const el = mapEl;
+            const live = el && el.__liveSnap;
+            if (!el || !el.__map || !live || live.leg === 'done') return;
+            const preview = isPreview(live);
+            const origin = preview ? live.store : live.agent || live.store;
+            const target = preview ? live.drop : live.leg === 'to_store' ? live.store || live.drop : live.drop || live.store;
+            if (origin && target) trafficEta(el, origin, target, phaseCopy(live));
+        }, 8000);
     }
 
     function mapPadding() {
