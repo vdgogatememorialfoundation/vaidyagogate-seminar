@@ -137,12 +137,13 @@
         const years = data.years || [];
         if (!years.length) {
             const volunteer = data.viewer && data.viewer.volunteer;
-            host.innerHTML =
-                '<div class="vl-card"><h4>No videos published yet</h4><p>' +
-                (volunteer
-                    ? 'Seminar videos is turned on for volunteer accounts. Recordings appear here after the seminar office publishes them.'
-                    : 'Seminar recordings appear here once the seminar office publishes them.') +
-                '</p></div>';
+            host.innerHTML = data.blocked
+                ? '<div class="vl-card"><h4>Video access is turned off</h4><p>The seminar office has turned off your access to these recordings.</p></div>'
+                : '<div class="vl-card"><h4>No videos published yet</h4><p>' +
+                  (volunteer
+                      ? 'Seminar videos is turned on for volunteer accounts. Recordings appear here after the seminar office publishes them.'
+                      : 'Seminar recordings appear here once the seminar office publishes them.') +
+                  '</p></div>';
             return;
         }
         const pending = data.pendingPurchases || [];
@@ -159,8 +160,14 @@
                     y.bundlePriceInr != null && y.bundlePriceInr > 0 && !y.allAllowed
                         ? '<button type="button" class="vl-btn is-ghost is-small" data-vl-buy-year="' + y.year + '">Unlock all ' + y.year + ' videos · ' + fmtMoney(y.bundlePriceInr) + '</button>'
                         : '';
-                const grouped = groupYear(y.videos);
-                const playable = y.videos.filter((v) => v.kind !== 'album').length;
+                const seen = {};
+                const uniqueVideos = (y.videos || []).filter((v) => {
+                    if (!v || seen[v.id]) return false;
+                    seen[v.id] = true;
+                    return true;
+                });
+                const grouped = groupYear(uniqueVideos);
+                const playable = uniqueVideos.filter((v) => v.kind !== 'album').length;
                 const cards =
                     grouped.albums.map((a) => albumBlock(a, grouped.partsOf[a.id] || [], pending)).join('') +
                     grouped.singles.map((v) => card(v, pending)).join('');

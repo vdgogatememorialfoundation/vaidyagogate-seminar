@@ -108,6 +108,25 @@ function access(db, userId, video) {
     assert.strictEqual((await access(db, 2, partRow)).allowed, true, 'volunteers still watch free');
     assert.strictEqual((await access(db, 3, singleRow)).allowed, true, 'paid registration still watches free');
 
+    const doubled = vl.collapseVideoRows([
+        { id: 1, position_sec: 1, title: 'a' },
+        { id: 1, position_sec: 4, title: 'a-later' },
+        { id: 2, position_sec: 0, title: 'b' }
+    ]);
+    assert.strictEqual(doubled.length, 2);
+    assert.strictEqual(doubled.find((row) => row.id === 1).position_sec, 4);
+
+    await new Promise((resolve, reject) => vl.blockDoctorVideo(db, { userId: 2, year: 2026, videoId: partRow.id, adminId: 1 }, (err) => (err ? reject(err) : resolve())));
+    const blockedVolunteer = await access(db, 2, partRow);
+    assert.strictEqual(blockedVolunteer.allowed, false, 'turning off beats volunteer access');
+    assert.strictEqual(blockedVolunteer.reason, 'blocked');
+    await new Promise((resolve, reject) => vl.blockDoctorVideo(db, { userId: 3, year: 2026, videoId: singleRow.id, adminId: 1 }, (err) => (err ? reject(err) : resolve())));
+    assert.strictEqual((await access(db, 3, singleRow)).allowed, false, 'turning off beats a paid registration');
+    await new Promise((resolve, reject) => vl.enableDoctorVideo(db, { userId: 2, year: 2026, videoId: partRow.id, adminId: 1 }, (err) => (err ? reject(err) : resolve())));
+    assert.strictEqual((await access(db, 2, partRow)).allowed, true, 'turning on restores the volunteer');
+    await new Promise((resolve, reject) => vl.enableDoctorVideo(db, { userId: 3, year: 2026, videoId: singleRow.id, adminId: 1 }, (err) => (err ? reject(err) : resolve())));
+    assert.strictEqual((await access(db, 3, singleRow)).allowed, true, 'turning on restores the paid doctor');
+
     db.close();
     console.log('video album ok');
 })().catch((err) => {

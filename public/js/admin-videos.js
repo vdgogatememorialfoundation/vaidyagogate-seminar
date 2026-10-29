@@ -143,7 +143,7 @@
             '<label>Price to unlock all videos of the year (₹, blank = not offered)</label><input type="number" id="vly-price" min="0" step="1">' +
             '<div class="vl-upload-row" style="margin-top:10px;"><button type="button" class="vl-btn" id="vly-save">Save year</button></div>' +
             '<p class="vl-form-msg" id="vly-msg"></p>' +
-            '<p class="vl-note" style="margin-top:10px;">Free access: volunteers, and any doctor whose registration for the linked seminar (or that year) is paid — whether or not the ticket was scanned. Everyone else pays the price or is enabled below.</p></div>' +
+            '<p class="vl-note" style="margin-top:10px;">Free access: volunteers, and any doctor whose registration for the linked seminar (or that year) is paid — whether or not the ticket was scanned. Everyone else pays the price or is enabled below. Turn off in Who can watch stops a doctor even when they are a volunteer or have paid.</p></div>' +
             '</div>' +
             '<div class="vl-form" id="vl-settings-form" style="margin-top:16px;"><h3>Protection &amp; storage settings</h3>' +
             '<div class="vl-form-row vl-form-row-3"><div><label>Devices allowed per account</label><input type="number" id="vls-devices" min="1" max="10"></div>' +
@@ -1029,7 +1029,9 @@
                               esc(g.paymentModeLabel || (g.source === 'purchase' ? 'Online payment' : g.source === 'admin_paid' ? 'Paid at office' : 'Complimentary')) + (g.amountInr ? ' · ' + fmtMoney(g.amountInr) : '') +
                               (g.note ? '<div class="vl-note">' + esc(g.note) + '</div>' : '') +
                               '</td><td>' + esc(g.grantedBy || (g.source === 'purchase' ? 'Doctor' : '')) + '</td><td>' + fmtWhen(g.createdAt) + (g.revokedAt ? '<div class="vl-note">Revoked ' + fmtWhen(g.revokedAt) + '</div>' : '') + '</td><td>' +
-                              (g.revokedAt ? '' : '<button type="button" class="vl-btn is-danger is-small" data-revoke="' + g.id + '">Revoke</button>') +
+                              (g.revokedAt || g.source === 'blocked'
+                                  ? '<button type="button" class="vl-btn is-small" data-enable-grant="' + g.userId + '" data-enable-year="' + g.year + '" data-enable-video="' + (g.videoId || '') + '">Turn on</button>'
+                                  : '<button type="button" class="vl-btn is-danger is-small" data-revoke="' + g.id + '">Turn off</button>') +
                               '</td></tr>'
                       )
                       .join('') +
@@ -1037,9 +1039,27 @@
                 : '<p class="vl-note">No grants or purchases for this year yet.</p>';
             gHost.querySelectorAll('[data-revoke]').forEach((b) =>
                 b.addEventListener('click', async () => {
-                    if (!confirm('Revoke this access?')) return;
+                    if (!confirm('Turn off this access? The doctor cannot watch it even as a volunteer or if the seminar fee is paid.')) return;
                     try {
                         await api('/api/admin/videos/access/' + b.getAttribute('data-revoke') + '/revoke', { method: 'POST', body: {} });
+                        loadAccess();
+                    } catch (e) {
+                        alert(e.message);
+                    }
+                })
+            );
+            gHost.querySelectorAll('[data-enable-grant]').forEach((b) =>
+                b.addEventListener('click', async () => {
+                    if (!confirm('Turn this access back on?')) return;
+                    try {
+                        await api('/api/admin/videos/access/enable', {
+                            method: 'POST',
+                            body: {
+                                userId: b.getAttribute('data-enable-grant'),
+                                year: b.getAttribute('data-enable-year'),
+                                videoId: b.getAttribute('data-enable-video')
+                            }
+                        });
                         loadAccess();
                     } catch (e) {
                         alert(e.message);
@@ -1067,6 +1087,7 @@
     let eligible = null;
 
     function reasonText(r) {
+        if (r.reason === 'blocked') return 'Turned off by the office';
         if (!r.allowed) return r.checks && r.checks.registered ? (r.checks.paid ? 'Registered' : 'Registered — fee not paid') : 'Not registered';
         const map = {
             volunteer: 'Volunteer',
@@ -1109,7 +1130,11 @@
                           '<td>' + (r.allowed ? '<span class="vl-badge is-free">' : '<span class="vl-badge is-paid">') + esc(reasonText(r)) + '</span>' + (r.checks && r.checks.seminarTitle ? '<div class="vl-note">' + esc(r.checks.seminarTitle) + '</div>' : '') + '</td>' +
                           '<td>' + tick(r.checks && r.checks.registered) + '</td><td>' + tick(r.checks && r.checks.paid) + '</td><td>' + tick(r.checks && r.checks.scanned) + '</td>' +
                           '<td>' + r.devices + (r.deviceLimit ? ' / ' + r.deviceLimit : '') + '</td><td>' + fmtWhen(r.lastWatchedAt) + '</td><td>' + esc(r.lastIp || '—') + '</td><td>' + fmtDuration(r.watchSeconds) + '</td>' +
-                          '<td><button type="button" class="vl-btn is-ghost is-small" data-track="' + r.userId + '">Tracking</button></td></tr>'
+                          '<td><button type="button" class="vl-btn is-ghost is-small" data-track="' + r.userId + '">Tracking</button> ' +
+                          (r.allowed
+                              ? '<button type="button" class="vl-btn is-danger is-small" data-access-off="' + r.userId + '">Turn off</button>'
+                              : '<button type="button" class="vl-btn is-small" data-access-on="' + r.userId + '">Turn on</button>') +
+                          '</td></tr>'
                   )
                   .join('') +
               '</tbody></table>'
@@ -1120,6 +1145,28 @@
                 $('vl-tracking').scrollIntoView({ behavior: 'smooth', block: 'start' });
             })
         );
+        const setAccess = async (userId, allow) => {
+            const year = $('vle-year').value;
+            const videoId = $('vle-video') ? $('vle-video').value : '';
+            const who = (eligible.rows || []).find((row) => String(row.userId) === String(userId));
+            const name = who ? who.user : 'this doctor';
+            const scope = videoId ? 'this video' : 'every ' + year + ' video';
+            const question = allow
+                ? 'Turn on ' + scope + ' for ' + name + '?'
+                : 'Turn off ' + scope + ' for ' + name + '? They will not be able to watch, even as a volunteer or if the seminar fee is paid.';
+            if (!confirm(question)) return;
+            try {
+                await api('/api/admin/videos/access/' + (allow ? 'enable' : 'block'), {
+                    method: 'POST',
+                    body: { userId: userId, year: year, videoId: videoId }
+                });
+                await loadEligible();
+            } catch (e) {
+                alert(e.message);
+            }
+        };
+        host.querySelectorAll('[data-access-off]').forEach((b) => b.addEventListener('click', () => setAccess(b.getAttribute('data-access-off'), false)));
+        host.querySelectorAll('[data-access-on]').forEach((b) => b.addEventListener('click', () => setAccess(b.getAttribute('data-access-on'), true)));
     }
 
     function downloadEligibleCsv() {
