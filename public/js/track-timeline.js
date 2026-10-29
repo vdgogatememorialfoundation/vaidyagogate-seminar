@@ -334,11 +334,34 @@
             return true;
         }
         if (!fix.ignored) {
+            const prev = el.__acceptedGps ? { lat: el.__acceptedGps.lat, lng: el.__acceptedGps.lng } : null;
+            const reported = Number(live.agent && live.agent.heading);
             el.__acceptedGps = fix.point;
             el.__riderTraveling = !!fix.traveling;
             if (fix.snap || fix.first) el.__poseMeters = null;
+            if (Number.isFinite(reported)) {
+                el.__stillHeading = ((reported % 360) + 360) % 360;
+                el.__headingFallback = false;
+                el.__glide = null;
+            } else if (fix.traveling && prev) {
+                const heading = bearingDeg(prev, fix.point) % 360;
+                const meters = haversine(prev, fix.point);
+                el.__stillHeading = heading;
+                el.__headingFallback = false;
+                el.__glide = {
+                    from: prev,
+                    to: { lat: fix.point.lat, lng: fix.point.lng },
+                    heading: heading,
+                    start: 0,
+                    ms: Math.min(700, Math.max(280, Math.round(meters * 6)))
+                };
+            } else if (fix.snap || fix.first) {
+                el.__glide = null;
+                el.__headingFallback = true;
+            }
         }
-        live.agent = el.__acceptedGps || live.agent;
+        live.agent = Object.assign({}, el.__acceptedGps || live.agent);
+        if (el.__stillHeading != null && !el.__headingFallback) live.agent.heading = el.__stillHeading;
         return false;
     }
 
@@ -352,6 +375,7 @@
         const live = el.__liveSnap;
         if (msg.agent && Number.isFinite(Number(msg.agent.lat)) && Number.isFinite(Number(msg.agent.lng))) {
             live.agent = { lat: Number(msg.agent.lat), lng: Number(msg.agent.lng) };
+            if (Number.isFinite(Number(msg.agent.heading))) live.agent.heading = Number(msg.agent.heading);
             live.route = 'road';
             if (!live.leg || live.leg === 'preview' || live.leg === 'done') live.leg = msg.leg || 'to_drop';
         } else if (msg.agent == null) {
@@ -473,7 +497,7 @@
         const s = document.createElement('script');
         s.id = 'tl-maps-js';
         s.async = true;
-        s.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(live.mapsApiKey) + '&callback=__tlMapBoot';
+        s.src = 'https://maps.googleapis.com/maps/api/js?key=' + encodeURIComponent(live.mapsApiKey) + '&v=weekly&callback=__tlMapBoot';
         document.body.appendChild(s);
     }
 
@@ -610,9 +634,9 @@
         };
         Rider.prototype.setRider = function (pos, heading, visible, moving) {
             this.pos = pos;
-            this.heading = heading || 0;
+            this.heading = heading == null || !Number.isFinite(Number(heading)) ? 0 : Number(heading);
             this.visible = !!visible && !!pos;
-            this.moving = !!moving && this.visible;
+            this.moving = false;
             this.draw();
         };
         Rider.prototype.onRemove = function () {
@@ -639,20 +663,21 @@
 
     function ensureMotion(el) {
         if (el.__raf) return;
-        const step = () => {
+        const step = (now) => {
             el.__raf = requestAnimationFrame(step);
-            const path = el.__path;
-            const cum = el.__cum;
-            if (!path || !cum || !el.__agentLive || !el.__rider) return;
-            const gps = el.__gpsMeters || 0;
-            el.__riderTraveling = false;
-            el.__agentMeters = gps;
-            if (el.__poseMeters === gps) return;
-            el.__poseMoving = false;
-            el.__poseMeters = gps;
-            holdRider(el, along(path, cum, gps));
-            if (el.__remain) el.__remain.setPath(tailPath(path, cum, gps));
-            if (el.__doneLine) el.__doneLine.setPath(headPath(path, cum, gps));
+            const g = el.__glide;
+            if (!g || !el.__rider || !el.__agentLive) return;
+            if (!g.start) g.start = now;
+            const t = Math.min(1, (now - g.start) / g.ms);
+            const lat = g.from.lat + (g.to.lat - g.from.lat) * t;
+            const lng = g.from.lng + (g.to.lng - g.from.lng) * t;
+            el.__rider.setRider({ lat: lat, lng: lng }, g.heading, true, false);
+            syncBike(false);
+            if (t >= 1) {
+                el.__stillHeading = g.heading;
+                el.__headingFallback = false;
+                el.__glide = null;
+            }
         };
         el.__raf = requestAnimationFrame(step);
     }
@@ -690,29 +715,41 @@
         }
         if (!el.__map) {
             el.textContent = '';
-            el.__map = new google.maps.Map(el, {
+            const phone = document.documentElement && document.documentElement.classList.contains('tl-phone');
+            const mapOpts = {
                 center,
-                zoom: 15,
+                zoom: 17,
+                tilt: 45,
+                heading: 0,
+                mapId: 'DEMO_MAP_ID',
                 mapTypeControl: false,
                 streetViewControl: false,
-                fullscreenControl: true,
+                fullscreenControl: !phone,
+                zoomControl: !phone,
+                rotateControl: false,
                 gestureHandling: 'greedy',
                 clickableIcons: false,
-                scaleControl: true,
-                zoomControlOptions: google.maps.ControlPosition ? { position: google.maps.ControlPosition.RIGHT_BOTTOM } : undefined,
-                styles: [
-                    { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-                    { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-                    { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#f4f7f5' }] },
-                    { featureType: 'landscape.man_made', elementType: 'geometry', stylers: [{ color: '#eef2f0' }] },
-                    { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#d7e6f4' }] },
-                    { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
-                    { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#e2e8e6' }] },
-                    { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#f1f5f4' }] },
-                    { featureType: 'road', elementType: 'labels', stylers: [{ visibility: 'simplified' }] },
-                    { featureType: 'administrative', elementType: 'labels.text.fill', stylers: [{ color: '#64748b' }] }
-                ]
-            });
+                scaleControl: !phone,
+                isFractionalZoomEnabled: true,
+                headingInteractionEnabled: false,
+                tiltInteractionEnabled: false
+            };
+            if (google.maps.RenderingType) mapOpts.renderingType = google.maps.RenderingType.VECTOR;
+            el.__buildings3d = true;
+            try {
+                el.__map = new google.maps.Map(el, mapOpts);
+                el.__vectorMap = true;
+            } catch (err) {
+                delete mapOpts.mapId;
+                delete mapOpts.renderingType;
+                delete mapOpts.isFractionalZoomEnabled;
+                mapOpts.tilt = 0;
+                mapOpts.styles = rasterStyles();
+                el.__map = new google.maps.Map(el, mapOpts);
+                el.__vectorMap = false;
+                el.__buildings3d = false;
+            }
+            applyBuildings(el);
             el.__map.addListener('dragstart', () => {
                 el.__userMoved = true;
             });
@@ -741,12 +778,31 @@
                     const snap = el.__liveSnap || {};
                     const bounds = new google.maps.LatLngBounds();
                     [snap.store, snap.drop, snap.agent].forEach((pos) => pos && bounds.extend(pos));
-                    if (!bounds.isEmpty()) {
-                        el.__userMoved = false;
-                        el.__map.fitBounds(bounds, mapPadding());
-                    }
+                    el.__userMoved = false;
+                    fitMap(el, bounds);
                 });
                 el.appendChild(btn);
+            }
+            if (el.__vectorMap && !el.querySelector('.tl-map-3d')) {
+                const buildings = document.createElement('button');
+                buildings.type = 'button';
+                buildings.className = 'tl-map-3d is-on';
+                buildings.textContent = 'Flat';
+                buildings.addEventListener('click', () => {
+                    el.__buildings3d = el.__buildings3d === false;
+                    buildings.textContent = el.__buildings3d === false ? '3D' : 'Flat';
+                    buildings.classList.toggle('is-on', el.__buildings3d !== false);
+                    if (el.__buildings3d !== false) {
+                        const snap = el.__liveSnap || {};
+                        const focus = snap.agent || snap.store || snap.drop;
+                        if (focus && el.__map.getZoom && el.__map.getZoom() < 16) {
+                            el.__map.panTo(focus);
+                            el.__map.setZoom(17);
+                        }
+                    }
+                    applyBuildings(el);
+                });
+                el.appendChild(buildings);
             }
         }
         ensureLinks(el);
@@ -795,7 +851,7 @@
             if (!el.__fitted || el.__fitLeg !== live.leg) {
                 const bounds = new google.maps.LatLngBounds();
                 [live.store, live.drop].forEach((pos) => pos && bounds.extend(pos));
-                if (!bounds.isEmpty()) el.__map.fitBounds(bounds, mapPadding());
+                fitMap(el, bounds);
                 el.__fitted = true;
                 el.__fitLeg = live.leg;
             }
@@ -817,14 +873,14 @@
         if (moving && live.agent) {
             el.__lastGps = { lat: live.agent.lat, lng: live.agent.lng };
             el.__lastGpsAt = Date.now();
-            if (!el.__path) parkRider(el, live.agent, toward);
+            parkRider(el, live.agent, toward);
         }
         if (live.store && live.drop) loadTrip(el, live.store, live.drop);
         else fallbackLive(el, live);
         if (!el.__fitted || el.__fitLeg !== live.leg) {
             const bounds = new google.maps.LatLngBounds();
             [live.store, live.drop, live.agent].forEach((pos) => pos && bounds.extend(pos));
-            if (!bounds.isEmpty()) el.__map.fitBounds(bounds, mapPadding());
+            fitMap(el, bounds);
             el.__fitted = true;
             el.__fitLeg = live.leg;
             el.__userMoved = false;
@@ -1154,9 +1210,20 @@
             syncBike(false);
             return;
         }
-        const heading = toward ? bearingDeg(agent, toward) % 360 : el.__stillHeading || 0;
+        if (el.__glide) return;
+        const device = Number(agent.heading);
+        let heading;
+        if (Number.isFinite(device)) {
+            heading = ((device % 360) + 360) % 360;
+            el.__headingFallback = false;
+        } else if (el.__stillHeading != null && !el.__headingFallback) {
+            heading = el.__stillHeading;
+        } else if (toward) {
+            heading = bearingDeg(agent, toward) % 360;
+            el.__headingFallback = true;
+        } else heading = el.__stillHeading || 0;
         el.__stillHeading = heading;
-        el.__rider.setRider(agent, heading, true, false);
+        el.__rider.setRider({ lat: Number(agent.lat), lng: Number(agent.lng) }, heading, true, false);
         syncBike(false);
     }
 
@@ -1250,11 +1317,62 @@
         else hideEta();
     }
 
+    function rasterStyles() {
+        return [
+            { featureType: 'poi', stylers: [{ visibility: 'off' }] },
+            { featureType: 'transit', stylers: [{ visibility: 'off' }] },
+            { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#f4f7f5' }] },
+            { featureType: 'landscape.man_made', elementType: 'geometry', stylers: [{ color: '#eef2f0' }] },
+            { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#d7e6f4' }] },
+            { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
+            { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#e2e8e6' }] },
+            { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#f1f5f4' }] },
+            { featureType: 'road', elementType: 'labels', stylers: [{ visibility: 'simplified' }] },
+            { featureType: 'administrative', elementType: 'labels.text.fill', stylers: [{ color: '#64748b' }] }
+        ];
+    }
+
+    function applyBuildings(el) {
+        if (!el || !el.__map || !el.__map.setTilt) return;
+        try {
+            if (el.__map.setHeading) el.__map.setHeading(0);
+            el.__map.setTilt(el.__buildings3d === false ? 0 : 45);
+        } catch (err) {}
+    }
+
+    function fitMap(el, bounds) {
+        if (!el || !el.__map || !bounds || (bounds.isEmpty && bounds.isEmpty())) return;
+        el.__map.fitBounds(bounds, mapPadding());
+        const settle = () => applyBuildings(el);
+        if (window.google && google.maps.event && google.maps.event.addListenerOnce) google.maps.event.addListenerOnce(el.__map, 'idle', settle);
+        else settle();
+    }
+
+    function applyDeviceClass() {
+        const root = document.documentElement;
+        if (!root || !root.classList) return;
+        const width = Math.min(window.innerWidth || 1200, root.clientWidth || window.innerWidth || 1200);
+        const phone = width <= 760;
+        const tablet = !phone && width <= 1100;
+        root.classList.toggle('tl-phone', phone);
+        root.classList.toggle('tl-tablet', tablet);
+        root.classList.toggle('tl-desktop', !phone && !tablet);
+        if (!mapEl || !mapEl.__map) return;
+        const phoneNow = root.classList.contains('tl-phone');
+        try {
+            if (mapEl.__map.setOptions) mapEl.__map.setOptions({ fullscreenControl: !phoneNow, zoomControl: !phoneNow, scaleControl: !phoneNow });
+        } catch (err) {}
+        applyBuildings(mapEl);
+        if (window.google && google.maps.event) google.maps.event.trigger(mapEl.__map, 'resize');
+    }
+
     function routeColor() {
         return document.body.classList.contains('hl-page') ? '#ea580c' : '#067d62';
     }
 
     function mapPadding() {
+        const root = document.documentElement;
+        if (root && root.classList && root.classList.contains('tl-phone')) return { top: 56, right: 16, bottom: 52, left: 16 };
         return document.body.classList.contains('hl-page') ? { top: 72, right: 72, bottom: 96, left: 72 } : 64;
     }
 
@@ -1271,5 +1389,7 @@
             el.style.setProperty('--line', String(pct));
         });
     }
+    applyDeviceClass();
+    if (window.addEventListener) window.addEventListener('resize', applyDeviceClass);
     window.TrackTimeline = { render, mount, bind, when, esc, updates, tick: tickLines, focusPlace, watch: watchRider, acceptFix, haversine };
 })();
