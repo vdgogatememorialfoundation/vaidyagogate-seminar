@@ -98,6 +98,7 @@
         renderStatus();
         renderYearForm();
         renderVideos();
+        fillAlbumSelect();
         loadAccess();
         if ($('vl-tracking') && !$('vl-tracking').innerHTML) loadTracking(null);
         schedulePoll();
@@ -126,9 +127,10 @@
             '<div class="vl-form-row"><div><label>Seminar year</label><input type="number" id="vlc-year" min="2000" max="2100" placeholder="2026" required></div>' +
             '<div><label>Seminar</label><select id="vlc-seminar" required><option value="">Choose a seminar</option></select></div></div>' +
             '<label>Title</label><input type="text" id="vlc-title" maxlength="200" placeholder="Day 1 — Inaugural session">' +
-            '<div class="vl-form-row"><div><label>Type</label><select id="vlc-kind"><option value="episode">Episode / part</option><option value="full">Full video</option></select></div>' +
-            '<div><label>Part number</label><input type="number" id="vlc-part" min="1" placeholder="1"></div></div>' +
-            '<label>Price for non-registered doctors (₹, 0 = not sold separately)</label><input type="number" id="vlc-price" min="0" step="1" value="0">' +
+            '<div class="vl-form-row"><div><label>How it is sold</label><select id="vlc-sale"><option value="single">Single video</option><option value="album">Album (one price unlocks every part)</option><option value="part">Part of an album</option></select></div>' +
+            '<div id="vlc-part-wrap"><label>Part number</label><input type="number" id="vlc-part" min="1" placeholder="1"></div></div>' +
+            '<div id="vlc-album-wrap" class="hidden"><label>Album</label><select id="vlc-album"><option value="">Choose an album</option></select></div>' +
+            '<label id="vlc-price-label">Price for non-registered doctors (₹, 0 = not sold separately)</label><input type="number" id="vlc-price" min="0" step="1" value="0">' +
             '<label>Description</label><textarea id="vlc-desc" maxlength="2000"></textarea>' +
             '<div class="vl-upload-row" style="margin-top:10px;"><button type="button" class="vl-btn" id="vlc-save">Create video</button><span class="vl-note">Then upload the file from the table below.</span></div>' +
             '<p class="vl-form-msg" id="vlc-msg"></p></div>' +
@@ -177,6 +179,9 @@
             '<div class="vl-upload-row"><input type="text" id="vlt-search" placeholder="Find an account (name, email, phone, ID)" style="flex:1;min-width:220px;"><button type="button" class="vl-btn is-ghost is-small" id="vlt-all">Recent activity (all accounts)</button></div>' +
             '<div class="vl-user-pick" id="vlt-picks"></div><div id="vl-tracking"></div></div>';
         $('vlc-save').addEventListener('click', createVideo);
+        $('vlc-sale').addEventListener('change', syncSaleFields);
+        $('vlc-year').addEventListener('change', fillAlbumSelect);
+        syncSaleFields();
         $('vly-save').addEventListener('click', saveYear);
         $('vly-theme-apply').addEventListener('click', applyTheme);
         $('vly-year').addEventListener('change', renderYearForm);
@@ -299,7 +304,7 @@
             .forEach((v) => {
                 const o = document.createElement('option');
                 o.value = v.id;
-                o.textContent = (v.kind === 'full' ? 'Full · ' : 'Part ' + (v.partNo || '') + ' · ') + v.title;
+                o.textContent = kindLabel(v) + ' · ' + v.title;
                 sel.appendChild(o);
             });
     }
@@ -475,8 +480,9 @@
                                   ? '<div class="vl-progress" style="margin-top:6px;"><span style="width:' + Math.round((up.fraction || 0) * 100) + '%"></span></div><div class="vl-note">' + esc(up.text || '') + '</div>'
                                   : '';
                         const log = v.processLog ? '<div class="vl-note" title="' + esc(v.processLog) + '">' + esc(v.processLog.length > 110 ? v.processLog.slice(0, 107) + '…' : v.processLog) + '</div>' : '';
-                        const uploadControls =
-                            v.status === 'processing'
+                        const uploadControls = v.kind === 'album'
+                            ? ''
+                            : v.status === 'processing'
                                 ? ''
                                 : up
                                   ? '<button type="button" class="vl-btn is-ghost is-small" data-vl-act="pause" data-id="' + v.id + '">' + (up.paused ? 'Resume upload' : 'Pause upload') + '</button>'
@@ -490,7 +496,7 @@
                             '<tr><td><strong>' +
                             esc(v.title) +
                             '</strong><div class="vl-note">' +
-                            (v.kind === 'full' ? 'Full video' : 'Part ' + (v.partNo != null ? v.partNo : '—')) +
+                            kindLabel(v) +
                             (v.seminarTitle ? ' · ' + esc(v.seminarTitle) : v.seminarId ? ' · seminar #' + v.seminarId : '') +
                             '</div>' +
                             log +
@@ -504,13 +510,13 @@
                             (v.segmentCount ? ' · ' + v.segmentCount + ' seg' : '') +
                             (v.status === 'ready' ? ' · ' + (v.storage === 'r2' ? '<span class="vl-badge is-free">cloud</span>' : '<span class="vl-badge">server disk</span>') : '') +
                             '</div></td><td>' +
-                            (v.priceInr > 0 ? fmtMoney(v.priceInr) : '<span class="vl-note">registered only</span>') +
+                            priceCell(v) +
                             '</td><td>' +
                             (v.published ? '<span class="vl-badge is-free">Published</span>' : '<span class="vl-badge">Hidden</span>') +
                             '</td><td><div class="vl-actions">' +
                             uploadControls +
                             (v.status === 'failed' || (v.status === 'uploaded' && v.hasSource) ? '<button type="button" class="vl-btn is-warn is-small" data-vl-act="process" data-id="' + v.id + '">Process</button>' : '') +
-                            (v.status === 'ready'
+                            (v.status === 'ready' || v.kind === 'album'
                                 ? '<button type="button" class="vl-btn is-small ' + (v.published ? 'is-ghost' : '') + '" data-vl-act="publish" data-id="' + v.id + '">' + (v.published ? 'Unpublish' : 'Publish') + '</button>'
                                 : '') +
                             (v.status === 'ready' && v.storage !== 'r2' && state.cloud && state.cloud.ready ? '<button type="button" class="vl-btn is-ghost is-small" data-vl-act="offload" data-id="' + v.id + '">Move to cloud</button>' : '') +
@@ -539,22 +545,80 @@
 
     /* --------------------------------------------------------- actions */
 
+    function kindLabel(v) {
+        if (!v) return '';
+        if (v.kind === 'album') return 'Album';
+        if (v.albumId) return 'Part ' + (v.partNo != null ? v.partNo : '—') + ' of album';
+        if (v.kind === 'full') return 'Single video';
+        return 'Part ' + (v.partNo != null ? v.partNo : '—');
+    }
+
+    function priceCell(v) {
+        if (v.kind === 'album') return v.priceInr > 0 ? fmtMoney(v.priceInr) + '<div class="vl-note">Unlocks every part</div>' : '<span class="vl-note">registered only</span>';
+        if (v.albumId) {
+            const album = (state.videos || []).find((a) => a.id === v.albumId);
+            return '<span class="vl-note">Included in ' + esc(album ? album.title : 'album') + (album && album.priceInr > 0 ? ' · ' + fmtMoney(album.priceInr) : '') + '</span>';
+        }
+        return v.priceInr > 0 ? fmtMoney(v.priceInr) : '<span class="vl-note">registered only</span>';
+    }
+
+    function fillAlbumSelect() {
+        const sel = $('vlc-album');
+        if (!sel || !state) return;
+        const year = Number($('vlc-year') && $('vlc-year').value);
+        const current = sel.value;
+        sel.innerHTML =
+            '<option value="">Choose an album</option>' +
+            (state.videos || [])
+                .filter((v) => v.kind === 'album' && (!year || v.year === year))
+                .map((v) => '<option value="' + v.id + '">' + esc(v.year + ' · ' + v.title) + '</option>')
+                .join('');
+        if (current) sel.value = current;
+    }
+
+    function syncSaleFields() {
+        const sale = $('vlc-sale') ? $('vlc-sale').value : 'single';
+        const albumWrap = $('vlc-album-wrap');
+        const partWrap = $('vlc-part-wrap');
+        const price = $('vlc-price');
+        const label = $('vlc-price-label');
+        if (albumWrap) albumWrap.classList.toggle('hidden', sale !== 'part');
+        if (partWrap) partWrap.classList.toggle('hidden', sale !== 'part');
+        if (price) {
+            price.disabled = sale === 'part';
+            if (sale === 'part') price.value = '0';
+        }
+        if (label) {
+            label.textContent =
+                sale === 'album'
+                    ? 'Album price (₹). Paying this unlocks every part.'
+                    : sale === 'part'
+                      ? 'Parts use the album price'
+                      : 'Price for this single video (₹, 0 = not sold separately)';
+        }
+        if (sale === 'part') fillAlbumSelect();
+    }
+
     async function createVideo() {
         if (!$('vlc-year').value) return setMsg('vlc-msg', 'Choose the seminar year.', true);
         if (!$('vlc-seminar').value) return setMsg('vlc-msg', 'Choose the seminar this video belongs to.', true);
+        const sale = $('vlc-sale').value;
+        if (sale === 'part' && !$('vlc-album').value) return setMsg('vlc-msg', 'Choose the album this part belongs to.', true);
+        if (sale === 'part' && !$('vlc-part').value) return setMsg('vlc-msg', 'Give this part a part number.', true);
         const body = {
             year: $('vlc-year').value,
             seminarId: $('vlc-seminar').value,
             title: $('vlc-title').value,
-            kind: $('vlc-kind').value,
-            partNo: $('vlc-part').value,
-            priceInr: $('vlc-price').value,
+            sale,
+            albumId: sale === 'part' ? $('vlc-album').value : '',
+            partNo: sale === 'part' ? $('vlc-part').value : '',
+            priceInr: sale === 'part' ? 0 : $('vlc-price').value,
             description: $('vlc-desc').value,
             published: false
         };
         try {
             await api('/api/admin/videos', { method: 'POST', body });
-            setMsg('vlc-msg', 'Video created. Upload its file from the table.');
+            setMsg('vlc-msg', sale === 'album' ? 'Album created. Add parts under it, then publish the album.' : sale === 'part' ? 'Part created. Upload its file from the table.' : 'Single video created. Upload its file from the table.');
             $('vlc-title').value = '';
             $('vlc-desc').value = '';
             await load();
@@ -636,8 +700,11 @@
             (state.seminars || []).map((s) => '<option value="' + s.id + '"' + (v.seminarId === s.id ? ' selected' : '') + '>' + esc((s.year ? s.year + ' · ' : '') + s.title) + '</option>').join('') +
             '</select></div></div>' +
             '<label>Title</label><input type="text" id="vle-title" value="' + esc(v.title) + '">' +
-            '<div class="vl-form-row"><div><label>Type</label><select id="vle-kind"><option value="episode"' + (v.kind === 'episode' ? ' selected' : '') + '>Episode / part</option><option value="full"' + (v.kind === 'full' ? ' selected' : '') + '>Full video</option></select></div>' +
+            '<div class="vl-form-row"><div><label>How it is sold</label><select id="vle-sale"><option value="single"' + (v.sale === 'single' || v.kind === 'full' ? ' selected' : '') + '>Single video</option><option value="album"' + (v.kind === 'album' ? ' selected' : '') + '>Album</option><option value="part"' + (v.sale === 'part' || v.albumId ? ' selected' : '') + '>Part of an album</option></select></div>' +
             '<div><label>Part number</label><input type="number" id="vle-part" min="1" value="' + (v.partNo != null ? v.partNo : '') + '"></div></div>' +
+            '<label>Album</label><select id="vle-album"><option value="">None</option>' +
+            (state.videos || []).filter((a) => a.kind === 'album' && a.id !== v.id).map((a) => '<option value="' + a.id + '"' + (v.albumId === a.id ? ' selected' : '') + '>' + esc(a.year + ' · ' + a.title) + '</option>').join('') +
+            '</select>' +
             '<div class="vl-form-row"><div><label>Price (₹)</label><input type="number" id="vle-price" min="0" step="1" value="' + v.priceInr + '"></div>' +
             '<div><label>Sort order</label><input type="number" id="vle-sort" value="' + (v.sortOrder || 0) + '"></div></div>' +
             '<label>Description</label><textarea id="vle-desc">' + esc(v.description) + '</textarea>' +
@@ -653,9 +720,10 @@
                         year: modal.querySelector('#vle-year').value,
                         seminarId: modal.querySelector('#vle-seminar').value,
                         title: modal.querySelector('#vle-title').value,
-                        kind: modal.querySelector('#vle-kind').value,
+                        sale: modal.querySelector('#vle-sale').value,
+                        albumId: modal.querySelector('#vle-sale').value === 'part' ? modal.querySelector('#vle-album').value : '',
                         partNo: modal.querySelector('#vle-part').value,
-                        priceInr: modal.querySelector('#vle-price').value,
+                        priceInr: modal.querySelector('#vle-sale').value === 'part' ? 0 : modal.querySelector('#vle-price').value,
                         sortOrder: modal.querySelector('#vle-sort').value,
                         description: modal.querySelector('#vle-desc').value
                     }
@@ -1214,6 +1282,72 @@
             })
         );
     }
+
+    const TX_LABEL = { seminar: 'Event', video: 'Seminar video', book: 'Book order' };
+
+    async function loadTransactions(kind) {
+        const host = $('vl-admin-tx');
+        const filters = $('vl-admin-tx-filters');
+        if (!host) return;
+        const current = kind || (host.dataset.kind || 'all');
+        host.dataset.kind = current;
+        if (filters && !filters.dataset.bound) {
+            filters.dataset.bound = '1';
+            filters.addEventListener('click', (e) => {
+                const btn = e.target.closest('[data-tx-kind]');
+                if (!btn) return;
+                loadTransactions(btn.getAttribute('data-tx-kind'));
+            });
+        }
+        if (filters) {
+            filters.querySelectorAll('[data-tx-kind]').forEach((b) => {
+                b.classList.toggle('is-ghost', b.getAttribute('data-tx-kind') !== current);
+            });
+        }
+        host.innerHTML = '<p class="vl-note">Loading…</p>';
+        const q = $('vl-admin-tx-q') ? $('vl-admin-tx-q').value.trim() : '';
+        try {
+            const body = await api('/api/admin/transactions?kind=' + encodeURIComponent(current) + '&q=' + encodeURIComponent(q));
+            const rows = body.transactions || [];
+            if (!rows.length) {
+                host.innerHTML = '<p class="vl-note">No transactions in this list.</p>';
+                return;
+            }
+            host.innerHTML =
+                '<div class="vl-table-wrap"><table class="vl-tx"><thead><tr><th>When</th><th>Type</th><th>Who</th><th>Item</th><th>Reference</th><th>Amount</th><th>Status</th></tr></thead><tbody>' +
+                rows
+                    .map(
+                        (r) =>
+                            '<tr><td data-label="When">' +
+                            fmtWhen(r.at) +
+                            '</td><td data-label="Type">' +
+                            esc(TX_LABEL[r.kind] || r.kind) +
+                            '</td><td data-label="Who">' +
+                            esc(r.who || '') +
+                            (r.portalId ? '<div class="vl-note">' + esc(r.portalId) + '</div>' : '') +
+                            '</td><td data-label="Item">' +
+                            esc(r.title) +
+                            '</td><td data-label="Reference">' +
+                            esc(r.ref) +
+                            (r.txnId ? '<div class="vl-note">' + esc(r.txnId) + '</div>' : '') +
+                            '</td><td data-label="Amount">' +
+                            fmtMoney(r.amount) +
+                            '</td><td data-label="Status">' +
+                            esc(r.status || '—') +
+                            '</td></tr>'
+                    )
+                    .join('') +
+                '</tbody></table></div>';
+        } catch (e) {
+            host.innerHTML = '<p class="vl-note" style="color:#b91c1c;">' + esc(e.message) + '</p>';
+        }
+    }
+
+    window.loadAdminTransactions = function () {
+        loadTransactions($('vl-admin-tx') && $('vl-admin-tx').dataset.kind ? $('vl-admin-tx').dataset.kind : 'all');
+    };
+    const txSearch = $('vl-admin-tx-q');
+    if (txSearch) txSearch.addEventListener('input', debounce(() => loadTransactions(), 300));
 
     window.loadVideoLibraryAdmin = load;
 })();

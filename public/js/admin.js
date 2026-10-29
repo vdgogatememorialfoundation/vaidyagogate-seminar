@@ -662,6 +662,7 @@ function adminCanAccessTab(tabId) {
         if (tabId === 'tab-cancellation-review' && globalAdminTabAllowed('tab-admin-payments')) return true;
         if (tabId === 'tab-refund-tracking' && globalAdminTabAllowed('tab-admin-payments')) return true;
         if (tabId === 'tab-commerce' && globalAdminTabAllowed('tab-book-sales')) return true;
+        if (tabId === 'tab-transactions' && (globalAdminTabAllowed('tab-video-library') || globalAdminTabAllowed('tab-admin-payments'))) return true;
         return globalAdminTabAllowed(checkId);
     }
     const { unset, mods } = coAdminModulesState(u);
@@ -669,12 +670,14 @@ function adminCanAccessTab(tabId) {
         if (tabId === 'tab-cancellation-review' && globalAdminTabAllowed('tab-admin-payments')) return true;
         if (tabId === 'tab-refund-tracking' && globalAdminTabAllowed('tab-admin-payments')) return true;
         if (tabId === 'tab-commerce' && globalAdminTabAllowed('tab-book-sales')) return true;
+        if (tabId === 'tab-transactions' && (globalAdminTabAllowed('tab-video-library') || globalAdminTabAllowed('tab-admin-payments'))) return true;
         return globalAdminTabAllowed(checkId);
     }
     if (!Object.keys(mods).length) return false;
     if (tabId === 'tab-cancellation-review' && mods['tab-admin-payments'] === true) return true;
     if (tabId === 'tab-refund-tracking' && mods['tab-admin-payments'] === true) return true;
     if (tabId === 'tab-commerce' && (mods['tab-commerce'] === true || mods['tab-book-sales'] === true)) return true;
+    if (tabId === 'tab-transactions' && (mods['tab-transactions'] === true || mods['tab-video-library'] === true || mods['tab-admin-payments'] === true)) return true;
     return mods[checkId] === true;
 }
 
@@ -1564,6 +1567,10 @@ const DOCTOR_MODULE_TAB_DEFS = [
     ['tab-payments', 'Payments'],
     ['tab-books', 'Book orders (Agnikarma / Viddhakarma)'],
     ['tab-videos', 'Seminar videos'],
+    ['tab-video-subscription', 'My subscription'],
+    ['tab-video-devices', 'My devices'],
+    ['tab-video-license', 'My license ID'],
+    ['tab-transactions', 'My transactions'],
     ['tab-ticket', 'Participant tickets'],
     ['tab-certificate', 'Certificates'],
     ['tab-reset-pwd', 'Change password']
@@ -1720,6 +1727,7 @@ const ADMIN_MODULE_TAB_DEFS = [
     ['tab-site-cms', 'Website & doctor updates'],
     ['tab-book-sales', 'Book sales'],
     ['tab-video-library', 'Seminar videos'],
+    ['tab-transactions', 'Transactions'],
     ['tab-commerce', 'Commerce'],
     ['tab-admin-payments', 'Payments'],
     ['tab-cancellation-review', 'Cancellation review & refunds'],

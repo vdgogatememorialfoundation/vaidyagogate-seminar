@@ -751,21 +751,35 @@ function expandDoctorRefundTabAccess(allowed) {
     return allowed;
 }
 
+function expandDoctorVideoAccountTabs(allowed) {
+    if (!allowed) return allowed;
+    const out = new Set(allowed);
+    if (out.has('tab-videos')) {
+        out.add('tab-video-subscription');
+        out.add('tab-video-devices');
+        out.add('tab-video-license');
+    }
+    if (out.has('tab-orders') || out.has('tab-videos') || out.has('tab-books') || out.has('tab-payments')) {
+        out.add('tab-transactions');
+    }
+    return out;
+}
+
 function resolveDoctorAllowedTabsClient(category, globalRegular, globalVolunteer, userModulesRaw) {
     const cat = String(category || 'regular').toLowerCase() === 'volunteer' ? 'volunteer' : 'regular';
     const globalMap = cat === 'volunteer' ? globalVolunteer || {} : globalRegular || {};
     let allowed = modulesMapToAllowedSetClient(globalMap);
-    if (isLegacyVolunteerDefaultModulesClient(userModulesRaw)) return expandDoctorRefundTabAccess(allowed);
+    if (isLegacyVolunteerDefaultModulesClient(userModulesRaw)) return expandDoctorVideoAccountTabs(expandDoctorRefundTabAccess(allowed));
     const userMap = parseDoctorModulesMap(userModulesRaw);
-    if (!userMap || !Object.keys(userMap).length) return expandDoctorRefundTabAccess(allowed);
+    if (!userMap || !Object.keys(userMap).length) return expandDoctorVideoAccountTabs(expandDoctorRefundTabAccess(allowed));
     const hasExplicitOff = Object.keys(userMap).some((k) => userMap[k] === false);
     if (!hasExplicitOff) {
         const userAllowed = modulesMapToAllowedSetClient(userMap);
-        if (allowed === null) return expandDoctorRefundTabAccess(userAllowed);
-        if (!userAllowed) return expandDoctorRefundTabAccess(allowed);
+        if (allowed === null) return expandDoctorVideoAccountTabs(expandDoctorRefundTabAccess(userAllowed));
+        if (!userAllowed) return expandDoctorVideoAccountTabs(expandDoctorRefundTabAccess(allowed));
         const merged = new Set(allowed);
         userAllowed.forEach((tabId) => merged.add(tabId));
-        return expandDoctorRefundTabAccess(merged);
+        return expandDoctorVideoAccountTabs(expandDoctorRefundTabAccess(merged));
     }
     const out = new Set();
     const tabIds = [
@@ -784,6 +798,10 @@ function resolveDoctorAllowedTabsClient(category, globalRegular, globalVolunteer
         'tab-payments',
         'tab-books',
         'tab-videos',
+        'tab-video-subscription',
+        'tab-video-devices',
+        'tab-video-license',
+        'tab-transactions',
         'tab-ticket',
         'tab-certificate',
         'tab-reset-pwd'
@@ -796,7 +814,7 @@ function resolveDoctorAllowedTabsClient(category, globalRegular, globalVolunteer
         if (userMap[tabId] === false) return;
         if (allowed === null || allowed.has(tabId)) out.add(tabId);
     });
-    return expandDoctorRefundTabAccess(out.size ? out : new Set());
+    return expandDoctorVideoAccountTabs(expandDoctorRefundTabAccess(out.size ? out : new Set()));
 }
 
 function doctorPortalFetchBust() {
@@ -3995,6 +4013,18 @@ function switchTab(tabId, menuEl) {
     }
     if (tabId === 'tab-videos' && typeof initDoctorVideosTab === 'function') {
         initDoctorVideosTab();
+    }
+    if (tabId === 'tab-video-subscription' && typeof initDoctorSubscriptionTab === 'function') {
+        initDoctorSubscriptionTab();
+    }
+    if (tabId === 'tab-video-devices' && typeof initDoctorDevicesTab === 'function') {
+        initDoctorDevicesTab();
+    }
+    if (tabId === 'tab-video-license' && typeof initDoctorLicenseTab === 'function') {
+        initDoctorLicenseTab();
+    }
+    if (tabId === 'tab-transactions' && typeof initDoctorTransactionsTab === 'function') {
+        initDoctorTransactionsTab();
     }
     if (tabId !== 'tab-videos' && typeof stopDoctorVideoPlayback === 'function') {
         stopDoctorVideoPlayback();
