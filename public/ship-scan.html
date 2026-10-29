@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Scan shipment</title>
+<style>
+body{margin:0;font-family:"Segoe UI",system-ui,sans-serif;background:#f4f7f5;color:#0f172a}
+main{max-width:420px;margin:0 auto;padding:28px 16px 40px}
+h1{font-size:1.35rem;margin:0 0 6px}
+p{color:#475569;line-height:1.45}
+.card{background:#fff;border:1px solid #e6eeea;border-radius:18px;padding:16px;box-shadow:0 10px 28px rgba(15,23,42,.06)}
+.code{font-weight:800;letter-spacing:.04em}
+button{width:100%;margin-top:14px;border:0;border-radius:12px;background:#067d62;color:#fff;font-weight:800;padding:14px 16px;font-size:1rem;cursor:pointer}
+button:disabled{opacity:.6}
+.ok{color:#047857;font-weight:700}
+.bad{color:#b91c1c;font-weight:700}
+</style>
+</head>
+<body>
+<main>
+<h1>Shipment scan</h1>
+<p id="lead">Checking this shipment…</p>
+<div class="card">
+<div id="order" class="code"></div>
+<p id="msg"></p>
+<button type="button" id="go" hidden>Confirm</button>
+</div>
+</main>
+<script>
+(function () {
+  var params = new URLSearchParams(location.search);
+  var token = params.get('token') || '';
+  var lead = document.getElementById('lead');
+  var order = document.getElementById('order');
+  var msg = document.getElementById('msg');
+  var go = document.getElementById('go');
+  if (token.length < 8) {
+    lead.textContent = 'This scan link is incomplete.';
+    return;
+  }
+  fetch('/api/public/commerce/shipment-scan?token=' + encodeURIComponent(token), { cache: 'no-store' })
+    .then(function (res) { return res.json().then(function (data) { return { ok: res.ok, data: data }; }); })
+    .then(function (res) {
+      if (!res.ok) {
+        lead.textContent = res.data.error || 'Shipment not found.';
+        return;
+      }
+      order.textContent = res.data.orderCode ? 'Order ' + res.data.orderCode : 'Shipment';
+      if (!res.data.next) {
+        lead.textContent = 'Nothing left to mark.';
+        msg.textContent = res.data.label || 'Already delivered.';
+        msg.className = 'ok';
+        return;
+      }
+      lead.textContent = 'Confirm this scan to update the customer’s order.';
+      go.hidden = false;
+      go.textContent = res.data.label || 'Confirm';
+      go.onclick = function () {
+        go.disabled = true;
+        fetch('/api/public/commerce/shipment-scan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: token })
+        }).then(function (r) { return r.json().then(function (data) { return { ok: r.ok, data: data }; }); })
+          .then(function (out) {
+            go.hidden = true;
+            if (!out.ok) {
+              msg.textContent = out.data.error || 'Could not mark this shipment.';
+              msg.className = 'bad';
+              return;
+            }
+            msg.textContent = out.data.message || 'Updated.';
+            msg.className = 'ok';
+            lead.textContent = 'The customer’s tracking now shows this scan.';
+          })
+          .catch(function () {
+            go.disabled = false;
+            msg.textContent = 'Could not reach the server.';
+            msg.className = 'bad';
+          });
+      };
+    })
+    .catch(function () { lead.textContent = 'Could not reach the server.'; });
+})();
+</script>
+</body>
+</html>

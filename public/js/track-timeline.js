@@ -72,7 +72,7 @@
                 html += '<div class="tl-otps"><div class="tl-otp"><div class="lbl">Pickup OTP</div><div class="code">' + esc(pk.pickupOtp) + '</div></div></div><div class="tl-note">Store staff: the courier agent must quote this at handover.</div>';
             }
         }
-        if (step.deliveryOtp && (step.key === 'shipped' || step.key === 'out_for_delivery' || step.key === 'delivered')) {
+        if (step.deliveryOtp && (step.key === 'packed' || step.key === 'shipped' || step.key === 'out_for_delivery' || step.key === 'delivered')) {
             html += '<div class="tl-otps"><div class="tl-otp"><div class="lbl">Delivery OTP</div><div class="code">' + esc(step.deliveryOtp) + '</div></div></div><div class="tl-note">Share this code with the delivery partner.</div>';
         }
         if (step.queue && step.state === 'active') {
@@ -592,6 +592,10 @@
         '<svg xmlns="http://www.w3.org/2000/svg" width="42" height="52" viewBox="0 0 42 52"><ellipse cx="21" cy="48" rx="8" ry="3" fill="#0f172a" opacity="0.18"/><path d="M21 46s14-12.4 14-25A14 14 0 1 0 7 21c0 12.6 14 25 14 25z" fill="#0f766e"/><circle cx="21" cy="20" r="8.5" fill="#fff"/><path d="M15.5 24.5v-7h11v7M15.5 20.5h11M18 17.5V16h6v1.5" fill="none" stroke="#0f766e" stroke-width="1.6" stroke-linejoin="round"/></svg>';
     const HOME_SVG =
         '<svg xmlns="http://www.w3.org/2000/svg" width="42" height="52" viewBox="0 0 42 52"><ellipse cx="21" cy="48" rx="8" ry="3" fill="#0f172a" opacity="0.18"/><path d="M21 46s14-12.4 14-25A14 14 0 1 0 7 21c0 12.6 14 25 14 25z" fill="#0f172a"/><circle cx="21" cy="20" r="8.5" fill="#fff"/><path d="M15 23.5V18l6-4.2 6 4.2v5.5h-4.2v-3.4h-3.6v3.4z" fill="#0f172a"/></svg>';
+    const PREVIEW_STORE_SVG =
+        '<svg xmlns="http://www.w3.org/2000/svg" width="42" height="52" viewBox="0 0 42 52"><ellipse cx="21" cy="48" rx="8" ry="3" fill="#0f172a" opacity="0.2"/><path d="M21 46s14-12.4 14-25A14 14 0 1 0 7 21c0 12.6 14 25 14 25z" fill="#111"/><circle cx="21" cy="20" r="8.2" fill="#fff"/><path d="M16 22.5v-5.2h10v5.2M16 19.4h10M18.2 17.2h5.6" fill="none" stroke="#111" stroke-width="1.5" stroke-linejoin="round"/></svg>';
+    const PREVIEW_HOME_SVG =
+        '<svg xmlns="http://www.w3.org/2000/svg" width="42" height="52" viewBox="0 0 42 52"><ellipse cx="21" cy="48" rx="8" ry="3" fill="#0f172a" opacity="0.2"/><path d="M21 46s14-12.4 14-25A14 14 0 1 0 7 21c0 12.6 14 25 14 25z" fill="#111"/><circle cx="21" cy="20" r="8.2" fill="#fff"/><path d="M15.2 23.2V18.2l5.8-4 5.8 4v5h-4v-3h-3.6v3z" fill="#111"/></svg>';
     // The scooter artwork faces right. A -90 degree turn points the front up so the map heading follows the road.
     const RIDER_ICON = '/media/delivery-agent.png?v=2';
 
@@ -816,12 +820,16 @@
                 el.__markers[key] = new google.maps.Marker({ map: el.__map, title, icon: markerIcon(svg, 42, 52), zIndex: 3 });
                 el.__markers[key].__svg = svg;
                 el.__markers[key].addListener('click', () => focusPlace(key));
+            } else if (el.__markers[key].__svg !== svg) {
+                el.__markers[key].setIcon(markerIcon(svg, 42, 52));
+                el.__markers[key].__svg = svg;
             }
             el.__markers[key].setMap(el.__map);
             el.__markers[key].setPosition(pos);
         };
-        place('store', live.store, 'Store', STORE_SVG);
-        place('drop', live.drop, 'Delivery location', HOME_SVG);
+        const previewPins = isPreview(live);
+        place('store', live.store, 'Store', previewPins ? PREVIEW_STORE_SVG : STORE_SVG);
+        place('drop', live.drop, 'Delivery location', previewPins ? PREVIEW_HOME_SVG : HOME_SVG);
         el.__liveSnap = live;
         el.__onTrip = (pts) => {
             const snap = el.__liveSnap;
@@ -838,7 +846,7 @@
             hideEta();
             if (live.store && live.drop) {
                 if (!(el.__tripPath && samePoint(el.__tripFrom, live.store, 40) && samePoint(el.__tripTo, live.drop, 40))) {
-                    dottedLine(el.__remain, live.store, live.drop);
+                    previewArc(el.__remain, live.store, live.drop);
                     clearConnectors(el);
                 }
                 loadTrip(el, live.store, live.drop);
@@ -850,7 +858,7 @@
             }
             if (!el.__fitted || el.__fitLeg !== live.leg) {
                 const bounds = new google.maps.LatLngBounds();
-                [live.store, live.drop].forEach((pos) => pos && bounds.extend(pos));
+                [live.store, live.drop, live.store && live.drop ? arcMid(live.store, live.drop) : null].forEach((pos) => pos && bounds.extend(pos));
                 fitMap(el, bounds);
                 el.__fitted = true;
                 el.__fitLeg = live.leg;
@@ -992,6 +1000,45 @@
         if (!line) return;
         line.setOptions({ strokeColor: routeColor(), strokeOpacity: 1, strokeWeight: 6, icons: null });
         if (pts && pts.length) line.setPath(pts);
+    }
+
+    function arcPoints(a, b) {
+        const dLat = b.lat - a.lat;
+        const dLng = b.lng - a.lng;
+        const len = Math.sqrt(dLat * dLat + dLng * dLng) || 0.0001;
+        const bow = len * 0.42;
+        const cx = (a.lat + b.lat) / 2 + (-dLng / len) * bow;
+        const cy = (a.lng + b.lng) / 2 + (dLat / len) * bow;
+        const pts = [];
+        const steps = 56;
+        for (let i = 0; i <= steps; i++) {
+            const t = i / steps;
+            const u = 1 - t;
+            pts.push({
+                lat: u * u * a.lat + 2 * u * t * cx + t * t * b.lat,
+                lng: u * u * a.lng + 2 * u * t * cy + t * t * b.lng
+            });
+        }
+        return pts;
+    }
+
+    function arcMid(a, b) {
+        const pts = arcPoints(a, b);
+        return pts[Math.floor(pts.length / 2)];
+    }
+
+    function previewArc(line, a, b) {
+        if (!line || !a || !b) return;
+        line.setOptions({
+            strokeOpacity: 0,
+            strokeWeight: 0,
+            icons: [{
+                icon: { path: 'M 0,-3.2 0,3.2', strokeOpacity: 1, strokeColor: '#161616', strokeWeight: 3.5, scale: 3 },
+                offset: '0',
+                repeat: '28px'
+            }]
+        });
+        line.setPath(arcPoints(a, b));
     }
 
     function dottedLine(line, a, b, pts) {
@@ -1234,12 +1281,7 @@
         if (el.__doneLine) el.__doneLine.setPath([]);
         if (el.__corridor) el.__corridor.setPath([]);
         if (!live.store || !live.drop || !el.__remain) return;
-        if (!pts) {
-            dottedLine(el.__remain, live.store, live.drop);
-            clearConnectors(el);
-            return;
-        }
-        dottedLine(el.__remain, live.store, live.drop, pts);
+        previewArc(el.__remain, live.store, live.drop);
         clearConnectors(el);
         const dur = el.__tripDuration;
         if (dur && dur.text) showEta(dur.text, 'From the store', etaSub(dur));

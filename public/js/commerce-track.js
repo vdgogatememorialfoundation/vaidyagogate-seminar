@@ -380,6 +380,11 @@
         });
     }
 
+    function qrHtml(track) {
+        if (!track || !track.shipmentQrSvg || track.mainStatus === 'DELIVERED' || track.mainStatus === 'CANCELLED') return '';
+        return '<section class="trk-qr"><div class="trk-qr-copy"><b>Shipment QR</b><p>Show this to the delivery partner. They scan it to confirm pickup, then delivery. Your order updates here.</p></div><div class="trk-qr-img">' + track.shipmentQrSvg + '</div></section>';
+    }
+
     function otpHtml(label, code, track) {
         const verified = track && ((/pickup/i.test(label) && track.pickupOtpVerified) || (/delivery/i.test(label) && track.deliveryOtpVerified));
         if (verified) return '<div class="ship-otp ship-otp-ok"><div class="lbl">' + esc(label) + '</div><div class="code">\u2713 OTP verified</div></div>';
@@ -845,6 +850,7 @@
             '</div>' +
             (expects ? '<div class="trk-whens">' + expects + '</div>' : '') +
             failureHtml(track) +
+            qrHtml(track) +
             otpHtml('Pickup OTP', track.pickupOtp, track) + otpHtml('Delivery OTP', track.deliveryOtp, track) +
             '<section class="trk-progress"><h2>' + (ret ? kindWord(track) + ' progress' : 'Order progress') + '</h2><p class="trk-line-note">' + esc(lineNote(track)) + '</p>' + '<ol class="ship-pipe">' + pipeHtml(track) + '</ol>' + '</section>' +
             logHtml(track) +
@@ -890,8 +896,11 @@
             '<header class="hl-brand"><span class="trk-mark">' + iconSvg('M3 8l9-4 9 4-9 4-9-4zM3 8v8l9 4 9-4V8') + '</span><div><div class="trk-brand-name">Gogate Products</div><div class="trk-brand-sub">Hyperlocal delivery</div></div></header>' +
             '<div class="hl-top"><div><div class="hl-kicker">Order #' + esc(track.orderId || shipment.orderCode || '') + (badge ? ' ' + badge : '') + '</div><h1>' + esc(track.currentStatus || track.currentMessage) + '</h1>' +
             '<p class="hl-sub">' + esc(partnerLine(track, liveNow)) + '</p>' +
-            (liveNow.agent ? (liveNow.leg === 'to_store' ? '<p class="hl-wait">' + esc(liveNow.phaseLabel || 'Heading to the store') + '.</p>' : '') : '<p class="hl-wait">Dotted driving route from the store to your address. The partner appears here as soon as one is assigned.</p>') +
+            (liveNow.agent ? (liveNow.leg === 'to_store' ? '<p class="hl-wait">' + esc(liveNow.phaseLabel || 'Heading to the store') + '.</p>' : '') : '<p class="hl-wait">Dashed route from the store to your address. The partner appears here as soon as one is assigned.</p>') +
             '</div><div id="tl-eta" class="hl-eta" hidden><span class="hl-eta-lbl">' + esc(liveNow.phaseLabel || 'Arriving') + '</span><b class="hl-eta-val"></b><span class="tl-eta-sub"></span></div></div>' +
+            qrHtml(track) +
+            otpHtml('Delivery OTP', track.deliveryOtp, track) +
+            otpHtml('Pickup OTP', track.pickupOtp, track) +
             milesHtml(shipment) +
             hlNowHtml(track) +
             railHtml(track) +
@@ -907,7 +916,6 @@
             esc(note) + '</textarea><div class="hl-note-actions"><button type="submit">Save</button><button type="button" id="hl-note-cancel">Cancel</button></div><p class="form-msg" id="hl-note-msg"></p></form></div>' +
             partner +
             '</section><div class="hl-below">' +
-            otpHtml('Pickup OTP', track.pickupOtp) + otpHtml('Delivery OTP', track.deliveryOtp) +
             progressHtml(track) +
             '</div></div>';
     }
