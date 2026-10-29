@@ -1155,7 +1155,6 @@
                 el.__fitted = true;
                 el.__fitLeg = live.leg;
             }
-            if (el.__map && window.google && google.maps.event) google.maps.event.trigger(el.__map, 'resize');
             return;
         }
         if (lockRider(el, live)) return;
@@ -1186,7 +1185,6 @@
             el.__userMoved = false;
         }
         el.__paintedLeg = live.leg;
-        if (el.__map && window.google && google.maps.event) google.maps.event.trigger(el.__map, 'resize');
         if (pendingRider) {
             const msg = pendingRider;
             pendingRider = null;

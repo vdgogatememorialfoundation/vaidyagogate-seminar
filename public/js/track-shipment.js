@@ -170,7 +170,8 @@
         root.classList.remove('hidden');
         if (o.commerceTimeline && window.TrackTimeline) {
             const live = o.commerceLive || null;
-            const sig = JSON.stringify(o.commerceTimeline) + '|' + (live && live.slot ? live.slot : '') + '|' + (live && live.leg ? live.leg : '');
+            const steps = (o.commerceTimeline.steps || []).map((step) => (step.key || '') + ':' + (step.state || '') + ':' + (step.title || '')).join('|');
+            const sig = steps + '|' + (o.commerceTimeline.headline || '') + '|' + (o.commerceTimeline.deliveryOtp || '') + '|' + (o.commerceTimeline.cancelled ? '1' : '0');
             if (sig !== lastCommerceSig) {
                 lastCommerceSig = sig;
                 root.innerHTML = summaryHtml(o) + '<section class="ts4-card"><div class="ts4-card-head"><h3><i class="fas fa-list-check"></i> Order progress</h3><span>Updates when you refresh</span></div>' + window.TrackTimeline.render({ timeline: o.commerceTimeline, live: live }, { animate: true }) + '</section>';

@@ -6,6 +6,7 @@ let razorpayMethod = null;
 let shopSearchTerm = '';
 let shopPending = null;
 let orderPoll = null;
+let shopOrderStory = '';
 let checkoutState = { fulfillment: 'delivery', method: '', addressId: null, showForm: false };
 let accountTab = 'orders';
 let orderFilter = 'all';
@@ -818,19 +819,32 @@ async function openShopOrder(id) {
         root.innerHTML = '<div class="box empty">' + shopEsc(data.error || 'Order not found') + '</div>';
         return;
     }
+    shopOrderStory = shopOrderStoryOf(data);
     renderOrderDetail(data);
     if (!termOrder(data) || data.returnView) {
         orderPoll = setInterval(async () => {
             if (document.getElementById('view-order').classList.contains('hidden')) return stopPolling();
             try {
                 const r = await fetchOrder(id);
-                if (r.ok) {
+                if (!r.ok) return;
+                const next = shopOrderStoryOf(r.data);
+                if (next !== shopOrderStory) {
+                    shopOrderStory = next;
                     renderOrderDetail(r.data);
-                    if (termOrder(r.data) && !r.data.returnView) stopPolling();
+                } else if (window.TrackTimeline && r.data.live) {
+                    TrackTimeline.mount(r.data.live);
                 }
+                if (termOrder(r.data) && !r.data.returnView) stopPolling();
             } catch (_) {}
         }, 15000);
     }
+}
+
+function shopOrderStoryOf(data) {
+    const t = (data && data.timeline) || {};
+    const steps = (t.steps || []).map((step) => (step.key || '') + ':' + (step.state || '') + ':' + (step.title || '')).join('|');
+    const o = (data && data.order) || {};
+    return [o.id || '', o.status || '', t.headline || '', t.cancelled ? '1' : '0', t.deliveryOtp || '', steps].join('~');
 }
 
 async function shopRequestReturn(id) {

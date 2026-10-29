@@ -962,14 +962,7 @@
         document.body.classList.add('hl-page');
         const live = track.map.enabled ? shipment.live : null;
         const editing = document.getElementById('hl-note-form');
-        const steady = Object.assign({}, track, {
-            pipeline: (track.pipeline || []).map((step) => {
-                const copy = Object.assign({}, step);
-                delete copy.lineGrow;
-                return copy;
-            })
-        });
-        const sig = JSON.stringify(steady) + '|' + JSON.stringify(shipment.linked || null) + '|' + (live && live.slot ? live.slot : '') + '|' + (live && live.courierView ? live.courierView.url : '') + '|' + JSON.stringify(shipment.journey || null) + '|' + (live && live.leg ? live.leg : '') + '|' + (live && live.route ? live.route : '');
+        const sig = storyKey(track) + '|' + storyKey(shipment.linked && shipment.linked.replacementTrack) + '|' + storyKey(shipment.linked && shipment.linked.originReturnTrack);
         if (!(editing && !editing.hidden) && sig !== drawn) {
             drawn = sig;
             tracker.innerHTML = (liveSheet ? sheetHtml(track, shipment) : documentHtml(track, shipment)) + linkedHtml(shipment);
@@ -1051,6 +1044,18 @@
         });
     }
 
+    function storyKey(track) {
+        if (!track) return '';
+        const steps = (track.pipeline || track.steps || []).map((step) => [step.key || '', step.state || '', step.title || ''].join(':'));
+        return JSON.stringify({
+            status: track.currentStatus || track.mainStatus || track.headline || '',
+            cancelled: !!track.cancelled,
+            otp: track.deliveryOtp || '',
+            pickup: track.pickupOtp || '',
+            steps: steps
+        });
+    }
+
     function touchFresh(root) {
         (root || document).querySelectorAll('.trk-fresh').forEach((el) => {
             el.textContent = 'Updated ' + new Intl.DateTimeFormat('en-IN', {
@@ -1070,7 +1075,7 @@
         draw: function (container, track, shipment) {
             if (!container) return;
             const html = window.ShipTrack.html(track, shipment);
-            const sig = JSON.stringify(Object.assign({}, track, { pipeline: (track && track.pipeline || []).map((step) => Object.assign({}, step, { lineGrow: undefined })) }));
+            const sig = storyKey(track);
             if (container.dataset.sig === sig) return;
             container.dataset.sig = sig;
             container.innerHTML = html;
@@ -1228,7 +1233,7 @@
     if (tracker && sub) {
         poll();
         setInterval(poll, 8000);
-        document.addEventListener('tl-track-refresh', () => { drawn = ''; poll(); });
+        document.addEventListener('tl-track-refresh', () => { poll(); });
         document.addEventListener('click', (e) => { if (e.target.closest && e.target.closest('.trk-refresh')) { pipePlayed = false; poll(); } });
     }
     setInterval(tickPipe, 2000);
