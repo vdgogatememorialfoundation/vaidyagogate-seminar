@@ -10603,6 +10603,37 @@ app.post('/api/admin/certificates/:id/toggle', (req, res) => {
     );
 });
 
+function publicCertificateVerify(req, res, rawId) {
+    if (!certVerify.allowPublicCertificateLookup(req.ip)) {
+        res.setHeader('Cache-Control', 'no-store');
+        return res.status(429).json({
+            ok: false,
+            valid: false,
+            status: 'rate_limited',
+            error: 'Too many lookups. Try again in a minute.'
+        });
+    }
+    certVerify.lookupCertificateByPublicId(db, rawId, (err, out) => {
+        if (err) return res.status(500).json({ ok: false, valid: false, error: 'Certificate lookup failed.' });
+        res.setHeader('Cache-Control', 'no-store');
+        res.status(out && out.status === 'invalid_id' ? 400 : 200).json(out);
+    });
+}
+
+app.get(['/developers/certificate-api', '/developers/certificate-api/'], (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.sendFile(path.join(publicDir, 'developers', 'certificate-api.html'));
+});
+
+// Certificate id check for the foundation's main website. No login and no email code.
+app.get('/api/public/certificates/verify', (req, res) => {
+    publicCertificateVerify(req, res, req.query.id || req.query.certificateId || '');
+});
+
+app.get('/api/public/certificates/verify/:certificateId', (req, res) => {
+    publicCertificateVerify(req, res, req.params.certificateId);
+});
+
 // Public certificate verification (enabled per seminar after event ends)
 app.get('/api/public/certificate-verify/seminars', (req, res) => {
     certVerify.listPublicVerifySeminars(db, (err, list) => {

@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Certificate verification API · Vaidya Gogate Memorial Foundation</title>
+    <style>
+        :root { color-scheme: light; }
+        body { margin: 0; font-family: Georgia, "Iowan Old Style", serif; background: #f8fafc; color: #0f172a; }
+        header { background: #fff; border-bottom: 1px solid #e2e8f0; }
+        header div, main { max-width: 820px; margin: 0 auto; padding: 28px 20px; }
+        h1 { font-size: 1.8rem; margin: 0 0 8px; letter-spacing: -0.02em; }
+        h2 { font-size: 1.2rem; margin: 32px 0 8px; }
+        p, li { line-height: 1.55; font-size: 1.02rem; }
+        .lede { color: #334155; font-size: 1.08rem; }
+        code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.88rem; }
+        code { background: #e2e8f0; padding: 0.1em 0.35em; border-radius: 4px; }
+        pre { background: #0f172a; color: #e2e8f0; padding: 14px 16px; border-radius: 10px; overflow: auto; }
+        table { width: 100%; border-collapse: collapse; background: #fff; }
+        th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #e2e8f0; vertical-align: top; font-size: 0.95rem; }
+        th { background: #f1f5f9; }
+        a { color: #0f766e; }
+    </style>
+</head>
+<body>
+    <header>
+        <div>
+            <h1>Certificate verification API</h1>
+            <p class="lede">Check a printed certificate id from the foundation's main website. Each issued certificate has its own 12-digit id.</p>
+        </div>
+    </header>
+    <main>
+        <p>Base URL: <code>https://seminar.vaidyagogate.org</code></p>
+        <p>No API key, login, or email code is required. The response does not include the holder's email or phone.</p>
+
+        <h2>Request</h2>
+        <p><code>GET /api/public/certificates/verify/{certificateId}</code></p>
+        <p><code>GET /api/public/certificates/verify?id={certificateId}</code></p>
+        <p>Spaces and dashes are ignored. The value must be exactly 12 digits.</p>
+        <pre>curl -sS "https://seminar.vaidyagogate.org/api/public/certificates/verify/433495146392"</pre>
+
+        <h2>Valid certificate</h2>
+        <p>HTTP 200.</p>
+        <pre>{
+  "ok": true,
+  "valid": true,
+  "status": "valid",
+  "certificateId": "433495146392",
+  "kind": "participant",
+  "holderName": "Dr Asha Gogate",
+  "prn": "PRN2600000001",
+  "applicationNo": "SEM-2026-0015",
+  "event": { "id": 9, "title": "Manas Rog 3", "date": "2026-02-04" },
+  "issuedAt": "2026-02-05T10:00:00.000Z",
+  "message": "This certificate is authentic and was issued by the Vaidya Gogate Memorial Foundation."
+}</pre>
+        <p><code>kind</code> is <code>participant</code> or <code>volunteer</code>. Show the name and event only when <code>valid</code> is true.</p>
+
+        <h2>Other results</h2>
+        <table>
+            <thead><tr><th>HTTP</th><th>status</th><th>Meaning</th></tr></thead>
+            <tbody>
+                <tr><td>200</td><td><code>valid</code></td><td>Issued and active.</td></tr>
+                <tr><td>200</td><td><code>not_found</code></td><td>No certificate uses this id.</td></tr>
+                <tr><td>200</td><td><code>not_issued</code></td><td>The id exists, but the certificate is not active. The name is omitted.</td></tr>
+                <tr><td>400</td><td><code>invalid_id</code></td><td>Not 12 digits.</td></tr>
+                <tr><td>429</td><td><code>rate_limited</code></td><td>More than 60 lookups from one address in a minute.</td></tr>
+            </tbody>
+        </table>
+
+        <h2>Browser</h2>
+        <pre>const res = await fetch(
+  "https://seminar.vaidyagogate.org/api/public/certificates/verify/" +
+  encodeURIComponent(id.replace(/\D/g, ""))
+);
+const body = await res.json();</pre>
+        <p>The certificate id is assigned when that certificate is issued. Creating an event does not create ids by itself. Use this id, not the application number or PRN, as the lookup key.</p>
+    </main>
+</body>
+</html>
