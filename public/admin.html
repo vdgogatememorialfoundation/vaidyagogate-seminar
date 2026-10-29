@@ -174,6 +174,7 @@
                 <a class="menu-item" data-admin-module="tab-refund-tracking" onclick="switchTab('tab-refund-tracking'); initAdminRefundTrackingTab();"><i class="fas fa-undo-alt"></i> Refund tracking</a>
                 <a class="menu-item" data-admin-module="tab-book-sales" onclick="switchTab('tab-book-sales'); loadBookSalesAdmin();"><i class="fas fa-book"></i> Book sales</a>
                 <a class="menu-item" data-admin-module="tab-video-library" onclick="switchTab('tab-video-library'); loadVideoLibraryAdmin();"><i class="fas fa-video"></i> Seminar videos</a>
+                <a class="menu-item" data-admin-module="tab-transactions" onclick="switchTab('tab-transactions'); if (window.loadAdminTransactions) loadAdminTransactions();"><i class="fas fa-receipt"></i> Transactions</a>
                 <a class="menu-item" data-admin-module="tab-certificates" onclick="switchTab('tab-certificates'); initAdminCertificatesTab();"><i class="fas fa-award"></i> Certificate Management</a>
                 <a class="menu-item" data-admin-module="tab-volunteers" onclick="switchTab('tab-volunteers'); initAdminVolunteersTab();"><i class="fas fa-hands-helping"></i> Volunteers</a>
                 <a class="menu-item" data-admin-module="tab-volunteer-assignments" onclick="switchTab('tab-volunteer-assignments'); initAdminVolunteerAssignmentsTab();"><i class="fas fa-clipboard-list"></i> Volunteer assignments</a>
@@ -1315,9 +1316,24 @@
             </div>
 
             <!-- Seminar videos -->
+            <div id="tab-transactions" class="tab-pane hidden">
+                <h2 class="section-title">Transactions</h2>
+                <p class="vl-intro">Event registrations, seminar video unlocks, and book orders.</p>
+                <div class="vl-upload-row" style="margin-bottom:12px;">
+                    <div id="vl-admin-tx-filters" class="vl-filters" style="margin:0;">
+                        <button type="button" class="vl-btn is-small is-ghost" data-tx-kind="events">Events</button>
+                        <button type="button" class="vl-btn is-small is-ghost" data-tx-kind="videos">Seminar videos</button>
+                        <button type="button" class="vl-btn is-small is-ghost" data-tx-kind="books">Book orders</button>
+                        <button type="button" class="vl-btn is-small" data-tx-kind="all">All</button>
+                    </div>
+                    <input type="search" id="vl-admin-tx-q" placeholder="Search name, reference, or payment id" style="min-width:220px;flex:1;">
+                </div>
+                <div id="vl-admin-tx"><p class="vl-note">Open this page to load transactions.</p></div>
+            </div>
+
             <div id="tab-video-library" class="tab-pane hidden">
                 <h2 class="section-title">Seminar videos</h2>
-                <p class="vl-intro">Upload full recordings or episodes per seminar year. Files are encrypted into a protected stream on this server; doctors registered for that year watch free, others pay the price or are enabled here.</p>
+                <p class="vl-intro">Upload an album (one price unlocks every part) or a single video. Files are encrypted into a protected stream on this server; doctors registered and paid for that seminar watch free, others pay the album or single-video price.</p>
                 <div id="vl-admin-root"><p class="vl-note">Loading…</p></div>
             </div>
 
@@ -3508,13 +3524,13 @@
     <script src="/js/user-roles.js?v=20260522f"></script>
     <script src="/js/admin-list-search.js?v=20260522a"></script>
     <link rel="stylesheet" href="/css/book-track.css?v=20260529stg">
-    <link rel="stylesheet" href="/css/video-library.css?v=20261029vl5">
+    <link rel="stylesheet" href="/css/video-library.css?v=20261029acct1">
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
     <script src="/js/track-timeline.js?v=20261003tl"></script>
     <script src="/js/admin-commerce.js?v=20261003tl"></script>
-    <script src="/js/admin.js?v=20261029vl4"></script>
-    <script src="/js/admin-videos.js?v=20261029vl6"></script>
+    <script src="/js/admin.js?v=20261029acct1"></script>
+    <script src="/js/admin-videos.js?v=20261029acct2"></script>
 </body>
 </html>

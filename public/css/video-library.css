@@ -107,3 +107,17 @@
 .vl-product { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; }
 .vl-product strong { color: #0f172a; font-size: 0.92rem; }
 .vl-cart { margin-top: 10px; padding: 10px 12px; border-radius: 12px; background: #f8fafc; border: 1px dashed #cbd5e1; }
+.vl-album { grid-column: 1 / -1; }
+.vl-album-parts { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin-top: 4px; }
+.vl-license-hero { gap: 6px; }
+.vl-license-hero b { font-size: 1.8rem; letter-spacing: 0.16em; font-variant-numeric: tabular-nums; color: #0f172a; }
+.vl-filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
+.vl-tx { width: 100%; border-collapse: collapse; }
+.vl-tx th, .vl-tx td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #e2e8f0; font-size: 0.86rem; vertical-align: top; }
+.vl-tx th { color: #64748b; font-size: 0.75rem; letter-spacing: 0.03em; text-transform: uppercase; }
+@media (max-width: 720px) {
+    .vl-tx thead { display: none; }
+    .vl-tx tr { display: block; border: 1px solid #e2e8f0; border-radius: 12px; margin: 0 0 10px; padding: 6px 8px; background: #fff; }
+    .vl-tx td { display: flex; justify-content: space-between; gap: 12px; border: 0; padding: 4px 6px; }
+    .vl-tx td::before { content: attr(data-label); color: #64748b; font-weight: 700; }
+}

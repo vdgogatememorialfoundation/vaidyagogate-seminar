@@ -137,12 +137,13 @@
         const years = data.years || [];
         if (!years.length) {
             const volunteer = data.viewer && data.viewer.volunteer;
-            host.innerHTML =
-                '<div class="vl-card"><h4>No videos published yet</h4><p>' +
-                (volunteer
-                    ? 'Seminar videos is turned on for volunteer accounts. Recordings appear here after the seminar office publishes them.'
-                    : 'Seminar recordings appear here once the seminar office publishes them.') +
-                '</p></div>';
+            host.innerHTML = data.blocked
+                ? '<div class="vl-card"><h4>Video access is turned off</h4><p>The seminar office has turned off your access to these recordings.</p></div>'
+                : '<div class="vl-card"><h4>No videos published yet</h4><p>' +
+                  (volunteer
+                      ? 'Seminar videos is turned on for volunteer accounts. Recordings appear here after the seminar office publishes them.'
+                      : 'Seminar recordings appear here once the seminar office publishes them.') +
+                  '</p></div>';
             return;
         }
         const pending = data.pendingPurchases || [];
@@ -151,7 +152,7 @@
               esc(data.license) +
               '</b></div><div class="vl-license-note">This number is printed inside every video you watch. Videos play on up to ' +
               esc(data.maxDevices || 2) +
-              ' of your own devices. <button type="button" class="vl-linkbtn" id="vl-devices-btn">My devices</button></div><div id="vl-devices" class="hidden"></div></div>'
+              ' of your own devices. <button type="button" class="vl-linkbtn" data-vl-go="tab-video-license">My license ID</button> · <button type="button" class="vl-linkbtn" data-vl-go="tab-video-devices">My devices</button> · <button type="button" class="vl-linkbtn" data-vl-go="tab-video-subscription">My subscription</button></div><div id="vl-devices" class="hidden"></div></div>'
             : '';
         host.innerHTML = licenseBar + years
             .map((y) => {
@@ -159,7 +160,17 @@
                     y.bundlePriceInr != null && y.bundlePriceInr > 0 && !y.allAllowed
                         ? '<button type="button" class="vl-btn is-ghost is-small" data-vl-buy-year="' + y.year + '">Unlock all ' + y.year + ' videos · ' + fmtMoney(y.bundlePriceInr) + '</button>'
                         : '';
-                const cards = y.videos.map((v) => card(v, pending)).join('');
+                const seen = {};
+                const uniqueVideos = (y.videos || []).filter((v) => {
+                    if (!v || seen[v.id]) return false;
+                    seen[v.id] = true;
+                    return true;
+                });
+                const grouped = groupYear(uniqueVideos);
+                const playable = uniqueVideos.filter((v) => v.kind !== 'album').length;
+                const cards =
+                    grouped.albums.map((a) => albumBlock(a, grouped.partsOf[a.id] || [], pending)).join('') +
+                    grouped.singles.map((v) => card(v, pending)).join('');
                 const accent = /^#[0-9a-fA-F]{6}$/.test(y.accent || '') ? y.accent : '';
                 return (
                     '<section class="vl-year"' +
@@ -167,8 +178,8 @@
                     '><div class="vl-year-head"><h3>' +
                     esc(y.title || 'Seminar ' + y.year) +
                     '</h3><span class="vl-badge">' +
-                    y.videos.length +
-                    (y.videos.length === 1 ? ' video' : ' videos') +
+                    playable +
+                    (playable === 1 ? ' video' : ' videos') +
                     '</span>' +
                     bundle +
                     (y.description ? '<p class="vl-note">' + esc(y.description) + '</p>' : '') +
@@ -178,12 +189,47 @@
                 );
             })
             .join('');
+        bindPurchase(host);
+    }
+
+    function bindPurchase(host) {
+        if (!host) return;
         host.querySelectorAll('[data-vl-watch]').forEach((b) => b.addEventListener('click', () => watch(parseInt(b.getAttribute('data-vl-watch'), 10))));
         host.querySelectorAll('[data-vl-buy]').forEach((b) => b.addEventListener('click', () => startPurchase({ videoId: parseInt(b.getAttribute('data-vl-buy'), 10) })));
         host.querySelectorAll('[data-vl-buy-year]').forEach((b) => b.addEventListener('click', () => startPurchase({ year: parseInt(b.getAttribute('data-vl-buy-year'), 10) })));
         host.querySelectorAll('[data-vl-check]').forEach((b) => b.addEventListener('click', () => checkPending(parseInt(b.getAttribute('data-vl-check'), 10), b)));
-        const devBtn = $('vl-devices-btn');
-        if (devBtn) devBtn.addEventListener('click', showDevices);
+        host.querySelectorAll('[data-vl-go]').forEach((b) =>
+            b.addEventListener('click', () => {
+                const tab = b.getAttribute('data-vl-go');
+                if (typeof switchTab === 'function') switchTab(tab);
+            })
+        );
+    }
+
+    function groupYear(videos) {
+        const albums = (videos || []).filter((v) => v.kind === 'album');
+        const albumIds = {};
+        albums.forEach((a) => {
+            albumIds[a.id] = true;
+        });
+        const partsOf = {};
+        const singles = [];
+        (videos || []).forEach((v) => {
+            if (v.kind === 'album') return;
+            if (v.albumId && albumIds[v.albumId]) {
+                if (!partsOf[v.albumId]) partsOf[v.albumId] = [];
+                partsOf[v.albumId].push(v);
+            } else singles.push(v);
+        });
+        return { albums, partsOf, singles };
+    }
+
+    function pendingFor(v, pending) {
+        return (pending || []).find((p) => {
+            if (p.video_id && (p.video_id === v.id || (v.albumId && p.video_id === v.albumId) || (v.kind === 'album' && p.video_id === v.id))) return true;
+            if (!p.video_id && p.year === v.year) return true;
+            return false;
+        });
     }
 
     async function showDevices() {
@@ -217,14 +263,51 @@
         }
     }
 
-    function card(v, pending) {
-        const kind = v.kind === 'full' ? '<span class="vl-badge is-full">Full video</span>' : '<span class="vl-badge is-part">Part ' + (v.partNo != null ? v.partNo : '') + '</span>';
+    function albumBlock(album, parts, pending) {
+        const allowed = album.access && album.access.allowed;
+        const pend = pendingFor(album, pending);
+        let actions = '';
+        if (allowed) {
+            actions = '<span class="vl-badge is-free">' + esc(accessLabel(album.access)) + ' · all parts</span>';
+        } else if (pend) {
+            actions = '<span class="vl-badge is-paid">Payment pending</span><button type="button" class="vl-btn is-ghost is-small" data-vl-check="' + pend.id + '">Check payment</button>';
+        } else if (album.priceInr > 0) {
+            actions =
+                '<button type="button" class="vl-btn is-warn" data-vl-buy="' + album.id + '"><i class="fas fa-lock"></i> Unlock all parts · ' + fmtMoney(album.priceInr) + '</button>' +
+                (whyLocked(album.access) ? '<span class="vl-note vl-why">' + esc(whyLocked(album.access)) + '</span>' : '');
+        } else {
+            actions = '<span class="vl-badge">Included for registered participants</span>';
+        }
+        const partCards = (parts || []).map((p) => card(p, pending, { insideAlbum: true })).join('');
+        return (
+            '<article class="vl-card vl-album"><div class="vl-card-top"><span class="vl-badge is-full">Album</span><span class="vl-note">' +
+            (parts || []).length +
+            ((parts || []).length === 1 ? ' part' : ' parts') +
+            '</span></div><h4>' +
+            esc(album.title) +
+            '</h4>' +
+            (album.description ? '<p>' + esc(album.description) + '</p>' : '') +
+            '<p class="vl-note">One price unlocks every part in this album.</p><div class="vl-card-actions">' +
+            actions +
+            '</div><div class="vl-album-parts">' +
+            (partCards || '<p class="vl-note">Parts appear here after the seminar office publishes them.</p>') +
+            '</div></article>'
+        );
+    }
+
+    function card(v, pending, opts) {
+        opts = opts || {};
+        const kind = opts.insideAlbum
+            ? '<span class="vl-badge is-part">Part ' + (v.partNo != null ? v.partNo : '') + '</span>'
+            : v.kind === 'full'
+              ? '<span class="vl-badge is-full">Single video</span>'
+              : '<span class="vl-badge is-part">Part ' + (v.partNo != null ? v.partNo : '') + '</span>';
         const dur = fmtDuration(v.durationSec);
-        const pend = pending.find((p) => (p.video_id && p.video_id === v.id) || (!p.video_id && p.year === v.year));
+        const pend = pendingFor(v, pending);
         const allowed = v.access && v.access.allowed;
         const resume = v.positionSec > 30 && v.durationSec && v.positionSec < v.durationSec - 30;
         let actions = '';
-        if (allowed) {
+        if (allowed && v.kind !== 'album') {
             actions =
                 '<button type="button" class="vl-btn" data-vl-watch="' + v.id + '"><i class="fas fa-play"></i> ' + (resume ? 'Resume' : 'Watch') + '</button>' +
                 '<span class="vl-badge is-free">' + esc(accessLabel(v.access)) + '</span>';
@@ -232,6 +315,8 @@
             actions =
                 '<span class="vl-badge is-paid">Payment pending</span>' +
                 '<button type="button" class="vl-btn is-ghost is-small" data-vl-check="' + pend.id + '">Check payment</button>';
+        } else if (opts.insideAlbum) {
+            actions = '<span class="vl-note">Unlocks with the album</span>' + (whyLocked(v.access) ? '<span class="vl-note vl-why">' + esc(whyLocked(v.access)) + '</span>' : '');
         } else if (v.priceInr > 0) {
             actions =
                 '<button type="button" class="vl-btn is-warn" data-vl-buy="' + v.id + '"><i class="fas fa-lock"></i> Unlock · ' + fmtMoney(v.priceInr) + '</button>' +
@@ -443,8 +528,8 @@
         if (!box) return;
         payState = Object.assign({}, target);
         box.classList.remove('hidden');
-        box.innerHTML = '<h4>Choose how to pay</h4><p class="vl-note">Loading payment methods…</p>';
-        box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        box.innerHTML = '<h4>Payment</h4><div id="vl-pay-body"></div><p class="vl-pay-msg" id="vl-pay-msg">Opening Razorpay…</p>';
+        box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         let options = [];
         try {
             options = await api('/api/doctor/videos/payment-options?userId=' + encodeURIComponent(uid));
@@ -452,19 +537,14 @@
             box.innerHTML = '<h4>Payment</h4><p class="vl-note" style="color:#b91c1c;">' + esc(e.message) + '</p>';
             return;
         }
-        if (!options.length) {
-            box.innerHTML = '<h4>Payment</h4><p class="vl-note">Online payment is not available right now. Contact the seminar office; they can unlock the video for you after payment.</p>';
+        const razor =
+            (options || []).find((o) => o.gateway === 'razorpay' && o.mode === 'live') ||
+            (options || []).find((o) => o.gateway === 'razorpay');
+        if (!razor) {
+            box.innerHTML = '<h4>Payment</h4><p class="vl-note">Razorpay is not available right now. Contact the seminar office; they can unlock the video for you after payment.</p>';
             return;
         }
-        box.innerHTML =
-            '<h4>Choose how to pay</h4><div class="vl-pay-options">' +
-            options.map((o) => '<button type="button" class="vl-btn is-ghost" data-vl-mid="' + esc(o.id) + '">' + esc(o.label || o.id) + '</button>').join('') +
-            '<button type="button" class="vl-btn is-ghost is-small" data-vl-cancel>Cancel</button></div><div id="vl-pay-body"></div><p class="vl-pay-msg" id="vl-pay-msg"></p>';
-        box.querySelectorAll('[data-vl-mid]').forEach((b) => b.addEventListener('click', () => pay(b.getAttribute('data-vl-mid'))));
-        box.querySelector('[data-vl-cancel]').addEventListener('click', () => {
-            box.classList.add('hidden');
-            payState = null;
-        });
+        pay(razor.id);
     }
 
     async function pay(mid) {
@@ -645,9 +725,203 @@
         window.addEventListener('pagehide', () => stop(true));
     }
 
+    function subscriptionRows() {
+        const rows = [];
+        (data && data.years ? data.years : []).forEach((y) => {
+            const grouped = groupYear(y.videos);
+            if (y.allAllowed && y.videos.length) {
+                const sample = y.videos.find((v) => v.access && v.access.allowed);
+                rows.push({ title: y.title || 'Seminar ' + y.year, meta: 'Whole year', state: accessLabel(sample && sample.access) || 'Included' });
+            }
+            grouped.albums.forEach((a) => {
+                rows.push({
+                    title: a.title,
+                    meta: 'Album · ' + y.year + ' · ' + (grouped.partsOf[a.id] || []).length + ' parts',
+                    state: a.access && a.access.allowed ? accessLabel(a.access) : a.priceInr > 0 ? 'Locked · ' + fmtMoney(a.priceInr) : 'Locked'
+                });
+            });
+            grouped.singles.forEach((v) => {
+                rows.push({
+                    title: v.title,
+                    meta: 'Single video · ' + y.year,
+                    state: v.access && v.access.allowed ? accessLabel(v.access) : v.priceInr > 0 ? 'Locked · ' + fmtMoney(v.priceInr) : 'Locked'
+                });
+            });
+        });
+        return rows;
+    }
+
+    async function ensureCatalog() {
+        const uid = userId();
+        if (!uid) return null;
+        data = await api('/api/doctor/videos?userId=' + encodeURIComponent(uid) + '&_=' + Date.now());
+        return data;
+    }
+
+    async function renderSubscription() {
+        const host = $('vl-subscription');
+        if (!host) return;
+        const uid = userId();
+        if (!uid) {
+            host.innerHTML = '<p class="vl-note">Sign in to see your subscription.</p>';
+            return;
+        }
+        host.innerHTML = '<p class="vl-note">Loading…</p>';
+        try {
+            await ensureCatalog();
+        } catch (e) {
+            host.innerHTML = '<p class="vl-note" style="color:#b91c1c;">' + esc(e.message) + '</p>';
+            return;
+        }
+        const rows = subscriptionRows();
+        const license = data && data.license ? '<p class="vl-note">License ID <strong>' + esc(data.license) + '</strong></p>' : '';
+        host.innerHTML =
+            license +
+            (rows.length
+                ? '<div class="vl-table-wrap"><table class="vl-tx"><thead><tr><th>Access</th><th>Type</th><th>Status</th></tr></thead><tbody>' +
+                  rows
+                      .map(
+                          (r) =>
+                              '<tr><td data-label="Access">' +
+                              esc(r.title) +
+                              '</td><td data-label="Type">' +
+                              esc(r.meta) +
+                              '</td><td data-label="Status">' +
+                              esc(r.state) +
+                              '</td></tr>'
+                      )
+                      .join('') +
+                  '</tbody></table></div>'
+                : '<div class="vl-card"><h4>No seminar videos yet</h4><p>Your subscription appears here when the seminar office publishes recordings, or after you unlock an album or a single video.</p></div>');
+    }
+
+    async function renderDevicesPage() {
+        const host = $('vl-devices-page');
+        if (!host) return;
+        const uid = userId();
+        if (!uid) {
+            host.innerHTML = '<p class="vl-note">Sign in to see your devices.</p>';
+            return;
+        }
+        host.innerHTML = '<p class="vl-note">Loading…</p>';
+        try {
+            const d = await api('/api/doctor/videos/devices?userId=' + encodeURIComponent(uid) + '&deviceId=' + encodeURIComponent(deviceId()));
+            const rows = (d.devices || []).map(
+                (x) =>
+                    '<li>' +
+                    esc(x.label) +
+                    (x.current ? ' <span class="vl-badge is-free">this device</span>' : '') +
+                    '<small>first used ' + esc(fmtWhen(x.firstSeenAt)) + ' · last used ' + esc(fmtWhen(x.lastSeenAt)) + '</small></li>'
+            );
+            host.innerHTML =
+                '<div class="vl-card"><h4>' +
+                (d.devices || []).length +
+                ' of ' +
+                esc(d.limit) +
+                ' devices in use</h4><p>To move your access to a new device, contact the seminar office.</p>' +
+                (d.license ? '<p>License ID <strong>' + esc(d.license) + '</strong></p>' : '') +
+                (rows.length ? '<ul class="vl-devlist">' + rows.join('') + '</ul>' : '<p class="vl-note">No device has played a video yet. The first device you watch on is registered automatically.</p>') +
+                '</div>';
+        } catch (e) {
+            host.innerHTML = '<p class="vl-note" style="color:#b91c1c;">' + esc(e.message) + '</p>';
+        }
+    }
+
+    async function renderLicensePage() {
+        const host = $('vl-license-page');
+        if (!host) return;
+        const uid = userId();
+        if (!uid) {
+            host.innerHTML = '<p class="vl-note">Sign in to see your license ID.</p>';
+            return;
+        }
+        host.innerHTML = '<p class="vl-note">Loading…</p>';
+        try {
+            await ensureCatalog();
+            const lic = (data && data.license) || '';
+            host.innerHTML = lic
+                ? '<div class="vl-card vl-license-hero"><span class="vl-license-lbl">Your video license</span><b>' +
+                  esc(lic) +
+                  '</b><p>This 12-digit ID is printed inside every video you watch. It does not change. Playback is limited to ' +
+                  esc((data && data.maxDevices) || 2) +
+                  ' of your devices.</p></div>'
+                : '<div class="vl-card"><h4>License not ready</h4><p>Open Seminar videos once. Your license ID is created with your account the first time the video library loads.</p></div>';
+        } catch (e) {
+            host.innerHTML = '<p class="vl-note" style="color:#b91c1c;">' + esc(e.message) + '</p>';
+        }
+    }
+
+    const TX_LABEL = { seminar: 'Seminar', video: 'Seminar video', book: 'Book order' };
+
+    async function renderTransactions(kind) {
+        const host = $('vl-transactions');
+        const filters = $('vl-tx-filters');
+        if (!host) return;
+        const uid = userId();
+        const current = kind || 'all';
+        if (filters) {
+            filters.innerHTML = ['all', 'seminar', 'video', 'book']
+                .map((k) => {
+                    const label = k === 'all' ? 'All' : TX_LABEL[k];
+                    return '<button type="button" class="vl-btn is-small ' + (k === current ? '' : 'is-ghost') + '" data-vl-tx="' + k + '">' + label + '</button>';
+                })
+                .join('');
+            filters.querySelectorAll('[data-vl-tx]').forEach((b) => b.addEventListener('click', () => renderTransactions(b.getAttribute('data-vl-tx'))));
+        }
+        if (!uid) {
+            host.innerHTML = '<p class="vl-note">Sign in to see your transactions.</p>';
+            return;
+        }
+        host.innerHTML = '<p class="vl-note">Loading…</p>';
+        try {
+            const body = await api('/api/doctor/transactions?userId=' + encodeURIComponent(uid) + '&kind=' + encodeURIComponent(current));
+            const rows = body.transactions || [];
+            if (!rows.length) {
+                host.innerHTML = '<div class="vl-card"><h4>No transactions yet</h4><p>Seminar fees, video unlocks, and book orders will show up here.</p></div>';
+                return;
+            }
+            host.innerHTML =
+                '<div class="vl-table-wrap"><table class="vl-tx"><thead><tr><th>When</th><th>Type</th><th>Item</th><th>Reference</th><th>Amount</th><th>Status</th></tr></thead><tbody>' +
+                rows
+                    .map(
+                        (r) =>
+                            '<tr><td data-label="When">' +
+                            esc(fmtWhen(r.at)) +
+                            '</td><td data-label="Type">' +
+                            esc(TX_LABEL[r.kind] || r.kind) +
+                            '</td><td data-label="Item">' +
+                            esc(r.title) +
+                            '</td><td data-label="Reference">' +
+                            esc(r.ref) +
+                            (r.txnId ? '<div class="vl-note">' + esc(r.txnId) + '</div>' : '') +
+                            '</td><td data-label="Amount">' +
+                            fmtMoney(r.amount) +
+                            '</td><td data-label="Status">' +
+                            esc(r.status || '—') +
+                            '</td></tr>'
+                    )
+                    .join('') +
+                '</tbody></table></div>';
+        } catch (e) {
+            host.innerHTML = '<p class="vl-note" style="color:#b91c1c;">' + esc(e.message) + '</p>';
+        }
+    }
+
     window.initDoctorVideosTab = function () {
         bindOnce();
         load();
+    };
+    window.initDoctorSubscriptionTab = function () {
+        renderSubscription();
+    };
+    window.initDoctorDevicesTab = function () {
+        renderDevicesPage();
+    };
+    window.initDoctorLicenseTab = function () {
+        renderLicensePage();
+    };
+    window.initDoctorTransactionsTab = function () {
+        renderTransactions('all');
     };
     window.stopDoctorVideoPlayback = function () {
         if (play) stop(true);
