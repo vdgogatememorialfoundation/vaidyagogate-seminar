@@ -73,10 +73,13 @@
         if (manual) manual.checked = !!row.use_manual_link;
         const waiting = document.getElementById('seminar-meeting-waiting');
         if (waiting) waiting.checked = !!row.waiting_room;
-        const join = document.getElementById('seminar-meeting-join-url');
-        if (join) join.value = row.join_url && /^https?:\/\//i.test(row.join_url) ? row.join_url : '';
-        const host = document.getElementById('seminar-meeting-host-url');
-        if (host) host.value = row.host_url && /^https?:\/\//i.test(row.host_url) ? row.host_url : '';
+        ['seminar-meeting-join-url', 'seminar-meeting-host-url'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.type = 'password';
+            el.value = '';
+            el.placeholder = row.private_link ? 'A private link is already stored and is not shown.' : 'Paste once. It is not shown again.';
+        });
         const pass = document.getElementById('seminar-meeting-passcode');
         if (pass) pass.value = row.passcode || '';
         const warn = document.getElementById('seminar-online-warning');
@@ -118,7 +121,11 @@
             return;
         }
         if (data.mode === 'hall' && data.token) sessionStorage.setItem('vgmf_hall_token_' + id, data.token);
-        window.open(data.url, '_blank', 'noopener');
+        if ((data.mode === 'hall' || data.mode === 'gate') && typeof data.url === 'string' && data.url.charAt(0) === '/') {
+            window.open(data.url, '_blank', 'noopener');
+            return;
+        }
+        alert('The meeting link stays on the server. Open VGMF Hall from this form, or join after the account is connected.');
     };
 
     const origFetch = window.fetch.bind(window);
@@ -332,11 +339,111 @@
         if (msg) msg.textContent = data.message || data.error || (res.ok ? 'Connected.' : 'Test failed.');
     };
 
+    function escapeOffice(value) {
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    }
+
+    async function loadOnlineSeminarOffice() {
+        const aid = actorId();
+        if (!aid) return;
+        const res = await fetch('/api/admin/online-seminar/office?actingAdminId=' + encodeURIComponent(aid), { cache: 'no-store' });
+        const data = await res.json().catch(() => ({}));
+        const select = document.getElementById('os-invite-seminar');
+        const invites = document.getElementById('os-invite-list');
+        const recordings = document.getElementById('os-recordings-list');
+        if (!res.ok) {
+            if (invites) invites.textContent = data.error || 'Could not load online seminars.';
+            return;
+        }
+        const seminars = data.seminars || [];
+        if (select) {
+            const current = select.value;
+            select.innerHTML = seminars.length
+                ? seminars.map((row) => '<option value="' + Number(row.id) + '">' + escapeOffice(row.title || 'Seminar') + ' · ' + escapeOffice(row.provider_label || '') + (Number(row.price) === 0 ? ' · Free' : '') + '</option>').join('')
+                : '<option value="">No online seminar yet</option>';
+            if (current) select.value = current;
+        }
+        if (invites) {
+            invites.innerHTML = (data.invites || []).length
+                ? '<ul style="margin:0;padding-left:18px;">' + data.invites.map((row) =>
+                    '<li style="margin:6px 0;">' + escapeOffice(row.email) +
+                    (row.name ? ' · ' + escapeOffice(row.name) : '') +
+                    ' <button type="button" class="btn-secondary" onclick="removeOnlineStaffInvite(' + Number(row.id) + ')">Remove</button></li>'
+                ).join('') + '</ul>'
+                : '<p style="color:#64748b;margin:0;">No staff invited yet.</p>';
+        }
+        if (recordings) {
+            const rows = data.recordings || [];
+            recordings.innerHTML = rows.length
+                ? '<table class="data-table"><thead><tr><th>Seminar</th><th>Status</th><th>Saved</th><th></th></tr></thead><tbody>' +
+                  rows.map((row) => {
+                      const when = row.ended_at || row.started_at || '';
+                      const download = row.status === 'ready'
+                          ? '<a class="btn-primary" style="background:#0f766e;text-decoration:none;" href="/api/admin/online-seminar/recordings/' + Number(row.id) + '/file?actingAdminId=' + encodeURIComponent(aid) + '">Download</a>'
+                          : escapeOffice(row.status || '');
+                      return '<tr><td>' + escapeOffice(row.title || '') + '</td><td>' + escapeOffice(row.status || '') + '</td><td>' + escapeOffice(when) + '</td><td>' + download + '</td></tr>';
+                  }).join('') +
+                  '</tbody></table>'
+                : '<p style="color:#64748b;margin:0;">No recordings saved yet. Go live in VGMF Hall, or save a Zoom or Zoho Webinar recording after the meeting.</p>';
+            if (seminars.some((row) => row.provider && row.provider !== 'vgmf')) {
+                recordings.innerHTML += '<div style="margin-top:12px;"><button type="button" class="btn-secondary" onclick="pullOnlineRecording()">Save recording from the connected account</button></div>';
+            }
+        }
+    }
+
+    window.inviteOnlineStaff = async function () {
+        const aid = actorId();
+        const email = val('os-invite-email').trim();
+        const seminarId = val('os-invite-seminar');
+        const res = await fetch('/api/admin/online-seminar/invites', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: aid, seminarId: Number(seminarId), email: email })
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            alert(data.error || 'Could not invite that staff account.');
+            return;
+        }
+        const input = document.getElementById('os-invite-email');
+        if (input) input.value = '';
+        loadOnlineSeminarOffice();
+    };
+
+    window.removeOnlineStaffInvite = async function (id) {
+        const aid = actorId();
+        await fetch('/api/admin/online-seminar/invites/' + encodeURIComponent(id) + '?actingAdminId=' + encodeURIComponent(aid), { method: 'DELETE' });
+        loadOnlineSeminarOffice();
+    };
+
+    window.loadOnlineSeminarOffice = function () {
+        loadOnlineSeminarOffice().catch(() => {});
+    };
+
+    window.pullOnlineRecording = async function () {
+        const aid = actorId();
+        const seminarId = val('os-invite-seminar');
+        const res = await fetch('/api/admin/online-seminar/recordings/pull', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ actingAdminId: aid, seminarId: Number(seminarId) })
+        });
+        const data = await res.json().catch(() => ({}));
+        alert(res.ok ? 'Recording saved on this server.' : (data.error || 'Could not save the recording.'));
+        if (res.ok) loadOnlineSeminarOffice();
+    };
+
     if (typeof window.switchTab === 'function') {
         const origTab = window.switchTab;
         window.switchTab = function (tabId) {
             const result = origTab.apply(this, arguments);
-            if (tabId === 'tab-seminars') loadOnlineSeminarSettings().catch(() => {});
+            if (tabId === 'tab-online-seminars') {
+                loadOnlineSeminarSettings().catch(() => {});
+                loadOnlineSeminarOffice().catch(() => {});
+            }
             return result;
         };
     }

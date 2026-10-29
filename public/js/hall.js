@@ -41,8 +41,8 @@
         let doctor = null;
         try { admin = JSON.parse(localStorage.getItem('admin_user') || 'null'); } catch (_) {}
         try { doctor = JSON.parse(localStorage.getItem('seminar_doctor_user') || 'null'); } catch (_) {}
-        const staff = admin && (admin.role === 'admin' || admin.user_role === 'co_admin' || admin.user_role === 'admin');
-        return { staff: staff ? admin : null, doctor: doctor };
+        const host = admin && (admin.role === 'admin' || admin.user_role === 'co_admin' || admin.user_role === 'admin');
+        return { host: host ? admin : null, person: doctor || admin };
     }
 
     async function obtainToken() {
@@ -50,14 +50,10 @@
         const existing = sessionStorage.getItem(key);
         if (existing) return existing;
         const people = storedPeople();
-        const person = people.staff || people.doctor;
+        const person = people.person;
         if (!person || person.id == null) throw new Error('Sign in from the doctor portal or the office, then join again.');
-        const body = { seminarId: seminarId };
-        if (people.staff) body.actingAdminId = people.staff.id;
-        else {
-            body.userId = person.id;
-            body.userIdString = person.user_id_string || '';
-        }
+        const body = { seminarId: seminarId, userId: person.id, userIdString: person.user_id_string || '' };
+        if (people.host) body.actingAdminId = people.host.id;
         const res = await fetch('/api/online-seminar/join', {
             method: 'POST',
             credentials: 'same-origin',
@@ -248,7 +244,7 @@
         controls.innerHTML = '';
         controls.appendChild(button('Camera', '', () => ensureLocal(false).catch((err) => say(err.message))));
         controls.appendChild(button('Screen', 'secondary', () => ensureLocal(true).then(() => { if (recorder) startRecorder(); }).catch((err) => say(err.message))));
-        controls.appendChild(button('Go live', '', async () => {
+        controls.appendChild(button('Go live and record', '', async () => {
             await ensureLocal(false);
             send({ type: 'go-live' });
             startRecorder();
@@ -349,7 +345,7 @@
         } else if (msg.type === 'playback' && msg.hls) {
             playHls();
         } else if (msg.type === 'live' && msg.live) {
-            waitEl.textContent = 'The seminar is live.';
+            waitEl.textContent = role === 'host' ? 'This meeting is being recorded for the office.' : 'The seminar is live.';
         } else if (msg.type === 'admitted') {
             waitEl.textContent = 'You are in the hall.';
             roleEl.textContent = 'Audience';

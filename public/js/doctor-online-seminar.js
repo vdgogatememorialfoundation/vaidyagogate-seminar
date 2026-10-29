@@ -18,7 +18,7 @@
             '<div style="margin:8px 0 12px;padding:10px 12px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;">' +
             '<strong style="color:#0f766e;">Online seminar</strong> · ' +
             label +
-            '<p style="margin:6px 0 0;font-size:0.82rem;color:#115e59;">Registered doctors join from this portal. The hall checks the ticket before it opens.</p>' +
+            '<p style="margin:6px 0 0;font-size:0.82rem;color:#115e59;">Only the email on your registration can enter. The meeting link is not shown. A seminar with no fee is free for registered doctors and invited staff.</p>' +
             '<button type="button" class="btn-primary" style="margin-top:8px;background:#0f766e;" onclick="openOnlineSeminar(' +
             Number(seminar.id) +
             ')">Join online seminar</button></div>'
@@ -83,11 +83,15 @@
             alert(data.error || 'The online seminar could not be opened.');
             return;
         }
-        if (data.mode === 'hall') {
+        if (data.mode === 'hall' && typeof data.url === 'string' && data.url.indexOf('/hall/') === 0) {
             if (data.token) sessionStorage.setItem('vgmf_hall_token_' + seminarId, data.token);
             window.location.href = data.url;
             return;
         }
-        window.open(data.url, '_blank', 'noopener');
+        if (data.mode === 'gate' && typeof data.url === 'string' && data.url.charAt(0) === '/') {
+            window.location.href = data.url;
+            return;
+        }
+        alert('This online seminar did not open. Join again from your registration.');
     };
 })();

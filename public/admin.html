@@ -157,6 +157,7 @@
                 <a class="menu-item active" data-admin-module="tab-staff-users" onclick="switchTab('tab-staff-users')"><i class="fas fa-user-shield"></i> Staff users</a>
                 <a class="menu-item" data-admin-module="tab-doctors" onclick="switchTab('tab-doctors')"><i class="fas fa-user-md"></i> Doctors</a>
                 <a class="menu-item" data-admin-module="tab-seminars" onclick="switchTab('tab-seminars')"><i class="fas fa-calendar-alt"></i> Seminar Management</a>
+                <a class="menu-item" data-admin-module="tab-online-seminars" onclick="switchTab('tab-online-seminars')"><i class="fas fa-chalkboard-teacher"></i> Online seminars</a>
                 <a class="menu-item" data-admin-module="tab-event-schedules" onclick="switchTab('tab-event-schedules'); loadEventSchedules();"><i class="fas fa-clock"></i> Event Schedules</a>
                 <a class="menu-item" data-admin-module="tab-applications" onclick="switchTab('tab-applications')"><i class="fas fa-folder-open"></i> Review Applications</a>
                 <a class="menu-item" data-admin-module="tab-case-applications" onclick="switchTab('tab-case-applications'); initAdminCaseApplicationsTab();"><i class="fas fa-file-medical"></i> Review case applications</a>
@@ -336,14 +337,35 @@
                 <div id="case-mgmt-detail" class="card hidden" style="margin-top:16px;"></div>
             </div>
 
+            <!-- Online seminars -->
+            <div id="tab-online-seminars" class="tab-pane hidden">
+                <h2 style="margin-bottom: 20px;">Online seminars</h2>
+                <div class="card" id="online-seminar-settings" style="margin-bottom:16px;border:1px solid #99f6e4;background:#f0fdfa;">
+                    <h3 style="margin:0 0 6px;color:#0f766e;">Online seminar connections</h3>
+                    <p style="margin:0 0 12px;color:#115e59;font-size:0.88rem;">Add the office accounts once. Each seminar can then be at a venue, or online on VGMF Hall, Zoom, Google Meet, Zoho Backstage, or Zoho Webinar. Keys stay on this server. Meeting links are not shown here.</p>
+                    <div id="online-seminar-settings-body"><p style="color:#64748b;">Open this tab to load the connection form.</p></div>
+                </div>
+                <div class="card" id="online-seminar-access" style="margin-bottom:16px;">
+                    <h3 style="margin:0 0 6px;">Staff access</h3>
+                    <p style="margin:0 0 12px;color:#64748b;font-size:0.88rem;">Only a registered email can enter. Invite a staff account and they attend free, even when the seminar has a fee. If the fee is 0, registered doctors and invited staff both join without payment.</p>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+                        <select id="os-invite-seminar" style="min-width:220px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;"></select>
+                        <input id="os-invite-email" type="email" placeholder="Staff email" style="min-width:220px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;">
+                        <button type="button" class="btn-primary" style="background:#0f766e;" onclick="inviteOnlineStaff()">Invite staff</button>
+                    </div>
+                    <div id="os-invite-list" style="margin-top:12px;"></div>
+                </div>
+                <div class="card" id="online-seminar-recordings">
+                    <h3 style="margin:0 0 6px;">Recordings</h3>
+                    <p style="margin:0 0 12px;color:#64748b;font-size:0.88rem;">VGMF Hall keeps a copy when the host goes live. Zoom and Zoho Webinar recordings can be saved onto this server after the meeting. Downloads stay in this office.</p>
+                    <button type="button" class="btn-secondary" onclick="loadOnlineSeminarOffice()">Refresh</button>
+                    <div id="os-recordings-list" style="margin-top:12px;"></div>
+                </div>
+            </div>
+
             <!-- Seminar Management -->
             <div id="tab-seminars" class="tab-pane hidden">
                 <h2 style="margin-bottom: 20px;">Seminar Management</h2>
-                <div class="card" id="online-seminar-settings" style="margin-bottom:16px;border:1px solid #99f6e4;background:#f0fdfa;">
-                    <h3 style="margin:0 0 6px;color:#0f766e;">Online seminar connections</h3>
-                    <p style="margin:0 0 12px;color:#115e59;font-size:0.88rem;">Add the office accounts once. Each seminar can then be at a venue, or online on VGMF Hall, Zoom, Google Meet, Zoho Backstage, or Zoho Webinar. Keys stay on this server.</p>
-                    <div id="online-seminar-settings-body"><p style="color:#64748b;">Open this tab to load the connection form.</p></div>
-                </div>
                 <div class="card">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
                         <h3>Active Seminars</h3>
@@ -3218,7 +3240,7 @@
                 </div>
                 <div id="seminar-online-card" style="grid-column:1/-1;padding:14px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:10px;">
                     <h4 style="margin:0 0 8px;color:#0f766e;">Online or at the venue</h4>
-                    <p style="font-size:0.82rem;color:#115e59;margin:0 0 10px;">Offline seminars stay on the venue map. Online seminars give registered doctors a join button. VGMF Hall runs on this server. The other options use the accounts saved under Online seminar connections.</p>
+                    <p style="font-size:0.82rem;color:#115e59;margin:0 0 10px;">Offline seminars stay on the venue map. Online seminars open only for a registered email. Invited staff attend free. If the fee is 0, registered doctors and invited staff both join without payment. Accounts are saved under Online seminars. The meeting link is never shown.</p>
                     <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
                         <div>
                             <label>How people attend</label>
@@ -3245,8 +3267,8 @@
                         <label id="seminar-manual-wrap" style="display:flex;align-items:center;gap:8px;font-weight:600;">
                             <input type="checkbox" id="seminar-meeting-manual"> Use a link I paste instead of creating one from the connected account
                         </label>
-                        <div><label>Attendee link (optional)</label><input type="url" id="seminar-meeting-join-url" placeholder="https://"></div>
-                        <div><label>Host link (optional)</label><input type="url" id="seminar-meeting-host-url" placeholder="Shown only in this office form"></div>
+                        <div><label>Attendee link (paste once, then it stays hidden)</label><input type="password" id="seminar-meeting-join-url" autocomplete="new-password" placeholder="Not shown again after you save"></div>
+                        <div><label>Host link (paste once, then it stays hidden)</label><input type="password" id="seminar-meeting-host-url" autocomplete="new-password" placeholder="Not shown again after you save"></div>
                         <div><label>Passcode (optional)</label><input type="text" id="seminar-meeting-passcode" autocomplete="off" placeholder="Doctors must enter this to join"></div>
                         <p id="seminar-online-warning" style="margin:0;font-size:0.82rem;color:#9a3412;"></p>
                         <button type="button" class="btn-primary" style="background:#0f766e;max-width:240px;" onclick="openOnlineSeminarHost()">Open host hall</button>
@@ -3556,7 +3578,7 @@
     <script src="/js/track-timeline.js?v=20261003tl"></script>
     <script src="/js/admin-commerce.js?v=20261003tl"></script>
     <script src="/js/admin.js?v=20261029vl4"></script>
-    <script src="/js/admin-online-seminar.js?v=20261030hall1"></script>
+    <script src="/js/admin-online-seminar.js?v=20261030hall2"></script>
     <script src="/js/admin-videos.js?v=20261029vl6"></script>
 </body>
 </html>

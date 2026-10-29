@@ -54,6 +54,20 @@ function fakeHttp(routes) {
     assert.strictEqual(created.joinUrl, 'https://zoom.example/j/99');
     assert.strictEqual(created.hostUrl, 'https://zoom.example/s/99');
     assert.strictEqual(JSON.stringify(zoomRoutes[1].last.opts.body).includes('Asia/Kolkata'), true);
+    assert.strictEqual(String(zoomRoutes[1].last.opts.body).includes('auto_recording'), true);
+    assert.strictEqual(String(zoomRoutes[1].last.opts.body).includes('cloud'), true);
+
+    const located = await providers.recordingLocator(
+        'zoom',
+        { zoom: { accountId: 'acc', clientId: 'cid', clientSecret: 'sec' } },
+        '99',
+        fakeHttp([
+            { match: 'zoom.us/oauth/token', json: { access_token: 'zoom-token' } },
+            { match: '/meetings/99/recordings', json: { recording_files: [{ file_type: 'MP4', download_url: 'https://zoom.example/rec.mp4' }] } }
+        ])
+    );
+    assert.strictEqual(located.ext, 'mp4');
+    assert.strictEqual(located.downloadUrl, 'https://zoom.example/rec.mp4');
 
     const pending = await providers.provisionMeeting({
         provider: 'google_meet',
@@ -99,12 +113,13 @@ function fakeHttp(routes) {
     const db = new sqlite3.Database(':memory:');
     const run = (sql, params) => new Promise((resolve, reject) => db.run(sql, params || [], (err) => (err ? reject(err) : resolve())));
     await run(`CREATE TABLE global_settings (key TEXT PRIMARY KEY, value TEXT)`);
-    await run(`CREATE TABLE users (id INTEGER PRIMARY KEY, user_id_string TEXT, first_name TEXT, last_name TEXT, role TEXT, user_role TEXT)`);
+    await run(`CREATE TABLE users (id INTEGER PRIMARY KEY, user_id_string TEXT, first_name TEXT, last_name TEXT, email TEXT, role TEXT, user_role TEXT)`);
     await run(`CREATE TABLE seminars (id INTEGER PRIMARY KEY, title TEXT, description TEXT, event_date TEXT, event_end_date TEXT, price REAL)`);
     await run(`CREATE TABLE registrations (id INTEGER PRIMARY KEY, user_id INTEGER, seminar_id INTEGER, status TEXT)`);
     await run(`CREATE TABLE seminar_volunteers (id INTEGER PRIMARY KEY, user_id INTEGER, seminar_id INTEGER, status TEXT)`);
-    await run(`INSERT INTO users (id, user_id_string, first_name, last_name, role, user_role) VALUES (4, 'PRN1', 'Asha', 'Gogate', 'doctor', 'doctor')`);
-    await run(`INSERT INTO users (id, user_id_string, first_name, last_name, role, user_role) VALUES (1, 'ADM1', 'Office', 'Admin', 'admin', 'admin')`);
+    await run(`INSERT INTO users (id, user_id_string, first_name, last_name, email, role, user_role) VALUES (4, 'PRN1', 'Asha', 'Gogate', 'asha@example.org', 'doctor', 'doctor')`);
+    await run(`INSERT INTO users (id, user_id_string, first_name, last_name, email, role, user_role) VALUES (1, 'ADM1', 'Office', 'Admin', 'office@example.org', 'admin', 'admin')`);
+    await run(`INSERT INTO users (id, user_id_string, first_name, last_name, email, role, user_role) VALUES (8, 'STF1', 'Nita', 'Staff', 'staff@example.org', 'staff', 'scanner_portal_user')`);
     await run(`INSERT INTO seminars (id, title, description, event_date, event_end_date, price) VALUES (9, 'Manas Rog 3', 'Seminar', '2020-01-01T10:00:00+05:30', '2020-01-01T16:00:00+05:30', 100)`);
     await run(`INSERT INTO registrations (id, user_id, seminar_id, status) VALUES (3, 4, 9, 'e_ticket_issued')`);
     await new Promise((resolve, reject) => online.ensureSchema(db, (err) => (err ? reject(err) : resolve())));
@@ -114,7 +129,8 @@ function fakeHttp(routes) {
             err ? reject(err) : resolve(out)
         );
     });
-    assert.strictEqual(saved.meeting.join_url, '/hall/9');
+    assert.strictEqual(saved.meeting.join_url, undefined);
+    assert.strictEqual(saved.meeting.private_link, false);
     assert.strictEqual(saved.warning, '');
 
     const rows = [{ id: 9, title: 'Manas Rog 3' }];
@@ -137,6 +153,28 @@ function fakeHttp(routes) {
     assert.strictEqual(joined.body.url, '/hall/9');
     const hostJoin = await online.issueJoin(db, { seminarId: 9, admin: { id: 1, role: 'admin', user_role: 'admin', first_name: 'Office', last_name: 'Admin' }, now: Date.now() });
     assert.strictEqual(hostJoin.body.role, 'host');
+
+    await run(`INSERT INTO seminars (id, title, description, event_date, event_end_date, price) VALUES (10, 'Free Hall', 'Seminar', '2020-01-01T10:00:00+05:30', '2020-01-01T16:00:00+05:30', 0)`);
+    await run(`INSERT INTO registrations (id, user_id, seminar_id, status) VALUES (4, 4, 10, 'approved')`);
+    await new Promise((resolve, reject) => {
+        online.persistFromSeminarBody(db, 10, { delivery_mode: 'online', meeting_provider: 'vgmf' }, (err) => (err ? reject(err) : resolve()));
+    });
+    const freeJoin = await online.issueJoin(db, { seminarId: 10, userId: 4, userIdString: 'PRN1', now: Date.parse('2020-01-01T05:00:00Z') });
+    assert.strictEqual(freeJoin.status, 200);
+    assert.strictEqual(freeJoin.body.role, 'audience');
+
+    await run(`INSERT INTO seminars (id, title, description, event_date, event_end_date, price) VALUES (11, 'Paid Hall', 'Seminar', '2020-01-01T10:00:00+05:30', '2020-01-01T16:00:00+05:30', 500)`);
+    await run(`INSERT INTO registrations (id, user_id, seminar_id, status) VALUES (5, 4, 11, 'approved')`);
+    await new Promise((resolve, reject) => {
+        online.persistFromSeminarBody(db, 11, { delivery_mode: 'online', meeting_provider: 'vgmf' }, (err) => (err ? reject(err) : resolve()));
+    });
+    const unpaid = await online.issueJoin(db, { seminarId: 11, userId: 4, userIdString: 'PRN1', now: Date.parse('2020-01-01T05:00:00Z') });
+    assert.strictEqual(unpaid.status, 403);
+
+    await run(`UPDATE users SET email = '' WHERE id = 4`);
+    const noEmail = await online.issueJoin(db, { seminarId: 9, userId: 4, userIdString: 'PRN1', passcode: '4491', now: Date.parse('2020-01-01T05:00:00Z') });
+    assert.strictEqual(noEmail.status, 403);
+    await run(`UPDATE users SET email = 'asha@example.org' WHERE id = 4`);
 
     const app = express();
     app.use(express.json());
@@ -195,6 +233,49 @@ function fakeHttp(routes) {
     await waitFor(doctorMsgs, (m) => m.type === 'error');
     wsHost.close();
     wsDoctor.close();
+
+    const invite = await fetch(`http://127.0.0.1:${port}/api/admin/online-seminar/invites`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actingAdminId: 1, seminarId: 9, email: 'staff@example.org' })
+    });
+    assert.strictEqual(invite.status, 200);
+    const doctorInvite = await fetch(`http://127.0.0.1:${port}/api/admin/online-seminar/invites`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actingAdminId: 1, seminarId: 9, email: 'asha@example.org' })
+    });
+    assert.strictEqual(doctorInvite.status, 400);
+    const staffJoin = await online.issueJoin(db, { seminarId: 9, userId: 8, userIdString: 'STF1', passcode: '4491', now: Date.parse('2020-01-01T05:00:00Z') });
+    assert.strictEqual(staffJoin.status, 200);
+    assert.strictEqual(staffJoin.body.role, 'audience');
+
+    await run(`UPDATE online_seminar_meetings SET provider = 'zoom', external_id = '99', join_url = 'https://zoom.example/j/99', host_url = 'https://zoom.example/s/99' WHERE seminar_id = 9`);
+    const gated = await online.issueJoin(db, { seminarId: 9, userId: 4, userIdString: 'PRN1', passcode: '4491', now: Date.parse('2020-01-01T05:00:00Z') });
+    assert.strictEqual(gated.body.mode, 'gate');
+    assert.strictEqual(JSON.stringify(gated.body).includes('zoom.example'), false);
+    assert.strictEqual(String(gated.body.url).startsWith('/api/online-seminar/enter?token='), true);
+
+    const office = await fetch(`http://127.0.0.1:${port}/api/admin/online-seminar/office?actingAdminId=1`);
+    const officeText = await office.text();
+    assert.strictEqual(office.status, 200);
+    assert.strictEqual(officeText.includes('zoom.example'), false);
+    assert.strictEqual(officeText.includes('join_url'), false);
+    assert.strictEqual(officeText.includes('staff@example.org'), true);
+
+    const fs = require('fs');
+    const path = require('path');
+    const recDir = path.join(__dirname, '..', 'uploads', 'online-recordings');
+    fs.mkdirSync(recDir, { recursive: true });
+    fs.writeFileSync(path.join(recDir, 'rec-41.webm'), 'recorded-bytes');
+    await run(`INSERT INTO online_seminar_recordings (id, seminar_id, provider, title, file_name, bytes, status, started_at) VALUES (41, 9, 'vgmf', 'Manas Rog 3', 'rec-41.webm', 14, 'ready', '2020-01-01T05:00:00Z')`);
+    const file = await fetch(`http://127.0.0.1:${port}/api/admin/online-seminar/recordings/41/file?actingAdminId=1`);
+    assert.strictEqual(file.status, 200);
+    assert.strictEqual(await file.text(), 'recorded-bytes');
+    const locked = await fetch(`http://127.0.0.1:${port}/api/admin/online-seminar/recordings/41/file`);
+    assert.strictEqual(locked.status, 400);
+    fs.unlinkSync(path.join(recDir, 'rec-41.webm'));
+
     server.close();
     db.close();
     console.log('online seminar ok');
