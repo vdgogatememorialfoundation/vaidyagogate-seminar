@@ -33,6 +33,9 @@ assert.strictEqual(doctorJs.includes('Choose how to pay'), false);
 assert.ok(doctorJs.includes('Opening Razorpay'));
 assert.ok(doctorJs.includes('initDoctorSubscriptionTab'));
 assert.ok(doctorJs.includes('initDoctorTransactionsTab'));
+const libraryJs = fs.readFileSync(path.join(__dirname, '../lib/video-library.js'), 'utf8');
+assert.strictEqual(libraryJs.includes('? IS NOT NULL AND video_id'), false);
+assert.ok(libraryJs.includes('video_id = CAST(? AS INTEGER)'));
 
 const allowed = modules.resolveDoctorAllowedTabs('regular', { 'tab-videos': true, 'tab-dashboard': true }, {}, null);
 assert.ok(allowed.has('tab-video-subscription'));
