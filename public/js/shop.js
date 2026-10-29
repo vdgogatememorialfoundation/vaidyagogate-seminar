@@ -22,12 +22,18 @@ let shopWish = [];
 let orderQuery = '';
 
 const COVER_COLORS = [
-    ['#0b3d2e', '#1f7a4d'],
-    ['#4a1d6a', '#8e44ad'],
-    ['#7a2e0e', '#d35400'],
-    ['#12355b', '#2b79c2'],
-    ['#5b1228', '#c0392b']
+    ['#ff8a3d', '#ffb067'],
+    ['#ff5d73', '#ff9aab'],
+    ['#20b486', '#7eebc8'],
+    ['#4d7dff', '#9db6ff'],
+    ['#f97316', '#fdba74']
 ];
+const LANG_THEMES = {
+    english: ['#fff4e8', 'English editions'],
+    marathi: ['#fff0f3', 'Marathi editions'],
+    hindi: ['#eefbf4', 'Hindi editions'],
+    kannada: ['#eef3ff', 'Kannada editions']
+};
 
 function shopEsc(s) {
     return String(s == null ? '' : s)
@@ -453,9 +459,22 @@ function renderHome() {
           (catalogCount ? 'No books match these filters.' : 'Books appear here after a price is saved in seminar book settings.') +
           (shopSearchTerm || shopPrice !== 'all' ? '<br><br><button class="btn sm" type="button" onclick="clearShopSearch()">Clear filters</button>' : '') +
           '</div>';
+    const themes =
+        '<div class="theme-row">' +
+        langs
+            .map((l) => {
+                const theme = LANG_THEMES[l] || ['#fff6ee', langLabel(l) + ' editions'];
+                return (
+                    '<button type="button" class="theme-tile' + (shopLangFilter === l ? ' on' : '') + '" style="background:' + theme[0] + '" onclick="setLangFilter(\'' + shopEsc(l) + '\')"><b>' +
+                    shopEsc(langLabel(l)) + '</b><span>' + shopEsc(theme[1]) + '</span></button>'
+                );
+            })
+            .join('') +
+        '</div>';
     home.innerHTML =
-        '<div class="hero"><div><p class="c-kicker" style="letter-spacing:.14em;text-transform:uppercase;font-size:.72rem;opacity:.75;margin:0 0 8px;">Vaidya Gogate Memorial Foundation</p><h1>Seminar book shop</h1><p>Choose a language, save a title, or check out the full set. Delivery and store pickup stay on the same order, with live tracking after you pay.</p></div>' +
+        '<div class="hero"><div><p class="c-kicker" style="letter-spacing:.08em;text-transform:uppercase;font-size:.72rem;color:#e46d08;font-weight:800;margin:0 0 8px;">Vaidya Gogate Memorial Foundation</p><h1>Seminar book shop</h1><p>Pick a language, save a title, or order the full set. Home delivery and store pickup stay on one bright checkout, with live tracking after you pay.</p></div>' +
         '<div class="hero-badges">' + badges.map((b) => '<span>' + shopEsc(b) + '</span>').join('') + '</div></div>' +
+        themes +
         '<div class="store"><aside class="filters"><h3>Language</h3>' + langFilters + priceFilters +
         '<h3>View</h3><div class="view-toggle"><button type="button" class="pill' + (shopLayout === 'grid' ? ' on' : '') + '" onclick="setShopLayout(\'grid\')">Grid</button>' +
         '<button type="button" class="pill' + (shopLayout === 'list' ? ' on' : '') + '" onclick="setShopLayout(\'list\')">List</button></div>' +
