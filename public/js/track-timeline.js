@@ -277,13 +277,164 @@
         });
     }
 
+    const RIDER_STILL_M = 18;
+    let riderSocket = null;
+    let riderToken = '';
+    let riderRetry = null;
+    let riderHttp = null;
+    let riderMisses = 0;
+    let pendingRider = null;
+
+    function acceptFix(prev, next, deadband) {
+        const band = deadband || RIDER_STILL_M;
+        if (!next || !Number.isFinite(Number(next.lat)) || !Number.isFinite(Number(next.lng))) {
+            return { point: null, traveling: false, first: false, clear: true };
+        }
+        const point = { lat: Number(next.lat), lng: Number(next.lng) };
+        if (!prev) return { point: point, traveling: false, first: true };
+        const dist = haversine(prev, point);
+        if (dist < band) return { point: prev, traveling: false, ignored: true };
+        if (dist > 1500) return { point: point, traveling: false, first: true, snap: true };
+        return { point: point, traveling: true };
+    }
+
+    function lockRider(el, live) {
+        if (!live || !live.agent) {
+            el.__riderTraveling = false;
+            return false;
+        }
+        const fix = acceptFix(el.__acceptedGps, live.agent, RIDER_STILL_M);
+        if (fix.clear) {
+            el.__riderTraveling = false;
+            return false;
+        }
+        if (fix.ignored && !el.__riderTraveling && el.__map && el.__paintedLeg === live.leg) {
+            syncBike(false);
+            return true;
+        }
+        if (!fix.ignored) {
+            el.__acceptedGps = fix.point;
+            el.__riderTraveling = !!fix.traveling;
+            if (fix.snap || fix.first) el.__poseMeters = null;
+        }
+        live.agent = el.__acceptedGps || live.agent;
+        return false;
+    }
+
+    function applyRiderMessage(msg) {
+        const el = mapEl;
+        if (!msg || msg.type !== 'rider') return;
+        if (!el || !el.__map || !el.__liveSnap) {
+            pendingRider = msg;
+            return;
+        }
+        const live = el.__liveSnap;
+        if (msg.agent && Number.isFinite(Number(msg.agent.lat)) && Number.isFinite(Number(msg.agent.lng))) {
+            live.agent = { lat: Number(msg.agent.lat), lng: Number(msg.agent.lng) };
+            live.route = 'road';
+            if (!live.leg || live.leg === 'preview' || live.leg === 'done') live.leg = msg.leg || 'to_drop';
+        } else if (msg.agent == null) {
+            live.agent = null;
+            live.route = 'dotted';
+            if (msg.leg) live.leg = msg.leg;
+        }
+        if (msg.leg && live.leg !== 'done') live.leg = msg.leg;
+        paint(live);
+    }
+
+    function stopRiderHttp() {
+        if (riderHttp) clearInterval(riderHttp);
+        riderHttp = null;
+    }
+
+    function startRiderHttp() {
+        if (riderHttp || !riderToken) return;
+        const pull = () => {
+            fetch('/api/public/commerce/rider-live?token=' + encodeURIComponent(riderToken), { cache: 'no-store' })
+                .then((res) => res.json())
+                .then((data) => applyRiderMessage(data))
+                .catch(() => {});
+        };
+        pull();
+        riderHttp = setInterval(pull, 8000);
+    }
+
+    function scheduleRiderRetry() {
+        if (riderRetry || !riderToken) return;
+        riderRetry = setTimeout(() => {
+            riderRetry = null;
+            openRiderSocket();
+        }, 4000);
+    }
+
+    function openRiderSocket() {
+        if (!riderToken || typeof WebSocket === 'undefined') {
+            startRiderHttp();
+            return;
+        }
+        if (riderRetry) {
+            clearTimeout(riderRetry);
+            riderRetry = null;
+        }
+        if (riderSocket) {
+            riderSocket.onclose = null;
+            try { riderSocket.close(); } catch (e) {}
+            riderSocket = null;
+        }
+        const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+        let ws;
+        let opened = false;
+        try {
+            ws = new WebSocket(proto + '//' + location.host + '/api/public/commerce/rider-live?token=' + encodeURIComponent(riderToken));
+        } catch (e) {
+            riderMisses += 1;
+            if (riderMisses >= 2) startRiderHttp();
+            scheduleRiderRetry();
+            return;
+        }
+        riderSocket = ws;
+        ws.onopen = () => {
+            opened = true;
+            riderMisses = 0;
+            stopRiderHttp();
+        };
+        ws.onmessage = (ev) => {
+            let msg;
+            try { msg = JSON.parse(ev.data); } catch (e) { return; }
+            applyRiderMessage(msg);
+        };
+        ws.onerror = () => {};
+        ws.onclose = () => {
+            if (riderSocket === ws) riderSocket = null;
+            if (!opened) riderMisses += 1;
+            if (riderMisses >= 2) startRiderHttp();
+            scheduleRiderRetry();
+        };
+    }
+
+    function watchRider(token) {
+        token = String(token || '').trim();
+        if (token.length < 8) return;
+        if (riderToken === token && riderSocket && riderSocket.readyState <= 1) return;
+        riderToken = token;
+        riderMisses = 0;
+        openRiderSocket();
+    }
+
     /** Call after the rendered HTML is in the page. */
     function mount(live) {
+        if (live && live.watchToken) watchRider(live.watchToken);
         if (live && !live.mapsApiKey) return;
         bind();
         if (!live) return;
-        if (mapEl && mapEl.isConnected && mapEl.__map) return paint(live);
         const slot = document.getElementById('tl-map-slot');
+        if (mapEl && mapEl.__map) {
+            if (!mapEl.isConnected) {
+                if (!slot) return;
+                slot.replaceWith(mapEl);
+            }
+            return paint(live);
+        }
         if (!slot) return;
         if (!mapEl) {
             mapEl = document.createElement('div');
@@ -427,15 +578,20 @@
             if (!pt) return;
             this.div.style.left = pt.x + 'px';
             this.div.style.top = pt.y + 'px';
-            this.div.style.display = this.visible ? 'block' : 'none';
-            this.div.classList.toggle('is-moving', !!this.visible);
+            this.div.style.display = 'block';
+            this.div.classList.toggle('is-moving', !!this.moving);
             const aim = this.div.querySelector('.tl-rider-aim');
-            if (aim) aim.style.transform = 'rotate(' + (this.heading || 0) + 'deg)';
+            const heading = this.heading || 0;
+            const sig = pt.x + ',' + pt.y + ':' + heading + ':' + (this.moving ? 1 : 0);
+            if (this.div.__sig === sig) return;
+            this.div.__sig = sig;
+            if (aim) aim.style.transform = 'rotate(' + heading + 'deg)';
         };
-        Rider.prototype.setRider = function (pos, heading, visible) {
+        Rider.prototype.setRider = function (pos, heading, visible, moving) {
             this.pos = pos;
             this.heading = heading || 0;
             this.visible = !!visible && !!pos;
+            this.moving = !!moving && this.visible;
             this.draw();
         };
         Rider.prototype.onRemove = function () {
@@ -446,6 +602,19 @@
         rider.setMap(el.__map);
         el.__rider = rider;
         return rider;
+    }
+
+    function syncBike(moving) {
+        document.querySelectorAll('.hl-bike-3d').forEach((node) => node.classList.toggle('is-moving', !!moving));
+    }
+
+    function holdRider(el, at, moving) {
+        if (!el.__rider || !at) return;
+        const heading = moving ? at.heading : (el.__stillHeading != null ? el.__stillHeading : at.heading);
+        if (!moving) el.__stillHeading = heading;
+        else el.__stillHeading = at.heading;
+        el.__rider.setRider(at, heading, true, !!moving);
+        syncBike(!!moving);
     }
 
     function ensureMotion(el) {
@@ -461,12 +630,32 @@
             const cum = el.__cum;
             if (!path || !cum || !el.__agentLive || !el.__rider) return;
             const gps = el.__gpsMeters || 0;
-            let m = el.__agentMeters || 0;
-            if (m < gps) m += (gps - m) * Math.min(1, dt * 1.8);
-            else m = gps;
+            let m = el.__agentMeters == null ? gps : el.__agentMeters;
+            const traveling = !!el.__riderTraveling && Math.abs(gps - m) > 3;
+            if (!traveling) {
+                el.__riderTraveling = false;
+                if (m !== gps) m = gps;
+                el.__agentMeters = m;
+                if (el.__poseMoving || el.__poseMeters !== m) {
+                    el.__poseMoving = false;
+                    el.__poseMeters = m;
+                    holdRider(el, along(path, cum, m), false);
+                    if (el.__remain) el.__remain.setPath(tailPath(path, cum, m));
+                    if (el.__doneLine) el.__doneLine.setPath(headPath(path, cum, m));
+                }
+                return;
+            }
+            const gap = gps - m;
+            const gain = Math.min(1, dt * 1.6);
+            m += gap * gain;
+            if (Math.abs(gps - m) <= 3) {
+                m = gps;
+                el.__riderTraveling = false;
+            }
             el.__agentMeters = m;
-            const at = along(path, cum, m);
-            el.__rider.setRider(at, at.heading, true);
+            el.__poseMoving = !!el.__riderTraveling;
+            el.__poseMeters = m;
+            holdRider(el, along(path, cum, m), !!el.__riderTraveling);
             if (now - lineAt > 140) {
                 lineAt = now;
                 if (el.__remain) el.__remain.setPath(tailPath(path, cum, m));
@@ -483,7 +672,11 @@
         const gps = el.__pendingGps;
         const hit = gps ? projectMeters(path, el.__cum, gps) : { meters: 0, dist: 0 };
         el.__gpsMeters = hit.meters;
-        if (el.__agentMeters == null || Math.abs(el.__agentMeters - hit.meters) > 400) el.__agentMeters = hit.meters;
+        const far = el.__agentMeters == null || Math.abs(el.__agentMeters - hit.meters) > 800;
+        if (!el.__riderTraveling || far) {
+            el.__agentMeters = hit.meters;
+            if (far) el.__riderTraveling = false;
+        }
         if (el.__remain) el.__remain.setPath(tailPath(path, el.__cum, el.__agentMeters || 0));
         if (el.__doneLine) el.__doneLine.setPath(headPath(path, el.__cum, el.__agentMeters || 0));
     }
@@ -590,11 +783,16 @@
             if (el.__map && window.google && google.maps.event) google.maps.event.trigger(el.__map, 'resize');
             return;
         }
+        if (lockRider(el, live)) return;
         const moving = live.leg !== 'done' && !!live.agent;
         el.__agentLive = moving;
         el.__pendingGps = live.agent || null;
-        if (!moving && el.__rider) el.__rider.setRider(null, 0, false);
-        if (!moving) hideEta();
+        if (!moving && el.__rider) el.__rider.setRider(null, 0, false, false);
+        if (!moving) {
+            el.__riderTraveling = false;
+            hideEta();
+            syncBike(false);
+        }
         if (el.__fitLeg && el.__fitLeg !== live.leg) el.__legPath = null;
         const toward = live.leg === 'to_store' ? live.store || live.drop : live.drop || live.store;
         if (moving && live.agent) {
@@ -612,7 +810,13 @@
             el.__fitLeg = live.leg;
             el.__userMoved = false;
         }
+        el.__paintedLeg = live.leg;
         if (el.__map && window.google && google.maps.event) google.maps.event.trigger(el.__map, 'resize');
+        if (pendingRider) {
+            const msg = pendingRider;
+            pendingRider = null;
+            applyRiderMessage(msg);
+        }
     }
 
     function focusPlace(key) {
@@ -858,11 +1062,16 @@
     function parkRider(el, agent, toward) {
         if (!el.__rider) return;
         if (!agent) {
-            el.__rider.setRider(null, 0, false);
+            el.__rider.setRider(null, 0, false, false);
+            syncBike(false);
             return;
         }
-        const heading = toward ? bearingDeg(agent, toward) % 360 : 0;
-        el.__rider.setRider(agent, heading, true);
+        const heading = !el.__riderTraveling && el.__stillHeading != null
+            ? el.__stillHeading
+            : (toward ? bearingDeg(agent, toward) % 360 : 0);
+        if (!el.__riderTraveling) el.__stillHeading = heading;
+        el.__rider.setRider(agent, heading, true, !!el.__riderTraveling);
+        syncBike(!!el.__riderTraveling);
     }
 
     function applyPreviewRoad(el, live, pts) {
@@ -972,5 +1181,5 @@
             el.style.setProperty('--line', String(pct));
         });
     }
-    window.TrackTimeline = { render, mount, bind, when, esc, updates, tick: tickLines, focusPlace };
+    window.TrackTimeline = { render, mount, bind, when, esc, updates, tick: tickLines, focusPlace, watch: watchRider, acceptFix, haversine };
 })();

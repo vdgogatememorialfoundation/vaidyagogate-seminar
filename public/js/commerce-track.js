@@ -929,6 +929,7 @@
         touchFresh();
         tickPipe();
         if (live && (live.mapsApiKey || !live.courierView) && window.TrackTimeline) TrackTimeline.mount(live);
+        if (!returnToken && token && window.TrackTimeline && TrackTimeline.watch) TrackTimeline.watch(token);
         document.querySelectorAll('[data-focus-place]').forEach((b) => {
             if (b.__bound) return;
             b.__bound = true;

@@ -352,11 +352,13 @@ body.hl-page .hl-below .ship-pipe { border: 0; background: #fff; border-radius: 
 .tl-courier-link{font-size:.82rem;font-weight:600;color:#1d4ed8}
 .tl-rider{perspective:600px}
 .tl-rider-aim,.tl-rider-bob{transform-style:preserve-3d}
-.tl-rider-bob{animation:tlRiderBob 1.4s ease-in-out infinite}
+.tl-rider-bob{animation:none}
+.tl-rider.is-moving .tl-rider-bob{animation:tlRiderBob .55s ease-in-out infinite}
 .tl-rider-img{filter:drop-shadow(0 10px 8px rgba(15,23,42,.35)) drop-shadow(0 2px 2px rgba(15,23,42,.25));transform:rotateX(18deg) translateZ(12px)}
 .tl-rider-plate{background:radial-gradient(ellipse at center,rgba(15,23,42,.35),rgba(15,23,42,0) 70%);transform:rotateX(70deg)}
 @keyframes tlRiderBob{0%,100%{transform:translateY(0) rotateX(18deg)}50%{transform:translateY(-3px) rotateX(22deg)}}
-.hl-bike-3d img{filter:drop-shadow(0 8px 6px rgba(15,23,42,.35));transform:perspective(300px) rotateY(-18deg) rotateX(10deg);animation:tlRiderBob 1.4s ease-in-out infinite}
+.hl-bike-3d img{filter:drop-shadow(0 8px 6px rgba(15,23,42,.35));transform:perspective(300px) rotateY(-18deg) rotateX(10deg);animation:none}
+.hl-bike-3d.is-moving img{animation:tlRiderBob 1.4s ease-in-out infinite}
 .hl-bike-idle{display:inline-flex;align-items:center;justify-content:center;width:52px;height:52px;border-radius:14px;background:#f8fafc;border:1px solid #e2e8f0}
 
 .ship-courier { margin: 6px 0 0; padding: 6px 10px; border: 1px solid #e3e6e6; border-radius: 8px; background: #fafafa; display: flex; flex-direction: column; gap: 2px; font-size: .88rem; }
