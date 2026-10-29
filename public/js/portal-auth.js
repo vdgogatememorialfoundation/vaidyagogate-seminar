@@ -183,7 +183,7 @@
             const d = await res.json();
             panelEl.style.display = d.required ? 'block' : 'none';
         } catch (_) {
-            panelEl.style.display = 'none';
+            panelEl.style.display = 'block';
         }
     }
 
@@ -362,9 +362,15 @@
             const email = ev.cleanedEmail;
             const password = (document.getElementById(opts.passwordInputId) || {}).value;
             const body = { email, password, portal: portal === 'doctor' ? 'doctor' : portal };
-            if (otpPanel && otpPanel.style.display === 'block') {
-                body.phoneOtpToken = phoneOtpToken;
+            if (otpPanel && otpPanel.style.display !== 'none' && !otpPanel.classList.contains('hidden')) {
+                if (!emailOtpToken) {
+                    const msg = 'Send the email code, enter it, and press Verify before signing in.';
+                    if (opts.onError) opts.onError(msg);
+                    else alert(msg);
+                    return;
+                }
                 body.emailOtpToken = emailOtpToken;
+                if (phoneOtpToken) body.phoneOtpToken = phoneOtpToken;
             }
             const submitBtn = form.querySelector('button[type="submit"]');
             const submitLabel = submitBtn ? submitBtn.innerHTML : '';

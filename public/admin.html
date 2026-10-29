@@ -173,6 +173,7 @@
                 <a class="menu-item" data-admin-module="tab-cancellation-review" onclick="switchTab('tab-cancellation-review'); initAdminCancellationReviewTab();"><i class="fas fa-user-times"></i> Cancellation review <span id="admin-cancel-review-badge" style="display:none;margin-left:6px;background:#f59e0b;color:#fff;font-size:0.68rem;font-weight:700;padding:2px 7px;border-radius:999px;vertical-align:middle;"></span></a>
                 <a class="menu-item" data-admin-module="tab-refund-tracking" onclick="switchTab('tab-refund-tracking'); initAdminRefundTrackingTab();"><i class="fas fa-undo-alt"></i> Refund tracking</a>
                 <a class="menu-item" data-admin-module="tab-book-sales" onclick="switchTab('tab-book-sales'); loadBookSalesAdmin();"><i class="fas fa-book"></i> Book sales</a>
+                <a class="menu-item" data-admin-module="tab-video-library" onclick="switchTab('tab-video-library'); loadVideoLibraryAdmin();"><i class="fas fa-video"></i> Seminar videos</a>
                 <a class="menu-item" data-admin-module="tab-certificates" onclick="switchTab('tab-certificates'); initAdminCertificatesTab();"><i class="fas fa-award"></i> Certificate Management</a>
                 <a class="menu-item" data-admin-module="tab-volunteers" onclick="switchTab('tab-volunteers'); initAdminVolunteersTab();"><i class="fas fa-hands-helping"></i> Volunteers</a>
                 <a class="menu-item" data-admin-module="tab-volunteer-assignments" onclick="switchTab('tab-volunteer-assignments'); initAdminVolunteerAssignmentsTab();"><i class="fas fa-clipboard-list"></i> Volunteer assignments</a>
@@ -920,7 +921,7 @@
                         <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="pa-show-signup" checked> Show “Create account” on main site</label>
                         <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="pa-show-login" checked> Show sign-in entry on main site</label>
                         <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="pa-req-signup-otp" checked> Require signup OTP (email only)</label>
-                        <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="pa-req-login-otp" checked> Require login OTP on public site &amp; doctor portal (never on admin/judge/scanner apps)</label>
+                        <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="pa-req-login-otp" checked> Require email OTP on public site and doctor portal login (never on admin, judge, or scanner)</label>
                         <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="pa-req-email-verify"> Require email verification before login</label>
                         <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="pa-req-admin-sensitive-otp"> Require admin OTP to create users / save behalf applications</label>
                         <label style="display:flex;align-items:center;gap:8px;font-size:0.9rem;"><input type="checkbox" id="pa-req-behalf-applicant-otp" checked> Require applicant OTP (phone + email) when admin saves doctor application</label>
@@ -1311,6 +1312,13 @@
                     <button type="button" class="btn-primary" style="margin-top:16px;" onclick="saveAdminSiteCms()">Save website &amp; portal content</button>
                     <p id="cms-save-msg" style="margin-top:10px;font-weight:600;"></p>
                 </div>
+            </div>
+
+            <!-- Seminar videos -->
+            <div id="tab-video-library" class="tab-pane hidden">
+                <h2 class="section-title">Seminar videos</h2>
+                <p class="vl-intro">Upload full recordings or episodes per seminar year. Files are encrypted into a protected stream on this server; doctors registered for that year watch free, others pay the price or are enabled here.</p>
+                <div id="vl-admin-root"><p class="vl-note">Loading…</p></div>
             </div>
 
             <!-- Book sales -->
@@ -3500,11 +3508,13 @@
     <script src="/js/user-roles.js?v=20260522f"></script>
     <script src="/js/admin-list-search.js?v=20260522a"></script>
     <link rel="stylesheet" href="/css/book-track.css?v=20260529stg">
+    <link rel="stylesheet" href="/css/video-library.css?v=20261029vl5">
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
     <script src="/js/track-timeline.js?v=20261003tl"></script>
     <script src="/js/admin-commerce.js?v=20261003tl"></script>
-    <script src="/js/admin.js?v=20261004attend"></script>
+    <script src="/js/admin.js?v=20261029vl4"></script>
+    <script src="/js/admin-videos.js?v=20261029vl6"></script>
 </body>
 </html>

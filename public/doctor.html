@@ -14,6 +14,7 @@
     <link rel="stylesheet" href="/css/responsive-portals.css?v=20260620layout4">
     <link rel="stylesheet" href="/css/vgmf-portal-bright.css?v=20260620theme1">
     <link rel="stylesheet" href="/css/vgmf-mobile-portal.css">
+    <link rel="stylesheet" href="/css/video-library.css?v=20261029vl5">
     <link rel="stylesheet" href="/css/doctor-vivid.css?v=20260916vivid1">
     <style>
         :root {
@@ -225,8 +226,8 @@
                 <p style="margin:10px 0 0;">
                     <button type="button" id="doctor-forgot-password-btn" style="padding:0;border:none;background:none;color:#0f766e;font-weight:700;font-size:0.85rem;cursor:pointer;text-decoration:underline;">Forgot password?</button>
                 </p>
-                <div id="doctor-login-otp-panel" style="display:none;margin-top:14px;padding-top:14px;border-top:1px solid #e2e8f0;">
-                    <p style="font-size:0.82rem;color:#64748b;margin-bottom:8px;">Verify email and WhatsApp (both required).</p>
+                <div id="doctor-login-otp-panel" style="display:block;margin-top:14px;padding-top:14px;border-top:1px solid #e2e8f0;">
+                    <p style="font-size:0.82rem;color:#64748b;margin-bottom:8px;">Enter the code sent to your email. Email verification is required before sign-in.</p>
                     <div class="doctor-otp-row" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px;">
                         <span style="font-weight:700;min-width:44px;">Email</span>
                         <button type="button" id="doctor-send-otp-email" style="padding:6px 12px;border-radius:8px;border:1px solid #99f6e4;background:#f0fdfa;cursor:pointer;font-weight:700;color:#0f766e;">Send</button>
@@ -236,7 +237,7 @@
                         <span id="doctor-email-otp-ok" style="font-size:0.78rem;color:#059669;"></span>
                     </div>
                     <div class="doctor-otp-row" style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
-                        <span style="font-weight:700;min-width:44px;">Phone</span>
+                        <span style="font-weight:700;min-width:44px;">Phone <span style="font-weight:500;color:#94a3b8;">(optional)</span></span>
                         <button type="button" id="doctor-send-otp-phone" style="padding:6px 12px;border-radius:8px;border:1px solid #99f6e4;background:#f0fdfa;cursor:pointer;font-weight:700;color:#0f766e;">Send</button>
                         <button type="button" id="doctor-resend-otp-phone" style="padding:6px 12px;border-radius:8px;border:1px solid #cbd5e1;background:#f8fafc;cursor:pointer;font-weight:700;color:#475569;">Resend</button>
                         <input type="text" id="doctor-phone-otp" placeholder="Code" style="max-width:88px;padding:8px;border-radius:8px;border:1px solid #cbd5e1;">
@@ -257,8 +258,8 @@
                     </div>
                     <input type="email" id="doctor-signup-email" placeholder="Email" required style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;margin-bottom:10px;">
                     <input type="tel" id="doctor-signup-phone" placeholder="Phone (WhatsApp)" required style="width:100%;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;margin-bottom:10px;">
-                    <div id="doctor-signup-otp-panel" style="display:none;margin-bottom:10px;padding-top:10px;border-top:1px solid #e2e8f0;">
-                        <p style="font-size:0.82rem;color:#64748b;margin-bottom:8px;">Verify email before signup.</p>
+                    <div id="doctor-signup-otp-panel" style="display:block;margin-bottom:10px;padding-top:10px;border-top:1px solid #e2e8f0;">
+                        <p style="font-size:0.82rem;color:#64748b;margin-bottom:8px;">Email verification is required. Send a code to your email, enter it, and press OK before creating the account.</p>
                         <div class="doctor-otp-row" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:6px;">
                             <span style="font-weight:700;">Email</span>
                             <button type="button" id="doctor-signup-send-otp-email" style="padding:5px 10px;border-radius:8px;border:1px solid #99f6e4;background:#f0fdfa;cursor:pointer;font-weight:700;">Send</button>
@@ -319,6 +320,7 @@
                 <button type="button" class="menu-item" data-tab="tab-refunds"><i class="fas fa-undo-alt"></i> <span data-i18n="doctor.menu.refunds">Refund tracking</span></button>
                 <button type="button" class="menu-item" data-tab="tab-receipts"><i class="fas fa-file-invoice"></i> <span data-i18n="doctor.menu.receipts">Receipts</span></button>
                 <button type="button" class="menu-item hidden" id="nav-books" data-tab="tab-books"><i class="fas fa-book"></i> <span data-i18n="doctor.menu.books">Book orders</span></button>
+                <button type="button" class="menu-item" data-tab="tab-videos"><i class="fas fa-video"></i> Seminar videos</button>
                 <button type="button" class="menu-item" data-tab="tab-payments"><i class="fas fa-credit-card"></i> <span data-i18n="doctor.menu.payments">Payments</span></button>
                 <button type="button" class="menu-item" data-tab="tab-ticket"><i class="fas fa-qrcode"></i> <span data-i18n="doctor.menu.tickets">Participant tickets</span></button>
                 <button type="button" class="menu-item" data-tab="tab-certificate"><i class="fas fa-award"></i> Certificates</button>
@@ -744,6 +746,27 @@
                     </div>
                 </div>
 
+                <div id="tab-videos" class="tab-pane hidden">
+                    <h2 class="section-title">Seminar videos</h2>
+                    <p class="vl-intro">Recordings of the national seminar, year by year. Volunteers, and doctors registered and paid for that seminar, watch without a separate fee. The picture cannot be saved from this page.</p>
+                    <div id="vl-player-wrap" class="vl-player hidden">
+                        <div class="vl-player-head">
+                            <h3 id="vl-player-title">Seminar video</h3>
+                            <button type="button" class="vl-btn is-ghost is-small" id="vl-player-close"><i class="fas fa-times"></i> Close</button>
+                        </div>
+                        <div class="vl-stage">
+                            <video id="vl-video" controls playsinline preload="metadata" controlsList="nodownload noremoteplayback noplaybackrate" disablePictureInPicture oncontextmenu="return false;"></video>
+                            <div class="vl-guard" id="vl-guard" aria-hidden="true"></div>
+                            <div class="vl-wm" id="vl-wm"></div>
+                            <div class="vl-wm-fixed" id="vl-wm-fixed" aria-hidden="true"></div>
+                        </div>
+                        <p class="vl-player-msg" id="vl-player-msg"></p>
+                        <div class="vl-player-foot"><span><i class="fas fa-shield-alt"></i> Protected stream, personal to your account.</span><span>Playback on one device at a time.</span></div>
+                    </div>
+                    <div id="vl-pay" class="vl-pay hidden"></div>
+                    <div id="vl-years"><p class="vl-note">Loading…</p></div>
+                </div>
+
                 <div id="tab-books" class="tab-pane hidden">
                     <h2 class="section-title">Books — Agnikarma &amp; Viddhakarma</h2>
                     <p style="color:#64748b;margin:-10px 0 16px;">Order Dr. R.B. Gogate books in English, Marathi, Hindi, or Kannada. Collect at the seminar book desk, or choose courier delivery with live shipping rates.</p>
@@ -908,15 +931,16 @@
     <script src="/js/site-branding.js"></script>
     <script src="/js/otp-ui.js"></script>
     <script src="/js/http-json.js"></script>
-    <script src="/js/portal-auth.js?v=20260620loginfast2"></script>
+    <script src="/js/portal-auth.js?v=20261029emailotp"></script>
     <script src="/js/name-validation.js"></script>
     <script src="/js/contact-validation.js"></script>
-    <script src="/js/doctor-auth-ui.js?v=20260620signupredirect1"></script>
+    <script src="/js/doctor-auth-ui.js?v=20261029emailotp"></script>
     <script src="/js/portal-upload.js?v=20260523"></script>
     <script src="/js/case-r2-upload.js?v=20260608case2"></script>
     <link rel="stylesheet" href="/css/book-track.css?v=20260529stg">
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
-    <script src="/js/doctor-books.js?v=20261003commerce"></script>
+    <script src="/js/doctor-books.js?v=20261029books2"></script>
+    <script src="/js/doctor-videos.js?v=20261029vl5"></script>
     <script src="/js/live-chat-client-info.js?v=20260610chat1"></script>
     <script src="/js/doctor-live-chat-widget.js?v=20260615live2"></script>
     <script src="/js/site-visitor-beacon.js?v=20260613radar6"></script>
@@ -942,6 +966,6 @@
         }
     })();
     </script>
-    <script src="/js/doctor.js?v=20261004attend"></script>
+    <script src="/js/doctor.js?v=20261029vl4"></script>
 </body>
 </html>

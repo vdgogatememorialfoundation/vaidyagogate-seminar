@@ -1563,6 +1563,7 @@ const DOCTOR_MODULE_TAB_DEFS = [
     ['tab-receipts', 'Receipts'],
     ['tab-payments', 'Payments'],
     ['tab-books', 'Book orders (Agnikarma / Viddhakarma)'],
+    ['tab-videos', 'Seminar videos'],
     ['tab-ticket', 'Participant tickets'],
     ['tab-certificate', 'Certificates'],
     ['tab-reset-pwd', 'Change password']
@@ -1605,7 +1606,11 @@ function resolveDoctorAllowedTabsAdmin(category, userModulesRaw) {
     if (!hasExplicitOff) {
         const uk = Object.keys(userMap);
         if (!uk.length || !uk.some((k) => userMap[k] === true)) return allowed;
-        return new Set(uk.filter((k) => userMap[k] === true));
+        const userAllowed = new Set(uk.filter((k) => userMap[k] === true));
+        if (allowed === null) return userAllowed;
+        const merged = new Set(allowed);
+        userAllowed.forEach((tabId) => merged.add(tabId));
+        return merged;
     }
     const out = new Set();
     DOCTOR_MODULE_TAB_DEFS.forEach(([tabId]) => {
@@ -1714,6 +1719,7 @@ const ADMIN_MODULE_TAB_DEFS = [
     ['tab-reg-form', 'Registration form fields'],
     ['tab-site-cms', 'Website & doctor updates'],
     ['tab-book-sales', 'Book sales'],
+    ['tab-video-library', 'Seminar videos'],
     ['tab-commerce', 'Commerce'],
     ['tab-admin-payments', 'Payments'],
     ['tab-cancellation-review', 'Cancellation review & refunds'],

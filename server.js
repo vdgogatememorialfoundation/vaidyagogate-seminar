@@ -244,6 +244,10 @@ function mountPaymentsRoutes() {
         listDoctorPaymentOptions,
         parsePositiveUserId
     });
+    require('./lib/video-library').registerVideoLibraryRoutes(app, db, {
+        listDoctorPaymentOptions,
+        parsePositiveUserId
+    });
     require('./lib/staff-portal-routes').registerStaffPortalRoutes(app, db, {
         portalTracking,
         notifEngine,
@@ -4377,8 +4381,8 @@ app.post('/api/auth/login', requestGuard.authLoginLimit, withAuxiliaryTables, (r
                 }
 
                 if (loginOtpRequired(loginPortal) && !portalAuthPolicy.isStaffPortalAccount(row)) {
-                    if (!phoneOtpToken || !emailOtpToken) {
-                        return res.status(400).json({ error: 'Phone and email OTP verification is required to log in.' });
+                    if (!emailOtpToken) {
+                        return res.status(400).json({ error: 'Email OTP verification is required to log in.' });
                     }
                     otpLib.validateLoginOtpTokens(
                         db,
@@ -6541,7 +6545,7 @@ function respondDoctorPortalAccess(res, row) {
         const globalVolunteer = c.doctorPortalModulesVolunteer || {};
         const useGlobalModules = !doctorPortalModules.userHasCustomModules(row.doctor_modules);
         const modulesForResolve = useGlobalModules ? null : row.doctor_modules;
-        const allowedSet = expandRefundTabAccess(
+        const allowedSet = doctorPortalModules.expandRefundTabAccess(
             doctorPortalModules.resolveDoctorAllowedTabs(
                 row.doctor_category,
                 globalRegular,
@@ -11279,7 +11283,9 @@ app.post('/api/admin/portal-auth-config', (req, res) => {
             if (req.body && req.body.resetAllDoctorModuleOverrides) {
                 db.run(
                     `UPDATE users SET doctor_modules = NULL
-                     WHERE LOWER(TRIM(COALESCE(user_role, ''))) = 'doctor'`,
+                     WHERE LOWER(TRIM(COALESCE(user_role, ''))) = 'doctor'
+                        OR LOWER(TRIM(COALESCE(role, ''))) = 'doctor'
+                        OR LOWER(TRIM(COALESCE(doctor_category, ''))) = 'volunteer'`,
                     [],
                     (clrErr) => {
                         if (clrErr) return res.status(500).json({ error: clrErr.message });
