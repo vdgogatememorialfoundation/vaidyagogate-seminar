@@ -118,6 +118,18 @@
         return html;
     }
 
+    function proofHtml(t) {
+        if (!t || t.cancelled) return '';
+        let html = '';
+        if (t.deliveryOtp) {
+            html += '<div class="ship-otp"><div class="lbl">Delivery OTP</div><div class="code">' + esc(t.deliveryOtp) + '</div><div class="note">Share this code with the delivery partner at your door.</div></div>';
+        }
+        if (t.shipmentQrSvg) {
+            html += '<section class="trk-qr"><div class="trk-qr-copy"><b>Shipment QR</b><p>Show this to the delivery partner. They scan it to confirm pickup, then delivery. Your order updates here.</p></div><div class="trk-qr-img">' + t.shipmentQrSvg + '</div></section>';
+        }
+        return html;
+    }
+
     function milesHtml(list) {
         if (!list || !list.length) return '';
         return '<ol class="tl-miles">' + list.map((m) => '<li class="tl-mile is-' + esc(m.state) + '"><b>' + esc(m.label) + '</b>' + (m.detail && m.state === 'active' ? '<span>' + esc(m.detail) + '</span>' : '') + '</li>').join('') + '</ol>';
@@ -214,6 +226,7 @@
         return (
             '<div class="tl' + (animate ? '' : ' tl-static') + (settled ? ' is-settled' : '') + '">' +
             milesHtml(t.milestones) +
+            proofHtml(t) +
             mapBlock(data.live) +
             dateStrip(t) +
             expectedStrip(t) +
