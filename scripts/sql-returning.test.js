@@ -11,6 +11,7 @@ assert.strictEqual(appendReturningId(settings), settings.trim());
 
 assert.strictEqual(insertReturnsId(`INSERT INTO wa_settings (key, value) VALUES (?, ?)`), false);
 assert.strictEqual(insertReturnsId(`INSERT INTO global_settings (key, value) VALUES (?, ?)`), false);
+assert.strictEqual(insertReturnsId(`INSERT INTO online_seminar_meetings (seminar_id, delivery_mode) VALUES (?, ?)`), false);
 assert.strictEqual(insertReturnsId(`INSERT INTO video_items (title) VALUES (?)`), true);
 assert.strictEqual(appendReturningId(`INSERT INTO video_items (title) VALUES (?)`), `INSERT INTO video_items (title) VALUES (?) RETURNING id`);
 

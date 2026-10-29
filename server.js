@@ -83,6 +83,7 @@ const emailDeliveryFlags = require('./lib/email-delivery-flags');
 const seminarEventOps = require('./lib/seminar-event-ops');
 const seminarAlumniNotify = require('./lib/seminar-alumni-notify');
 const googleMaps = require('./lib/google-maps');
+const onlineSeminar = require('./lib/online-seminar');
 
 function volunteerTicketDeps() {
     return {
@@ -258,6 +259,7 @@ function mountPaymentsRoutes() {
 }
 
 function bootstrapApp(done) {
+    onlineSeminar.ensureSchema(db, () => {});
     mountExtendedRoutes();
     mountPaymentsRoutes();
     const r2Storage = require('./lib/r2-storage');
@@ -2282,7 +2284,7 @@ function attachEventsAndDaysToSeminarRows(rows, cb) {
                 s.schedule_dates = seminarDt.seminarDateList(s);
                 s.is_multi_day = s.schedule_dates.length > 1;
             });
-            cb(null, out);
+            onlineSeminar.attachPublicSummary(db, out || [], cb);
         });
     });
 }
@@ -8707,7 +8709,14 @@ app.post('/api/admin/seminars', (req, res) => {
                         });
                         cacheInvalidatePrefix('api:seminars:');
                         cacheInvalidatePrefix('api:public:announcements');
-                        res.json({ success: true, seminarId: newId });
+                        onlineSeminar.persistFromSeminarBody(db, newId, req.body, (mErr, saved) => {
+                            if (mErr) console.warn('[online-seminar] create:', mErr.message);
+                            res.json({
+                                success: true,
+                                seminarId: newId,
+                                onlineSeminarWarning: (mErr && mErr.message) || (saved && saved.warning) || null
+                            });
+                        });
                     });
                 });
             }
@@ -8884,7 +8893,14 @@ app.put('/api/admin/seminars/:id', (req, res) => {
                         if (!is_active) {
                             removeSeminarScrollingAnnouncement(sid, () => {});
                         }
-                        res.json({ success: true, portalYear: finalPortalYear });
+                        onlineSeminar.persistFromSeminarBody(db, sid, req.body, (mErr, saved) => {
+                            if (mErr) console.warn('[online-seminar] update:', mErr.message);
+                            res.json({
+                                success: true,
+                                portalYear: finalPortalYear,
+                                onlineSeminarWarning: (mErr && mErr.message) || (saved && saved.warning) || null
+                            });
+                        });
                     });
                 });
             }
@@ -15881,6 +15897,12 @@ app.post('/api/admin/case-judge-marking-reminder-config', (req, res) => {
     });
 });
 
+onlineSeminar.registerOnlineSeminarRoutes(app, {
+    db,
+    assertAdminPortalActor,
+    publicDir
+});
+
 app.use((err, req, res, next) => {
     if (res.headersSent) return next(err);
     console.error('[express] unhandled error:', err && err.message ? err.message : err);
@@ -15896,9 +15918,14 @@ if (require.main === module) {
             process.exit(1);
         }
         bootstrapApp(() => {
-            app.listen(PORT, () => {
+            const httpServer = app.listen(PORT, () => {
                 console.log(`Server is running on http://localhost:${PORT}`);
                 console.log('[routes] Case presentation APIs: /api/admin/case/programs, /api/case/programs');
+                try {
+                    onlineSeminar.attachHall(httpServer, { db });
+                } catch (hallErr) {
+                    console.warn('[online-seminar] hall:', hallErr.message);
+                }
                 renderKeepalive.startRenderKeepalive();
                 try {
                     require('./lib/gmail-inbound-poller').startGmailInboundPoller(db);
