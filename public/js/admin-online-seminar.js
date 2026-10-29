@@ -436,6 +436,14 @@
         if (res.ok) loadOnlineSeminarOffice();
     };
 
+    if (typeof window.adminCanAccessTab === 'function') {
+        const origAccess = window.adminCanAccessTab;
+        window.adminCanAccessTab = function (tabId) {
+            if (tabId === 'tab-online-seminars' && origAccess.call(this, 'tab-seminars')) return true;
+            return origAccess.apply(this, arguments);
+        };
+    }
+
     if (typeof window.switchTab === 'function') {
         const origTab = window.switchTab;
         window.switchTab = function (tabId) {
