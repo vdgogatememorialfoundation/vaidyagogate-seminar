@@ -445,25 +445,29 @@
             el.__acceptedGps = fix.point;
             el.__riderTraveling = !!fix.traveling;
             if (fix.snap || fix.first) el.__poseMeters = null;
-            if (Number.isFinite(reported)) {
-                el.__stillHeading = ((reported % 360) + 360) % 360;
+            if (fix.traveling && prev) {
+                const now = Date.now();
+                const gap = el.__moveAt ? now - el.__moveAt : 2500;
+                el.__moveAt = now;
                 el.__headingFallback = false;
-                el.__glide = null;
-            } else if (fix.traveling && prev) {
-                const heading = bearingDeg(prev, fix.point) % 360;
-                const meters = haversine(prev, fix.point);
-                el.__stillHeading = heading;
-                el.__headingFallback = false;
+                const shownMeters = Number.isFinite(el.__shownMeters) ? el.__shownMeters : null;
                 el.__glide = {
+                    mode: 'road',
                     from: prev,
                     to: { lat: fix.point.lat, lng: fix.point.lng },
-                    heading: heading,
+                    shownMeters: shownMeters,
                     start: 0,
-                    ms: Math.min(700, Math.max(280, Math.round(meters * 6)))
+                    ms: glideMs(el, prev, fix.point, shownMeters, gap)
                 };
             } else if (fix.snap || fix.first) {
                 el.__glide = null;
-                el.__headingFallback = true;
+                el.__shownMeters = null;
+                el.__shownPoint = null;
+                el.__headingFallback = !Number.isFinite(reported);
+                if (Number.isFinite(reported)) el.__stillHeading = ((reported % 360) + 360) % 360;
+            } else if (Number.isFinite(reported) && !el.__path) {
+                el.__stillHeading = ((reported % 360) + 360) % 360;
+                el.__headingFallback = false;
             }
         }
         live.agent = Object.assign({}, el.__acceptedGps || live.agent);
@@ -507,7 +511,7 @@
                 .catch(() => {});
         };
         pull();
-        riderHttp = setInterval(pull, 8000);
+        riderHttp = setInterval(pull, 2500);
     }
 
     function scheduleRiderRetry() {
@@ -840,6 +844,51 @@
         return best;
     }
 
+    // Cover the road distance at a scooter pace, and keep gliding until the next fix arrives.
+    function glideMs(el, from, to, shownMeters, gap) {
+        const wait = Math.min(7000, Math.max(900, Number(gap) || 2500));
+        let road = haversine(from, to);
+        if (el && el.__path && el.__cum) {
+            const end = projectMeters(el.__path, el.__cum, to);
+            if (end.dist <= 140) {
+                const fromM = Number.isFinite(shownMeters) ? shownMeters : projectMeters(el.__path, el.__cum, from).meters;
+                road = Math.abs(end.meters - fromM);
+            }
+        }
+        const paced = (road / 14) * 1000;
+        return Math.min(7000, Math.max(wait, Math.min(7000, paced)));
+    }
+
+    function steerHeading(current, target, now, last) {
+        const aim = ((Number(target) % 360) + 360) % 360;
+        if (!Number.isFinite(Number(current))) return aim;
+        const dt = last ? Math.min(0.08, Math.max(0, (now - last) / 1000)) : 0;
+        if (dt <= 0) return aim;
+        let delta = ((aim - Number(current) + 540) % 360) - 180;
+        const step = 170 * dt;
+        if (Math.abs(delta) <= step) return aim;
+        return (Number(current) + Math.sign(delta) * step + 360) % 360;
+    }
+
+    // Move on the road polyline. A straight line between two GPS points cuts the corner.
+    function roadPose(path, cum, from, to, t, shownMeters) {
+        if (!path || path.length < 2 || !cum || !cum.length || !to) return null;
+        const endHit = projectMeters(path, cum, to);
+        if (endHit.dist > 140) return null;
+        const startHit = from ? projectMeters(path, cum, from) : { meters: 0, dist: 0 };
+        const fromM = Number.isFinite(shownMeters) ? shownMeters : startHit.meters;
+        let targetM = endHit.meters;
+        if (targetM < fromM && fromM - targetM < 45) targetM = fromM;
+        const clamped = Math.max(0, Math.min(1, t));
+        const meters = fromM + (targetM - fromM) * clamped;
+        const pose = along(path, cum, meters);
+        if (!pose) return null;
+        const ahead = along(path, cum, meters + 22);
+        if (ahead && haversine(pose, ahead) >= 6) pose.heading = bearingDeg(pose, ahead) % 360;
+        pose.meters = meters;
+        return pose;
+    }
+
     function tailPath(path, cum, meters) {
         const start = along(path, cum, meters);
         const out = [{ lat: start.lat, lng: start.lng }];
@@ -872,7 +921,7 @@
         '<svg xmlns="http://www.w3.org/2000/svg" width="42" height="52" viewBox="0 0 42 52"><ellipse cx="21" cy="48" rx="8" ry="3" fill="#1d4ed8" opacity="0.18"/><path d="M21 46s14-12.4 14-25A14 14 0 1 0 7 21c0 12.6 14 25 14 25z" fill="#1d4ed8"/><circle cx="21" cy="20" r="8.5" fill="#fff"/><path d="M15 23.5V18l6-4.2 6 4.2v5.5h-4.2v-3.4h-3.6v3.4z" fill="#1d4ed8"/></svg>';
     const PREVIEW_STORE_SVG = STORE_SVG;
     const PREVIEW_HOME_SVG = HOME_SVG;
-    // The scooter artwork faces right. A -90 degree turn points the front up so the map heading follows the road.
+    // The scooter artwork already faces up. The aim rotation is the road heading.
     const RIDER_ICON = '/media/delivery-agent.png?v=2';
 
     function ensureRider(el) {
@@ -949,40 +998,143 @@
             if (!g || !el.__rider || !el.__agentLive) return;
             if (!g.start) g.start = now;
             const t = Math.min(1, (now - g.start) / g.ms);
-            const lat = g.from.lat + (g.to.lat - g.from.lat) * t;
-            const lng = g.from.lng + (g.to.lng - g.from.lng) * t;
-            el.__rider.setRider({ lat: lat, lng: lng }, g.heading, true, false);
-            syncBike(false);
-            if (t >= 1) {
-                el.__stillHeading = g.heading;
+            const pose = el.__path && el.__cum ? roadPose(el.__path, el.__cum, g.from, g.to, t, g.shownMeters) : null;
+            if (pose) {
+                const frameAt = el.__aimAt || 0;
+                const shownHeading = steerHeading(el.__aim, pose.heading, now, frameAt);
+                el.__aimAt = now;
+                el.__aim = shownHeading;
+                el.__shownMeters = pose.meters;
+                el.__shownPoint = { lat: pose.lat, lng: pose.lng };
+                el.__stillHeading = shownHeading;
                 el.__headingFallback = false;
-                el.__glide = null;
+                el.__rider.setRider(pose, shownHeading, true, false);
+                if (el.__remain) el.__remain.setPath(tailPath(el.__path, el.__cum, pose.meters));
+                if (el.__doneLine) el.__doneLine.setPath(headPath(el.__path, el.__cum, pose.meters));
+            } else if (el.__shownPoint) {
+                el.__rider.setRider(el.__shownPoint, el.__stillHeading || 0, true, false);
             }
+            syncBike(false);
+            if (t >= 1) el.__glide = null;
         };
         el.__raf = requestAnimationFrame(step);
     }
 
     function applyPath(el, path) {
         if (!path || path.length < 2) return;
+        const prevPoint = el.__shownPoint;
         el.__path = path;
         el.__cum = buildCum(path);
         const gps = el.__pendingGps;
-        const hit = gps ? projectMeters(path, el.__cum, gps) : { meters: 0, dist: 0 };
+        const hit = gps ? projectMeters(path, el.__cum, gps) : { meters: 0, dist: Infinity };
+        let shown = hit.meters;
+        if (prevPoint) {
+            const kept = projectMeters(path, el.__cum, prevPoint);
+            if (kept.dist <= 80 && hit.meters + 25 >= kept.meters) shown = kept.meters;
+        }
+        el.__shownMeters = shown;
         el.__gpsMeters = hit.meters;
-        el.__agentMeters = hit.meters;
-        el.__riderTraveling = false;
-        if (el.__remain) el.__remain.setPath(tailPath(path, el.__cum, el.__agentMeters || 0));
-        if (el.__doneLine) el.__doneLine.setPath(headPath(path, el.__cum, el.__agentMeters || 0));
+        el.__agentMeters = shown;
+        if (el.__glide) el.__glide.shownMeters = shown;
+        const pose = along(path, el.__cum, shown);
+        if (pose) {
+            el.__shownPoint = { lat: pose.lat, lng: pose.lng };
+            if (!el.__glide && el.__rider && el.__agentLive) {
+                el.__stillHeading = pose.heading;
+                el.__headingFallback = false;
+                holdRider(el, pose);
+            }
+        }
+        if (el.__remain) el.__remain.setPath(tailPath(path, el.__cum, shown));
+        if (el.__doneLine) el.__doneLine.setPath(headPath(path, el.__cum, shown));
+    }
+
+    // Replace a sharp kink with a short arc so the line and the bike take the bend instead of stacking on the corner.
+    function smoothPath(path) {
+        if (!path || path.length < 3) return path ? path.slice() : [];
+        const lat0 = path[0].lat;
+        const lng0 = path[0].lng;
+        const mPerLat = 111320;
+        const mPerLng = 111320 * Math.cos((lat0 * Math.PI) / 180);
+        const en = (p) => ({ e: (p.lng - lng0) * mPerLng, n: (p.lat - lat0) * mPerLat });
+        const ll = (e, n) => ({ lat: lat0 + n / mPerLat, lng: lng0 + e / mPerLng });
+        const pts = path.map(en);
+        const out = [path[0]];
+        const push = (e, n) => {
+            const point = ll(e, n);
+            const prev = out[out.length - 1];
+            if (haversine(prev, point) >= 2.5) out.push(point);
+        };
+        for (let i = 1; i < pts.length - 1; i++) {
+            const a = pts[i - 1];
+            const b = pts[i];
+            const c = pts[i + 1];
+            const abE = b.e - a.e;
+            const abN = b.n - a.n;
+            const bcE = c.e - b.e;
+            const bcN = c.n - b.n;
+            const len1 = Math.sqrt(abE * abE + abN * abN);
+            const len2 = Math.sqrt(bcE * bcE + bcN * bcN);
+            if (len1 < 8 || len2 < 8) {
+                push(b.e, b.n);
+                continue;
+            }
+            const uE = abE / len1;
+            const uN = abN / len1;
+            const vE = bcE / len2;
+            const vN = bcN / len2;
+            const cross = uE * vN - uN * vE;
+            const dot = uE * vE + uN * vN;
+            const alpha = Math.atan2(cross, dot);
+            const turn = Math.abs(alpha);
+            if (turn < 0.22 || turn > 2.6) {
+                push(b.e, b.n);
+                continue;
+            }
+            const room = 0.42 * Math.min(len1, len2);
+            let trim = Math.min(18, room) * Math.tan(turn / 2);
+            if (trim > room) trim = room;
+            const radius = trim / Math.tan(turn / 2);
+            if (radius < 6 || trim < 4) {
+                push(b.e, b.n);
+                continue;
+            }
+            const p1e = b.e - uE * trim;
+            const p1n = b.n - uN * trim;
+            const p2e = b.e + vE * trim;
+            const p2n = b.n + vN * trim;
+            const side = cross >= 0 ? 1 : -1;
+            const nE = -uN * side;
+            const nN = uE * side;
+            const cE = p1e + nE * radius;
+            const cN = p1n + nN * radius;
+            const a0 = Math.atan2(p1n - cN, p1e - cE);
+            let sweep = Math.atan2(p2n - cN, p2e - cE) - a0;
+            if (side > 0 && sweep < 0) sweep += Math.PI * 2;
+            if (side < 0 && sweep > 0) sweep -= Math.PI * 2;
+            const steps = Math.max(3, Math.min(10, Math.round(Math.abs(sweep) * radius / 5)));
+            for (let s = 0; s <= steps; s++) {
+                const ang = a0 + sweep * (s / steps);
+                push(cE + Math.cos(ang) * radius, cN + Math.sin(ang) * radius);
+            }
+        }
+        const last = path[path.length - 1];
+        if (haversine(out[out.length - 1], last) >= 2.5) out.push(last);
+        return out.length > 1 ? out : path.slice();
     }
 
     function routePoints(result) {
         const pts = [];
-        const leg = result.routes && result.routes[0] && result.routes[0].legs && result.routes[0].legs[0];
+        const route = result.routes && result.routes[0];
+        const leg = route && route.legs && route.legs[0];
         if (!leg) return pts;
         leg.steps.forEach((step) => {
             (step.path || []).forEach((ll) => pts.push({ lat: ll.lat(), lng: ll.lng() }));
         });
-        return pts;
+        if (pts.length < 2 && route && route.overview_path) {
+            route.overview_path.forEach((ll) => pts.push({ lat: ll.lat(), lng: ll.lng() }));
+        }
+        return smoothPath(pts);
     }
 
     function paint(live) {
@@ -1008,7 +1160,7 @@
                 zoomControl: !phone,
                 rotateControl: false,
                 gestureHandling: 'greedy',
-                clickableIcons: false,
+                clickableIcons: true,
                 scaleControl: !phone,
                 backgroundColor: '#e8f1fb',
                 minZoom: 12,
@@ -1046,6 +1198,19 @@
             if (google.maps.TrafficLayer && !el.__traffic) {
                 el.__traffic = new google.maps.TrafficLayer();
                 el.__traffic.setMap(el.__map);
+            }
+            if (!el.querySelector('.tl-map-north')) {
+                const north = document.createElement('div');
+                north.className = 'tl-map-north';
+                north.textContent = 'N';
+                north.title = 'North is up';
+                el.appendChild(north);
+            }
+            if (!el.querySelector('.tl-map-legend')) {
+                const legend = document.createElement('div');
+                legend.className = 'tl-map-legend';
+                legend.innerHTML = '<span><i class="is-route"></i>Route</span><span><i class="is-done"></i>Done</span><span><i class="is-pin"></i>Store and home</span>';
+                el.appendChild(legend);
             }
             if (!el.querySelector('.tl-map-chip')) {
                 const chip = document.createElement('div');
@@ -1238,9 +1403,10 @@
 
     function ensureLinks(el) {
         if (!el.__map || el.__linkStore) return;
-        const link = () =>
+            const link = () =>
             new google.maps.Polyline({
                 map: el.__map,
+                geodesic: false,
                 strokeOpacity: 0,
                 strokeWeight: 0,
                 zIndex: 4,
@@ -1248,7 +1414,7 @@
             });
         el.__linkStore = link();
         el.__linkDrop = link();
-        el.__corridor = new google.maps.Polyline({ map: el.__map, strokeColor: routeColor(), strokeOpacity: 0.45, strokeWeight: 6, zIndex: 0 });
+        el.__corridor = new google.maps.Polyline({ map: el.__map, geodesic: false, strokeColor: routeColor(), strokeOpacity: 0.28, strokeWeight: 10, zIndex: 0 });
     }
 
     function setConnector(line, pin, roadPoint) {
@@ -1403,14 +1569,16 @@
     function trackLine(el, color, weight, z) {
         const casing = new google.maps.Polyline({
             map: el.__map,
+            geodesic: false,
             strokeColor: '#ffffff',
-            strokeWeight: weight + 6,
+            strokeWeight: weight + 4,
             strokeOpacity: 1,
             zIndex: z,
             clickable: false
         });
         const line = new google.maps.Polyline({
             map: el.__map,
+            geodesic: false,
             strokeColor: color,
             strokeWeight: weight,
             strokeOpacity: 1,
@@ -1428,7 +1596,7 @@
             const dotted = opts && opts.strokeOpacity === 0;
             casing.setOptions({
                 strokeOpacity: dotted ? 0 : 0.96,
-                strokeWeight: dotted ? 0 : ((opts && opts.strokeWeight) || weight) + 6,
+                strokeWeight: dotted ? 0 : ((opts && opts.strokeWeight) || weight) + 4,
                 icons: null
             });
         };
@@ -1572,6 +1740,19 @@
             return;
         }
         if (el.__glide) return;
+        const road = el.__path && el.__cum ? projectMeters(el.__path, el.__cum, agent) : null;
+        if (road && road.dist <= 140) {
+            const pose = along(el.__path, el.__cum, road.meters);
+            el.__shownMeters = road.meters;
+            el.__shownPoint = { lat: pose.lat, lng: pose.lng };
+            el.__stillHeading = pose.heading;
+            el.__aim = pose.heading;
+            el.__aimAt = 0;
+            el.__headingFallback = false;
+            el.__rider.setRider(pose, pose.heading, true, false);
+            syncBike(false);
+            return;
+        }
         const device = Number(agent.heading);
         let heading;
         if (Number.isFinite(device)) {
@@ -1675,17 +1856,32 @@
 
     function rasterStyles() {
         return [
-            { featureType: 'poi', stylers: [{ visibility: 'off' }] },
-            { featureType: 'transit', stylers: [{ visibility: 'off' }] },
-            { featureType: 'landscape', elementType: 'geometry', stylers: [{ color: '#f4f7f5' }] },
-            { featureType: 'landscape.man_made', elementType: 'geometry', stylers: [{ color: '#eef2f0' }] },
-            { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#d7e6f4' }] },
+            { elementType: 'geometry', stylers: [{ color: '#eef3f8' }] },
+            { elementType: 'labels.text.fill', stylers: [{ color: '#334155' }] },
+            { elementType: 'labels.text.stroke', stylers: [{ color: '#f8fbff' }, { weight: 3 }] },
+            { featureType: 'administrative.locality', elementType: 'labels.text.fill', stylers: [{ color: '#0f172a' }] },
+            { featureType: 'administrative.neighborhood', elementType: 'labels.text.fill', stylers: [{ color: '#475569' }] },
+            { featureType: 'landscape.natural', elementType: 'geometry', stylers: [{ color: '#e5f2e8' }] },
+            { featureType: 'landscape.man_made', elementType: 'geometry', stylers: [{ color: '#e7eef6' }] },
+            { featureType: 'poi', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+            { featureType: 'poi.business', stylers: [{ visibility: 'off' }] },
+            { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#cfe8d4' }] },
+            { featureType: 'poi.park', elementType: 'labels.text.fill', stylers: [{ color: '#3f7d4e' }] },
+            { featureType: 'poi.medical', elementType: 'geometry', stylers: [{ color: '#fde8e8' }] },
+            { featureType: 'poi.school', elementType: 'geometry', stylers: [{ color: '#fef3c7' }] },
+            { featureType: 'poi.attraction', stylers: [{ visibility: 'simplified' }] },
             { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#ffffff' }] },
-            { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#dbe7f8' }] },
-            { featureType: 'road.arterial', elementType: 'geometry', stylers: [{ color: '#e8f1fb' }] },
+            { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#d3e2f4' }] },
+            { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#1e293b' }] },
+            { featureType: 'road.local', elementType: 'labels', stylers: [{ visibility: 'on' }] },
+            { featureType: 'road.arterial', elementType: 'geometry', stylers: [{ color: '#f8fbff' }] },
+            { featureType: 'road.arterial', elementType: 'geometry.stroke', stylers: [{ color: '#bfd3ee' }] },
             { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#dbeafe' }] },
-            { featureType: 'road', elementType: 'labels', stylers: [{ visibility: 'simplified' }] },
-            { featureType: 'administrative', elementType: 'labels.text.fill', stylers: [{ color: '#64748b' }] }
+            { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#93c5fd' }] },
+            { featureType: 'transit', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+            { featureType: 'transit.station', elementType: 'labels.text', stylers: [{ visibility: 'on' }] },
+            { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#c9dff3' }] },
+            { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#3b6ea5' }] }
         ];
     }
 
@@ -1762,5 +1958,5 @@
     }
     applyDeviceClass();
     if (window.addEventListener) window.addEventListener('resize', applyDeviceClass);
-    window.TrackTimeline = { render, mount, bind, when, esc, updates, tick: tickLines, focusPlace, watch: watchRider, acceptFix, haversine };
+    window.TrackTimeline = { render, mount, bind, when, esc, updates, tick: tickLines, focusPlace, watch: watchRider, acceptFix, haversine, roadPose, glideMs, steerHeading, buildCum, projectMeters, along, smoothPath, rasterStyles };
 })();

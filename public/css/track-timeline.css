@@ -142,12 +142,12 @@
 .tl-warn .call, .ship-fail .call { display: inline-block; margin: 8px 12px 0 0; color: #067d62; font-weight: 700; }
 .ship-fail .form-msg { min-height: 1.2em; }
 @media (max-width: 800px) { .ship-grid { grid-template-columns: 1fr; } }
-.tl-rider { position: absolute; width: 148px; height: 148px; margin: -74px 0 0 -74px; z-index: 6; pointer-events: none; }
+.tl-rider { position: absolute; width: 112px; height: 112px; margin: -56px 0 0 -56px; z-index: 6; pointer-events: none; }
 .tl-rider-pulse { display: none !important; animation: none !important; }
 .tl-rider.is-moving .tl-rider-pulse { display: none !important; animation: none !important; }
-.tl-rider-plate { position: absolute; left: 34px; top: 112px; width: 80px; height: 16px; border-radius: 50%; background: rgba(15, 23, 42, 0.16); }
+.tl-rider-plate { position: absolute; left: 22px; top: 86px; width: 68px; height: 14px; border-radius: 50%; background: rgba(15, 23, 42, 0.16); }
 .tl-rider-aim, .tl-rider-bob { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
-.tl-rider-img { width: 132px; height: 132px; object-fit: contain; transform: rotate(-90deg); display: block; }
+.tl-rider-img { width: 100px; height: 100px; object-fit: contain; transform: none; display: block; }
 .tl-rider-bob, .tl-rider.is-moving .tl-rider-bob { animation: none !important; }
 @keyframes tlRiderPulse { 0% { transform: scale(0.72); opacity: 0.75; } 100% { transform: scale(1.55); opacity: 0; } }
 @keyframes tlWheelSpin { to { transform: rotate(360deg); } }
@@ -352,7 +352,7 @@ body.hl-page .hl-below .ship-pipe { border: 0; background: #fff; border-radius: 
 .tl-rider{perspective:600px}
 .tl-rider-aim,.tl-rider-bob{transform-style:preserve-3d}
 .tl-rider-bob,.tl-rider.is-moving .tl-rider-bob{animation:none !important}
-.tl-rider-img{filter:drop-shadow(0 10px 8px rgba(15,23,42,.35)) drop-shadow(0 2px 2px rgba(15,23,42,.25));transform:rotate(-90deg)}
+.tl-rider-img{filter:drop-shadow(0 10px 8px rgba(15,23,42,.35)) drop-shadow(0 2px 2px rgba(15,23,42,.25));transform:none}
 .tl-rider-plate{background:radial-gradient(ellipse at center,rgba(15,23,42,.35),rgba(15,23,42,0) 70%)}
 .hl-bike-3d img,.hl-bike-3d.is-moving img{filter:drop-shadow(0 8px 6px rgba(15,23,42,.35));animation:none !important}
 .hl-bike-idle{display:inline-flex;align-items:center;justify-content:center;width:52px;height:52px;border-radius:14px;background:#f8fafc;border:1px solid #e2e8f0}
@@ -638,6 +638,12 @@ li.drawer-flash .ship-copy{animation:shipFlash 1.5s ease}
 .trk-qr-img{flex:none;background:#fff;border-radius:12px;padding:4px}
 .trk-qr-img svg{width:112px;height:112px;display:block}
 .hl-sheet .ship-otp{background:#fff}
+.tl-map-north{position:absolute;z-index:5;top:12px;right:12px;width:32px;height:32px;border-radius:50%;background:#fff;color:#1d4ed8;font-weight:800;display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(15,23,42,.16);pointer-events:none}
+.tl-map-legend{position:absolute;z-index:5;left:12px;bottom:36px;display:flex;gap:10px;align-items:center;background:rgba(255,255,255,.94);border-radius:999px;padding:6px 10px;font-size:12px;font-weight:700;color:#334155;box-shadow:0 8px 24px rgba(15,23,42,.12);pointer-events:none}
+.tl-map-legend i{display:inline-block;width:14px;height:4px;border-radius:99px;margin-right:4px;vertical-align:middle}
+.tl-map-legend .is-route{background:#1d4ed8}
+.tl-map-legend .is-done{background:#64748b}
+.tl-map-legend .is-pin{width:8px;height:8px;border-radius:50%;background:#1d4ed8}
 .tl-map-3d,.tl-map-traffic{position:absolute;z-index:5;bottom:28px;border:0;border-radius:999px;background:#fff;color:#0f172a;font-weight:700;padding:8px 12px;cursor:pointer;box-shadow:0 8px 24px rgba(15,23,42,.16)}
 .tl-map-3d{right:108px}
 .tl-map-traffic{right:168px}
@@ -663,6 +669,8 @@ body.hl-page,body.ts4{overflow-x:hidden}
     .trk-qr-img svg{width:148px;height:148px}
     .hl-legend{left:8px;right:8px;bottom:8px;flex-wrap:wrap;border-radius:16px;justify-content:flex-start}
     .tl-map-chip{max-width:calc(100% - 16px);left:8px;top:8px}
+    .tl-map-north{top:8px;right:8px;width:28px;height:28px}
+    .tl-map-legend{left:8px;bottom:46px;gap:6px;font-size:11px;padding:5px 8px}
     .tl-map-recenter{right:8px;bottom:8px;padding:7px 10px;font-size:.78rem}
     .tl-map-3d{right:92px;bottom:8px;padding:7px 10px;font-size:.78rem}
     .tl-map-traffic{right:148px;bottom:8px;padding:7px 10px;font-size:.78rem}
