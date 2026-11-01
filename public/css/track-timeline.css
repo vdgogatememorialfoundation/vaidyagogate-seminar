@@ -147,7 +147,7 @@
 .tl-rider.is-moving .tl-rider-pulse { display: none !important; animation: none !important; }
 .tl-rider-plate { position: absolute; left: 34px; top: 112px; width: 80px; height: 16px; border-radius: 50%; background: rgba(15, 23, 42, 0.16); }
 .tl-rider-aim, .tl-rider-bob { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
-.tl-rider-img { width: 132px; height: 132px; object-fit: contain; transform: rotate(-90deg); display: block; }
+.tl-rider-img { width: 132px; height: 132px; object-fit: contain; transform: none; display: block; }
 .tl-rider-bob, .tl-rider.is-moving .tl-rider-bob { animation: none !important; }
 @keyframes tlRiderPulse { 0% { transform: scale(0.72); opacity: 0.75; } 100% { transform: scale(1.55); opacity: 0; } }
 @keyframes tlWheelSpin { to { transform: rotate(360deg); } }
@@ -352,7 +352,7 @@ body.hl-page .hl-below .ship-pipe { border: 0; background: #fff; border-radius: 
 .tl-rider{perspective:600px}
 .tl-rider-aim,.tl-rider-bob{transform-style:preserve-3d}
 .tl-rider-bob,.tl-rider.is-moving .tl-rider-bob{animation:none !important}
-.tl-rider-img{filter:drop-shadow(0 10px 8px rgba(15,23,42,.35)) drop-shadow(0 2px 2px rgba(15,23,42,.25));transform:rotate(-90deg)}
+.tl-rider-img{filter:drop-shadow(0 10px 8px rgba(15,23,42,.35)) drop-shadow(0 2px 2px rgba(15,23,42,.25));transform:none}
 .tl-rider-plate{background:radial-gradient(ellipse at center,rgba(15,23,42,.35),rgba(15,23,42,0) 70%)}
 .hl-bike-3d img,.hl-bike-3d.is-moving img{filter:drop-shadow(0 8px 6px rgba(15,23,42,.35));animation:none !important}
 .hl-bike-idle{display:inline-flex;align-items:center;justify-content:center;width:52px;height:52px;border-radius:14px;background:#f8fafc;border:1px solid #e2e8f0}
