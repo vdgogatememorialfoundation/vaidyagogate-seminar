@@ -445,25 +445,29 @@
             el.__acceptedGps = fix.point;
             el.__riderTraveling = !!fix.traveling;
             if (fix.snap || fix.first) el.__poseMeters = null;
-            if (Number.isFinite(reported)) {
-                el.__stillHeading = ((reported % 360) + 360) % 360;
+            if (fix.traveling && prev) {
+                const now = Date.now();
+                const gap = el.__moveAt ? now - el.__moveAt : 2500;
+                el.__moveAt = now;
                 el.__headingFallback = false;
-                el.__glide = null;
-            } else if (fix.traveling && prev) {
-                const heading = bearingDeg(prev, fix.point) % 360;
-                const meters = haversine(prev, fix.point);
-                el.__stillHeading = heading;
-                el.__headingFallback = false;
+                const shownMeters = Number.isFinite(el.__shownMeters) ? el.__shownMeters : null;
                 el.__glide = {
+                    mode: 'road',
                     from: prev,
                     to: { lat: fix.point.lat, lng: fix.point.lng },
-                    heading: heading,
+                    shownMeters: shownMeters,
                     start: 0,
-                    ms: Math.min(700, Math.max(280, Math.round(meters * 6)))
+                    ms: glideMs(el, prev, fix.point, shownMeters, gap)
                 };
             } else if (fix.snap || fix.first) {
                 el.__glide = null;
-                el.__headingFallback = true;
+                el.__shownMeters = null;
+                el.__shownPoint = null;
+                el.__headingFallback = !Number.isFinite(reported);
+                if (Number.isFinite(reported)) el.__stillHeading = ((reported % 360) + 360) % 360;
+            } else if (Number.isFinite(reported) && !el.__path) {
+                el.__stillHeading = ((reported % 360) + 360) % 360;
+                el.__headingFallback = false;
             }
         }
         live.agent = Object.assign({}, el.__acceptedGps || live.agent);
@@ -507,7 +511,7 @@
                 .catch(() => {});
         };
         pull();
-        riderHttp = setInterval(pull, 8000);
+        riderHttp = setInterval(pull, 2500);
     }
 
     function scheduleRiderRetry() {
@@ -840,6 +844,51 @@
         return best;
     }
 
+    // Cover the road distance at a scooter pace, and keep gliding until the next fix arrives.
+    function glideMs(el, from, to, shownMeters, gap) {
+        const wait = Math.min(7000, Math.max(900, Number(gap) || 2500));
+        let road = haversine(from, to);
+        if (el && el.__path && el.__cum) {
+            const end = projectMeters(el.__path, el.__cum, to);
+            if (end.dist <= 140) {
+                const fromM = Number.isFinite(shownMeters) ? shownMeters : projectMeters(el.__path, el.__cum, from).meters;
+                road = Math.abs(end.meters - fromM);
+            }
+        }
+        const paced = (road / 14) * 1000;
+        return Math.min(7000, Math.max(wait, Math.min(7000, paced)));
+    }
+
+    function steerHeading(current, target, now, last) {
+        const aim = ((Number(target) % 360) + 360) % 360;
+        if (!Number.isFinite(Number(current))) return aim;
+        const dt = last ? Math.min(0.08, Math.max(0, (now - last) / 1000)) : 0;
+        if (dt <= 0) return aim;
+        let delta = ((aim - Number(current) + 540) % 360) - 180;
+        const step = 170 * dt;
+        if (Math.abs(delta) <= step) return aim;
+        return (Number(current) + Math.sign(delta) * step + 360) % 360;
+    }
+
+    // Move on the road polyline. A straight line between two GPS points cuts the corner.
+    function roadPose(path, cum, from, to, t, shownMeters) {
+        if (!path || path.length < 2 || !cum || !cum.length || !to) return null;
+        const endHit = projectMeters(path, cum, to);
+        if (endHit.dist > 140) return null;
+        const startHit = from ? projectMeters(path, cum, from) : { meters: 0, dist: 0 };
+        const fromM = Number.isFinite(shownMeters) ? shownMeters : startHit.meters;
+        let targetM = endHit.meters;
+        if (targetM < fromM && fromM - targetM < 45) targetM = fromM;
+        const clamped = Math.max(0, Math.min(1, t));
+        const meters = fromM + (targetM - fromM) * clamped;
+        const pose = along(path, cum, meters);
+        if (!pose) return null;
+        const ahead = along(path, cum, meters + 22);
+        if (ahead && haversine(pose, ahead) >= 6) pose.heading = bearingDeg(pose, ahead) % 360;
+        pose.meters = meters;
+        return pose;
+    }
+
     function tailPath(path, cum, meters) {
         const start = along(path, cum, meters);
         const out = [{ lat: start.lat, lng: start.lng }];
@@ -949,30 +998,55 @@
             if (!g || !el.__rider || !el.__agentLive) return;
             if (!g.start) g.start = now;
             const t = Math.min(1, (now - g.start) / g.ms);
-            const lat = g.from.lat + (g.to.lat - g.from.lat) * t;
-            const lng = g.from.lng + (g.to.lng - g.from.lng) * t;
-            el.__rider.setRider({ lat: lat, lng: lng }, g.heading, true, false);
-            syncBike(false);
-            if (t >= 1) {
-                el.__stillHeading = g.heading;
+            const pose = el.__path && el.__cum ? roadPose(el.__path, el.__cum, g.from, g.to, t, g.shownMeters) : null;
+            if (pose) {
+                const frameAt = el.__aimAt || 0;
+                const shownHeading = steerHeading(el.__aim, pose.heading, now, frameAt);
+                el.__aimAt = now;
+                el.__aim = shownHeading;
+                el.__shownMeters = pose.meters;
+                el.__shownPoint = { lat: pose.lat, lng: pose.lng };
+                el.__stillHeading = shownHeading;
                 el.__headingFallback = false;
-                el.__glide = null;
+                el.__rider.setRider(pose, shownHeading, true, false);
+                if (el.__remain) el.__remain.setPath(tailPath(el.__path, el.__cum, pose.meters));
+                if (el.__doneLine) el.__doneLine.setPath(headPath(el.__path, el.__cum, pose.meters));
+            } else if (el.__shownPoint) {
+                el.__rider.setRider(el.__shownPoint, el.__stillHeading || 0, true, false);
             }
+            syncBike(false);
+            if (t >= 1) el.__glide = null;
         };
         el.__raf = requestAnimationFrame(step);
     }
 
     function applyPath(el, path) {
         if (!path || path.length < 2) return;
+        const prevPoint = el.__shownPoint;
         el.__path = path;
         el.__cum = buildCum(path);
         const gps = el.__pendingGps;
-        const hit = gps ? projectMeters(path, el.__cum, gps) : { meters: 0, dist: 0 };
+        const hit = gps ? projectMeters(path, el.__cum, gps) : { meters: 0, dist: Infinity };
+        let shown = hit.meters;
+        if (prevPoint) {
+            const kept = projectMeters(path, el.__cum, prevPoint);
+            if (kept.dist <= 80 && hit.meters + 25 >= kept.meters) shown = kept.meters;
+        }
+        el.__shownMeters = shown;
         el.__gpsMeters = hit.meters;
-        el.__agentMeters = hit.meters;
-        el.__riderTraveling = false;
-        if (el.__remain) el.__remain.setPath(tailPath(path, el.__cum, el.__agentMeters || 0));
-        if (el.__doneLine) el.__doneLine.setPath(headPath(path, el.__cum, el.__agentMeters || 0));
+        el.__agentMeters = shown;
+        if (el.__glide) el.__glide.shownMeters = shown;
+        const pose = along(path, el.__cum, shown);
+        if (pose) {
+            el.__shownPoint = { lat: pose.lat, lng: pose.lng };
+            if (!el.__glide && el.__rider && el.__agentLive) {
+                el.__stillHeading = pose.heading;
+                el.__headingFallback = false;
+                holdRider(el, pose);
+            }
+        }
+        if (el.__remain) el.__remain.setPath(tailPath(path, el.__cum, shown));
+        if (el.__doneLine) el.__doneLine.setPath(headPath(path, el.__cum, shown));
     }
 
     function routePoints(result) {
@@ -1572,6 +1646,19 @@
             return;
         }
         if (el.__glide) return;
+        const road = el.__path && el.__cum ? projectMeters(el.__path, el.__cum, agent) : null;
+        if (road && road.dist <= 140) {
+            const pose = along(el.__path, el.__cum, road.meters);
+            el.__shownMeters = road.meters;
+            el.__shownPoint = { lat: pose.lat, lng: pose.lng };
+            el.__stillHeading = pose.heading;
+            el.__aim = pose.heading;
+            el.__aimAt = 0;
+            el.__headingFallback = false;
+            el.__rider.setRider(pose, pose.heading, true, false);
+            syncBike(false);
+            return;
+        }
         const device = Number(agent.heading);
         let heading;
         if (Number.isFinite(device)) {
@@ -1762,5 +1849,5 @@
     }
     applyDeviceClass();
     if (window.addEventListener) window.addEventListener('resize', applyDeviceClass);
-    window.TrackTimeline = { render, mount, bind, when, esc, updates, tick: tickLines, focusPlace, watch: watchRider, acceptFix, haversine };
+    window.TrackTimeline = { render, mount, bind, when, esc, updates, tick: tickLines, focusPlace, watch: watchRider, acceptFix, haversine, roadPose, glideMs, steerHeading, buildCum, projectMeters, along };
 })();

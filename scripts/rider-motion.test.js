@@ -205,6 +205,30 @@ async function main() {
     assert.strictEqual(teleport.snap, true);
     assert.strictEqual(teleport.traveling, false);
 
+    const north = { lat: 19.0, lng: 72.0 };
+    const corner = { lat: 19.01, lng: 72.0 };
+    const east = { lat: 19.01, lng: 72.01 };
+    const bend = [north, corner, east];
+    const cum = tl.buildCum(bend);
+    const total = cum[cum.length - 1];
+    const alongBend = tl.roadPose(bend, cum, north, east, (tl.haversine(north, corner) + 30) / total, 0);
+    assert.ok(alongBend, 'road pose follows the bend');
+    assert.ok(tl.haversine(alongBend, corner) < 80);
+    const diagonal = { lat: (north.lat + east.lat) / 2, lng: (north.lng + east.lng) / 2 };
+    assert.ok(tl.haversine(alongBend, diagonal) > 200);
+    const heading = ((alongBend.heading % 360) + 360) % 360;
+    assert.ok(Math.abs(heading - 90) < 20, 'nose follows the road, not the slant');
+    const beforeCorner = tl.roadPose(bend, cum, north, east, (tl.haversine(north, corner) - 12) / total, 0);
+    assert.ok(beforeCorner, 'pose exists before the corner');
+    const turning = ((beforeCorner.heading % 360) + 360) % 360;
+    assert.ok(turning > 15 && turning < 80, 'nose starts turning before the corner');
+    const held = tl.roadPose(bend, cum, east, corner, 1, cum[1] + 20);
+    assert.ok(held && held.meters >= cum[1] + 19, 'small backward jitter does not reverse the bike');
+    const turned = tl.steerHeading(0, 90, 200, 100);
+    assert.ok(turned > 10 && turned < 30, 'heading eases through the turn');
+    const paced = tl.glideMs(null, north, corner, null, 800);
+    assert.ok(paced > 800 && paced <= 7000, 'a short gap still glides along the road');
+
     const still = payloadFor({ agent: home, leg: 'to_drop' }, { agent: shiftLat(home, 5), leg: 'to_drop' });
     assert.strictEqual(still, null);
     const go = payloadFor({ agent: shiftLat(home, 40), leg: 'to_drop' }, { agent: home, leg: 'to_drop' });
