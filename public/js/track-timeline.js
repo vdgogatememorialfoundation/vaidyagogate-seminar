@@ -434,7 +434,10 @@
         };
         Rider.prototype.setRider = function (pos, heading, visible) {
             this.pos = pos;
-            this.heading = heading || 0;
+            const target = ((heading || 0) + 360) % 360;
+            const cur = this.heading == null ? target : this.heading;
+            let delta = ((target - cur + 540) % 360) - 180;
+            this.heading = Math.abs(delta) > 90 ? target : (cur + delta * 0.35 + 360) % 360;
             this.visible = !!visible && !!pos;
             this.draw();
         };
@@ -462,8 +465,10 @@
             if (!path || !cum || !el.__agentLive || !el.__rider) return;
             const gps = el.__gpsMeters || 0;
             let m = el.__agentMeters || 0;
-            if (m < gps) m += (gps - m) * Math.min(1, dt * 1.8);
-            else m = gps;
+            // Glide toward the latest fix over roughly one poll interval (Zomato-style), never jumping or running backwards.
+            const glide = el.__glideSec || 6;
+            if (m < gps) m = Math.min(gps, m + Math.max(gps - m, 0) * Math.min(1, dt / glide) + dt * 0.4);
+            else if (gps < m - 60) m = gps;
             el.__agentMeters = m;
             const at = along(path, cum, m);
             el.__rider.setRider(at, at.heading, true);

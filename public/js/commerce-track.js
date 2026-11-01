@@ -852,7 +852,7 @@
             esc(name || (href ? 'Delivery partner' : 'Finding a delivery partner')) + '</div></div>' +
             (name ? '<span class="hl-avatar" aria-hidden="true">' + esc(initial) + '</span>' : '') +
             call + '</div>';
-        const livePill = track.map && track.map.live ? '<span class="hl-live-pill">Live</span>' : '';
+        const livePill = '';
         const liveSrc = track.map && track.map.enabled ? shipment.live : null;
         const cv = liveSrc && liveSrc.courierView && !liveSrc.mapsApiKey ? liveSrc.courierView : null;
         const ownMap = !cv && !!(liveSrc && liveSrc.mapsApiKey);
@@ -1163,6 +1163,10 @@
                 return;
             }
             render(shipment);
+            const live = shipment.track && shipment.track.map && shipment.track.map.live;
+            const hyper = String(shipment.commerceMode || '') === 'hyperlocal' && String(shipment.commerceStage || '') !== 'delivered';
+            if (window.__hlPollTimer) clearTimeout(window.__hlPollTimer);
+            if (hyper && live) window.__hlPollTimer = setTimeout(poll, 6000);
         } catch (e) {
             sub.textContent = 'Could not refresh tracking.';
         }
