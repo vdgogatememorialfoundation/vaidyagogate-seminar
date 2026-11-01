@@ -228,6 +228,16 @@ async function main() {
     assert.ok(turned > 10 && turned < 30, 'heading eases through the turn');
     const paced = tl.glideMs(null, north, corner, null, 800);
     assert.ok(paced > 800 && paced <= 7000, 'a short gap still glides along the road');
+    const curved = tl.smoothPath(bend);
+    assert.ok(curved.length > bend.length, 'a sharp corner becomes a curve');
+    let nearest = Infinity;
+    curved.forEach((p) => { nearest = Math.min(nearest, tl.haversine(p, corner)); });
+    assert.ok(nearest > 4 && nearest < 16, 'the curve clears the corner instead of stacking on it');
+    const straight = tl.smoothPath([north, { lat: 19.005, lng: 72.0 }, corner]);
+    assert.strictEqual(straight.length, 3, 'a straight road is left alone');
+    const styles = tl.rasterStyles();
+    assert.ok(styles.some((rule) => rule.featureType === 'road.local'));
+    assert.ok(styles.some((rule) => rule.featureType === 'poi.park'));
 
     const still = payloadFor({ agent: home, leg: 'to_drop' }, { agent: shiftLat(home, 5), leg: 'to_drop' });
     assert.strictEqual(still, null);
