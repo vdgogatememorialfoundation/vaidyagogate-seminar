@@ -603,6 +603,8 @@ app.use(
             if (/\.html$/i.test(filePath)) {
                 res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
                 res.setHeader('Pragma', 'no-cache');
+            } else if (/\/ads\.txt$/i.test(filePath)) {
+                res.setHeader('Cache-Control', 'public, max-age=300');
             }
         }
     })
