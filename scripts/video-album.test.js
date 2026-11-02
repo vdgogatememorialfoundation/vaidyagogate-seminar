@@ -233,6 +233,9 @@ function access(db, userId, video, settings) {
     assert.ok(capped.includes('1 object'));
     assert.ok(!capped.includes('no fixed disk size'));
     assert.ok(!capped.includes('seminar videos'));
+    const emptySeminar = r2.describeCloudSpace({ configured: true, ready: true, usedBytes: 1024 ** 3, objectCount: 4, quotaBytes: 0, freeBytes: null, seminarBytes: 0 });
+    assert.ok(emptySeminar.includes('seminar videos 0 B'));
+    assert.ok(!emptySeminar.includes('other files'));
     assert.strictEqual(r2.describeCloudSpace({ ready: false, error: 'Bucket not reachable' }), 'Cloudflare: Bucket not reachable');
     assert.strictEqual(r2.readQuotaBytes(), 0);
     assert.ok(doctorJs.includes('imasdk.googleapis.com/js/sdkloader/ima3.js'));
