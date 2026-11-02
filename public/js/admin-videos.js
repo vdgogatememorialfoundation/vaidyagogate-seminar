@@ -265,6 +265,7 @@
                 : '<span class="bad"><i class="fas fa-exclamation-triangle"></i> ffmpeg is not installed on the server — uploads will wait until it is (apt install ffmpeg)</span>') +
             '<span>Storage: <code>' + esc(t.storageDir || '') + '</code></span>' +
             (disk ? '<span>' + esc(disk) + '</span>' : '') +
+            cloudSpaceLine() +
             '<span>Upload chunk: ' + fmtBytes(t.chunkBytes) + '</span>' +
             cloudBadge() +
             (proc.running ? '<span class="good">Processing video #' + proc.running + (proc.queued && proc.queued.length ? ' (+' + proc.queued.length + ' queued)' : '') + '</span>' : '');
@@ -282,11 +283,12 @@
         if ($('vls-ads-tag') && document.activeElement !== $('vls-ads-tag')) $('vls-ads-tag').value = st.imaAdTag || '';
         const c = state.cloud || {};
         if ($('vls-cloud')) {
-            $('vls-cloud').innerHTML = c.ready
+            const space = c.usage && c.usage.label ? '<div>' + esc(c.usage.label) + '</div>' : '';
+            $('vls-cloud').innerHTML = (c.ready
                 ? '<span class="good">Cloud bucket reachable' + (c.bucket ? ' (' + esc(c.bucket) + ')' : '') + '</span>'
                 : c.configured
                   ? '<span class="bad">Cloud bucket not reachable: ' + esc(c.error || '') + '</span>'
-                  : '<span>Cloud storage is not configured on this server. Set the R2 variables in the pm2 environment to enable it.</span>';
+                  : '<span>Cloud storage is not configured on this server. Set the R2 variables in the pm2 environment to enable it.</span>') + space;
         }
         const sel = $('vlc-seminar');
         if (sel && sel.options.length <= 1) {
@@ -297,6 +299,11 @@
                 sel.appendChild(o);
             });
         }
+    }
+
+    function cloudSpaceLine() {
+        const label = state.cloud && state.cloud.usage && state.cloud.usage.label;
+        return label ? '<span><i class="fas fa-cloud"></i> ' + esc(label) + '</span>' : '';
     }
 
     function cloudBadge() {
