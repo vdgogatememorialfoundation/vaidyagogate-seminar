@@ -74,6 +74,14 @@ assert.strictEqual(libraryJs.includes('? IS NOT NULL AND video_id'), false);
     assert.strictEqual(vl.browserCopyOk({ video: 'hevc', audio: 'aac', pixFmt: 'yuv420p' }), false);
     assert.strictEqual(vl.browserCopyOk({ video: 'h264', audio: 'aac', pixFmt: 'yuv420p10le' }), false);
     assert.strictEqual(vl.browserCopyOk({ video: 'h264', audio: 'ac3', pixFmt: 'yuv420p' }), false);
+    assert.ok(libraryJs.includes("tasks.push(['watermark_enabled'"));
+    assert.ok(libraryJs.includes('watermarkEnabled: settings.watermarkEnabled !== false'));
+    assert.ok(libraryJs.includes('Re-encoding so this recording plays'));
+    const adminVideos = fs.readFileSync(path.join(__dirname, '../public/js/admin-videos.js'), 'utf8');
+    assert.ok(adminVideos.includes('id="vls-watermark"'));
+    assert.ok(adminVideos.includes('watermarkEnabled:'));
+    assert.ok(doctorJs.includes('watermarkEnabled !== false'));
+    assert.ok(doctorJs.includes('being converted so it can play'));
 
 const allowed = modules.resolveDoctorAllowedTabs('regular', { 'tab-videos': true, 'tab-dashboard': true }, {}, null);
 assert.ok(allowed.has('tab-video-subscription'));

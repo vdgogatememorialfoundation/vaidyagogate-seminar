@@ -699,12 +699,25 @@
             }
             return;
         }
+        const showWm = session.watermarkEnabled !== false;
+        ['vl-wm', 'vl-wm-fixed', 'vl-wm-corner'].forEach((id) => {
+            const el = $(id);
+            if (!el) return;
+            el.style.display = showWm ? '' : 'none';
+            if (!showWm) el.textContent = '';
+        });
         const fixedWm = $('vl-wm-fixed');
-        if (fixedWm) fixedWm.textContent = [(session.watermark && session.watermark.license) || '', (session.watermark && session.watermark.name) || ''].filter(Boolean).join('  ');
+        if (showWm && fixedWm) fixedWm.textContent = [(session.watermark && session.watermark.license) || '', (session.watermark && session.watermark.name) || ''].filter(Boolean).join('  ');
         $('vl-player-title').textContent = session.video ? session.video.title : 'Seminar video';
-        play = { token: session.token, videoId, hls: null, heartbeat: null, wmTimer: null, watermark: session.watermark || {}, ended: false };
-        moveWatermark();
-        play.wmTimer = setInterval(moveWatermark, 4000);
+        if (session.preparing) {
+            msg.textContent = 'This recording is being converted so it can play in the browser. Please wait, then press Watch again.';
+            return;
+        }
+        play = { token: session.token, videoId, hls: null, heartbeat: null, wmTimer: null, watermark: showWm ? session.watermark || {} : {}, ended: false };
+        if (showWm) {
+            moveWatermark();
+            play.wmTimer = setInterval(moveWatermark, 4000);
+        }
         video.setAttribute('controlsList', 'nodownload noremoteplayback noplaybackrate');
         video.controlsList && video.controlsList.add && video.controlsList.add('nodownload');
         video.disablePictureInPicture = true;
