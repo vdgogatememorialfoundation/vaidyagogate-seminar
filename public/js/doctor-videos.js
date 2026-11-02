@@ -757,10 +757,21 @@
                 }
             });
             play.hls = hls;
+            let playFailures = 0;
             hls.on(Hls.Events.ERROR, (_evt, err) => {
                 const code = err && err.response && err.response.code;
                 if (code === 403 || code === 410) return endedElsewhere();
-                if (err && err.fatal) {
+                if (!err) return;
+                const stuck = err.details === 'fragParsingError' || err.details === 'bufferAppendError' || err.details === 'bufferAddCodecError' || err.details === 'bufferIncompatibleCodecsError' || err.details === 'manifestIncompatibleCodecsError';
+                if (stuck || err.fatal) playFailures += 1;
+                if (playFailures >= 4) {
+                    msg.textContent = 'Playback could not start. Refresh the page and press Watch again.';
+                    try {
+                        hls.stopLoad();
+                    } catch (_) {}
+                    return;
+                }
+                if (err.fatal) {
                     if (err.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
                     else if (err.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
                     else msg.textContent = 'Playback error. Press Watch again.';

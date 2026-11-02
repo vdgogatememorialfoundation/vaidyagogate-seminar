@@ -67,6 +67,13 @@ assert.strictEqual(libraryJs.includes('? IS NOT NULL AND video_id'), false);
     assert.ok(!copied.includes('libx264'));
     assert.ok(doctorJs.includes('startFragPrefetch'));
     assert.ok(doctorJs.includes('maxBufferLength: 8'));
+    assert.ok(doctorJs.includes('playFailures'));
+    assert.strictEqual(libraryJs.includes('h264|hevc'), false);
+    assert.strictEqual(vl.browserCopyOk({ video: 'h264', audio: 'aac', pixFmt: 'yuv420p' }), true);
+    assert.strictEqual(vl.browserCopyOk({ video: 'h264', audio: '', pixFmt: '' }), true);
+    assert.strictEqual(vl.browserCopyOk({ video: 'hevc', audio: 'aac', pixFmt: 'yuv420p' }), false);
+    assert.strictEqual(vl.browserCopyOk({ video: 'h264', audio: 'aac', pixFmt: 'yuv420p10le' }), false);
+    assert.strictEqual(vl.browserCopyOk({ video: 'h264', audio: 'ac3', pixFmt: 'yuv420p' }), false);
 
 const allowed = modules.resolveDoctorAllowedTabs('regular', { 'tab-videos': true, 'tab-dashboard': true }, {}, null);
 assert.ok(allowed.has('tab-video-subscription'));
