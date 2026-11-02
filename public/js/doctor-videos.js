@@ -107,6 +107,277 @@
         });
     }
 
+    const IMA_SRC = 'https://imasdk.googleapis.com/js/sdkloader/ima3.js';
+    let imaReady = null;
+    let adsenseReady = null;
+    let adDisplay = null;
+
+    function seminarPane() {
+        return $('tab-videos');
+    }
+
+    function insideSeminarVideos(el) {
+        const pane = seminarPane();
+        return !!(pane && el && pane.contains(el));
+    }
+
+    function adsConfig() {
+        const ads = data && data.ads;
+        if (!ads || ads.enabled !== true) return null;
+        if (!seminarPane()) return null;
+        return ads;
+    }
+
+    function loadExternal(src, marker) {
+        return new Promise((resolve, reject) => {
+            const existing = document.querySelector('script[' + marker + ']');
+            if (existing && existing.getAttribute('data-vl-loaded') === '1') return resolve();
+            if (existing) {
+                existing.addEventListener('load', () => resolve());
+                existing.addEventListener('error', () => reject(new Error('ad script failed')));
+                return;
+            }
+            const s = document.createElement('script');
+            s.src = src;
+            s.async = true;
+            s.crossOrigin = 'anonymous';
+            s.setAttribute(marker, '1');
+            s.onload = () => {
+                s.setAttribute('data-vl-loaded', '1');
+                resolve();
+            };
+            s.onerror = () => reject(new Error('ad script failed'));
+            document.head.appendChild(s);
+        });
+    }
+
+    function ensureIma() {
+        if (!imaReady) imaReady = loadExternal(IMA_SRC, 'data-vl-ima');
+        return imaReady;
+    }
+
+    function ensureAdsense(client) {
+        const src = 'https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=' + encodeURIComponent(client);
+        if (!adsenseReady) {
+            adsenseReady = loadExternal(src, 'data-vl-adsense').then(() => {
+                const s = document.querySelector('script[data-vl-adsense]');
+                if (s) s.crossOrigin = 'anonymous';
+            });
+        }
+        return adsenseReady;
+    }
+
+    function adHost(id, before) {
+        const pane = seminarPane();
+        if (!pane || !before || !pane.contains(before)) return null;
+        let host = $(id);
+        if (host && !pane.contains(host)) return null;
+        if (!host) {
+            host = document.createElement('div');
+            host.id = id;
+            host.className = 'vl-ad';
+            before.parentNode.insertBefore(host, before);
+        }
+        return insideSeminarVideos(host) ? host : null;
+    }
+
+    function fillAdsense(host) {
+        if (!insideSeminarVideos(host)) return;
+        const ads = adsConfig();
+        if (!ads || !ads.adsenseClient || !ads.adsenseSlot) {
+            host.innerHTML = '';
+            host.removeAttribute('data-filled');
+            return;
+        }
+        const key = ads.adsenseClient + ':' + ads.adsenseSlot;
+        if (host.getAttribute('data-filled') === key) return;
+        host.setAttribute('data-filled', key);
+        host.innerHTML =
+            '<ins class="adsbygoogle vl-ad-unit" style="display:block" data-ad-client="' +
+            esc(ads.adsenseClient) +
+            '" data-ad-slot="' +
+            esc(ads.adsenseSlot) +
+            '" data-ad-format="auto" data-full-width-responsive="true"></ins>';
+        ensureAdsense(ads.adsenseClient)
+            .then(() => {
+                const ins = host.querySelector('ins');
+                if (!ins || ins.getAttribute('data-vl-pushed') === '1') return;
+                ins.setAttribute('data-vl-pushed', '1');
+                try {
+                    (window.adsbygoogle = window.adsbygoogle || []).push({});
+                } catch (_) {}
+            })
+            .catch(() => {});
+    }
+
+    function placeListingAds() {
+        const years = $('vl-years');
+        const host = adHost('vl-ad-list', years);
+        if (host) fillAdsense(host);
+        const ads = adsConfig();
+        if (ads && ads.imaAdTag) ensureIma().catch(() => {});
+    }
+
+    function placePlayerAds() {
+        const stage = document.querySelector('#tab-videos .vl-stage');
+        const foot = document.querySelector('#tab-videos .vl-player-foot');
+        const above = stage ? adHost('vl-ad-above', stage) : null;
+        const below = foot ? adHost('vl-ad-below', foot) : null;
+        if (above) fillAdsense(above);
+        if (below) fillAdsense(below);
+        if (stage && ! $('vl-ad-container')) {
+            const box = document.createElement('div');
+            box.id = 'vl-ad-container';
+            stage.appendChild(box);
+        }
+    }
+
+    function setAdMode(on) {
+        const box = $('vl-ad-container');
+        if (box) box.classList.toggle('is-active', !!on);
+        ['vl-guard', 'vl-wm', 'vl-wm-fixed', 'vl-wm-corner'].forEach((id) => {
+            const el = $(id);
+            if (el) el.classList.toggle('vl-ad-hidden', !!on);
+        });
+    }
+
+    function destroyVideoAds(video) {
+        if (!play || !play.ads) return;
+        if (play.ads.wait) clearTimeout(play.ads.wait);
+        if (video && play.ads.onEnded) video.removeEventListener('ended', play.ads.onEnded);
+        try {
+            if (play.ads.manager) play.ads.manager.destroy();
+        } catch (_) {}
+        try {
+            if (play.ads.loader && play.ads.loader.destroy) play.ads.loader.destroy();
+        } catch (_) {}
+        play.ads = null;
+        setAdMode(false);
+    }
+
+    function primeImaGesture() {
+        const ads = adsConfig();
+        if (!ads || !ads.imaAdTag || !window.google || !google.ima) return;
+        const container = $('vl-ad-container');
+        const video = $('vl-video');
+        if (!container || !video || !insideSeminarVideos(container)) return;
+        if (!adDisplay) {
+            adDisplay = new google.ima.AdDisplayContainer(container, video);
+            try {
+                adDisplay.initialize();
+            } catch (_) {}
+        }
+    }
+
+    function requestVideoAds(video, beginContent) {
+        const ads = adsConfig();
+        if (!ads || !ads.imaAdTag) {
+            beginContent();
+            return Promise.resolve();
+        }
+        return ensureIma()
+            .then(() => {
+                if (!window.google || !google.ima || !play) {
+                    beginContent();
+                    return;
+                }
+                placePlayerAds();
+                const container = $('vl-ad-container');
+                if (!container || !insideSeminarVideos(container)) {
+                    beginContent();
+                    return;
+                }
+                google.ima.settings.setDisableCustomPlaybackForIOS10Plus(true);
+                if (!adDisplay) {
+                    adDisplay = new google.ima.AdDisplayContainer(container, video);
+                    try {
+                        adDisplay.initialize();
+                    } catch (_) {}
+                }
+                const loader = new google.ima.AdsLoader(adDisplay);
+                let begun = false;
+                const startContent = () => {
+                    if (!play) return;
+                    setAdMode(false);
+                    if (!begun) {
+                        begun = true;
+                        beginContent();
+                        return;
+                    }
+                    video.play().catch(() => {});
+                };
+                const wait = setTimeout(startContent, 12000);
+                play.ads = { loader, manager: null, onEnded: null, wait };
+                const release = () => clearTimeout(wait);
+                const onEnded = () => {
+                    try {
+                        loader.contentComplete();
+                    } catch (_) {}
+                };
+                play.ads.onEnded = onEnded;
+                video.addEventListener('ended', onEnded);
+                loader.addEventListener(
+                    google.ima.AdsManagerLoadedEvent.Type.ADS_MANAGER_LOADED,
+                    (ev) => {
+                        if (!play) return;
+                        const rendering = new google.ima.AdsRenderingSettings();
+                        rendering.restoreCustomPlaybackStateOnAdBreakComplete = true;
+                        const manager = ev.getAdsManager(video, rendering);
+                        play.ads.manager = manager;
+                        const stage = container.parentElement;
+                        const width = (stage && stage.clientWidth) || 640;
+                        const height = (stage && stage.clientHeight) || 360;
+                        manager.addEventListener(google.ima.AdErrorEvent.Type.AD_ERROR, () => {
+                            release();
+                            startContent();
+                        });
+                        manager.addEventListener(google.ima.AdEvent.Type.CONTENT_PAUSE_REQUESTED, () => {
+                            release();
+                            setAdMode(true);
+                            try {
+                                video.pause();
+                            } catch (_) {}
+                        });
+                        manager.addEventListener(google.ima.AdEvent.Type.CONTENT_RESUME_REQUESTED, () => {
+                            release();
+                            startContent();
+                        });
+                        manager.addEventListener(google.ima.AdEvent.Type.ALL_ADS_COMPLETED, () => setAdMode(false));
+                        try {
+                            manager.init(width, height, google.ima.ViewMode.NORMAL);
+                            manager.start();
+                        } catch (_) {
+                            release();
+                            startContent();
+                        }
+                    },
+                    false
+                );
+                loader.addEventListener(
+                    google.ima.AdErrorEvent.Type.AD_ERROR,
+                    () => {
+                        release();
+                        startContent();
+                    },
+                    false
+                );
+                const req = new google.ima.AdsRequest();
+                req.adTagUrl = ads.imaAdTag;
+                const stage = container.parentElement;
+                req.linearAdSlotWidth = (stage && stage.clientWidth) || 640;
+                req.linearAdSlotHeight = (stage && stage.clientHeight) || 360;
+                req.nonLinearAdSlotWidth = req.linearAdSlotWidth;
+                req.nonLinearAdSlotHeight = 150;
+                try {
+                    loader.requestAds(req);
+                } catch (_) {
+                    release();
+                    startContent();
+                }
+            })
+            .catch(() => beginContent());
+    }
+
     async function api(url, opts) {
         const res = await fetch(url, Object.assign({ headers: { 'Content-Type': 'application/json' } }, opts || {}));
         let body = null;
@@ -159,6 +430,7 @@
                       ? 'Seminar videos is turned on for volunteer accounts. Recordings appear here after the seminar office publishes them.'
                       : 'Seminar recordings appear here once the seminar office publishes them.') +
                   '</p></div>';
+            placeListingAds();
             return;
         }
         const pending = data.pendingPurchases || [];
@@ -207,6 +479,7 @@
             })
             .join('');
         bindPurchase(host);
+        placeListingAds();
     }
 
     function bindPurchase(host) {
@@ -403,6 +676,8 @@
         const uid = userId();
         if (!uid) return;
         stop(true);
+        placePlayerAds();
+        primeImaGesture();
         const wrap = $('vl-player-wrap');
         const video = $('vl-video');
         const msg = $('vl-player-msg');
@@ -437,7 +712,9 @@
         video.setAttribute('controlslist', 'nodownload noremoteplayback noplaybackrate');
         video.oncontextmenu = () => false;
         const start = Number(session.positionSec) || 0;
-        const onReady = () => {
+        const beginContent = () => {
+            if (!play || play.contentBegun) return;
+            play.contentBegun = true;
             if (start > 5) {
                 try {
                     video.currentTime = start;
@@ -445,7 +722,9 @@
             }
             video.play().catch(() => {});
             msg.textContent = '';
+            if (!play.heartbeat) play.heartbeat = setInterval(() => heartbeat(video), 15000);
         };
+        const onReady = () => requestVideoAds(video, beginContent);
         if (video.canPlayType('application/vnd.apple.mpegurl') && !window.MediaSource) {
             video.src = session.playlistUrl;
             video.addEventListener('loadedmetadata', onReady, { once: true });
@@ -486,7 +765,6 @@
             hls.loadSource(session.playlistUrl);
             hls.attachMedia(video);
         }
-        play.heartbeat = setInterval(() => heartbeat(video), 15000);
         video.addEventListener('pause', () => heartbeat(video));
         video.addEventListener('ended', () => heartbeat(video));
     }
@@ -522,6 +800,7 @@
         const wrap = $('vl-player-wrap');
         const video = $('vl-video');
         if (play) {
+            destroyVideoAds(video);
             clearInterval(play.heartbeat);
             clearInterval(play.wmTimer);
             if (play.hls) {

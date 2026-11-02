@@ -166,6 +166,12 @@
             '<div><label>Every signed-in doctor</label><select id="vls-everyone"><option value="0">Off — only the groups above, or a payment</option><option value="1">Watch free</option></select></div>' +
             '<div><label>Devices allowed per account</label><input type="number" id="vls-devices" min="1" max="10"></div></div>' +
             '<div class="vl-form-row" style="margin-top:8px;"><div><label>Where finished videos are stored</label><select id="vls-storage"><option value="local">Server disk</option><option value="r2">Cloud bucket (Cloudflare R2)</option></select></div></div>' +
+            '<h4 style="margin:16px 0 6px;">Seminar video ads</h4>' +
+            '<p class="vl-note">These ads appear only in Seminar videos: one banner on the recording list, banners above and below the player, and a Google video ad before, during, or after the recording. Free and paid event videos both use them. The shop, tracking, certificates, and the rest of the site do not. Leave this off until AdSense has approved the site and you have an IMA ad tag.</p>' +
+            '<div class="vl-form-row vl-form-row-3"><div><label>Ads in Seminar videos</label><select id="vls-ads"><option value="0">Off</option><option value="1">On</option></select></div>' +
+            '<div><label>AdSense publisher ID</label><input type="text" id="vls-ads-client" placeholder="ca-pub-1234567890123" maxlength="40" autocomplete="off"></div>' +
+            '<div><label>AdSense display slot</label><input type="text" id="vls-ads-slot" placeholder="1234567890" maxlength="20" autocomplete="off"></div></div>' +
+            '<label>Google IMA ad tag (https)</label><input type="url" id="vls-ads-tag" placeholder="https://pubads.g.doubleclick.net/gampad/ads?..." maxlength="2000" autocomplete="off">' +
             '<div class="vl-upload-row" style="margin-top:10px;"><button type="button" class="vl-btn" id="vls-save">Save settings</button><span class="vl-note" id="vls-cloud"></span></div>' +
             '<p class="vl-form-msg" id="vls-msg"></p>' +
             '<p class="vl-note">Each doctor gets a permanent 12-digit video license. It is printed on the picture together with their name and portal ID, and it moves while the video plays. The file is encrypted. The player does not offer download, picture-in-picture, or remote playback, and the stream is released only to that doctor’s registered device. The original upload is not available as a file. A doctor may play videos on the number of devices set here. Turn off in Who can watch stops a doctor even when they are a volunteer or have paid. Choosing the cloud bucket moves finished videos off the server disk. Playback still goes through this license.</p></div>' +
@@ -270,6 +276,10 @@
         if ($('vls-other')) $('vls-other').value = st.freePaidOther === true ? '1' : '0';
         if ($('vls-everyone')) $('vls-everyone').value = st.freeForEveryone === true ? '1' : '0';
         if ($('vls-storage')) $('vls-storage').value = st.storageBackend === 'r2' ? 'r2' : 'local';
+        if ($('vls-ads')) $('vls-ads').value = st.adsEnabled === true ? '1' : '0';
+        if ($('vls-ads-client') && document.activeElement !== $('vls-ads-client')) $('vls-ads-client').value = st.adsenseClient || '';
+        if ($('vls-ads-slot') && document.activeElement !== $('vls-ads-slot')) $('vls-ads-slot').value = st.adsenseSlot || '';
+        if ($('vls-ads-tag') && document.activeElement !== $('vls-ads-tag')) $('vls-ads-tag').value = st.imaAdTag || '';
         const c = state.cloud || {};
         if ($('vls-cloud')) {
             $('vls-cloud').innerHTML = c.ready
@@ -307,7 +317,11 @@
                     freePaidAbsent: $('vls-absent').value === '1',
                     freePaidOther: $('vls-other').value === '1',
                     freeForEveryone: $('vls-everyone').value === '1',
-                    storageBackend: $('vls-storage').value
+                    storageBackend: $('vls-storage').value,
+                    adsEnabled: $('vls-ads') && $('vls-ads').value === '1',
+                    adsenseClient: $('vls-ads-client') ? $('vls-ads-client').value : '',
+                    adsenseSlot: $('vls-ads-slot') ? $('vls-ads-slot').value : '',
+                    imaAdTag: $('vls-ads-tag') ? $('vls-ads-tag').value : ''
                 }
             });
             setMsg('vls-msg', 'Saved.');
