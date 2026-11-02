@@ -43,10 +43,10 @@
     function accessLabel(access) {
         if (!access || !access.allowed) return '';
         if (access.reason === 'public') return 'Free';
+        if (access.reason === 'not_registered') return 'Included — not registered for this event';
         if (access.reason === 'volunteer') return 'Free for volunteers';
-        if (access.reason === 'attended_certified') return 'Included — registered, attended, certificate issued';
-        if (access.reason === 'paid_absent') return 'Included — registered and paid';
-        if (access.reason === 'paid_other') return 'Included — checked in';
+        if (access.reason === 'paid_checked_in' || access.reason === 'attended_certified' || access.reason === 'paid_other') return 'Included — registered for this event, paid, and checked in';
+        if (access.reason === 'paid_absent') return 'Included — registered and paid, did not attend';
         if (access.reason === 'registered_scanned') return 'Included — registered, paid, ticket scanned';
         if (access.reason === 'registered_paid' || access.reason === 'registered') return 'Included — registered and paid';
         if (access.reason === 'purchase') return 'Purchased';
@@ -67,8 +67,8 @@
         if (access && access.reason === 'blocked') return 'The seminar office has turned this video off for your account.';
         if (!c.registered) return 'You are not registered for this seminar.';
         if (!c.paid) return 'Your registration fee is not paid yet, so this video is not included.';
-        if (c.paidOther) return 'You are checked in. This recording opens for that group when the office enables it, or you can unlock it.';
-        if (c.paidAbsent) return 'Paid registrations who did not attend are not included until the office turns that group on.';
+        if (c.paidCheckedIn || c.attendedCertified || c.paidOther) return 'You are registered for this seminar, paid, and checked in. This recording stays closed until the office includes that group, or you can unlock it.';
+        if (c.paidAbsent) return 'You registered and paid but did not attend. This recording stays closed until the office includes that group, or you can unlock it.';
         return 'Unlock this recording to watch it.';
     }
 
