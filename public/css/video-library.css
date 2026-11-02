@@ -41,7 +41,11 @@
 .vl-wm small { display: block; font-weight: 500; opacity: 0.85; }
 .vl-wm b { display: block; font-size: 1.05rem; letter-spacing: 0.12em; font-variant-numeric: tabular-nums; opacity: 0.9; }
 /* A second, nearly transparent license mark that never leaves the centre of the picture. */
-.vl-wm-fixed { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(-18deg); pointer-events: none; user-select: none; color: rgba(255, 255, 255, 0.16); font-size: clamp(1.2rem, 4.2vw, 2.6rem); font-weight: 800; letter-spacing: 0.22em; font-variant-numeric: tabular-nums; white-space: nowrap; z-index: 2; mix-blend-mode: screen; }
+.vl-wm-fixed { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(-18deg); pointer-events: none; user-select: none; color: rgba(255, 255, 255, 0.22); font-size: clamp(1.05rem, 3.4vw, 2.1rem); font-weight: 800; letter-spacing: 0.14em; font-variant-numeric: tabular-nums; white-space: nowrap; z-index: 2; mix-blend-mode: screen; text-shadow: 0 0 6px rgba(0, 0, 0, 0.45); }
+.vl-wm-corner { position: absolute; right: 8%; bottom: 14%; pointer-events: none; user-select: none; color: rgba(255, 255, 255, 0.72); font-size: 0.68rem; font-weight: 700; letter-spacing: 0.03em; text-shadow: 0 0 4px rgba(0, 0, 0, 0.85); z-index: 3; max-width: 70%; text-align: right; }
+.vl-stats { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0 12px; }
+.vl-stat { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 8px 12px; min-width: 120px; }
+.vl-stat b { display: block; font-size: 1.15rem; color: #0f172a; }
 .vl-license { display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center; margin: 0 0 14px; padding: 10px 14px; border: 1px solid #dbeafe; background: #eff6ff; border-radius: 10px; }
 .vl-license-lbl { display: block; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: #1d4ed8; }
 .vl-license b { font-size: 1.05rem; letter-spacing: 0.1em; color: #0f172a; font-variant-numeric: tabular-nums; }

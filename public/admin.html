@@ -174,6 +174,9 @@
                 <a class="menu-item" data-admin-module="tab-refund-tracking" onclick="switchTab('tab-refund-tracking'); initAdminRefundTrackingTab();"><i class="fas fa-undo-alt"></i> Refund tracking</a>
                 <a class="menu-item" data-admin-module="tab-book-sales" onclick="switchTab('tab-book-sales'); loadBookSalesAdmin();"><i class="fas fa-book"></i> Book sales</a>
                 <a class="menu-item" data-admin-module="tab-video-library" onclick="switchTab('tab-video-library'); loadVideoLibraryAdmin();"><i class="fas fa-video"></i> Seminar videos</a>
+                <a class="menu-item" data-admin-module="tab-video-library" style="padding-left:28px;" onclick="switchTab('tab-video-library'); loadVideoLibraryAdmin('settings');"><i class="fas fa-shield-alt"></i> Video settings</a>
+                <a class="menu-item" data-admin-module="tab-video-library" style="padding-left:28px;" onclick="switchTab('tab-video-library'); loadVideoLibraryAdmin('analytics');"><i class="fas fa-chart-bar"></i> Watch analytics</a>
+                <a class="menu-item" data-admin-module="tab-video-library" style="padding-left:28px;" onclick="switchTab('tab-video-library'); loadVideoLibraryAdmin('price');"><i class="fas fa-tag"></i> Personal price</a>
                 <a class="menu-item" data-admin-module="tab-transactions" onclick="switchTab('tab-transactions'); if (window.loadAdminTransactions) loadAdminTransactions();"><i class="fas fa-receipt"></i> Transactions</a>
                 <a class="menu-item" data-admin-module="tab-certificates" onclick="switchTab('tab-certificates'); initAdminCertificatesTab();"><i class="fas fa-award"></i> Certificate Management</a>
                 <a class="menu-item" data-admin-module="tab-volunteers" onclick="switchTab('tab-volunteers'); initAdminVolunteersTab();"><i class="fas fa-hands-helping"></i> Volunteers</a>
@@ -1333,7 +1336,7 @@
 
             <div id="tab-video-library" class="tab-pane hidden">
                 <h2 class="section-title">Seminar videos</h2>
-                <p class="vl-intro">Upload an album (one price unlocks every part) or a single video. Files are encrypted into a protected stream on this server; doctors registered and paid for that seminar watch free, others pay the album or single-video price.</p>
+                <p class="vl-intro">Upload an album for one seminar, lecture by lecture or as one video. A fixed album price unlocks every part, including lectures added later. A subscription price unlocks the lectures available at the time of payment. A single video, such as an online seminar, has its own price, and that price can be changed. The office can also set a different price for one doctor. Files are encrypted. Download is not offered. Volunteers, doctors who attended that seminar and received a certificate, and doctors who paid for that seminar but did not attend watch free while those switches are on. A registration for a different seminar does not include these recordings. Opening the library to every signed-in doctor is a separate switch, and it stays off until the office turns it on.</p>
                 <div id="vl-admin-root"><p class="vl-note">Loading…</p></div>
             </div>
 
@@ -3524,13 +3527,13 @@
     <script src="/js/user-roles.js?v=20260522f"></script>
     <script src="/js/admin-list-search.js?v=20260522a"></script>
     <link rel="stylesheet" href="/css/book-track.css?v=20260529stg">
-    <link rel="stylesheet" href="/css/video-library.css?v=20261029acct1">
+    <link rel="stylesheet" href="/css/video-library.css?v=20261102tbd1">
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
     <script src="/js/track-timeline.js?v=20261003tl"></script>
     <script src="/js/admin-commerce.js?v=20261003tl"></script>
     <script src="/js/admin.js?v=20261029acct1"></script>
-    <script src="/js/admin-videos.js?v=20261029acct2"></script>
+    <script src="/js/admin-videos.js?v=20261102tbd1"></script>
 </body>
 </html>
