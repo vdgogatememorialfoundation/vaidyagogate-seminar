@@ -56,7 +56,17 @@ assert.ok(doctorJs.includes('initDoctorSubscriptionTab'));
 assert.ok(doctorJs.includes('initDoctorTransactionsTab'));
 const libraryJs = fs.readFileSync(path.join(__dirname, '../lib/video-library.js'), 'utf8');
 assert.strictEqual(libraryJs.includes('? IS NOT NULL AND video_id'), false);
-assert.ok(libraryJs.includes('video_id = CAST(? AS INTEGER)'));
+    assert.ok(libraryJs.includes('video_id = CAST(? AS INTEGER)'));
+    assert.ok(libraryJs.includes('VIDEO_LIST_COLUMNS'));
+    assert.strictEqual(libraryJs.includes('SELECT v.*'), false);
+    const transcode = vl.hlsArgs('in.mp4', '/tmp/hls', '/tmp/enc.keyinfo', true);
+    assert.ok(transcode.includes('expr:gte(t,n_forced*2)'));
+    assert.strictEqual(transcode[transcode.indexOf('-hls_time') + 1], '2');
+    const copied = vl.hlsArgs('in.mp4', '/tmp/hls', '/tmp/enc.keyinfo', false);
+    assert.ok(copied.includes('copy'));
+    assert.ok(!copied.includes('libx264'));
+    assert.ok(doctorJs.includes('startFragPrefetch'));
+    assert.ok(doctorJs.includes('maxBufferLength: 8'));
 
 const allowed = modules.resolveDoctorAllowedTabs('regular', { 'tab-videos': true, 'tab-dashboard': true }, {}, null);
 assert.ok(allowed.has('tab-video-subscription'));

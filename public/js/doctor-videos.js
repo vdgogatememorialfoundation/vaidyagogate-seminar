@@ -715,7 +715,7 @@
         const beginContent = () => {
             if (!play || play.contentBegun) return;
             play.contentBegun = true;
-            if (start > 5) {
+            if (start > 5 && !play.hls) {
                 try {
                     video.currentTime = start;
                 } catch (_) {}
@@ -740,10 +740,15 @@
                 return;
             }
             const hls = new Hls({
-                enableWorker: false,
+                enableWorker: true,
                 lowLatencyMode: false,
-                backBufferLength: 60,
-                maxBufferLength: 45,
+                startFragPrefetch: true,
+                startPosition: start > 5 ? start : -1,
+                maxBufferLength: 8,
+                maxMaxBufferLength: 30,
+                backBufferLength: 20,
+                testBandwidth: false,
+                abrEwmaDefaultEstimate: 5000000,
                 xhrSetup: function (xhr) {
                     try {
                         xhr.withCredentials = true;
