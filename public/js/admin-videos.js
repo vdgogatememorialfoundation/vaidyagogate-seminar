@@ -138,6 +138,7 @@
             '<div class="vl-form-row"><div><label>How it is sold</label><select id="vlc-sale"><option value="single">Single video</option><option value="album">Album (one price unlocks every part)</option><option value="part">Part of an album</option></select></div>' +
             '<div id="vlc-part-wrap"><label>Part number</label><input type="number" id="vlc-part" min="1" placeholder="1"></div></div>' +
             '<div id="vlc-album-wrap" class="hidden"><label>Album</label><select id="vlc-album"><option value="">Choose an album</option></select></div>' +
+            '<div id="vlc-tbd-wrap"><label>Public price</label><select id="vlc-tbd"><option value="0">Set a price now</option><option value="1">Price will be updated later</option></select><p class="vl-note">The rupee amount stays saved. Doctors who are not watching free see “Price will be updated later” and cannot watch or pay until you set a price now. A personal price still lets that one doctor pay.</p></div>' +
             '<label id="vlc-price-label">Price for non-registered doctors (₹, 0 = not sold separately)</label><input type="number" id="vlc-price" min="0" step="1" value="0">' +
             '<div id="vlc-mode-wrap" class="hidden"><label>Album price</label><select id="vlc-mode"><option value="fixed">Fixed — one payment unlocks every part, including lectures added later</option><option value="subscription">Subscription — paying again unlocks lectures added after the last payment</option></select></div>' +
             '<label>Description</label><textarea id="vlc-desc" maxlength="2000"></textarea>' +
@@ -149,7 +150,9 @@
             '<label>Description</label><textarea id="vly-desc" maxlength="2000"></textarea>' +
             '<label>Theme for this year</label><textarea id="vly-theme" maxlength="2000" placeholder="Describe next year\'s theme — colours, mood, and what the recordings should feel like."></textarea>' +
             '<div class="vl-upload-row" style="margin-top:10px;"><button type="button" class="vl-btn is-ghost" id="vly-theme-apply">Apply theme</button><span class="vl-note" id="vly-theme-note"></span></div>' +
+            '<label>Public year price</label><select id="vly-tbd"><option value="0">Set a price now</option><option value="1">Price will be updated later</option></select>' +
             '<label>Price to unlock all videos of the year (₹, blank = not offered)</label><input type="number" id="vly-price" min="0" step="1">' +
+            '<p class="vl-note">While the year price is held, doctors cannot buy the whole year. Videos they already watch free stay open.</p>' +
             '<div class="vl-upload-row" style="margin-top:10px;"><button type="button" class="vl-btn" id="vly-save">Save year</button></div>' +
             '<p class="vl-form-msg" id="vly-msg"></p>' +
             '<p class="vl-note" style="margin-top:10px;">Who watches free is set under Video settings. Turn off in Who can watch stops a doctor even when they are a volunteer or have paid.</p></div>' +
@@ -327,6 +330,7 @@
             $('vly-theme-note').textContent = y && y.themeSource === 'ai' ? 'Last theme was written with AI.' : y && y.themeSource === 'composed' ? 'Last theme was written from the description.' : '';
         }
         $('vly-price').value = y && y.bundlePriceInr != null ? y.bundlePriceInr : '';
+        if ($('vly-tbd')) $('vly-tbd').value = y && y.priceTbd ? '1' : '0';
         if (!$('vlg-year').value && years.length) $('vlg-year').value = years[0];
         renderCatalog();
         renderCart();
@@ -598,12 +602,15 @@
     function priceCell(v) {
         if (v.kind === 'album') {
             const how = v.priceMode === 'subscription' ? 'New lectures need another payment' : 'Unlocks every part, including later ones';
+            if (v.priceTbd) return '<span class="vl-note">Price will be updated later</span><div class="vl-note">' + how + '</div>';
             return v.priceInr > 0 ? fmtMoney(v.priceInr) + '<div class="vl-note">' + how + '</div>' : '<span class="vl-note">registered only</span>';
         }
         if (v.albumId) {
             const album = (state.videos || []).find((a) => a.id === v.albumId);
-            return '<span class="vl-note">Included in ' + esc(album ? album.title : 'album') + (album && album.priceInr > 0 ? ' · ' + fmtMoney(album.priceInr) : '') + '</span>';
+            const held = album && album.priceTbd;
+            return '<span class="vl-note">Included in ' + esc(album ? album.title : 'album') + (held ? ' · Price will be updated later' : album && album.priceInr > 0 ? ' · ' + fmtMoney(album.priceInr) : '') + '</span>';
         }
+        if (v.priceTbd) return '<span class="vl-note">Price will be updated later</span>';
         return v.priceInr > 0 ? fmtMoney(v.priceInr) : '<span class="vl-note">registered only</span>';
     }
 
@@ -631,6 +638,8 @@
         if (partWrap) partWrap.classList.toggle('hidden', sale !== 'part');
         const modeWrap = $('vlc-mode-wrap');
         if (modeWrap) modeWrap.classList.toggle('hidden', sale !== 'album');
+        const tbdWrap = $('vlc-tbd-wrap');
+        if (tbdWrap) tbdWrap.classList.toggle('hidden', sale === 'part');
         if (price) {
             price.disabled = sale === 'part';
             if (sale === 'part') price.value = '0';
@@ -660,6 +669,7 @@
             albumId: sale === 'part' ? $('vlc-album').value : '',
             partNo: sale === 'part' ? $('vlc-part').value : '',
             priceInr: sale === 'part' ? 0 : $('vlc-price').value,
+            priceTbd: sale !== 'part' && $('vlc-tbd') && $('vlc-tbd').value === '1',
             priceMode: sale === 'album' && $('vlc-mode') ? $('vlc-mode').value : 'fixed',
             description: $('vlc-desc').value,
             published: false
@@ -680,7 +690,7 @@
         try {
             await api('/api/admin/videos/years/' + encodeURIComponent(year), {
                 method: 'PUT',
-                body: { title: $('vly-title').value, description: $('vly-desc').value, bundlePriceInr: $('vly-price').value }
+                body: { title: $('vly-title').value, description: $('vly-desc').value, bundlePriceInr: $('vly-price').value, priceTbd: $('vly-tbd') && $('vly-tbd').value === '1' }
             });
             setMsg('vly-msg', 'Saved.');
             await load();
@@ -755,6 +765,7 @@
             '</select>' +
             '<div class="vl-form-row"><div><label>Price (₹)</label><input type="number" id="vle-price" min="0" step="1" value="' + v.priceInr + '"></div>' +
             '<div><label>Sort order</label><input type="number" id="vle-sort" value="' + (v.sortOrder || 0) + '"></div></div>' +
+            '<div id="vle-tbd-wrap"><label>Public price</label><select id="vle-tbd"><option value="0">Set a price now</option><option value="1"' + (v.priceTbd ? ' selected' : '') + '>Price will be updated later</option></select><p class="vl-note">The rupee amount stays saved. Turning this off shows that amount again.</p></div>' +
             '<div id="vle-mode-wrap"' + (v.kind === 'album' ? '' : ' class="hidden"') + '><label>Album price</label><select id="vle-mode"><option value="fixed"' + (v.priceMode === 'subscription' ? '' : ' selected') + '>Fixed — one payment unlocks every part, including lectures added later</option><option value="subscription"' + (v.priceMode === 'subscription' ? ' selected' : '') + '>Subscription — a later lecture needs another payment</option></select></div>' +
             '<label>Description</label><textarea id="vle-desc">' + esc(v.description) + '</textarea>' +
             '<div class="vl-upload-row" style="margin-top:10px;"><button type="button" class="vl-btn" id="vle-save">Save</button><button type="button" class="vl-btn is-ghost" id="vle-cancel">Cancel</button></div>' +
@@ -770,6 +781,8 @@
                 price.disabled = sale === 'part';
                 if (sale === 'part') price.value = '0';
             }
+            const tbdWrap = modal.querySelector('#vle-tbd-wrap');
+            if (tbdWrap) tbdWrap.classList.toggle('hidden', sale === 'part');
         };
         modal.querySelector('#vle-sale').addEventListener('change', syncEditSale);
         syncEditSale();
@@ -785,6 +798,7 @@
                         albumId: modal.querySelector('#vle-sale').value === 'part' ? modal.querySelector('#vle-album').value : '',
                         partNo: modal.querySelector('#vle-part').value,
                         priceInr: modal.querySelector('#vle-sale').value === 'part' ? 0 : modal.querySelector('#vle-price').value,
+                        priceTbd: modal.querySelector('#vle-sale').value !== 'part' && modal.querySelector('#vle-tbd') && modal.querySelector('#vle-tbd').value === '1',
                         priceMode: modal.querySelector('#vle-sale').value === 'album' ? modal.querySelector('#vle-mode').value : 'fixed',
                         sortOrder: modal.querySelector('#vle-sort').value,
                         description: modal.querySelector('#vle-desc').value

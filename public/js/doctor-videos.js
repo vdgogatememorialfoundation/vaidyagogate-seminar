@@ -54,6 +54,14 @@
         return 'Enabled by the seminar office';
     }
 
+    function priceLater(access) {
+        const registered = access && access.checks && access.checks.registered;
+        const line = registered
+            ? 'Price will be updated later.'
+            : 'Price will be updated later. You are not registered for this seminar, so you cannot watch yet.';
+        return '<span class="vl-badge">Price will be updated later</span><span class="vl-note vl-why">' + esc(line) + '</span>';
+    }
+
     function whyLocked(access) {
         const c = (access && access.checks) || {};
         if (access && access.reason === 'blocked') return 'The seminar office has turned this video off for your account.';
@@ -164,9 +172,11 @@
         host.innerHTML = licenseBar + years
             .map((y) => {
                 const bundle =
-                    y.bundlePriceInr != null && y.bundlePriceInr > 0 && !y.allAllowed
-                        ? '<button type="button" class="vl-btn is-ghost is-small" data-vl-buy-year="' + y.year + '">Unlock all ' + y.year + ' videos · ' + fmtMoney(y.bundlePriceInr) + '</button>'
-                        : '';
+                    y.priceTbd && !y.allAllowed
+                        ? '<span class="vl-badge">Price will be updated later</span>'
+                        : y.bundlePriceInr != null && y.bundlePriceInr > 0 && !y.allAllowed
+                          ? '<button type="button" class="vl-btn is-ghost is-small" data-vl-buy-year="' + y.year + '">Unlock all ' + y.year + ' videos · ' + fmtMoney(y.bundlePriceInr) + '</button>'
+                          : '';
                 const seen = {};
                 const uniqueVideos = (y.videos || []).filter((v) => {
                     if (!v || seen[v.id]) return false;
@@ -280,6 +290,8 @@
             actions = '<span class="vl-badge is-free">' + esc(accessLabel(album.access)) + (subscription ? '' : ' · all parts') + '</span>';
         } else if (pend) {
             actions = '<span class="vl-badge is-paid">Payment pending</span><button type="button" class="vl-btn is-ghost is-small" data-vl-check="' + pend.id + '">Check payment</button>';
+        } else if (album.priceTbd && !album.personalPrice) {
+            actions = priceLater(album.access);
         } else if (album.priceInr > 0) {
             actions =
                 '<button type="button" class="vl-btn is-warn" data-vl-buy="' + album.id + '"><i class="fas fa-lock"></i> Unlock all parts · ' + fmtMoney(album.priceInr) + '</button>' +
@@ -287,7 +299,7 @@
         } else {
             actions = '<span class="vl-badge">Included for registered participants</span>';
         }
-        const partCards = (parts || []).map((p) => card(p, pending, { insideAlbum: true, subscription: subscription, albumId: album.id })).join('');
+        const partCards = (parts || []).map((p) => card(p, pending, { insideAlbum: true, subscription: subscription, albumId: album.id, priceTbd: !!(album.priceTbd && !album.personalPrice), personalPrice: !!album.personalPrice })).join('');
         return (
             '<article class="vl-card vl-album"><div class="vl-card-top"><span class="vl-badge is-full">Album</span><span class="vl-note">' +
             (parts || []).length +
@@ -329,6 +341,8 @@
             actions =
                 '<span class="vl-badge is-paid">Payment pending</span>' +
                 '<button type="button" class="vl-btn is-ghost is-small" data-vl-check="' + pend.id + '">Check payment</button>';
+        } else if ((opts.priceTbd || v.priceTbd) && !opts.personalPrice && !v.personalPrice) {
+            actions = priceLater(v.access);
         } else if (opts.insideAlbum && opts.subscription && opts.albumId && !(v.access && v.access.allowed)) {
             actions =
                 '<button type="button" class="vl-btn is-warn is-small" data-vl-buy="' + opts.albumId + '"><i class="fas fa-lock"></i> Unlock this lecture</button>' +
@@ -764,14 +778,14 @@
                 rows.push({
                     title: a.title,
                     meta: 'Album · ' + y.year + ' · ' + (grouped.partsOf[a.id] || []).length + ' parts',
-                    state: a.access && a.access.allowed ? accessLabel(a.access) : a.priceInr > 0 ? 'Locked · ' + fmtMoney(a.priceInr) : 'Locked'
+                    state: a.access && a.access.allowed ? accessLabel(a.access) : a.priceTbd && !a.personalPrice ? 'Price will be updated later' : a.priceInr > 0 ? 'Locked · ' + fmtMoney(a.priceInr) : 'Locked'
                 });
             });
             grouped.singles.forEach((v) => {
                 rows.push({
                     title: v.title,
                     meta: 'Single video · ' + y.year,
-                    state: v.access && v.access.allowed ? accessLabel(v.access) : v.priceInr > 0 ? 'Locked · ' + fmtMoney(v.priceInr) : 'Locked'
+                    state: v.access && v.access.allowed ? accessLabel(v.access) : v.priceTbd && !v.personalPrice ? 'Price will be updated later' : v.priceInr > 0 ? 'Locked · ' + fmtMoney(v.priceInr) : 'Locked'
                 });
             });
         });

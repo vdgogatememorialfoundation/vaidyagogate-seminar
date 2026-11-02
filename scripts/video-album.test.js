@@ -17,6 +17,18 @@ assert.strictEqual(vl.purchaseItem({ id: 2, album_id: 1, kind: 'episode', publis
 assert.strictEqual(vl.purchaseItem({ id: 2, album_id: 1, kind: 'episode', published: 1, status: 'ready', year: 2026, price_inr: 0, title: 'Part 1' }, { id: 1, kind: 'album', published: 1, status: 'ready', year: 2026, price_inr: 500, title: 'Day 1' }).amount, 500);
 assert.strictEqual(vl.purchaseItem({ id: 9, kind: 'full', published: 1, status: 'ready', year: 2026, price_inr: 200, title: 'Talk' }, null).videoId, 9);
 assert.strictEqual(vl.purchaseItem({ id: 9, kind: 'full', published: 0, status: 'ready', year: 2026, price_inr: 200, title: 'Talk' }, null), null);
+const heldSale = vl.purchaseItem(
+    { id: 2, album_id: 1, kind: 'episode', published: 1, status: 'ready', year: 2026, price_inr: 0, title: 'Part 1' },
+    { id: 1, kind: 'album', published: 1, status: 'ready', year: 2026, price_inr: 500, title: 'Day 1', price_tbd: 1 }
+);
+assert.strictEqual(heldSale.priceTbd, true);
+assert.strictEqual(vl.priceHeld({ price_tbd: 1 }), true);
+assert.strictEqual(vl.priceHeld({ price_tbd: 0 }), false);
+assert.strictEqual(vl.priceHeld({ priceTbd: true }), true);
+assert.strictEqual(vl.purchaseHoldMessage(heldSale), 'The price will be updated later. You cannot watch this until the office sets a price.');
+heldSale.personalPrice = true;
+assert.strictEqual(vl.purchaseHoldMessage(heldSale), null);
+assert.strictEqual(vl.purchaseHoldMessage({ price_tbd: 0, amount: 500 }), null);
 
 const options = [
     { id: 'razorpay:test', gateway: 'razorpay', mode: 'test', config: { key_id: 'rzp_test' } },
@@ -192,6 +204,10 @@ function access(db, userId, video, settings) {
     assert.ok(adminJs.includes('price-overrides'));
     assert.ok(doctorJs.includes("reason === 'public'"));
     assert.ok(doctorJs.includes('personalPrice'));
+    assert.ok(doctorJs.includes('Price will be updated later'));
+    assert.ok(doctorJs.includes('You are not registered for this seminar, so you cannot watch yet.'));
+    assert.ok(adminJs.includes('Price will be updated later'));
+    assert.ok(adminJs.includes('vlc-tbd'));
 
     db.close();
     console.log('video album ok');
