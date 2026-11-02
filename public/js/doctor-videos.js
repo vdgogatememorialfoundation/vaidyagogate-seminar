@@ -42,7 +42,11 @@
 
     function accessLabel(access) {
         if (!access || !access.allowed) return '';
+        if (access.reason === 'public') return 'Free';
         if (access.reason === 'volunteer') return 'Free for volunteers';
+        if (access.reason === 'attended_certified') return 'Included — registered, attended, certificate issued';
+        if (access.reason === 'paid_absent') return 'Included — registered and paid';
+        if (access.reason === 'paid_other') return 'Included — checked in';
         if (access.reason === 'registered_scanned') return 'Included — registered, paid, ticket scanned';
         if (access.reason === 'registered_paid' || access.reason === 'registered') return 'Included — registered and paid';
         if (access.reason === 'purchase') return 'Purchased';
@@ -52,9 +56,12 @@
 
     function whyLocked(access) {
         const c = (access && access.checks) || {};
+        if (access && access.reason === 'blocked') return 'The seminar office has turned this video off for your account.';
         if (!c.registered) return 'You are not registered for this seminar.';
         if (!c.paid) return 'Your registration fee is not paid yet, so this video is not included.';
-        return '';
+        if (c.paidOther) return 'You are checked in. This recording opens for that group when the office enables it, or you can unlock it.';
+        if (c.paidAbsent) return 'Paid registrations who did not attend are not included until the office turns that group on.';
+        return 'Unlock this recording to watch it.';
     }
 
     /** A stable, random id for this browser. Devices are limited per account, so it is kept for good. */
@@ -265,10 +272,12 @@
 
     function albumBlock(album, parts, pending) {
         const allowed = album.access && album.access.allowed;
+        const lockedPart = (parts || []).some((p) => !(p.access && p.access.allowed));
+        const subscription = album.priceMode === 'subscription';
         const pend = pendingFor(album, pending);
         let actions = '';
-        if (allowed) {
-            actions = '<span class="vl-badge is-free">' + esc(accessLabel(album.access)) + ' · all parts</span>';
+        if (allowed && !(subscription && lockedPart)) {
+            actions = '<span class="vl-badge is-free">' + esc(accessLabel(album.access)) + (subscription ? '' : ' · all parts') + '</span>';
         } else if (pend) {
             actions = '<span class="vl-badge is-paid">Payment pending</span><button type="button" class="vl-btn is-ghost is-small" data-vl-check="' + pend.id + '">Check payment</button>';
         } else if (album.priceInr > 0) {
@@ -278,7 +287,7 @@
         } else {
             actions = '<span class="vl-badge">Included for registered participants</span>';
         }
-        const partCards = (parts || []).map((p) => card(p, pending, { insideAlbum: true })).join('');
+        const partCards = (parts || []).map((p) => card(p, pending, { insideAlbum: true, subscription: subscription, albumId: album.id })).join('');
         return (
             '<article class="vl-card vl-album"><div class="vl-card-top"><span class="vl-badge is-full">Album</span><span class="vl-note">' +
             (parts || []).length +
@@ -287,7 +296,12 @@
             esc(album.title) +
             '</h4>' +
             (album.description ? '<p>' + esc(album.description) + '</p>' : '') +
-            '<p class="vl-note">One price unlocks every part in this album.</p><div class="vl-card-actions">' +
+            '<p class="vl-note">' +
+            (subscription
+                ? 'This price unlocks the lectures available when you pay. A lecture added later needs another payment.'
+                : 'One price unlocks every part in this album, including lectures added later.') +
+            (album.personalPrice ? ' Your price is shown here' + (album.listPriceInr != null ? ' (public price ' + fmtMoney(album.listPriceInr) + ')' : '') + '.' : '') +
+            '</p><div class="vl-card-actions">' +
             actions +
             '</div><div class="vl-album-parts">' +
             (partCards || '<p class="vl-note">Parts appear here after the seminar office publishes them.</p>') +
@@ -315,11 +329,16 @@
             actions =
                 '<span class="vl-badge is-paid">Payment pending</span>' +
                 '<button type="button" class="vl-btn is-ghost is-small" data-vl-check="' + pend.id + '">Check payment</button>';
+        } else if (opts.insideAlbum && opts.subscription && opts.albumId && !(v.access && v.access.allowed)) {
+            actions =
+                '<button type="button" class="vl-btn is-warn is-small" data-vl-buy="' + opts.albumId + '"><i class="fas fa-lock"></i> Unlock this lecture</button>' +
+                (whyLocked(v.access) ? '<span class="vl-note vl-why">' + esc(whyLocked(v.access)) + '</span>' : '');
         } else if (opts.insideAlbum) {
             actions = '<span class="vl-note">Unlocks with the album</span>' + (whyLocked(v.access) ? '<span class="vl-note vl-why">' + esc(whyLocked(v.access)) + '</span>' : '');
         } else if (v.priceInr > 0) {
             actions =
                 '<button type="button" class="vl-btn is-warn" data-vl-buy="' + v.id + '"><i class="fas fa-lock"></i> Unlock · ' + fmtMoney(v.priceInr) + '</button>' +
+                (v.personalPrice && v.listPriceInr != null ? '<span class="vl-note">Your price · public ' + fmtMoney(v.listPriceInr) + '</span>' : '') +
                 (whyLocked(v.access) ? '<span class="vl-note vl-why">' + esc(whyLocked(v.access)) + '</span>' : '');
         } else {
             actions = '<span class="vl-badge">Available to registered participants</span>' + (whyLocked(v.access) ? '<span class="vl-note vl-why">' + esc(whyLocked(v.access)) + '</span>' : '');
@@ -347,15 +366,23 @@
         const now = new Date();
         const hh = String(now.getHours()).padStart(2, '0');
         const mm = String(now.getMinutes()).padStart(2, '0');
-        return '<b>' + esc(wm.license || '') + '</b><span>' + esc(wm.name || '') + '</span><small>' + esc(wm.id || '') + ' · ' + hh + ':' + mm + '</small>';
+        const account = wm.account ? ' · ' + esc(wm.account) : '';
+        return '<b>' + esc(wm.license || '') + '</b><span>' + esc(wm.name || '') + '</span><small>' + esc(wm.id || '') + account + ' · ' + hh + ':' + mm + '</small>';
     }
 
     function moveWatermark() {
         const el = $('vl-wm');
         if (!el || !play) return;
-        el.innerHTML = wmText(play.watermark || {});
-        el.style.left = 5 + Math.random() * 65 + '%';
-        el.style.top = 6 + Math.random() * 78 + '%';
+        const wm = play.watermark || {};
+        el.innerHTML = wmText(wm);
+        el.style.left = 4 + Math.random() * 58 + '%';
+        el.style.top = 8 + Math.random() * 62 + '%';
+        const corner = $('vl-wm-corner');
+        if (corner) {
+            corner.textContent = [wm.license, wm.name, wm.id, wm.account].filter(Boolean).join(' · ');
+            corner.style.right = 8 + Math.random() * 18 + '%';
+            corner.style.bottom = 10 + Math.random() * 22 + '%';
+        }
     }
 
     async function watch(videoId) {
@@ -384,11 +411,11 @@
             return;
         }
         const fixedWm = $('vl-wm-fixed');
-        if (fixedWm) fixedWm.textContent = (session.watermark && session.watermark.license) || '';
+        if (fixedWm) fixedWm.textContent = [(session.watermark && session.watermark.license) || '', (session.watermark && session.watermark.name) || ''].filter(Boolean).join('  ');
         $('vl-player-title').textContent = session.video ? session.video.title : 'Seminar video';
         play = { token: session.token, videoId, hls: null, heartbeat: null, wmTimer: null, watermark: session.watermark || {}, ended: false };
         moveWatermark();
-        play.wmTimer = setInterval(moveWatermark, 9000);
+        play.wmTimer = setInterval(moveWatermark, 4000);
         video.setAttribute('controlsList', 'nodownload noremoteplayback noplaybackrate');
         video.controlsList && video.controlsList.add && video.controlsList.add('nodownload');
         video.disablePictureInPicture = true;

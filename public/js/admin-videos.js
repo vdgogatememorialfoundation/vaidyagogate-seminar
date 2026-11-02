@@ -3,6 +3,7 @@
  */
 (function () {
     let state = null;
+    let priceUser = null;
     let pollTimer = null;
     let uploads = {}; // videoId -> { paused, abort }
     let chosenUser = null;
@@ -85,7 +86,7 @@
 
     /* ------------------------------------------------------------ load */
 
-    async function load() {
+    async function load(focus) {
         const host = $('vl-admin-root');
         if (!host) return;
         try {
@@ -102,6 +103,13 @@
         loadAccess();
         if ($('vl-tracking') && !$('vl-tracking').innerHTML) loadTracking(null);
         schedulePoll();
+        loadAnalytics();
+        loadPriceOverrides();
+        if (focus === 'settings' || focus === 'analytics' || focus === 'price') {
+            const id = focus === 'analytics' ? 'vl-analytics' : focus === 'price' ? 'vl-personal-price' : 'vl-settings-form';
+            const panel = $(id);
+            if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
     }
 
     function schedulePoll() {
@@ -131,6 +139,7 @@
             '<div id="vlc-part-wrap"><label>Part number</label><input type="number" id="vlc-part" min="1" placeholder="1"></div></div>' +
             '<div id="vlc-album-wrap" class="hidden"><label>Album</label><select id="vlc-album"><option value="">Choose an album</option></select></div>' +
             '<label id="vlc-price-label">Price for non-registered doctors (₹, 0 = not sold separately)</label><input type="number" id="vlc-price" min="0" step="1" value="0">' +
+            '<div id="vlc-mode-wrap" class="hidden"><label>Album price</label><select id="vlc-mode"><option value="fixed">Fixed — one payment unlocks every part, including lectures added later</option><option value="subscription">Subscription — paying again unlocks lectures added after the last payment</option></select></div>' +
             '<label>Description</label><textarea id="vlc-desc" maxlength="2000"></textarea>' +
             '<div class="vl-upload-row" style="margin-top:10px;"><button type="button" class="vl-btn" id="vlc-save">Create video</button><span class="vl-note">Then upload the file from the table below.</span></div>' +
             '<p class="vl-form-msg" id="vlc-msg"></p></div>' +
@@ -143,15 +152,20 @@
             '<label>Price to unlock all videos of the year (₹, blank = not offered)</label><input type="number" id="vly-price" min="0" step="1">' +
             '<div class="vl-upload-row" style="margin-top:10px;"><button type="button" class="vl-btn" id="vly-save">Save year</button></div>' +
             '<p class="vl-form-msg" id="vly-msg"></p>' +
-            '<p class="vl-note" style="margin-top:10px;">Free access: volunteers, and any doctor whose registration for the linked seminar (or that year) is paid — whether or not the ticket was scanned. Everyone else pays the price or is enabled below. Turn off in Who can watch stops a doctor even when they are a volunteer or have paid.</p></div>' +
+            '<p class="vl-note" style="margin-top:10px;">Who watches free is set under Video settings. Turn off in Who can watch stops a doctor even when they are a volunteer or have paid.</p></div>' +
             '</div>' +
-            '<div class="vl-form" id="vl-settings-form" style="margin-top:16px;"><h3>Protection &amp; storage settings</h3>' +
-            '<div class="vl-form-row vl-form-row-3"><div><label>Devices allowed per account</label><input type="number" id="vls-devices" min="1" max="10"></div>' +
-            '<div><label>Volunteer accounts</label><select id="vls-volunteers"><option value="1">Watch free</option><option value="0">Pay like others</option></select></div>' +
-            '<div><label>Where finished videos are stored</label><select id="vls-storage"><option value="local">Server disk</option><option value="r2">Cloud bucket (Cloudflare R2)</option></select></div></div>' +
+            '<div class="vl-form" id="vl-settings-form" style="margin-top:16px;"><h3>Video settings</h3>' +
+            '<p class="vl-note">These switches decide who watches a seminar year for free. Everyone else pays the album price, the single-video price, or is turned on one by one below. Raising or lowering a price does not remove access that is already paid.</p>' +
+            '<div class="vl-form-row vl-form-row-3"><div><label>Volunteers</label><select id="vls-volunteers"><option value="1">Watch free</option><option value="0">Pay like others</option></select></div>' +
+            '<div><label>Registered, checked in, certificate issued</label><select id="vls-attended"><option value="1">Watch free</option><option value="0">Pay the video price</option></select></div>' +
+            '<div><label>Registered and paid, did not attend</label><select id="vls-absent"><option value="1">Watch free</option><option value="0">Pay the video price</option></select></div></div>' +
+            '<div class="vl-form-row vl-form-row-3" style="margin-top:8px;"><div><label>Checked in, certificate not issued yet</label><select id="vls-other"><option value="0">Pay until this is turned on</option><option value="1">Watch free</option></select></div>' +
+            '<div><label>Every signed-in doctor</label><select id="vls-everyone"><option value="0">Off — only the groups above, or a payment</option><option value="1">Watch free</option></select></div>' +
+            '<div><label>Devices allowed per account</label><input type="number" id="vls-devices" min="1" max="10"></div></div>' +
+            '<div class="vl-form-row" style="margin-top:8px;"><div><label>Where finished videos are stored</label><select id="vls-storage"><option value="local">Server disk</option><option value="r2">Cloud bucket (Cloudflare R2)</option></select></div></div>' +
             '<div class="vl-upload-row" style="margin-top:10px;"><button type="button" class="vl-btn" id="vls-save">Save settings</button><span class="vl-note" id="vls-cloud"></span></div>' +
             '<p class="vl-form-msg" id="vls-msg"></p>' +
-            '<p class="vl-note">Each doctor gets a permanent 12-digit video license that is printed inside every video they watch. Playback uses the VGMF license: the video is encrypted, the key is issued only to that doctor’s registered device, and save/download from the player is blocked. A doctor may play videos on the number of devices set here; the first devices used are registered automatically, and the office can remove a device below. Choosing the cloud bucket moves finished videos off the server disk into Cloudflare R2. Playback still goes through this license.</p></div>' +
+            '<p class="vl-note">Each doctor gets a permanent 12-digit video license. It is printed on the picture together with their name and portal ID, and it moves while the video plays. The file is encrypted. The player does not offer download, picture-in-picture, or remote playback, and the stream is released only to that doctor’s registered device. The original upload is not available as a file. A doctor may play videos on the number of devices set here. Turn off in Who can watch stops a doctor even when they are a volunteer or have paid. Choosing the cloud bucket moves finished videos off the server disk. Playback still goes through this license.</p></div>' +
             '<h3 style="margin:18px 0 8px;font-size:1.05rem;">Videos</h3><div id="vl-admin-videos"></div>' +
             '<div class="vl-admin-grid" style="margin-top:22px;">' +
             '<div class="vl-form"><h3>Issue video access</h3>' +
@@ -174,7 +188,19 @@
             '<label style="margin:0 0 0 8px;">Video</label><select id="vle-video" style="max-width:260px;"><option value="">Any video of the year</option></select>' +
             '<input type="text" id="vle-q" placeholder="Filter by name, email, phone, ID or license" style="flex:1;min-width:200px;">' +
             '<button type="button" class="vl-btn is-small" id="vle-run">Show</button><button type="button" class="vl-btn is-ghost is-small" id="vle-csv">Download CSV</button></div>' +
-            '<p class="vl-note" id="vle-summary"></p><div class="vl-table-wrap" id="vl-eligible"></div></div>' +
+            '<p class="vl-note" id="vle-summary"></p><p class="vl-note">Choose a video to see who watches that seminar free. A doctor registered for a different seminar is not included. With no video selected, only volunteers and people the office has enabled are marked as allowed.</p><div class="vl-table-wrap" id="vl-eligible"></div></div>' +
+            '<div class="vl-form" id="vl-analytics" style="margin-top:22px;"><h3>Watch analytics</h3>' +
+            '<p class="vl-note">How many doctors opened each recording, and how long they watched. Times are measured while the player is open on a registered device.</p>' +
+            '<div class="vl-upload-row"><label style="margin:0;">Year</label><input type="number" id="vlan-year" min="2000" max="2100" style="width:110px;"><button type="button" class="vl-btn is-ghost is-small" id="vlan-reload">Refresh</button></div>' +
+            '<div id="vl-analytics-body"><p class="vl-note">Loading…</p></div></div>' +
+            '<div class="vl-form" id="vl-personal-price" style="margin-top:22px;"><h3>Personal price</h3>' +
+            '<p class="vl-note">The public album or single-video price stays as it is. This sets a different amount for one doctor. It does not turn the video on. Use Turn on when they should watch free. Raising or lowering the public price later does not change a price already set here.</p>' +
+            '<label>Find the doctor</label><input type="text" id="vlp-search" placeholder="Name, phone, email, portal ID"><div class="vl-user-pick" id="vlp-picks"></div><div id="vlp-chosen" class="vl-note"></div>' +
+            '<div class="vl-form-row"><div><label>Album or single video</label><select id="vlp-video"><option value="">Choose</option></select></div>' +
+            '<div><label>Price for this doctor (₹)</label><input type="number" id="vlp-amount" min="1" step="1"></div></div>' +
+            '<label>Note</label><input type="text" id="vlp-note" maxlength="300" placeholder="Reason, receipt…">' +
+            '<div class="vl-upload-row" style="margin-top:10px;"><button type="button" class="vl-btn" id="vlp-save">Save personal price</button><span class="vl-form-msg" id="vlp-msg"></span></div>' +
+            '<div class="vl-table-wrap" id="vl-price-overrides"></div></div>' +
             '<div class="vl-form" style="margin-top:22px;"><h3>Devices &amp; account tracking</h3>' +
             '<div class="vl-upload-row"><input type="text" id="vlt-search" placeholder="Find an account (name, email, phone, ID)" style="flex:1;min-width:220px;"><button type="button" class="vl-btn is-ghost is-small" id="vlt-all">Recent activity (all accounts)</button></div>' +
             '<div class="vl-user-pick" id="vlt-picks"></div><div id="vl-tracking"></div></div>';
@@ -200,6 +226,10 @@
         $('vle-year').addEventListener('change', fillEligibleVideos);
         $('vlt-search').addEventListener('input', debounce(searchTracking, 300));
         $('vlt-all').addEventListener('click', () => loadTracking(null));
+        $('vlan-reload').addEventListener('click', loadAnalytics);
+        $('vlan-year').addEventListener('change', loadAnalytics);
+        $('vlp-search').addEventListener('input', debounce(searchPriceUser, 300));
+        $('vlp-save').addEventListener('click', savePersonalPrice);
         $('vlc-seminar').addEventListener('change', () => {
             const sem = (state.seminars || []).find((x) => String(x.id) === $('vlc-seminar').value);
             if (sem && sem.year) $('vlc-year').value = sem.year;
@@ -232,6 +262,10 @@
         const st = state.settings || {};
         if ($('vls-devices') && document.activeElement !== $('vls-devices')) $('vls-devices').value = st.maxDevices || 2;
         if ($('vls-volunteers')) $('vls-volunteers').value = st.volunteersFree === false ? '0' : '1';
+        if ($('vls-attended')) $('vls-attended').value = st.freeAttendedCertified === false ? '0' : '1';
+        if ($('vls-absent')) $('vls-absent').value = st.freePaidAbsent === false ? '0' : '1';
+        if ($('vls-other')) $('vls-other').value = st.freePaidOther === true ? '1' : '0';
+        if ($('vls-everyone')) $('vls-everyone').value = st.freeForEveryone === true ? '1' : '0';
         if ($('vls-storage')) $('vls-storage').value = st.storageBackend === 'r2' ? 'r2' : 'local';
         const c = state.cloud || {};
         if ($('vls-cloud')) {
@@ -263,7 +297,15 @@
         try {
             await api('/api/admin/videos/settings', {
                 method: 'PUT',
-                body: { maxDevices: $('vls-devices').value, volunteersFree: $('vls-volunteers').value === '1', storageBackend: $('vls-storage').value }
+                body: {
+                    maxDevices: $('vls-devices').value,
+                    volunteersFree: $('vls-volunteers').value === '1',
+                    freeAttendedCertified: $('vls-attended').value === '1',
+                    freePaidAbsent: $('vls-absent').value === '1',
+                    freePaidOther: $('vls-other').value === '1',
+                    freeForEveryone: $('vls-everyone').value === '1',
+                    storageBackend: $('vls-storage').value
+                }
             });
             setMsg('vls-msg', 'Saved.');
             await load();
@@ -554,7 +596,10 @@
     }
 
     function priceCell(v) {
-        if (v.kind === 'album') return v.priceInr > 0 ? fmtMoney(v.priceInr) + '<div class="vl-note">Unlocks every part</div>' : '<span class="vl-note">registered only</span>';
+        if (v.kind === 'album') {
+            const how = v.priceMode === 'subscription' ? 'New lectures need another payment' : 'Unlocks every part, including later ones';
+            return v.priceInr > 0 ? fmtMoney(v.priceInr) + '<div class="vl-note">' + how + '</div>' : '<span class="vl-note">registered only</span>';
+        }
         if (v.albumId) {
             const album = (state.videos || []).find((a) => a.id === v.albumId);
             return '<span class="vl-note">Included in ' + esc(album ? album.title : 'album') + (album && album.priceInr > 0 ? ' · ' + fmtMoney(album.priceInr) : '') + '</span>';
@@ -584,6 +629,8 @@
         const label = $('vlc-price-label');
         if (albumWrap) albumWrap.classList.toggle('hidden', sale !== 'part');
         if (partWrap) partWrap.classList.toggle('hidden', sale !== 'part');
+        const modeWrap = $('vlc-mode-wrap');
+        if (modeWrap) modeWrap.classList.toggle('hidden', sale !== 'album');
         if (price) {
             price.disabled = sale === 'part';
             if (sale === 'part') price.value = '0';
@@ -591,7 +638,7 @@
         if (label) {
             label.textContent =
                 sale === 'album'
-                    ? 'Album price (₹). Paying this unlocks every part.'
+                    ? 'Album price (₹). You can change this later.'
                     : sale === 'part'
                       ? 'Parts use the album price'
                       : 'Price for this single video (₹, 0 = not sold separately)';
@@ -613,6 +660,7 @@
             albumId: sale === 'part' ? $('vlc-album').value : '',
             partNo: sale === 'part' ? $('vlc-part').value : '',
             priceInr: sale === 'part' ? 0 : $('vlc-price').value,
+            priceMode: sale === 'album' && $('vlc-mode') ? $('vlc-mode').value : 'fixed',
             description: $('vlc-desc').value,
             published: false
         };
@@ -707,11 +755,24 @@
             '</select>' +
             '<div class="vl-form-row"><div><label>Price (₹)</label><input type="number" id="vle-price" min="0" step="1" value="' + v.priceInr + '"></div>' +
             '<div><label>Sort order</label><input type="number" id="vle-sort" value="' + (v.sortOrder || 0) + '"></div></div>' +
+            '<div id="vle-mode-wrap"' + (v.kind === 'album' ? '' : ' class="hidden"') + '><label>Album price</label><select id="vle-mode"><option value="fixed"' + (v.priceMode === 'subscription' ? '' : ' selected') + '>Fixed — one payment unlocks every part, including lectures added later</option><option value="subscription"' + (v.priceMode === 'subscription' ? ' selected' : '') + '>Subscription — a later lecture needs another payment</option></select></div>' +
             '<label>Description</label><textarea id="vle-desc">' + esc(v.description) + '</textarea>' +
             '<div class="vl-upload-row" style="margin-top:10px;"><button type="button" class="vl-btn" id="vle-save">Save</button><button type="button" class="vl-btn is-ghost" id="vle-cancel">Cancel</button></div>' +
             '<p class="vl-form-msg" id="vle-msg"></p></div>';
         document.body.appendChild(modal);
         modal.querySelector('#vle-cancel').addEventListener('click', () => modal.remove());
+        const syncEditSale = () => {
+            const sale = modal.querySelector('#vle-sale').value;
+            const wrap = modal.querySelector('#vle-mode-wrap');
+            if (wrap) wrap.classList.toggle('hidden', sale !== 'album');
+            const price = modal.querySelector('#vle-price');
+            if (price) {
+                price.disabled = sale === 'part';
+                if (sale === 'part') price.value = '0';
+            }
+        };
+        modal.querySelector('#vle-sale').addEventListener('change', syncEditSale);
+        syncEditSale();
         modal.querySelector('#vle-save').addEventListener('click', async () => {
             try {
                 await api('/api/admin/videos/' + v.id, {
@@ -724,6 +785,7 @@
                         albumId: modal.querySelector('#vle-sale').value === 'part' ? modal.querySelector('#vle-album').value : '',
                         partNo: modal.querySelector('#vle-part').value,
                         priceInr: modal.querySelector('#vle-sale').value === 'part' ? 0 : modal.querySelector('#vle-price').value,
+                        priceMode: modal.querySelector('#vle-sale').value === 'album' ? modal.querySelector('#vle-mode').value : 'fixed',
                         sortOrder: modal.querySelector('#vle-sort').value,
                         description: modal.querySelector('#vle-desc').value
                     }
@@ -1088,9 +1150,19 @@
 
     function reasonText(r) {
         if (r.reason === 'blocked') return 'Turned off by the office';
-        if (!r.allowed) return r.checks && r.checks.registered ? (r.checks.paid ? 'Registered' : 'Registered — fee not paid') : 'Not registered';
+        if (!r.allowed) {
+            const c = r.checks || {};
+            if (!c.registered) return 'Not registered';
+            if (!c.paid) return 'Registered — fee not paid';
+            if (c.paidOther) return 'Checked in — certificate not issued (this group pays until you turn it on)';
+            if (c.paidAbsent) return 'Paid, did not attend (this group pays until you turn it on)';
+            return 'Registered';
+        }
         const map = {
             volunteer: 'Volunteer',
+            attended_certified: 'Registered · checked in · certificate issued',
+            paid_absent: 'Registered · paid · did not attend',
+            paid_other: 'Checked in · certificate not issued yet',
             registered_scanned: 'Registered · paid · ticket scanned',
             registered_paid: 'Registered · paid · not scanned',
             registered: 'Registered · paid',
@@ -1188,6 +1260,121 @@
             URL.revokeObjectURL(a.href);
             a.remove();
         }, 500);
+    }
+
+    /* ------------------------------------------------ analytics & personal price */
+
+    function fillPersonalVideos() {
+        const sel = $('vlp-video');
+        if (!sel || !state) return;
+        const current = sel.value;
+        const rows = (state.videos || []).filter((v) => v.kind === 'album' || (v.kind === 'full' && !v.albumId));
+        sel.innerHTML = '<option value="">Choose</option>' + rows.map((v) => '<option value="' + v.id + '">' + esc(v.year + ' · ' + v.title) + '</option>').join('');
+        if (current) sel.value = current;
+    }
+
+    async function loadAnalytics() {
+        const host = $('vl-analytics-body');
+        if (!host) return;
+        const yearInput = $('vlan-year');
+        if (yearInput && !yearInput.value && $('vly-year') && $('vly-year').value) yearInput.value = $('vly-year').value;
+        const year = yearInput && yearInput.value ? yearInput.value : '';
+        try {
+            const data = await api('/api/admin/videos/analytics' + (year ? '?year=' + encodeURIComponent(year) : ''));
+            const t = data.totals || {};
+            const videos = data.videos || [];
+            const days = data.days || [];
+            host.innerHTML =
+                '<div class="vl-stats"><div class="vl-stat"><b>' + esc(t.watchers || 0) + '</b><span class="vl-note">Doctors who watched</span></div>' +
+                '<div class="vl-stat"><b>' + esc(t.sessions || 0) + '</b><span class="vl-note">Playbacks</span></div>' +
+                '<div class="vl-stat"><b>' + esc(fmtDuration(t.watchSeconds || 0)) + '</b><span class="vl-note">Watch time</span></div></div>' +
+                (videos.length
+                    ? '<div class="vl-table-wrap"><table class="vl-table"><thead><tr><th>Video</th><th>Doctors</th><th>Playbacks</th><th>Watch time</th></tr></thead><tbody>' +
+                      videos.map((v) => '<tr><td>' + esc(v.title) + '<div class="vl-note">' + esc(v.year || '') + (v.kind === 'album' ? ' · album' : v.kind === 'full' ? ' · single' : '') + '</div></td><td>' + esc(v.watchers) + '</td><td>' + esc(v.sessions) + '</td><td>' + esc(fmtDuration(v.watchSeconds)) + '</td></tr>').join('') +
+                      '</tbody></table></div>'
+                    : '<p class="vl-note">No playback yet for this year.</p>') +
+                (days.length
+                    ? '<h4 style="margin:14px 0 6px;">By day</h4><div class="vl-table-wrap"><table class="vl-table"><thead><tr><th>Day</th><th>Doctors</th><th>Playbacks</th><th>Watch time</th></tr></thead><tbody>' +
+                      days.map((d) => '<tr><td>' + esc(d.day) + '</td><td>' + esc(d.watchers) + '</td><td>' + esc(d.sessions) + '</td><td>' + esc(fmtDuration(d.watchSeconds)) + '</td></tr>').join('') +
+                      '</tbody></table></div>'
+                    : '');
+        } catch (e) {
+            host.innerHTML = '<p class="vl-note" style="color:#b91c1c;">' + esc(e.message) + '</p>';
+        }
+    }
+
+    async function searchPriceUser() {
+        const q = $('vlp-search').value.trim();
+        const host = $('vlp-picks');
+        if (!host || q.length < 2) {
+            if (host) host.innerHTML = '';
+            return;
+        }
+        try {
+            const rows = await api('/api/admin/videos/users?q=' + encodeURIComponent(q));
+            host.innerHTML = rows.length
+                ? rows.map((u) => '<button type="button" data-puid="' + u.id + '" data-pname="' + esc(u.name) + '"><strong>' + esc(u.name) + '</strong> <span class="vl-note">' + esc(u.userIdString || '') + '</span></button>').join('')
+                : '<span class="vl-note">No account matches.</span>';
+            host.querySelectorAll('[data-puid]').forEach((b) =>
+                b.addEventListener('click', () => {
+                    priceUser = { id: parseInt(b.getAttribute('data-puid'), 10), name: b.getAttribute('data-pname') || '' };
+                    host.innerHTML = '';
+                    $('vlp-search').value = '';
+                    $('vlp-chosen').textContent = 'Price for ' + priceUser.name;
+                    fillPersonalVideos();
+                })
+            );
+        } catch (e) {
+            host.innerHTML = '<span class="vl-note" style="color:#b91c1c;">' + esc(e.message) + '</span>';
+        }
+    }
+
+    async function savePersonalPrice() {
+        if (!priceUser) return setMsg('vlp-msg', 'Choose a doctor.', true);
+        try {
+            await api('/api/admin/videos/price-overrides', {
+                method: 'POST',
+                body: { userId: priceUser.id, videoId: $('vlp-video').value, amountInr: $('vlp-amount').value, note: $('vlp-note').value }
+            });
+            setMsg('vlp-msg', 'Saved. This doctor pays this amount. It does not unlock the video by itself.');
+            $('vlp-note').value = '';
+            loadPriceOverrides();
+        } catch (e) {
+            setMsg('vlp-msg', e.message, true);
+        }
+    }
+
+    async function loadPriceOverrides() {
+        const host = $('vl-price-overrides');
+        if (!host) return;
+        fillPersonalVideos();
+        const year = $('vlan-year') && $('vlan-year').value ? $('vlan-year').value : $('vly-year') && $('vly-year').value;
+        try {
+            const data = await api('/api/admin/videos/price-overrides' + (year ? '?year=' + encodeURIComponent(year) : ''));
+            const rows = data.overrides || [];
+            host.innerHTML = rows.length
+                ? '<table class="vl-table"><thead><tr><th>Doctor</th><th>Video</th><th>Their price</th><th>Public price</th><th></th></tr></thead><tbody>' +
+                  rows
+                      .map(
+                          (r) =>
+                              '<tr><td>' + esc(r.user) + '<div class="vl-note">' + esc(r.userIdString || '') + '</div></td><td>' + esc(r.title) + '<div class="vl-note">' + esc(r.year || '') + '</div></td><td>' + fmtMoney(r.amountInr) + '</td><td>' + fmtMoney(r.listPriceInr) + '</td><td><button type="button" class="vl-btn is-ghost is-small" data-price-clear="' + r.userId + '" data-price-video="' + r.videoId + '">Use public price</button></td></tr>'
+                      )
+                      .join('') +
+                  '</tbody></table>'
+                : '<p class="vl-note">No personal prices for this year. Doctors pay the public album or single-video price.</p>';
+            host.querySelectorAll('[data-price-clear]').forEach((b) =>
+                b.addEventListener('click', async () => {
+                    try {
+                        await api('/api/admin/videos/price-overrides/clear', { method: 'POST', body: { userId: b.getAttribute('data-price-clear'), videoId: b.getAttribute('data-price-video') } });
+                        loadPriceOverrides();
+                    } catch (e) {
+                        setMsg('vlp-msg', e.message, true);
+                    }
+                })
+            );
+        } catch (e) {
+            host.innerHTML = '<p class="vl-note" style="color:#b91c1c;">' + esc(e.message) + '</p>';
+        }
     }
 
     /* ------------------------------------------------ devices & tracking */
@@ -1295,7 +1482,7 @@
             devices
                 .map(
                     (d) =>
-                        '<tr' + (d.revokedAt ? ' style="opacity:.55;"' : '') + '>' + (withUser ? '<td>' + esc([d.first_name, d.last_name].filter(Boolean).join(' ') || '#' + d.user_id) + '<div class="vl-note">' + esc(d.user_id_string || '') + '</div></td>' : '') +
+                        '<tr' + (d.revokedAt ? ' style="opacity:.55;"' : '') + '>' + (withUser ? '<td>' + esc(d.user || [d.first_name, d.last_name].filter(Boolean).join(' ') || (d.userId ? 'Account ' + d.userId : 'Account')) + '<div class="vl-note">' + esc(d.userIdString || d.user_id_string || '') + '</div></td>' : '') +
                         '<td>' + esc(d.label || 'Device') + ' <code>' + esc(d.shortId || String(d.device_id || '').slice(0, 8)) + '</code></td><td>' + fmtWhen(d.firstSeenAt || d.first_seen_at) + '</td><td>' + fmtWhen(d.lastSeenAt || d.last_seen_at) + '</td>' +
                         '<td>' + esc(d.firstIp || d.first_ip || '—') + ((d.lastIp || d.last_ip) && (d.lastIp || d.last_ip) !== (d.firstIp || d.first_ip) ? ' → ' + esc(d.lastIp || d.last_ip) : '') + '</td>' +
                         '<td>' + (d.revokedAt || d.revoked_at ? '<span class="vl-badge">removed</span>' : '<span class="vl-badge is-free">allowed</span>') + '</td>' +
@@ -1396,5 +1583,7 @@
     const txSearch = $('vl-admin-tx-q');
     if (txSearch) txSearch.addEventListener('input', debounce(() => loadTransactions(), 300));
 
-    window.loadVideoLibraryAdmin = load;
+    window.loadVideoLibraryAdmin = function (focus) {
+        return load(focus);
+    };
 })();
