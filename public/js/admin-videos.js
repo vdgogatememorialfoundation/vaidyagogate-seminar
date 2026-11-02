@@ -163,7 +163,8 @@
             '<div><label>Registered for this event, paid and checked in</label><select id="vls-checkedin"><option value="1">Watch free</option><option value="0">Pay the video price</option></select></div>' +
             '<div><label>Registered and paid, did not attend</label><select id="vls-absent"><option value="1">Watch free</option><option value="0">Pay the video price</option></select></div></div>' +
             '<div class="vl-form-row vl-form-row-3" style="margin-top:8px;"><div><label>Not registered for this event</label><select id="vls-unregistered"><option value="0">Pay the video price</option><option value="1">Watch free</option></select></div>' +
-            '<div><label>Devices allowed per account</label><input type="number" id="vls-devices" min="1" max="10"></div></div>' +
+            '<div><label>Devices allowed per account</label><input type="number" id="vls-devices" min="1" max="10"></div>' +
+            '<div><label>Name and license on the picture</label><select id="vls-watermark"><option value="1">Shown</option><option value="0">Hidden</option></select></div></div>' +
             '<p class="vl-note">Checked in means the ticket was scanned or the registration is marked checked in. A certificate is not required. A registration for a different seminar counts as not registered for this event.</p>' +
             '<div class="vl-form-row" style="margin-top:8px;"><div><label>Where finished videos are stored</label><select id="vls-storage"><option value="local">Server disk</option><option value="r2">Cloud bucket (Cloudflare R2)</option></select></div></div>' +
             '<h4 style="margin:16px 0 6px;">Seminar video ads</h4>' +
@@ -174,7 +175,7 @@
             '<label>Google IMA ad tag (https)</label><input type="url" id="vls-ads-tag" placeholder="https://pubads.g.doubleclick.net/gampad/ads?..." maxlength="2000" autocomplete="off">' +
             '<div class="vl-upload-row" style="margin-top:10px;"><button type="button" class="vl-btn" id="vls-save">Save settings</button><span class="vl-note" id="vls-cloud"></span></div>' +
             '<p class="vl-form-msg" id="vls-msg"></p>' +
-            '<p class="vl-note">Each doctor gets a permanent 12-digit video license. It is printed on the picture together with their name and portal ID, and it moves while the video plays. The file is encrypted. The player does not offer download, picture-in-picture, or remote playback, and the stream is released only to that doctor’s registered device. The original upload is not available as a file. A doctor may play videos on the number of devices set here. Turn off in Who can watch stops a doctor even when they are a volunteer or have paid. Choosing the cloud bucket moves finished videos off the server disk. Playback still goes through this license.</p></div>' +
+            '<p class="vl-note">Each doctor gets a permanent 12-digit video license. While the watermark is shown, that license is drawn on the picture together with their name and portal ID, and it moves while the video plays. Choose Hidden to play the recording with no watermark. The file stays encrypted. The player does not offer download, picture-in-picture, or remote playback, and the stream is released only to that doctor’s registered device. The original upload is not available as a file. A doctor may play videos on the number of devices set here. Turn off in Who can watch stops a doctor even when they are a volunteer or have paid. Choosing the cloud bucket moves finished videos off the server disk. Playback still goes through this license.</p></div>' +
             '<h3 style="margin:18px 0 8px;font-size:1.05rem;">Videos</h3><div id="vl-admin-videos"></div>' +
             '<div class="vl-admin-grid" style="margin-top:22px;">' +
             '<div class="vl-form"><h3>Issue video access</h3>' +
@@ -275,6 +276,7 @@
         if ($('vls-checkedin')) $('vls-checkedin').value = st.freeCheckedIn === false || st.freeAttendedCertified === false ? '0' : '1';
         if ($('vls-absent')) $('vls-absent').value = st.freePaidAbsent === false ? '0' : '1';
         if ($('vls-unregistered')) $('vls-unregistered').value = st.freeNotRegistered === true ? '1' : '0';
+        if ($('vls-watermark')) $('vls-watermark').value = st.watermarkEnabled === false ? '0' : '1';
         if ($('vls-storage')) $('vls-storage').value = st.storageBackend === 'r2' ? 'r2' : 'local';
         if ($('vls-ads')) $('vls-ads').value = st.adsEnabled === true ? '1' : '0';
         if ($('vls-ads-client') && document.activeElement !== $('vls-ads-client')) $('vls-ads-client').value = st.adsenseClient || '';
@@ -322,6 +324,7 @@
                     freeCheckedIn: $('vls-checkedin').value === '1',
                     freePaidAbsent: $('vls-absent').value === '1',
                     freeNotRegistered: $('vls-unregistered').value === '1',
+                    watermarkEnabled: $('vls-watermark') ? $('vls-watermark').value !== '0' : true,
                     storageBackend: $('vls-storage').value,
                     adsEnabled: $('vls-ads') && $('vls-ads').value === '1',
                     adsenseClient: $('vls-ads-client') ? $('vls-ads-client').value : '',

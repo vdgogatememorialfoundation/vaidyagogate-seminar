@@ -699,12 +699,25 @@
             }
             return;
         }
+        const showWm = session.watermarkEnabled !== false;
+        ['vl-wm', 'vl-wm-fixed', 'vl-wm-corner'].forEach((id) => {
+            const el = $(id);
+            if (!el) return;
+            el.style.display = showWm ? '' : 'none';
+            if (!showWm) el.textContent = '';
+        });
         const fixedWm = $('vl-wm-fixed');
-        if (fixedWm) fixedWm.textContent = [(session.watermark && session.watermark.license) || '', (session.watermark && session.watermark.name) || ''].filter(Boolean).join('  ');
+        if (showWm && fixedWm) fixedWm.textContent = [(session.watermark && session.watermark.license) || '', (session.watermark && session.watermark.name) || ''].filter(Boolean).join('  ');
         $('vl-player-title').textContent = session.video ? session.video.title : 'Seminar video';
-        play = { token: session.token, videoId, hls: null, heartbeat: null, wmTimer: null, watermark: session.watermark || {}, ended: false };
-        moveWatermark();
-        play.wmTimer = setInterval(moveWatermark, 4000);
+        if (session.preparing) {
+            msg.textContent = 'This recording is being converted so it can play in the browser. Please wait, then press Watch again.';
+            return;
+        }
+        play = { token: session.token, videoId, hls: null, heartbeat: null, wmTimer: null, watermark: showWm ? session.watermark || {} : {}, ended: false };
+        if (showWm) {
+            moveWatermark();
+            play.wmTimer = setInterval(moveWatermark, 4000);
+        }
         video.setAttribute('controlsList', 'nodownload noremoteplayback noplaybackrate');
         video.controlsList && video.controlsList.add && video.controlsList.add('nodownload');
         video.disablePictureInPicture = true;
@@ -757,10 +770,21 @@
                 }
             });
             play.hls = hls;
+            let playFailures = 0;
             hls.on(Hls.Events.ERROR, (_evt, err) => {
                 const code = err && err.response && err.response.code;
                 if (code === 403 || code === 410) return endedElsewhere();
-                if (err && err.fatal) {
+                if (!err) return;
+                const stuck = err.details === 'fragParsingError' || err.details === 'bufferAppendError' || err.details === 'bufferAddCodecError' || err.details === 'bufferIncompatibleCodecsError' || err.details === 'manifestIncompatibleCodecsError';
+                if (stuck || err.fatal) playFailures += 1;
+                if (playFailures >= 4) {
+                    msg.textContent = 'Playback could not start. Refresh the page and press Watch again.';
+                    try {
+                        hls.stopLoad();
+                    } catch (_) {}
+                    return;
+                }
+                if (err.fatal) {
                     if (err.type === Hls.ErrorTypes.NETWORK_ERROR) hls.startLoad();
                     else if (err.type === Hls.ErrorTypes.MEDIA_ERROR) hls.recoverMediaError();
                     else msg.textContent = 'Playback error. Press Watch again.';
