@@ -158,13 +158,13 @@
             '<p class="vl-note" style="margin-top:10px;">Who watches free is set under Video settings. Turn off in Who can watch stops a doctor even when they are a volunteer or have paid.</p></div>' +
             '</div>' +
             '<div class="vl-form" id="vl-settings-form" style="margin-top:16px;"><h3>Video settings</h3>' +
-            '<p class="vl-note">These switches decide who watches a seminar year for free. Everyone else pays the album price, the single-video price, or is turned on one by one below. Raising or lowering a price does not remove access that is already paid.</p>' +
+            '<p class="vl-note">These switches decide who watches this seminar’s recordings for free. Everyone else pays the album price, the single-video price, or a personal price. Raising or lowering a price does not remove access that is already paid.</p>' +
             '<div class="vl-form-row vl-form-row-3"><div><label>Volunteers</label><select id="vls-volunteers"><option value="1">Watch free</option><option value="0">Pay like others</option></select></div>' +
-            '<div><label>Registered, checked in, certificate issued</label><select id="vls-attended"><option value="1">Watch free</option><option value="0">Pay the video price</option></select></div>' +
+            '<div><label>Registered for this event, paid and checked in</label><select id="vls-checkedin"><option value="1">Watch free</option><option value="0">Pay the video price</option></select></div>' +
             '<div><label>Registered and paid, did not attend</label><select id="vls-absent"><option value="1">Watch free</option><option value="0">Pay the video price</option></select></div></div>' +
-            '<div class="vl-form-row vl-form-row-3" style="margin-top:8px;"><div><label>Checked in, certificate not issued yet</label><select id="vls-other"><option value="0">Pay until this is turned on</option><option value="1">Watch free</option></select></div>' +
-            '<div><label>Every signed-in doctor</label><select id="vls-everyone"><option value="0">Off — only the groups above, or a payment</option><option value="1">Watch free</option></select></div>' +
+            '<div class="vl-form-row vl-form-row-3" style="margin-top:8px;"><div><label>Not registered for this event</label><select id="vls-unregistered"><option value="0">Pay the video price</option><option value="1">Watch free</option></select></div>' +
             '<div><label>Devices allowed per account</label><input type="number" id="vls-devices" min="1" max="10"></div></div>' +
+            '<p class="vl-note">Checked in means the ticket was scanned or the registration is marked checked in. A certificate is not required. A registration for a different seminar counts as not registered for this event.</p>' +
             '<div class="vl-form-row" style="margin-top:8px;"><div><label>Where finished videos are stored</label><select id="vls-storage"><option value="local">Server disk</option><option value="r2">Cloud bucket (Cloudflare R2)</option></select></div></div>' +
             '<h4 style="margin:16px 0 6px;">Seminar video ads</h4>' +
             '<p class="vl-note">These ads appear only in Seminar videos: one banner on the recording list, banners above and below the player, and a Google video ad before, during, or after the recording. Free and paid event videos both use them. The shop, tracking, certificates, and the rest of the site do not. Leave this off until AdSense has approved the site and you have an IMA ad tag.</p>' +
@@ -272,10 +272,9 @@
         const st = state.settings || {};
         if ($('vls-devices') && document.activeElement !== $('vls-devices')) $('vls-devices').value = st.maxDevices || 2;
         if ($('vls-volunteers')) $('vls-volunteers').value = st.volunteersFree === false ? '0' : '1';
-        if ($('vls-attended')) $('vls-attended').value = st.freeAttendedCertified === false ? '0' : '1';
+        if ($('vls-checkedin')) $('vls-checkedin').value = st.freeCheckedIn === false || st.freeAttendedCertified === false ? '0' : '1';
         if ($('vls-absent')) $('vls-absent').value = st.freePaidAbsent === false ? '0' : '1';
-        if ($('vls-other')) $('vls-other').value = st.freePaidOther === true ? '1' : '0';
-        if ($('vls-everyone')) $('vls-everyone').value = st.freeForEveryone === true ? '1' : '0';
+        if ($('vls-unregistered')) $('vls-unregistered').value = st.freeNotRegistered === true ? '1' : '0';
         if ($('vls-storage')) $('vls-storage').value = st.storageBackend === 'r2' ? 'r2' : 'local';
         if ($('vls-ads')) $('vls-ads').value = st.adsEnabled === true ? '1' : '0';
         if ($('vls-ads-client') && document.activeElement !== $('vls-ads-client')) $('vls-ads-client').value = st.adsenseClient || '';
@@ -320,10 +319,9 @@
                 body: {
                     maxDevices: $('vls-devices').value,
                     volunteersFree: $('vls-volunteers').value === '1',
-                    freeAttendedCertified: $('vls-attended').value === '1',
+                    freeCheckedIn: $('vls-checkedin').value === '1',
                     freePaidAbsent: $('vls-absent').value === '1',
-                    freePaidOther: $('vls-other').value === '1',
-                    freeForEveryone: $('vls-everyone').value === '1',
+                    freeNotRegistered: $('vls-unregistered').value === '1',
                     storageBackend: $('vls-storage').value,
                     adsEnabled: $('vls-ads') && $('vls-ads').value === '1',
                     adsenseClient: $('vls-ads-client') ? $('vls-ads-client').value : '',
@@ -1187,17 +1185,19 @@
         if (r.reason === 'blocked') return 'Turned off by the office';
         if (!r.allowed) {
             const c = r.checks || {};
-            if (!c.registered) return 'Not registered';
+            if (!c.registered) return 'Not registered for this event';
             if (!c.paid) return 'Registered — fee not paid';
-            if (c.paidOther) return 'Checked in — certificate not issued (this group pays until you turn it on)';
-            if (c.paidAbsent) return 'Paid, did not attend (this group pays until you turn it on)';
+            if (c.paidCheckedIn || c.attendedCertified || c.paidOther) return 'Registered, paid, and checked in (this group pays until you turn it on)';
+            if (c.paidAbsent) return 'Registered and paid, did not attend (this group pays until you turn it on)';
             return 'Registered';
         }
         const map = {
             volunteer: 'Volunteer',
-            attended_certified: 'Registered · checked in · certificate issued',
+            paid_checked_in: 'Registered for this event · paid · checked in',
+            attended_certified: 'Registered for this event · paid · checked in',
             paid_absent: 'Registered · paid · did not attend',
-            paid_other: 'Checked in · certificate not issued yet',
+            not_registered: 'Not registered for this event · watching free',
+            paid_other: 'Registered for this event · paid · checked in',
             registered_scanned: 'Registered · paid · ticket scanned',
             registered_paid: 'Registered · paid · not scanned',
             registered: 'Registered · paid',
