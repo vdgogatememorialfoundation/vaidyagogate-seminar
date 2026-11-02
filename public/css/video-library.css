@@ -59,6 +59,12 @@
 .vl-why { flex-basis: 100%; color: #9a3412; }
 .vl-player-msg { margin: 10px 0 0; font-size: 0.86rem; color: #fcd34d; min-height: 1.2em; }
 .vl-player-foot { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 8px; font-size: 0.78rem; color: #94a3b8; }
+.vl-ad { margin: 12px 0; text-align: center; }
+.vl-ad:empty { display: none; margin: 0; }
+.vl-player .vl-ad { background: #fff; border-radius: 10px; padding: 8px; }
+#vl-ad-container { position: absolute; inset: 0; z-index: 5; pointer-events: none; }
+#vl-ad-container.is-active { pointer-events: auto; z-index: 7; }
+.vl-ad-hidden { visibility: hidden !important; }
 
 .vl-pay { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; margin: 0 0 18px; }
 .vl-pay h4 { margin: 0 0 8px; font-size: 0.98rem; }

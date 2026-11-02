@@ -29,6 +29,15 @@ assert.strictEqual(vl.purchaseHoldMessage(heldSale), 'The price will be updated 
 heldSale.personalPrice = true;
 assert.strictEqual(vl.purchaseHoldMessage(heldSale), null);
 assert.strictEqual(vl.purchaseHoldMessage({ price_tbd: 0, amount: 500 }), null);
+assert.deepStrictEqual(vl.publicAdConfig({ adsEnabled: false, adsenseClient: 'ca-pub-1234567890123', adsenseSlot: '1234567890' }), { enabled: false });
+assert.deepStrictEqual(
+    vl.publicAdConfig({ adsEnabled: true, adsenseClient: 'ca-pub-1234567890123', adsenseSlot: '1234567890', imaAdTag: 'https://pubads.g.doubleclick.net/gampad/ads?sz=640x480' }),
+    { enabled: true, adsenseClient: 'ca-pub-1234567890123', adsenseSlot: '1234567890', imaAdTag: 'https://pubads.g.doubleclick.net/gampad/ads?sz=640x480' }
+);
+assert.strictEqual(vl.publicAdConfig({ adsEnabled: true, imaAdTag: 'http://pubads.g.doubleclick.net/ads' }).enabled, false);
+assert.strictEqual(vl.publicAdConfig({ adsEnabled: true, imaAdTag: 'javascript:alert(1)' }).enabled, false);
+assert.strictEqual(vl.cleanAdsenseClient('ca-pub-1234567890123'), 'ca-pub-1234567890123');
+assert.strictEqual(vl.cleanAdsenseClient('pub-123'), '');
 
 const options = [
     { id: 'razorpay:test', gateway: 'razorpay', mode: 'test', config: { key_id: 'rzp_test' } },
@@ -208,6 +217,13 @@ function access(db, userId, video, settings) {
     assert.ok(doctorJs.includes('You are not registered for this seminar, so you cannot watch yet.'));
     assert.ok(adminJs.includes('Price will be updated later'));
     assert.ok(adminJs.includes('vlc-tbd'));
+    assert.ok(adminJs.includes('vls-ads'));
+    assert.ok(adminJs.includes('Seminar video ads'));
+    assert.ok(doctorJs.includes('imasdk.googleapis.com/js/sdkloader/ima3.js'));
+    assert.ok(doctorJs.includes('pagead2.googlesyndication.com/pagead/js/adsbygoogle.js'));
+    assert.ok(doctorJs.includes('insideSeminarVideos'));
+    assert.ok(doctorJs.includes('tab-videos'));
+    assert.strictEqual(doctorJs.includes('adsbygoogle.js'), true);
 
     db.close();
     console.log('video album ok');
