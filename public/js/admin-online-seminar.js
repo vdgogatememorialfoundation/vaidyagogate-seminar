@@ -457,3 +457,16 @@
     }
     syncOnlineSeminarFields();
 })();
+
+(function () {
+    try {
+        const msg = new URLSearchParams(window.location.search).get('onlineMsg');
+        if (!msg) return;
+        window.addEventListener('load', function () {
+            setTimeout(function () {
+                if (typeof switchTab === 'function') switchTab('tab-online-seminars');
+                window.alert('Online seminar connection: ' + msg);
+            }, 600);
+        });
+    } catch (_) {}
+})();

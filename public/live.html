@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <title>Live seminar · Vaidya Gogate Memorial Foundation</title>
+    <link rel="stylesheet" href="/css/live.css?v=20261103live1">
+</head>
+<body>
+    <div class="live-wrap">
+        <header class="live-head">
+            <div>
+                <p class="live-kicker">Vaidya Gogate Memorial Foundation · Online seminar</p>
+                <h1 id="live-title">Live seminar</h1>
+            </div>
+            <span id="live-badge" class="live-badge">Checking…</span>
+        </header>
+
+        <section id="live-gate" class="live-card">
+            <p class="live-lead">Only doctors registered for this seminar can watch. Enter the email you registered with and we will send a one-time code.</p>
+            <form id="live-email-form" class="live-form">
+                <input id="live-email" type="email" required autocomplete="email" placeholder="Registered email">
+                <button type="submit" class="live-btn">Send code</button>
+            </form>
+            <form id="live-code-form" class="live-form hidden">
+                <input id="live-code" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" required placeholder="6-digit code">
+                <input id="live-pass" class="hidden" placeholder="Seminar passcode">
+                <button type="submit" class="live-btn">Watch</button>
+                <button type="button" id="live-resend" class="live-link">Resend code</button>
+            </form>
+            <p id="live-error" class="live-error"></p>
+            <p class="live-foot">Not registered yet? <a id="live-register" href="/doctor" target="_blank" rel="noopener">Register on the doctor portal</a>.</p>
+        </section>
+
+        <section id="live-stage" class="live-card live-stage hidden">
+            <div class="live-player">
+                <video id="live-video" playsinline controls autoplay></video>
+                <div id="live-wait" class="live-wait">Waiting for the host to go live…</div>
+                <div id="live-mark" class="live-mark"></div>
+            </div>
+            <p id="live-status" class="live-status"></p>
+        </section>
+    </div>
+    <script src="/vendor/hls.light.min.js"></script>
+    <script src="/js/live.js?v=20261103live1"></script>
+</body>
+</html>
