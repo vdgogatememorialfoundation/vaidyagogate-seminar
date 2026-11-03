@@ -14,6 +14,7 @@
     <link rel="stylesheet" href="/css/responsive-portals.css?v=20260620layout4">
     <link rel="stylesheet" href="/css/vgmf-portal-bright.css?v=20260620theme1">
     <link rel="stylesheet" href="/css/vgmf-mobile-portal.css">
+    <link rel="stylesheet" href="/css/video-library.css?v=20261102ads1">
     <link rel="stylesheet" href="/css/doctor-professional.css?v=20260922b">
     <style>
         :root {
@@ -317,6 +318,11 @@
                 <button type="button" class="menu-item" data-tab="tab-refunds"><i class="fas fa-undo-alt"></i> <span data-i18n="doctor.menu.refunds">Refund tracking</span></button>
                 <button type="button" class="menu-item" data-tab="tab-receipts"><i class="fas fa-file-invoice"></i> <span data-i18n="doctor.menu.receipts">Receipts</span></button>
                 <button type="button" class="menu-item hidden" id="nav-books" data-tab="tab-books"><i class="fas fa-book"></i> <span data-i18n="doctor.menu.books">Book orders</span></button>
+                <button type="button" class="menu-item" data-tab="tab-videos"><i class="fas fa-video"></i> Seminar videos</button>
+                <button type="button" class="menu-item" data-tab="tab-video-subscription"><i class="fas fa-id-card"></i> My subscription</button>
+                <button type="button" class="menu-item" data-tab="tab-video-devices"><i class="fas fa-laptop"></i> My devices</button>
+                <button type="button" class="menu-item" data-tab="tab-video-license"><i class="fas fa-fingerprint"></i> My license ID</button>
+                <button type="button" class="menu-item" data-tab="tab-transactions"><i class="fas fa-list-alt"></i> My transactions</button>
                 <button type="button" class="menu-item" data-tab="tab-payments"><i class="fas fa-credit-card"></i> <span data-i18n="doctor.menu.payments">Payments</span></button>
                 <button type="button" class="menu-item" data-tab="tab-ticket"><i class="fas fa-qrcode"></i> <span data-i18n="doctor.menu.tickets">Participant tickets</span></button>
                 <button type="button" class="menu-item" data-tab="tab-certificate"><i class="fas fa-award"></i> Certificates</button>
@@ -745,6 +751,53 @@
                     </div>
                 </div>
 
+                <div id="tab-videos" class="tab-pane hidden">
+                    <h2 class="section-title">Seminar videos</h2>
+                    <p class="vl-intro">Recordings of the seminar you registered for. A fixed album price unlocks every lecture, including ones added later. A subscription unlocks the lectures available when you pay. A single video unlocks only that recording. If the office set a price for your account, that is the amount you pay. Volunteers, doctors who attended and hold a certificate, and doctors who paid but did not attend watch without a separate fee while the office leaves those groups on. A registration for a different seminar does not include these recordings. The picture is marked with your video license, name, and portal ID, and it cannot be downloaded from this page.</p>
+                    <div id="vl-player-wrap" class="vl-player hidden">
+                        <div class="vl-player-head">
+                            <h3 id="vl-player-title">Seminar video</h3>
+                            <button type="button" class="vl-btn is-ghost is-small" id="vl-player-close"><i class="fas fa-times"></i> Close</button>
+                        </div>
+                        <div class="vl-stage">
+                            <video id="vl-video" controls playsinline preload="metadata" controlsList="nodownload noremoteplayback noplaybackrate" disablePictureInPicture oncontextmenu="return false;"></video>
+                            <div class="vl-guard" id="vl-guard" aria-hidden="true"></div>
+                            <div class="vl-wm" id="vl-wm"></div>
+                            <div class="vl-wm-fixed" id="vl-wm-fixed" aria-hidden="true"></div>
+                            <div class="vl-wm-corner" id="vl-wm-corner" aria-hidden="true"></div>
+                        </div>
+                        <p class="vl-player-msg" id="vl-player-msg"></p>
+                        <div class="vl-player-foot"><span><i class="fas fa-shield-alt"></i> Protected stream, personal to your account.</span><span>Playback on one device at a time.</span></div>
+                    </div>
+                    <div id="vl-pay" class="vl-pay hidden"></div>
+                    <div id="vl-years"><p class="vl-note">Loading…</p></div>
+                </div>
+
+                <div id="tab-video-subscription" class="tab-pane hidden">
+                    <h2 class="section-title">My subscription</h2>
+                    <p class="vl-intro">Seminar years, albums, and single videos you can watch. Paying an album unlocks every part in it. A single video unlocks only that recording.</p>
+                    <div id="vl-subscription"><p class="vl-note">Loading…</p></div>
+                </div>
+
+                <div id="tab-video-devices" class="tab-pane hidden">
+                    <h2 class="section-title">My devices</h2>
+                    <p class="vl-intro">Videos play on a limited number of your own devices. This browser is registered the first time you press Watch.</p>
+                    <div id="vl-devices-page"><p class="vl-note">Loading…</p></div>
+                </div>
+
+                <div id="tab-video-license" class="tab-pane hidden">
+                    <h2 class="section-title">My license ID</h2>
+                    <p class="vl-intro">This permanent number is printed inside every seminar video you watch. It stays with your account.</p>
+                    <div id="vl-license-page"><p class="vl-note">Loading…</p></div>
+                </div>
+
+                <div id="tab-transactions" class="tab-pane hidden">
+                    <h2 class="section-title">My transactions</h2>
+                    <p class="vl-intro">Seminar registrations, seminar videos, and book orders in one list.</p>
+                    <div id="vl-tx-filters" class="vl-filters"></div>
+                    <div id="vl-transactions"><p class="vl-note">Loading…</p></div>
+                </div>
+
                 <div id="tab-books" class="tab-pane hidden">
                     <h2 class="section-title">Books — Agnikarma &amp; Viddhakarma</h2>
                     <p style="color:#64748b;margin:-10px 0 16px;">Order Dr. R.B. Gogate books in English, Marathi, Hindi, or Kannada. Collect at the seminar book desk, or choose courier delivery with live shipping rates.</p>
@@ -759,7 +812,6 @@
                     </div>
                     <h3 style="margin:24px 0 6px;font-size:1.05rem;">My book orders</h3>
                     <p style="margin:0 0 10px;font-size:0.85rem;color:#64748b;">Courier parcels: <a href="/track-shipment" target="_blank" rel="noopener" style="color:#0f766e;font-weight:700;">Track shipment ↗</a> (order code + AWB or mobile last 4 digits).</p>
-                    <p id="books-track-live" class="hidden" style="font-size:0.82rem;color:#0f766e;font-weight:700;margin:0 0 10px;"><span class="pkg-live-dot" style="display:inline-block;vertical-align:middle;margin-right:6px;"></span> Live delivery tracking — updates every few seconds</p>
                     <div id="books-orders-list"></div>
                 </div>
 
@@ -930,7 +982,8 @@
     <script src="/js/case-r2-upload.js?v=20260608case2"></script>
     <link rel="stylesheet" href="/css/book-track.css?v=20260529stg">
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
-    <script src="/js/doctor-books.js?v=20261006move"></script>
+    <script src="/js/doctor-books.js?v=20261026stage1"></script>
+    <script src="/js/doctor-videos.js?v=20261102h2641"></script>
     <script src="/js/live-chat-client-info.js?v=20260610chat1"></script>
     <script src="/js/doctor-live-chat-widget.js?v=20260615live2"></script>
     <script src="/js/site-visitor-beacon.js?v=20260613radar6"></script>
@@ -956,6 +1009,7 @@
         }
     })();
     </script>
-    <script src="/js/doctor.js?v=20261004attend"></script>
+    <script src="/js/doctor.js?v=20261029acct1"></script>
+    <script src="/js/doctor-online-seminar.js?v=20261030hall2"></script>
 </body>
 </html>

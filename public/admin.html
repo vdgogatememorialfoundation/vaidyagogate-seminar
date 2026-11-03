@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <script>!function(){var w=Math.min(window.innerWidth||1200,document.documentElement.clientWidth||1200);document.documentElement.classList.add(w<=760?"tl-phone":w<=1100?"tl-tablet":"tl-desktop")}()</script>
     <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
     <title>Super Admin CMS | Vaidya Gogate Memorial Foundation National Seminar</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
@@ -156,6 +157,7 @@
                 <a class="menu-item active" data-admin-module="tab-staff-users" onclick="switchTab('tab-staff-users')"><i class="fas fa-user-shield"></i> Staff users</a>
                 <a class="menu-item" data-admin-module="tab-doctors" onclick="switchTab('tab-doctors')"><i class="fas fa-user-md"></i> Doctors</a>
                 <a class="menu-item" data-admin-module="tab-seminars" onclick="switchTab('tab-seminars')"><i class="fas fa-calendar-alt"></i> Seminar Management</a>
+                <a class="menu-item" data-admin-module="tab-online-seminars" onclick="switchTab('tab-online-seminars')"><i class="fas fa-chalkboard-teacher"></i> Online seminars</a>
                 <a class="menu-item" data-admin-module="tab-event-schedules" onclick="switchTab('tab-event-schedules'); loadEventSchedules();"><i class="fas fa-clock"></i> Event Schedules</a>
                 <a class="menu-item" data-admin-module="tab-applications" onclick="switchTab('tab-applications')"><i class="fas fa-folder-open"></i> Review Applications</a>
                 <a class="menu-item" data-admin-module="tab-payment-followup" onclick="switchTab('tab-payment-followup'); initAdminPaymentFollowupTab();"><i class="fas fa-phone-volume"></i> Payment Follow-up</a>
@@ -174,6 +176,11 @@
                 <a class="menu-item" data-admin-module="tab-cancellation-review" onclick="switchTab('tab-cancellation-review'); initAdminCancellationReviewTab();"><i class="fas fa-user-times"></i> Cancellation review <span id="admin-cancel-review-badge" style="display:none;margin-left:6px;background:#f59e0b;color:#fff;font-size:0.68rem;font-weight:700;padding:2px 7px;border-radius:999px;vertical-align:middle;"></span></a>
                 <a class="menu-item" data-admin-module="tab-refund-tracking" onclick="switchTab('tab-refund-tracking'); initAdminRefundTrackingTab();"><i class="fas fa-undo-alt"></i> Refund tracking</a>
                 <a class="menu-item" data-admin-module="tab-book-sales" onclick="switchTab('tab-book-sales'); loadBookSalesAdmin();"><i class="fas fa-book"></i> Book sales</a>
+                <a class="menu-item" data-admin-module="tab-video-library" onclick="switchTab('tab-video-library'); loadVideoLibraryAdmin();"><i class="fas fa-video"></i> Seminar videos</a>
+                <a class="menu-item" data-admin-module="tab-video-library" style="padding-left:28px;" onclick="switchTab('tab-video-library'); loadVideoLibraryAdmin('settings');"><i class="fas fa-shield-alt"></i> Video settings</a>
+                <a class="menu-item" data-admin-module="tab-video-library" style="padding-left:28px;" onclick="switchTab('tab-video-library'); loadVideoLibraryAdmin('analytics');"><i class="fas fa-chart-bar"></i> Watch analytics</a>
+                <a class="menu-item" data-admin-module="tab-video-library" style="padding-left:28px;" onclick="switchTab('tab-video-library'); loadVideoLibraryAdmin('price');"><i class="fas fa-tag"></i> Personal price</a>
+                <a class="menu-item" data-admin-module="tab-transactions" onclick="switchTab('tab-transactions'); if (window.loadAdminTransactions) loadAdminTransactions();"><i class="fas fa-receipt"></i> Transactions</a>
                 <a class="menu-item" data-admin-module="tab-certificates" onclick="switchTab('tab-certificates'); initAdminCertificatesTab();"><i class="fas fa-award"></i> Certificate Management</a>
                 <a class="menu-item" data-admin-module="tab-volunteers" onclick="switchTab('tab-volunteers'); initAdminVolunteersTab();"><i class="fas fa-hands-helping"></i> Volunteers</a>
                 <a class="menu-item" data-admin-module="tab-volunteer-assignments" onclick="switchTab('tab-volunteer-assignments'); initAdminVolunteerAssignmentsTab();"><i class="fas fa-clipboard-list"></i> Volunteer assignments</a>
@@ -367,7 +374,33 @@
             </div>
 
             <!-- Seminar Management -->
-            <div id="tab-seminars" class="tab-pane hidden">
+                        <!-- Online seminars -->
+            <div id="tab-online-seminars" class="tab-pane hidden">
+                <h2 style="margin-bottom: 20px;">Online seminars</h2>
+                <div class="card" id="online-seminar-settings" style="margin-bottom:16px;border:1px solid #99f6e4;background:#f0fdfa;">
+                    <h3 style="margin:0 0 6px;color:#0f766e;">Online seminar connections</h3>
+                    <p style="margin:0 0 12px;color:#115e59;font-size:0.88rem;">Add the office accounts once. Each seminar can then be at a venue, or online on VGMF Hall, Zoom, Google Meet, Zoho Backstage, or Zoho Webinar. Keys stay on this server. Meeting links are not shown here.</p>
+                    <div id="online-seminar-settings-body"><p style="color:#64748b;">Open this tab to load the connection form.</p></div>
+                </div>
+                <div class="card" id="online-seminar-access" style="margin-bottom:16px;">
+                    <h3 style="margin:0 0 6px;">Staff access</h3>
+                    <p style="margin:0 0 12px;color:#64748b;font-size:0.88rem;">Only a registered email can enter. Invite a staff account and they attend free, even when the seminar has a fee. If the fee is 0, registered doctors and invited staff both join without payment.</p>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+                        <select id="os-invite-seminar" style="min-width:220px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;"></select>
+                        <input id="os-invite-email" type="email" placeholder="Staff email" style="min-width:220px;padding:8px;border:1px solid #cbd5e1;border-radius:8px;">
+                        <button type="button" class="btn-primary" style="background:#0f766e;" onclick="inviteOnlineStaff()">Invite staff</button>
+                    </div>
+                    <div id="os-invite-list" style="margin-top:12px;"></div>
+                </div>
+                <div class="card" id="online-seminar-recordings">
+                    <h3 style="margin:0 0 6px;">Recordings</h3>
+                    <p style="margin:0 0 12px;color:#64748b;font-size:0.88rem;">VGMF Hall keeps a copy when the host goes live. Zoom and Zoho Webinar recordings can be saved onto this server after the meeting. Downloads stay in this office.</p>
+                    <button type="button" class="btn-secondary" onclick="loadOnlineSeminarOffice()">Refresh</button>
+                    <div id="os-recordings-list" style="margin-top:12px;"></div>
+                </div>
+            </div>
+
+<div id="tab-seminars" class="tab-pane hidden">
                 <h2 style="margin-bottom: 20px;">Seminar Management</h2>
                 <div class="card">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 15px;">
@@ -1352,6 +1385,29 @@
                     <button type="button" class="btn-primary" style="margin-top:16px;" onclick="saveAdminSiteCms()">Save website &amp; portal content</button>
                     <p id="cms-save-msg" style="margin-top:10px;font-weight:600;"></p>
                 </div>
+            </div>
+
+            <!-- Transactions -->
+            <div id="tab-transactions" class="tab-pane hidden">
+                <h2 class="section-title">Transactions</h2>
+                <p class="vl-intro">Event registrations, seminar video unlocks, and book orders.</p>
+                <div class="vl-upload-row" style="margin-bottom:12px;">
+                    <div id="vl-admin-tx-filters" class="vl-filters" style="margin:0;">
+                        <button type="button" class="vl-btn is-small is-ghost" data-tx-kind="events">Events</button>
+                        <button type="button" class="vl-btn is-small is-ghost" data-tx-kind="videos">Seminar videos</button>
+                        <button type="button" class="vl-btn is-small is-ghost" data-tx-kind="books">Book orders</button>
+                        <button type="button" class="vl-btn is-small" data-tx-kind="all">All</button>
+                    </div>
+                    <input type="search" id="vl-admin-tx-q" placeholder="Search name, reference, or payment id" style="min-width:220px;flex:1;">
+                </div>
+                <div id="vl-admin-tx"><p class="vl-note">Open this page to load transactions.</p></div>
+            </div>
+
+            <!-- Seminar videos -->
+            <div id="tab-video-library" class="tab-pane hidden">
+                <h2 class="section-title">Seminar videos</h2>
+                <p class="vl-intro">Upload an album for one seminar, lecture by lecture or as one video. A fixed album price unlocks every part, including lectures added later. A subscription price unlocks the lectures available at the time of payment. A single video, such as an online seminar, has its own price, and that price can be changed. The office can also set a different price for one doctor. Files are encrypted. Download is not offered. Volunteers, doctors who attended that seminar and received a certificate, and doctors who paid for that seminar but did not attend watch free while those switches are on. A registration for a different seminar does not include these recordings. Opening the library to every signed-in doctor stays off until the office turns it on.</p>
+                <div id="vl-admin-root"><p class="vl-note">Loading…</p></div>
             </div>
 
             <!-- Book sales -->
@@ -3466,6 +3522,42 @@
                     <input type="text" id="seminar-location-text" placeholder="e.g. Smt Shakuntala Shetty Auditorium, Pune — or TBD">
                     <p style="font-size:0.8rem;color:#64748b;margin:4px 0 0;">Doctors see this on a map when set. Enter <strong>TBD</strong> if the venue is not final yet. Requires <code>GOOGLE_MAPS_API_KEY</code> (Maps Embed API) on the server.</p>
                 </div>
+                <div id="seminar-online-card" style="grid-column:1/-1;padding:14px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:10px;">
+                    <h4 style="margin:0 0 8px;color:#0f766e;">Online or at the venue</h4>
+                    <p style="font-size:0.82rem;color:#115e59;margin:0 0 10px;">Offline seminars stay on the venue map. Online seminars open only for a registered email. Invited staff attend free. If the fee is 0, registered doctors and invited staff both join without payment. Accounts are saved under Online seminars. The meeting link is never shown.</p>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                        <div>
+                            <label>How people attend</label>
+                            <select id="seminar-attend-mode">
+                                <option value="offline">At the venue</option>
+                                <option value="online">Online</option>
+                            </select>
+                        </div>
+                        <div id="seminar-provider-wrap">
+                            <label>Online platform</label>
+                            <select id="seminar-meeting-provider">
+                                <option value="vgmf">VGMF Hall (our webinar)</option>
+                                <option value="zoom">Zoom</option>
+                                <option value="google_meet">Google Meet</option>
+                                <option value="zoho_backstage">Zoho Backstage</option>
+                                <option value="zoho_webinar">Zoho Webinar</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div id="seminar-online-extra" style="margin-top:12px;display:grid;gap:10px;">
+                        <label style="display:flex;align-items:center;gap:8px;font-weight:600;">
+                            <input type="checkbox" id="seminar-meeting-waiting"> Waiting room on VGMF Hall (host admits each doctor)
+                        </label>
+                        <label id="seminar-manual-wrap" style="display:flex;align-items:center;gap:8px;font-weight:600;">
+                            <input type="checkbox" id="seminar-meeting-manual"> Use a link I paste instead of creating one from the connected account
+                        </label>
+                        <div><label>Attendee link (paste once, then it stays hidden)</label><input type="password" id="seminar-meeting-join-url" autocomplete="new-password" placeholder="Not shown again after you save"></div>
+                        <div><label>Host link (paste once, then it stays hidden)</label><input type="password" id="seminar-meeting-host-url" autocomplete="new-password" placeholder="Not shown again after you save"></div>
+                        <div><label>Passcode (optional)</label><input type="text" id="seminar-meeting-passcode" autocomplete="off" placeholder="Doctors must enter this to join"></div>
+                        <p id="seminar-online-warning" style="margin:0;font-size:0.82rem;color:#9a3412;"></p>
+                        <button type="button" class="btn-primary" style="background:#0f766e;max-width:240px;" onclick="openOnlineSeminarHost()">Open host hall</button>
+                    </div>
+                </div>
                 <div><label>Terms and Conditions</label><textarea id="seminar-terms" rows="3"></textarea></div>
                 <div style="background: #eff6ff; padding: 15px; border: 1px solid #bfdbfe; border-radius: 12px;">
                     <h4 style="margin-bottom: 10px; color:#1e40af;">Per-seminar links, policy &amp; form override</h4>
@@ -3764,16 +3856,19 @@
     <script src="/js/user-roles.js?v=20260522f"></script>
     <script src="/js/admin-list-search.js?v=20260522a"></script>
     <link rel="stylesheet" href="/css/book-track.css?v=20260529stg">
-    <link rel="stylesheet" href="/css/track-timeline.css?v=20261027v1">
+    <link rel="stylesheet" href="/css/video-library.css?v=20261102ads1">
+    <link rel="stylesheet" href="/css/track-timeline.css?v=20261101curve1">
     <script src="/js/book-tracking-ui.js?v=20260529stg"></script>
     <script src="/js/fetch-json.js?v=20260527a"></script>
     <script src="/js/portal-website-menu.js?v=20260612legal2"></script>
-    <script src="/js/admin-module-defs.js?v=20261001b"></script>
-    <script src="/js/track-timeline.js?v=20261027v1"></script>
-    <script src="/js/commerce-track.js?v=20261027v1"></script>
-    <script src="/js/admin-commerce.js?v=20261012v21"></script>
+    <script src="/js/admin-module-defs.js?v=20261029field1"></script>
+    <script src="/js/track-timeline.js?v=20261101curve1"></script>
+    <script src="/js/commerce-track.js?v=20261029rider11"></script>
+    <script src="/js/admin-commerce.js?v=20261029rider2"></script>
     <script src="/js/doctor-module-access.js?v=20261004mod"></script>
-    <script src="/js/admin.js?v=20261012v20"></script>
+    <script src="/js/admin.js?v=20261029acct1"></script>
+    <script src="/js/admin-online-seminar.js?v=20261030hall3"></script>
+    <script src="/js/admin-videos.js?v=20261102groups1"></script>
     <script src="/js/pos-onspot-ui.js?v=20261001m"></script>
     <script src="/js/admin-whatsapp.js?v=20260921a"></script>
     <script src="/js/admin-payment-followup.js?v=20260929a"></script>

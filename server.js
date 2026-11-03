@@ -91,6 +91,7 @@ const emailDeliveryFlags = require('./lib/email-delivery-flags');
 const seminarEventOps = require('./lib/seminar-event-ops');
 const seminarAlumniNotify = require('./lib/seminar-alumni-notify');
 const googleMaps = require('./lib/google-maps');
+const onlineSeminar = require('./lib/online-seminar');
 
 function volunteerTicketDeps() {
     return {
@@ -296,6 +297,11 @@ function mountPaymentsRoutes() {
         listDoctorPaymentOptions,
         parsePositiveUserId
     });
+    require('./lib/tookan-field-routes').registerTookanFieldRoutes(app, db);
+    require('./lib/video-library').registerVideoLibraryRoutes(app, db, {
+        listDoctorPaymentOptions,
+        parsePositiveUserId
+    });
     require('./lib/staff-portal-routes').registerStaffPortalRoutes(app, db, {
         portalTracking,
         notifEngine,
@@ -309,6 +315,7 @@ function mountPaymentsRoutes() {
 }
 
 function bootstrapApp(done) {
+    onlineSeminar.ensureSchema(db, () => {});
     mountExtendedRoutes();
     mountPaymentsRoutes();
     const r2Storage = require('./lib/r2-storage');
@@ -2351,7 +2358,7 @@ function attachEventsAndDaysToSeminarRows(rows, cb) {
                 s.schedule_dates = seminarDt.seminarDateList(s);
                 s.is_multi_day = s.schedule_dates.length > 1;
             });
-            cb(null, out);
+            onlineSeminar.attachPublicSummary(db, out || [], cb);
         });
     });
 }
@@ -6780,7 +6787,7 @@ function respondDoctorPortalAccess(res, row) {
         const globalVolunteer = c.doctorPortalModulesVolunteer || {};
         const useGlobalModules = !doctorPortalModules.userHasCustomModules(row.doctor_modules);
         const modulesForResolve = useGlobalModules ? null : row.doctor_modules;
-        const allowedSet = expandRefundTabAccess(
+        const allowedSet = doctorPortalModules.expandRefundTabAccess(
             doctorPortalModules.resolveDoctorAllowedTabs(
                 row.doctor_category,
                 globalRegular,
@@ -9004,7 +9011,14 @@ app.post('/api/admin/seminars', (req, res) => {
                         });
                         cacheInvalidatePrefix('api:seminars:');
                         cacheInvalidatePrefix('api:public:announcements');
-                        res.json({ success: true, seminarId: newId });
+                        onlineSeminar.persistFromSeminarBody(db, newId, req.body, (mErr, saved) => {
+                            if (mErr) console.warn('[online-seminar] create:', mErr.message);
+                            res.json({
+                                success: true,
+                                seminarId: newId,
+                                onlineSeminarWarning: (mErr && mErr.message) || (saved && saved.warning) || null
+                            });
+                        });
                     });
                 });
             }
@@ -9192,7 +9206,14 @@ app.put('/api/admin/seminars/:id', (req, res) => {
                         if (!is_active) {
                             removeSeminarScrollingAnnouncement(sid, () => {});
                         }
-                        res.json({ success: true, portalYear: finalPortalYear });
+                        onlineSeminar.persistFromSeminarBody(db, sid, req.body, (mErr, saved) => {
+                            if (mErr) console.warn('[online-seminar] update:', mErr.message);
+                            res.json({
+                                success: true,
+                                portalYear: finalPortalYear,
+                                onlineSeminarWarning: (mErr && mErr.message) || (saved && saved.warning) || null
+                            });
+                        });
                     });
                 });
             }
@@ -11016,6 +11037,37 @@ app.post('/api/admin/certificates/:id/toggle', (req, res) => {
     );
 });
 
+function publicCertificateVerify(req, res, rawId) {
+    if (!certVerify.allowPublicCertificateLookup(req.ip)) {
+        res.setHeader('Cache-Control', 'no-store');
+        return res.status(429).json({
+            ok: false,
+            valid: false,
+            status: 'rate_limited',
+            error: 'Too many lookups. Try again in a minute.'
+        });
+    }
+    certVerify.lookupCertificateByPublicId(db, rawId, (err, out) => {
+        if (err) return res.status(500).json({ ok: false, valid: false, error: 'Certificate lookup failed.' });
+        res.setHeader('Cache-Control', 'no-store');
+        res.status(out && out.status === 'invalid_id' ? 400 : 200).json(out);
+    });
+}
+
+app.get(['/developers/certificate-api', '/developers/certificate-api/'], (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.sendFile(path.join(publicDir, 'developers', 'certificate-api.html'));
+});
+
+// Certificate id check for the foundation's main website. No login and no email code.
+app.get('/api/public/certificates/verify', (req, res) => {
+    publicCertificateVerify(req, res, req.query.id || req.query.certificateId || '');
+});
+
+app.get('/api/public/certificates/verify/:certificateId', (req, res) => {
+    publicCertificateVerify(req, res, req.params.certificateId);
+});
+
 // Public certificate verification (enabled per seminar after event ends)
 app.get('/api/public/certificate-verify/seminars', (req, res) => {
     certVerify.listPublicVerifySeminars(db, (err, list) => {
@@ -11718,7 +11770,9 @@ app.post('/api/admin/portal-auth-config', (req, res) => {
             if (req.body && req.body.resetAllDoctorModuleOverrides) {
                 db.run(
                     `UPDATE users SET doctor_modules = NULL
-                     WHERE LOWER(TRIM(COALESCE(user_role, ''))) = 'doctor'`,
+                     WHERE LOWER(TRIM(COALESCE(user_role, ''))) = 'doctor'
+                        OR LOWER(TRIM(COALESCE(role, ''))) = 'doctor'
+                        OR LOWER(TRIM(COALESCE(doctor_category, ''))) = 'volunteer'`,
                     [],
                     (clrErr) => {
                         if (clrErr) return res.status(500).json({ error: clrErr.message });
@@ -16543,11 +16597,19 @@ app.post('/api/admin/case-judge-marking-reminder-config', (req, res) => {
     });
 });
 
+onlineSeminar.registerOnlineSeminarRoutes(app, {
+    db,
+    assertAdminPortalActor,
+    publicDir
+});
+
 app.use((err, req, res, next) => {
     if (res.headersSent) return next(err);
     console.error('[express] unhandled error:', err && err.message ? err.message : err);
     res.status(500).json({ error: 'Internal server error' });
 });
+
+try { require('./lib/vgmf-ingest').install({ app, db, portal: 'seminar' }); } catch (e) { console.warn('[vgmf-ingest]', e && e.message); }
 
 module.exports = app;
 
@@ -16558,7 +16620,7 @@ if (require.main === module) {
             process.exit(1);
         }
         bootstrapApp(() => {
-            app.listen(PORT, () => {
+            const httpServer = app.listen(PORT, () => {
                 console.log(`Server is running on http://localhost:${PORT}`);
                 console.log('[routes] Case presentation APIs: /api/admin/case/programs, /api/case/programs');
                 renderKeepalive.startRenderKeepalive();
@@ -16567,6 +16629,12 @@ if (require.main === module) {
                 } catch (e) {
                     console.warn('[gmail-inbound] start failed:', e.message);
                 }
+                try {
+                    require('./lib/rider-live-socket').attach(httpServer, db);
+                } catch (e) {
+                    console.warn('[rider-live] start failed:', e.message);
+                }
+                try { onlineSeminar.attachHall(httpServer, { db }); } catch (hallErr) { console.warn('[online-seminar] hall:', hallErr.message); }
             });
         });
     });

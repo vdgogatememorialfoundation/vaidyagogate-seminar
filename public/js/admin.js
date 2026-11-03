@@ -264,7 +264,8 @@ const STAFF_MODULE_TO_ADMIN_TAB = {
     'support-tickets': 'tab-support-tickets',
     'contact-center': 'tab-contact-center',
     'book-inventory': 'tab-book-sales',
-    'book-orders': 'tab-book-sales'
+    'book-orders': 'tab-book-sales',
+    'field-force': 'tab-field-force'
 };
 
 function isStaffCrmUserClient(u) {
@@ -1638,6 +1639,7 @@ const DOCTOR_MODULE_TAB_DEFS = [
     ['tab-receipts', 'Receipts'],
     ['tab-payments', 'Payments'],
     ['tab-books', 'Book orders (Agnikarma / Viddhakarma)'],
+    ['tab-videos', 'Seminar videos'],
     ['tab-ticket', 'Participant tickets'],
     ['tab-certificate', 'Certificates'],
     ['tab-reset-pwd', 'Change password']
@@ -1680,7 +1682,11 @@ function resolveDoctorAllowedTabsAdmin(category, userModulesRaw) {
     if (!hasExplicitOff) {
         const uk = Object.keys(userMap);
         if (!uk.length || !uk.some((k) => userMap[k] === true)) return allowed;
-        return new Set(uk.filter((k) => userMap[k] === true));
+        const userAllowed = new Set(uk.filter((k) => userMap[k] === true));
+        if (allowed === null) return userAllowed;
+        const merged = new Set(allowed);
+        userAllowed.forEach((tabId) => merged.add(tabId));
+        return merged;
     }
     const out = new Set();
     DOCTOR_MODULE_TAB_DEFS.forEach(([tabId]) => {
@@ -1790,6 +1796,7 @@ const ADMIN_MODULE_TAB_DEFS = [
     ['tab-reg-form', 'Registration form fields'],
     ['tab-site-cms', 'Website & doctor updates'],
     ['tab-book-sales', 'Book sales'],
+    ['tab-video-library', 'Seminar videos'],
     ['tab-commerce', 'Commerce'],
     ['tab-admin-payments', 'Payments'],
     ['tab-payment-followup', 'Payment follow-up'],
@@ -2459,7 +2466,8 @@ const STAFF_PORTAL_MODULE_DEFS = [
     ['etickets', 'E-tickets lookup'],
     ['payments', 'Payments & seminar orders'],
     ['pos', 'On-spot POS (register & collect, private pay links)'],
-    ['contact-center', 'Contact Center (assigned applicant follow-up)']
+    ['contact-center', 'Contact Center (assigned applicant follow-up)'],
+    ['field-force', 'Appointments & field force']
 ].concat(
     (window.ADMIN_MODULE_DEFS || [])
         .filter((d) => !Object.values(STAFF_MODULE_TO_ADMIN_TAB).includes(d.id))
@@ -24467,11 +24475,36 @@ function renderBsPosOrdersTable(rows) {
                     '<button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.78rem;background:#475569;" onclick="bsViewOrderTracking(' +
                     o.id +
                     ')">Track</button>' +
+                    (o.tracking_token
+                        ? ' <button type="button" class="btn-primary" style="padding:4px 8px;font-size:0.78rem;background:#0f766e;" onclick="bsCopyText(\'' +
+                          e(bsPublicTrackUrl(o.tracking_token)).replace(/'/g, '') +
+                          '\', this)">Copy tracking link</button>'
+                        : '') +
                     '</td></tr>'
                 );
             })
             .join('') +
         '</tbody></table></div>';
+}
+
+function bsPublicTrackUrl(token) {
+    return window.location.origin + '/track-commerce?token=' + encodeURIComponent(String(token || ''));
+}
+
+function bsCopyText(text, btn) {
+    const done = () => {
+        if (!btn) return;
+        const old = btn.textContent;
+        btn.textContent = 'Copied';
+        setTimeout(() => {
+            btn.textContent = old;
+        }, 1400);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, () => window.prompt('Copy this link', text));
+    } else {
+        window.prompt('Copy this link', text);
+    }
 }
 
 async function bsPosApplyOrderStatus(orderId) {
@@ -24622,6 +24655,12 @@ async function bsPosSave() {
         if (msg) {
             msg.style.color = '#15803d';
             let html = '✓ Order placed: <strong>' + e(data.orderCode || '') + '</strong>';
+            const posTrack = data.trackUrl || (data.order && data.order.commerceTrackUrl) || '';
+            if (posTrack) {
+                html +=
+                    '<div style="margin-top:8px;font-size:0.85rem;">Public tracking link: <a href="' + e(posTrack) + '" target="_blank" rel="noopener">' + e(posTrack) + '</a> ' +
+                    '<button type="button" class="btn-primary" style="padding:2px 8px;font-size:0.75rem;background:#475569;" onclick="bsCopyText(\'' + e(posTrack).replace(/'/g, '') + '\', this)">Copy</button></div>';
+            }
             if (data.pickupQrImageUrl) {
                 html +=
                     '<div style="margin-top:12px;text-align:center;"><p style="font-size:0.85rem;color:#64748b;">Pickup QR for buyer</p>' +

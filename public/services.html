@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Book a visit</title>
+    <link rel="stylesheet" href="/css/services.css?v=20261029field1">
+</head>
+<body>
+<header class="top">
+    <div class="top-inner">
+        <a class="brand" href="/services">VGMF <span>visits</span></a>
+        <nav>
+            <a href="/shop">Book shop</a>
+            <a href="#lookup">Your visit</a>
+        </nav>
+    </div>
+</header>
+<main class="wrap">
+    <section class="hero">
+        <h1>Book a service visit</h1>
+        <p>Choose a service, a time, and the address. A field partner is assigned from the team and you can follow the visit with your booking code.</p>
+    </section>
+    <div id="services" class="grid"></div>
+    <div class="layout">
+        <section class="card" id="book">
+            <h2 id="book-title">Book a visit</h2>
+            <p id="book-summary">Select a service to choose a time.</p>
+            <form id="book-form">
+                <input type="hidden" id="service-id">
+                <div class="row">
+                    <div>
+                        <label for="visit-date">Date</label>
+                        <input id="visit-date" type="date" required>
+                    </div>
+                    <div>
+                        <label for="visit-time">Start time</label>
+                        <select id="visit-time" required></select>
+                    </div>
+                </div>
+                <label for="visit-name">Your name</label>
+                <input id="visit-name" required maxlength="80" autocomplete="name">
+                <label for="visit-phone">Phone</label>
+                <input id="visit-phone" required inputmode="tel" autocomplete="tel" placeholder="10-digit mobile">
+                <label for="visit-email">Email (optional)</label>
+                <input id="visit-email" type="email" autocomplete="email">
+                <label for="visit-address">Visit address</label>
+                <textarea id="visit-address" required maxlength="300" placeholder="Building, street, area, city"></textarea>
+                <label for="visit-notes">Notes for the partner</label>
+                <textarea id="visit-notes" maxlength="500" placeholder="Gate, floor, what you need"></textarea>
+                <button class="btn" id="book-btn" type="submit">Confirm visit</button>
+                <div id="book-msg"></div>
+            </form>
+        </section>
+        <section class="card" id="lookup">
+            <h2>Check a visit</h2>
+            <p>Use the booking code and the phone number on the visit.</p>
+            <form id="lookup-form">
+                <label for="look-code">Booking code</label>
+                <input id="look-code" required placeholder="SV…">
+                <label for="look-phone">Phone</label>
+                <input id="look-phone" required inputmode="tel">
+                <button class="btn" type="submit">Show visit</button>
+            </form>
+            <div id="look-out"></div>
+        </section>
+    </div>
+</main>
+<script src="/js/services.js?v=20261029field1"></script>
+</body>
+</html>

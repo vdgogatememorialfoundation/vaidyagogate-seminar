@@ -1,0 +1,64 @@
+:root {
+    --ink: #1c1917;
+    --muted: #78716c;
+    --line: #fed7aa;
+    --card: #fff;
+    --bg: #fff7ed;
+    --accent: #ea580c;
+    --accent-dark: #c2410c;
+    --soft: #ffedd5;
+    --ok: #047857;
+    --ok-bg: #ecfdf5;
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--ink); }
+a { color: var(--accent-dark); }
+button, input, select, textarea { font: inherit; }
+.top { background: #fff; border-bottom: 1px solid #ffedd5; position: sticky; top: 0; z-index: 5; }
+.top-inner, .wrap { width: min(1080px, calc(100% - 28px)); margin: 0 auto; }
+.top-inner { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 0; }
+.brand { font-weight: 800; font-size: 1.15rem; color: var(--ink); text-decoration: none; }
+.brand span { color: var(--accent); }
+.top nav { display: flex; gap: 14px; font-size: .92rem; }
+.wrap { padding: 22px 0 48px; }
+.hero { background: linear-gradient(135deg, #fff 0%, #ffedd5 70%); border: 1px solid #fed7aa; border-radius: 22px; padding: 28px 24px; margin-bottom: 18px; }
+.hero h1 { margin: 0 0 8px; font-size: clamp(1.6rem, 3vw, 2.2rem); }
+.hero p { margin: 0; color: #57534e; max-width: 46rem; line-height: 1.45; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 14px; }
+.card { background: var(--card); border: 1px solid #ffedd5; border-radius: 18px; padding: 16px; box-shadow: 0 8px 24px rgba(234, 88, 12, .06); }
+.card h2 { margin: 0 0 6px; font-size: 1.15rem; }
+.card p { margin: 0 0 10px; color: var(--muted); line-height: 1.4; }
+.meta { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+.pill { background: var(--soft); color: var(--accent-dark); border-radius: 999px; padding: 4px 10px; font-size: .78rem; font-weight: 700; }
+.btn { border: 0; background: var(--accent); color: #fff; border-radius: 999px; padding: 11px 16px; font-weight: 700; cursor: pointer; }
+.btn:hover { background: var(--accent-dark); }
+.btn.ghost { background: #fff; color: var(--ink); border: 1px solid #fdba74; }
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+.layout { display: grid; grid-template-columns: 1.1fr .9fr; gap: 16px; margin-top: 18px; }
+label { display: block; font-size: .8rem; font-weight: 700; margin: 10px 0 4px; }
+input, select, textarea { width: 100%; padding: 11px 12px; border-radius: 12px; border: 1px solid #fdba74; background: #fff; }
+textarea { min-height: 80px; resize: vertical; }
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.note { background: var(--ok-bg); color: var(--ok); border-radius: 14px; padding: 12px 14px; margin-top: 12px; }
+.err { background: #fff1f2; color: #be123c; border-radius: 14px; padding: 12px 14px; margin-top: 12px; }
+.hidden { display: none !important; }
+.desk { display: grid; gap: 14px; }
+.desk-head { display: flex; justify-content: space-between; gap: 10px; align-items: center; flex-wrap: wrap; }
+.visit { border: 1px solid #ffedd5; border-radius: 14px; padding: 12px; margin-top: 10px; background: #fff; }
+.visit p { margin: 8px 0 0; }
+.visit .btn { width: auto; margin-right: 6px; }
+table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+th, td { text-align: left; padding: 8px 6px; border-bottom: 1px solid #ffedd5; vertical-align: top; }
+th { font-size: .75rem; text-transform: uppercase; color: #9a3412; }
+.chip { display: inline-block; border-radius: 999px; padding: 2px 8px; font-size: .75rem; font-weight: 700; background: var(--soft); color: var(--accent-dark); }
+.chip.ok { background: var(--ok-bg); color: var(--ok); }
+.chip.warn { background: #fef3c7; color: #92400e; }
+.chip.muted { background: #f5f5f4; color: #57534e; }
+.tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0; }
+.tabs button { background: #fff; border: 1px solid #fdba74; border-radius: 999px; padding: 8px 12px; cursor: pointer; font-weight: 700; }
+.tabs button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+@media (max-width: 800px) {
+    .layout, .row { grid-template-columns: 1fr; }
+    .top nav { gap: 8px; }
+    table { display: block; overflow-x: auto; }
+}

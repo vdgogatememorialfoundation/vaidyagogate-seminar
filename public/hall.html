@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>VGMF Hall</title>
+    <link rel="stylesheet" href="/css/hall.css?v=20261030hall1">
+</head>
+<body>
+    <header class="hall-bar">
+        <div>
+            <p class="eyebrow">Vaidya Gogate Memorial Foundation</p>
+            <h1 id="hall-title">Online seminar</h1>
+        </div>
+        <p id="hall-role" class="role"></p>
+    </header>
+    <main class="hall-layout">
+        <section class="stage-card">
+            <div class="stage">
+                <video id="hall-video" autoplay playsinline controls></video>
+                <div id="hall-wait" class="wait">Waiting for the host to go live.</div>
+            </div>
+            <div id="hall-controls" class="controls"></div>
+            <div id="speaker-row" class="speakers"></div>
+        </section>
+        <aside class="side">
+            <section>
+                <h2>In the hall</h2>
+                <ul id="hall-people"></ul>
+            </section>
+            <section>
+                <h2>Questions</h2>
+                <ul id="hall-questions"></ul>
+                <form id="question-form">
+                    <input id="question-text" maxlength="500" placeholder="Ask the host">
+                    <button type="submit">Send</button>
+                </form>
+            </section>
+            <section>
+                <h2>Chat</h2>
+                <ul id="hall-chat"></ul>
+                <form id="chat-form">
+                    <input id="chat-text" maxlength="500" placeholder="Message the hall">
+                    <button type="submit">Send</button>
+                </form>
+            </section>
+        </aside>
+    </main>
+    <p id="hall-error" class="error"></p>
+    <script src="/js/hall.js?v=20261030hall1"></script>
+</body>
+</html>
