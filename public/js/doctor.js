@@ -813,6 +813,37 @@ function allowedTabsArrayToSet(allowedTabs) {
     return new Set(allowedTabs);
 }
 
+/** Admin-defined sidebar order and nesting (portal_auth_config.doctorPortalMenu). */
+function applyDoctorMenuLayout(menu) {
+    const container = document.querySelector('.sidebar .menu-items');
+    if (!container || !menu) return;
+    const items = Array.from(container.querySelectorAll('.menu-item[data-tab]'));
+    if (!items.length) return;
+    const byTab = new Map(items.map((el) => [el.getAttribute('data-tab'), el]));
+    const parents = menu.parents && typeof menu.parents === 'object' ? menu.parents : {};
+    const order = Array.isArray(menu.order) ? menu.order.filter((id) => byTab.has(id)) : [];
+    items.forEach((el) => {
+        const id = el.getAttribute('data-tab');
+        if (!order.includes(id)) order.push(id);
+    });
+    const tops = order.filter((id) => !parents[id] || !byTab.has(parents[id]));
+    const frag = document.createDocumentFragment();
+    tops.forEach((id) => {
+        const el = byTab.get(id);
+        el.classList.remove('menu-sub');
+        el.removeAttribute('data-menu-parent');
+        frag.appendChild(el);
+        order.filter((c) => parents[c] === id).forEach((c) => {
+            const child = byTab.get(c);
+            child.classList.add('menu-sub');
+            child.setAttribute('data-menu-parent', id);
+            frag.appendChild(child);
+        });
+    });
+    container.appendChild(frag);
+    window.__doctorMenuLayout = { order, parents };
+}
+
 function doctorTabModuleEnabled(tabId) {
     return !__doctorAllowedTabs || __doctorAllowedTabs.has(tabId);
 }
@@ -885,6 +916,7 @@ async function loadDoctorPortalModulesGlobal() {
         const data = await res.json();
         if (res.ok) {
             window.__doctorPortalModulesGlobal = data;
+            if (data && data.menu) applyDoctorMenuLayout(data.menu);
             return data;
         }
     } catch (_) {}
@@ -914,6 +946,7 @@ async function refreshDoctorPortalAccess() {
         }
         window.__doctorPortalAllowedTabs = Array.isArray(data.allowedTabs) ? data.allowedTabs : null;
         window.__doctorPortalUseGlobalModules = data.useGlobalModules !== false;
+        if (data.menu) applyDoctorMenuLayout(data.menu);
         window.__doctorPortalModulesGlobal = {
             regular: data.globalRegular || {},
             volunteer: data.globalVolunteer || {}

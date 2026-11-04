@@ -466,3 +466,7 @@
 }
 .dp-hscroll.can-right::after { right: 0; background: linear-gradient(90deg, rgba(255,255,255,0), #fff); }
 .dp-hscroll.can-left::before { left: 0; background: linear-gradient(270deg, rgba(255,255,255,0), #fff); }
+
+/* Nested sidebar items (admin menu grouping) */
+.sidebar .menu-item.menu-sub{padding-left:38px!important;font-size:.92em;opacity:.95;position:relative}
+.sidebar .menu-item.menu-sub::before{content:'';position:absolute;left:22px;top:50%;width:8px;height:1px;background:currentColor;opacity:.5}

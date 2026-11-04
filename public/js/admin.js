@@ -1718,6 +1718,7 @@ async function ensureAdminDoctorPortalModulesGlobalLoaded() {
         const d = await res.json();
         if (d.success && d.config) {
             window.__doctorPortalModulesGlobalRegular = d.config.doctorPortalModulesRegular || {};
+                window.__doctorPortalMenu = d.config.doctorPortalMenu || { order: [], parents: {} };
             window.__doctorPortalModulesGlobalVolunteer = d.config.doctorPortalModulesVolunteer || {};
         }
     } catch (_) {}
@@ -20483,6 +20484,7 @@ async function loadPortalAuthAdminForm() {
                 window.__adminEnabledPages = mergeAdminEnabledPagesPolicy(d.config.adminEnabledPages || {});
         window.__websiteMenuPages = d.config.websiteMenuPages || {};
                 window.__doctorPortalModulesGlobalRegular = d.config.doctorPortalModulesRegular || {};
+                window.__doctorPortalMenu = d.config.doctorPortalMenu || { order: [], parents: {} };
                 window.__doctorPortalModulesGlobalVolunteer = d.config.doctorPortalModulesVolunteer || {};
         if (eff) {
             eff.textContent = `Effective signup OTP: ${d.signupOtpEffective ? 'on' : 'off'} · Effective login OTP: ${d.loginOtpEffective ? 'on' : 'off'} (environment variables can still override).`;
@@ -20523,7 +20525,8 @@ async function saveDoctorPortalModulesAdminConfig() {
     });
     const config = Object.assign({}, base, {
         doctorPortalModulesRegular,
-        doctorPortalModulesVolunteer
+        doctorPortalModulesVolunteer,
+        doctorPortalMenu: window.__doctorPortalMenu || { order: [], parents: {} }
     });
     if (msg) {
         msg.style.color = '#475569';
@@ -20620,9 +20623,97 @@ function renderDoctorPortalModulesCheckboxes() {
     };
     renderGroup(regWrap, regular);
     renderGroup(volWrap, volunteer);
+    renderDoctorPortalMenuOrder();
     if (card) card.style.display = '';
 }
 window.renderDoctorPortalModulesCheckboxes = renderDoctorPortalModulesCheckboxes;
+
+const DOCTOR_MENU_EXTRA_TABS = [
+    ['tab-video-subscription', 'My subscription (videos)'],
+    ['tab-video-devices', 'My devices (videos)'],
+    ['tab-video-license', 'My license ID (videos)'],
+    ['tab-transactions', 'My transactions (videos)']
+];
+
+function doctorMenuTabDefs() {
+    const defs = (Array.isArray(DOCTOR_MODULE_TAB_DEFS) ? DOCTOR_MODULE_TAB_DEFS : []).filter((d) => d[0] !== 'tab-live-chat');
+    DOCTOR_MENU_EXTRA_TABS.forEach((d) => {
+        if (!defs.some((x) => x[0] === d[0])) defs.push(d);
+    });
+    return defs;
+}
+
+function renderDoctorPortalMenuOrder() {
+    const wrap = document.getElementById('doctor-portal-menu-order');
+    if (!wrap) return;
+    const menu = window.__doctorPortalMenu || { order: [], parents: {} };
+    const defs = doctorMenuTabDefs();
+    const byId = new Map(defs.map((d) => [d[0], d[1]]));
+    const order = (menu.order || []).filter((id) => byId.has(id));
+    defs.forEach((d) => {
+        if (!order.includes(d[0])) order.push(d[0]);
+    });
+    const parents = menu.parents || {};
+    wrap.innerHTML = order
+        .map((id, idx) => {
+            const opts = ['<option value="">— top level —</option>']
+                .concat(order.filter((o) => o !== id && !parents[o]).map((o) => '<option value="' + o + '"' + (parents[id] === o ? ' selected' : '') + '>' + byId.get(o) + '</option>'))
+                .join('');
+            return (
+                '<div class="dpm-row" draggable="true" data-tab-id="' + id + '" style="display:flex;align-items:center;gap:8px;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;background:#f8fafc;font-size:0.85rem;cursor:grab;' + (parents[id] ? 'margin-left:26px;background:#f0fdfa;' : '') + '">' +
+                '<span style="color:#94a3b8;">☰</span>' +
+                '<span style="flex:1;">' + (parents[id] ? '↳ ' : '') + byId.get(id) + '</span>' +
+                '<label style="font-size:0.78rem;color:#475569;display:flex;align-items:center;gap:4px;">Show under <select data-dpm-parent="' + id + '" style="font-size:0.78rem;padding:2px 4px;">' + opts + '</select></label>' +
+                '<button type="button" data-dpm-move="-1" title="Move up" style="border:1px solid #cbd5e1;background:#fff;border-radius:4px;padding:0 6px;cursor:pointer;"' + (idx === 0 ? ' disabled' : '') + '>▲</button>' +
+                '<button type="button" data-dpm-move="1" title="Move down" style="border:1px solid #cbd5e1;background:#fff;border-radius:4px;padding:0 6px;cursor:pointer;"' + (idx === order.length - 1 ? ' disabled' : '') + '>▼</button>' +
+                '</div>'
+            );
+        })
+        .join('');
+    window.__doctorPortalMenu = { order, parents };
+    let dragId = null;
+    wrap.querySelectorAll('.dpm-row').forEach((row) => {
+        row.addEventListener('dragstart', () => { dragId = row.getAttribute('data-tab-id'); row.style.opacity = '0.5'; });
+        row.addEventListener('dragend', () => { row.style.opacity = ''; });
+        row.addEventListener('dragover', (ev) => { ev.preventDefault(); row.style.outline = '2px solid #0f766e'; });
+        row.addEventListener('dragleave', () => { row.style.outline = ''; });
+        row.addEventListener('drop', (ev) => {
+            ev.preventDefault();
+            row.style.outline = '';
+            const target = row.getAttribute('data-tab-id');
+            if (!dragId || dragId === target) return;
+            const o = window.__doctorPortalMenu.order.filter((x) => x !== dragId);
+            o.splice(o.indexOf(target), 0, dragId);
+            window.__doctorPortalMenu.order = o;
+            renderDoctorPortalMenuOrder();
+        });
+        row.querySelectorAll('[data-dpm-move]').forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const id = row.getAttribute('data-tab-id');
+                const o = window.__doctorPortalMenu.order.slice();
+                const i = o.indexOf(id);
+                const j = i + Number(btn.getAttribute('data-dpm-move'));
+                if (j < 0 || j >= o.length) return;
+                o.splice(i, 1);
+                o.splice(j, 0, id);
+                window.__doctorPortalMenu.order = o;
+                renderDoctorPortalMenuOrder();
+            });
+        });
+        const sel = row.querySelector('[data-dpm-parent]');
+        if (sel) {
+            sel.addEventListener('change', () => {
+                const id = sel.getAttribute('data-dpm-parent');
+                const p = Object.assign({}, window.__doctorPortalMenu.parents);
+                if (sel.value) p[id] = sel.value;
+                else delete p[id];
+                Object.keys(p).forEach((k) => { if (p[k] === id && p[id]) delete p[k]; });
+                window.__doctorPortalMenu.parents = p;
+                renderDoctorPortalMenuOrder();
+            });
+        }
+    });
+}
 
 function renderWebsiteMenuPagesCheckboxes() {
     const wrap = document.getElementById('website-menu-pages-checkboxes');

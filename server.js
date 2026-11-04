@@ -6806,6 +6806,7 @@ function respondDoctorPortalAccess(res, row) {
             allowedTabs: doctorPortalModules.allowedSetToTabArray(allowedSet),
             globalRegular,
             globalVolunteer,
+            menu: c.doctorPortalMenu || { order: [], parents: {} },
             tabDefs: doctorPortalModules.TAB_DEFS
         });
     });
@@ -11759,6 +11760,9 @@ app.post('/api/admin/portal-auth-config', (req, res) => {
             if (!Object.prototype.hasOwnProperty.call(config, 'doctorPortalModulesVolunteer')) {
                 merged.doctorPortalModulesVolunteer = existing.doctorPortalModulesVolunteer || {};
             }
+            if (!Object.prototype.hasOwnProperty.call(config, 'doctorPortalMenu')) {
+                merged.doctorPortalMenu = existing.doctorPortalMenu || { order: [], parents: {} };
+            }
             const finishSave = () => {
                 upsertGlobalSetting(portalAuthPolicy.KEY, JSON.stringify(merged), (err) => {
                     if (err) return res.status(500).json({ error: err.message });
@@ -13825,6 +13829,7 @@ app.get('/api/public/doctor-portal-modules', (req, res) => {
         res.json({
             regular: c.doctorPortalModulesRegular || {},
             volunteer: c.doctorPortalModulesVolunteer || {},
+            menu: c.doctorPortalMenu || { order: [], parents: {} },
             tabDefs: doctorPortalModules.TAB_DEFS
         });
     });
