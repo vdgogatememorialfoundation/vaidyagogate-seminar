@@ -19164,6 +19164,11 @@ function cmsApplyHeroFieldsToForm(cms) {
         const el = document.getElementById(id);
         if (el) el.value = v != null ? String(v) : '';
     };
+    const shloka = cms.shlokaBar || {};
+    const shEn = document.getElementById('cms-shloka-enabled');
+    if (shEn) shEn.checked = !!shloka.enabled;
+    set('cms-shloka-lines', Array.isArray(shloka.lines) ? shloka.lines.join('\n') : '');
+    set('cms-shloka-interval', shloka.intervalSec || 8);
     set('cms-hero-eyebrow', hero.eyebrow);
     set('cms-hero-title', hero.title);
     set('cms-hero-subtitle', hero.subtitle);
@@ -19204,6 +19209,11 @@ function cmsCollectHeroFieldsFromForm() {
             email: gv('cms-top-email'),
             phone: gv('cms-top-phone'),
             dateLine: gv('cms-top-date')
+        },
+        shlokaBar: {
+            enabled: !!(document.getElementById('cms-shloka-enabled') || {}).checked,
+            intervalSec: parseInt(gv('cms-shloka-interval'), 10) || 8,
+            lines: gv('cms-shloka-lines').split('\n').map((l) => l.trim()).filter(Boolean)
         },
         hero: {
             eyebrow: gv('cms-hero-eyebrow'),
@@ -20888,6 +20898,7 @@ async function saveAdminSiteCms() {
             speakers: cmsCollectSpeakersFromDom(),
             seo: cmsCollectSeoFieldsFromForm(),
             topBar: heroBundle.topBar,
+            shlokaBar: heroBundle.shlokaBar,
             hero: heroBundle.hero,
             heroStats: heroBundle.heroStats,
             foundedYear: heroBundle.foundedYear,

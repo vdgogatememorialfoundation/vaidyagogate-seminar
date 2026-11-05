@@ -1022,6 +1022,11 @@ const DEFAULT_PUBLIC_SITE_CMS = {
         phone: '+91 9876543210',
         dateLine: 'National Seminar 2026'
     },
+    shlokaBar: {
+        enabled: false,
+        intervalSec: 8,
+        lines: []
+    },
     hero: {
         eyebrow: 'National CME Congress',
         title: 'National Seminar 2026',
@@ -4995,6 +5000,17 @@ app.post('/api/admin/site-cms', (req, res) => {
                 creditHtml: f.creditHtml != null ? String(f.creditHtml) : '',
                 exploreLinks: Array.isArray(f.exploreLinks) ? f.exploreLinks : [],
                 doctorLinks: Array.isArray(f.doctorLinks) ? f.doctorLinks : []
+            };
+        }
+        if (incoming.shlokaBar && typeof incoming.shlokaBar === 'object') {
+            const sb = incoming.shlokaBar;
+            merged.shlokaBar = {
+                enabled: !!sb.enabled,
+                intervalSec: Math.min(120, Math.max(3, parseInt(sb.intervalSec, 10) || 8)),
+                lines: (Array.isArray(sb.lines) ? sb.lines : String(sb.lines || '').split('\n'))
+                    .map((l) => String(l || '').trim().slice(0, 400))
+                    .filter(Boolean)
+                    .slice(0, 50)
             };
         }
         ['topBar', 'hero', 'contact', 'schedulePage'].forEach((k) => {
