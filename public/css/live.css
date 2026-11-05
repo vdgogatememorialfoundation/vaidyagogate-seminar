@@ -1,0 +1,27 @@
+*{box-sizing:border-box}
+body{margin:0;font-family:"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#f8fafc;color:#0f172a}
+.hidden{display:none!important}
+.live-wrap{max-width:980px;margin:0 auto;padding:16px}
+.live-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:12px}
+.live-kicker{margin:0 0 4px;font-size:.78rem;letter-spacing:.08em;text-transform:uppercase;color:#0f766e;font-weight:700}
+.live-head h1{margin:0;font-size:1.35rem}
+.live-badge{flex:none;border-radius:999px;padding:5px 12px;font-size:.78rem;font-weight:700;background:#e2e8f0;color:#334155}
+.live-badge.on{background:#fee2e2;color:#b91c1c}
+.live-badge.on::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:#dc2626;margin-right:6px;animation:lp 1.2s infinite}
+@keyframes lp{0%,100%{opacity:1}50%{opacity:.3}}
+.live-card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:18px;box-shadow:0 6px 24px rgba(15,23,42,.06)}
+.live-lead{margin:0 0 14px;color:#475569}
+.live-form{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.live-form input{flex:1 1 220px;padding:11px 12px;border:1px solid #cbd5e1;border-radius:10px;font-size:1rem}
+.live-btn{padding:11px 18px;border:0;border-radius:10px;background:#0f766e;color:#fff;font-weight:700;cursor:pointer}
+.live-btn[disabled]{opacity:.6;cursor:wait}
+.live-link{border:0;background:none;color:#0f766e;font-weight:700;cursor:pointer}
+.live-error{min-height:1.2em;margin:10px 0 0;color:#b91c1c;font-weight:600}
+.live-foot{margin:14px 0 0;font-size:.85rem;color:#64748b}
+.live-stage{padding:0;overflow:hidden}
+.live-player{position:relative;background:#000;aspect-ratio:16/9}
+.live-player video{width:100%;height:100%;display:block;background:#000}
+.live-wait{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#e2e8f0;font-weight:600;background:rgba(2,6,23,.75);text-align:center;padding:20px}
+.live-mark{position:absolute;right:10px;bottom:48px;font-size:.72rem;color:rgba(255,255,255,.55);pointer-events:none;text-shadow:0 1px 2px #000;animation:mv 40s linear infinite}
+@keyframes mv{0%{bottom:48px;right:10px}50%{bottom:70%;right:60%}100%{bottom:48px;right:10px}}
+.live-status{margin:0;padding:10px 16px;font-size:.85rem;color:#475569}

@@ -12,6 +12,134 @@
     let lastSnapshot = null;
     let mounted = false;
     let streamConnected = false;
+    let gmap = null;
+    let gmapMarkers = [];
+    let gmapLoading = false;
+    let gmapFailed = false;
+
+    function isApplyingKind(k) {
+        return k === 'seminar_apply' || k === 'payment';
+    }
+
+    function pointColor(p) {
+        const isGuest = p.kind === 'homepage' || p.kind === 'browse' || p.kind === 'signup' || p.kind === 'login';
+        return isApplyingKind(p.kind) ? '#fb923c' : isGuest ? '#a78bfa' : '#2dd4bf';
+    }
+
+    function loadGoogleMapsScript(key, cb) {
+        if (global.google && global.google.maps) return cb(true);
+        if (document.getElementById('lr-gmaps-script')) {
+            const t = setInterval(function () {
+                if (global.google && global.google.maps) {
+                    clearInterval(t);
+                    cb(true);
+                }
+            }, 200);
+            setTimeout(function () {
+                clearInterval(t);
+                if (!(global.google && global.google.maps)) cb(false);
+            }, 15000);
+            return;
+        }
+        const s = document.createElement('script');
+        s.id = 'lr-gmaps-script';
+        s.async = true;
+        s.src =
+            'https://maps.googleapis.com/maps/api/js?key=' +
+            encodeURIComponent(key) +
+            '&v=weekly&loading=async&callback=__lrGmapsReady';
+        global.__lrGmapsReady = function () {
+            cb(true);
+        };
+        global.gm_authFailure = function () {
+            gmapFailed = true;
+            const wrap = document.getElementById('lr-gmap');
+            if (wrap) wrap.style.display = 'none';
+            const cv = document.getElementById('lr-map-canvas');
+            if (cv) cv.style.display = 'block';
+            const countEl = document.getElementById('lr-map-count');
+            if (countEl) countEl.textContent = 'Google Maps key rejected — check Integrations';
+        };
+        s.onerror = function () {
+            cb(false);
+        };
+        document.head.appendChild(s);
+    }
+
+    function initGoogleMap() {
+        if (gmap || gmapLoading || gmapFailed) return;
+        gmapLoading = true;
+        fetch('/api/admin/live-radar/maps-key')
+            .then(function (r) {
+                return r.json();
+            })
+            .then(function (d) {
+                const key = d && d.key ? String(d.key).trim() : '';
+                if (!key) {
+                    gmapLoading = false;
+                    gmapFailed = true;
+                    return;
+                }
+                loadGoogleMapsScript(key, function (ok) {
+                    gmapLoading = false;
+                    const el = document.getElementById('lr-gmap');
+                    if (!ok || !el || !(global.google && global.google.maps)) {
+                        gmapFailed = true;
+                        return;
+                    }
+                    gmap = new global.google.maps.Map(el, {
+                        center: { lat: 20.5937, lng: 78.9629 },
+                        zoom: 4,
+                        mapTypeControl: false,
+                        streetViewControl: false,
+                        fullscreenControl: true
+                    });
+                    el.style.display = 'block';
+                    if (mapCanvas) mapCanvas.style.display = 'none';
+                    stopMapAnim();
+                    syncGoogleMarkers(mapPoints);
+                });
+            })
+            .catch(function () {
+                gmapLoading = false;
+                gmapFailed = true;
+            });
+    }
+
+    function syncGoogleMarkers(points) {
+        if (!gmap || !(global.google && global.google.maps)) return;
+        gmapMarkers.forEach(function (m) {
+            m.setMap(null);
+        });
+        gmapMarkers = [];
+        const bounds = new global.google.maps.LatLngBounds();
+        (points || []).forEach(function (p) {
+            const lat = Number(p.lat);
+            const lng = Number(p.lon);
+            if (!isFinite(lat) || !isFinite(lng)) return;
+            const pos = { lat: lat, lng: lng };
+            const marker = new global.google.maps.Marker({
+                position: pos,
+                map: gmap,
+                title: (p.label || '') + (p.kind ? ' · ' + p.kind : ''),
+                icon: {
+                    path: global.google.maps.SymbolPath.CIRCLE,
+                    scale: isApplyingKind(p.kind) ? 9 : 7,
+                    fillColor: pointColor(p),
+                    fillOpacity: 0.95,
+                    strokeColor: '#ffffff',
+                    strokeWeight: 2
+                }
+            });
+            gmapMarkers.push(marker);
+            bounds.extend(pos);
+        });
+        if (gmapMarkers.length > 1) gmap.fitBounds(bounds, 40);
+        else if (gmapMarkers.length === 1) {
+            gmap.setCenter(gmapMarkers[0].getPosition());
+            gmap.setZoom(8);
+        }
+    }
 
     const STEP_NAMES = ['Terms', 'Personal', 'Address', 'Qualification', 'College', 'Submit'];
 
@@ -86,7 +214,7 @@
             '<div class="live-radar-grid">' +
             '<div class="lr-panel lr-panel-map">' +
             '<div class="lr-panel-head"><h3>🗺 Live locations</h3><span class="live-radar-updated" id="lr-map-count"></span></div>' +
-            '<div class="lr-map-wrap"><canvas id="lr-map-canvas" width="720" height="360"></canvas>' +
+            '<div class="lr-map-wrap"><div id="lr-gmap" style="display:none;width:100%;height:100%;"></div><canvas id="lr-map-canvas" width="720" height="360"></canvas>' +
             '<div class="lr-map-legend"><span><i style="background:#2dd4bf"></i> Active</span><span><i style="background:#fb923c"></i> Applying</span><span><i style="background:#a78bfa"></i> Guest</span></div></div>' +
             '<div class="lr-panel-head" style="margin-top:14px;"><h3>📊 By seminar</h3></div>' +
             '<div class="lr-seminar-bars" id="lr-seminar-bars"></div></div>' +
@@ -94,6 +222,10 @@
             '<div class="lr-feed" id="lr-feed"></div></div></div></div>';
         mapCanvas = root.querySelector('#lr-map-canvas');
         if (mapCanvas) mapCtx = mapCanvas.getContext('2d');
+        gmap = null;
+        gmapMarkers = [];
+        gmapFailed = false;
+        initGoogleMap();
     }
 
     function setStreamStatus(connected, msg) {
@@ -346,6 +478,12 @@
 
     function startMapAnim(points) {
         mapPoints = points || [];
+        if (gmap) {
+            syncGoogleMarkers(mapPoints);
+            const c = document.getElementById('lr-map-count');
+            if (c) c.textContent = mapPoints.length ? mapPoints.length + ' on map' : 'No located visitors yet';
+            return;
+        }
         const countEl = document.getElementById('lr-map-count');
         if (countEl) {
             countEl.textContent = mapPoints.length

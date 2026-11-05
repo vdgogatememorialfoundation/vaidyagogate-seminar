@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Field force</title>
+    <link rel="stylesheet" href="/css/services.css?v=20261029field1">
+</head>
+<body>
+<header class="top">
+    <div class="top-inner">
+        <a class="brand" href="/field-force">Field <span>force</span></a>
+        <nav>
+            <a href="/services" target="_blank">Customer booking</a>
+            <a href="/staff">Staff portal</a>
+        </nav>
+    </div>
+</header>
+<main class="wrap">
+    <section class="hero">
+        <h1>Appointments and field force</h1>
+        <p>Teams, agents, and visits use the Tookan account already connected for delivery. An appointment is a scheduled service. A field visit sends an agent on site.</p>
+    </section>
+    <section class="card" id="sign-in">
+        <h2>Desk access</h2>
+        <p id="actor-line">Sign in on the staff portal, then open this desk again. Or enter your user id.</p>
+        <div class="row">
+            <div>
+                <label for="actor-id">User id</label>
+                <input id="actor-id" inputmode="numeric">
+            </div>
+            <div style="align-self:end">
+                <button class="btn" id="actor-save" type="button">Use this id</button>
+            </div>
+        </div>
+    </section>
+    <div class="tabs" id="tabs">
+        <button type="button" class="on" data-tab="visits">Visits</button>
+        <button type="button" data-tab="teams">Teams</button>
+        <button type="button" data-tab="agents">Agents</button>
+        <button type="button" data-tab="new">New visit</button>
+    </div>
+    <section class="card" id="panel-visits">
+        <div class="desk-head"><h2>Visits</h2><button class="btn ghost" id="reload-visits" type="button">Refresh</button></div>
+        <div id="visits"></div>
+    </section>
+    <section class="card hidden" id="panel-teams">
+        <div class="desk-head"><h2>Teams</h2><button class="btn ghost" id="reload-teams" type="button">Refresh</button></div>
+        <form id="team-form" class="row">
+            <div>
+                <label for="team-name">Team name</label>
+                <input id="team-name" required>
+            </div>
+            <div>
+                <label for="team-battery">Phone battery use</label>
+                <select id="team-battery"><option value="0">Low</option><option value="1" selected>Medium</option><option value="2">High</option></select>
+            </div>
+            <div>
+                <label for="team-tags">Tags</label>
+                <input id="team-tags" placeholder="field, clinic">
+            </div>
+            <div style="align-self:end"><button class="btn" type="submit">Create team</button></div>
+        </form>
+        <div id="team-msg"></div>
+        <div id="teams"></div>
+    </section>
+    <section class="card hidden" id="panel-agents">
+        <div class="desk-head">
+            <h2>Agents</h2>
+            <div>
+                <select id="agent-filter">
+                    <option value="">All</option>
+                    <option value="free">Free</option>
+                    <option value="busy">Busy</option>
+                </select>
+                <button class="btn ghost" id="reload-agents" type="button">Refresh</button>
+            </div>
+        </div>
+        <form id="agent-form">
+            <div class="row">
+                <div><label for="ag-first">First name</label><input id="ag-first" required></div>
+                <div><label for="ag-last">Last name</label><input id="ag-last"></div>
+                <div><label for="ag-phone">Phone</label><input id="ag-phone" required></div>
+                <div><label for="ag-email">Email</label><input id="ag-email" type="email" required></div>
+                <div><label for="ag-user">Agent app username</label><input id="ag-user" required></div>
+                <div><label for="ag-team">Team id</label><input id="ag-team" required></div>
+                <div>
+                    <label for="ag-vehicle">Vehicle</label>
+                    <select id="ag-vehicle">
+                        <option value="1">Car</option>
+                        <option value="2" selected>Motorcycle</option>
+                        <option value="3">Bicycle</option>
+                        <option value="4">Scooter</option>
+                        <option value="5">On foot</option>
+                        <option value="6">Truck</option>
+                    </select>
+                </div>
+                <div><label for="ag-pass">Password (optional)</label><input id="ag-pass" type="password" autocomplete="new-password"></div>
+            </div>
+            <button class="btn" type="submit">Add agent</button>
+            <div id="agent-msg"></div>
+        </form>
+        <div id="agents"></div>
+    </section>
+    <section class="card hidden" id="panel-new">
+        <h2>Dispatch a visit</h2>
+        <form id="dispatch-form">
+            <div class="row">
+                <div>
+                    <label for="d-kind">Type</label>
+                    <select id="d-kind"><option value="appointment">Appointment</option><option value="fos">Field visit</option></select>
+                </div>
+                <div>
+                    <label for="d-service">Service</label>
+                    <select id="d-service"><option value="">Custom</option></select>
+                </div>
+                <div><label for="d-date">Date</label><input id="d-date" type="date" required></div>
+                <div><label for="d-time">Start</label><select id="d-time" required></select></div>
+                <div><label for="d-name">Customer</label><input id="d-name" required></div>
+                <div><label for="d-phone">Phone</label><input id="d-phone" required></div>
+                <div><label for="d-team">Team id</label><input id="d-team"></div>
+                <div><label for="d-fleet">Agent id (optional)</label><input id="d-fleet"></div>
+            </div>
+            <label for="d-address">Address</label>
+            <textarea id="d-address" required></textarea>
+            <label for="d-notes">Notes</label>
+            <textarea id="d-notes"></textarea>
+            <button class="btn" type="submit">Create in Tookan</button>
+            <div id="dispatch-msg"></div>
+        </form>
+    </section>
+</main>
+<script src="/js/field-force.js?v=20261029field1"></script>
+</body>
+</html>
