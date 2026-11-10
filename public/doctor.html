@@ -9,15 +9,13 @@
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <title>Doctor's Portal | VGMF National Seminar</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="/css/responsive-portals.css?v=20260620layout4">
     <link rel="stylesheet" href="/css/vgmf-portal-bright.css?v=20260620theme1">
     <link rel="stylesheet" href="/css/vgmf-mobile-portal.css">
     <link rel="stylesheet" href="/css/video-library.css?v=20261102ads1">
     <link rel="stylesheet" href="/css/doctor-professional.css?v=20261106dash1">
-    <link rel="stylesheet" href="/css/doctor-v2.css?v=20261106v2b">
-    <link rel="stylesheet" href="/css/doctor-v3.css?v=20261106v3a">
     <style>
         :root {
             --doctor-primary: #0f766e;
@@ -205,7 +203,7 @@
 
     </style>
 </head>
-<body class="portal-bright doctor-professional doctor-v2 doctor-v3" data-portal-theme="doctor">
+<body class="portal-bright doctor-professional" data-portal-theme="doctor">
 
     <!-- Doctor portal login -->
     <div id="auth-overlay">
@@ -333,23 +331,11 @@
         </aside>
 
         <div id="doctor-nav-backdrop" class="doctor-nav-backdrop" aria-hidden="true"></div>
-        <nav class="v2-bottom-nav" id="v2-bottom-nav" aria-label="Quick navigation">
-            <button type="button" data-tab="tab-dashboard"><i class="fas fa-house"></i>Home</button>
-            <button type="button" data-tab="tab-seminars"><i class="fas fa-calendar-check"></i>Seminars</button>
-            <button type="button" data-tab="tab-applications"><i class="fas fa-route"></i>Track</button>
-            <button type="button" data-tab="tab-ticket"><i class="fas fa-qrcode"></i>Tickets</button>
-            <button type="button" data-tab="tab-profile"><i class="fas fa-user"></i>Profile</button>
-        </nav>
 
         <div class="main-content">
             <header class="top-header">
-                <div class="v3-brand">
-                    <span class="v3-logo"><span data-site-logo data-logo-height="34px" data-logo-fallback="icon"></span></span>
-                    <div><h1>Doctor's Portal</h1><small>Vaidya Gogate Memorial Foundation · National Seminar <span id="v3-year"></span></small></div>
-                </div>
                 <button type="button" class="doctor-menu-toggle" id="doctor-menu-toggle" aria-label="Open menu" data-i18n-aria="common.open"><i class="fas fa-bars"></i></button>
-                <button type="button" class="v2-collapse-btn" id="v2-collapse-btn" aria-label="Collapse menu" title="Collapse menu"><i class="fas fa-angles-left"></i></button>
-                <div class="header-title" data-v2-title="Dashboard" data-i18n="doctor.headerTitle">Vaidya Gogate Memorial Foundation — Doctor's Portal</div>
+                <div class="header-title" data-i18n="doctor.headerTitle">Vaidya Gogate Memorial Foundation — Doctor's Portal</div>
                 <div class="user-info">
                     <img id="header-profile-photo" class="doctor-header-photo hidden" alt="Profile photo" src="">
                     <span class="hi-user" id="header-name">Hi, Doctor</span>
@@ -359,8 +345,6 @@
                     <button type="button" class="btn-primary" id="btn-logout" style="padding:8px 16px;"><i class="fas fa-sign-out-alt"></i> <span data-i18n="common.logout">Logout</span></button>
                 </div>
             </header>
-
-            <div class="v3-nav-wrap"><nav class="v3-nav" id="v3-nav" aria-label="Portal sections"></nav></div>
 
             <div class="notification-bar hidden" id="profile-complete-banner"><i class="fas fa-info-circle"></i> <span data-i18n="doctor.completeProfile">Complete your profile before registering for seminars.</span></div>
 
@@ -1050,7 +1034,7 @@
     })();
     </script>
     <script src="/js/seat-picker.js?v=20261106seat1"></script>
-    <script src="/js/doctor.js?v=20261106v3a"></script>
+    <script src="/js/doctor.js?v=20261106seat1"></script>
     <script src="/js/doctor-online-seminar.js?v=20261030hall2"></script>
 </body>
 </html>
