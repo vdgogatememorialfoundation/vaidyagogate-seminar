@@ -470,3 +470,33 @@
 /* Nested sidebar items (admin menu grouping) */
 .sidebar .menu-item.menu-sub{padding-left:38px!important;font-size:.92em;opacity:.95;position:relative}
 .sidebar .menu-item.menu-sub::before{content:'';position:absolute;left:22px;top:50%;width:8px;height:1px;background:currentColor;opacity:.5}
+
+
+/* ---------- Dashboard v2 ---------- */
+.doctor-professional .dv2-hero{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:16px;padding:22px 24px;border:1px solid var(--dp-line);border-radius:14px;background:linear-gradient(135deg,#f8fafc,#eef6ff);margin-bottom:18px}
+.doctor-professional .dv2-kicker{margin:0;font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--dp-muted);font-weight:700}
+.doctor-professional .dv2-name{margin:2px 0 4px;font-size:1.5rem;color:var(--dp-ink)}
+.doctor-professional .dv2-sub{margin:0;color:var(--dp-muted);font-size:.85rem}
+.doctor-professional .dv2-hero-actions{display:flex;flex-wrap:wrap;gap:10px}
+.doctor-professional .dv2-hero-actions .btn-primary,.doctor-professional .dv2-hero-actions .btn-secondary{display:inline-flex;align-items:center;gap:8px;text-decoration:none}
+.doctor-professional .dv2-grid{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:16px;margin-bottom:18px}
+@media (max-width:900px){.doctor-professional .dv2-grid{grid-template-columns:1fr}}
+.doctor-professional .dv2-grid .card{margin:0}
+.doctor-professional .dv2-grid h3{display:flex;align-items:center;gap:8px;color:var(--dp-accent);margin:0 0 10px;font-size:1rem}
+.doctor-professional .dv2-badge{margin-left:auto;font-size:.7rem;background:#dcfce7;color:#166534;border-radius:999px;padding:3px 10px;font-weight:800}
+.doctor-professional .dv2-title{font-size:1.15rem;font-weight:800;color:var(--dp-ink);margin:0 0 8px}
+.doctor-professional .dv2-facts{list-style:none;padding:0;margin:0 0 14px;display:grid;gap:6px;color:var(--dp-muted);font-size:.9rem}
+.doctor-professional .dv2-facts i{width:18px;color:var(--dp-accent)}
+.doctor-professional .dv2-status{text-transform:capitalize;font-weight:700;color:var(--dp-ink)}
+.doctor-professional .dv2-muted{color:var(--dp-muted);font-size:.9rem;margin:0 0 12px}
+.doctor-professional .dv2-timeline{list-style:none;margin:0;padding:0 0 0 4px;display:grid;gap:10px;max-height:260px;overflow:auto}
+.doctor-professional .dv2-timeline li{display:flex;gap:10px;font-size:.88rem;color:var(--dp-ink)}
+.doctor-professional .dv2-timeline small{color:var(--dp-muted)}
+.doctor-professional .dv2-dot{flex:none;width:10px;height:10px;margin-top:5px;border-radius:50%;background:var(--dp-accent);box-shadow:0 0 0 3px #dbeafe}
+.doctor-professional .dv2-stats .stat-card{cursor:pointer;position:relative;padding-top:18px}
+.doctor-professional .dv2-stats .stat-card>i{position:absolute;top:12px;right:14px;color:#cbd5e1;font-size:1.1rem}
+.doctor-professional .dv2-stats .stat-card:hover{border-color:var(--dp-accent)}
+.doctor-professional .dv2-quick{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.doctor-professional .dv2-quick button{display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:14px;border:1px solid var(--dp-line);border-radius:12px;background:#fff;color:var(--dp-ink);font-weight:700;font-size:.88rem;cursor:pointer;text-align:left}
+.doctor-professional .dv2-quick button i{font-size:1.2rem;color:var(--dp-accent)}
+.doctor-professional .dv2-quick button:hover{border-color:var(--dp-accent);background:#f8fafc}

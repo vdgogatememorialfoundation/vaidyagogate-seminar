@@ -7214,7 +7214,42 @@ app.get('/api/doctor/dashboard-stats/:userId', (req, res) => {
                 } catch (_) {}
             }
             out.certificates = out.participant_certificates + out.volunteer_certificates;
-            res.json(out);
+            const nowIso = new Date().toISOString();
+            db.all(
+                `SELECT r.id AS registration_id, r.application_no, r.status, s.id AS seminar_id, s.title, s.event_date, s.event_end_date,
+                        s.location_text, s.location_url,
+                        (SELECT t.ticket_id_string FROM tickets t JOIN orders o ON o.id = t.order_id
+                          WHERE o.registration_id = r.id ORDER BY t.id ASC LIMIT 1) AS ticket_id_string
+                 FROM registrations r JOIN seminars s ON s.id = r.seminar_id
+                 WHERE r.user_id = ? AND IFNULL(r.status,'') NOT IN ('rejected','cancelled','draft','refunded')
+                   AND COALESCE(s.event_end_date, s.event_date) >= ?
+                 ORDER BY s.event_date ASC LIMIT 1`,
+                [uid, nowIso.slice(0, 10)],
+                (nErr, nRows) => {
+                    const nextEv = !nErr && nRows && nRows[0] ? nRows[0] : null;
+                    const withSeat = (done) => {
+                        if (!nextEv) return done();
+                        seatMap.seatsForRegistration(db, nextEv.registration_id, (sErr, codes) => {
+                            nextEv.seat_label = !sErr && codes && codes.length ? codes.join(', ') : null;
+                            done();
+                        });
+                    };
+                    withSeat(() => {
+                        out.next_event = nextEv;
+                        db.all(
+                            `SELECT l.step_key, l.label, l.message, l.created_at, r.application_no, s.title AS seminar_title
+                             FROM registration_status_log l JOIN registrations r ON r.id = l.registration_id
+                             LEFT JOIN seminars s ON s.id = r.seminar_id
+                             WHERE r.user_id = ? ORDER BY l.created_at DESC LIMIT 8`,
+                            [uid],
+                            (aErr, aRows) => {
+                                out.recent_activity = !aErr && Array.isArray(aRows) ? aRows : [];
+                                res.json(out);
+                            }
+                        );
+                    });
+                }
+            );
         });
     });
     let i = 0;

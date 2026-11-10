@@ -8810,6 +8810,7 @@ async function loadDoctorDashboardStats() {
         }
         const d = await res.json();
         set('stat-registered', d.registered_seminars);
+        try { renderDashboardV2(d); } catch (e) { console.error(e); }
         set('stat-paid', d.paid_or_confirmed);
         set('stat-checked', d.checked_in_seminars);
         const chkEl = document.getElementById('stat-checked');
@@ -10628,3 +10629,56 @@ if (document.readyState === 'loading') {
     }
     if (window.Notification) { window.addEventListener('load', function () { setTimeout(tick, 4000); setInterval(tick, 60000); }); }
 })();
+
+
+/* ---------- Dashboard v2 widgets ---------- */
+function renderDashboardV2(d) {
+    const esc = (v) => String(v == null ? '' : v).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const u = currentUser || {};
+    const h = new Date().getHours();
+    const greet = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+    const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email || '';
+    const g = document.getElementById('dv2-greeting'); if (g) g.textContent = greet + ',';
+    const n = document.getElementById('dv2-name'); if (n) n.textContent = /^dr\.?\s/i.test(name) ? name : (name ? 'Dr. ' + name : 'Doctor');
+    const sub = document.getElementById('dv2-sub');
+    if (sub) sub.textContent = [u.user_id_string ? 'Portal ID ' + u.user_id_string : '', u.email || ''].filter(Boolean).join(' · ');
+
+    const nx = document.getElementById('dv2-next');
+    if (nx) {
+        const ev = d.next_event;
+        if (!ev) {
+            nx.innerHTML = '<h3><i class="fas fa-ticket"></i> Your next seminar</h3><p class="dv2-muted">No upcoming seminar yet. Browse the available seminars and register.</p><button type="button" class="btn-primary" onclick="switchTab(\'tab-seminars\')">See available seminars</button>';
+        } else {
+            let when = '';
+            try { when = window.PortalDateTime && window.PortalDateTime.formatSeminarSchedule ? window.PortalDateTime.formatSeminarSchedule(ev) : new Date(ev.event_date).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }); } catch (_) { when = ev.event_date || ''; }
+            const days = Math.ceil((Date.parse(ev.event_date) - Date.now()) / 86400000);
+            const badge = days > 1 ? 'In ' + days + ' days' : days === 1 ? 'Tomorrow' : days === 0 ? 'Today' : 'Ongoing';
+            const st = String(ev.status || '').replace(/_/g, ' ');
+            nx.innerHTML = `<h3><i class="fas fa-ticket"></i> Your next seminar <span class="dv2-badge">${esc(badge)}</span></h3>
+                <p class="dv2-title">${esc(ev.title)}</p>
+                <ul class="dv2-facts">
+                    <li><i class="fas fa-calendar"></i> ${esc(when)}</li>
+                    ${ev.location_text ? `<li><i class="fas fa-location-dot"></i> ${ev.location_url ? `<a href="${esc(ev.location_url)}" target="_blank" rel="noopener">${esc(ev.location_text)}</a>` : esc(ev.location_text)}</li>` : ''}
+                    ${ev.seat_label ? `<li><i class="fas fa-chair"></i> Seat <b>${esc(ev.seat_label)}</b></li>` : ''}
+                    <li><i class="fas fa-circle-info"></i> Application ${esc(ev.application_no || '')} · <span class="dv2-status">${esc(st)}</span></li>
+                </ul>
+                <div class="dv2-hero-actions">
+                    ${ev.ticket_id_string ? `<a class="btn-primary" href="${esc(eticketViewUrl({ ticket_id_string: ev.ticket_id_string }))}" target="_blank" rel="noopener"><i class="fas fa-qrcode"></i> Open e‑ticket</a>` : ''}
+                    <button type="button" class="btn-secondary" onclick="switchTab('tab-applications')">Track application</button>
+                </div>`;
+        }
+    }
+    const ac = document.getElementById('dv2-activity');
+    if (ac) {
+        const rows = Array.isArray(d.recent_activity) ? d.recent_activity : [];
+        if (!rows.length) {
+            ac.innerHTML = '<h3><i class="fas fa-clock-rotate-left"></i> Recent activity</h3><p class="dv2-muted">Your application updates will appear here.</p>';
+        } else {
+            ac.innerHTML = '<h3><i class="fas fa-clock-rotate-left"></i> Recent activity</h3><ol class="dv2-timeline">' + rows.map((r) => {
+                let t = '';
+                try { t = new Date(r.created_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' }); } catch (_) {}
+                return `<li><span class="dv2-dot"></span><div><b>${esc(r.label || r.step_key || 'Update')}</b>${r.seminar_title ? ' · ' + esc(r.seminar_title) : ''}<br><small>${esc(r.message || '')}${r.message ? ' · ' : ''}${esc(t)}</small></div></li>`;
+            }).join('') + '</ol>';
+        }
+    }
+}

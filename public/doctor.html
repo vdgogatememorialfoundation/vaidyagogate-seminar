@@ -15,7 +15,7 @@
     <link rel="stylesheet" href="/css/vgmf-portal-bright.css?v=20260620theme1">
     <link rel="stylesheet" href="/css/vgmf-mobile-portal.css">
     <link rel="stylesheet" href="/css/video-library.css?v=20261102ads1">
-    <link rel="stylesheet" href="/css/doctor-professional.css?v=20261104menu1">
+    <link rel="stylesheet" href="/css/doctor-professional.css?v=20261106dash1">
     <style>
         :root {
             --doctor-primary: #0f766e;
@@ -364,26 +364,50 @@
                 <div id="tab-dashboard" class="tab-pane hidden">
                     <h2 class="section-title" data-i18n="doctor.section.dashboard">Dashboard</h2>
                     <div data-doctor-updates-anchor></div>
+                    <div class="dv2-hero" id="dv2-hero">
+                        <div>
+                            <p class="dv2-kicker" id="dv2-greeting">Welcome back</p>
+                            <h3 class="dv2-name" id="dv2-name">—</h3>
+                            <p class="dv2-sub" id="dv2-sub"></p>
+                        </div>
+                        <div class="dv2-hero-actions">
+                            <button type="button" class="btn-primary" data-doctor-tab="tab-seminars" onclick="switchTab('tab-seminars')"><i class="fas fa-calendar-plus"></i> Register for a seminar</button>
+                            <button type="button" class="btn-secondary" data-doctor-tab="tab-profile" onclick="switchTab('tab-profile')"><i class="fas fa-user"></i> My profile</button>
+                        </div>
+                    </div>
                     <div id="dash-pending-fields" class="hidden"></div>
                     <div id="dash-payment-due" class="hidden"></div>
-                    <p style="color: #64748b; margin: -10px 0 20px;">Overview of your seminar activity. Use <strong>Seminar feedback</strong> and <strong>Support tickets</strong> in the menu. Live chat is the chat button at the bottom right.</p>
-                    <div class="stat-grid">
-                        <div class="stat-card"><h4 id="stat-registered">—</h4><p>Registered seminars</p></div>
-                        <div class="stat-card" style="border-top-color:#10b981;"><h4 id="stat-paid">—</h4><p>Paid / confirmed</p></div>
-                        <div class="stat-card" style="border-top-color:#f59e0b;"><h4 id="stat-checked">—</h4><p>Checked in</p></div>
-                        <div class="stat-card" style="border-top-color:#c9a227;cursor:pointer;" onclick="switchTab('tab-certificate')" title="Open My certificates"><h4 id="stat-certs">—</h4><p>Certificates</p></div>
-                        <div class="stat-card" style="border-top-color:#8b5cf6;"><h4 id="stat-feedback">—</h4><p>Feedback submitted</p></div>
-                        <div class="stat-card" style="border-top-color:#0ea5e9;"><h4 id="stat-abstracts">—</h4><p>Case presentations</p></div>
-                        <div class="stat-card" style="border-top-color:#ec4899;"><h4 id="stat-ptix">—</h4><p>Participant e‑tickets</p></div>
-                        <div class="stat-card" style="border-top-color:#64748b;"><h4 id="stat-suptix">—</h4><p>Support tickets</p></div>
+                    <div class="dv2-grid">
+                        <div class="card dv2-next" id="dv2-next">
+                            <h3><i class="fas fa-ticket"></i> Your next seminar</h3>
+                            <p class="dv2-muted">No upcoming seminar yet. Browse the available seminars and register.</p>
+                        </div>
+                        <div class="card dv2-activity" id="dv2-activity">
+                            <h3><i class="fas fa-clock-rotate-left"></i> Recent activity</h3>
+                            <p class="dv2-muted">Your application updates will appear here.</p>
+                        </div>
+                    </div>
+                    <div class="stat-grid dv2-stats">
+                        <div class="stat-card" data-doctor-tab="tab-applications" onclick="switchTab('tab-applications')"><i class="fas fa-file-lines"></i><h4 id="stat-registered">—</h4><p>Registered seminars</p></div>
+                        <div class="stat-card" style="border-top-color:#10b981;" data-doctor-tab="tab-applications" onclick="switchTab('tab-applications')"><i class="fas fa-circle-check"></i><h4 id="stat-paid">—</h4><p>Paid / confirmed</p></div>
+                        <div class="stat-card" style="border-top-color:#f59e0b;"><i class="fas fa-qrcode"></i><h4 id="stat-checked">—</h4><p>Checked in</p></div>
+                        <div class="stat-card" style="border-top-color:#c9a227;" data-doctor-tab="tab-certificate" onclick="switchTab('tab-certificate')" title="Open My certificates"><i class="fas fa-award"></i><h4 id="stat-certs">—</h4><p>Certificates</p></div>
+                        <div class="stat-card" style="border-top-color:#8b5cf6;" data-doctor-tab="tab-feedback" onclick="switchTab('tab-feedback')"><i class="fas fa-comment-dots"></i><h4 id="stat-feedback">—</h4><p>Feedback submitted</p></div>
+                        <div class="stat-card" style="border-top-color:#0ea5e9;" data-doctor-tab="tab-case-track" onclick="switchTab('tab-case-track')"><i class="fas fa-microscope"></i><h4 id="stat-abstracts">—</h4><p>Case presentations</p></div>
+                        <div class="stat-card" style="border-top-color:#ec4899;" data-doctor-tab="tab-ticket" onclick="switchTab('tab-ticket')"><i class="fas fa-users"></i><h4 id="stat-ptix">—</h4><p>Participant e‑tickets</p></div>
+                        <div class="stat-card" style="border-top-color:#64748b;" data-doctor-tab="tab-support" onclick="switchTab('tab-support')"><i class="fas fa-headset"></i><h4 id="stat-suptix">—</h4><p>Support tickets</p></div>
                     </div>
                     <div class="card">
-                        <h3 style="color:#0f766e;margin-bottom:10px;"><i class="fas fa-bolt"></i> Quick links</h3>
-                        <div style="display:flex;flex-wrap:wrap;gap:10px;">
-                            <button type="button" class="btn-primary" data-doctor-tab="tab-seminars" onclick="switchTab('tab-seminars')">Register for seminar</button>
-                            <button type="button" class="btn-primary" style="background:#7c3aed;" data-doctor-tab="tab-orders" onclick="switchTab('tab-orders')">Orders</button>
-                            <button type="button" class="btn-primary" style="background:#c9a227;" data-doctor-tab="tab-certificate" onclick="switchTab('tab-certificate')">My certificates</button>
-                            <button type="button" class="btn-primary" style="background:#64748b;" data-doctor-tab="tab-reset-pwd" onclick="switchTab('tab-reset-pwd')">Change password</button>
+                        <h3 style="margin-bottom:12px;"><i class="fas fa-bolt"></i> Quick actions</h3>
+                        <div class="dv2-quick">
+                            <button type="button" data-doctor-tab="tab-applications" onclick="switchTab('tab-applications')"><i class="fas fa-route"></i><span>Track applications</span></button>
+                            <button type="button" data-doctor-tab="tab-videos" onclick="switchTab('tab-videos')"><i class="fas fa-circle-play"></i><span>Seminar videos</span></button>
+                            <button type="button" data-doctor-tab="tab-certificate" onclick="switchTab('tab-certificate')"><i class="fas fa-award"></i><span>My certificates</span></button>
+                            <button type="button" data-doctor-tab="tab-orders" onclick="switchTab('tab-orders')"><i class="fas fa-box"></i><span>Orders</span></button>
+                            <button type="button" data-doctor-tab="tab-books" onclick="switchTab('tab-books')"><i class="fas fa-book"></i><span>Books</span></button>
+                            <button type="button" data-doctor-tab="tab-receipts" onclick="switchTab('tab-receipts')"><i class="fas fa-receipt"></i><span>Payment receipts</span></button>
+                            <button type="button" data-doctor-tab="tab-support" onclick="switchTab('tab-support')"><i class="fas fa-headset"></i><span>Support</span></button>
+                            <button type="button" data-doctor-tab="tab-reset-pwd" onclick="switchTab('tab-reset-pwd')"><i class="fas fa-key"></i><span>Change password</span></button>
                         </div>
                     </div>
                 </div>
